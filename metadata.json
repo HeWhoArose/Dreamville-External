@@ -1,0 +1,8 @@
+{
+  "name": "Dreamville External",
+  "description": "User-facing presentation and interaction client for the Personal AI Story Engine",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

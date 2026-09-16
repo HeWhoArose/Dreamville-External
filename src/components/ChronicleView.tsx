@@ -1,22 +1,26 @@
-import React from 'react';
-import { PlayerKnowledge, ActionLog } from '../types';
-import { BookOpen, CheckCircle2, History, AlertCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { PlayerKnowledge, ActionLog, ChronicleEntry } from '../types';
+import { BookOpen, CheckCircle2, History, AlertCircle, Scroll, Landmark, Sparkles } from 'lucide-react';
 
 interface ChronicleViewProps {
   knowledgeBase: PlayerKnowledge[];
   actionHistory: ActionLog[];
   engineContractVersion: string;
+  chronicleEntries?: ChronicleEntry[];
 }
 
 export const ChronicleView: React.FC<ChronicleViewProps> = ({
   knowledgeBase,
   actionHistory,
   engineContractVersion,
+  chronicleEntries = [],
 }) => {
+  const [activeSection, setActiveSection] = useState<'chronicle' | 'knowledge' | 'validation'>('chronicle');
+
   return (
     <div className="space-y-6">
       {/* Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-stone-900/60 rounded-2xl border border-stone-800 p-4">
           <span className="text-[10px] font-mono uppercase tracking-wider text-stone-500 block mb-1">
             Engine Contract
@@ -31,7 +35,19 @@ export const ChronicleView: React.FC<ChronicleViewProps> = ({
 
         <div className="bg-stone-900/60 rounded-2xl border border-stone-800 p-4">
           <span className="text-[10px] font-mono uppercase tracking-wider text-stone-500 block mb-1">
-            Player Knowledge Entries
+            World Chronicle (CH4)
+          </span>
+          <div className="text-lg font-mono font-bold text-amber-400">
+            {chronicleEntries.length} Recorded
+          </div>
+          <span className="text-xs text-stone-400">
+            Authoritative Historical Ledger
+          </span>
+        </div>
+
+        <div className="bg-stone-900/60 rounded-2xl border border-stone-800 p-4">
+          <span className="text-[10px] font-mono uppercase tracking-wider text-stone-500 block mb-1">
+            Player Knowledge
           </span>
           <div className="text-lg font-mono font-bold text-emerald-400">
             {knowledgeBase.length} Unlocked
@@ -46,7 +62,7 @@ export const ChronicleView: React.FC<ChronicleViewProps> = ({
             Mock Engine Commits
           </span>
           <div className="text-lg font-mono font-bold text-stone-200">
-            {actionHistory.length} Validated Requests
+            {actionHistory.length} Validated
           </div>
           <span className="text-xs text-stone-400">
             Processed via MockEngineAdapter
@@ -54,10 +70,138 @@ export const ChronicleView: React.FC<ChronicleViewProps> = ({
         </div>
       </div>
 
-      {/* Main Two-Column Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Knowledge Base Section (6 cols) */}
-        <div className="lg:col-span-6 space-y-4">
+      {/* Navigation Sub-Tabs */}
+      <div className="flex items-center gap-2 border-b border-stone-800 pb-2">
+        <button
+          id="tab-view-world-chronicle"
+          onClick={() => setActiveSection('chronicle')}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition ${
+            activeSection === 'chronicle'
+              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+              : 'text-stone-400 hover:text-stone-200 bg-stone-900/40 border border-stone-800'
+          }`}
+        >
+          <Scroll className="w-3.5 h-3.5" />
+          <span>Historical Chronicle ({chronicleEntries.length})</span>
+        </button>
+
+        <button
+          id="tab-view-player-knowledge"
+          onClick={() => setActiveSection('knowledge')}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition ${
+            activeSection === 'knowledge'
+              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+              : 'text-stone-400 hover:text-stone-200 bg-stone-900/40 border border-stone-800'
+          }`}
+        >
+          <BookOpen className="w-3.5 h-3.5" />
+          <span>Knowledge Base ({knowledgeBase.length})</span>
+        </button>
+
+        <button
+          id="tab-view-validation-stream"
+          onClick={() => setActiveSection('validation')}
+          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition ${
+            activeSection === 'validation'
+              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+              : 'text-stone-400 hover:text-stone-200 bg-stone-900/40 border border-stone-800'
+          }`}
+        >
+          <History className="w-3.5 h-3.5" />
+          <span>Validation Stream ({actionHistory.length})</span>
+        </button>
+      </div>
+
+      {/* Section 1: Historical Chronicle (CH4) */}
+      {activeSection === 'chronicle' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between gap-3 pb-2 border-b border-stone-800">
+            <h3 className="text-sm font-mono uppercase tracking-wider text-stone-200 font-semibold flex items-center gap-2">
+              <Landmark className="w-4 h-4 text-amber-400" />
+              <span>Authoritative World Chronicle (Epistemically Filtered)</span>
+            </h3>
+            <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+              Deterministic Significance Evaluator
+            </span>
+          </div>
+
+          {chronicleEntries.length === 0 ? (
+            <div className="rounded-xl border border-stone-800 bg-stone-900/30 p-8 text-center text-stone-500 text-xs">
+              No historical chronicle milestones recorded yet for this era.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {chronicleEntries.map((entry) => {
+                const isHistoric = entry.significance === 'HISTORIC';
+                const isSignificant = entry.significance === 'SIGNIFICANT';
+
+                return (
+                  <div
+                    key={entry.id}
+                    className={`rounded-xl border p-4 space-y-2 transition ${
+                      isHistoric
+                        ? 'bg-amber-950/20 border-amber-500/40 shadow-sm'
+                        : isSignificant
+                        ? 'bg-purple-950/20 border-purple-500/40'
+                        : 'bg-stone-900/70 border-stone-800'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <Sparkles
+                          className={`w-4 h-4 flex-shrink-0 ${
+                            isHistoric
+                              ? 'text-amber-400'
+                              : isSignificant
+                              ? 'text-purple-400'
+                              : 'text-stone-400'
+                          }`}
+                        />
+                        <h4 className="font-serif font-bold text-stone-100 text-sm">
+                          {entry.headline}
+                        </h4>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <span
+                          className={`text-[9px] font-mono uppercase font-bold px-2 py-0.5 rounded border ${
+                            isHistoric
+                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                              : isSignificant
+                              ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                              : 'bg-stone-800 text-stone-400 border-stone-700'
+                          }`}
+                        >
+                          {entry.significance}
+                        </span>
+                        <span className="text-[9px] font-mono uppercase px-2 py-0.5 rounded bg-stone-800 text-stone-400 border border-stone-700">
+                          {entry.category.replace(/_/g, ' ')}
+                        </span>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-stone-300 leading-relaxed font-serif pl-6">
+                      {entry.historicalAccount}
+                    </p>
+
+                    <div className="pt-2 border-t border-stone-850 flex items-center justify-between text-[10px] font-mono text-stone-500 pl-6">
+                      <span>Location: {entry.locationId}</span>
+                      <span>
+                        Time: Year {entry.timestamp.year}, Month {entry.timestamp.month}, Day {entry.timestamp.day} ({entry.timestamp.hour.toString().padStart(2, '0')}:{entry.timestamp.minute.toString().padStart(2, '0')})
+                      </span>
+                      <span>Provenance: {entry.provenance}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Section 2: Player Knowledge Base */}
+      {activeSection === 'knowledge' && (
+        <div className="space-y-4">
           <div className="flex items-center justify-between gap-3 pb-2 border-b border-stone-800">
             <h3 className="text-sm font-mono uppercase tracking-wider text-stone-200 font-semibold flex items-center gap-2">
               <BookOpen className="w-4 h-4 text-amber-400" />
@@ -95,9 +239,11 @@ export const ChronicleView: React.FC<ChronicleViewProps> = ({
             ))}
           </div>
         </div>
+      )}
 
-        {/* Action Request Validation Stream (6 cols) */}
-        <div className="lg:col-span-6 space-y-4">
+      {/* Section 3: Action Request Validation Stream */}
+      {activeSection === 'validation' && (
+        <div className="space-y-4">
           <div className="flex items-center justify-between gap-3 pb-2 border-b border-stone-800">
             <h3 className="text-sm font-mono uppercase tracking-wider text-stone-200 font-semibold flex items-center gap-2">
               <History className="w-4 h-4 text-amber-400" />
@@ -160,7 +306,8 @@ export const ChronicleView: React.FC<ChronicleViewProps> = ({
             })}
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
+

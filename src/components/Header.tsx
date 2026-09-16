@@ -1,13 +1,15 @@
 import React from 'react';
 import { WorldTime, Location } from '../types';
-import { ShieldCheck, Clock, Compass, BookOpen, Eye } from 'lucide-react';
+import { ShieldCheck, Clock, Compass, BookOpen, Eye, Layers, Archive } from 'lucide-react';
 
 interface HeaderProps {
   worldTime: WorldTime;
   activeLocation: Location;
-  activeTab: 'story' | 'characters' | 'inventory' | 'map' | 'chronicle';
-  onTabChange: (tab: 'story' | 'characters' | 'inventory' | 'map' | 'chronicle') => void;
+  activeTab: 'story' | 'characters' | 'inventory' | 'capabilities' | 'combat' | 'map' | 'chronicle';
+  onTabChange: (tab: 'story' | 'characters' | 'inventory' | 'capabilities' | 'combat' | 'map' | 'chronicle') => void;
   onOpenEpistemicModal: () => void;
+  onOpenContextModal?: () => void;
+  onOpenArchiveModal?: () => void;
   pendingRequestsCount: number;
 }
 
@@ -17,6 +19,8 @@ export const Header: React.FC<HeaderProps> = ({
   activeTab,
   onTabChange,
   onOpenEpistemicModal,
+  onOpenContextModal,
+  onOpenArchiveModal,
   pendingRequestsCount,
 }) => {
   return (
@@ -34,8 +38,8 @@ export const Header: React.FC<HeaderProps> = ({
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 font-mono text-stone-300">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 font-mono text-stone-300 mr-1">
             <Clock className="w-3.5 h-3.5 text-amber-400" />
             <span>Cycle {worldTime.cycle}</span>
             <span className="text-stone-500">•</span>
@@ -50,6 +54,28 @@ export const Header: React.FC<HeaderProps> = ({
             <Eye className="w-3 h-3 text-amber-400" />
             <span>Epistemic Model</span>
           </button>
+          {onOpenContextModal && (
+            <button
+              id="context-inspect-btn"
+              onClick={onOpenContextModal}
+              className="flex items-center gap-1 px-2.5 py-0.5 rounded bg-stone-800 hover:bg-stone-750 text-stone-300 hover:text-amber-200 border border-stone-700 transition text-[11px] font-medium"
+              title="Inspect Working Context & Token Budget"
+            >
+              <Layers className="w-3 h-3 text-amber-400" />
+              <span>Context Budget</span>
+            </button>
+          )}
+          {onOpenArchiveModal && (
+            <button
+              id="archive-modal-btn"
+              onClick={onOpenArchiveModal}
+              className="flex items-center gap-1 px-2.5 py-0.5 rounded bg-stone-800 hover:bg-stone-750 text-stone-300 hover:text-amber-200 border border-stone-700 transition text-[11px] font-medium"
+              title="Lossless Campaign Archive (.dreamarchive)"
+            >
+              <Archive className="w-3 h-3 text-amber-400" />
+              <span>Archive</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -114,6 +140,30 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <span>🎒</span>
             <span>Inventory & Gear</span>
+          </button>
+          <button
+            id="nav-tab-capabilities"
+            onClick={() => onTabChange('capabilities')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'capabilities'
+                ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-sm'
+                : 'text-stone-400 hover:text-stone-200 hover:bg-stone-900'
+            }`}
+          >
+            <span>✨</span>
+            <span>Powers & Workshop</span>
+          </button>
+          <button
+            id="nav-tab-combat"
+            onClick={() => onTabChange('combat')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition flex items-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'combat'
+                ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 shadow-sm'
+                : 'text-stone-400 hover:text-stone-200 hover:bg-stone-900'
+            }`}
+          >
+            <span>⚔️</span>
+            <span>Tactical Combat</span>
           </button>
           <button
             id="nav-tab-map"

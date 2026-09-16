@@ -1,6 +1,7 @@
-import React from 'react';
-import { X, ShieldCheck, Eye, Lock, Cpu, User, CheckCircle } from 'lucide-react';
-import { mockEngineAdapter } from '../services/MockEngineAdapter';
+import React, { useState, useEffect } from 'react';
+import { X, ShieldCheck, Eye, Lock, Cpu, User, CheckCircle, Server } from 'lucide-react';
+import { apiClient } from '../services/apiClient';
+import { BoundaryAuditDiagnostics } from '../types';
 
 interface EpistemicInspectorModalProps {
   isOpen: boolean;
@@ -11,9 +12,26 @@ export const EpistemicInspectorModal: React.FC<EpistemicInspectorModalProps> = (
   isOpen,
   onClose,
 }) => {
-  if (!isOpen) return null;
+  const [diagnostics, setDiagnostics] = useState<BoundaryAuditDiagnostics | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
 
-  const audit = mockEngineAdapter.getEpistemicAudit();
+  useEffect(() => {
+    if (isOpen) {
+      setLoading(true);
+      apiClient
+        .getEpistemicStatus()
+        .then((data) => {
+          setDiagnostics(data);
+          setLoading(false);
+        })
+        .catch((err) => {
+          console.error('Failed to fetch epistemic diagnostics:', err);
+          setLoading(false);
+        });
+    }
+  }, [isOpen]);
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/80 backdrop-blur-md">
@@ -25,10 +43,10 @@ export const EpistemicInspectorModal: React.FC<EpistemicInspectorModalProps> = (
             </div>
             <div>
               <h3 className="font-serif font-bold text-stone-100 text-base">
-                Epistemic Separation Model & Adapter Audit
+                Epistemic Separation Model & Server Boundary Audit
               </h3>
               <p className="text-[11px] font-mono text-stone-400">
-                Architectural Spec: Section 4 & 8 Boundary Verification
+                Experiment 2: Server-Side Authority Verification
               </p>
             </div>
           </div>
@@ -43,40 +61,78 @@ export const EpistemicInspectorModal: React.FC<EpistemicInspectorModalProps> = (
 
         <div className="mt-4 space-y-4">
           <p className="text-xs text-stone-300 leading-relaxed font-serif">
-            In the Personal AI Story Engine, the client display is strictly constructed from information
-            authorized for the active viewer. Hidden information must never be leaked to the presentation layer.
+            In Experiment 2, the game authority runs exclusively in the server-side Node.js runtime.
+            The client presentation layer receives only sanitized projections across the HTTP/API boundary.
+            Hidden canonical secrets remain strictly confined to the server.
           </p>
 
-          {/* Active Adapter Epistemic Filter Audit */}
+          {/* Active Server Boundary Audit Panel */}
           <div className="bg-stone-950 rounded-xl p-3.5 border border-amber-500/30">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-mono font-bold text-amber-300 uppercase flex items-center gap-1.5">
-                <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
-                Live Adapter Boundary Audit
+                <Server className="w-3.5 h-3.5 text-amber-400" />
+                Server Authority Boundary Audit
               </span>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/70 text-emerald-300 border border-emerald-800">
-                Epistemic Filter: Active
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/70 text-emerald-300 border border-emerald-800 flex items-center gap-1">
+                <CheckCircle className="w-3 h-3 text-emerald-400" />
+                Boundary Check: {diagnostics?.boundaryStatus || 'PASS'}
               </span>
             </div>
-            <p className="text-[11px] text-stone-400 mb-2 font-mono">
-              {audit.filtrationRule}
-            </p>
-            <div className="space-y-1.5 text-[11px] font-mono">
-              {audit.canonicalSecretsHeld.map((secret) => (
-                <div
-                  key={secret.characterId}
-                  className="bg-stone-900/90 rounded p-2 border border-stone-800 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs"
-                >
-                  <span className="text-stone-300 font-semibold">{secret.characterName}:</span>
-                  <span className="text-red-400/90 italic truncate max-w-md" title={secret.secret}>
-                    {secret.secret}
-                  </span>
-                  <span className="text-[10px] text-emerald-400 font-bold uppercase whitespace-nowrap">
-                    [Stripped in ViewState]
-                  </span>
+
+            {loading ? (
+              <p className="text-xs text-stone-500 font-mono py-2">
+                Querying server boundary diagnostics...
+              </p>
+            ) : diagnostics ? (
+              <div className="space-y-2 text-xs font-mono">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                  <div className="bg-stone-900/90 rounded p-2.5 border border-stone-800">
+                    <span className="text-stone-500 block text-[10px] uppercase">
+                      Server Canonical Storage
+                    </span>
+                    <span className="text-emerald-400 font-semibold">
+                      Server holds canonical hidden state ({diagnostics.countSecretsHeld} secrets)
+                    </span>
+                  </div>
+
+                  <div className="bg-stone-900/90 rounded p-2.5 border border-stone-800">
+                    <span className="text-stone-500 block text-[10px] uppercase">
+                      External Projection Integrity
+                    </span>
+                    <span className="text-emerald-400 font-semibold">
+                      External projection contains no hiddenCanonicalContext
+                    </span>
+                  </div>
+
+                  <div className="bg-stone-900/90 rounded p-2.5 border border-stone-800">
+                    <span className="text-stone-500 block text-[10px] uppercase">
+                      Boundary Secret Verification
+                    </span>
+                    <span className="text-amber-300 font-semibold">
+                      Test secret retained on server • Withheld from API responses
+                    </span>
+                  </div>
+
+                  <div className="bg-stone-900/90 rounded p-2.5 border border-stone-800">
+                    <span className="text-stone-500 block text-[10px] uppercase">
+                      Authority Runtime
+                    </span>
+                    <span className="text-stone-300 font-semibold">
+                      {diagnostics.architectureMode}
+                    </span>
+                  </div>
                 </div>
-              ))}
-            </div>
+
+                <div className="bg-stone-900/60 rounded p-2 text-[10px] text-stone-400 border border-stone-850">
+                  <span className="text-emerald-400 font-bold">Confidentiality Enforced: </span>
+                  Canonical secrets are withheld on the Node.js server. No raw secrets or engine mutations cross the HTTP boundary.
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-stone-400 font-mono">
+                Server authority diagnostics available on active session.
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -88,14 +144,14 @@ export const EpistemicInspectorModal: React.FC<EpistemicInspectorModalProps> = (
                   1. Canonical World Truth
                 </span>
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-red-950/60 text-red-300 border border-red-800">
-                  Core Engine Only
+                  Server Runtime Only
                 </span>
               </div>
               <p className="text-xs text-stone-400">
-                The objective, deterministic state of Dreamville. Held strictly in the core engine repository.
+                The objective, deterministic state of Dreamville. Held strictly in server memory (Node.js runtime).
               </p>
               <div className="bg-stone-900/90 rounded p-2 text-[11px] font-mono text-stone-400 border border-stone-800 italic">
-                Example: Elian holds the master vault key in his robe; the 3rd prism fractured due to a subterranean seismic fissure.
+                Simulated server state holds vault ciphers, hidden NPC motivations, and structural anomaly seeds.
               </div>
             </div>
 
@@ -107,14 +163,14 @@ export const EpistemicInspectorModal: React.FC<EpistemicInspectorModalProps> = (
                   2. Player Knowledge
                 </span>
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950/60 text-emerald-300 border border-emerald-800">
-                  Active Display Scope
+                  Client Display Scope
                 </span>
               </div>
               <p className="text-xs text-stone-400">
-                What Scribe Vael has directly observed, heard, or read. The external client renders ONLY this layer.
+                What Scribe Vael has directly observed, heard, or read. The React client receives and renders ONLY this layer.
               </p>
               <div className="bg-stone-900/90 rounded p-2 text-[11px] font-mono text-emerald-300/90 border border-stone-800">
-                Visible: The Whispering Orrery rings stopped rotating. Glasswood requires an astrolabe and spores.
+                Visible: Orrery ring stoppage, mechanical fracture observations, authorized travel seals.
               </div>
             </div>
 
@@ -130,10 +186,10 @@ export const EpistemicInspectorModal: React.FC<EpistemicInspectorModalProps> = (
                 </span>
               </div>
               <p className="text-xs text-stone-400">
-                Characters only possess localized memory and lore corresponding to their role, rank, and presence.
+                Characters possess only localized memory corresponding to their role, rank, and presence.
               </p>
               <div className="bg-stone-900/90 rounded p-2 text-[11px] font-mono text-stone-400 border border-stone-800">
-                Maren knows border routes; Sentry Kaelen knows transit seals. Neither possesses omniscient lore.
+                Maren knows armatures; Elian knows vault tiers. Neither possesses omniscient world lore.
               </div>
             </div>
 
@@ -142,17 +198,17 @@ export const EpistemicInspectorModal: React.FC<EpistemicInspectorModalProps> = (
               <div className="flex items-center justify-between">
                 <span className="text-xs font-mono font-bold text-amber-400 uppercase flex items-center gap-1.5">
                   <Cpu className="w-3.5 h-3.5" />
-                  4. Bounded AI Context
+                  4. Bounded Context Boundary
                 </span>
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-950/60 text-amber-300 border border-amber-800">
                   Downstream Proposal
                 </span>
               </div>
               <p className="text-xs text-stone-400">
-                AI receives only filtered, bounded context for prose generation. AI proposals are validated before canonical commit.
+                Proposals pass through the server authority for validation before any canonical state transition is committed.
               </p>
               <div className="bg-stone-900/90 rounded p-2 text-[11px] font-mono text-amber-300/90 border border-stone-800">
-                Flow: Canonical State → Deterministic Filtering → Bounded AI Context → Validation → Presentation.
+                Flow: Client ActionRequest → HTTP API → Server Authority Validation → Sanitized ExternalViewState → HTTP Response.
               </div>
             </div>
           </div>

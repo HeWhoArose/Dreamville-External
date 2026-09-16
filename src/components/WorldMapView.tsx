@@ -5,14 +5,20 @@ import { Compass, MapPin, Navigation, ShieldAlert, Sparkles, Footprints } from '
 interface WorldMapViewProps {
   locations: Record<string, Location>;
   activeLocationId: string;
+  activeJourney?: any | null;
+  isTraveling?: boolean;
   onRequestTravel: (targetLocationId: string) => void;
+  onCancelTravel?: () => void;
   isProcessingAction: boolean;
 }
 
 export const WorldMapView: React.FC<WorldMapViewProps> = ({
   locations,
   activeLocationId,
+  activeJourney,
+  isTraveling,
   onRequestTravel,
+  onCancelTravel,
   isProcessingAction,
 }) => {
   const locationList = Object.values(locations);
@@ -20,6 +26,35 @@ export const WorldMapView: React.FC<WorldMapViewProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Active Journey Banner */}
+      {isTraveling && activeJourney && (
+        <div className="bg-amber-950/40 border border-amber-500/50 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg animate-pulse">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Navigation className="w-5 h-5 text-amber-400" />
+              <h4 className="text-sm font-serif font-bold text-amber-200">
+                Journey In Progress &mdash; Traveling to {locations[activeJourney.destinationLocationId]?.name || activeJourney.destinationLocationId}
+              </h4>
+            </div>
+            <p className="text-xs font-mono text-stone-400">
+              Origin: <span className="text-stone-300">{locations[activeJourney.originLocationId]?.name || activeJourney.originLocationId}</span> &bull; 
+              Mode: <span className="text-stone-300">{activeJourney.mode}</span> &bull; 
+              Distance: <span className="text-amber-300">{activeJourney.totalDistanceKm} km</span>
+            </p>
+          </div>
+          {onCancelTravel && (
+            <button
+              id="cancel-journey-btn"
+              disabled={isProcessingAction}
+              onClick={onCancelTravel}
+              className="px-4 py-2 rounded-xl bg-red-950/60 hover:bg-red-900/60 border border-red-500/40 text-red-300 text-xs font-mono font-medium transition disabled:opacity-50"
+            >
+              Cancel Journey
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Map Header / Legend */}
       <div className="bg-stone-900/60 rounded-2xl border border-stone-800 p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>

@@ -9,7 +9,8 @@ import { GeographyGraph } from '../domain/geographyGraph';
 import { HistoricalChronicleEngine } from '../domain/historicalChronicleEngine';
 import { InventoryItemEngine } from '../domain/inventoryItem';
 import { CapabilityEngine } from '../domain/capabilityEngine';
-import { TacticalCombatEngine } from '../domain/combatEngine';
+import { ReusableSkillRegistry } from '../domain/reusableSkillRegistry';
+import { TacticalCombatEngine, CombatPerceptionOptions } from '../domain/combatEngine';
 import { MemoryOpportunityEngine } from '../domain/memoryOpportunityEngine';
 import { SensoryEngine } from '../domain/sensoryEngine';
 import { LivingWorldSimulation } from '../domain/livingWorldSimulation';
@@ -25,21 +26,32 @@ import { CampaignArchiveService, PartitionedArchive } from '../domain/campaignAr
 export interface WorldRepository {
   getPlayerLifecycle(storyId: string): PlayerLifecycleState | null;
   updatePlayerLifecycle(storyId: string, state: PlayerLifecycleState): void;
+  getNpcLifecycle(storyId: string, npcId: string): PlayerLifecycleState | null;
+  updateNpcLifecycle(storyId: string, state: PlayerLifecycleState): void;
+  getAllNpcLifecycles(storyId: string): PlayerLifecycleState[];
   getCurrentLocation(storyId: string): string | null;
   getActiveJourney(storyId: string): TravelJourney | null;
   getWorldClock(storyId: string): WorldClock;
-  getGeographyGraph(): GeographyGraph;
+  getGeographyGraph(storyId?: string): GeographyGraph;
+  seedStory(storyId: string): void;
   getKnowledgeFacts(storyId: string): KnowledgeFact[];
   addKnowledgeFact(storyId: string, fact: KnowledgeFact): void;
   getHistoricalChronicleEngine(storyId: string): HistoricalChronicleEngine;
   getInventoryEngine(storyId: string): InventoryItemEngine;
   getCapabilityEngine(storyId: string): CapabilityEngine;
+  getEffectiveActorCapabilities(
+    storyId: string,
+    actorId: string
+  ): import('../domain/capabilityEngine').EffectiveCapability[];
   getCombatEngine(storyId: string): TacticalCombatEngine;
+  getCombatPerceptionOptions(storyId: string, viewerActorId: string): CombatPerceptionOptions;
+  isEntityEpistemicallyKnown(storyId: string, viewerActorId: string, targetId: string): boolean;
   getMemoryEngine(storyId: string): MemoryOpportunityEngine;
   getLivingWorldSimulation(storyId: string): LivingWorldSimulation;
   getAiOrchestrator(): MultiModelOrchestrator;
   getCharacterAlignmentEngine(): CharacterAlignmentEngine;
   getSensoryEngine(): SensoryEngine;
+  getReusableSkillRegistry(): ReusableSkillRegistry;
   exportCampaignArchive(storyId?: string, title?: string): PartitionedArchive;
   restoreCampaignArchive(
     archive: PartitionedArchive,
@@ -49,6 +61,7 @@ export interface WorldRepository {
 
 export class InMemoryWorldRepository implements WorldRepository {
   private playerLifecycles: Map<string, PlayerLifecycleState> = new Map();
+  private npcLifecycles: Map<string, Map<string, PlayerLifecycleState>> = new Map();
   private worldClocks: Map<string, WorldClock> = new Map();
   private knowledgeBases: Map<string, KnowledgeFact[]> = new Map();
   private chronicleEngines: Map<string, HistoricalChronicleEngine> = new Map();
@@ -60,164 +73,209 @@ export class InMemoryWorldRepository implements WorldRepository {
   private aiOrchestrator: MultiModelOrchestrator = new MultiModelOrchestrator();
   private characterAlignmentEngine: CharacterAlignmentEngine = new CharacterAlignmentEngine();
   private sensoryEngine: SensoryEngine = new SensoryEngine();
-  private geography: GeographyGraph;
+  private reusableSkillRegistry: ReusableSkillRegistry = new ReusableSkillRegistry();
+  private geographies: Map<string, GeographyGraph> = new Map();
 
   constructor() {
-    this.geography = new GeographyGraph();
+    this.geographies.set('default_story', new GeographyGraph());
     this.aiOrchestrator.setWorldRepository(this);
     this.seedDefaultStory('default_story');
   }
 
+  public seedStory(storyId: string): void {
+    this.seedDefaultStory(storyId);
+  }
+
   private seedDefaultStory(storyId: string): void {
-    const clock = new WorldClock();
-    this.worldClocks.set(storyId, clock);
-    const chronicleEngine = new HistoricalChronicleEngine();
-    this.chronicleEngines.set(storyId, chronicleEngine);
+    if (!this.geographies.has(storyId)) {
+      this.geographies.set(storyId, new GeographyGraph());
+    }
+    if (!this.worldClocks.has(storyId)) {
+      this.worldClocks.set(storyId, new WorldClock());
+    }
+    const clock = this.worldClocks.get(storyId)!;
+
+    if (!this.chronicleEngines.has(storyId)) {
+      const chronicleEngine = new HistoricalChronicleEngine();
+      this.chronicleEngines.set(storyId, chronicleEngine);
+
+      // Seed canonical initial historical evidence into HistoricalChronicleEngine
+      chronicleEngine.recordEvidence({
+        id: 'ev_init_orrery_halt',
+        category: 'WORLD_ANOMALY',
+        timestamp: clock.getTimestamp(),
+        primarySubjectId: 'loc_whispering_orrery',
+        secondarySubjectId: 'char_maren',
+        locationId: 'loc_whispering_orrery',
+        summary: 'The Whispering Orrery astral rings ground to a halt.',
+        details: 'Concentric bronze armatures ceased motion three bells past dusk due to subterranean resonant vibration.',
+        sourceEventId: 'evt_astral_rings_halt',
+        provenance: 'direct_astronomical_observation',
+        visibility: 'PUBLIC',
+        metadata: { subjectName: 'The Whispering Orrery' },
+      });
+
+      chronicleEngine.recordEvidence({
+        id: 'ev_init_maren_inspection',
+        category: 'LIFECYCLE_TRANSITION',
+        timestamp: clock.getTimestamp(),
+        primarySubjectId: 'char_maren',
+        locationId: 'loc_whispering_orrery',
+        summary: 'Maren the Archivist recorded micro-fractures in the third prism ring.',
+        details: 'Technician logged anomalous bedrock harmonic frequency pulse.',
+        sourceEventId: 'evt_maren_prism_log',
+        provenance: 'archival_log',
+        visibility: 'PUBLIC',
+        metadata: { subjectName: 'Maren the Archivist' },
+      });
+    }
 
     // Embodied player actor
-    const initialPlayer = new PlayerLifecycleState({
-      actorId: `player_actor_${storyId}`,
-      name: 'Scribe Vael',
-      locationId: 'loc_whispering_orrery',
-      lastUpdatedTime: clock.getTimestamp().totalElapsedSeconds,
-      currentActivity: 'idle',
-      activeJourney: null,
-      injuries: [],
-    });
-    this.playerLifecycles.set(storyId, initialPlayer);
+    if (!this.playerLifecycles.has(storyId)) {
+      const initialPlayer = new PlayerLifecycleState({
+        actorId: `player_actor_${storyId}`,
+        name: 'Scribe Vael',
+        locationId: 'loc_whispering_orrery',
+        lastUpdatedTime: clock.getTimestamp().totalElapsedSeconds,
+        currentActivity: 'idle',
+        activeJourney: null,
+        injuries: [],
+      });
+      this.playerLifecycles.set(storyId, initialPlayer);
+    }
 
-    const initialFacts: KnowledgeFact[] = [
-      {
-        id: 'fact_orrery_halt',
-        subjectEntityId: 'loc_whispering_orrery',
-        predicate: 'motion_status',
-        objectValue: 'halted_three_bells_past_dusk',
-        sourceType: 'witnessed',
-        acquiredAtTimestamp: clock.getTimestamp(),
-        confidence: 1.0,
-        secretLevel: 'public',
-        scope: 'exact',
-        provenanceSummary: 'Direct astronomical observation at Whispering Orrery',
-      },
-      {
-        id: 'fact_prism_fracture',
-        subjectEntityId: 'loc_whispering_orrery',
-        predicate: 'damage_cause',
-        objectValue: 'acoustic_pulse_from_bedrock',
-        sourceType: 'told',
-        acquiredAtTimestamp: clock.getTimestamp(),
-        confidence: 0.95,
-        secretLevel: 'public',
-        scope: 'exact',
-        provenanceSummary: 'Report from Maren the Archivist',
-      },
-    ];
-    this.knowledgeBases.set(storyId, initialFacts);
-
-    // Seed canonical initial historical evidence into HistoricalChronicleEngine
-    chronicleEngine.recordEvidence({
-      id: 'ev_init_orrery_halt',
-      category: 'WORLD_ANOMALY',
-      timestamp: clock.getTimestamp(),
-      primarySubjectId: 'loc_whispering_orrery',
-      secondarySubjectId: 'char_maren',
-      locationId: 'loc_whispering_orrery',
-      summary: 'The Whispering Orrery astral rings ground to a halt.',
-      details: 'Concentric bronze armatures ceased motion three bells past dusk due to subterranean resonant vibration.',
-      sourceEventId: 'evt_astral_rings_halt',
-      provenance: 'direct_astronomical_observation',
-      visibility: 'PUBLIC',
-      metadata: { subjectName: 'The Whispering Orrery' },
-    });
-
-    chronicleEngine.recordEvidence({
-      id: 'ev_init_maren_inspection',
-      category: 'LIFECYCLE_TRANSITION',
-      timestamp: clock.getTimestamp(),
-      primarySubjectId: 'char_maren',
-      locationId: 'loc_whispering_orrery',
-      summary: 'Maren the Archivist recorded micro-fractures in the third prism ring.',
-      details: 'Technician logged anomalous bedrock harmonic frequency pulse.',
-      sourceEventId: 'evt_maren_prism_log',
-      provenance: 'archival_log',
-      visibility: 'PUBLIC',
-      metadata: { subjectName: 'Maren the Archivist' },
-    });
+    if (!this.knowledgeBases.has(storyId)) {
+      const initialFacts: KnowledgeFact[] = [
+        {
+          id: 'fact_orrery_halt',
+          subjectEntityId: 'loc_whispering_orrery',
+          predicate: 'motion_status',
+          objectValue: 'halted_three_bells_past_dusk',
+          sourceType: 'witnessed',
+          acquiredAtTimestamp: clock.getTimestamp(),
+          confidence: 1.0,
+          secretLevel: 'public',
+          scope: 'exact',
+          provenanceSummary: 'Direct astronomical observation at Whispering Orrery',
+        },
+        {
+          id: 'fact_prism_fracture',
+          subjectEntityId: 'loc_whispering_orrery',
+          predicate: 'damage_cause',
+          objectValue: 'acoustic_pulse_from_bedrock',
+          sourceType: 'told',
+          acquiredAtTimestamp: clock.getTimestamp(),
+          confidence: 0.95,
+          secretLevel: 'public',
+          scope: 'exact',
+          provenanceSummary: 'Report from Maren the Archivist',
+        },
+      ];
+      this.knowledgeBases.set(storyId, initialFacts);
+    }
 
     // Seed canonical initial living world simulation (CH10)
-    const livingSim = new LivingWorldSimulation();
-    livingSim.registerEntityPhysiology({
-      entityId: `player_actor_${storyId}`,
-      hunger: 15,
-      thirst: 15,
-      fatigue: 5,
-      pain: 0,
-      stress: 10,
-      morale: 80,
-      hungerRatePerHour: 4,
-      thirstRatePerHour: 6,
-      fatigueRatePerHour: 3,
-      lastFedTimestamp: clock.getTimestamp(),
-      lastRestedTimestamp: clock.getTimestamp(),
-      personalityModulation: 'stoic',
-    });
+    if (!this.livingSimulations.has(storyId)) {
+      const livingSim = new LivingWorldSimulation();
+      livingSim.registerEntityPhysiology({
+        entityId: `player_actor_${storyId}`,
+        hunger: 15,
+        thirst: 15,
+        fatigue: 5,
+        pain: 0,
+        stress: 10,
+        morale: 80,
+        hungerRatePerHour: 4,
+        thirstRatePerHour: 6,
+        fatigueRatePerHour: 3,
+        lastFedTimestamp: clock.getTimestamp(),
+        lastRestedTimestamp: clock.getTimestamp(),
+        personalityModulation: 'stoic',
+      });
 
-    livingSim.registerEntityPhysiology({
-      entityId: 'char_maren',
-      hunger: 10,
-      thirst: 10,
-      fatigue: 5,
-      pain: 0,
-      stress: 5,
-      morale: 90,
-      hungerRatePerHour: 3,
-      thirstRatePerHour: 5,
-      fatigueRatePerHour: 2,
-      lastFedTimestamp: clock.getTimestamp(),
-      lastRestedTimestamp: clock.getTimestamp(),
-      personalityModulation: 'expressive',
-    });
+      livingSim.registerEntityPhysiology({
+        entityId: 'char_maren',
+        hunger: 10,
+        thirst: 10,
+        fatigue: 5,
+        pain: 0,
+        stress: 5,
+        morale: 90,
+        hungerRatePerHour: 3,
+        thirstRatePerHour: 5,
+        fatigueRatePerHour: 2,
+        lastFedTimestamp: clock.getTimestamp(),
+        lastRestedTimestamp: clock.getTimestamp(),
+        personalityModulation: 'expressive',
+      });
 
-    livingSim.registerNpcSchedule({
-      npcId: 'char_maren',
-      name: 'Maren the Archivist',
-      currentLocationId: 'loc_whispering_orrery',
-      currentActivity: 'working',
-      entries: [
-        { id: 'sch_maren_breakfast', startHour: 6, endHour: 8, activity: 'eating', targetLocationId: 'loc_whispering_orrery' },
-        { id: 'sch_maren_work', startHour: 8, endHour: 18, activity: 'working', targetLocationId: 'loc_whispering_orrery' },
-        { id: 'sch_maren_dinner', startHour: 18, endHour: 20, activity: 'eating', targetLocationId: 'loc_whispering_orrery' },
-        { id: 'sch_maren_relax', startHour: 20, endHour: 22, activity: 'relaxing', targetLocationId: 'loc_whispering_orrery' },
-        { id: 'sch_maren_sleep', startHour: 22, endHour: 6, activity: 'sleeping', targetLocationId: 'loc_whispering_orrery' },
-      ],
-      fallbackActivity: 'idle',
-      fallbackLocationId: 'loc_whispering_orrery',
-    });
+      livingSim.registerNpcSchedule({
+        npcId: 'char_maren',
+        name: 'Maren the Archivist',
+        currentLocationId: 'loc_whispering_orrery',
+        currentActivity: 'working',
+        entries: [
+          { id: 'sch_maren_breakfast', startHour: 6, endHour: 8, activity: 'eating', targetLocationId: 'loc_whispering_orrery' },
+          { id: 'sch_maren_work', startHour: 8, endHour: 18, activity: 'working', targetLocationId: 'loc_whispering_orrery' },
+          { id: 'sch_maren_dinner', startHour: 18, endHour: 20, activity: 'eating', targetLocationId: 'loc_whispering_orrery' },
+          { id: 'sch_maren_relax', startHour: 20, endHour: 22, activity: 'relaxing', targetLocationId: 'loc_whispering_orrery' },
+          { id: 'sch_maren_sleep', startHour: 22, endHour: 6, activity: 'sleeping', targetLocationId: 'loc_whispering_orrery' },
+        ],
+        fallbackActivity: 'idle',
+        fallbackLocationId: 'loc_whispering_orrery',
+      });
 
-    livingSim.registerNpcSchedule({
-      npcId: 'npc_lantern_guard',
-      name: 'Vault Watchman Orlo',
-      currentLocationId: 'loc_lantern_vault',
-      currentActivity: 'patrolling',
-      entries: [
-        { id: 'sch_guard_patrol', startHour: 6, endHour: 18, activity: 'patrolling', targetLocationId: 'loc_lantern_vault' },
-        { id: 'sch_guard_evening', startHour: 18, endHour: 22, activity: 'relaxing', targetLocationId: 'loc_whispering_orrery' },
-        { id: 'sch_guard_sleep', startHour: 22, endHour: 6, activity: 'sleeping', targetLocationId: 'loc_lantern_vault' },
-      ],
-      fallbackActivity: 'patrolling',
-      fallbackLocationId: 'loc_lantern_vault',
-    });
+      livingSim.registerNpcSchedule({
+        npcId: 'npc_lantern_guard',
+        name: 'Vault Watchman Orlo',
+        currentLocationId: 'loc_lantern_vault',
+        currentActivity: 'patrolling',
+        entries: [
+          { id: 'sch_guard_patrol', startHour: 6, endHour: 18, activity: 'patrolling', targetLocationId: 'loc_lantern_vault' },
+          { id: 'sch_guard_evening', startHour: 18, endHour: 22, activity: 'relaxing', targetLocationId: 'loc_whispering_orrery' },
+          { id: 'sch_guard_sleep', startHour: 22, endHour: 6, activity: 'sleeping', targetLocationId: 'loc_lantern_vault' },
+        ],
+        fallbackActivity: 'patrolling',
+        fallbackLocationId: 'loc_lantern_vault',
+      });
 
-    this.livingSimulations.set(storyId, livingSim);
+      this.livingSimulations.set(storyId, livingSim);
+    }
   }
 
   public getPlayerLifecycle(storyId: string): PlayerLifecycleState | null {
-    const state = this.playerLifecycles.get(storyId);
+    let state = this.playerLifecycles.get(storyId);
+    if (!state) {
+      this.seedDefaultStory(storyId);
+      state = this.playerLifecycles.get(storyId);
+    }
     return state ?? null;
   }
 
   public updatePlayerLifecycle(storyId: string, state: PlayerLifecycleState): void {
     this.playerLifecycles.set(storyId, state);
+  }
+
+  public getNpcLifecycle(storyId: string, npcId: string): PlayerLifecycleState | null {
+    const npcs = this.npcLifecycles.get(storyId);
+    if (!npcs) return null;
+    const state = npcs.get(npcId);
+    return state ? state : null;
+  }
+
+  public updateNpcLifecycle(storyId: string, state: PlayerLifecycleState): void {
+    let npcs = this.npcLifecycles.get(storyId);
+    if (!npcs) {
+      npcs = new Map<string, PlayerLifecycleState>();
+      this.npcLifecycles.set(storyId, npcs);
+    }
+    npcs.set(state.actorId, state);
+  }
+
+  public getAllNpcLifecycles(storyId: string): PlayerLifecycleState[] {
+    const npcs = this.npcLifecycles.get(storyId);
+    if (!npcs) return [];
+    return Array.from(npcs.values());
   }
 
   /**
@@ -246,8 +304,13 @@ export class InMemoryWorldRepository implements WorldRepository {
     return clock;
   }
 
-  public getGeographyGraph(): GeographyGraph {
-    return this.geography;
+  public getGeographyGraph(storyId = 'default_story'): GeographyGraph {
+    let geo = this.geographies.get(storyId);
+    if (!geo) {
+      geo = new GeographyGraph();
+      this.geographies.set(storyId, geo);
+    }
+    return geo;
   }
 
   public getKnowledgeFacts(storyId: string): KnowledgeFact[] {
@@ -295,6 +358,28 @@ export class InMemoryWorldRepository implements WorldRepository {
     return engine;
   }
 
+  public getProgressionPolicy(storyId: string): import('../domain/capabilityEngine').WorldProgressionPolicy {
+    const capEngine = this.getCapabilityEngine(storyId);
+    return capEngine.getProgressionPolicy();
+  }
+
+  public setProgressionPolicy(
+    storyId: string,
+    policy: Partial<import('../domain/capabilityEngine').WorldProgressionPolicy>
+  ): void {
+    const capEngine = this.getCapabilityEngine(storyId);
+    capEngine.setProgressionPolicy(policy);
+  }
+
+  public getEffectiveActorCapabilities(
+    storyId: string,
+    actorId: string
+  ): import('../domain/capabilityEngine').EffectiveCapability[] {
+    const capEngine = this.getCapabilityEngine(storyId);
+    const invEngine = this.getInventoryEngine(storyId);
+    return capEngine.getEffectiveActorCapabilities(actorId, invEngine);
+  }
+
   public getCombatEngine(storyId: string): TacticalCombatEngine {
     let engine = this.combatEngines.get(storyId);
     if (!engine) {
@@ -302,6 +387,74 @@ export class InMemoryWorldRepository implements WorldRepository {
       this.combatEngines.set(storyId, engine);
     }
     return engine;
+  }
+
+  public isEntityEpistemicallyKnown(
+    storyId: string,
+    viewerActorId: string,
+    targetId: string
+  ): boolean {
+    // 1. Viewing actor always knows themselves
+    if (viewerActorId === targetId) return true;
+
+    const player = this.getPlayerLifecycle(storyId);
+    const combat = this.getCombatEngine(storyId);
+    const viewerPart = combat.getParticipant(viewerActorId);
+    const targetPart = combat.getParticipant(targetId);
+
+    // 2. Allies on the same team share tactical awareness
+    if (viewerPart && targetPart && viewerPart.team === targetPart.team) {
+      return true;
+    }
+
+    // 3. Durable Knowledge Facts (KnowledgeBase)
+    const facts = this.getKnowledgeFacts(storyId);
+    const hasFact = facts.some(
+      (f) =>
+        (f.subjectEntityId === targetId || f.objectValue === targetId) &&
+        (f.secretLevel === 'public' || f.secretLevel === 'faction' || f.subjectEntityId === viewerActorId)
+    );
+    if (hasFact) return true;
+
+    // 4. Chronicle Historical Evidence (Observed records)
+    const chronicle = this.getHistoricalChronicleEngine(storyId);
+    const evidence = chronicle.getEpistemicEvidence(viewerActorId);
+    const hasEvidence = evidence.some(
+      (e) => e.primarySubjectId === targetId || e.secondarySubjectId === targetId
+    );
+    if (hasEvidence) return true;
+
+    // 5. Living World Co-located NPCs / Discovered Locations
+    const livingSim = this.getLivingWorldSimulation(storyId);
+    const npc = livingSim.getNpcSchedule(targetId);
+    if (npc) {
+      const playerLoc = player?.locationId;
+      const discovered = player?.discoveredLocationIds || [];
+      if (npc.currentLocationId === playerLoc || discovered.includes(npc.currentLocationId)) {
+        return true;
+      }
+    }
+
+    // 6. Active encounter participants in combat (visible if not concealed/stealthed)
+    if (viewerPart && targetPart) {
+      const hiddenConditions = ['Hidden', 'Stealthed', 'Invisible', 'Concealed', 'Unperceived'];
+      const isConcealed = targetPart.conditions && targetPart.conditions.some((c) => hiddenConditions.includes(c));
+      if (!isConcealed) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  public getCombatPerceptionOptions(
+    storyId: string,
+    viewerActorId: string
+  ): CombatPerceptionOptions {
+    return {
+      epistemicKnowledgeChecker: (viewerId: string, targetId: string) =>
+        this.isEntityEpistemicallyKnown(storyId, viewerId, targetId),
+    };
   }
 
   public getMemoryEngine(storyId: string): MemoryOpportunityEngine {
@@ -397,13 +550,21 @@ export class InMemoryWorldRepository implements WorldRepository {
     return this.characterAlignmentEngine;
   }
 
+  public getReusableSkillRegistry(): ReusableSkillRegistry {
+    return this.reusableSkillRegistry;
+  }
+
   /**
    * Challenge 13: Export Lossless Campaign Archive (.dreamarchive)
    */
   public exportCampaignArchive(storyId = 'default_story', title = 'Dreamville Campaign'): PartitionedArchive {
-    const clock = this.getWorldClock(storyId);
     const player = this.getPlayerLifecycle(storyId);
-    const geography = this.getGeographyGraph();
+    if (!player || !player.actorId) {
+      throw new Error(`Cannot export campaign archive for story '${storyId}': No active player lifecycle found.`);
+    }
+
+    const clock = this.getWorldClock(storyId);
+    const geography = this.getGeographyGraph(storyId);
     const knowledgeFacts = this.getKnowledgeFacts(storyId);
     const chronicleEngine = this.getHistoricalChronicleEngine(storyId);
     const inventoryEngine = this.getInventoryEngine(storyId);
@@ -412,6 +573,7 @@ export class InMemoryWorldRepository implements WorldRepository {
     const memoryEngine = this.getMemoryEngine(storyId);
     const livingSim = this.getLivingWorldSimulation(storyId);
     const alignmentEngine = this.getCharacterAlignmentEngine();
+    const orchestrator = this.getAiOrchestrator();
 
     const worldState = {
       clock: clock.exportState(),
@@ -419,11 +581,19 @@ export class InMemoryWorldRepository implements WorldRepository {
       knowledgeFacts,
     };
 
-    const playerState = player ? player.toJSON() : null;
+    const playerState = player.toJSON();
     const inventoryState = inventoryEngine.exportState();
-    const npcsState = alignmentEngine.exportState();
+    const npcs = this.npcLifecycles.get(storyId);
+    let npcLifecyclesState: any[] = [];
+    if (npcs) {
+      npcLifecyclesState = Array.from(npcs.values()).map(npc => npc.toJSON());
+    }
+    const npcsState = {
+      ...alignmentEngine.exportState(),
+      lifecycles: npcLifecyclesState
+    };
     const chronicleState = chronicleEngine.exportState();
-    const narrativeState: any[] = [];
+    const narrativeState = orchestrator.exportNarrativeHistory(storyId);
     const capabilitiesState = capabilityEngine.exportState();
     const combatState = combatEngine.exportState();
     const memoriesState = memoryEngine.exportState();
@@ -482,7 +652,7 @@ export class InMemoryWorldRepository implements WorldRepository {
         : [];
 
       let stagedPlayer: PlayerLifecycleState;
-      if (restored.player) {
+      if (restored.player && restored.player.actorId) {
         stagedPlayer = PlayerLifecycleState.fromJSON(restored.player);
       } else {
         stagedPlayer = new PlayerLifecycleState({
@@ -495,6 +665,8 @@ export class InMemoryWorldRepository implements WorldRepository {
           injuries: [],
         });
       }
+
+      const stagedNarrative = Array.isArray(restored.narrative) ? [...restored.narrative] : [];
 
       const stagedChronicle = new HistoricalChronicleEngine();
       if (restored.chronicle) {
@@ -536,8 +708,15 @@ export class InMemoryWorldRepository implements WorldRepository {
       }
 
       const stagedAlignment = new CharacterAlignmentEngine();
+      let stagedNpcLifecycles = new Map<string, PlayerLifecycleState>();
       if (restored.npcs) {
         stagedAlignment.importState(restored.npcs);
+        if (Array.isArray(restored.npcs.lifecycles)) {
+          for (const raw of restored.npcs.lifecycles) {
+            const life = PlayerLifecycleState.fromJSON(raw);
+            stagedNpcLifecycles.set(life.actorId, life);
+          }
+        }
       }
 
       // 3. Staged Semantic & Integrity Verification
@@ -553,10 +732,11 @@ export class InMemoryWorldRepository implements WorldRepository {
 
       // 4. Atomic Commit (Atomic reference swap)
       this.worldClocks.set(targetStoryId, stagedClock);
-      this.geography = stagedGeography;
+      this.geographies.set(targetStoryId, stagedGeography);
       this.knowledgeBases.set(targetStoryId, stagedKnowledgeFacts);
       this.playerLifecycles.set(targetStoryId, stagedPlayer);
       this.chronicleEngines.set(targetStoryId, stagedChronicle);
+      this.aiOrchestrator.restoreNarrativeHistory(targetStoryId, stagedNarrative);
       this.inventoryEngines.set(targetStoryId, stagedInventory);
       this.sensoryEngine = stagedSensory;
       this.capabilityEngines.set(targetStoryId, stagedCapability);
@@ -564,6 +744,7 @@ export class InMemoryWorldRepository implements WorldRepository {
       this.memoryEngines.set(targetStoryId, stagedMemory);
       this.livingSimulations.set(targetStoryId, stagedLivingWorld);
       this.characterAlignmentEngine = stagedAlignment;
+      this.npcLifecycles.set(targetStoryId, stagedNpcLifecycles);
 
       return {
         success: true,

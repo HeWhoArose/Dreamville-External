@@ -41,6 +41,7 @@ export interface SemanticSensoryEvent {
   hapticDirection?: HapticIntensity;
   intensity: number;
   presentationMetadata?: any;
+  suppressed?: boolean;
 }
 
 export interface SoundscapeProjection {
@@ -150,6 +151,7 @@ export class SensoryEngine {
     }
   ): SemanticSensoryEvent[] {
     const events: SemanticSensoryEvent[] = [];
+    let cueSequence = 0;
     for (const cue of cues) {
       let type: SemanticSensoryEvent['type'] = 'GENERAL';
       let hapticDirection: HapticIntensity | undefined;
@@ -162,38 +164,58 @@ export class SensoryEngine {
       else if (lowerCue.includes('death')) { type = 'DEATH'; hapticDirection = 'heavy'; }
       else if (lowerCue.includes('divergence')) { type = 'DIVERGENCE'; hapticDirection = 'heavy'; }
 
-      events.push({
-        eventId: `evt_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-        type,
-        visualDirection: cue,
-        audioDirection: (function() {
-          let radius = 10;
-          let volume = 1.0;
-          let distance = 0;
-          if (context?.listenerPosition && context?.entities) {
-            const source = context.entities.find(e => lowerCue.includes(e.name.toLowerCase()));
-            if (source) {
-              const dx = source.x - context.listenerPosition.x;
-              const dy = source.y - context.listenerPosition.y;
-              distance = Math.sqrt(dx * dx + dy * dy);
-              if (distance === 0) {
-                volume = 1.0;
-              } else {
-                volume = Math.max(0.1, 1.0 / Math.max(1, (distance / 5)));
-              }
-              radius = Math.max(5, distance + 10);
-            }
+      let radius = 10;
+      let volume = 1.0;
+      let distance = 0;
+      let audioDirection: SpatialAudioCue | undefined = undefined;
+      let suppressed = false;
+
+      if (context?.listenerPosition && context?.entities) {
+        const source = context.entities.find(e => lowerCue.includes(e.name.toLowerCase()));
+        if (source) {
+          const dx = source.x - context.listenerPosition.x;
+          const dy = source.y - context.listenerPosition.y;
+          distance = Math.sqrt(dx * dx + dy * dy);
+          if (distance === 0) {
+            volume = 1.0;
+          } else {
+            volume = Math.max(0.1, 1.0 / Math.max(1, (distance / 5)));
           }
-          return {
-            cueId: cue,
-            soundId: cue,
-            radius,
-            volume,
-          };
-        })(),
-        hapticDirection,
-        intensity: hapticDirection === 'heavy' ? 1.0 : hapticDirection === 'medium' ? 0.6 : 0.3,
-      });
+          radius = Math.max(5, distance + 10);
+          audioDirection = { cueId: cue, soundId: cue, radius, volume };
+        } else {
+          // DEF-CH14-04: If entities context is provided but the source cannot be resolved
+          // to an authorized canonical entity, the cue MUST be suppressed.
+          suppressed = true;
+        }
+      } else if (context?.listenerPosition) {
+        // Fallback for purely ambient contexts without entity sets (e.g. general exploration)
+        audioDirection = { cueId: cue, soundId: cue, radius: 10, volume: 1.0 };
+      } else {
+        // No spatial context provided
+        audioDirection = { cueId: cue, soundId: cue, radius: 10, volume: 1.0 };
+      }
+
+      if (suppressed) {
+        cueSequence++;
+        events.push({
+          eventId: `evt_${cue}_${cueSequence}`,
+          type,
+          visualDirection: cue,
+          intensity: 0,
+          suppressed: true
+        });
+      } else {
+        cueSequence++;
+        events.push({
+          eventId: `evt_${cue}_${cueSequence}`,
+          type,
+          visualDirection: cue,
+          audioDirection,
+          hapticDirection,
+          intensity: hapticDirection === 'heavy' ? 1.0 : hapticDirection === 'medium' ? 0.6 : 0.3,
+        });
+      }
     }
     return events;
   }

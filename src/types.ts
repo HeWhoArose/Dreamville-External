@@ -192,6 +192,7 @@ export interface ExternalViewState {
   activeLocation: Location;
   protagonist: ProtagonistProfile;
   locations: Record<string, Location>;
+  routeEdges?: any[];
   characters: Record<string, ExternalCharacter>;
   activeDialogue: DialogueNode | null;
   dialogueHistory: { speaker: string; text: string; cycle: number }[];

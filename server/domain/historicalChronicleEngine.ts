@@ -188,6 +188,21 @@ export class HistoricalChronicleEngine {
   }
 
   /**
+   * Returns all historical evidence visible to the given actor based on epistemic visibility rules.
+   */
+  public getEpistemicEvidence(viewerActorId?: string): HistoricalEvidence[] {
+    return Array.from(this.evidenceStore.values()).filter((ev) => {
+      if (!viewerActorId) return true;
+      if (ev.visibility === 'PUBLIC') return true;
+      if (ev.primarySubjectId === viewerActorId || ev.secondarySubjectId === viewerActorId) return true;
+      if (ev.visibility === 'OBSERVERS_ONLY' || ev.visibility === 'SECRET') {
+        return ev.confidentialToEntityIds?.includes(viewerActorId) ?? false;
+      }
+      return true;
+    });
+  }
+
+  /**
    * Epistemic Projection for Client (CH4 Phase 4 / Invariant 4)
    * Transforms raw dossiers and chronicle entries into player-safe views.
    * Excludes SECRET or OBSERVERS_ONLY entries unless the player is explicitly in confidentialToEntityIds.

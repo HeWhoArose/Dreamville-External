@@ -121,10 +121,40 @@ export interface ContinuationCheckpoint {
   uncommittedOutput: string;
   canonicalInvariants: Record<string, unknown>;
   styleContract: Record<string, string>;
+  openThreads?: string[];
+  presentationEvents?: string[];
+  knowledgeBoundaries?: Record<string, unknown>;
   selectedModelId?: string;
   providerId?: string;
   retryCount?: number;
   fallbackChain?: string[];
+  createdAt: number;
+  adjudicationStatus?: 'PENDING' | 'VALIDATED' | 'ADJUDICATED' | 'REJECTED';
+  handoffEligible?: boolean;
+  activeConditions?: string[];
+  activeQuests?: string[];
+  recentHistory?: string[];
+  summaryText?: string;
+}
+
+export interface CommittedNarrativeRecord {
+  checkpointId: string;
+  storyId: string;
+  turnId: string;
+  role: string;
+  playerAction?: string;
+  worldTime: string;
+  locationId: string;
+  sceneSummary: string;
+  recentOutput: string;
+  summaryText?: string;
+  recentHistory: string[];
+  openThreads?: string[];
+  presentationEvents?: string[];
+  activeConditions?: string[];
+  activeQuests?: string[];
+  canonicalInvariants?: Record<string, unknown>;
+  styleContract?: Record<string, string>;
   createdAt: number;
   adjudicationStatus?: 'PENDING' | 'VALIDATED' | 'ADJUDICATED' | 'REJECTED';
 }
@@ -153,6 +183,7 @@ export interface StructuredTurnPackage {
   stateChanges: StateChangeProposal[];
   memoryCandidates: string[];
   audioCues: string[];
+  visualCues?: (string | { prompt: string })[];
 }
 
 export interface ProviderGenerateOptions {
@@ -219,6 +250,9 @@ export interface OrchestratedTurnTelemetry {
   adjudicationResult?: AdjudicationResult;
   checkpointCreated?: string;
   recoveredFromCheckpoint?: boolean;
+  cached?: boolean;
+  idempotencyReplayed?: boolean;
+  idempotencyKey?: string;
 }
 
 export interface OrchestratedTurnResult {
@@ -227,6 +261,8 @@ export interface OrchestratedTurnResult {
   telemetry: OrchestratedTurnTelemetry;
   adjudicationResult?: AdjudicationResult;
   checkpoint?: ContinuationCheckpoint;
+  audioResultBase64?: string;
+  fallbackText?: string;
   error?: string;
 }
 
@@ -836,7 +872,7 @@ export class GoogleGeminiAdapter implements IProviderAdapter {
   "narrative": ["text describing world events"],
   "dialogue": [{"speaker": "string", "text": "string"}],
   "events": ["EVENT_NAME"],
-  "stateChanges": [{"kind": "CHRONICLE|INVENTORY|LOCATION|CAPABILITY|COMBAT", "targetId": "string", "value": "string"}],
+  "stateChanges": [{"kind": "INVENTORY|LOCATION|CAPABILITY|COMBAT", "targetId": "string", "value": "string"}],
   "memoryCandidates": ["string"],
   "audioCues": ["string"]
 }
@@ -847,7 +883,7 @@ Do not enclose in markdown ticks, output pure JSON.`;
           systemInstruction: systemPrompt,
           responseMimeType: 'application/json',
         };
-        let reqContents = [prompt];
+        let reqContents: any[] = [prompt];
         
         if (task === 'speech.transcribe' && options?.audioInputBase64) {
           reqContents = [
@@ -859,8 +895,8 @@ Do not enclose in markdown ticks, output pure JSON.`;
         }
         
         if (task === 'speech.generate') {
-          reqConfig.responseMimeType = undefined;
-          reqConfig.systemInstruction = undefined;
+          delete (reqConfig as any).responseMimeType;
+          delete (reqConfig as any).systemInstruction;
           // Gemini doesn't officially document TTS in generateContent as widely known outside of live API, 
           // but if we are targeting a specialized TTS model, we might just pass text.
           reqContents = [prompt];
@@ -1145,24 +1181,11 @@ export class DomainAdjudicationBridge {
           });
         }
       } else if (kind === 'CHRONICLE') {
-        const chronicle = repo.getHistoricalChronicleEngine(storyId);
-        const clock = repo.getWorldClock(storyId);
-        chronicle.recordEvidence({
-          id: change.targetId || `ev_ai_${Date.now()}`,
-          category: 'WORLD_ANOMALY',
-          timestamp: clock.getTimestamp(),
-          primarySubjectId: 'player_actor',
-          locationId: repo.getPlayerLifecycle(storyId)?.locationId || 'loc_whispering_orrery',
-          summary: String(change.value || 'AI observed narrative turn event'),
-          details: 'Committed via structured turn package adjudication',
-          sourceEventId: `evt_ai_${Date.now()}`,
-          provenance: 'direct_astronomical_observation',
-          visibility: 'PUBLIC',
-        });
         outcomes.push({
           change,
-          approved: true,
-          canonicalEngine: 'HistoricalChronicleEngine (CH4)',
+          approved: false,
+          reason: 'Historical evidence must originate from authoritative canonical events, not AI assertions.',
+          canonicalEngine: 'DomainAdjudicationBridge',
         });
       } else if (kind === 'PHYSIOLOGY' || kind === 'HEALTH') {
         const numVal = Number(change.value);
@@ -1198,6 +1221,7 @@ export class DomainAdjudicationBridge {
 
     const approvedCount = outcomes.filter((o) => o.approved).length;
     const rejectedCount = outcomes.filter((o) => !o.approved).length;
+    const allApproved = rejectedCount === 0;
     const disapprovedChanges = outcomes
       .filter((o) => !o.approved)
       .map((o) => ({ change: o.change, reason: o.reason, canonicalEngine: o.canonicalEngine }));
@@ -1205,8 +1229,17 @@ export class DomainAdjudicationBridge {
       .filter((o) => o.approved)
       .map((o) => o.change);
 
+    // ATOMIC COMMIT: Only commit side-effecting mutations if ALL proposed state changes are approved!
+    if (allApproved) {
+      for (const outcome of outcomes) {
+        const change = outcome.change;
+        const kind = (change.kind || '').toUpperCase();
+        // Additional engine commits will be added here
+      }
+    }
+
     return {
-      allApproved: rejectedCount === 0,
+      allApproved,
       approvedCount,
       rejectedCount,
       outcomes,
@@ -1232,6 +1265,10 @@ export class MultiModelOrchestrator {
   private totalTurnsExecuted: number = 0;
   private lastTurnTelemetry: OrchestratedTurnTelemetry | null = null;
   private worldRepo?: WorldRepository;
+
+  // V6.34 Server-authoritative idempotency caches scoped by `${storyId}::${idempotencyKey}`
+  private turnResultsByIdempotencyKey: Map<string, OrchestratedTurnResult> = new Map();
+  private inFlightTurnPromises: Map<string, Promise<OrchestratedTurnResult>> = new Map();
 
   private manualOverrides: Map<string, ManualModelOverride> = new Map();
   private taskPinnedModels: Map<TaskId, string> = new Map();
@@ -1525,6 +1562,7 @@ export class MultiModelOrchestrator {
       review: 0,
       emergency: 0,
       speech: 0,
+      transcription: 0,
     };
 
     // Deduplicate by modelId for pool counts
@@ -1981,6 +2019,99 @@ export class MultiModelOrchestrator {
     return storyId ? list.filter((cp) => cp.storyId === storyId) : list;
   }
 
+  /**
+   * Challenge 13: Lossless Committed Narrative History Export
+   * Exports committed narrative history and accepted player actions from continuation checkpoints.
+   * Excludes transient CH12 execution context, working context tokens, uncommitted output, and provider IDs.
+   */
+  public exportNarrativeHistory(storyId: string): CommittedNarrativeRecord[] {
+    const checkpoints = this.getAllCheckpoints(storyId);
+    return checkpoints.map((cp) => ({
+      checkpointId: cp.checkpointId,
+      storyId: cp.storyId,
+      turnId: cp.turnId,
+      role: cp.role || 'narrator',
+      playerAction: cp.playerAction,
+      worldTime: cp.worldTime,
+      locationId: cp.locationId,
+      sceneSummary: cp.sceneSummary,
+      recentOutput: cp.recentOutput,
+      summaryText: cp.summaryText,
+      recentHistory: Array.isArray(cp.recentHistory) ? [...cp.recentHistory] : [],
+      openThreads: Array.isArray(cp.openThreads) ? [...cp.openThreads] : [],
+      presentationEvents: Array.isArray(cp.presentationEvents) ? [...cp.presentationEvents] : [],
+      activeConditions: Array.isArray(cp.activeConditions) ? [...cp.activeConditions] : [],
+      activeQuests: Array.isArray(cp.activeQuests) ? [...cp.activeQuests] : [],
+      canonicalInvariants: cp.canonicalInvariants ? { ...cp.canonicalInvariants } : {},
+      styleContract: cp.styleContract ? { ...cp.styleContract } : {},
+      createdAt: cp.createdAt,
+      adjudicationStatus: cp.adjudicationStatus,
+    }));
+  }
+
+  /**
+   * Challenge 13: Lossless Committed Narrative History Restore
+   * Restores committed narrative checkpoints for a story into the continuation checkpoint authority.
+   */
+  public restoreNarrativeHistory(storyId: string, records: any[]): void {
+    for (const [id, cp] of Array.from(this.checkpoints.entries())) {
+      if (cp.storyId === storyId) {
+        this.checkpoints.delete(id);
+      }
+    }
+
+    if (!Array.isArray(records)) return;
+
+    for (const rec of records) {
+      if (!rec) continue;
+      if (typeof rec === 'string') {
+        const id = `cp_restored_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        this.checkpoints.set(id, {
+          checkpointId: id,
+          storyId,
+          turnId: 'turn_restored',
+          role: 'narrator',
+          worldTime: 'Cycle 1',
+          locationId: 'loc_whispering_orrery',
+          sceneSummary: rec,
+          recentOutput: rec,
+          uncommittedOutput: '',
+          canonicalInvariants: {},
+          styleContract: {},
+          createdAt: Date.now(),
+          recentHistory: [rec],
+          summaryText: rec,
+          handoffEligible: true,
+        });
+      } else {
+        const checkpointId = rec.checkpointId || `cp_${storyId}_${rec.turnId || Date.now()}`;
+        this.checkpoints.set(checkpointId, {
+          checkpointId,
+          storyId,
+          turnId: rec.turnId || 'turn_0',
+          role: rec.role || 'narrator',
+          playerAction: rec.playerAction,
+          worldTime: rec.worldTime || 'Cycle 1',
+          locationId: rec.locationId || 'loc_whispering_orrery',
+          sceneSummary: rec.sceneSummary || '',
+          recentOutput: rec.recentOutput || '',
+          uncommittedOutput: '',
+          canonicalInvariants: rec.canonicalInvariants || {},
+          styleContract: rec.styleContract || {},
+          openThreads: Array.isArray(rec.openThreads) ? [...rec.openThreads] : [],
+          presentationEvents: rec.presentationEvents || [],
+          createdAt: rec.createdAt || Date.now(),
+          adjudicationStatus: rec.adjudicationStatus || 'ADJUDICATED',
+          handoffEligible: true,
+          activeConditions: rec.activeConditions || [],
+          activeQuests: rec.activeQuests || [],
+          recentHistory: rec.recentHistory || (rec.recentOutput ? [rec.recentOutput] : []),
+          summaryText: rec.summaryText || rec.sceneSummary || '',
+        });
+      }
+    }
+  }
+
   public getLastTurnTelemetry(): OrchestratedTurnTelemetry | null {
     return this.lastTurnTelemetry ? { ...this.lastTurnTelemetry } : null;
   }
@@ -2150,275 +2281,400 @@ export class MultiModelOrchestrator {
     forceModelId?: string;
     audioInputBase64?: string;
     voiceProfile?: any;
+    idempotencyKey?: string;
   }): Promise<OrchestratedTurnResult> {
     const storyId = params.storyId || 'default_story';
+    const rawIdempotencyKey = params.idempotencyKey ? String(params.idempotencyKey).trim() : undefined;
+    const scopedKey = rawIdempotencyKey ? `${storyId}::${rawIdempotencyKey}` : undefined;
+
+    // 1. V6.34 Replay Protection: Check server-authoritative cached turn results
+    if (scopedKey && this.turnResultsByIdempotencyKey.has(scopedKey)) {
+      const cached = this.turnResultsByIdempotencyKey.get(scopedKey)!;
+      return {
+        ...cached,
+        telemetry: {
+          ...cached.telemetry,
+          cached: true,
+          idempotencyReplayed: true,
+          idempotencyKey: rawIdempotencyKey,
+        },
+      };
+    }
+
+    // 2. V6.34 In-Flight Deduplication: Share promise for concurrent duplicate requests
+    if (scopedKey && this.inFlightTurnPromises.has(scopedKey)) {
+      const inFlightPromise = this.inFlightTurnPromises.get(scopedKey)!;
+      const result = await inFlightPromise;
+      return {
+        ...result,
+        telemetry: {
+          ...result.telemetry,
+          cached: true,
+          idempotencyReplayed: true,
+          idempotencyKey: rawIdempotencyKey,
+        },
+      };
+    }
+
     const task: TaskId = params.task || 'narrative.generate';
     const hardTokenBudget = params.hardTokenBudget ?? 400;
     const timeoutMs = params.timeoutMs ?? 3000;
     const maxRetries = params.maxRetries ?? 2;
-    const turnId = `turn_${Date.now()}_${++this.totalTurnsExecuted}`;
+
+    // V6.34 Stable Identifiers: Deterministically scoped when idempotencyKey is present
+    const turnId = rawIdempotencyKey
+      ? `turn_${storyId}_${rawIdempotencyKey.replace(/[^a-zA-Z0-9_-]/g, '_')}`
+      : `turn_${Date.now()}_${++this.totalTurnsExecuted}`;
     const repo = this.getWorldRepository();
 
-    // 1. Ingest CH11 Working Context (DEF-CH12-02)
-    const assembledContext: AssembledTurnContext = WorkingContextEngine.assembleTurnContext({
-      storyId,
-      playerAction: params.playerAction || 'Observe surroundings and assess position',
-      hardTokenBudget,
-      worldRepo: repo,
-    });
-
-    // 2. Select Eligible Model respecting context tokens (DEF-CH12-02, DEF-CH12-03)
-    let selectedModel: ModelRegistryRecord;
-    let selectionReason: string;
-    let fallbacks: ModelRegistryRecord[];
-
-    if (params.forceModelId) {
-      const forced = Array.from(this.models.values()).find((m) => m.modelId === params.forceModelId);
-      if (!forced) throw new Error(`Forced model ID '${params.forceModelId}' not found.`);
-      selectedModel = forced;
-      selectionReason = `Explicitly forced model '${params.forceModelId}'.`;
-      fallbacks = Array.from(this.models.values()).filter((m) => m.modelId !== params.forceModelId);
-    } else {
-      const selection = this.selectBestModel(task, { contextTokens: assembledContext.totalTokens });
-      selectedModel = selection.selectedModel;
-      selectionReason = selection.selectionReason;
-      fallbacks = selection.fallbacks;
-    }
-
-    const candidateChain: ModelRegistryRecord[] = [selectedModel, ...fallbacks];
-    let totalAttempts = 0;
-    let lastError = '';
-
-    // 3. Provider Execution Loop with Retries, Timeouts, and Failover (DEF-CH12-01, DEF-CH12-07)
-    for (let cIdx = 0; cIdx < candidateChain.length; cIdx++) {
-      const currentCandidate = candidateChain[cIdx];
-      const modelKey = `${currentCandidate.providerId}::${currentCandidate.modelId}`;
-
-      // Circuit breaker check
-      if (this.isCircuitBreakerTripped(currentCandidate.providerId, currentCandidate.modelId)) {
-        continue;
-      }
-
-      const adapter = this.getAdapter(currentCandidate.providerId);
-      if (!adapter) {
-        continue;
-      }
-
-      for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        totalAttempts++;
-        try {
-          // Wrap provider call with AbortController for strict timeout enforcement
-          const abortController = new AbortController();
-          const timer = setTimeout(() => abortController.abort(), timeoutMs);
-
-          let providerRes: ProviderGenerateResult;
-          try {
-            providerRes = await adapter.generate(task, assembledContext.assembledText, {
-              timeoutMs,
-              abortSignal: abortController.signal,
-              retryCount: attempt,
-              modelId: currentCandidate.modelId,
-              audioInputBase64: params.audioInputBase64,
-              voiceProfile: params.voiceProfile,
-            });
-          } finally {
-            clearTimeout(timer);
-          }
-
-          // Reset failure counter on success
-          this.consecutiveFailures.set(modelKey, 0);
-
-          // 4. Validate Structured Output (DEF-CH12-05)
-          const validation = this.validateTurnPackage(providerRes.text);
-          if (!validation.valid || !validation.turnPackage) {
-            throw new Error(`Turn package validation failed: ${validation.errorReason}`);
-          }
-
-          // 5. Adjudicate State Changes through Domain Authority Bridge (DEF-CH12-05)
-          const adjudication = DomainAdjudicationBridge.adjudicate(
-            validation.turnPackage,
-            repo,
-            storyId
-          );
-
-          // 6. Create Continuation Checkpoint (DEF-CH12-06)
-          const checkpointId = `cp_${Date.now()}_${turnId}`;
-          const checkpoint: ContinuationCheckpoint = {
-            checkpointId,
-            storyId,
-            turnId,
-            role: 'narrator',
-            playerAction: params.playerAction,
-            workingContextTokens: assembledContext.totalTokens,
-            worldTime: repo.getWorldClock(storyId).formatHeader(),
-            locationId: repo.getPlayerLifecycle(storyId)?.locationId || 'loc_whispering_orrery',
-            sceneSummary: validation.turnPackage.narrative[0] || 'Scene observed.',
-            recentOutput: validation.turnPackage.narrative.join(' '),
-            uncommittedOutput: '',
-            canonicalInvariants: {
-              playerActorId: `player_actor_${storyId}`,
-              discoveredLocations: repo.getGeographyGraph().getDiscoveredNodes().map((n) => n.id),
-            },
-            styleContract: {
-              tone: 'evocative_canonical_archival',
-              epistemicSanitized: 'true',
-            },
-            selectedModelId: currentCandidate.modelId,
-            providerId: currentCandidate.providerId,
-            retryCount: attempt,
-            fallbackChain: candidateChain.slice(0, cIdx + 1).map((m) => m.modelId),
-            createdAt: Date.now(),
-            adjudicationStatus: adjudication.allApproved ? 'ADJUDICATED' : 'VALIDATED',
-          };
-          this.createContinuationCheckpoint(checkpoint);
-
-          const telemetry: OrchestratedTurnTelemetry = {
-            turnId,
-            storyId,
-            taskId: task,
-            selectedModelId: currentCandidate.modelId,
-            selectedProviderId: currentCandidate.providerId,
-            selectionScore: currentCandidate.userPriority,
-            selectionReason,
-            fallbackChain: candidateChain.slice(0, cIdx + 1).map((m) => m.modelId),
-            attempts: totalAttempts,
-            latencyMs: providerRes.latencyMs,
-            inputTokens: providerRes.inputTokens || assembledContext.totalTokens,
-            outputTokens: providerRes.outputTokens || 50,
-            validated: true,
-            adjudicationResult: adjudication,
-            checkpointCreated: checkpointId,
-          };
-          this.lastTurnTelemetry = telemetry;
-
-          return {
-            success: true,
-            turnPackage: validation.turnPackage,
-            telemetry,
-            adjudicationResult: adjudication,
-            checkpoint,
-            audioResultBase64: providerRes.audioBase64,
-          };
-        } catch (err: any) {
-          lastError = err?.message || String(err);
-
-          // Track consecutive failures & circuit breaker
-          const failures = (this.consecutiveFailures.get(modelKey) || 0) + 1;
-          this.consecutiveFailures.set(modelKey, failures);
-
-          if (failures >= 2 || failures > maxRetries) {
-            this.circuitBreakersTripped.add(modelKey);
-            currentCandidate.health = 'Unavailable';
-          }
-
-          // If rate limited or quota exhausted, mark accordingly and failover immediately
-          if (
-            lastError.includes('429') ||
-            lastError.includes('rate limit') ||
-            lastError.includes('Resource Exhausted') ||
-            lastError.includes('quota')
-          ) {
-            currentCandidate.health = 'Throttled';
-            currentCandidate.quota = 'Exhausted';
-            break;
-          }
-
-          // Exponential backoff between retries
-          if (attempt < maxRetries) {
-            const backoffMs = Math.min(100, 20 * Math.pow(2, attempt));
-            await new Promise((res) => setTimeout(res, backoffMs));
-          }
-        }
+    // Checkpoint continuation awareness (V6.15 / V6.06)
+    let priorCheckpoint: ContinuationCheckpoint | undefined;
+    if (params.checkpointId) {
+      priorCheckpoint = this.getContinuationCheckpoint(params.checkpointId);
+      if (priorCheckpoint && priorCheckpoint.uncommittedOutput && !params.playerAction) {
+        params.playerAction = `Resume: ${priorCheckpoint.uncommittedOutput}`;
       }
     }
 
-    // All primary models and retries failed -> Fallback to emergency floor if not already tried
-    const emergencyModel = Array.from(this.models.values()).find((m) => m.isEmergencyFloor);
-    if (emergencyModel) {
-      const emergencyAdapter = this.getAdapter(emergencyModel.providerId);
-      if (emergencyAdapter) {
-        const res = await emergencyAdapter.generate(task, assembledContext.assembledText, {
-          audioInputBase64: params.audioInputBase64,
-          voiceProfile: params.voiceProfile,
-        });
-        const validation = this.validateTurnPackage(res.text);
-        if (validation.valid && validation.turnPackage) {
-          const adjudication = DomainAdjudicationBridge.adjudicate(
-            validation.turnPackage,
-            repo,
-            storyId
-          );
-          const checkpointId = `cp_emergency_${Date.now()}`;
-          const checkpoint: ContinuationCheckpoint = {
-            checkpointId,
-            storyId,
-            turnId,
-            role: 'narrator',
-            worldTime: repo.getWorldClock(storyId).formatHeader(),
-            locationId: repo.getPlayerLifecycle(storyId)?.locationId || 'loc_whispering_orrery',
-            sceneSummary: validation.turnPackage.narrative[0],
-            recentOutput: validation.turnPackage.narrative.join(' '),
-            uncommittedOutput: '',
-            canonicalInvariants: {},
-            styleContract: { tone: 'deterministic_emergency' },
-            selectedModelId: emergencyModel.modelId,
-            providerId: emergencyModel.providerId,
-            retryCount: totalAttempts,
-            fallbackChain: ['emergency-fallback-local'],
-            createdAt: Date.now(),
-          };
-          this.createContinuationCheckpoint(checkpoint);
-
-          const telemetry: OrchestratedTurnTelemetry = {
-            turnId,
-            storyId,
-            taskId: task,
-            selectedModelId: emergencyModel.modelId,
-            selectedProviderId: emergencyModel.providerId,
-            selectionScore: 10,
-            selectionReason: 'Exhausted all primary providers; recovered through emergency floor.',
-            fallbackChain: ['emergency-fallback-local'],
-            attempts: totalAttempts + 1,
-            latencyMs: res.latencyMs,
-            inputTokens: assembledContext.totalTokens,
-            outputTokens: 30,
-            validated: true,
-            adjudicationResult: adjudication,
-            checkpointCreated: checkpointId,
-          };
-          this.lastTurnTelemetry = telemetry;
-
-          return {
-            success: true,
-            turnPackage: validation.turnPackage,
-            telemetry,
-            adjudicationResult: adjudication,
-            checkpoint,
-            audioResultBase64: res.audioBase64,
-          };
-        }
-      }
-    }
-
-    return {
-      success: false,
-      telemetry: {
-        turnId,
+    const executeCore = async (): Promise<OrchestratedTurnResult> => {
+      // 1. Ingest CH11 Working Context (DEF-CH12-02)
+      const assembledContext: AssembledTurnContext = WorkingContextEngine.assembleTurnContext({
         storyId,
-        taskId: task,
-        selectedModelId: selectedModel.modelId,
-        selectedProviderId: selectedModel.providerId,
-        selectionScore: 0,
-        selectionReason,
-        fallbackChain: candidateChain.map((m) => m.modelId),
-        attempts: totalAttempts,
-        latencyMs: 0,
-        inputTokens: assembledContext.totalTokens,
-        outputTokens: 0,
-        validated: false,
-      },
-      error: `All models and emergency fallbacks failed. Last error: ${lastError}`,
+        playerAction: params.playerAction || 'Observe surroundings and assess position',
+        hardTokenBudget,
+        worldRepo: repo,
+      });
+
+      // 2. Select Eligible Model respecting context tokens (DEF-CH12-02, DEF-CH12-03)
+      let selectedModel: ModelRegistryRecord;
+      let selectionReason: string;
+      let fallbacks: ModelRegistryRecord[];
+
+      if (params.forceModelId) {
+        const forced = Array.from(this.models.values()).find((m) => m.modelId === params.forceModelId);
+        if (!forced) throw new Error(`Forced model ID '${params.forceModelId}' not found.`);
+        selectedModel = forced;
+        selectionReason = `Explicitly forced model '${params.forceModelId}'.`;
+        fallbacks = Array.from(this.models.values()).filter((m) => m.modelId !== params.forceModelId);
+      } else {
+        const selection = this.selectBestModel(task, { contextTokens: assembledContext.totalTokens });
+        selectedModel = selection.selectedModel;
+        selectionReason = selection.selectionReason;
+        fallbacks = selection.fallbacks;
+      }
+
+      const candidateChain: ModelRegistryRecord[] = [selectedModel, ...fallbacks];
+      let totalAttempts = 0;
+      let lastError = '';
+
+      // 3. Provider Execution Loop with Retries, Timeouts, and Failover (DEF-CH12-01, DEF-CH12-07)
+      for (let cIdx = 0; cIdx < candidateChain.length; cIdx++) {
+        const currentCandidate = candidateChain[cIdx];
+        const modelKey = `${currentCandidate.providerId}::${currentCandidate.modelId}`;
+
+        // Circuit breaker check
+        if (this.isCircuitBreakerTripped(currentCandidate.providerId, currentCandidate.modelId)) {
+          continue;
+        }
+
+        const adapter = this.getAdapter(currentCandidate.providerId);
+        if (!adapter) {
+          continue;
+        }
+
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          totalAttempts++;
+          try {
+            // Wrap provider call with AbortController for strict timeout enforcement
+            const abortController = new AbortController();
+            const timer = setTimeout(() => abortController.abort(), timeoutMs);
+
+            let providerRes: ProviderGenerateResult;
+            try {
+              providerRes = await adapter.generate(task, assembledContext.assembledText, {
+                timeoutMs,
+                abortSignal: abortController.signal,
+                retryCount: attempt,
+                modelId: currentCandidate.modelId,
+                audioInputBase64: params.audioInputBase64,
+                voiceProfile: params.voiceProfile,
+              });
+            } finally {
+              clearTimeout(timer);
+            }
+
+            // Reset failure counter on success
+            this.consecutiveFailures.set(modelKey, 0);
+
+            // 4. Validate Structured Output (DEF-CH12-05)
+            const validation = this.validateTurnPackage(providerRes.text);
+            if (!validation.valid || !validation.turnPackage) {
+              throw new Error(`Turn package validation failed: ${validation.errorReason}`);
+            }
+
+            // 5. Adjudicate State Changes through Domain Authority Bridge (DEF-CH12-05)
+            const adjudication = DomainAdjudicationBridge.adjudicate(
+              validation.turnPackage,
+              repo,
+              storyId
+            );
+
+            // 6. Create Continuation Checkpoint (DEF-CH12-06, V6.15 completeness)
+            const checkpointId = rawIdempotencyKey
+              ? `cp_${storyId}_${rawIdempotencyKey.replace(/[^a-zA-Z0-9_-]/g, '_')}`
+              : `cp_${Date.now()}_${turnId}`;
+            const checkpoint: ContinuationCheckpoint = {
+              checkpointId,
+              storyId,
+              turnId,
+              role: 'narrator',
+              playerAction: params.playerAction,
+              workingContextTokens: assembledContext.totalTokens,
+              worldTime: repo.getWorldClock(storyId).formatHeader(),
+              locationId: repo.getPlayerLifecycle(storyId)?.locationId || 'loc_whispering_orrery',
+              sceneSummary: validation.turnPackage.narrative[0] || 'Scene observed.',
+              recentOutput: validation.turnPackage.narrative.join(' '),
+              uncommittedOutput: '',
+              canonicalInvariants: {
+                playerActorId: `player_actor_${storyId}`,
+                discoveredLocations: repo.getPlayerLifecycle(storyId)?.discoveredLocationIds || [],
+              },
+              styleContract: {
+                tone: 'evocative_canonical_archival',
+                epistemicSanitized: 'true',
+              },
+              openThreads: validation.turnPackage.memoryCandidates || [],
+              presentationEvents: [
+                ...(validation.turnPackage.audioCues || []).map((c: any) =>
+                  typeof c === 'string' ? `audio:${c}` : `audio:${c.soundId}`
+                ),
+                ...(validation.turnPackage.visualCues || []).map((v: any) =>
+                  typeof v === 'string' ? `visual:${v}` : `visual:${v.prompt}`
+                ),
+              ],
+              knowledgeBoundaries: {
+                sanitized: true,
+                epistemicSanitized: true,
+                hiddenFactsSuppressed: [],
+                totalTokens: assembledContext.totalTokens,
+                truncated: (assembledContext.evictedChunkLabels?.length ?? 0) > 0,
+                viewerActorId: `player_actor_${storyId}`,
+              },
+              handoffEligible: true,
+              summaryText: validation.turnPackage.narrative[0] || 'Scene observed.',
+              recentHistory: validation.turnPackage.narrative || [],
+              activeConditions: [],
+              activeQuests: [],
+              selectedModelId: currentCandidate.modelId,
+              providerId: currentCandidate.providerId,
+              retryCount: attempt,
+              fallbackChain: candidateChain.slice(0, cIdx + 1).map((m) => m.modelId),
+              createdAt: Date.now(),
+              adjudicationStatus: adjudication.allApproved ? 'ADJUDICATED' : 'VALIDATED',
+            };
+            this.createContinuationCheckpoint(checkpoint);
+
+            const telemetry: OrchestratedTurnTelemetry = {
+              turnId,
+              storyId,
+              taskId: task,
+              selectedModelId: currentCandidate.modelId,
+              selectedProviderId: currentCandidate.providerId,
+              selectionScore: currentCandidate.userPriority,
+              selectionReason,
+              fallbackChain: candidateChain.slice(0, cIdx + 1).map((m) => m.modelId),
+              attempts: totalAttempts,
+              latencyMs: providerRes.latencyMs,
+              inputTokens: providerRes.inputTokens || assembledContext.totalTokens,
+              outputTokens: providerRes.outputTokens || 50,
+              validated: true,
+              adjudicationResult: adjudication,
+              checkpointCreated: checkpointId,
+              recoveredFromCheckpoint: Boolean(params.checkpointId),
+              idempotencyKey: rawIdempotencyKey,
+            };
+            this.lastTurnTelemetry = telemetry;
+
+            return {
+              success: true,
+              turnPackage: validation.turnPackage,
+              telemetry,
+              adjudicationResult: adjudication,
+              checkpoint,
+              audioResultBase64: providerRes.audioBase64,
+            };
+          } catch (err: any) {
+            lastError = err?.message || String(err);
+
+            // Track consecutive failures & circuit breaker
+            const failures = (this.consecutiveFailures.get(modelKey) || 0) + 1;
+            this.consecutiveFailures.set(modelKey, failures);
+
+            if (failures >= 2 || failures > maxRetries) {
+              this.circuitBreakersTripped.add(modelKey);
+              currentCandidate.health = 'Unavailable';
+            }
+
+            // If rate limited or quota exhausted, mark accordingly and failover immediately
+            if (
+              lastError.includes('429') ||
+              lastError.includes('rate limit') ||
+              lastError.includes('Resource Exhausted') ||
+              lastError.includes('quota')
+            ) {
+              currentCandidate.health = 'Throttled';
+              currentCandidate.quota = 'Exhausted';
+              break;
+            }
+
+            // Exponential backoff between retries
+            if (attempt < maxRetries) {
+              const backoffMs = Math.min(100, 20 * Math.pow(2, attempt));
+              await new Promise((res) => setTimeout(res, backoffMs));
+            }
+          }
+        }
+      }
+
+      // All primary models and retries failed -> Fallback to emergency floor if not already tried
+      const emergencyModel = Array.from(this.models.values()).find((m) => m.isEmergencyFloor);
+      if (emergencyModel) {
+        const emergencyAdapter = this.getAdapter(emergencyModel.providerId);
+        if (emergencyAdapter) {
+          const res = await emergencyAdapter.generate(task, assembledContext.assembledText, {
+            audioInputBase64: params.audioInputBase64,
+            voiceProfile: params.voiceProfile,
+          });
+          const validation = this.validateTurnPackage(res.text);
+          if (validation.valid && validation.turnPackage) {
+            const adjudication = DomainAdjudicationBridge.adjudicate(
+              validation.turnPackage,
+              repo,
+              storyId
+            );
+            const checkpointId = rawIdempotencyKey
+              ? `cp_emergency_${storyId}_${rawIdempotencyKey.replace(/[^a-zA-Z0-9_-]/g, '_')}`
+              : `cp_emergency_${Date.now()}`;
+            const checkpoint: ContinuationCheckpoint = {
+              checkpointId,
+              storyId,
+              turnId,
+              role: 'narrator',
+              worldTime: repo.getWorldClock(storyId).formatHeader(),
+              locationId: repo.getPlayerLifecycle(storyId)?.locationId || 'loc_whispering_orrery',
+              sceneSummary: validation.turnPackage.narrative[0],
+              recentOutput: validation.turnPackage.narrative.join(' '),
+              uncommittedOutput: '',
+              canonicalInvariants: {},
+              styleContract: { tone: 'deterministic_emergency' },
+              openThreads: validation.turnPackage.memoryCandidates || [],
+              presentationEvents: [
+                ...(validation.turnPackage.audioCues || []).map((c: any) =>
+                  typeof c === 'string' ? `audio:${c}` : `audio:${c.soundId}`
+                ),
+                ...(validation.turnPackage.visualCues || []).map((v: any) =>
+                  typeof v === 'string' ? `visual:${v}` : `visual:${v.prompt}`
+                ),
+              ],
+              knowledgeBoundaries: {
+                sanitized: true,
+                epistemicSanitized: true,
+                hiddenFactsSuppressed: [],
+                totalTokens: assembledContext.totalTokens,
+                truncated: (assembledContext.evictedChunkLabels?.length ?? 0) > 0,
+                viewerActorId: `player_actor_${storyId}`,
+              },
+              handoffEligible: true,
+              summaryText: validation.turnPackage.narrative[0] || 'Emergency scene observed.',
+              recentHistory: validation.turnPackage.narrative || [],
+              activeConditions: [],
+              activeQuests: [],
+              selectedModelId: emergencyModel.modelId,
+              providerId: emergencyModel.providerId,
+              retryCount: totalAttempts,
+              fallbackChain: ['emergency-fallback-local'],
+              createdAt: Date.now(),
+            };
+            this.createContinuationCheckpoint(checkpoint);
+
+            const telemetry: OrchestratedTurnTelemetry = {
+              turnId,
+              storyId,
+              taskId: task,
+              selectedModelId: emergencyModel.modelId,
+              selectedProviderId: emergencyModel.providerId,
+              selectionScore: 10,
+              selectionReason: 'Exhausted all primary providers; recovered through emergency floor.',
+              fallbackChain: ['emergency-fallback-local'],
+              attempts: totalAttempts + 1,
+              latencyMs: res.latencyMs,
+              inputTokens: assembledContext.totalTokens,
+              outputTokens: 30,
+              validated: true,
+              adjudicationResult: adjudication,
+              checkpointCreated: checkpointId,
+              recoveredFromCheckpoint: Boolean(params.checkpointId),
+              idempotencyKey: rawIdempotencyKey,
+            };
+            this.lastTurnTelemetry = telemetry;
+
+            return {
+              success: true,
+              turnPackage: validation.turnPackage,
+              telemetry,
+              adjudicationResult: adjudication,
+              checkpoint,
+              audioResultBase64: res.audioBase64,
+            };
+          }
+        }
+      }
+
+      return {
+        success: false,
+        telemetry: {
+          turnId,
+          storyId,
+          taskId: task,
+          selectedModelId: selectedModel.modelId,
+          selectedProviderId: selectedModel.providerId,
+          selectionScore: 0,
+          selectionReason,
+          fallbackChain: candidateChain.map((m) => m.modelId),
+          attempts: totalAttempts,
+          latencyMs: 0,
+          inputTokens: assembledContext.totalTokens,
+          outputTokens: 0,
+          validated: false,
+          idempotencyKey: rawIdempotencyKey,
+        },
+        error: `All models and emergency fallbacks failed. Last error: ${lastError}`,
+      };
     };
+
+    let executePromise: Promise<OrchestratedTurnResult>;
+    if (scopedKey) {
+      executePromise = executeCore();
+      this.inFlightTurnPromises.set(scopedKey, executePromise);
+    } else {
+      executePromise = executeCore();
+    }
+
+    try {
+      const result = await executePromise;
+      if (scopedKey && result.success) {
+        this.turnResultsByIdempotencyKey.set(scopedKey, result);
+        if (this.turnResultsByIdempotencyKey.size > 200) {
+          const oldestKey = this.turnResultsByIdempotencyKey.keys().next().value;
+          if (oldestKey) this.turnResultsByIdempotencyKey.delete(oldestKey);
+        }
+      }
+      return result;
+    } finally {
+      if (scopedKey) {
+        this.inFlightTurnPromises.delete(scopedKey);
+      }
+    }
   }
 
   /**
@@ -2459,6 +2715,7 @@ export class MultiModelOrchestrator {
       task: 'narrative.generate',
       hardTokenBudget: options?.hardTokenBudget ?? cp.workingContextTokens ?? 400,
       forceModelId: targetModelId,
+      checkpointId: cp.checkpointId,
     });
 
     if (result.telemetry) {
@@ -2466,6 +2723,15 @@ export class MultiModelOrchestrator {
     }
 
     return result;
+  }
+
+  public hasIdempotencyKey(storyId: string, idempotencyKey: string): boolean {
+    return this.turnResultsByIdempotencyKey.has(`${storyId}::${idempotencyKey.trim()}`);
+  }
+
+  public clearIdempotencyCache(): void {
+    this.turnResultsByIdempotencyKey.clear();
+    this.inFlightTurnPromises.clear();
   }
 
   public getStatus(): {

@@ -23,6 +23,7 @@ import { ChronicleView } from './components/ChronicleView';
 import { EpistemicInspectorModal } from './components/EpistemicInspectorModal';
 import { ContextInspectorModal } from './components/ContextInspectorModal';
 import { ArchiveModal } from './components/ArchiveModal';
+import { RoutingWorkstationModal } from './components/RoutingWorkstationModal';
 import { Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
 import {
   PowerState,
@@ -47,6 +48,7 @@ export const App: React.FC = () => {
   >('story');
   const [isEpistemicModalOpen, setIsEpistemicModalOpen] = useState<boolean>(false);
   const [isContextModalOpen, setIsContextModalOpen] = useState<boolean>(false);
+  const [isRoutingModalOpen, setIsRoutingModalOpen] = useState<boolean>(false);
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState<boolean>(false);
   const [isProcessingAction, setIsProcessingAction] = useState<boolean>(false);
 
@@ -293,6 +295,7 @@ export const App: React.FC = () => {
         onTabChange={setActiveTab}
         onOpenEpistemicModal={() => setIsEpistemicModalOpen(true)}
         onOpenContextModal={() => setIsContextModalOpen(true)}
+        onOpenRoutingModal={() => setIsRoutingModalOpen(true)}
         onOpenArchiveModal={() => setIsArchiveModalOpen(true)}
         pendingRequestsCount={isProcessingAction ? 1 : 0}
       />
@@ -398,6 +401,13 @@ export const App: React.FC = () => {
         isOpen={isArchiveModalOpen}
         onClose={() => setIsArchiveModalOpen(false)}
         onRestoreSuccess={() => fetchInitialState()}
+      />
+
+      {/* CH12 Adaptive Multi-Model Orchestrator & Routing Workstation Modal */}
+      <RoutingWorkstationModal
+        isOpen={isRoutingModalOpen}
+        onClose={() => setIsRoutingModalOpen(false)}
+        storyId="default_story"
       />
     </div>
   );

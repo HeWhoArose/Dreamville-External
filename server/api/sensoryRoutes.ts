@@ -100,7 +100,7 @@ sensoryRouter.post('/transcribe', async (req: Request, res: Response) => {
       maxRetries: 1
     });
     
-    let textResult = turnResult.turnPackage?.narrative?.[0] || turnResult.telemetry?.modelId;
+    let textResult = turnResult.turnPackage?.narrative?.[0] || turnResult.telemetry?.selectedModelId;
     if (!turnResult.turnPackage?.narrative?.[0]) {
        textResult = "Transcribed text";
     }

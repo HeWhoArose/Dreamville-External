@@ -31,6 +31,7 @@ export class PlayerLifecycleState implements IActorLifecycle {
   public readonly deathRecord: DeathRecord | null;
   public readonly possessionRecord: PossessionRecord | null;
   public readonly lineage: string | null;
+  public readonly discoveredLocationIds: ReadonlyArray<string>;
 
   constructor(params: {
     actorId: string;
@@ -44,6 +45,7 @@ export class PlayerLifecycleState implements IActorLifecycle {
     deathRecord?: DeathRecord | null;
     possessionRecord?: PossessionRecord | null;
     lineage?: string | null;
+    discoveredLocationIds?: ReadonlyArray<string> | string[];
   }) {
     this.actorId = params.actorId;
     this.name = params.name;
@@ -58,6 +60,10 @@ export class PlayerLifecycleState implements IActorLifecycle {
     this.deathRecord = params.deathRecord ? { ...params.deathRecord } : null;
     this.possessionRecord = params.possessionRecord ? { ...params.possessionRecord } : null;
     this.lineage = params.lineage ?? null;
+
+    const defaultDiscovered = ['loc_whispering_orrery', 'loc_lantern_vault', 'loc_glasswood_verge'];
+    const initialDiscovered = params.discoveredLocationIds ? params.discoveredLocationIds : defaultDiscovered;
+    this.discoveredLocationIds = Object.freeze([...new Set(initialDiscovered)]);
 
     Object.freeze(this);
   }
@@ -91,6 +97,7 @@ export class PlayerLifecycleState implements IActorLifecycle {
     deathRecord?: DeathRecord | null;
     possessionRecord?: PossessionRecord | null;
     lineage?: string | null;
+    discoveredLocationIds?: ReadonlyArray<string> | string[];
   }): PlayerLifecycleState {
     return new PlayerLifecycleState({
       actorId: updates.actorId ?? this.actorId,
@@ -112,6 +119,10 @@ export class PlayerLifecycleState implements IActorLifecycle {
       possessionRecord:
         updates.possessionRecord !== undefined ? updates.possessionRecord : this.possessionRecord,
       lineage: updates.lineage !== undefined ? updates.lineage : this.lineage,
+      discoveredLocationIds:
+        updates.discoveredLocationIds !== undefined
+          ? updates.discoveredLocationIds
+          : [...this.discoveredLocationIds],
     });
   }
 
@@ -132,6 +143,7 @@ export class PlayerLifecycleState implements IActorLifecycle {
       deathRecord: this.deathRecord,
       possessionRecord: this.possessionRecord,
       lineage: this.lineage,
+      discoveredLocationIds: this.discoveredLocationIds,
     };
   }
 
@@ -148,6 +160,7 @@ export class PlayerLifecycleState implements IActorLifecycle {
       deathRecord: data.deathRecord,
       possessionRecord: data.possessionRecord,
       lineage: data.lineage,
+      discoveredLocationIds: Array.isArray(data.discoveredLocationIds) ? data.discoveredLocationIds : undefined,
     });
   }
 

@@ -37,7 +37,6 @@ export interface EngineState {
   worldTime: WorldTime;
   activeLocationId: string;
   protagonist: ProtagonistProfile;
-  locations: Record<string, Location>;
   characters: Record<string, CanonicalCharacter>;
   activeDialogue: DialogueNode | null;
   dialogueHistory: { speaker: string; text: string; cycle: number }[];

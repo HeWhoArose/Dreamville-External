@@ -35,7 +35,11 @@ export interface GeographicCoordinates {
   elevation?: number;
 }
 
+
+export type GeographyProvenance = 'authored' | 'source/reference' | 'generated' | 'imported' | 'hybrid';
+
 export interface LocationNode {
+  provenance: GeographyProvenance;
   id: string;
   name: string;
   regionId: string;
@@ -48,6 +52,7 @@ export interface LocationNode {
 }
 
 export interface RouteEdge {
+  provenance: GeographyProvenance;
   id: string;
   fromLocationId: string;
   toLocationId: string;
@@ -131,6 +136,7 @@ export interface IActorLifecycle {
   deathRecord: DeathRecord | null;
   possessionRecord: PossessionRecord | null;
   lineage?: string | null;
+  discoveredLocationIds?: ReadonlyArray<string>;
 }
 
 export type KnowledgeSourceType =

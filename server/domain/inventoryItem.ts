@@ -44,6 +44,7 @@ export interface ItemDefinition {
   tags: string[];
   properties: Record<string, unknown>;
   defaultAssetId?: string;
+  grantedCapabilities?: string[];
 }
 
 export interface ItemInstance {
@@ -103,6 +104,7 @@ export class InventoryItemEngine {
   private itemDefinitions: Map<string, ItemDefinition> = new Map();
   private itemInstances: Map<string, ItemInstance> = new Map();
   private recipes: Map<string, CraftingRecipe> = new Map();
+  private globalInstanceCounter: number = 0;
 
   constructor() {
     this.seedDefaultDefinitions();
@@ -217,6 +219,67 @@ export class InventoryItemEngine {
       maxDurability: 120,
       tags: ['shield', 'iron'],
       properties: { armorBonus: 2 },
+    });
+
+    // CH3.2 Benchmark Item Definitions
+    this.registerDefinition({
+      id: 'def_flying_shoes',
+      name: 'Winged Hermes Greaves',
+      category: 'Armor',
+      rarity: 'Rare',
+      description: 'Enchanted feathered greaves that grant aerial levitation and flight.',
+      allowedSlots: ['feet'],
+      weightKg: 0.8,
+      baseValueGold: 120,
+      maxDurability: 80,
+      tags: ['footwear', 'enchanted', 'flight'],
+      properties: { speedBonus: 2 },
+      grantedCapabilities: ['cap_flight'],
+    });
+
+    this.registerDefinition({
+      id: 'def_flame_staff',
+      name: 'Pyromancer Cinder Staff',
+      category: 'Weapon',
+      rarity: 'Rare',
+      description: 'An ash-wood staff tipped with a smoldering volcanic crystal.',
+      allowedSlots: ['mainHand'],
+      weightKg: 2.1,
+      baseValueGold: 150,
+      maxDurability: 100,
+      tags: ['weapon', 'staff', 'fire', 'focus'],
+      properties: { damageDice: '1d6', damageType: 'fire' },
+      grantedCapabilities: ['cap_fireball'],
+    });
+
+    this.registerDefinition({
+      id: 'def_oracle_monocle',
+      name: 'Aethelgard Oracle Monocle',
+      category: 'Tool',
+      rarity: 'Rare',
+      description: 'A ground quartz lens framed in electrum, revealing hidden resonance and entity qualities.',
+      allowedSlots: ['head'],
+      weightKg: 0.1,
+      baseValueGold: 200,
+      maxDurability: 50,
+      tags: ['accessory', 'optics', 'divination'],
+      properties: { observationBonus: 4 },
+      grantedCapabilities: ['cap_analyze'],
+    });
+
+    this.registerDefinition({
+      id: 'def_ring_light',
+      name: 'Ring of Luminescence',
+      category: 'Armor',
+      rarity: 'Uncommon',
+      description: 'A silver band set with a radiant sunstone that emits guiding illumination.',
+      allowedSlots: ['ring1', 'ring2'],
+      weightKg: 0.05,
+      baseValueGold: 60,
+      maxDurability: 70,
+      tags: ['ring', 'jewelry', 'light'],
+      properties: { lightRadius: 10 },
+      grantedCapabilities: ['cap_light'],
     });
 
     // Register canonical crafting recipes
@@ -342,7 +405,8 @@ export class InventoryItemEngine {
       throw new Error(`Item definition '${params.defId}' not found.`);
     }
 
-    const instanceId = `item_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    this.globalInstanceCounter++;
+    const instanceId = `item_${def.id}_${this.globalInstanceCounter}`;
     const instance: ItemInstance = {
       id: instanceId,
       defId: def.id,
@@ -376,6 +440,49 @@ export class InventoryItemEngine {
     }
     return items;
   }
+
+	public projectItemInstance(item: ItemInstance): ItemInstance {
+		if (item.identified) {
+			return JSON.parse(JSON.stringify(item));
+		}
+		const projected: ItemInstance = JSON.parse(JSON.stringify(item));
+		projected.name = 'Unidentified Item';
+		projected.enchantments = [];
+		projected.materials = [];
+		projected.provenance = 'unknown';
+		return projected;
+	}
+
+	public projectActorInventory(actorId: string): {
+		items: ItemInstance[];
+		paperDoll: PaperDollSlots;
+		definitions: ItemDefinition[];
+	} {
+		const rawItems = this.getActorInventory(actorId);
+		const projectedItems = rawItems.map((item) => this.projectItemInstance(item));
+
+		const rawPaperDoll = this.getActorPaperDoll(actorId);
+		const projectedPaperDoll: PaperDollSlots = { ...rawPaperDoll };
+		for (const slotKey of Object.keys(projectedPaperDoll) as (keyof PaperDollSlots)[]) {
+			const slotItem = projectedPaperDoll[slotKey];
+			if (slotItem) {
+				projectedPaperDoll[slotKey] = this.projectItemInstance(slotItem);
+			}
+		}
+
+		const identifiedDefIds = new Set(
+			rawItems.filter((i) => i.identified).map((i) => i.defId)
+		);
+		const projectedDefinitions = Array.from(this.itemDefinitions.values())
+			.filter((def) => identifiedDefIds.has(def.id))
+			.map((d) => JSON.parse(JSON.stringify(d)));
+
+		return {
+			items: projectedItems,
+			paperDoll: projectedPaperDoll,
+			definitions: projectedDefinitions,
+		};
+	}
 
   public getActorPaperDoll(actorId: string): PaperDollSlots {
     const doll: PaperDollSlots = {
@@ -530,12 +637,67 @@ export class InventoryItemEngine {
   }
 
   /**
+   * Transfers an item between owners/containers atomically.
+   */
+  public transferItem(
+    itemId: string,
+    sourceOwnerId: string,
+    targetOwnerId: string,
+    targetContainerType: 'actor' | 'container' | 'corpse' | 'shop' | 'armory' | 'ground',
+    quantity?: number
+  ): {
+    success: boolean;
+    errorReason?: string;
+    transferredItem?: ItemInstance;
+  } {
+    const item = this.itemInstances.get(itemId);
+    if (!item) {
+      return { success: false, errorReason: `Item ${itemId} not found.` };
+    }
+    if (item.ownerEntityId !== sourceOwnerId) {
+      return { success: false, errorReason: `Item is not owned by ${sourceOwnerId}.` };
+    }
+    if (item.equippedSlot) {
+      return { success: false, errorReason: `Cannot transfer equipped item.` };
+    }
+
+    const transferQty = quantity !== undefined ? quantity : item.quantity;
+    if (transferQty <= 0 || transferQty > item.quantity) {
+      return { success: false, errorReason: `Invalid transfer quantity.` };
+    }
+
+    let transferred: ItemInstance;
+    if (transferQty === item.quantity) {
+      item.ownerEntityId = targetOwnerId;
+      item.containerType = targetContainerType;
+      transferred = item;
+    } else {
+      item.quantity -= transferQty;
+      
+      this.globalInstanceCounter++;
+      const instanceId = `item_${item.defId}_${this.globalInstanceCounter}`;
+      
+      transferred = {
+        ...JSON.parse(JSON.stringify(item)),
+        id: instanceId,
+        ownerEntityId: targetOwnerId,
+        containerType: targetContainerType,
+        quantity: transferQty
+      };
+      this.itemInstances.set(instanceId, transferred);
+    }
+
+    return { success: true, transferredItem: JSON.parse(JSON.stringify(transferred)) };
+  }
+
+  /**
    * Executes Crafting using deterministic material consumption
    */
   public craftItem(actorId: string, recipeId: string): {
     success: boolean;
     errorReason?: string;
     producedItem?: ItemInstance;
+    craftingTimeSeconds?: number;
   } {
     const recipe = this.recipes.get(recipeId);
     if (!recipe) return { success: false, errorReason: `Recipe ${recipeId} not found.` };
@@ -543,6 +705,17 @@ export class InventoryItemEngine {
     const actorItems = Array.from(this.itemInstances.values()).filter(
       (i) => i.ownerEntityId === actorId && i.containerType === 'actor'
     );
+
+    // Verify tool if required
+    if (recipe.requiredToolCategory) {
+      const hasTool = actorItems.some(i => {
+        const def = this.itemDefinitions.get(i.defId);
+        return def && def.category === recipe.requiredToolCategory;
+      });
+      if (!hasTool) {
+        return { success: false, errorReason: `Missing required tool of category: ${recipe.requiredToolCategory}.` };
+      }
+    }
 
     // Verify all materials
     for (const req of recipe.requiredMaterials) {
@@ -581,7 +754,11 @@ export class InventoryItemEngine {
       provenance: `crafted_via_${recipe.id}`,
     });
 
-    return { success: true, producedItem: produced };
+    return { 
+      success: true, 
+      producedItem: produced, 
+      craftingTimeSeconds: recipe.craftingTimeSeconds 
+    };
   }
 
   /**
@@ -591,11 +768,13 @@ export class InventoryItemEngine {
     itemDefinitions: ItemDefinition[];
     itemInstances: ItemInstance[];
     recipes: CraftingRecipe[];
+    globalInstanceCounter: number;
   } {
     return {
       itemDefinitions: Array.from(this.itemDefinitions.values()).map((d) => ({ ...d })),
       itemInstances: Array.from(this.itemInstances.values()).map((i) => ({ ...i })),
       recipes: Array.from(this.recipes.values()).map((r) => ({ ...r })),
+      globalInstanceCounter: this.globalInstanceCounter,
     };
   }
 
@@ -606,8 +785,13 @@ export class InventoryItemEngine {
     itemDefinitions?: ItemDefinition[];
     itemInstances?: ItemInstance[];
     recipes?: CraftingRecipe[];
+    globalInstanceCounter?: number;
   }): void {
     if (!state) return;
+
+    if (state.globalInstanceCounter !== undefined) {
+      this.globalInstanceCounter = state.globalInstanceCounter;
+    }
     this.itemDefinitions.clear();
     this.itemInstances.clear();
     this.recipes.clear();

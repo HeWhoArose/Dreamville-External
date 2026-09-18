@@ -2132,6 +2132,130 @@ describe('Broad Implementation Pass — Domain Subsystems', () => {
       assert.ok(orreryAsset.mediaSha256.length === 64);
       assert.ok(orreryAsset.promptFallback.includes('Whispering Orrery') || orreryAsset.promptFallback.includes('orrery'));
     });
+
+    it('DEF-CH13-04: exports and restores committed narrative history losslessly while excluding ephemeral model state', async () => {
+      const { worldRepository } = await import('../server/repositories/worldRepository');
+      const orchestrator = worldRepository.getAiOrchestrator();
+
+      const testStory = 'narrative_export_story';
+      worldRepository.seedStory(testStory);
+
+      // Create a committed continuation checkpoint with player action and narrative output
+      orchestrator.createContinuationCheckpoint({
+        checkpointId: 'cp_narrative_test_1',
+        storyId: testStory,
+        turnId: 'turn_42',
+        role: 'narrator',
+        playerAction: 'Investigate the humming crystal prism.',
+        workingContextTokens: 1450, // Ephemeral - should NOT leak
+        worldTime: 'Year 1240, Day 4',
+        locationId: 'loc_whispering_orrery',
+        sceneSummary: 'Vael inspects the humming crystal.',
+        recentOutput: 'The prism vibrates gently, refracting ancient starlight across the chamber walls.',
+        uncommittedOutput: 'Draft output', // Ephemeral - should NOT leak
+        canonicalInvariants: { crystalState: 'attuned' },
+        styleContract: { tone: 'mythic' },
+        createdAt: 1700000000000,
+        adjudicationStatus: 'ADJUDICATED',
+        handoffEligible: true,
+        recentHistory: ['The prism vibrates gently, refracting ancient starlight across the chamber walls.'],
+        summaryText: 'Vael inspects the humming crystal.',
+        providerId: 'gemini_flash', // Ephemeral
+        selectedModelId: 'gemini-2.5-flash', // Ephemeral
+      });
+
+      // Export campaign archive
+      const archive = worldRepository.exportCampaignArchive(testStory, 'Narrative Export Test');
+      assert.ok(archive.partitions['canonical/narrative.json']);
+
+      const narrativePartition = JSON.parse(archive.partitions['canonical/narrative.json']);
+      assert.ok(Array.isArray(narrativePartition));
+      assert.strictEqual(narrativePartition.length, 1);
+
+      const record = narrativePartition[0];
+      assert.strictEqual(record.checkpointId, 'cp_narrative_test_1');
+      assert.strictEqual(record.playerAction, 'Investigate the humming crystal prism.');
+      assert.strictEqual(record.recentOutput, 'The prism vibrates gently, refracting ancient starlight across the chamber walls.');
+      assert.strictEqual(record.sceneSummary, 'Vael inspects the humming crystal.');
+      assert.deepStrictEqual(record.canonicalInvariants, { crystalState: 'attuned' });
+
+      // Verify ephemeral fields were excluded from canonical narrative history
+      assert.strictEqual(record.workingContextTokens, undefined);
+      assert.strictEqual(record.providerId, undefined);
+      assert.strictEqual(record.selectedModelId, undefined);
+      assert.strictEqual(record.uncommittedOutput, undefined);
+
+      // Restore to a fresh target story
+      const restoreResult = worldRepository.restoreCampaignArchive(archive, 'narrative_restored_story');
+      assert.strictEqual(restoreResult.success, true);
+
+      // Verify restored narrative in AI orchestrator
+      const restoredCheckpoints = orchestrator.getAllCheckpoints('narrative_restored_story');
+      assert.strictEqual(restoredCheckpoints.length, 1);
+      assert.strictEqual(restoredCheckpoints[0].checkpointId, 'cp_narrative_test_1');
+      assert.strictEqual(restoredCheckpoints[0].playerAction, 'Investigate the humming crystal prism.');
+      assert.strictEqual(restoredCheckpoints[0].recentOutput, 'The prism vibrates gently, refracting ancient starlight across the chamber walls.');
+      assert.strictEqual(restoredCheckpoints[0].handoffEligible, true);
+    });
+
+    it('DEF-CH13-03: ensures story-scoped geography isolation prevents cross-story mutation collisions', async () => {
+      const { worldRepository } = await import('../server/repositories/worldRepository');
+      worldRepository.seedStory('story_alpha');
+      worldRepository.seedStory('story_beta');
+
+      const geoAlpha = worldRepository.getGeographyGraph('story_alpha');
+      const geoBeta = worldRepository.getGeographyGraph('story_beta');
+
+      assert.notStrictEqual(geoAlpha, geoBeta);
+
+      // Add unique location node to story_alpha
+      geoAlpha.addNode({
+        id: 'loc_alpha_unique_citadel',
+        name: 'Alpha Citadel',
+        description: 'A fortress unique to story alpha.',
+        zoneId: 'zone_spire',
+        coordinates: { x: 100, y: 200 },
+        tags: ['alpha'],
+      });
+
+      assert.ok(geoAlpha.getNode('loc_alpha_unique_citadel') !== undefined);
+      assert.strictEqual(geoBeta.getNode('loc_alpha_unique_citadel'), undefined);
+
+      // Export story_alpha and restore to story_gamma
+      const archiveAlpha = worldRepository.exportCampaignArchive('story_alpha', 'Alpha Story');
+      const restoreGamma = worldRepository.restoreCampaignArchive(archiveAlpha, 'story_gamma');
+      assert.strictEqual(restoreGamma.success, true);
+
+      const geoGamma = worldRepository.getGeographyGraph('story_gamma');
+      assert.ok(geoGamma.getNode('loc_alpha_unique_citadel') !== undefined);
+
+      // Story beta remains completely unpolluted
+      assert.strictEqual(geoBeta.getNode('loc_alpha_unique_citadel'), undefined);
+    });
+
+    it('DEF-CH13-06: ensures unseeded exports auto-initialize deterministically without hash drift', async () => {
+      const { worldRepository } = await import('../server/repositories/worldRepository');
+
+      // Exporting an unseeded story must auto-initialize deterministically and produce a complete archive
+      const unseededArchive = worldRepository.exportCampaignArchive('unseeded_phantom_story', 'Ghost Campaign');
+      assert.ok(unseededArchive.manifest.partitionHashes['canonical/player.json']);
+      assert.ok(unseededArchive.partitions['canonical/player.json']);
+
+      // Restoring it to another story
+      const restoreResult = worldRepository.restoreCampaignArchive(unseededArchive, 'restored_phantom_story');
+      assert.strictEqual(restoreResult.success, true);
+
+      // Re-exporting restored story reproduces identical partition hashes
+      const reExported = worldRepository.exportCampaignArchive('restored_phantom_story', 'Ghost Campaign');
+      assert.strictEqual(
+        reExported.manifest.partitionHashes['canonical/player.json'],
+        unseededArchive.manifest.partitionHashes['canonical/player.json']
+      );
+      assert.strictEqual(
+        reExported.manifest.partitionHashes['canonical/world.json'],
+        unseededArchive.manifest.partitionHashes['canonical/world.json']
+      );
+    });
   });
 
   describe('Challenge 15: Story Adaptation Pipeline', () => {

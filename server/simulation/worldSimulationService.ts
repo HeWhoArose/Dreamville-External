@@ -46,7 +46,10 @@ export class WorldSimulationService {
       return { success: false, message: `Destination ${destinationLocationId} does not exist.` };
     }
 
-    if (!destNode.discovered) {
+    const actorDiscoveredSet = new Set(
+      player.discoveredLocationIds || ['loc_whispering_orrery', 'loc_lantern_vault', 'loc_glasswood_verge']
+    );
+    if (!actorDiscoveredSet.has(destinationLocationId)) {
       return { success: false, message: `Destination ${destNode.name} is uncharted and undiscovered.` };
     }
 
@@ -71,7 +74,7 @@ export class WorldSimulationService {
     const estimatedArrivalTime = arrivalClock.getTimestamp();
 
     const journey: TravelJourney = {
-      id: `journey_${Date.now()}`,
+      id: `journey_${player.actorId}_${clock.getTimestamp().totalElapsedSeconds}`,
       actorId: player.actorId,
       originLocationId: player.locationId,
       destinationLocationId,
@@ -114,6 +117,7 @@ export class WorldSimulationService {
     livingWorldSummary?: import('../domain/livingWorldSimulation').LivingWorldSimulationSummary;
   } {
     const clock = this.worldRepo.getWorldClock(storyId);
+    const previousElapsed = clock.getTimestamp().totalElapsedSeconds;
     const updatedClockState = clock.advanceSeconds(secondsToAdvance);
     const currentElapsed = updatedClockState.timestamp.totalElapsedSeconds;
     const completedArrivals: string[] = [];
@@ -138,8 +142,16 @@ export class WorldSimulationService {
           lastUpdatedTime: currentElapsed,
         });
 
-        this.worldRepo.updatePlayerLifecycle(storyId, arrivedPlayer);
-        this.worldRepo.getGeographyGraph().setDiscovered(journey.destinationLocationId, true);
+        const currentDiscovered = arrivedPlayer.discoveredLocationIds || [];
+        const updatedDiscovered = currentDiscovered.includes(journey.destinationLocationId)
+          ? currentDiscovered
+          : [...currentDiscovered, journey.destinationLocationId];
+
+        const arrivedPlayerWithDiscovery = arrivedPlayer.copyWith({
+          discoveredLocationIds: updatedDiscovered,
+        });
+
+        this.worldRepo.updatePlayerLifecycle(storyId, arrivedPlayerWithDiscovery);
         completedArrivals.push(journey.destinationLocationId);
 
         // Record historical evidence for completed territorial transit
@@ -193,9 +205,12 @@ export class WorldSimulationService {
 
     // CH4 Historical Chronicle integration: record evidence for triggered world events
     const chronicleEngine = this.worldRepo.getHistoricalChronicleEngine(storyId);
+    const memoryEngine = this.worldRepo.getMemoryEngine(storyId);
+
     for (const ev of livingSummary.triggeredEvents) {
+      const eventId = `ev_world_${ev.id}_${updatedClockState.timestamp.totalElapsedSeconds}`;
       chronicleEngine.recordEvidence({
-        id: `ev_world_${ev.id}_${updatedClockState.timestamp.totalElapsedSeconds}`,
+        id: eventId,
         category: 'WORLD_ANOMALY',
         timestamp: updatedClockState.timestamp,
         primarySubjectId: ev.id,
@@ -207,6 +222,45 @@ export class WorldSimulationService {
         visibility: 'PUBLIC',
         metadata: { eventKind: ev.kind, status: ev.status, forcedSignificance: 'NOTABLE' },
       });
+
+      // DEF-CH10-08: CH9 Memory Integration
+      const memoryId = `mem_world_${ev.id}_${updatedClockState.timestamp.totalElapsedSeconds}`;
+      if (!memoryEngine.getMemory(memoryId)) {
+        const witnesses: string[] = [];
+        const currentPlayer = this.worldRepo.getPlayerLifecycle(storyId);
+        if (currentPlayer && currentPlayer.locationId === ev.locationId) {
+          witnesses.push(currentPlayer.actorId);
+        }
+        const npcs = livingSim.getAllNpcSchedules().filter(npc => npc.currentLocationId === ev.locationId);
+        witnesses.push(...npcs.map(n => n.npcId));
+
+        let visibility: 'PUBLIC' | 'SHARED' | 'PRIVATE' = 'SHARED';
+        if (ev.locationId === 'global' || ev.kind === 'ASTRONOMICAL_SUNRISE' || ev.kind === 'TOURNAMENT') {
+          visibility = 'PUBLIC';
+        } else if (witnesses.length === 0) {
+          visibility = 'PRIVATE';
+        }
+
+        memoryEngine.storeMemory({
+          id: memoryId,
+          storyId,
+          memoryClass: 'ATOMIC_FACT',
+          subjectEntityId: ev.id,
+          relatedEntityIds: [ev.locationId, ...witnesses],
+          content: ev.consequenceSummary || `Scheduled world event ${ev.name} triggered.`,
+          importance: 80,
+          confidence: 1.0,
+          status: 'active',
+          visibility: visibility as any,
+          accessibleToEntityIds: witnesses,
+          isPersistentCritical: true,
+          provenance: 'system_grant',
+          sourceEventId: eventId,
+          validFromTurn: 1,
+          lastRecalledTurn: 1,
+          triggerConditionTags: [],
+        });
+      }
     }
 
     for (const ev of livingSummary.missedEvents) {
@@ -223,6 +277,73 @@ export class WorldSimulationService {
         visibility: 'PUBLIC',
         metadata: { eventKind: ev.kind, status: ev.status },
       });
+    }
+
+    // DEF-CH10-07: Sunrise / Astronomical Integration
+    const SECONDS_PER_DAY = 86400;
+    const SUNRISE_OFFSET = 21600; // 06:00:00
+
+    const prevSunriseCount = Math.floor((previousElapsed - SUNRISE_OFFSET) / SECONDS_PER_DAY);
+    const currSunriseCount = Math.floor((currentElapsed - SUNRISE_OFFSET) / SECONDS_PER_DAY);
+
+    if (currSunriseCount > prevSunriseCount) {
+      const currentPlayer = this.worldRepo.getPlayerLifecycle(storyId);
+      if (currentPlayer?.transformationRecord?.active && currentPlayer.transformationRecord.formName === 'werewolf') {
+        const res = livingSim.evaluateSunriseCurse({
+          currentSeconds: currentElapsed,
+          sunriseSeconds: currentElapsed,
+          hasWerewolfCurse: true
+        });
+
+        if (res.revertedToHuman) {
+          const updatedPlayer = currentPlayer.copyWith({
+            transformationRecord: {
+              ...currentPlayer.transformationRecord,
+              active: false,
+              expiresAtTimestamp: updatedClockState.timestamp,
+            }
+          });
+          this.worldRepo.updatePlayerLifecycle(storyId, updatedPlayer);
+
+          const eventId = `ev_sunrise_reversion_${updatedClockState.timestamp.totalElapsedSeconds}`;
+          chronicleEngine.recordEvidence({
+            id: eventId,
+            category: 'LIFECYCLE_TRANSITION',
+            timestamp: updatedClockState.timestamp,
+            primarySubjectId: updatedPlayer.actorId,
+            locationId: updatedPlayer.locationId,
+            summary: `Sunrise transformation reversion.`,
+            details: res.narrativeFact,
+            sourceEventId: eventId,
+            provenance: 'system_grant',
+            visibility: 'PUBLIC',
+            metadata: { forcedSignificance: 'NOTABLE' }
+          });
+
+          const memoryId = `mem_sunrise_${updatedClockState.timestamp.totalElapsedSeconds}`;
+          if (!memoryEngine.getMemory(memoryId)) {
+            memoryEngine.storeMemory({
+              id: memoryId,
+              storyId,
+              memoryClass: 'EPISODIC',
+              subjectEntityId: updatedPlayer.actorId,
+              relatedEntityIds: [updatedPlayer.locationId],
+              content: res.narrativeFact,
+              importance: 90,
+              confidence: 1.0,
+              status: 'active',
+              visibility: 'PRIVATE',
+              accessibleToEntityIds: [updatedPlayer.actorId],
+              isPersistentCritical: true,
+              provenance: 'direct_observation',
+              sourceEventId: eventId,
+              validFromTurn: 1,
+              lastRecalledTurn: 1,
+          triggerConditionTags: [],
+            });
+          }
+        }
+      }
     }
 
     return {
@@ -249,6 +370,56 @@ export class WorldSimulationService {
     this.worldRepo.updatePlayerLifecycle(storyId, updatedPlayer);
     return true;
   }
+
+  /**
+   * Deterministically interrupts an active travel journey.
+   * DreamBook V5.12, §340: Travel can be interrupted by scheduled events or player action.
+   */
+  public interruptPlayerTravel(storyId: string, reason: string): boolean {
+    const player = this.worldRepo.getPlayerLifecycle(storyId);
+    if (!player || !player.isTraveling || !player.activeJourney) {
+      return false;
+    }
+
+    const journey = player.activeJourney;
+    const clock = this.worldRepo.getWorldClock(storyId);
+    const currentElapsed = clock.getTimestamp().totalElapsedSeconds;
+
+    // Calculate how far they got before interruption
+    const timeSpentTraveling = Math.max(0, currentElapsed - journey.departureTime.totalElapsedSeconds);
+    const distanceTraveled = (timeSpentTraveling / 3600) * journey.speedKmPerHour;
+
+    const interruptedJourney = {
+      ...journey,
+      status: 'interrupted' as const,
+      traveledDistanceKm: Math.min(distanceTraveled, journey.totalDistanceKm)
+    };
+
+    const updatedPlayer = player.copyWith({
+      activeJourney: interruptedJourney,
+      currentActivity: 'idle',
+      lastUpdatedTime: currentElapsed,
+    });
+
+    this.worldRepo.updatePlayerLifecycle(storyId, updatedPlayer);
+
+    const chronicleEngine = this.worldRepo.getHistoricalChronicleEngine(storyId);
+    chronicleEngine.recordEvidence({
+      id: `ev_journey_interrupt_${currentElapsed}`,
+      category: 'TERRITORIAL_TRANSIT',
+      timestamp: clock.getTimestamp(),
+      primarySubjectId: player.actorId,
+      locationId: journey.originLocationId, // Still anchored to origin per CH1 invariant
+      summary: `Travel interrupted: ${reason}`,
+      details: `The journey toward ${journey.destinationLocationId} was interrupted. (${distanceTraveled.toFixed(1)} km traveled).`,
+      sourceEventId: `ev_interrupt_${currentElapsed}`,
+      provenance: 'system_grant',
+      visibility: 'PUBLIC',
+    });
+
+    return true;
+  }
+
 
   /**
    * Sets the canonical player activity state.
@@ -285,7 +456,7 @@ export class WorldSimulationService {
     const clock = this.worldRepo.getWorldClock(storyId);
     const timestamp = clock.getTimestamp();
     const injury: InjuryRecord = {
-      id: injuryData.id || `inj_${Date.now()}`,
+      id: injuryData.id || `inj_${player.actorId}_${timestamp.totalElapsedSeconds}_${player.injuries.length}`,
       type: injuryData.type,
       severity: injuryData.severity,
       location: injuryData.location,
@@ -388,7 +559,7 @@ export class WorldSimulationService {
     const clock = this.worldRepo.getWorldClock(storyId);
     const timestamp = clock.getTimestamp();
     const record: TransformationRecord = {
-      id: transformData.id || `trans_${Date.now()}`,
+      id: transformData.id || `trans_${player.actorId}_${timestamp.totalElapsedSeconds}`,
       formName: transformData.formName,
       vesselType: transformData.vesselType,
       active: true,

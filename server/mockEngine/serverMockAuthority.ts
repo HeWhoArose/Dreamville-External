@@ -42,11 +42,9 @@ export class ServerMockAuthority {
    * Projects server-side canonical EngineState into a client-safe ExternalViewState.
    * Strips all hidden secrets, canonical character secrets, and server test secrets.
    */
-  public filterForExternalClient(state: EngineState): ExternalViewState {
+  public filterForExternalClient(state: EngineState, storyId: string = 'default_story'): ExternalViewState {
     const sanitizedCharacters: Record<string, ExternalCharacter> = {};
-
     for (const [id, char] of Object.entries(state.characters)) {
-      // Epistemic Boundary: hiddenCanonicalContext is explicitly excluded
       sanitizedCharacters[id] = {
         id: char.id,
         name: char.name,
@@ -60,14 +58,13 @@ export class ServerMockAuthority {
       };
     }
 
-    const player = worldRepository.getPlayerLifecycle('default_story');
+    const player = worldRepository.getPlayerLifecycle(storyId);
     const canonicalLocationId = player ? player.locationId : state.activeLocationId;
     const isTraveling = player ? player.isTraveling : false;
     const activeJourney = player ? player.activeJourney : null;
-    const clock = worldRepository.getWorldClock('default_story');
+    const clock = worldRepository.getWorldClock(storyId);
     const canonicalClockState = clock.getState();
 
-    // Synchronize mock mirror state with canonical domain authority
     state.activeLocationId = canonicalLocationId;
     const phaseMapping: Record<string, 'Dawn' | 'Morning' | 'Zenith' | 'Dusk' | 'Starlight'> = {
       Predawn: 'Dawn',
@@ -83,23 +80,31 @@ export class ServerMockAuthority {
       era: 'Age of Resonances',
     };
 
-    // Epistemic Boundary (CH2.MAP_MASK): Filter out undiscovered locations from player view state
-    // The server canonical world state retains all locations (e.g. loc_sunken_scriptorium).
-    // The player projection must strictly only include locations the player has discovered or observed.
-    // Client MUST NOT receive any location entity with discovered: false.
+    const actorDiscoveredSet = new Set(
+      player?.discoveredLocationIds || ['loc_whispering_orrery', 'loc_lantern_vault', 'loc_glasswood_verge']
+    );
+
+    const graphNodes = worldRepository.getGeographyGraph().getAllNodes();
     const projectedLocations: Record<string, Location> = {};
-    for (const [id, loc] of Object.entries(state.locations)) {
-      const isCurrentLocation = id === canonicalLocationId;
+    for (const node of graphNodes) {
+      const isCurrentLocation = node.id === canonicalLocationId;
       const isKnownInKnowledgeBase = state.knowledgeBase.some(
-        (k) => k.id.includes(id) || k.summary.toLowerCase().includes(loc.name.toLowerCase())
+        (k) => k.id.includes(node.id) || k.summary.toLowerCase().includes(node.name.toLowerCase())
       );
       const isPartOfActiveJourney =
         activeJourney !== null &&
-        (activeJourney.originLocationId === id || activeJourney.destinationLocationId === id);
+        (activeJourney.originLocationId === node.id || activeJourney.destinationLocationId === node.id);
+      const isActorDiscovered = actorDiscoveredSet.has(node.id);
 
-      if (loc.discovered || isCurrentLocation || isKnownInKnowledgeBase || isPartOfActiveJourney) {
-        projectedLocations[id] = {
-          ...loc,
+      if (isActorDiscovered || isCurrentLocation || isKnownInKnowledgeBase || isPartOfActiveJourney) {
+        projectedLocations[node.id] = {
+          id: node.id,
+          name: node.name,
+          region: node.regionId,
+          description: node.description,
+          coordinates: node.coordinates,
+          accessible: node.accessible,
+          ambientSensory: node.ambientSensory,
           discovered: true,
         };
       }
@@ -107,7 +112,6 @@ export class ServerMockAuthority {
 
     const activeLocation =
       projectedLocations[canonicalLocationId] ||
-      state.locations[canonicalLocationId] ||
       Object.values(projectedLocations)[0];
 
     // Canonical Inventory & Equipment Projection from InventoryItemEngine (CH5)
@@ -115,7 +119,6 @@ export class ServerMockAuthority {
     const actorId = player ? player.actorId : 'player_actor_default_story';
     const canonicalItems = invEngine.getActorInventory(actorId);
     const canonicalPaperDoll = invEngine.getActorPaperDoll(actorId);
-
     const iconMap: Record<string, string> = {
       def_iron_sword: '⚔️',
       def_steel_cuirass: '🛡️',
@@ -128,7 +131,6 @@ export class ServerMockAuthority {
       def_scribed_vellum: '📜',
       def_glasswood_spore_flask: '🧪',
     };
-
     const projectedInventory = canonicalItems.map((item) => {
       const def = invEngine.getItemDefinition(item.defId);
       return {
@@ -146,7 +148,6 @@ export class ServerMockAuthority {
         isBroken: item.isBroken,
       };
     });
-
     const projectedEquipment: Record<string, any> = {
       Head: canonicalPaperDoll.head ? { ...canonicalPaperDoll.head, icon: iconMap[canonicalPaperDoll.head.defId] || '🧣' } : null,
       Cloak: canonicalPaperDoll.cloak ? { ...canonicalPaperDoll.cloak, icon: iconMap[canonicalPaperDoll.cloak.defId] || '🧣' } : null,
@@ -158,7 +159,6 @@ export class ServerMockAuthority {
       OffHand: canonicalPaperDoll.offHand ? { ...canonicalPaperDoll.offHand, icon: iconMap[canonicalPaperDoll.offHand.defId] || '🛡️' } : null,
     };
 
-    // Explicitly construct ExternalViewState without serverBoundarySecret
     return {
       worldTime: { ...state.worldTime },
       activeLocationId: canonicalLocationId,
@@ -176,6 +176,10 @@ export class ServerMockAuthority {
           : 'Active',
       },
       locations: projectedLocations,
+      routeEdges: worldRepository
+        .getGeographyGraph()
+        .getAllEdges()
+        .filter((edge) => Boolean(projectedLocations[edge.fromLocationId] && projectedLocations[edge.toLocationId])),
       characters: sanitizedCharacters,
       activeDialogue: state.activeDialogue ? { ...state.activeDialogue } : null,
       dialogueHistory: state.dialogueHistory.map((d) => ({ ...d })),
@@ -193,15 +197,29 @@ export class ServerMockAuthority {
   /**
    * Returns sanitized view state for GET /api/game/state
    */
-  public getSanitizedViewState(): ExternalViewState {
-    return this.filterForExternalClient(this.EXPERIMENTAL_SINGLE_INSTANCE_MOCK_STATE);
+  public getSanitizedViewState(storyId: string = 'default_story'): ExternalViewState {
+    return this.filterForExternalClient(this.EXPERIMENTAL_SINGLE_INSTANCE_MOCK_STATE, storyId);
   }
 
   /**
    * Returns canonical server-side locations (unfiltered world truth).
    */
   public getCanonicalLocations(): Record<string, Location> {
-    return { ...this.EXPERIMENTAL_SINGLE_INSTANCE_MOCK_STATE.locations };
+    const graphNodes = worldRepository.getGeographyGraph().getAllNodes();
+    const locs: Record<string, Location> = {};
+    for (const node of graphNodes) {
+      locs[node.id] = {
+        id: node.id,
+        name: node.name,
+        region: node.regionId,
+        description: node.description,
+        coordinates: node.coordinates,
+        accessible: node.accessible,
+        ambientSensory: node.ambientSensory,
+        discovered: node.discovered,
+      };
+    }
+    return locs;
   }
 
   /**
@@ -295,7 +313,7 @@ export class ServerMockAuthority {
         );
 
         if (travelResult.success) {
-          const targetLoc = state.locations[request.targetLocationId];
+          const targetLoc = worldRepository.getGeographyGraph().getAllNodes().find(n => n.id === request.targetLocationId);
           const destName = targetLoc ? targetLoc.name : request.targetLocationId;
           message = travelResult.message;
           authoritativeFeedback = `WorldSimulationService validated route and initiated travel to ${destName}. Invariant 6: Location remains origin while journey is in progress.`;
@@ -349,10 +367,21 @@ export class ServerMockAuthority {
 
       case 'DISCOVER_LOCATION': {
         const targetId = request.targetLocationId;
-        const targetLoc = state.locations[targetId];
-        if (targetLoc) {
-          targetLoc.discovered = true;
-          worldRepository.getGeographyGraph().setDiscovered(targetId, true);
+        const targetStoryId = (request as any).storyId || 'default_story';
+        const graphNodes = worldRepository.getGeographyGraph().getAllNodes();
+        const targetNode = graphNodes.find(n => n.id === targetId);
+        if (targetNode) {
+          const player = worldRepository.getPlayerLifecycle(targetStoryId);
+          if (player) {
+            const currentList = player.discoveredLocationIds || [];
+            if (!currentList.includes(targetId)) {
+              const updatedPlayer = player.copyWith({
+                discoveredLocationIds: [...currentList, targetId],
+              });
+              worldRepository.updatePlayerLifecycle(targetStoryId, updatedPlayer);
+            }
+          }
+          const targetLoc = targetNode;
           message = `Location charted: ${targetLoc.name}.`;
           authoritativeFeedback = `Server epistemic authority charted new location in player knowledge.`;
           logEntry = {
@@ -497,7 +526,7 @@ export class ServerMockAuthority {
 
       case 'INSPECT_SURROUNDINGS': {
         const activeLoc =
-          state.locations[state.activeLocationId] || Object.values(state.locations)[0];
+          worldRepository.getGeographyGraph().getAllNodes().find(n => n.id === state.activeLocationId) || worldRepository.getGeographyGraph().getAllNodes()[0];
         message = `Inspected surroundings at ${activeLoc.name}.`;
         authoritativeFeedback = `Server emitted ambient sensory narrative: "${activeLoc.ambientSensory}"`;
         logEntry = {
@@ -527,7 +556,7 @@ export class ServerMockAuthority {
         message = `World clock advanced to Day ${ts.day} (${phase}, ${ts.hour.toString().padStart(2, '0')}:${ts.minute.toString().padStart(2, '0')}).`;
         if (advanceResult.completedArrivals.length > 0) {
           const completedDest = advanceResult.completedArrivals[0];
-          const destLoc = state.locations[completedDest];
+          const destLoc = worldRepository.getGeographyGraph().getAllNodes().find(n => n.id === completedDest);
           const destName = destLoc ? destLoc.name : completedDest;
           message += ` Arrived at destination: ${destName}.`;
 

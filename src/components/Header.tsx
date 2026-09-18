@@ -1,6 +1,6 @@
 import React from 'react';
 import { WorldTime, Location } from '../types';
-import { ShieldCheck, Clock, Compass, BookOpen, Eye, Layers, Archive } from 'lucide-react';
+import { ShieldCheck, Clock, Compass, BookOpen, Eye, Layers, Archive, Cpu } from 'lucide-react';
 
 interface HeaderProps {
   worldTime: WorldTime;
@@ -10,6 +10,7 @@ interface HeaderProps {
   onOpenEpistemicModal: () => void;
   onOpenContextModal?: () => void;
   onOpenArchiveModal?: () => void;
+  onOpenRoutingModal?: () => void;
   pendingRequestsCount: number;
 }
 
@@ -21,12 +22,13 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenEpistemicModal,
   onOpenContextModal,
   onOpenArchiveModal,
+  onOpenRoutingModal,
   pendingRequestsCount,
 }) => {
   return (
     <header className="border-b border-stone-800 bg-stone-900/90 backdrop-blur-md sticky top-0 z-40">
       {/* Top authoritative bar */}
-      <div className="border-b border-stone-850 bg-stone-950/60 px-4 py-1.5 text-xs text-stone-400 flex flex-wrap items-center justify-between gap-2">
+      <div className="border-b border-stone-855 bg-stone-950/60 px-4 py-1.5 text-xs text-stone-400 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-550/10 text-emerald-400 border border-emerald-500/20 font-mono text-[11px]">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
@@ -63,6 +65,17 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Layers className="w-3 h-3 text-amber-400" />
               <span>Context Budget</span>
+            </button>
+          )}
+          {onOpenRoutingModal && (
+            <button
+              id="routing-workstation-btn"
+              onClick={onOpenRoutingModal}
+              className="flex items-center gap-1 px-2.5 py-0.5 rounded bg-stone-800 hover:bg-stone-750 text-stone-300 hover:text-amber-200 border border-stone-700 transition text-[11px] font-medium"
+              title="Model Routing Workstation (DreamBook V6.29)"
+            >
+              <Cpu className="w-3 h-3 text-amber-400" />
+              <span>Model Routing</span>
             </button>
           )}
           {onOpenArchiveModal && (

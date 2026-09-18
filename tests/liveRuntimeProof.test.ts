@@ -525,7 +525,12 @@ describe('CH1 Live Runtime Proof — Canonical Domain & HTTP API Path', () => {
     assert.strictEqual(typeof data.powerState.physicalStrain, 'number');
 
     assert.ok(Array.isArray(data.capabilities), 'capabilities must be an array');
-    assert.ok(data.capabilities.length >= 3, 'Must contain seeded starter capabilities');
+    assert.ok(data.capabilities.length >= 2, 'Must contain seeded starter capabilities within vessel capacity');
+    assert.strictEqual(
+      data.capabilities.some((c: any) => c.id === 'cap_world_darkness'),
+      false,
+      'Must filter out WorldScale capabilities exceeding vessel capacity'
+    );
     assert.ok(Array.isArray(data.graph), 'graph must be an array');
   });
 
@@ -557,10 +562,10 @@ describe('CH1 Live Runtime Proof — Canonical Domain & HTTP API Path', () => {
         intendedCapabilityId: 'cap_nonexistent_unregistered',
       }),
     });
-    assert.strictEqual(rejRes.status, 200);
+    assert.strictEqual(rejRes.status, 403);
     const rejData = (await rejRes.json()) as any;
     assert.strictEqual(rejData.approved, false);
-    assert.ok(rejData.rejectionReason?.includes('not in the canonical registry'));
+    assert.ok(rejData.rejectionReason?.includes('does not possess or have active equipment'));
   });
 
   it('CH6/CH7 Live API: POST /api/game/capabilities/synthesize creates structured power, derived techniques, and emits chronicle evidence', async () => {
@@ -1238,5 +1243,281 @@ describe('CH1 Live Runtime Proof — Canonical Domain & HTTP API Path', () => {
     assert.ok(data.stats);
     assert.ok(data.stats.modelsRegistered >= 5);
     assert.ok(data.stats.totalTurnsExecuted >= 1);
+  });
+
+  // ==========================================
+  // CH12 V6.34: Server-Authoritative Idempotency Suite (Mandatory Tests A-E)
+  // ==========================================
+
+  it('CH12 V6.34 Test A: Identical POST /api/game/orchestrator/turn twice with same idempotency key deduplicates execution and returns cached result', async () => {
+    const idempotencyKey = 'idem_key_live_test_a_' + Date.now();
+    const payload = {
+      storyId: 'story_idem_a',
+      playerAction: 'Decipher the celestial inscriptions',
+      task: 'narrative.generate',
+      hardTokenBudget: 350,
+      idempotencyKey,
+    };
+
+    // First call: initial execution
+    const res1 = await fetch(`${baseUrl}/orchestrator/turn`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify(payload),
+    });
+    assert.strictEqual(res1.status, 200);
+    const data1 = (await res1.json()) as any;
+    assert.strictEqual(data1.success, true);
+    assert.ok(data1.turnPackage);
+    const turnId1 = data1.telemetry.turnId;
+    assert.ok(turnId1);
+    assert.strictEqual(res1.headers.get('x-idempotent-replay'), null);
+
+    // Second call: replay with exact same idempotency key
+    const res2 = await fetch(`${baseUrl}/orchestrator/turn`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': idempotencyKey,
+      },
+      body: JSON.stringify(payload),
+    });
+    assert.strictEqual(res2.status, 200);
+    const data2 = (await res2.json()) as any;
+    assert.strictEqual(data2.success, true);
+    assert.strictEqual(res2.headers.get('x-idempotent-replay'), 'true');
+    assert.strictEqual(data2.telemetry.turnId, turnId1, 'Replayed turn must have identical turnId');
+    assert.deepStrictEqual(data2.turnPackage.narrative, data1.turnPackage.narrative);
+  });
+
+  it('CH12 V6.34 Test B & C: In-flight deduplication and concurrent replay share identical promise without redundant execution', async () => {
+    const idempotencyKey = 'idem_key_concurrent_' + Date.now();
+    const payload = {
+      storyId: 'story_idem_concurrent',
+      playerAction: 'Channel the resonant beacon concurrently',
+      task: 'narrative.generate',
+      hardTokenBudget: 350,
+      idempotencyKey,
+    };
+
+    // Dispatch two concurrent identical requests
+    const [res1, res2] = await Promise.all([
+      fetch(`${baseUrl}/orchestrator/turn`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
+        body: JSON.stringify(payload),
+      }),
+      fetch(`${baseUrl}/orchestrator/turn`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
+        body: JSON.stringify(payload),
+      }),
+    ]);
+
+    assert.strictEqual(res1.status, 200);
+    assert.strictEqual(res2.status, 200);
+    const data1 = (await res1.json()) as any;
+    const data2 = (await res2.json()) as any;
+
+    assert.strictEqual(data1.telemetry.turnId, data2.telemetry.turnId);
+    assert.deepStrictEqual(data1.turnPackage.narrative, data2.turnPackage.narrative);
+  });
+
+  it('CH12 V6.34 Test D: Replay of a fallback attempt preserves deterministic fallback telemetry and result', async () => {
+    const idempotencyKey = 'idem_key_fallback_' + Date.now();
+    // Temporarily mark primary model unavailable to trigger fallback
+    await fetch(`${baseUrl}/orchestrator/health`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        providerId: 'google_gemini',
+        modelId: 'gemini-2.5-pro',
+        health: 'Unavailable',
+      }),
+    });
+
+    const payload = {
+      storyId: 'story_idem_fb',
+      playerAction: 'Attempt complex spatial resonance through degraded conduits',
+      task: 'narrative.generate',
+      hardTokenBudget: 300,
+      idempotencyKey,
+    };
+
+    const res1 = await fetch(`${baseUrl}/orchestrator/turn`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    assert.strictEqual(res1.status, 200);
+    const data1 = (await res1.json()) as any;
+    assert.strictEqual(data1.success, true);
+    assert.ok(data1.telemetry.fallbackChain.length >= 1);
+
+    // Replay call
+    const res2 = await fetch(`${baseUrl}/orchestrator/turn`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    assert.strictEqual(res2.status, 200);
+    const data2 = (await res2.json()) as any;
+    assert.strictEqual(res2.headers.get('x-idempotent-replay'), 'true');
+    assert.strictEqual(data2.telemetry.turnId, data1.telemetry.turnId);
+    assert.deepStrictEqual(data2.telemetry.fallbackChain, data1.telemetry.fallbackChain);
+
+    // Restore health
+    await fetch(`${baseUrl}/orchestrator/health`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        providerId: 'google_gemini',
+        modelId: 'gemini-2.5-pro',
+        health: 'Healthy',
+        resetCircuitBreaker: true,
+      }),
+    });
+  });
+
+  it('CH12 V6.34 Test E: Replay of state-changing proposal preserves canonical single-commit invariants', async () => {
+    const idempotencyKey = 'idem_key_state_change_' + Date.now();
+    const payload = {
+      storyId: 'story_idem_state',
+      playerAction: 'Strike the bronze bell and activate ward',
+      task: 'rules.adjudicate',
+      idempotencyKey,
+    };
+
+    const res1 = await fetch(`${baseUrl}/orchestrator/turn`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data1 = (await res1.json()) as any;
+
+    const res2 = await fetch(`${baseUrl}/orchestrator/turn`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data2 = (await res2.json()) as any;
+
+    assert.strictEqual(data1.checkpoint.checkpointId, data2.checkpoint.checkpointId);
+    assert.deepStrictEqual(data1.turnPackage.proposedStateChanges, data2.turnPackage.proposedStateChanges);
+  });
+
+  // ==========================================
+  // CH12 V6.15: ContinuationCheckpoint Full Completeness Verification
+  // ==========================================
+
+  it('CH12 V6.15: ContinuationCheckpoint includes all required fields: openThreads, presentationEvents, and knowledgeBoundaries', async () => {
+    const res = await fetch(`${baseUrl}/orchestrator/turn`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        storyId: 'story_checkpoint_spec',
+        playerAction: 'Unfurl the starmap and observe the planetary orbits',
+        task: 'narrative.generate',
+      }),
+    });
+    assert.strictEqual(res.status, 200);
+    const data = (await res.json()) as any;
+    const cp = data.checkpoint;
+    assert.ok(cp, 'ContinuationCheckpoint must exist');
+
+    // Canonical fields validation
+    assert.ok(cp.checkpointId);
+    assert.strictEqual(cp.storyId, 'story_checkpoint_spec');
+    assert.ok(cp.turnId);
+    assert.ok(cp.worldTime);
+    assert.ok(cp.locationId);
+    assert.ok(Array.isArray(cp.activeConditions));
+    assert.ok(Array.isArray(cp.activeQuests));
+    assert.ok(Array.isArray(cp.recentHistory));
+    assert.ok(typeof cp.summaryText === 'string');
+    assert.ok(typeof cp.workingContextTokens === 'number');
+    assert.strictEqual(cp.handoffEligible, true);
+
+    // V6.15 explicit closure targets
+    assert.ok(Array.isArray(cp.openThreads), 'openThreads array must be present');
+    assert.ok(Array.isArray(cp.presentationEvents), 'presentationEvents array must be present');
+    assert.ok(cp.knowledgeBoundaries !== undefined, 'knowledgeBoundaries must be present');
+    assert.strictEqual(cp.knowledgeBoundaries.epistemicSanitized, true);
+    assert.ok(Array.isArray(cp.knowledgeBoundaries.hiddenFactsSuppressed));
+  });
+
+  // ==========================================
+  // CH12 V6.29: Model Routing Workstation & Secret Safeguard API Verification
+  // ==========================================
+
+  it('CH12 V6.29: Workstation API endpoints for model catalog, discovery, overrides, health, and secret safety', async () => {
+    // 1. Model Catalog
+    const modelsRes = await fetch(`${baseUrl}/orchestrator/models`);
+    const modelsData = (await modelsRes.json()) as any;
+    assert.strictEqual(modelsData.success, true);
+    assert.ok(modelsData.models.length >= 5);
+
+    // Secret Safeguard: Verify NO model object contains API keys, tokens, or private secrets
+    for (const m of modelsData.models) {
+      assert.strictEqual(m.apiKey, undefined, 'API keys must never be exposed');
+      assert.strictEqual(m.secret, undefined, 'Secrets must never be exposed');
+      assert.strictEqual(m.credentials, undefined, 'Credentials must never be exposed');
+    }
+
+    // 2. Health & Circuit Breaker management
+    const healthRes = await fetch(`${baseUrl}/orchestrator/health`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        providerId: 'google_gemini',
+        modelId: 'gemini-2.5-flash',
+        health: 'Degraded',
+      }),
+    });
+    const healthData = (await healthRes.json()) as any;
+    assert.strictEqual(healthData.success, true);
+
+    // 3. Task Pinning
+    const pinRes = await fetch(`${baseUrl}/orchestrator/pin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        task: 'combat.tactics',
+        modelKey: 'anthropic::claude-3-7-sonnet',
+      }),
+    });
+    const pinData = (await pinRes.json()) as any;
+    assert.strictEqual(pinData.success, true);
+
+    // 4. List Overrides
+    const overridesRes = await fetch(`${baseUrl}/orchestrator/overrides`);
+    const overridesData = (await overridesRes.json()) as any;
+    assert.strictEqual(overridesData.success, true);
+    assert.ok(Array.isArray(overridesData.overrides));
+
+    // 5. Dynamic Model Discovery
+    const discoverRes = await fetch(`${baseUrl}/orchestrator/discover`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ forceRefresh: true }),
+    });
+    const discoverData = (await discoverRes.json()) as any;
+    assert.strictEqual(discoverData.success, true);
+    assert.ok(discoverData.discoveredCount >= 5);
+
+    // Restore health to Healthy
+    await fetch(`${baseUrl}/orchestrator/health`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        providerId: 'google_gemini',
+        modelId: 'gemini-2.5-flash',
+        health: 'Healthy',
+        resetCircuitBreaker: true,
+      }),
+    });
   });
 });

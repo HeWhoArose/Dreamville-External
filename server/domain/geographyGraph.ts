@@ -240,6 +240,7 @@ export class GeographyGraph {
    */
   private seedDefaultTopology(): void {
     const loc1: LocationNode = {
+      provenance: 'authored',
       id: 'loc_whispering_orrery',
       name: 'The Whispering Orrery',
       regionId: 'reg_spire',
@@ -251,6 +252,7 @@ export class GeographyGraph {
     };
 
     const loc2: LocationNode = {
+      provenance: 'authored',
       id: 'loc_lantern_vault',
       name: 'The Lantern Vault',
       regionId: 'reg_bastion',
@@ -262,6 +264,7 @@ export class GeographyGraph {
     };
 
     const loc3: LocationNode = {
+      provenance: 'authored',
       id: 'loc_glasswood_verge',
       name: 'Glasswood Verge',
       regionId: 'reg_basin',
@@ -273,6 +276,7 @@ export class GeographyGraph {
     };
 
     const loc4: LocationNode = {
+      provenance: 'authored',
       id: 'loc_sunken_scriptorium',
       name: 'Sunken Scriptorium',
       regionId: 'reg_trenches',
@@ -290,6 +294,7 @@ export class GeographyGraph {
 
     // Add bidirectional edges
     this.addEdge({
+      provenance: 'authored',
       id: 'edge_orrery_to_vault',
       fromLocationId: 'loc_whispering_orrery',
       toLocationId: 'loc_lantern_vault',
@@ -301,6 +306,7 @@ export class GeographyGraph {
     });
 
     this.addEdge({
+      provenance: 'authored',
       id: 'edge_vault_to_orrery',
       fromLocationId: 'loc_lantern_vault',
       toLocationId: 'loc_whispering_orrery',
@@ -312,6 +318,7 @@ export class GeographyGraph {
     });
 
     this.addEdge({
+      provenance: 'authored',
       id: 'edge_orrery_to_glasswood',
       fromLocationId: 'loc_whispering_orrery',
       toLocationId: 'loc_glasswood_verge',
@@ -324,6 +331,7 @@ export class GeographyGraph {
     });
 
     this.addEdge({
+      provenance: 'authored',
       id: 'edge_glasswood_to_orrery',
       fromLocationId: 'loc_glasswood_verge',
       toLocationId: 'loc_whispering_orrery',
@@ -335,6 +343,7 @@ export class GeographyGraph {
     });
 
     this.addEdge({
+      provenance: 'authored',
       id: 'edge_vault_to_scriptorium',
       fromLocationId: 'loc_lantern_vault',
       toLocationId: 'loc_sunken_scriptorium',

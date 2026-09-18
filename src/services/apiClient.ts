@@ -332,6 +332,13 @@ class ApiClient {
     description: string;
     tags?: string[];
     powerTier?: 'Minor' | 'Moderate' | 'Major' | 'WorldScale';
+    targetType?: string;
+    rangeScope?: string;
+    actionType?: string;
+    cooldownTurns?: number;
+    durationTurns?: number;
+    restrictions?: string[];
+    counters?: string[];
   }): Promise<any> {
     const res = await fetch(`${this.baseUrl}/capabilities/synthesize`, {
       method: 'POST',
@@ -345,6 +352,37 @@ class ApiClient {
     if (!res.ok) {
       const errorData = await res.json().catch(() => null);
       throw new Error(errorData?.errorReason || errorData?.error || `Synthesis failed with HTTP ${res.status}`);
+    }
+
+    return await res.json();
+  }
+
+  /**
+   * Freeform Action Interpretation Pipeline (CH7).
+   * POST /api/game/capabilities/interpret
+   */
+  public async interpretAction(params: {
+    actionText: string;
+    tags?: string[];
+    intendedCapabilityId?: string;
+    requestedModifiers?: any[];
+    requestedScale?: 'Local' | 'Moderate' | 'WorldScale';
+    environment?: any;
+    actorConditions?: string[];
+    executeIfValid?: boolean;
+  }): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/capabilities/interpret`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(params),
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => null);
+      throw new Error(errorData?.errorReason || errorData?.error || `Action interpretation failed with HTTP ${res.status}`);
     }
 
     return await res.json();
@@ -862,6 +900,188 @@ class ApiClient {
       throw new Error(`Get assets failed: HTTP ${res.status}`);
     }
 
+    return await res.json();
+  }
+
+  /**
+   * Challenge 12: List all registered orchestrator models, pools, health, and latency.
+   * GET /api/game/orchestrator/models
+   */
+  public async getOrchestratorModels(): Promise<{ success: boolean; count: number; models: any[] }> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/models`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Failed to list models: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  /**
+   * Challenge 12: Select best model for task & preview routing explanation.
+   * POST /api/game/orchestrator/select
+   */
+  public async selectOrchestratorModel(params: {
+    task?: string;
+    contextTokens?: number;
+    userPriorityTier?: string;
+  }): Promise<{
+    success: boolean;
+    task: string;
+    selectedModel: any;
+    selectionReason: string;
+    selectionScore: number;
+    fallbacks: any[];
+  }> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/select`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) throw new Error(`Failed to select model: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  /**
+   * Challenge 12: Execute orchestrated turn with server-authoritative idempotency.
+   * POST /api/game/orchestrator/turn
+   */
+  public async executeOrchestratorTurn(params: {
+    storyId?: string;
+    playerAction?: string;
+    task?: string;
+    hardTokenBudget?: number;
+    timeoutMs?: number;
+    maxRetries?: number;
+    forceModelId?: string;
+    idempotencyKey?: string;
+  }): Promise<any> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    };
+    if (params.idempotencyKey) {
+      headers['Idempotency-Key'] = params.idempotencyKey;
+    }
+    const res = await fetch(`${this.baseUrl}/orchestrator/turn`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Turn execution failed: HTTP ${res.status}`);
+    }
+    return await res.json();
+  }
+
+  /**
+   * Challenge 12: Get cross-model continuation checkpoints.
+   * GET /api/game/orchestrator/checkpoints
+   */
+  public async getOrchestratorCheckpoints(storyId?: string): Promise<{
+    success: boolean;
+    count: number;
+    checkpoints: any[];
+  }> {
+    const url = storyId
+      ? `${this.baseUrl}/orchestrator/checkpoints?storyId=${encodeURIComponent(storyId)}`
+      : `${this.baseUrl}/orchestrator/checkpoints`;
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Failed to get checkpoints: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  /**
+   * Challenge 12: Get last turn telemetry and orchestration stats.
+   * GET /api/game/orchestrator/telemetry
+   */
+  public async getOrchestratorTelemetry(): Promise<{
+    success: boolean;
+    lastTurnTelemetry: any;
+    stats: any;
+  }> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/telemetry`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Failed to get telemetry: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  /**
+   * Challenge 12: Update model health / reset circuit breaker.
+   * POST /api/game/orchestrator/health
+   */
+  public async updateModelHealth(params: {
+    providerId: string;
+    modelId: string;
+    health: string;
+    resetCircuitBreaker?: boolean;
+  }): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/health`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) throw new Error(`Failed to update model health: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  /**
+   * Challenge 12: Dynamic model discovery.
+   * POST /api/game/orchestrator/discover
+   */
+  public async discoverOrchestratorModels(forceRefresh = false): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/discover`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ forceRefresh }),
+    });
+    if (!res.ok) throw new Error(`Failed to discover models: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  /**
+   * Challenge 12: Get manual model overrides.
+   * GET /api/game/orchestrator/overrides
+   */
+  public async getManualOverrides(): Promise<{ success: boolean; overrides: any[] }> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/overrides`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Failed to get overrides: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  /**
+   * Challenge 12: Set manual override.
+   * POST /api/game/orchestrator/overrides
+   */
+  public async setManualOverride(params: { modelId: string; override: any }): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/overrides`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) throw new Error(`Failed to set override: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  /**
+   * Challenge 12: Pin model for task.
+   * POST /api/game/orchestrator/pin
+   */
+  public async pinModelForTask(params: { task: string; modelKey?: string }): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/pin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) throw new Error(`Failed to pin model: HTTP ${res.status}`);
     return await res.json();
   }
 }

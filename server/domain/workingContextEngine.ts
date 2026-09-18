@@ -192,6 +192,7 @@ export class WorkingContextEngine {
     hardTokenBudget?: number;
     customChunks?: ContextChunk[];
     npcTargetId?: string;
+    viewerActorId?: string;
     worldRepo?: WorldRepository;
   }): AssembledTurnContext {
     const storyId = params.storyId || 'default_story';
@@ -209,10 +210,12 @@ export class WorkingContextEngine {
     const memoryEngine = repo.getMemoryEngine(storyId);
     const livingSim = repo.getLivingWorldSimulation(storyId);
 
+    const viewerId = params.viewerActorId || (player ? player.actorId : 'player_actor_default_story');
+
     // 2. Epistemic Projection: Scene & Geography
     const locId = player ? player.locationId : 'loc_whispering_orrery';
     const locNode = geography.getNode(locId);
-    const isDiscovered = locNode ? Boolean(locNode.discovered) : false;
+		const isDiscovered = player ? player.discoveredLocationIds.includes(locId) : false;
     // Epistemic filter: only show rich description if discovered; otherwise basic label
     const sceneDesc = isDiscovered && locNode
       ? `${locNode.name}: ${locNode.description}`
@@ -250,34 +253,38 @@ export class WorkingContextEngine {
       }
     }
 
-    // 6. Active Conditions & Combat
+    // 6. Active Conditions & Combat (Actor-Scoped Projection Boundary - CH2-08)
     const conditions: string[] = [];
     if (player) {
       if (player.isTransformed) conditions.push(`Transformed: ${player.transformationRecord?.formName || 'Unknown Form'}`);
       if (player.isPossessed) conditions.push(`Possessed by: ${player.possessionRecord?.entityName || 'Entity'}`);
       if (player.isDead) conditions.push('Status: Deceased');
     }
-    const combatParticipants = combatEngine.getParticipants();
+    const perceptionOptions = repo.getCombatPerceptionOptions ? repo.getCombatPerceptionOptions(storyId, viewerId) : undefined;
+    const projectedCombat = combatEngine.projectCombatForActor(viewerId, perceptionOptions);
+    const combatParticipants = projectedCombat.participants;
     const isInCombat = combatParticipants.length > 0;
     if (isInCombat) {
-      const currentActor = combatEngine.getCurrentActor();
-      conditions.push(`Combat Active (Round: ${combatEngine.getCurrentRound()}, Actor: ${currentActor?.name || currentActor?.id || 'None'})`);
-      const hazards = combatEngine.getHazards();
+      const currentActor = projectedCombat.currentActor;
+      conditions.push(`Combat Active (Round: ${projectedCombat.currentRound}, Actor: ${currentActor?.name || currentActor?.id || 'None'})`);
+      const hazards = projectedCombat.hazards;
       for (const h of hazards) {
         conditions.push(`Hazard: ${h.type} at (${h.x},${h.y}, radius=${h.radiusCells})`);
       }
     }
 
-    // 7. Epistemic Projection: Capabilities
+    // 7. Epistemic Projection: Capabilities (CH3.2: includes active equipment grants)
     const powerState = player ? capabilityEngine.getPowerState(player.actorId) : undefined;
     if (powerState && powerState.activeConditions) {
       conditions.push(...powerState.activeConditions);
     }
-    const allCaps = capabilityEngine.getAllCapabilities();
-    const relevantCapabilities = allCaps.slice(0, 4).map((c) => `${c.name} [${c.powerTier}]: ${c.description}`);
+    const actorCaps = player ? capabilityEngine.getEffectiveActorCapabilities(player.actorId, inventoryEngine) : [];
+    const relevantCapabilities = actorCaps.slice(0, 6).map((c) => {
+      const sourceDescriptions = c.sources.map((s) => (s.type === 'EQUIPMENT' ? `Granted by ${s.itemName || 'Equipped Item'}` : s.type)).join(', ');
+      return `${c.name} [${c.powerTier}] (${sourceDescriptions}): ${c.description}`;
+    });
 
     // 8. Epistemic Projection: Memories (Anti-Recency & Epistemic Visibility Filtering)
-    const viewerId = player ? player.actorId : 'player_actor_default_story';
     const retrievedMemories = memoryEngine.retrieveMemories({
       storyId,
       viewerActorId: viewerId, // Excludes PRIVATE memories of other entities
@@ -293,6 +300,11 @@ export class WorkingContextEngine {
       actorId: viewerId,
     });
 
+    const playerDiscoveredSet = new Set(
+      player?.discoveredLocationIds || ['loc_whispering_orrery', 'loc_lantern_vault', 'loc_glasswood_verge']
+    );
+    playerDiscoveredSet.add(locId);
+
     // 10. Relationships / Visible Archetypes
     const relationships: string[] = [];
     for (const ent of visibleEntities) {
@@ -300,7 +312,15 @@ export class WorkingContextEngine {
       const sched = livingSim.getNpcSchedule(npcId);
       if (sched) {
         const route = sched.entries && sched.entries.length > 0
-          ? sched.entries.map((e) => e.targetLocationId).join(' -> ')
+          ? sched.entries
+              .map((e) => {
+                if (playerDiscoveredSet.has(e.targetLocationId)) {
+                  const targetNode = geography.getNode(e.targetLocationId);
+                  return targetNode ? targetNode.name : e.targetLocationId;
+                }
+                return 'Uncharted Waypoint';
+              })
+              .join(' -> ')
           : 'Local';
         relationships.push(`${sched.name || npcId}: Schedule Route [${route}]`);
       }
@@ -309,8 +329,8 @@ export class WorkingContextEngine {
     // 11. Quests & Scheduled Events
     const scheduledEvents = livingSim.getScheduledEvents().filter((e) => !e.isResolved);
     const quests = scheduledEvents
-      .filter((e) => !e.locationId || e.locationId === locId)
-      .map((e) => `${e.name} (Location: ${e.locationId || 'Global'}, Status: ${e.status})`);
+      .filter((e) => !e.locationId || e.locationId === locId || playerDiscoveredSet.has(e.locationId))
+      .map((e) => `${e.name} (Location: ${e.locationId && playerDiscoveredSet.has(e.locationId) ? e.locationId : 'Global'}, Status: ${e.status})`);
 
     // 12. Inventory
     const equipped = player ? (inventoryEngine.getActorPaperDoll(player.actorId) as unknown as Record<string, import('./inventoryItem').ItemInstance | null>) : {};

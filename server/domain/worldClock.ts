@@ -61,6 +61,10 @@ export class WorldClock {
     return { ...this.state.timestamp };
   }
 
+  public getAbsoluteTime(): number {
+    return this.state.timestamp.totalElapsedSeconds;
+  }
+
   public static deriveDayPhase(hour: number, minute: number): DayPhase {
     const timeInMinutes = hour * 60 + minute;
     if (timeInMinutes >= 4 * 60 && timeInMinutes < 6 * 60) return 'Predawn';

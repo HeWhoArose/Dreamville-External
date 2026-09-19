@@ -7,8 +7,8 @@ import { PlayerLifecycleState } from '../domain/playerLifecycleState';
 import { WorldClock } from '../domain/worldClock';
 import { GeographyGraph } from '../domain/geographyGraph';
 import { HistoricalChronicleEngine } from '../domain/historicalChronicleEngine';
-import { InventoryItemEngine } from '../domain/inventoryItem';
-import { CapabilityEngine } from '../domain/capabilityEngine';
+import { InventoryItemEngine, EquipmentSlot, ItemCategory } from '../domain/inventoryItem';
+import { CapabilityEngine, CapabilityDefinition } from '../domain/capabilityEngine';
 import { ReusableSkillRegistry } from '../domain/reusableSkillRegistry';
 import { TacticalCombatEngine, CombatPerceptionOptions } from '../domain/combatEngine';
 import { MemoryOpportunityEngine } from '../domain/memoryOpportunityEngine';
@@ -88,6 +88,72 @@ export interface WorldRepository {
     archive: PartitionedArchive,
     targetStoryId?: string
   ): { success: boolean; errorReason?: string; campaignId?: string };
+  // Character Creation / Genesis
+  getCharacterDrafts(worldId: string): any[];
+  saveCharacterDraft(worldId: string, draft: any): void;
+  getConfirmedCharacters(worldId: string): any[];
+  saveConfirmedCharacter(worldId: string, char: any): void;
+  getConfirmedCharacter(worldId: string, characterId: string): any | null;
+  createStoryRunFromConfirmedCharacter(params: {
+    worldId: string;
+    confirmedCharacter: any;
+    storyId?: string;
+    storyMode?: string;
+    dndRulesMode?: string;
+  }): { storyId: string; run: any };
+  deleteStoryRun(storyId: string): void;
+  getStoryRun(storyId: string): any;
+  saveStoryRun(run: any): void;
+  registerStoryRun(run: any): void;
+  getWorldTemplate(worldId: string): any;
+  saveWorldTemplate(template: any): void;
+  getAllWorldTemplates(): any[];
+}
+
+function normalizeEquipmentSlot(slot?: string, category?: string): EquipmentSlot {
+  if (!slot && category) {
+    const catLower = category.toLowerCase();
+    if (catLower.includes('weapon') || catLower.includes('sword') || catLower.includes('bow') || catLower.includes('staff')) return 'mainHand';
+    if (catLower.includes('shield')) return 'offHand';
+    if (catLower.includes('armor') || catLower.includes('chest') || catLower.includes('cuirass')) return 'body';
+    if (catLower.includes('helm') || catLower.includes('head')) return 'head';
+    if (catLower.includes('boot') || catLower.includes('foot') || catLower.includes('feet')) return 'feet';
+    if (catLower.includes('glove') || catLower.includes('hand')) return 'hands';
+    if (catLower.includes('cloak') || catLower.includes('robe') || catLower.includes('cape')) return 'cloak';
+    if (catLower.includes('ring')) return 'ring1';
+    if (catLower.includes('amulet') || catLower.includes('necklace') || catLower.includes('neck')) return 'neck';
+    if (catLower.includes('relic')) return 'relic';
+  }
+  const s = (slot || '').toLowerCase().replace(/[\s_-]/g, '');
+  if (s === 'head' || s === 'helmet' || s === 'helm') return 'head';
+  if (s === 'cloak' || s === 'cape' || s === 'robe') return 'cloak';
+  if (s === 'body' || s === 'chest' || s === 'armor' || s === 'torso' || s === 'cuirass') return 'body';
+  if (s === 'hands' || s === 'gloves' || s === 'gauntlets') return 'hands';
+  if (s === 'waist' || s === 'belt') return 'waist';
+  if (s === 'legs' || s === 'pants' || s === 'greaves') return 'legs';
+  if (s === 'feet' || s === 'boots' || s === 'shoes') return 'feet';
+  if (s === 'mainhand' || s === 'weapon' || s === 'right' || s === 'primary') return 'mainHand';
+  if (s === 'offhand' || s === 'shield' || s === 'left' || s === 'secondary') return 'offHand';
+  if (s === 'relic' || s === 'artifact') return 'relic';
+  if (s === 'ring1' || s === 'ring') return 'ring1';
+  if (s === 'ring2') return 'ring2';
+  if (s === 'neck' || s === 'amulet' || s === 'necklace') return 'neck';
+  return 'mainHand';
+}
+
+function normalizeItemCategory(cat?: string): ItemCategory {
+  const c = (cat || '').toLowerCase();
+  if (c.includes('weapon') || c.includes('sword') || c.includes('bow') || c.includes('dagger') || c.includes('staff') || c.includes('axe') || c.includes('mace')) return 'Weapon';
+  if (c.includes('shield')) return 'Shield';
+  if (c.includes('armor') || c.includes('cuirass') || c.includes('robe') || c.includes('helm') || c.includes('boot')) return 'Armor';
+  if (c.includes('potion') || c.includes('salve') || c.includes('elixir')) return 'Potion';
+  if (c.includes('scroll') || c.includes('tome') || c.includes('book')) return 'Scroll';
+  if (c.includes('tool') || c.includes('kit') || c.includes('lockpick')) return 'Tool';
+  if (c.includes('food') || c.includes('ration')) return 'Food';
+  if (c.includes('ring') || c.includes('amulet') || c.includes('neck') || c.includes('accessory')) return 'Accessory';
+  if (c.includes('document') || c.includes('map') || c.includes('letter')) return 'Document';
+  if (c.includes('material') || c.includes('ore') || c.includes('ingot') || c.includes('herb')) return 'Material';
+  return 'Miscellaneous';
 }
 
 export class InMemoryWorldRepository implements WorldRepository {
@@ -101,7 +167,7 @@ export class InMemoryWorldRepository implements WorldRepository {
   private combatEngines: Map<string, TacticalCombatEngine> = new Map();
   private memoryEngines: Map<string, MemoryOpportunityEngine> = new Map();
   private livingSimulations: Map<string, LivingWorldSimulation> = new Map();
-  private aiOrchestrator: MultiModelOrchestrator = new MultiModelOrchestrator();
+  private aiOrchestrator: MultiModelOrchestrator | null = null;
   private characterAlignmentEngine: CharacterAlignmentEngine = new CharacterAlignmentEngine();
   private sensoryEngine: SensoryEngine = new SensoryEngine();
   private reusableSkillRegistry: ReusableSkillRegistry = new ReusableSkillRegistry();
@@ -121,14 +187,714 @@ export class InMemoryWorldRepository implements WorldRepository {
   private worldFactsMap: Map<string, any[]> = new Map();
   private protagonistAgendas: Map<string, any> = new Map();
 
+  // Slice 2 Storage Maps
+  private characterDraftsMap: Map<string, any[]> = new Map();
+  private confirmedCharactersMap: Map<string, any[]> = new Map();
+
   constructor() {
     this.geographies.set('default_story', new GeographyGraph());
-    this.aiOrchestrator.setWorldRepository(this);
+    this.seedDefaultTemplates();
     this.seedDefaultStory('default_story');
   }
 
+  private seedDefaultTemplates(): void {
+    if (this.worldTemplates.size === 0) {
+      this.worldTemplates.set('world_solar_archive', {
+        worldId: 'world_solar_archive',
+        title: 'Elysium Solar Citadel',
+        worldManifestVersion: 1,
+        genreTags: ['Solarpunk', 'High Fantasy'],
+        toneTags: ['Heroic', 'Luminescent'],
+        defaultEra: 'First Radiance',
+        setting: 'Elysium Solar Citadel',
+        sourcePolicy: 'ORIGINAL_CANON',
+        supportedPlaystyles: ['Tactical', 'Exploration'],
+        rulesetId: 'FULL_DND',
+        dndRulesMode: 'FULL_DND',
+        summary: 'A luminous civilization harnessing solar resonance crystals across floating celestial citadels.',
+        description: 'An expansive realm where solar energy powers arcane engines and celestial bridges.',
+        capabilities: [
+          {
+            capabilityId: 'cap_solar_resonance',
+            name: 'Solar Resonance',
+            description: 'Manipulate concentrated sunlight for healing and divine radiant power.',
+            source: 'ORIGINAL_CANON',
+            verificationStatus: 'VERIFIED',
+          },
+        ],
+        canonicalCapabilities: [
+          {
+            capabilityId: 'cap_solar_resonance',
+            name: 'Solar Resonance',
+            description: 'Manipulate concentrated sunlight for healing and divine radiant power.',
+            source: 'ORIGINAL_CANON',
+            verificationStatus: 'VERIFIED',
+          },
+        ],
+      });
+
+      this.worldTemplates.set('world_shadow_depths', {
+        worldId: 'world_shadow_depths',
+        title: 'Shadow Depths of the Sunken Spire',
+        worldManifestVersion: 1,
+        genreTags: ['Cosmic Horror', 'Steampunk'],
+        toneTags: ['Grimdark', 'Ominous'],
+        defaultEra: 'Age of Sinking',
+        setting: 'Undersea Trenches',
+        sourcePolicy: 'COMMUNITY_EXTENDED',
+        supportedPlaystyles: ['Survival', 'Investigation'],
+        rulesetId: 'HYBRID_DND',
+        dndRulesMode: 'HYBRID_DND',
+        summary: 'Submerged pressure-sealed colonies threatened by abyssal entities beneath frozen oceans.',
+        description: 'Deep abyss settlements where bioluminescent tech battles pressure and maddening whispers.',
+        capabilities: [
+          {
+            capabilityId: 'cap_abyssal_sonar',
+            name: 'Abyssal Sonar',
+            description: 'Echolocate through deep ocean trenches detecting hidden horrors.',
+            source: 'COMMUNITY_EXTENDED',
+            verificationStatus: 'VERIFIED',
+          },
+        ],
+        canonicalCapabilities: [
+          {
+            capabilityId: 'cap_abyssal_sonar',
+            name: 'Abyssal Sonar',
+            description: 'Echolocate through deep ocean trenches detecting hidden horrors.',
+            source: 'COMMUNITY_EXTENDED',
+            verificationStatus: 'VERIFIED',
+          },
+        ],
+      });
+    }
+  }
+
   public seedStory(storyId: string): void {
-    this.seedDefaultStory(storyId);
+    if (storyId === 'default_story' || !storyId) {
+      this.seedDefaultStory('default_story');
+      return;
+    }
+
+    const run = this.getStoryRun(storyId);
+    if (run) {
+      const world = this.getWorldTemplate(run.worldId);
+      if (world) {
+        if (run.protagonist) {
+          this.createStoryRunFromConfirmedCharacter({
+            worldId: run.worldId,
+            confirmedCharacter: run.protagonist,
+            storyId,
+            storyMode: run.storyMode,
+            dndRulesMode: run.dndRulesMode,
+          });
+        } else {
+          this.seedDynamicStoryRun(storyId, world, {
+            characterName: run.characterName || 'Hero Vael',
+            characterRole: run.characterRole,
+            characterBackground: run.characterBackground,
+            characterAppearance: run.characterAppearance,
+            characterPersonality: run.characterPersonality,
+            characterMotivations: run.characterMotivations,
+            characterEquipment: run.characterEquipment,
+            characterPortraitEmoji: run.characterPortraitEmoji,
+            characterPortraitUrl: run.characterPortraitUrl,
+            capabilities: run.capabilities,
+            initialConditions: run.initialConditions,
+          });
+        }
+        return;
+      }
+    }
+    // Strict isolation: non-existent stories do NOT fall back to seedDefaultStory!
+  }
+
+  public createStoryRunFromConfirmedCharacter(params: {
+    worldId: string;
+    confirmedCharacter: any;
+    storyId?: string;
+    storyMode?: string;
+    dndRulesMode?: string;
+  }): { storyId: string; run: any } {
+    const { worldId, confirmedCharacter: char } = params;
+
+    // 1. Validation of World
+    const world = this.getWorldTemplate(worldId);
+    if (!world) {
+      throw new Error(`World template "${worldId}" not found.`);
+    }
+
+    // 2. Validation of Confirmed Character
+    if (!char || !char.characterId || !char.identity?.name) {
+      throw new Error('Invalid confirmed character: characterId and identity.name are required.');
+    }
+
+    if (char.worldId && char.worldId !== worldId) {
+      throw new Error(`Confirmed character is bound to world "${char.worldId}", not target world "${worldId}".`);
+    }
+
+    // 3. Atomicity & Story ID Setup
+    const storyId = params.storyId || `story_${worldId}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+    try {
+      // 4. Pin World Version (strictly from confirmed character or manifest)
+      const pinnedWorldVersion = char.worldVersion || world.worldManifestVersion || 1;
+
+      // 5. Build Geography Graph & Validate Starting Location
+      const geographyGraph = new GeographyGraph(false);
+      const worldGeography = world.geography || {};
+      const rawNodes = worldGeography.nodes || worldGeography.locations || worldGeography.zones || world.startingStarts || [];
+
+      let startingLocationId = char.startingLocation?.locationId;
+      const registeredNodes: any[] = [];
+
+      if (Array.isArray(rawNodes) && rawNodes.length > 0) {
+        // If startingLocationId is provided, check existence in world nodes
+        if (startingLocationId) {
+          const exists = rawNodes.some((n: any) => (n.id || n.locationId) === startingLocationId);
+          if (!exists) {
+            throw new Error(`Starting location "${startingLocationId}" does not exist in world "${worldId}" geography.`);
+          }
+        } else {
+          startingLocationId = rawNodes[0].id || rawNodes[0].locationId || `loc_${storyId}_0`;
+        }
+
+        rawNodes.forEach((nodeItem: any, idx: number) => {
+          const isObj = typeof nodeItem === 'object' && nodeItem !== null;
+          const nodeId = isObj ? (nodeItem.id || nodeItem.locationId || `loc_${storyId}_${idx}`) : `loc_${storyId}_${idx}`;
+          const name = isObj ? (nodeItem.name || nodeItem.title || `Area ${idx + 1}`) : String(nodeItem);
+          const regionId = isObj ? (nodeItem.region || nodeItem.regionId || world.setting || world.title) : world.title;
+          const description = isObj ? (nodeItem.description || `A location in ${world.title}.`) : `A region in ${world.title}.`;
+          const angle = (idx / rawNodes.length) * 2 * Math.PI;
+          const defaultX = Math.round(50 + 30 * Math.cos(angle));
+          const defaultY = Math.round(50 + 25 * Math.sin(angle));
+
+          const locNode = {
+            id: nodeId,
+            name,
+            regionId,
+            description,
+            coordinates: isObj && nodeItem.coordinates ? nodeItem.coordinates : { x: defaultX, y: defaultY },
+            accessible: isObj && nodeItem.accessible !== undefined ? Boolean(nodeItem.accessible) : true,
+            discovered: nodeId === startingLocationId, // Epistemic isolation: only starting location discovered initially
+            ambientSensory: isObj && typeof nodeItem.ambientSensory === 'string'
+              ? nodeItem.ambientSensory
+              : `Visual: Distinct environment of ${name}. Sounds: Ambient murmurs. Scent: Fresh air. Tactile: Stable terrain.`,
+            provenance: (isObj && nodeItem.provenance) || 'authored',
+          };
+          registeredNodes.push(locNode);
+          geographyGraph.addNode(locNode as any);
+        });
+
+        // Add connections
+        const connections = worldGeography.connections || [];
+        if (Array.isArray(connections) && connections.length > 0) {
+          connections.forEach((conn: any, cIdx: number) => {
+            if (conn.fromLocationId && conn.toLocationId) {
+              geographyGraph.addEdge({
+                id: conn.id || `edge_${storyId}_${cIdx}`,
+                fromLocationId: conn.fromLocationId,
+                toLocationId: conn.toLocationId,
+                distanceKm: conn.distanceKm || 5.0,
+                terrain: conn.terrain || 'Trail',
+                allowedModes: conn.allowedModes || ['Foot', 'Horse'],
+                hazardRisk: conn.hazardRisk !== undefined ? conn.hazardRisk : 0.05,
+                isBlocked: Boolean(conn.isBlocked),
+                provenance: conn.provenance || 'authored',
+              });
+            }
+          });
+        } else {
+          // Synthetic edges between nodes in a loop
+          for (let i = 0; i < registeredNodes.length; i++) {
+            const fromNode = registeredNodes[i];
+            const toNode = registeredNodes[(i + 1) % registeredNodes.length];
+            if (fromNode.id !== toNode.id) {
+              geographyGraph.addEdge({
+                id: `edge_${fromNode.id}_${toNode.id}`,
+                fromLocationId: fromNode.id,
+                toLocationId: toNode.id,
+                distanceKm: 4.5,
+                terrain: 'Trail',
+                allowedModes: ['Foot', 'Horse'],
+                hazardRisk: 0.05,
+                isBlocked: false,
+                provenance: 'authored',
+              });
+              geographyGraph.addEdge({
+                id: `edge_${toNode.id}_${fromNode.id}`,
+                fromLocationId: toNode.id,
+                toLocationId: fromNode.id,
+                distanceKm: 4.5,
+                terrain: 'Trail',
+                allowedModes: ['Foot', 'Horse'],
+                hazardRisk: 0.05,
+                isBlocked: false,
+                provenance: 'authored',
+              });
+            }
+          }
+        }
+      } else {
+        // World has no nodes; construct canonical starting waypoint
+        if (!startingLocationId) {
+          startingLocationId = `loc_${storyId}_start`;
+        }
+        const startNode = {
+          id: startingLocationId,
+          name: char.startingLocation?.name || world.setting || `${world.title} Capital`,
+          regionId: char.startingLocation?.region || world.title,
+          description: char.startingLocation?.description || world.description || `Starting area in ${world.title}.`,
+          coordinates: { x: 50, y: 50 },
+          accessible: true,
+          discovered: true,
+          ambientSensory: `Visual: First light over ${world.title}. Sounds: Distant atmosphere. Scent: Native vegetation. Tactile: Firm earth.`,
+          provenance: 'generated' as const,
+        };
+        geographyGraph.addNode(startNode as any);
+        registeredNodes.push(startNode);
+      }
+
+      this.geographies.set(storyId, geographyGraph);
+
+      // 6. Chronology: Brand-new WorldClock with Era, turn 0
+      const clock = new WorldClock(world.defaultEra || 'Age of Discovery');
+      this.worldClocks.set(storyId, clock);
+
+      // 7. Protagonist Actor & Lifecycle
+      const actorId = `player_actor_${storyId}`;
+
+      // Deep copy injuries from condition
+      const initialInjuries: any[] = [];
+      if (Array.isArray(char.condition?.injuries)) {
+        char.condition.injuries.forEach((inj: any, idx: number) => {
+          if (typeof inj === 'string') {
+            initialInjuries.push({
+              id: `inj_${storyId}_${idx}`,
+              name: inj,
+              severity: 'minor',
+              treated: false,
+              location: 'body',
+            });
+          } else if (inj && typeof inj === 'object') {
+            initialInjuries.push({
+              id: inj.id || `inj_${storyId}_${idx}`,
+              name: inj.name || 'Injury',
+              severity: inj.severity || 'minor',
+              treated: Boolean(inj.treated),
+              location: inj.location || 'body',
+            });
+          }
+        });
+      }
+
+      const activeForm: import('../domain/types').TransformationRecord | null = Array.isArray(char.condition?.forms) && char.condition.forms.length > 0
+        ? {
+            id: `trans_${storyId}_0`,
+            formName: String(char.condition.forms[0]),
+            vesselType: 'metamorphic',
+            active: true,
+            beganAtTimestamp: clock.getTimestamp(),
+            expiresAtTimestamp: null,
+          }
+        : null;
+
+      const player = new PlayerLifecycleState({
+        actorId,
+        name: char.identity.name,
+        locationId: startingLocationId,
+        discoveredLocationIds: [startingLocationId], // Strict epistemic boundary
+        lastUpdatedTime: clock.getTimestamp().totalElapsedSeconds,
+        currentActivity: 'idle',
+        activeJourney: null,
+        injuries: initialInjuries,
+        transformationRecord: activeForm,
+      });
+      this.playerLifecycles.set(storyId, player);
+
+      // 8. Inventory & Equipment Paper Doll
+      const invEngine = new InventoryItemEngine();
+      this.inventoryEngines.set(storyId, invEngine);
+
+      const equippedItems = Array.isArray(char.startingEquipment?.equipped) ? char.startingEquipment.equipped : [];
+      const inventoryItems = [
+        ...(Array.isArray(char.startingEquipment?.inventory) ? char.startingEquipment.inventory : []),
+        ...(Array.isArray(char.startingEquipment?.weapons) ? char.startingEquipment.weapons : []),
+        ...(Array.isArray(char.startingEquipment?.armor) ? char.startingEquipment.armor : []),
+        ...(Array.isArray(char.startingEquipment?.tools) ? char.startingEquipment.tools : []),
+        ...(Array.isArray(char.startingEquipment?.consumables) ? char.startingEquipment.consumables : []),
+      ];
+
+      let itemDefCounter = 0;
+
+      // Register and equip equipped items
+      equippedItems.forEach((eqItem: any) => {
+        itemDefCounter++;
+        const defId = `def_${storyId}_eq_${itemDefCounter}`;
+        const slot = normalizeEquipmentSlot(eqItem.slot, eqItem.category);
+        const category = normalizeItemCategory(eqItem.category);
+
+        invEngine.registerDefinition({
+          id: defId,
+          name: eqItem.name || 'Equipped Gear',
+          category,
+          rarity: (eqItem.rarity as any) || 'Common',
+          description: eqItem.description || 'Starting equipped equipment.',
+          allowedSlots: [slot],
+          weightKg: typeof eqItem.weightKg === 'number' ? eqItem.weightKg : 1.0,
+          baseValueGold: 10,
+          maxDurability: eqItem.maxDurability || eqItem.durability || 100,
+          tags: ['equipped', 'starting'],
+          properties: eqItem.properties || {},
+        });
+
+        const instance = invEngine.createInstance({
+          defId,
+          ownerEntityId: actorId,
+          quantity: 1,
+          provenance: 'Starting Equipment',
+          customName: eqItem.name,
+        });
+
+        invEngine.equipItem(actorId, instance.id, slot);
+      });
+
+      // Register backpack/inventory items
+      inventoryItems.forEach((invItem: any) => {
+        itemDefCounter++;
+        const defId = `def_${storyId}_inv_${itemDefCounter}`;
+        const category = normalizeItemCategory(invItem.category);
+
+        invEngine.registerDefinition({
+          id: defId,
+          name: invItem.name || 'Adventuring Item',
+          category,
+          rarity: (invItem.rarity as any) || 'Common',
+          description: invItem.description || 'Starting inventory item.',
+          weightKg: typeof invItem.weightKg === 'number' ? invItem.weightKg : 0.5,
+          baseValueGold: 5,
+          maxDurability: invItem.maxDurability || invItem.durability || 100,
+          tags: ['inventory', 'starting'],
+          properties: invItem.properties || {},
+        });
+
+        invEngine.createInstance({
+          defId,
+          ownerEntityId: actorId,
+          quantity: 1,
+          provenance: 'Starting Equipment',
+          customName: invItem.name,
+        });
+      });
+
+      // 9. Capabilities & Techniques
+      const capEngine = new CapabilityEngine();
+      this.capabilityEngines.set(storyId, capEngine);
+
+      const allCaps = [
+        ...(Array.isArray(world.capabilities) ? world.capabilities : []),
+        ...(Array.isArray(char.capabilities) ? char.capabilities : []),
+      ];
+
+      allCaps.forEach((cap: any) => {
+        if (cap && (cap.name || cap.id)) {
+          const capId = cap.id || `cap_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+          const capDef: CapabilityDefinition = {
+            id: capId,
+            name: cap.name || capId,
+            category: (cap.category as any) || 'Magic',
+            activationMode: cap.activationMode || 'immediate',
+            powerTier: cap.powerTier || 'Moderate',
+            baseEnergyCost: cap.baseEnergyCost || 0,
+            baseStrainCost: cap.baseStrainCost || 0,
+            minVesselCapacityRequired: cap.minVesselCapacityRequired || 0,
+            description: cap.description || 'Synthesized capability.',
+            provenance: cap.provenance || cap.source || 'WORLD_CANON',
+          };
+
+          capEngine.registerCapability(capDef);
+
+          // Link derived skills from generatedSkills
+          const matchingSkills = (char.generatedSkills || [])
+            .filter((s: any) => s.parentCapabilityId === capId || s.parentCapabilityName === cap.name)
+            .map((s: any) => s.name || s.id);
+
+          capEngine.setCapabilityGraphNode(capId, {
+            capabilityId: capId,
+            name: capDef.name,
+            derivedSkills: matchingSkills,
+            prerequisites: [],
+          });
+
+          // Acquire skill for protagonist
+          capEngine.acquireSkill(actorId, capId);
+
+          this.reusableSkillRegistry.registerApprovedSkill({
+            id: `lib_skill_${capId}`,
+            definitionId: capId,
+            definition: capDef,
+            progressionSnapshot: {
+              level: 1,
+              xp: 0,
+              xpToNext: 100,
+              evolutionPoints: 0,
+            },
+            evolutionLineage: [capId],
+            visualIdentityRef: capDef.visualIdentityRef,
+            compatibility: {
+              requiredWorldModes: [],
+              minVesselCapacity: 0,
+              permittedCategories: [],
+              forbiddenTraits: [],
+            },
+            provenance: {
+              sourceStoryIds: [storyId],
+              registeredAtSeconds: 0,
+              approvedBy: 'WORLD_COORDINATOR',
+              version: '1.0.0',
+            },
+          });
+        }
+      });
+
+      // 10. Epistemic Knowledge Boundary: Initial Facts
+      const startLocNode = geographyGraph.getNode(startingLocationId);
+      const startLocName = startLocNode?.name || char.startingLocation?.name || startingLocationId;
+      const startLocDesc = startLocNode?.description || char.startingLocation?.description || `Starting area in ${world.title}.`;
+
+      const initialFacts: KnowledgeFact[] = [
+        {
+          id: `fact_identity_${storyId}`,
+          subjectEntityId: actorId,
+          predicate: 'identity',
+          objectValue: `${char.identity.name}, ${char.identity.species || 'Human'} ${char.role?.profession || char.role?.archetype || 'Adventurer'}`,
+          sourceType: 'witnessed',
+          acquiredAtTimestamp: clock.getTimestamp(),
+          confidence: 1.0,
+          secretLevel: 'public',
+          scope: 'exact',
+          provenanceSummary: 'Self-knowledge from genesis identity.',
+        },
+        {
+          id: `fact_background_${storyId}`,
+          subjectEntityId: actorId,
+          predicate: 'origin_history',
+          objectValue: char.background?.history || `${char.identity.name} begins their journey.`,
+          sourceType: 'witnessed',
+          acquiredAtTimestamp: clock.getTimestamp(),
+          confidence: 1.0,
+          secretLevel: 'public',
+          scope: 'exact',
+          provenanceSummary: 'Personal memory and background.',
+        },
+        {
+          id: `fact_starting_location_${storyId}`,
+          subjectEntityId: startingLocationId,
+          predicate: 'current_surroundings',
+          objectValue: `${startLocName}: ${startLocDesc}`,
+          sourceType: 'witnessed',
+          acquiredAtTimestamp: clock.getTimestamp(),
+          confidence: 1.0,
+          secretLevel: 'public',
+          scope: 'exact',
+          provenanceSummary: `Immediate observation at ${startLocName}.`,
+        },
+        {
+          id: `fact_world_premise_${storyId}`,
+          subjectEntityId: `world_${world.worldId}`,
+          predicate: 'public_premise',
+          objectValue: world.description || `The realm of ${world.title}.`,
+          sourceType: 'witnessed',
+          acquiredAtTimestamp: clock.getTimestamp(),
+          confidence: 1.0,
+          secretLevel: 'public',
+          scope: 'exact',
+          provenanceSummary: `Common public knowledge of ${world.title}.`,
+        },
+      ];
+      this.knowledgeBases.set(storyId, initialFacts);
+
+      // 11. Timeline State & Planned World Events (Slice 1B)
+      // Cloned with status 'PLANNED', strictly unexecuted
+      const rawEvents = Array.isArray(world.events) ? world.events : [];
+      const plannedEvents = rawEvents.map((ev: any) => ({
+        id: ev.id,
+        title: ev.title,
+        description: ev.description,
+        category: ev.category,
+        scheduledTime: ev.scheduledTime ? { ...ev.scheduledTime } : undefined,
+        locationId: ev.locationId,
+        status: 'PLANNED' as const,
+        visibility: ev.visibility || 'HIDDEN',
+        participatingActors: Array.isArray(ev.participatingActors) ? [...ev.participatingActors] : [],
+        plannedConsequences: Array.isArray(ev.plannedConsequences) ? [...ev.plannedConsequences] : [],
+        preconditions: Array.isArray(ev.preconditions) ? [...ev.preconditions] : undefined,
+      }));
+
+      const eventStates = plannedEvents.reduce((acc: any, ev: any) => {
+        acc[ev.id] = {
+          id: ev.id,
+          status: 'PLANNED',
+          scheduledTime: ev.scheduledTime,
+        };
+        return acc;
+      }, {});
+
+      // 12. Historical Chronicle Engine
+      const chronicle = new HistoricalChronicleEngine();
+      this.chronicleEngines.set(storyId, chronicle);
+
+      const initialSceneHook = char.startingSituation?.summary || char.startingSituation?.hook || world.summary || `You awaken in ${startLocName} as ${char.identity.name}. The journey begins.`;
+      chronicle.recordEvidence({
+        id: `ev_genesis_${storyId}`,
+        category: 'SACRED_OR_HISTORIC',
+        timestamp: clock.getTimestamp(),
+        primarySubjectId: actorId,
+        locationId: startingLocationId,
+        summary: `Awakened in ${startLocName}`,
+        details: initialSceneHook,
+        sourceEventId: `evt_genesis_${storyId}`,
+        provenance: 'story_genesis',
+        visibility: 'PUBLIC',
+        metadata: {
+          characterName: char.identity.name,
+          characterId: char.characterId,
+          worldTitle: world.title,
+          worldVersion: pinnedWorldVersion,
+        },
+      });
+
+      // 13. Construct and Persist StoryRun
+      const allEquipNames = [
+        ...equippedItems.map((e: any) => e.name),
+        ...inventoryItems.map((i: any) => i.name),
+      ];
+
+      const run = {
+        id: storyId,
+        storyId,
+        worldId: world.worldId,
+        worldVersion: pinnedWorldVersion,
+        pinnedWorldVersion,
+        activeCharacterId: char.characterId,
+        storyMode: params.storyMode || world.storyMode || 'PROTAGONIST',
+        dndRulesMode: params.dndRulesMode || world.dndRulesMode || world.rulesetId || 'FULL_DND',
+        ruleset: params.dndRulesMode || world.rulesetId || 'FULL_DND',
+        characterName: char.identity.name,
+        characterRole: char.role?.profession || char.role?.archetype || 'Adventurer',
+        characterBackground: [char.background?.history, ...(char.background?.notableEvents || [])].filter(Boolean).join('. ') || '',
+        characterAppearance: char.appearance?.physicalDescription || '',
+        characterPersonality: Array.isArray(char.personality?.traits)
+          ? char.personality.traits.join(', ')
+          : (char.personality?.traits || ''),
+        characterMotivations: Array.isArray(char.motivations?.goals)
+          ? char.motivations.goals.join(', ')
+          : (char.motivations?.goals || ''),
+        characterEquipment: allEquipNames,
+        characterPortraitEmoji: char.portraitAsset?.emoji || '🧙‍♂️',
+        characterPortraitUrl: char.portraitAsset?.imageUrl || char.portraitAsset?.url,
+        currentLocationId: startingLocationId,
+        currentHp: 30,
+        maxHp: 30,
+        protagonist: JSON.parse(JSON.stringify(char)), // Sealed snapshot
+        startingLocation: JSON.parse(JSON.stringify(char.startingLocation || {})),
+        startingSituation: JSON.parse(JSON.stringify(char.startingSituation || {})),
+        plannedEvents,
+        eventStates,
+        createdAt: new Date().toISOString(),
+        initialScene: initialSceneHook,
+      };
+
+      this.saveStoryRun(run);
+
+      return { storyId, run };
+    } catch (err) {
+      // Atomic rollback on failure
+      this.deleteStoryRun(storyId);
+      throw err;
+    }
+  }
+
+  public seedDynamicStoryRun(
+    storyId: string,
+    world: any,
+    characterData: {
+      storyMode?: string;
+      dndRulesMode?: string;
+      characterName: string;
+      characterRole?: string;
+      characterBackground?: string;
+      characterAppearance?: string;
+      characterPersonality?: string;
+      characterMotivations?: string;
+      characterEquipment?: string[];
+      characterPortraitEmoji?: string;
+      characterPortraitUrl?: string;
+      capabilities?: any[];
+      initialConditions?: string[];
+    }
+  ): void {
+    const syntheticConfirmedChar = {
+      characterId: `char_synth_${storyId}`,
+      worldId: world.worldId,
+      worldVersion: world.worldManifestVersion || 1,
+      confirmedAt: new Date().toISOString(),
+      identity: {
+        name: characterData.characterName || 'Hero Vael',
+        species: 'Human',
+      },
+      role: {
+        profession: characterData.characterRole || 'Adventurer',
+        archetype: characterData.characterRole || 'Adventurer',
+      },
+      background: {
+        history: characterData.characterBackground || '',
+      },
+      appearance: {
+        physicalDescription: characterData.characterAppearance || '',
+      },
+      personality: {
+        traits: characterData.characterPersonality ? [characterData.characterPersonality] : [],
+      },
+      motivations: {
+        goals: characterData.characterMotivations ? [characterData.characterMotivations] : [],
+      },
+      condition: {
+        injuries: characterData.initialConditions || [],
+      },
+      capabilities: characterData.capabilities || [],
+      generatedSkills: [],
+      startingEquipment: {
+        equipped: [],
+        inventory: (characterData.characterEquipment || []).map((eqName) => ({
+          name: eqName,
+          category: 'Weapon',
+          description: 'Starting equipment.',
+        })),
+        weapons: [],
+        armor: [],
+        tools: [],
+        consumables: [],
+      },
+      portraitAsset: {
+        emoji: characterData.characterPortraitEmoji || '🧙‍♂️',
+        imageUrl: characterData.characterPortraitUrl,
+      },
+      startingLocation: {
+        locationId: world.geography?.nodes?.[0]?.id || world.geography?.locations?.[0]?.id,
+        name: world.geography?.nodes?.[0]?.name || world.setting || world.title,
+      },
+      startingSituation: {
+        summary: world.description || `Entering ${world.title}.`,
+      },
+    };
+
+    this.createStoryRunFromConfirmedCharacter({
+      worldId: world.worldId,
+      confirmedCharacter: syntheticConfirmedChar,
+      storyId,
+      storyMode: characterData.storyMode,
+      dndRulesMode: characterData.dndRulesMode,
+    });
   }
 
   private seedDefaultStory(storyId: string): void {
@@ -291,7 +1057,11 @@ export class InMemoryWorldRepository implements WorldRepository {
   public getPlayerLifecycle(storyId: string): PlayerLifecycleState | null {
     let state = this.playerLifecycles.get(storyId);
     if (!state) {
-      this.seedDefaultStory(storyId);
+      if (storyId === 'default_story') {
+        this.seedDefaultStory(storyId);
+      } else if (this.storyRuns.has(storyId)) {
+        this.seedStory(storyId);
+      }
       state = this.playerLifecycles.get(storyId);
     }
     return state ?? null;
@@ -352,10 +1122,15 @@ export class InMemoryWorldRepository implements WorldRepository {
   public getGeographyGraph(storyId = 'default_story'): GeographyGraph {
     let geo = this.geographies.get(storyId);
     if (!geo) {
-      geo = new GeographyGraph();
+      const isDefault = storyId === 'default_story';
+      geo = new GeographyGraph(isDefault);
       this.geographies.set(storyId, geo);
     }
     return geo;
+  }
+
+  public getGeography(storyId = 'default_story'): GeographyGraph {
+    return this.getGeographyGraph(storyId);
   }
 
   public getKnowledgeFacts(storyId: string): KnowledgeFact[] {
@@ -584,6 +1359,10 @@ export class InMemoryWorldRepository implements WorldRepository {
   }
 
   public getAiOrchestrator(): MultiModelOrchestrator {
+    if (!this.aiOrchestrator) {
+      this.aiOrchestrator = new MultiModelOrchestrator();
+      this.aiOrchestrator.setWorldRepository(this);
+    }
     return this.aiOrchestrator;
   }
 
@@ -787,17 +1566,21 @@ export class InMemoryWorldRepository implements WorldRepository {
       settings: sensoryEngine.getSettings(storyId),
       voiceProfiles: sensoryEngine.getAllVoiceProfiles(storyId),
     };
+    const run = this.getStoryRun(storyId);
+    const worldTemplate = run?.worldId ? this.getWorldTemplate(run.worldId) : null;
+
     const adaptationState = {
       bible: this.getAdaptedStoryBible(storyId),
       profile: this.getAdaptationProfile(storyId),
       pipelineState: this.getPipelineState(storyId),
       session: this.getAdaptationSession(storyId),
       events: this.getAdaptationEvents(storyId),
-      ch16Run: this.getStoryRun(storyId),
+      ch16Run: run,
       ch16Threads: this.getStoryThreads(storyId),
       ch16ActiveEffects: this.getActiveEffects(storyId),
       ch16WorldFacts: this.getWorldFacts(storyId),
       ch16Agenda: this.getProtagonistAgenda(storyId),
+      worldTemplate,
     };
 
     return CampaignArchiveService.createArchive({
@@ -825,7 +1608,7 @@ export class InMemoryWorldRepository implements WorldRepository {
    */
   public restoreCampaignArchive(
     archive: PartitionedArchive,
-    targetStoryId = 'default_story'
+    targetStoryId?: string
   ): { success: boolean; errorReason?: string; campaignId?: string } {
     // 1. Validate & extract payload via CampaignArchiveService
     const validationResult = CampaignArchiveService.validateAndRestoreArchive(archive);
@@ -837,6 +1620,14 @@ export class InMemoryWorldRepository implements WorldRepository {
     }
 
     const restored = validationResult.restoredCampaign;
+    let effectiveStoryId = targetStoryId;
+    if (!effectiveStoryId) {
+      if (restored.campaignId && restored.campaignId.startsWith('campaign_')) {
+        effectiveStoryId = restored.campaignId.slice('campaign_'.length);
+      } else {
+        effectiveStoryId = restored.campaignId || 'default_story';
+      }
+    }
 
     // 2. Stage isolated engine instances (ZERO side-effects on live state during staging)
     try {
@@ -859,7 +1650,7 @@ export class InMemoryWorldRepository implements WorldRepository {
         stagedPlayer = PlayerLifecycleState.fromJSON(restored.player);
       } else {
         stagedPlayer = new PlayerLifecycleState({
-          actorId: `player_actor_${targetStoryId}`,
+          actorId: `player_actor_${effectiveStoryId}`,
           name: 'Scribe Vael',
           locationId: 'loc_whispering_orrery',
           lastUpdatedTime: stagedClock.getTimestamp().totalElapsedSeconds,
@@ -935,77 +1726,80 @@ export class InMemoryWorldRepository implements WorldRepository {
       }
 
       // 4. Atomic Commit (Atomic reference swap)
-      this.worldClocks.set(targetStoryId, stagedClock);
-      this.geographies.set(targetStoryId, stagedGeography);
-      this.knowledgeBases.set(targetStoryId, stagedKnowledgeFacts);
-      this.playerLifecycles.set(targetStoryId, stagedPlayer);
-      this.chronicleEngines.set(targetStoryId, stagedChronicle);
-      this.aiOrchestrator.restoreNarrativeHistory(targetStoryId, stagedNarrative);
-      this.inventoryEngines.set(targetStoryId, stagedInventory);
+      this.worldClocks.set(effectiveStoryId, stagedClock);
+      this.geographies.set(effectiveStoryId, stagedGeography);
+      this.knowledgeBases.set(effectiveStoryId, stagedKnowledgeFacts);
+      this.playerLifecycles.set(effectiveStoryId, stagedPlayer);
+      this.chronicleEngines.set(effectiveStoryId, stagedChronicle);
+      this.getAiOrchestrator().restoreNarrativeHistory(effectiveStoryId, stagedNarrative);
+      this.inventoryEngines.set(effectiveStoryId, stagedInventory);
       if (stagedSensorySettings) {
-        this.sensoryEngine.updateSettings(targetStoryId, stagedSensorySettings);
+        this.sensoryEngine.updateSettings(effectiveStoryId, stagedSensorySettings);
       }
       if (stagedVoiceProfiles && stagedVoiceProfiles.length > 0) {
-        this.sensoryEngine.restoreVoiceProfiles(targetStoryId, stagedVoiceProfiles);
+        this.sensoryEngine.restoreVoiceProfiles(effectiveStoryId, stagedVoiceProfiles);
       }
-      this.capabilityEngines.set(targetStoryId, stagedCapability);
-      this.combatEngines.set(targetStoryId, stagedCombat);
-      this.memoryEngines.set(targetStoryId, stagedMemory);
-      this.livingSimulations.set(targetStoryId, stagedLivingWorld);
+      this.capabilityEngines.set(effectiveStoryId, stagedCapability);
+      this.combatEngines.set(effectiveStoryId, stagedCombat);
+      this.memoryEngines.set(effectiveStoryId, stagedMemory);
+      this.livingSimulations.set(effectiveStoryId, stagedLivingWorld);
       this.characterAlignmentEngine = stagedAlignment;
-      this.npcLifecycles.set(targetStoryId, stagedNpcLifecycles);
+      this.npcLifecycles.set(effectiveStoryId, stagedNpcLifecycles);
 
       if (restored.adaptationState) {
         if (restored.adaptationState.bible) {
-          this.saveAdaptedStoryBible(targetStoryId, {
+          this.saveAdaptedStoryBible(effectiveStoryId, {
             ...restored.adaptationState.bible,
-            storyId: targetStoryId,
+            storyId: effectiveStoryId,
           });
         }
         if (restored.adaptationState.profile) {
-          this.saveAdaptationProfile(targetStoryId, {
+          this.saveAdaptationProfile(effectiveStoryId, {
             ...restored.adaptationState.profile,
-            storyId: targetStoryId,
+            storyId: effectiveStoryId,
           });
         }
         if (restored.adaptationState.pipelineState) {
-          this.savePipelineState(targetStoryId, {
+          this.savePipelineState(effectiveStoryId, {
             ...restored.adaptationState.pipelineState,
-            storyId: targetStoryId,
+            storyId: effectiveStoryId,
           });
         }
         if (restored.adaptationState.session) {
-          this.saveAdaptationSession(targetStoryId, {
+          this.saveAdaptationSession(effectiveStoryId, {
             ...restored.adaptationState.session,
-            storyId: targetStoryId,
+            storyId: effectiveStoryId,
           });
         }
         if (Array.isArray(restored.adaptationState.events)) {
-          this.adaptationEvents.set(targetStoryId, restored.adaptationState.events);
+          this.adaptationEvents.set(effectiveStoryId, restored.adaptationState.events);
         }
         if (restored.adaptationState.ch16Run) {
           this.saveStoryRun({
             ...restored.adaptationState.ch16Run,
-            storyId: targetStoryId,
+            storyId: effectiveStoryId,
           });
         }
         if (Array.isArray(restored.adaptationState.ch16Threads)) {
           for (const thread of restored.adaptationState.ch16Threads) {
-            this.saveStoryThread({ ...thread, storyId: targetStoryId });
+            this.saveStoryThread({ ...thread, storyId: effectiveStoryId });
           }
         }
         if (Array.isArray(restored.adaptationState.ch16ActiveEffects)) {
           for (const eff of restored.adaptationState.ch16ActiveEffects) {
-            this.saveActiveEffect({ ...eff, storyId: targetStoryId });
+            this.saveActiveEffect({ ...eff, storyId: effectiveStoryId });
           }
         }
         if (Array.isArray(restored.adaptationState.ch16WorldFacts)) {
           for (const fact of restored.adaptationState.ch16WorldFacts) {
-            this.saveWorldFact(targetStoryId, fact);
+            this.saveWorldFact(effectiveStoryId, fact);
           }
         }
         if (restored.adaptationState.ch16Agenda) {
-          this.saveProtagonistAgenda(targetStoryId, restored.adaptationState.ch16Agenda);
+          this.saveProtagonistAgenda(effectiveStoryId, restored.adaptationState.ch16Agenda);
+        }
+        if (restored.adaptationState.worldTemplate) {
+          this.saveWorldTemplate(restored.adaptationState.worldTemplate);
         }
       }
 
@@ -1034,12 +1828,110 @@ export class InMemoryWorldRepository implements WorldRepository {
     this.worldTemplates.set(world.worldId, world);
   }
 
+  public searchWorldTemplates(criteria: {
+    query?: string;
+    genre?: string;
+    tone?: string;
+    medium?: string;
+    era?: string;
+    setting?: string;
+    source?: string;
+    playstyle?: string;
+    rules?: string;
+  } = {}): any[] {
+    const all = this.getAllWorldTemplates();
+    return all.filter((w) => {
+      if (criteria.query) {
+        const q = criteria.query.toLowerCase();
+        const matchesTitle = (w.title || '').toLowerCase().includes(q);
+        const matchesSummary = (w.summary || '').toLowerCase().includes(q);
+        const matchesDesc = (w.description || '').toLowerCase().includes(q);
+        const matchesGenre = Array.isArray(w.genreTags) && w.genreTags.some((g: string) => g.toLowerCase().includes(q));
+        const matchesTone = Array.isArray(w.toneTags) && w.toneTags.some((t: string) => t.toLowerCase().includes(q));
+        const matchesMedium = Array.isArray(w.mediumTags) && w.mediumTags.some((m: string) => m.toLowerCase().includes(q));
+        const matchesEra = (w.era || w.defaultEra || '').toLowerCase().includes(q);
+        const matchesSetting = (w.setting || '').toLowerCase().includes(q);
+        const matchesSource = (w.source || w.sourcePolicy || '').toLowerCase().includes(q);
+        if (!matchesTitle && !matchesSummary && !matchesDesc && !matchesGenre && !matchesTone && !matchesMedium && !matchesEra && !matchesSetting && !matchesSource) {
+          return false;
+        }
+      }
+      if (criteria.genre) {
+        const g = criteria.genre.toLowerCase();
+        const hasGenre = Array.isArray(w.genreTags) && w.genreTags.some((tag: string) => tag.toLowerCase() === g || tag.toLowerCase().includes(g));
+        if (!hasGenre) return false;
+      }
+      if (criteria.tone) {
+        const t = criteria.tone.toLowerCase();
+        const hasTone = Array.isArray(w.toneTags) && w.toneTags.some((tag: string) => tag.toLowerCase() === t || tag.toLowerCase().includes(t));
+        if (!hasTone) return false;
+      }
+      if (criteria.medium) {
+        const m = criteria.medium.toLowerCase();
+        const hasMedium =
+          (Array.isArray(w.mediumTags) && w.mediumTags.some((tag: string) => tag.toLowerCase() === m || tag.toLowerCase().includes(m))) ||
+          (typeof w.medium === 'string' && w.medium.toLowerCase().includes(m));
+        if (!hasMedium) return false;
+      }
+      if (criteria.era) {
+        const e = criteria.era.toLowerCase();
+        const eraVal = (w.era || w.defaultEra || '').toLowerCase();
+        if (!eraVal.includes(e)) return false;
+      }
+      if (criteria.setting) {
+        const s = criteria.setting.toLowerCase();
+        const settingVal = (w.setting || '').toLowerCase();
+        if (!settingVal.includes(s)) return false;
+      }
+      if (criteria.source) {
+        const src = criteria.source.toLowerCase();
+        const sourceVal = (w.source || w.sourcePolicy || '').toLowerCase();
+        if (!sourceVal.includes(src)) return false;
+      }
+      if (criteria.playstyle) {
+        const p = criteria.playstyle.toLowerCase();
+        const playstyleVal = (w.playstyle || '').toLowerCase();
+        const hasSupported =
+          Array.isArray(w.supportedPlaystyles) &&
+          w.supportedPlaystyles.some((s: string) => s.toLowerCase() === p || s.toLowerCase().includes(p));
+        if (!playstyleVal.includes(p) && !hasSupported) return false;
+      }
+      if (criteria.rules) {
+        const r = criteria.rules.toLowerCase();
+        const rulesVal = (w.rules || w.rulesetId || w.dndRulesMode || '').toLowerCase();
+        if (!rulesVal.includes(r)) return false;
+      }
+      return true;
+    });
+  }
+
+  public getChronologicallyAvailableFacts(storyId: string): any[] {
+    const clock = this.getWorldClock(storyId);
+    const currentSeconds = clock.getTimestamp().totalElapsedSeconds;
+    const allFacts: any[] = [...this.getKnowledgeFacts(storyId), ...this.getWorldFacts(storyId)];
+    return allFacts.filter((f) => {
+      const ts = f.acquiredAtTimestamp;
+      if (!ts || typeof ts.totalElapsedSeconds !== 'number') {
+        return true;
+      }
+      return ts.totalElapsedSeconds <= currentSeconds;
+    });
+  }
+
   public getStoryRun(storyId: string): any | null {
     return this.storyRuns.get(storyId) || null;
   }
 
+  public getAllStoryRuns(): any[] {
+    return Array.from(this.storyRuns.values());
+  }
+
   public saveStoryRun(run: any): void {
     this.storyRuns.set(run.storyId, run);
+  }
+
+  public registerStoryRun(run: any): void {
+    this.saveStoryRun(run);
   }
 
   public getStoryThreads(storyId: string): any[] {
@@ -1180,6 +2072,69 @@ export class InMemoryWorldRepository implements WorldRepository {
       dndMode,
       overrideCapabilities: run?.canonicalCapabilities || [],
     });
+  }
+
+  // Character Genesis / Drafts & Confirmed Characters (Slice 2)
+  public getCharacterDrafts(worldId: string): any[] {
+    if (!worldId) return [];
+    return this.characterDraftsMap.get(worldId) || [];
+  }
+
+  public saveCharacterDraft(worldId: string, draft: any): void {
+    if (!worldId || !draft) return;
+    const existing = this.getCharacterDrafts(worldId);
+    const draftId = draft.draftId || draft.id || `draft_${Date.now()}`;
+    draft.draftId = draftId;
+    draft.worldId = worldId;
+    const idx = existing.findIndex((d) => (d.draftId || d.id) === draftId);
+    if (idx >= 0) {
+      existing[idx] = draft;
+    } else {
+      existing.push(draft);
+    }
+    this.characterDraftsMap.set(worldId, [...existing]);
+  }
+
+  public getConfirmedCharacters(worldId: string): any[] {
+    if (!worldId) return [];
+    return this.confirmedCharactersMap.get(worldId) || [];
+  }
+
+  public saveConfirmedCharacter(worldId: string, char: any): void {
+    if (!worldId || !char) return;
+    const existing = this.getConfirmedCharacters(worldId);
+    const charId = char.characterId || char.id || `char_${Date.now()}`;
+    char.characterId = charId;
+    char.worldId = worldId;
+    const idx = existing.findIndex((c) => (c.characterId || c.id) === charId);
+    if (idx >= 0) {
+      existing[idx] = char;
+    } else {
+      existing.push(char);
+    }
+    this.confirmedCharactersMap.set(worldId, [...existing]);
+  }
+
+  public getConfirmedCharacter(worldId: string, characterId: string): any | null {
+    if (!worldId || !characterId) return null;
+    const chars = this.getConfirmedCharacters(worldId);
+    return chars.find((c) => (c.characterId || c.id) === characterId) || null;
+  }
+
+  public deleteStoryRun(storyId: string): void {
+    if (!storyId) return;
+    this.storyRuns.delete(storyId);
+    this.playerLifecycles.delete(storyId);
+    this.worldClocks.delete(storyId);
+    this.geographies.delete(storyId);
+    this.inventoryEngines.delete(storyId);
+    this.capabilityEngines.delete(storyId);
+    this.chronicleEngines.delete(storyId);
+    this.knowledgeBases.delete(storyId);
+    this.combatEngines.delete(storyId);
+    this.memoryEngines.delete(storyId);
+    this.livingSimulations.delete(storyId);
+    this.npcLifecycles.delete(storyId);
   }
 }
 

@@ -4,12 +4,33 @@ import { ActionRequest } from '../mockEngine/serverTypes';
 import { worldRepository } from '../repositories/worldRepository';
 import { NpcTacticalDecisionPolicy } from '../domain/tacticalDecisionPolicy';
 import { PlayerLifecycleState } from '../domain/playerLifecycleState';
+import { OpeningSceneService } from '../services/openingSceneService';
+import { WorkingContextEngine } from '../domain/workingContextEngine';
 
 export const gameRouter = Router();
 import { sensoryRouter } from './sensoryRoutes';
 import { adaptationRouter } from './adaptationRoutes';
 gameRouter.use('/sensory', sensoryRouter);
 gameRouter.use('/adaptation', adaptationRouter);
+
+function resolveStoryId(req: Request, allowDefault = true): string {
+  const headerId = req.headers['x-story-id'];
+  if (typeof headerId === 'string' && headerId) {
+    return headerId;
+  }
+  const queryId = req.query.storyId;
+  if (typeof queryId === 'string' && queryId) {
+    return queryId;
+  }
+  const bodyId = req.body?.storyId;
+  if (typeof bodyId === 'string' && bodyId) {
+    return bodyId;
+  }
+  if (allowDefault) {
+    return 'default_story';
+  }
+  throw new Error('Active story context (X-Story-ID header or storyId) is required for gameplay operations.');
+}
 
 /**
  * GET /api/game/state
@@ -18,7 +39,8 @@ gameRouter.use('/adaptation', adaptationRouter);
  */
 gameRouter.get('/state', (req: Request, res: Response) => {
   try {
-    const viewState = serverMockAuthority.getSanitizedViewState();
+    const storyId = resolveStoryId(req, true);
+    const viewState = serverMockAuthority.getSanitizedViewState(storyId);
     res.json(viewState);
   } catch (error) {
     console.error('Error projecting external view state:', error);
@@ -42,6 +64,10 @@ gameRouter.post('/action', (req: Request, res: Response) => {
         error: 'Invalid request payload: ActionRequest must contain a valid type field.',
       });
       return;
+    }
+
+    if (!(actionRequest as any).storyId) {
+      (actionRequest as any).storyId = resolveStoryId(req, true);
     }
 
     const actionResult = serverMockAuthority.processAction(actionRequest);
@@ -190,7 +216,8 @@ gameRouter.post('/workstation/iteration', async (req: Request, res: Response) =>
 gameRouter.get('/player-lifecycle', async (req: Request, res: Response) => {
   try {
     const { worldRepository } = await import('../repositories/worldRepository');
-    const player = worldRepository.getPlayerLifecycle('default_story');
+    const storyId = resolveStoryId(req);
+    const player = worldRepository.getPlayerLifecycle(storyId);
     res.json(player ? player.toJSON() : null);
   } catch (error) {
     res.status(500).json({ error: 'Failed to retrieve player lifecycle.' });
@@ -204,9 +231,10 @@ gameRouter.get('/player-lifecycle', async (req: Request, res: Response) => {
 gameRouter.get('/chronicle', async (req: Request, res: Response) => {
   try {
     const { worldRepository } = await import('../repositories/worldRepository');
-    const engine = worldRepository.getHistoricalChronicleEngine('default_story');
-    const player = worldRepository.getPlayerLifecycle('default_story');
-    const playerId = player ? player.actorId : 'player_actor_default_story';
+    const storyId = resolveStoryId(req);
+    const engine = worldRepository.getHistoricalChronicleEngine(storyId);
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const playerId = player ? player.actorId : `player_actor_${storyId}`;
     const entries = engine.projectPlayerChronicle(playerId);
     res.json(entries);
   } catch (error) {
@@ -221,9 +249,10 @@ gameRouter.get('/chronicle', async (req: Request, res: Response) => {
 gameRouter.get('/dossiers', async (req: Request, res: Response) => {
   try {
     const { worldRepository } = await import('../repositories/worldRepository');
-    const engine = worldRepository.getHistoricalChronicleEngine('default_story');
-    const player = worldRepository.getPlayerLifecycle('default_story');
-    const playerId = player ? player.actorId : 'player_actor_default_story';
+    const storyId = resolveStoryId(req);
+    const engine = worldRepository.getHistoricalChronicleEngine(storyId);
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const playerId = player ? player.actorId : `player_actor_${storyId}`;
     const rawDossiers = engine.getAllDossiers();
     const projected = rawDossiers.map((d) => engine.projectPlayerDossier(d.subjectId, playerId)).filter(Boolean);
     res.json(projected);
@@ -243,9 +272,10 @@ gameRouter.get('/dossiers/:subjectId', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Missing subjectId param.' });
     }
     const { worldRepository } = await import('../repositories/worldRepository');
-    const engine = worldRepository.getHistoricalChronicleEngine('default_story');
-    const player = worldRepository.getPlayerLifecycle('default_story');
-    const playerId = player ? player.actorId : 'player_actor_default_story';
+    const storyId = resolveStoryId(req);
+    const engine = worldRepository.getHistoricalChronicleEngine(storyId);
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const playerId = player ? player.actorId : `player_actor_${storyId}`;
     const projected = engine.projectPlayerDossier(subjectId, playerId);
     if (!projected) {
       return res.status(404).json({ error: `Dossier for ${subjectId} not found.` });
@@ -263,9 +293,10 @@ gameRouter.get('/dossiers/:subjectId', async (req: Request, res: Response) => {
 gameRouter.get('/inventory', async (req: Request, res: Response) => {
 	try {
 		const { worldRepository } = await import('../repositories/worldRepository');
-		const player = worldRepository.getPlayerLifecycle('default_story');
-		const actorId = player ? player.actorId : 'player_actor_default_story';
-		const invEngine = worldRepository.getInventoryEngine('default_story');
+		const storyId = resolveStoryId(req);
+		const player = worldRepository.getPlayerLifecycle(storyId);
+		const actorId = player ? player.actorId : `player_actor_${storyId}`;
+		const invEngine = worldRepository.getInventoryEngine(storyId);
 		const projection = invEngine.projectActorInventory(actorId);
 		res.json({ actorId, items: projection.items, paperDoll: projection.paperDoll, definitions: projection.definitions });
 	} catch (error) {
@@ -284,9 +315,10 @@ gameRouter.post('/inventory/equip', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, errorReason: 'Missing itemId or slot in request body.' });
     }
     const { worldRepository } = await import('../repositories/worldRepository');
-    const player = worldRepository.getPlayerLifecycle('default_story');
-    const actorId = player ? player.actorId : 'player_actor_default_story';
-    const invEngine = worldRepository.getInventoryEngine('default_story');
+    const storyId = resolveStoryId(req);
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player ? player.actorId : `player_actor_${storyId}`;
+    const invEngine = worldRepository.getInventoryEngine(storyId);
     const result = invEngine.equipItem(actorId, itemId, slot);
     if (!result.success) {
       return res.status(400).json(result);
@@ -310,9 +342,10 @@ gameRouter.post('/inventory/unequip', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, errorReason: 'Missing slot in request body.' });
     }
     const { worldRepository } = await import('../repositories/worldRepository');
-    const player = worldRepository.getPlayerLifecycle('default_story');
-    const actorId = player ? player.actorId : 'player_actor_default_story';
-    const invEngine = worldRepository.getInventoryEngine('default_story');
+    const storyId = resolveStoryId(req);
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player ? player.actorId : `player_actor_${storyId}`;
+    const invEngine = worldRepository.getInventoryEngine(storyId);
     const result = invEngine.unequipItem(actorId, slot);
     if (!result.success) {
       return res.status(400).json(result);
@@ -332,7 +365,8 @@ gameRouter.post('/inventory/unequip', async (req: Request, res: Response) => {
 gameRouter.get('/inventory/recipes', async (req: Request, res: Response) => {
   try {
     const { worldRepository } = await import('../repositories/worldRepository');
-    const invEngine = worldRepository.getInventoryEngine('default_story');
+    const storyId = resolveStoryId(req);
+    const invEngine = worldRepository.getInventoryEngine(storyId);
     const recipes = invEngine.getRecipes();
     res.json({ recipes });
   } catch (error) {
@@ -510,9 +544,10 @@ gameRouter.post('/inventory/degrade', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, errorReason: 'Missing itemId in request body.' });
     }
     const { worldRepository } = await import('../repositories/worldRepository');
-    const player = worldRepository.getPlayerLifecycle('default_story');
-    const actorId = player ? player.actorId : 'player_actor_default_story';
-    const invEngine = worldRepository.getInventoryEngine('default_story');
+    const storyId = resolveStoryId(req);
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player ? player.actorId : `player_actor_${storyId}`;
+    const invEngine = worldRepository.getInventoryEngine(storyId);
 
     const item = invEngine.getItemInstance(itemId);
     if (!item) {
@@ -538,10 +573,11 @@ gameRouter.post('/inventory/degrade', async (req: Request, res: Response) => {
 gameRouter.get('/capabilities', async (req: Request, res: Response) => {
 	try {
 		const { worldRepository } = await import('../repositories/worldRepository');
-		const player = worldRepository.getPlayerLifecycle('default_story');
-		const actorId = (req.query.actorId as string) || (player ? player.actorId : 'player_actor_default_story');
-		const capEngine = worldRepository.getCapabilityEngine('default_story');
-		const invEngine = worldRepository.getInventoryEngine('default_story');
+		const storyId = resolveStoryId(req);
+		const player = worldRepository.getPlayerLifecycle(storyId);
+		const actorId = (req.query.actorId as string) || (player ? player.actorId : `player_actor_${storyId}`);
+		const capEngine = worldRepository.getCapabilityEngine(storyId);
+		const invEngine = worldRepository.getInventoryEngine(storyId);
 		const powerState = capEngine.getPowerState(actorId);
 		const capabilities = capEngine.getEffectiveActorCapabilities(actorId, invEngine);
 		const skillInstances = capEngine.getAllSkillInstances(actorId);
@@ -577,10 +613,11 @@ gameRouter.post('/capabilities/adjudicate', async (req: Request, res: Response) 
     }
 
     const { worldRepository } = await import('../repositories/worldRepository');
-    const player = worldRepository.getPlayerLifecycle('default_story');
-    const actorId = reqActorId || (player ? player.actorId : 'player_actor_default_story');
-    const capEngine = worldRepository.getCapabilityEngine('default_story');
-    const invEngine = worldRepository.getInventoryEngine('default_story');
+    const storyId = resolveStoryId(req);
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = reqActorId || (player ? player.actorId : `player_actor_${storyId}`);
+    const capEngine = worldRepository.getCapabilityEngine(storyId);
+    const invEngine = worldRepository.getInventoryEngine(storyId);
 
     // CH3.2 Server-authoritative capability grant check
     const effectiveCaps = capEngine.getEffectiveActorCapabilities(actorId, invEngine);
@@ -606,8 +643,8 @@ gameRouter.post('/capabilities/adjudicate', async (req: Request, res: Response) 
       // CH4 Integration: record chronicle evidence if significant/world-scale
       const cap = capEngine.getCapability(intendedCapabilityId);
       const isWorldScale = requestedScale === 'WorldScale' || cap?.powerTier === 'WorldScale';
-      const chronicle = worldRepository.getHistoricalChronicleEngine('default_story');
-      const clock = worldRepository.getWorldClock('default_story');
+      const chronicle = worldRepository.getHistoricalChronicleEngine(storyId);
+      const clock = worldRepository.getWorldClock(storyId);
       const ts = clock.getTimestamp();
       chronicle.recordEvidence({
         id: `ev_cap_${intendedCapabilityId}_${ts.totalElapsedSeconds}_${chronicle.getChronicleEntries().length}`,
@@ -1837,11 +1874,11 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
  */
 gameRouter.get('/memories', async (req: Request, res: Response) => {
   try {
-    const storyId = (req.query.storyId as string) || 'default_story';
+    const storyId = resolveStoryId(req);
     const { worldRepository } = await import('../repositories/worldRepository');
     const player = worldRepository.getPlayerLifecycle(storyId);
     const actorId = (req.query.actorId as string) || player?.actorId || `player_actor_${storyId}`;
-    const clock = worldRepository.getWorldClock('default_story');
+    const clock = worldRepository.getWorldClock(storyId);
     const memEngine = worldRepository.getMemoryEngine(storyId);
 
     const memories = memEngine.retrieveMemories({
@@ -1870,11 +1907,12 @@ gameRouter.get('/memories', async (req: Request, res: Response) => {
  */
 gameRouter.post('/memories/query', async (req: Request, res: Response) => {
   try {
-    const { storyId = 'default_story', actorId, queryKeywords = [], currentTurn, maxResults, includeDormant, includeArchived } = req.body;
+    const storyId = resolveStoryId(req);
+    const { actorId, queryKeywords = [], currentTurn, maxResults, includeDormant, includeArchived } = req.body;
     const { worldRepository } = await import('../repositories/worldRepository');
     const player = worldRepository.getPlayerLifecycle(storyId);
     const viewerActorId = actorId || player?.actorId || `player_actor_${storyId}`;
-    const clock = worldRepository.getWorldClock('default_story');
+    const clock = worldRepository.getWorldClock(storyId);
     const memEngine = worldRepository.getMemoryEngine(storyId);
 
     const memories = memEngine.retrieveMemories({
@@ -1904,7 +1942,8 @@ gameRouter.post('/memories/query', async (req: Request, res: Response) => {
  */
 gameRouter.post('/memories/opportunities', async (req: Request, res: Response) => {
   try {
-    const { storyId = 'default_story', actorId, actionText, targetEntityId, currentTurn } = req.body;
+    const storyId = resolveStoryId(req);
+    const { actorId, actionText, targetEntityId, currentTurn } = req.body;
     if (!actionText || typeof actionText !== 'string') {
       return res.status(400).json({ success: false, errorReason: 'actionText string is required.' });
     }
@@ -1912,7 +1951,7 @@ gameRouter.post('/memories/opportunities', async (req: Request, res: Response) =
     const { worldRepository } = await import('../repositories/worldRepository');
     const player = worldRepository.getPlayerLifecycle(storyId);
     const resolvedActorId = actorId || player?.actorId || `player_actor_${storyId}`;
-    const clock = worldRepository.getWorldClock('default_story');
+    const clock = worldRepository.getWorldClock(storyId);
     const memEngine = worldRepository.getMemoryEngine(storyId);
 
     const opportunities = memEngine.scanOpportunities({
@@ -2796,6 +2835,23 @@ gameRouter.post('/orchestrator/overrides', async (req: Request, res: Response) =
 });
 
 /**
+ * GET /api/game/orchestrator/pins
+ * Returns all current task pins.
+ */
+gameRouter.get('/orchestrator/pins', async (req: Request, res: Response) => {
+  try {
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const orchestrator = worldRepository.getAiOrchestrator();
+    res.json({
+      success: true,
+      pins: orchestrator.getAllTaskPins(),
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to retrieve task pins.' });
+  }
+});
+
+/**
  * POST /api/game/orchestrator/pin
  * Pins a model to a specific task.
  */
@@ -2814,9 +2870,34 @@ gameRouter.post('/orchestrator/pin', async (req: Request, res: Response) => {
       success: true,
       task,
       pinnedModel: modelKey || null,
+      pins: orchestrator.getAllTaskPins(),
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to pin model for task.' });
+  }
+});
+
+/**
+ * POST /api/game/orchestrator/test-model
+ * Performs a real-time connectivity & readiness test for a specified model.
+ */
+gameRouter.post('/orchestrator/test-model', async (req: Request, res: Response) => {
+  try {
+    const { providerId, modelId } = req.body;
+    if (!providerId || !modelId) {
+      res.status(400).json({ error: 'providerId and modelId are required.' });
+      return;
+    }
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const orchestrator = worldRepository.getAiOrchestrator();
+    const result = await orchestrator.testModel(providerId, modelId);
+
+    res.json({
+      success: true,
+      result,
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to execute model test.', details: String(error) });
   }
 });
 
@@ -2932,7 +3013,18 @@ gameRouter.get('/archive/assets', async (req: Request, res: Response) => {
 gameRouter.get('/worlds', async (req: Request, res: Response) => {
   try {
     const { worldRepository } = await import('../repositories/worldRepository');
-    const worlds = worldRepository.getAllWorldTemplates();
+    const { query, genre, tone, medium, era, setting, source, playstyle, rules } = req.query as Record<string, string>;
+    const worlds = worldRepository.searchWorldTemplates({
+      query,
+      genre,
+      tone,
+      medium,
+      era,
+      setting,
+      source,
+      playstyle,
+      rules,
+    });
     res.json(worlds);
   } catch (error) {
     res.status(500).json({ error: 'Failed to retrieve worlds list.' });
@@ -2941,16 +3033,70 @@ gameRouter.get('/worlds', async (req: Request, res: Response) => {
 
 gameRouter.post('/worlds', async (req: Request, res: Response) => {
   try {
-    const { naturalLanguagePremise, genreTags, storyMode, dndRulesMode } = req.body;
+    const {
+      naturalLanguagePremise,
+      title,
+      genreTags,
+      toneTags,
+      mediumTags,
+      defaultEra,
+      canonMode,
+      rulesetId,
+      storyMode,
+      dndRulesMode,
+      setting,
+      sourcePolicy,
+      imageAsset,
+      imageMetadata,
+      geography,
+      timeline,
+      characters,
+      factions,
+      magicRules,
+      economy,
+      forbiddenContradictions,
+      startingStarts,
+      terminology,
+      knowledgeBoundaries,
+      artConfig,
+      audioConfig,
+      narrativeConfig,
+      events,
+    } = req.body;
+
     if (!naturalLanguagePremise || typeof naturalLanguagePremise !== 'string') {
       return res.status(400).json({ error: 'naturalLanguagePremise string is required.' });
     }
     const { worldSynthesisService } = await import('../services/worldSynthesisService');
     const world = await worldSynthesisService.synthesizeWorldFromPremise({
       naturalLanguagePremise,
+      title,
       genreTags,
+      toneTags,
+      mediumTags,
+      defaultEra,
+      canonMode,
+      rulesetId,
       storyMode,
       dndRulesMode,
+      setting,
+      sourcePolicy,
+      imageAsset,
+      imageMetadata,
+      geography,
+      timeline,
+      characters,
+      factions,
+      magicRules,
+      economy,
+      forbiddenContradictions,
+      startingStarts,
+      terminology,
+      knowledgeBoundaries,
+      artConfig,
+      audioConfig,
+      narrativeConfig,
+      events,
     });
     res.status(201).json(world);
   } catch (error) {
@@ -2975,32 +3121,394 @@ gameRouter.get('/worlds/:worldId', async (req: Request, res: Response) => {
 gameRouter.post('/worlds/:worldId/start-run', async (req: Request, res: Response) => {
   try {
     const { worldRepository } = await import('../repositories/worldRepository');
+    const { serverMockAuthority } = await import('../mockEngine/serverMockAuthority');
     const worldId = req.params.worldId as string;
     const world = worldRepository.getWorldTemplate(worldId);
     if (!world) {
-      return res.status(404).json({ error: 'World template not found.' });
+      return res.status(404).json({ error: `World template "${worldId}" not found.` });
     }
-    const { storyMode = 'PROTAGONIST', dndRulesMode = 'FULL_DND', characterName = 'Hero Vael' } = req.body;
-    const storyId = `run_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
-
-    const run = {
-      storyId,
-      worldId: world.worldId,
-      pinnedWorldVersion: world.worldManifestVersion || 1,
-      storyMode,
-      dndRulesMode,
+    const {
+      confirmedCharacter,
+      characterId,
+      storyMode = 'PROTAGONIST',
+      dndRulesMode = 'FULL_DND',
       characterName,
-      currentLocationId: 'loc_whispering_orrery',
-      currentHp: 30,
-      canonicalCapabilities: world.canonicalCapabilities || [],
-      createdAt: new Date().toISOString(),
-    };
+      characterRole,
+      characterBackground,
+      characterAppearance,
+      characterPersonality,
+      characterMotivations,
+      characterEquipment,
+      characterPortraitEmoji,
+      characterPortraitUrl,
+      capabilities,
+      initialConditions,
+    } = req.body;
 
-    worldRepository.seedStory(storyId);
-    worldRepository.saveStoryRun(run);
-    res.status(201).json(run);
+    let targetConfirmedCharacter = confirmedCharacter;
+
+    if (!targetConfirmedCharacter && characterId) {
+      targetConfirmedCharacter = worldRepository.getConfirmedCharacter(worldId, characterId);
+      if (!targetConfirmedCharacter) {
+        return res.status(404).json({ error: `Confirmed character "${characterId}" not found in world "${worldId}".` });
+      }
+    }
+
+    let storyId: string;
+    let run: any;
+
+    if (targetConfirmedCharacter) {
+      // Primary Slice 3 creation from Confirmed Character
+      const creationResult = worldRepository.createStoryRunFromConfirmedCharacter({
+        worldId,
+        confirmedCharacter: targetConfirmedCharacter,
+        storyMode,
+        dndRulesMode,
+      });
+      storyId = creationResult.storyId;
+      run = creationResult.run;
+    } else {
+      // Legacy backwards-compatibility
+      storyId = `run_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+      worldRepository.seedDynamicStoryRun(storyId, world, {
+        storyMode,
+        dndRulesMode,
+        characterName: characterName || 'Hero Vael',
+        characterRole,
+        characterBackground,
+        characterAppearance,
+        characterPersonality,
+        characterMotivations,
+        characterEquipment,
+        characterPortraitEmoji,
+        characterPortraitUrl,
+        capabilities,
+        initialConditions,
+      });
+      run = worldRepository.getStoryRun(storyId);
+    }
+
+    serverMockAuthority.setActiveStoryId(storyId);
+
+    // Auto-generate or retrieve canonical opening scene for the new StoryRun (Slice 4)
+    let openingScene = null;
+    try {
+      openingScene = await OpeningSceneService.generateOpeningScene({ storyId });
+    } catch (genErr) {
+      console.warn(`[POST /story-runs] Initial opening scene auto-generation deferred:`, genErr);
+    }
+
+    const viewState = serverMockAuthority.getSanitizedViewState(storyId);
+
+    res.status(201).json({
+      success: true,
+      storyId,
+      storyMode: run?.storyMode || storyMode,
+      dndRulesMode: run?.dndRulesMode || dndRulesMode,
+      run,
+      viewState,
+      openingScene: openingScene || run?.openingScene || null,
+    });
+  } catch (error: any) {
+    console.error('Error starting world run:', error);
+    res.status(400).json({ error: error?.message || 'Failed to start world run.' });
+  }
+});
+
+/**
+ * GET /api/game/story-runs/:storyId/opening
+ * Retrieves existing opening scene for a story run.
+ */
+gameRouter.get('/story-runs/:storyId/opening', async (req: Request, res: Response) => {
+  try {
+    const storyId = String(req.params.storyId);
+    const run = worldRepository.getStoryRun(storyId);
+    if (!run) {
+      return res.status(404).json({ error: `StoryRun with ID "${storyId}" not found.` });
+    }
+
+    const openingScene = OpeningSceneService.getOpeningScene(storyId);
+    if (!openingScene) {
+      return res.status(404).json({ error: `Opening scene has not yet been generated for storyId "${storyId}".` });
+    }
+
+    return res.json({ success: true, storyId, openingScene });
+  } catch (error: any) {
+    return res.status(500).json({ error: error?.message || 'Failed to retrieve opening scene.' });
+  }
+});
+
+/**
+ * POST /api/game/story-runs/:storyId/opening
+ * Idempotently generates or retrieves the opening scene for a story run.
+ */
+gameRouter.post('/story-runs/:storyId/opening', async (req: Request, res: Response) => {
+  try {
+    const storyId = String(req.params.storyId);
+    const { forceRegenerate, timeoutMs, simulateFailure } = req.body || {};
+
+    const run = worldRepository.getStoryRun(storyId);
+    if (!run) {
+      return res.status(404).json({ error: `StoryRun with ID "${storyId}" not found.` });
+    }
+
+    const openingScene = await OpeningSceneService.generateOpeningScene({
+      storyId,
+      forceRegenerate: Boolean(forceRegenerate),
+      timeoutMs: typeof timeoutMs === 'number' ? timeoutMs : undefined,
+      simulateFailure: Boolean(simulateFailure),
+    });
+
+    const viewState = serverMockAuthority.getSanitizedViewState(storyId);
+
+    return res.json({
+      success: true,
+      storyId,
+      openingScene,
+      viewState,
+    });
+  } catch (error: any) {
+    console.error(`Error generating opening scene for ${req.params.storyId}:`, error);
+    return res.status(500).json({
+      error: error?.message || 'Failed to generate opening scene.',
+      storyId: req.params.storyId,
+      recoverable: true,
+    });
+  }
+});
+
+/**
+ * GET /api/game/story-runs/:storyId/opening/context
+ * Retrieves assembled opening working context for inspection and verification.
+ */
+gameRouter.get('/story-runs/:storyId/opening/context', (req: Request, res: Response) => {
+  try {
+    const storyId = String(req.params.storyId);
+    const run = worldRepository.getStoryRun(storyId);
+    if (!run) {
+      return res.status(404).json({ error: `StoryRun with ID "${storyId}" not found.` });
+    }
+
+    const context = WorkingContextEngine.assembleOpeningContext({ storyId });
+    return res.json({ success: true, storyId, context });
+  } catch (error: any) {
+    return res.status(500).json({ error: error?.message || 'Failed to assemble opening context.' });
+  }
+});
+
+// ==========================================
+// Character Genesis & Creation (Slice 2)
+// ==========================================
+
+/**
+ * POST /api/game/worlds/:worldId/characters/extract
+ * Extracts a complete CharacterGenesisDraft from a natural-language description.
+ * Preserves user edits if userEditedFields are provided.
+ */
+gameRouter.post('/worlds/:worldId/characters/extract', async (req: Request, res: Response) => {
+  try {
+    const worldId = String(req.params.worldId);
+    const { naturalLanguageConcept, existingDraft, userEditedFields } = req.body;
+    const worldTemplate = worldRepository.getWorldTemplate(worldId);
+    if (!worldTemplate) {
+      return res.status(404).json({ error: `World ${worldId} not found.` });
+    }
+
+    const { characterGenesisService } = await import('../services/characterGenesisService');
+    const draft = await characterGenesisService.extractCharacterDraft(
+      {
+        naturalLanguageConcept: naturalLanguageConcept || '',
+        worldId,
+        existingDraft,
+        userEditedFields,
+      },
+      worldTemplate
+    );
+
+    res.json({ success: true, draft });
+  } catch (error: any) {
+    console.error('Error extracting character draft:', error);
+    res.status(500).json({ error: error?.message || 'Failed to extract character draft.' });
+  }
+});
+
+/**
+ * POST /api/game/worlds/:worldId/characters/custom-capability
+ * Synthesizes a structured custom capability proposal with linked techniques.
+ */
+gameRouter.post('/worlds/:worldId/characters/custom-capability', async (req: Request, res: Response) => {
+  try {
+    const worldId = String(req.params.worldId);
+    const { capabilityConcept, characterContext } = req.body;
+    const worldTemplate = worldRepository.getWorldTemplate(worldId);
+    if (!worldTemplate) {
+      return res.status(404).json({ error: `World ${worldId} not found.` });
+    }
+
+    const { characterGenesisService } = await import('../services/characterGenesisService');
+    const capability = await characterGenesisService.proposeCustomCapability(
+      {
+        worldId,
+        capabilityConcept: capabilityConcept || '',
+        characterContext,
+      },
+      worldTemplate
+    );
+
+    res.json({ success: true, capability });
+  } catch (error: any) {
+    console.error('Error proposing custom capability:', error);
+    res.status(500).json({ error: error?.message || 'Failed to propose custom capability.' });
+  }
+});
+
+/**
+ * GET /api/game/worlds/:worldId/characters/drafts
+ * Retrieves all saved drafts for a specific world.
+ */
+gameRouter.get('/worlds/:worldId/characters/drafts', (req: Request, res: Response) => {
+  try {
+    const worldId = String(req.params.worldId);
+    const drafts = worldRepository.getCharacterDrafts(worldId);
+    res.json({ success: true, drafts });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Failed to retrieve drafts.' });
+  }
+});
+
+/**
+ * POST /api/game/worlds/:worldId/characters/drafts
+ * Saves or updates a draft for a specific world.
+ */
+gameRouter.post('/worlds/:worldId/characters/drafts', (req: Request, res: Response) => {
+  try {
+    const worldId = String(req.params.worldId);
+    const { draft } = req.body;
+    if (!draft) {
+      return res.status(400).json({ error: 'Draft object is required.' });
+    }
+    worldRepository.saveCharacterDraft(worldId, draft);
+    res.json({ success: true, draft });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Failed to save draft.' });
+  }
+});
+
+/**
+ * POST /api/game/worlds/:worldId/characters/confirm
+ * Validates and explicitly confirms a CharacterGenesisDraft into a ConfirmedCharacter.
+ * CRITICAL: Strictest isolation guarantee — does NOT launch or create any StoryRun!
+ */
+gameRouter.post('/worlds/:worldId/characters/confirm', async (req: Request, res: Response) => {
+  try {
+    const worldId = String(req.params.worldId);
+    const { draft } = req.body;
+    const worldTemplate = worldRepository.getWorldTemplate(worldId);
+    if (!worldTemplate) {
+      return res.status(404).json({ error: `World ${worldId} not found.` });
+    }
+    if (!draft) {
+      return res.status(400).json({ error: 'Draft object is required.' });
+    }
+
+    const { characterGenesisService } = await import('../services/characterGenesisService');
+    const confirmedCharacter = characterGenesisService.confirmCharacter(draft, worldTemplate);
+    worldRepository.saveConfirmedCharacter(worldId, confirmedCharacter);
+
+    res.json({ success: true, character: confirmedCharacter });
+  } catch (error: any) {
+    console.error('Error confirming character:', error);
+    res.status(400).json({ error: error?.message || 'Failed to confirm character.' });
+  }
+});
+
+/**
+ * GET /api/game/worlds/:worldId/characters/confirmed
+ * Retrieves all confirmed characters for a specific world.
+ */
+gameRouter.get('/worlds/:worldId/characters/confirmed', (req: Request, res: Response) => {
+  try {
+    const worldId = String(req.params.worldId);
+    const characters = worldRepository.getConfirmedCharacters(worldId);
+    res.json({ success: true, characters });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Failed to retrieve confirmed characters.' });
+  }
+});
+
+// ==========================================
+// Media & Image Generation Adapter (Presentation Only)
+// ==========================================
+
+gameRouter.post('/media/generate-image', async (req: Request, res: Response) => {
+  try {
+    const { storyId = 'default_story', prompt, assetId, aspectRatio, tags } = req.body;
+    const { mediaAdapterService } = await import('../services/mediaAdapterService');
+    const result = await mediaAdapterService.generateImage({
+      storyId,
+      prompt,
+      assetId,
+      aspectRatio,
+      tags,
+    });
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ success: false, errorReason: error?.message || 'Media generation error.' });
+  }
+});
+
+gameRouter.post('/media/fault-injection', async (req: Request, res: Response) => {
+  try {
+    const { mode } = req.body;
+    const { mediaAdapterService } = await import('../services/mediaAdapterService');
+    mediaAdapterService.setFailureMode(mode || 'NONE');
+    res.json({ success: true, mode: mediaAdapterService.getFailureMode() });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to start world run.' });
+    res.status(500).json({ error: 'Failed to set fault injection mode.' });
+  }
+});
+
+// ==========================================
+// Research Evidence Firewall & Adjudication Pipeline
+// ==========================================
+
+gameRouter.post('/research/evidence', async (req: Request, res: Response) => {
+  try {
+    const { researchEvidencePipeline } = await import('../domain/researchEvidence');
+    const item = req.body;
+    if (!item.evidenceId || !item.claimText) {
+      return res.status(400).json({ error: 'evidenceId and claimText are required.' });
+    }
+    researchEvidencePipeline.registerEvidence(item);
+    res.status(201).json({ success: true, evidence: item });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to register research evidence.' });
+  }
+});
+
+gameRouter.get('/research/evidence', async (req: Request, res: Response) => {
+  try {
+    const { researchEvidencePipeline } = await import('../domain/researchEvidence');
+    res.json(researchEvidencePipeline.getAllEvidence());
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to list research evidence.' });
+  }
+});
+
+gameRouter.post('/research/adjudicate', async (req: Request, res: Response) => {
+  try {
+    const { evidenceId, adjudicationResult, storyId = 'default_story' } = req.body;
+    const { researchEvidencePipeline } = await import('../domain/researchEvidence');
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const result = researchEvidencePipeline.adjudicateAndPromote(
+      evidenceId,
+      adjudicationResult,
+      storyId,
+      worldRepository
+    );
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ success: false, errorReason: error?.message || 'Adjudication failed.' });
   }
 });
 
@@ -3135,18 +3643,100 @@ gameRouter.post('/worlds/runs/:storyId/dice-clash/resolve', async (req: Request,
   }
 });
 
-gameRouter.post('/worlds/runs/:storyId/spells/evaluate', async (req: Request, res: Response) => {
+gameRouter.get('/run-canonical-state', (req: Request, res: Response) => {
   try {
-    const { spellProposal } = req.body;
-    if (!spellProposal) {
-      return res.status(400).json({ error: 'spellProposal object is required.' });
-    }
-    const { worldRepository } = await import('../repositories/worldRepository');
-    const storyId = req.params.storyId as string;
-    const result = worldRepository.evaluateCustomSpellProposal(storyId, spellProposal);
-    res.json(result);
+    const storyId = resolveStoryId(req, true);
+    const run = worldRepository.getStoryRun(storyId);
+    const playerLifecycle = worldRepository.getPlayerLifecycle(storyId) as any;
+    const invEngine = worldRepository.getInventoryEngine(storyId);
+    const capEngine = worldRepository.getCapabilityEngine(storyId);
+    const chronicle = worldRepository.getHistoricalChronicleEngine(storyId);
+    const facts = worldRepository.getKnowledgeFacts(storyId);
+    const geography = worldRepository.getGeographyGraph(storyId);
+
+    const actorId = playerLifecycle?.characterId || playerLifecycle?.actorId || 'protagonist';
+    const equippedItems = invEngine.getEquippedItems(actorId);
+    const inventoryItems = invEngine.getInventoryItems(actorId);
+    const paperDoll = invEngine.getActorPaperDoll(actorId);
+
+    const coreCaps = capEngine.getAllCapabilities ? capEngine.getAllCapabilities() : [];
+    const actorSkills = capEngine.getActorSkillInstances ? capEngine.getActorSkillInstances(actorId) : [];
+
+    const activeQuests = (run?.plannedEvents || []).filter((e: any) => {
+      const st = run?.eventStates?.[e.id]?.status;
+      return st === 'READY' || st === 'ACTIVE' || st === 'PLANNED';
+    });
+    const completedQuests = (run?.plannedEvents || []).filter((e: any) => {
+      const st = run?.eventStates?.[e.id]?.status;
+      return st === 'COMPLETED';
+    });
+    const failedQuests = (run?.plannedEvents || []).filter((e: any) => {
+      const st = run?.eventStates?.[e.id]?.status;
+      return st === 'FAILED' || st === 'PREVENTED';
+    });
+
+    const locations = geography.getAllNodes().map(n => ({
+      id: n.id,
+      name: n.name,
+      region: n.regionId,
+      description: n.description,
+      discovered: n.discovered,
+      accessible: n.accessible,
+    }));
+
+    const currentLocationId = playerLifecycle?.locationId || run?.currentLocationId || 'loc_whispering_orrery';
+    const currentLocation = locations.find(l => l.id === currentLocationId) || locations[0];
+
+    res.json({
+      storyId,
+      storyMode: run?.storyMode || 'PROTAGONIST',
+      dndRulesMode: run?.dndRulesMode || 'FULL_DND',
+      protagonist: {
+        name: playerLifecycle?.identity?.name || playerLifecycle?.name || run?.protagonistName || 'Aelion',
+        role: playerLifecycle?.role?.profession || run?.protagonistRole || 'Seeker',
+        portraitUrl: playerLifecycle?.portraitUrl || '',
+        health: playerLifecycle?.health || { current: 100, max: 100 },
+        resource: playerLifecycle?.resource || { current: 50, max: 50, name: 'Mana/Energy' },
+        strain: playerLifecycle?.strain || 0,
+        fatigue: playerLifecycle?.fatigue || 0,
+        conditions: playerLifecycle?.conditions || [],
+        activeEffects: playerLifecycle?.activeEffects || [],
+        injuries: playerLifecycle?.injuries || [],
+        forms: playerLifecycle?.forms || [],
+        seals: playerLifecycle?.seals || [],
+        locationId: currentLocationId,
+      },
+      equipment: {
+        paperDoll,
+        equippedItems,
+      },
+      inventory: {
+        items: inventoryItems,
+      },
+      capabilities: {
+        coreCapabilities: coreCaps,
+        generatedTechniques: actorSkills,
+      },
+      quests: {
+        active: activeQuests,
+        completed: completedQuests,
+        failed: failedQuests,
+      },
+      relationships: playerLifecycle?.relationships || [],
+      memory: {
+        facts,
+        evidence: chronicle.exportState().evidenceStore,
+      },
+      worldCodex: {
+        currentLocation,
+        discoveredLocations: locations.filter(l => l.discovered),
+        factions: worldRepository.getWorldTemplate(run?.worldId || 'world_solar_archive')?.factions || [],
+        lore: worldRepository.getWorldTemplate(run?.worldId || 'world_solar_archive')?.lore || [],
+      }
+    });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to evaluate spell proposal.' });
+    console.error('Error fetching canonical run state:', error);
+    res.status(500).json({ error: 'Failed to fetch canonical run state.' });
   }
 });
 

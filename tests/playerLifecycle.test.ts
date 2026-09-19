@@ -111,10 +111,27 @@ describe('World Repository Authority & Travel Semantics', () => {
     const simService = new WorldSimulationService(repo);
     const storyId = 'story_travel_invariants';
 
+    const graph = repo.getGeographyGraph(storyId);
+    graph.addNode({ id: 'loc_whispering_orrery', name: 'Orrery', description: '', coordinates: { x: 0, y: 0 }, accessible: true });
+    graph.addNode({ id: 'loc_lantern_vault', name: 'Vault', description: '', coordinates: { x: 10, y: 10 }, accessible: true });
+    graph.addEdge({
+      id: 'edge_orrery_vault_1',
+      fromLocationId: 'loc_whispering_orrery',
+      toLocationId: 'loc_lantern_vault',
+      distanceKm: 5,
+      allowedModes: ['Foot'],
+      terrain: 'Trail',
+      trailQuality: 'Maintained',
+      steepness: 'Flat',
+      perceivedDanger: 'Safe',
+      isBlocked: false,
+    });
+
     const startPlayer = new PlayerLifecycleState({
       actorId: `player_actor_${storyId}`,
       name: 'Scribe Vael',
       locationId: 'loc_whispering_orrery',
+      discoveredLocationIds: ['loc_whispering_orrery', 'loc_lantern_vault'],
       lastUpdatedTime: repo.getWorldClock(storyId).getTimestamp().totalElapsedSeconds,
     });
     repo.updatePlayerLifecycle(storyId, startPlayer);
@@ -158,10 +175,27 @@ describe('World Repository Authority & Travel Semantics', () => {
     const simService = new WorldSimulationService(repo);
     const storyId = 'story_cancel_travel';
 
+    const graph = repo.getGeographyGraph(storyId);
+    graph.addNode({ id: 'loc_whispering_orrery', name: 'Orrery', description: '', coordinates: { x: 0, y: 0 }, accessible: true });
+    graph.addNode({ id: 'loc_lantern_vault', name: 'Vault', description: '', coordinates: { x: 10, y: 10 }, accessible: true });
+    graph.addEdge({
+      id: 'edge_orrery_vault_2',
+      fromLocationId: 'loc_whispering_orrery',
+      toLocationId: 'loc_lantern_vault',
+      distanceKm: 5,
+      allowedModes: ['Foot'],
+      terrain: 'Trail',
+      trailQuality: 'Maintained',
+      steepness: 'Flat',
+      perceivedDanger: 'Safe',
+      isBlocked: false,
+    });
+
     const player = new PlayerLifecycleState({
       actorId: `player_actor_${storyId}`,
       name: 'Scribe Vael',
       locationId: 'loc_whispering_orrery',
+      discoveredLocationIds: ['loc_whispering_orrery', 'loc_lantern_vault'],
       lastUpdatedTime: repo.getWorldClock(storyId).getTimestamp().totalElapsedSeconds,
     });
     repo.updatePlayerLifecycle(storyId, player);

@@ -204,6 +204,50 @@ export interface ExternalViewState {
   activeJourney?: any | null;
   isTraveling?: boolean;
   playerLifecycle?: any | null;
+  openingScene?: OpeningScene | null;
+}
+
+export type NarrativeEventType =
+  | 'normal'
+  | 'dialogue'
+  | 'action'
+  | 'magic'
+  | 'damage'
+  | 'heal'
+  | 'location'
+  | 'quest'
+  | 'item'
+  | 'system';
+
+export interface StructuredNarrativeEvent {
+  id: string;
+  type: NarrativeEventType;
+  text: string;
+  speaker?: string;
+  metadata?: Record<string, any>;
+  timestamp?: string;
+}
+
+export interface OpeningScene {
+  storyId: string;
+  worldId: string;
+  worldName: string;
+  startingLocationId: string;
+  startingLocationName: string;
+  characterId: string;
+  characterName: string;
+  characterRole: string;
+  worldTime: {
+    cycle: number;
+    period: string;
+    era: string;
+    formattedTime: string;
+  };
+  startingSituation: string;
+  narrativeText: string;
+  structuredEvents: StructuredNarrativeEvent[];
+  generatedAt: string;
+  idempotencyKey: string;
 }
 
 /**
@@ -282,6 +326,12 @@ export type ActionRequest =
     }
   | {
       type: 'REVIVE_PLAYER';
+    }
+  | {
+      type: 'CUSTOM_ACTION';
+      customText?: string;
+      description?: string;
+      input?: string;
     };
 
 /**
@@ -392,9 +442,9 @@ export interface PowerState {
 export interface CapabilityDefinition {
   id: string;
   name: string;
-  category: 'Physical' | 'Magic' | 'Biological' | 'Social' | 'Domain' | 'Movement';
-  activationMode: 'immediate' | 'passive' | 'reaction' | 'charged' | 'channelled';
-  powerTier: 'Minor' | 'Moderate' | 'Major' | 'WorldScale';
+  category: 'Physical' | 'Magic' | 'Biological' | 'Social' | 'Domain' | 'Movement' | string;
+  activationMode: 'immediate' | 'passive' | 'reaction' | 'charged' | 'channelled' | string;
+  powerTier: 'Minor' | 'Moderate' | 'Major' | 'WorldScale' | string;
   baseEnergyCost: number;
   baseStrainCost: number;
   chargeTurnsRequired?: number;
@@ -402,6 +452,15 @@ export interface CapabilityDefinition {
   minVesselCapacityRequired: number;
   description: string;
   provenance: string;
+  prerequisites?: string[];
+  restrictions?: string[];
+  cooldownTurns?: number;
+  durationTurns?: number;
+  targetType?: 'single_target' | 'self' | 'area_of_effect' | 'all_allies' | 'all_enemies' | string;
+  rangeScope?: 'melee' | 'close' | 'ranged' | 'realm' | 'global' | string;
+  actionType?: 'action' | 'bonus_action' | 'reaction' | 'free' | string;
+  sourceUserPrompt?: string;
+  generatedSkills?: GeneratedTechnique[];
 }
 
 export interface CapabilityGraphNode {
@@ -792,6 +851,115 @@ export interface WorldTemplate {
   worldFacts: WorldFact[];
   createdAt: string;
   updatedAt: string;
+  // Advanced & Canonical Discovery Fields (CH16)
+  setting?: string;
+  era?: string;
+  source?: string;
+  playstyle?: string;
+  rules?: string;
+  supportedPlaystyles?: string[];
+  imageAsset?: string;
+  imageMetadata?: {
+    promptFallback: string;
+    rightsStatus: string;
+    provenance: string;
+    mediaSha256?: string;
+  };
+  geography?: any;
+  timeline?: any[];
+  characters?: any[];
+  factions?: any[];
+  magicRules?: any;
+  economy?: any;
+  forbiddenContradictions?: string[];
+  startingStarts?: any[];
+  terminology?: Record<string, string>;
+  knowledgeBoundaries?: any;
+  artConfig?: any;
+  audioConfig?: any;
+  narrativeConfig?: any;
+  events?: any[];
+}
+
+export interface WorldSearchCriteria {
+  query?: string;
+  genre?: string;
+  tone?: string;
+  medium?: string;
+  era?: string;
+  setting?: string;
+  source?: string;
+  playstyle?: string;
+  rules?: string;
+}
+
+export interface WorldSynthesisInput {
+  naturalLanguagePremise: string;
+  title?: string;
+  genreTags?: string[];
+  toneTags?: string[];
+  mediumTags?: string[];
+  defaultEra?: string;
+  canonMode?: string;
+  rulesetId?: string;
+  storyMode?: 'PROTAGONIST' | 'SIDE_CHARACTER' | 'FREE_ROAM';
+  dndRulesMode?: 'FULL_DND' | 'HYBRID_DND' | 'CUSTOM_HOMEBREW_DND';
+  setting?: string;
+  sourcePolicy?: string;
+  imageAsset?: string;
+  imageMetadata?: {
+    promptFallback: string;
+    rightsStatus: string;
+    provenance: string;
+    mediaSha256?: string;
+  };
+  geography?: any;
+  timeline?: any[];
+  characters?: any[];
+  factions?: any[];
+  magicRules?: any;
+  economy?: any;
+  forbiddenContradictions?: string[];
+  startingStarts?: any[];
+  terminology?: Record<string, string>;
+  knowledgeBoundaries?: any;
+  artConfig?: any;
+  audioConfig?: any;
+  narrativeConfig?: any;
+  events?: any[];
+}
+
+export interface ResearchEvidenceItem {
+  evidenceId: string;
+  sourceUri: string;
+  sourceTitle: string;
+  claimText: string;
+  qualification: 'QUALIFIED' | 'UNQUALIFIED' | 'DISPUTED' | 'UNKNOWN';
+  provenance: {
+    retrievedAt: string;
+    lawfulNotice?: string;
+    accessibilityMetadata?: string;
+    extractorModel?: string;
+    isGeneratedProposal: boolean;
+  };
+  validationStatus: 'PENDING' | 'VALIDATED' | 'REJECTED' | 'UNKNOWN';
+  canonicalPromotionTarget?: {
+    category: string;
+    subjectEntityId: string;
+    predicate: string;
+    objectValue: string;
+  };
+}
+
+export interface MediaGenerationResult {
+  success: boolean;
+  isFallback: boolean;
+  imageUrl?: string;
+  mediaAsset?: any;
+  promptFallback: string;
+  assetMetadata?: any;
+  errorReason?: string;
+  failureModeInjected?: string;
 }
 
 export interface NpcDialogueContextResponse {
@@ -801,6 +969,196 @@ export interface NpcDialogueContextResponse {
   estimatedTokens: number;
   epistemicallySanitized: boolean;
 }
+
+// ============================================================
+// CHARACTER CREATION SLICE 2 — CHARACTER GENESIS TYPES
+// ============================================================
+
+export type CharacterProvenanceSource =
+  | 'PLAYER_INPUT'
+  | 'AI_GENERATED'
+  | 'USER_EDITED'
+  | 'WORLD_DERIVED'
+  | 'SYSTEM_DERIVED';
+
+export interface CharacterIdentity {
+  name: string;
+  species: string;
+  age: number | string;
+  gender?: string;
+}
+
+export interface CharacterAppearance {
+  physicalDescription: string;
+  distinguishingTraits: string[];
+}
+
+export interface CharacterPersonality {
+  traits: string[];
+  temperament: string;
+  values: string[];
+}
+
+export interface CharacterBackground {
+  history: string;
+  upbringing: string;
+  importantEvents: string[];
+}
+
+export interface CharacterRole {
+  archetype: string;
+  profession: string;
+  role: string;
+}
+
+export interface CharacterMotivations {
+  goals: string[];
+  fears: string[];
+  desires: string[];
+}
+
+export interface CharacterRelationships {
+  allies: string[];
+  rivals: string[];
+  family: string[];
+  factions: string[];
+}
+
+export interface CharacterCondition {
+  injuries: string[];
+  curses: string[];
+  forms: string[];
+  specialStates: string[];
+}
+
+export interface GeneratedTechnique {
+  id: string;
+  name: string;
+  description: string;
+  parentCapabilityId: string;
+  parentCapabilityName: string;
+  activationType?: string;
+  energyCost?: number;
+  cooldownTurns?: number;
+  range?: string;
+  provenance: CharacterProvenanceSource;
+}
+
+export interface StartingEquipmentItem {
+  id: string;
+  defId?: string;
+  name: string;
+  category: 'Weapon' | 'Armor' | 'Shield' | 'Potion' | 'Scroll' | 'Quest' | 'Material' | 'Document' | 'Food' | 'Accessory' | 'Tool' | 'Miscellaneous' | string;
+  description?: string;
+  slot?: string;
+  isEquipped: boolean;
+  quantity: number;
+  provenance: CharacterProvenanceSource;
+}
+
+export interface StartingEquipmentConfig {
+  equipped: StartingEquipmentItem[];
+  inventory: StartingEquipmentItem[];
+  weapons: string[];
+  armor: string[];
+  tools: string[];
+  consumables: string[];
+}
+
+export interface StartingLocationConfig {
+  locationId: string;
+  name: string;
+  region?: string;
+  description?: string;
+  coordinates?: { x: number; y: number };
+}
+
+export interface StartingSituationConfig {
+  summary: string;
+  hook: string;
+  initialConditions: string;
+  whyHereNow: string;
+}
+
+export interface CharacterPortraitAsset {
+  imageUrl?: string;
+  emoji?: string;
+  promptFallback: string;
+  isFallback: boolean;
+  status: 'idle' | 'generating' | 'ready' | 'fallback' | 'failed';
+  failureReason?: string;
+}
+
+export interface CharacterGenesisDraft {
+  draftId: string;
+  worldId: string;
+  worldVersion: number;
+  sourceDescription: string;
+  identity: CharacterIdentity;
+  appearance: CharacterAppearance;
+  personality: CharacterPersonality;
+  background: CharacterBackground;
+  role: CharacterRole;
+  motivations: CharacterMotivations;
+  relationships: CharacterRelationships;
+  condition: CharacterCondition;
+  capabilities: CapabilityDefinition[];
+  generatedSkills: GeneratedTechnique[];
+  startingEquipment: StartingEquipmentConfig;
+  startingLocation: StartingLocationConfig;
+  startingSituation: StartingSituationConfig;
+  portraitAsset?: CharacterPortraitAsset;
+  provenance: Record<string, CharacterProvenanceSource>;
+  validationState: {
+    isValid: boolean;
+    errors: string[];
+    warnings: string[];
+  };
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ConfirmedCharacter {
+  characterId: string;
+  draftId: string;
+  worldId: string;
+  worldVersion: number;
+  confirmedAt: string;
+  sourceDescription: string;
+  identity: CharacterIdentity;
+  appearance: CharacterAppearance;
+  personality: CharacterPersonality;
+  background: CharacterBackground;
+  role: CharacterRole;
+  motivations: CharacterMotivations;
+  relationships: CharacterRelationships;
+  condition: CharacterCondition;
+  capabilities: CapabilityDefinition[];
+  generatedSkills: GeneratedTechnique[];
+  startingEquipment: StartingEquipmentConfig;
+  startingLocation: StartingLocationConfig;
+  startingSituation: StartingSituationConfig;
+  portraitAsset?: CharacterPortraitAsset;
+  provenance: Record<string, CharacterProvenanceSource>;
+}
+
+export interface CharacterExtractionRequest {
+  naturalLanguageConcept: string;
+  worldId: string;
+  existingDraft?: Partial<CharacterGenesisDraft>;
+  userEditedFields?: string[];
+}
+
+export interface CustomCapabilityProposalRequest {
+  worldId: string;
+  capabilityConcept: string;
+  characterContext?: {
+    role?: string;
+    background?: string;
+    species?: string;
+  };
+}
+
 
 
 

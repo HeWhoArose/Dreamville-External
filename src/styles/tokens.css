@@ -1,0 +1,131 @@
+/**
+ * DreamBook Design Tokens — PBG Architecture
+ * Purple (Brand / Selected Nav / Ambient Glow)
+ * Blue (World / Systems / Technology)
+ * Gold (Action / Progression / Primary CTAs)
+ */
+
+:root {
+  /* ==================================================
+     1. PBG CORE PALETTES
+     ================================================== */
+  
+  /* PURPLE: Primary DreamBook Brand Identity & Active Navigation */
+  --db-purple-300: #d8b4fe;
+  --db-purple-400: #c084fc;
+  --db-purple-500: #9d6cf8;
+  --db-purple-600: #7e3af2;
+  --db-purple-700: #6c2bd9;
+  --db-purple-800: #49108b;
+  --db-purple-900: #240d42;
+  --db-purple-surface: #17122a;
+  --db-purple-surface-raised: #211a3b;
+  --db-purple-glow: rgba(157, 108, 248, 0.16);
+
+  /* BLUE: World, Geography, Technology & System Elements */
+  --db-blue-300: #93c5fd;
+  --db-blue-400: #60a5fa;
+  --db-blue-500: #3b82f6;
+  --db-blue-600: #2563eb;
+  --db-blue-700: #1d4ed8;
+  --db-blue-800: #1e3a8a;
+  --db-blue-900: #101c3d;
+  --db-blue-surface: #0f192c;
+  --db-blue-surface-raised: #16243e;
+  --db-blue-glow: rgba(59, 130, 246, 0.15);
+
+  /* GOLD: Progression, Primary CTAs (Play, Continue, Create), Importance */
+  --db-gold-300: #fde047;
+  --db-gold-400: #f3ba42;
+  --db-gold-500: #d99a2b;
+  --db-gold-600: #b87d18;
+  --db-gold-700: #8c5b0c;
+  --db-gold-surface: rgba(217, 154, 43, 0.08);
+  --db-gold-glow: rgba(217, 154, 43, 0.22);
+
+  /* ==================================================
+     2. BACKGROUNDS & SURFACES (Dark Near-Black / Plum Canvas)
+     ================================================== */
+  --db-bg-canvas: #09070f;
+  --db-bg-subtle: #110e1c;
+  --db-bg-card: #161224;
+  --db-bg-raised: #1e1932;
+  --db-bg-overlay: rgba(9, 7, 15, 0.90);
+
+  /* Semantic Component Surfaces */
+  --db-surface-purple: #17122a;
+  --db-surface-blue: #0f192c;
+  --db-surface-gold: rgba(217, 154, 43, 0.09);
+
+  /* ==================================================
+     3. BORDERS & DIVIDERS
+     ================================================== */
+  --db-border-subtle: rgba(210, 200, 240, 0.06);
+  --db-border-default: rgba(210, 200, 240, 0.11);
+  --db-border-strong: rgba(210, 200, 240, 0.20);
+  --db-border-purple: rgba(157, 108, 248, 0.40);
+  --db-border-blue: rgba(59, 130, 246, 0.35);
+  --db-border-gold: rgba(217, 154, 43, 0.45);
+  --db-border-focus: rgba(157, 108, 248, 0.70);
+
+  /* ==================================================
+     4. TYPOGRAPHY
+     ================================================== */
+  --db-text-primary: #f5f3f9;
+  --db-text-secondary: #aba5be;
+  --db-text-muted: #6e6783;
+  --db-text-purple: #d8b4fe;
+  --db-text-blue: #93c5fd;
+  --db-text-gold: #f5c45e;
+  --db-text-on-accent: #09070f;
+
+  /* ==================================================
+     5. STATES & INTERACTION
+     ================================================== */
+  --db-state-hover: rgba(157, 108, 248, 0.06);
+  --db-state-active: rgba(157, 108, 248, 0.12);
+  --db-state-selected: rgba(157, 108, 248, 0.18);
+
+  /* Auxiliary Accents */
+  --db-accent-emerald: #10b981;
+  --db-accent-rose: #f43f5e;
+  --db-accent-amber: #f59e0b;
+
+  /* ==================================================
+     6. RADII & SHADOWS
+     ================================================== */
+  --db-radius-xs: 4px;
+  --db-radius-sm: 6px;
+  --db-radius-md: 10px;
+  --db-radius-lg: 16px;
+  --db-radius-xl: 24px;
+  --db-radius-full: 9999px;
+
+  --db-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --db-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.65);
+  --db-shadow-lg: 0 12px 36px rgba(0, 0, 0, 0.85);
+  --db-shadow-glow: 0 0 20px rgba(217, 154, 43, 0.18);
+  --db-shadow-glow-purple: 0 0 20px rgba(157, 108, 248, 0.18);
+  --db-shadow-glow-blue: 0 0 20px rgba(59, 130, 246, 0.18);
+
+  /* Spacing */
+  --db-space-xs: 0.25rem;
+  --db-space-sm: 0.5rem;
+  --db-space-md: 1rem;
+  --db-space-lg: 1.5rem;
+  --db-space-xl: 2rem;
+  --db-space-2xl: 3rem;
+
+  /* Motion */
+  --db-transition-fast: 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  --db-transition-normal: 250ms cubic-bezier(0.16, 1, 0.3, 1);
+  --db-transition-dramatic: 400ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --db-transition-fast: 0ms !important;
+    --db-transition-normal: 0ms !important;
+    --db-transition-dramatic: 0ms !important;
+  }
+}

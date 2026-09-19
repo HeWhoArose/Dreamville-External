@@ -1,7 +1,10 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { GoogleGenAI } from '@google/genai';
 import { WorldTimestamp } from './types';
 import { WorkingContextEngine, AssembledTurnContext } from './workingContextEngine';
-import { worldRepository, WorldRepository } from '../repositories/worldRepository';
+import type { WorldRepository } from '../repositories/worldRepository';
+import { worldRepository } from '../repositories/worldRepository';
 import { StoryAdaptationPipeline } from './storyAdaptation';
 
 export type TaskId =
@@ -14,7 +17,8 @@ export type TaskId =
   | 'speech.transcribe'
   | 'combat.tactics'
   | 'narrative.review'
-  | 'utility.inspect';
+  | 'utility.inspect'
+  | 'image.generate';
 
 export type HealthState = 'Healthy' | 'Degraded' | 'Throttled' | 'Unavailable' | 'InvalidAuth' | 'DisabledByUser';
 export type QuotaState = 'Healthy' | 'Low' | 'NearExhaustion' | 'Exhausted' | 'Unknown';
@@ -1278,10 +1282,71 @@ export class MultiModelOrchestrator {
   private lastDiscoveredAt: number = 0;
   private discoveryStatus: 'ConfiguredAndDiscovered' | 'CredentialsMissing' | 'DiscoveryUnavailable' | 'MockDiscovered' = 'CredentialsMissing';
 
+  private configFilePath = (typeof process !== 'undefined' && (process.env.NODE_ENV === 'test' || Boolean(process.env.NODE_TEST_CONTEXT)))
+    ? path.resolve(process.cwd(), 'server', 'data', 'orchestrator_config_test.json')
+    : path.resolve(process.cwd(), 'server', 'data', 'orchestrator_config.json');
+
   constructor(repo?: WorldRepository) {
     this.worldRepo = repo;
     this.seedDefaultModels();
     this.seedDefaultAdapters();
+    this.seedDefaultPins();
+    this.loadPersistedConfig();
+  }
+
+  private loadPersistedConfig(): void {
+    try {
+      if (fs.existsSync(this.configFilePath)) {
+        const raw = fs.readFileSync(this.configFilePath, 'utf-8');
+        const data = JSON.parse(raw);
+        if (data && typeof data === 'object') {
+          if (data.pins && typeof data.pins === 'object') {
+            for (const [task, key] of Object.entries(data.pins)) {
+              if (typeof key === 'string') {
+                this.taskPinnedModels.set(task as TaskId, key);
+              }
+            }
+          }
+          if (Array.isArray(data.overrides)) {
+            for (const ov of data.overrides) {
+              if (ov && ov.modelId) {
+                this.setManualOverride(ov.modelId, ov);
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // Ignore load errors
+    }
+  }
+
+  private savePersistedConfig(): void {
+    try {
+      const dir = path.dirname(this.configFilePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      const pins: Record<string, string> = {};
+      for (const [task, key] of this.taskPinnedModels.entries()) {
+        pins[task] = key;
+      }
+      const overrides = this.getManualOverrides();
+      fs.writeFileSync(this.configFilePath, JSON.stringify({ pins, overrides }, null, 2), 'utf-8');
+    } catch (e) {
+      // Ignore save errors
+    }
+  }
+
+  private seedDefaultPins(): void {
+    this.taskPinnedModels.set('narrative.generate', 'google_gemini::gemini-3.6-flash');
+    this.taskPinnedModels.set('character.dialogue', 'google_gemini::gemini-3.6-flash');
+    this.taskPinnedModels.set('memory.extract', 'google_gemini::gemini-3.6-flash');
+    this.taskPinnedModels.set('summary.scene', 'google_gemini::gemini-3.6-flash');
+    this.taskPinnedModels.set('rules.adjudicate', 'google_gemini::gemini-3.6-flash');
+    this.taskPinnedModels.set('utility.inspect', 'google_gemini::gemini-3.6-flash');
+    this.taskPinnedModels.set('speech.generate', 'provider_mock_speech::mock-speech-v1');
+    this.taskPinnedModels.set('image.generate', 'google_imagen::imagen-3.0-generate-002');
   }
 
   public setWorldRepository(repo: WorldRepository): void {
@@ -1293,40 +1358,66 @@ export class MultiModelOrchestrator {
   }
 
   private seedDefaultModels(): void {
-    // 1. Creative / Primary Narrator Pool (v6.0 §342)
+    // 0. Primary Operational Text Model: Gemini 3.6 Flash (LIVE & READY)
     this.registerModel({
       providerId: 'google_gemini',
-      modelId: 'gemini-2.5-pro',
-      displayName: 'Gemini 2.5 Pro (Primary Narrator)',
-      pool: 'creative',
-      capabilities: ['creative_writing', 'long_context', 'json_strict'],
+      modelId: 'gemini-3.6-flash',
+      displayName: 'Gemini 3.6 Flash (Primary Live Text Engine)',
+      pool: 'fast',
+      capabilities: ['fast', 'creative_writing', 'structured_extraction', 'long_context', 'low_cost'],
       contextWindow: 1000000,
       health: 'Healthy',
       quota: 'Healthy',
-      latencyMs: 800,
-      userPriority: 100,
-      roleEligibility: ['narrative.generate', 'summary.scene'],
+      latencyMs: 250,
+      userPriority: 120,
+      roleEligibility: [
+        'narrative.generate',
+        'character.dialogue',
+        'memory.extract',
+        'summary.scene',
+        'rules.adjudicate',
+        'utility.inspect',
+      ],
       fallbackEligibility: true,
       accessStatus: 'accessible',
       lifecycleState: 'active',
       isEmergencyFloor: false,
     });
 
-    // 2. Fast Utility Pool (v6.0 §342)
+    // 1. Gemini 2.5 Pro (HTTP 404 - Discontinued by Google)
+    this.registerModel({
+      providerId: 'google_gemini',
+      modelId: 'gemini-2.5-pro',
+      displayName: 'Gemini 2.5 Pro (Discontinued 404)',
+      pool: 'creative',
+      capabilities: ['creative_writing', 'long_context', 'json_strict'],
+      contextWindow: 1000000,
+      health: 'Unavailable',
+      quota: 'Unknown',
+      latencyMs: 800,
+      userPriority: 30,
+      roleEligibility: ['narrative.generate', 'summary.scene'],
+      fallbackEligibility: false,
+      accessStatus: 'unavailable',
+      lifecycleState: 'deprecated',
+      isEmergencyFloor: false,
+    });
+
+    // 2. Gemini 2.5 Flash (HTTP 429 - Quota Limited)
     this.registerModel({
       providerId: 'google_gemini',
       modelId: 'gemini-2.5-flash',
-      displayName: 'Gemini 2.5 Flash (Fast Utility)',
+      displayName: 'Gemini 2.5 Flash (Quota Limited 429)',
       pool: 'fast',
       capabilities: ['fast', 'structured_extraction', 'low_cost'],
       contextWindow: 1000000,
-      health: 'Healthy',
-      quota: 'Healthy',
+      health: 'Throttled',
+      quota: 'Exhausted',
       latencyMs: 250,
-      userPriority: 90,
+      userPriority: 40,
       roleEligibility: ['character.dialogue', 'memory.extract', 'rules.adjudicate'],
       fallbackEligibility: true,
-      accessStatus: 'accessible',
+      accessStatus: 'quota_limited',
       lifecycleState: 'active',
       isEmergencyFloor: false,
     });
@@ -1339,13 +1430,13 @@ export class MultiModelOrchestrator {
       pool: 'long_context',
       capabilities: ['deep_research', 'archival_synthesis', '2m_context'],
       contextWindow: 2000000,
-      health: 'Healthy',
-      quota: 'Healthy',
+      health: 'Unavailable',
+      quota: 'Unknown',
       latencyMs: 1200,
-      userPriority: 85,
-      roleEligibility: ['summary.scene', 'memory.extract'],
+      userPriority: 25,
+      roleEligibility: ['summary.scene', 'memory.extract', 'utility.inspect'],
       fallbackEligibility: true,
-      accessStatus: 'accessible',
+      accessStatus: 'unavailable',
       lifecycleState: 'active',
       isEmergencyFloor: false,
     });
@@ -1358,13 +1449,13 @@ export class MultiModelOrchestrator {
       pool: 'review',
       capabilities: ['strict_rule_verification', 'schema_critique'],
       contextWindow: 500000,
-      health: 'Healthy',
-      quota: 'Healthy',
+      health: 'Unavailable',
+      quota: 'Unknown',
       latencyMs: 600,
-      userPriority: 80,
+      userPriority: 20,
       roleEligibility: ['rules.adjudicate', 'summary.scene'],
       fallbackEligibility: true,
-      accessStatus: 'accessible',
+      accessStatus: 'unavailable',
       lifecycleState: 'active',
       isEmergencyFloor: false,
     });
@@ -1381,7 +1472,14 @@ export class MultiModelOrchestrator {
       quota: 'Healthy',
       latencyMs: 5,
       userPriority: 10,
-      roleEligibility: ['narrative.generate', 'character.dialogue', 'memory.extract', 'rules.adjudicate', 'summary.scene'],
+      roleEligibility: [
+        'narrative.generate',
+        'character.dialogue',
+        'memory.extract',
+        'rules.adjudicate',
+        'summary.scene',
+        'utility.inspect',
+      ],
       isEmergencyFloor: true,
       fallbackEligibility: true,
       accessStatus: 'accessible',
@@ -1405,7 +1503,7 @@ export class MultiModelOrchestrator {
       lifecycleState: 'active',
       isEmergencyFloor: false,
     });
-    
+
     // Specialized Speech Model
     this.registerModel({
       providerId: 'provider_mock_speech',
@@ -1438,6 +1536,92 @@ export class MultiModelOrchestrator {
       userPriority: 80,
       roleEligibility: ['combat.tactics', 'rules.adjudicate'],
       accessStatus: 'accessible',
+      lifecycleState: 'active',
+      isEmergencyFloor: false,
+    });
+
+    // External Unconfigured Provider Models
+    this.registerModel({
+      providerId: 'google_cloud_tts',
+      modelId: 'Neural2-D',
+      displayName: 'Google Cloud TTS (Neural2-D)',
+      pool: 'speech',
+      capabilities: ['tts', 'neural_voice'],
+      contextWindow: 16000,
+      health: 'InvalidAuth',
+      quota: 'Unknown',
+      latencyMs: 0,
+      userPriority: 50,
+      roleEligibility: ['speech.generate'],
+      accessStatus: 'not_configured',
+      lifecycleState: 'active',
+      isEmergencyFloor: false,
+    });
+
+    this.registerModel({
+      providerId: 'google_imagen',
+      modelId: 'imagen-3.0-generate-002',
+      displayName: 'Google Imagen 3',
+      pool: 'utility',
+      capabilities: ['image_generation'],
+      contextWindow: 16000,
+      health: 'InvalidAuth',
+      quota: 'Unknown',
+      latencyMs: 0,
+      userPriority: 50,
+      roleEligibility: ['image.generate'],
+      accessStatus: 'not_configured',
+      lifecycleState: 'active',
+      isEmergencyFloor: false,
+    });
+
+    this.registerModel({
+      providerId: 'openai',
+      modelId: 'gpt-4o',
+      displayName: 'OpenAI GPT-4o',
+      pool: 'creative',
+      capabilities: ['creative_writing', 'fast'],
+      contextWindow: 128000,
+      health: 'InvalidAuth',
+      quota: 'Unknown',
+      latencyMs: 0,
+      userPriority: 50,
+      roleEligibility: ['narrative.generate', 'character.dialogue'],
+      accessStatus: 'not_configured',
+      lifecycleState: 'active',
+      isEmergencyFloor: false,
+    });
+
+    this.registerModel({
+      providerId: 'anthropic',
+      modelId: 'claude-3-5-sonnet',
+      displayName: 'Anthropic Claude 3.5 Sonnet',
+      pool: 'creative',
+      capabilities: ['creative_writing', 'long_context'],
+      contextWindow: 200000,
+      health: 'InvalidAuth',
+      quota: 'Unknown',
+      latencyMs: 0,
+      userPriority: 50,
+      roleEligibility: ['narrative.generate', 'summary.scene'],
+      accessStatus: 'not_configured',
+      lifecycleState: 'active',
+      isEmergencyFloor: false,
+    });
+
+    this.registerModel({
+      providerId: 'elevenlabs',
+      modelId: 'eleven_multilingual_v2',
+      displayName: 'ElevenLabs Multilingual v2',
+      pool: 'speech',
+      capabilities: ['tts', 'emotional_speech'],
+      contextWindow: 16000,
+      health: 'InvalidAuth',
+      quota: 'Unknown',
+      latencyMs: 0,
+      userPriority: 50,
+      roleEligibility: ['speech.generate'],
+      accessStatus: 'not_configured',
       lifecycleState: 'active',
       isEmergencyFloor: false,
     });
@@ -1653,6 +1837,7 @@ export class MultiModelOrchestrator {
         }
       }
     }
+    this.savePersistedConfig();
   }
 
   public pinModelForTask(task: TaskId, modelKey: string | null): void {
@@ -1661,10 +1846,19 @@ export class MultiModelOrchestrator {
     } else {
       this.taskPinnedModels.set(task, modelKey);
     }
+    this.savePersistedConfig();
   }
 
   public getPinnedModelForTask(task: TaskId): string | undefined {
     return this.taskPinnedModels.get(task);
+  }
+
+  public getAllTaskPins(): Record<string, string> {
+    const pins: Record<string, string> = {};
+    for (const [task, key] of this.taskPinnedModels.entries()) {
+      pins[task] = key;
+    }
+    return pins;
   }
 
   public removeManualOverride(modelId: string): void {
@@ -1679,6 +1873,188 @@ export class MultiModelOrchestrator {
         this.taskPinnedModels.delete(task);
       }
     }
+    this.savePersistedConfig();
+  }
+
+  public async testModel(providerId: string, modelId: string): Promise<{
+    success: boolean;
+    status: 'READY' | 'CONFIGURED_NOT_TESTED' | 'QUOTA_LIMIT' | 'UNAVAILABLE' | 'NOT_CONFIGURED';
+    health: HealthState;
+    quota: QuotaState;
+    latencyMs: number;
+    message: string;
+    testedAt: number;
+  }> {
+    const key = `${providerId}::${modelId}`;
+    const model = this.models.get(key) || Array.from(this.models.values()).find((m) => m.modelId === modelId);
+
+    // 1. Built-in engines
+    if (
+      providerId === 'provider_deterministic_emergency' ||
+      providerId === 'provider_mock_speech' ||
+      providerId === 'provider_mock_stt' ||
+      providerId === 'provider_mock_reasoning' ||
+      providerId === 'dreambook-native'
+    ) {
+      if (model) {
+        model.health = 'Healthy';
+        model.quota = 'Healthy';
+        model.accessStatus = 'accessible';
+      }
+      return {
+        success: true,
+        status: 'READY',
+        health: 'Healthy',
+        quota: 'Healthy',
+        latencyMs: 5,
+        message: 'Built-in local engine operational',
+        testedAt: Date.now(),
+      };
+    }
+
+    // 2. Google Gemini Provider
+    if (providerId === 'google_gemini' || providerId === 'provider_google_gemini') {
+      const apiKey = typeof process !== 'undefined' ? process.env?.GEMINI_API_KEY : undefined;
+      if (!apiKey) {
+        if (model) {
+          model.health = 'InvalidAuth';
+          model.accessStatus = 'not_configured';
+        }
+        return {
+          success: false,
+          status: 'NOT_CONFIGURED',
+          health: 'InvalidAuth',
+          quota: 'Unknown',
+          latencyMs: 0,
+          message: 'GEMINI_API_KEY environment variable is not configured',
+          testedAt: Date.now(),
+        };
+      }
+
+      const start = Date.now();
+      try {
+        const adapter = this.getAdapter('google_gemini') as GoogleGeminiAdapter;
+        await adapter.generate('utility.inspect', 'Ping test model', {
+          modelId,
+          timeoutMs: 5000,
+        });
+        const latencyMs = Math.max(1, Date.now() - start);
+
+        if (model) {
+          model.health = 'Healthy';
+          model.quota = 'Healthy';
+          model.accessStatus = 'accessible';
+          model.latencyMs = latencyMs;
+        }
+        this.savePersistedConfig();
+
+        return {
+          success: true,
+          status: 'READY',
+          health: 'Healthy',
+          quota: 'Healthy',
+          latencyMs,
+          message: 'Live provider connection test succeeded',
+          testedAt: Date.now(),
+        };
+      } catch (err: any) {
+        const errMsg = String(err?.message || err);
+        const latencyMs = Math.max(1, Date.now() - start);
+
+        if (
+          errMsg.includes('404') ||
+          errMsg.includes('NOT_FOUND') ||
+          errMsg.includes('no longer available') ||
+          errMsg.includes('discontinued')
+        ) {
+          if (model) {
+            model.health = 'Unavailable';
+            model.accessStatus = 'unavailable';
+            model.quota = 'Unknown';
+          }
+          this.savePersistedConfig();
+          return {
+            success: false,
+            status: 'UNAVAILABLE',
+            health: 'Unavailable',
+            quota: 'Unknown',
+            latencyMs,
+            message: `Model unavailable or discontinued: ${errMsg}`,
+            testedAt: Date.now(),
+          };
+        }
+
+        if (
+          errMsg.includes('429') ||
+          errMsg.includes('RESOURCE_EXHAUSTED') ||
+          errMsg.includes('quota') ||
+          errMsg.includes('rate limit')
+        ) {
+          if (model) {
+            model.health = 'Throttled';
+            model.accessStatus = 'quota_limited';
+            model.quota = 'Exhausted';
+          }
+          this.savePersistedConfig();
+          return {
+            success: false,
+            status: 'QUOTA_LIMIT',
+            health: 'Throttled',
+            quota: 'Exhausted',
+            latencyMs,
+            message: `Model quota/rate limit exceeded: ${errMsg}`,
+            testedAt: Date.now(),
+          };
+        }
+
+        if (errMsg.includes('401') || errMsg.includes('403') || errMsg.includes('API_KEY_INVALID')) {
+          if (model) {
+            model.health = 'InvalidAuth';
+            model.accessStatus = 'not_configured';
+          }
+          this.savePersistedConfig();
+          return {
+            success: false,
+            status: 'NOT_CONFIGURED',
+            health: 'InvalidAuth',
+            quota: 'Unknown',
+            latencyMs,
+            message: `Authentication failed: ${errMsg}`,
+            testedAt: Date.now(),
+          };
+        }
+
+        if (model) {
+          model.health = 'Degraded';
+          model.accessStatus = 'unavailable';
+        }
+        this.savePersistedConfig();
+        return {
+          success: false,
+          status: 'UNAVAILABLE',
+          health: 'Degraded',
+          quota: 'Unknown',
+          latencyMs,
+          message: `Model test failed: ${errMsg}`,
+          testedAt: Date.now(),
+        };
+      }
+    }
+
+    // 3. Other External Providers
+    if (model) {
+      model.health = 'InvalidAuth';
+      model.accessStatus = 'not_configured';
+    }
+    return {
+      success: false,
+      status: 'NOT_CONFIGURED',
+      health: 'InvalidAuth',
+      quota: 'Unknown',
+      latencyMs: 0,
+      message: `Provider '${providerId}' requires API credentials in server environment`,
+      testedAt: Date.now(),
+    };
   }
 
   public getManualOverrides(): ManualModelOverride[] {
@@ -1740,13 +2116,15 @@ export class MultiModelOrchestrator {
   }
 
   public registerModel(record: ModelRegistryRecord): void {
-    const key = `${record.providerId}::${record.modelId}`;
-    this.models.set(key, record);
+    const effective = this.applyManualOverridesToRecord(record);
+    if (!effective) return;
+    const key = `${effective.providerId}::${effective.modelId}`;
+    this.models.set(key, effective);
     // Ensure alias registration for google_gemini <-> provider_google_gemini
-    if (record.providerId === 'google_gemini') {
-      this.models.set(`provider_google_gemini::${record.modelId}`, { ...record, providerId: 'provider_google_gemini' });
-    } else if (record.providerId === 'provider_google_gemini') {
-      this.models.set(`google_gemini::${record.modelId}`, { ...record, providerId: 'google_gemini' });
+    if (effective.providerId === 'google_gemini') {
+      this.models.set(`provider_google_gemini::${effective.modelId}`, { ...effective, providerId: 'provider_google_gemini' });
+    } else if (effective.providerId === 'provider_google_gemini') {
+      this.models.set(`google_gemini::${effective.modelId}`, { ...effective, providerId: 'google_gemini' });
     }
   }
 
@@ -1877,9 +2255,15 @@ export class MultiModelOrchestrator {
         !this.isCircuitBreakerTripped(pinnedModel.providerId, pinnedModel.modelId)
       ) {
         if (contextTokens === 0 || contextTokens <= pinnedModel.contextWindow) {
-          const fallbacks = Array.from(this.models.values()).filter(
+          const rawFallbacks = Array.from(this.models.values()).filter(
             (m) => m.modelId !== pinnedModel.modelId && m.roleEligibility.includes(task)
           );
+          const fallbacks = rawFallbacks.sort((a, b) => {
+            const scoreA = a.userPriority + (a.health === 'Healthy' ? 50 : 0) - (this.consecutiveFailures.get(`${a.providerId}::${a.modelId}`) || 0) * 25;
+            const scoreB = b.userPriority + (b.health === 'Healthy' ? 50 : 0) - (this.consecutiveFailures.get(`${b.providerId}::${b.modelId}`) || 0) * 25;
+            if (scoreB !== scoreA) return scoreB - scoreA;
+            return a.modelId.localeCompare(b.modelId);
+          });
           return {
             selectedModel: pinnedModel,
             selectionReason: `Model '${pinnedModel.modelId}' was manually pinned for task '${task}'.`,
@@ -2610,6 +2994,9 @@ export class MultiModelOrchestrator {
       if (params.forceModelId) {
         const forced = Array.from(this.models.values()).find((m) => m.modelId === params.forceModelId);
         if (!forced) throw new Error(`Forced model ID '${params.forceModelId}' not found.`);
+        if (!forced.roleEligibility.includes(task)) {
+          throw new Error(`Model '${params.forceModelId}' is not eligible for role/task '${task}'.`);
+        }
         selectedModel = forced;
         selectionReason = `Explicitly forced model '${params.forceModelId}'.`;
         fallbacks = Array.from(this.models.values()).filter((m) => m.modelId !== params.forceModelId);

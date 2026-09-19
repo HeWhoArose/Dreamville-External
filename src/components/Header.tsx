@@ -1,6 +1,6 @@
 import React from 'react';
 import { WorldTime, Location } from '../types';
-import { ShieldCheck, Clock, Compass, BookOpen, Eye, Layers, Archive, Cpu, Sliders, Mic, Activity } from 'lucide-react';
+import { ShieldCheck, Clock, Compass, BookOpen, Eye, Layers, Archive, Cpu, Sliders, Mic, Activity, Globe } from 'lucide-react';
 
 interface HeaderProps {
   worldTime: WorldTime;
@@ -15,6 +15,7 @@ interface HeaderProps {
   onOpenVoiceStudio?: () => void;
   onOpenImportModal?: () => void;
   onOpenStoryLibraryModal?: () => void;
+  onOpenWorldLibraryModal?: () => void;
   onOpenLivingBibleModal?: () => void;
   pendingRequestsCount: number;
 }
@@ -32,6 +33,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenVoiceStudio,
   onOpenImportModal,
   onOpenStoryLibraryModal,
+  onOpenWorldLibraryModal,
   onOpenLivingBibleModal,
   pendingRequestsCount,
 }) => {
@@ -130,6 +132,17 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <BookOpen className="w-3 h-3 text-indigo-400" />
               <span>Story Library</span>
+            </button>
+          )}
+          {onOpenWorldLibraryModal && (
+            <button
+              id="world-library-btn"
+              onClick={onOpenWorldLibraryModal}
+              className="flex items-center gap-1 px-2.5 py-0.5 rounded bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-200 border border-indigo-500/50 transition text-[11px] font-medium"
+              title="Reusable World Library & Campaign Discovery (CH16)"
+            >
+              <Globe className="w-3 h-3 text-indigo-400" />
+              <span>World Library</span>
             </button>
           )}
           {onOpenAudioSettings && (

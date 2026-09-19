@@ -28,8 +28,16 @@ export class GeographyGraph {
   private edges: Map<string, RouteEdge> = new Map();
   private adjacency: Map<string, string[]> = new Map(); // fromLocationId -> edgeIds
 
-  constructor() {
-    this.seedDefaultTopology();
+  constructor(seedDefault = true) {
+    if (seedDefault) {
+      this.seedDefaultTopology();
+    }
+  }
+
+  public clear(): void {
+    this.nodes.clear();
+    this.edges.clear();
+    this.adjacency.clear();
   }
 
   public addNode(node: LocationNode): void {

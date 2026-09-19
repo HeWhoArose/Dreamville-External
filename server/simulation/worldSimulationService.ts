@@ -40,7 +40,7 @@ export class WorldSimulationService {
       };
     }
 
-    const geography = this.worldRepo.getGeographyGraph();
+    const geography = this.worldRepo.getGeographyGraph(storyId);
     const destNode = geography.getNode(destinationLocationId);
     if (!destNode) {
       return { success: false, message: `Destination ${destinationLocationId} does not exist.` };
@@ -155,7 +155,7 @@ export class WorldSimulationService {
         completedArrivals.push(journey.destinationLocationId);
 
         // Record historical evidence for completed territorial transit
-        const destNode = this.worldRepo.getGeographyGraph().getNode(journey.destinationLocationId);
+        const destNode = this.worldRepo.getGeographyGraph(storyId).getNode(journey.destinationLocationId);
         const chronicleEngine = this.worldRepo.getHistoricalChronicleEngine(storyId);
         chronicleEngine.recordEvidence({
           id: `ev_travel_${journey.id}_completed`,
@@ -193,7 +193,7 @@ export class WorldSimulationService {
 
     // Authoritatively advance canonical living world simulation (DEF-CH10-03)
     const livingSim = this.worldRepo.getLivingWorldSimulation(storyId);
-    const geography = this.worldRepo.getGeographyGraph();
+    const geography = this.worldRepo.getGeographyGraph(storyId);
     const playerLoc = this.worldRepo.getPlayerLifecycle(storyId)?.locationId || 'loc_whispering_orrery';
 
     const livingSummary = livingSim.advanceSimulation({
@@ -202,6 +202,104 @@ export class WorldSimulationService {
       playerLocationId: playerLoc,
       geography,
     });
+
+    // Evaluate StoryRun Planned World Events (Slice 7 Living World Timeline Execution)
+    const run = this.worldRepo.getStoryRun(storyId);
+    if (run && run.plannedEvents && Array.isArray(run.plannedEvents)) {
+      if (!run.eventStates) {
+        run.eventStates = {};
+      }
+      let eventsUpdated = false;
+      for (const ev of run.plannedEvents) {
+        const state = run.eventStates[ev.id] || { id: ev.id, status: 'PLANNED' };
+        if (state.status === 'PLANNED') {
+          const scheduledSec = ev.scheduledTime?.totalElapsedSeconds ?? 0;
+          const timeEligible = currentElapsed >= scheduledSec;
+
+          let preconditionsMet = true;
+          if (ev.preconditions && Array.isArray(ev.preconditions.requiredEvents)) {
+            for (const reqId of ev.preconditions.requiredEvents) {
+              const reqState = run.eventStates[reqId];
+              if (!reqState || reqState.status !== 'COMPLETED') {
+                preconditionsMet = false;
+                break;
+              }
+            }
+          }
+
+          if (timeEligible && preconditionsMet) {
+            state.status = 'COMPLETED';
+            run.eventStates[ev.id] = { ...state, completedAt: updatedClockState.timestamp };
+            eventsUpdated = true;
+
+            const chronicle = this.worldRepo.getHistoricalChronicleEngine(storyId);
+            chronicle.recordEvidence({
+              id: `ev_story_run_event_${ev.id}_${currentElapsed}`,
+              category: 'SACRED_OR_HISTORIC',
+              timestamp: updatedClockState.timestamp,
+              primarySubjectId: ev.participatingActors?.[0] || 'world_canons',
+              locationId: ev.locationId || playerLoc,
+              summary: `Planned World Event Resolved: ${ev.title}`,
+              details: ev.description || `The planned event ${ev.title} has occurred in the living timeline.`,
+              sourceEventId: ev.id,
+              provenance: 'world_timeline_execution',
+              visibility: run.storyMode === 'PROTAGONIST' ? 'PUBLIC' : 'OBSERVERS_ONLY',
+              metadata: {
+                storyMode: run.storyMode,
+                consequences: ev.plannedConsequences || [],
+              },
+            });
+
+            if (run.storyMode === 'PROTAGONIST') {
+              this.worldRepo.addKnowledgeFact(storyId, {
+                id: `fact_event_notice_${ev.id}_${currentElapsed}`,
+                subjectEntityId: ev.id,
+                predicate: 'world_development',
+                objectValue: `Happened at ${ev.locationId || playerLoc}: ${ev.title} — ${ev.description}`,
+                sourceType: 'witnessed',
+                acquiredAtTimestamp: updatedClockState.timestamp,
+                confidence: 1.0,
+                secretLevel: 'public',
+                scope: 'exact',
+                provenanceSummary: `Direct protagonist experience of planned world event ${ev.title}.`,
+              });
+            } else if (run.storyMode === 'SIDE_CHARACTER') {
+              this.worldRepo.addKnowledgeFact(storyId, {
+                id: `fact_event_rumor_${ev.id}_${currentElapsed}`,
+                subjectEntityId: ev.id,
+                predicate: 'rumor_news',
+                objectValue: `Rumors spread of ${ev.title} occurring nearby.`,
+                sourceType: 'rumor',
+                acquiredAtTimestamp: updatedClockState.timestamp,
+                confidence: 0.8,
+                secretLevel: 'faction',
+                scope: 'general',
+                provenanceSummary: `Traveler news and aftermath of ${ev.title}.`,
+              });
+            } else {
+              const currentPlayer = this.worldRepo.getPlayerLifecycle(storyId);
+              if (currentPlayer && currentPlayer.locationId === ev.locationId) {
+                this.worldRepo.addKnowledgeFact(storyId, {
+                  id: `fact_event_organic_${ev.id}_${currentElapsed}`,
+                  subjectEntityId: ev.id,
+                  predicate: 'environmental_observation',
+                  objectValue: `You observe the unfolding of ${ev.title}.`,
+                  sourceType: 'witnessed',
+                  acquiredAtTimestamp: updatedClockState.timestamp,
+                  confidence: 1.0,
+                  secretLevel: 'public',
+                  scope: 'exact',
+                  provenanceSummary: `Organic environmental observation of ${ev.title}.`,
+                });
+              }
+            }
+          }
+        }
+      }
+      if (eventsUpdated) {
+        this.worldRepo.saveStoryRun(run);
+      }
+    }
 
     // CH4 Historical Chronicle integration: record evidence for triggered world events
     const chronicleEngine = this.worldRepo.getHistoricalChronicleEngine(storyId);

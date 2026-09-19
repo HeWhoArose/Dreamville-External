@@ -55,6 +55,31 @@ export interface AssembledTurnContext {
   epistemicallySanitized: boolean;
 }
 
+export interface AssembledOpeningContext {
+  storyId: string;
+  worldId: string;
+  worldTitle: string;
+  characterName: string;
+  startingLocationId: string;
+  startingLocationName: string;
+  formattedTime: string;
+  chunks: ContextChunk[];
+  assembledText: string;
+  totalTokens: number;
+  hardTokenBudget: number;
+  includedChunks: ContextChunk[];
+  evictedChunkLabels: string[];
+  evictionReasons: Record<string, string>;
+  epistemicallySanitized: boolean;
+  rawOpeningFacts: {
+    world: { id: string; title: string; genre?: string; tone?: string; rulesetId?: string; summary?: string; setting?: string };
+    character: { name: string; role?: string; background?: string; capabilities: string[]; conditions: string[]; startingSituation?: string; equipment: string[] };
+    location: { id: string; name: string; description: string; ambientSensory?: string; region?: string };
+    time: { cycle: number; period: string; era: string; formattedHeader: string };
+    knowledge: string[];
+  };
+}
+
 /**
  * WorkingContextEngine
  * Implements DreamBook Challenge 11 & V10.8.30 (Working Context & Token Budgeting).
@@ -202,7 +227,7 @@ export class WorkingContextEngine {
     // 1. Read canonical states (read-only; no state mutation)
     const player = repo.getPlayerLifecycle(storyId);
     const clock = repo.getWorldClock(storyId);
-    const geography = repo.getGeographyGraph();
+    const geography = repo.getGeographyGraph(storyId);
     const chronicle = repo.getHistoricalChronicleEngine(storyId);
     const inventoryEngine = repo.getInventoryEngine(storyId);
     const capabilityEngine = repo.getCapabilityEngine(storyId);
@@ -210,10 +235,11 @@ export class WorkingContextEngine {
     const memoryEngine = repo.getMemoryEngine(storyId);
     const livingSim = repo.getLivingWorldSimulation(storyId);
 
-    const viewerId = params.viewerActorId || (player ? player.actorId : 'player_actor_default_story');
+    const viewerId = params.viewerActorId || (player ? player.actorId : `player_actor_${storyId}`);
 
     // 2. Epistemic Projection: Scene & Geography
-    const locId = player ? player.locationId : 'loc_whispering_orrery';
+    const run = repo.getStoryRun(storyId);
+    const locId = player ? player.locationId : (run?.startingLocationId || run?.currentLocationId || (storyId === 'default_story' ? 'loc_whispering_orrery' : 'loc_unknown'));
     const locNode = geography.getNode(locId);
 		const isDiscovered = player ? player.discoveredLocationIds.includes(locId) : false;
     // Epistemic filter: only show rich description if discovered; otherwise basic label
@@ -301,7 +327,7 @@ export class WorkingContextEngine {
     });
 
     const playerDiscoveredSet = new Set(
-      player?.discoveredLocationIds || ['loc_whispering_orrery', 'loc_lantern_vault', 'loc_glasswood_verge']
+      player?.discoveredLocationIds || (storyId === 'default_story' ? ['loc_whispering_orrery', 'loc_lantern_vault', 'loc_glasswood_verge'] : [locId])
     );
     playerDiscoveredSet.add(locId);
 
@@ -585,5 +611,213 @@ export class WorkingContextEngine {
       sanitizedPlayerText,
       '</player_dialogue>',
     ].join('\n');
+  }
+
+  /**
+   * Dedicated initial-turn context assembly for Slice 4 (Dynamic Opening Scene).
+   * Constructs a bounded, deterministic, epistemically safe context strictly bound to the canonical StoryRun.
+   * Never falls back to default fixtures or leaked demo locations.
+   */
+  public static assembleOpeningContext(params: {
+    storyId: string;
+    hardTokenBudget?: number;
+    worldRepo?: WorldRepository;
+  }): AssembledOpeningContext {
+    const storyId = params.storyId;
+    if (!storyId) {
+      throw new Error('Valid storyId is required to assemble opening context.');
+    }
+    const hardTokenBudget = params.hardTokenBudget ?? 600;
+    const repo = params.worldRepo || worldRepository;
+
+    const run = repo.getStoryRun(storyId);
+    if (!run) {
+      throw new Error(`StoryRun "${storyId}" not found. Cannot assemble opening context.`);
+    }
+
+    const world = repo.getWorldTemplate(run.worldId);
+    const player = repo.getPlayerLifecycle(storyId);
+    const clock = repo.getWorldClock(storyId);
+    const geography = repo.getGeographyGraph(storyId);
+    const invEngine = repo.getInventoryEngine(storyId);
+    const capEngine = repo.getCapabilityEngine(storyId);
+    const knowledgeFacts = repo.getKnowledgeFacts(storyId);
+
+    // 1. Canonical starting location
+    const startingLocId = run.startingLocationId || run.currentLocationId || (player ? player.locationId : 'loc_unknown');
+    const locNode = geography.getNode(startingLocId);
+    const locName = locNode?.name || run.startingLocation?.name || startingLocId;
+    const locDesc = locNode?.description || run.startingLocation?.description || `The opening lands of ${world?.title || run.worldId}.`;
+    const locSensory = locNode?.ambientSensory || run.startingLocation?.ambientSensory || 'A quiet, watchful atmosphere fills the surroundings.';
+    const locRegion = locNode?.regionId || run.startingLocation?.region || 'Frontier';
+
+    // 2. Canonical protagonist details
+    const charName = run.characterName || run.protagonist?.identity?.name || 'Protagonist';
+    const charRole = run.characterRole || run.protagonist?.role?.profession || run.protagonist?.role?.archetype || 'Adventurer';
+    const charBackground = run.characterBackground || run.protagonist?.background?.history || '';
+    const charPersonality = run.characterPersonality || (Array.isArray(run.protagonist?.personality?.traits) ? run.protagonist.personality.traits.join(', ') : '');
+    const charMotivations = run.characterMotivations || (Array.isArray(run.protagonist?.motivations?.goals) ? run.protagonist.motivations.goals.join(', ') : '');
+    const situationHook = run.startingSituation?.hook || run.startingSituation?.summary || run.initialScene || `Awakened in ${locName}.`;
+
+    // 3. Protagonist conditions (e.g. lycanthropy form, injuries)
+    const injuryStrings: string[] = player?.injuries?.map((i: any) => `${i.name || i.description || 'Injury'} [${i.severity || 'minor'}]`) || [];
+    const formStrings: string[] = player?.transformationRecord?.active
+      ? [`Metamorphic Form: ${player.transformationRecord.formName}`]
+      : (Array.isArray(run.protagonist?.condition?.forms) && run.protagonist.condition.forms.length > 0
+        ? [`Form: ${run.protagonist.condition.forms[0]}`]
+        : []);
+    const conditionList = [...injuryStrings, ...formStrings];
+
+    // 4. Capabilities & Equipment
+    const actorId = player?.actorId || `player_actor_${storyId}`;
+    const actorCaps = capEngine.getEffectiveActorCapabilities(actorId, invEngine);
+    const capDescriptions = actorCaps.map((c) => `${c.name} [${c.powerTier}]: ${c.description}`);
+    const equipList = run.characterEquipment || [];
+
+    // 5. Epistemic filter: only public and player-witnessed knowledge facts
+    const safeKnowledge = knowledgeFacts
+      .filter((f) => f.secretLevel === 'public' || f.subjectEntityId === actorId || f.subjectEntityId === startingLocId)
+      .map((f) => `[${f.predicate}]: ${f.objectValue}`);
+
+    // 6. Chronology
+    const timestamp = clock.getTimestamp();
+    const formattedHeader = clock.getFormattedLocationTimeHeader(locName, timestamp);
+    const eraName = world?.defaultEra || (run as any)?.worldTime?.era || 'Age of Shadows';
+    const periodName = clock.getState().currentDayPhase;
+
+    // 7. Structured context chunks with strict priority bands
+    const chunks: ContextChunk[] = [
+      // B1_CRITICAL: Core Grounding Truths
+      {
+        id: `chunk_${storyId}_b1_world`,
+        band: 'B1_CRITICAL',
+        label: 'CANONICAL_WORLD_IDENTITY',
+        content: `World: "${world?.title || run.worldId}". Genre: ${world?.genre || (Array.isArray(world?.genreTags) ? world.genreTags.join(', ') : 'Fantasy')}, Tone: ${world?.tone || (Array.isArray(world?.toneTags) ? world.toneTags.join(', ') : 'Atmospheric')}. Setting: ${world?.setting || world?.description || ''}. Ruleset: ${run.ruleset || run.dndRulesMode || 'Standard'}.`,
+        estimatedTokens: WorkingContextEngine.estimateTokens(`World: "${world?.title || run.worldId}"`),
+        isProtected: true,
+        relevanceScore: 1.0,
+      },
+      {
+        id: `chunk_${storyId}_b1_protagonist`,
+        band: 'B1_CRITICAL',
+        label: 'PROTAGONIST_IDENTITY',
+        content: `Protagonist: ${charName} | Role: ${charRole} | Background: ${charBackground} | Personality: ${charPersonality} | Motivations: ${charMotivations} | Conditions: ${conditionList.length > 0 ? conditionList.join(', ') : 'Nominal'}.`,
+        estimatedTokens: WorkingContextEngine.estimateTokens(charName + charRole + charBackground),
+        isProtected: true,
+        relevanceScore: 1.0,
+      },
+      {
+        id: `chunk_${storyId}_b1_location`,
+        band: 'B1_CRITICAL',
+        label: 'STARTING_LOCATION',
+        content: `Location ID: ${startingLocId} | Name: "${locName}" (${locRegion}) | Surroundings: ${locDesc} | Atmosphere: ${locSensory}`,
+        estimatedTokens: WorkingContextEngine.estimateTokens(locName + locDesc + locSensory),
+        isProtected: true,
+        relevanceScore: 1.0,
+      },
+      {
+        id: `chunk_${storyId}_b1_time`,
+        band: 'B1_CRITICAL',
+        label: 'WORLD_CHRONOLOGY',
+        content: `Chronology: ${formattedHeader} (Era: ${eraName}, Day: ${timestamp.day}, Period: ${periodName})`,
+        estimatedTokens: WorkingContextEngine.estimateTokens(formattedHeader),
+        isProtected: true,
+        relevanceScore: 1.0,
+      },
+      {
+        id: `chunk_${storyId}_b1_situation`,
+        band: 'B1_CRITICAL',
+        label: 'STARTING_SITUATION_HOOK',
+        content: `Immediate Starting Situation & Hook: ${situationHook}`,
+        estimatedTokens: WorkingContextEngine.estimateTokens(situationHook),
+        isProtected: true,
+        relevanceScore: 1.0,
+      },
+
+      // B2_IMMEDIATE: Capabilities & Player Visible Facts
+      {
+        id: `chunk_${storyId}_b2_capabilities`,
+        band: 'B2_IMMEDIATE',
+        label: 'PROTAGONIST_CAPABILITIES_EQUIPMENT',
+        content: `Active Capabilities: ${capDescriptions.length > 0 ? capDescriptions.join('; ') : 'None registered'}. Equipment in hand/pack: ${equipList.length > 0 ? equipList.join(', ') : 'Standard attire'}.`,
+        estimatedTokens: WorkingContextEngine.estimateTokens(capDescriptions.join('; ') + equipList.join(', ')),
+        isProtected: true,
+        relevanceScore: 0.95,
+      },
+      {
+        id: `chunk_${storyId}_b2_knowledge`,
+        band: 'B2_IMMEDIATE',
+        label: 'PLAYER_VISIBLE_KNOWLEDGE',
+        content: `Known Realities: ${safeKnowledge.length > 0 ? safeKnowledge.join(' | ') : 'Only immediate surroundings witnessed'}.`,
+        estimatedTokens: WorkingContextEngine.estimateTokens(safeKnowledge.join(' | ')),
+        isProtected: false,
+        relevanceScore: 0.9,
+      },
+
+      // B3_CAUSAL_OPPORTUNITY: World Laws & Rules
+      {
+        id: `chunk_${storyId}_b3_world_rules`,
+        band: 'B3_CAUSAL_OPPORTUNITY',
+        label: 'WORLD_RULES_AND_LAWS',
+        content: `World Laws: ${world?.worldRules ? world.worldRules.map((r: any) => `${r.category}: ${r.description}`).join('; ') : 'Standard physical constraints apply'}. Public Premise: ${world?.summary || world?.description || ''}.`,
+        estimatedTokens: WorkingContextEngine.estimateTokens(world?.summary || ''),
+        isProtected: false,
+        relevanceScore: 0.8,
+      },
+    ];
+
+    const budgeted = WorkingContextEngine.assembleBudgetedContext(chunks, hardTokenBudget);
+
+    return {
+      storyId,
+      worldId: run.worldId,
+      worldTitle: world?.title || run.worldId,
+      characterName: charName,
+      startingLocationId: startingLocId,
+      startingLocationName: locName,
+      formattedTime: formattedHeader,
+      chunks,
+      assembledText: budgeted.assembledText,
+      totalTokens: budgeted.totalTokens,
+      hardTokenBudget: budgeted.hardTokenBudget,
+      includedChunks: budgeted.includedChunks,
+      evictedChunkLabels: budgeted.evictedChunkLabels,
+      evictionReasons: budgeted.evictionReasons,
+      epistemicallySanitized: true,
+      rawOpeningFacts: {
+        world: {
+          id: run.worldId,
+          title: world?.title || run.worldId,
+          genre: world?.genre || (Array.isArray(world?.genreTags) ? world.genreTags[0] : undefined),
+          tone: world?.tone || (Array.isArray(world?.toneTags) ? world.toneTags[0] : undefined),
+          rulesetId: run.ruleset || world?.rulesetId,
+          summary: world?.summary,
+          setting: world?.setting,
+        },
+        character: {
+          name: charName,
+          role: charRole,
+          background: charBackground,
+          capabilities: capDescriptions,
+          conditions: conditionList,
+          startingSituation: situationHook,
+          equipment: equipList,
+        },
+        location: {
+          id: startingLocId,
+          name: locName,
+          description: locDesc,
+          ambientSensory: locSensory,
+          region: locRegion,
+        },
+        time: {
+          cycle: timestamp.year,
+          period: periodName,
+          era: eraName,
+          formattedHeader,
+        },
+        knowledge: safeKnowledge,
+      },
+    };
   }
 }

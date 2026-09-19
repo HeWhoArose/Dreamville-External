@@ -56,27 +56,51 @@ export class AbilityService {
       };
     }
 
-    const def = KNOWN_ABILITIES[abilityId];
-    if (!def) {
-      return {
-        success: false,
-        statusCode: 400,
-        errorReason: `Unknown ability: '${abilityId}'.`,
-      };
-    }
-
-    // Check ownership
     const run = worldRepository.getStoryRun(storyId);
     const player = worldRepository.getPlayerLifecycle(storyId);
     const capEngine = worldRepository.getCapabilityEngine(storyId);
+
+    // Look up static definition or resolve dynamic capability definition
+    let def: AbilityDefinition | undefined = KNOWN_ABILITIES[abilityId];
+    if (!def) {
+      const cap = capEngine.getAllCapabilities().find(c => c.id === abilityId || c.name === abilityId);
+      if (cap) {
+        def = {
+          abilityId: cap.id,
+          name: cap.name,
+          description: cap.description,
+          durationTurns: cap.durationTurns || 5,
+        };
+      } else {
+        const skill = worldRepository.getReusableSkillRegistry().getSkill(abilityId);
+        if (skill) {
+          def = {
+            abilityId: skill.definition.id,
+            name: skill.definition.name,
+            description: skill.definition.description,
+            durationTurns: skill.definition.durationTurns || 5,
+          };
+        } else {
+          // Fallback definition for custom player skills
+          def = {
+            abilityId,
+            name: abilityId,
+            description: 'Custom player capability.',
+            durationTurns: 5,
+          };
+        }
+      }
+    }
+
     const ownedCapabilities = [
       ...(run?.canonicalCapabilities || []),
       ...(run?.unlockedAbilities || []),
       ...((player as any)?.capabilities || []),
       ...capEngine.getAllSkillInstances(player?.actorId || `player_actor_${storyId}`).map((s) => s.capabilityId),
+      ...capEngine.getAllCapabilities().map((c) => c.id),
     ];
 
-    if (!ownedCapabilities.includes(abilityId)) {
+    if (!ownedCapabilities.includes(abilityId) && !ownedCapabilities.includes(def.name)) {
       return {
         success: false,
         statusCode: 403,

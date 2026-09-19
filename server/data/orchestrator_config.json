@@ -1,0 +1,13 @@
+{
+  "pins": {
+    "narrative.generate": "google_gemini::gemini-3.6-flash",
+    "character.dialogue": "google_gemini::gemini-3.6-flash",
+    "memory.extract": "google_gemini::gemini-3.6-flash",
+    "summary.scene": "google_gemini::gemini-3.6-flash",
+    "rules.adjudicate": "google_gemini::gemini-3.6-flash",
+    "utility.inspect": "google_gemini::gemini-3.6-flash",
+    "speech.generate": "provider_mock_speech::mock-speech-v1",
+    "image.generate": "google_imagen::imagen-3.0-generate-002"
+  },
+  "overrides": []
+}

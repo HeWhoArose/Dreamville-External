@@ -20,15 +20,33 @@ import {
  * - NEVER accesses hidden canonical secrets.
  * - Simply issues HTTP requests to the server and receives sanitized ExternalViewState.
  */
+const originalFetch = window.fetch;
+let globalActiveStoryId = 'default_story';
+
+const fetch = (url: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const finalInit = init || {};
+  const headers = finalInit.headers ? { ...finalInit.headers } as Record<string, string> : {};
+  if (!headers['x-story-id'] && !headers['X-Story-ID']) {
+    headers['X-Story-ID'] = globalActiveStoryId;
+  }
+  finalInit.headers = headers;
+  return originalFetch(url, finalInit);
+};
+
 class ApiClient {
   private baseUrl = '/api/game';
+
+  public setActiveStoryId(storyId: string): void {
+    globalActiveStoryId = storyId;
+  }
 
   /**
    * Fetches initial or refreshed ExternalViewState from the server authority.
    * GET /api/game/state
    */
-  public async getGameState(): Promise<ExternalViewState> {
-    const res = await fetch(`${this.baseUrl}/state`, {
+  public async getGameState(storyId?: string): Promise<ExternalViewState> {
+    const url = storyId ? `${this.baseUrl}/state?storyId=${encodeURIComponent(storyId)}` : `${this.baseUrl}/state`;
+    const res = await fetch(url, {
       method: 'GET',
       headers: {
         Accept: 'application/json',
@@ -1072,6 +1090,19 @@ class ApiClient {
   }
 
   /**
+   * Challenge 12: Get current task pins.
+   * GET /api/game/orchestrator/pins
+   */
+  public async getOrchestratorPins(): Promise<{ success: boolean; pins: Record<string, string> }> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/pins`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Failed to get orchestrator pins: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  /**
    * Challenge 12: Pin model for task.
    * POST /api/game/orchestrator/pin
    */
@@ -1082,6 +1113,20 @@ class ApiClient {
       body: JSON.stringify(params),
     });
     if (!res.ok) throw new Error(`Failed to pin model: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  /**
+   * Challenge 12: Test model connectivity/readiness.
+   * POST /api/game/orchestrator/test-model
+   */
+  public async testOrchestratorModel(params: { providerId: string; modelId: string }): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/test-model`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) throw new Error(`Failed to test model: HTTP ${res.status}`);
     return await res.json();
   }
 
@@ -1293,6 +1338,262 @@ class ApiClient {
     if (!res.ok) {
       const err = await res.json().catch(() => null);
       throw new Error(err?.error || `Failed to promote requirement: HTTP ${res.status}`);
+    }
+    return await res.json();
+  }
+
+  // ==========================================
+  // Challenge 16: Worlds & Campaign Discovery
+  // ==========================================
+
+  public async getWorlds(filters?: any): Promise<any[]> {
+    const params = new URLSearchParams();
+    if (filters) {
+      for (const [k, v] of Object.entries(filters)) {
+        if (v) params.append(k, String(v));
+      }
+    }
+    const queryStr = params.toString() ? `?${params.toString()}` : '';
+    const res = await fetch(`${this.baseUrl}/worlds${queryStr}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Failed to fetch worlds: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  public async getWorldTemplate(worldId: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/worlds/${encodeURIComponent(worldId)}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Failed to fetch world template: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  public async synthesizeWorld(input: any): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/worlds`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!res.ok) throw new Error(`Failed to synthesize world: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  public async startWorldRun(worldId: string, options: {
+    confirmedCharacter?: any;
+    characterId?: string;
+    storyMode?: string;
+    dndRulesMode?: string;
+    characterName?: string;
+    characterRole?: string;
+    characterBackground?: string;
+    characterAppearance?: string;
+    characterPersonality?: string;
+    characterMotivations?: string;
+    characterEquipment?: string[];
+    characterPortraitEmoji?: string;
+    characterPortraitUrl?: string;
+    capabilities?: any[];
+    initialConditions?: string[];
+  }): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/worlds/${encodeURIComponent(worldId)}/start-run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(options),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.error || `Failed to start world run: HTTP ${res.status}`);
+    }
+    return await res.json();
+  }
+
+  public async getStoryRun(storyId: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/worlds/runs/${encodeURIComponent(storyId)}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Failed to fetch story run: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  public async generateImage(params: { storyId: string; prompt: string; assetId?: string }): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/media/generate-image`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) throw new Error(`Failed to generate image: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  public async setFaultInjection(mode: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/media/fault-injection`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ mode }),
+    });
+    if (!res.ok) throw new Error(`Failed to set fault injection: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  public async registerResearchEvidence(item: any): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/research/evidence`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(item),
+    });
+    if (!res.ok) throw new Error(`Failed to register research evidence: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  public async listResearchEvidence(): Promise<any[]> {
+    const res = await fetch(`${this.baseUrl}/research/evidence`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Failed to list research evidence: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  public async adjudicateResearchEvidence(evidenceId: string, adjudicationResult: string, storyId = 'default_story'): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/research/adjudicate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ evidenceId, adjudicationResult, storyId }),
+    });
+    if (!res.ok) throw new Error(`Failed to adjudicate research evidence: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  // ============================================================
+  // Character Creation Slice 2 Methods
+  // ============================================================
+
+  public async extractCharacterFromConcept(
+    worldId: string,
+    naturalLanguageConcept: string,
+    existingDraft?: any,
+    userEditedFields?: string[]
+  ): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/worlds/${encodeURIComponent(worldId)}/characters/extract`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ naturalLanguageConcept, existingDraft, userEditedFields }),
+    });
+    if (!res.ok) throw new Error(`Failed to extract character draft: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  public async proposeCustomCapability(
+    worldId: string,
+    capabilityConcept: string,
+    characterContext?: any
+  ): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/worlds/${encodeURIComponent(worldId)}/characters/custom-capability`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ capabilityConcept, characterContext }),
+    });
+    if (!res.ok) throw new Error(`Failed to propose custom capability: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  public async getCharacterDrafts(worldId: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/worlds/${encodeURIComponent(worldId)}/characters/drafts`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Failed to get character drafts: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  public async saveCharacterDraft(worldId: string, draft: any): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/worlds/${encodeURIComponent(worldId)}/characters/drafts`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ draft }),
+    });
+    if (!res.ok) throw new Error(`Failed to save character draft: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  public async confirmCharacter(worldId: string, draft: any): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/worlds/${encodeURIComponent(worldId)}/characters/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ draft }),
+    });
+    if (!res.ok) throw new Error(`Failed to confirm character: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  public async getConfirmedCharacters(worldId: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/worlds/${encodeURIComponent(worldId)}/characters/confirmed`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Failed to get confirmed characters: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  /**
+   * Retrieves an already generated opening scene for a story run.
+   */
+  public async getOpeningScene(storyId: string): Promise<{ success: boolean; storyId: string; openingScene: import('../types').OpeningScene }> {
+    const res = await fetch(`${this.baseUrl}/story-runs/${encodeURIComponent(storyId)}/opening`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'X-Story-ID': storyId,
+      },
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => null);
+      throw new Error(errorData?.error || `Failed to fetch opening scene: HTTP ${res.status}`);
+    }
+    return await res.json();
+  }
+
+  /**
+   * Idempotently generates or retrieves the opening scene for a story run.
+   */
+  public async generateOpeningScene(
+    storyId: string,
+    options?: { forceRegenerate?: boolean; timeoutMs?: number; simulateFailure?: boolean }
+  ): Promise<{ success: boolean; storyId: string; openingScene: import('../types').OpeningScene; viewState?: import('../types').ExternalViewState }> {
+    const res = await fetch(`${this.baseUrl}/story-runs/${encodeURIComponent(storyId)}/opening`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'X-Story-ID': storyId,
+      },
+      body: JSON.stringify(options || {}),
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => null);
+      throw new Error(errorData?.error || `Failed to generate opening scene: HTTP ${res.status}`);
+    }
+    return await res.json();
+  }
+
+  /**
+   * Retrieves the assembled opening working context for a story run.
+   */
+  public async getOpeningWorkingContext(storyId: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/story-runs/${encodeURIComponent(storyId)}/opening/context`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        'X-Story-ID': storyId,
+      },
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => null);
+      throw new Error(errorData?.error || `Failed to fetch opening context: HTTP ${res.status}`);
     }
     return await res.json();
   }

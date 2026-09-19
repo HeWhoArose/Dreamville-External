@@ -48,21 +48,54 @@ export const useAudioHaptic = () => {
   return ctx;
 };
 
+export const AUDIO_STORAGE_KEY = 'dreambook_audio_preferences';
+
 export const AudioHapticProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [settings, setSettings] = useState<AudioSettings>({
-    masterAudio: 1.0,
-    masterMuted: false,
-    narration: 'auto',
-    voiceVolume: 1.0,
-    characterVoiceEnabled: true,
-    sfxEnabled: true,
-    sfxVolume: 1.0,
-    musicVolume: 0.8,
-    ambienceEnabled: true,
-    ambienceVolume: 0.6,
-    autoplay: true,
-    dataSavingMode: false,
-    hapticIntensity: 'medium',
+  // Silence by default during dashboard and navigation (ambienceEnabled: false)
+  const [settings, setSettings] = useState<AudioSettings>(() => {
+    const defaultSettings: AudioSettings = {
+      masterAudio: 1.0,
+      masterMuted: false,
+      narration: 'auto',
+      voiceVolume: 1.0,
+      characterVoiceEnabled: true,
+      sfxEnabled: true,
+      sfxVolume: 1.0,
+      musicVolume: 0.8,
+      ambienceEnabled: false, // Default to silence - no automatic continuous hum
+      ambienceVolume: 0.5,
+      autoplay: false,
+      dataSavingMode: false,
+      hapticIntensity: 'medium',
+    };
+
+    try {
+      const stored = localStorage.getItem(AUDIO_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // Only restore valid configuration properties
+        return {
+          ...defaultSettings,
+          masterAudio: typeof parsed.masterAudio === 'number' ? parsed.masterAudio : defaultSettings.masterAudio,
+          masterMuted: typeof parsed.masterMuted === 'boolean' ? parsed.masterMuted : defaultSettings.masterMuted,
+          narration: parsed.narration || defaultSettings.narration,
+          voiceVolume: typeof parsed.voiceVolume === 'number' ? parsed.voiceVolume : defaultSettings.voiceVolume,
+          characterVoiceEnabled: typeof parsed.characterVoiceEnabled === 'boolean' ? parsed.characterVoiceEnabled : defaultSettings.characterVoiceEnabled,
+          sfxEnabled: typeof parsed.sfxEnabled === 'boolean' ? parsed.sfxEnabled : defaultSettings.sfxEnabled,
+          sfxVolume: typeof parsed.sfxVolume === 'number' ? parsed.sfxVolume : defaultSettings.sfxVolume,
+          musicVolume: typeof parsed.musicVolume === 'number' ? parsed.musicVolume : defaultSettings.musicVolume,
+          ambienceEnabled: typeof parsed.ambienceEnabled === 'boolean' ? parsed.ambienceEnabled : defaultSettings.ambienceEnabled,
+          ambienceVolume: typeof parsed.ambienceVolume === 'number' ? parsed.ambienceVolume : defaultSettings.ambienceVolume,
+          autoplay: typeof parsed.autoplay === 'boolean' ? parsed.autoplay : defaultSettings.autoplay,
+          dataSavingMode: typeof parsed.dataSavingMode === 'boolean' ? parsed.dataSavingMode : defaultSettings.dataSavingMode,
+          hapticIntensity: parsed.hapticIntensity || defaultSettings.hapticIntensity,
+        };
+      }
+    } catch {
+      // Local storage fallback
+    }
+
+    return defaultSettings;
   });
 
   const [soundscape, setSoundscape] = useState<any>(null);
@@ -76,7 +109,28 @@ export const AudioHapticProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const activeAudioElRef = useRef<HTMLAudioElement | null>(null);
   const audioQueueRef = useRef<QueuedAudioEvent[]>([]);
 
-  // Initialize or retrieve safe AudioContext
+  // Stop and disconnect any active ambient sound generator safely
+  const stopAmbientGenerator = useCallback(() => {
+    if (ambienceOscRef.current) {
+      try {
+        ambienceOscRef.current.stop();
+        ambienceOscRef.current.disconnect();
+      } catch {
+        // Safe disconnect fallback
+      }
+      ambienceOscRef.current = null;
+    }
+    if (ambienceGainRef.current) {
+      try {
+        ambienceGainRef.current.disconnect();
+      } catch {
+        // Safe disconnect fallback
+      }
+      ambienceGainRef.current = null;
+    }
+  }, []);
+
+  // Initialize safe AudioContext only on demand
   const getAudioContext = useCallback(() => {
     if (!audioContextRef.current) {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
@@ -104,12 +158,11 @@ export const AudioHapticProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
   }, [settings.masterAudio, settings.masterMuted]);
 
-  // Initial fetch of settings & soundscape
+  // Initial fetch of sensory state from server
   useEffect(() => {
     fetch('/api/game/sensory/state')
       .then((r) => r.json())
       .then((data) => {
-        if (data.settings) setSettings((prev) => ({ ...prev, ...data.settings }));
         if (data.soundscape) setSoundscape(data.soundscape);
       })
       .catch((err) => console.warn('Failed to load sensory state:', err));
@@ -135,12 +188,41 @@ export const AudioHapticProvider: React.FC<{ children: React.ReactNode }> = ({ c
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
-  // Soft ambient drone generator via Web Audio API
+  // Unmount cleanup: explicitly kill all audio nodes, oscillators, and speech playback
   useEffect(() => {
-    if (!settings.ambienceEnabled || settings.masterMuted || settings.ambienceVolume <= 0) {
-      if (ambienceGainRef.current && audioContextRef.current) {
-        ambienceGainRef.current.gain.setTargetAtTime(0, audioContextRef.current.currentTime, 0.2);
+    return () => {
+      stopAmbientGenerator();
+      if (activeAudioElRef.current) {
+        try {
+          activeAudioElRef.current.pause();
+          activeAudioElRef.current.src = '';
+        } catch {
+          // ignore
+        }
+        activeAudioElRef.current = null;
       }
+      if (audioContextRef.current) {
+        try {
+          audioContextRef.current.close().catch(() => {});
+        } catch {
+          // ignore
+        }
+        audioContextRef.current = null;
+      }
+    };
+  }, [stopAmbientGenerator]);
+
+  // Controlled Ambient Generator: only runs if explicitly requested & enabled
+  useEffect(() => {
+    // If disabled, muted, or zero volume -> immediately stop and disconnect oscillator
+    if (!settings.ambienceEnabled || settings.masterMuted || settings.ambienceVolume <= 0) {
+      stopAmbientGenerator();
+      return;
+    }
+
+    // Only start ambient generator if soundscape has a valid active environment track
+    if (!soundscape?.environmentTrack) {
+      stopAmbientGenerator();
       return;
     }
 
@@ -152,8 +234,8 @@ export const AudioHapticProvider: React.FC<{ children: React.ReactNode }> = ({ c
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
         osc.type = 'sine';
-        osc.frequency.value = soundscape?.environmentTrack?.includes('forest') ? 220 : 110;
-        gain.gain.value = settings.ambienceVolume * 0.05; // Gentle whisper volume
+        osc.frequency.value = soundscape.environmentTrack.includes('forest') ? 220 : 110;
+        gain.gain.value = settings.ambienceVolume * 0.03; // Gentle whisper level
         osc.connect(gain);
         gain.connect(masterGainRef.current);
         osc.start();
@@ -162,7 +244,7 @@ export const AudioHapticProvider: React.FC<{ children: React.ReactNode }> = ({ c
         ambienceGainRef.current = gain;
       } else if (ambienceGainRef.current) {
         ambienceGainRef.current.gain.setTargetAtTime(
-          settings.ambienceVolume * 0.05,
+          settings.ambienceVolume * 0.03,
           ctx.currentTime,
           0.1
         );
@@ -170,10 +252,19 @@ export const AudioHapticProvider: React.FC<{ children: React.ReactNode }> = ({ c
     } catch {
       // Audio context might need user gesture
     }
-  }, [settings.ambienceEnabled, settings.masterMuted, settings.ambienceVolume, soundscape, getAudioContext]);
+  }, [settings.ambienceEnabled, settings.masterMuted, settings.ambienceVolume, soundscape, getAudioContext, stopAmbientGenerator]);
 
   const updateSettings = async (newSettings: Partial<AudioSettings>) => {
-    setSettings((prev) => ({ ...prev, ...newSettings }));
+    const updated = { ...settings, ...newSettings };
+    setSettings(updated);
+
+    // Persist configuration in localStorage
+    try {
+      localStorage.setItem(AUDIO_STORAGE_KEY, JSON.stringify(updated));
+    } catch {
+      // ignore
+    }
+
     try {
       await fetch('/api/game/sensory/settings', {
         method: 'POST',
@@ -207,7 +298,7 @@ export const AudioHapticProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
   };
 
-  // Local-first Web Audio SFX synthesis
+  // Local-first Web Audio SFX synthesis (deterministic finite duration)
   const playSfx = useCallback(
     (cue: string, priority: 'LOW' | 'NORMAL' | 'HIGH' | 'CRITICAL' = 'NORMAL', volume = 1.0) => {
       if (!settings.sfxEnabled || settings.masterMuted || settings.sfxVolume <= 0) return;
@@ -217,13 +308,13 @@ export const AudioHapticProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
       const effVolume = volume * settings.sfxVolume;
 
-      // Duck ambience during HIGH / CRITICAL SFX
+      // Duck ambience during HIGH / CRITICAL SFX if ambience is playing
       if ((priority === 'HIGH' || priority === 'CRITICAL') && ambienceGainRef.current) {
         ambienceGainRef.current.gain.setTargetAtTime(0.005, ctx.currentTime, 0.05);
         setTimeout(() => {
-          if (ambienceGainRef.current && audioContextRef.current) {
+          if (ambienceGainRef.current && audioContextRef.current && settings.ambienceEnabled && !settings.masterMuted) {
             ambienceGainRef.current.gain.setTargetAtTime(
-              settings.ambienceVolume * 0.05,
+              settings.ambienceVolume * 0.03,
               audioContextRef.current.currentTime,
               0.3
             );
@@ -236,7 +327,6 @@ export const AudioHapticProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
       try {
         if (cleanCue.includes('stab') || cleanCue.includes('blade')) {
-          // Sharp metallic whoosh + blade contact
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
           osc.type = 'sawtooth';
@@ -248,8 +338,11 @@ export const AudioHapticProvider: React.FC<{ children: React.ReactNode }> = ({ c
           gain.connect(masterGainRef.current);
           osc.start(now);
           osc.stop(now + 0.22);
+          // Auto cleanup
+          setTimeout(() => {
+            try { osc.disconnect(); gain.disconnect(); } catch {}
+          }, 300);
         } else if (cleanCue.includes('heal') || cleanCue.includes('holy') || cleanCue.includes('chime')) {
-          // Restorative major triad chime
           [523.25, 659.25, 783.99].forEach((freq, i) => {
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
@@ -262,9 +355,11 @@ export const AudioHapticProvider: React.FC<{ children: React.ReactNode }> = ({ c
             gain.connect(masterGainRef.current!);
             osc.start(now + i * 0.08);
             osc.stop(now + i * 0.08 + 0.85);
+            setTimeout(() => {
+              try { osc.disconnect(); gain.disconnect(); } catch {}
+            }, 1000);
           });
         } else if (cleanCue.includes('fire') || cleanCue.includes('burn')) {
-          // Warm noise / flame burst
           const osc = ctx.createOscillator();
           const gain = ctx.createGain();
           osc.type = 'triangle';
@@ -276,8 +371,10 @@ export const AudioHapticProvider: React.FC<{ children: React.ReactNode }> = ({ c
           gain.connect(masterGainRef.current);
           osc.start(now);
           osc.stop(now + 0.5);
+          setTimeout(() => {
+            try { osc.disconnect(); gain.disconnect(); } catch {}
+          }, 600);
         } else if (cleanCue.includes('quest') || cleanCue.includes('victory')) {
-          // Fanfare
           [440, 554.37, 659.25, 880].forEach((freq, idx) => {
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
@@ -291,6 +388,9 @@ export const AudioHapticProvider: React.FC<{ children: React.ReactNode }> = ({ c
             gain.connect(masterGainRef.current!);
             osc.start(start);
             osc.stop(start + 0.55);
+            setTimeout(() => {
+              try { osc.disconnect(); gain.disconnect(); } catch {}
+            }, 1200);
           });
         } else {
           // Subtle default tactile tick
@@ -305,18 +405,20 @@ export const AudioHapticProvider: React.FC<{ children: React.ReactNode }> = ({ c
           gain.connect(masterGainRef.current);
           osc.start(now);
           osc.stop(now + 0.1);
+          setTimeout(() => {
+            try { osc.disconnect(); gain.disconnect(); } catch {}
+          }, 200);
         }
       } catch (e) {
         console.warn('SFX audio play error:', e);
       }
     },
-    [settings.sfxEnabled, settings.masterMuted, settings.sfxVolume, settings.ambienceVolume, getAudioContext]
+    [settings.sfxEnabled, settings.masterMuted, settings.sfxVolume, settings.ambienceVolume, settings.ambienceEnabled, getAudioContext]
   );
 
   const playSpeech = async (text: string, actorId?: string): Promise<string | null> => {
     if (settings.narration === 'off' || settings.masterMuted) return null;
     if (settings.dataSavingMode) {
-      console.log('[Sensory] Data-saving mode active: skipping automated speech download.');
       return null;
     }
 
@@ -332,10 +434,15 @@ export const AudioHapticProvider: React.FC<{ children: React.ReactNode }> = ({ c
       const data = await res.json();
 
       if (data.audioResult) {
-        // If data URL or raw base64
         const audioSrc = data.audioResult.startsWith('data:')
           ? data.audioResult
           : `data:audio/mp3;base64,${data.audioResult}`;
+
+        if (activeAudioElRef.current) {
+          try {
+            activeAudioElRef.current.pause();
+          } catch {}
+        }
 
         const audio = new Audio(audioSrc);
         activeAudioElRef.current = audio;
@@ -344,10 +451,12 @@ export const AudioHapticProvider: React.FC<{ children: React.ReactNode }> = ({ c
         audio.onended = () => {
           setIsPlayingSpeech(false);
           setActiveSpeechText(null);
+          activeAudioElRef.current = null;
         };
         audio.onerror = () => {
           setIsPlayingSpeech(false);
           setActiveSpeechText(null);
+          activeAudioElRef.current = null;
         };
 
         await audio.play();
@@ -368,7 +477,9 @@ export const AudioHapticProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const clearQueue = () => {
     audioQueueRef.current = [];
     if (activeAudioElRef.current) {
-      activeAudioElRef.current.pause();
+      try {
+        activeAudioElRef.current.pause();
+      } catch {}
       activeAudioElRef.current = null;
     }
     setIsPlayingSpeech(false);

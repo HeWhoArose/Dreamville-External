@@ -441,6 +441,26 @@ export class InventoryItemEngine {
     return items;
   }
 
+  public getEquippedItems(actorId?: string): ItemInstance[] {
+    const items: ItemInstance[] = [];
+    for (const item of this.itemInstances.values()) {
+      if ((!actorId || item.ownerEntityId === actorId) && item.equippedSlot) {
+        items.push(JSON.parse(JSON.stringify(item)));
+      }
+    }
+    return items;
+  }
+
+  public getInventoryItems(actorId?: string): ItemInstance[] {
+    const items: ItemInstance[] = [];
+    for (const item of this.itemInstances.values()) {
+      if ((!actorId || item.ownerEntityId === actorId) && !item.equippedSlot && item.containerType === 'actor') {
+        items.push(JSON.parse(JSON.stringify(item)));
+      }
+    }
+    return items;
+  }
+
 	public projectItemInstance(item: ItemInstance): ItemInstance {
 		if (item.identified) {
 			return JSON.parse(JSON.stringify(item));

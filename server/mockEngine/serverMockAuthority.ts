@@ -6,6 +6,9 @@ import {
   ActionResult,
   ActionLog,
   Location,
+  PlayerKnowledge,
+  OpeningScene,
+  StructuredNarrativeEvent,
 } from './serverTypes';
 import {
   INITIAL_ENGINE_STATE,
@@ -31,11 +34,108 @@ export class ServerMockAuthority {
   // Labelled clearly per user specification: in-memory state for development experiment
   private EXPERIMENTAL_SINGLE_INSTANCE_MOCK_STATE: EngineState;
   private activeStoryId: string = 'default_story';
+  private dynamicStoryStates: Map<string, any> = new Map();
 
   constructor() {
     this.EXPERIMENTAL_SINGLE_INSTANCE_MOCK_STATE = JSON.parse(
       JSON.stringify(INITIAL_ENGINE_STATE)
     );
+  }
+
+  public getDynamicStoryState(storyId: string): EngineState {
+    if (storyId === 'default_story') {
+      return this.EXPERIMENTAL_SINGLE_INSTANCE_MOCK_STATE;
+    }
+    let dState = this.dynamicStoryStates.get(storyId);
+    if (!dState) {
+      const run = worldRepository.getStoryRun(storyId);
+      const player = worldRepository.getPlayerLifecycle(storyId);
+      const protagonistName = player?.name || run?.characterName || 'Protagonist';
+      const protagonistRole = run?.characterRole || 'Protagonist';
+      const protagonistPortraitEmoji = run?.characterPortraitEmoji || '🧙‍♂️';
+
+      const initialCharacters: Record<string, any> = {};
+      const protagonistActorId = player?.actorId || `player_actor_${storyId}`;
+      initialCharacters[protagonistActorId] = {
+        id: protagonistActorId,
+        name: protagonistName,
+        title: protagonistRole,
+        role: 'PROTAGONIST',
+        locationId: player?.locationId || `loc_${storyId}_start`,
+        presence: 'PRESENT',
+        disposition: 'FRIENDLY',
+        playerVisibleKnowledge: [],
+        portraitEmoji: protagonistPortraitEmoji,
+      };
+
+      const npcs = worldRepository.getAllNpcLifecycles(storyId);
+      for (const npc of npcs) {
+        initialCharacters[npc.actorId] = {
+          id: npc.actorId,
+          name: npc.name,
+          title: npc.currentActivity || 'Resident',
+          role: 'NPC',
+          locationId: npc.locationId,
+          presence: npc.locationId === player?.locationId ? 'PRESENT' : 'ABSENT',
+          disposition: 'NEUTRAL',
+          playerVisibleKnowledge: [],
+          portraitEmoji: '👤',
+        };
+      }
+
+      const facts = worldRepository.getKnowledgeFacts(storyId);
+      const mappedKnowledge: PlayerKnowledge[] = facts.map((f) => ({
+        id: f.id,
+        title: f.predicate || 'Knowledge Fact',
+        summary: `${f.predicate}: ${f.objectValue}`,
+        acquiredAtCycle: f.acquiredAtTimestamp?.day || 1,
+        source: f.sourceType || 'REPUTATION',
+        category: 'Lore',
+      }));
+
+      dState = {
+        worldTime: { cycle: 1, period: 'Dawn', era: 'Age of Resonances' },
+        activeLocationId: player?.locationId || `loc_${storyId}_start`,
+        protagonist: {
+          name: protagonistName,
+          title: protagonistRole,
+          attributes: {},
+          resources: {},
+          conditionEffects: [],
+        },
+        characters: initialCharacters,
+        activeDialogue: null,
+        dialogueHistory: [],
+        inventory: [],
+        equipment: {},
+        knowledgeBase: mappedKnowledge,
+        actionHistory: run?.openingScene ? [
+          {
+            id: `act_open_${storyId}`,
+            timestamp: run.openingScene.worldTime.formattedTime || 'Dawn',
+            cycle: run.openingScene.worldTime.cycle || 1,
+            actionType: 'NOTE_RECORD',
+            description: run.openingScene.narrativeText,
+            epistemicValidation: 'MOCK_ENGINE_COMMITTED',
+            authoritativeFeedback: `Opening scene established in ${run.openingScene.startingLocationName}.`,
+          }
+        ] : [
+          {
+            id: `act_init_${storyId}`,
+            timestamp: 'Dawn',
+            cycle: 1,
+            actionType: 'NOTE_RECORD',
+            description: `Awakened in starting location.`,
+            epistemicValidation: 'MOCK_ENGINE_COMMITTED',
+            authoritativeFeedback: run?.initialScene || `Entered the world of ${run?.worldId || 'Adventure'}.`,
+          }
+        ],
+        engineContractVersion: '1.0.0',
+        serverBoundarySecret: 'boundary_verified_secure_token',
+      };
+      this.dynamicStoryStates.set(storyId, dState);
+    }
+    return dState;
   }
 
   public setActiveStoryId(storyId: string): void {
@@ -69,11 +169,13 @@ export class ServerMockAuthority {
       };
     }
 
-    const player = worldRepository.getPlayerLifecycle(storyId);
-    const canonicalLocationId = player ? player.locationId : state.activeLocationId;
+    const targetStoryId = storyId || this.activeStoryId;
+    const player = worldRepository.getPlayerLifecycle(targetStoryId);
+    const run = worldRepository.getStoryRun(targetStoryId);
+    const canonicalLocationId = player ? player.locationId : (run ? run.currentLocationId : state.activeLocationId);
     const isTraveling = player ? player.isTraveling : false;
     const activeJourney = player ? player.activeJourney : null;
-    const clock = worldRepository.getWorldClock(storyId);
+    const clock = worldRepository.getWorldClock(targetStoryId);
     const canonicalClockState = clock.getState();
 
     state.activeLocationId = canonicalLocationId;
@@ -92,16 +194,22 @@ export class ServerMockAuthority {
     };
 
     const actorDiscoveredSet = new Set(
-      player?.discoveredLocationIds || ['loc_whispering_orrery', 'loc_lantern_vault', 'loc_glasswood_verge']
+      player?.discoveredLocationIds || (targetStoryId === 'default_story' ? ['loc_whispering_orrery', 'loc_lantern_vault', 'loc_glasswood_verge'] : [canonicalLocationId])
     );
 
-    const graphNodes = worldRepository.getGeographyGraph().getAllNodes();
+    const graphNodes = worldRepository.getGeographyGraph(targetStoryId).getAllNodes();
     const projectedLocations: Record<string, Location> = {};
     for (const node of graphNodes) {
       const isCurrentLocation = node.id === canonicalLocationId;
-      const isKnownInKnowledgeBase = state.knowledgeBase.some(
-        (k) => k.id.includes(node.id) || k.summary.toLowerCase().includes(node.name.toLowerCase())
-      );
+      const isKnownInKnowledgeBase = state.knowledgeBase.some((k) => {
+        if (!node.name) return false;
+        const normalizedName = node.name.toLowerCase();
+        if (normalizedName.length <= 2) {
+          const words = k.summary.toLowerCase().split(/[^a-z0-9]+/);
+          return k.id.includes(node.id) || words.includes(normalizedName);
+        }
+        return k.id.includes(node.id) || k.summary.toLowerCase().includes(normalizedName);
+      });
       const isPartOfActiveJourney =
         activeJourney !== null &&
         (activeJourney.originLocationId === node.id || activeJourney.destinationLocationId === node.id);
@@ -118,6 +226,18 @@ export class ServerMockAuthority {
           ambientSensory: node.ambientSensory,
           discovered: true,
         };
+      } else if (targetStoryId !== 'default_story') {
+        // Preserve a useful small-map presentation using non-revealing 'unknown territory'
+        projectedLocations[`unknown_${node.id}`] = {
+          id: `unknown_${node.id}`,
+          name: 'Unknown Territory',
+          region: 'Wilderness',
+          description: 'A distant, unmapped region shrouded in fog. Perhaps some exploration will reveal its secrets.',
+          coordinates: node.coordinates,
+          accessible: false,
+          ambientSensory: 'A quiet, unrevealed stillness.',
+          discovered: true,
+        };
       }
     }
 
@@ -126,8 +246,8 @@ export class ServerMockAuthority {
       Object.values(projectedLocations)[0];
 
     // Canonical Inventory & Equipment Projection from InventoryItemEngine (CH5)
-    const invEngine = worldRepository.getInventoryEngine('default_story');
-    const actorId = player ? player.actorId : 'player_actor_default_story';
+    const invEngine = worldRepository.getInventoryEngine(targetStoryId);
+    const actorId = player ? player.actorId : `player_actor_${targetStoryId}`;
     const canonicalItems = invEngine.getActorInventory(actorId);
     const canonicalPaperDoll = invEngine.getActorPaperDoll(actorId);
     const iconMap: Record<string, string> = {
@@ -176,6 +296,8 @@ export class ServerMockAuthority {
       activeLocation,
       protagonist: {
         ...state.protagonist,
+        name: player ? player.name : (run ? run.characterName : state.protagonist.name),
+        title: run?.characterRole || state.protagonist.title,
         status: player?.isDead
           ? 'Deceased'
           : player?.isPossessed
@@ -188,7 +310,7 @@ export class ServerMockAuthority {
       },
       locations: projectedLocations,
       routeEdges: worldRepository
-        .getGeographyGraph()
+        .getGeographyGraph(targetStoryId)
         .getAllEdges()
         .filter((edge) => Boolean(projectedLocations[edge.fromLocationId] && projectedLocations[edge.toLocationId])),
       characters: sanitizedCharacters,
@@ -202,7 +324,44 @@ export class ServerMockAuthority {
       activeJourney: activeJourney ? JSON.parse(JSON.stringify(activeJourney)) : null,
       isTraveling,
       playerLifecycle: player ? player.toJSON() : null,
+      openingScene: run?.openingScene || null,
     };
+  }
+
+  /**
+   * Records the opening scene into the dynamic story state's action history and dialogue history.
+   */
+  public recordOpeningScene(storyId: string, opening: OpeningScene): void {
+    if (storyId === 'default_story') return;
+    const dState = this.getDynamicStoryState(storyId);
+    const existingIndex = dState.actionHistory.findIndex((a) => a.id === `act_open_${storyId}`);
+    const actionRecord: ActionLog = {
+      id: `act_open_${storyId}`,
+      timestamp: opening.worldTime.formattedTime || 'Dawn',
+      cycle: opening.worldTime.cycle || 1,
+      actionType: 'NOTE_RECORD',
+      description: opening.narrativeText,
+      epistemicValidation: 'MOCK_ENGINE_COMMITTED',
+      authoritativeFeedback: `Opening scene established in ${opening.startingLocationName}.`,
+    };
+
+    if (existingIndex >= 0) {
+      dState.actionHistory[existingIndex] = actionRecord;
+    } else {
+      dState.actionHistory = [actionRecord, ...dState.actionHistory.filter((a) => a.id !== `act_init_${storyId}`)];
+    }
+
+    // Reflect any dialogue from the opening scene into dialogue history
+    const dialogueEvents = opening.structuredEvents.filter((e: StructuredNarrativeEvent) => e.type === 'dialogue');
+    for (const d of dialogueEvents) {
+      if (!dState.dialogueHistory.some((dh) => dh.text === d.text)) {
+        dState.dialogueHistory.push({
+          speaker: d.speaker || 'Narrator',
+          text: d.text,
+          cycle: opening.worldTime.cycle || 1,
+        });
+      }
+    }
   }
 
   /**
@@ -210,7 +369,8 @@ export class ServerMockAuthority {
    */
   public getSanitizedViewState(storyId?: string): ExternalViewState {
     const targetStoryId = storyId || this.activeStoryId;
-    return this.filterForExternalClient(this.EXPERIMENTAL_SINGLE_INSTANCE_MOCK_STATE, targetStoryId);
+    const state = this.getDynamicStoryState(targetStoryId);
+    return this.filterForExternalClient(state, targetStoryId);
   }
 
   /**
@@ -238,7 +398,8 @@ export class ServerMockAuthority {
    * Server-authoritative resolution of player ActionRequests.
    */
   public processAction(request: ActionRequest): ActionResult {
-    const state = this.EXPERIMENTAL_SINGLE_INSTANCE_MOCK_STATE;
+    const targetStoryId = (request as any).storyId || this.activeStoryId;
+    const state = this.getDynamicStoryState(targetStoryId);
     const now = new Date().toTimeString().split(' ')[0];
     const actionId = `act_srv_${Date.now()}`;
     let success = true;
@@ -254,7 +415,7 @@ export class ServerMockAuthority {
         status: 'MOCK_ENGINE_REJECTED',
         message: 'Malformed request: missing action type.',
         authoritativeFeedback: 'Server authority rejected request without action type.',
-        viewState: this.filterForExternalClient(state),
+        viewState: this.filterForExternalClient(state, targetStoryId),
       };
     }
 
@@ -319,13 +480,13 @@ export class ServerMockAuthority {
       case 'TRAVEL_REQUEST': {
         const mode = (request as any).mode || 'Foot';
         const travelResult = worldSimulationService.startPlayerTravel(
-          'default_story',
+          targetStoryId,
           request.targetLocationId,
           mode
         );
 
         if (travelResult.success) {
-          const targetLoc = worldRepository.getGeographyGraph().getAllNodes().find(n => n.id === request.targetLocationId);
+          const targetLoc = worldRepository.getGeographyGraph(targetStoryId).getAllNodes().find(n => n.id === request.targetLocationId);
           const destName = targetLoc ? targetLoc.name : request.targetLocationId;
           message = travelResult.message;
           authoritativeFeedback = `WorldSimulationService validated route and initiated travel to ${destName}. Invariant 6: Location remains origin while journey is in progress.`;
@@ -356,7 +517,7 @@ export class ServerMockAuthority {
       }
 
       case 'CANCEL_TRAVEL': {
-        const cancelled = worldSimulationService.cancelPlayerTravel('default_story');
+        const cancelled = worldSimulationService.cancelPlayerTravel(targetStoryId);
         if (cancelled) {
           message = 'Travel cancelled. Player anchored at origin location.';
           authoritativeFeedback = 'WorldSimulationService cancelled active journey. Destination was not committed.';
@@ -726,6 +887,57 @@ export class ServerMockAuthority {
         break;
       }
 
+      case 'CUSTOM_ACTION': {
+        const freeformText = (request as any).actionText || (request as any).customText || (request as any).description || (request as any).input || 'Performed freeform action.';
+        const capEngine = worldRepository.getCapabilityEngine(targetStoryId);
+        const player = worldRepository.getPlayerLifecycle(targetStoryId);
+        const actorId = player ? player.actorId : `player_actor_${targetStoryId}`;
+
+        const interp = capEngine.interpretFreeformAction({
+          actorId,
+          actionText: freeformText,
+          executeIfValid: true,
+        });
+
+        if (interp.validationSuccess) {
+          success = true;
+          message = interp.narrativeInterpretation || `Executed custom action: ${freeformText}`;
+          const matchedId = interp.mappedCapability?.id || interp.proposedCapability?.id || 'Novel Capability';
+          authoritativeFeedback = `Server authority processed freeform action through CapabilityEngine (${matchedId}).`;
+        } else {
+          success = true;
+          message = `Attempted action: ${freeformText}. The outcome unfolds in the narrative.`;
+          authoritativeFeedback = `Server authority recorded narrative action.`;
+        }
+
+        const chronicle = worldRepository.getHistoricalChronicleEngine(targetStoryId);
+        const clock = worldRepository.getWorldClock(targetStoryId);
+        const ts = clock.getTimestamp();
+        chronicle.recordEvidence({
+          id: `ev_custom_${ts.totalElapsedSeconds}_${chronicle.getChronicleEntries().length}`,
+          category: 'SACRED_OR_HISTORIC',
+          timestamp: ts,
+          primarySubjectId: actorId,
+          locationId: player?.locationId || 'loc_starting_area',
+          summary: freeformText.length > 50 ? freeformText.substring(0, 50) + '...' : freeformText,
+          details: message,
+          sourceEventId: `evt_custom_${ts.totalElapsedSeconds}`,
+          provenance: 'custom_player_action',
+          visibility: 'PUBLIC',
+        });
+
+        logEntry = {
+          id: actionId,
+          timestamp: now,
+          cycle: clock.getTimestamp().day,
+          actionType: 'NOTE_RECORD',
+          description: freeformText,
+          epistemicValidation: 'MOCK_ENGINE_COMMITTED',
+          authoritativeFeedback,
+        };
+        break;
+      }
+
       default: {
         success = false;
         message = 'Unrecognized action type.';
@@ -738,7 +950,7 @@ export class ServerMockAuthority {
       state.actionHistory = [logEntry, ...state.actionHistory];
     }
 
-    const updatedViewState = this.filterForExternalClient(state);
+    const updatedViewState = this.filterForExternalClient(state, targetStoryId);
 
     return {
       success,

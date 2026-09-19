@@ -1,10 +1,41 @@
+import React, { useState, useEffect } from 'react';
+import { AppRoute } from './routes';
+import { AppShell } from './components/shell/AppShell';
+import { StoryContextShell } from './components/storyContext/StoryContextShell';
+import { CompendiumView } from './components/compendium/CompendiumView';
+import { CompendiumCategory } from './components/compendium/compendiumTypes';
+import { SettingsView, SettingsTab } from './components/settings/SettingsView';
+import { SplashScreen } from './components/boot/SplashScreen';
+import { OnboardingView, ONBOARDING_STORAGE_KEY } from './components/boot/OnboardingView';
+import { DashboardView, StorySummary } from './components/dashboard/DashboardView';
+import { StoryLibraryView } from './components/library/StoryLibraryView';
 import { AudioHapticProvider } from './components/AudioHapticManager';
 import { SensoryEventProcessor } from './components/SensoryEventProcessor';
+
+// Domain views
+import { StoryView } from './components/StoryView';
+import { CharacterDossier } from './components/CharacterDossier';
+import { InventoryView } from './components/InventoryView';
+import { PowerWorkstation } from './components/PowerWorkstation';
+import { TacticalCombatView } from './components/TacticalCombatView';
+import { WorldMapView } from './components/WorldMapView';
+import { ChronicleView } from './components/ChronicleView';
+
+// Modals & Workstations
 import { AudioSettingsModal } from './components/AudioSettingsModal';
 import { VoiceStudioModal } from './components/VoiceStudioModal';
 import { ImportStoryModal } from './components/ImportStoryModal';
 import { StoryLibraryModal } from './components/StoryLibraryModal';
-import React, { useState, useEffect } from 'react';
+import { WorldLibraryModal } from './components/WorldLibraryModal';
+import { RoutingWorkstationModal } from './components/RoutingWorkstationModal';
+import { LivingBibleWorkstationModal } from './components/LivingBibleWorkstationModal';
+import { EpistemicInspectorModal } from './components/EpistemicInspectorModal';
+import { ContextInspectorModal } from './components/ContextInspectorModal';
+import { ArchiveModal } from './components/ArchiveModal';
+import { CreateStoryWizard } from './components/CreateStoryWizard';
+import { CharacterGenesisView } from './components/characterGenesis/CharacterGenesisView';
+
+import { apiClient } from './services/apiClient';
 import {
   ExternalViewState,
   DialogueChoice,
@@ -14,30 +45,21 @@ import {
   ChronicleEntry,
   NpcDossier,
   CraftingRecipe,
-} from './types';
-import { apiClient } from './services/apiClient';
-import { Header } from './components/Header';
-import { StoryView } from './components/StoryView';
-import { CharacterDossier } from './components/CharacterDossier';
-import { InventoryView } from './components/InventoryView';
-import { PowerWorkstation } from './components/PowerWorkstation';
-import { TacticalCombatView } from './components/TacticalCombatView';
-import { WorldMapView } from './components/WorldMapView';
-import { ChronicleView } from './components/ChronicleView';
-import { EpistemicInspectorModal } from './components/EpistemicInspectorModal';
-import { ContextInspectorModal } from './components/ContextInspectorModal';
-import { ArchiveModal } from './components/ArchiveModal';
-import { RoutingWorkstationModal } from './components/RoutingWorkstationModal';
-import { LivingBibleWorkstationModal } from './components/LivingBibleWorkstationModal';
-import { Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
-import {
   PowerState,
   CapabilityDefinition,
   CapabilityGraphNode,
+  WorldTemplate,
+  OpeningScene,
 } from './types';
 
 export const App: React.FC = () => {
-  // Pure presentation state received from the server authority over HTTP
+  // Boot & Navigation state
+  const [bootPhase, setBootPhase] = useState<'splash' | 'onboarding' | 'ready'>('splash');
+  const [splashStatus, setSplashStatus] = useState<'loading' | 'restoring' | 'ready' | 'error'>('loading');
+  const [currentRoute, setCurrentRoute] = useState<AppRoute>('dashboard');
+  const [activeStoryId, setActiveStoryId] = useState<string>('default_story');
+
+  // Presentation state received from server authority
   const [viewState, setViewState] = useState<ExternalViewState | null>(null);
   const [chronicleEntries, setChronicleEntries] = useState<ChronicleEntry[]>([]);
   const [dossiers, setDossiers] = useState<NpcDossier[]>([]);
@@ -45,30 +67,72 @@ export const App: React.FC = () => {
   const [powerState, setPowerState] = useState<PowerState | null>(null);
   const [capabilities, setCapabilities] = useState<CapabilityDefinition[]>([]);
   const [capabilityGraph, setCapabilityGraph] = useState<CapabilityGraphNode[]>([]);
-  const [isLoadingInitialState, setIsLoadingInitialState] = useState<boolean>(true);
+  const [worldTemplates, setWorldTemplates] = useState<WorldTemplate[]>([]);
   const [networkError, setNetworkError] = useState<string | null>(null);
-
-  const [activeTab, setActiveTab] = useState<
-    'story' | 'characters' | 'inventory' | 'capabilities' | 'combat' | 'map' | 'chronicle'
-  >('story');
-  const [isEpistemicModalOpen, setIsEpistemicModalOpen] = useState<boolean>(false);
-  const [isContextModalOpen, setIsContextModalOpen] = useState<boolean>(false);
-  const [isRoutingModalOpen, setIsRoutingModalOpen] = useState<boolean>(false);
-  const [isArchiveModalOpen, setIsArchiveModalOpen] = useState<boolean>(false);
-  const [isAudioSettingsOpen, setIsAudioSettingsOpen] = useState<boolean>(false);
-  const [isVoiceStudioOpen, setIsVoiceStudioOpen] = useState<boolean>(false);
-  const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
-  const [isStoryLibraryModalOpen, setIsStoryLibraryModalOpen] = useState<boolean>(false);
-  const [isLivingBibleModalOpen, setIsLivingBibleModalOpen] = useState<boolean>(false);
   const [isProcessingAction, setIsProcessingAction] = useState<boolean>(false);
+
+  // Modal overlays
+  const [isAudioSettingsOpen, setIsAudioSettingsOpen] = useState(false);
+  const [isVoiceStudioOpen, setIsVoiceStudioOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isStoryLibraryModalOpen, setIsStoryLibraryModalOpen] = useState(false);
+  const [isWorldLibraryModalOpen, setIsWorldLibraryModalOpen] = useState(false);
+  const [isRoutingModalOpen, setIsRoutingModalOpen] = useState(false);
+  const [isLivingBibleModalOpen, setIsLivingBibleModalOpen] = useState(false);
+  const [isEpistemicModalOpen, setIsEpistemicModalOpen] = useState(false);
+  const [isContextModalOpen, setIsContextModalOpen] = useState(false);
+  const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
+  const [genesisWorld, setGenesisWorld] = useState<WorldTemplate | null>(null);
+  const [activeOpeningScene, setActiveOpeningScene] = useState<OpeningScene | null>(null);
+  const [isLoadingOpening, setIsLoadingOpening] = useState(false);
+  const [openingError, setOpeningError] = useState<string | null>(null);
+
+  const fetchOpeningScene = async (storyId: string) => {
+    if (!storyId || storyId === 'default_story') return;
+    setIsLoadingOpening(true);
+    setOpeningError(null);
+    try {
+      const res = await apiClient.generateOpeningScene(storyId);
+      if (res.openingScene) {
+        setActiveOpeningScene(res.openingScene);
+      }
+      if (res.viewState) {
+        setViewState(res.viewState);
+      }
+    } catch (err: any) {
+      setOpeningError(err?.message || 'Failed to assemble opening narrative.');
+    } finally {
+      setIsLoadingOpening(false);
+    }
+  };
+
+  const handleRetryOpening = async () => {
+    if (!activeStoryId || activeStoryId === 'default_story') return;
+    setIsLoadingOpening(true);
+    setOpeningError(null);
+    try {
+      const res = await apiClient.generateOpeningScene(activeStoryId, { forceRegenerate: true });
+      if (res.openingScene) {
+        setActiveOpeningScene(res.openingScene);
+      }
+      if (res.viewState) {
+        setViewState(res.viewState);
+      }
+    } catch (err: any) {
+      setOpeningError(err?.message || 'Failed to generate opening scene.');
+    } finally {
+      setIsLoadingOpening(false);
+    }
+  };
 
   const fetchAuxiliaryData = async () => {
     try {
-      const [chronicleData, dossierData, recipeData, capData] = await Promise.all([
+      const [chronicleData, dossierData, recipeData, capData, worldsData] = await Promise.all([
         apiClient.getChronicle().catch(() => []),
         apiClient.getDossiers().catch(() => []),
         apiClient.getRecipes().catch(() => []),
         apiClient.getCapabilities().catch(() => null),
+        apiClient.getWorlds().catch(() => []),
       ]);
       setChronicleEntries(chronicleData);
       setDossiers(dossierData);
@@ -77,24 +141,36 @@ export const App: React.FC = () => {
         setPowerState(capData.powerState || null);
         setCapabilities(capData.capabilities || []);
         setCapabilityGraph(capData.graph || []);
+      }
+      if (worldsData) {
+        setWorldTemplates(worldsData);
       }
     } catch (e) {
       console.error('Failed to fetch auxiliary chronicle/dossier/capabilities data:', e);
     }
   };
 
-  const fetchInitialState = async () => {
-    setIsLoadingInitialState(true);
+  const initializeApp = async (targetStoryId?: string) => {
+    const storyIdToUse = targetStoryId || activeStoryId;
+    setSplashStatus('loading');
     setNetworkError(null);
     try {
-      const [state, chronicleData, dossierData, recipeData, capData] = await Promise.all([
-        apiClient.getGameState(),
+      const [state, chronicleData, dossierData, recipeData, capData, worldsData] = await Promise.all([
+        apiClient.getGameState(storyIdToUse),
         apiClient.getChronicle().catch(() => []),
         apiClient.getDossiers().catch(() => []),
         apiClient.getRecipes().catch(() => []),
         apiClient.getCapabilities().catch(() => null),
+        apiClient.getWorlds().catch(() => []),
       ]);
       setViewState(state);
+      if (state.openingScene) {
+        setActiveOpeningScene(state.openingScene);
+      } else if (storyIdToUse !== 'default_story') {
+        fetchOpeningScene(storyIdToUse);
+      } else {
+        setActiveOpeningScene(null);
+      }
       setChronicleEntries(chronicleData);
       setDossiers(dossierData);
       setRecipes(recipeData);
@@ -103,78 +179,68 @@ export const App: React.FC = () => {
         setCapabilities(capData.capabilities || []);
         setCapabilityGraph(capData.graph || []);
       }
+      if (worldsData) {
+        setWorldTemplates(worldsData);
+      }
+
+      setSplashStatus('ready');
+
+      // Check onboarding persistence
+      const onboardingDone = localStorage.getItem(ONBOARDING_STORAGE_KEY);
+      setTimeout(() => {
+        if (!onboardingDone) {
+          setBootPhase('onboarding');
+        } else {
+          setBootPhase('ready');
+        }
+      }, 400);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to connect to server authority.';
+      const message = err instanceof Error ? err.message : 'Unable to connect to the DreamBook story service.';
       setNetworkError(message);
-    } finally {
-      setIsLoadingInitialState(false);
+      setSplashStatus('error');
     }
   };
 
   useEffect(() => {
-    fetchInitialState();
+    initializeApp();
   }, []);
 
-  /**
-   * Dispatches an ActionRequest across the HTTP boundary to POST /api/game/action.
-   * The client does not calculate outcomes; it renders the server-returned ExternalViewState.
-   */
   const dispatchAction = async (
     action: ActionRequest,
     onComplete?: (result: ActionResult) => void
   ) => {
     setIsProcessingAction(true);
     try {
-      const result = await apiClient.sendAction(action);
+      const payload = { ...action, storyId: (action as any).storyId || activeStoryId };
+      const result = await apiClient.sendAction(payload);
       setViewState(result.viewState);
       fetchAuxiliaryData();
       if (onComplete) {
         onComplete(result);
       }
-    } catch (err: unknown) {
-      console.error('Server action failed:', err);
+    } catch (err) {
+      console.error('Failed to execute story action:', err);
     } finally {
       setIsProcessingAction(false);
     }
   };
 
+  // Event Handlers for Gameplay Interactions
   const handleSelectChoice = (choice: DialogueChoice) => {
     dispatchAction({
       type: 'DIALOGUE_CHOICE',
       choiceId: choice.id,
-      targetNodeId: choice.targetNodeId,
-      intent: choice.intent,
+      targetNodeId: choice.targetNodeId || 'node_next',
+      intent: choice.intent || choice.label,
       label: choice.label,
     });
   };
 
-  const handleRequestTravel = (targetLocationId: string) => {
-    dispatchAction(
-      {
-        type: 'TRAVEL_REQUEST',
-        targetLocationId,
-      },
-      (res) => {
-        if (res.success) {
-          setActiveTab('story');
-        }
-      }
-    );
-  };
-
-  const handleCancelTravel = () => {
-    dispatchAction({
-      type: 'CANCEL_TRAVEL',
-    });
-  };
-
   const handleEquipItem = (item: Item, targetSlot?: string) => {
-    const slot = targetSlot || item.equippableSlot;
-    if (!slot) return;
     dispatchAction({
       type: 'EQUIP_REQUEST',
       itemId: item.id,
-      slot,
+      slot: targetSlot || item.equippableSlot || 'mainHand',
     });
   };
 
@@ -192,32 +258,33 @@ export const App: React.FC = () => {
     });
   };
 
-  const handleCraftRecipe = async (recipeId: string) => {
-    setIsProcessingAction(true);
-    try {
-      await apiClient.craftItem(recipeId);
-      const updatedState = await apiClient.getGameState();
-      setViewState(updatedState);
-      fetchAuxiliaryData();
-    } catch (err: unknown) {
-      console.error('Crafting failed:', err);
-    } finally {
-      setIsProcessingAction(false);
-    }
+  const handleCraftRecipe = (recipeId: string) => {
+    dispatchAction({
+      type: 'CUSTOM_ACTION',
+      actionText: `Craft recipe ${recipeId}`,
+      intent: 'CRAFT_ITEM',
+    } as any);
   };
 
-  const handleRepairItem = async (itemId: string) => {
-    setIsProcessingAction(true);
-    try {
-      await apiClient.repairItem(itemId, 50);
-      const updatedState = await apiClient.getGameState();
-      setViewState(updatedState);
-      fetchAuxiliaryData();
-    } catch (err: unknown) {
-      console.error('Repair failed:', err);
-    } finally {
-      setIsProcessingAction(false);
-    }
+  const handleRepairItem = (itemId: string) => {
+    dispatchAction({
+      type: 'CUSTOM_ACTION',
+      actionText: `Repair item ${itemId}`,
+      intent: 'REPAIR_ITEM',
+    } as any);
+  };
+
+  const handleRequestTravel = (targetLocationId: string, _routeId?: string) => {
+    dispatchAction({
+      type: 'TRAVEL_REQUEST',
+      targetLocationId,
+    });
+  };
+
+  const handleCancelTravel = () => {
+    dispatchAction({
+      type: 'CANCEL_TRAVEL',
+    });
   };
 
   const handleInspectSurroundings = () => {
@@ -228,7 +295,8 @@ export const App: React.FC = () => {
 
   const handleAdvanceCycle = () => {
     dispatchAction({
-      type: 'ADVANCE_CYCLE',
+      type: 'ADVANCE_TIME',
+      seconds: 28800,
     });
   };
 
@@ -248,232 +316,427 @@ export const App: React.FC = () => {
       },
       (res) => {
         if (res.success) {
-          setActiveTab('story');
+          setCurrentRoute('play.story');
         }
       }
     );
   };
 
-  // Loading initial state across the HTTP boundary
-  if (isLoadingInitialState) {
+  const handleNavigate = (route: AppRoute) => {
+    // Intercept routes that trigger legacy workstations/modals
+    if (route === 'worlds') {
+      setIsWorldLibraryModalOpen(true);
+      setCurrentRoute('worlds');
+      return;
+    }
+    if (route === 'create' || route === 'create.bring-to-life' || route === 'create.genesis') {
+      setCurrentRoute(route);
+      return;
+    }
+    if (route === 'engine.settings') {
+      setIsAudioSettingsOpen(true);
+      return;
+    }
+    if (route === 'engine.routing') {
+      setIsRoutingModalOpen(true);
+      return;
+    }
+    if (route === 'engine.voice') {
+      setIsVoiceStudioOpen(true);
+      return;
+    }
+    if (route === 'engine.audio') {
+      setIsAudioSettingsOpen(true);
+      return;
+    }
+    if (route === 'ops.archive') {
+      setIsArchiveModalOpen(true);
+      return;
+    }
+    if (route === 'ops.bible') {
+      setIsLivingBibleModalOpen(true);
+      return;
+    }
+    if (route === 'ops.debug') {
+      setIsEpistemicModalOpen(true);
+      return;
+    }
+
+    setCurrentRoute(route);
+  };
+
+  // 1. Splash Screen Phase
+  if (bootPhase === 'splash') {
     return (
-      <div className="min-h-screen bg-stone-950 text-stone-100 flex items-center justify-center font-sans p-4">
-        <div className="bg-stone-900 border border-stone-800 rounded-2xl p-8 max-w-md w-full text-center space-y-4 shadow-2xl">
-          <Loader2 className="w-8 h-8 text-amber-400 animate-spin mx-auto" />
-          <div className="space-y-1">
-            <h2 className="font-serif text-lg font-bold text-stone-100">
-              Connecting to Server Authority
-            </h2>
-            <p className="text-xs text-stone-400 font-mono">
-              Querying GET /api/game/state across boundary...
-            </p>
-          </div>
-        </div>
-      </div>
+      <SplashScreen
+        status={splashStatus}
+        errorMessage={networkError || undefined}
+        onRetry={initializeApp}
+        onContinue={() => {
+          const done = localStorage.getItem(ONBOARDING_STORAGE_KEY);
+          setBootPhase(done ? 'ready' : 'onboarding');
+        }}
+      />
     );
   }
 
-  // Network connection failure
-  if (networkError || !viewState) {
+  // 2. First-Run Onboarding Phase
+  if (bootPhase === 'onboarding') {
     return (
-      <div className="min-h-screen bg-stone-950 text-stone-100 flex items-center justify-center font-sans p-4">
-        <div className="bg-stone-900 border border-red-900/50 rounded-2xl p-8 max-w-md w-full text-center space-y-4 shadow-2xl">
-          <AlertTriangle className="w-8 h-8 text-red-400 mx-auto" />
-          <div className="space-y-1">
-            <h2 className="font-serif text-lg font-bold text-stone-100">
-              Authority Connection Failed
-            </h2>
-            <p className="text-xs text-red-300 font-mono">
-              {networkError || 'Unable to establish session with server authority.'}
-            </p>
-          </div>
-          <button
-            onClick={fetchInitialState}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-stone-800 hover:bg-stone-750 text-stone-200 border border-stone-700 rounded-xl text-xs font-medium transition"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-            Retry Connection
-          </button>
-        </div>
-      </div>
+      <OnboardingView
+        onComplete={() => setBootPhase('ready')}
+        onSkip={() => setBootPhase('ready')}
+      />
     );
   }
 
   const activeLocation =
-    viewState.activeLocation ||
-    viewState.locations[viewState.activeLocationId] ||
-    Object.values(viewState.locations)[0];
+    viewState?.activeLocation ||
+    (viewState?.locations && viewState.activeLocationId ? viewState.locations[viewState.activeLocationId] : undefined) ||
+    (viewState?.locations ? Object.values(viewState.locations)[0] : undefined);
+
+  // Projection for Dashboard & Story Library
+  const formattedWorldTime = viewState?.worldTime
+    ? `${viewState.worldTime.period}, Cycle ${viewState.worldTime.cycle} (${viewState.worldTime.era})`
+    : undefined;
+
+  const activeStorySummary: StorySummary | null = viewState
+    ? {
+        storyId: activeStoryId,
+        runId: `run_${activeStoryId}`,
+        title: viewState.openingScene?.worldName
+          ? `Chronicle of ${viewState.openingScene.worldName}`
+          : activeLocation
+          ? `Chronicle of ${activeLocation.name}`
+          : 'The Awakening Chronicle',
+        worldName: viewState.openingScene?.worldName || activeLocation?.region || 'Living Realm',
+        genre: 'Dynamic Adventure',
+        characterName: viewState.protagonist?.name || viewState.characters?.[0]?.name || 'Protagonist',
+        currentLocation: activeLocation?.name || 'Sanctum Gateway',
+        turnCount: viewState.actionHistory?.length || 1,
+        lastPlayed: 'Active Session',
+        excerpt:
+          viewState.openingScene?.narrativeText?.slice(0, 120) ||
+          viewState.activeDialogue?.text ||
+          'The shadows lengthen across the ancient stone archways...',
+      }
+    : null;
+
+  const sampleStories: StorySummary[] = activeStorySummary
+    ? [
+        activeStorySummary,
+        {
+          storyId: 'story_valdor',
+          runId: 'run_valdor_01',
+          title: 'The Spires of Valdor',
+          worldName: 'Cyberpunk Neo-Valdor',
+          genre: 'Cyberpunk',
+          characterName: 'Kaelen Vex',
+          currentLocation: 'Sector 4 Neon Underpass',
+          turnCount: 14,
+          lastPlayed: '2 days ago',
+          excerpt: 'Rain drips through the rusted conduit lines as sirens echo in the neon mist.',
+        },
+      ]
+    : [];
+
+  const isPlayRoute = currentRoute.startsWith('play.');
+
+  // Derive compendium category if route is compendium.*
+  let compendiumCategory: CompendiumCategory = 'characters';
+  if (currentRoute.startsWith('compendium.')) {
+    const sub = currentRoute.replace('compendium.', '') as CompendiumCategory;
+    if (['characters', 'equipment', 'powers', 'npcs', 'creatures', 'worlds', 'visuals'].includes(sub)) {
+      compendiumCategory = sub;
+    }
+  }
+
+  const activeStoryConfig = {
+    storyId: activeStoryId,
+    runId: `run_${activeStoryId}`,
+    title: activeStorySummary?.title || 'The Awakening Chronicle',
+    worldName: activeStorySummary?.worldName || 'Living Aethelgard',
+    ruleset: 'FULL_DND',
+    genre: activeStorySummary?.genre || 'Dark Fantasy',
+    characterName: activeStorySummary?.characterName || 'Protagonist',
+    currentLocation: activeStorySummary?.currentLocation || 'Sanctum Gateway',
+    currentCycle: formattedWorldTime || 'Dawn, Cycle 1',
+    turnCount: activeStorySummary?.turnCount || 1,
+    hasCombatActive: false,
+  };
+
+  const renderPlayContent = () => (
+    <>
+      {currentRoute === 'play.story' && activeLocation && viewState && (
+        <StoryView
+          location={activeLocation}
+          activeDialogue={viewState.activeDialogue}
+          dialogueHistory={viewState.dialogueHistory}
+          actionHistory={viewState.actionHistory}
+          onSelectChoice={handleSelectChoice}
+          onRequestInspect={handleInspectSurroundings}
+          onRequestRest={handleAdvanceCycle}
+          onCustomAction={handleCustomAction}
+          isProcessingAction={isProcessingAction}
+          openingScene={activeOpeningScene || viewState.openingScene || null}
+          worldTitle={activeStorySummary?.worldName}
+          storyId={activeStoryId}
+          protagonistName={viewState.protagonist?.name}
+          protagonistRole={viewState.protagonist?.title}
+          isLoadingOpening={isLoadingOpening}
+          openingError={openingError}
+          onRetryOpening={handleRetryOpening}
+        />
+      )}
+
+      {currentRoute === 'play.character' && viewState && (
+        <CharacterDossier
+          characters={viewState.characters}
+          activeLocationId={viewState.activeLocationId}
+          locations={viewState.locations}
+          onEngageDialogue={handleEngageDialogue}
+          dossiers={dossiers}
+        />
+      )}
+
+      {currentRoute === 'play.inventory' && viewState && (
+        <InventoryView
+          inventory={viewState.inventory}
+          equipment={viewState.equipment}
+          onEquipItem={handleEquipItem}
+          onUnequipSlot={handleUnequipSlot}
+          onInspectItem={handleInspectItem}
+          recipes={recipes}
+          onCraftRecipe={handleCraftRecipe}
+          onRepairItem={handleRepairItem}
+          isProcessingAction={isProcessingAction}
+        />
+      )}
+
+      {currentRoute === 'play.powers' && (
+        <PowerWorkstation
+          powerState={powerState}
+          capabilities={capabilities}
+          graph={capabilityGraph}
+          onRefresh={fetchAuxiliaryData}
+        />
+      )}
+
+      {currentRoute === 'play.combat' && (
+        <TacticalCombatView onRefreshWorldState={fetchAuxiliaryData} />
+      )}
+
+      {currentRoute === 'play.map' && viewState && (
+        <WorldMapView
+          locations={viewState.locations}
+          activeLocationId={viewState.activeLocationId}
+          activeJourney={viewState.activeJourney}
+          isTraveling={viewState.isTraveling}
+          onRequestTravel={handleRequestTravel}
+          onCancelTravel={handleCancelTravel}
+          isProcessingAction={isProcessingAction}
+          routeEdges={viewState.routeEdges}
+        />
+      )}
+
+      {currentRoute === 'play.chronicle' && viewState && (
+        <ChronicleView
+          knowledgeBase={viewState.knowledgeBase}
+          actionHistory={viewState.actionHistory}
+          engineContractVersion={viewState.engineContractVersion}
+          chronicleEntries={chronicleEntries}
+        />
+      )}
+    </>
+  );
 
   return (
     <AudioHapticProvider>
       <SensoryEventProcessor events={(viewState as any)?.sensoryEvents} />
-      <div className="min-h-screen bg-stone-950 text-stone-100 flex flex-col font-sans">
-        <Header
-          worldTime={viewState.worldTime}
-          activeLocation={activeLocation}
-          activeTab={activeTab}
-          onTabChange={setActiveTab}
-          onOpenEpistemicModal={() => setIsEpistemicModalOpen(true)}
-          onOpenContextModal={() => setIsContextModalOpen(true)}
-          onOpenRoutingModal={() => setIsRoutingModalOpen(true)}
-          onOpenArchiveModal={() => setIsArchiveModalOpen(true)}
-          onOpenAudioSettings={() => setIsAudioSettingsOpen(true)}
-          onOpenVoiceStudio={() => setIsVoiceStudioOpen(true)}
-          onOpenImportModal={() => setIsImportModalOpen(true)}
-          onOpenStoryLibraryModal={() => setIsStoryLibraryModalOpen(true)}
-          onOpenLivingBibleModal={() => setIsLivingBibleModalOpen(true)}
-          pendingRequestsCount={isProcessingAction ? 1 : 0}
-        />
 
-        <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
-          {activeTab === 'story' && (
-            <StoryView
-              location={activeLocation}
-              activeDialogue={viewState.activeDialogue}
-              dialogueHistory={viewState.dialogueHistory}
-              onSelectChoice={handleSelectChoice}
-              onRequestInspect={handleInspectSurroundings}
-              onRequestRest={handleAdvanceCycle}
-              onCustomAction={handleCustomAction}
-              isProcessingAction={isProcessingAction}
+      {isPlayRoute ? (
+        <StoryContextShell
+          storyConfig={activeStoryConfig}
+          currentRoute={currentRoute}
+          onNavigate={handleNavigate}
+          onExitToLibrary={() => setCurrentRoute('story-library')}
+          onOpenSettings={() => setIsAudioSettingsOpen(true)}
+        >
+          {renderPlayContent()}
+        </StoryContextShell>
+      ) : (
+        <AppShell
+          currentRoute={currentRoute}
+          onNavigate={handleNavigate}
+          activeStoryTitle={activeStorySummary?.title}
+          worldClockTime={formattedWorldTime}
+          isEngineReady={Boolean(viewState && !networkError)}
+        >
+          {/* Route Viewports */}
+          {currentRoute === 'dashboard' && (
+            <DashboardView
+              activeStory={activeStorySummary}
+              recentStories={sampleStories}
+              curatedWorlds={worldTemplates}
+              isLoading={!viewState}
+              onResumeStory={() => setCurrentRoute('play.story')}
+              onNewStory={() => setIsImportModalOpen(true)}
+              onExploreWorlds={() => setIsWorldLibraryModalOpen(true)}
+              onOpenLibrary={() => setCurrentRoute('story-library')}
+              onOpenSettings={() => setIsAudioSettingsOpen(true)}
+              onSelectWorld={() => setIsWorldLibraryModalOpen(true)}
             />
           )}
 
-        {activeTab === 'characters' && (
-          <CharacterDossier
-            characters={viewState.characters}
-            activeLocationId={viewState.activeLocationId}
-            locations={viewState.locations}
-            onEngageDialogue={handleEngageDialogue}
-            dossiers={dossiers}
-          />
-        )}
+          {currentRoute === 'story-library' && (
+            <StoryLibraryView
+              stories={sampleStories}
+              isLoading={!viewState}
+              onResumeStory={() => setCurrentRoute('play.story')}
+              onNewStory={() => setIsImportModalOpen(true)}
+              onBranchStory={() => setIsStoryLibraryModalOpen(true)}
+            />
+          )}
 
-        {activeTab === 'inventory' && (
-          <InventoryView
-            inventory={viewState.inventory}
-            equipment={viewState.equipment}
-            onEquipItem={handleEquipItem}
-            onUnequipSlot={handleUnequipSlot}
-            onInspectItem={handleInspectItem}
-            recipes={recipes}
-            onCraftRecipe={handleCraftRecipe}
-            onRepairItem={handleRepairItem}
-            isProcessingAction={isProcessingAction}
-          />
-        )}
+          {currentRoute === 'create.genesis' && (
+            <CharacterGenesisView
+              initialWorld={genesisWorld || worldTemplates?.[0] || null}
+              onNavigateToWorldLibrary={() => setIsWorldLibraryModalOpen(true)}
+              onCancel={() => setCurrentRoute('dashboard')}
+              onStartStoryRun={(newStoryId, run, openingScene) => {
+                apiClient.setActiveStoryId(newStoryId);
+                setActiveStoryId(newStoryId);
+                if (openingScene) {
+                  setActiveOpeningScene(openingScene);
+                }
+                setCurrentRoute('play.story');
+                initializeApp(newStoryId);
+              }}
+            />
+          )}
 
-        {activeTab === 'capabilities' && (
-          <PowerWorkstation
-            powerState={powerState}
-            capabilities={capabilities}
-            graph={capabilityGraph}
-            onRefresh={fetchAuxiliaryData}
-          />
-        )}
+          {(currentRoute === 'create' || currentRoute === 'create.bring-to-life') && (
+            <CreateStoryWizard
+              onSelectRun={(runStoryId) => {
+                if (runStoryId) {
+                  apiClient.setActiveStoryId(runStoryId);
+                  setActiveStoryId(runStoryId);
+                  setCurrentRoute('play.story');
+                  initializeApp(runStoryId);
+                }
+              }}
+              onCancel={() => {
+                setCurrentRoute('dashboard');
+              }}
+            />
+          )}
 
-        {activeTab === 'combat' && (
-          <TacticalCombatView onRefreshWorldState={fetchAuxiliaryData} />
-        )}
+          {currentRoute === 'worlds' && (
+            <DashboardView
+              activeStory={activeStorySummary}
+              recentStories={sampleStories}
+              curatedWorlds={worldTemplates}
+              onResumeStory={() => setCurrentRoute('play.story')}
+              onNewStory={() => setIsImportModalOpen(true)}
+              onExploreWorlds={() => setIsWorldLibraryModalOpen(true)}
+              onOpenLibrary={() => setCurrentRoute('story-library')}
+              onOpenSettings={() => setIsAudioSettingsOpen(true)}
+            />
+          )}
 
-        {activeTab === 'map' && (
-          <WorldMapView
-            locations={viewState.locations}
-            activeLocationId={viewState.activeLocationId}
-            activeJourney={viewState.activeJourney}
-            isTraveling={viewState.isTraveling}
-            onRequestTravel={handleRequestTravel}
-            onCancelTravel={handleCancelTravel}
-            isProcessingAction={isProcessingAction}
-          />
-        )}
+          {(currentRoute === 'compendium' || currentRoute.startsWith('compendium.')) && (
+            <CompendiumView
+              initialCategory={compendiumCategory}
+              onNavigateCategory={(cat) => setCurrentRoute(`compendium.${cat}` as AppRoute)}
+            />
+          )}
 
-        {activeTab === 'chronicle' && (
-          <ChronicleView
-            knowledgeBase={viewState.knowledgeBase}
-            actionHistory={viewState.actionHistory}
-            engineContractVersion={viewState.engineContractVersion}
-            chronicleEntries={chronicleEntries}
-          />
-        )}
-      </main>
+          {(currentRoute === 'settings' ||
+            currentRoute === 'engine.settings' ||
+            currentRoute === 'engine.routing' ||
+            currentRoute === 'engine.voice' ||
+            currentRoute === 'engine.audio') && (
+            <SettingsView
+              initialTab={
+                currentRoute === 'engine.routing'
+                  ? 'MODELS'
+                  : currentRoute === 'engine.voice' || currentRoute === 'engine.audio'
+                  ? 'AUDIO'
+                  : 'MODELS'
+              }
+              onOpenAdvancedRouting={() => setIsRoutingModalOpen(true)}
+              onOpenLivingBible={() => setIsLivingBibleModalOpen(true)}
+              onOpenEpistemicInspector={() => setIsEpistemicModalOpen(true)}
+              onOpenContextInspector={() => setIsContextModalOpen(true)}
+            />
+          )}
+        </AppShell>
+      )}
 
-      {/* Footer explaining relationship to core engine */}
-      <footer className="border-t border-stone-850 bg-stone-900/50 py-4 px-4 text-center text-xs text-stone-500 font-mono">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>
-            Dreamville External Client • HTTP API Presentation Layer
-          </span>
-          <span>
-            Server Authority: Node.js Express Runtime • In-Memory Single Instance
-          </span>
-        </div>
-      </footer>
-
-      {/* Epistemic Separation Inspector Modal */}
-      <EpistemicInspectorModal
-        isOpen={isEpistemicModalOpen}
-        onClose={() => setIsEpistemicModalOpen(false)}
-      />
-
-      {/* CH11 Working Context & Token Budgeting Inspector Modal */}
-      <ContextInspectorModal
-        isOpen={isContextModalOpen}
-        onClose={() => setIsContextModalOpen(false)}
-      />
-
-      {/* CH13 Lossless Campaign Archive Modal */}
-      <ArchiveModal
-        isOpen={isArchiveModalOpen}
-        onClose={() => setIsArchiveModalOpen(false)}
-        onRestoreSuccess={() => fetchInitialState()}
-      />
-
-      {/* CH12 Adaptive Multi-Model Orchestrator & Routing Workstation Modal */}
-      <RoutingWorkstationModal
-        isOpen={isRoutingModalOpen}
-        onClose={() => setIsRoutingModalOpen(false)}
-        storyId="default_story"
-      />
-
-      {/* Audio Settings Modal */}
+      {/* Modals & Diagnostic Workstations */}
       <AudioSettingsModal
         isOpen={isAudioSettingsOpen}
         onClose={() => setIsAudioSettingsOpen(false)}
       />
-
-      {/* Voice Studio Modal */}
       <VoiceStudioModal
         isOpen={isVoiceStudioOpen}
         onClose={() => setIsVoiceStudioOpen(false)}
         storyId="default_story"
       />
-
-      {/* CH15 Import & Adaptation Modal */}
       <ImportStoryModal
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
-        onStoryAdapted={(adaptedStoryId) => {
+        onStoryAdapted={() => {
           setIsImportModalOpen(false);
-          fetchInitialState();
+          initializeApp();
         }}
       />
-
-      {/* CH15 Adapted Story Library & Dashboard Modal */}
       <StoryLibraryModal
         isOpen={isStoryLibraryModalOpen}
         onClose={() => setIsStoryLibraryModalOpen(false)}
-        onSelectStory={(storyId) => {
-          fetchInitialState();
+        onSelectStory={() => initializeApp()}
+      />
+      <WorldLibraryModal
+        isOpen={isWorldLibraryModalOpen}
+        onClose={() => setIsWorldLibraryModalOpen(false)}
+        onGenesisCharacter={(world) => {
+          setGenesisWorld(world);
+          setIsWorldLibraryModalOpen(false);
+          setCurrentRoute('create.genesis');
+        }}
+        onSelectRun={(runStoryId) => {
+          if (runStoryId) {
+            setActiveStoryId(runStoryId);
+            setIsWorldLibraryModalOpen(false);
+            setCurrentRoute('play.story');
+            initializeApp(runStoryId);
+          } else {
+            initializeApp();
+          }
         }}
       />
-
-      {/* CH17 Living Bible & Workstation Modal */}
+      <RoutingWorkstationModal
+        isOpen={isRoutingModalOpen}
+        onClose={() => setIsRoutingModalOpen(false)}
+        storyId="default_story"
+      />
       <LivingBibleWorkstationModal
         isOpen={isLivingBibleModalOpen}
         onClose={() => setIsLivingBibleModalOpen(false)}
       />
-    </div>
-  </AudioHapticProvider>
-);
+      <EpistemicInspectorModal
+        isOpen={isEpistemicModalOpen}
+        onClose={() => setIsEpistemicModalOpen(false)}
+      />
+      <ContextInspectorModal
+        isOpen={isContextModalOpen}
+        onClose={() => setIsContextModalOpen(false)}
+      />
+      <ArchiveModal
+        isOpen={isArchiveModalOpen}
+        onClose={() => setIsArchiveModalOpen(false)}
+        onRestoreSuccess={() => initializeApp()}
+      />
+    </AudioHapticProvider>
+  );
 };

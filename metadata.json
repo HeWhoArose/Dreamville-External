@@ -1,6 +1,6 @@
 {
-  "name": "Dreamville External",
-  "description": "User-facing presentation and interaction client for the Personal AI Story Engine",
+  "name": "DreamBook",
+  "description": "DreamBook: Personal AI Story Engine — An immersive, persistent world simulation and interactive storytelling experience.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

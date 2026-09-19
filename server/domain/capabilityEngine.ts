@@ -501,7 +501,10 @@ export class CapabilityEngine {
   }
 
   public registerCapability(cap: CapabilityDefinition): void {
-    this.capabilities.set(cap.id, cap);
+    const id = cap.id || (cap as any).capabilityId;
+    if (id) {
+      this.capabilities.set(id, { ...cap, id });
+    }
   }
 
   public setPowerState(actorId: string, state: PowerState): void {
@@ -1016,6 +1019,10 @@ export class CapabilityEngine {
     return Array.from(this.capabilityGraph.values());
   }
 
+  public setCapabilityGraphNode(nodeId: string, node: CapabilityGraphNode): void {
+    this.capabilityGraph.set(nodeId, node);
+  }
+
   public exportState(): {
     capabilities: CapabilityDefinition[];
     powerStates: Record<string, PowerState>;
@@ -1071,7 +1078,10 @@ export class CapabilityEngine {
     }
     if (state.capabilities) {
       for (const cap of state.capabilities) {
-        this.capabilities.set(cap.id, cap);
+        const id = cap.id || (cap as any).capabilityId;
+        if (id) {
+          this.capabilities.set(id, { ...cap, id });
+        }
       }
     }
     if (state.powerStates) {
@@ -1133,11 +1143,13 @@ export class CapabilityEngine {
       this.synthesisCounter = state.synthesisCounter;
     }
     for (const capId of this.capabilities.keys()) {
-      const match = capId.match(/^cap_synth_(\d+)/);
-      if (match) {
-        const num = parseInt(match[1], 10);
-        if (!isNaN(num) && num > this.synthesisCounter) {
-          this.synthesisCounter = num;
+      if (typeof capId === 'string') {
+        const match = capId.match(/^cap_synth_(\d+)/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (!isNaN(num) && num > this.synthesisCounter) {
+            this.synthesisCounter = num;
+          }
         }
       }
     }

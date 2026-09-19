@@ -8,805 +8,1523 @@ TAP version 13
         # Subtest: creates canonical items, equips to valid slots, and blocks invalid slots
         ok 1 - creates canonical items, equips to valid slots, and blocks invalid slots
           ---
-          duration_ms: 1.206562
+          duration_ms: 1.178292
           type: 'test'
           ...
         # Subtest: degrades durability, breaks item at 0, and unequips broken items
         ok 2 - degrades durability, breaks item at 0, and unequips broken items
           ---
-          duration_ms: 0.440123
+          duration_ms: 0.339043
           type: 'test'
           ...
         # Subtest: executes crafting with deterministic material consumption
         ok 3 - executes crafting with deterministic material consumption
           ---
-          duration_ms: 0.462624
+          duration_ms: 0.393247
           type: 'test'
           ...
         1..3
     ok 1 - Challenge 5: Inventory, Paper-Doll, Durability & Crafting
       ---
-      duration_ms: 2.924815
+      duration_ms: 2.711278
       type: 'suite'
       ...
     # Subtest: Challenge 6 & 7: Dynamic Capability, Consequence & Custom Power Synthesis
         # Subtest: rejects capability invocation when absolute seal is active
         ok 1 - rejects capability invocation when absolute seal is active
           ---
-          duration_ms: 0.527628
+          duration_ms: 0.887107
           type: 'test'
           ...
         # Subtest: adjudicates mortal vessel overload with deterministic hp cost and conditions
         ok 2 - adjudicates mortal vessel overload with deterministic hp cost and conditions
           ---
-          duration_ms: 0.268049
+          duration_ms: 0.397846
           type: 'test'
           ...
         # Subtest: synthesizes custom powers into structured capabilities, derived techniques, and graph linkages (DEF-CH7-01 & DEF-CH7-02)
         ok 3 - synthesizes custom powers into structured capabilities, derived techniques, and graph linkages (DEF-CH7-01 & DEF-CH7-02)
           ---
-          duration_ms: 0.751144
+          duration_ms: 1.482249
           type: 'test'
           ...
         # Subtest: deterministically maps tags to categories and activation modes with strict precedence (DEF-CH7-02)
         ok 4 - deterministically maps tags to categories and activation modes with strict precedence (DEF-CH7-02)
           ---
-          duration_ms: 0.467116
+          duration_ms: 0.959989
           type: 'test'
           ...
         1..4
     ok 2 - Challenge 6 & 7: Dynamic Capability, Consequence & Custom Power Synthesis
       ---
-      duration_ms: 2.633169
+      duration_ms: 4.257009
       type: 'suite'
       ...
     # Subtest: Challenge 8: Deterministic Ruleset Adapter & Tactical Combat Engine
         # Subtest: calculates D&D ability modifiers deterministically
         ok 1 - calculates D&D ability modifiers deterministically
           ---
-          duration_ms: 0.278741
+          duration_ms: 0.265953
           type: 'test'
           ...
         # Subtest: resolves attack, saving throw, and damage formulas with immutable roll records
         ok 2 - resolves attack, saving throw, and damage formulas with immutable roll records
           ---
-          duration_ms: 0.632336
+          duration_ms: 0.580711
           type: 'test'
           ...
         # Subtest: executes tactical battlefield moves within speed limits and prevents cell overlapping
         ok 3 - executes tactical battlefield moves within speed limits and prevents cell overlapping
           ---
-          duration_ms: 0.51603
+          duration_ms: 0.549532
           type: 'test'
           ...
         # Subtest: advances turns and applies dynamic hazard zone damage ticks (CH8 Hazards)
         ok 4 - advances turns and applies dynamic hazard zone damage ticks (CH8 Hazards)
           ---
-          duration_ms: 0.355579
+          duration_ms: 0.39705
           type: 'test'
           ...
         # Subtest: executes combat capability casts deterministically (CH8/CH6/CH7 Integration)
         ok 5 - executes combat capability casts deterministically (CH8/CH6/CH7 Integration)
           ---
-          duration_ms: 0.31112
+          duration_ms: 0.342017
           type: 'test'
           ...
         # Subtest: exports and imports tactical combat state losslessly (DEF-CH8-05)
         ok 6 - exports and imports tactical combat state losslessly (DEF-CH8-05)
           ---
-          duration_ms: 0.330492
+          duration_ms: 0.455616
           type: 'test'
           ...
         # Subtest: integrates combat state with CampaignArchiveService container (DEF-CH8-05)
         ok 7 - integrates combat state with CampaignArchiveService container (DEF-CH8-05)
           ---
-          duration_ms: 1.507223
+          duration_ms: 1.577219
           type: 'test'
           ...
         1..7
     ok 3 - Challenge 8: Deterministic Ruleset Adapter & Tactical Combat Engine
       ---
-      duration_ms: 4.399598
+      duration_ms: 4.750179
       type: 'suite'
       ...
     # Subtest: Challenge 9: Memory Opportunity Engine & Epistemic Retrieval
         # Subtest: detects dormant latent capabilities (poison-teeth exemplar) via structured data-driven triggers (DEF-CH9-01)
         ok 1 - detects dormant latent capabilities (poison-teeth exemplar) via structured data-driven triggers (DEF-CH9-01)
           ---
-          duration_ms: 0.525547
+          duration_ms: 0.606812
           type: 'test'
           ...
         # Subtest: enforces memory decay lifecycle transitions across turns and timestamps (DEF-CH9-02)
         ok 2 - enforces memory decay lifecycle transitions across turns and timestamps (DEF-CH9-02)
           ---
-          duration_ms: 0.284716
+          duration_ms: 0.29171
           type: 'test'
           ...
         # Subtest: authoritatively locks memories and protects them against decay or archiving (DEF-CH9-03)
         ok 3 - authoritatively locks memories and protects them against decay or archiving (DEF-CH9-03)
           ---
-          duration_ms: 0.222958
+          duration_ms: 0.22734
           type: 'test'
           ...
         # Subtest: enforces strict epistemic visibility boundaries (PRIVATE, SHARED, PUBLIC) (DEF-CH9-04)
         ok 4 - enforces strict epistemic visibility boundaries (PRIVATE, SHARED, PUBLIC) (DEF-CH9-04)
           ---
-          duration_ms: 0.666062
+          duration_ms: 0.661468
           type: 'test'
           ...
         # Subtest: guarantees PERSISTENT_CRITICAL memories receive minimum retrieval floor score (DEF-CH9-01)
         ok 5 - guarantees PERSISTENT_CRITICAL memories receive minimum retrieval floor score (DEF-CH9-01)
           ---
-          duration_ms: 0.197382
+          duration_ms: 0.19745
           type: 'test'
           ...
         # Subtest: exports, restores, and integrates memory state in CampaignArchiveService (DEF-CH9-05)
         ok 6 - exports, restores, and integrates memory state in CampaignArchiveService (DEF-CH9-05)
           ---
-          duration_ms: 0.439029
+          duration_ms: 0.449865
           type: 'test'
           ...
         1..6
     ok 4 - Challenge 9: Memory Opportunity Engine & Epistemic Retrieval
       ---
-      duration_ms: 2.642978
+      duration_ms: 2.678038
       type: 'suite'
       ...
     # Subtest: Challenge 10: Living World Simulation & Autonomous Physiology
         # Subtest: advances hunger and thirst based on entity-specific rates and evaluates personality cues
         ok 1 - advances hunger and thirst based on entity-specific rates and evaluates personality cues
           ---
-          duration_ms: 0.426457
+          duration_ms: 0.405852
           type: 'test'
           ...
         # Subtest: evaluates werewolf sunrise transformation deterministic rule
         ok 2 - evaluates werewolf sunrise transformation deterministic rule
           ---
-          duration_ms: 0.129987
+          duration_ms: 0.128273
           type: 'test'
           ...
         # Subtest: DEF-CH10-01: evaluates NPC daily schedules deterministically across time windows and midnight rollover
         ok 3 - DEF-CH10-01: evaluates NPC daily schedules deterministically across time windows and midnight rollover
           ---
-          duration_ms: 0.249383
+          duration_ms: 0.248097
           type: 'test'
           ...
         # Subtest: DEF-CH10-02: evaluates canonical simulation fidelity tiers (ACTIVE, NEARBY, DISTANT, OFF_SCREEN)
         ok 4 - DEF-CH10-02: evaluates canonical simulation fidelity tiers (ACTIVE, NEARBY, DISTANT, OFF_SCREEN)
           ---
-          duration_ms: 1.290225
+          duration_ms: 57.628494
           type: 'test'
           ...
         # Subtest: DEF-CH10-06: executes autonomous NPC movement across GeographyGraph without mutating topology
         ok 5 - DEF-CH10-06: executes autonomous NPC movement across GeographyGraph without mutating topology
           ---
-          duration_ms: 0.85477
+          duration_ms: 1.010424
           type: 'test'
           ...
         # Subtest: DEF-CH10-06: falls back safely when NPC destination route is blocked or invalid
         ok 6 - DEF-CH10-06: falls back safely when NPC destination route is blocked or invalid
           ---
-          duration_ms: 0.458266
+          duration_ms: 0.480718
           type: 'test'
           ...
         # Subtest: DEF-CH10-03: integrates living world advancement into WorldSimulationService.advanceTime()
         ok 7 - DEF-CH10-03: integrates living world advancement into WorldSimulationService.advanceTime()
           ---
-          duration_ms: 4.413505
+          duration_ms: 4.944459
           type: 'test'
           ...
         # Subtest: DEF-CH10-04: preserves living world state losslessly in canonical/living_world.json campaign archive partition
         ok 8 - DEF-CH10-04: preserves living world state losslessly in canonical/living_world.json campaign archive partition
           ---
-          duration_ms: 0.934598
+          duration_ms: 3.775311
           type: 'test'
           ...
         1..8
     ok 5 - Challenge 10: Living World Simulation & Autonomous Physiology
       ---
-      duration_ms: 9.121428
+      duration_ms: 69.106056
       type: 'suite'
       ...
     # Subtest: Challenge 11: Working Context Assembly & Token Budgeting
         # Subtest: enforces token budget by preserving B1/B2 and evicting lower priority bands
         ok 1 - enforces token budget by preserving B1/B2 and evicting lower priority bands
           ---
-          duration_ms: 0.476176
+          duration_ms: 0.472184
           type: 'test'
           ...
         # Subtest: strictly prevents knapsack priority inversion and lower-band budget backfilling (DEF-CH11-01)
         ok 2 - strictly prevents knapsack priority inversion and lower-band budget backfilling (DEF-CH11-01)
           ---
-          duration_ms: 7.451805
+          duration_ms: 7.23052
           type: 'test'
           ...
         # Subtest: accounts for framing overhead ensuring totalTokens never exceeds budget (DEF-CH11-04)
         ok 3 - accounts for framing overhead ensuring totalTokens never exceeds budget (DEF-CH11-04)
           ---
-          duration_ms: 0.38019
+          duration_ms: 0.246225
           type: 'test'
           ...
         # Subtest: orders candidate chunks deterministically with stable tie-breaking (DEF-CH11-05)
         ok 4 - orders candidate chunks deterministically with stable tie-breaking (DEF-CH11-05)
           ---
-          duration_ms: 0.191098
+          duration_ms: 0.167945
           type: 'test'
           ...
         # Subtest: assembles canonical 13-domain turn context via WorldRepository without mutating state (DEF-CH11-02)
         ok 5 - assembles canonical 13-domain turn context via WorldRepository without mutating state (DEF-CH11-02)
           ---
-          duration_ms: 2.880535
+          duration_ms: 2.323267
           type: 'test'
           ...
         # Subtest: defends against prompt injection and enforces strict trust boundary in NPC context (DEF-CH11-06)
         ok 6 - defends against prompt injection and enforces strict trust boundary in NPC context (DEF-CH11-06)
           ---
-          duration_ms: 0.492175
+          duration_ms: 0.452367
           type: 'test'
           ...
         1..6
     ok 6 - Challenge 11: Working Context Assembly & Token Budgeting
       ---
-      duration_ms: 13.233666
+      duration_ms: 11.173252
       type: 'suite'
       ...
     # Subtest: Challenge 12: Multi-Model AI Orchestrator
         # Subtest: registers canonical model pools and specialized roles (DEF-CH12-04)
-        ok 1 - registers canonical model pools and specialized roles (DEF-CH12-04)
+        not ok 1 - registers canonical model pools and specialized roles (DEF-CH12-04)
           ---
-          duration_ms: 0.62931
+          duration_ms: 12.642637
           type: 'test'
+          location: '/app/applet/tests/broadSubsystems.test.ts:1445:5'
+          failureType: 'testCodeFailure'
+          error: |-
+            The expression evaluated to a falsy value:
+            
+              assert.ok(models.some((m) => m.modelId === 'gemini-2.5-flash' && m.roleEligibility.includes('rules.adjudicate')))
+            
+          code: 'ERR_ASSERTION'
+          name: 'AssertionError'
+          expected: true
+          actual: false
+          operator: '=='
+          stack: |-
+            TestContext.<anonymous> (/app/applet/tests/broadSubsystems.test.ts:1459:14)
+            Test.runInAsyncScope (node:async_hooks:214:14)
+            Test.run (node:internal/test_runner/test:1047:25)
+            Test.start (node:internal/test_runner/test:944:17)
+            node:internal/test_runner/test:1440:71
+            node:internal/per_context/primordials:466:82
+            new Promise (<anonymous>)
+            new SafePromise (node:internal/per_context/primordials:435:3)
+            node:internal/per_context/primordials:466:9
+            Array.map (<anonymous>)
           ...
         # Subtest: validates context-window capacity and excludes models whose context window is smaller than contextTokens (DEF-CH12-02)
-        ok 2 - validates context-window capacity and excludes models whose context window is smaller than contextTokens (DEF-CH12-02)
+        not ok 2 - validates context-window capacity and excludes models whose context window is smaller than contextTokens (DEF-CH12-02)
           ---
-          duration_ms: 27.987581
+          duration_ms: 1.921455
           type: 'test'
+          location: '/app/applet/tests/broadSubsystems.test.ts:1465:5'
+          failureType: 'testCodeFailure'
+          error: |-
+            Expected values to be strictly equal:
+            + actual - expected
+            
+            + 'gemini-2.5-flash'
+            - 'tiny-context-model'
+            
+          code: 'ERR_ASSERTION'
+          name: 'AssertionError'
+          expected: 'tiny-context-model'
+          actual: 'gemini-2.5-flash'
+          operator: 'strictEqual'
+          stack: |-
+            TestContext.<anonymous> (/app/applet/tests/broadSubsystems.test.ts:1486:14)
+            Test.runInAsyncScope (node:async_hooks:214:14)
+            Test.run (node:internal/test_runner/test:1047:25)
+            Suite.processPendingSubtests (node:internal/test_runner/test:744:18)
+            Test.postRun (node:internal/test_runner/test:1173:19)
+            Test.run (node:internal/test_runner/test:1101:12)
+            async Promise.all (index 0)
+            async Suite.run (node:internal/test_runner/test:1442:7)
+            async Suite.processPendingSubtests (node:internal/test_runner/test:744:7)
           ...
         # Subtest: enforces deterministic multi-tier tie breaking in model selection (DEF-CH12-03)
         ok 3 - enforces deterministic multi-tier tie breaking in model selection (DEF-CH12-03)
           ---
-          duration_ms: 0.408997
+          duration_ms: 0.711752
           type: 'test'
           ...
         # Subtest: validates structured turn packages and rejects illegal state changes (DEF-CH12-05)
         ok 4 - validates structured turn packages and rejects illegal state changes (DEF-CH12-05)
           ---
-          duration_ms: 0.466729
+          duration_ms: 0.625569
           type: 'test'
           ...
         # Subtest: validates state changes through DomainAdjudicationBridge against canonical domain engines (DEF-CH12-05)
         ok 5 - validates state changes through DomainAdjudicationBridge against canonical domain engines (DEF-CH12-05)
           ---
-          duration_ms: 1.343548
+          duration_ms: 0.997911
           type: 'test'
           ...
         # Subtest: creates, retrieves, and preserves continuation checkpoints across model failovers (DEF-CH12-06)
         ok 6 - creates, retrieves, and preserves continuation checkpoints across model failovers (DEF-CH12-06)
           ---
-          duration_ms: 0.351743
+          duration_ms: 0.536386
           type: 'test'
           ...
         # Subtest: enforces circuit breakers after consecutive provider failures and falls back to emergency floor (DEF-CH12-07)
         ok 7 - enforces circuit breakers after consecutive provider failures and falls back to emergency floor (DEF-CH12-07)
           ---
-          duration_ms: 34.499006
+          duration_ms: 105.39782
           type: 'test'
           ...
         # Subtest: executes end-to-end turn orchestration with CH11 context assembly and telemetry (DEF-CH12-01, DEF-CH12-02)
         ok 8 - executes end-to-end turn orchestration with CH11 context assembly and telemetry (DEF-CH12-01, DEF-CH12-02)
           ---
-          duration_ms: 927.752774
+          duration_ms: 694.059802
           type: 'test'
           ...
         # Subtest: dynamically discovers and registers models via Google Gemini adapter without hardcoding (DEF-CH12-DYNAMIC-01)
         ok 9 - dynamically discovers and registers models via Google Gemini adapter without hardcoding (DEF-CH12-DYNAMIC-01)
           ---
-          duration_ms: 139.745374
+          duration_ms: 119.224784
           type: 'test'
           ...
         # Subtest: preserves strict domain boundaries by filtering out non-generative models (DEF-CH12-DYNAMIC-02)
         ok 10 - preserves strict domain boundaries by filtering out non-generative models (DEF-CH12-DYNAMIC-02)
           ---
-          duration_ms: 116.794754
+          duration_ms: 114.512075
           type: 'test'
           ...
         # Subtest: classifies discovered models into canonical roles based on naming heuristics and capabilities (DEF-CH12-DYNAMIC-03)
         ok 11 - classifies discovered models into canonical roles based on naming heuristics and capabilities (DEF-CH12-DYNAMIC-03)
           ---
-          duration_ms: 0.294057
+          duration_ms: 0.244275
           type: 'test'
           ...
         # Subtest: enforces manual overrides over automatic discovery defaults with immediate precedence (DEF-CH12-DYNAMIC-04)
         ok 12 - enforces manual overrides over automatic discovery defaults with immediate precedence (DEF-CH12-DYNAMIC-04)
           ---
-          duration_ms: 95.772683
+          duration_ms: 127.401722
           type: 'test'
           ...
         # Subtest: respects manual task-to-model pinning when pinned model is healthy (DEF-CH12-DYNAMIC-05)
         ok 13 - respects manual task-to-model pinning when pinned model is healthy (DEF-CH12-DYNAMIC-05)
           ---
-          duration_ms: 0.459728
+          duration_ms: 1.011339
           type: 'test'
           ...
         # Subtest: guarantees local deterministic emergency floor is never disguised as a Google Gemini model (DEF-CH12-DYNAMIC-06)
         ok 14 - guarantees local deterministic emergency floor is never disguised as a Google Gemini model (DEF-CH12-DYNAMIC-06)
           ---
-          duration_ms: 106.396685
+          duration_ms: 116.949236
           type: 'test'
           ...
         # Subtest: handles provider aliasing and quota exhaustion by triggering immediate failover without retry waste (DEF-CH12-DYNAMIC-07)
         ok 15 - handles provider aliasing and quota exhaustion by triggering immediate failover without retry waste (DEF-CH12-DYNAMIC-07)
           ---
-          duration_ms: 2.344937
+          duration_ms: 8.370508
           type: 'test'
           ...
         1..15
-    ok 7 - Challenge 12: Multi-Model AI Orchestrator
+    not ok 7 - Challenge 12: Multi-Model AI Orchestrator
       ---
-      duration_ms: 1456.102678
+      duration_ms: 1305.589771
       type: 'suite'
+      location: '/app/applet/tests/broadSubsystems.test.ts:1444:3'
+      failureType: 'subtestsFailed'
+      error: '2 subtests failed'
+      code: 'ERR_TEST_FAILURE'
       ...
     # Subtest: Challenge 13: Lossless Campaign Archive (.dreamarchive)
         # Subtest: packs partitioned state, computes SHA-256 hashes, and restores atomically
         ok 1 - packs partitioned state, computes SHA-256 hashes, and restores atomically
           ---
-          duration_ms: 0.729545
+          duration_ms: 1.291891
           type: 'test'
           ...
         # Subtest: DEF-CH13-01: atomic repository restore prevents partial mutation on validation failure
         ok 2 - DEF-CH13-01: atomic repository restore prevents partial mutation on validation failure
           ---
-          duration_ms: 2.781629
+          duration_ms: 5.763799
           type: 'test'
           ...
         # Subtest: DEF-CH13-02: chronicles and episodic entries round-trip losslessly without data truncation
         ok 3 - DEF-CH13-02: chronicles and episodic entries round-trip losslessly without data truncation
           ---
-          duration_ms: 0.844731
+          duration_ms: 0.697072
           type: 'test'
           ...
         # Subtest: DEF-CH13-03: inventory item engine and 13-slot paper-doll equipment export and restore losslessly
         ok 4 - DEF-CH13-03: inventory item engine and 13-slot paper-doll equipment export and restore losslessly
           ---
-          duration_ms: 0.731899
+          duration_ms: 0.665877
           type: 'test'
           ...
         # Subtest: DEF-CH13-04: world clock and geography graph state export and import losslessly
         ok 5 - DEF-CH13-04: world clock and geography graph state export and import losslessly
           ---
-          duration_ms: 0.632053
+          duration_ms: 0.658876
           type: 'test'
           ...
         # Subtest: DEF-CH13-06: bundles visual asset registry with deterministic hashes and generative fallbacks
         ok 6 - DEF-CH13-06: bundles visual asset registry with deterministic hashes and generative fallbacks
           ---
-          duration_ms: 0.79582
+          duration_ms: 0.872269
           type: 'test'
           ...
-        1..6
+        # Subtest: DEF-CH13-04: exports and restores committed narrative history losslessly while excluding ephemeral model state
+        ok 7 - DEF-CH13-04: exports and restores committed narrative history losslessly while excluding ephemeral model state
+          ---
+          duration_ms: 3.791763
+          type: 'test'
+          ...
+        # Subtest: DEF-CH13-03: ensures story-scoped geography isolation prevents cross-story mutation collisions
+        ok 8 - DEF-CH13-03: ensures story-scoped geography isolation prevents cross-story mutation collisions
+          ---
+          duration_ms: 57.567007
+          type: 'test'
+          ...
+        # Subtest: DEF-CH13-06: ensures unseeded exports auto-initialize deterministically without hash drift
+        ok 9 - DEF-CH13-06: ensures unseeded exports auto-initialize deterministically without hash drift
+          ---
+          duration_ms: 2.416342
+          type: 'test'
+          ...
+        1..9
     ok 8 - Challenge 13: Lossless Campaign Archive (.dreamarchive)
       ---
-      duration_ms: 6.866153
+      duration_ms: 74.117932
       type: 'suite'
       ...
     # Subtest: Challenge 15: Story Adaptation Pipeline
         # Subtest: segments source documents and creates grounded canonical facts
         ok 1 - segments source documents and creates grounded canonical facts
           ---
-          duration_ms: 0.637142
+          duration_ms: 2.668697
           type: 'test'
           ...
         1..1
     ok 9 - Challenge 15: Story Adaptation Pipeline
       ---
-      duration_ms: 0.721065
+      duration_ms: 2.778606
       type: 'suite'
       ...
     # Subtest: Amendment V10.8.35: Dynamic Character Alignment & Opposition Without Hatred
         # Subtest: supports dynamic role transformation with causal preservation and opposition without hatred
         ok 1 - supports dynamic role transformation with causal preservation and opposition without hatred
           ---
-          duration_ms: 0.404914
+          duration_ms: 0.501938
           type: 'test'
           ...
         1..1
     ok 10 - Amendment V10.8.35: Dynamic Character Alignment & Opposition Without Hatred
       ---
-      duration_ms: 0.475304
+      duration_ms: 0.590393
       type: 'suite'
       ...
     1..10
-ok 1 - Broad Implementation Pass — Domain Subsystems
+not ok 1 - Broad Implementation Pass — Domain Subsystems
   ---
-  duration_ms: 1500.494833
+  duration_ms: 1478.996386
+  type: 'suite'
+  location: '/app/applet/tests/broadSubsystems.test.ts:19:1'
+  failureType: 'subtestsFailed'
+  error: '1 subtest failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: CH13: Comprehensive Lossless Archive Round-Trip & Atomic Verification
+    # Subtest: 1. performs an exact, deep semantic equality comparison across all 20+ canonical domains pre-export vs post-restore
+    ok 1 - 1. performs an exact, deep semantic equality comparison across all 20+ canonical domains pre-export vs post-restore
+      ---
+      duration_ms: 20.481282
+      type: 'test'
+      ...
+    # Subtest: 2. guarantees atomic rollback on corrupted archive without mutating live state
+    ok 2 - 2. guarantees atomic rollback on corrupted archive without mutating live state
+      ---
+      duration_ms: 0.755278
+      type: 'test'
+      ...
+    1..2
+ok 2 - CH13: Comprehensive Lossless Archive Round-Trip & Atomic Verification
+  ---
+  duration_ms: 22.252148
+  type: 'suite'
+  ...
+# Subtest: CH13 DEF-CH13-01 Surgical Repair — Narrative openThreads Losslessness
+    # Subtest: TEST 1 — Narrative openThreads round-trip: preserves non-empty openThreads losslessly
+    ok 1 - TEST 1 — Narrative openThreads round-trip: preserves non-empty openThreads losslessly
+      ---
+      duration_ms: 3.857501
+      type: 'test'
+      ...
+    # Subtest: TEST 2 — Archive export/import/export: semantic identity between A and B
+    ok 2 - TEST 2 — Archive export/import/export: semantic identity between A and B
+      ---
+      duration_ms: 6.422283
+      type: 'test'
+      ...
+    # Subtest: TEST 3 — Empty/default behavior: checkpoint with no openThreads exports as [] and does not throw
+    ok 3 - TEST 3 — Empty/default behavior: checkpoint with no openThreads exports as [] and does not throw
+      ---
+      duration_ms: 0.299475
+      type: 'test'
+      ...
+    # Subtest: TEST 4 — Backward compatibility: narrative records lacking openThreads property restore safely as []
+    ok 4 - TEST 4 — Backward compatibility: narrative records lacking openThreads property restore safely as []
+      ---
+      duration_ms: 0.404557
+      type: 'test'
+      ...
+    # Subtest: TEST 5 — Cross-story restore: rebinds storyId, preserves openThreads, prevents cross-story leaks
+    ok 5 - TEST 5 — Cross-story restore: rebinds storyId, preserves openThreads, prevents cross-story leaks
+      ---
+      duration_ms: 2.793812
+      type: 'test'
+      ...
+    1..5
+ok 3 - CH13 DEF-CH13-01 Surgical Repair — Narrative openThreads Losslessness
+  ---
+  duration_ms: 48.362927
   type: 'suite'
   ...
 # Subtest: CH14: Voice Profile Persistence and Settings
-ok 2 - CH14: Voice Profile Persistence and Settings
+ok 4 - CH14: Voice Profile Persistence and Settings
   ---
-  duration_ms: 1.335713
+  duration_ms: 0.930598
   type: 'test'
   ...
 # Subtest: CH14: Semantic Event Resolution
-ok 3 - CH14: Semantic Event Resolution
+ok 5 - CH14: Semantic Event Resolution
   ---
-  duration_ms: 0.333488
+  duration_ms: 0.505568
   type: 'test'
   ...
 # Subtest: CH14: Archive Persistence
-ok 4 - CH14: Archive Persistence
+ok 6 - CH14: Archive Persistence
   ---
-  duration_ms: 2.341289
+  duration_ms: 4.188341
   type: 'test'
+  ...
+# Subtest: DEF-CH14-01: Direct Speech Synthesis & Transcription Do NOT Mutate Narrative History
+ok 7 - DEF-CH14-01: Direct Speech Synthesis & Transcription Do NOT Mutate Narrative History
+  ---
+  duration_ms: 4.082386
+  type: 'test'
+  ...
+# Subtest: DEF-CH14-02 & DEF-CH14-03: Campaign Archive Sensory State & Multi-Story Isolation
+ok 8 - DEF-CH14-02 & DEF-CH14-03: Campaign Archive Sensory State & Multi-Story Isolation
+  ---
+  duration_ms: 2.922628
+  type: 'test'
+  ...
+# Subtest: DEF-CH14-04: Adversarial Epistemic Suppression Leak Prevention
+ok 9 - DEF-CH14-04: Adversarial Epistemic Suppression Leak Prevention
+  ---
+  duration_ms: 0.543654
+  type: 'test'
+  ...
+# Subtest: DEF-CH14-05: Typed SFX Registry Resolution
+ok 10 - DEF-CH14-05: Typed SFX Registry Resolution
+  ---
+  duration_ms: 0.285089
+  type: 'test'
+  ...
+# Subtest: R12: Derived Speech Cache with Invalidation
+ok 11 - R12: Derived Speech Cache with Invalidation
+  ---
+  duration_ms: 0.267401
+  type: 'test'
+  ...
+# Subtest: CH15 Surgical Repairs Verification Suite
+    # Subtest: DEF-CH15-01: Backward Compatibility Methods
+        # Subtest: restores ingestAndSegment with expected return contract
+        ok 1 - restores ingestAndSegment with expected return contract
+          ---
+          duration_ms: 2.046436
+          type: 'test'
+          ...
+        # Subtest: restores extractAndNormalize with expected story bible return contract
+        ok 2 - restores extractAndNormalize with expected story bible return contract
+          ---
+          duration_ms: 2.911226
+          type: 'test'
+          ...
+        1..2
+    ok 1 - DEF-CH15-01: Backward Compatibility Methods
+      ---
+      duration_ms: 5.706602
+      type: 'suite'
+      ...
+    # Subtest: DEF-CH15-02: Adapted Story Library & State Isolation
+        # Subtest: maintains clean state isolation between story instances in worldRepository
+        ok 1 - maintains clean state isolation between story instances in worldRepository
+          ---
+          duration_ms: 0.952288
+          type: 'test'
+          ...
+        # Subtest: lists all adapted stories including default original story
+        ok 2 - lists all adapted stories including default original story
+          ---
+          duration_ms: 0.5086
+          type: 'test'
+          ...
+        1..2
+    ok 2 - DEF-CH15-02: Adapted Story Library & State Isolation
+      ---
+      duration_ms: 1.68592
+      type: 'suite'
+      ...
+    # Subtest: DEF-CH15-03: Real Stage 8 Player Instantiation
+        # Subtest: instantiates player lifecycle derived from story bible and profile
+        ok 1 - instantiates player lifecycle derived from story bible and profile
+          ---
+          duration_ms: 1.283776
+          type: 'test'
+          ...
+        1..1
+    ok 3 - DEF-CH15-03: Real Stage 8 Player Instantiation
+      ---
+      duration_ms: 1.417467
+      type: 'suite'
+      ...
+    # Subtest: DEF-CH15-04: Server-Driven Pipeline Status
+        # Subtest: persists and returns 9-stage pipeline state with completed stage progress
+        ok 1 - persists and returns 9-stage pipeline state with completed stage progress
+          ---
+          duration_ms: 0.66701
+          type: 'test'
+          ...
+        1..1
+    ok 4 - DEF-CH15-04: Server-Driven Pipeline Status
+      ---
+      duration_ms: 0.920947
+      type: 'suite'
+      ...
+    # Subtest: DEF-CH15-05: Distinct Adaptation Mode Adjudication
+        # Subtest: Faithful Adaptation rejects actions that contradict source facts
+        ok 1 - Faithful Adaptation rejects actions that contradict source facts
+          ---
+          duration_ms: 0.408981
+          type: 'test'
+          ...
+        # Subtest: Guided Divergence permits departure and flags divergence type
+        ok 2 - Guided Divergence permits departure and flags divergence type
+          ---
+          duration_ms: 0.229641
+          type: 'test'
+          ...
+        # Subtest: Alternate Timeline protects pre-divergence chronology and permits post-divergence branch
+        ok 3 - Alternate Timeline protects pre-divergence chronology and permits post-divergence branch
+          ---
+          duration_ms: 0.271071
+          type: 'test'
+          ...
+        # Subtest: Remix mode permits creative expansion while enforcing physical world rules
+        ok 4 - Remix mode permits creative expansion while enforcing physical world rules
+          ---
+          duration_ms: 0.361801
+          type: 'test'
+          ...
+        1..4
+    ok 5 - DEF-CH15-05: Distinct Adaptation Mode Adjudication
+      ---
+      duration_ms: 1.515964
+      type: 'suite'
+      ...
+    # Subtest: DEF-CH15-06: Scene Reconstruction & Fallback Logic
+        # Subtest: splits scenes using actual source chapter headers and scene breaks
+        ok 1 - splits scenes using actual source chapter headers and scene breaks
+          ---
+          duration_ms: 0.366276
+          type: 'test'
+          ...
+        # Subtest: sets missing location or time to UNKNOWN rather than inventing strings
+        ok 2 - sets missing location or time to UNKNOWN rather than inventing strings
+          ---
+          duration_ms: 0.323957
+          type: 'test'
+          ...
+        1..2
+    ok 6 - DEF-CH15-06: Scene Reconstruction & Fallback Logic
+      ---
+      duration_ms: 0.808165
+      type: 'suite'
+      ...
+    1..6
+ok 12 - CH15 Surgical Repairs Verification Suite
+  ---
+  duration_ms: 13.022792
+  type: 'suite'
+  ...
+# Subtest: Challenge 15 — Story Adaptation Pipeline & Canon Divergence Domain Tests
+    # Subtest: Pipeline Stage 1-9: Executes complete 9-stage adaptation pipeline and creates AdaptedStoryBible
+    ok 1 - Pipeline Stage 1-9: Executes complete 9-stage adaptation pipeline and creates AdaptedStoryBible
+      ---
+      duration_ms: 4.490678
+      type: 'test'
+      ...
+    # Subtest: Evaluates player action against canon in Strict mode: Rejects direct contradiction
+    ok 2 - Evaluates player action against canon in Strict mode: Rejects direct contradiction
+      ---
+      duration_ms: 1.520583
+      type: 'test'
+      ...
+    # Subtest: Evaluates player action in Guided Divergence mode: Creates divergence flag
+    ok 3 - Evaluates player action in Guided Divergence mode: Creates divergence flag
+      ---
+      duration_ms: 0.654264
+      type: 'test'
+      ...
+    # Subtest: Persists and restores adaptation state in WorldRepository and CampaignArchive
+    ok 4 - Persists and restores adaptation state in WorldRepository and CampaignArchive
+      ---
+      duration_ms: 6.874586
+      type: 'test'
+      ...
+    # Subtest: Branch Duplication: Clones adaptation session and story bible to new branch
+    ok 5 - Branch Duplication: Clones adaptation session and story bible to new branch
+      ---
+      duration_ms: 2.015034
+      type: 'test'
+      ...
+    1..5
+ok 13 - Challenge 15 — Story Adaptation Pipeline & Canon Divergence Domain Tests
+  ---
+  duration_ms: 17.072446
+  type: 'suite'
+  ...
+# Subtest: CH16 End-to-End Behavioral Verification Suite
+not ok 14 - CH16 End-to-End Behavioral Verification Suite
+  ---
+  duration_ms: 251.436909
+  type: 'test'
+  location: '/app/applet/tests/ch16_behavioral_verification.test.ts:36:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+    + undefined
+    - 'PROTAGONIST'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'PROTAGONIST'
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (/app/applet/tests/ch16_behavioral_verification.test.ts:66:10)
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+# Subtest: CH16: Comprehensive Architectural Gap Closure & Verification
+    # Subtest: Part 2: World Template Search & Discovery Filtering
+        # Subtest: filters worlds by natural language query across titles, summaries, and descriptions
+        ok 1 - filters worlds by natural language query across titles, summaries, and descriptions
+          ---
+          duration_ms: 2.619809
+          type: 'test'
+          ...
+        # Subtest: filters worlds by multiple criteria: genre, tone, era, and ruleset
+        ok 2 - filters worlds by multiple criteria: genre, tone, era, and ruleset
+          ---
+          duration_ms: 1.161622
+          type: 'test'
+          ...
+        # Subtest: 1. filters worlds by setting-only filter
+        ok 3 - 1. filters worlds by setting-only filter
+          ---
+          duration_ms: 1.013024
+          type: 'test'
+          ...
+        # Subtest: 2. filters worlds by source-only filter
+        ok 4 - 2. filters worlds by source-only filter
+          ---
+          duration_ms: 0.989274
+          type: 'test'
+          ...
+        # Subtest: 3. filters worlds by playstyle-only filter
+        ok 5 - 3. filters worlds by playstyle-only filter
+          ---
+          duration_ms: 0.777934
+          type: 'test'
+          ...
+        # Subtest: 4. filters worlds by setting + genre combination
+        ok 6 - 4. filters worlds by setting + genre combination
+          ---
+          duration_ms: 0.618217
+          type: 'test'
+          ...
+        # Subtest: 5. filters worlds by source + tone combination
+        ok 7 - 5. filters worlds by source + tone combination
+          ---
+          duration_ms: 0.690534
+          type: 'test'
+          ...
+        # Subtest: 6. filters worlds by playstyle + rules combination
+        ok 8 - 6. filters worlds by playstyle + rules combination
+          ---
+          duration_ms: 0.915745
+          type: 'test'
+          ...
+        # Subtest: 7. filters worlds by a multi-dimensional combination involving at least 4 filters
+        ok 9 - 7. filters worlds by a multi-dimensional combination involving at least 4 filters
+          ---
+          duration_ms: 0.926892
+          type: 'test'
+          ...
+        # Subtest: 8. returns empty array when criteria match nothing (no-match behavior)
+        ok 10 - 8. returns empty array when criteria match nothing (no-match behavior)
+          ---
+          duration_ms: 0.752394
+          type: 'test'
+          ...
+        # Subtest: 9. empty criteria returns normal listing of all worlds
+        ok 11 - 9. empty criteria returns normal listing of all worlds
+          ---
+          duration_ms: 0.427823
+          type: 'test'
+          ...
+        # Subtest: 10. search is strictly read-only and does not mutate worldRepository.worldTemplates
+        ok 12 - 10. search is strictly read-only and does not mutate worldRepository.worldTemplates
+          ---
+          duration_ms: 0.5058
+          type: 'test'
+          ...
+        1..12
+    ok 1 - Part 2: World Template Search & Discovery Filtering
+      ---
+      duration_ms: 13.45333
+      type: 'suite'
+      ...
+    # Subtest: Part 3 & 4: World Synthesis Schema & Research Evidence Firewall
+        # Subtest: synthesizes world preserving advanced schema fields (geography, timeline, magicRules, economy)
+        ok 1 - synthesizes world preserving advanced schema fields (geography, timeline, magicRules, economy)
+          ---
+          duration_ms: 2.874532
+          type: 'test'
+          ...
+        # Subtest: enforces research evidence firewall: unpromoted evidence is never in canonical facts, promoted evidence is qualified
+        ok 2 - enforces research evidence firewall: unpromoted evidence is never in canonical facts, promoted evidence is qualified
+          ---
+          duration_ms: 0.9819
+          type: 'test'
+          ...
+        1..2
+    ok 2 - Part 3 & 4: World Synthesis Schema & Research Evidence Firewall
+      ---
+      duration_ms: 4.063115
+      type: 'suite'
+      ...
+    # Subtest: Part 5: Chronology & Future-Knowledge Firewall
+        # Subtest: strictly isolates future knowledge from the current chronological clock timestamp
+        ok 1 - strictly isolates future knowledge from the current chronological clock timestamp
+          ---
+          duration_ms: 36.638839
+          type: 'test'
+          ...
+        1..1
+    ok 3 - Part 5: Chronology & Future-Knowledge Firewall
+      ---
+      duration_ms: 36.825123
+      type: 'suite'
+      ...
+    # Subtest: Part 6: Media Provider Failure Injection & Presentation Resilience
+        # Subtest: handles normal generation and deterministic failure injection modes gracefully
+        ok 1 - handles normal generation and deterministic failure injection modes gracefully
+          ---
+          duration_ms: 1.535319
+          type: 'test'
+          ...
+        1..1
+    ok 4 - Part 6: Media Provider Failure Injection & Presentation Resilience
+      ---
+      duration_ms: 1.671876
+      type: 'suite'
+      ...
+    # Subtest: Part 8: Version Pinning & Cross-Run Isolation
+        # Subtest: guarantees that mutating a story run never corrupts the base world template or other runs
+        ok 1 - guarantees that mutating a story run never corrupts the base world template or other runs
+          ---
+          duration_ms: 0.712494
+          type: 'test'
+          ...
+        1..1
+    ok 5 - Part 8: Version Pinning & Cross-Run Isolation
+      ---
+      duration_ms: 0.816462
+      type: 'suite'
+      ...
+    1..5
+ok 15 - CH16: Comprehensive Architectural Gap Closure & Verification
+  ---
+  duration_ms: 60.405223
+  type: 'suite'
+  ...
+# Subtest: CH16 20-Step Live World/Run UI Workflow & Isolation Sequence
+not ok 16 - CH16 20-Step Live World/Run UI Workflow & Isolation Sequence
+  ---
+  duration_ms: 173.712528
+  type: 'test'
+  location: '/app/applet/tests/ch16_live_ui_workflow.test.ts:32:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Expected values to be strictly equal:
+    + actual - expected
+    
+    + undefined
+    - 'PROTAGONIST'
+    
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected: 'PROTAGONIST'
+  operator: 'strictEqual'
+  stack: |-
+    TestContext.<anonymous> (/app/applet/tests/ch16_live_ui_workflow.test.ts:104:10)
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    async Test.run (node:internal/test_runner/test:1054:7)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+# Subtest: CH17 Living Bible & Workstation Tests
+    # Subtest: TEST-CH17-01: Registry contains complete current requirement set including CH14 and CH16
+    ok 1 - TEST-CH17-01: Registry contains complete current requirement set including CH14 and CH16
+      ---
+      duration_ms: 1.379845
+      type: 'test'
+      ...
+    # Subtest: TEST-CH17-02: Requirement IDs are stable and unique
+    ok 2 - TEST-CH17-02: Requirement IDs are stable and unique
+      ---
+      duration_ms: 0.311236
+      type: 'test'
+      ...
+    # Subtest: TEST-CH17-03: A DOCUMENTED requirement cannot become VERIFIED without supporting evidence
+    ok 3 - TEST-CH17-03: A DOCUMENTED requirement cannot become VERIFIED without supporting evidence
+      ---
+      duration_ms: 0.181481
+      type: 'test'
+      ...
+    # Subtest: TEST-CH17-04: IMPLEMENTED requires corresponding implementation/test evidence according to applicability
+    ok 4 - TEST-CH17-04: IMPLEMENTED requires corresponding implementation/test evidence according to applicability
+      ---
+      duration_ms: 0.123482
+      type: 'test'
+      ...
+    # Subtest: TEST-CH17-05: Verified status cannot be set by arbitrary UI/API payload
+    ok 5 - TEST-CH17-05: Verified status cannot be set by arbitrary UI/API payload
+      ---
+      duration_ms: 0.178953
+      type: 'test'
+      ...
+    # Subtest: TEST-CH17-06: Evidence records preserve evidence type and source/reference
+    ok 6 - TEST-CH17-06: Evidence records preserve evidence type and source/reference
+      ---
+      duration_ms: 1.261951
+      type: 'test'
+      ...
+    # Subtest: TEST-CH17-07: Workstation counts derive from current registry state
+    ok 7 - TEST-CH17-07: Workstation counts derive from current registry state
+      ---
+      duration_ms: 0.464392
+      type: 'test'
+      ...
+    # Subtest: TEST-CH17-08: Iteration record can be appended
+    ok 8 - TEST-CH17-08: Iteration record can be appended
+      ---
+      duration_ms: 1.245847
+      type: 'test'
+      ...
+    # Subtest: TEST-CH17-09: Iteration persists across server restart/reinitialization
+    ok 9 - TEST-CH17-09: Iteration persists across server restart/reinitialization
+      ---
+      duration_ms: 1.938518
+      type: 'test'
+      ...
+    # Subtest: TEST-CH17-10: Current phase/next task/blockers survive restart
+    ok 10 - TEST-CH17-10: Current phase/next task/blockers survive restart
+      ---
+      duration_ms: 1.997536
+      type: 'test'
+      ...
+    # Subtest: TEST-CH17-11: GET /api/game/living-bible returns current registry state
+    ok 11 - TEST-CH17-11: GET /api/game/living-bible returns current registry state
+      ---
+      duration_ms: 40.350872
+      type: 'test'
+      ...
+    # Subtest: TEST-CH17-12: GET /api/game/workstation returns current ledger
+    ok 12 - TEST-CH17-12: GET /api/game/workstation returns current ledger
+      ---
+      duration_ms: 11.102863
+      type: 'test'
+      ...
+    # Subtest: TEST-CH17-13: POST iteration validates payload and persists valid iteration
+    ok 13 - TEST-CH17-13: POST iteration validates payload and persists valid iteration
+      ---
+      duration_ms: 34.615058
+      type: 'test'
+      ...
+    # Subtest: TEST-CH17-14: Invalid requirement status transition is rejected
+    ok 14 - TEST-CH17-14: Invalid requirement status transition is rejected
+      ---
+      duration_ms: 7.132304
+      type: 'test'
+      ...
+    # Subtest: TEST-CH17-15: UI/API does not mutate gameplay/world state
+    ok 15 - TEST-CH17-15: UI/API does not mutate gameplay/world state
+      ---
+      duration_ms: 28.263108
+      type: 'test'
+      ...
+    # Subtest: TEST-CH17-16: CH17 evidence does not leak secrets or hidden gameplay information
+    ok 16 - TEST-CH17-16: CH17 evidence does not leak secrets or hidden gameplay information
+      ---
+      duration_ms: 7.409499
+      type: 'test'
+      ...
+    # Subtest: TEST-CH17-17: Server-authoritative evidence provenance and verification gate assertions (DEF-CH17-01)
+    ok 17 - TEST-CH17-17: Server-authoritative evidence provenance and verification gate assertions (DEF-CH17-01)
+      ---
+      duration_ms: 17.446683
+      type: 'test'
+      ...
+    1..17
+ok 17 - CH17 Living Bible & Workstation Tests
+  ---
+  duration_ms: 157.452778
+  type: 'suite'
   ...
 # Subtest: CH1 SURGICAL REPAIR REGRESSION
     # Subtest: DEF-CH1-01: Geography Authority Disconnect
         # Subtest: should derive UI projection from canonical GeographyGraph, without a duplicate mock location dictionary controlling the result
         ok 1 - should derive UI projection from canonical GeographyGraph, without a duplicate mock location dictionary controlling the result
           ---
-          duration_ms: 2.897826
+          duration_ms: 2.974539
           type: 'test'
           ...
         # Subtest: DISCOVER_LOCATION changes canonical discovery state
         ok 2 - DISCOVER_LOCATION changes canonical discovery state
           ---
-          duration_ms: 2.48531
+          duration_ms: 1.956668
           type: 'test'
           ...
         1..2
     ok 1 - DEF-CH1-01: Geography Authority Disconnect
       ---
-      duration_ms: 6.126436
+      duration_ms: 5.758461
       type: 'suite'
       ...
     # Subtest: DEF-CH1-02: Travel Interruptions
         # Subtest: should deterministically interrupt a journey, preserve elapsed time and location rules
         ok 1 - should deterministically interrupt a journey, preserve elapsed time and location rules
           ---
-          duration_ms: 2.28532
+          duration_ms: 2.139525
           type: 'test'
           ...
         1..1
     ok 2 - DEF-CH1-02: Travel Interruptions
       ---
-      duration_ms: 2.593115
+      duration_ms: 4.173154
       type: 'suite'
       ...
     # Subtest: DEF-CH1-03: Simulation Time Scale Semantics
         # Subtest: advanceSeconds() strictly adds literal canonical simulation seconds, irrespective of timeScale
         ok 1 - advanceSeconds() strictly adds literal canonical simulation seconds, irrespective of timeScale
           ---
-          duration_ms: 0.593644
+          duration_ms: 0.616638
           type: 'test'
           ...
         1..1
     ok 3 - DEF-CH1-03: Simulation Time Scale Semantics
       ---
-      duration_ms: 0.757963
+      duration_ms: 0.884126
       type: 'suite'
       ...
     # Subtest: DEF-CH1-04: Geography Provenance
         # Subtest: Canonical geography nodes and edges have structured provenance
         ok 1 - Canonical geography nodes and edges have structured provenance
           ---
-          duration_ms: 0.466521
+          duration_ms: 0.502876
           type: 'test'
           ...
         1..1
     ok 4 - DEF-CH1-04: Geography Provenance
       ---
-      duration_ms: 0.694547
+      duration_ms: 0.828864
       type: 'suite'
       ...
     1..4
-ok 5 - CH1 SURGICAL REPAIR REGRESSION
+ok 18 - CH1 SURGICAL REPAIR REGRESSION
   ---
-  duration_ms: 10.835684
+  duration_ms: 12.330123
   type: 'suite'
   ...
 # Subtest: CH2 SURGICAL REPAIR VERIFICATION — EPISTEMIC HORIZON & ACTOR DISCOVERY
     # Subtest: DEF-CH2-01: Route Edge Epistemic Leak
         # Subtest: Scenario A: hides route edges connected to undiscovered locations
-        ok 1 - Scenario A: hides route edges connected to undiscovered locations
+        not ok 1 - Scenario A: hides route edges connected to undiscovered locations
           ---
-          duration_ms: 2.634755
+          duration_ms: 4.38023
           type: 'test'
+          location: '/app/applet/tests/ch2_surgical.test.ts:16:5'
+          failureType: 'testCodeFailure'
+          error: |-
+            Expected values to be strictly equal:
+            + actual - expected
+            
+            + {
+            +   accessible: false,
+            +   ambientSensory: 'Smell of wet vellum, cedar resin, and still black water.',
+            +   coordinates: {
+            +     x: 190,
+            +     y: 310
+            +   },
+            +   description: 'Ancient archives submerged beneath dark brackish pools. Vellum cases float in sealed reed baskets.',
+            +   discovered: true,
+            +   id: 'loc_sunken_scriptorium',
+            +   name: 'Sunken Scriptorium',
+            +   region: 'reg_trenches'
+            + }
+            - undefined
+            
+          code: 'ERR_ASSERTION'
+          name: 'AssertionError'
+          actual:
+            id: 'loc_sunken_scriptorium'
+            name: 'Sunken Scriptorium'
+            region: 'reg_trenches'
+            description: 'Ancient archives submerged beneath dark brackish pools. Vellum cases float in sealed reed baskets.'
+            coordinates:
+              x: 190
+              y: 310
+            accessible: false
+            ambientSensory: 'Smell of wet vellum, cedar resin, and still black water.'
+            discovered: true
+          operator: 'strictEqual'
+          stack: |-
+            TestContext.<anonymous> (/app/applet/tests/ch2_surgical.test.ts:20:14)
+            Test.runInAsyncScope (node:async_hooks:214:14)
+            Test.run (node:internal/test_runner/test:1047:25)
+            async Promise.all (index 0)
+            async Suite.run (node:internal/test_runner/test:1442:7)
+            async Promise.all (index 0)
+            async Suite.run (node:internal/test_runner/test:1442:7)
+            async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
           ...
         1..1
-    ok 1 - DEF-CH2-01: Route Edge Epistemic Leak
+    not ok 1 - DEF-CH2-01: Route Edge Epistemic Leak
       ---
-      duration_ms: 3.409451
+      duration_ms: 4.985137
       type: 'suite'
+      location: '/app/applet/tests/ch2_surgical.test.ts:15:3'
+      failureType: 'subtestsFailed'
+      error: '1 subtest failed'
+      code: 'ERR_TEST_FAILURE'
+      stack: |-
+        async Promise.all (index 0)
       ...
     # Subtest: DEF-CH2-02: Actor-Scoped Discovery Authority
         # Subtest: Scenario B & C: discovery is actor-scoped and isolated between actors
-        ok 1 - Scenario B & C: discovery is actor-scoped and isolated between actors
+        not ok 1 - Scenario B & C: discovery is actor-scoped and isolated between actors
           ---
-          duration_ms: 2.26859
+          duration_ms: 2.987643
           type: 'test'
+          location: '/app/applet/tests/ch2_surgical.test.ts:33:5'
+          failureType: 'testCodeFailure'
+          error: |-
+            Actor B must NOT see loc_sunken_scriptorium
+            + actual - expected
+            
+            + {
+            +   accessible: false,
+            +   ambientSensory: 'Smell of wet vellum, cedar resin, and still black water.',
+            +   coordinates: {
+            +     x: 190,
+            +     y: 310
+            +   },
+            +   description: 'Ancient archives submerged beneath dark brackish pools. Vellum cases float in sealed reed baskets.',
+            +   discovered: true,
+            +   id: 'loc_sunken_scriptorium',
+            +   name: 'Sunken Scriptorium',
+            +   region: 'reg_trenches'
+            + }
+            - undefined
+            
+          code: 'ERR_ASSERTION'
+          name: 'AssertionError'
+          actual:
+            id: 'loc_sunken_scriptorium'
+            name: 'Sunken Scriptorium'
+            region: 'reg_trenches'
+            description: 'Ancient archives submerged beneath dark brackish pools. Vellum cases float in sealed reed baskets.'
+            coordinates:
+              x: 190
+              y: 310
+            accessible: false
+            ambientSensory: 'Smell of wet vellum, cedar resin, and still black water.'
+            discovered: true
+          operator: 'strictEqual'
+          stack: |-
+            TestContext.<anonymous> (/app/applet/tests/ch2_surgical.test.ts:46:14)
+            Test.runInAsyncScope (node:async_hooks:214:14)
+            Test.run (node:internal/test_runner/test:1047:25)
+            async Promise.all (index 0)
+            async Suite.run (node:internal/test_runner/test:1442:7)
+            async Suite.processPendingSubtests (node:internal/test_runner/test:744:7)
           ...
         1..1
-    ok 2 - DEF-CH2-02: Actor-Scoped Discovery Authority
+    not ok 2 - DEF-CH2-02: Actor-Scoped Discovery Authority
       ---
-      duration_ms: 2.550499
+      duration_ms: 3.150525
       type: 'suite'
+      location: '/app/applet/tests/ch2_surgical.test.ts:32:3'
+      failureType: 'subtestsFailed'
+      error: '1 subtest failed'
+      code: 'ERR_TEST_FAILURE'
       ...
     # Subtest: DEF-CH2-03: Living World Epistemic Projection
         # Subtest: Scenario D: masks undiscovered locations, NPC schedules, and secret events in living-world state
         ok 1 - Scenario D: masks undiscovered locations, NPC schedules, and secret events in living-world state
           ---
-          duration_ms: 0.78366
+          duration_ms: 0.65662
           type: 'test'
           ...
         1..1
     ok 3 - DEF-CH2-03: Living World Epistemic Projection
       ---
-      duration_ms: 1.029514
+      duration_ms: 0.891956
       type: 'suite'
       ...
     # Subtest: DEF-CH2-04: Working Context Engine Epistemic Masking
         # Subtest: Scenario E: masks undiscovered targetLocationId in AI schedule route context
         ok 1 - Scenario E: masks undiscovered targetLocationId in AI schedule route context
           ---
-          duration_ms: 3.388592
+          duration_ms: 3.092265
           type: 'test'
           ...
         1..1
     ok 4 - DEF-CH2-04: Working Context Engine Epistemic Masking
       ---
-      duration_ms: 3.5716
+      duration_ms: 3.316167
       type: 'suite'
       ...
     # Subtest: Scenario F: Persistence & Archive Integrity
         # Subtest: preserves discoveredLocationIds across PlayerLifecycleState serialization and campaign archive
         ok 1 - preserves discoveredLocationIds across PlayerLifecycleState serialization and campaign archive
           ---
-          duration_ms: 2.678925
+          duration_ms: 2.127921
           type: 'test'
           ...
         1..1
     ok 5 - Scenario F: Persistence & Archive Integrity
       ---
-      duration_ms: 2.922101
+      duration_ms: 2.338795
       type: 'suite'
       ...
     # Subtest: CH2 RECONCILIATION SURGICAL REPAIRS (CH2-05, BYPASS-01, BYPASS-02, CH2-06, CH2-07)
         # Subtest: BYPASS-01 & BYPASS-02: WorkingContext uses actor-scoped discovery and capabilities
         ok 1 - BYPASS-01 & BYPASS-02: WorkingContext uses actor-scoped discovery and capabilities
           ---
-          duration_ms: 1.536536
+          duration_ms: 0.964232
           type: 'test'
           ...
         # Subtest: CH2-06: CapabilityEngine.getActorCapabilities filters by vesselCapacity
         ok 2 - CH2-06: CapabilityEngine.getActorCapabilities filters by vesselCapacity
           ---
-          duration_ms: 0.509678
+          duration_ms: 0.427281
           type: 'test'
           ...
         # Subtest: CH2-07: InventoryItemEngine.projectActorInventory masks unidentified items
         ok 3 - CH2-07: InventoryItemEngine.projectActorInventory masks unidentified items
           ---
-          duration_ms: 0.872894
+          duration_ms: 3.519781
           type: 'test'
           ...
         1..3
     ok 6 - CH2 RECONCILIATION SURGICAL REPAIRS (CH2-05, BYPASS-01, BYPASS-02, CH2-06, CH2-07)
       ---
-      duration_ms: 3.138775
+      duration_ms: 5.129935
       type: 'suite'
       ...
     # Subtest: CH2-08: Actor-Scoped Tactical Perception & Knowledge Projection
         # Subtest: Canonical Completeness: TacticalCombatEngine retains all participants, hazards, and turns internally
         ok 1 - Canonical Completeness: TacticalCombatEngine retains all participants, hazards, and turns internally
           ---
-          duration_ms: 1.036576
+          duration_ms: 1.262491
           type: 'test'
           ...
         # Subtest: Actor Isolation: projectCombatForActor omits hidden participants and masks turnQueue
         ok 2 - Actor Isolation: projectCombatForActor omits hidden participants and masks turnQueue
           ---
-          duration_ms: 0.668693
+          duration_ms: 8.932788
           type: 'test'
           ...
         # Subtest: AI Context Scoping: WorkingContextEngine does not leak hidden combatants into prompt text
         ok 3 - AI Context Scoping: WorkingContextEngine does not leak hidden combatants into prompt text
           ---
-          duration_ms: 3.185658
+          duration_ms: 1.539294
           type: 'test'
           ...
         # Subtest: Event Log Sanitization: prevents event leaks for unseen actions
         ok 4 - Event Log Sanitization: prevents event leaks for unseen actions
           ---
-          duration_ms: 0.893307
+          duration_ms: 0.990802
           type: 'test'
           ...
         # Subtest: Target-ID Security Authorization: rejects targeting unseen/hidden participants
         ok 5 - Target-ID Security Authorization: rejects targeting unseen/hidden participants
           ---
-          duration_ms: 0.388064
+          duration_ms: 0.463447
           type: 'test'
           ...
         # Subtest: Lossless Archival: exportState and importState remain 100% canonical and lossless
         ok 6 - Lossless Archival: exportState and importState remain 100% canonical and lossless
           ---
-          duration_ms: 0.409414
+          duration_ms: 0.615226
           type: 'test'
           ...
         1..6
     ok 7 - CH2-08: Actor-Scoped Tactical Perception & Knowledge Projection
       ---
-      duration_ms: 6.871361
+      duration_ms: 14.165096
       type: 'suite'
       ...
     # Subtest: CH2-08 FINAL REPAIR: ACTOR IDENTITY SECURITY & EPISTEMIC KNOWLEDGE BOUNDARIES
         # Subtest: TEST 1: Public route GET /combat/state cannot fetch projection for unowned actorId
         ok 1 - TEST 1: Public route GET /combat/state cannot fetch projection for unowned actorId
           ---
-          duration_ms: 84.640108
+          duration_ms: 76.457873
           type: 'test'
           ...
         # Subtest: TEST 2: Public route POST /combat/move cannot move unowned actorId
         ok 2 - TEST 2: Public route POST /combat/move cannot move unowned actorId
           ---
-          duration_ms: 34.407709
+          duration_ms: 31.78413
           type: 'test'
           ...
         # Subtest: TEST 3: Public route POST /combat/attack cannot attack as unowned attackerId
         ok 3 - TEST 3: Public route POST /combat/attack cannot attack as unowned attackerId
           ---
-          duration_ms: 22.874919
+          duration_ms: 4.964346
           type: 'test'
           ...
         # Subtest: TEST 4: Public route POST /combat/cast cannot cast as unowned actorId
         ok 4 - TEST 4: Public route POST /combat/cast cannot cast as unowned actorId
           ---
-          duration_ms: 26.853436
+          duration_ms: 5.964195
           type: 'test'
           ...
         # Subtest: TEST 5: Public route POST /combat/end-turn cannot end turn as unowned actorId
         ok 5 - TEST 5: Public route POST /combat/end-turn cannot end turn as unowned actorId
           ---
-          duration_ms: 7.237765
+          duration_ms: 5.994373
           type: 'test'
           ...
         # Subtest: TEST 6: Combat participant known via durable KnowledgeFact is visible even if stealthed
         ok 6 - TEST 6: Combat participant known via durable KnowledgeFact is visible even if stealthed
           ---
-          duration_ms: 0.639759
+          duration_ms: 0.598335
           type: 'test'
           ...
         # Subtest: TEST 7: Combat participant unknown epistemically is NOT visible even if adjacent
         ok 7 - TEST 7: Combat participant unknown epistemically is NOT visible even if adjacent
           ---
-          duration_ms: 0.488705
+          duration_ms: 0.589602
           type: 'test'
           ...
         # Subtest: TEST 8: Epistemic check in projectCombatForActor and isParticipantKnownToActor return identical results for all participants
         ok 8 - TEST 8: Epistemic check in projectCombatForActor and isParticipantKnownToActor return identical results for all participants
           ---
-          duration_ms: 0.459065
+          duration_ms: 0.373564
           type: 'test'
           ...
         # Subtest: TEST 9: Full turn cycle executes with actor-scoped projections without epistemic leak
         ok 9 - TEST 9: Full turn cycle executes with actor-scoped projections without epistemic leak
           ---
-          duration_ms: 0.761954
+          duration_ms: 0.79493
           type: 'test'
           ...
         1..9
     ok 8 - CH2-08 FINAL REPAIR: ACTOR IDENTITY SECURITY & EPISTEMIC KNOWLEDGE BOUNDARIES
       ---
-      duration_ms: 293.894157
+      duration_ms: 248.555459
       type: 'suite'
       ...
     1..8
-ok 6 - CH2 SURGICAL REPAIR VERIFICATION — EPISTEMIC HORIZON & ACTOR DISCOVERY
+not ok 19 - CH2 SURGICAL REPAIR VERIFICATION — EPISTEMIC HORIZON & ACTOR DISCOVERY
   ---
-  duration_ms: 318.624002
+  duration_ms: 283.71394
   type: 'suite'
+  location: '/app/applet/tests/ch2_surgical.test.ts:9:1'
+  failureType: 'subtestsFailed'
+  error: '2 subtests failed'
+  code: 'ERR_TEST_FAILURE'
   ...
 # Subtest: CH3.2 Item-Bound Capabilities & Equipment-Granted Skills Suite
     # Subtest: TEST 1: Canonical item definitions declare grantedCapabilities correctly
     ok 1 - TEST 1: Canonical item definitions declare grantedCapabilities correctly
       ---
-      duration_ms: 3.222065
+      duration_ms: 3.076389
       type: 'test'
       ...
     # Subtest: TEST 2: Canonical capability definitions are registered in CapabilityEngine
     ok 2 - TEST 2: Canonical capability definitions are registered in CapabilityEngine
       ---
-      duration_ms: 0.684768
+      duration_ms: 0.634345
       type: 'test'
       ...
     # Subtest: TEST 3: Equipping an item dynamically surfaces granted capability in getEffectiveActorCapabilities
     ok 3 - TEST 3: Equipping an item dynamically surfaces granted capability in getEffectiveActorCapabilities
       ---
-      duration_ms: 1.099037
+      duration_ms: 1.265821
       type: 'test'
       ...
     # Subtest: TEST 4: Unequipping an item dynamically revokes the granted capability
     ok 4 - TEST 4: Unequipping an item dynamically revokes the granted capability
       ---
-      duration_ms: 1.084321
+      duration_ms: 1.142777
       type: 'test'
       ...
     # Subtest: TEST 5: Innate/learned capabilities persist regardless of item equip/unequip
     ok 5 - TEST 5: Innate/learned capabilities persist regardless of item equip/unequip
       ---
-      duration_ms: 0.920592
+      duration_ms: 1.299743
       type: 'test'
       ...
     # Subtest: TEST 6: Dual source (Learned + Equipment) produces exactly ONE merged capability entry with multiple sources
     ok 6 - TEST 6: Dual source (Learned + Equipment) produces exactly ONE merged capability entry with multiple sources
       ---
-      duration_ms: 0.647439
+      duration_ms: 0.587956
       type: 'test'
       ...
     # Subtest: TEST 7: Unequipping dual-source item retains the learned capability without loss
     ok 7 - TEST 7: Unequipping dual-source item retains the learned capability without loss
       ---
-      duration_ms: 0.486074
+      duration_ms: 0.41845
       type: 'test'
       ...
     # Subtest: TEST 8: Two equipped items granting the same capability merge into one entry with multiple equipment sources
     ok 8 - TEST 8: Two equipped items granting the same capability merge into one entry with multiple equipment sources
       ---
-      duration_ms: 0.783739
+      duration_ms: 0.756164
       type: 'test'
       ...
     # Subtest: TEST 9: Broken item (isBroken=true) does NOT grant capability
     ok 9 - TEST 9: Broken item (isBroken=true) does NOT grant capability
       ---
-      duration_ms: 1.403841
+      duration_ms: 0.83227
       type: 'test'
       ...
     # Subtest: TEST 10: Item with 0 durability immediately loses capability grant
     ok 10 - TEST 10: Item with 0 durability immediately loses capability grant
       ---
-      duration_ms: 0.944749
+      duration_ms: 1.396901
       type: 'test'
       ...
     # Subtest: TEST 11: Unidentified item masks client projection but server resolves capability grant accurately
     ok 11 - TEST 11: Unidentified item masks client projection but server resolves capability grant accurately
       ---
-      duration_ms: 0.594146
+      duration_ms: 1.368039
       type: 'test'
       ...
     # Subtest: TEST 12: Live API rejects unequipped/unlearned capability cast with HTTP 403
     ok 12 - TEST 12: Live API rejects unequipped/unlearned capability cast with HTTP 403
       ---
-      duration_ms: 78.816614
+      duration_ms: 78.862847
       type: 'test'
       ...
     # Subtest: TEST 13: Epistemic boundary blocks target analysis on unperceived/concealed entities
     ok 13 - TEST 13: Epistemic boundary blocks target analysis on unperceived/concealed entities
       ---
-      duration_ms: 11.511886
+      duration_ms: 18.174366
       type: 'test'
       ...
     # Subtest: TEST 14: WorkingContextEngine includes equipped capabilities and provenance in turn context
     ok 14 - TEST 14: WorkingContextEngine includes equipped capabilities and provenance in turn context
       ---
-      duration_ms: 2.537836
+      duration_ms: 2.770603
       type: 'test'
       ...
     # Subtest: TEST 15: Lossless archive serialization and atomic restore preserves equipment capability dynamic state
     ok 15 - TEST 15: Lossless archive serialization and atomic restore preserves equipment capability dynamic state
       ---
-      duration_ms: 2.477783
+      duration_ms: 4.925193
       type: 'test'
       ...
     # Subtest: TEST 16: Adjudication rejects client-fabricated capability invocation without valid equipment or learned grant
     ok 16 - TEST 16: Adjudication rejects client-fabricated capability invocation without valid equipment or learned grant
       ---
-      duration_ms: 10.637786
+      duration_ms: 10.417156
       type: 'test'
       ...
     1..16
-ok 7 - CH3.2 Item-Bound Capabilities & Equipment-Granted Skills Suite
+ok 20 - CH3.2 Item-Bound Capabilities & Equipment-Granted Skills Suite
   ---
-  duration_ms: 133.902672
+  duration_ms: 141.527647
   type: 'suite'
   ...
 # Subtest: CH3 Surgical Repair Verification Suite
@@ -814,770 +1532,1842 @@ ok 7 - CH3.2 Item-Bound Capabilities & Equipment-Granted Skills Suite
         # Subtest: TEST 1: NPC decision changes when canonical state changes (Low Health Retreat vs Healthy Attack)
         ok 1 - TEST 1: NPC decision changes when canonical state changes (Low Health Retreat vs Healthy Attack)
           ---
-          duration_ms: 2.870988
+          duration_ms: 1.851227
           type: 'test'
           ...
         # Subtest: TEST 2: Same initial state produces deterministic tactical decision
         ok 2 - TEST 2: Same initial state produces deterministic tactical decision
           ---
-          duration_ms: 2.353917
+          duration_ms: 1.904622
           type: 'test'
           ...
         # Subtest: TEST 3: Tactical policy cannot invent unavailable capabilities or exceed resources
         ok 3 - TEST 3: Tactical policy cannot invent unavailable capabilities or exceed resources
           ---
-          duration_ms: 1.207877
+          duration_ms: 0.748165
           type: 'test'
           ...
         # Subtest: TEST 4: Tactical policy cannot use knowledge outside actor-scoped epistemic context
         ok 4 - TEST 4: Tactical policy cannot use knowledge outside actor-scoped epistemic context
           ---
-          duration_ms: 1.192338
+          duration_ms: 0.685042
           type: 'test'
           ...
         1..4
     ok 1 - Objective A: Autonomous NPC Decision Policy
       ---
-      duration_ms: 8.735985
+      duration_ms: 5.928137
       type: 'suite'
       ...
     # Subtest: Objective B: Group Tactical Coordination
         # Subtest: TEST 5: Group decision distinguishes VANGUARD vs REARGUARD/PROTECTOR roles
         ok 1 - TEST 5: Group decision distinguishes VANGUARD vs REARGUARD/PROTECTOR roles
           ---
-          duration_ms: 0.806624
+          duration_ms: 0.640599
           type: 'test'
           ...
         1..1
     ok 2 - Objective B: Group Tactical Coordination
       ---
-      duration_ms: 0.984938
+      duration_ms: 0.776281
       type: 'suite'
       ...
     # Subtest: Objective C: AI Adjudication Atomicity
-        # Subtest: TEST 6: Valid turn package commits chronicle evidence atomically
-        not ok 1 - TEST 6: Valid turn package commits chronicle evidence atomically
-          ---
-          duration_ms: 2.362735
-          type: 'test'
-          location: '/app/applet/tests/ch3_surgical.test.ts:386:5'
-          failureType: 'testCodeFailure'
-          error: |-
-            Expected values to be strictly equal:
-            
-            false !== true
-            
-          code: 'ERR_ASSERTION'
-          name: 'AssertionError'
-          expected: true
-          actual: false
-          operator: 'strictEqual'
-          stack: |-
-            TestContext.<anonymous> (/app/applet/tests/ch3_surgical.test.ts:401:14)
-            Test.runInAsyncScope (node:async_hooks:214:14)
-            Test.run (node:internal/test_runner/test:1047:25)
-            process.processTicksAndRejections (node:internal/process/task_queues:103:5)
-            async Promise.all (index 0)
-            async Suite.run (node:internal/test_runner/test:1442:7)
-            async Suite.processPendingSubtests (node:internal/test_runner/test:744:7)
-          ...
-        # Subtest: TEST 7: Partially invalid turn package commits NOTHING (Chronicle remains pristine)
-        not ok 2 - TEST 7: Partially invalid turn package commits NOTHING (Chronicle remains pristine)
-          ---
-          duration_ms: 1.598112
-          type: 'test'
-          location: '/app/applet/tests/ch3_surgical.test.ts:409:5'
-          failureType: 'testCodeFailure'
-          error: |-
-            Expected values to be strictly equal:
-            
-            2 !== 1
-            
-          code: 'ERR_ASSERTION'
-          name: 'AssertionError'
-          expected: 1
-          actual: 2
-          operator: 'strictEqual'
-          stack: |-
-            TestContext.<anonymous> (/app/applet/tests/ch3_surgical.test.ts:426:14)
-            Test.runInAsyncScope (node:async_hooks:214:14)
-            Test.run (node:internal/test_runner/test:1047:25)
-            process.processTicksAndRejections (node:internal/process/task_queues:103:5)
-            async Suite.processPendingSubtests (node:internal/test_runner/test:744:7)
-          ...
-        1..2
-    not ok 3 - Objective C: AI Adjudication Atomicity
+    ok 3 - Objective C: AI Adjudication Atomicity
       ---
-      duration_ms: 4.298583
+      duration_ms: 0.05393
       type: 'suite'
-      location: '/app/applet/tests/ch3_surgical.test.ts:385:3'
-      failureType: 'subtestsFailed'
-      error: '2 subtests failed'
-      code: 'ERR_TEST_FAILURE'
       ...
     # Subtest: Objective D: Actor Authority & HTTP API Verification
         # Subtest: TEST 8: Forged actor identity on player combat routes returns 403 Forbidden
         ok 1 - TEST 8: Forged actor identity on player combat routes returns 403 Forbidden
           ---
-          duration_ms: 95.131263
+          duration_ms: 77.138463
           type: 'test'
           ...
         # Subtest: TEST 9: NPC tactical turn endpoint executes autonomously and rejects player usurpation
         ok 2 - TEST 9: NPC tactical turn endpoint executes autonomously and rejects player usurpation
           ---
-          duration_ms: 13.300367
+          duration_ms: 17.812626
           type: 'test'
           ...
         1..2
     ok 4 - Objective D: Actor Authority & HTTP API Verification
       ---
-      duration_ms: 108.744294
+      duration_ms: 95.387606
       type: 'suite'
       ...
     1..4
-not ok 8 - CH3 Surgical Repair Verification Suite
+ok 21 - CH3 Surgical Repair Verification Suite
   ---
-  duration_ms: 138.896497
+  duration_ms: 114.301972
   type: 'suite'
-  location: '/app/applet/tests/ch3_surgical.test.ts:12:1'
+  ...
+# Subtest: CH4 SURGICAL REPAIR (Evidence Identity & AI Boundary)
+    # Subtest: TEST 1 & 2: DETERMINISTIC EVIDENCE IDENTITY & REPLAY DEDUPLICATION
+    ok 1 - TEST 1 & 2: DETERMINISTIC EVIDENCE IDENTITY & REPLAY DEDUPLICATION
+      ---
+      duration_ms: 1.552249
+      type: 'test'
+      ...
+    # Subtest: TEST 3: DIFFERENT EVENTS REMAIN DISTINCT
+    ok 2 - TEST 3: DIFFERENT EVENTS REMAIN DISTINCT
+      ---
+      duration_ms: 0.601475
+      type: 'test'
+      ...
+    # Subtest: TEST 4: ARCHIVE / RESTORE
+    ok 3 - TEST 4: ARCHIVE / RESTORE
+      ---
+      duration_ms: 6.383343
+      type: 'test'
+      ...
+    # Subtest: TEST 5: AI CHRONICLE REJECTION
+    ok 4 - TEST 5: AI CHRONICLE REJECTION
+      ---
+      duration_ms: 0.898454
+      type: 'test'
+      ...
+    # Subtest: TEST 6: AI CANNOT INVENT PROVENANCE
+    ok 5 - TEST 6: AI CANNOT INVENT PROVENANCE
+      ---
+      duration_ms: 0.392657
+      type: 'test'
+      ...
+    # Subtest: TEST 7: AI CANNOT INVENT CAUSALITY
+    ok 6 - TEST 7: AI CANNOT INVENT CAUSALITY
+      ---
+      duration_ms: 0.572058
+      type: 'test'
+      ...
+    # Subtest: TEST 8: VALID CANONICAL EVENT STILL PROMOTES
+    ok 7 - TEST 8: VALID CANONICAL EVENT STILL PROMOTES
+      ---
+      duration_ms: 0.752672
+      type: 'test'
+      ...
+    1..7
+ok 22 - CH4 SURGICAL REPAIR (Evidence Identity & AI Boundary)
+  ---
+  duration_ms: 12.347663
+  type: 'suite'
+  ...
+# Subtest: TEST 9: DIFFERENT EVENTS WITH SAME LOGICAL TIMESTAMP RECEIVE DISTINCT DETERMINISTIC IDS
+ok 23 - TEST 9: DIFFERENT EVENTS WITH SAME LOGICAL TIMESTAMP RECEIVE DISTINCT DETERMINISTIC IDS
+  ---
+  duration_ms: 0.882484
+  type: 'test'
+  ...
+# Subtest: CH5 Surgical Repair - Crafting & Transfer
+    # Subtest: Crafting Prerequisites (CH5-DEF-001)
+        # Subtest: CRAFTING 1: valid tool requirement succeeds
+        ok 1 - CRAFTING 1: valid tool requirement succeeds
+          ---
+          duration_ms: 1.507199
+          type: 'test'
+          ...
+        # Subtest: CRAFTING 2: missing required tool is rejected
+        ok 2 - CRAFTING 2: missing required tool is rejected
+          ---
+          duration_ms: 0.321226
+          type: 'test'
+          ...
+        # Subtest: CRAFTING 3: canonical crafting time is respected and returned for clock advancement
+        ok 3 - CRAFTING 3: canonical crafting time is respected and returned for clock advancement
+          ---
+          duration_ms: 0.20525
+          type: 'test'
+          ...
+        # Subtest: CRAFTING 5: material insufficiency remains atomic
+        ok 4 - CRAFTING 5: material insufficiency remains atomic
+          ---
+          duration_ms: 0.351213
+          type: 'test'
+          ...
+        # Subtest: CRAFTING 6, 7: successful output remains deterministic and provenance correct
+        ok 5 - CRAFTING 6, 7: successful output remains deterministic and provenance correct
+          ---
+          duration_ms: 0.282189
+          type: 'test'
+          ...
+        1..5
+    ok 1 - Crafting Prerequisites (CH5-DEF-001)
+      ---
+      duration_ms: 3.709326
+      type: 'suite'
+      ...
+    # Subtest: Transfer & Looting (CH5-DEF-002)
+        # Subtest: TRANSFER 9: valid actor-to-container transfer
+        ok 1 - TRANSFER 9: valid actor-to-container transfer
+          ---
+          duration_ms: 0.532246
+          type: 'test'
+          ...
+        # Subtest: TRANSFER 10: valid container-to-actor loot
+        ok 2 - TRANSFER 10: valid container-to-actor loot
+          ---
+          duration_ms: 0.185464
+          type: 'test'
+          ...
+        # Subtest: TRANSFER 11, 12: missing / forged item ID rejected
+        ok 3 - TRANSFER 11, 12: missing / forged item ID rejected
+          ---
+          duration_ms: 0.326558
+          type: 'test'
+          ...
+        # Subtest: TRANSFER 13, 14, 20: forged ownership / unauthorized source rejected
+        ok 4 - TRANSFER 13, 14, 20: forged ownership / unauthorized source rejected
+          ---
+          duration_ms: 0.274885
+          type: 'test'
+          ...
+        # Subtest: TRANSFER 16: failed transfer leaves source and target unchanged
+        ok 5 - TRANSFER 16: failed transfer leaves source and target unchanged
+          ---
+          duration_ms: 0.341463
+          type: 'test'
+          ...
+        # Subtest: TRANSFER 17, 18: successful transfer preserves durability/quality/condition/provenance
+        ok 6 - TRANSFER 17, 18: successful transfer preserves durability/quality/condition/provenance
+          ---
+          duration_ms: 0.219685
+          type: 'test'
+          ...
+        # Subtest: TRANSFER 19: corpse loot uses canonical corpse inventory
+        ok 7 - TRANSFER 19: corpse loot uses canonical corpse inventory
+          ---
+          duration_ms: 0.099189
+          type: 'test'
+          ...
+        1..7
+    ok 2 - Transfer & Looting (CH5-DEF-002)
+      ---
+      duration_ms: 2.297121
+      type: 'suite'
+      ...
+    # Subtest: CH5 Surgical Repair - Regression & Isolation (CH5-DEF-003, CH5-DEF-004, CH5-DEF-005)
+        # Subtest: TEST 20: Cross-actor transfer isolation
+        ok 1 - TEST 20: Cross-actor transfer isolation
+          ---
+          duration_ms: 73.948377
+          type: 'test'
+          ...
+        # Subtest: TEST 21: AI fabricated inventory operation cannot mutate canonical inventory
+        ok 2 - TEST 21: AI fabricated inventory operation cannot mutate canonical inventory
+          ---
+          duration_ms: 8.189788
+          type: 'test'
+          ...
+        # Subtest: TEST 22: Item description cannot fabricate a capability
+        ok 3 - TEST 22: Item description cannot fabricate a capability
+          ---
+          duration_ms: 2.09419
+          type: 'test'
+          ...
+        # Subtest: TEST 23: Epistemic discovery bypass rejected
+        ok 4 - TEST 23: Epistemic discovery bypass rejected
+          ---
+          duration_ms: 0.860407
+          type: 'test'
+          ...
+        # Subtest: TEST 24: CH3.2 equipment/capability regression
+        ok 5 - TEST 24: CH3.2 equipment/capability regression
+          ---
+          duration_ms: 1.338348
+          type: 'test'
+          ...
+        # Subtest: TEST 25: CH4 historical evidence regression
+        ok 6 - TEST 25: CH4 historical evidence regression
+          ---
+          duration_ms: 1.014285
+          type: 'test'
+          ...
+        # Subtest: TEST 26: Successful transfer persistence/reload
+        ok 7 - TEST 26: Successful transfer persistence/reload
+          ---
+          duration_ms: 22.185079
+          type: 'test'
+          ...
+        # Subtest: TEST 27: Corpse survives new combat initialization
+        ok 8 - TEST 27: Corpse survives new combat initialization
+          ---
+          duration_ms: 9.186566
+          type: 'test'
+          ...
+        # Subtest: TEST 28: Corpse can subsequently be looted
+        ok 9 - TEST 28: Corpse can subsequently be looted
+          ---
+          duration_ms: 6.77231
+          type: 'test'
+          ...
+        # Subtest: TEST 29: Player-owned source cannot transfer to an arbitrary inaccessible targetOwnerId
+        ok 10 - TEST 29: Player-owned source cannot transfer to an arbitrary inaccessible targetOwnerId
+          ---
+          duration_ms: 4.561451
+          type: 'test'
+          ...
+        # Subtest: TEST 30: Valid legitimate target remains transferable when the target is actually authorized and accessible
+        ok 11 - TEST 30: Valid legitimate target remains transferable when the target is actually authorized and accessible
+          ---
+          duration_ms: 5.665172
+          type: 'test'
+          ...
+        # Subtest: TEST 31: Campaign archive export includes NPC lifecycles including corpses
+        ok 12 - TEST 31: Campaign archive export includes NPC lifecycles including corpses
+          ---
+          duration_ms: 3.17839
+          type: 'test'
+          ...
+        # Subtest: TEST 32: Campaign archive restore restores NPC lifecycles and corpses into WorldRepository
+        ok 13 - TEST 32: Campaign archive restore restores NPC lifecycles and corpses into WorldRepository
+          ---
+          duration_ms: 3.740965
+          type: 'test'
+          ...
+        # Subtest: TEST 33: Multiple NPC lifecycles (alive and dead) persist across export/restore
+        ok 14 - TEST 33: Multiple NPC lifecycles (alive and dead) persist across export/restore
+          ---
+          duration_ms: 2.337465
+          type: 'test'
+          ...
+        # Subtest: TEST 34: Restored corpse inventory remains lootable via transfer endpoint
+        ok 15 - TEST 34: Restored corpse inventory remains lootable via transfer endpoint
+          ---
+          duration_ms: 6.345057
+          type: 'test'
+          ...
+        # Subtest: CH5 Round 4: NPC Combat Death -> Canonical Lifecycle Synchronization (CH5-COMBAT-01 & CH5-COMBAT-02)
+            # Subtest: TEST 35 (TEST A): Existing living NPC is marked dead in WorldRepository upon combat death
+            ok 1 - TEST 35 (TEST A): Existing living NPC is marked dead in WorldRepository upon combat death
+              ---
+              duration_ms: 7.610293
+              type: 'test'
+              ...
+            # Subtest: TEST 36 (TEST B): NPC without prior canonical lifecycle creates canonical dead state on combat death
+            ok 2 - TEST 36 (TEST B): NPC without prior canonical lifecycle creates canonical dead state on combat death
+              ---
+              duration_ms: 5.492543
+              type: 'test'
+              ...
+            # Subtest: TEST 37 (TEST C): Immediate attack-time synchronization marks NPC dead without combat reset
+            ok 3 - TEST 37 (TEST C): Immediate attack-time synchronization marks NPC dead without combat reset
+              ---
+              duration_ms: 38.35391
+              type: 'test'
+              ...
+            # Subtest: TEST 38 (TEST D): Non-lethal attack does not mark NPC dead in canonical lifecycle
+            ok 4 - TEST 38 (TEST D): Non-lethal attack does not mark NPC dead in canonical lifecycle
+              ---
+              duration_ms: 4.553221
+              type: 'test'
+              ...
+            # Subtest: TEST 39 (TEST E): Repeated death synchronization is idempotent and preserves death record
+            ok 5 - TEST 39 (TEST E): Repeated death synchronization is idempotent and preserves death record
+              ---
+              duration_ms: 10.62192
+              type: 'test'
+              ...
+            # Subtest: TEST 40 (TEST F): Corpse survives subsequent combat reset
+            ok 6 - TEST 40 (TEST F): Corpse survives subsequent combat reset
+              ---
+              duration_ms: 7.406174
+              type: 'test'
+              ...
+            # Subtest: TEST 41 (TEST G): Campaign archive export/restore preserves immediately synchronized corpse
+            ok 7 - TEST 41 (TEST G): Campaign archive export/restore preserves immediately synchronized corpse
+              ---
+              duration_ms: 5.188862
+              type: 'test'
+              ...
+            # Subtest: TEST 42 (TEST H): Restored corpse inventory remains lootable via transfer endpoint
+            ok 8 - TEST 42 (TEST H): Restored corpse inventory remains lootable via transfer endpoint
+              ---
+              duration_ms: 9.800732
+              type: 'test'
+              ...
+            1..8
+        ok 16 - CH5 Round 4: NPC Combat Death -> Canonical Lifecycle Synchronization (CH5-COMBAT-01 & CH5-COMBAT-02)
+          ---
+          duration_ms: 89.625263
+          type: 'suite'
+          ...
+        # Subtest: CH5 Round 5: Environmental Hazard Death & Dead-NPC Encounter Reseeding (CH5-HAZARD-01 & CH5-COMBAT-RESEED)
+            # Subtest: TEST 43: Hazard death during turn advancement immediately synchronizes to WorldRepository as dead
+            ok 1 - TEST 43: Hazard death during turn advancement immediately synchronizes to WorldRepository as dead
+              ---
+              duration_ms: 3.827376
+              type: 'test'
+              ...
+            # Subtest: TEST 44: Non-lethal hazard damage leaves combat participant and canonical lifecycle ALIVE
+            ok 2 - TEST 44: Non-lethal hazard damage leaves combat participant and canonical lifecycle ALIVE
+              ---
+              duration_ms: 4.228513
+              type: 'test'
+              ...
+            # Subtest: TEST 45: Hazard death synchronization is idempotent and preserves original death record
+            ok 3 - TEST 45: Hazard death synchronization is idempotent and preserves original death record
+              ---
+              duration_ms: 8.113862
+              type: 'test'
+              ...
+            # Subtest: TEST 46: Live POST /combat/end-turn route synchronizes newly dead hazard victim into canonical lifecycle
+            ok 4 - TEST 46: Live POST /combat/end-turn route synchronizes newly dead hazard victim into canonical lifecycle
+              ---
+              duration_ms: 3.422335
+              type: 'test'
+              ...
+            # Subtest: TEST 47: Dead unique NPC is NOT resurrected or reseeded as alive under same actorId
+            ok 5 - TEST 47: Dead unique NPC is NOT resurrected or reseeded as alive under same actorId
+              ---
+              duration_ms: 4.788189
+              type: 'test'
+              ...
+            # Subtest: TEST 48: Dynamic enemy spawning still works when base archetype is dead
+            ok 6 - TEST 48: Dynamic enemy spawning still works when base archetype is dead
+              ---
+              duration_ms: 5.037249
+              type: 'test'
+              ...
+            # Subtest: TEST 49: Canonical dead NPC survives encounter reset and subsequent encounters
+            ok 7 - TEST 49: Canonical dead NPC survives encounter reset and subsequent encounters
+              ---
+              duration_ms: 7.106685
+              type: 'test'
+              ...
+            1..7
+        ok 17 - CH5 Round 5: Environmental Hazard Death & Dead-NPC Encounter Reseeding (CH5-HAZARD-01 & CH5-COMBAT-RESEED)
+          ---
+          duration_ms: 37.046761
+          type: 'suite'
+          ...
+        1..17
+    ok 3 - CH5 Surgical Repair - Regression & Isolation (CH5-DEF-003, CH5-DEF-004, CH5-DEF-005)
+      ---
+      duration_ms: 669.051212
+      type: 'suite'
+      ...
+    1..3
+ok 24 - CH5 Surgical Repair - Crafting & Transfer
+  ---
+  duration_ms: 675.557647
+  type: 'suite'
+  ...
+# Subtest: CH6 Comprehensive Verification: Dynamic Powers & Progression
+    # Subtest: Phase A: SkillDefinition vs. SkillInstance Architectural Separation
+        # Subtest: guarantees CapabilityDefinition remains immutable when SkillInstance evolves and levels up
+        ok 1 - guarantees CapabilityDefinition remains immutable when SkillInstance evolves and levels up
+          ---
+          duration_ms: 1.233252
+          type: 'test'
+          ...
+        1..1
+    ok 1 - Phase A: SkillDefinition vs. SkillInstance Architectural Separation
+      ---
+      duration_ms: 1.663979
+      type: 'suite'
+      ...
+    # Subtest: Phase B: Progression State, Audit History & Evolution Lineage
+        # Subtest: awards XP, handles multi-level progressions, and records detailed audit history
+        ok 1 - awards XP, handles multi-level progressions, and records detailed audit history
+          ---
+          duration_ms: 0.377029
+          type: 'test'
+          ...
+        # Subtest: evolves skill along DAG branch, updating lineage and preserving history
+        ok 2 - evolves skill along DAG branch, updating lineage and preserving history
+          ---
+          duration_ms: 1.451382
+          type: 'test'
+          ...
+        # Subtest: supports deterministic downgrade and relearning with audit logging
+        ok 3 - supports deterministic downgrade and relearning with audit logging
+          ---
+          duration_ms: 0.356458
+          type: 'test'
+          ...
+        1..3
+    ok 2 - Phase B: Progression State, Audit History & Evolution Lineage
+      ---
+      duration_ms: 2.422016
+      type: 'suite'
+      ...
+    # Subtest: Phase C: Tactical Combat Activation Modes, Countdown & Interruption
+        # Subtest: manages charged capability lifecycle and interruption upon damage
+        ok 1 - manages charged capability lifecycle and interruption upon damage
+          ---
+          duration_ms: 0.612129
+          type: 'test'
+          ...
+        # Subtest: protects non-interruptible activations from cancellation on damage
+        ok 2 - protects non-interruptible activations from cancellation on damage
+          ---
+          duration_ms: 0.337949
+          type: 'test'
+          ...
+        1..2
+    ok 3 - Phase C: Tactical Combat Activation Modes, Countdown & Interruption
+      ---
+      duration_ms: 1.340554
+      type: 'suite'
+      ...
+    # Subtest: Phase D: Mastery Levels & Environmental Execution Gates
+        # Subtest: evaluates execution gates deterministically based on mastery and environmental distortion
+        ok 1 - evaluates execution gates deterministically based on mastery and environmental distortion
+          ---
+          duration_ms: 0.498127
+          type: 'test'
+          ...
+        1..1
+    ok 4 - Phase D: Mastery Levels & Environmental Execution Gates
+      ---
+      duration_ms: 0.62438
+      type: 'suite'
+      ...
+    # Subtest: Phase E: Contextual Modifiers (OVERCHARGE, CONCENTRATE, EXPAND_SCOPE)
+        # Subtest: applies modifiers to energy cost and strain during capability adjudication
+        ok 1 - applies modifiers to energy cost and strain during capability adjudication
+          ---
+          duration_ms: 0.45767
+          type: 'test'
+          ...
+        1..1
+    ok 5 - Phase E: Contextual Modifiers (OVERCHARGE, CONCENTRATE, EXPAND_SCOPE)
+      ---
+      duration_ms: 0.656957
+      type: 'suite'
+      ...
+    # Subtest: Phase F & G: Reusable Skill Registry, Provenance & Adaptation
+        # Subtest: exports reusable skills with clean schema, checks target compatibility, and instantiates cleanly
+        ok 1 - exports reusable skills with clean schema, checks target compatibility, and instantiates cleanly
+          ---
+          duration_ms: 0.852419
+          type: 'test'
+          ...
+        1..1
+    ok 6 - Phase F & G: Reusable Skill Registry, Provenance & Adaptation
+      ---
+      duration_ms: 0.995448
+      type: 'suite'
+      ...
+    # Subtest: Phase H: Live HTTP API Verification for CH6 Endpoints
+        # Subtest: POST /api/game/capabilities/acquire, /award-xp, /downgrade, /relearn
+        ok 1 - POST /api/game/capabilities/acquire, /award-xp, /downgrade, /relearn
+          ---
+          duration_ms: 89.561741
+          type: 'test'
+          ...
+        # Subtest: POST /api/game/capabilities/evaluate-gate
+        ok 2 - POST /api/game/capabilities/evaluate-gate
+          ---
+          duration_ms: 11.482056
+          type: 'test'
+          ...
+        # Subtest: GET /api/game/capabilities/library and POST /evaluate-compatibility
+        ok 3 - GET /api/game/capabilities/library and POST /evaluate-compatibility
+          ---
+          duration_ms: 10.705689
+          type: 'test'
+          ...
+        # Subtest: handles multi-turn combat activations and interrupts over HTTP
+        ok 4 - handles multi-turn combat activations and interrupts over HTTP
+          ---
+          duration_ms: 18.433241
+          type: 'test'
+          ...
+        1..4
+    ok 7 - Phase H: Live HTTP API Verification for CH6 Endpoints
+      ---
+      duration_ms: 130.532712
+      type: 'suite'
+      ...
+    # Subtest: Phase I: AUDIT-CH6-008 Exact-ID Miss Isolation & Deterministic Matching Hierarchy
+        # Subtest: Regression Test 1: exact-ID miss returns [] and autoAcquireOrReuse registers actual source capability (no Fireball substitution)
+        ok 1 - Regression Test 1: exact-ID miss returns [] and autoAcquireOrReuse registers actual source capability (no Fireball substitution)
+          ---
+          duration_ms: 0.747754
+          type: 'test'
+          ...
+        # Subtest: Regression Test 2: exact hit retrieves existing entry from library without substituting other skills
+        ok 2 - Regression Test 2: exact hit retrieves existing entry from library without substituting other skills
+          ---
+          duration_ms: 0.237035
+          type: 'test'
+          ...
+        # Subtest: Regression Test 3: findCandidateSkills({}) returns all library entries deterministically sorted by ID
+        ok 3 - Regression Test 3: findCandidateSkills({}) returns all library entries deterministically sorted by ID
+          ---
+          duration_ms: 7.249721
+          type: 'test'
+          ...
+        # Subtest: Regression Test 4: missing exact ID returns [] even when semantic matches and compatible skills exist
+        ok 4 - Regression Test 4: missing exact ID returns [] even when semantic matches and compatible skills exist
+          ---
+          duration_ms: 0.270448
+          type: 'test'
+          ...
+        # Subtest: Matching Hierarchy Verification: exact ID > lineage > semantic discovery, with mechanical rules authoritative
+        ok 5 - Matching Hierarchy Verification: exact ID > lineage > semantic discovery, with mechanical rules authoritative
+          ---
+          duration_ms: 0.36545
+          type: 'test'
+          ...
+        1..5
+    ok 8 - Phase I: AUDIT-CH6-008 Exact-ID Miss Isolation & Deterministic Matching Hierarchy
+      ---
+      duration_ms: 9.067212
+      type: 'suite'
+      ...
+    1..8
+ok 25 - CH6 Comprehensive Verification: Dynamic Powers & Progression
+  ---
+  duration_ms: 165.538324
+  type: 'suite'
+  ...
+# Subtest: CH7 Final Closure Adversarial Audit
+    # Subtest: 1. Entity-Specific Capability Synthesis & Validation
+        # Subtest: synthesizes and binds capabilities for Player, NPC, and Enemy with active constraint participation
+        ok 1 - synthesizes and binds capabilities for Player, NPC, and Enemy with active constraint participation
+          ---
+          duration_ms: 2.928902
+          type: 'test'
+          ...
+        1..1
+    ok 1 - 1. Entity-Specific Capability Synthesis & Validation
+      ---
+      duration_ms: 3.331915
+      type: 'suite'
+      ...
+    # Subtest: 2. AI Proposal Firewall & Zero Raw State Mutation
+        # Subtest: guarantees raw AI output cannot mutate canonical capability state
+        ok 1 - guarantees raw AI output cannot mutate canonical capability state
+          ---
+          duration_ms: 0.303607
+          type: 'test'
+          ...
+        1..1
+    ok 2 - 2. AI Proposal Firewall & Zero Raw State Mutation
+      ---
+      duration_ms: 0.433578
+      type: 'suite'
+      ...
+    # Subtest: 3. Failure Atomicity
+        # Subtest: ensures zero state mutation upon failure at any validation or synthesis stage
+        ok 1 - ensures zero state mutation upon failure at any validation or synthesis stage
+          ---
+          duration_ms: 0.507677
+          type: 'test'
+          ...
+        1..1
+    ok 3 - 3. Failure Atomicity
+      ---
+      duration_ms: 0.706524
+      type: 'suite'
+      ...
+    # Subtest: 4. Freeform Action Live Runtime Outcomes
+        # Subtest: tests Outcome 1: EXISTING_CAPABILITY
+        ok 1 - tests Outcome 1: EXISTING_CAPABILITY
+          ---
+          duration_ms: 69.730723
+          type: 'test'
+          ...
+        # Subtest: tests Outcome 2: CONTEXTUAL_MODIFICATION
+        ok 2 - tests Outcome 2: CONTEXTUAL_MODIFICATION
+          ---
+          duration_ms: 8.146568
+          type: 'test'
+          ...
+        # Subtest: tests Outcome 3A: NOVEL_CAPABILITY_PROPOSAL (Preview: executeIfValid = false)
+        ok 3 - tests Outcome 3A: NOVEL_CAPABILITY_PROPOSAL (Preview: executeIfValid = false)
+          ---
+          duration_ms: 5.327917
+          type: 'test'
+          ...
+        # Subtest: tests Outcome 3B: NOVEL_CAPABILITY_PROPOSAL (Execution: executeIfValid = true)
+        ok 4 - tests Outcome 3B: NOVEL_CAPABILITY_PROPOSAL (Execution: executeIfValid = true)
+          ---
+          duration_ms: 5.133625
+          type: 'test'
+          ...
+        # Subtest: tests Outcome 4: UNSUPPORTED
+        ok 5 - tests Outcome 4: UNSUPPORTED
+          ---
+          duration_ms: 4.944614
+          type: 'test'
+          ...
+        1..5
+    ok 4 - 4. Freeform Action Live Runtime Outcomes
+      ---
+      duration_ms: 94.143743
+      type: 'suite'
+      ...
+    # Subtest: 5. CH8 Combat Resolution Firewall
+        # Subtest: verifies that CH7 interpretation does not execute CH8 d20 combat resolution or damage rolls
+        ok 1 - verifies that CH7 interpretation does not execute CH8 d20 combat resolution or damage rolls
+          ---
+          duration_ms: 0.518524
+          type: 'test'
+          ...
+        1..1
+    ok 5 - 5. CH8 Combat Resolution Firewall
+      ---
+      duration_ms: 0.642259
+      type: 'suite'
+      ...
+    # Subtest: 7. Canonical Identity Collision Safety
+        # Subtest: reconciles corrupted or missing synthesis counters to prevent collision
+        ok 1 - reconciles corrupted or missing synthesis counters to prevent collision
+          ---
+          duration_ms: 1.4192
+          type: 'test'
+          ...
+        1..1
+    ok 6 - 7. Canonical Identity Collision Safety
+      ---
+      duration_ms: 1.509854
+      type: 'suite'
+      ...
+    # Subtest: 8. Strict powerTier Validation
+        # Subtest: rejects all variants of invalid powerTier with HTTP 400 Bad Request
+        ok 1 - rejects all variants of invalid powerTier with HTTP 400 Bad Request
+          ---
+          duration_ms: 35.327478
+          type: 'test'
+          ...
+        1..1
+    ok 7 - 8. Strict powerTier Validation
+      ---
+      duration_ms: 35.536809
+      type: 'suite'
+      ...
+    # Subtest: 9. Prompt Injection & Epistemic Isolation
+        # Subtest: treats prompt injection as literal string without altering costs or revealing hidden state
+        ok 1 - treats prompt injection as literal string without altering costs or revealing hidden state
+          ---
+          duration_ms: 0.59864
+          type: 'test'
+          ...
+        1..1
+    ok 8 - 9. Prompt Injection & Epistemic Isolation
+      ---
+      duration_ms: 0.685693
+      type: 'suite'
+      ...
+    1..8
+ok 26 - CH7 Final Closure Adversarial Audit
+  ---
+  duration_ms: 150.459348
+  type: 'suite'
+  ...
+# Subtest: CH7 Evidence-Closure Audit: AI -> Novel Capability Pipeline & Internal Failure Atomicity
+    # Subtest: Gap A: AI -> Novel Capability Synthesis Pipeline
+        # Subtest: processes a genuine novel capability proposal from AI output through deterministic CH7 synthesis to canonical state
+        not ok 1 - processes a genuine novel capability proposal from AI output through deterministic CH7 synthesis to canonical state
+          ---
+          duration_ms: 6.386114
+          type: 'test'
+          location: '/app/applet/tests/ch7_evidence_closure.test.ts:45:5'
+          failureType: 'testCodeFailure'
+          error: "Model 'model_controlled_novel' is not eligible for role/task 'narrative.generate'."
+          code: 'ERR_TEST_FAILURE'
+          stack: |-
+            executeCore (/app/applet/server/domain/aiOrchestrator.ts:2998:17)
+            MultiModelOrchestrator.executeTurn (/app/applet/server/domain/aiOrchestrator.ts:3304:24)
+            TestContext.<anonymous> (/app/applet/tests/ch7_evidence_closure.test.ts:76:45)
+            Test.runInAsyncScope (node:async_hooks:214:14)
+            Test.run (node:internal/test_runner/test:1047:25)
+            Test.start (node:internal/test_runner/test:944:17)
+            node:internal/test_runner/test:1440:71
+            node:internal/per_context/primordials:466:82
+            new Promise (<anonymous>)
+            new SafePromise (node:internal/per_context/primordials:435:3)
+          ...
+        # Subtest: proves negative AI / Authority tests: unauthorized AI proposals cannot mutate canonical state
+        not ok 2 - proves negative AI / Authority tests: unauthorized AI proposals cannot mutate canonical state
+          ---
+          duration_ms: 2.02312
+          type: 'test'
+          location: '/app/applet/tests/ch7_evidence_closure.test.ts:143:5'
+          failureType: 'testCodeFailure'
+          error: "Model 'model_controlled_novel' is not eligible for role/task 'narrative.generate'."
+          code: 'ERR_TEST_FAILURE'
+          stack: |-
+            executeCore (/app/applet/server/domain/aiOrchestrator.ts:2998:17)
+            MultiModelOrchestrator.executeTurn (/app/applet/server/domain/aiOrchestrator.ts:3304:24)
+            TestContext.<anonymous> (/app/applet/tests/ch7_evidence_closure.test.ts:191:45)
+            Test.runInAsyncScope (node:async_hooks:214:14)
+            Test.run (node:internal/test_runner/test:1047:25)
+            Suite.processPendingSubtests (node:internal/test_runner/test:744:18)
+            Test.postRun (node:internal/test_runner/test:1173:19)
+            Test.run (node:internal/test_runner/test:1101:12)
+            async Promise.all (index 0)
+            async Suite.run (node:internal/test_runner/test:1442:7)
+          ...
+        1..2
+    not ok 1 - Gap A: AI -> Novel Capability Synthesis Pipeline
+      ---
+      duration_ms: 9.181259
+      type: 'suite'
+      location: '/app/applet/tests/ch7_evidence_closure.test.ts:20:3'
+      failureType: 'subtestsFailed'
+      error: '2 subtests failed'
+      code: 'ERR_TEST_FAILURE'
+      stack: |-
+        async Promise.all (index 0)
+      ...
+    # Subtest: Gap B: Internal Failure Atomicity
+        # Subtest: guarantees complete transactional rollback if an error occurs during synthesis stages
+        ok 1 - guarantees complete transactional rollback if an error occurs during synthesis stages
+          ---
+          duration_ms: 2.247312
+          type: 'test'
+          ...
+        # Subtest: verifies ledger recording failure leaves canonical capability engine intact and distinct
+        ok 2 - verifies ledger recording failure leaves canonical capability engine intact and distinct
+          ---
+          duration_ms: 0.766443
+          type: 'test'
+          ...
+        1..2
+    ok 2 - Gap B: Internal Failure Atomicity
+      ---
+      duration_ms: 3.343536
+      type: 'suite'
+      ...
+    1..2
+not ok 27 - CH7 Evidence-Closure Audit: AI -> Novel Capability Pipeline & Internal Failure Atomicity
+  ---
+  duration_ms: 13.025455
+  type: 'suite'
+  location: '/app/applet/tests/ch7_evidence_closure.test.ts:17:1'
   failureType: 'subtestsFailed'
   error: '1 subtest failed'
   code: 'ERR_TEST_FAILURE'
   ...
-# Subtest: CH4 SURGICAL REPAIR (Evidence Identity & AI Boundary)
-not ok 9 - CH4 SURGICAL REPAIR (Evidence Identity & AI Boundary)
+# Subtest: CH7 Comprehensive Verification: Concept-to-Mechanics / Custom Capability Synthesis
+    # Subtest: Target \#1: Full Structured Capability Synthesis
+        # Subtest: synthesizes structured capability with deterministically inferred fields from concept tags
+        ok 1 - synthesizes structured capability with deterministically inferred fields from concept tags
+          ---
+          duration_ms: 2.716939
+          type: 'test'
+          ...
+        # Subtest: honors explicitly specified structured mechanics parameters
+        ok 2 - honors explicitly specified structured mechanics parameters
+          ---
+          duration_ms: 1.666945
+          type: 'test'
+          ...
+        1..2
+    ok 1 - Target \#1: Full Structured Capability Synthesis
+      ---
+      duration_ms: 4.97607
+      type: 'suite'
+      ...
+    # Subtest: Target \#5: Canonical Identity and Archive Collision Safety
+        # Subtest: restores synthesis counter and reconciles against existing synthesized capability IDs on import
+        ok 1 - restores synthesis counter and reconciles against existing synthesized capability IDs on import
+          ---
+          duration_ms: 2.737383
+          type: 'test'
+          ...
+        1..1
+    ok 2 - Target \#5: Canonical Identity and Archive Collision Safety
+      ---
+      duration_ms: 2.96206
+      type: 'suite'
+      ...
+    # Subtest: Target \#2: Freeform Action Interpretation Pipeline
+        # Subtest: maps to EXISTING_CAPABILITY when actor uses an exact known capability
+        ok 1 - maps to EXISTING_CAPABILITY when actor uses an exact known capability
+          ---
+          duration_ms: 1.068944
+          type: 'test'
+          ...
+        # Subtest: maps to CONTEXTUAL_MODIFICATION when freeform effort modifiers (e.g. overcharge) are described without mutating base capability
+        ok 2 - maps to CONTEXTUAL_MODIFICATION when freeform effort modifiers (e.g. overcharge) are described without mutating base capability
+          ---
+          duration_ms: 0.300462
+          type: 'test'
+          ...
+        # Subtest: proposes NOVEL_CAPABILITY_PROPOSAL for unknown concepts without state mutation when executeIfValid is false
+        ok 3 - proposes NOVEL_CAPABILITY_PROPOSAL for unknown concepts without state mutation when executeIfValid is false
+          ---
+          duration_ms: 0.401942
+          type: 'test'
+          ...
+        # Subtest: synthesizes and executes novel capability canonically when executeIfValid is true
+        ok 4 - synthesizes and executes novel capability canonically when executeIfValid is true
+          ---
+          duration_ms: 0.835095
+          type: 'test'
+          ...
+        # Subtest: returns UNSUPPORTED for empty or blank action text
+        ok 5 - returns UNSUPPORTED for empty or blank action text
+          ---
+          duration_ms: 0.184717
+          type: 'test'
+          ...
+        1..5
+    ok 3 - Target \#2: Freeform Action Interpretation Pipeline
+      ---
+      duration_ms: 3.598986
+      type: 'suite'
+      ...
+    # Subtest: Target \#6 & \#12: Live HTTP Endpoints for Synthesis & Interpretation
+        # Subtest: POST /api/game/capabilities/synthesize strictly rejects invalid powerTier with 400 Bad Request
+        ok 1 - POST /api/game/capabilities/synthesize strictly rejects invalid powerTier with 400 Bad Request
+          ---
+          duration_ms: 71.618345
+          type: 'test'
+          ...
+        # Subtest: POST /api/game/capabilities/synthesize creates structured power and records CH4 evidence
+        ok 2 - POST /api/game/capabilities/synthesize creates structured power and records CH4 evidence
+          ---
+          duration_ms: 8.511726
+          type: 'test'
+          ...
+        # Subtest: POST /api/game/capabilities/interpret processes freeform action over HTTP
+        ok 3 - POST /api/game/capabilities/interpret processes freeform action over HTTP
+          ---
+          duration_ms: 6.249375
+          type: 'test'
+          ...
+        1..3
+    ok 4 - Target \#6 & \#12: Live HTTP Endpoints for Synthesis & Interpretation
+      ---
+      duration_ms: 86.771234
+      type: 'suite'
+      ...
+    1..4
+ok 28 - CH7 Comprehensive Verification: Concept-to-Mechanics / Custom Capability Synthesis
   ---
-  duration_ms: 0.492622
+  duration_ms: 115.365011
   type: 'suite'
-  location: '/app/applet/tests/ch4SurgicalRepair.test.ts:9:1'
-  failureType: 'testCodeFailure'
-  error: 'it is not defined'
-  code: 'ERR_TEST_FAILURE'
-  name: 'ReferenceError'
-  stack: |-
-    SuiteContext.<anonymous> (/app/applet/tests/ch4SurgicalRepair.test.ts:11:3)
-    Suite.runInAsyncScope (node:async_hooks:214:14)
-    Suite.createBuild (node:internal/test_runner/test:1402:13)
-    new Suite (node:internal/test_runner/test:1393:28)
-    Test.createSubtest (node:internal/test_runner/test:808:18)
-    run (node:internal/test_runner/harness:302:28)
-    test (node:internal/test_runner/harness:316:12)
-    <anonymous> (/app/applet/tests/ch4SurgicalRepair.test.ts:9:1)
-    ModuleJob.run (node:internal/modules/esm/module_job:343:25)
-    async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:681:26)
+  ...
+# Subtest: CH8 Surgical Defect Repair & Adversarial Verification Suite
+    # Subtest: DEF-CH8-01: rollInitiative accounts for varying participant initiative modifiers rather than universal +2
+    ok 1 - DEF-CH8-01: rollInitiative accounts for varying participant initiative modifiers rather than universal +2
+      ---
+      duration_ms: 1.249281
+      type: 'test'
+      ...
+    # Subtest: DEF-CH8-02: rollInitiative breaks initiative ties deterministically using actor ID ordering
+    ok 2 - DEF-CH8-02: rollInitiative breaks initiative ties deterministically using actor ID ordering
+      ---
+      duration_ms: 9.464991
+      type: 'test'
+      ...
+    # Subtest: DEF-CH8-03: moveActor respects configured map bounds and impassable obstacles
+    ok 3 - DEF-CH8-03: moveActor respects configured map bounds and impassable obstacles
+      ---
+      duration_ms: 0.845926
+      type: 'test'
+      ...
+    # Subtest: DEF-CH8-04: moveActor rejects movement for actors with immobilizing conditions
+    ok 4 - DEF-CH8-04: moveActor rejects movement for actors with immobilizing conditions
+      ---
+      duration_ms: 0.269891
+      type: 'test'
+      ...
+    # Subtest: DEF-CH8-05: executeCapabilityCast integrates saving throws, attack rolls, and resistances
+    ok 5 - DEF-CH8-05: executeCapabilityCast integrates saving throws, attack rolls, and resistances
+      ---
+      duration_ms: 0.46864
+      type: 'test'
+      ...
+    # Subtest: LocalDiceEngine: instance PRNG isolation and lossless state export/import
+    ok 6 - LocalDiceEngine: instance PRNG isolation and lossless state export/import
+      ---
+      duration_ms: 0.669539
+      type: 'test'
+      ...
+    1..6
+ok 29 - CH8 Surgical Defect Repair & Adversarial Verification Suite
+  ---
+  duration_ms: 14.175298
+  type: 'suite'
   ...
 # Subtest: WorldClock Domain Simulation
     # Subtest: initializes with canonical default timestamp and derives day phase and season
     ok 1 - initializes with canonical default timestamp and derives day phase and season
       ---
-      duration_ms: 0.803076
+      duration_ms: 0.793895
       type: 'test'
       ...
     # Subtest: correctly maps hour and minute to DayPhase
     ok 2 - correctly maps hour and minute to DayPhase
       ---
-      duration_ms: 0.151692
+      duration_ms: 0.213802
       type: 'test'
       ...
     # Subtest: advances world time deterministically by seconds, minutes, hours, and days
     ok 3 - advances world time deterministically by seconds, minutes, hours, and days
       ---
-      duration_ms: 0.254819
+      duration_ms: 0.250878
       type: 'test'
       ...
     # Subtest: computes deterministic countdowns from canonical timestamps (DreamBook §336)
     ok 4 - computes deterministic countdowns from canonical timestamps (DreamBook §336)
       ---
-      duration_ms: 0.280739
+      duration_ms: 0.248178
       type: 'test'
       ...
     1..4
-ok 10 - WorldClock Domain Simulation
+ok 30 - WorldClock Domain Simulation
   ---
-  duration_ms: 3.170873
+  duration_ms: 3.754009
   type: 'suite'
   ...
 # Subtest: GeographyGraph Spatial Topology & Routing
     # Subtest: contains seeded Dreamville canonical locations and traversable routes
     ok 1 - contains seeded Dreamville canonical locations and traversable routes
       ---
-      duration_ms: 0.402245
+      duration_ms: 0.324458
       type: 'test'
       ...
     # Subtest: calculates deterministic travel duration based on distance, terrain, and mode (DreamBook §338)
     ok 2 - calculates deterministic travel duration based on distance, terrain, and mode (DreamBook §338)
       ---
-      duration_ms: 0.308813
+      duration_ms: 0.331521
       type: 'test'
       ...
     # Subtest: finds valid path between connected locations and rejects blocked paths
     ok 3 - finds valid path between connected locations and rejects blocked paths
       ---
-      duration_ms: 1.589879
+      duration_ms: 1.659769
       type: 'test'
       ...
     1..3
-ok 11 - GeographyGraph Spatial Topology & Routing
+ok 31 - GeographyGraph Spatial Topology & Routing
   ---
-  duration_ms: 2.702128
+  duration_ms: 2.730772
   type: 'suite'
   ...
 # Subtest: Living Bible Operational Registry
     # Subtest: exposes all Core DreamBook challenges with verification evidence
     ok 1 - exposes all Core DreamBook challenges with verification evidence
       ---
-      duration_ms: 0.415029
+      duration_ms: 0.464396
       type: 'test'
       ...
     1..1
-ok 12 - Living Bible Operational Registry
+ok 32 - Living Bible Operational Registry
   ---
-  duration_ms: 0.582825
+  duration_ms: 0.764795
   type: 'suite'
   ...
 # Subtest: CHALLENGE 2 — Epistemic Boundary & Player Knowledge Horizon (CH2.MAP_MASK)
     # Subtest: 1. Server canonical state retains undiscovered locations, but client projection excludes them
-    ok 1 - 1. Server canonical state retains undiscovered locations, but client projection excludes them
+    not ok 1 - 1. Server canonical state retains undiscovered locations, but client projection excludes them
       ---
-      duration_ms: 29.680261
+      duration_ms: 28.543623
       type: 'test'
+      location: '/app/applet/tests/epistemicLocationProjection.test.ts:46:3'
+      failureType: 'testCodeFailure'
+      error: |-
+        Client projection MUST NOT expose undiscovered location loc_sunken_scriptorium
+        + actual - expected
+        
+        + {
+        +   accessible: false,
+        +   ambientSensory: 'Smell of wet vellum, cedar resin, and still black water.',
+        +   coordinates: {
+        +     x: 190,
+        +     y: 310
+        +   },
+        +   description: 'Ancient archives submerged beneath dark brackish pools. Vellum cases float in sealed reed baskets.',
+        +   discovered: true,
+        +   id: 'loc_sunken_scriptorium',
+        +   name: 'Sunken Scriptorium',
+        +   region: 'reg_trenches'
+        + }
+        - undefined
+        
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      actual:
+        id: 'loc_sunken_scriptorium'
+        name: 'Sunken Scriptorium'
+        region: 'reg_trenches'
+        description: 'Ancient archives submerged beneath dark brackish pools. Vellum cases float in sealed reed baskets.'
+        coordinates:
+          x: 190
+          y: 310
+        accessible: false
+        ambientSensory: 'Smell of wet vellum, cedar resin, and still black water.'
+        discovered: true
+      operator: 'strictEqual'
+      stack: |-
+        TestContext.<anonymous> (/app/applet/tests/epistemicLocationProjection.test.ts:65:12)
+        process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async Promise.all (index 0)
+        async Suite.run (node:internal/test_runner/test:1442:7)
+        async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
       ...
     # Subtest: 2. Travel to undiscovered location is rejected by server epistemic authority
     ok 2 - 2. Travel to undiscovered location is rejected by server epistemic authority
       ---
-      duration_ms: 21.692977
+      duration_ms: 24.60657
       type: 'test'
       ...
     # Subtest: 3. Legitimate discovery event expands client projection horizon deterministically
     ok 3 - 3. Legitimate discovery event expands client projection horizon deterministically
       ---
-      duration_ms: 10.017246
+      duration_ms: 9.909548
       type: 'test'
       ...
     1..3
-ok 13 - CHALLENGE 2 — Epistemic Boundary & Player Knowledge Horizon (CH2.MAP_MASK)
+not ok 33 - CHALLENGE 2 — Epistemic Boundary & Player Knowledge Horizon (CH2.MAP_MASK)
   ---
-  duration_ms: 76.699773
+  duration_ms: 76.39173
   type: 'suite'
+  location: '/app/applet/tests/epistemicLocationProjection.test.ts:9:1'
+  failureType: 'subtestsFailed'
+  error: '1 subtest failed'
+  code: 'ERR_TEST_FAILURE'
   ...
 # Subtest: SignificanceEvaluator Deterministic Evaluation (CH4.SIGNIFICANCE)
     # Subtest: evaluates death lifecycle transition as globally HISTORIC
     ok 1 - evaluates death lifecycle transition as globally HISTORIC
       ---
-      duration_ms: 0.816025
+      duration_ms: 0.789602
       type: 'test'
       ...
     # Subtest: evaluates world anomalies (astrolabe halt, bedrock rupture) as HISTORIC
     ok 2 - evaluates world anomalies (astrolabe halt, bedrock rupture) as HISTORIC
       ---
-      duration_ms: 0.256861
+      duration_ms: 0.146398
       type: 'test'
       ...
     # Subtest: evaluates minor transit as TRIVIAL and suppresses promotion
     ok 3 - evaluates minor transit as TRIVIAL and suppresses promotion
       ---
-      duration_ms: 0.15255
+      duration_ms: 0.150033
       type: 'test'
       ...
     1..3
-ok 14 - SignificanceEvaluator Deterministic Evaluation (CH4.SIGNIFICANCE)
+ok 34 - SignificanceEvaluator Deterministic Evaluation (CH4.SIGNIFICANCE)
   ---
-  duration_ms: 2.184833
+  duration_ms: 2.157115
   type: 'suite'
   ...
 # Subtest: HistoricalChronicleEngine Deduplication & Aggregation (CH4.DEDUP, CH4.DOSSIER, CH4.CHRONICLE)
     # Subtest: aggregates evidence into subject dossiers and orders milestones chronologically
     ok 1 - aggregates evidence into subject dossiers and orders milestones chronologically
       ---
-      duration_ms: 0.587823
+      duration_ms: 0.545773
       type: 'test'
       ...
     # Subtest: strictly enforces deterministic deduplication (CH4.DEDUP)
     ok 2 - strictly enforces deterministic deduplication (CH4.DEDUP)
       ---
-      duration_ms: 0.29058
+      duration_ms: 0.219243
       type: 'test'
       ...
     # Subtest: guarantees deterministic rebuildability from source evidence (CH4.REBUILD)
     ok 3 - guarantees deterministic rebuildability from source evidence (CH4.REBUILD)
       ---
-      duration_ms: 1.848152
+      duration_ms: 1.838928
       type: 'test'
       ...
     1..3
-ok 15 - HistoricalChronicleEngine Deduplication & Aggregation (CH4.DEDUP, CH4.DOSSIER, CH4.CHRONICLE)
+ok 35 - HistoricalChronicleEngine Deduplication & Aggregation (CH4.DEDUP, CH4.DOSSIER, CH4.CHRONICLE)
   ---
-  duration_ms: 3.136787
+  duration_ms: 2.971413
   type: 'suite'
   ...
 # Subtest: Epistemic Projection Boundary for History (CH4.EPISTEMIC)
     # Subtest: strictly masks SECRET and OBSERVERS_ONLY entries from unauthorized player projections
     ok 1 - strictly masks SECRET and OBSERVERS_ONLY entries from unauthorized player projections
       ---
-      duration_ms: 0.597339
+      duration_ms: 0.584579
       type: 'test'
       ...
     1..1
-ok 16 - Epistemic Projection Boundary for History (CH4.EPISTEMIC)
+ok 36 - Epistemic Projection Boundary for History (CH4.EPISTEMIC)
   ---
-  duration_ms: 0.966469
+  duration_ms: 0.927061
   type: 'suite'
   ...
 # Subtest: CH1 Live Runtime Proof — Canonical Domain & HTTP API Path
     # Subtest: Verification Question Checks: live architectural binding confirmation
     ok 1 - Verification Question Checks: live architectural binding confirmation
       ---
-      duration_ms: 6.919619
+      duration_ms: 2.877285
       type: 'test'
       ...
     # Subtest: Scenario A: Start at Location A and read state via live GET /api/game/state
     ok 2 - Scenario A: Start at Location A and read state via live GET /api/game/state
       ---
-      duration_ms: 54.683292
+      duration_ms: 56.376324
       type: 'test'
       ...
     # Subtest: Scenario B & C: Request travel to Location B and read state immediately
     ok 3 - Scenario B & C: Request travel to Location B and read state immediately
       ---
-      duration_ms: 28.484343
+      duration_ms: 30.656579
       type: 'test'
       ...
     # Subtest: Scenario D & E: Advance canonical time until completion and read state again
     ok 4 - Scenario D & E: Advance canonical time until completion and read state again
       ---
-      duration_ms: 13.617339
+      duration_ms: 17.615011
       type: 'test'
       ...
     # Subtest: Scenario F: Attempt travel along a blocked route
     ok 5 - Scenario F: Attempt travel along a blocked route
       ---
-      duration_ms: 11.268899
+      duration_ms: 10.235839
       type: 'test'
       ...
     # Subtest: Scenario G: Cancel/interruption during travel leaves origin intact and destination uncommitted
     ok 6 - Scenario G: Cancel/interruption during travel leaves origin intact and destination uncommitted
       ---
-      duration_ms: 23.048884
+      duration_ms: 17.904065
       type: 'test'
       ...
     # Subtest: CH3 Live API: GET /api/game/player-lifecycle returns single canonical lifecycle authority
     ok 7 - CH3 Live API: GET /api/game/player-lifecycle returns single canonical lifecycle authority
       ---
-      duration_ms: 7.260632
+      duration_ms: 4.978628
       type: 'test'
       ...
     # Subtest: CH3 Live API: Injury lifecycle actions mutate canonical authority and update live state
     ok 8 - CH3 Live API: Injury lifecycle actions mutate canonical authority and update live state
       ---
-      duration_ms: 23.625268
+      duration_ms: 14.768961
       type: 'test'
       ...
     # Subtest: CH3 Live API: Transformation & Mortality transitions mutate canonical state
     ok 9 - CH3 Live API: Transformation & Mortality transitions mutate canonical state
       ---
-      duration_ms: 48.473018
+      duration_ms: 35.714854
       type: 'test'
       ...
     # Subtest: CH4 Live API: GET /api/game/chronicle and /api/game/dossiers serve projected historical ledger
     ok 10 - CH4 Live API: GET /api/game/chronicle and /api/game/dossiers serve projected historical ledger
       ---
-      duration_ms: 11.533485
+      duration_ms: 11.367628
       type: 'test'
       ...
     # Subtest: CH4 Live API: Lifecycle mutations automatically emit HistoricalEvidence to Chronicle & Dossiers
     ok 11 - CH4 Live API: Lifecycle mutations automatically emit HistoricalEvidence to Chronicle & Dossiers
       ---
-      duration_ms: 16.899669
+      duration_ms: 18.247393
       type: 'test'
       ...
     # Subtest: CH5 Live API: GET /api/game/inventory serves canonical inventory and 13-slot paper doll
     ok 12 - CH5 Live API: GET /api/game/inventory serves canonical inventory and 13-slot paper doll
       ---
-      duration_ms: 5.237059
+      duration_ms: 3.300494
       type: 'test'
       ...
     # Subtest: CH5 Live API: POST /api/game/inventory/equip and unequip mutate paper-doll slots authoritatively
     ok 13 - CH5 Live API: POST /api/game/inventory/equip and unequip mutate paper-doll slots authoritatively
       ---
-      duration_ms: 14.580806
+      duration_ms: 11.117885
       type: 'test'
       ...
     # Subtest: CH5 Live API: GET /api/game/inventory/recipes and POST /api/game/inventory/craft consume materials and create item
     ok 14 - CH5 Live API: GET /api/game/inventory/recipes and POST /api/game/inventory/craft consume materials and create item
       ---
-      duration_ms: 17.997022
+      duration_ms: 11.657267
       type: 'test'
       ...
     # Subtest: CH5 Live API: POST /api/game/inventory/degrade and /repair modify durability and clear broken state
     ok 15 - CH5 Live API: POST /api/game/inventory/degrade and /repair modify durability and clear broken state
       ---
-      duration_ms: 12.027152
+      duration_ms: 10.888433
       type: 'test'
       ...
     # Subtest: CH6 Live API: GET /api/game/capabilities returns anchored PowerState, capability registry, and DAG graph
     ok 16 - CH6 Live API: GET /api/game/capabilities returns anchored PowerState, capability registry, and DAG graph
       ---
-      duration_ms: 5.142807
+      duration_ms: 3.282646
       type: 'test'
       ...
     # Subtest: CH6 Live API: POST /api/game/capabilities/adjudicate deterministically resolves consequences and updates state
     ok 17 - CH6 Live API: POST /api/game/capabilities/adjudicate deterministically resolves consequences and updates state
       ---
-      duration_ms: 6.665749
+      duration_ms: 8.499221
       type: 'test'
       ...
     # Subtest: CH6/CH7 Live API: POST /api/game/capabilities/synthesize creates structured power, derived techniques, and emits chronicle evidence
     ok 18 - CH6/CH7 Live API: POST /api/game/capabilities/synthesize creates structured power, derived techniques, and emits chronicle evidence
       ---
-      duration_ms: 20.342335
+      duration_ms: 19.454486
       type: 'test'
       ...
     # Subtest: CH6 Live API: GET /api/game/archive/export includes capabilities state partition
     ok 19 - CH6 Live API: GET /api/game/archive/export includes capabilities state partition
       ---
-      duration_ms: 6.521306
+      duration_ms: 10.042614
       type: 'test'
       ...
     # Subtest: CH8 Live API: POST /api/game/combat/encounter/start initializes encounter with canonical equipment & lifecycle stats
     ok 20 - CH8 Live API: POST /api/game/combat/encounter/start initializes encounter with canonical equipment & lifecycle stats
       ---
-      duration_ms: 5.860318
+      duration_ms: 12.060013
       type: 'test'
       ...
     # Subtest: CH8 Live API: GET /api/game/combat/state returns current combat status
     ok 21 - CH8 Live API: GET /api/game/combat/state returns current combat status
       ---
-      duration_ms: 3.792178
+      duration_ms: 2.353165
       type: 'test'
       ...
     # Subtest: CH8 Live API: POST /api/game/combat/move moves actor within speed limit
     ok 22 - CH8 Live API: POST /api/game/combat/move moves actor within speed limit
       ---
-      duration_ms: 4.224562
+      duration_ms: 4.987531
       type: 'test'
       ...
     # Subtest: CH8 Live API: POST /api/game/combat/attack resolves D&D attack and degrades equipped weapon durability
     ok 23 - CH8 Live API: POST /api/game/combat/attack resolves D&D attack and degrades equipped weapon durability
       ---
-      duration_ms: 7.958795
+      duration_ms: 8.256288
       type: 'test'
       ...
     # Subtest: CH8 Live API: POST /api/game/combat/cast adjudicates capability via CapabilityEngine and inflicts combat damage
     ok 24 - CH8 Live API: POST /api/game/combat/cast adjudicates capability via CapabilityEngine and inflicts combat damage
       ---
-      duration_ms: 10.455094
+      duration_ms: 11.26637
       type: 'test'
       ...
     # Subtest: CH8 Live API: POST /api/game/combat/end-turn advances turn queue and ticks hazards
     ok 25 - CH8 Live API: POST /api/game/combat/end-turn advances turn queue and ticks hazards
       ---
-      duration_ms: 2.411423
+      duration_ms: 3.921103
       type: 'test'
       ...
     # Subtest: CH8 Live API: GET /api/game/archive/export includes canonical/combat.json partition with valid SHA-256 hash
     ok 26 - CH8 Live API: GET /api/game/archive/export includes canonical/combat.json partition with valid SHA-256 hash
       ---
-      duration_ms: 4.897999
+      duration_ms: 5.52077
       type: 'test'
       ...
     # Subtest: CH9 Live API: GET /api/game/memories returns seeded canonical memories with epistemic visibility
     ok 27 - CH9 Live API: GET /api/game/memories returns seeded canonical memories with epistemic visibility
       ---
-      duration_ms: 4.274853
+      duration_ms: 3.794682
       type: 'test'
       ...
     # Subtest: CH9 Live API: POST /api/game/memories/query searches memories with keyword scoring & epistemic security
     ok 28 - CH9 Live API: POST /api/game/memories/query searches memories with keyword scoring & epistemic security
       ---
-      duration_ms: 8.234404
+      duration_ms: 7.699361
       type: 'test'
       ...
     # Subtest: CH9 Live API: POST /api/game/memories/opportunities scans action text and detects latent opportunities (DEF-CH9-01)
     ok 29 - CH9 Live API: POST /api/game/memories/opportunities scans action text and detects latent opportunities (DEF-CH9-01)
       ---
-      duration_ms: 3.213641
+      duration_ms: 3.993996
       type: 'test'
       ...
     # Subtest: CH9 Live API: POST /api/game/memories/store authoritatively records new memories
     ok 30 - CH9 Live API: POST /api/game/memories/store authoritatively records new memories
       ---
-      duration_ms: 4.726147
+      duration_ms: 3.97155
       type: 'test'
       ...
     # Subtest: CH9 Live API: POST /api/game/memories/lock and /unlock manage authoritative memory locks (DEF-CH9-03)
     ok 31 - CH9 Live API: POST /api/game/memories/lock and /unlock manage authoritative memory locks (DEF-CH9-03)
       ---
-      duration_ms: 10.066784
+      duration_ms: 10.65296
       type: 'test'
       ...
     # Subtest: CH9 Live API: POST /api/game/memories/decay advances memory decay simulation (DEF-CH9-02)
     ok 32 - CH9 Live API: POST /api/game/memories/decay advances memory decay simulation (DEF-CH9-02)
       ---
-      duration_ms: 2.591127
+      duration_ms: 2.584848
       type: 'test'
       ...
     # Subtest: CH9 Live API: GET /api/game/archive/export includes canonical/memories.json partition with valid SHA-256 hash (DEF-CH9-05)
     ok 33 - CH9 Live API: GET /api/game/archive/export includes canonical/memories.json partition with valid SHA-256 hash (DEF-CH9-05)
       ---
-      duration_ms: 4.632618
+      duration_ms: 5.391813
       type: 'test'
       ...
     # Subtest: CH10 Live API: GET /api/game/living-world/state returns canonical living world state (DEF-CH10-05)
     ok 34 - CH10 Live API: GET /api/game/living-world/state returns canonical living world state (DEF-CH10-05)
       ---
-      duration_ms: 4.116074
+      duration_ms: 3.006275
       type: 'test'
       ...
     # Subtest: CH10 Live API: POST /api/game/living-world/schedule-event schedules world events and deadlines (DEF-CH10-05)
     ok 35 - CH10 Live API: POST /api/game/living-world/schedule-event schedules world events and deadlines (DEF-CH10-05)
       ---
-      duration_ms: 3.481791
+      duration_ms: 2.723238
       type: 'test'
       ...
     # Subtest: CH10 Live API: POST /api/game/living-world/advance advances living world simulation canonically (DEF-CH10-03, DEF-CH10-05)
     ok 36 - CH10 Live API: POST /api/game/living-world/advance advances living world simulation canonically (DEF-CH10-03, DEF-CH10-05)
       ---
-      duration_ms: 3.74392
+      duration_ms: 4.060458
       type: 'test'
       ...
     # Subtest: CH10 Live API: POST /api/game/living-world/cues evaluates personality-modulated hunger narrative cues (DEF-CH10-05)
     ok 37 - CH10 Live API: POST /api/game/living-world/cues evaluates personality-modulated hunger narrative cues (DEF-CH10-05)
       ---
-      duration_ms: 4.071793
+      duration_ms: 3.952105
       type: 'test'
       ...
     # Subtest: CH10 Live API: GET /api/game/archive/export includes canonical/living_world.json with valid SHA-256 hash (DEF-CH10-04)
     ok 38 - CH10 Live API: GET /api/game/archive/export includes canonical/living_world.json with valid SHA-256 hash (DEF-CH10-04)
       ---
-      duration_ms: 4.097116
+      duration_ms: 4.785284
       type: 'test'
       ...
     # Subtest: CH11 Live API: GET /api/game/context assembles canonical 13-domain working context packet and budgeted prompt (DEF-CH11-02, DEF-CH11-03)
     ok 39 - CH11 Live API: GET /api/game/context assembles canonical 13-domain working context packet and budgeted prompt (DEF-CH11-02, DEF-CH11-03)
       ---
-      duration_ms: 6.49589
+      duration_ms: 5.886942
       type: 'test'
       ...
     # Subtest: CH11 Live API: POST /api/game/context/assemble enforces hard token budget and strict priority band eviction (DEF-CH11-01, DEF-CH11-04)
     ok 40 - CH11 Live API: POST /api/game/context/assemble enforces hard token budget and strict priority band eviction (DEF-CH11-01, DEF-CH11-04)
       ---
-      duration_ms: 14.027322
+      duration_ms: 11.58208
       type: 'test'
       ...
     # Subtest: CH11 Live API: GET /api/game/context/inspect returns epistemic-safe breakdown without leaking secrets (DEF-CH11-03)
     ok 41 - CH11 Live API: GET /api/game/context/inspect returns epistemic-safe breakdown without leaking secrets (DEF-CH11-03)
       ---
-      duration_ms: 3.819374
+      duration_ms: 5.211753
       type: 'test'
       ...
     # Subtest: CH11 Live API: POST /api/game/context/npc-dialogue sanitizes prompt injection tags and protects character persona boundaries (DEF-CH11-06)
     ok 42 - CH11 Live API: POST /api/game/context/npc-dialogue sanitizes prompt injection tags and protects character persona boundaries (DEF-CH11-06)
       ---
-      duration_ms: 6.271846
+      duration_ms: 5.159151
       type: 'test'
       ...
     # Subtest: CH12 Live API: GET /api/game/orchestrator/models returns canonical model pools and specialized roles (DEF-CH12-04)
     ok 43 - CH12 Live API: GET /api/game/orchestrator/models returns canonical model pools and specialized roles (DEF-CH12-04)
       ---
-      duration_ms: 2.662039
+      duration_ms: 4.016295
       type: 'test'
       ...
     # Subtest: CH12 Live API: POST /api/game/orchestrator/select deterministically selects eligible model respecting context (DEF-CH12-02, DEF-CH12-03)
     ok 44 - CH12 Live API: POST /api/game/orchestrator/select deterministically selects eligible model respecting context (DEF-CH12-02, DEF-CH12-03)
       ---
-      duration_ms: 3.328192
+      duration_ms: 5.388911
       type: 'test'
       ...
     # Subtest: CH12 Live API: POST /api/game/orchestrator/turn executes full turn orchestration with context assembly, adjudication, and continuation checkpoint (DEF-CH12-01, DEF-CH12-05, DEF-CH12-06)
     ok 45 - CH12 Live API: POST /api/game/orchestrator/turn executes full turn orchestration with context assembly, adjudication, and continuation checkpoint (DEF-CH12-01, DEF-CH12-05, DEF-CH12-06)
       ---
-      duration_ms: 630.895111
+      duration_ms: 410.483967
       type: 'test'
       ...
     # Subtest: CH12 Live API: GET /api/game/orchestrator/telemetry returns runtime metrics and stats
     ok 46 - CH12 Live API: GET /api/game/orchestrator/telemetry returns runtime metrics and stats
       ---
-      duration_ms: 5.149353
+      duration_ms: 2.630141
       type: 'test'
       ...
-    1..46
-ok 17 - CH1 Live Runtime Proof — Canonical Domain & HTTP API Path
+    # Subtest: CH12 V6.34 Test A: Identical POST /api/game/orchestrator/turn twice with same idempotency key deduplicates execution and returns cached result
+    ok 47 - CH12 V6.34 Test A: Identical POST /api/game/orchestrator/turn twice with same idempotency key deduplicates execution and returns cached result
+      ---
+      duration_ms: 188.650517
+      type: 'test'
+      ...
+    # Subtest: CH12 V6.34 Test B & C: In-flight deduplication and concurrent replay share identical promise without redundant execution
+    ok 48 - CH12 V6.34 Test B & C: In-flight deduplication and concurrent replay share identical promise without redundant execution
+      ---
+      duration_ms: 7.708307
+      type: 'test'
+      ...
+    # Subtest: CH12 V6.34 Test D: Replay of a fallback attempt preserves deterministic fallback telemetry and result
+    ok 49 - CH12 V6.34 Test D: Replay of a fallback attempt preserves deterministic fallback telemetry and result
+      ---
+      duration_ms: 17.209042
+      type: 'test'
+      ...
+    # Subtest: CH12 V6.34 Test E: Replay of state-changing proposal preserves canonical single-commit invariants
+    ok 50 - CH12 V6.34 Test E: Replay of state-changing proposal preserves canonical single-commit invariants
+      ---
+      duration_ms: 14.127993
+      type: 'test'
+      ...
+    # Subtest: CH12 V6.15: ContinuationCheckpoint includes all required fields: openThreads, presentationEvents, and knowledgeBoundaries
+    ok 51 - CH12 V6.15: ContinuationCheckpoint includes all required fields: openThreads, presentationEvents, and knowledgeBoundaries
+      ---
+      duration_ms: 504.27837
+      type: 'test'
+      ...
+    # Subtest: CH12 V6.29: Workstation API endpoints for model catalog, discovery, overrides, health, and secret safety
+    ok 52 - CH12 V6.29: Workstation API endpoints for model catalog, discovery, overrides, health, and secret safety
+      ---
+      duration_ms: 128.838993
+      type: 'test'
+      ...
+    1..52
+ok 37 - CH1 Live Runtime Proof — Canonical Domain & HTTP API Path
   ---
-  duration_ms: 1121.248876
+  duration_ms: 1731.769967
   type: 'suite'
+  ...
+# Subtest: MODEL ROUTING & TASK ASSIGNMENT OPERATIONAL INTEGRATION
+    # Subtest: 1. Model Registry: Seed models contain Gemini 3.6 Flash, Gemini 2.5 Pro, Gemini 2.5 Flash, and Emergency Floor
+    ok 1 - 1. Model Registry: Seed models contain Gemini 3.6 Flash, Gemini 2.5 Pro, Gemini 2.5 Flash, and Emergency Floor
+      ---
+      duration_ms: 1.86085
+      type: 'test'
+      ...
+    # Subtest: 2. Model Readiness Truthfulness: Gemini 2.5 Pro is marked Unavailable, NOT Ready
+    ok 2 - 2. Model Readiness Truthfulness: Gemini 2.5 Pro is marked Unavailable, NOT Ready
+      ---
+      duration_ms: 0.502866
+      type: 'test'
+      ...
+    # Subtest: 3. Pin Model For Task: Persists to disk and orchestrator memory
+    ok 3 - 3. Pin Model For Task: Persists to disk and orchestrator memory
+      ---
+      duration_ms: 1.393132
+      type: 'test'
+      ...
+    # Subtest: 4. Role Eligibility & Select Best Model: Selects pinned healthy model if available
+    ok 4 - 4. Role Eligibility & Select Best Model: Selects pinned healthy model if available
+      ---
+      duration_ms: 8.793595
+      type: 'test'
+      ...
+    # Subtest: 5. Fallback Chain: Skips unavailable gemini-2.5-pro and picks healthy model or emergency floor
+    ok 5 - 5. Fallback Chain: Skips unavailable gemini-2.5-pro and picks healthy model or emergency floor
+      ---
+      duration_ms: 0.83507
+      type: 'test'
+      ...
+    # Subtest: 6. Real Connectivity Testbench: Returns truthful health result without crashing
+    ok 6 - 6. Real Connectivity Testbench: Returns truthful health result without crashing
+      ---
+      duration_ms: 365.032969
+      type: 'test'
+      ...
+    # Subtest: 7. Emergency Floor Model: Always healthy and ready for failover
+    ok 7 - 7. Emergency Floor Model: Always healthy and ready for failover
+      ---
+      duration_ms: 0.721822
+      type: 'test'
+      ...
+    1..7
+ok 38 - MODEL ROUTING & TASK ASSIGNMENT OPERATIONAL INTEGRATION
+  ---
+  duration_ms: 380.486749
+  type: 'suite'
+  ...
+# Subtest: Phase 1.5 — Story Navigation Menu Composition (INVESTIGATION ruleset without active combat hides combat)
+ok 39 - Phase 1.5 — Story Navigation Menu Composition (INVESTIGATION ruleset without active combat hides combat)
+  ---
+  duration_ms: 0.90649
+  type: 'test'
+  ...
+# Subtest: Phase 1.5 — Story Navigation Menu Composition (FULL_DND shows combat when active)
+ok 40 - Phase 1.5 — Story Navigation Menu Composition (FULL_DND shows combat when active)
+  ---
+  duration_ms: 0.211647
+  type: 'test'
+  ...
+# Subtest: Phase 1.5 — Provider-Neutral Prompt Compiler produces structured engine prompt
+ok 41 - Phase 1.5 — Provider-Neutral Prompt Compiler produces structured engine prompt
+  ---
+  duration_ms: 0.251721
+  type: 'test'
+  ...
+# Subtest: Phase 1.5 — Compendium maintains 7 canonical categories
+ok 42 - Phase 1.5 — Compendium maintains 7 canonical categories
+  ---
+  duration_ms: 0.230873
+  type: 'test'
+  ...
+# Subtest: Phase 1.5 — Compendium dataset holds initial entries across categories
+ok 43 - Phase 1.5 — Compendium dataset holds initial entries across categories
+  ---
+  duration_ms: 0.153279
+  type: 'test'
+  ...
+# Subtest: Phase 1.5B — 1. Global Navigation Route Definitions
+ok 44 - Phase 1.5B — 1. Global Navigation Route Definitions
+  ---
+  duration_ms: 1.119826
+  type: 'test'
+  ...
+# Subtest: Phase 1.5B — 2. Sub-categories map under compendium sub-routes
+ok 45 - Phase 1.5B — 2. Sub-categories map under compendium sub-routes
+  ---
+  duration_ms: 0.178249
+  type: 'test'
+  ...
+# Subtest: Phase 1.5B — 3. Compendium maintaining 7 internal tabs
+ok 46 - Phase 1.5B — 3. Compendium maintaining 7 internal tabs
+  ---
+  duration_ms: 0.223144
+  type: 'test'
+  ...
+# Subtest: Phase 1.5B — 4. Compendium items retain provenance tracking properties
+ok 47 - Phase 1.5B — 4. Compendium items retain provenance tracking properties
+  ---
+  duration_ms: 0.173331
+  type: 'test'
+  ...
+# Subtest: Phase 1.5B — 5. Epistemic Separation Invariant (Compendium does not mutate canonical world repo)
+ok 48 - Phase 1.5B — 5. Epistemic Separation Invariant (Compendium does not mutate canonical world repo)
+  ---
+  duration_ms: 0.155961
+  type: 'test'
+  ...
+# Subtest: Phase 1.5B — 6. Automatic Voice Identity Resolver computes deterministic assignment
+ok 49 - Phase 1.5B — 6. Automatic Voice Identity Resolver computes deterministic assignment
+  ---
+  duration_ms: 0.481603
+  type: 'test'
+  ...
+# Subtest: Phase 1.5B — 7. Voice Identity Resolver respects manual override mode
+ok 50 - Phase 1.5B — 7. Voice Identity Resolver respects manual override mode
+  ---
+  duration_ms: 0.173924
+  type: 'test'
+  ...
+# Subtest: Phase 1.5B — 8. Deterministic Character Speaker Accent Color Derivation
+ok 51 - Phase 1.5B — 8. Deterministic Character Speaker Accent Color Derivation
+  ---
+  duration_ms: 0.250024
+  type: 'test'
+  ...
+# Subtest: Phase 1.5B — 9. Narrator / System voice color fallback
+ok 52 - Phase 1.5B — 9. Narrator / System voice color fallback
+  ---
+  duration_ms: 0.333765
+  type: 'test'
+  ...
+# Subtest: Phase 1.5B — 10. Preset Voices pool diversity
+ok 53 - Phase 1.5B — 10. Preset Voices pool diversity
+  ---
+  duration_ms: 0.521927
+  type: 'test'
+  ...
+# Subtest: Gap 1 — Compendium Persistence across reload and provenance preservation
+ok 54 - Gap 1 — Compendium Persistence across reload and provenance preservation
+  ---
+  duration_ms: 1.716316
+  type: 'test'
+  ...
+# Subtest: Gap 1b — Compendium Epistemic Separation Invariant (World B context does NOT know World A Compendium item)
+ok 55 - Gap 1b — Compendium Epistemic Separation Invariant (World B context does NOT know World A Compendium item)
+  ---
+  duration_ms: 0.223465
+  type: 'test'
+  ...
+# Subtest: Gap 2 — Fallback Runtime Proof: Primary failure -> Fallback model invoked -> Successful response
+ok 56 - Gap 2 — Fallback Runtime Proof: Primary failure -> Fallback model invoked -> Successful response
+  ---
+  duration_ms: 80.067736
+  type: 'test'
+  ...
+# Subtest: Gap 2b — Primary success -> Fallback NOT invoked
+ok 57 - Gap 2b — Primary success -> Fallback NOT invoked
+  ---
+  duration_ms: 2.139606
+  type: 'test'
+  ...
+# Subtest: Gap 2c — Primary failure -> Secondary failure -> Tertiary fallback attempted and succeeded
+ok 58 - Gap 2c — Primary failure -> Secondary failure -> Tertiary fallback attempted and succeeded
+  ---
+  duration_ms: 64.371712
+  type: 'test'
+  ...
+# Subtest: Phase 1 Audio Lifecycle: Audio engine settings and lifecycle management
+ok 59 - Phase 1 Audio Lifecycle: Audio engine settings and lifecycle management
+  ---
+  duration_ms: 1.315433
+  type: 'test'
+  ...
+# Subtest: Phase 1 Genre Decoupling: Discovery Preferences ≠ World Genre ≠ Ruleset
+ok 60 - Phase 1 Genre Decoupling: Discovery Preferences ≠ World Genre ≠ Ruleset
+  ---
+  duration_ms: 0.925368
+  type: 'test'
+  ...
+# Subtest: Phase 1 World Manifest: Genre tags are first-class on world templates
+ok 61 - Phase 1 World Manifest: Genre tags are first-class on world templates
+  ---
+  duration_ms: 0.215063
+  type: 'test'
   ...
 # Subtest: PlayerLifecycleState Model (Decision 1)
     # Subtest: instantiates with deterministic actorId and value immutability
     ok 1 - instantiates with deterministic actorId and value immutability
       ---
-      duration_ms: 0.865618
+      duration_ms: 0.73758
       type: 'test'
       ...
     # Subtest: supports copyWith without mutating original instance
     ok 2 - supports copyWith without mutating original instance
       ---
-      duration_ms: 0.217956
+      duration_ms: 0.248957
       type: 'test'
       ...
     # Subtest: serializes and deserializes deterministically to/from JSON
     ok 3 - serializes and deserializes deterministically to/from JSON
       ---
-      duration_ms: 0.29287
+      duration_ms: 0.327113
       type: 'test'
       ...
     1..3
-ok 18 - PlayerLifecycleState Model (Decision 1)
+ok 62 - PlayerLifecycleState Model (Decision 1)
   ---
-  duration_ms: 2.374966
+  duration_ms: 2.369671
   type: 'suite'
   ...
 # Subtest: World Repository Authority & Travel Semantics
     # Subtest: guarantees getCurrentLocation reads directly from PlayerLifecycleState (Single Authority)
     ok 1 - guarantees getCurrentLocation reads directly from PlayerLifecycleState (Single Authority)
       ---
-      duration_ms: 0.764951
+      duration_ms: 0.824448
       type: 'test'
       ...
     # Subtest: strictly enforces Travel Origin Anchoring (Decision 1 Invariants 6 & 7)
     ok 2 - strictly enforces Travel Origin Anchoring (Decision 1 Invariants 6 & 7)
       ---
-      duration_ms: 1.871995
+      duration_ms: 2.15874
       type: 'test'
       ...
     # Subtest: leaves player anchored at origin when travel is cancelled
     ok 3 - leaves player anchored at origin when travel is cancelled
       ---
-      duration_ms: 0.509867
+      duration_ms: 0.58816
       type: 'test'
       ...
     # Subtest: manages player injuries deterministically (CH3 Embodied Lifecycle)
     ok 4 - manages player injuries deterministically (CH3 Embodied Lifecycle)
       ---
-      duration_ms: 0.748166
+      duration_ms: 0.771001
       type: 'test'
       ...
     # Subtest: manages player transformations deterministically (CH3 Embodied Lifecycle)
     ok 5 - manages player transformations deterministically (CH3 Embodied Lifecycle)
       ---
-      duration_ms: 0.682522
+      duration_ms: 0.957919
       type: 'test'
       ...
     # Subtest: manages player mortality and revival deterministically (CH3 Embodied Lifecycle)
     ok 6 - manages player mortality and revival deterministically (CH3 Embodied Lifecycle)
       ---
-      duration_ms: 0.813878
+      duration_ms: 0.738933
       type: 'test'
       ...
     # Subtest: manages player possession deterministically (CH3 Embodied Lifecycle)
     ok 7 - manages player possession deterministically (CH3 Embodied Lifecycle)
       ---
-      duration_ms: 0.608389
+      duration_ms: 1.574919
       type: 'test'
       ...
     1..7
-ok 19 - World Repository Authority & Travel Semantics
+ok 63 - World Repository Authority & Travel Semantics
   ---
-  duration_ms: 6.479337
+  duration_ms: 8.187458
   type: 'suite'
   ...
 # Subtest: CH14 - Sensory Engine Epistemic Security (DEF-CH14-04)
     # Subtest: TEST A: Visible source -> cue emitted
     ok 1 - TEST A: Visible source -> cue emitted
       ---
-      duration_ms: 1.198977
+      duration_ms: 1.735037
       type: 'test'
       ...
     # Subtest: TEST B: Hidden source -> cue suppressed
     ok 2 - TEST B: Hidden source -> cue suppressed
       ---
-      duration_ms: 0.229496
+      duration_ms: 0.407036
       type: 'test'
       ...
     # Subtest: TEST C: Undiscovered location -> cue suppressed
     ok 3 - TEST C: Undiscovered location -> cue suppressed
       ---
-      duration_ms: 0.156552
+      duration_ms: 0.236989
       type: 'test'
       ...
     # Subtest: TEST D: Nonexistent source -> cue suppressed
     ok 4 - TEST D: Nonexistent source -> cue suppressed
       ---
-      duration_ms: 0.415523
+      duration_ms: 0.349121
       type: 'test'
       ...
     # Subtest: TEST E: Malformed source -> cue suppressed
     ok 5 - TEST E: Malformed source -> cue suppressed
       ---
-      duration_ms: 0.51916
+      duration_ms: 0.569795
       type: 'test'
       ...
     # Subtest: TEST F: Authorized combat source -> cue emitted
     ok 6 - TEST F: Authorized combat source -> cue emitted
       ---
-      duration_ms: 0.285169
+      duration_ms: 0.322831
       type: 'test'
       ...
     # Subtest: TEST G: Authorized geography source -> cue emitted
     ok 7 - TEST G: Authorized geography source -> cue emitted
       ---
-      duration_ms: 0.222933
+      duration_ms: 0.213892
       type: 'test'
       ...
     # Subtest: TEST H: Exact same cue executed twice -> deterministic result
     ok 8 - TEST H: Exact same cue executed twice -> deterministic result
       ---
-      duration_ms: 0.159539
+      duration_ms: 0.380311
       type: 'test'
       ...
     # Subtest: Spatial Math regression checks
     ok 9 - Spatial Math regression checks
       ---
-      duration_ms: 0.327802
+      duration_ms: 0.340498
       type: 'test'
       ...
     1..9
-ok 20 - CH14 - Sensory Engine Epistemic Security (DEF-CH14-04)
+ok 64 - CH14 - Sensory Engine Epistemic Security (DEF-CH14-04)
   ---
-  duration_ms: 4.777243
+  duration_ms: 6.175325
   type: 'suite'
   ...
 # Subtest: CH10 DEF-CH10-07 and DEF-CH10-08 Verifications
     # Subtest: TEST A: Advance time across a sunrise boundary while the sunrise-linked condition is active
     ok 1 - TEST A: Advance time across a sunrise boundary while the sunrise-linked condition is active
       ---
-      duration_ms: 2.983517
+      duration_ms: 2.7623
       type: 'test'
       ...
     # Subtest: TEST B: Advance by a large multi-hour jump that crosses sunrise
     ok 2 - TEST B: Advance by a large multi-hour jump that crosses sunrise
       ---
-      duration_ms: 0.63938
+      duration_ms: 0.697616
       type: 'test'
       ...
     # Subtest: TEST C: Trigger a meaningful CH10 world event (CH4 evidence intact)
     ok 3 - TEST C: Trigger a meaningful CH10 world event (CH4 evidence intact)
       ---
-      duration_ms: 1.296954
+      duration_ms: 1.086086
       type: 'test'
       ...
     # Subtest: TEST D, E, F, G: Meaningful event generates CH9 memory, deduplicates, verifies provenance and visibility
     ok 4 - TEST D, E, F, G: Meaningful event generates CH9 memory, deduplicates, verifies provenance and visibility
       ---
-      duration_ms: 1.113428
+      duration_ms: 0.981094
       type: 'test'
       ...
     1..4
-ok 21 - CH10 DEF-CH10-07 and DEF-CH10-08 Verifications
+ok 65 - CH10 DEF-CH10-07 and DEF-CH10-08 Verifications
   ---
-  duration_ms: 7.333884
+  duration_ms: 6.55799
   type: 'suite'
   ...
-1..21
-# tests 200
-# suites 44
-# pass 198
-# fail 2
+1..65
+# tests 403
+# suites 95
+# pass 394
+# fail 9
 # cancelled 0
 # skipped 0
 # todo 0
-# duration_ms 9915.589677
+# duration_ms 26667.953199

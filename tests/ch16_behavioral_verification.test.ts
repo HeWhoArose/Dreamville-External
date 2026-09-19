@@ -61,12 +61,12 @@ test('CH16 End-to-End Behavioral Verification Suite', async () => {
   });
 
   assert.equal(startRes.status, 201);
-  const run = await startRes.json();
-  assert.ok(run.storyId);
-  assert.equal(run.storyMode, 'PROTAGONIST');
-  assert.equal(run.pinnedWorldVersion, 1);
+  const startData = await startRes.json();
+  assert.ok(startData.storyId);
+  assert.equal(startData.run.storyMode, 'PROTAGONIST');
+  assert.equal(startData.run.pinnedWorldVersion, 1);
 
-  const activeStoryId = run.storyId;
+  const activeStoryId = startData.storyId;
 
   // 3. Real Gameplay Event Production & Emergent Narrative Threading
   const actionRes = await fetch(`${baseUrl}/api/game/worlds/runs/${activeStoryId}/actions/execute`, {

@@ -1,7 +1,40 @@
 @import "tailwindcss";
+@import "./styles/tokens.css";
 
 @layer base {
-  * {
-    border-color: rgba(255, 255, 255, 0.08);
+  body {
+    background-color: var(--db-bg-canvas);
+    color: var(--db-text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    letter-spacing: -0.01em;
   }
+
+  /* Custom subtle scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--db-bg-canvas);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--db-bg-raised);
+    border-radius: var(--db-radius-full);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--db-border-strong);
+  }
+}
+
+/* Atmospheric Ambient Lighting (Restrained Purple-Gold-Blue) */
+.dreambook-ambient-glow {
+  background: radial-gradient(circle at 50% 0%, rgba(157, 108, 248, 0.08) 0%, rgba(217, 154, 43, 0.03) 40%, rgba(9, 7, 15, 0) 70%);
+}
+
+.dreambook-subtle-glow {
+  background: radial-gradient(circle at 50% 20%, rgba(157, 108, 248, 0.06) 0%, rgba(59, 130, 246, 0.04) 50%, rgba(9, 7, 15, 0) 70%);
+}
+
+.dreambook-gold-glow {
+  background: radial-gradient(circle at 50% 50%, rgba(217, 154, 43, 0.10) 0%, rgba(9, 7, 15, 0) 65%);
 }

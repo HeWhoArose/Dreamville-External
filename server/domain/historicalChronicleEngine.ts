@@ -164,6 +164,10 @@ export class HistoricalChronicleEngine {
       .map((e) => JSON.parse(JSON.stringify(e)));
   }
 
+  public getTimeline(): ChronicleEntry[] {
+    return this.getChronicleEntries();
+  }
+
   /**
    * Deterministic Rebuild (Invariant 5)
    * Completely reconstructs all dossiers and chronicle entries from the raw evidence store.

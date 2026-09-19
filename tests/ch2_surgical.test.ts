@@ -839,4 +839,160 @@ describe('CH2 SURGICAL REPAIR VERIFICATION — EPISTEMIC HORIZON & ACTOR DISCOVE
       assert.strictEqual(combat.getParticipants().length, 2);
     });
   });
+
+  describe('CH2 REGRESSION: Epistemic Node & Dynamic Geography Verification', () => {
+    it('proves a newly created dynamic world contains NO default fixture nodes', () => {
+      const dynamicStoryId = 'story_regression_dynamic_geography';
+      const dynamicWorld = {
+        worldId: 'world_werewolf',
+        title: 'Lupine Sanguine Moon',
+        summary: 'Only werewolves exist; dark fantasy.',
+        geography: {
+          locations: [
+            { id: 'loc_lupine_ridge', name: 'Lupine Ridge', description: 'Craggy peaks' },
+            { id: 'loc_silver_mine', name: 'Silver Mine', description: 'Ancient mines' },
+          ]
+        }
+      };
+      
+      worldRepository.seedDynamicStoryRun(dynamicStoryId, dynamicWorld, {
+        characterName: 'Fenrir',
+      });
+
+      const geo = worldRepository.getGeographyGraph(dynamicStoryId);
+      const nodes = geo.getAllNodes();
+
+      // Verify no default fixture locations are present
+      const fixtureIds = ['loc_whispering_orrery', 'loc_lantern_vault', 'loc_glasswood_verge', 'loc_sunken_scriptorium'];
+      for (const id of fixtureIds) {
+        assert.strictEqual(geo.getNode(id), undefined, `Should not contain default fixture location: ${id}`);
+      }
+
+      // Verify only synthesized nodes exist
+      assert.strictEqual(nodes.length, 2);
+      assert.ok(nodes.some(n => n.id === 'loc_lupine_ridge'));
+      assert.ok(nodes.some(n => n.id === 'loc_silver_mine'));
+    });
+
+    it('enforces strict epistemic visibility on 4-node graph with an undiscovered node', () => {
+      const storyId = 'story_epistemic_4_nodes';
+      const geo = worldRepository.getGeographyGraph(storyId);
+      geo.clear();
+
+      const n1 = { id: 'loc_a', name: 'A', regionId: 'R', description: 'desc', coordinates: { x: 0, y: 0 }, accessible: true, discovered: true, provenance: 'generated' as const };
+      const n2 = { id: 'loc_b', name: 'B', regionId: 'R', description: 'desc', coordinates: { x: 1, y: 1 }, accessible: true, discovered: true, provenance: 'generated' as const };
+      const n3 = { id: 'loc_c', name: 'C', regionId: 'R', description: 'desc', coordinates: { x: 2, y: 2 }, accessible: true, discovered: true, provenance: 'generated' as const };
+      const n4 = { id: 'loc_d', name: 'D', regionId: 'R', description: 'desc', coordinates: { x: 3, y: 3 }, accessible: true, discovered: false, provenance: 'generated' as const };
+
+      geo.addNode(n1);
+      geo.addNode(n2);
+      geo.addNode(n3);
+      geo.addNode(n4);
+
+      const player = new PlayerLifecycleState({
+        actorId: 'player_epistemic_4',
+        name: 'Tester',
+        locationId: 'loc_a',
+        discoveredLocationIds: ['loc_a', 'loc_b', 'loc_c'],
+      });
+      worldRepository.updatePlayerLifecycle(storyId, player);
+
+      const projection = serverMockAuthority.filterForExternalClient(serverMockAuthority['EXPERIMENTAL_SINGLE_INSTANCE_MOCK_STATE'], storyId);
+      
+      assert.strictEqual(projection.locations['loc_d'], undefined, 'Undiscovered node must not leak its canonical ID');
+      assert.ok(projection.locations['unknown_loc_d'], 'Undiscovered node must be projected under unknown territory key');
+      assert.strictEqual(projection.locations['unknown_loc_d'].name, 'Unknown Territory');
+    });
+
+    it('enforces strict epistemic visibility on 5-node graph with an undiscovered node', () => {
+      const storyId = 'story_epistemic_5_nodes';
+      const geo = worldRepository.getGeographyGraph(storyId);
+      geo.clear();
+
+      const n1 = { id: 'loc_a', name: 'A', regionId: 'R', description: 'desc', coordinates: { x: 0, y: 0 }, accessible: true, discovered: true, provenance: 'generated' as const };
+      const n2 = { id: 'loc_b', name: 'B', regionId: 'R', description: 'desc', coordinates: { x: 1, y: 1 }, accessible: true, discovered: true, provenance: 'generated' as const };
+      const n3 = { id: 'loc_c', name: 'C', regionId: 'R', description: 'desc', coordinates: { x: 2, y: 2 }, accessible: true, discovered: true, provenance: 'generated' as const };
+      const n4 = { id: 'loc_d', name: 'D', regionId: 'R', description: 'desc', coordinates: { x: 3, y: 3 }, accessible: true, discovered: true, provenance: 'generated' as const };
+      const n5 = { id: 'loc_e', name: 'E', regionId: 'R', description: 'desc', coordinates: { x: 4, y: 4 }, accessible: true, discovered: false, provenance: 'generated' as const };
+
+      geo.addNode(n1);
+      geo.addNode(n2);
+      geo.addNode(n3);
+      geo.addNode(n4);
+      geo.addNode(n5);
+
+      const player = new PlayerLifecycleState({
+        actorId: 'player_epistemic_5',
+        name: 'Tester',
+        locationId: 'loc_a',
+        discoveredLocationIds: ['loc_a', 'loc_b', 'loc_c', 'loc_d'],
+      });
+      worldRepository.updatePlayerLifecycle(storyId, player);
+
+      const projection = serverMockAuthority.filterForExternalClient(serverMockAuthority['EXPERIMENTAL_SINGLE_INSTANCE_MOCK_STATE'], storyId);
+
+      assert.strictEqual(projection.locations['loc_e'], undefined, 'Undiscovered node must not leak its canonical ID');
+      assert.ok(projection.locations['unknown_loc_e'], 'Undiscovered node must be projected under unknown territory key');
+    });
+
+    it('enforces strict epistemic visibility on 6-node graph with an undiscovered node', () => {
+      const storyId = 'story_epistemic_6_nodes';
+      const geo = worldRepository.getGeographyGraph(storyId);
+      geo.clear();
+
+      const n1 = { id: 'loc_a', name: 'A', regionId: 'R', description: 'desc', coordinates: { x: 0, y: 0 }, accessible: true, discovered: true, provenance: 'generated' as const };
+      const n2 = { id: 'loc_b', name: 'B', regionId: 'R', description: 'desc', coordinates: { x: 1, y: 1 }, accessible: true, discovered: true, provenance: 'generated' as const };
+      const n3 = { id: 'loc_c', name: 'C', regionId: 'R', description: 'desc', coordinates: { x: 2, y: 2 }, accessible: true, discovered: true, provenance: 'generated' as const };
+      const n4 = { id: 'loc_d', name: 'D', regionId: 'R', description: 'desc', coordinates: { x: 3, y: 3 }, accessible: true, discovered: true, provenance: 'generated' as const };
+      const n5 = { id: 'loc_e', name: 'E', regionId: 'R', description: 'desc', coordinates: { x: 4, y: 4 }, accessible: true, discovered: true, provenance: 'generated' as const };
+      const n6 = { id: 'loc_f', name: 'F', regionId: 'R', description: 'desc', coordinates: { x: 5, y: 5 }, accessible: true, discovered: false, provenance: 'generated' as const };
+
+      geo.addNode(n1);
+      geo.addNode(n2);
+      geo.addNode(n3);
+      geo.addNode(n4);
+      geo.addNode(n5);
+      geo.addNode(n6);
+
+      const player = new PlayerLifecycleState({
+        actorId: 'player_epistemic_6',
+        name: 'Tester',
+        locationId: 'loc_a',
+        discoveredLocationIds: ['loc_a', 'loc_b', 'loc_c', 'loc_d', 'loc_e'],
+      });
+      worldRepository.updatePlayerLifecycle(storyId, player);
+
+      const projection = serverMockAuthority.filterForExternalClient(serverMockAuthority['EXPERIMENTAL_SINGLE_INSTANCE_MOCK_STATE'], storyId);
+
+      assert.strictEqual(projection.locations['loc_f'], undefined, 'Undiscovered node must not leak its canonical ID');
+      assert.ok(projection.locations['unknown_loc_f'], 'Undiscovered node must be projected under unknown territory key');
+    });
+
+    it('shows all nodes with real IDs in a completely discovered graph', () => {
+      const storyId = 'story_epistemic_fully_discovered';
+      const geo = worldRepository.getGeographyGraph(storyId);
+      geo.clear();
+
+      const n1 = { id: 'loc_a', name: 'A', regionId: 'R', description: 'desc', coordinates: { x: 0, y: 0 }, accessible: true, discovered: true, provenance: 'generated' as const };
+      const n2 = { id: 'loc_b', name: 'B', regionId: 'R', description: 'desc', coordinates: { x: 1, y: 1 }, accessible: true, discovered: true, provenance: 'generated' as const };
+
+      geo.addNode(n1);
+      geo.addNode(n2);
+
+      const player = new PlayerLifecycleState({
+        actorId: 'player_epistemic_full',
+        name: 'Tester',
+        locationId: 'loc_a',
+        discoveredLocationIds: ['loc_a', 'loc_b'],
+      });
+      worldRepository.updatePlayerLifecycle(storyId, player);
+
+      const projection = serverMockAuthority.filterForExternalClient(serverMockAuthority['EXPERIMENTAL_SINGLE_INSTANCE_MOCK_STATE'], storyId);
+
+      assert.ok(projection.locations['loc_a']);
+      assert.ok(projection.locations['loc_b']);
+      assert.strictEqual(projection.locations['loc_b'].name, 'B');
+      assert.strictEqual(projection.locations['unknown_loc_b'], undefined);
+    });
+  });
 });

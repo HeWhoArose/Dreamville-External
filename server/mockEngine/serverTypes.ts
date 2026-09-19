@@ -10,6 +10,9 @@ import type {
   ExternalCharacter,
   ActionRequest,
   ActionResult,
+  NarrativeEventType,
+  StructuredNarrativeEvent,
+  OpeningScene,
 } from '../../src/types';
 
 /**
@@ -61,4 +64,7 @@ export type {
   ExternalCharacter,
   ActionRequest,
   ActionResult,
+  NarrativeEventType,
+  StructuredNarrativeEvent,
+  OpeningScene,
 };

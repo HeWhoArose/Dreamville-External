@@ -1,6 +1,6 @@
 import React from 'react';
 import { WorldTime, Location } from '../types';
-import { ShieldCheck, Clock, Compass, BookOpen, Eye, Layers, Archive, Cpu } from 'lucide-react';
+import { ShieldCheck, Clock, Compass, BookOpen, Eye, Layers, Archive, Cpu, Sliders, Mic, Activity } from 'lucide-react';
 
 interface HeaderProps {
   worldTime: WorldTime;
@@ -11,6 +11,11 @@ interface HeaderProps {
   onOpenContextModal?: () => void;
   onOpenArchiveModal?: () => void;
   onOpenRoutingModal?: () => void;
+  onOpenAudioSettings?: () => void;
+  onOpenVoiceStudio?: () => void;
+  onOpenImportModal?: () => void;
+  onOpenStoryLibraryModal?: () => void;
+  onOpenLivingBibleModal?: () => void;
   pendingRequestsCount: number;
 }
 
@@ -23,6 +28,11 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenContextModal,
   onOpenArchiveModal,
   onOpenRoutingModal,
+  onOpenAudioSettings,
+  onOpenVoiceStudio,
+  onOpenImportModal,
+  onOpenStoryLibraryModal,
+  onOpenLivingBibleModal,
   pendingRequestsCount,
 }) => {
   return (
@@ -87,6 +97,61 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Archive className="w-3 h-3 text-amber-400" />
               <span>Archive</span>
+            </button>
+          )}
+          {onOpenVoiceStudio && (
+            <button
+              id="voice-studio-btn"
+              onClick={onOpenVoiceStudio}
+              className="flex items-center gap-1 px-2.5 py-0.5 rounded bg-stone-800 hover:bg-stone-750 text-stone-300 hover:text-amber-200 border border-stone-700 transition text-[11px] font-medium"
+              title="Voice & Character Studio"
+            >
+              <Mic className="w-3 h-3 text-amber-400" />
+              <span>Voice Studio</span>
+            </button>
+          )}
+          {onOpenImportModal && (
+            <button
+              id="import-story-btn"
+              onClick={onOpenImportModal}
+              className="flex items-center gap-1 px-2.5 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 transition text-[11px] font-medium"
+              title="Bring a Story to Life (Story Adaptation Pipeline)"
+            >
+              <BookOpen className="w-3 h-3 text-amber-400" />
+              <span>Adapt Story</span>
+            </button>
+          )}
+          {onOpenStoryLibraryModal && (
+            <button
+              id="story-library-btn"
+              onClick={onOpenStoryLibraryModal}
+              className="flex items-center gap-1 px-2.5 py-0.5 rounded bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-500/40 transition text-[11px] font-medium"
+              title="Adapted Story Library & Dashboard"
+            >
+              <BookOpen className="w-3 h-3 text-indigo-400" />
+              <span>Story Library</span>
+            </button>
+          )}
+          {onOpenAudioSettings && (
+            <button
+              id="audio-settings-btn"
+              onClick={onOpenAudioSettings}
+              className="flex items-center gap-1 px-2.5 py-0.5 rounded bg-stone-800 hover:bg-stone-750 text-stone-300 hover:text-amber-200 border border-stone-700 transition text-[11px] font-medium"
+              title="Sensory & Audio Architecture Settings"
+            >
+              <Sliders className="w-3 h-3 text-amber-400" />
+              <span>Audio</span>
+            </button>
+          )}
+          {onOpenLivingBibleModal && (
+            <button
+              id="living-bible-workstation-btn"
+              onClick={onOpenLivingBibleModal}
+              className="flex items-center gap-1 px-2.5 py-0.5 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition text-[11px] font-medium"
+              title="Living Bible Requirement Ledger & Developer Workstation (CH17)"
+            >
+              <Activity className="w-3 h-3 text-emerald-400" />
+              <span>Living Bible</span>
             </button>
           )}
         </div>

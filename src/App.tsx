@@ -1,5 +1,9 @@
 import { AudioHapticProvider } from './components/AudioHapticManager';
 import { SensoryEventProcessor } from './components/SensoryEventProcessor';
+import { AudioSettingsModal } from './components/AudioSettingsModal';
+import { VoiceStudioModal } from './components/VoiceStudioModal';
+import { ImportStoryModal } from './components/ImportStoryModal';
+import { StoryLibraryModal } from './components/StoryLibraryModal';
 import React, { useState, useEffect } from 'react';
 import {
   ExternalViewState,
@@ -24,6 +28,7 @@ import { EpistemicInspectorModal } from './components/EpistemicInspectorModal';
 import { ContextInspectorModal } from './components/ContextInspectorModal';
 import { ArchiveModal } from './components/ArchiveModal';
 import { RoutingWorkstationModal } from './components/RoutingWorkstationModal';
+import { LivingBibleWorkstationModal } from './components/LivingBibleWorkstationModal';
 import { Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
 import {
   PowerState,
@@ -50,6 +55,11 @@ export const App: React.FC = () => {
   const [isContextModalOpen, setIsContextModalOpen] = useState<boolean>(false);
   const [isRoutingModalOpen, setIsRoutingModalOpen] = useState<boolean>(false);
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState<boolean>(false);
+  const [isAudioSettingsOpen, setIsAudioSettingsOpen] = useState<boolean>(false);
+  const [isVoiceStudioOpen, setIsVoiceStudioOpen] = useState<boolean>(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState<boolean>(false);
+  const [isStoryLibraryModalOpen, setIsStoryLibraryModalOpen] = useState<boolean>(false);
+  const [isLivingBibleModalOpen, setIsLivingBibleModalOpen] = useState<boolean>(false);
   const [isProcessingAction, setIsProcessingAction] = useState<boolean>(false);
 
   const fetchAuxiliaryData = async () => {
@@ -222,6 +232,14 @@ export const App: React.FC = () => {
     });
   };
 
+  const handleCustomAction = (actionText: string) => {
+    dispatchAction({
+      type: 'CUSTOM_ACTION',
+      actionText,
+      intent: actionText,
+    } as any);
+  };
+
   const handleEngageDialogue = (characterId: string) => {
     dispatchAction(
       {
@@ -287,31 +305,39 @@ export const App: React.FC = () => {
     Object.values(viewState.locations)[0];
 
   return (
-    <div className="min-h-screen bg-stone-950 text-stone-100 flex flex-col font-sans">
-      <Header
-        worldTime={viewState.worldTime}
-        activeLocation={activeLocation}
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        onOpenEpistemicModal={() => setIsEpistemicModalOpen(true)}
-        onOpenContextModal={() => setIsContextModalOpen(true)}
-        onOpenRoutingModal={() => setIsRoutingModalOpen(true)}
-        onOpenArchiveModal={() => setIsArchiveModalOpen(true)}
-        pendingRequestsCount={isProcessingAction ? 1 : 0}
-      />
+    <AudioHapticProvider>
+      <SensoryEventProcessor events={(viewState as any)?.sensoryEvents} />
+      <div className="min-h-screen bg-stone-950 text-stone-100 flex flex-col font-sans">
+        <Header
+          worldTime={viewState.worldTime}
+          activeLocation={activeLocation}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          onOpenEpistemicModal={() => setIsEpistemicModalOpen(true)}
+          onOpenContextModal={() => setIsContextModalOpen(true)}
+          onOpenRoutingModal={() => setIsRoutingModalOpen(true)}
+          onOpenArchiveModal={() => setIsArchiveModalOpen(true)}
+          onOpenAudioSettings={() => setIsAudioSettingsOpen(true)}
+          onOpenVoiceStudio={() => setIsVoiceStudioOpen(true)}
+          onOpenImportModal={() => setIsImportModalOpen(true)}
+          onOpenStoryLibraryModal={() => setIsStoryLibraryModalOpen(true)}
+          onOpenLivingBibleModal={() => setIsLivingBibleModalOpen(true)}
+          pendingRequestsCount={isProcessingAction ? 1 : 0}
+        />
 
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
-        {activeTab === 'story' && (
-          <StoryView
-            location={activeLocation}
-            activeDialogue={viewState.activeDialogue}
-            dialogueHistory={viewState.dialogueHistory}
-            onSelectChoice={handleSelectChoice}
-            onRequestInspect={handleInspectSurroundings}
-            onRequestRest={handleAdvanceCycle}
-            isProcessingAction={isProcessingAction}
-          />
-        )}
+        <main className="flex-1 max-w-7xl w-full mx-auto px-4 py-6">
+          {activeTab === 'story' && (
+            <StoryView
+              location={activeLocation}
+              activeDialogue={viewState.activeDialogue}
+              dialogueHistory={viewState.dialogueHistory}
+              onSelectChoice={handleSelectChoice}
+              onRequestInspect={handleInspectSurroundings}
+              onRequestRest={handleAdvanceCycle}
+              onCustomAction={handleCustomAction}
+              isProcessingAction={isProcessingAction}
+            />
+          )}
 
         {activeTab === 'characters' && (
           <CharacterDossier
@@ -409,6 +435,45 @@ export const App: React.FC = () => {
         onClose={() => setIsRoutingModalOpen(false)}
         storyId="default_story"
       />
+
+      {/* Audio Settings Modal */}
+      <AudioSettingsModal
+        isOpen={isAudioSettingsOpen}
+        onClose={() => setIsAudioSettingsOpen(false)}
+      />
+
+      {/* Voice Studio Modal */}
+      <VoiceStudioModal
+        isOpen={isVoiceStudioOpen}
+        onClose={() => setIsVoiceStudioOpen(false)}
+        storyId="default_story"
+      />
+
+      {/* CH15 Import & Adaptation Modal */}
+      <ImportStoryModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onStoryAdapted={(adaptedStoryId) => {
+          setIsImportModalOpen(false);
+          fetchInitialState();
+        }}
+      />
+
+      {/* CH15 Adapted Story Library & Dashboard Modal */}
+      <StoryLibraryModal
+        isOpen={isStoryLibraryModalOpen}
+        onClose={() => setIsStoryLibraryModalOpen(false)}
+        onSelectStory={(storyId) => {
+          fetchInitialState();
+        }}
+      />
+
+      {/* CH17 Living Bible & Workstation Modal */}
+      <LivingBibleWorkstationModal
+        isOpen={isLivingBibleModalOpen}
+        onClose={() => setIsLivingBibleModalOpen(false)}
+      />
     </div>
-  );
+  </AudioHapticProvider>
+);
 };

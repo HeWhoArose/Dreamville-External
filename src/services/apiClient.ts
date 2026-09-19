@@ -1084,6 +1084,218 @@ class ApiClient {
     if (!res.ok) throw new Error(`Failed to pin model: HTTP ${res.status}`);
     return await res.json();
   }
+
+  /**
+   * Challenge 15: Run story adaptation pipeline.
+   * POST /api/game/adaptation/analyze
+   */
+  public async analyzeStoryAdaptation(params: {
+    storyId: string;
+    title: string;
+    rawText: string;
+    profile?: any;
+    options?: any;
+  }): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/adaptation/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) throw new Error(`Failed to analyze story adaptation: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  /**
+   * Challenge 15: Get story adaptation review.
+   * GET /api/game/adaptation/:storyId/review
+   */
+  public async getStoryAdaptationReview(storyId: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/adaptation/${storyId}/review`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Failed to fetch story adaptation review: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  /**
+   * Challenge 15: Resolve conflict in story bible.
+   * POST /api/game/adaptation/:storyId/conflicts/:conflictId/resolve
+   */
+  public async resolveAdaptationConflict(
+    storyId: string,
+    conflictId: string,
+    resolution: string
+  ): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/adaptation/${storyId}/conflicts/${conflictId}/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ resolution, userOverride: resolution }),
+    });
+    if (!res.ok) throw new Error(`Failed to resolve conflict: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  /**
+   * Challenge 15: Duplicate adaptation branch.
+   * POST /api/game/adaptation/:storyId/duplicate-branch
+   */
+  public async duplicateAdaptationBranch(
+    storyId: string,
+    newBranchId: string,
+    branchTitle?: string
+  ): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/adaptation/${storyId}/duplicate-branch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ newBranchId, branchTitle }),
+    });
+    if (!res.ok) throw new Error(`Failed to duplicate adaptation branch: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  /**
+   * Challenge 15: Get record provenance.
+   * GET /api/game/adaptation/:storyId/provenance/:targetId
+   */
+  public async getRecordProvenance(storyId: string, targetId: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/adaptation/${storyId}/provenance/${targetId}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Failed to fetch provenance: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  /**
+   * Challenge 15: List adapted stories.
+   * GET /api/game/adaptation/list
+   */
+  public async listAdaptedStories(): Promise<any[]> {
+    const res = await fetch(`${this.baseUrl}/adaptation/list`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Failed to list adapted stories: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  /**
+   * Challenge 15: Get pipeline execution status.
+   * GET /api/game/adaptation/:storyId/status
+   */
+  public async getAdaptationStatus(storyId: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/adaptation/${encodeURIComponent(storyId)}/status`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Failed to fetch adaptation status: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  /**
+   * Challenge 15: Select active story on server authority.
+   * POST /api/game/adaptation/select
+   */
+  public async selectActiveStory(storyId: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/adaptation/select`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ storyId }),
+    });
+    if (!res.ok) throw new Error(`Failed to select story: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  /**
+   * Challenge 17: Get operational Living Bible requirement ledger.
+   * GET /api/game/living-bible
+   */
+  public async getLivingBible(): Promise<any[]> {
+    const res = await fetch(`${this.baseUrl}/living-bible`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Failed to fetch Living Bible: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  /**
+   * Challenge 17: Get Workstation status and iteration ledger.
+   * GET /api/game/workstation
+   */
+  public async getWorkstationState(): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/workstation`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Failed to fetch Workstation state: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  /**
+   * Challenge 17: Record a new developer iteration into the Workstation ledger.
+   * POST /api/game/workstation/iteration
+   */
+  public async recordWorkstationIteration(payload: {
+    description: string;
+    outcome: string;
+    reason?: string;
+    affectedRequirements?: string[];
+  }): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/workstation/iteration`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.error || `Failed to record iteration: HTTP ${res.status}`);
+    }
+    return await res.json();
+  }
+
+  /**
+   * Challenge 17: Record evidence for a requirement.
+   * POST /api/game/living-bible/evidence
+   */
+  public async recordRequirementEvidence(payload: {
+    requirementId: string;
+    evidenceType: string;
+    sourceReference: string;
+    description: string;
+  }): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/living-bible/evidence`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.error || `Failed to record evidence: HTTP ${res.status}`);
+    }
+    return await res.json();
+  }
+
+  /**
+   * Challenge 17: Validate and promote a requirement status based on evidence.
+   * POST /api/game/living-bible/promote
+   */
+  public async promoteRequirementStatus(
+    requirementId: string,
+    targetStatus: string
+  ): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/living-bible/promote`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ requirementId, targetStatus }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.error || `Failed to promote requirement: HTTP ${res.status}`);
+    }
+    return await res.json();
+  }
 }
 
 export const apiClient = new ApiClient();

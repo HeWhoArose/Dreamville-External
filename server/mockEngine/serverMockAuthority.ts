@@ -30,11 +30,22 @@ import { PlayerLifecycleState } from '../domain/playerLifecycleState';
 export class ServerMockAuthority {
   // Labelled clearly per user specification: in-memory state for development experiment
   private EXPERIMENTAL_SINGLE_INSTANCE_MOCK_STATE: EngineState;
+  private activeStoryId: string = 'default_story';
 
   constructor() {
     this.EXPERIMENTAL_SINGLE_INSTANCE_MOCK_STATE = JSON.parse(
       JSON.stringify(INITIAL_ENGINE_STATE)
     );
+  }
+
+  public setActiveStoryId(storyId: string): void {
+    if (!storyId) return;
+    worldRepository.seedStory(storyId);
+    this.activeStoryId = storyId;
+  }
+
+  public getActiveStoryId(): string {
+    return this.activeStoryId;
   }
 
   /**
@@ -197,8 +208,9 @@ export class ServerMockAuthority {
   /**
    * Returns sanitized view state for GET /api/game/state
    */
-  public getSanitizedViewState(storyId: string = 'default_story'): ExternalViewState {
-    return this.filterForExternalClient(this.EXPERIMENTAL_SINGLE_INSTANCE_MOCK_STATE, storyId);
+  public getSanitizedViewState(storyId?: string): ExternalViewState {
+    const targetStoryId = storyId || this.activeStoryId;
+    return this.filterForExternalClient(this.EXPERIMENTAL_SINGLE_INSTANCE_MOCK_STATE, targetStoryId);
   }
 
   /**

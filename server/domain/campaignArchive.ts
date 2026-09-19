@@ -37,7 +37,7 @@ export interface PartitionedArchive {
     'canonical/memories.json'?: string;
     'canonical/living_world.json'?: string;
     'canonical/sensory_config.json'?: string;
-    
+    'canonical/adaptation.json'?: string;
     'canonical/assets.json'?: string;
   };
 }
@@ -56,6 +56,7 @@ export interface RestoredCampaignData {
   memories?: any;
   livingWorld?: any;
   sensoryConfig?: any;
+  adaptationState?: any;
   assets?: VisualAssetEntry[];
 }
 
@@ -116,6 +117,7 @@ export class CampaignArchiveService {
     memoriesState?: unknown;
     livingWorldState?: unknown;
     sensoryState?: unknown;
+    adaptationState?: unknown;
     assetsState?: VisualAssetEntry[];
   }): PartitionedArchive {
     const worldJson = JSON.stringify(params.worldState ?? {}, null, 2);
@@ -129,6 +131,7 @@ export class CampaignArchiveService {
     const memoriesJson = JSON.stringify(params.memoriesState ?? [], null, 2);
     const livingWorldJson = JSON.stringify(params.livingWorldState ?? {}, null, 2);
     const sensoryJson = JSON.stringify(params.sensoryState ?? {}, null, 2);
+    const adaptationJson = JSON.stringify(params.adaptationState ?? {}, null, 2);
     const assetsList = params.assetsState && params.assetsState.length > 0 ? params.assetsState : DEFAULT_CANONICAL_ASSETS;
     const assetsJson = JSON.stringify(assetsList, null, 2);
 
@@ -144,7 +147,7 @@ export class CampaignArchiveService {
       'canonical/memories.json': this.computeSha256(memoriesJson),
       'canonical/living_world.json': this.computeSha256(livingWorldJson),
       'canonical/sensory_config.json': this.computeSha256(sensoryJson),
-    
+      'canonical/adaptation.json': this.computeSha256(adaptationJson),
       'canonical/assets.json': this.computeSha256(assetsJson),
     };
 
@@ -177,7 +180,7 @@ export class CampaignArchiveService {
         'canonical/memories.json': memoriesJson,
         'canonical/living_world.json': livingWorldJson,
         'canonical/sensory_config.json': sensoryJson,
-    
+        'canonical/adaptation.json': adaptationJson,
         'canonical/assets.json': assetsJson,
       },
     };
@@ -243,9 +246,10 @@ export class CampaignArchiveService {
         JSON.parse(archive.partitions['canonical/memories.json']);
       }
       if (archive.partitions['canonical/living_world.json']) {
-    
         JSON.parse(archive.partitions['canonical/living_world.json']);
-    
+      }
+      if (archive.partitions['canonical/adaptation.json']) {
+        JSON.parse(archive.partitions['canonical/adaptation.json']);
       }
       if (archive.partitions['canonical/assets.json']) {
         JSON.parse(archive.partitions['canonical/assets.json']);
@@ -323,6 +327,7 @@ export class CampaignArchiveService {
     
         : undefined;
       const sensoryConfig = archive.partitions['canonical/sensory_config.json'] ? JSON.parse(archive.partitions['canonical/sensory_config.json']) : undefined;
+      const adaptationState = archive.partitions['canonical/adaptation.json'] ? JSON.parse(archive.partitions['canonical/adaptation.json']) : undefined;
       const assets = archive.partitions['canonical/assets.json']
         ? JSON.parse(archive.partitions['canonical/assets.json'])
         : undefined;
@@ -343,6 +348,7 @@ export class CampaignArchiveService {
           memories,
           livingWorld,
           sensoryConfig,
+          adaptationState,
           assets,
         },
       };

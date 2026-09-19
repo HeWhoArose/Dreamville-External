@@ -17,6 +17,14 @@ import { LivingWorldSimulation } from '../domain/livingWorldSimulation';
 import { MultiModelOrchestrator } from '../domain/aiOrchestrator';
 import { CharacterAlignmentEngine } from '../domain/characterAlignment';
 import { CampaignArchiveService, PartitionedArchive } from '../domain/campaignArchive';
+import { dndSpellRulesEvaluator } from '../domain/dndSpellRulesModel';
+import {
+  AdaptedStoryBible,
+  AdaptationProfile,
+  PipelineState,
+  AdaptationSession,
+  TypedAdaptationEvent,
+} from '../domain/storyAdaptation';
 
 /**
  * WorldRepository
@@ -52,6 +60,29 @@ export interface WorldRepository {
   getCharacterAlignmentEngine(): CharacterAlignmentEngine;
   getSensoryEngine(): SensoryEngine;
   getReusableSkillRegistry(): ReusableSkillRegistry;
+  getAdaptedStoryBible(storyId: string): AdaptedStoryBible | null;
+  saveAdaptedStoryBible(storyId: string, bible: AdaptedStoryBible): void;
+  getAdaptationProfile(storyId: string): AdaptationProfile | null;
+  saveAdaptationProfile(storyId: string, profile: AdaptationProfile): void;
+  getPipelineState(storyId: string): PipelineState | null;
+  savePipelineState(storyId: string, state: PipelineState): void;
+  getAdaptationSession(storyId: string): AdaptationSession | null;
+  saveAdaptationSession(storyId: string, session: AdaptationSession): void;
+  getAdaptationEvents(storyId: string): TypedAdaptationEvent[];
+  addAdaptationEvent(storyId: string, event: TypedAdaptationEvent): void;
+  duplicateAdaptationBranch(
+    parentStoryId: string,
+    newBranchId: string,
+    options?: { branchTitle?: string }
+  ): { success: boolean; newStoryId: string; errorReason?: string };
+  getAllAdaptationStories(): {
+    storyId: string;
+    title: string;
+    mode: string;
+    branchId: string;
+    parentStoryId?: string;
+    isAdapted: boolean;
+  }[];
   exportCampaignArchive(storyId?: string, title?: string): PartitionedArchive;
   restoreCampaignArchive(
     archive: PartitionedArchive,
@@ -75,6 +106,20 @@ export class InMemoryWorldRepository implements WorldRepository {
   private sensoryEngine: SensoryEngine = new SensoryEngine();
   private reusableSkillRegistry: ReusableSkillRegistry = new ReusableSkillRegistry();
   private geographies: Map<string, GeographyGraph> = new Map();
+
+  private adaptedStoryBibles: Map<string, AdaptedStoryBible> = new Map();
+  private adaptationProfiles: Map<string, AdaptationProfile> = new Map();
+  private pipelineStates: Map<string, PipelineState> = new Map();
+  private adaptationSessions: Map<string, AdaptationSession> = new Map();
+  private adaptationEvents: Map<string, TypedAdaptationEvent[]> = new Map();
+
+  // CH16 Storage Maps
+  private worldTemplates: Map<string, any> = new Map();
+  private storyRuns: Map<string, any> = new Map();
+  private storyThreads: Map<string, any[]> = new Map();
+  private activeEffects: Map<string, any[]> = new Map();
+  private worldFactsMap: Map<string, any[]> = new Map();
+  private protagonistAgendas: Map<string, any> = new Map();
 
   constructor() {
     this.geographies.set('default_story', new GeographyGraph());
@@ -554,6 +599,145 @@ export class InMemoryWorldRepository implements WorldRepository {
     return this.reusableSkillRegistry;
   }
 
+  getAdaptedStoryBible(storyId: string): AdaptedStoryBible | null {
+    return this.adaptedStoryBibles.get(storyId) || null;
+  }
+
+  saveAdaptedStoryBible(storyId: string, bible: AdaptedStoryBible): void {
+    this.adaptedStoryBibles.set(storyId, bible);
+  }
+
+  getAdaptationProfile(storyId: string): AdaptationProfile | null {
+    return this.adaptationProfiles.get(storyId) || null;
+  }
+
+  saveAdaptationProfile(storyId: string, profile: AdaptationProfile): void {
+    this.adaptationProfiles.set(storyId, profile);
+  }
+
+  getPipelineState(storyId: string): PipelineState | null {
+    return this.pipelineStates.get(storyId) || null;
+  }
+
+  savePipelineState(storyId: string, state: PipelineState): void {
+    this.pipelineStates.set(storyId, state);
+  }
+
+  getAdaptationSession(storyId: string): AdaptationSession | null {
+    return this.adaptationSessions.get(storyId) || null;
+  }
+
+  saveAdaptationSession(storyId: string, session: AdaptationSession): void {
+    this.adaptationSessions.set(storyId, session);
+  }
+
+  getAdaptationEvents(storyId: string): TypedAdaptationEvent[] {
+    return this.adaptationEvents.get(storyId) || [];
+  }
+
+  addAdaptationEvent(storyId: string, event: TypedAdaptationEvent): void {
+    const list = this.getAdaptationEvents(storyId);
+    list.push(event);
+    this.adaptationEvents.set(storyId, list);
+  }
+
+  duplicateAdaptationBranch(
+    parentStoryId: string,
+    newBranchId: string,
+    options?: { branchTitle?: string }
+  ): { success: boolean; newStoryId: string; errorReason?: string } {
+    const newStoryId = `${parentStoryId}_branch_${newBranchId}`;
+    this.seedStory(newStoryId);
+
+    const parentPlayer = this.getPlayerLifecycle(parentStoryId);
+    if (parentPlayer) {
+      const clonedPlayer = PlayerLifecycleState.fromJSON(parentPlayer.toJSON());
+      this.updatePlayerLifecycle(newStoryId, clonedPlayer);
+    }
+
+    const parentClock = this.getWorldClock(parentStoryId);
+    const newClock = new WorldClock();
+    newClock.importState(parentClock.exportState());
+    this.worldClocks.set(newStoryId, newClock);
+
+    const parentBible = this.getAdaptedStoryBible(parentStoryId);
+    if (parentBible) {
+      this.saveAdaptedStoryBible(newStoryId, {
+        ...parentBible,
+        storyId: newStoryId,
+        title: options?.branchTitle || `${parentBible.title} (${newBranchId})`,
+      });
+    }
+
+    const parentProfile = this.getAdaptationProfile(parentStoryId);
+    if (parentProfile) {
+      this.saveAdaptationProfile(newStoryId, { ...parentProfile, storyId: newStoryId });
+    }
+
+    const parentPipelineState = this.getPipelineState(parentStoryId);
+    if (parentPipelineState) {
+      this.savePipelineState(newStoryId, { ...parentPipelineState, storyId: newStoryId });
+    }
+
+    const parentSession = this.getAdaptationSession(parentStoryId);
+    if (parentSession) {
+      this.saveAdaptationSession(newStoryId, {
+        ...parentSession,
+        sessionId: `session_${newStoryId}_${Date.now()}`,
+        storyId: newStoryId,
+        branchId: newBranchId,
+        parentStoryId,
+      });
+    }
+
+    const parentEvents = this.getAdaptationEvents(parentStoryId);
+    this.adaptationEvents.set(newStoryId, [...parentEvents]);
+
+    return { success: true, newStoryId };
+  }
+
+  getAllAdaptationStories(): {
+    storyId: string;
+    title: string;
+    mode: string;
+    branchId: string;
+    parentStoryId?: string;
+    isAdapted: boolean;
+  }[] {
+    const list: {
+      storyId: string;
+      title: string;
+      mode: string;
+      branchId: string;
+      parentStoryId?: string;
+      isAdapted: boolean;
+    }[] = [];
+
+    this.adaptedStoryBibles.forEach((bible, storyId) => {
+      const session = this.getAdaptationSession(storyId);
+      list.push({
+        storyId,
+        title: bible.title,
+        mode: bible.profile.mode,
+        branchId: session?.branchId || 'main',
+        parentStoryId: session?.parentStoryId,
+        isAdapted: true,
+      });
+    });
+
+    if (!list.some((s) => s.storyId === 'default_story')) {
+      list.unshift({
+        storyId: 'default_story',
+        title: 'Original Dreamville Campaign',
+        mode: 'Original',
+        branchId: 'main',
+        isAdapted: false,
+      });
+    }
+
+    return list;
+  }
+
   /**
    * Challenge 13: Export Lossless Campaign Archive (.dreamarchive)
    */
@@ -598,6 +782,23 @@ export class InMemoryWorldRepository implements WorldRepository {
     const combatState = combatEngine.exportState();
     const memoriesState = memoryEngine.exportState();
     const livingWorldState = livingSim.exportState();
+    const sensoryEngine = this.getSensoryEngine();
+    const sensoryState = {
+      settings: sensoryEngine.getSettings(storyId),
+      voiceProfiles: sensoryEngine.getAllVoiceProfiles(storyId),
+    };
+    const adaptationState = {
+      bible: this.getAdaptedStoryBible(storyId),
+      profile: this.getAdaptationProfile(storyId),
+      pipelineState: this.getPipelineState(storyId),
+      session: this.getAdaptationSession(storyId),
+      events: this.getAdaptationEvents(storyId),
+      ch16Run: this.getStoryRun(storyId),
+      ch16Threads: this.getStoryThreads(storyId),
+      ch16ActiveEffects: this.getActiveEffects(storyId),
+      ch16WorldFacts: this.getWorldFacts(storyId),
+      ch16Agenda: this.getProtagonistAgenda(storyId),
+    };
 
     return CampaignArchiveService.createArchive({
       campaignId: `campaign_${storyId}`,
@@ -612,6 +813,8 @@ export class InMemoryWorldRepository implements WorldRepository {
       combatState,
       memoriesState,
       livingWorldState,
+      sensoryState,
+      adaptationState,
     });
   }
 
@@ -693,13 +896,14 @@ export class InMemoryWorldRepository implements WorldRepository {
         stagedMemory.importState(restored.memories);
       }
 
-      const stagedSensory = new SensoryEngine();
+      let stagedSensorySettings: any = null;
+      let stagedVoiceProfiles: any[] = [];
       if (restored.sensoryConfig) {
         if ((restored.sensoryConfig as any).settings) {
-          stagedSensory.updateSettings(targetStoryId, (restored.sensoryConfig as any).settings);
+          stagedSensorySettings = (restored.sensoryConfig as any).settings;
         }
-        if ((restored.sensoryConfig as any).voiceProfiles) {
-          stagedSensory.restoreVoiceProfiles(targetStoryId, (restored.sensoryConfig as any).voiceProfiles);
+        if (Array.isArray((restored.sensoryConfig as any).voiceProfiles)) {
+          stagedVoiceProfiles = (restored.sensoryConfig as any).voiceProfiles;
         }
       }
       const stagedLivingWorld = new LivingWorldSimulation();
@@ -738,13 +942,72 @@ export class InMemoryWorldRepository implements WorldRepository {
       this.chronicleEngines.set(targetStoryId, stagedChronicle);
       this.aiOrchestrator.restoreNarrativeHistory(targetStoryId, stagedNarrative);
       this.inventoryEngines.set(targetStoryId, stagedInventory);
-      this.sensoryEngine = stagedSensory;
+      if (stagedSensorySettings) {
+        this.sensoryEngine.updateSettings(targetStoryId, stagedSensorySettings);
+      }
+      if (stagedVoiceProfiles && stagedVoiceProfiles.length > 0) {
+        this.sensoryEngine.restoreVoiceProfiles(targetStoryId, stagedVoiceProfiles);
+      }
       this.capabilityEngines.set(targetStoryId, stagedCapability);
       this.combatEngines.set(targetStoryId, stagedCombat);
       this.memoryEngines.set(targetStoryId, stagedMemory);
       this.livingSimulations.set(targetStoryId, stagedLivingWorld);
       this.characterAlignmentEngine = stagedAlignment;
       this.npcLifecycles.set(targetStoryId, stagedNpcLifecycles);
+
+      if (restored.adaptationState) {
+        if (restored.adaptationState.bible) {
+          this.saveAdaptedStoryBible(targetStoryId, {
+            ...restored.adaptationState.bible,
+            storyId: targetStoryId,
+          });
+        }
+        if (restored.adaptationState.profile) {
+          this.saveAdaptationProfile(targetStoryId, {
+            ...restored.adaptationState.profile,
+            storyId: targetStoryId,
+          });
+        }
+        if (restored.adaptationState.pipelineState) {
+          this.savePipelineState(targetStoryId, {
+            ...restored.adaptationState.pipelineState,
+            storyId: targetStoryId,
+          });
+        }
+        if (restored.adaptationState.session) {
+          this.saveAdaptationSession(targetStoryId, {
+            ...restored.adaptationState.session,
+            storyId: targetStoryId,
+          });
+        }
+        if (Array.isArray(restored.adaptationState.events)) {
+          this.adaptationEvents.set(targetStoryId, restored.adaptationState.events);
+        }
+        if (restored.adaptationState.ch16Run) {
+          this.saveStoryRun({
+            ...restored.adaptationState.ch16Run,
+            storyId: targetStoryId,
+          });
+        }
+        if (Array.isArray(restored.adaptationState.ch16Threads)) {
+          for (const thread of restored.adaptationState.ch16Threads) {
+            this.saveStoryThread({ ...thread, storyId: targetStoryId });
+          }
+        }
+        if (Array.isArray(restored.adaptationState.ch16ActiveEffects)) {
+          for (const eff of restored.adaptationState.ch16ActiveEffects) {
+            this.saveActiveEffect({ ...eff, storyId: targetStoryId });
+          }
+        }
+        if (Array.isArray(restored.adaptationState.ch16WorldFacts)) {
+          for (const fact of restored.adaptationState.ch16WorldFacts) {
+            this.saveWorldFact(targetStoryId, fact);
+          }
+        }
+        if (restored.adaptationState.ch16Agenda) {
+          this.saveProtagonistAgenda(targetStoryId, restored.adaptationState.ch16Agenda);
+        }
+      }
 
       return {
         success: true,
@@ -756,6 +1019,167 @@ export class InMemoryWorldRepository implements WorldRepository {
         errorReason: `Atomic restore failed during staging: ${err?.message || 'Unknown staging error'}`,
       };
     }
+  }
+
+  // CH16 Repository Methods
+  public getAllWorldTemplates(): any[] {
+    return Array.from(this.worldTemplates.values());
+  }
+
+  public getWorldTemplate(worldId: string): any | null {
+    return this.worldTemplates.get(worldId) || null;
+  }
+
+  public saveWorldTemplate(world: any): void {
+    this.worldTemplates.set(world.worldId, world);
+  }
+
+  public getStoryRun(storyId: string): any | null {
+    return this.storyRuns.get(storyId) || null;
+  }
+
+  public saveStoryRun(run: any): void {
+    this.storyRuns.set(run.storyId, run);
+  }
+
+  public getStoryThreads(storyId: string): any[] {
+    return this.storyThreads.get(storyId) || [];
+  }
+
+  public saveStoryThread(thread: any): void {
+    const list = this.getStoryThreads(thread.storyId);
+    const idx = list.findIndex((t) => t.threadId === thread.threadId);
+    if (idx >= 0) {
+      list[idx] = thread;
+    } else {
+      list.push(thread);
+    }
+    this.storyThreads.set(thread.storyId, list);
+  }
+
+  public getActiveEffects(storyId: string): any[] {
+    return this.activeEffects.get(storyId) || [];
+  }
+
+  public saveActiveEffect(effect: any): void {
+    const list = this.getActiveEffects(effect.storyId);
+    list.push(effect);
+    this.activeEffects.set(effect.storyId, list);
+  }
+
+  public getWorldFacts(storyId: string): any[] {
+    return this.worldFactsMap.get(storyId) || [];
+  }
+
+  public saveWorldFact(storyId: string, fact: any): void {
+    const list = this.getWorldFacts(storyId);
+    list.push(fact);
+    this.worldFactsMap.set(storyId, list);
+  }
+
+  public getProtagonistAgenda(storyId: string): any | null {
+    return this.protagonistAgendas.get(storyId) || null;
+  }
+
+  public saveProtagonistAgenda(storyId: string, agenda: any): void {
+    this.protagonistAgendas.set(storyId, agenda);
+  }
+
+  public resolveDiceClashExchange(
+    storyId: string,
+    playerPool: { dice: number[] },
+    enemyPool: { dice: number[] },
+    options: { exchangeIndex?: number; attackerStats?: { atk: number }; defenderStats?: { def: number } } = {}
+  ) {
+    if (!playerPool?.dice || !enemyPool?.dice) {
+      throw new Error('Player and Enemy dice pools are required.');
+    }
+    if (playerPool.dice.length > 5 || enemyPool.dice.length > 5) {
+      throw new Error('Dice pool size cannot exceed 5.');
+    }
+
+    const exchangeIdx = options.exchangeIndex ?? 1;
+    const atk = options.attackerStats?.atk ?? 12;
+    const def = options.defenderStats?.def ?? 6;
+
+    // Check active effects for reactive damage reflection
+    const activeEffs = this.getActiveEffects(storyId);
+    const reflectionEff = activeEffs.find((e) => e.damageReflection && e.charges && e.charges > 0);
+
+    let totalPlayerDamage = 0;
+    let totalEnemyDamage = 0;
+    const beatResults: any[] = [];
+
+    const pairsCount = Math.min(playerPool.dice.length, enemyPool.dice.length);
+    for (let i = 0; i < pairsCount; i++) {
+      const pDie = playerPool.dice[i];
+      const eDie = enemyPool.dice[i];
+      const diff = pDie - eDie;
+
+      let pDmg = 0;
+      let eDmg = 0;
+
+      if (diff > 0) {
+        // Player wins beat
+        pDmg = Math.max(1, atk - def + Math.floor(diff / 2));
+      } else if (diff < 0) {
+        // Enemy wins beat
+        const defAtk = (options.defenderStats as any)?.atk ?? 10;
+        const atkDef = (options.attackerStats as any)?.def ?? 5;
+        eDmg = Math.max(1, defAtk - atkDef + Math.floor(Math.abs(diff) / 2));
+      }
+
+      // Reactive effect handling (Fire Mantle damage reflection)
+      if (eDmg > 0 && reflectionEff) {
+        const reflected = reflectionEff.damageReflection || 5;
+        pDmg += reflected; // reflected damage dealt to enemy
+        reflectionEff.charges -= 1;
+      }
+
+      totalPlayerDamage += pDmg;
+      totalEnemyDamage += eDmg;
+
+      beatResults.push({
+        beatIndex: i + 1,
+        playerDie: pDie,
+        enemyDie: eDie,
+        differential: diff,
+        playerDamageDealt: pDmg,
+        enemyDamageDealt: eDmg,
+        outcome: diff > 0 ? 'WIN' : diff < 0 ? 'LOSS' : 'DRAW',
+      });
+    }
+
+    // Mutate HP on story run / player lifecycle
+    const run = this.getStoryRun(storyId);
+    if (run) {
+      run.currentHp = Math.max(0, (run.currentHp ?? 30) - totalEnemyDamage);
+      this.saveStoryRun(run);
+    }
+
+    return {
+      success: true,
+      storyId,
+      exchangeIndex: exchangeIdx,
+      beatResults,
+      totalPlayerDamageDealt: totalPlayerDamage,
+      totalEnemyDamageDealt: totalEnemyDamage,
+      remainingPlayerHp: run ? run.currentHp : 30,
+      activeEffectTriggered: Boolean(reflectionEff),
+    };
+  }
+
+  public evaluateCustomSpellProposal(storyId: string, spellProposal: any) {
+    const run = this.getStoryRun(storyId);
+    const dndMode = run?.dndRulesMode || 'FULL_DND';
+    const characterLevel = spellProposal.casterLevel || 5;
+
+    return dndSpellRulesEvaluator.evaluateSpellProposal({
+      proposal: spellProposal,
+      characterLevel,
+      dndMode,
+      overrideCapabilities: run?.canonicalCapabilities || [],
+    });
   }
 }
 

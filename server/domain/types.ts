@@ -173,6 +173,44 @@ export interface ObservationRecord {
 
 export type RequirementStatus = 'DOCUMENTED' | 'FOUNDATION' | 'IMPLEMENTED' | 'VERIFIED' | 'BLOCKED' | 'DEFERRED';
 
+export type EvidenceType =
+  | 'SOURCE_INSPECTION'
+  | 'UNIT_TEST'
+  | 'INTEGRATION_TEST'
+  | 'LIVE_HTTP'
+  | 'LIVE_UI'
+  | 'ARCHIVE_ROUND_TRIP';
+
+export interface RequirementEvidence {
+  evidenceId: string;
+  requirementId: string;
+  evidenceType: EvidenceType;
+  sourceReference: string;
+  description: string;
+  recordedAt: string;
+  valid: boolean;
+  trustedProvenance?: boolean;
+}
+
+export interface IterationRecord {
+  iteration: number;
+  id?: string;
+  date: string;
+  description: string;
+  outcome: string;
+  reason?: string;
+  affectedRequirements?: string[];
+  evidenceIds?: string[];
+}
+
+export interface WorkstationMetadata {
+  currentPhase: string;
+  phaseObjective: string;
+  lastAuditDate: string;
+  nextTask: string;
+  blockers: string[];
+}
+
 export interface LivingBibleRequirement {
   id: string;
   area: string;
@@ -183,6 +221,7 @@ export interface LivingBibleRequirement {
   codeEvidence: string;
   testEvidence: string;
   notes: string;
+  evidences?: RequirementEvidence[];
 }
 
 export interface WorkstationState {
@@ -198,10 +237,5 @@ export interface WorkstationState {
     documented: number;
     planned: number;
   };
-  iterationHistory: {
-    iteration: number;
-    date: string;
-    description: string;
-    outcome: string;
-  }[];
+  iterationHistory: IterationRecord[];
 }

@@ -7,7 +7,9 @@ import { PlayerLifecycleState } from '../domain/playerLifecycleState';
 
 export const gameRouter = Router();
 import { sensoryRouter } from './sensoryRoutes';
+import { adaptationRouter } from './adaptationRoutes';
 gameRouter.use('/sensory', sensoryRouter);
+gameRouter.use('/adaptation', adaptationRouter);
 
 /**
  * GET /api/game/state
@@ -83,6 +85,60 @@ gameRouter.get('/living-bible', async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/game/living-bible/evidence
+ * Records evidence for a requirement.
+ */
+gameRouter.post('/living-bible/evidence', async (req: Request, res: Response) => {
+  try {
+    const { livingBibleRegistry } = await import('../domain/livingBible');
+    const { requirementId, evidenceType, sourceReference, description } = req.body;
+
+    if (!requirementId || !evidenceType || !sourceReference || !description) {
+      res.status(400).json({ error: 'Missing required evidence parameters (requirementId, evidenceType, sourceReference, description).' });
+      return;
+    }
+
+    const evidence = livingBibleRegistry.recordEvidence({
+      requirementId,
+      evidenceType,
+      sourceReference,
+      description,
+    });
+
+    res.status(201).json({ success: true, evidence });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message || 'Failed to record evidence.' });
+  }
+});
+
+/**
+ * POST /api/game/living-bible/promote
+ * Validates and promotes a requirement status based on evidence.
+ */
+gameRouter.post('/living-bible/promote', async (req: Request, res: Response) => {
+  try {
+    const { livingBibleRegistry } = await import('../domain/livingBible');
+    const { requirementId, targetStatus } = req.body;
+
+    if (!requirementId || !targetStatus) {
+      res.status(400).json({ error: 'Missing requirementId or targetStatus.' });
+      return;
+    }
+
+    const result = livingBibleRegistry.validateAndPromoteRequirement(requirementId, targetStatus);
+    if (!result.success) {
+      res.status(400).json({ error: result.reason });
+      return;
+    }
+
+    const updated = livingBibleRegistry.getRequirement(requirementId);
+    res.json({ success: true, requirement: updated });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to promote requirement status.' });
+  }
+});
+
+/**
  * GET /api/game/workstation
  * Returns the active development workstation status and iteration audit ledger (DreamBook §408).
  */
@@ -92,6 +148,38 @@ gameRouter.get('/workstation', async (req: Request, res: Response) => {
     res.json(livingBibleRegistry.getWorkstationState());
   } catch (error) {
     res.status(500).json({ error: 'Failed to load Workstation state.' });
+  }
+});
+
+/**
+ * POST /api/game/workstation/iteration
+ * Records a new developer iteration entry into the Workstation ledger.
+ */
+gameRouter.post('/workstation/iteration', async (req: Request, res: Response) => {
+  try {
+    const { livingBibleRegistry } = await import('../domain/livingBible');
+    const { description, outcome, reason, affectedRequirements } = req.body;
+
+    if (!description || typeof description !== 'string' || !description.trim() ||
+        !outcome || typeof outcome !== 'string' || !outcome.trim()) {
+      res.status(400).json({ error: 'Invalid iteration payload. Description and outcome are required non-empty strings.' });
+      return;
+    }
+
+    const record = livingBibleRegistry.recordIteration({
+      description: description.trim(),
+      outcome: outcome.trim(),
+      reason: reason ? String(reason).trim() : undefined,
+      affectedRequirements: Array.isArray(affectedRequirements) ? affectedRequirements.map(String) : [],
+    });
+
+    res.status(201).json({
+      success: true,
+      iteration: record,
+      workstationState: livingBibleRegistry.getWorkstationState(),
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to record iteration.' });
   }
 });
 
@@ -2506,7 +2594,8 @@ gameRouter.post('/orchestrator/turn', async (req: Request, res: Response) => {
         { listenerPosition, entities }
       );
     }
-    (turnResult as any).sensoryEvents = sensoryEvents;
+    // DEF-CH14-04: Client presentation receives perceivable events only
+    (turnResult as any).sensoryEvents = sensoryEvents.filter((e: any) => !e.suppressed);
     res.json(turnResult);
   } catch (error) {
     console.error('Failed to execute orchestrated turn:', error);
@@ -2835,6 +2924,232 @@ gameRouter.get('/archive/assets', async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to retrieve visual asset registry.' });
   }
 });
+
+// ==========================================
+// CH16: Reusable World Library & Campaign Discovery
+// ==========================================
+
+gameRouter.get('/worlds', async (req: Request, res: Response) => {
+  try {
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const worlds = worldRepository.getAllWorldTemplates();
+    res.json(worlds);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to retrieve worlds list.' });
+  }
+});
+
+gameRouter.post('/worlds', async (req: Request, res: Response) => {
+  try {
+    const { naturalLanguagePremise, genreTags, storyMode, dndRulesMode } = req.body;
+    if (!naturalLanguagePremise || typeof naturalLanguagePremise !== 'string') {
+      return res.status(400).json({ error: 'naturalLanguagePremise string is required.' });
+    }
+    const { worldSynthesisService } = await import('../services/worldSynthesisService');
+    const world = await worldSynthesisService.synthesizeWorldFromPremise({
+      naturalLanguagePremise,
+      genreTags,
+      storyMode,
+      dndRulesMode,
+    });
+    res.status(201).json(world);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to synthesize world from premise.' });
+  }
+});
+
+gameRouter.get('/worlds/:worldId', async (req: Request, res: Response) => {
+  try {
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const worldId = req.params.worldId as string;
+    const world = worldRepository.getWorldTemplate(worldId);
+    if (!world) {
+      return res.status(404).json({ error: 'World template not found.' });
+    }
+    res.json(world);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to retrieve world template.' });
+  }
+});
+
+gameRouter.post('/worlds/:worldId/start-run', async (req: Request, res: Response) => {
+  try {
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const worldId = req.params.worldId as string;
+    const world = worldRepository.getWorldTemplate(worldId);
+    if (!world) {
+      return res.status(404).json({ error: 'World template not found.' });
+    }
+    const { storyMode = 'PROTAGONIST', dndRulesMode = 'FULL_DND', characterName = 'Hero Vael' } = req.body;
+    const storyId = `run_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+
+    const run = {
+      storyId,
+      worldId: world.worldId,
+      pinnedWorldVersion: world.worldManifestVersion || 1,
+      storyMode,
+      dndRulesMode,
+      characterName,
+      currentLocationId: 'loc_whispering_orrery',
+      currentHp: 30,
+      canonicalCapabilities: world.canonicalCapabilities || [],
+      createdAt: new Date().toISOString(),
+    };
+
+    worldRepository.seedStory(storyId);
+    worldRepository.saveStoryRun(run);
+    res.status(201).json(run);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to start world run.' });
+  }
+});
+
+gameRouter.get('/worlds/runs/:storyId', async (req: Request, res: Response) => {
+  try {
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const storyId = req.params.storyId as string;
+    const run = worldRepository.getStoryRun(storyId);
+    if (!run) {
+      return res.status(404).json({ error: 'Story run not found.' });
+    }
+    res.json(run);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to retrieve story run.' });
+  }
+});
+
+gameRouter.post('/worlds/runs/:storyId/story-director/step', async (req: Request, res: Response) => {
+  try {
+    const { storyDirectorService } = await import('../services/storyDirectorService');
+    const storyId = req.params.storyId as string;
+    const result = storyDirectorService.stepDirector(storyId);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to step story director.' });
+  }
+});
+
+gameRouter.post('/worlds/runs/:storyId/story-director/choice', async (req: Request, res: Response) => {
+  try {
+    const { beatId, optionId } = req.body;
+    if (!beatId || !optionId) {
+      return res.status(400).json({ error: 'beatId and optionId are required.' });
+    }
+    const { storyDirectorService } = await import('../services/storyDirectorService');
+    const storyId = req.params.storyId as string;
+    const result = storyDirectorService.recordChoice(storyId, beatId, optionId);
+    res.json({
+      ...result,
+      recordedChoice: { beatId, optionId },
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to record story director choice.' });
+  }
+});
+
+gameRouter.post('/worlds/runs/:storyId/story-director/offscreen', async (req: Request, res: Response) => {
+  try {
+    const { storyDirectorService } = await import('../services/storyDirectorService');
+    const storyId = req.params.storyId as string;
+    const result = storyDirectorService.advanceOffscreenProtagonist(storyId);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to advance offscreen protagonist.' });
+  }
+});
+
+gameRouter.post('/worlds/runs/:storyId/actions/execute', async (req: Request, res: Response) => {
+  try {
+    const { actionType, locationId } = req.body;
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const { emergentNarrativeEngine } = await import('../services/emergentNarrativeEngine');
+    const storyId = req.params.storyId as string;
+
+    const run = worldRepository.getStoryRun(storyId);
+    if (!run) {
+      return res.status(404).json({ error: 'Story run not found.' });
+    }
+
+    if (locationId) {
+      run.currentLocationId = locationId;
+      worldRepository.saveStoryRun(run);
+    }
+
+    const gameplayEvent = {
+      eventId: `evt_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+      storyId,
+      eventType: actionType || 'INVESTIGATE_AREA',
+      actorId: run.characterName || 'Player',
+      locationId: run.currentLocationId || 'loc_unknown',
+      details: `Server resolved action ${actionType || 'INVESTIGATE_AREA'} at ${run.currentLocationId}`,
+      evidenceItems: [`ev_${actionType || 'action'}_${Date.now()}`],
+      timestamp: new Date().toISOString(),
+    };
+
+    const narrativeResult = emergentNarrativeEngine.processCanonicalEvent(gameplayEvent);
+    const storyThreads = worldRepository.getStoryThreads(storyId);
+
+    res.json({
+      success: true,
+      gameplayEvent,
+      narrativeResult,
+      storyThreads,
+      storyRun: run,
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to execute player action.' });
+  }
+});
+
+gameRouter.post('/worlds/runs/:storyId/actions/apply-ability', async (req: Request, res: Response) => {
+  try {
+    const { abilityId, targetId } = req.body;
+    if (!abilityId || !targetId) {
+      return res.status(400).json({ error: 'abilityId and targetId are required.' });
+    }
+    const { abilityService } = await import('../services/abilityService');
+    const storyId = req.params.storyId as string;
+    const result = abilityService.resolveAbilityApplication(storyId, abilityId, targetId, req.body);
+    if (!result.success) {
+      return res.status(result.statusCode || 400).json({ error: result.errorReason });
+    }
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to apply ability.' });
+  }
+});
+
+gameRouter.post('/worlds/runs/:storyId/dice-clash/resolve', async (req: Request, res: Response) => {
+  try {
+    const { playerPool, enemyPool, exchangeIndex, attackerStats, defenderStats } = req.body;
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const storyId = req.params.storyId as string;
+    const result = worldRepository.resolveDiceClashExchange(storyId, playerPool, enemyPool, {
+      exchangeIndex,
+      attackerStats,
+      defenderStats,
+    });
+    res.json(result);
+  } catch (error: any) {
+    res.status(400).json({ error: error?.message || 'Failed to resolve dice clash.' });
+  }
+});
+
+gameRouter.post('/worlds/runs/:storyId/spells/evaluate', async (req: Request, res: Response) => {
+  try {
+    const { spellProposal } = req.body;
+    if (!spellProposal) {
+      return res.status(400).json({ error: 'spellProposal object is required.' });
+    }
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const storyId = req.params.storyId as string;
+    const result = worldRepository.evaluateCustomSpellProposal(storyId, spellProposal);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to evaluate spell proposal.' });
+  }
+});
+
 
 
 

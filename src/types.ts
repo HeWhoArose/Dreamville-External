@@ -715,6 +715,85 @@ export interface ContextInspectionResponse {
   epistemicallySanitized: boolean;
 }
 
+export interface ActiveEffect {
+  effectId: string;
+  storyId: string;
+  abilityId?: string;
+  targetId: string;
+  name: string;
+  type: string;
+  turnsRemaining: number;
+  damageReflection?: number;
+  charges?: number;
+  createdAt: string;
+}
+
+export interface StoryThread {
+  threadId: string;
+  storyId: string;
+  title: string;
+  status: 'OPEN' | 'ACTIVE' | 'ESCALATED' | 'RESOLVED' | 'ABANDONED' | string;
+  stage?: number;
+  locationId?: string;
+  description?: string;
+  category?: string;
+  sourceEventId?: string;
+  evidenceItems?: string[];
+  evidenceGathered?: string[];
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CanonicalGameplayEvent {
+  eventId: string;
+  storyId: string;
+  eventType: string;
+  actorId: string;
+  locationId: string;
+  details: string;
+  evidenceItems?: string[];
+  timestamp: string;
+}
+
+export interface WorldFact {
+  factId: string;
+  statement: string;
+  category: string;
+  subjectEntityId: string;
+  predicate: string;
+  objectValue: string;
+  provenanceClass: string;
+  provenanceSummary: string;
+  sourceSegmentIds: string[];
+  confidence: number;
+  acquiredAtTimestamp: any;
+}
+
+export interface WorldTemplate {
+  worldId: string;
+  title: string;
+  summary: string;
+  description: string;
+  genreTags: string[];
+  toneTags: string[];
+  mediumTags: string[];
+  canonMode: string;
+  rulesetId: string;
+  visibility: string;
+  creatorId: string;
+  sourcePolicy: string;
+  defaultEra: string;
+  worldManifestVersion: number;
+  versionHash: string;
+  canonicalCapabilities: any[];
+  capabilities: any[];
+  worldRules: any[];
+  ruleConstraints: string[];
+  worldFacts: WorldFact[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface NpcDialogueContextResponse {
   success: boolean;
   npcName: string;

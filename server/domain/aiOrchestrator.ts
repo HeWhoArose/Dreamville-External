@@ -2,6 +2,7 @@ import { GoogleGenAI } from '@google/genai';
 import { WorldTimestamp } from './types';
 import { WorkingContextEngine, AssembledTurnContext } from './workingContextEngine';
 import { worldRepository, WorldRepository } from '../repositories/worldRepository';
+import { StoryAdaptationPipeline } from './storyAdaptation';
 
 export type TaskId =
   | 'narrative.generate'
@@ -2259,6 +2260,162 @@ export class MultiModelOrchestrator {
   }
 
   /**
+   * Direct Speech Synthesis Path (DEF-CH14-01 & R3 & R12)
+   * Presentation/utility operation ONLY.
+   * MUST NOT call executeTurn().
+   * MUST NOT create ContinuationCheckpoint records.
+   * MUST NOT mutate canonical world state, narrative history, memories, etc.
+   */
+  public async synthesizeSpeech(params: {
+    storyId?: string;
+    text: string;
+    voiceProfile?: any;
+    timeoutMs?: number;
+  }): Promise<{
+    success: boolean;
+    audioResultBase64: string | null;
+    fallbackText: string;
+    fromCache?: boolean;
+    modelId?: string;
+  }> {
+    const text = params.text || '';
+    const sensoryEngine = this.getWorldRepository().getSensoryEngine();
+    const cache = sensoryEngine?.getSpeechCache();
+
+    // Check pinned or best model for speech.generate
+    const pinned = this.getPinnedModelForTask('speech.generate');
+    const targetModelId = pinned || 'mock-speech-v1';
+    const providerId = 'provider_mock_speech';
+
+    // R12: Check derived speech cache
+    if (cache) {
+      const cacheKey = cache.computeKey(text, params.voiceProfile, providerId, targetModelId);
+      const cached = cache.get(cacheKey);
+      if (cached) {
+        return {
+          success: true,
+          audioResultBase64: cached,
+          fallbackText: text,
+          fromCache: true,
+          modelId: targetModelId,
+        };
+      }
+    }
+
+    try {
+      let adapter = this.getAdapter(providerId);
+      let selectedModelId = targetModelId;
+
+      if (!adapter) {
+        adapter = this.getAdapter('google_gemini');
+        selectedModelId = 'gemini-2.5-flash';
+      }
+
+      if (!adapter) {
+        return {
+          success: false,
+          audioResultBase64: null,
+          fallbackText: text,
+        };
+      }
+
+      const timeoutMs = params.timeoutMs || 5000;
+      const res = await adapter.generate('speech.generate', text, {
+        timeoutMs,
+        modelId: selectedModelId,
+        voiceProfile: params.voiceProfile,
+      });
+
+      const audioBase64 = res.audioBase64 || null;
+
+      if (audioBase64 && cache) {
+        const cacheKey = cache.computeKey(text, params.voiceProfile, providerId, selectedModelId);
+        cache.set(cacheKey, audioBase64);
+      }
+
+      return {
+        success: !!audioBase64,
+        audioResultBase64: audioBase64,
+        fallbackText: text || 'Speech synthesized.',
+        fromCache: false,
+        modelId: selectedModelId,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        audioResultBase64: null,
+        fallbackText: text,
+      };
+    }
+  }
+
+  /**
+   * Direct Speech Transcription Path (DEF-CH14-01 & R1)
+   * Input normalization utility ONLY.
+   * Returns normalized text to caller; does NOT execute game actions.
+   * MUST NOT call executeTurn().
+   * MUST NOT create ContinuationCheckpoint records.
+   * MUST NOT mutate canonical world state or narrative history.
+   */
+  public async transcribeAudio(params: {
+    storyId?: string;
+    audioBase64: string;
+    timeoutMs?: number;
+  }): Promise<{
+    success: boolean;
+    text: string;
+    modelId?: string;
+  }> {
+    const audioBase64 = params.audioBase64 || '';
+    const pinned = this.getPinnedModelForTask('speech.transcribe');
+    const targetModelId = pinned || 'mock-stt-v1';
+    const providerId = 'provider_mock_stt';
+
+    try {
+      let adapter = this.getAdapter(providerId);
+      let selectedModelId = targetModelId;
+
+      if (!adapter) {
+        adapter = this.getAdapter('google_gemini');
+        selectedModelId = 'gemini-2.5-flash';
+      }
+
+      if (!adapter) {
+        return {
+          success: false,
+          text: '',
+        };
+      }
+
+      const timeoutMs = params.timeoutMs || 5000;
+      const res = await adapter.generate('speech.transcribe', 'Transcribe user audio input', {
+        timeoutMs,
+        modelId: selectedModelId,
+        audioInputBase64: audioBase64,
+      });
+
+      let transcribedText = '';
+      try {
+        const parsed = JSON.parse(res.text);
+        transcribedText = parsed.narrative?.[0] || res.text;
+      } catch {
+        transcribedText = res.text;
+      }
+
+      return {
+        success: true,
+        text: transcribedText || 'Transcribed text',
+        modelId: selectedModelId,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        text: '',
+      };
+    }
+  }
+
+  /**
    * Authoritative Turn Orchestration Loop (DEF-CH12-01 & DEF-CH12-02 & DEF-CH12-07)
    *
    * Flow:
@@ -2344,6 +2501,106 @@ export class MultiModelOrchestrator {
         hardTokenBudget,
         worldRepo: repo,
       });
+
+      // 1b. CH15 Source Adaptation Adjudication Check
+      const profile = repo.getAdaptationProfile(storyId);
+      const bible = repo.getAdaptedStoryBible(storyId);
+      if (profile && bible) {
+        const evalResult = StoryAdaptationPipeline.evaluatePlayerActionAgainstCanon(
+          params.playerAction || '',
+          profile,
+          bible.canonFacts
+        );
+
+        if (!evalResult.allowed) {
+          const rejectedOutput = `[CANON REJECTION] ${evalResult.reason}`;
+          return {
+            success: true,
+            turnPackage: {
+              narrative: [rejectedOutput],
+              dialogue: [],
+              events: [],
+              stateChanges: [],
+              memoryCandidates: [],
+              audioCues: [],
+            },
+            adjudicationResult: {
+              allApproved: false,
+              approvedCount: 0,
+              rejectedCount: 1,
+              outcomes: [],
+              disapprovedChanges: [],
+            },
+            checkpoint: {
+              checkpointId: `cp_rejected_${turnId}`,
+              storyId,
+              turnId,
+              role: 'narrator',
+              workingContextTokens: assembledContext.totalTokens,
+              worldTime: repo.getWorldClock(storyId).formatHeader(),
+              locationId: repo.getPlayerLifecycle(storyId)?.locationId || 'loc_whispering_orrery',
+              sceneSummary: evalResult.reason,
+              recentOutput: rejectedOutput,
+              uncommittedOutput: '',
+              canonicalInvariants: {
+                playerActorId: `player_actor_${storyId}`,
+                discoveredLocations: repo.getPlayerLifecycle(storyId)?.discoveredLocationIds || [],
+              },
+              styleContract: {
+                tone: 'evocative_canonical_archival',
+                epistemicSanitized: 'true',
+              },
+              openThreads: [],
+              presentationEvents: [],
+              knowledgeBoundaries: {},
+              createdAt: Date.now(),
+            },
+            telemetry: {
+              turnId,
+              storyId,
+              taskId: task,
+              selectedModelId: 'canon-guard',
+              selectedProviderId: 'server-adjudicator',
+              selectionScore: 100,
+              selectionReason: 'Source Canon Guard Adjudication',
+              fallbackChain: [],
+              attempts: 1,
+              latencyMs: 2,
+              inputTokens: assembledContext.totalTokens,
+              outputTokens: 20,
+              validated: true,
+            },
+          };
+        }
+
+        if (evalResult.createsDivergence) {
+          const session = repo.getAdaptationSession(storyId);
+          repo.addAdaptationEvent(storyId, {
+            id: `evt_div_${Date.now()}`,
+            storyId,
+            branchId: session?.branchId || 'main_branch',
+            type: 'DIVERGENCE',
+            involvedEntities: ['player'],
+            timestamp: new Date().toISOString(),
+            reason: evalResult.reason,
+            details: { action: params.playerAction },
+          });
+
+          const chronicle = repo.getHistoricalChronicleEngine(storyId);
+          chronicle.recordEvidence({
+            id: `chron_div_${Date.now()}`,
+            category: 'WORLD_ANOMALY',
+            sourceEventId: `evt_div_${Date.now()}`,
+            timestamp: repo.getWorldClock(storyId).getTimestamp(),
+            locationId: repo.getPlayerLifecycle(storyId)?.locationId || 'loc_whispering_orrery',
+            primarySubjectId: `player_actor_${storyId}`,
+            summary: `DIVERGENCE EVENT: ${evalResult.reason}`,
+            details: `Player initiated canonical divergence: ${params.playerAction}`,
+            provenance: 'direct_observation',
+            visibility: 'PUBLIC',
+          });
+        }
+      }
 
       // 2. Select Eligible Model respecting context tokens (DEF-CH12-02, DEF-CH12-03)
       let selectedModel: ModelRegistryRecord;

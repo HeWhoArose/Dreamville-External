@@ -62,22 +62,21 @@ sensoryRouter.post('/speech', async (req: Request, res: Response) => {
     const orchestrator = worldRepository.getAiOrchestrator();
     const sensoryEngine = worldRepository.getSensoryEngine();
     
-    const profile = sensoryEngine.getVoiceProfile(storyId, actorId);
+    const profile = actorId ? sensoryEngine.getVoiceProfile(storyId, actorId) : null;
     
-    const turnResult = await orchestrator.executeTurn({
+    // DEF-CH14-01: Direct presentation synthesis path; MUST NOT call executeTurn
+    const result = await orchestrator.synthesizeSpeech({
       storyId,
-      playerAction: `Generate speech for: ${text}`,
-      task: 'speech.generate',
-      hardTokenBudget: 50,
+      text: String(text || ''),
+      voiceProfile: profile,
       timeoutMs: 5000,
-      maxRetries: 1,
-      voiceProfile: profile
     });
     
     res.json({
-      success: !!turnResult.audioResultBase64,
-      audioResult: turnResult.audioResultBase64 || null,
-      fallbackText: turnResult.turnPackage?.narrative?.[0] || 'No speech generated.'
+      success: result.success,
+      audioResult: result.audioResultBase64,
+      fallbackText: result.fallbackText,
+      fromCache: result.fromCache || false,
     });
   } catch (error: any) {
     res.status(500).json({ error: 'Speech synthesis failed.', details: String(error) });
@@ -90,24 +89,16 @@ sensoryRouter.post('/transcribe', async (req: Request, res: Response) => {
     const { storyId = 'default_story', audioBase64 } = req.body;
     const orchestrator = worldRepository.getAiOrchestrator();
     
-    const turnResult = await orchestrator.executeTurn({
+    // DEF-CH14-01: Direct transcription utility path; MUST NOT call executeTurn
+    const result = await orchestrator.transcribeAudio({
       storyId,
-      playerAction: 'Transcribe user audio input',
-      task: 'speech.transcribe',
-      audioInputBase64: audioBase64,
-      hardTokenBudget: 150,
+      audioBase64: String(audioBase64 || ''),
       timeoutMs: 5000,
-      maxRetries: 1
     });
     
-    let textResult = turnResult.turnPackage?.narrative?.[0] || turnResult.telemetry?.selectedModelId;
-    if (!turnResult.turnPackage?.narrative?.[0]) {
-       textResult = "Transcribed text";
-    }
-    
     res.json({
-      success: turnResult.success,
-      text: textResult
+      success: result.success,
+      text: result.text || 'Transcribed text',
     });
   } catch (error: any) {
     res.status(500).json({ error: 'Transcription failed.', details: String(error) });

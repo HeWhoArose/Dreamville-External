@@ -384,6 +384,26 @@ export class WorkingContextEngine {
       },
     ];
 
+    const adaptedBible = repo.getAdaptedStoryBible(storyId);
+    if (adaptedBible) {
+      const lockedFactStatements = adaptedBible.canonFacts
+        .filter((f) => f.isLocked)
+        .map((f) => `- ${f.statement}`)
+        .slice(0, 5)
+        .join('\n');
+      const adaptationContent = `Source Document: ${adaptedBible.title}\nAdaptation Mode: ${adaptedBible.profile.mode} (${adaptedBible.profile.canonStrictness} strictness)\nLocked Source Canon:\n${lockedFactStatements || 'Source canon established.'}`;
+      candidateChunks.push({
+        id: 'b1_adaptation_canon',
+        band: 'B1_CRITICAL',
+        label: 'Adapted Source Canon & Strictness',
+        content: adaptationContent,
+        estimatedTokens: WorkingContextEngine.estimateTokens(adaptationContent),
+        sourceAuthority: 'AdaptedStoryBible (CH15)',
+        isProtected: true,
+        relevanceScore: 0.98,
+      });
+    }
+
     if (isInCombat) {
       candidateChunks.push({
         id: 'b1_combat_economy',

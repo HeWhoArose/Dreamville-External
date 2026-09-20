@@ -1,5 +1,6 @@
 import { worldRepository } from '../repositories/worldRepository';
 import { WorldTemplate, WorldSynthesisInput } from '../../src/types';
+import { MultiModelOrchestrator } from '../domain/aiOrchestrator';
 
 export interface StructuredWorldRule {
   ruleId: string;
@@ -67,6 +68,12 @@ function extractPremiseTokens(premise: string): string[] {
 }
 
 export class WorldSynthesisService {
+  private readonly getAiOrchestrator: () => MultiModelOrchestrator;
+
+  constructor(orchestratorProvider?: () => MultiModelOrchestrator) {
+    this.getAiOrchestrator = orchestratorProvider || (() => worldRepository.getAiOrchestrator());
+  }
+
   /**
    * Synthesizes a WorldTemplate based on the user premise.
    * Leverages the MultiModelOrchestrator for AI generation.
@@ -217,7 +224,7 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
 5. Ensure factions are active, locations are sensory-rich, and the planned background events show a complex, living timeline of 5 to 10 events starting from Year 42, Month 10, Day 14.`;
 
     try {
-      const orchestrator = worldRepository.getAiOrchestrator();
+      const orchestrator = this.getAiOrchestrator();
       const execResult = await orchestrator.executeTaskGeneration('narrative.generate', prompt, systemInstruction);
       generationSource = execResult.source;
       providerId = execResult.providerId;
@@ -412,10 +419,10 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
       characters: characters,
       factions: factions,
       magicRules: input.magicRules || (parsedAiPayload?.magicRules ? parsedAiPayload.magicRules : {
-        systemName: `${title || primaryToken} Arcana`,
-        system: `${title || primaryToken} Arcana`,
-        laws: [`Manipulation of ambient ${primaryToken.toLowerCase()} forces requires focused resonance.`],
-        cost: 'Fatigue and mental strain'
+        systemName: `${title || primaryToken} World System`,
+        system: `World-defining principles anchored to ${primaryToken.toLowerCase()}.`,
+        laws: [`Core interactions are constrained by the premise: ${input.naturalLanguagePremise.trim()}`],
+        cost: 'Context-dependent consequence'
       }),
       economy: input.economy || (parsedAiPayload?.economy ? parsedAiPayload.economy : {
         currency: `${primaryToken} Scrip`,
@@ -784,7 +791,18 @@ As regional tensions rise, rival factions maneuver for influence over critical r
       let scheduledTime = raw.scheduledTime || {};
       const year = typeof scheduledTime.year === 'number' && scheduledTime.year > 0 ? scheduledTime.year : 42;
       const month = typeof scheduledTime.month === 'number' && scheduledTime.month >= 1 && scheduledTime.month <= 12 ? scheduledTime.month : 10;
-      const day = typeof scheduledTime.day === 'number' && scheduledTime.day >= 1 && scheduledTime.day <= 30 ? scheduledTime.day : 14 + idx;
+      let day = typeof scheduledTime.day === 'number' && scheduledTime.day >= 1 && scheduledTime.day <= 30 ? scheduledTime.day : 14 + idx;
+
+      if (
+        year < 42 ||
+        (year === 42 && month < 10) ||
+        (year === 42 && month === 10 && day < 14)
+      ) {
+        year = 42;
+        month = 10;
+        day = Math.min(30, 14 + idx);
+      }
+
       const hour = typeof scheduledTime.hour === 'number' && scheduledTime.hour >= 0 && scheduledTime.hour < 24 ? scheduledTime.hour : 12;
       const minute = typeof scheduledTime.minute === 'number' && scheduledTime.minute >= 0 && scheduledTime.minute < 60 ? scheduledTime.minute : 0;
       const second = 0;
@@ -889,34 +907,64 @@ As regional tensions rise, rival factions maneuver for influence over critical r
     let finalEvents = [...cleanedEvents];
 
     if (enforceCountRange) {
-      // Trim to at most 10 while maintaining referential integrity
       if (finalEvents.length > 10) {
-        finalEvents = finalEvents.slice(0, 10);
+        const remaining = [...finalEvents];
+        const selected: any[] = [];
+        const selectedIds = new Set<string>();
+
+        while (selected.length < 10 && remaining.length > 0) {
+          const nextIndex = remaining.findIndex(event => {
+            const deps = Array.isArray(event.preconditions?.requiredEvents) ? event.preconditions.requiredEvents : [];
+            return deps.every((depId: string) => selectedIds.has(depId));
+          });
+
+          if (nextIndex === -1) {
+            const fallback = remaining.shift()!;
+            fallback.preconditions.requiredEvents = [];
+            selected.push(fallback);
+            selectedIds.add(fallback.id);
+            continue;
+          }
+
+          const [nextEvent] = remaining.splice(nextIndex, 1);
+          selected.push(nextEvent);
+          selectedIds.add(nextEvent.id);
+        }
+
+        finalEvents = selected;
       }
 
-      // Complete to at least 5 if fewer than 5 events provided
       if (finalEvents.length < 5) {
         const tokens = extractPremiseTokens(premise);
         const primaryToken = tokens[0] || 'Realm';
+        const secondaryToken = tokens[1] || 'Frontier';
         const rng = createSeededRng(`${seed}::complete_events::${finalEvents.length}`);
-
-        const fallbackEventTemplates = [
-          { cat: 'DISCOVERY', title: `${primaryToken} Anomaly Emergence`, desc: `Sensors and scouts detect early anomalies across regional territories.` },
-          { cat: 'FACTION', title: `Regional Council Mobilization`, desc: `Local leaders gather to assess defensive stances and economic distribution.` },
-          { cat: 'MILITARY', title: `Frontier Patrol Alignment`, desc: `Border patrols coordinate movements to secure transit corridors.` },
-          { cat: 'SUPERNATURAL', title: `Atmospheric Energy Surge`, desc: `A sudden influx of ambient energy sweeps through key landmarks.` },
-          { cat: 'POLITICAL', title: `Territorial Accord Review`, desc: `Treaties between factions undergo scrutiny as conditions change.` },
-          { cat: 'DISASTER', title: `Environmental Tremor Event`, desc: `Subterranean or atmospheric shifts trigger emergency protocols.` }
+        const titlePatterns = [
+          (s: string) => `${s} Discovery`,
+          (s: string) => `${s} Emergence`,
+          (s: string) => `The ${s} Shift`,
+          (s: string) => `${s} Boundary Event`,
+          (s: string) => `The ${s} Assembly`,
+          (s: string) => `${s} Critical Change`
         ];
+        const descriptionPatterns = [
+          (s: string) => `New evidence surrounding ${s.toLowerCase()} changes how communities respond to the current situation.`,
+          (s: string) => `A consequential development involving ${s.toLowerCase()} alters conditions and forces local actors to adapt.`,
+          (s: string) => `Observers record an unusual development tied directly to ${s.toLowerCase()} within the world.`,
+          (s: string) => `Regional activity centered on ${s.toLowerCase()} creates new pressure on settlements and factions.`
+        ];
+        const categories = ['DISCOVERY', 'FACTION', 'MILITARY', 'SUPERNATURAL', 'POLITICAL', 'DISASTER'];
 
         while (finalEvents.length < 5) {
           const idx = finalEvents.length;
           const autoId = `evt_syn_auto_${idx + 1}`;
           const prevId = idx > 0 ? finalEvents[idx - 1].id : undefined;
-          const tpl = fallbackEventTemplates[idx % fallbackEventTemplates.length];
-          const day = 14 + idx;
+          const subject = idx % 2 === 0 ? primaryToken : secondaryToken;
+          const titleBuilder = pickOne(rng, titlePatterns);
+          const descriptionBuilder = pickOne(rng, descriptionPatterns);
+          const category = pickOne(rng, categories);
+          const day = Math.min(30, 14 + idx);
           const totalElapsedSeconds = (42 * 360 * 24 * 3600) + ((10 - 1) * 30 * 24 * 3600) + ((day - 1) * 24 * 3600) + (12 * 3600);
-
           const loc = locations.length > 0 ? locations[idx % locations.length] : { id: 'loc_primary', name: 'Primary Region' };
           const actor = characters.length > 0
             ? (characters[idx % characters.length].id || characters[idx % characters.length].subjectId)
@@ -926,38 +974,20 @@ As regional tensions rise, rival factions maneuver for influence over critical r
 
           finalEvents.push({
             id: autoId,
-            title: tpl.title,
-            description: tpl.desc,
-            category: tpl.cat,
-            scheduledTime: {
-              year: 42,
-              month: 10,
-              day,
-              hour: 12,
-              minute: 0,
-              second: 0,
-              totalElapsedSeconds
-            },
+            title: titleBuilder(subject),
+            description: descriptionBuilder(subject),
+            category,
+            scheduledTime: { year: 42, month: 10, day, hour: 12, minute: 0, second: 0, totalElapsedSeconds },
             participatingActors: [actor],
             locationId: loc.id,
-            preconditions: {
-              requiredEvents: prevId ? [prevId] : [],
-              requiredWorldFacts: []
-            },
-            plannedConsequences: [
-              {
-                type: 'location_state_change',
-                targetId: loc.id,
-                detail: `Regional balance updated during ${tpl.title}.`
-              }
-            ],
+            preconditions: { requiredEvents: prevId ? [prevId] : [], requiredWorldFacts: [] },
+            plannedConsequences: [{ type: 'location_state_change', targetId: loc.id, detail: `Regional conditions changed because of ${subject.toLowerCase()}.` }],
             visibility: 'PUBLIC',
             status: 'PLANNED'
           });
         }
       }
     }
-
     // Referential integrity check for requiredEvents
     const finalEventIds = new Set(finalEvents.map(e => e.id));
     finalEvents.forEach(e => {

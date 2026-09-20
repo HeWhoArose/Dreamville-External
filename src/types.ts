@@ -811,6 +811,25 @@ export interface BattleEvent {
   metadata?: Record<string, unknown>;
 }
 
+export interface CombatTurnResourceSnapshot {
+  actorId: string;
+  round: number;
+  movementRemainingCells: number;
+  movementMaxCells: number;
+  actionAvailable: boolean;
+  bonusActionAvailable: boolean;
+  reactionAvailable: boolean;
+  objectInteractionAvailable: boolean;
+  dashMovementBonusCells: number;
+  disengaging: boolean;
+  dodging: boolean;
+  readyAction?: {
+    actionDescription: string;
+    triggerDescription: string;
+    expiresOnTurnStart: boolean;
+  };
+}
+
 export interface CombatStateResponse {
   participants: BattlefieldParticipant[];
   currentActor?: BattlefieldParticipant;
@@ -823,6 +842,7 @@ export interface CombatStateResponse {
   victory: boolean;
   defeat: boolean;
   isPlayerTurn: boolean;
+  viewerTurnResources?: CombatTurnResourceSnapshot;
 }
 
 export interface CombatActionResponse {

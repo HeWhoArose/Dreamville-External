@@ -75,7 +75,7 @@ test('Dash consumes the Action and restores additional movement equal to Speed',
 
 test('Dodge changes the canonical actor state used by attack and Dexterity-save resolution', () => {
   const engine = new TacticalCombatEngine(1337);
-  engine.addParticipant(participant());
+  engine.addParticipant(participant({ initiativeModifier: 100 }));
   engine.addParticipant(participant({
     id: 'enemy',
     name: 'Enemy',
@@ -86,24 +86,6 @@ test('Dodge changes the canonical actor state used by attack and Dexterity-save 
     damageFormula: '1d4+1',
   }));
   engine.rollInitiative();
-
-  const current = engine.getCurrentActor();
-  if (current?.id !== 'hero') {
-    // Make this deterministic regardless of the initiative tie-break.
-    engine.clear();
-    engine.addParticipant(participant({ initiative: 100 }));
-    engine.addParticipant(participant({
-      id: 'enemy',
-      name: 'Enemy',
-      x: 1,
-      y: 0,
-      team: 'enemies',
-      initiative: 1,
-      attackBonus: 5,
-      damageFormula: '1d4+1',
-    }));
-    engine.rollInitiative();
-  }
 
   const active = engine.getCurrentActor();
   assert.equal(active?.id, 'hero');
@@ -145,9 +127,10 @@ test('Bonus Action and Reaction capability types use their declared resource rat
   assert.equal(engine.getTurnResources('hero')?.actionAvailable, true);
 
   engine.advanceTurn();
+  engine.advanceTurn();
   const reaction = engine.executeCapabilityCast({
-    actorId: engine.getCurrentActor()!.id,
-    targetId: 'hero',
+    actorId: 'hero',
+    targetId: 'enemy',
     capabilityName: 'Reaction Strike',
     baseDamage: 1,
     actionType: 'reaction',

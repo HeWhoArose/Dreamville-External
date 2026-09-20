@@ -186,7 +186,6 @@ export class ConditionEngine {
       return clone(existing);
     }
 
-    const conditionState = input?.conditionState;
     for (const definition of conditionState?.customDefinitions || []) {
       if (definition?.id && definition?.name) {
         this.registerDefinition(definition);

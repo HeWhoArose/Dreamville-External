@@ -71,14 +71,11 @@ export class OpeningSceneService {
       try {
         const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
         const systemInstruction = `You are the Authoritative World Narrator for an interactive story engine.
-Generate the initial opening scene for a newly begun story run based strictly on the canonical context provided.
-You MUST answer all 6 canonical grounding questions naturally woven into the prose:
-1. Where am I? (${rawOpeningFacts.location.name}, ${rawOpeningFacts.location.region} - visual & atmospheric sensory details)
-2. When is this? (${rawOpeningFacts.time.formattedHeader})
-3. What does my character perceive? (sensory cues: light, sounds, textures, air)
-4. What immediate situation am I in? (character background, condition, role, immediate situation hook)
-5. What is happening around me? (surroundings, presence or absence of others, tension)
-6. What meaningful possibility exists right now? (initial inquiry, caution, actionable horizon)
+Generate a concise, player-friendly opening scene for a newly begun story run based strictly on the canonical context provided.
+The opening should orient the player without over-explaining. Mention the place, time, immediate sensory impression, current situation, and one clear thing that could be acted on next.
+Use 60–120 words of prose and at most 3 short structured events.
+Do not recap the entire world history, character biography, or quest lore unless it is necessary to understand the first moment.
+Do not use headings such as "Key Narrative Moments" or "Immediate Epistemic Horizon" in the generated prose.
 
 STRICT ANTI-CONTAMINATION RULES:
 - Ground ONLY in the provided world ("${rawOpeningFacts.world.title}") and location ("${rawOpeningFacts.location.name}").
@@ -88,7 +85,7 @@ STRICT ANTI-CONTAMINATION RULES:
         const promptText = `Assemble the dynamic opening scene using this canonical working context:
 ${workingContext.assembledText}
 
-Produce a vivid narrative between 120 and 280 words, plus 4 to 6 structured narrative events.
+Produce a concise narrative between 60 and 120 words, plus 2 to 3 structured narrative events.
 Event types MUST be chosen from: ["location", "normal", "action", "dialogue", "magic", "damage", "heal", "quest", "item", "system"].`;
 
         const responsePromise = ai.models.generateContent({
@@ -201,76 +198,52 @@ Event types MUST be chosen from: ["location", "normal", "action", "dialogue", "m
     storyId: string
   ): { narrativeText: string; structuredEvents: StructuredNarrativeEvent[] } {
     const { world, character, location, time } = facts;
-
-    // Detect key thematic elements from background, conditions, genre, or starting situation
-    const charSummary = `${character.name} ${character.role} ${character.background} ${character.startingSituation} ${character.conditions.join(' ')}`.toLowerCase();
-    const isWerewolf = charSummary.includes('werewolf') || charSummary.includes('wolf') || charSummary.includes('lycanthro');
-    const isScholar = charSummary.includes('scholar') || charSummary.includes('archive') || charSummary.includes('book') || charSummary.includes('study');
-    const isSciFi = (world.genre || '').toLowerCase().includes('sci-fi') || (world.title || '').toLowerCase().includes('astral') || (world.setting || '').toLowerCase().includes('space') || (world.setting || '').toLowerCase().includes('cyber');
+    const summary = `${character.name} ${character.role} ${character.background} ${character.startingSituation} ${character.conditions.join(' ')}`.toLowerCase();
+    const isSciFi =
+      (world.genre || '').toLowerCase().includes('sci-fi') ||
+      (world.title || '').toLowerCase().includes('space') ||
+      (world.setting || '').toLowerCase().includes('cyber');
 
     let p1 = '';
     let p2 = '';
-    let p3 = '';
 
-    if (isWerewolf && isScholar) {
-      // Dark Fantasy Werewolf Scholar canonical prose
-      p1 = `${time.formattedHeader}. The cold, quiet gloom of ${location.name} in the ${location.region} clings to the ancient stonework. ${location.ambientSensory}. Outside, the world remains entirely ignorant of what walks among them; to common folk and temple archons alike, werewolves are dismissed as bedtime horrors and forgotten myths. Yet beneath ${character.name}'s scholar's robes, the beast's pulse beats in lockstep with the human heart—a condition hidden through years of disciplined silence, cautious study, and suffocating vigilance.`;
-      p2 = `Surrounded by ${location.description}, ${character.name} checks the bindings of parchment folios and inkwells with steady, measured fingers. ${character.startingSituation || 'The research has reached a perilous precipice.'} If anyone were to pierce the veil and discover the curse lurking under the scholar's quiet demeanor, fear would outstrip reason in an instant. The burning question remains an obsession: where did this monstrous affliction truly originate, and why does its dormant savagery awaken only here?`;
-      p3 = `A faint tremor passes through the stillness of ${location.name}. Before ${character.name} lie scattered leads, guarded notes, and the immediate imperative to tread unseen. The path forward demands equal parts keen intellect and primal restraint.`;
-    } else if (isSciFi) {
-      // Sci-fi / Astral canonical prose
-      p1 = `${time.formattedHeader}. Across the pressurized bulkheads of ${location.name} in the ${location.region}, the hum of life-support filters echoes steadily. ${location.ambientSensory}. ${character.name}, designated as ${character.role || 'Specialist'}, monitors the ambient telemetry. ${location.description}`;
-      p2 = `${character.startingSituation || 'Systems have completed initialization.'} Equipped with standard kit and operational discipline, ${character.name} stands amid the flickering instrument arrays. The expanse of ${world.title} stretches beyond the observation ports, filled with unresolved trajectories and unmapped horizons.`;
-      p3 = `Telemetry feeds blink into readiness. ${character.name} prepares to calibrate navigation vectors and execute the initial protocol.`;
+    if (isSciFi) {
+      p1 = `${time.formattedHeader}. ${character.name} stands in ${location.name}, listening to the quiet machinery beneath the floor. ${location.ambientSensory}`;
+      p2 = `${character.startingSituation || 'The immediate systems are stable.'} Ahead, the scene offers a small number of obvious choices, but nothing forces your hand.`;
+    } else if (summary.includes('werewolf') || summary.includes('lycanthro')) {
+      p1 = `${time.formattedHeader}. ${location.name} is still, cold, and close around ${character.name}. ${location.ambientSensory}`;
+      p2 = `${character.startingSituation || 'Your hidden condition remains under control for now.'} Something in the surroundings gives you reason to pay attention.`;
     } else {
-      // General atmospheric fantasy / adventure canonical prose
-      p1 = `${time.formattedHeader}. The air in ${location.name}, nestled within the ${location.region}, stirs with an expectant quiet. ${location.ambientSensory}. ${character.name}, recognized as ${character.role || 'Traveler'}, steps into the space, taking measure of every contour and shadow. ${location.description}`;
-      p2 = `${character.startingSituation || 'The initial journey begins.'} With belongings secured and senses sharp, ${character.name} reflects on the road that led to ${world.title}. The world's quiet currents are already in motion, indifferent yet brimming with latent promise.`;
-      p3 = `As the light of ${time.period} deepens across ${location.name}, immediate paths and unanswered questions present themselves. The moment has arrived to make the first deliberate move.`;
+      p1 = `${time.formattedHeader}. ${character.name} arrives in ${location.name}, within ${location.region}. ${location.ambientSensory}`;
+      p2 = `${character.startingSituation || 'For the moment, the way forward is open.'} Nothing has happened yet that demands a single answer; the next move is yours.`;
     }
-
-    const narrativeText = `${p1}\n\n${p2}\n\n${p3}`;
 
     const structuredEvents: StructuredNarrativeEvent[] = [
       {
         id: `evt_open_${storyId}_0`,
         type: 'location',
-        text: `Arrived at ${location.name} (${location.region}) at ${time.period}, Cycle ${time.cycle}.`,
+        text: `${location.name} — ${location.region}`,
         timestamp: time.formattedHeader,
       },
       {
         id: `evt_open_${storyId}_1`,
         type: 'normal',
-        text: location.ambientSensory || `The ambient atmosphere of ${location.name} surrounds ${character.name}.`,
+        text: location.ambientSensory || `The immediate surroundings of ${location.name} are quiet.`,
         timestamp: time.formattedHeader,
       },
       {
         id: `evt_open_${storyId}_2`,
-        type: 'normal',
-        text: `${character.name} reflects on the immediate situation: ${character.startingSituation || 'A new chapter begins.'}`,
-        timestamp: time.formattedHeader,
-      },
-      {
-        id: `evt_open_${storyId}_3`,
-        type: isWerewolf ? 'system' : 'action',
-        text: isWerewolf
-          ? `Condition verified: Hidden lycanthropy held in check beneath scholar's mantle.`
-          : `${character.name} surveys the immediate surroundings and readies equipment.`,
-        timestamp: time.formattedHeader,
-      },
-      {
-        id: `evt_open_${storyId}_4`,
         type: 'quest',
-        text: isWerewolf
-          ? `Objective: Uncover the true origin of the werewolf curse while preserving concealment.`
-          : `Horizon: Investigate the surrounding mysteries of ${location.name}.`,
+        text: 'The scene is established. Decide what to do next.',
         timestamp: time.formattedHeader,
       },
     ];
 
-    return { narrativeText, structuredEvents };
+    return {
+      narrativeText: `${p1}\n\n${p2}`,
+      structuredEvents,
+    };
   }
-
   /**
    * Firewall filter that scrubs out any forbidden demo fixture names if they were inadvertently hallucinated.
    */

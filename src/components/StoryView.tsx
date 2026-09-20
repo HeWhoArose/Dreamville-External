@@ -59,7 +59,11 @@ const StoryCheckCard: React.FC<{
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <Dices className="h-4 w-4 text-stone-500" />
-          <p className="text-xs font-semibold text-stone-300">{check.skill} Check</p>
+          <p className="text-xs font-semibold text-stone-300">
+            {check.testType === 'SAVING_THROW'
+              ? `${check.ability} Saving Throw`
+              : `${check.skill} Check`}
+          </p>
         </div>
         <p className="mt-1 text-[10px] text-stone-600">{check.ability}
           {check.proficiencyLevel === 'EXPERTISE' ? ' · Expertise' : check.proficiencyLevel === 'PROFICIENT' ? ' · Proficient' : ''}

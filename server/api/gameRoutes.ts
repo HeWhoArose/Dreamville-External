@@ -3494,6 +3494,37 @@ gameRouter.post('/worlds/:worldId/characters/custom-capability', async (req: Req
 });
 
 /**
+ * POST /api/game/worlds/:worldId/characters/custom-feat
+ * Synthesizes a structured custom feat proposal based on feat concept.
+ */
+gameRouter.post('/worlds/:worldId/characters/custom-feat', async (req: Request, res: Response) => {
+  try {
+    const worldId = String(req.params.worldId);
+    const { featName, featConcept, characterContext } = req.body;
+    const worldTemplate = worldRepository.getWorldTemplate(worldId);
+    if (!worldTemplate) {
+      return res.status(404).json({ error: `World ${worldId} not found.` });
+    }
+
+    const { characterGenesisService } = await import('../services/characterGenesisService');
+    const feat = await characterGenesisService.proposeCustomFeat(
+      {
+        worldId,
+        featName: featName || '',
+        featConcept: featConcept || '',
+        characterContext,
+      },
+      worldTemplate
+    );
+
+    res.json({ success: true, feat });
+  } catch (error: any) {
+    console.error('Error proposing custom feat:', error);
+    res.status(500).json({ error: error?.message || 'Failed to propose custom feat.' });
+  }
+});
+
+/**
  * GET /api/game/worlds/:worldId/characters/drafts
  * Retrieves all saved drafts for a specific world.
  */

@@ -1189,6 +1189,21 @@ export interface CharacterGenesisRevision {
   snapshot: Partial<CharacterGenesisDraft>;
 }
 
+export interface CharacterCoreStats {
+  level: number;
+  armorClass: number;
+  speed: number;
+  hitDice: string;
+  hpCurrent: number;
+  hpMax: number;
+  strength: number;
+  dexterity: number;
+  constitution: number;
+  intelligence: number;
+  wisdom: number;
+  charisma: number;
+}
+
 export interface CharacterGenesisDraft {
   draftId: string;
   worldId: string;
@@ -1202,6 +1217,7 @@ export interface CharacterGenesisDraft {
   motivations: CharacterMotivations;
   relationships: CharacterRelationships;
   condition: CharacterCondition;
+  coreStats?: CharacterCoreStats;
   attributes: CharacterStatDefinition[];
   stats: CharacterStatDefinition[];
   traits: string[];
@@ -1247,6 +1263,7 @@ export interface ConfirmedCharacter {
   motivations: CharacterMotivations;
   relationships: CharacterRelationships;
   condition: CharacterCondition;
+  coreStats?: CharacterCoreStats;
   attributes: CharacterStatDefinition[];
   stats: CharacterStatDefinition[];
   traits: string[];
@@ -1281,6 +1298,17 @@ export interface CharacterExtractionRequest {
 export interface CustomCapabilityProposalRequest {
   worldId: string;
   capabilityConcept: string;
+  characterContext?: {
+    role?: string;
+    background?: string;
+    species?: string;
+  };
+}
+
+export interface CustomFeatProposalRequest {
+  worldId: string;
+  featName: string;
+  featConcept: string;
   characterContext?: {
     role?: string;
     background?: string;

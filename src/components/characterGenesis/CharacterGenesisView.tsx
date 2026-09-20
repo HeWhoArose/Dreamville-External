@@ -25,6 +25,7 @@ import {
   ChevronRight,
   ChevronDown,
   Play,
+  BarChart2,
 } from 'lucide-react';
 import {
   CharacterGenesisDraft,
@@ -35,6 +36,8 @@ import {
   WorldTemplate,
   CharacterProvenanceSource,
   CharacterStoryMode,
+  CharacterCoreStats,
+  CharacterFeat,
 } from '../../types';
 import { apiClient } from '../../services/apiClient';
 
@@ -111,14 +114,21 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
   const [extractionModel, setExtractionModel] = useState<string | null>(null);
   const [extractionElapsedSeconds, setExtractionElapsedSeconds] = useState(0);
 
-  // The active Draft
+  // The active Draft & Review Gate
   const [draft, setDraft] = useState<CharacterGenesisDraft | null>(null);
+  const [pendingAiDraft, setPendingAiDraft] = useState<CharacterGenesisDraft | null>(null);
   const [userEditedFields, setUserEditedFields] = useState<Set<string>>(new Set());
 
   // Custom capability proposal state
   const [customCapInput, setCustomCapInput] = useState<string>('');
   const [isProposingCap, setIsProposingCap] = useState<boolean>(false);
   const [capProposalError, setCapProposalError] = useState<string | null>(null);
+  const [pendingCapProposal, setPendingCapProposal] = useState<(CapabilityDefinition & { generatedSkills: GeneratedTechnique[] }) | null>(null);
+
+  // Custom feat proposal state
+  const [isProposingFeat, setIsProposingFeat] = useState<boolean>(false);
+  const [featProposalError, setFeatProposalError] = useState<string | null>(null);
+  const [pendingFeatProposal, setPendingFeatProposal] = useState<CharacterFeat | null>(null);
 
   // Draft persistence & history
   const [savedDrafts, setSavedDrafts] = useState<CharacterGenesisDraft[]>([]);
@@ -464,10 +474,8 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
       );
 
       if (res.success && res.draft) {
-        setDraft(res.draft);
-        setSelectedNarrativeRole(res.draft.storyMode || 'PROTAGONIST');
-        setExtractionActivity('Character extraction complete • opening the dossier for review.');
-        setActiveStep(2);
+        setPendingAiDraft(res.draft);
+        setExtractionActivity('Character proposal synthesized • please review below.');
       } else {
         throw new Error(res.error || 'Failed to extract character draft.');
       }
@@ -495,9 +503,24 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
     await handleExtractCharacter(true);
   };
 
-  // 2. Propose Custom Capability
+  const handleAcceptPendingAiDraft = async () => {
+    if (!pendingAiDraft) return;
+    setDraft(pendingAiDraft);
+    setSelectedNarrativeRole(pendingAiDraft.storyMode || 'PROTAGONIST');
+    setPendingAiDraft(null);
+    setActiveStep(2);
+    if (selectedWorld) {
+      await apiClient.saveCharacterDraft(selectedWorld.worldId, pendingAiDraft);
+    }
+  };
+
+  const handleRejectPendingAiDraft = () => {
+    setPendingAiDraft(null);
+  };
+
+  // 2. Propose Custom Capability (AI Proposal Review Gate)
   const handleProposeCustomCapability = async () => {
-    if (!selectedWorld || !draft) return;
+    if (!selectedWorld) return;
     if (!customCapInput.trim()) {
       setCapProposalError('Enter a capability concept name or description.');
       return;
@@ -508,29 +531,13 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
 
     try {
       const res = await apiClient.proposeCustomCapability(selectedWorld.worldId, customCapInput, {
-        role: draft.role.role || draft.role.archetype,
-        background: draft.background.history,
-        species: draft.identity.species,
+        role: draft?.role?.role || draft?.role?.archetype || draft?.role?.profession,
+        background: draft?.background?.history,
+        species: draft?.identity?.species,
       });
 
       if (res.success && res.capability) {
-        const newCap = res.capability;
-        const newSkills = res.capability.generatedSkills || [];
-
-        setDraft((prev) => {
-          if (!prev) return prev;
-          const updatedCaps = [...prev.capabilities, newCap];
-          const updatedSkills = [...prev.generatedSkills, ...newSkills];
-          return {
-            ...prev,
-            capabilities: updatedCaps,
-            generatedSkills: updatedSkills,
-          };
-        });
-
-        markFieldEdited('capabilities');
-        markFieldEdited('generatedSkills');
-        setCustomCapInput('');
+        setPendingCapProposal(res.capability);
       } else {
         throw new Error(res.error || 'Failed to propose custom capability.');
       }
@@ -539,6 +546,125 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
     } finally {
       setIsProposingCap(false);
     }
+  };
+
+  const handleAcceptCapProposal = () => {
+    if (!pendingCapProposal || !draft) return;
+    const newCap = { ...pendingCapProposal };
+    const newSkills = pendingCapProposal.generatedSkills || [];
+
+    setDraft((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        capabilities: [...prev.capabilities, newCap],
+        generatedSkills: [...prev.generatedSkills, ...newSkills],
+      };
+    });
+
+    markFieldEdited('capabilities');
+    markFieldEdited('generatedSkills');
+    setPendingCapProposal(null);
+    setCustomCapInput('');
+  };
+
+  const handleRejectCapProposal = () => {
+    setPendingCapProposal(null);
+  };
+
+  // 3. Propose Custom Feat (AI Proposal Review Gate)
+  const handleProposeCustomFeat = async () => {
+    if (!selectedWorld) return;
+    if (!customFeatName.trim() && !customFeatDescription.trim()) {
+      setFeatProposalError('Enter a feat name or concept description.');
+      return;
+    }
+
+    setFeatProposalError(null);
+    setIsProposingFeat(true);
+
+    try {
+      const res = await apiClient.proposeCustomFeat(
+        selectedWorld.worldId,
+        customFeatName,
+        customFeatDescription,
+        {
+          role: draft?.role?.role || draft?.role?.archetype || draft?.role?.profession,
+          background: draft?.background?.history,
+          species: draft?.identity?.species,
+        }
+      );
+
+      if (res.success && res.feat) {
+        setPendingFeatProposal(res.feat);
+      } else {
+        throw new Error(res.error || 'Failed to propose custom feat.');
+      }
+    } catch (err: any) {
+      setFeatProposalError(err.message || 'Error proposing custom feat.');
+    } finally {
+      setIsProposingFeat(false);
+    }
+  };
+
+  const handleAcceptFeatProposal = () => {
+    if (!pendingFeatProposal || !draft) return;
+    setDraft((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        feats: [...prev.feats, pendingFeatProposal],
+      };
+    });
+
+    markFieldEdited('feats');
+    setPendingFeatProposal(null);
+    setCustomFeatName('');
+    setCustomFeatDescription('');
+  };
+
+  const handleRejectFeatProposal = () => {
+    setPendingFeatProposal(null);
+  };
+
+  // Update Core D&D Stats with 1-20 limits on ability scores
+  const updateCoreStat = (field: keyof CharacterCoreStats, value: any) => {
+    if (!draft) return;
+    const currentCore = draft.coreStats || {
+      level: 1, armorClass: 10, speed: 30, hitDice: '1d8', hpCurrent: 10, hpMax: 10,
+      strength: 10, dexterity: 10, constitution: 10, intelligence: 10, wisdom: 10, charisma: 10,
+    };
+
+    let updatedCore: CharacterCoreStats = { ...currentCore, [field]: value };
+
+    if (['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma'].includes(field)) {
+      const numVal = Math.max(1, Math.min(20, Math.floor(Number(value) || 10)));
+      (updatedCore as any)[field] = numVal;
+    } else if (field === 'level') {
+      updatedCore.level = Math.max(1, Math.min(30, Math.floor(Number(value) || 1)));
+    } else if (field === 'armorClass') {
+      updatedCore.armorClass = Math.max(1, Math.min(50, Math.floor(Number(value) || 10)));
+    } else if (field === 'speed') {
+      updatedCore.speed = Math.max(0, Math.min(300, Math.floor(Number(value) || 30)));
+    } else if (field === 'hpMax') {
+      const newMax = Math.max(1, Math.floor(Number(value) || 10));
+      updatedCore.hpMax = newMax;
+      if (updatedCore.hpCurrent > newMax) updatedCore.hpCurrent = newMax;
+    } else if (field === 'hpCurrent') {
+      const maxHp = updatedCore.hpMax || 10;
+      updatedCore.hpCurrent = Math.max(0, Math.min(maxHp, Math.floor(Number(value) || 0)));
+    }
+
+    setDraft({
+      ...draft,
+      coreStats: updatedCore,
+      startingState: {
+        ...draft.startingState,
+        healthCurrent: updatedCore.hpCurrent,
+        healthMax: updatedCore.hpMax,
+      },
+    });
+    markFieldEdited('coreStats');
   };
 
   // Delete Capability
@@ -776,10 +902,11 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
             { step: 1, label: '1. Concept & Extraction', icon: Sparkles },
             { step: 2, label: '2. Identity & Bio', icon: User },
             { step: 3, label: '3. Capabilities & Skills', icon: Zap },
-            { step: 4, label: '4. Starting Equipment', icon: Shield },
-            { step: 5, label: '5. Location & Situation', icon: MapPin },
-            { step: 6, label: '6. Portrait Studio', icon: ImageIcon },
-            { step: 7, label: '7. Review & Confirm', icon: CheckCircle2 },
+            { step: 4, label: '4. Stats & Attributes', icon: BarChart2 },
+            { step: 5, label: '5. Starting Equipment', icon: Shield },
+            { step: 6, label: '6. Location & Situation', icon: MapPin },
+            { step: 7, label: '7. Portrait Studio', icon: ImageIcon },
+            { step: 8, label: '8. Review & Confirm', icon: CheckCircle2 },
           ].map((item) => {
             const Icon = item.icon;
             const isCompleted = activeStep > item.step || (item.step === 1 && draft !== null);
@@ -1016,6 +1143,133 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 )}
               </div>
             </div>
+
+            {/* AI CHARACTER GENERATION REVIEW GATE */}
+            {pendingAiDraft && (
+              <div className="p-6 rounded-xl bg-neutral-950 border-2 border-indigo-500/80 space-y-5 shadow-xl">
+                <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-indigo-400" />
+                      <h3 className="text-base font-bold text-white">AI Character Extraction Proposal</h3>
+                      <span
+                        className={
+                          pendingAiDraft.aiExtractionSummary?.generationSource === 'DETERMINISTIC_FALLBACK'
+                            ? 'text-xs px-2.5 py-0.5 rounded border border-amber-700 bg-amber-950/60 text-amber-300 font-mono'
+                            : pendingAiDraft.aiExtractionSummary?.generationSource === 'AI_FALLBACK'
+                            ? 'text-xs px-2.5 py-0.5 rounded border border-yellow-700 bg-yellow-950/50 text-yellow-300 font-mono'
+                            : 'text-xs px-2.5 py-0.5 rounded border border-indigo-600 bg-indigo-950/60 text-indigo-300 font-mono'
+                        }
+                      >
+                        {pendingAiDraft.aiExtractionSummary?.generationSource === 'DETERMINISTIC_FALLBACK'
+                          ? 'Deterministic Extraction'
+                          : pendingAiDraft.aiExtractionSummary?.generationSource === 'AI_FALLBACK'
+                          ? 'Fallback AI Model'
+                          : 'Primary AI Model'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-neutral-400 mt-1">
+                      Review the AI's interpretation and proposed character before committing them to your active dossier.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Interpretation Box */}
+                <div className="p-4 rounded-lg bg-neutral-900 border border-neutral-800 space-y-2 text-xs">
+                  <div className="font-semibold text-indigo-300 uppercase tracking-wider text-[11px]">
+                    AI Interpretation & Synthesis
+                  </div>
+                  <p className="text-neutral-200 leading-relaxed text-sm">
+                    {pendingAiDraft.aiExtractionSummary?.interpretation || 'Proposed character based on your natural language concept.'}
+                  </p>
+
+                  {pendingAiDraft.aiExtractionSummary?.keyFacts?.length ? (
+                    <div className="pt-2 border-t border-neutral-800 flex flex-wrap items-center gap-1.5">
+                      <span className="text-neutral-400 font-medium">Key Facts:</span>
+                      {pendingAiDraft.aiExtractionSummary.keyFacts.map((fact, idx) => (
+                        <span key={idx} className="px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 text-[11px]">
+                          {fact}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {pendingAiDraft.aiExtractionSummary?.proposedHighlights?.length ? (
+                    <div className="pt-1 flex flex-wrap items-center gap-1.5">
+                      <span className="text-neutral-400 font-medium font-semibold">AI Highlights:</span>
+                      {pendingAiDraft.aiExtractionSummary.proposedHighlights.map((hl, idx) => (
+                        <span key={idx} className="px-2 py-0.5 rounded bg-indigo-950/80 text-indigo-300 border border-indigo-800/60 text-[11px]">
+                          {hl}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {pendingAiDraft.aiExtractionSummary?.uncertainties?.length ? (
+                    <div className="pt-1 text-amber-300 text-[11px]">
+                      <span className="font-semibold text-amber-400">Uncertainties / Assumptions:</span>{' '}
+                      {pendingAiDraft.aiExtractionSummary.uncertainties.join(' • ')}
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* Proposed Character Card Overview */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                  <div className="p-4 rounded-lg bg-neutral-900/90 border border-neutral-800 space-y-2">
+                    <div className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">
+                      Proposed Identity & Role
+                    </div>
+                    <div className="text-base font-bold text-white">{pendingAiDraft.identity.name}</div>
+                    <div className="text-neutral-300">
+                      {pendingAiDraft.identity.species} • {pendingAiDraft.role.profession || pendingAiDraft.role.archetype}
+                    </div>
+                    <div className="text-neutral-400 text-[11px] line-clamp-3">
+                      {pendingAiDraft.appearance.physicalDescription}
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-lg bg-neutral-900/90 border border-neutral-800 space-y-2">
+                    <div className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider">
+                      Core D&D Stats & Capabilities
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 font-mono text-[11px] text-indigo-300 font-semibold">
+                      <div>Lvl: {pendingAiDraft.coreStats?.level ?? 1}</div>
+                      <div>AC: {pendingAiDraft.coreStats?.armorClass ?? 10}</div>
+                      <div>Speed: {pendingAiDraft.coreStats?.speed ?? 30}ft</div>
+                      <div>HD: {pendingAiDraft.coreStats?.hitDice ?? '1d8'}</div>
+                      <div>HP: {pendingAiDraft.coreStats?.hpCurrent ?? 10}/{pendingAiDraft.coreStats?.hpMax ?? 10}</div>
+                    </div>
+                    <div className="pt-1 text-[11px] font-mono text-neutral-400">
+                      STR {pendingAiDraft.coreStats?.strength ?? 10} • DEX {pendingAiDraft.coreStats?.dexterity ?? 10} • CON {pendingAiDraft.coreStats?.constitution ?? 10} • INT {pendingAiDraft.coreStats?.intelligence ?? 10} • WIS {pendingAiDraft.coreStats?.wisdom ?? 10} • CHA {pendingAiDraft.coreStats?.charisma ?? 10}
+                    </div>
+                    <div className="pt-1 text-neutral-300">
+                      <span className="text-neutral-500">Capabilities ({pendingAiDraft.capabilities?.length || 0}):</span>{' '}
+                      {pendingAiDraft.capabilities?.map((c) => c.name).join(', ') || 'None'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Review Gate Action Buttons */}
+                <div className="flex items-center justify-end gap-3 pt-3 border-t border-neutral-800">
+                  <button
+                    type="button"
+                    onClick={handleRejectPendingAiDraft}
+                    className="px-4 py-2 rounded-lg border border-neutral-700 bg-neutral-900 hover:bg-neutral-800 text-xs text-neutral-300 hover:text-white transition-colors"
+                  >
+                    Change / Keep Editing Concept
+                  </button>
+                  <button
+                    type="button"
+                    id="btn-use-proposed-character"
+                    onClick={handleAcceptPendingAiDraft}
+                    className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white transition-colors shadow-sm"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Use This Character & Continue</span>
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* World Context Snapshot Card */}
             <div className="p-5 rounded-xl bg-neutral-950/60 border border-neutral-800/80 space-y-3">
@@ -1387,52 +1641,11 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
         {/* STEP 3: CAPABILITIES & SKILLS / TECHNIQUES */}
         {draft && activeStep === 3 && (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              <div className="p-5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-3">
-                <h3 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">Attributes & Stats</h3>
-                <div className="space-y-2">
-                  {(draft.attributes || []).map((entry) => (
-                    <div key={entry.id} className="flex items-center justify-between rounded bg-neutral-900 p-2 text-xs">
-                      <span>{entry.name}</span><span className="font-mono text-indigo-300">{entry.value}</span>
-                    </div>
-                  ))}
-                  <div className="flex gap-2">
-                    <input value={customAttributeName} onChange={(e) => setCustomAttributeName(e.target.value)} placeholder="Custom attribute" className="flex-1 px-2 py-1.5 rounded bg-neutral-900 border border-neutral-700 text-xs" />
-                    <input value={customAttributeValue} onChange={(e) => setCustomAttributeValue(e.target.value)} className="w-16 px-2 py-1.5 rounded bg-neutral-900 border border-neutral-700 text-xs" />
-                    <button onClick={() => addCustomStat('attribute')} className="px-2 rounded bg-neutral-800"><Plus className="w-3.5 h-3.5" /></button>
-                  </div>
-                  <div className="flex gap-2">
-                    <input value={customStatName} onChange={(e) => setCustomStatName(e.target.value)} placeholder="Custom stat" className="flex-1 px-2 py-1.5 rounded bg-neutral-900 border border-neutral-700 text-xs" />
-                    <input value={customStatValue} onChange={(e) => setCustomStatValue(e.target.value)} className="w-16 px-2 py-1.5 rounded bg-neutral-900 border border-neutral-700 text-xs" />
-                    <button onClick={() => addCustomStat('stat')} className="px-2 rounded bg-neutral-800"><Plus className="w-3.5 h-3.5" /></button>
-                  </div>
-                </div>
-              </div>
-              <div className="p-5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">Feats & Titles</h3>
-                  <span className="text-[10px] text-neutral-500">Extensible • AI + Player + World</span>
-                </div>
-                {(draft.feats || []).map((feat) => (
-                  <div key={feat.id} className="rounded-lg bg-neutral-900 border border-neutral-800 p-3 text-xs">
-                    <div className="font-medium text-white">{feat.name}</div>
-                    <div className="text-neutral-400 mt-1">{feat.description}</div>
-                    {feat.effects?.length ? <div className="text-indigo-300 mt-1">{feat.effects.map((e) => e.description).join(' • ')}</div> : null}
-                  </div>
-                ))}
-                <div className="space-y-2">
-                  <input value={customFeatName} onChange={(e) => setCustomFeatName(e.target.value)} placeholder="Create a custom feat/title" className="w-full px-2.5 py-2 rounded bg-neutral-900 border border-neutral-700 text-xs" />
-                  <input value={customFeatDescription} onChange={(e) => setCustomFeatDescription(e.target.value)} placeholder="What happened and what does it do?" className="w-full px-2.5 py-2 rounded bg-neutral-900 border border-neutral-700 text-xs" />
-                  <button onClick={addCustomFeat} className="px-3 py-1.5 rounded bg-indigo-700 text-xs"><Plus className="w-3.5 h-3.5 inline mr-1" />Add custom feat</button>
-                </div>
-              </div>
-            </div>
-
             {/* Custom Capability Proposal Bar */}
             <div className="p-5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-3">
               <h3 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider flex items-center gap-2">
                 <Sparkles className="w-3.5 h-3.5" />
-                Propose Custom Capability
+                Propose Custom Capability (AI Synthesis)
               </h3>
               <p className="text-xs text-neutral-400">
                 Propose a unique supernatural power, combat technique, or domain mastery. The engine will synthesize a structured capability schema and derive complementary techniques linked by lineage.
@@ -1462,6 +1675,45 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
               </div>
               {capProposalError && (
                 <div className="text-xs text-red-400">{capProposalError}</div>
+              )}
+
+              {/* Review Gate for Pending Capability Proposal */}
+              {pendingCapProposal && (
+                <div className="p-4 rounded-xl bg-indigo-950/70 border-2 border-indigo-500 space-y-3 mt-3 shadow-lg">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-bold text-indigo-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-indigo-400" />
+                      <span>Synthesized Capability Proposal</span>
+                    </div>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-900 text-indigo-200 border border-indigo-700 font-mono">
+                      {pendingCapProposal.powerTier || 'TIER_1'}
+                    </span>
+                  </div>
+                  <div className="text-sm font-bold text-white">{pendingCapProposal.name}</div>
+                  <p className="text-xs text-neutral-300 leading-relaxed">{pendingCapProposal.description}</p>
+                  {pendingCapProposal.generatedSkills?.length ? (
+                    <div className="text-xs text-indigo-200 pt-1 border-t border-indigo-900/80">
+                      <span className="font-semibold text-neutral-400">Derived Techniques ({pendingCapProposal.generatedSkills.length}):</span>{' '}
+                      {pendingCapProposal.generatedSkills.map((s) => s.name).join(', ')}
+                    </div>
+                  ) : null}
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-indigo-900">
+                    <button
+                      onClick={handleRejectCapProposal}
+                      className="px-3 py-1.5 rounded bg-neutral-900 border border-neutral-700 text-xs text-neutral-300 hover:text-white"
+                    >
+                      Reject
+                    </button>
+                    <button
+                      id="btn-accept-capability"
+                      onClick={handleAcceptCapProposal}
+                      className="px-4 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white flex items-center gap-1.5"
+                    >
+                      <Check className="w-4 h-4" />
+                      <span>Accept & Add Capability</span>
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
 
@@ -1570,6 +1822,301 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 onClick={() => setActiveStep(4)}
                 className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition-colors"
               >
+                <span>Proceed to Stats & Attributes</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 4: DEDICATED STATS & ATTRIBUTES TAB */}
+        {draft && activeStep === 4 && (
+          <div className="space-y-6">
+            {/* Core D&D Stats Card */}
+            <div className="p-6 rounded-xl bg-neutral-950 border border-neutral-800 space-y-6">
+              <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
+                <div>
+                  <h2 className="text-base font-semibold text-white flex items-center gap-2">
+                    <BarChart2 className="w-4 h-4 text-indigo-400" />
+                    Permanent D&D Core Stats & Abilities
+                  </h2>
+                  <p className="text-xs text-neutral-400 mt-0.5">
+                    Configure official D&D combat statistics and core ability scores (clamped between 1 and 20).
+                  </p>
+                </div>
+                <span className="text-xs font-mono px-2.5 py-1 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">
+                  D&D 5e Ruleset
+                </span>
+              </div>
+
+              {/* Combat Stats Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 text-xs">
+                <div className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 space-y-1">
+                  <label className="text-[11px] font-medium text-neutral-400">Level</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={30}
+                    value={draft.coreStats?.level ?? 1}
+                    onChange={(e) => updateCoreStat('level', e.target.value)}
+                    className="w-full px-2 py-1 rounded bg-neutral-950 border border-neutral-700 font-mono text-sm text-white font-bold"
+                  />
+                </div>
+                <div className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 space-y-1">
+                  <label className="text-[11px] font-medium text-neutral-400">Armor Class (AC)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={draft.coreStats?.armorClass ?? 10}
+                    onChange={(e) => updateCoreStat('armorClass', e.target.value)}
+                    className="w-full px-2 py-1 rounded bg-neutral-950 border border-neutral-700 font-mono text-sm text-white font-bold"
+                  />
+                </div>
+                <div className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 space-y-1">
+                  <label className="text-[11px] font-medium text-neutral-400">Speed (ft)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={300}
+                    value={draft.coreStats?.speed ?? 30}
+                    onChange={(e) => updateCoreStat('speed', e.target.value)}
+                    className="w-full px-2 py-1 rounded bg-neutral-950 border border-neutral-700 font-mono text-sm text-white font-bold"
+                  />
+                </div>
+                <div className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 space-y-1">
+                  <label className="text-[11px] font-medium text-neutral-400">Hit Dice</label>
+                  <input
+                    type="text"
+                    value={draft.coreStats?.hitDice ?? '1d8'}
+                    onChange={(e) => updateCoreStat('hitDice', e.target.value)}
+                    className="w-full px-2 py-1 rounded bg-neutral-950 border border-neutral-700 font-mono text-sm text-white font-bold"
+                  />
+                </div>
+                <div className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 space-y-1">
+                  <label className="text-[11px] font-medium text-neutral-400">Current HP</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={draft.coreStats?.hpMax ?? 10}
+                    value={draft.coreStats?.hpCurrent ?? 10}
+                    onChange={(e) => updateCoreStat('hpCurrent', e.target.value)}
+                    className="w-full px-2 py-1 rounded bg-neutral-950 border border-neutral-700 font-mono text-sm text-emerald-400 font-bold"
+                  />
+                </div>
+                <div className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 space-y-1">
+                  <label className="text-[11px] font-medium text-neutral-400">Max HP</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={999}
+                    value={draft.coreStats?.hpMax ?? 10}
+                    onChange={(e) => updateCoreStat('hpMax', e.target.value)}
+                    className="w-full px-2 py-1 rounded bg-neutral-950 border border-neutral-700 font-mono text-sm text-emerald-400 font-bold"
+                  />
+                </div>
+              </div>
+
+              {/* 6 Core Ability Scores Grid */}
+              <div className="space-y-3 pt-2">
+                <h3 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">
+                  Core Ability Scores (1 - 20)
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                  {[
+                    { key: 'strength', label: 'Strength (STR)', score: draft.coreStats?.strength ?? 10 },
+                    { key: 'dexterity', label: 'Dexterity (DEX)', score: draft.coreStats?.dexterity ?? 10 },
+                    { key: 'constitution', label: 'Constitution (CON)', score: draft.coreStats?.constitution ?? 10 },
+                    { key: 'intelligence', label: 'Intelligence (INT)', score: draft.coreStats?.intelligence ?? 10 },
+                    { key: 'wisdom', label: 'Wisdom (WIS)', score: draft.coreStats?.wisdom ?? 10 },
+                    { key: 'charisma', label: 'Charisma (CHA)', score: draft.coreStats?.charisma ?? 10 },
+                  ].map((stat) => {
+                    const mod = Math.floor((stat.score - 10) / 2);
+                    const modStr = mod >= 0 ? `+${mod}` : `${mod}`;
+                    return (
+                      <div key={stat.key} className="p-3.5 rounded-xl bg-neutral-900 border border-neutral-800 text-center space-y-1">
+                        <div className="text-[11px] font-semibold text-neutral-300 uppercase">{stat.key.slice(0, 3)}</div>
+                        <div className="text-[10px] text-neutral-500">{stat.label}</div>
+                        <input
+                          type="number"
+                          min={1}
+                          max={20}
+                          value={stat.score}
+                          onChange={(e) => updateCoreStat(stat.key as any, e.target.value)}
+                          className="w-16 mx-auto text-center px-2 py-1 rounded bg-neutral-950 border border-neutral-700 font-mono text-base font-bold text-white focus:outline-none focus:border-indigo-500"
+                        />
+                        <div className="text-xs font-mono font-bold text-indigo-400 pt-0.5">
+                          Modifier: {modStr}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Extensible Custom Attributes & Stats */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Custom Attributes & World Stats */}
+              <div className="p-5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-3">
+                <h3 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">
+                  Custom Attributes & World Stats
+                </h3>
+                <div className="space-y-2">
+                  {(draft.attributes || []).map((entry) => (
+                    <div key={entry.id} className="flex items-center justify-between rounded bg-neutral-900 p-2.5 text-xs border border-neutral-800">
+                      <span className="text-neutral-200 font-medium">{entry.name}</span>
+                      <span className="font-mono text-indigo-300 font-bold">{entry.value}</span>
+                    </div>
+                  ))}
+                  <div className="flex gap-2 pt-2">
+                    <input
+                      value={customAttributeName}
+                      onChange={(e) => setCustomAttributeName(e.target.value)}
+                      placeholder="Custom attribute (e.g. Mana)"
+                      className="flex-1 px-3 py-1.5 rounded bg-neutral-900 border border-neutral-700 text-xs text-white"
+                    />
+                    <input
+                      value={customAttributeValue}
+                      onChange={(e) => setCustomAttributeValue(e.target.value)}
+                      placeholder="Value"
+                      className="w-20 px-3 py-1.5 rounded bg-neutral-900 border border-neutral-700 text-xs text-white font-mono"
+                    />
+                    <button
+                      onClick={() => addCustomStat('attribute')}
+                      className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-xs font-medium text-white flex items-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Feats & Titles + AI Custom Feat Generator */}
+              <div className="p-5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Feats, Titles & Special Traits ({draft.feats?.length || 0})
+                  </h3>
+                </div>
+
+                {/* List of Feats */}
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {(draft.feats || []).map((feat) => (
+                    <div key={feat.id} className="rounded-lg bg-neutral-900 border border-neutral-800 p-3 text-xs space-y-1">
+                      <div className="flex items-center justify-between">
+                        <div className="font-semibold text-white">{feat.name}</div>
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 font-mono">
+                          {feat.tags?.[0] || 'FEAT'}
+                        </span>
+                      </div>
+                      <div className="text-neutral-400 text-[11px] leading-relaxed">{feat.description}</div>
+                      {feat.effects?.length ? (
+                        <div className="text-indigo-300 text-[10px] font-mono pt-1 border-t border-neutral-800">
+                          {feat.effects.map((e) => `${e.type || 'Effect'}: ${e.description}`).join(' • ')}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+
+                {/* AI Feat Synthesis Generator */}
+                <div className="p-4 rounded-xl bg-neutral-900 border border-neutral-800 space-y-3 pt-3">
+                  <div className="text-xs font-semibold text-indigo-300 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>AI Custom Feat Generator</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      value={customFeatName}
+                      onChange={(e) => setCustomFeatName(e.target.value)}
+                      placeholder="Feat concept name (e.g., Shadow Walker)"
+                      className="px-3 py-2 rounded bg-neutral-950 border border-neutral-700 text-xs text-white"
+                    />
+                    <input
+                      type="text"
+                      value={customFeatDescription}
+                      onChange={(e) => setCustomFeatDescription(e.target.value)}
+                      placeholder="Desired mechanical effect"
+                      className="px-3 py-2 rounded bg-neutral-950 border border-neutral-700 text-xs text-white"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <button
+                      id="btn-propose-feat"
+                      onClick={handleProposeCustomFeat}
+                      disabled={isProposingFeat || (!customFeatName.trim() && !customFeatDescription.trim())}
+                      className="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-xs text-white font-medium flex items-center gap-1.5 shadow-sm"
+                    >
+                      {isProposingFeat ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                      <span>Synthesize AI Feat</span>
+                    </button>
+                    <button
+                      onClick={addCustomFeat}
+                      disabled={!customFeatName.trim()}
+                      className="px-3 py-2 rounded bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-xs text-neutral-300 font-medium"
+                    >
+                      Add Manual Feat
+                    </button>
+                  </div>
+                  {featProposalError && <div className="text-xs text-red-400">{featProposalError}</div>}
+
+                  {/* Feat Proposal Review Gate */}
+                  {pendingFeatProposal && (
+                    <div className="p-4 rounded-lg bg-indigo-950/70 border-2 border-indigo-500 space-y-2 mt-2 shadow-lg">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-indigo-300 uppercase">
+                          AI Proposed Feat: {pendingFeatProposal.name}
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-900 text-indigo-200 border border-indigo-700 font-mono">
+                          {pendingFeatProposal.tags?.[0] || 'FEAT'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-neutral-300 leading-relaxed">{pendingFeatProposal.description}</p>
+                      {pendingFeatProposal.effects?.length ? (
+                        <div className="text-xs text-indigo-200 font-mono pt-1 border-t border-indigo-900">
+                          <span className="text-neutral-400">Effects:</span>{' '}
+                          {pendingFeatProposal.effects.map((e) => `${e.type || 'Effect'}: ${e.description}`).join(' • ')}
+                        </div>
+                      ) : null}
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-indigo-900">
+                        <button
+                          onClick={handleRejectFeatProposal}
+                          className="px-3 py-1 rounded bg-neutral-900 border border-neutral-700 text-xs text-neutral-300 hover:text-white"
+                        >
+                          Reject
+                        </button>
+                        <button
+                          id="btn-accept-feat"
+                          onClick={handleAcceptFeatProposal}
+                          className="px-3.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white flex items-center gap-1"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Accept Feat</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Navigation */}
+            <div className="flex items-center justify-between pt-4">
+              <button
+                onClick={() => setActiveStep(3)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 transition-colors"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Back to Capabilities</span>
+              </button>
+              <button
+                onClick={() => setActiveStep(5)}
+                className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition-colors"
+              >
                 <span>Proceed to Equipment</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
@@ -1577,8 +2124,8 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
           </div>
         )}
 
-        {/* STEP 4: STARTING EQUIPMENT & SLOTS */}
-        {draft && activeStep === 4 && (
+        {/* STEP 5: STARTING EQUIPMENT & SLOTS */}
+        {draft && activeStep === 5 && (
           <div className="space-y-6">
             <div className="p-6 rounded-xl bg-neutral-950 border border-neutral-800 space-y-6">
               <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
@@ -1731,14 +2278,14 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
             {/* Navigation */}
             <div className="flex items-center justify-between">
               <button
-                onClick={() => setActiveStep(3)}
+                onClick={() => setActiveStep(4)}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 transition-colors"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Back to Capabilities</span>
+                <span>Back to Stats & Attributes</span>
               </button>
               <button
-                onClick={() => setActiveStep(5)}
+                onClick={() => setActiveStep(6)}
                 className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition-colors"
               >
                 <span>Proceed to Location & Situation</span>
@@ -1748,8 +2295,8 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
           </div>
         )}
 
-        {/* STEP 5: STARTING LOCATION & SITUATION */}
-        {draft && activeStep === 5 && (
+        {/* STEP 6: STARTING LOCATION & SITUATION */}
+        {draft && activeStep === 6 && (
           <div className="space-y-6">
             <div className="p-6 rounded-xl bg-neutral-950 border border-neutral-800 space-y-6">
               <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
@@ -1894,14 +2441,14 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
             {/* Navigation */}
             <div className="flex items-center justify-between">
               <button
-                onClick={() => setActiveStep(4)}
+                onClick={() => setActiveStep(5)}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 transition-colors"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Back to Equipment</span>
               </button>
               <button
-                onClick={() => setActiveStep(6)}
+                onClick={() => setActiveStep(7)}
                 className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition-colors"
               >
                 <span>Proceed to Portrait</span>
@@ -1911,8 +2458,8 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
           </div>
         )}
 
-        {/* STEP 6: PORTRAIT STUDIO */}
-        {draft && activeStep === 6 && (
+        {/* STEP 7: PORTRAIT STUDIO */}
+        {draft && activeStep === 7 && (
           <div className="space-y-6">
             <div className="p-6 rounded-xl bg-neutral-950 border border-neutral-800 space-y-6">
               <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
@@ -2092,14 +2639,14 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
             {/* Navigation */}
             <div className="flex items-center justify-between">
               <button
-                onClick={() => setActiveStep(5)}
+                onClick={() => setActiveStep(6)}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 transition-colors"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Back to Starting State</span>
+                <span>Back to Location</span>
               </button>
               <button
-                onClick={() => setActiveStep(7)}
+                onClick={() => setActiveStep(8)}
                 className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition-colors"
               >
                 <span>Proceed to Final Review</span>
@@ -2109,8 +2656,8 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
           </div>
         )}
 
-        {/* STEP 7: REVIEW & EXPLICIT CONFIRMATION */}
-        {draft && activeStep === 7 && (
+        {/* STEP 8: REVIEW & EXPLICIT CONFIRMATION */}
+        {draft && activeStep === 8 && (
           <div className="space-y-6">
             <div className="p-6 rounded-xl bg-neutral-950 border border-neutral-800 space-y-6">
               <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
@@ -2193,7 +2740,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
               )}
 
               {/* Comprehensive Summary Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 {/* 1. Identity & Origin */}
                 <div className="p-4 rounded-lg bg-neutral-900 border border-neutral-800 space-y-2 text-xs">
                   <div className="font-semibold text-indigo-400 uppercase tracking-wider">
@@ -2208,10 +2755,28 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                   </div>
                 </div>
 
-                {/* 2. Capabilities & Techniques */}
+                {/* 2. D&D Core Stats */}
                 <div className="p-4 rounded-lg bg-neutral-900 border border-neutral-800 space-y-2 text-xs">
                   <div className="font-semibold text-indigo-400 uppercase tracking-wider">
-                    Capabilities ({draft.capabilities.length}) & Techniques ({draft.generatedSkills.length})
+                    D&D Core Combat & Stats
+                  </div>
+                  <div className="text-sm font-medium text-white font-mono">
+                    Lvl {draft.coreStats?.level || 1} • AC {draft.coreStats?.armorClass || 10} • HP {draft.coreStats?.hpCurrent || 10}/{draft.coreStats?.hpMax || 10}
+                  </div>
+                  <div className="grid grid-cols-3 gap-1 pt-1 font-mono text-[10px] text-neutral-300">
+                    <div>STR: <span className="text-indigo-300 font-bold">{draft.coreStats?.strength || 10}</span></div>
+                    <div>DEX: <span className="text-indigo-300 font-bold">{draft.coreStats?.dexterity || 10}</span></div>
+                    <div>CON: <span className="text-indigo-300 font-bold">{draft.coreStats?.constitution || 10}</span></div>
+                    <div>INT: <span className="text-indigo-300 font-bold">{draft.coreStats?.intelligence || 10}</span></div>
+                    <div>WIS: <span className="text-indigo-300 font-bold">{draft.coreStats?.wisdom || 10}</span></div>
+                    <div>CHA: <span className="text-indigo-300 font-bold">{draft.coreStats?.charisma || 10}</span></div>
+                  </div>
+                </div>
+
+                {/* 3. Capabilities & Techniques */}
+                <div className="p-4 rounded-lg bg-neutral-900 border border-neutral-800 space-y-2 text-xs">
+                  <div className="font-semibold text-indigo-400 uppercase tracking-wider">
+                    Capabilities ({draft.capabilities.length}) & Feats ({draft.feats?.length || 0})
                   </div>
                   <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
                     {draft.capabilities.map((c) => (
@@ -2223,7 +2788,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                   </div>
                 </div>
 
-                {/* 3. Starting State */}
+                {/* 4. Starting Waypoint */}
                 <div className="p-4 rounded-lg bg-neutral-900 border border-neutral-800 space-y-2 text-xs">
                   <div className="font-semibold text-indigo-400 uppercase tracking-wider">
                     Starting Waypoint
@@ -2264,7 +2829,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
               {/* Action Buttons */}
               <div className="flex items-center justify-between pt-2">
                 <button
-                  onClick={() => setActiveStep(6)}
+                  onClick={() => setActiveStep(7)}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 transition-colors"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />

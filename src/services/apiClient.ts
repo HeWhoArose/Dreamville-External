@@ -1601,6 +1601,21 @@ class ApiClient {
     return await res.json();
   }
 
+  public async proposeCustomFeat(
+    worldId: string,
+    featName: string,
+    featConcept: string,
+    characterContext?: any
+  ): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/worlds/${encodeURIComponent(worldId)}/characters/custom-feat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ featName, featConcept, characterContext }),
+    });
+    if (!res.ok) throw new Error(`Failed to propose custom feat: HTTP ${res.status}`);
+    return await res.json();
+  }
+
   public async getCharacterDrafts(worldId: string): Promise<any> {
     const res = await fetch(`${this.baseUrl}/worlds/${encodeURIComponent(worldId)}/characters/drafts`, {
       method: 'GET',

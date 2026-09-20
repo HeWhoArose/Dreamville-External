@@ -4,8 +4,11 @@ import {
   ConfirmedCharacter,
   CharacterExtractionRequest,
   CustomCapabilityProposalRequest,
+  CustomFeatProposalRequest,
   CapabilityDefinition,
   GeneratedTechnique,
+  CharacterFeat,
+  CharacterCoreStats,
   StartingEquipmentConfig,
   StartingEquipmentItem,
   StartingLocationConfig,
@@ -273,6 +276,20 @@ Return ONLY one JSON object matching this contract:
   "portraitAsset": {
     "promptFallback": string,
     "emoji": string
+  },
+  "coreStats": {
+    "level": number,
+    "armorClass": number,
+    "speed": number,
+    "hitDice": string,
+    "hpCurrent": number,
+    "hpMax": number,
+    "strength": number,
+    "dexterity": number,
+    "constitution": number,
+    "intelligence": number,
+    "wisdom": number,
+    "charisma": number
   },
   "aiExtractionSummary": {
     "interpretation": string,
@@ -707,6 +724,25 @@ Rules:
           generationSource,
         };
 
+    const rawCore = extracted.coreStats || {};
+    const clampAbility = (v: any) => Math.max(1, Math.min(20, Math.floor(Number(v) || 10)));
+    const coreStats: CharacterCoreStats = userEditedFields.has('coreStats') && existingDraft?.coreStats
+      ? existingDraft.coreStats
+      : {
+          level: Math.max(1, Math.min(30, Math.floor(Number(rawCore.level) || 1))),
+          armorClass: Math.max(1, Math.min(50, Math.floor(Number(rawCore.armorClass) || 10))),
+          speed: Math.max(0, Math.min(300, Math.floor(Number(rawCore.speed) || 30))),
+          hitDice: String(rawCore.hitDice || '1d8').trim() || '1d8',
+          hpCurrent: Math.max(1, Math.floor(Number(rawCore.hpCurrent) || Number(rawCore.hpMax) || 10)),
+          hpMax: Math.max(1, Math.floor(Number(rawCore.hpMax) || 10)),
+          strength: clampAbility(rawCore.strength),
+          dexterity: clampAbility(rawCore.dexterity),
+          constitution: clampAbility(rawCore.constitution),
+          intelligence: clampAbility(rawCore.intelligence),
+          wisdom: clampAbility(rawCore.wisdom),
+          charisma: clampAbility(rawCore.charisma),
+        };
+
     const draft: CharacterGenesisDraft = {
       draftId,
       worldId,
@@ -720,6 +756,7 @@ Rules:
       motivations,
       relationships,
       condition,
+      coreStats,
       attributes,
       stats,
       traits,
@@ -734,8 +771,8 @@ Rules:
       startingSituationMode: existingDraft?.startingSituationMode || 'AI_SUGGEST',
       storyMode: narrativeRole,
       startingState: {
-        healthCurrent: 100,
-        healthMax: 100,
+        healthCurrent: coreStats.hpCurrent,
+        healthMax: coreStats.hpMax,
         energyCurrent: 100,
         energyMax: 100,
         fatigue: 0,
@@ -788,14 +825,19 @@ Rules:
     const concept = input.capabilityConcept || 'Unique Ability';
     const capId = `cap_custom_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     let proposal: any = null;
+
+    const charCtxStr = input.characterContext
+      ? `CHARACTER CONTEXT:\nProfession/Role: ${input.characterContext.role || 'N/A'}\nSpecies: ${input.characterContext.species || 'N/A'}\nBackground: ${input.characterContext.background || 'N/A'}\n`
+      : '';
+
     const prompt = `You are a system designer for narrative RPG magic and combat systems.
-Given this custom capability concept and world setting, generate a structured capability definition with 2 to 3 linked concrete techniques.
+Given this custom capability concept, character context, and world setting, generate a structured capability definition with 2 to 3 linked concrete techniques.
 
 WORLD CONTEXT:
 Title: ${worldTemplate?.title || 'Unknown World'}
 Genre: ${worldTemplate?.genreTags?.join(', ') || 'Fantasy'}
 
-CAPABILITY CONCEPT:
+${charCtxStr}CAPABILITY CONCEPT:
 "${concept}"
 
 OUTPUT STRICT JSON with this structure:
@@ -817,7 +859,10 @@ OUTPUT STRICT JSON with this structure:
       "range": string
     }
   ]
-}`;
+}
+
+IMPORTANT: Ensure the capability name, description, power tier, energy costs, strain costs, and techniques are uniquely tailored to this exact concept: "${concept}". Do NOT return generic placeholder text. Produce distinct mechanics and evocative technique names specifically matching this capability concept.`;
+
     let generatedProvenance: CharacterProvenanceSource = 'AI_GENERATED';
     try {
       const orchestrator = worldRepository.getAiOrchestrator();
@@ -851,7 +896,7 @@ OUTPUT STRICT JSON with this structure:
       baseStrainCost: Number(proposal.baseStrainCost ?? 10),
       minVesselCapacityRequired: 15,
       description: proposal.description || `Specialized mastery of ${concept}.`,
-      provenance: 'PLAYER_INPUT',
+      provenance: generatedProvenance,
       sourceUserPrompt: concept,
     };
 
@@ -872,6 +917,111 @@ OUTPUT STRICT JSON with this structure:
       ...capability,
       generatedSkills,
     };
+  }
+
+  /**
+   * Synthesizes and proposes a structured Custom Feat based on natural language input.
+   */
+  public async proposeCustomFeat(
+    input: CustomFeatProposalRequest,
+    worldTemplate: WorldTemplate
+  ): Promise<CharacterFeat> {
+    const featName = input.featName?.trim() || 'Custom Feat';
+    const concept = input.featConcept?.trim() || featName;
+    const featId = `feat_custom_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    let proposal: any = null;
+
+    const charCtxStr = input.characterContext
+      ? `CHARACTER CONTEXT:\nProfession/Role: ${input.characterContext.role || 'N/A'}\nSpecies: ${input.characterContext.species || 'N/A'}\nBackground: ${input.characterContext.background || 'N/A'}\n`
+      : '';
+
+    const prompt = `You are a game mechanics designer for narrative RPG and D&D systems.
+Given this custom feat name, feat concept, character context, and world setting, generate a structured feat definition with mechanical effects, tags, and prerequisites.
+
+WORLD CONTEXT:
+Title: ${worldTemplate?.title || 'Unknown World'}
+Genre: ${worldTemplate?.genreTags?.join(', ') || 'Fantasy'}
+
+${charCtxStr}FEAT NAME: "${featName}"
+FEAT CONCEPT/DESCRIPTION: "${concept}"
+
+OUTPUT STRICT JSON with this structure:
+{
+  "name": string,
+  "description": string,
+  "prerequisites": [string],
+  "tags": [string],
+  "effects": [
+    {
+      "type": string,
+      "target": string,
+      "scope": string,
+      "modifier": number,
+      "value": string | number | boolean,
+      "condition": string,
+      "description": string
+    }
+  ]
+}
+
+IMPORTANT:
+- Description should expand on "${concept}" with clear narrative flair and mechanical implications.
+- Generate 1-3 specific mechanical effects (e.g. STAT_MODIFIER, CAPABILITY_BOOST, SKILL_BONUS, PASSIVE_TRAIT) that reflect the feat's theme.
+- Name must match or refine "${featName}".`;
+
+    let generatedProvenance: CharacterProvenanceSource = 'AI_GENERATED';
+    try {
+      const orchestrator = worldRepository.getAiOrchestrator();
+      const response = await orchestrator.executeTaskGeneration(
+        'narrative.generate',
+        prompt,
+        'Return only the requested structured custom feat JSON.'
+      );
+      if (response.text) {
+        proposal = this.parseJsonFromAiResponse(response.text);
+        if (response.source === 'DETERMINISTIC_FALLBACK') {
+          generatedProvenance = 'DETERMINISTIC_FALLBACK';
+        }
+      }
+    } catch (err) {
+      console.warn('[CharacterGenesisService] Custom feat proposal failed, using procedural fallback:', err);
+    }
+
+    if (!proposal || !proposal.name) {
+      proposal = {
+        name: featName || 'Custom Feat',
+        description: concept || `Mastery associated with ${featName}.`,
+        prerequisites: [],
+        tags: ['Custom', 'Feat'],
+        effects: [
+          {
+            type: 'PASSIVE_TRAIT',
+            target: featName,
+            scope: 'GENERAL',
+            modifier: 1,
+            value: true,
+            condition: 'Always active',
+            description: `Grants benefits of ${featName}.`,
+          },
+        ],
+      };
+      generatedProvenance = 'DETERMINISTIC_FALLBACK';
+    }
+
+    const feat: CharacterFeat = {
+      id: featId,
+      name: proposal.name || featName,
+      description: proposal.description || concept,
+      prerequisites: Array.isArray(proposal.prerequisites) ? proposal.prerequisites.map(String) : [],
+      tags: Array.isArray(proposal.tags) ? proposal.tags.map(String) : ['Custom'],
+      effects: Array.isArray(proposal.effects)
+        ? this.mapCharacterEffects(proposal.effects, featId, generatedProvenance)
+        : [],
+      provenance: generatedProvenance,
+      worldId: worldTemplate.worldId,
+    };
+
+    return feat;
   }
 
   /**
@@ -1010,6 +1160,20 @@ OUTPUT STRICT JSON with this structure:
       motivations: { ...draft.motivations },
       relationships: { ...draft.relationships },
       condition: { ...draft.condition },
+      coreStats: draft.coreStats ? { ...draft.coreStats } : {
+        level: 1,
+        armorClass: 10,
+        speed: 30,
+        hitDice: '1d8',
+        hpCurrent: 10,
+        hpMax: 10,
+        strength: 10,
+        dexterity: 10,
+        constitution: 10,
+        intelligence: 10,
+        wisdom: 10,
+        charisma: 10,
+      },
       attributes: draft.attributes ? draft.attributes.map((entry) => ({ ...entry })) : [],
       stats: draft.stats ? draft.stats.map((entry) => ({ ...entry })) : [],
       traits: [...(draft.traits || [])],

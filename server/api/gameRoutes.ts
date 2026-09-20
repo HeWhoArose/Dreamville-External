@@ -2490,6 +2490,76 @@ gameRouter.post('/context/npc-dialogue', async (req: Request, res: Response) => 
  */
 
 /**
+ * GET /api/game/orchestrator/providers/:providerId
+ * Returns provider configuration state without exposing API credentials.
+ */
+gameRouter.get('/orchestrator/providers/:providerId', async (req: Request, res: Response) => {
+  try {
+    const providerId = String(req.params.providerId);
+    const { isProviderConfigured } = await import('../services/providerCredentialService');
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const orchestrator = worldRepository.getAiOrchestrator();
+    const adapter = orchestrator.getAdapter(providerId);
+    const status = adapter?.getProviderStatus?.() || {
+      configured: isProviderConfigured(providerId),
+      message: isProviderConfigured(providerId) ? 'Provider configured.' : 'Provider not configured.',
+    };
+
+    res.json({
+      success: true,
+      providerId,
+      configured: Boolean(status.configured),
+      message: status.message,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Failed to retrieve provider status.' });
+  }
+});
+
+/**
+ * POST /api/game/orchestrator/providers/:providerId/key
+ * Stores a provider credential server-side and refreshes that provider's model adapter.
+ * The key is never returned to the client.
+ */
+gameRouter.post('/orchestrator/providers/:providerId/key', async (req: Request, res: Response) => {
+  try {
+    const providerId = String(req.params.providerId);
+    const apiKey = String(req.body?.apiKey || '').trim();
+    if (!apiKey) {
+      return res.status(400).json({ error: 'API key is required.' });
+    }
+
+    const { setProviderApiKey } = await import('../services/providerCredentialService');
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const orchestrator = worldRepository.getAiOrchestrator();
+
+    setProviderApiKey(providerId, apiKey);
+
+    const adapter = orchestrator.getAdapter(providerId);
+    const configured = adapter?.validateCredentials ? await adapter.validateCredentials() : true;
+    if (!configured) {
+      return res.status(400).json({
+        error: `The ${providerId} API key was saved but could not be validated.`,
+        configured: false,
+      });
+    }
+
+    if (typeof adapter?.discoverModels === 'function') {
+      await orchestrator.refreshDiscovery({ force: true });
+    }
+
+    res.json({
+      success: true,
+      providerId,
+      configured: true,
+      message: `${providerId} API key saved and provider validated.`,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Failed to save provider API key.' });
+  }
+});
+
+/**
  * GET /api/game/orchestrator/models
  * Returns all registered models, canonical pools/roles, capabilities, health, and latency.
  */

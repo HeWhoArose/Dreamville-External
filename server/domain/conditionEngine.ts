@@ -338,56 +338,81 @@ export class ConditionEngine {
       if ((definition.tickUnit || instance.tickUnit) !== unit) continue;
 
       const every = Math.max(1, definition.tickEvery || instance.tickEvery || 1);
-      if (unit === 'WORLD_TIME' && instance.nextTickAtSeconds !== undefined && nowSeconds < instance.nextTickAtSeconds) {
-        continue;
+      let tickCount = 1;
+
+      if (unit === 'WORLD_TIME' && instance.nextTickAtSeconds !== undefined) {
+        if (nowSeconds < instance.nextTickAtSeconds) continue;
+        tickCount = Math.max(1, Math.floor((nowSeconds - instance.nextTickAtSeconds) / every) + 1);
       }
 
       const beforeIntensity = instance.intensity;
       const notes: string[] = [];
 
-      let damage: ConditionDamageResult | undefined;
-      if (definition.damagePerTick && definition.damagePerTick > 0) {
-        damage = this.resolveDamage(actorId, definition.damagePerTick * Math.max(1, instance.intensity), definition.damageType || 'CUSTOM');
+      let totalDamage = 0;
+      let totalHealing = 0;
+      let finalDamageResult: ConditionDamageResult | undefined;
+
+      for (let tickIndex = 0; tickIndex < tickCount; tickIndex++) {
+        if (state.dead) break;
+
+        if (definition.damagePerTick && definition.damagePerTick > 0) {
+          finalDamageResult = this.resolveDamage(
+            actorId,
+            definition.damagePerTick * Math.max(1, instance.intensity),
+            definition.damageType || 'CUSTOM'
+          );
+          totalDamage += finalDamageResult.finalAmount;
+        }
+
+        if (definition.healingPerTick && definition.healingPerTick > 0 && state.healthCurrent > 0) {
+          const healed = Math.min(
+            definition.healingPerTick * Math.max(1, instance.intensity),
+            state.healthMax - state.healthCurrent
+          );
+          state.healthCurrent += healed;
+          totalHealing += healed;
+        }
+
+        if (definition.intensityDeltaPerTick) {
+          instance.intensity = Math.max(
+            0,
+            Math.min(
+              instance.maxIntensity ?? definition.maxIntensity ?? Number.MAX_SAFE_INTEGER,
+              instance.intensity + definition.intensityDeltaPerTick
+            )
+          );
+          this.applyStageBodyEffects(state, instance, definition);
+        }
+      }
+
+      if (tickCount > 1) {
+        notes.push(`Applied ${tickCount} ${unit.toLowerCase()} ticks during elapsed time.`);
+      }
+
+      if (totalDamage > 0 && finalDamageResult) {
         notes.push(
-          damage.immune
+          finalDamageResult.immune
             ? 'Damage immunity prevented the condition tick.'
-            : damage.resisted
+            : finalDamageResult.resisted
             ? 'Damage resistance reduced the condition tick.'
-            : damage.vulnerable
+            : finalDamageResult.vulnerable
             ? 'Damage vulnerability amplified the condition tick.'
             : 'Condition damage applied.'
         );
       }
-
-      let healing = 0;
-      if (definition.healingPerTick && definition.healingPerTick > 0 && state.healthCurrent > 0) {
-        healing = Math.min(
-          definition.healingPerTick * Math.max(1, instance.intensity),
-          state.healthMax - state.healthCurrent
-        );
-        state.healthCurrent += healing;
-        if (healing > 0) notes.push(`Recovered ${healing} HP.`);
-      }
-
-      if (definition.intensityDeltaPerTick) {
-        instance.intensity = Math.max(
-          0,
-          Math.min(instance.maxIntensity ?? definition.maxIntensity ?? Number.MAX_SAFE_INTEGER, instance.intensity + definition.intensityDeltaPerTick)
-        );
-        this.applyStageBodyEffects(state, instance, definition);
-      }
+      if (totalHealing > 0) notes.push(`Recovered ${totalHealing} HP.`);
 
       if (instance.remainingDurationSeconds !== undefined && instance.remainingDurationSeconds !== null) {
-        const durationDelta = this.tickDurationSeconds(unit, every);
+        const durationDelta = this.tickDurationSeconds(unit, every) * tickCount;
         instance.remainingDurationSeconds = Math.max(0, instance.remainingDurationSeconds - durationDelta);
       }
 
       if (definition.decayIntensityPerRestTick && unit === 'DAY') {
-        instance.intensity = Math.max(0, instance.intensity - definition.decayIntensityPerRestTick);
+        instance.intensity = Math.max(0, instance.intensity - definition.decayIntensityPerRestTick * tickCount);
       }
 
-      if (unit === 'WORLD_TIME') {
-        instance.nextTickAtSeconds = nowSeconds + every;
+      if (unit === 'WORLD_TIME' && instance.nextTickAtSeconds !== undefined) {
+        instance.nextTickAtSeconds += every * tickCount;
       }
 
       let removed = false;
@@ -404,8 +429,10 @@ export class ConditionEngine {
         conditionId: instance.id,
         conditionName: instance.name,
         unit,
-        damage,
-        healing: healing || undefined,
+        damage: finalDamageResult
+          ? { ...finalDamageResult, finalAmount: totalDamage, healthCurrent: state.healthCurrent, targetDied: state.dead }
+          : undefined,
+        healing: totalHealing || undefined,
         intensityBefore: beforeIntensity,
         intensityAfter: instance.intensity,
         removed,

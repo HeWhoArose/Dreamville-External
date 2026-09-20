@@ -70,7 +70,10 @@ gameRouter.post('/action', (req: Request, res: Response) => {
       (actionRequest as any).storyId = resolveStoryId(req, true);
     }
 
-    const actionResult = serverMockAuthority.processAction(actionRequest);
+    const actionResult =
+      actionRequest.type === 'CUSTOM_ACTION'
+        ? await serverMockAuthority.processCustomAction(actionRequest)
+        : serverMockAuthority.processAction(actionRequest);
     res.json(actionResult);
   } catch (error) {
     console.error('Error processing authoritative action request:', error);

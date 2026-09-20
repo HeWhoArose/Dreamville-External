@@ -506,6 +506,28 @@ export class CharacterGenesisService {
       draft.worldVersion = worldTemplate.worldManifestVersion;
     }
 
+    // World compatibility is a warning-first gate: player creativity is allowed,
+    // but contradictions with hard world rules are surfaced before confirmation.
+    const conceptText = [
+      draft.sourceDescription,
+      draft.identity.species,
+      draft.background.history,
+      draft.capabilities.map((cap) => cap.name).join(' '),
+    ].join(' ').toLowerCase();
+
+    const hardConstraints = [...(worldTemplate?.ruleConstraints || []), ...(worldTemplate?.worldRules || [])]
+      .filter((rule: any) => rule && (rule.isHardConstraint || rule.hardConstraint));
+
+    for (const rule of hardConstraints) {
+      const ruleText = String(rule.description || rule.statement || '').toLowerCase();
+      if (ruleText.includes('no magic') && /(magic|spell|sorcer|wizard|arcane)/i.test(conceptText)) {
+        warnings.push('Character concept may conflict with a hard world rule: magic is restricted in this world.');
+      }
+      if (ruleText.includes('no supernatural') && /(supernatural|immortal|cosmic|telepath|teleport)/i.test(conceptText)) {
+        warnings.push('Character concept may conflict with a hard world rule: supernatural traits are restricted in this world.');
+      }
+    }
+
     // World Rules / Capability Constraints Check
     const worldRules = worldTemplate?.worldRules || [];
     const ruleConstraints = worldTemplate?.ruleConstraints || [];

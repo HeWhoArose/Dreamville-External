@@ -216,34 +216,30 @@ export class MediaAdapterService {
     };
   }
 
-  private generateFallbackSvgBuffer(assetKey: string, promptText: string): Buffer {
+  private generateFallbackSvgBuffer(
+    assetKey: string,
+    promptText: string,
+    width = 1024,
+    height = 1024
+  ): Buffer {
     const cleanPrompt = (promptText || 'Character Portrait').replace(/[<>&"]/g, '');
-    const title = cleanPrompt.slice(0, 42);
+    const title = cleanPrompt.slice(0, 64);
+    const cx = width / 2;
+    const cy = height * 0.33;
+    const r = Math.min(width, height) * 0.16;
 
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
-  <defs>
-    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#0f172a"/>
-      <stop offset="50%" stop-color="#1e1b4b"/>
-      <stop offset="100%" stop-color="#312e81"/>
-    </linearGradient>
-    <linearGradient id="avatarGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#6366f1"/>
-      <stop offset="100%" stop-color="#a855f7"/>
-    </linearGradient>
-  </defs>
-  <rect width="100%" height="100%" fill="url(#bgGrad)"/>
-  <circle cx="200" cy="150" r="65" fill="url(#avatarGrad)" opacity="0.85"/>
-  <circle cx="200" cy="125" r="32" fill="#e0e7ff"/>
-  <path d="M 125 245 Q 200 175 275 245 L 275 280 Q 200 280 125 280 Z" fill="#e0e7ff"/>
-  <rect x="20" y="310" width="360" height="70" rx="10" fill="#020617" opacity="0.8" stroke="#4f46e5" stroke-width="1.5"/>
-  <text x="200" y="340" font-family="system-ui, sans-serif" font-size="14" font-weight="600" fill="#f8fafc" text-anchor="middle">${title}</text>
-  <text x="200" y="362" font-family="system-ui, sans-serif" font-size="11" fill="#818cf8" text-anchor="middle">DreamBook Character Genesis</text>
-</svg>`;
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + width + '" height="' + height + '" viewBox="0 0 ' + width + ' ' + height + '">' +
+      '<defs><linearGradient id="bg-' + assetKey + '" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#0f172a"/><stop offset="50%" stop-color="#1e1b4b"/><stop offset="100%" stop-color="#312e81"/></linearGradient></defs>' +
+      '<rect width="100%" height="100%" fill="url(#bg-' + assetKey + ')"/>' +
+      '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="#6366f1" opacity="0.85"/>' +
+      '<circle cx="' + cx + '" cy="' + (height * 0.29) + '" r="' + (Math.min(width, height) * 0.08) + '" fill="#e0e7ff"/>' +
+      '<path d="M ' + (width * 0.28) + ' ' + (height * 0.55) + ' Q ' + cx + ' ' + (height * 0.40) + ' ' + (width * 0.72) + ' ' + (height * 0.55) + ' L ' + (width * 0.72) + ' ' + (height * 0.66) + ' Q ' + cx + ' ' + (height * 0.68) + ' ' + (width * 0.28) + ' ' + (height * 0.66) + ' Z" fill="#e0e7ff"/>' +
+      '<text x="' + cx + '" y="' + (height * 0.88) + '" font-family="system-ui, sans-serif" font-size="' + Math.max(12, width * 0.028) + '" font-weight="600" fill="#f8fafc" text-anchor="middle">' + title + '</text>' +
+      '<text x="' + cx + '" y="' + (height * 0.93) + '" font-family="system-ui, sans-serif" font-size="' + Math.max(9, width * 0.02) + '" fill="#818cf8" text-anchor="middle">DreamBook Presentation Fallback</text>' +
+      '</svg>';
 
     return Buffer.from(svg, 'utf-8');
   }
 }
 
 export const mediaAdapterService = new MediaAdapterService();
-

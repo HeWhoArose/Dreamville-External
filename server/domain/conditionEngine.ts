@@ -154,7 +154,37 @@ export class ConditionEngine {
     }
   ): ConditionActorState {
     const existing = this.actors.get(actorId);
-    if (existing) return clone(existing);
+    const conditionState = input?.conditionState;
+
+    if (existing) {
+      for (const definition of conditionState?.customDefinitions || []) {
+        if (definition?.id && definition?.name) this.registerDefinition(definition);
+      }
+      if (input?.healthMax !== undefined) {
+        existing.healthMax = Math.max(1, Math.floor(Number(input.healthMax)));
+      }
+      if (input?.healthCurrent !== undefined) {
+        existing.healthCurrent = Math.max(0, Math.min(existing.healthMax, Math.floor(Number(input.healthCurrent))));
+        existing.dead = existing.healthCurrent <= 0;
+      }
+      if (input?.fatigue !== undefined) existing.fatigue = Math.max(0, Math.min(100, Number(input.fatigue)));
+      if (input?.stress !== undefined) existing.stress = Math.max(0, Math.min(100, Number(input.stress)));
+      if (conditionState) {
+        existing.damageProfile = clone(conditionState.damageProfile);
+        existing.conditionProfile = clone(conditionState.conditionProfile);
+        existing.bodyRegions = this.normalizeBodyRegions(conditionState.bodyRegions);
+        existing.instances = clone(conditionState.instances);
+        existing.dead = existing.healthCurrent <= 0 || existing.bodyRegions.some((region) => region.id === 'HEART' && region.destroyed);
+      }
+      for (const raw of input?.legacyConditions || []) {
+        const text = String(raw || '').trim();
+        if (!text) continue;
+        if (!existing.instances.some((instance) => instance.name.toLowerCase() === text.toLowerCase())) {
+          this.applyConditionToState(existing, { definitionIdOrName: text, nowSeconds: 0 });
+        }
+      }
+      return clone(existing);
+    }
 
     const conditionState = input?.conditionState;
     for (const definition of conditionState?.customDefinitions || []) {
@@ -502,14 +532,14 @@ export class ConditionEngine {
   public exportActorState(actorId: string): CharacterStartingConditionState | undefined {
     const state = this.actors.get(actorId);
     if (!state) return undefined;
+    const referencedDefinitions = new Map<string, CharacterConditionDefinition>();
+    for (const instance of state.instances) {
+      const definition = this.definitions.get(instance.definitionId);
+      if (definition) referencedDefinitions.set(definition.id, definition);
+    }
     return {
       instances: clone(state.instances),
-      customDefinitions: state.instances
-        .map((instance) => this.definitions.get(instance.definitionId))
-        .filter((definition): definition is CharacterConditionDefinition =>
-          Boolean(definition && definition.category === 'CUSTOM')
-        )
-        .map((definition) => clone(definition)),
+      customDefinitions: Array.from(referencedDefinitions.values()).map((definition) => clone(definition)),
       damageProfile: clone(state.damageProfile),
       conditionProfile: clone(state.conditionProfile),
       bodyRegions: clone(state.bodyRegions),

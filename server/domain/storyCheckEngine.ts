@@ -6,6 +6,7 @@ import type {
   StoryCheckAbility,
   StoryCheckResult,
   StoryD20AdvantageState,
+  StoryTestType,
 } from '../../src/types';
 import { LocalDiceEngine } from './combatEngine';
 
@@ -24,6 +25,65 @@ interface CheckProfile {
   reason: string;
   requiresSight?: boolean;
 }
+
+interface SaveProfile {
+  ability: StoryCheckAbility;
+  explicitKeywords: string[];
+  sceneHazards: string[];
+  actionTriggers: string[];
+  dc: number;
+  reason: string;
+  triggerReason: string;
+}
+
+
+const SAVE_PROFILES: SaveProfile[] = [
+  {
+    ability: 'Dexterity',
+    explicitKeywords: ['dodge', 'duck', 'evade', 'avoid the blast', 'leap clear', 'jump clear', 'roll away', 'get out of the way'],
+    sceneHazards: ['collapsing', 'collapse', 'falling debris', 'explosion', 'blast', 'trap', 'fall', 'cave-in'],
+    actionTriggers: ['open', 'touch', 'step', 'walk', 'move', 'enter', 'pull', 'push'],
+    dc: 13,
+    reason: 'Reacting quickly to avoid a physical hazard.',
+    triggerReason: 'The scene contains a sudden physical hazard that requires a reflexive response.',
+  },
+  {
+    ability: 'Constitution',
+    explicitKeywords: ['resist poison', 'fight the poison', 'withstand the toxin', 'endure the fumes', 'hold my breath', 'breathe the gas', 'resist the disease', 'fight the venom'],
+    sceneHazards: ['poison gas', 'toxic gas', 'fumes', 'venom', 'poison', 'disease', 'toxin', 'smoke'],
+    actionTriggers: ['breathe', 'inhale', 'enter', 'walk', 'remain', 'endure'],
+    dc: 13,
+    reason: 'Withstanding a harmful physical or biological effect.',
+    triggerReason: 'The scene exposes the character to a harmful physical or biological threat.',
+  },
+  {
+    ability: 'Wisdom',
+    explicitKeywords: ['resist fear', 'resist being charmed', 'resist the charm', 'resist the voice', 'resist possession', 'shake off the fear', 'fight the compulsion'],
+    sceneHazards: ['terror', 'fear', 'dread', 'charm', 'compulsion', 'possession', 'supernatural voice'],
+    actionTriggers: ['look', 'listen', 'hear', 'enter', 'approach', 'touch'],
+    dc: 14,
+    reason: 'Resisting a mental or supernatural influence.',
+    triggerReason: 'The scene exerts a mental or supernatural influence that calls for resistance.',
+  },
+  {
+    ability: 'Intelligence',
+    explicitKeywords: ['resist the illusion', 'see through the illusion', 'break the illusion', 'resist the mind trick'],
+    sceneHazards: ['illusion', 'mind trick', 'mental puzzle', 'memory attack'],
+    actionTriggers: ['look', 'inspect', 'observe', 'touch'],
+    dc: 14,
+    reason: 'Resisting or recognizing a hostile mental distortion.',
+    triggerReason: 'The scene contains a mental distortion that threatens to mislead or overwhelm the character.',
+  },
+  {
+    ability: 'Charisma',
+    explicitKeywords: ['resist banishment', 'resist possession', 'resist being displaced', 'assert my identity'],
+    sceneHazards: ['banishment', 'possession', 'planar pull', 'soul pull'],
+    actionTriggers: ['enter', 'touch', 'approach', 'resist'],
+    dc: 15,
+    reason: 'Resisting a force that attempts to displace or possess the character.',
+    triggerReason: 'The scene contains a force attempting to displace, bind, or possess the character.',
+  },
+];
 
 const CHECK_PROFILES: CheckProfile[] = [
   { skill: 'Perception', ability: 'Wisdom', keywords: ['look around', 'look', 'observe', 'notice', 'spot', 'scan', 'search', 'survey', 'watch', 'listen', 'hear', 'detect'], dc: 12, reason: 'Noticing something uncertain in the current scene.', requiresSight: true },
@@ -123,23 +183,29 @@ export class StoryCheckEngine {
     const text = normalize(actionText);
     if (!text || this.isRoutine(text)) return null;
 
-    const profile = this.pickProfile(text);
-    if (!profile) return null;
+    const sceneText = normalize(character.sceneText || '');
+    const saveSelection = this.pickSaveProfile(text, sceneText);
+    const profile = saveSelection ? null : this.pickProfile(text);
+    if (!saveSelection && !profile) return null;
+
+    const testType: StoryTestType = saveSelection ? 'SAVING_THROW' : 'ABILITY_CHECK';
+    const ability = saveSelection ? saveSelection.profile.ability : profile!.ability;
+    const skillName = saveSelection ? 'Saving Throw' : profile!.skill;
 
     const characterLevel = Math.max(1, Number(character.coreStats?.level ?? 1));
-    const abilityMod = modifier(abilityScore(character.coreStats, profile.ability));
+    const abilityMod = modifier(abilityScore(character.coreStats, ability));
     const levelProficiencyBonus = proficiencyBonus(characterLevel);
-    const proficiencyLevelValue = proficiencyLevel(character.skills, profile.skill);
+    const proficiencyLevelValue = saveSelection ? 'NONE' as const : proficiencyLevel(character.skills, profile!.skill);
     const prof = proficiencyLevelValue === 'EXPERTISE'
       ? levelProficiencyBonus * 2
       : proficiencyLevelValue === 'PROFICIENT'
       ? levelProficiencyBonus
       : 0;
     const totalModifier = abilityMod + prof;
-    const dc = applyDcHint(text, profile.dc);
+    const dc = applyDcHint(text, saveSelection ? saveSelection.profile.dc : profile!.dc);
 
     const modifierSources: StoryCheckModifierSource[] = [
-      { label: `${profile.ability} modifier`, value: abilityMod, kind: 'ABILITY' },
+      { label: `${ability} modifier`, value: abilityMod, kind: 'ABILITY' },
     ];
     if (proficiencyLevelValue === 'EXPERTISE') {
       modifierSources.push({ label: 'Proficiency (Expertise)', value: prof, kind: 'EXPERTISE' });
@@ -152,11 +218,11 @@ export class StoryCheckEngine {
     let disadvantage = false;
     let forcedFailure = false;
 
-    if (profile.requiresSight && containsCondition(character.conditionState, 'Blinded')) {
+    if (!saveSelection && profile!.requiresSight && containsCondition(character.conditionState, 'Blinded')) {
       forcedFailure = true;
       contextNotes.push('Blinded: sight-dependent checks automatically fail.');
     }
-    if (containsCondition(character.conditionState, 'Poisoned')) {
+    if (!saveSelection && containsCondition(character.conditionState, 'Poisoned')) {
       disadvantage = true;
       contextNotes.push('Poisoned: Disadvantage on ability checks.');
     }
@@ -219,8 +285,10 @@ export class StoryCheckEngine {
 
     return {
       checkId: `check_${storyId}_${roll.rollId}`,
-      skill: profile.skill,
-      ability: profile.ability,
+      testType,
+      skill: skillName,
+      ability,
+
       difficultyClass: dc,
       proficiencyBonus: levelProficiencyBonus,
       proficiencyLevel: proficiencyLevelValue,
@@ -234,15 +302,61 @@ export class StoryCheckEngine {
       success,
       criticalSuccess,
       criticalFailure,
-      reason: profile.reason,
+      reason: saveSelection ? saveSelection.profile.reason : profile!.reason,
       contextNotes,
+      worldTriggered: saveSelection?.worldTriggered || false,
+      triggerReason: saveSelection?.profile.triggerReason,
     };
   }
+
+  private pickSaveProfile(
+    text: string,
+    sceneText: string
+  ): { profile: SaveProfile; worldTriggered: boolean } | null {
+    const explicit = SAVE_PROFILES
+      .map((profile) => ({
+        profile,
+        score: profile.explicitKeywords.reduce(
+          (score, keyword) => score + (text.includes(normalize(keyword)) ? keyword.length + 2 : 0),
+          0
+        ),
+        worldTriggered: false,
+      }))
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => b.score - a.score)[0];
+
+    if (explicit) return explicit;
+
+    const triggered = SAVE_PROFILES
+      .map((profile) => {
+        const hazardScore = profile.sceneHazards.reduce(
+          (score, hazard) => score + (sceneText.includes(normalize(hazard)) ? hazard.length + 2 : 0),
+          0
+        );
+        const actionScore = profile.actionTriggers.reduce(
+          (score, trigger) => score + (text.includes(normalize(trigger)) ? trigger.length : 0),
+          0
+        );
+        return {
+          profile,
+          score: hazardScore > 0 ? hazardScore + actionScore : 0,
+          worldTriggered: true,
+        };
+      })
+      .filter((entry) => entry.score > 0)
+      .sort((a, b) => b.score - a.score)[0];
+
+    return triggered || null;
+  }
+
   private pickProfile(text: string): CheckProfile | null {
     const candidates = CHECK_PROFILES
       .map((profile) => ({
         profile,
-        score: profile.keywords.reduce((score, keyword) => score + (text.includes(normalize(keyword)) ? keyword.length + 1 : 0), 0),
+        score: profile.keywords.reduce(
+          (score, keyword) => score + (text.includes(normalize(keyword)) ? keyword.length + 1 : 0),
+          0
+        ),
       }))
       .filter((entry) => entry.score > 0)
       .sort((a, b) => b.score - a.score);

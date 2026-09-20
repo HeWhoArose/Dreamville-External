@@ -723,7 +723,7 @@ export class ServerMockAuthority {
 
       case 'EQUIP_REQUEST': {
         const player = worldRepository.getPlayerLifecycle(targetStoryId);
-        const actorId = player ? player.actorId : 'player_actor_default_story';
+        const actorId = player ? player.actorId : `player_actor_${targetStoryId}`;
         const invEngine = worldRepository.getInventoryEngine(targetStoryId);
 
         const slotMapping: Record<string, string> = {
@@ -776,7 +776,7 @@ export class ServerMockAuthority {
 
       case 'UNEQUIP_REQUEST': {
         const player = worldRepository.getPlayerLifecycle(targetStoryId);
-        const actorId = player ? player.actorId : 'player_actor_default_story';
+        const actorId = player ? player.actorId : `player_actor_${targetStoryId}`;
         const invEngine = worldRepository.getInventoryEngine(targetStoryId);
 
         const slotMapping: Record<string, string> = {
@@ -820,7 +820,7 @@ export class ServerMockAuthority {
 
       case 'INSPECT_ITEM': {
         const player = worldRepository.getPlayerLifecycle(targetStoryId);
-        const actorId = player ? player.actorId : 'player_actor_default_story';
+        const actorId = player ? player.actorId : `player_actor_${targetStoryId}`;
         const invEngine = worldRepository.getInventoryEngine(targetStoryId);
         const item = invEngine.getItemInstance(request.itemId) || invEngine.getActorInventory(actorId).find((i) => i.id === request.itemId);
         const def = item ? invEngine.getItemDefinition(item.defId) : undefined;

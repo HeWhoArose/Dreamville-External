@@ -227,8 +227,11 @@ export class StoryCheckEngine {
       contextNotes.push('Poisoned: Disadvantage on ability checks.');
     }
 
-    const sceneText = normalize(character.sceneText || '');
-    if (profile.skill === 'Perception' && /\b(dark|darkness|dim light|fog|smoke|heavily obscured)\b/.test(sceneText)) {
+    if (
+      !saveSelection &&
+      profile!.skill === 'Perception' &&
+      /\b(dark|darkness|dim light|fog|smoke|heavily obscured)\b/.test(sceneText)
+    ) {
       disadvantage = true;
       contextNotes.push('The scene obscures sight: Disadvantage on this Perception check.');
     }
@@ -290,7 +293,7 @@ export class StoryCheckEngine {
       ability,
 
       difficultyClass: dc,
-      proficiencyBonus: levelProficiencyBonus,
+      proficiencyBonus: prof,
       proficiencyLevel: proficiencyLevelValue,
       abilityModifier: abilityMod,
       totalModifier,

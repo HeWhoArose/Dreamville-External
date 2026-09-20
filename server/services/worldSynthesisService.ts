@@ -102,6 +102,8 @@ export class WorldSynthesisService {
     let events: any[] = [];
     let capabilities: any[] = [];
     let worldRules: any[] = [];
+    let storyCheckChallenges: any[] = [];
+    let hazards: any[] = [];
     let parsedAiPayload: any = null;
 
     let generationSource: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK' = 'AI_PRIMARY';
@@ -167,7 +169,32 @@ The JSON schema must strictly be:
       "source": "AI_PROPOSAL",
       "name": "Capability Name",
       "powerTier": "Minor" | "Moderate" | "Major" | "WorldScale",
-      "description": "How the magic or tech capability works"
+      "description": "How the magic or tech capability works",
+      "storyCheckChallenges": [
+        {
+          "id": "challenge_xxx",
+          "label": "Human-readable challenge name",
+          "sourceType": "CAPABILITY",
+          "sourceId": "cap_xxx",
+          "keywords": ["action phrase", "hazard phrase"],
+          "testType": "SAVING_THROW",
+          "savingThrowAbility": "Dexterity" | "Constitution" | "Wisdom" | "Intelligence" | "Charisma" | "Strength",
+          "difficultyClass": 13,
+          "reason": "Why the roll is required",
+          "triggerReason": "What in the world triggers it",
+          "onFailure": {
+            "damageFormula": "1d6",
+            "damageType": "poison",
+            "conditions": [
+              { "definitionIdOrName": "Poisoned", "durationSeconds": 60 }
+            ],
+            "summary": "Authored failure consequence"
+          },
+          "onSuccess": {
+            "summary": "Authored success consequence"
+          }
+        }
+      ]
     }
   ],
   "worldRules": [
@@ -202,6 +229,28 @@ The JSON schema must strictly be:
           "type": "world_fact" | "faction_state_change" | "location_state_change" | "actor_state",
           "targetId": "loc_xxx" | "char_xxx" | "fac_xxx",
           "detail": "What specifically changes"
+        }
+      ],
+      "storyCheckChallenges": [
+        {
+          "id": "challenge_xxx",
+          "label": "Hazard or event challenge",
+          "sourceType": "HAZARD" | "EVENT",
+          "sourceId": "evt_xxx",
+          "keywords": ["walk", "open", "touch"],
+          "testType": "SAVING_THROW",
+          "savingThrowAbility": "Dexterity",
+          "difficultyClass": 13,
+          "reason": "Why a save is required",
+          "triggerReason": "What hazard or event triggers the save",
+          "onFailure": {
+            "damageFormula": "1d6",
+            "damageType": "bludgeoning",
+            "summary": "What happens on failure"
+          },
+          "onSuccess": {
+            "summary": "What happens on success"
+          }
         }
       ],
       "visibility": "PUBLIC" | "SECRET" | "HIDDEN",
@@ -264,6 +313,8 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
             characters = parsed.characters || [];
             capabilities = parsed.capabilities || [];
             worldRules = parsed.worldRules || [];
+            storyCheckChallenges = Array.isArray(parsed.storyCheckChallenges) ? parsed.storyCheckChallenges : [];
+            hazards = Array.isArray(parsed.hazards) ? parsed.hazards : [];
             events = parsed.events || [];
           }
         } catch (jsonErr: any) {
@@ -298,7 +349,14 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
       capabilities = candidate.capabilities;
       worldRules = candidate.worldRules;
       events = candidate.events;
+      storyCheckChallenges = Array.isArray(input.storyCheckChallenges) ? input.storyCheckChallenges : [];
+      hazards = Array.isArray(input.hazards) ? input.hazards : [];
     } else {
+      // Preserve explicit authored challenge/hazard definitions supplied by the caller.
+      storyCheckChallenges = Array.isArray(input.storyCheckChallenges)
+        ? input.storyCheckChallenges
+        : storyCheckChallenges;
+      hazards = Array.isArray(input.hazards) ? input.hazards : hazards;
       // Ensure genreTags/toneTags/mediumTags defaults if AI didn't return them
       if (genreTags.length === 0) genreTags = input.genreTags || ['Original'];
       if (toneTags.length === 0) toneTags = input.toneTags || ['Dynamic'];
@@ -355,6 +413,29 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
       generationSeed,
       true
     );
+
+    // Explicit caller-provided authored challenges take precedence over generated duplicates.
+    const explicitChallenges = Array.isArray(input.storyCheckChallenges) ? input.storyCheckChallenges : [];
+    const nestedEventChallenges = validatedEvents.flatMap((event: any) => (
+      Array.isArray(event.storyCheckChallenges) ? event.storyCheckChallenges : []
+    ));
+    const capabilityChallenges = capabilities.flatMap((capability: any) => (
+      Array.isArray(capability.storyCheckChallenges) ? capability.storyCheckChallenges : []
+    ));
+    const allAuthoredChallenges = [
+      ...explicitChallenges,
+      ...storyCheckChallenges,
+      ...nestedEventChallenges,
+      ...capabilityChallenges,
+    ];
+    const seenChallengeIds = new Set<string>();
+    storyCheckChallenges = allAuthoredChallenges.filter((challenge: any) => {
+      if (!challenge || typeof challenge !== 'object') return false;
+      const id = String(challenge.id || challenge.challengeId || '');
+      if (!id || seenChallengeIds.has(id)) return false;
+      seenChallengeIds.add(id);
+      return true;
+    });
 
     const premiseTokens = extractPremiseTokens(input.naturalLanguagePremise);
     const primaryToken = premiseTokens[0] || 'Core';
@@ -451,6 +532,8 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
         pov: 'third_person_limited'
       }),
       events: validatedEvents,
+      hazards,
+      storyCheckChallenges,
       generationStatus,
       provenance,
     };

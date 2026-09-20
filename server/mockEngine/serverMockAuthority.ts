@@ -18,6 +18,8 @@ import {
 import { worldRepository } from '../repositories/worldRepository';
 import { worldSimulationService } from '../simulation/worldSimulationService';
 import { PlayerLifecycleState } from '../domain/playerLifecycleState';
+import { storyCheckConsequenceEngine } from '../domain/storyCheckConsequenceEngine';
+import { storyCheckChallengeResolver } from '../domain/storyCheckChallengeResolver';
 
 /**
  * ServerMockAuthority
@@ -430,8 +432,26 @@ export class ServerMockAuthority {
     const run = worldRepository.getStoryRun(targetStoryId);
     const actorId = player?.actorId || `player_actor_${targetStoryId}`;
 
-    // Narrative skill checks are canonical dice resolutions. The AI may describe the result,
-    // but it never supplies the die value, modifier, DC, or success state.
+    // Narrative checks and authored challenge consequences are canonical mechanics. The AI may
+    // describe the committed result, but it never supplies the die, modifier, DC, damage, or condition.
+    const sceneText = [
+      run?.startingSituation?.summary,
+      run?.startingSituation?.hook,
+      worldRepository.getGeographyGraph(targetStoryId)
+        .getAllNodes()
+        .find((node) => node.id === player?.locationId || node.id === run?.currentLocationId)?.description,
+    ].filter(Boolean).join(' ');
+
+    const capabilityEngine = worldRepository.getCapabilityEngine(targetStoryId);
+    const authoredChallenge = storyCheckChallengeResolver.resolve({
+      actionText: String(freeformText),
+      sceneText,
+      run,
+      worldTemplate: run?.worldId ? worldRepository.getWorldTemplate(run.worldId) : undefined,
+      activeEffects: worldRepository.getActiveEffects(targetStoryId),
+      capabilities: capabilityEngine.getEffectiveActorCapabilities(actorId),
+    });
+
     const storyCheckEngine = worldRepository.getStoryCheckEngine(targetStoryId);
     const storyCheck = storyCheckEngine.resolve(
       targetStoryId,
@@ -440,29 +460,38 @@ export class ServerMockAuthority {
         coreStats: run?.characterCoreStats || run?.protagonist?.coreStats,
         skills: run?.characterSkills || run?.protagonist?.skills,
         conditionState: conditionEngine.exportActorState(actorId),
-        sceneText: [
-          run?.startingSituation?.summary,
-          run?.startingSituation?.hook,
-          worldRepository.getGeographyGraph(targetStoryId)
-            .getAllNodes()
-            .find((node) => node.id === player?.locationId || node.id === run?.currentLocationId)?.description,
-        ].filter(Boolean).join(' '),
-      }
+        sceneText,
+      },
+      authoredChallenge || undefined
     );
 
     let committedOutcome = baseResult.message;
     if (storyCheck) {
+      const testLabel = storyCheck.testType === 'SAVING_THROW'
+        ? storyCheck.ability + ' saving throw'
+        : storyCheck.skill + ' check';
       committedOutcome = storyCheck.success
-        ? `${storyCheck.skill} check: ${storyCheck.total} vs DC ${storyCheck.difficultyClass} — success.`
-        : `${storyCheck.skill} check: ${storyCheck.total} vs DC ${storyCheck.difficultyClass} — failure.`;
-    }
+        ? testLabel + ': ' + storyCheck.total + ' vs DC ' + storyCheck.difficultyClass + ' — success.'
+        : testLabel + ': ' + storyCheck.total + ' vs DC ' + storyCheck.difficultyClass + ' — failure.';
 
+      if (authoredChallenge) {
+        const consequence = storyCheckConsequenceEngine.apply(
+          targetStoryId,
+          actorId,
+          storyCheck,
+          authoredChallenge,
+          conditionEngine,
+          worldRepository.getWorldClock(targetStoryId).getAbsoluteTime()
+        );
+        storyCheck.consequence = consequence;
+        committedOutcome += ' ' + consequence.summary;
+      }
+    }
     // Resolve condition-driven action triggers before narration so the narrator sees the committed result.
     conditionEngine.processAction(actorId, String(freeformText), worldRepository.getWorldClock(targetStoryId).getAbsoluteTime());
     conditionEngine.tickActor(actorId, 'TURN', worldRepository.getWorldClock(targetStoryId).getAbsoluteTime());
 
     const conditionStateAfterAction = conditionEngine.getActorState(actorId);
-    const capabilityEngine = worldRepository.getCapabilityEngine(targetStoryId);
     const currentPowerState = capabilityEngine.getPowerState(actorId);
     if (conditionStateAfterAction && currentPowerState) {
       capabilityEngine.setPowerState(actorId, {

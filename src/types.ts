@@ -887,6 +887,7 @@ export interface WorldTemplate {
     task: string;
     attemptCount: number;
     fallbackReason?: string;
+    generationSeed?: string;
   };
 }
 
@@ -908,6 +909,7 @@ export interface WorldSynthesisInput {
   genreTags?: string[];
   toneTags?: string[];
   mediumTags?: string[];
+  generationSeed?: string;
   defaultEra?: string;
   canonMode?: string;
   rulesetId?: string;

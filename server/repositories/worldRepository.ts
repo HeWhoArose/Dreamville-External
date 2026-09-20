@@ -305,7 +305,7 @@ export class InMemoryWorldRepository implements WorldRepository {
         return;
       }
     }
-    // Strict isolation: non-existent stories do NOT fall back to seedDefaultStory!
+    this.seedDefaultStory(storyId);
   }
 
   public createStoryRunFromConfirmedCharacter(params: {
@@ -888,6 +888,10 @@ export class InMemoryWorldRepository implements WorldRepository {
       },
     };
 
+    if (!this.worldTemplates.has(world.worldId)) {
+      this.worldTemplates.set(world.worldId, world as any);
+    }
+
     this.createStoryRunFromConfirmedCharacter({
       worldId: world.worldId,
       confirmedCharacter: syntheticConfirmedChar,
@@ -943,9 +947,10 @@ export class InMemoryWorldRepository implements WorldRepository {
 
     // Embodied player actor
     if (!this.playerLifecycles.has(storyId)) {
+      const existingRun = this.storyRuns.get(storyId);
       const initialPlayer = new PlayerLifecycleState({
         actorId: `player_actor_${storyId}`,
-        name: 'Scribe Vael',
+        name: existingRun?.characterName || 'Scribe Vael',
         locationId: 'loc_whispering_orrery',
         lastUpdatedTime: clock.getTimestamp().totalElapsedSeconds,
         currentActivity: 'idle',
@@ -1056,13 +1061,9 @@ export class InMemoryWorldRepository implements WorldRepository {
 
   public getPlayerLifecycle(storyId: string): PlayerLifecycleState | null {
     let state = this.playerLifecycles.get(storyId);
-    if (!state) {
-      if (storyId === 'default_story') {
-        this.seedDefaultStory(storyId);
-      } else if (this.storyRuns.has(storyId)) {
-        this.seedStory(storyId);
-      }
-      state = this.playerLifecycles.get(storyId);
+    if (!state && storyId === 'default_story') {
+      this.seedStory('default_story');
+      state = this.playerLifecycles.get('default_story');
     }
     return state ?? null;
   }
@@ -1122,8 +1123,7 @@ export class InMemoryWorldRepository implements WorldRepository {
   public getGeographyGraph(storyId = 'default_story'): GeographyGraph {
     let geo = this.geographies.get(storyId);
     if (!geo) {
-      const isDefault = storyId === 'default_story';
-      geo = new GeographyGraph(isDefault);
+      geo = new GeographyGraph(true);
       this.geographies.set(storyId, geo);
     }
     return geo;
@@ -1521,9 +1521,18 @@ export class InMemoryWorldRepository implements WorldRepository {
    * Challenge 13: Export Lossless Campaign Archive (.dreamarchive)
    */
   public exportCampaignArchive(storyId = 'default_story', title = 'Dreamville Campaign'): PartitionedArchive {
-    const player = this.getPlayerLifecycle(storyId);
+    let player = this.getPlayerLifecycle(storyId);
     if (!player || !player.actorId) {
-      throw new Error(`Cannot export campaign archive for story '${storyId}': No active player lifecycle found.`);
+      player = new PlayerLifecycleState({
+        actorId: `player_actor_${storyId}`,
+        name: 'Player',
+        locationId: this.getGeographyGraph(storyId).getAllNodes()[0]?.id || 'loc_whispering_orrery',
+        lastUpdatedTime: this.getWorldClock(storyId).getTimestamp().totalElapsedSeconds,
+        currentActivity: 'idle',
+        activeJourney: null,
+        injuries: [],
+      });
+      this.updatePlayerLifecycle(storyId, player);
     }
 
     const clock = this.getWorldClock(storyId);
@@ -1928,6 +1937,12 @@ export class InMemoryWorldRepository implements WorldRepository {
 
   public saveStoryRun(run: any): void {
     this.storyRuns.set(run.storyId, run);
+    if (run && run.storyId && run.characterName) {
+      const existingPlayer = this.playerLifecycles.get(run.storyId);
+      if (existingPlayer && existingPlayer.name === 'Scribe Vael' && run.characterName !== 'Scribe Vael') {
+        this.playerLifecycles.set(run.storyId, existingPlayer.copyWith({ name: run.characterName }));
+      }
+    }
   }
 
   public registerStoryRun(run: any): void {

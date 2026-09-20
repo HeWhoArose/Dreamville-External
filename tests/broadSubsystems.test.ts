@@ -1874,6 +1874,9 @@ describe('Broad Implementation Pass — Domain Subsystems', () => {
       orchestrator.updateModelHealth('provider_mock_reasoning', 'mock-reasoning-pro', 'Unavailable');
       const fallbackSelection = orchestrator.selectBestModel('narrative.generate');
       assert.notStrictEqual(fallbackSelection.selectedModel.modelId, 'mock-reasoning-pro');
+
+      // Reset pin to default to prevent cross-test contamination
+      orchestrator.pinModelForTask('narrative.generate', 'google_gemini::gemini-3.6-flash');
     });
 
     it('guarantees local deterministic emergency floor is never disguised as a Google Gemini model (DEF-CH12-DYNAMIC-06)', async () => {

@@ -12,7 +12,8 @@
   "fallbackChains": {
     "narrative.generate": [
       "google_gemini::gemini-3.6-flash",
-      "google_gemini::gemini-2.5-flash"
+      "google_gemini::gemini-2.5-flash",
+      "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "character.dialogue": [
       "google_gemini::gemini-3.6-flash",

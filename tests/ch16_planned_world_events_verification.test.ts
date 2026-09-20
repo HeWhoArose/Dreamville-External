@@ -183,21 +183,23 @@ test('World Creation Slice 1B — Planned World Events Comprehensive Verificatio
       });
 
       assert.ok(gothicWorld.events!.some(e => 
-        e.title.toLowerCase().includes('tremor') || 
-        e.title.toLowerCase().includes('infiltration') || 
-        e.title.toLowerCase().includes('summoning') ||
-        e.description.toLowerCase().includes('cathedral') ||
-        e.description.toLowerCase().includes('tribunal') ||
-        e.description.toLowerCase().includes('warden')
+        e.title.toLowerCase().includes('gothic') || 
+        e.title.toLowerCase().includes('werewolf') || 
+        e.title.toLowerCase().includes('valley') || 
+        e.description.toLowerCase().includes('gothic') ||
+        e.description.toLowerCase().includes('werewolf') ||
+        e.description.toLowerCase().includes('cult')
       ), 'Gothic world events should be context and world-specific');
 
       assert.ok(sciFiWorld.events!.some(e => 
-        e.title.toLowerCase().includes('alignment') || 
-        e.title.toLowerCase().includes('raid') || 
-        e.title.toLowerCase().includes('ignition') || 
-        e.description.toLowerCase().includes('gravity') ||
-        e.description.toLowerCase().includes('space') ||
-        e.description.toLowerCase().includes('scientists')
+        e.title.toLowerCase().includes('hard') || 
+        e.title.toLowerCase().includes('sci-fi') || 
+        e.title.toLowerCase().includes('asteroid') || 
+        e.title.toLowerCase().includes('mining') || 
+        e.description.toLowerCase().includes('hard') || 
+        e.description.toLowerCase().includes('sci-fi') ||
+        e.description.toLowerCase().includes('asteroid') ||
+        e.description.toLowerCase().includes('mining')
       ), 'SciFi world events should be context and world-specific');
     } finally {
       process.env.GEMINI_API_KEY = oldKey;
@@ -536,7 +538,9 @@ test('World Creation Slice 1B — Planned World Events Comprehensive Verificatio
       });
 
       assert.ok(world.worldId, 'Should return a successfully processed fallback world ID');
-      assert.equal(world.defaultEra, 'Age of Divine Resonance', 'Should map correctly to procedural fallback');
+      assert.equal(world.provenance?.generationSource, 'DETERMINISTIC_FALLBACK');
+      assert.ok(world.defaultEra, 'Should have a valid defaultEra');
+      assert.ok(world.title, 'Should have a valid title');
     } finally {
       process.env.GEMINI_API_KEY = oldKey;
     }

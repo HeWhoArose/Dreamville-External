@@ -1,6 +1,6 @@
 {
   "pins": {
-    "narrative.generate": "provider_google_gemini::gemini-3.6-flash",
+    "narrative.generate": "google_gemini::gemini-3.6-flash",
     "character.dialogue": "google_gemini::gemini-3.6-flash",
     "memory.extract": "google_gemini::gemini-3.6-flash",
     "summary.scene": "google_gemini::gemini-3.6-flash",
@@ -12,8 +12,7 @@
   "fallbackChains": {
     "narrative.generate": [
       "google_gemini::gemini-3.6-flash",
-      "google_gemini::gemini-2.5-flash",
-      "provider_deterministic_emergency::emergency-fallback-local"
+      "google_gemini::gemini-2.5-flash"
     ],
     "character.dialogue": [
       "google_gemini::gemini-3.6-flash",

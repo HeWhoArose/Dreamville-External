@@ -1,6 +1,5 @@
 import { worldRepository } from '../repositories/worldRepository';
 import { WorldTemplate, WorldSynthesisInput } from '../../src/types';
-import { GoogleGenAI } from '@google/genai';
 
 export interface StructuredWorldRule {
   ruleId: string;
@@ -15,35 +14,88 @@ export interface StructuredWorldCapability {
   name: string;
   powerTier: 'Minor' | 'Moderate' | 'Major' | 'WorldScale';
   validated: boolean;
+  description?: string;
+}
+
+const STOP_WORDS = new Set([
+  'a', 'about', 'above', 'after', 'again', 'against', 'all', 'am', 'an', 'and',
+  'any', 'are', 'as', 'at', 'be', 'because', 'been', 'before', 'being', 'below',
+  'between', 'both', 'but', 'by', 'could', 'did', 'do', 'does', 'doing', 'down',
+  'during', 'each', 'entirely', 'few', 'for', 'from', 'further', 'had', 'has',
+  'have', 'having', 'he', 'her', 'here', 'hers', 'herself', 'him', 'himself',
+  'his', 'how', 'i', 'if', 'in', 'into', 'is', 'it', 'its', 'itself', 'just',
+  'made', 'make', 'makes', 'me', 'more', 'most', 'my', 'myself', 'no', 'nor',
+  'not', 'now', 'of', 'off', 'on', 'once', 'only', 'or', 'other', 'our', 'ours',
+  'ourselves', 'out', 'over', 'own', 'people', 'same', 'she', 'should', 'so',
+  'some', 'such', 'than', 'that', 'the', 'their', 'theirs', 'them', 'themselves',
+  'then', 'there', 'these', 'they', 'this', 'those', 'through', 'to', 'too',
+  'turn', 'turned', 'turning', 'turns', 'under', 'until', 'up', 'very', 'was',
+  'we', 'were', 'what', 'when', 'where', 'which', 'while', 'who', 'whom', 'why',
+  'with', 'would', 'you', 'your', 'yours', 'yourself', 'yourselves'
+]);
+
+function createSeededRng(seedStr: string): () => number {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < seedStr.length; i++) {
+    h ^= seedStr.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  let state = h;
+  return function next(): number {
+    state = (state + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function pickOne<T>(rng: () => number, list: T[]): T {
+  const idx = Math.floor(rng() * list.length);
+  return list[Math.max(0, Math.min(list.length - 1, idx))];
+}
+
+function extractPremiseTokens(premise: string): string[] {
+  const words = premise
+    .replace(/[^\w\s-]/g, ' ')
+    .split(/\s+/)
+    .map(w => w.trim())
+    .filter(Boolean);
+
+  const filtered = words.filter(w => !STOP_WORDS.has(w.toLowerCase()) && w.length > 2);
+  const selected = filtered.length > 0 ? filtered : words.filter(w => w.length > 1);
+  return selected.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
 }
 
 export class WorldSynthesisService {
   /**
    * Synthesizes a WorldTemplate based on the user premise.
-   * Leverages Gemini 3.8 Flash for structured generation when GEMINI_API_KEY is available.
-   * Falls back to a premium, theme-responsive template engine when no API key exists.
+   * Leverages the MultiModelOrchestrator for AI generation.
+   * Falls back to a deterministic, premise-faithful procedural world builder when offline.
    */
   public async synthesizeWorldFromPremise(input: WorldSynthesisInput): Promise<WorldTemplate> {
     const timestamp = Date.now();
-    const worldId = `world_syn_${timestamp}`;
+    const generationSeed = input.generationSeed && input.generationSeed.trim()
+      ? input.generationSeed.trim()
+      : `seed_${timestamp}_${Math.random().toString(36).substring(2, 9)}`;
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    const worldId = `world_syn_${timestamp}`;
 
     let title = input.title || '';
     let summary = '';
     let description = '';
-    let genreTags = input.genreTags && input.genreTags.length > 0 ? input.genreTags : ['High Fantasy'];
-    let toneTags = input.toneTags && input.toneTags.length > 0 ? input.toneTags : ['Heroic'];
-    let mediumTags = input.mediumTags && input.mediumTags.length > 0 ? input.mediumTags : ['Original'];
-    let era = input.defaultEra || 'Third Age';
-    let setting = input.setting || 'Aether Plains';
-    
+    let genreTags = input.genreTags && input.genreTags.length > 0 ? input.genreTags : [];
+    let toneTags = input.toneTags && input.toneTags.length > 0 ? input.toneTags : [];
+    let mediumTags = input.mediumTags && input.mediumTags.length > 0 ? input.mediumTags : [];
+    let era = input.defaultEra || '';
+    let setting = input.setting || '';
+
     let locations: any[] = [];
     let characters: any[] = [];
     let factions: any[] = [];
     let events: any[] = [];
     let capabilities: any[] = [];
     let worldRules: any[] = [];
+    let parsedAiPayload: any = null;
 
     let generationSource: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK' = 'AI_PRIMARY';
     let providerId = 'google_gemini';
@@ -56,7 +108,7 @@ Your task is to take a natural language world premise and synthesize a complete,
 You must return a valid, pure JSON object with NO markdown formatting, wrapping, or extra text.
 
 CRITICAL INSTRUCTIONS FOR PLANNED WORLD EVENTS:
-- You must generate approximately 5 to 10 meaningful planned world events.
+- You must generate between 5 and 10 meaningful planned world events.
 - These events represent plausible future or background developments belonging to the world itself BEFORE the player begins playing.
 - The events MUST NOT assume that the player exists, participates, accepts any quests, or is the hero of these events.
 - Some events should have causal dependencies on preceding events (referenced in preconditions.requiredEvents by their ID).
@@ -162,7 +214,7 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
 2. GENRE GUIDANCE: ${genresStr} (Optional modifier to flavor the world, never override the premise).
 3. TONE GUIDANCE: ${tonesStr} (Optional modifier for narrative atmosphere).
 4. MEDIUM GUIDANCE: ${mediumsStr} (Optional stylistic expression).
-5. Ensure factions are active, locations are sensory-rich, and the planned background events show a complex, living timeline spanning a few weeks of fictional time starting from Year 42, Month 10, Day 14.`;
+5. Ensure factions are active, locations are sensory-rich, and the planned background events show a complex, living timeline of 5 to 10 events starting from Year 42, Month 10, Day 14.`;
 
     try {
       const orchestrator = worldRepository.getAiOrchestrator();
@@ -174,42 +226,99 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
       attemptCount = execResult.attempts;
 
       if (generationSource !== 'DETERMINISTIC_FALLBACK' && execResult.text) {
-        const parsed = JSON.parse(execResult.text);
-        title = parsed.title || title;
-        summary = parsed.summary || summary;
-        description = parsed.description || description;
-        if (Array.isArray(parsed.genreTags)) genreTags = parsed.genreTags;
-        if (Array.isArray(parsed.toneTags)) toneTags = parsed.toneTags;
-        if (Array.isArray(parsed.mediumTags)) mediumTags = parsed.mediumTags;
-        era = parsed.era || era;
-        setting = parsed.setting || setting;
+        try {
+          const parsed = JSON.parse(execResult.text);
+          const isTurnPackage = Array.isArray(parsed.narrative) && !parsed.geography && !parsed.title;
+          const hasStructuredLocations = (Array.isArray(parsed.geography?.locations) && parsed.geography.locations.length > 0) || (Array.isArray(parsed.locations) && parsed.locations.length > 0);
+          const hasStructuredEvents = Array.isArray(parsed.events) && parsed.events.length > 0 && typeof parsed.events[0] === 'object' && parsed.events[0] !== null && Boolean(parsed.events[0].title || parsed.events[0].id);
+          const hasWorldStructure = !isTurnPackage && Boolean(
+            hasStructuredLocations ||
+            (Array.isArray(parsed.factions) && parsed.factions.length > 0) ||
+            hasStructuredEvents ||
+            (parsed.title && (parsed.summary || parsed.description))
+          );
 
-        locations = parsed.geography?.locations || parsed.locations || [];
-        factions = parsed.factions || [];
-        characters = parsed.characters || [];
-        capabilities = parsed.capabilities || [];
-        worldRules = parsed.worldRules || [];
-        events = parsed.events || [];
+          if (!hasWorldStructure) {
+            generationSource = 'DETERMINISTIC_FALLBACK';
+            fallbackReason = 'AI response did not contain world candidate structure; fell back to deterministic candidate';
+          } else {
+            parsedAiPayload = parsed;
+            title = parsed.title || title;
+            summary = parsed.summary || summary;
+            description = parsed.description || description;
+            if (Array.isArray(parsed.genreTags) && parsed.genreTags.length > 0) genreTags = parsed.genreTags;
+            if (Array.isArray(parsed.toneTags) && parsed.toneTags.length > 0) toneTags = parsed.toneTags;
+            if (Array.isArray(parsed.mediumTags) && parsed.mediumTags.length > 0) mediumTags = parsed.mediumTags;
+            era = parsed.era || era;
+            setting = parsed.setting || setting;
+
+            locations = parsed.geography?.locations || parsed.locations || [];
+            factions = parsed.factions || [];
+            characters = parsed.characters || [];
+            capabilities = parsed.capabilities || [];
+            worldRules = parsed.worldRules || [];
+            events = parsed.events || [];
+          }
+        } catch (jsonErr: any) {
+          generationSource = 'DETERMINISTIC_FALLBACK';
+          fallbackReason = `Failed to parse AI response JSON: ${jsonErr.message}`;
+        }
       } else {
         generationSource = 'DETERMINISTIC_FALLBACK';
       }
     } catch (err: any) {
-      console.warn('World AI synthesis execution failed (falling back to procedural builder):', err?.message || err);
       generationSource = 'DETERMINISTIC_FALLBACK';
-      fallbackReason = err?.message;
+      fallbackReason = err?.message || String(err);
     }
 
     if (generationSource === 'DETERMINISTIC_FALLBACK') {
       providerId = 'provider_deterministic_emergency';
       modelId = 'emergency-fallback-local';
+
+      // Build completely deterministic, premise-faithful world candidate
+      const candidate = this.buildDeterministicCandidate(input, generationSeed);
+      title = input.title || candidate.title;
+      summary = candidate.summary;
+      description = candidate.description;
+      genreTags = input.genreTags && input.genreTags.length > 0 ? input.genreTags : candidate.genreTags;
+      toneTags = input.toneTags && input.toneTags.length > 0 ? input.toneTags : candidate.toneTags;
+      mediumTags = input.mediumTags && input.mediumTags.length > 0 ? input.mediumTags : candidate.mediumTags;
+      era = input.defaultEra || candidate.era;
+      setting = input.setting || candidate.setting;
+      locations = candidate.locations;
+      factions = candidate.factions;
+      characters = candidate.characters;
+      capabilities = candidate.capabilities;
+      worldRules = candidate.worldRules;
+      events = candidate.events;
+    } else {
+      // Ensure genreTags/toneTags/mediumTags defaults if AI didn't return them
+      if (genreTags.length === 0) genreTags = input.genreTags || ['Original'];
+      if (toneTags.length === 0) toneTags = input.toneTags || ['Dynamic'];
+      if (mediumTags.length === 0) mediumTags = input.mediumTags || ['Original'];
+      if (!era) era = input.defaultEra || 'Current Age';
+      if (!setting) setting = input.setting || title || 'The Central Expanse';
     }
 
+    // Handle user-supplied geography overrides if provided
+    if (input.geography && (Array.isArray(input.geography.locations) || Array.isArray(input.geography.majorLocations))) {
+      const rawLocs = input.geography.locations || input.geography.majorLocations || [];
+      locations = rawLocs.map((l: any, idx: number) => ({
+        id: l.id || `loc_${timestamp}_${idx}`,
+        name: l.name || l.title || `Location ${idx + 1}`,
+        description: l.description || `Location in ${setting}`,
+        coordinates: l.coordinates || { x: 40 + idx * 20, y: 50 },
+        ambientSensory: l.ambientSensory || `Visual: ${l.name || 'Location'}.`,
+      }));
+    }
+
+    // Player-friendly generation status
     const generationStatus =
       generationSource === 'AI_PRIMARY'
         ? 'Generated with DreamBook AI'
         : generationSource === 'AI_FALLBACK'
         ? 'Primary AI unavailable · Generated with fallback AI'
-        : 'AI generation unavailable · DreamBook used its offline world generator';
+        : 'AI unavailable · DreamBook used its offline world generator';
 
     const provenance = {
       generationSource,
@@ -218,414 +327,10 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
       task: 'narrative.generate',
       attemptCount,
       fallbackReason,
+      generationSeed,
     };
 
-    // FALLBACK PROCEDURAL GENERATION & VALIDATION Swappers
-    if (locations.length === 0) {
-      if (input.geography && (Array.isArray(input.geography.locations) || Array.isArray(input.geography.majorLocations))) {
-        const rawLocs = input.geography.locations || input.geography.majorLocations || [];
-        locations = rawLocs.map((l: any, idx: number) => ({
-          id: l.id || `loc_${timestamp}_${idx}`,
-          name: l.name || l.title || `Location ${idx + 1}`,
-          description: l.description || `Location in ${setting}`,
-          coordinates: l.coordinates || { x: 40 + idx * 20, y: 50 },
-          ambientSensory: l.ambientSensory || `Visual: ${l.name || 'Location'}.`,
-        }));
-        capabilities = [
-          { capabilityId: 'cap_synthesized_primary', name: 'Synthesized Core Capability', description: 'Primary world capability.', source: 'AI_PROPOSAL', powerTier: 'Moderate', validated: true }
-        ];
-        worldRules = [
-          { ruleId: 'rule_synthesized_constraint', ruleType: 'CANON_RULE', description: 'Primary world operational constraint.', validated: true }
-        ];
-      } else {
-        // Analyze premise keywords for theme
-      const premiseLower = input.naturalLanguagePremise.toLowerCase();
-      const isGlassTheme = premiseLower.includes('glass') || premiseLower.includes('crystal') || premiseLower.includes('prism') || premiseLower.includes('shard');
-      const isPlantTheme = premiseLower.includes('plant') || premiseLower.includes('overrun') || premiseLower.includes('forest') || premiseLower.includes('vine') || premiseLower.includes('flora');
-      const isDarkTheme = premiseLower.includes('dark') || premiseLower.includes('grim') || premiseLower.includes('doom') || premiseLower.includes('shadow') || premiseLower.includes('blood') || premiseLower.includes('death') || premiseLower.includes('horror') || premiseLower.includes('sunken');
-      const isSpaceTheme = premiseLower.includes('space') || premiseLower.includes('star') || premiseLower.includes('solar') || premiseLower.includes('void') || premiseLower.includes('alien') || premiseLower.includes('ship');
-      const isDivineSongTheme = premiseLower.includes('divine song') || premiseLower.includes('song') || premiseLower.includes('kingdom');
-
-      if (isDivineSongTheme) {
-        title = title || 'Aethelgard';
-        summary = 'A high fantasy kingdom powered by divine song and ancient choral resonance.';
-        description = `Grounded in the premise: "${input.naturalLanguagePremise}". A majestic realm where harmonic frequencies govern physics, architecture, and spiritual elevation.`;
-        genreTags = input.genreTags && input.genreTags.length > 0 ? input.genreTags : ['High Fantasy', 'Mythic'];
-        toneTags = input.toneTags && input.toneTags.length > 0 ? input.toneTags : ['Harmonic', 'Majestic'];
-        era = 'Age of Divine Resonance';
-        setting = 'The Choral Kingdom of Aethelgard';
-
-        locations = [
-          { id: 'loc_song_citadel', name: 'The Resonance Cathedral', description: 'A massive architectural masterpiece that amplifies divine song across the kingdom.', coordinates: { x: 50, y: 50 }, ambientSensory: 'Visual: Resonant glowing stained glass. Auditory: Everlasting angelic choruses.' },
-          { id: 'loc_song_outpost', name: 'Echo Reach', description: 'A frontier watchtower listening for discord in the outer winds.', coordinates: { x: 75, y: 30 }, ambientSensory: 'Visual: Mountain vistas. Auditory: Whispering gales.' }
-        ];
-
-        factions = [
-          { id: 'fac_song_choir', name: 'The Order of the Sacred Chord', description: 'Choral guardians who maintain the harmonic equilibrium of Aethelgard.' }
-        ];
-
-        characters = [
-          { id: 'char_song_prelate', name: 'Arch-Prelate Lyra', role: 'Master Chorister', locationId: 'loc_song_citadel', motivation: 'To sustain the great divine chord against encroaching silence.' }
-        ];
-
-        events = [
-          {
-            id: 'evt_song_init',
-            title: 'Dawn Anthem Awakening',
-            description: 'The morning chord rings across the valleys, blessing the realm with renewed harvest vitality.',
-            category: 'DISCOVERY',
-            scheduledTime: { year: 42, month: 10, day: 14, hour: 6, minute: 0, second: 0 },
-            participatingActors: ['fac_song_choir'],
-            locationId: 'loc_song_citadel',
-            preconditions: { requiredEvents: [], requiredWorldFacts: [] },
-            plannedConsequences: [{ type: 'world_fact', targetId: 'loc_song_citadel', detail: 'Harmonic barrier reinforced.' }],
-            visibility: 'PUBLIC'
-          },
-          {
-            id: 'evt_song_second',
-            title: 'Choral Convergence',
-            description: 'Regional choir masters gather at the cathedral for the septennial tuning.',
-            category: 'POLITICAL',
-            scheduledTime: { year: 42, month: 10, day: 15, hour: 12, minute: 0, second: 0 },
-            participatingActors: ['fac_song_choir'],
-            locationId: 'loc_song_citadel',
-            preconditions: { requiredEvents: ['evt_song_init'], requiredWorldFacts: [] },
-            plannedConsequences: [{ type: 'world_fact', targetId: 'loc_song_citadel', detail: 'Tuning harmonic established.' }],
-            visibility: 'PUBLIC'
-          },
-          {
-            id: 'evt_song_third',
-            title: 'Echo Reach Vigil',
-            description: 'Outer watchmen detect unusual harmonic interference from the southern wastelands.',
-            category: 'MILITARY',
-            scheduledTime: { year: 42, month: 10, day: 16, hour: 12, minute: 0, second: 0 },
-            participatingActors: ['fac_song_choir'],
-            locationId: 'loc_song_outpost',
-            preconditions: { requiredEvents: ['evt_song_second'], requiredWorldFacts: [] },
-            plannedConsequences: [{ type: 'location_state_change', targetId: 'loc_song_outpost', detail: 'Vigil heightened.' }],
-            visibility: 'PUBLIC'
-          }
-        ];
-
-        capabilities = [
-          { capabilityId: 'cap_song_resonance', name: 'Divine Chord Projection', description: 'Channel harmonic power into defensive shields and healing hymns.', source: 'AI_PROPOSAL', powerTier: 'Major', validated: true }
-        ];
-
-        worldRules = [
-          { ruleId: 'rule_song_silence', ruleType: 'ENVIRONMENTAL_CONSTRAINT', description: 'Areas of absolute silence disrupt magical and divine spellcasting.', validated: true }
-        ];
-
-      } else if (isGlassTheme) {
-        title = title || 'Glassbound Horizon';
-        summary = 'A breathtaking realm forged of translucent glass, reflective spires, and prismatic energy.';
-        description = `Grounded in the premise: "${input.naturalLanguagePremise}". A high-tech cybernetic and crystalline domain where architecture and technology are fused with indestructible tempered glass.`;
-        genreTags = input.genreTags && input.genreTags.length > 0 ? input.genreTags : ['Cyberpunk', 'Sci-Fi'];
-        toneTags = input.toneTags && input.toneTags.length > 0 ? input.toneTags : ['Sleek', 'Prismatic'];
-        era = 'Age of Crystalline Grid';
-        setting = 'The Prism Spire Metropolis';
-
-        locations = [
-          { id: 'loc_glass_core', name: 'The Obsidian Glass Spire', description: 'A towering monolith of black tempered glass housing quantum core terminals.', coordinates: { x: 30, y: 30 }, ambientSensory: 'Visual: Prismatic light bending through dark glass. Auditory: Humming quantum servers.' },
-          { id: 'loc_shard_district', name: 'Shattered Shard Market', description: 'A bustling commercial sector built among floating glass platforms.', coordinates: { x: 60, y: 35 }, ambientSensory: 'Visual: Neon reflections on transparent walkways. Auditory: Chimes and transaction pings.' }
-        ];
-
-        factions = [
-          { id: 'fac_glass_syndicate', name: 'The Prismatic Syndicate', description: 'Cybernetic architects who control the glass-fusion refineries.' },
-          { id: 'fac_glass_rebels', name: 'The Shard-Breaker Resistance', description: 'Outlaws fighting against corporate glass monopolies.' }
-        ];
-
-        characters = [
-          { id: 'char_glass_kora', name: 'Kora the Refractor', role: 'Chief Glasswright', locationId: 'loc_glass_core', motivation: 'To forge an unbreakable optical network across the sector.' }
-        ];
-
-        events = [
-          {
-            id: 'evt_glass_surge',
-            title: 'Prismatic Energy Surge',
-            description: 'A massive refraction overload causes glowing light pulses across all glass district conduits.',
-            category: 'SUPERNATURAL',
-            scheduledTime: { year: 42, month: 10, day: 15, hour: 12, minute: 0, second: 0 },
-            participatingActors: ['fac_glass_syndicate'],
-            locationId: 'loc_glass_core',
-            preconditions: { requiredEvents: [], requiredWorldFacts: [] },
-            plannedConsequences: [{ type: 'world_fact', targetId: 'loc_glass_core', detail: 'Grid efficiency increases by 20%.' }],
-            visibility: 'PUBLIC'
-          },
-          {
-            id: 'evt_glass_surge_2',
-            title: 'Secondary Refraction Wave',
-            description: 'Subsequent harmonic pulses ripple across the sector.',
-            category: 'SUPERNATURAL',
-            scheduledTime: { year: 42, month: 10, day: 16, hour: 12, minute: 0, second: 0 },
-            participatingActors: ['fac_glass_syndicate'],
-            locationId: 'loc_glass_core',
-            preconditions: { requiredEvents: ['evt_glass_surge'], requiredWorldFacts: [] },
-            plannedConsequences: [{ type: 'world_fact', targetId: 'loc_glass_core', detail: 'Secondary network online.' }],
-            visibility: 'PUBLIC'
-          }
-        ];
-
-        capabilities = [
-          { capabilityId: 'cap_glass_refraction', name: 'Prismatic Laser Refraction', description: 'Bend light and energy beams through quantum glass focusers.', source: 'AI_PROPOSAL', powerTier: 'Major', validated: true }
-        ];
-
-        worldRules = [
-          { ruleId: 'rule_glass_integrity', ruleType: 'ENVIRONMENTAL_CONSTRAINT', description: 'Structural integrity of glass infrastructure must be maintained via cooling fields.', validated: true }
-        ];
-
-      } else if (isPlantTheme) {
-        title = title || 'Verdant Reclamation';
-        summary = 'An untamed world where colossal sentient flora and sprawling vines have choked industrial machinery.';
-        description = `Grounded in the premise: "${input.naturalLanguagePremise}". A cynical steampunk realm where massive, adaptive plant life constantly threatens rust-covered factories and brass boilers.`;
-        genreTags = input.genreTags && input.genreTags.length > 0 ? input.genreTags : ['Steampunk', 'Post-Apocalyptic'];
-        toneTags = input.toneTags && input.toneTags.length > 0 ? input.toneTags : ['Cynical', 'Wild'];
-        era = 'Age of the Great Root';
-        setting = 'The Overgrown Industrial Basin';
-
-        locations = [
-          { id: 'loc_plant_canopy', name: 'The Colossal World Root', description: 'A mile-thick ancient trunk housing steam-powered elevators and vine balconies.', coordinates: { x: 40, y: 40 }, ambientSensory: 'Visual: Bioluminescent moss and dripping sap. Auditory: Creaking wood and rhythmic steam pistons.' },
-          { id: 'loc_boiler_yard', name: 'Rust-Iron Boiler Yard', description: 'A smog-choked factory floor locked in constant battle with encroaching briars.', coordinates: { x: 65, y: 50 }, ambientSensory: 'Visual: Black smoke curling through emerald leaves. Auditory: Hissing steam valves and snapping vines.' }
-        ];
-
-        factions = [
-          { id: 'fac_plant_wardens', name: 'The Thorn Guild', description: 'Engineers who harvest resilient plant fibers to reinforce steampunk machinery.' },
-          { id: 'fac_plant_purists', name: 'The Root Ascendancy', description: 'Radicals seeking to completely purge industrial engines in favor of primordial nature.' }
-        ];
-
-        characters = [
-          { id: 'char_plant_silas', name: 'Mechanist Silas', role: 'Boiler Foreman', locationId: 'loc_boiler_yard', motivation: 'To keep the steam engines running against the suffocating overgrowth.' }
-        ];
-
-        events = [
-          {
-            id: 'evt_plant_bloom',
-            title: 'Great Spore Bloom',
-            description: 'Colossal spores burst across the industrial basin, inducing metallic corrosion in steam boilers.',
-            category: 'DISASTER',
-            scheduledTime: { year: 42, month: 10, day: 16, hour: 8, minute: 0, second: 0 },
-            participatingActors: ['fac_plant_wardens'],
-            locationId: 'loc_boiler_yard',
-            preconditions: { requiredEvents: [], requiredWorldFacts: [] },
-            plannedConsequences: [{ type: 'location_state_change', targetId: 'loc_boiler_yard', detail: 'Boiler efficiency drops; maintenance required.' }],
-            visibility: 'PUBLIC'
-          },
-          {
-            id: 'evt_plant_bloom_2',
-            title: 'Canopy Expansion',
-            description: 'Vines entangle secondary steam turbine shafts.',
-            category: 'DISASTER',
-            scheduledTime: { year: 42, month: 10, day: 17, hour: 8, minute: 0, second: 0 },
-            participatingActors: ['fac_plant_wardens'],
-            locationId: 'loc_boiler_yard',
-            preconditions: { requiredEvents: ['evt_plant_bloom'], requiredWorldFacts: [] },
-            plannedConsequences: [{ type: 'location_state_change', targetId: 'loc_boiler_yard', detail: 'Turbines locked.' }],
-            visibility: 'PUBLIC'
-          }
-        ];
-
-        capabilities = [
-          { capabilityId: 'cap_plant_sap', name: 'Bio-Steam Infusion', description: 'Combine botanical sap with pressurized steam to generate organic propulsion.', source: 'AI_PROPOSAL', powerTier: 'Moderate', validated: true }
-        ];
-
-        worldRules = [
-          { ruleId: 'rule_plant_corrosion', ruleType: 'ENVIRONMENTAL_CONSTRAINT', description: 'Unchecked botanical sap rapidly corrodes exposed iron and brass.', validated: true }
-        ];
-
-      } else if (isDarkTheme) {
-        title = title || 'Gloomspire Under-Plains';
-        summary = 'A shadow-shrouded sunken realm where basalt spires harvest residual spiritual embers.';
-        description = 'An atmospheric, grim fantasy setting. Deep basalt canyons house defensive settlements keeping watch against the shifting abyssal tide.';
-        genreTags = input.genreTags && input.genreTags.length > 0 ? input.genreTags : ['Dark Fantasy', 'Grimdark'];
-        toneTags = input.toneTags && input.toneTags.length > 0 ? input.toneTags : ['Grim', 'Ominous'];
-        era = 'Age of Smothered Flames';
-        setting = 'Gloomspire Abyssal Rift';
-
-        locations = [
-          { id: 'loc_syn_temple', name: 'The Obsidian Cathedral', description: 'A massive basalt vault where acolytes tend the last dying spark of solar fire.', coordinates: { x: 30, y: 40 }, ambientSensory: 'Visual: Heavy ash drifting in candlelight. Auditory: Low, continuous harmonic chanting.' },
-          { id: 'loc_syn_keep', name: 'The Ashen Keep', description: 'A jagged stone military fortress overlooking the northern canyons.', coordinates: { x: 50, y: 25 }, ambientSensory: 'Visual: Flickering iron braziers lighting massive stonework. Auditory: Clanking armor and high-altitude wind.' }
-        ];
-
-        factions = [
-          { id: 'fac_syn_wardens', name: 'The Obsidian Wardens', description: 'The sworn protectors of the Cathedral dedicated to keeping the dark flame active.' }
-        ];
-
-        characters = [
-          { id: 'char_syn_vaelen', name: 'Inquisitor Vaelen', role: 'Cathedral Commander', locationId: 'loc_syn_temple', motivation: 'To find and secure a legendary resonance seed.' }
-        ];
-
-        events = [
-          {
-            id: 'evt_syn_tremor',
-            title: 'Subterranean Bedrock Tremor',
-            description: 'A geological anomaly causes structural micro-fractures in the cathedral warden district.',
-            category: 'DISASTER',
-            scheduledTime: { year: 42, month: 10, day: 15, hour: 6, minute: 0, second: 0 },
-            participatingActors: ['fac_syn_wardens'],
-            locationId: 'loc_syn_temple',
-            preconditions: { requiredEvents: [], requiredWorldFacts: [] },
-            plannedConsequences: [{ type: 'location_state_change', targetId: 'loc_syn_temple', detail: 'Structural micro-fractures increase danger.' }],
-            visibility: 'PUBLIC'
-          },
-          {
-            id: 'evt_syn_infiltration',
-            title: 'Cultist Infiltration at Ashen Keep',
-            description: 'Shadowy figures breach the outer gate tribunal of the keep.',
-            category: 'MILITARY',
-            scheduledTime: { year: 42, month: 10, day: 16, hour: 6, minute: 0, second: 0 },
-            participatingActors: ['fac_syn_wardens'],
-            locationId: 'loc_syn_keep',
-            preconditions: { requiredEvents: ['evt_syn_tremor'], requiredWorldFacts: [] },
-            plannedConsequences: [{ type: 'location_state_change', targetId: 'loc_syn_keep', detail: 'Gate security compromised.' }],
-            visibility: 'PUBLIC'
-          },
-          {
-            id: 'evt_syn_third',
-            title: 'Ashen Vigil Mobilization',
-            description: 'Wardens mobilize across the basalt walls.',
-            category: 'MILITARY',
-            scheduledTime: { year: 42, month: 10, day: 17, hour: 6, minute: 0, second: 0 },
-            participatingActors: ['fac_syn_wardens'],
-            locationId: 'loc_syn_keep',
-            preconditions: { requiredEvents: ['evt_syn_infiltration'], requiredWorldFacts: [] },
-            plannedConsequences: [{ type: 'location_state_change', targetId: 'loc_syn_keep', detail: 'Defenses reinforced.' }],
-            visibility: 'PUBLIC'
-          }
-        ];
-
-        capabilities = [
-          { capabilityId: 'cap_syn_flame', name: 'Basalt Resonance Spark', description: 'Manipulate residual solar embers.', source: 'AI_PROPOSAL', powerTier: 'Moderate', validated: true }
-        ];
-
-        worldRules = [
-          { ruleId: 'rule_syn_flame_restriction', ruleType: 'CAPABILITY_RESTRICTION', description: 'All magical activations must draw from physical fire embers or crystal conduits.', validated: true }
-        ];
-
-      } else if (isSpaceTheme) {
-        title = title || 'Vanguard Star-Terraces';
-        summary = 'An orbital complex in deep space built around a glowing, dormant super-rift.';
-        description = 'An high-concept space science setting. Gleaming metal structures house scientists and void explorers monitoring anomalous star alignments.';
-        genreTags = input.genreTags && input.genreTags.length > 0 ? input.genreTags : ['Space Opera', 'Sci-Fi'];
-        toneTags = input.toneTags && input.toneTags.length > 0 ? input.toneTags : ['Heroic', 'Luminescent'];
-        era = 'First Radiance of the Void';
-        setting = 'The Deep Space Void Basin';
-
-        locations = [
-          { id: 'loc_syn_command', name: 'Apex Control Terraces', description: 'The main administrative orbital hub regulating sector gravity beams.', coordinates: { x: 30, y: 35 }, ambientSensory: 'Visual: Holographic stellar maps. Auditory: Hum of gravity drives.' }
-        ];
-
-        factions = [
-          { id: 'fac_syn_scientists', name: 'The Apex Research Union', description: 'Pioneers researching high-efficiency gravity manipulation.' }
-        ];
-
-        characters = [
-          { id: 'char_syn_archon', name: 'Commander Selene', role: 'Apex Chief Director', locationId: 'loc_syn_command', motivation: 'To activate the super-rift.' }
-        ];
-
-        events = [
-          {
-            id: 'evt_syn_alignment',
-            title: 'Hyper-Spatial Star Conjunction',
-            description: 'Binary stars align in space, triggering intense gravity flares across science labs.',
-            category: 'SUPERNATURAL',
-            scheduledTime: { year: 42, month: 10, day: 15, hour: 14, minute: 0, second: 0 },
-            participatingActors: ['fac_syn_scientists'],
-            locationId: 'loc_syn_command',
-            preconditions: { requiredEvents: [], requiredWorldFacts: [] },
-            plannedConsequences: [{ type: 'location_state_change', targetId: 'loc_syn_command', detail: 'Gravity-well pull increases.' }],
-            visibility: 'PUBLIC'
-          },
-          {
-            id: 'evt_syn_raid',
-            title: 'Orbital Station Raid',
-            description: 'Unidentified raiders test sector defenses.',
-            category: 'MILITARY',
-            scheduledTime: { year: 42, month: 10, day: 16, hour: 14, minute: 0, second: 0 },
-            participatingActors: ['fac_syn_scientists'],
-            locationId: 'loc_syn_command',
-            preconditions: { requiredEvents: ['evt_syn_alignment'], requiredWorldFacts: [] },
-            plannedConsequences: [{ type: 'location_state_change', targetId: 'loc_syn_command', detail: 'Shields engaged.' }],
-            visibility: 'PUBLIC'
-          }
-        ];
-
-        capabilities = [
-          { capabilityId: 'cap_syn_gravity', name: 'Grav-Beam Coalescence', description: 'Manipulate artificial gravity parameters.', source: 'AI_PROPOSAL', powerTier: 'Major', validated: true }
-        ];
-
-        worldRules = [
-          { ruleId: 'rule_syn_vacuum', ruleType: 'ENVIRONMENTAL_CONSTRAINT', description: 'Atmosphere is strictly limited. Void zones require pressurized suits.', validated: true }
-        ];
-
-      } else {
-        // General Premise-Faithful Fallback
-        const cleanPremise = input.naturalLanguagePremise.trim();
-        title = title || (cleanPremise.length > 30 ? cleanPremise.substring(0, 27) + '...' : cleanPremise);
-        summary = `A dynamic world synthesized from premise: "${cleanPremise}".`;
-        description = `An expansive campaign setting grounded in the premise: "${cleanPremise}". Featuring local factions, emergent challenges, and dynamic geography.`;
-        genreTags = input.genreTags && input.genreTags.length > 0 ? input.genreTags : ['Original'];
-        toneTags = input.toneTags && input.toneTags.length > 0 ? input.toneTags : ['Dynamic'];
-        era = isDivineSongTheme ? 'Age of Divine Resonance' : (input.defaultEra || 'Current Age');
-        setting = input.setting || 'The Central Expanse';
-
-        locations = [
-          { id: 'loc_gen_center', name: 'Core Convergence Hub', description: `The primary nexus point of ${setting}.`, coordinates: { x: 50, y: 50 }, ambientSensory: 'Visual: Shifting horizons. Auditory: Ambient echoes.' },
-          { id: 'loc_gen_outer', name: 'Outer Bastion', description: 'Secondary regional watch post.', coordinates: { x: 70, y: 50 }, ambientSensory: 'Visual: Stone ramparts. Auditory: Winds.' }
-        ];
-        factions = [
-          { id: 'fac_gen_vanguard', name: 'Vanguard Alliance', description: 'Independent actors navigating the shifting frontier.' }
-        ];
-        characters = [
-          { id: 'char_gen_protagonist', name: 'Guide Vane', role: 'Expedition Lead', locationId: 'loc_gen_center', motivation: 'To chart the expanding frontiers of the realm.' }
-        ];
-        events = [
-          {
-            id: 'evt_gen_start',
-            title: 'Convergence Threshold',
-            description: 'Local energies align to initiate the campaign era.',
-            category: 'DISCOVERY',
-            scheduledTime: { year: 42, month: 10, day: 14, hour: 12, minute: 0, second: 0 },
-            participatingActors: ['fac_gen_vanguard'],
-            locationId: 'loc_gen_center',
-            preconditions: { requiredEvents: [], requiredWorldFacts: [] },
-            plannedConsequences: [{ type: 'world_fact', targetId: 'loc_gen_center', detail: 'Exploration vectors open.' }],
-            visibility: 'PUBLIC'
-          },
-          {
-            id: 'evt_gen_second',
-            title: 'Harmonic Awakening',
-            description: 'Secondary harmonic resonances spread across the realm.',
-            category: 'SUPERNATURAL',
-            scheduledTime: { year: 42, month: 10, day: 15, hour: 12, minute: 0, second: 0 },
-            participatingActors: ['fac_gen_vanguard'],
-            locationId: 'loc_gen_center',
-            preconditions: { requiredEvents: ['evt_gen_start'], requiredWorldFacts: [] },
-            plannedConsequences: [{ type: 'world_fact', targetId: 'loc_gen_center', detail: 'Resonance stable.' }],
-            visibility: 'PUBLIC'
-          },
-          {
-            id: 'evt_gen_third',
-            title: 'Outer Bastion Muster',
-            description: 'Factions gather at the outer bastion.',
-            category: 'POLITICAL',
-            scheduledTime: { year: 42, month: 10, day: 16, hour: 12, minute: 0, second: 0 },
-            participatingActors: ['fac_gen_vanguard'],
-            locationId: 'loc_gen_outer',
-            preconditions: { requiredEvents: ['evt_gen_second'], requiredWorldFacts: [] },
-            plannedConsequences: [{ type: 'location_state_change', targetId: 'loc_gen_outer', detail: 'Forces mustered.' }],
-            visibility: 'PUBLIC'
-          }
-        ];
-        capabilities = [
-          { capabilityId: 'cap_gen_adapt', name: 'Adaptive Resonance', description: 'Adapt to regional anomalies seamlessly.', source: 'AI_PROPOSAL', powerTier: 'Moderate', validated: true }
-        ];
-        worldRules = [
-          { ruleId: 'rule_gen_frontier', ruleType: 'CANON_RULE', description: 'Frontier conditions require active resource management.', validated: true }
-        ];
-      }
-      }
-    }
-
-    // ENSURE EVERY LOCATION NODE HAS A CORRESPONDING PREVIEW GEOGRAPHY NODE FOR FRONT-END RECT WIZARD COMPATIBILITY
+    // Ensure preview geography nodes for UI compatibility
     const nodes = locations.map(loc => ({
       id: loc.id,
       name: loc.name,
@@ -633,18 +338,24 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
       regionId: setting || title
     }));
 
-    // RUN DETERMINISTIC EVENT VALIDATION AND REPAIR BEFORE SAVING TO THE REPOSITORY
+    // Enforce 5 to 10 events with full causal validation and repair
     const validatedEvents = this.validateAndNormalizeEvents(
       events,
       locations,
       characters,
-      factions
+      factions,
+      input.naturalLanguagePremise,
+      generationSeed,
+      true
     );
 
-    // BUILD FINAL STRUCTURED WORLD TEMPLATE CONFORMING TO DREAMBOOK & SPECIFICATION STANDARDS
+    const premiseTokens = extractPremiseTokens(input.naturalLanguagePremise);
+    const primaryToken = premiseTokens[0] || 'Core';
+
+    // Canonical WorldTemplate construction without unrelated legacy fixture lore
     const world: WorldTemplate = {
       worldId,
-      title: title || 'Synthesized World Realm',
+      title: title || `${primaryToken} Realm`,
       summary: summary || `Synthesized from premise: ${input.naturalLanguagePremise}`,
       description: description || `Synthesized from premise: ${input.naturalLanguagePremise}. An expansive world featuring rich lore, factions, and emergent narrative opportunities.`,
       genreTags,
@@ -697,18 +408,41 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
         locations,
         nodes
       },
-      timeline: input.timeline || [{ era: era, event: `Genesis of the ${setting}` }],
+      timeline: input.timeline || [{ era: era, event: `Genesis of ${setting}` }],
       characters: characters,
       factions: factions,
-      magicRules: input.magicRules || { system: 'Resonant Harmonics', cost: 'Fatigue' },
-      economy: input.economy || { currency: 'Silver Shards', tradeHubs: ['Grand Bazaar'] },
-      forbiddenContradictions: input.forbiddenContradictions || ['Magic cannot create true perpetual motion without resonant toll.'],
-      startingStarts: input.startingStarts || locations.slice(0, 2).map(l => l.name),
-      terminology: input.terminology || { 'Orrery': 'Celestial mechanical simulator' },
-      knowledgeBoundaries: input.knowledgeBoundaries || { forbiddenKnowledgeLevel: 'Tier-4 Anomaly' },
-      artConfig: input.artConfig || { palette: 'mythic_amber_stone', style: 'painterly_realism' },
-      audioConfig: input.audioConfig || { ambientTrack: 'ambient_whispering_wind', reverbPreset: 'stone_cathedral' },
-      narrativeConfig: input.narrativeConfig || { pacing: 'deliberate_epic', pov: 'third_person_limited' },
+      magicRules: input.magicRules || (parsedAiPayload?.magicRules ? parsedAiPayload.magicRules : {
+        systemName: `${title || primaryToken} Arcana`,
+        system: `${title || primaryToken} Arcana`,
+        laws: [`Manipulation of ambient ${primaryToken.toLowerCase()} forces requires focused resonance.`],
+        cost: 'Fatigue and mental strain'
+      }),
+      economy: input.economy || (parsedAiPayload?.economy ? parsedAiPayload.economy : {
+        currency: `${primaryToken} Scrip`,
+        tradeHubs: locations.slice(0, 2).map((l: any) => l.name)
+      }),
+      forbiddenContradictions: input.forbiddenContradictions || (parsedAiPayload?.forbiddenContradictions ? parsedAiPayload.forbiddenContradictions : [
+        `The fundamental reality of ${setting} cannot be rewritten without triggering systemic collapse.`
+      ]),
+      startingStarts: input.startingStarts || (parsedAiPayload?.startingStarts ? parsedAiPayload.startingStarts : locations.slice(0, 2).map((l: any) => l.name)),
+      terminology: input.terminology || (parsedAiPayload?.terminology ? parsedAiPayload.terminology : {
+        [`${primaryToken} Core`]: `Primary energetic feature within ${setting}`
+      }),
+      knowledgeBoundaries: input.knowledgeBoundaries || (parsedAiPayload?.knowledgeBoundaries ? parsedAiPayload.knowledgeBoundaries : {
+        forbiddenKnowledgeLevel: 'Restricted Tier'
+      }),
+      artConfig: input.artConfig || (parsedAiPayload?.artConfig ? parsedAiPayload.artConfig : {
+        palette: 'cinematic_natural',
+        style: input.mediumTags?.[0] || 'illustrative_concept'
+      }),
+      audioConfig: input.audioConfig || (parsedAiPayload?.audioConfig ? parsedAiPayload.audioConfig : {
+        ambientTrack: 'ambient_exploration',
+        reverbPreset: 'natural_acoustic'
+      }),
+      narrativeConfig: input.narrativeConfig || (parsedAiPayload?.narrativeConfig ? parsedAiPayload.narrativeConfig : {
+        pacing: 'deliberate_epic',
+        pov: 'third_person_limited'
+      }),
       events: validatedEvents,
       generationStatus,
       provenance,
@@ -719,15 +453,280 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
   }
 
   /**
-   * Deterministic event validation and repair pipeline.
-   * Ensures that AI-generated events conform completely to campaign schemas,
-   * resolve IDs, link with valid locations, and maintain valid causal preconditions.
+   * Deterministic, premise-faithful procedural world builder.
+   * Derives all world entities, locations, factions, and rules from the premise and seed.
    */
-  private validateAndNormalizeEvents(
+  public buildDeterministicCandidate(input: WorldSynthesisInput, seed: string): {
+    title: string;
+    summary: string;
+    description: string;
+    genreTags: string[];
+    toneTags: string[];
+    mediumTags: string[];
+    era: string;
+    setting: string;
+    locations: any[];
+    factions: any[];
+    characters: any[];
+    capabilities: any[];
+    worldRules: any[];
+    events: any[];
+  } {
+    const seedString = `${seed}::${input.naturalLanguagePremise}::${(input.genreTags || []).join(',')}::${(input.toneTags || []).join(',')}::${(input.mediumTags || []).join(',')}`;
+    const rng = createSeededRng(seedString);
+
+    const tokens = extractPremiseTokens(input.naturalLanguagePremise);
+    const primary = tokens[0] || (input.genreTags?.[0] || 'Aether');
+    const secondary = tokens[1] || (tokens[0] ? 'Frontier' : 'Vanguard');
+    const tertiary = tokens[2] || 'Horizon';
+
+    const genrePool = ['High Fantasy', 'Sci-Fi', 'Dark Fantasy', 'Cyberpunk', 'Solarpunk', 'Steampunk', 'Cosmic Horror'];
+    const tonePool = ['Atmospheric', 'Mysterious', 'Heroic', 'Grim', 'Adventurous', 'Ominous', 'Melancholic'];
+
+    const genreTags = input.genreTags && input.genreTags.length > 0
+      ? input.genreTags
+      : [pickOne(rng, genrePool)];
+    const toneTags = input.toneTags && input.toneTags.length > 0
+      ? input.toneTags
+      : [pickOne(rng, tonePool)];
+    const mediumTags = input.mediumTags && input.mediumTags.length > 0
+      ? input.mediumTags
+      : ['Original'];
+
+    // Title construction
+    const titlePatterns = [
+      `The ${primary} ${pickOne(rng, ['Expanse', 'Domain', 'Sanctuary', 'Reach', 'Threshold', 'Wilds', 'Dominion', 'Enclave', 'Frontier'])}`,
+      `${pickOne(rng, ['Sovereign', 'Ashen', 'Prismatic', 'Boundless', 'Echoing', 'Silent', 'Obsidian', 'Radiant', 'Vibrant', 'Shadowed'])} ${primary}`,
+      `${primary} of ${secondary}`,
+      `Chronicles of the ${primary} ${pickOne(rng, ['Spire', 'Basin', 'Canopy', 'Colony', 'Wasteland', 'Haven'])}`,
+      `${primary} & the ${secondary} ${pickOne(rng, ['Order', 'Frontier', 'Remnant', 'Vigil'])}`
+    ];
+    const title = input.title && input.title.trim() ? input.title.trim() : pickOne(rng, titlePatterns);
+
+    // Setting and Era
+    const setting = input.setting || `The ${primary} ${pickOne(rng, ['Territories', 'Basin', 'Expanse', 'Marches', 'Dominion', 'Reaches'])}`;
+    const era = input.defaultEra || `Age of the ${primary} ${pickOne(rng, ['Awakening', 'Convergence', 'Ascension', 'Reckoning', 'Dominion', 'Flux'])}`;
+
+    const summary = `A ${toneTags.join('/')} ${genreTags.join('/')} realm anchored by the premise: "${input.naturalLanguagePremise.trim()}".`;
+
+    const description = `Anchored directly in the premise: "${input.naturalLanguagePremise.trim()}". In the era known as ${era}, the geographic landscape and natural order of ${setting} are fundamentally shaped by ${primary.toLowerCase()}${secondary !== 'Frontier' ? ' and ' + secondary.toLowerCase() : ''}. Ancient structures and everyday life adapt to this singular reality, creating an environment unlike any other.
+
+Civilization across ${setting} has developed distinct cultural traditions, survival strategies, and localized economies attuned to ${primary.toLowerCase()}. From fortified bastions to treacherous borderlands, local populations contend with unique ecological and geopolitical currents.
+
+As regional tensions rise, rival factions maneuver for influence over critical resources and territory. With scheduled developments unfolding on the horizon, the fragile balance across ${setting} stands on the brink of enduring transformation.`;
+
+    const primaryKey = primary.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    const secondaryKey = secondary.toLowerCase().replace(/[^a-z0-9]/g, '_');
+
+    // Locations
+    const locations = [
+      {
+        id: `loc_1_${primaryKey}`,
+        name: `The ${primary} ${pickOne(rng, ['Citadel', 'Nexus', 'Sanctuary', 'Spire', 'Heartland', 'Keep'])}`,
+        description: `The central seat of power and epicenter of ${primary.toLowerCase()} phenomena in ${setting}.`,
+        coordinates: { x: 45, y: 50 },
+        ambientSensory: `Visual: Formations of ${primary.toLowerCase()} under ambient illumination. Auditory: Low continuous humming resonating across corridors.`
+      },
+      {
+        id: `loc_2_${secondaryKey}`,
+        name: `${secondary} ${pickOne(rng, ['Outpost', 'Watch', 'Terrace', 'Ridge', 'Quarry', 'Crossing'])}`,
+        description: `A fortified regional station monitoring the volatile perimeter of ${setting}.`,
+        coordinates: { x: 75, y: 35 },
+        ambientSensory: `Visual: Weathered observation parapets overlooking uncharted zones. Auditory: Shifting winds and distant seismic echoes.`
+      },
+      {
+        id: `loc_3_depths`,
+        name: `The ${pickOne(rng, ['Sunken', 'Whispering', 'Shattered', 'Veiled', 'Silent', 'Hallowed'])} ${pickOne(rng, ['Hollows', 'Glade', 'Chasm', 'Vault', 'Canyon', 'Ruins'])}`,
+        description: `An isolated anomaly zone where deep secrets and concentrated ${primary.toLowerCase()} energies remain hidden.`,
+        coordinates: { x: 25, y: 70 },
+        ambientSensory: `Visual: Dense atmospheric haze reflecting shimmering luminescence. Auditory: Faint intermittent resonance in the still air.`
+      }
+    ];
+
+    // Factions
+    const factions = [
+      {
+        id: `fac_1_${primaryKey}`,
+        name: `The ${primary} ${pickOne(rng, ['Consortium', 'Vanguard', 'Order', 'Syndicate', 'Keepers', 'Enclave'])}`,
+        description: `An organized force dedicated to harnessing and directing ${primary.toLowerCase()} influence throughout ${setting}.`
+      },
+      {
+        id: `fac_2_${secondaryKey}`,
+        name: `${secondary} ${pickOne(rng, ['Reclamation Front', 'Sentinels', 'Free Coalition', 'Defenders', 'Covenant'])}`,
+        description: `A resilient collective determined to protect sovereign territories and prevent unchecked exploitation.`
+      }
+    ];
+
+    // Characters
+    const charNames = ['Valen', 'Seraphina', 'Corvus', 'Thorne', 'Kaelen', 'Lyra', 'Darius', 'Morwen', 'Zephyr', 'Talia'];
+    const characters = [
+      {
+        id: `char_1_leader`,
+        name: `${pickOne(rng, ['Commander', 'Archon', 'Overseer', 'Magister', 'Director', 'High Warden'])} ${pickOne(rng, charNames)}`,
+        role: `High Leader of ${factions[0].name}`,
+        locationId: locations[0].id,
+        motivation: `To consolidate authority and master the secrets of ${primary.toLowerCase()}.`
+      },
+      {
+        id: `char_2_scout`,
+        name: `${pickOne(rng, ['Pathfinder', 'Scout', 'Agent', 'Navigator', 'Scholar', 'Tracker'])} ${pickOne(rng, charNames)}`,
+        role: `Frontier Scout for ${factions[1].name}`,
+        locationId: locations[1].id,
+        motivation: `To investigate emerging anomalies and safeguard the outer perimeter.`
+      }
+    ];
+
+    // Capabilities
+    const capabilities = [
+      {
+        capabilityId: `cap_1_${primaryKey}`,
+        source: 'AI_PROPOSAL' as const,
+        name: `${primary} ${pickOne(rng, ['Channeling', 'Resonance', 'Transmutation', 'Attunement', 'Infusion', 'Manipulation'])}`,
+        powerTier: 'Major' as const,
+        description: `Specialized ability to interact with and channel ${primary.toLowerCase()} properties directly.`,
+        validated: true
+      },
+      {
+        capabilityId: `cap_2_${secondaryKey}`,
+        source: 'AI_PROPOSAL' as const,
+        name: `${secondary} ${pickOne(rng, ['Adaptation', 'Warding', 'Navigation', 'Surge', 'Defense'])}`,
+        powerTier: 'Moderate' as const,
+        description: `Field techniques developed to navigate hazardous environmental anomalies across ${setting}.`,
+        validated: true
+      }
+    ];
+
+    // World Rules
+    const worldRules = [
+      {
+        ruleId: `rule_1_${primaryKey}`,
+        ruleType: 'CANON_RULE' as const,
+        description: `Interactions involving ${primary.toLowerCase()} follow strict conservation of energy and require deliberate focus.`,
+        validated: true
+      },
+      {
+        ruleId: `rule_2_${secondaryKey}`,
+        ruleType: 'ENVIRONMENTAL_CONSTRAINT' as const,
+        description: `Severe environmental shifts across ${setting} can destabilize standard equipment and travel routes.`,
+        validated: true
+      }
+    ];
+
+    // 6 Structured Planned Events
+    const events = [
+      {
+        id: `evt_1_surge`,
+        title: `${primary} ${pickOne(rng, ['Awakening', 'Surge', 'Incursion', 'Convergence', 'Fluctuation', 'Manifestation'])}`,
+        description: `An environmental surge of ${primary.toLowerCase()} activity manifests at ${locations[0].name}.`,
+        category: 'SUPERNATURAL',
+        scheduledTime: { year: 42, month: 10, day: 14, hour: 12, minute: 0, second: 0, totalElapsedSeconds: 393914400 },
+        participatingActors: [factions[0].id],
+        locationId: locations[0].id,
+        preconditions: { requiredEvents: [], requiredWorldFacts: [] },
+        plannedConsequences: [{ type: 'location_state_change', targetId: locations[0].id, detail: `Initial surge alters regional equilibrium at ${locations[0].name}.` }],
+        visibility: 'PUBLIC',
+        status: 'PLANNED'
+      },
+      {
+        id: `evt_2_response`,
+        title: `${factions[1].name} ${pickOne(rng, ['Mobilization', 'Reconnaissance', 'Patrol', 'Expedition', 'Countermeasure'])}`,
+        description: `${factions[1].name} dispatches operatives from ${locations[1].name} to investigate the anomaly.`,
+        category: 'FACTION',
+        scheduledTime: { year: 42, month: 10, day: 15, hour: 8, minute: 0, second: 0, totalElapsedSeconds: 393986400 },
+        participatingActors: [characters[1].id, factions[1].id],
+        locationId: locations[1].id,
+        preconditions: { requiredEvents: [`evt_1_surge`], requiredWorldFacts: [] },
+        plannedConsequences: [{ type: 'actor_state', targetId: characters[1].id, detail: 'Dispatched to observe outer boundary shifts.' }],
+        visibility: 'PUBLIC',
+        status: 'PLANNED'
+      },
+      {
+        id: `evt_3_skirmish`,
+        title: `Skirmish near ${locations[2].name}`,
+        description: `Rival scouts encounter volatile anomalies and competing patrols near ${locations[2].name}.`,
+        category: 'MILITARY',
+        scheduledTime: { year: 42, month: 10, day: 16, hour: 14, minute: 0, second: 0, totalElapsedSeconds: 394095600 },
+        participatingActors: [characters[0].id, factions[0].id],
+        locationId: locations[2].id,
+        preconditions: { requiredEvents: [`evt_2_response`], requiredWorldFacts: [] },
+        plannedConsequences: [{ type: 'world_fact', targetId: 'world', detail: `Hostilities increase along the border of ${locations[2].name}.` }],
+        visibility: 'PUBLIC',
+        status: 'PLANNED'
+      },
+      {
+        id: `evt_4_discovery`,
+        title: `${pickOne(rng, ['Cryptic Revelation', 'Primordial Vault Breach', 'Signal Decryption', 'Ancient Catalyst Discovery'])}`,
+        description: `Explorers uncover a critical secret concerning the historical origin of ${primary.toLowerCase()}.`,
+        category: 'DISCOVERY',
+        scheduledTime: { year: 42, month: 10, day: 17, hour: 18, minute: 0, second: 0, totalElapsedSeconds: 394196400 },
+        participatingActors: [characters[0].id],
+        locationId: locations[0].id,
+        preconditions: { requiredEvents: [`evt_3_skirmish`], requiredWorldFacts: [] },
+        plannedConsequences: [{ type: 'location_state_change', targetId: locations[0].id, detail: 'Ancient records deciphered.' }],
+        visibility: 'PUBLIC',
+        status: 'PLANNED'
+      },
+      {
+        id: `evt_5_conclave`,
+        title: `The ${setting} ${pickOne(rng, ['Emergency Conclave', 'Council of Powers', 'Frontier Summit', 'Treaty Assembly'])}`,
+        description: `Delegates from ${factions[0].name} and ${factions[1].name} meet at ${locations[0].name} to contest territorial control.`,
+        category: 'POLITICAL',
+        scheduledTime: { year: 42, month: 10, day: 18, hour: 20, minute: 0, second: 0, totalElapsedSeconds: 394290000 },
+        participatingActors: [factions[0].id, factions[1].id],
+        locationId: locations[0].id,
+        preconditions: { requiredEvents: [`evt_4_discovery`], requiredWorldFacts: [] },
+        plannedConsequences: [{ type: 'faction_state_change', targetId: factions[0].id, detail: 'Diplomatic alert escalated.' }],
+        visibility: 'PUBLIC',
+        status: 'PLANNED'
+      },
+      {
+        id: `evt_6_climax`,
+        title: `The ${primary} ${pickOne(rng, ['Culmination', 'Ascension Apex', 'Great Muster', 'Threshold Reckoning'])}`,
+        description: `Atmospheric, geological, and political pressures culminate across ${setting}, initiating the campaign era.`,
+        category: 'SUPERNATURAL',
+        scheduledTime: { year: 42, month: 10, day: 19, hour: 12, minute: 0, second: 0, totalElapsedSeconds: 394347600 },
+        participatingActors: [characters[1].id, factions[0].id],
+        locationId: locations[2].id,
+        preconditions: { requiredEvents: [`evt_5_conclave`], requiredWorldFacts: [] },
+        plannedConsequences: [{ type: 'world_fact', targetId: 'world', detail: 'The campaign setting transitions into active systemic conflict.' }],
+        visibility: 'PUBLIC',
+        status: 'PLANNED'
+      }
+    ];
+
+    return {
+      title,
+      summary,
+      description,
+      genreTags,
+      toneTags,
+      mediumTags,
+      era,
+      setting,
+      locations,
+      factions,
+      characters,
+      capabilities,
+      worldRules,
+      events
+    };
+  }
+
+  /**
+   * Deterministic event validation, repair, and count enforcement pipeline.
+   * Ensures:
+   * 1. 5 to 10 planned events
+   * 2. Valid referential integrity (locations, actors, preconditions)
+   * 3. Structured consequences and chronology
+   */
+  public validateAndNormalizeEvents(
     eventsRaw: any[],
     locations: any[],
     characters: any[],
-    factions: any[]
+    factions: any[],
+    premise: string = '',
+    seed: string = 'event_seed',
+    enforceCountRange: boolean = false
   ): any[] {
     if (!Array.isArray(eventsRaw)) {
       eventsRaw = [];
@@ -756,7 +755,7 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
       if (!raw || typeof raw !== 'object') {
         continue;
       }
-      
+
       // 1. Unique ID Generation / De-duplication
       let id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : `evt_syn_event_${Date.now()}_${idx}`;
       if (eventIds.has(id)) {
@@ -785,11 +784,10 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
       let scheduledTime = raw.scheduledTime || {};
       const year = typeof scheduledTime.year === 'number' && scheduledTime.year > 0 ? scheduledTime.year : 42;
       const month = typeof scheduledTime.month === 'number' && scheduledTime.month >= 1 && scheduledTime.month <= 12 ? scheduledTime.month : 10;
-      const day = typeof scheduledTime.day === 'number' && scheduledTime.day >= 1 && scheduledTime.day <= 30 ? scheduledTime.day : 15 + idx;
+      const day = typeof scheduledTime.day === 'number' && scheduledTime.day >= 1 && scheduledTime.day <= 30 ? scheduledTime.day : 14 + idx;
       const hour = typeof scheduledTime.hour === 'number' && scheduledTime.hour >= 0 && scheduledTime.hour < 24 ? scheduledTime.hour : 12;
       const minute = typeof scheduledTime.minute === 'number' && scheduledTime.minute >= 0 && scheduledTime.minute < 60 ? scheduledTime.minute : 0;
       const second = 0;
-      // standard month elapsed seconds logic
       const totalElapsedSeconds = (year * 360 * 24 * 3600) + ((month - 1) * 30 * 24 * 3600) + ((day - 1) * 24 * 3600) + (hour * 3600) + (minute * 60);
 
       const validatedTimestamp = {
@@ -800,6 +798,8 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
       let locationId = typeof raw.locationId === 'string' && raw.locationId.trim() ? raw.locationId.trim() : undefined;
       if (locationId && !locationIds.has(locationId)) {
         locationId = locations.length > 0 ? locations[0].id : undefined;
+      } else if (!locationId && locations.length > 0) {
+        locationId = locations[idx % locations.length].id;
       }
 
       // 7. Actor references validation
@@ -809,8 +809,12 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
           return typeof actorId === 'string' && (characterIds.has(actorId) || factionIds.has(actorId));
         });
       }
+      if (participatingActors.length === 0) {
+        if (characters.length > 0) participatingActors.push(characters[idx % characters.length].id || characters[idx % characters.length].subjectId);
+        else if (factions.length > 0) participatingActors.push(factions[idx % factions.length].id || factions[idx % factions.length].factionId);
+      }
 
-      // 8. Preconditions validation (Impossible self dependency filter)
+      // 8. Preconditions validation (Self dependency filter)
       const preconditionsRaw = raw.preconditions || {};
       let requiredEvents: string[] = [];
       if (Array.isArray(preconditionsRaw.requiredEvents)) {
@@ -841,9 +845,9 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
             cType = 'world_fact';
           }
           const detail = typeof con.detail === 'string' && con.detail.trim() ? con.detail.trim() : 'Changes status';
-          let targetId = typeof con.targetId === 'string' && con.targetId.trim() ? con.targetId.trim() : id;
-          if (targetId && !entityIds.has(targetId) && targetId !== id) {
-            targetId = id;
+          let targetId = typeof con.targetId === 'string' && con.targetId.trim() ? con.targetId.trim() : (locationId || id);
+          if (targetId && !entityIds.has(targetId) && targetId !== 'world' && targetId !== id) {
+            targetId = locationId || id;
           }
 
           const uniqKey = `${cType}_${targetId}_${detail}`;
@@ -855,6 +859,14 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
               detail
             });
           }
+        });
+      }
+
+      if (plannedConsequences.length === 0) {
+        plannedConsequences.push({
+          type: 'location_state_change',
+          targetId: locationId || id,
+          detail: `State modified during ${title}`
         });
       }
 
@@ -873,13 +885,86 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
       });
     }
 
-    // 10. Post-filtering of requiredEvents to enforce strict referential integrity
-    const finalEventIds = new Set(cleanedEvents.map(e => e.id));
-    cleanedEvents.forEach(e => {
-      e.preconditions.requiredEvents = e.preconditions.requiredEvents.filter((depId: string) => finalEventIds.has(depId));
+    // Enforce Event Limits: Max 10, Min 5 (when requested)
+    let finalEvents = [...cleanedEvents];
+
+    if (enforceCountRange) {
+      // Trim to at most 10 while maintaining referential integrity
+      if (finalEvents.length > 10) {
+        finalEvents = finalEvents.slice(0, 10);
+      }
+
+      // Complete to at least 5 if fewer than 5 events provided
+      if (finalEvents.length < 5) {
+        const tokens = extractPremiseTokens(premise);
+        const primaryToken = tokens[0] || 'Realm';
+        const rng = createSeededRng(`${seed}::complete_events::${finalEvents.length}`);
+
+        const fallbackEventTemplates = [
+          { cat: 'DISCOVERY', title: `${primaryToken} Anomaly Emergence`, desc: `Sensors and scouts detect early anomalies across regional territories.` },
+          { cat: 'FACTION', title: `Regional Council Mobilization`, desc: `Local leaders gather to assess defensive stances and economic distribution.` },
+          { cat: 'MILITARY', title: `Frontier Patrol Alignment`, desc: `Border patrols coordinate movements to secure transit corridors.` },
+          { cat: 'SUPERNATURAL', title: `Atmospheric Energy Surge`, desc: `A sudden influx of ambient energy sweeps through key landmarks.` },
+          { cat: 'POLITICAL', title: `Territorial Accord Review`, desc: `Treaties between factions undergo scrutiny as conditions change.` },
+          { cat: 'DISASTER', title: `Environmental Tremor Event`, desc: `Subterranean or atmospheric shifts trigger emergency protocols.` }
+        ];
+
+        while (finalEvents.length < 5) {
+          const idx = finalEvents.length;
+          const autoId = `evt_syn_auto_${idx + 1}`;
+          const prevId = idx > 0 ? finalEvents[idx - 1].id : undefined;
+          const tpl = fallbackEventTemplates[idx % fallbackEventTemplates.length];
+          const day = 14 + idx;
+          const totalElapsedSeconds = (42 * 360 * 24 * 3600) + ((10 - 1) * 30 * 24 * 3600) + ((day - 1) * 24 * 3600) + (12 * 3600);
+
+          const loc = locations.length > 0 ? locations[idx % locations.length] : { id: 'loc_primary', name: 'Primary Region' };
+          const actor = characters.length > 0
+            ? (characters[idx % characters.length].id || characters[idx % characters.length].subjectId)
+            : factions.length > 0
+            ? (factions[idx % factions.length].id || factions[idx % factions.length].factionId)
+            : 'actor_system';
+
+          finalEvents.push({
+            id: autoId,
+            title: tpl.title,
+            description: tpl.desc,
+            category: tpl.cat,
+            scheduledTime: {
+              year: 42,
+              month: 10,
+              day,
+              hour: 12,
+              minute: 0,
+              second: 0,
+              totalElapsedSeconds
+            },
+            participatingActors: [actor],
+            locationId: loc.id,
+            preconditions: {
+              requiredEvents: prevId ? [prevId] : [],
+              requiredWorldFacts: []
+            },
+            plannedConsequences: [
+              {
+                type: 'location_state_change',
+                targetId: loc.id,
+                detail: `Regional balance updated during ${tpl.title}.`
+              }
+            ],
+            visibility: 'PUBLIC',
+            status: 'PLANNED'
+          });
+        }
+      }
+    }
+
+    // Referential integrity check for requiredEvents
+    const finalEventIds = new Set(finalEvents.map(e => e.id));
+    finalEvents.forEach(e => {
+      e.preconditions.requiredEvents = (e.preconditions?.requiredEvents || []).filter((depId: string) => finalEventIds.has(depId) && depId !== e.id);
     });
 
-    return cleanedEvents;
+    return finalEvents;
   }
 }
 

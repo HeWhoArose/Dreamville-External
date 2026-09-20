@@ -200,6 +200,7 @@ export interface ProviderGenerateOptions {
   maxTokens?: number;
   retryCount?: number;
   modelId?: string;
+  systemInstruction?: string;
 }
 
 export interface ProviderGenerateResult {
@@ -1590,6 +1591,24 @@ export class MultiModelOrchestrator {
       isEmergencyFloor: false,
     });
 
+    // Specialized Speech Model
+    this.registerModel({
+      providerId: 'provider_mock_speech',
+      modelId: 'mock-speech-v1',
+      displayName: 'DreamBook Canonical Voice Engine',
+      pool: 'speech',
+      capabilities: ['tts', 'speech_synthesis'],
+      contextWindow: 16000,
+      health: 'Healthy',
+      quota: 'Healthy',
+      latencyMs: 300,
+      userPriority: 70,
+      roleEligibility: ['speech.generate'],
+      accessStatus: 'accessible',
+      lifecycleState: 'active',
+      isEmergencyFloor: false,
+    });
+
     // External Unconfigured Provider Models
     this.registerModel({
       providerId: 'google_cloud_tts',
@@ -2324,41 +2343,6 @@ export class MultiModelOrchestrator {
       }
     }
 
-    const customChainKeys = this.taskFallbackChains.get(task);
-    if (customChainKeys && customChainKeys.length > 0) {
-      const resolvedChain: ModelRegistryRecord[] = [];
-      for (const key of customChainKeys) {
-        const m = Array.from(this.models.values()).find(
-          (mod) => `${mod.providerId}::${mod.modelId}` === key || mod.modelId === key
-        );
-        if (m && (m.isEmergencyFloor || (m.roleEligibility.includes(task) && m.health !== 'Unavailable' && m.health !== 'DisabledByUser' && m.health !== 'InvalidAuth'))) {
-          if (contextTokens === 0 || contextTokens <= m.contextWindow) {
-            if (!resolvedChain.some(existing => existing.modelId === m.modelId)) {
-              resolvedChain.push(m);
-            }
-          }
-        }
-      }
-      if (resolvedChain.length > 0) {
-        const pinnedKey = this.taskPinnedModels.get(task);
-        let primary = pinnedKey ? resolvedChain.find(r => `${r.providerId}::${r.modelId}` === pinnedKey || r.modelId === pinnedKey) : undefined;
-        if (!primary) {
-          primary = resolvedChain[0];
-        }
-        const fallbacks = resolvedChain.filter(m => m.modelId !== primary.modelId);
-        const emergency = Array.from(this.models.values()).find((m) => m.isEmergencyFloor);
-        if (emergency && emergency.roleEligibility.includes(task) && !fallbacks.some((f) => f.modelId === emergency.modelId) && primary.modelId !== emergency.modelId) {
-          fallbacks.push(emergency);
-        }
-        return {
-          selectedModel: primary,
-          selectionReason: `Selected via configured task fallback chain for '${task}'.`,
-          selectionScore: primary.userPriority + 400,
-          fallbacks,
-        };
-      }
-    }
-
     const eligible = Array.from(this.models.values()).filter((m) => {
       // 1. Role eligibility
       if (!m.roleEligibility.includes(task)) return false;
@@ -2408,8 +2392,16 @@ export class MultiModelOrchestrator {
       };
     }
 
+    const customChainKeys = this.taskFallbackChains.get(task);
+
     const scored = eligible.map((model) => {
       let score = model.userPriority;
+      if (customChainKeys) {
+        const chainIndex = customChainKeys.findIndex((k) => k === `${model.providerId}::${model.modelId}` || k === model.modelId);
+        if (chainIndex !== -1) {
+          score += (customChainKeys.length - chainIndex) * 200;
+        }
+      }
       if (model.health === 'Healthy') score += 50;
       else if (model.health === 'Degraded') score += 10;
       else if (model.health === 'Throttled') score -= 30;
@@ -3518,11 +3510,14 @@ export class MultiModelOrchestrator {
           throw new Error('Provider returned empty response.');
         }
 
-        const source = cIdx === 0 ? 'AI_PRIMARY' : 'AI_FALLBACK';
+        const isEmergency = Boolean(currentCandidate.isEmergencyFloor) ||
+                            currentCandidate.providerId.includes('emergency') ||
+                            currentCandidate.providerId === 'provider_deterministic_emergency';
+        const source = isEmergency ? 'DETERMINISTIC_FALLBACK' : (cIdx === 0 ? 'AI_PRIMARY' : 'AI_FALLBACK');
         const fallbackReason = cIdx > 0 ? `Primary model unavailable or exhausted; fell back to ${currentCandidate.modelId}` : undefined;
 
         return {
-          text: providerRes.text,
+          text: isEmergency ? '' : providerRes.text,
           source,
           providerId: currentCandidate.providerId,
           modelId: currentCandidate.modelId,

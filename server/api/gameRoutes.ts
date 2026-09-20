@@ -3104,6 +3104,7 @@ gameRouter.post('/worlds', async (req: Request, res: Response) => {
       audioConfig,
       narrativeConfig,
       events,
+      generationSeed,
     } = req.body;
 
     if (!naturalLanguagePremise || typeof naturalLanguagePremise !== 'string') {
@@ -3116,6 +3117,7 @@ gameRouter.post('/worlds', async (req: Request, res: Response) => {
       genreTags,
       toneTags,
       mediumTags,
+      generationSeed,
       defaultEra,
       canonMode,
       rulesetId,
@@ -3682,6 +3684,18 @@ gameRouter.post('/worlds/runs/:storyId/dice-clash/resolve', async (req: Request,
     res.json(result);
   } catch (error: any) {
     res.status(400).json({ error: error?.message || 'Failed to resolve dice clash.' });
+  }
+});
+
+gameRouter.post('/worlds/runs/:storyId/spells/evaluate', async (req: Request, res: Response) => {
+  try {
+    const { spellProposal } = req.body;
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const storyId = req.params.storyId as string;
+    const result = worldRepository.evaluateCustomSpellProposal(storyId, spellProposal || req.body);
+    res.json(result);
+  } catch (error: any) {
+    res.status(400).json({ error: error?.message || 'Failed to evaluate spell proposal.' });
   }
 });
 

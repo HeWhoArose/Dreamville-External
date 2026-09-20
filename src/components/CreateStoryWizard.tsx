@@ -104,6 +104,7 @@ export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRu
         genreTags: selectedGenres,
         toneTags: selectedTones,
         mediumTags: selectedMediums,
+        generationSeed: `seed_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
       });
       setSynthesizedWorld(result);
       if (result.suggestedProtagonist) {
@@ -342,8 +343,19 @@ export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRu
               <div className="flex items-center gap-3">
                 <Sparkles className="w-5 h-5 text-purple-400" />
                 <div>
-                  <span className="font-semibold block text-stone-100">{synthesizedWorld.title || 'Dynamic World Concept'}</span>
-                  <span className="text-xs text-purple-300">{synthesizedWorld.summary || 'Generated successfully from your premise.'}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold block text-stone-100">{synthesizedWorld.title || 'Dynamic World Concept'}</span>
+                    <span className="text-[11px] px-2 py-0.5 rounded-md bg-stone-900/80 border border-purple-500/30 text-purple-300 font-medium">
+                      {synthesizedWorld.generationStatus || (
+                        synthesizedWorld.provenance?.generationSource === 'AI_PRIMARY'
+                          ? 'Generated with DreamBook AI'
+                          : synthesizedWorld.provenance?.generationSource === 'AI_FALLBACK'
+                          ? 'Primary AI unavailable · Generated with fallback AI'
+                          : 'AI unavailable · DreamBook used its offline world generator'
+                      )}
+                    </span>
+                  </div>
+                  <span className="text-xs text-purple-300 mt-0.5 block">{synthesizedWorld.summary || 'Generated successfully from your premise.'}</span>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -385,8 +397,8 @@ export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRu
                       <span className="text-stone-200 font-medium">{synthesizedWorld.era || 'Current Age'}</span>
                     </div>
                     <div>
-                      <span className="text-stone-500 uppercase tracking-wider block text-[10px]">World ID</span>
-                      <span className="text-stone-400 font-mono text-[11px]">{synthesizedWorld.worldId}</span>
+                      <span className="text-stone-500 uppercase tracking-wider block text-[10px]">Genre</span>
+                      <span className="text-stone-200 font-medium">{(synthesizedWorld.genreTags || []).join(', ') || 'Original'}</span>
                     </div>
                     <div>
                       <span className="text-stone-500 uppercase tracking-wider block text-[10px]">Capabilities</span>
@@ -689,8 +701,8 @@ export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRu
                 <h3 className="text-lg font-serif font-semibold text-stone-100">The World of {synthesizedWorld?.title}</h3>
                 <div className="space-y-3 text-sm">
                   <div>
-                    <span className="text-xs font-semibold uppercase text-stone-500 block">World ID</span>
-                    <span className="text-stone-300 font-mono text-xs">{synthesizedWorld?.worldId}</span>
+                    <span className="text-xs font-semibold uppercase text-stone-500 block">Setting & Era</span>
+                    <span className="text-stone-300 text-xs">{synthesizedWorld?.setting || 'Known Realm'} • {synthesizedWorld?.era || 'Current Era'}</span>
                   </div>
                   <div>
                     <span className="text-xs font-semibold uppercase text-stone-500 block">Original Premise</span>

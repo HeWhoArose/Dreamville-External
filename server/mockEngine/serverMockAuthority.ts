@@ -173,6 +173,10 @@ export class ServerMockAuthority {
     const targetStoryId = storyId || this.activeStoryId;
     const player = worldRepository.getPlayerLifecycle(targetStoryId);
     const run = worldRepository.getStoryRun(targetStoryId);
+    const conditionEngine = worldRepository.getConditionEngine(targetStoryId);
+    const playerConditionState = player
+      ? conditionEngine.getActorState(player.actorId)
+      : undefined;
     const canonicalLocationId = player ? player.locationId : (run ? run.currentLocationId : state.activeLocationId);
     const isTraveling = player ? player.isTraveling : false;
     const activeJourney = player ? player.activeJourney : null;
@@ -301,6 +305,9 @@ export class ServerMockAuthority {
         title: run?.characterRole || state.protagonist.title,
         portraitUrl: run?.characterPortraitUrl,
         portraitEmoji: run?.characterPortraitEmoji || sanitizedCharacters[actorId]?.portraitEmoji || '🧙‍♂️',
+        conditionState: playerConditionState
+          ? conditionEngine.exportActorState(actorId)
+          : undefined,
         status: player?.isDead
           ? 'Deceased'
           : player?.isPossessed
@@ -417,6 +424,26 @@ export class ServerMockAuthority {
       (request as any).description ||
       (request as any).input ||
       'Performed freeform action.';
+
+    const conditionEngine = worldRepository.getConditionEngine(targetStoryId);
+    const player = worldRepository.getPlayerLifecycle(targetStoryId);
+    const actorId = player?.actorId || `player_actor_${targetStoryId}`;
+
+    // Resolve condition-driven action triggers before narration so the narrator sees the committed result.
+    conditionEngine.processAction(actorId, String(freeformText), worldRepository.getWorldClock(targetStoryId).getAbsoluteTime());
+    conditionEngine.tickActor(actorId, 'TURN', worldRepository.getWorldClock(targetStoryId).getAbsoluteTime());
+
+    const conditionStateAfterAction = conditionEngine.getActorState(actorId);
+    if (conditionStateAfterAction?.dead && player && !player.isDead) {
+      worldRepository.updatePlayerLifecycle(targetStoryId, player.copyWith({
+        deathRecord: {
+          isDead: true,
+          diedAtTimestamp: worldRepository.getWorldClock(targetStoryId).getTimestamp(),
+          cause: 'A condition reduced the character to a terminal state.',
+          revivalPossible: true,
+        },
+      }));
+    }
 
     let narrativeResponse = '';
     try {

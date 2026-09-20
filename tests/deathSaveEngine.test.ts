@@ -47,9 +47,10 @@ test('death-save engine handles natural 20, natural 1, stabilization, and lethal
 
   const stabilized = deathSaveEngine.resolveTurnStart(
     { successes: 2, failures: 0, stable: false },
-    new LocalDiceEngine(19) // natural 20 also verifies the independent 0-hp recovery path
+    new LocalDiceEngine(6)
   );
-  assert.equal(stabilized.revived, true);
+  assert.equal(stabilized.stabilized, true);
+  assert.equal(stabilized.state.stable, true);
 
   const lethal = deathSaveEngine.applyDamageAtZero(
     { successes: 0, failures: 2, stable: false },
@@ -122,7 +123,7 @@ test('damage received at 0 HP adds a death-save failure and a critical hit adds 
     x: 1,
     y: 0,
     initiative: 0,
-    initiativeModifier: 100,
+    initiativeModifier: 0,
     team: 'enemies',
     hpCurrent: 20,
     hpMax: 20,

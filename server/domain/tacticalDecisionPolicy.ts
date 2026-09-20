@@ -301,8 +301,9 @@ export class NpcTacticalDecisionPolicy {
         try {
           const attackRes = combatEngine.executeAttack(proposal.actorId, proposal.targetId);
           return {
-            success: true,
+            success: attackRes.success,
             proposal,
+            errorReason: attackRes.errorReason,
             combatOutcome: attackRes,
           };
         } catch (err: unknown) {
@@ -344,8 +345,9 @@ export class NpcTacticalDecisionPolicy {
         });
 
         return {
-          success: true,
+          success: castRes.success,
           proposal,
+          errorReason: castRes.success ? undefined : castRes.headline,
           combatOutcome: castRes,
         };
       }

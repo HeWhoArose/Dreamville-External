@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from '@google/genai';
+import { worldRepository } from '../repositories/worldRepository';
 import {
   CharacterGenesisDraft,
   ConfirmedCharacter,
@@ -32,114 +32,21 @@ export class CharacterGenesisService {
 
     const draftId = existingDraft?.draftId || `draft_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
-    // Try Gemini extraction if API key is present
-    let extracted: any = null;
-    const apiKey = process.env.GEMINI_API_KEY;
-
-    if (apiKey && concept.trim().length > 0) {
-      try {
-        const ai = new GoogleGenAI({
-          apiKey,
-          httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
-        });
-
-        const prompt = `You are a master character designer for narrative RPGs.
-Given this character concept and world context, extract and design a complete, deeply detailed character draft.
-
-Treat feats and titles as extensible data. Do not restrict them to a predefined list. Propose custom feats/titles when the concept, background, achievements, or world context imply them. A feat may have structured narrative effects such as reputation, NPC disposition, proficiency, or other rules effects. Keep those effects explainable and structured.
-
-WORLD CONTEXT:
-Title: ${worldTemplate?.title || 'Unknown World'}
-Genre: ${worldTemplate?.genreTags?.join(', ') || 'Fantasy'}
-Tone: ${worldTemplate?.toneTags?.join(', ') || 'Heroic'}
-Setting: ${worldTemplate?.setting || 'Realm'}
-Era: ${worldTemplate?.defaultEra || worldTemplate?.era || 'Current Era'}
-World Rules: ${JSON.stringify(worldTemplate?.worldRules || worldTemplate?.ruleConstraints || [])}
-Available Locations: ${JSON.stringify(
-          (worldTemplate?.geography?.nodes || []).map((n: any) => ({ id: n.id, name: n.name, region: n.region }))
-        )}
-
-CHARACTER CONCEPT:
-"${concept}"
-
-OUTPUT MUST BE STRICT JSON with the following structure:
-{
-  "identity": { "name": string, "species": string, "age": number or string, "gender": string },
-  "appearance": { "physicalDescription": string, "distinguishingTraits": [string] },
-  "personality": { "traits": [string], "temperament": string, "values": [string] },
-  "background": { "history": string, "upbringing": string, "importantEvents": [string] },
-  "role": { "archetype": string, "profession": string, "role": string },
-  "motivations": { "goals": [string], "fears": [string], "desires": [string] },
-  "relationships": { "allies": [string], "rivals": [string], "family": [string], "factions": [string] },
-  "condition": { "injuries": [string], "curses": [string], "forms": [string], "specialStates": [string] },
-  "attributes": [{ "name": string, "value": number, "description": string }],
-  "stats": [{ "name": string, "value": number, "description": string }],
-  "traits": [string],
-  "feats": [{ "name": string, "description": string, "effects": [{ "type": string, "scope": string, "modifier": number, "description": string }] }],
-  "titles": [{ "name": string, "description": string, "effects": [{ "type": string, "scope": string, "modifier": number, "description": string }] }],
-  "aiExtractionSummary": { "interpretation": string, "keyFacts": [string], "proposedHighlights": [string], "uncertainties": [string] },
-  "capabilities": [
-    {
-      "id": string,
-      "name": string,
-      "category": "Combat" | "Magic" | "Movement" | "Domain" | "Perception" | "Biological" | "Social",
-      "activationMode": "immediate" | "passive" | "reaction" | "charged" | "channelled" | "toggled",
-      "powerTier": "Minor" | "Moderate" | "Major" | "WorldScale",
-      "baseEnergyCost": number,
-      "baseStrainCost": number,
-      "description": string
-    }
-  ],
-  "generatedSkills": [
-    {
-      "name": string,
-      "description": string,
-      "parentCapabilityName": string,
-      "activationType": string,
-      "energyCost": number,
-      "cooldownTurns": number,
-      "range": string
-    }
-  ],
-  "startingEquipment": {
-    "weapons": [string],
-    "armor": [string],
-    "tools": [string],
-    "consumables": [string]
-  },
-  "startingLocation": {
-    "locationId": string,
-    "name": string,
-    "region": string
-  },
-  "startingSituation": {
-    "summary": string,
-    "hook": string,
-    "initialConditions": string,
-    "whyHereNow": string
-  },
-  "portraitAsset": {
-    "promptFallback": string,
-    "emoji": string
-  }
-}`;
-
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: prompt,
-          config: {
-            temperature: 0.4,
-            responseMimeType: 'application/json',
-          },
-        });
-
-        if (response.text) {
-          extracted = JSON.parse(response.text);
-        }
-      } catch (err) {
-        console.warn('[CharacterGenesisService] Gemini extraction failed or unavailable, using procedural fallback:', err);
-        extracted = null;
+    // Use the canonical model orchestrator so Genesis respects configured
+    // task routing, provider health, fallbacks, and deterministic emergency behavior.
+    try {
+      const orchestrator = worldRepository.getAiOrchestrator();
+      const response = await orchestrator.executeTaskGeneration(
+        'narrative.generate',
+        prompt,
+        'Return only the requested Character Genesis JSON. Treat the player concept as authoritative input; do not overwrite preserved user fields.'
+      );
+      if (response.text) {
+        extracted = JSON.parse(response.text);
       }
+    } catch (err) {
+      console.warn('[CharacterGenesisService] Orchestrated extraction failed, using procedural fallback:', err);
+      extracted = null;
     }
 
     // If Gemini was unavailable or returned invalid output, run procedural synthesis
@@ -512,59 +419,18 @@ OUTPUT MUST BE STRICT JSON with the following structure:
   ): Promise<CapabilityDefinition & { generatedSkills: GeneratedTechnique[] }> {
     const concept = input.capabilityConcept || 'Unique Ability';
     const capId = `cap_custom_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const apiKey = process.env.GEMINI_API_KEY;
-
-    let proposal: any = null;
-
-    if (apiKey && concept.trim().length > 0) {
-      try {
-        const ai = new GoogleGenAI({
-          apiKey,
-          httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
-        });
-
-        const prompt = `Propose a balanced, structured capability definition and 2 complementary techniques for this concept in an RPG world.
-
-WORLD: ${worldTemplate?.title} (${worldTemplate?.genreTags?.join(', ')})
-CONCEPT: "${concept}"
-CHARACTER CONTEXT: ${JSON.stringify(input.characterContext || {})}
-
-Respond in pure JSON:
-{
-  "name": string,
-  "category": "Combat" | "Magic" | "Movement" | "Domain" | "Perception" | "Biological" | "Social",
-  "activationMode": "immediate" | "passive" | "reaction" | "charged" | "channelled" | "toggled",
-  "powerTier": "Minor" | "Moderate" | "Major" | "WorldScale",
-  "baseEnergyCost": number,
-  "baseStrainCost": number,
-  "description": string,
-  "techniques": [
-    {
-      "name": string,
-      "description": string,
-      "activationType": string,
-      "energyCost": number,
-      "cooldownTurns": number,
-      "range": string
-    }
-  ]
-}`;
-
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: prompt,
-          config: {
-            temperature: 0.3,
-            responseMimeType: 'application/json',
-          },
-        });
-
-        if (response.text) {
-          proposal = JSON.parse(response.text);
-        }
-      } catch (err) {
-        console.warn('[CharacterGenesisService] Custom capability AI proposal failed, using procedural fallback:', err);
+    try {
+      const orchestrator = worldRepository.getAiOrchestrator();
+      const response = await orchestrator.executeTaskGeneration(
+        'narrative.generate',
+        prompt,
+        'Return only the requested structured custom capability JSON.'
+      );
+      if (response.text) {
+        proposal = JSON.parse(response.text);
       }
+    } catch (err) {
+      console.warn('[CharacterGenesisService] Orchestrated custom capability proposal failed, using procedural fallback:', err);
     }
 
     if (!proposal || !proposal.name) {

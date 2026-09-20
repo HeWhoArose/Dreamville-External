@@ -1265,7 +1265,7 @@ export interface ConfirmedCharacter {
   provenance: Record<string, CharacterProvenanceSource>;
   fieldLocks: string[];
   revision: number;
-  storyMode?: 'PROTAGONIST' | 'SIDE_CHARACTER' | 'FREE_ROAM';
+  storyMode?: CharacterStoryMode;
   dndRulesMode?: 'FULL_DND' | 'HYBRID_DND' | 'CUSTOM_HOMEBREW_DND';
 }
 

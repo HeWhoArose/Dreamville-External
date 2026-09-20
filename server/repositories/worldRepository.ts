@@ -17,6 +17,7 @@ import { LivingWorldSimulation } from '../domain/livingWorldSimulation';
 import { MultiModelOrchestrator } from '../domain/aiOrchestrator';
 import { CharacterAlignmentEngine } from '../domain/characterAlignment';
 import { ConditionEngine } from '../domain/conditionEngine';
+import { StoryCheckEngine } from '../domain/storyCheckEngine';
 import { CampaignArchiveService, PartitionedArchive } from '../domain/campaignArchive';
 import { dndSpellRulesEvaluator } from '../domain/dndSpellRulesModel';
 import {
@@ -54,6 +55,7 @@ export interface WorldRepository {
   ): import('../domain/capabilityEngine').EffectiveCapability[];
   getCombatEngine(storyId: string): TacticalCombatEngine;
   getConditionEngine(storyId: string): ConditionEngine;
+  getStoryCheckEngine(storyId: string): StoryCheckEngine;
   getCombatPerceptionOptions(storyId: string, viewerActorId: string): CombatPerceptionOptions;
   isEntityEpistemicallyKnown(storyId: string, viewerActorId: string, targetId: string): boolean;
   getMemoryEngine(storyId: string): MemoryOpportunityEngine;
@@ -168,6 +170,7 @@ export class InMemoryWorldRepository implements WorldRepository {
   private capabilityEngines: Map<string, CapabilityEngine> = new Map();
   private combatEngines: Map<string, TacticalCombatEngine> = new Map();
   private conditionEngines: Map<string, ConditionEngine> = new Map();
+  private storyCheckEngines: Map<string, StoryCheckEngine> = new Map();
   private memoryEngines: Map<string, MemoryOpportunityEngine> = new Map();
   private livingSimulations: Map<string, LivingWorldSimulation> = new Map();
   private aiOrchestrator: MultiModelOrchestrator | null = null;
@@ -1259,6 +1262,15 @@ export class InMemoryWorldRepository implements WorldRepository {
         stress: Number(run?.startingState?.stress ?? 0),
       });
       this.conditionEngines.set(storyId, engine);
+    }
+    return engine;
+  }
+
+  public getStoryCheckEngine(storyId: string): StoryCheckEngine {
+    let engine = this.storyCheckEngines.get(storyId);
+    if (!engine) {
+      engine = new StoryCheckEngine();
+      this.storyCheckEngines.set(storyId, engine);
     }
     return engine;
   }

@@ -1905,6 +1905,27 @@ export class CapabilityEngine {
     }
 
     // Step 3: Novel capability proposal
+    // IMPORTANT: Ordinary freeform actions must remain ordinary narrative actions.
+    // Never turn breathing, walking, looking, talking, resting, touching, etc. into
+    // synthetic powers merely because no registered capability matched them.
+    const capabilityIntentKeywords = [
+      'cast', 'spell', 'magic', 'conjure', 'summon', 'teleport', 'blink',
+      'ward', 'barrier', 'shield', 'invoke', 'channel', 'overcharge',
+      'activate', 'ability', 'power', 'energy', 'blast', 'beam', 'curse',
+      'enchant', 'manifest', 'transform', 'fireball', 'lightning',
+    ];
+    const hasCapabilityIntent = capabilityIntentKeywords.some((keyword) => normalizedText.includes(keyword));
+    if (!hasCapabilityIntent) {
+      return {
+        interpretationType: 'UNSUPPORTED',
+        actorId,
+        actionText,
+        validationSuccess: false,
+        rejectionReason: 'No registered capability or explicit power invocation was identified. Treat this as an ordinary narrative action.',
+        narrativeInterpretation: 'No special capability was invoked; resolve the action through the narrative/world simulation layer.',
+      };
+    }
+
     const tags = params.tags || [];
     // Extract implicit tags from text if none provided
     if (tags.length === 0) {

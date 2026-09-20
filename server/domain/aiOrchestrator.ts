@@ -3343,6 +3343,146 @@ export class MultiModelOrchestrator {
    *   -> Domain Adjudication Bridge
    *   -> Continuation Checkpoint
    */
+  /**
+   * Presentation-only narrative generation.
+   *
+   * Uses the same canonical working context and model selection infrastructure as a full
+   * turn, but deliberately does NOT adjudicate state changes or create continuation
+   * checkpoints. The caller remains responsible for canonical mechanics.
+   */
+  public async generateNarrativeOnly(params: {
+    storyId?: string;
+    playerAction: string;
+    hardTokenBudget?: number;
+    timeoutMs?: number;
+    maxRetries?: number;
+    styleInstruction?: string;
+  }): Promise<{
+    success: boolean;
+    turnPackage?: StructuredTurnPackage;
+    modelId?: string;
+    providerId?: string;
+    error?: string;
+  }> {
+    const storyId = params.storyId || 'default_story';
+    const playerAction = (params.playerAction || '').trim();
+    if (!playerAction) {
+      return { success: false, error: 'A player action is required for narrative generation.' };
+    }
+
+    const hardTokenBudget = params.hardTokenBudget ?? 500;
+    const timeoutMs = params.timeoutMs ?? 5000;
+    const maxRetries = params.maxRetries ?? 1;
+    const styleInstruction = params.styleInstruction || [
+      'Write the immediate player-facing narrator response to the current action.',
+      'Return only what the character can reasonably perceive and what the world immediately does in response.',
+      'Keep it concise: 1–3 short paragraphs, normally under 90 words.',
+      'Do not restate the player action verbatim.',
+      'Do not add menus, meta-commentary, engine terminology, model names, or system-status language.',
+      'Do not invent hidden facts, NPC knowledge, items, or outcomes that are not supported by the canonical context.',
+      'Do not propose or perform canonical state changes. The response is presentation only.',
+      'When the action has no meaningful mechanical consequence, acknowledge the sensory or emotional result naturally and leave a clear opening for the next action.',
+    ].join(' ');
+
+    const assembledContext = WorkingContextEngine.assembleTurnContext({
+      storyId,
+      playerAction,
+      hardTokenBudget,
+      worldRepo: this.getWorldRepository(),
+      customChunks: [
+        {
+          id: 'narrative_presentation_contract',
+          band: 'B1_CRITICAL',
+          label: 'Narrative Presentation Contract',
+          content: styleInstruction,
+          estimatedTokens: WorkingContextEngine.estimateTokens(styleInstruction),
+          sourceAuthority: 'DreamBook Narrative Presentation Layer',
+          isProtected: true,
+          relevanceScore: 1,
+        },
+      ],
+    });
+
+    const selection = this.selectBestModel('narrative.generate', {
+      contextTokens: assembledContext.totalTokens,
+    });
+
+    const candidates: ModelRegistryRecord[] = [selection.selectedModel, ...selection.fallbacks];
+    let lastError = '';
+
+    for (const candidate of candidates) {
+      const modelKey = `${candidate.providerId}::${candidate.modelId}`;
+      if (this.isCircuitBreakerTripped(candidate.providerId, candidate.modelId)) continue;
+
+      const adapter = this.getAdapter(candidate.providerId);
+      if (!adapter) continue;
+
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          const abortController = new AbortController();
+          const timer = setTimeout(() => abortController.abort(), timeoutMs);
+          let providerRes: ProviderGenerateResult;
+          try {
+            providerRes = await adapter.generate('narrative.generate', assembledContext.assembledText, {
+              timeoutMs,
+              abortSignal: abortController.signal,
+              retryCount: attempt,
+              modelId: candidate.modelId,
+              temperature: 0.7,
+              maxTokens: 350,
+            });
+          } finally {
+            clearTimeout(timer);
+          }
+
+          const validation = this.validateTurnPackage(providerRes.text);
+          if (!validation.valid || !validation.turnPackage) {
+            throw new Error(validation.errorReason || 'Narrative response failed structured validation.');
+          }
+
+          this.consecutiveFailures.set(modelKey, 0);
+
+          // Presentation-only contract: never propagate provider state changes from this path.
+          const turnPackage: StructuredTurnPackage = {
+            ...validation.turnPackage,
+            stateChanges: [],
+          };
+
+          return {
+            success: true,
+            turnPackage,
+            modelId: candidate.modelId,
+            providerId: candidate.providerId,
+          };
+        } catch (err: any) {
+          lastError = err?.message || String(err);
+          const failures = (this.consecutiveFailures.get(modelKey) || 0) + 1;
+          this.consecutiveFailures.set(modelKey, failures);
+
+          if (
+            lastError.includes('429') ||
+            lastError.includes('rate limit') ||
+            lastError.includes('Resource Exhausted') ||
+            lastError.includes('quota')
+          ) {
+            candidate.health = 'Throttled';
+            candidate.quota = 'Exhausted';
+            break;
+          }
+
+          if (attempt < maxRetries) {
+            await new Promise((resolve) => setTimeout(resolve, Math.min(200, 50 * Math.pow(2, attempt))));
+          }
+        }
+      }
+    }
+
+    return {
+      success: false,
+      error: lastError || 'No narrative model was available.',
+    };
+  }
+
   public async executeTurn(params: {
     storyId?: string;
     playerAction?: string;

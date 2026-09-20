@@ -6,6 +6,7 @@ import { WorkingContextEngine, AssembledTurnContext } from './workingContextEngi
 import type { WorldRepository } from '../repositories/worldRepository';
 import { worldRepository } from '../repositories/worldRepository';
 import { StoryAdaptationPipeline } from './storyAdaptation';
+import { getProviderApiKey } from '../services/providerCredentialService';
 
 export type TaskId =
   | 'narrative.generate'
@@ -736,6 +737,188 @@ export function classifyDiscoveredModel(
     contextWindow: record.contextWindow,
     supportedInputTypes: record.supportedInputTypes,
   };
+}
+
+/**
+ * OpenRouterAdapter
+ * Canonical adapter for OpenRouter's OpenAI-compatible API.
+ * Model discovery uses GET /api/v1/models; execution uses POST /api/v1/chat/completions.
+ */
+export class OpenRouterAdapter implements IProviderAdapter {
+  public readonly providerId = 'openrouter';
+  public isMockOnly = false;
+
+  private getApiKey(): string | undefined {
+    return getProviderApiKey(this.providerId);
+  }
+
+  public isDiscoverySupported(): boolean {
+    return true;
+  }
+
+  public getProviderStatus(): { configured: boolean; message: string } {
+    const configured = Boolean(this.getApiKey());
+    return configured
+      ? { configured: true, message: 'OpenRouter API key configured.' }
+      : { configured: false, message: 'OpenRouter API key is not configured.' };
+  }
+
+  public async validateCredentials(): Promise<boolean> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) return false;
+
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/models', {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          Accept: 'application/json',
+        },
+      });
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  public async discoverModels(): Promise<DiscoveredModelMetadata[]> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) return [];
+
+    const response = await fetch('https://openrouter.ai/api/v1/models', {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        Accept: 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      throw new Error(`OpenRouter model discovery failed (HTTP ${response.status}): ${body.slice(0, 300)}`);
+    }
+
+    const payload: any = await response.json();
+    const rawModels = Array.isArray(payload?.data) ? payload.data : [];
+
+    return rawModels
+      .map((model: any): DiscoveredModelMetadata | null => {
+        const id = String(model?.id || '').trim();
+        if (!id) return null;
+
+        const inputModalities = Array.isArray(model?.architecture?.input_modalities)
+          ? model.architecture.input_modalities.map(String)
+          : ['text'];
+        const outputModalities = Array.isArray(model?.architecture?.output_modalities)
+          ? model.architecture.output_modalities.map(String)
+          : ['text'];
+        const outputIsText = outputModalities.some((m: string) => /text|json/i.test(m));
+
+        if (!outputIsText) return null;
+
+        const promptPrice = Number(model?.pricing?.prompt || 0);
+        const completionPrice = Number(model?.pricing?.completion || 0);
+        const isPaidModel = promptPrice > 0 || completionPrice > 0;
+
+        return {
+          id,
+          rawName: id,
+          displayName: String(model?.name || id),
+          description: model?.description ? String(model.description) : undefined,
+          version: model?.created ? String(model.created) : undefined,
+          inputTokenLimit: Number(model?.context_length || 32768),
+          outputTokenLimit: Number(model?.max_completion_tokens || 0) || undefined,
+          supportedActions: ['generateContent'],
+          thinking: /reason|thinking|r1|o1|o3|o4/i.test(id),
+          isAccessible: true,
+          lifecycleState: 'active',
+          isPaidModel,
+          temperature: undefined,
+          maxTemperature: undefined,
+          topP: undefined,
+          topK: undefined,
+        };
+      })
+      .filter(Boolean) as DiscoveredModelMetadata[];
+  }
+
+  public async generate(
+    task: TaskId,
+    prompt: string,
+    options?: ProviderGenerateOptions
+  ): Promise<ProviderGenerateResult> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      throw new Error('OPENROUTER_API_KEY is not configured.');
+    }
+
+    const start = Date.now();
+    const controller = new AbortController();
+    const timeout = options?.timeoutMs
+      ? setTimeout(() => controller.abort(), options.timeoutMs)
+      : undefined;
+
+    const signal = options?.abortSignal
+      ? AbortSignal.any([controller.signal, options.abortSignal])
+      : controller.signal;
+
+    try {
+      const body: Record<string, unknown> = {
+        model: options?.modelId || 'openrouter/free',
+        messages: [
+          ...(options?.systemInstruction
+            ? [{ role: 'system', content: options.systemInstruction }]
+            : []),
+          { role: 'user', content: prompt },
+        ],
+        stream: false,
+      };
+
+      if (options?.maxTokens) {
+        body.max_tokens = options.maxTokens;
+      }
+
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        signal,
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': 'https://dreambook.local',
+          'X-Title': 'DreamBook',
+        },
+        body: JSON.stringify(body),
+      });
+
+      const payload: any = await response.json().catch(() => null);
+      if (!response.ok) {
+        const message =
+          payload?.error?.message ||
+          payload?.error ||
+          `OpenRouter request failed with HTTP ${response.status}`;
+        throw new Error(String(message));
+      }
+
+      const content = payload?.choices?.[0]?.message?.content;
+      const text = Array.isArray(content)
+        ? content.map((part: any) => typeof part === 'string' ? part : part?.text || '').join('')
+        : String(content || '');
+
+      if (!text.trim()) {
+        throw new Error('OpenRouter returned an empty model response.');
+      }
+
+      return {
+        text: text.trim(),
+        rawResponse: payload,
+        latencyMs: Math.max(1, Date.now() - start),
+        inputTokens: Number(payload?.usage?.prompt_tokens || 0) || undefined,
+        outputTokens: Number(payload?.usage?.completion_tokens || 0) || undefined,
+        modelId: String(payload?.model || options?.modelId || 'openrouter/free'),
+        providerId: this.providerId,
+      };
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+  }
 }
 
 /**
@@ -1644,6 +1827,7 @@ export class MultiModelOrchestrator {
       isEmergencyFloor: false,
     });
 
+    // OpenRouter models are discovered dynamically from the configured account.
     this.registerModel({
       providerId: 'openai',
       modelId: 'gpt-4o',
@@ -1706,6 +1890,7 @@ export class MultiModelOrchestrator {
     this.registerAdapter(gemini);
     // Also register alias 'provider_google_gemini'
     this.adapters.set('provider_google_gemini', gemini);
+    this.registerAdapter(new OpenRouterAdapter());
   }
 
   /**
@@ -1781,9 +1966,10 @@ export class MultiModelOrchestrator {
 
     this.lastDiscoveredAt = Date.now();
     this.discoveredCatalog = allDiscovered;
-    const gemini = this.getAdapter('google_gemini') as GoogleGeminiAdapter;
-    const isConfigured = Boolean(typeof process !== 'undefined' && process.env?.GEMINI_API_KEY);
-    this.discoveryStatus = isConfigured && !gemini?.isMockOnly ? 'ConfiguredAndDiscovered' : 'MockDiscovered';
+    const geminiConfigured = Boolean(getProviderApiKey('google_gemini'));
+    const openrouterConfigured = Boolean(getProviderApiKey('openrouter'));
+    const isConfigured = geminiConfigured || openrouterConfigured;
+    this.discoveryStatus = isConfigured ? 'ConfiguredAndDiscovered' : 'CredentialsMissing';
 
     return this.getDiscoveryStatus();
   }
@@ -2110,7 +2296,89 @@ export class MultiModelOrchestrator {
       }
     }
 
-    // 3. Other External Providers
+    // 3. OpenRouter
+    if (providerId === 'openrouter') {
+      const adapter = this.getAdapter('openrouter');
+      const apiKey = getProviderApiKey('openrouter');
+
+      if (!apiKey || !adapter) {
+        if (model) {
+          model.health = 'InvalidAuth';
+          model.accessStatus = 'not_configured';
+        }
+        return {
+          success: false,
+          status: 'NOT_CONFIGURED',
+          health: 'InvalidAuth',
+          quota: 'Unknown',
+          latencyMs: 0,
+          message: 'OpenRouter API key is not configured.',
+          testedAt: Date.now(),
+        };
+      }
+
+      const start = Date.now();
+      try {
+        const providerRes = await adapter.generate('utility.inspect', 'Respond with exactly: OK', {
+          modelId,
+          timeoutMs: 8000,
+        });
+        const latencyMs = Math.max(1, Date.now() - start);
+
+        if (model) {
+          model.health = 'Healthy';
+          model.quota = 'Healthy';
+          model.accessStatus = 'accessible';
+          model.latencyMs = latencyMs;
+        }
+
+        return {
+          success: true,
+          status: 'READY',
+          health: 'Healthy',
+          quota: 'Healthy',
+          latencyMs,
+          message: `OpenRouter model responded successfully via ${providerRes.modelId}.`,
+          testedAt: Date.now(),
+        };
+      } catch (err: any) {
+        const errMsg = String(err?.message || err);
+        const latencyMs = Math.max(1, Date.now() - start);
+        const lower = errMsg.toLowerCase();
+
+        let health: HealthState = 'Degraded';
+        let status: 'UNAVAILABLE' | 'NOT_CONFIGURED' | 'QUOTA_LIMIT' = 'UNAVAILABLE';
+        let quota: QuotaState = 'Unknown';
+
+        if (lower.includes('401') || lower.includes('unauthorized') || lower.includes('invalid') || lower.includes('api key')) {
+          health = 'InvalidAuth';
+          status = 'NOT_CONFIGURED';
+        } else if (lower.includes('402') || lower.includes('429') || lower.includes('rate limit') || lower.includes('quota') || lower.includes('credits')) {
+          health = 'Throttled';
+          status = 'QUOTA_LIMIT';
+          quota = 'Exhausted';
+        }
+
+        if (model) {
+          model.health = health;
+          model.quota = quota;
+          model.accessStatus = health === 'InvalidAuth' ? 'not_configured' : 'unavailable';
+          model.latencyMs = latencyMs;
+        }
+
+        return {
+          success: false,
+          status,
+          health,
+          quota,
+          latencyMs,
+          message: `OpenRouter model test failed: ${errMsg}`,
+          testedAt: Date.now(),
+        };
+      }
+    }
+
+    // 4. Other external providers
     if (model) {
       model.health = 'InvalidAuth';
       model.accessStatus = 'not_configured';

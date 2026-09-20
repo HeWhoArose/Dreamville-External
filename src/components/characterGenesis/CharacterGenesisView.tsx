@@ -886,7 +886,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 <div className="rounded-lg border border-indigo-900/70 bg-indigo-950/30 p-4">
                   <button
                     type="button"
-                    onClick={() => setShowInterpretation(!showInterpretation)
+                    onClick={() => setShowInterpretation(!showInterpretation)}
                     className="w-full flex items-center justify-between text-left"
                   >
                     <span className="text-xs font-semibold text-indigo-300">AI Interpretation Before Editing</span>
@@ -964,19 +964,20 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 </div>
               )}
 
-              <div className="flex items-center justify-between pt-2">
-                <div className="text-xs text-neutral-400">
+              <div className="pt-2 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-xs text-neutral-400">
                   {userEditedFields.size > 0 && (
                     <span className="text-amber-400 flex items-center gap-1">
                       <Edit3 className="w-3.5 h-3.5" />
                       {userEditedFields.size} custom field(s) will be strictly preserved during re-extraction
                     </span>
                   )}
-                </div>
+                  </div>
 
-                <button
-                  type="button"
-                  id="btn-extract-character"
+                  <button
+                    type="button"
+                    id="btn-extract-character"
                   onClick={() => handleExtractCharacter()}
                   disabled={isExtracting || !naturalConcept.trim() || Boolean(deterministicFallbackPrompt)}
                   className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-sm font-medium text-white transition-colors shadow-sm"
@@ -993,6 +994,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                     </>
                   )}
                 </button>
+                </div>
 
                 {isExtracting && (
                   <div className="mt-3 w-full max-w-xl rounded-lg border border-indigo-900/70 bg-indigo-950/25 px-3 py-2.5">

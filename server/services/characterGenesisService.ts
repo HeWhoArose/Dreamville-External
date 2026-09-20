@@ -12,6 +12,7 @@ import {
   StartingSituationConfig,
   CharacterPortraitAsset,
   CharacterProvenanceSource,
+  CharacterEffect,
   WorldTemplate,
 } from '../../src/types';
 
@@ -983,7 +984,7 @@ OUTPUT STRICT JSON with this structure:
     effects: any,
     sourceId: string,
     provenance: CharacterProvenanceSource
-  ): import('../../src/types').CharacterEffect[] {
+  ): CharacterEffect[] {
     if (!Array.isArray(effects)) return [];
     return effects.map((effect: any, idx: number) => ({
       id: String(effect?.id || `effect_${sourceId}_${idx + 1}`),

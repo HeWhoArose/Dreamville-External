@@ -323,6 +323,24 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
     }
   };
 
+  const restoreRevision = (revision: number) => {
+    if (!draft) return;
+    const target = (draft.revisionHistory || []).find((entry) => entry.revision === revision);
+    if (!target?.snapshot) return;
+    setDraft({
+      ...draft,
+      ...(target.snapshot as CharacterGenesisDraft),
+      revision: (draft.revision || 0) + 1,
+      revisionHistory: [...(draft.revisionHistory || []), {
+        revision: (draft.revision || 0) + 1,
+        savedAt: new Date().toISOString(),
+        label: 'Restored revision ' + revision,
+        snapshot: JSON.parse(JSON.stringify(target.snapshot)),
+      }],
+    });
+    setSaveDraftStatus('Restored revision ' + revision + '. Review before confirming.');
+  };
+
   // 1. Natural Language Extraction Handler
   const handleExtractCharacter = async () => {
     if (!selectedWorld) {
@@ -1936,6 +1954,26 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                   <div className="text-neutral-500 mt-1">Location mode: {draft.startingLocationMode} • Situation mode: {draft.startingSituationMode}</div>
                 </div>
               </div>
+
+              {(draft.revisionHistory || []).length > 0 && (
+                <div className="p-4 rounded-lg bg-neutral-950 border border-neutral-800">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">Revision History</span>
+                    <span className="text-[10px] text-neutral-500">Restore any previous draft before confirmation</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {(draft.revisionHistory || []).slice().reverse().map((entry) => (
+                      <button
+                        key={entry.revision}
+                        onClick={() => restoreRevision(entry.revision)}
+                        className="px-2.5 py-1.5 rounded bg-neutral-900 border border-neutral-800 hover:border-indigo-600 text-[11px] text-neutral-300"
+                      >
+                        v{entry.revision} · {entry.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Comprehensive Summary Cards */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

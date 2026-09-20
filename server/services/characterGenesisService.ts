@@ -482,6 +482,7 @@ Rules:
             minVesselCapacityRequired: Number(c.minVesselCapacityRequired ?? 15),
             description: c.description || 'Special capability.',
             effects: this.mapCharacterEffects(c.effects, c.id || `cap_${draftId}_${idx + 1}`, generatedProvenance),
+            storyCheckChallenges: Array.isArray(c.storyCheckChallenges) ? c.storyCheckChallenges : undefined,
             provenance: generatedProvenance,
           }))
     );
@@ -1110,6 +1111,7 @@ IMPORTANT: Ensure the capability name, description, power tier, energy costs, st
       description: proposal.description || `Specialized mastery of ${concept}.`,
       provenance: generatedProvenance,
       sourceUserPrompt: concept,
+      storyCheckChallenges: Array.isArray(proposal.storyCheckChallenges) ? proposal.storyCheckChallenges : undefined,
     };
 
     const generatedSkills: GeneratedTechnique[] = (proposal.techniques || []).map((t: any, idx: number) => ({

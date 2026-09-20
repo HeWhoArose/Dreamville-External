@@ -538,7 +538,12 @@ Rules:
       : {
           archetype: extracted.role?.archetype || 'Wanderer / Specialist',
           profession: extracted.role?.profession || 'Ranger',
-          role: extracted.role?.role || 'Protagonist',
+          role:
+            narrativeRole === 'PROTAGONIST'
+              ? 'Protagonist'
+              : narrativeRole === 'SIDE_CHARACTER'
+              ? 'Side Character'
+              : 'Free Roam',
         };
 
     const motivations = userEditedFields.has('motivations') && existingDraft?.motivations

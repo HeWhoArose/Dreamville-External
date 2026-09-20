@@ -152,6 +152,29 @@ Return ONLY one JSON object matching this contract:
     "specialStates": [string]
   },
   "conditionState": {
+    "customDefinitions": [
+      {
+        "id": string,
+        "name": string,
+        "description": string,
+        "category": string,
+        "alignment": "HARMFUL" | "BENEFICIAL" | "NEUTRAL" | "MIXED",
+        "defaultSeverity": number,
+        "defaultIntensity": number,
+        "maxIntensity": number | null,
+        "stackMode": "REPLACE" | "ADD" | "MAX" | "REFRESH",
+        "defaultDurationSeconds": number | null,
+        "tickUnit": "ACTION" | "TURN" | "ROUND" | "MINUTE" | "HOUR" | "DAY" | "WORLD_TIME" | null,
+        "tickEvery": number | null,
+        "damagePerTick": number | null,
+        "damageType": string | null,
+        "healingPerTick": number | null,
+        "intensityDeltaPerTick": number | null,
+        "tags": [string],
+        "triggers": [object],
+        "stages": [object]
+      }
+    ],
     "instances": [
       {
         "name": string,
@@ -743,8 +766,38 @@ Rules:
           tags: ['legacy_condition'],
         }));
 
+    const customDefinitions = Array.isArray(rawConditionState?.customDefinitions)
+      ? rawConditionState.customDefinitions.map((definition: any) => ({
+          id: String(definition?.id || '').trim(),
+          name: String(definition?.name || '').trim(),
+          description: String(definition?.description || ''),
+          category: String(definition?.category || 'CUSTOM'),
+          alignment: ['HARMFUL','BENEFICIAL','NEUTRAL','MIXED'].includes(definition?.alignment) ? definition.alignment : 'NEUTRAL',
+          defaultSeverity: Math.max(0, Number(definition?.defaultSeverity ?? 1)),
+          defaultIntensity: Math.max(0, Number(definition?.defaultIntensity ?? 1)),
+          maxIntensity: definition?.maxIntensity == null ? undefined : Math.max(1, Number(definition.maxIntensity)),
+          stackMode: ['REPLACE','ADD','MAX','REFRESH'].includes(definition?.stackMode) ? definition.stackMode : 'REFRESH',
+          defaultDurationSeconds: definition?.defaultDurationSeconds == null ? null : Math.max(0, Number(definition.defaultDurationSeconds)),
+          tickUnit: definition?.tickUnit || undefined,
+          tickEvery: definition?.tickEvery == null ? undefined : Math.max(1, Number(definition.tickEvery)),
+          tags: Array.isArray(definition?.tags) ? definition.tags.map(String) : [],
+          conditionKeywords: Array.isArray(definition?.conditionKeywords) ? definition.conditionKeywords.map(String) : [],
+          damagePerTick: definition?.damagePerTick == null ? undefined : Math.max(0, Number(definition.damagePerTick)),
+          damageType: definition?.damageType ? String(definition.damageType) : undefined,
+          healingPerTick: definition?.healingPerTick == null ? undefined : Math.max(0, Number(definition.healingPerTick)),
+          intensityDeltaPerTick: definition?.intensityDeltaPerTick == null ? undefined : Number(definition.intensityDeltaPerTick),
+          decayIntensityPerRestTick: definition?.decayIntensityPerRestTick == null ? undefined : Math.max(0, Number(definition.decayIntensityPerRestTick)),
+          triggers: Array.isArray(definition?.triggers) ? definition.triggers : [],
+          stages: Array.isArray(definition?.stages) ? definition.stages : [],
+          bodyRegionDefaults: Array.isArray(definition?.bodyRegionDefaults) ? definition.bodyRegionDefaults.map(String) : [],
+          blocksActions: Array.isArray(definition?.blocksActions) ? definition.blocksActions.map(String) : [],
+          modifierEffects: Array.isArray(definition?.modifierEffects) ? definition.modifierEffects : [],
+        })).filter((definition: any) => definition.id && definition.name)
+      : [];
+
     const conditionState: CharacterStartingConditionState = {
       instances: conditionInstances,
+      customDefinitions,
       damageProfile: {
         damageImmunities: Array.isArray(rawConditionState?.damageProfile?.damageImmunities)
           ? rawConditionState.damageProfile.damageImmunities.map(String)

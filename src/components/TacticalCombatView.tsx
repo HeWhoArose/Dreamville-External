@@ -192,34 +192,6 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
           <div className="h-10 w-10 rounded-lg bg-red-950/60 border border-red-800/40 flex items-center justify-center text-red-400">
             <Swords className="w-5 h-5" />
           </div>
-
-        <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="p-3 bg-stone-900/60 border border-stone-800 rounded-xl">
-            <span className="text-[10px] uppercase font-mono tracking-wider text-stone-500">Action</span>
-            <div className={`mt-1 font-mono text-sm font-bold ${actionAvailable ? 'text-emerald-300' : 'text-stone-500'}`}>
-              {actionAvailable ? 'Available' : 'Spent'}
-            </div>
-          </div>
-          <div className="p-3 bg-stone-900/60 border border-stone-800 rounded-xl">
-            <span className="text-[10px] uppercase font-mono tracking-wider text-stone-500">Bonus Action</span>
-            <div className={`mt-1 font-mono text-sm font-bold ${turnResources?.bonusActionAvailable ? 'text-emerald-300' : 'text-stone-500'}`}>
-              {turnResources?.bonusActionAvailable ? 'Available' : 'Spent'}
-            </div>
-          </div>
-          <div className="p-3 bg-stone-900/60 border border-stone-800 rounded-xl">
-            <span className="text-[10px] uppercase font-mono tracking-wider text-stone-500">Reaction</span>
-            <div className={`mt-1 font-mono text-sm font-bold ${turnResources?.reactionAvailable ? 'text-emerald-300' : 'text-stone-500'}`}>
-              {turnResources?.reactionAvailable ? 'Available' : 'Spent'}
-            </div>
-          </div>
-          <div className="p-3 bg-stone-900/60 border border-stone-800 rounded-xl">
-            <span className="text-[10px] uppercase font-mono tracking-wider text-stone-500">Movement</span>
-            <div className="mt-1 font-mono text-sm font-bold text-blue-300">
-              {movementRemaining.toFixed(1)} / {turnResources?.movementMaxCells ?? currentActor?.speedCells ?? 0} cells
-            </div>
-          </div>
-        </div>
-        </>
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-serif font-bold text-stone-100">Tactical Combat Workstation</h2>
@@ -257,42 +229,70 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
       {/* Combat State Banner */}
       {combatState && (
         <>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="p-3 bg-stone-900/60 border border-stone-800 rounded-xl">
-            <span className="text-[10px] uppercase font-mono tracking-wider text-stone-500">Battle Round</span>
-            <div className="text-lg font-bold font-serif text-amber-300 mt-0.5">Round {combatState.currentRound}</div>
-          </div>
-          <div className="p-3 bg-stone-900/60 border border-stone-800 rounded-xl">
-            <span className="text-[10px] uppercase font-mono tracking-wider text-stone-500">Active Actor</span>
-            <div className="text-sm font-semibold text-stone-200 mt-0.5 truncate">
-              {currentActor ? currentActor.name : 'None'}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-3 bg-stone-900/60 border border-stone-800 rounded-xl">
+              <span className="text-[10px] uppercase font-mono tracking-wider text-stone-500">Battle Round</span>
+              <div className="text-lg font-bold font-serif text-amber-300 mt-0.5">Round {combatState.currentRound}</div>
+            </div>
+            <div className="p-3 bg-stone-900/60 border border-stone-800 rounded-xl">
+              <span className="text-[10px] uppercase font-mono tracking-wider text-stone-500">Active Actor</span>
+              <div className="text-sm font-semibold text-stone-200 mt-0.5 truncate">
+                {currentActor ? currentActor.name : 'None'}
+              </div>
+            </div>
+            <div className="p-3 bg-stone-900/60 border border-stone-800 rounded-xl">
+              <span className="text-[10px] uppercase font-mono tracking-wider text-stone-500">Turn Status</span>
+              <div className="text-xs font-semibold mt-1">
+                {combatState.victory ? (
+                  <span className="text-emerald-400 flex items-center gap-1">
+                    <Trophy className="w-3.5 h-3.5" /> Victory
+                  </span>
+                ) : combatState.defeat ? (
+                  <span className="text-red-400 flex items-center gap-1">
+                    <Skull className="w-3.5 h-3.5" /> Defeat
+                  </span>
+                ) : isPlayerTurn ? (
+                  <span className="text-amber-400 font-mono">Player Turn (Active)</span>
+                ) : (
+                  <span className="text-stone-400 font-mono">Enemy Turn</span>
+                )}
+              </div>
+            </div>
+            <div className="p-3 bg-stone-900/60 border border-stone-800 rounded-xl">
+              <span className="text-[10px] uppercase font-mono tracking-wider text-stone-500">Player Power Mana</span>
+              <div className="text-sm font-bold text-cyan-400 mt-0.5 font-mono">
+                {powerState ? `${powerState.magicalEnergy} / 100` : '—'}
+              </div>
             </div>
           </div>
-          <div className="p-3 bg-stone-900/60 border border-stone-800 rounded-xl">
-            <span className="text-[10px] uppercase font-mono tracking-wider text-stone-500">Turn Status</span>
-            <div className="text-xs font-semibold mt-1">
-              {combatState.victory ? (
-                <span className="text-emerald-400 flex items-center gap-1">
-                  <Trophy className="w-3.5 h-3.5" /> Victory
-                </span>
-              ) : combatState.defeat ? (
-                <span className="text-red-400 flex items-center gap-1">
-                  <Skull className="w-3.5 h-3.5" /> Defeat
-                </span>
-              ) : isPlayerTurn ? (
-                <span className="text-amber-400 font-mono">Player Turn (Active)</span>
-              ) : (
-                <span className="text-stone-400 font-mono">Enemy Turn</span>
-              )}
+
+          <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-3 bg-stone-900/60 border border-stone-800 rounded-xl">
+              <span className="text-[10px] uppercase font-mono tracking-wider text-stone-500">Action</span>
+              <div className={`mt-1 font-mono text-sm font-bold ${actionAvailable ? 'text-emerald-300' : 'text-stone-500'}`}>
+                {actionAvailable ? 'Available' : 'Spent'}
+              </div>
+            </div>
+            <div className="p-3 bg-stone-900/60 border border-stone-800 rounded-xl">
+              <span className="text-[10px] uppercase font-mono tracking-wider text-stone-500">Bonus Action</span>
+              <div className={`mt-1 font-mono text-sm font-bold ${turnResources?.bonusActionAvailable ? 'text-emerald-300' : 'text-stone-500'}`}>
+                {turnResources?.bonusActionAvailable ? 'Available' : 'Spent'}
+              </div>
+            </div>
+            <div className="p-3 bg-stone-900/60 border border-stone-800 rounded-xl">
+              <span className="text-[10px] uppercase font-mono tracking-wider text-stone-500">Reaction</span>
+              <div className={`mt-1 font-mono text-sm font-bold ${turnResources?.reactionAvailable ? 'text-emerald-300' : 'text-stone-500'}`}>
+                {turnResources?.reactionAvailable ? 'Available' : 'Spent'}
+              </div>
+            </div>
+            <div className="p-3 bg-stone-900/60 border border-stone-800 rounded-xl">
+              <span className="text-[10px] uppercase font-mono tracking-wider text-stone-500">Movement</span>
+              <div className="mt-1 font-mono text-sm font-bold text-blue-300">
+                {movementRemaining.toFixed(1)} / {turnResources?.movementMaxCells ?? currentActor?.speedCells ?? 0} cells
+              </div>
             </div>
           </div>
-          <div className="p-3 bg-stone-900/60 border border-stone-800 rounded-xl">
-            <span className="text-[10px] uppercase font-mono tracking-wider text-stone-500">Player Power Mana</span>
-            <div className="text-sm font-bold text-cyan-400 mt-0.5 font-mono">
-              {powerState ? `${powerState.magicalEnergy} / 100` : '—'}
-            </div>
-          </div>
-        </div>
+        </>
       )}
 
       {/* Main Tactical Grid and Controls Area */}

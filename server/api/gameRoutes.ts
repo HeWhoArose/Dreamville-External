@@ -1140,10 +1140,12 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
     const actorId = player ? player.actorId : `player_actor_${storyId}`;
     const inv = worldRepository.getInventoryEngine(storyId);
     const capEngine = worldRepository.getCapabilityEngine(storyId);
+    const conditionEngine = worldRepository.getConditionEngine(storyId);
     const combatEngine = worldRepository.getCombatEngine(storyId);
 
     const doll = inv.getActorPaperDoll(actorId);
     const powerState = capEngine.getPowerState(actorId);
+    const conditionState = conditionEngine.getActorState(actorId);
     const run = worldRepository.getStoryRun(storyId);
     const coreStats = run?.protagonist?.coreStats;
     const characterLevel = Math.max(1, Math.min(20, Number(coreStats?.level ?? 1)));
@@ -1214,14 +1216,20 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
         CHA: abilityModifier(Number(coreStats?.charisma ?? 10)),
       },
       team: 'player_allies',
-      hpCurrent: Math.max(1, powerState?.healthCurrent ?? Number(coreStats?.hpCurrent ?? 100)),
-      hpMax: powerState?.healthMax ?? Number(coreStats?.hpMax ?? 100),
+      hpCurrent: Math.max(0, conditionState?.healthCurrent ?? powerState?.healthCurrent ?? Number(coreStats?.hpCurrent ?? 100)),
+      hpMax: conditionState?.healthMax ?? powerState?.healthMax ?? Number(coreStats?.hpMax ?? 100),
       armorClass: computedAC,
       speedCells,
       attackBonus: weaponAttackBonus,
       damageFormula: weaponFormula,
-      conditions: player?.isDead ? ['Dead'] : [],
-      isDead: player?.isDead ?? false,
+      damageType: doll.mainHand ? 'slashing' : 'bludgeoning',
+      damageProfile: conditionState?.damageProfile,
+      conditionProfile: conditionState?.conditionProfile,
+      conditions: [
+        ...(conditionState?.instances.map((instance) => instance.name) || []),
+        ...(player?.isDead || conditionState?.dead ? ['Dead'] : []),
+      ],
+      isDead: player?.isDead || conditionState?.dead || false,
     };
 
     combatEngine.addParticipant(playerParticipant);

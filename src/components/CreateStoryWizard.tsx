@@ -23,6 +23,7 @@ import { apiClient } from '../services/apiClient';
 
 interface CreateStoryWizardProps {
   onSelectRun: (storyId: string) => void;
+  onWorldAccepted?: (world: any) => void;
   onCancel: () => void;
 }
 
@@ -49,7 +50,7 @@ const PORTRAITS = [
   { emoji: '🧝‍♀️', label: 'Elf' }
 ];
 
-export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRun, onCancel }) => {
+export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRun, onWorldAccepted, onCancel }) => {
   const [stage, setStage] = useState<number>(1);
   const [isSynthesizing, setIsSynthesizing] = useState<boolean>(false);
   const [isLaunching, setIsLaunching] = useState<boolean>(false);
@@ -801,10 +802,16 @@ export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRu
             </button>
           ) : stage === 2 ? (
             <button
-              onClick={() => setStage(3)}
+              onClick={() => {
+                if (onWorldAccepted && synthesizedWorld) {
+                  onWorldAccepted(synthesizedWorld);
+                } else {
+                  setStage(3);
+                }
+              }}
               className="px-8 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl font-semibold transition-all shadow-[0_0_20px_rgba(168,85,247,0.3)] flex items-center gap-2 cursor-pointer text-sm"
             >
-              Accept World & Continue <ChevronRight className="w-4 h-4" />
+              Accept World & Open Character Genesis <ChevronRight className="w-4 h-4" />
             </button>
           ) : (
             <button

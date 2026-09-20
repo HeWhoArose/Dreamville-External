@@ -657,6 +657,57 @@ export function classifyDiscoveredModel(
   }
 
   // 5. General Text Reasoning / Narrative Models
+  // OpenRouter exposes many third-party text models whose names do not encode
+  // DreamBook's task taxonomy. A discovered OpenRouter text model is therefore
+  // eligible for every general AI task; the player explicitly chooses which of
+  // those models are allowed as fallbacks in Settings.
+  if (providerId === 'openrouter') {
+    const openRouterRecord: ModelRegistryRecord = {
+      providerId,
+      modelId,
+      displayName: discovered.displayName || modelId,
+      pool: /flash|mini|small|lite|haiku/i.test(modelId) ? 'fast' : /reason|thinking|r1|o1|o3|o4/i.test(modelId) ? 'reasoning' : 'creative',
+      capabilities: ['text_generation', 'reasoning', 'structured_output', ...(discovered.thinking ? ['extended_thinking'] : [])],
+      contextWindow: discovered.inputTokenLimit || 32768,
+      health: 'Healthy',
+      quota: 'Healthy',
+      latencyMs: 600,
+      userPriority: 75,
+      roleEligibility: [
+        'narrative.generate',
+        'character.dialogue',
+        'memory.extract',
+        'summary.scene',
+        'rules.adjudicate',
+        'utility.inspect',
+      ],
+      outputTokenLimit: discovered.outputTokenLimit,
+      supportedInputTypes: ['text', 'image', 'audio', 'video'],
+      supportedOutputTypes: ['text', 'json'],
+      hasTools: true,
+      hasStructuredOutput: true,
+      hasVision: discovered.supportedActions?.includes('vision') === true,
+      hasAudio: false,
+      hasImageGeneration: false,
+      fallbackEligibility: true,
+      lifecycleState: discovered.lifecycleState || 'active',
+      accessStatus: 'accessible',
+      isPaidModel: discovered.isPaidModel,
+      description: discovered.description,
+      isEmergencyFloor: false,
+    };
+
+    return {
+      eligible: true,
+      isCompatible: true,
+      record: openRouterRecord,
+      pool: openRouterRecord.pool,
+      roles: openRouterRecord.roleEligibility,
+      contextWindow: openRouterRecord.contextWindow,
+      supportedInputTypes: openRouterRecord.supportedInputTypes,
+    };
+  }
+
   const capabilities: string[] = ['text_generation', 'reasoning', 'structured_output'];
   if (discovered.thinking) {
     capabilities.push('extended_thinking');

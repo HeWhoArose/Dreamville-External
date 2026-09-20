@@ -5,6 +5,7 @@ import {
   DialogueChoice,
   ActionLog,
   OpeningScene,
+  CharacterStartingConditionState,
 } from '../types';
 import { useAudioHaptic } from './AudioHapticManager';
 import { getCharacterSpeakerTheme } from './voiceResolver';
@@ -40,6 +41,7 @@ interface StoryViewProps {
   protagonistRole?: string;
   protagonistPortraitUrl?: string;
   protagonistPortraitEmoji?: string;
+  protagonistConditionState?: CharacterStartingConditionState;
   isLoadingOpening?: boolean;
   openingError?: string | null;
   onRetryOpening?: () => void;
@@ -89,6 +91,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
   protagonistRole,
   protagonistPortraitUrl,
   protagonistPortraitEmoji,
+  protagonistConditionState,
   isLoadingOpening = false,
   openingError = null,
   onRetryOpening,
@@ -232,6 +235,25 @@ export const StoryView: React.FC<StoryViewProps> = ({
               )}
             </div>
           </div>
+
+          {protagonistConditionState?.instances?.length ? (
+            <div className="flex max-w-full flex-wrap items-center gap-1.5 border-t border-stone-900 pt-2">
+              {protagonistConditionState.instances.slice(0, 4).map((condition) => (
+                <span
+                  key={condition.id}
+                  className="rounded-md border border-stone-800 bg-stone-900/70 px-2 py-0.5 text-[10px] text-stone-400"
+                  title={`Severity ${condition.severity} · Intensity ${condition.intensity}`}
+                >
+                  {condition.name}{condition.intensity > 1 ? ` ×${condition.intensity}` : ''}
+                </span>
+              ))}
+              {protagonistConditionState.instances.length > 4 && (
+                <span className="text-[10px] text-stone-600">
+                  +{protagonistConditionState.instances.length - 4} more
+                </span>
+              )}
+            </div>
+          ) : null}
 
           {worldTitle && (
             <div className="hidden max-w-[210px] truncate text-right text-[11px] text-stone-600 md:block">

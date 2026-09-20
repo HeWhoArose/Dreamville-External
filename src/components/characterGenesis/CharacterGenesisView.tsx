@@ -72,6 +72,7 @@ import {
   getDefaultIconForEquipment,
 } from '../../data/iconSystem';
 import { IconStudioModal } from './IconStudioModal';
+import { ConditionProfileEditor } from './ConditionProfileEditor';
 import { apiClient } from '../../services/apiClient';
 import { getImageAssetSpec, appendImageOutputSpecification } from '../../data/imageAssetSpecs';
 import { normalizeImageFile, normalizeImageUrl } from '../../utils/imageAssetNormalizer';
@@ -3206,6 +3207,53 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                   </div>
                 </div>
               </div>
+            </div>
+
+
+            {/* Canonical condition / defensive profile */}
+            <div className="p-6 rounded-xl bg-neutral-950 border border-neutral-800 space-y-5">
+              <div className="flex items-start justify-between gap-3 border-b border-neutral-800 pb-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-white">Current Condition & Defensive Profile</h3>
+                  <p className="mt-1 text-[11px] text-neutral-500">
+                    Define the character's actual starting state, including afflictions, current situations, immunities, vulnerabilities, and body integrity.
+                  </p>
+                </div>
+                <span className="text-[10px] px-2 py-1 rounded bg-neutral-900 text-neutral-500 border border-neutral-800 font-mono uppercase">
+                  Canonical
+                </span>
+              </div>
+              <ConditionProfileEditor
+                value={draft.conditionState || {
+                  instances: [],
+                  damageProfile: {
+                    damageImmunities: [],
+                    damageResistances: [],
+                    damageVulnerabilities: [],
+                  },
+                  conditionProfile: {
+                    conditionImmunities: [],
+                    conditionResistances: [],
+                    conditionVulnerabilities: [],
+                  },
+                  bodyRegions: [],
+                }}
+                onChange={(conditionState) => {
+                  setDraft({
+                    ...draft,
+                    conditionState,
+                    startingState: {
+                      ...draft.startingState,
+                      conditionState,
+                      conditions: Array.from(new Set([
+                        ...(draft.startingState.conditions || []),
+                        ...conditionState.instances.map((instance) => instance.name),
+                      ])),
+                    },
+                  });
+                  markFieldEdited('conditionState');
+                }}
+              />
             </div>
 
             {/* Navigation */}

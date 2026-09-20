@@ -46,6 +46,8 @@ export class CharacterGenesisService {
         const prompt = `You are a master character designer for narrative RPGs.
 Given this character concept and world context, extract and design a complete, deeply detailed character draft.
 
+Treat feats and titles as extensible data. Do not restrict them to a predefined list. Propose custom feats/titles when the concept, background, achievements, or world context imply them. A feat may have structured narrative effects such as reputation, NPC disposition, proficiency, or other rules effects. Keep those effects explainable and structured.
+
 WORLD CONTEXT:
 Title: ${worldTemplate?.title || 'Unknown World'}
 Genre: ${worldTemplate?.genreTags?.join(', ') || 'Fantasy'}
@@ -70,6 +72,12 @@ OUTPUT MUST BE STRICT JSON with the following structure:
   "motivations": { "goals": [string], "fears": [string], "desires": [string] },
   "relationships": { "allies": [string], "rivals": [string], "family": [string], "factions": [string] },
   "condition": { "injuries": [string], "curses": [string], "forms": [string], "specialStates": [string] },
+  "attributes": [{ "name": string, "value": number, "description": string }],
+  "stats": [{ "name": string, "value": number, "description": string }],
+  "traits": [string],
+  "feats": [{ "name": string, "description": string, "effects": [{ "type": string, "scope": string, "modifier": number, "description": string }] }],
+  "titles": [{ "name": string, "description": string, "effects": [{ "type": string, "scope": string, "modifier": number, "description": string }] }],
+  "aiExtractionSummary": { "interpretation": string, "keyFacts": [string], "proposedHighlights": [string], "uncertainties": [string] },
   "capabilities": [
     {
       "id": string,
@@ -393,6 +401,48 @@ OUTPUT MUST BE STRICT JSON with the following structure:
           status: 'idle',
         };
 
+    const toStat = (entry: any, idx: number, prefix: string) => ({
+      id: entry?.id || prefix + '_' + draftId + '_' + (idx + 1),
+      name: String(entry?.name || prefix + ' ' + (idx + 1)),
+      value: typeof entry?.value === 'number' ? entry.value : 10,
+      baseValue: typeof entry?.baseValue === 'number' ? entry.baseValue : (typeof entry?.value === 'number' ? entry.value : 10),
+      description: entry?.description || '',
+      provenance: 'AI_GENERATED' as CharacterProvenanceSource,
+    });
+
+    const attributes = Array.isArray(extracted.attributes) ? extracted.attributes.map((entry: any, idx: number) => toStat(entry, idx, 'Attribute')) : [];
+    const stats = Array.isArray(extracted.stats) ? extracted.stats.map((entry: any, idx: number) => toStat(entry, idx, 'Stat')) : [];
+    const traits = Array.isArray(extracted.traits) ? extracted.traits.map(String) : (Array.isArray(extracted.personality?.traits) ? extracted.personality.traits.map(String) : []);
+
+    const mapEffects = (effects: any, sourceId: string): any[] => Array.isArray(effects) ? effects.map((effect: any, idx: number) => ({
+      id: effect?.id || 'effect_' + sourceId + '_' + (idx + 1),
+      type: String(effect?.type || 'narrative_modifier'),
+      target: effect?.target,
+      scope: effect?.scope,
+      modifier: typeof effect?.modifier === 'number' ? effect.modifier : undefined,
+      value: effect?.value,
+      condition: effect?.condition,
+      description: String(effect?.description || 'Contextual effect.'),
+      sourceId,
+      provenance: 'AI_GENERATED' as CharacterProvenanceSource,
+    })) : [];
+
+    const feats = Array.isArray(extracted.feats) ? extracted.feats.map((feat: any, idx: number) => {
+      const id = feat?.id || 'feat_' + draftId + '_' + (idx + 1);
+      return { id, name: String(feat?.name || 'Feat ' + (idx + 1)), description: String(feat?.description || ''), effects: mapEffects(feat?.effects, id), prerequisites: Array.isArray(feat?.prerequisites) ? feat.prerequisites.map(String) : [], tags: Array.isArray(feat?.tags) ? feat.tags.map(String) : [], provenance: 'AI_GENERATED' as CharacterProvenanceSource, worldId };
+    }) : [];
+
+    const titles = Array.isArray(extracted.titles) ? extracted.titles.map((title: any, idx: number) => {
+      const id = title?.id || 'title_' + draftId + '_' + (idx + 1);
+      return { id, name: String(title?.name || 'Title ' + (idx + 1)), description: String(title?.description || ''), effects: mapEffects(title?.effects, id), provenance: 'AI_GENERATED' as CharacterProvenanceSource, worldId };
+    }) : [];
+
+    const aiExtractionSummary = extracted.aiExtractionSummary ? {
+      interpretation: String(extracted.aiExtractionSummary.interpretation || ''),
+      keyFacts: Array.isArray(extracted.aiExtractionSummary.keyFacts) ? extracted.aiExtractionSummary.keyFacts.map(String) : [],
+      proposedHighlights: Array.isArray(extracted.aiExtractionSummary.proposedHighlights) ? extracted.aiExtractionSummary.proposedHighlights.map(String) : [],
+      uncertainties: Array.isArray(extracted.aiExtractionSummary.uncertainties) ? extracted.aiExtractionSummary.uncertainties.map(String) : [],
+    } : { interpretation: concept, keyFacts: [identity.name, identity.species, role.profession || role.archetype].filter(Boolean), proposedHighlights: capabilities.map((c) => c.name), uncertainties: [] };
     const draft: CharacterGenesisDraft = {
       draftId,
       worldId,
@@ -406,13 +456,36 @@ OUTPUT MUST BE STRICT JSON with the following structure:
       motivations,
       relationships,
       condition,
+      attributes,
+      stats,
+      traits,
       capabilities,
       generatedSkills,
+      feats,
+      titles,
       startingEquipment,
       startingLocation,
       startingSituation,
+      startingLocationMode: 'AI_SUGGEST',
+      startingSituationMode: 'AI_SUGGEST',
+      startingState: {
+        healthCurrent: 100,
+        healthMax: 100,
+        energyCurrent: 100,
+        energyMax: 100,
+        fatigue: 0,
+        stress: 0,
+        conditions: [...condition.injuries.map(String), ...condition.curses.map(String), ...condition.specialStates.map(String)],
+        activeEffects: [],
+        reputations: {},
+        relationshipModifiers: {},
+      },
       portraitAsset,
+      aiExtractionSummary,
       provenance,
+      fieldLocks: [],
+      revision: 1,
+      revisionHistory: [],
       validationState: {
         isValid: true,
         errors: [],

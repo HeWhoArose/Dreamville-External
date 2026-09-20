@@ -169,6 +169,7 @@ export type StoryCheckAbility =
 
 export interface StoryCheckResult {
   checkId: string;
+  testType: StoryTestType;
   skill: string;
   ability: StoryCheckAbility;
   difficultyClass: number;

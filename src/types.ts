@@ -35,6 +35,7 @@ export interface ExternalCharacter {
   disposition: 'Friendly' | 'Cautious' | 'Enigmatic' | 'Reverent';
   playerVisibleKnowledge: string[];
   portraitEmoji: string;
+  portraitUrl?: string;
 }
 
 export interface DialogueChoice {
@@ -166,6 +167,8 @@ export interface ActionLog {
   description: string;
   epistemicValidation: EpistemicValidationStatus;
   authoritativeFeedback: string;
+  /** Player-facing narrator response, separate from internal/mechanical engine feedback. */
+  narrativeResponse?: string;
 }
 
 export interface ProtagonistProfile {
@@ -180,6 +183,8 @@ export interface ProtagonistProfile {
   transformation?: any;
   isDead?: boolean;
   isPossessed?: boolean;
+  portraitUrl?: string;
+  portraitEmoji?: string;
 }
 
 /**

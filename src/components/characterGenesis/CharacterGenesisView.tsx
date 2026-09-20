@@ -907,7 +907,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
 
                 <button
                   id="btn-extract-character"
-                  onClick={handleExtractCharacter}
+                  onClick={() => handleExtractCharacter()}
                   disabled={isExtracting || !naturalConcept.trim() || Boolean(deterministicFallbackPrompt)}
                   className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-sm font-medium text-white transition-colors shadow-sm"
                 >

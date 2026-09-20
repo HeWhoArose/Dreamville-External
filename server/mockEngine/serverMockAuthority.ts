@@ -439,6 +439,14 @@ export class ServerMockAuthority {
       {
         coreStats: run?.characterCoreStats || run?.protagonist?.coreStats,
         skills: run?.characterSkills || run?.protagonist?.skills,
+        conditionState: conditionEngine.exportActorState(actorId),
+        sceneText: [
+          run?.startingSituation?.summary,
+          run?.startingSituation?.hook,
+          worldRepository.getGeographyGraph(targetStoryId)
+            .getAllNodes()
+            .find((node) => node.id === player?.locationId || node.id === run?.currentLocationId)?.description,
+        ].filter(Boolean).join(' '),
       }
     );
 

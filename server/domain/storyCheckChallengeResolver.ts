@@ -53,11 +53,24 @@ function collectFromContainer(container: any, sourceType: StoryCheckChallenge['s
   const directCollections = [
     container.storyCheckChallenges,
     container.savingThrowChallenges,
+    container.hazards,
+    container.activeHazards,
+    container.plannedEvents,
+    container.events,
+    container.eventStates,
   ];
   directCollections.forEach((collection, index) => {
     asArray(collection).forEach((raw, itemIndex) => {
       const challenge = normalizeChallenge(raw, sourceType, prefix + '_challenge_' + index + '_' + itemIndex);
       if (challenge) results.push(challenge);
+      if (raw && typeof raw === 'object') {
+        const nestedChallenges = collectFromContainer(
+          raw,
+          sourceType,
+          prefix + '_nested_collection_' + index + '_' + itemIndex
+        );
+        results.push(...nestedChallenges);
+      }
     });
   });
   const nested = [container.storyCheckChallenge, container.savingThrowChallenge];

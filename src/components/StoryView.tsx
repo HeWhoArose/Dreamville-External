@@ -61,49 +61,55 @@ const StoryCheckCard: React.FC<{
           <Dices className="h-4 w-4 text-stone-500" />
           <p className="text-xs font-semibold text-stone-300">{check.skill} Check</p>
         </div>
-        <p className="mt-1 text-[10px] text-stone-600">
-          {check.ability}
-          {check.proficiencyLevel === 'EXPERTISE'
-            ? ' · Expertise'
-            : check.proficiencyLevel === 'PROFICIENT'
-            ? ' · Proficient'
-            : ''}
+        <p className="mt-1 text-[10px] text-stone-600">{check.ability}
+          {check.proficiencyLevel === 'EXPERTISE' ? ' · Expertise' : check.proficiencyLevel === 'PROFICIENT' ? ' · Proficient' : ''}
           {check.proficiencyBonus > 0 ? ` · +${check.proficiencyBonus} proficiency` : ''}
           {check.abilityModifier !== 0 ? ` · ${check.abilityModifier > 0 ? '+' : ''}${check.abilityModifier} ability` : ''}
         </p>
       </div>
-
       <div className="shrink-0 text-right">
         <p className="text-[10px] uppercase tracking-wide text-stone-600">DC</p>
         <p className="text-lg font-semibold text-stone-200">{check.difficultyClass}</p>
       </div>
     </div>
 
+    {check.advantageState !== 'NORMAL' && (
+      <div className="mt-2 flex items-center gap-2">
+        <span className="rounded-md border border-stone-800 bg-stone-900 px-2 py-0.5 text-[10px] text-stone-400">
+          {check.advantageState === 'ADVANTAGE' ? 'Advantage · roll 2d20, keep higher' : 'Disadvantage · roll 2d20, keep lower'}
+        </span>
+      </div>
+    )}
+
     <div className="mt-3">
       <DiceRollAnimation roll={check.roll} onComplete={onReveal} />
     </div>
 
     {revealed && (
-      <div className={`mt-3 flex items-center justify-between border-t border-stone-900 pt-3 text-xs ${
-        check.success ? 'text-stone-300' : 'text-stone-500'
-      }`}>
-        <span className="font-medium">
-          {check.criticalSuccess
-            ? 'Critical success'
-            : check.criticalFailure
-            ? 'Critical failure'
-            : check.success
-            ? 'Success'
-            : 'Failure'}
-        </span>
-        <span className="text-[10px] text-stone-600">
-          {check.total} total {check.totalModifier !== 0 ? `(${check.totalModifier >= 0 ? '+' : ''}${check.totalModifier})` : ''}
-        </span>
-      </div>
+      <>
+        {check.modifierSources.length > 0 && (
+          <div className="mt-3 space-y-1 border-t border-stone-900 pt-3">
+            {check.modifierSources.map((source) => (
+              <div key={`${source.kind}-${source.label}`} className="flex items-center justify-between text-[10px]">
+                <span className="text-stone-600">{source.label}</span>
+                <span className="text-stone-400">{source.value !== undefined ? `${source.value >= 0 ? '+' : ''}${source.value}` : ''}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {check.contextNotes.length > 0 && (
+          <div className="mt-2 space-y-1">
+            {check.contextNotes.map((note) => <p key={note} className="text-[10px] text-stone-600">{note}</p>)}
+          </div>
+        )}
+        <div className={`mt-3 flex items-center justify-between border-t border-stone-900 pt-3 text-xs ${check.success ? 'text-stone-300' : 'text-stone-500'}`}>
+          <span className="font-medium">{check.success ? 'Success' : 'Failure'}</span>
+          <span className="text-[10px] text-stone-600">{check.total} total {check.totalModifier !== 0 ? `(${check.totalModifier >= 0 ? '+' : ''}${check.totalModifier})` : ''}</span>
+        </div>
+      </>
     )}
   </div>
 );
-
 const Portrait: React.FC<{
   imageUrl?: string;
   emoji?: string;

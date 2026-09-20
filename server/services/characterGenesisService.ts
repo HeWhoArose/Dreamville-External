@@ -151,6 +151,44 @@ Return ONLY one JSON object matching this contract:
     "forms": [string],
     "specialStates": [string]
   },
+  "conditionState": {
+    "instances": [
+      {
+        "name": string,
+        "definitionId": string,
+        "alignment": "HARMFUL" | "BENEFICIAL" | "NEUTRAL" | "MIXED",
+        "severity": number,
+        "intensity": number,
+        "maxIntensity": number | null,
+        "source": string,
+        "durationSeconds": number | null,
+        "tickUnit": "ACTION" | "TURN" | "ROUND" | "MINUTE" | "HOUR" | "DAY" | "WORLD_TIME" | null,
+        "tickEvery": number | null,
+        "tags": [string],
+        "affectedBodyRegions": [string]
+      }
+    ],
+    "damageProfile": {
+      "damageImmunities": [string],
+      "damageResistances": [string],
+      "damageVulnerabilities": [string]
+    },
+    "conditionProfile": {
+      "conditionImmunities": [string],
+      "conditionResistances": [string],
+      "conditionVulnerabilities": [string]
+    },
+    "bodyRegions": [
+      {
+        "id": string,
+        "label": string,
+        "integrityCurrent": number,
+        "integrityMax": number,
+        "destroyed": boolean,
+        "conditionIds": [string]
+      }
+    ]
+  },
   "attributes": [
     {
       "name": string,
@@ -646,6 +684,92 @@ Rules:
           specialStates: extracted.condition?.specialStates || ['Well-rested'],
         };
 
+    const normalizeBodyRegions = (regions: any[]): any[] => {
+      const source = Array.isArray(regions) ? regions : [];
+      return source.map((region: any) => ({
+        id: String(region?.id || 'WHOLE_BODY'),
+        label: String(region?.label || region?.id || 'Body'),
+        integrityCurrent: Math.max(0, Number(region?.integrityCurrent ?? 100)),
+        integrityMax: Math.max(1, Number(region?.integrityMax ?? 100)),
+        destroyed: Boolean(region?.destroyed || Number(region?.integrityCurrent ?? 100) <= 0),
+        conditionIds: Array.isArray(region?.conditionIds) ? region.conditionIds.map(String) : [],
+      }));
+    };
+
+    const legacyConditionNames = [
+      ...condition.injuries.map(String),
+      ...condition.curses.map(String),
+      ...condition.specialStates.map(String),
+    ].filter(Boolean);
+
+    const rawConditionState = userEditedFields.has('conditionState') && existingDraft?.conditionState
+      ? existingDraft.conditionState
+      : extracted.conditionState;
+
+    const conditionInstances: CharacterConditionInstance[] = Array.isArray(rawConditionState?.instances)
+      ? rawConditionState.instances.map((instance: any, index: number) => ({
+          id: String(instance?.id || `condition_${draftId}_${index + 1}`),
+          definitionId: String(instance?.definitionId || String(instance?.name || 'custom_condition').toLowerCase().replace(/[^a-z0-9]+/g, '_')),
+          name: String(instance?.name || `Condition ${index + 1}`),
+          alignment: ['HARMFUL','BENEFICIAL','NEUTRAL','MIXED'].includes(instance?.alignment) ? instance.alignment : 'HARMFUL',
+          severity: Math.max(0, Number(instance?.severity ?? 1)),
+          intensity: Math.max(0, Number(instance?.intensity ?? 1)),
+          maxIntensity: instance?.maxIntensity == null ? undefined : Math.max(1, Number(instance.maxIntensity)),
+          source: instance?.source ? String(instance.source) : undefined,
+          appliedAtSeconds: Math.max(0, Number(instance?.appliedAtSeconds ?? 0)),
+          durationSeconds: instance?.durationSeconds == null ? null : Math.max(0, Number(instance.durationSeconds)),
+          remainingDurationSeconds: instance?.remainingDurationSeconds == null ? null : Math.max(0, Number(instance.remainingDurationSeconds)),
+          tickUnit: instance?.tickUnit || undefined,
+          tickEvery: instance?.tickEvery == null ? undefined : Math.max(1, Number(instance.tickEvery)),
+          nextTickAtSeconds: instance?.nextTickAtSeconds == null ? undefined : Math.max(0, Number(instance.nextTickAtSeconds)),
+          stackCount: Math.max(1, Number(instance?.stackCount ?? 1)),
+          stackMode: ['REPLACE','ADD','MAX','REFRESH'].includes(instance?.stackMode) ? instance.stackMode : 'REFRESH',
+          tags: Array.isArray(instance?.tags) ? instance.tags.map(String) : [],
+          affectedBodyRegions: Array.isArray(instance?.affectedBodyRegions) ? instance.affectedBodyRegions.map(String) : undefined,
+          notes: instance?.notes ? String(instance.notes) : undefined,
+        }))
+      : legacyConditionNames.map((name: string, index: number) => ({
+          id: `condition_${draftId}_legacy_${index + 1}`,
+          definitionId: name.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
+          name,
+          alignment: 'HARMFUL',
+          severity: 1,
+          intensity: 1,
+          stackCount: 1,
+          stackMode: 'REFRESH',
+          appliedAtSeconds: 0,
+          durationSeconds: null,
+          remainingDurationSeconds: null,
+          tags: ['legacy_condition'],
+        }));
+
+    const conditionState: CharacterStartingConditionState = {
+      instances: conditionInstances,
+      damageProfile: {
+        damageImmunities: Array.isArray(rawConditionState?.damageProfile?.damageImmunities)
+          ? rawConditionState.damageProfile.damageImmunities.map(String)
+          : [],
+        damageResistances: Array.isArray(rawConditionState?.damageProfile?.damageResistances)
+          ? rawConditionState.damageProfile.damageResistances.map(String)
+          : [],
+        damageVulnerabilities: Array.isArray(rawConditionState?.damageProfile?.damageVulnerabilities)
+          ? rawConditionState.damageProfile.damageVulnerabilities.map(String)
+          : [],
+      },
+      conditionProfile: {
+        conditionImmunities: Array.isArray(rawConditionState?.conditionProfile?.conditionImmunities)
+          ? rawConditionState.conditionProfile.conditionImmunities.map(String)
+          : [],
+        conditionResistances: Array.isArray(rawConditionState?.conditionProfile?.conditionResistances)
+          ? rawConditionState.conditionProfile.conditionResistances.map(String)
+          : [],
+        conditionVulnerabilities: Array.isArray(rawConditionState?.conditionProfile?.conditionVulnerabilities)
+          ? rawConditionState.conditionProfile.conditionVulnerabilities.map(String)
+          : [],
+      },
+      bodyRegions: normalizeBodyRegions(rawConditionState?.bodyRegions),
+    };
+
     const startingSituation: StartingSituationConfig = userEditedFields.has('startingSituation') && existingDraft?.startingSituation
       ? existingDraft.startingSituation
       : {
@@ -761,6 +885,7 @@ Rules:
       motivations,
       relationships,
       condition,
+      conditionState,
       coreStats,
       attributes,
       stats,
@@ -782,10 +907,16 @@ Rules:
         energyMax: 100,
         fatigue: 0,
         stress: 0,
-        conditions: [...condition.injuries.map(String), ...condition.curses.map(String), ...condition.specialStates.map(String)],
+        conditions: [...new Set([
+          ...conditionState.instances.map((instance) => instance.name),
+          ...condition.injuries.map(String),
+          ...condition.curses.map(String),
+          ...condition.specialStates.map(String),
+        ])],
         activeEffects: [],
         reputations: {},
         relationshipModifiers: {},
+        conditionState: conditionState,
       },
       portraitAsset,
       aiExtractionSummary,

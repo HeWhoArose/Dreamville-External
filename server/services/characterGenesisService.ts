@@ -253,6 +253,20 @@ Return ONLY one JSON object matching this contract:
           "condition": string,
           "description": string
         }
+      ],
+      "storyCheckChallenges": [
+        {
+          "id": string,
+          "label": string,
+          "keywords": [string],
+          "testType": "SAVING_THROW" | "ABILITY_CHECK",
+          "savingThrowAbility": "Strength" | "Dexterity" | "Constitution" | "Intelligence" | "Wisdom" | "Charisma",
+          "difficultyClass": number,
+          "reason": string,
+          "triggerReason": string,
+          "onFailure": object,
+          "onSuccess": object
+        }
       ]
     }
   ],

@@ -9,6 +9,7 @@ import {
 } from '../types';
 import { useAudioHaptic } from './AudioHapticManager';
 import { getCharacterSpeakerTheme } from './voiceResolver';
+import { DiceRollAnimation } from './common/DiceRollAnimation';
 import { StoryHUDDrawer } from './StoryHUDDrawer';
 import {
   AlertCircle,
@@ -48,41 +49,61 @@ interface StoryViewProps {
   onRetryOpening?: () => void;
 }
 
-const StoryCheckCard: React.FC<{ check: NonNullable<ActionLog['checkResult']> }> = ({ check }) => (
+const StoryCheckCard: React.FC<{
+  check: NonNullable<ActionLog['checkResult']>;
+  revealed: boolean;
+  onReveal: () => void;
+}> = ({ check, revealed, onReveal }) => (
   <div className="ml-[3.25rem] rounded-2xl border border-stone-800 bg-stone-950/80 px-4 py-3">
     <div className="flex items-start justify-between gap-4">
-      <div className="flex items-center gap-2">
-        <Dices className="h-4 w-4 text-stone-500" />
-        <div>
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <Dices className="h-4 w-4 text-stone-500" />
           <p className="text-xs font-semibold text-stone-300">{check.skill} Check</p>
-          <p className="text-[10px] text-stone-600">
-            {check.ability} {check.proficiencyLevel === 'EXPERTISE' ? '· Expertise' : check.proficiencyLevel === 'PROFICIENT' ? '· Proficient' : ''}
-          </p>
         </div>
+        <p className="mt-1 text-[10px] text-stone-600">
+          {check.ability}
+          {check.proficiencyLevel === 'EXPERTISE'
+            ? ' · Expertise'
+            : check.proficiencyLevel === 'PROFICIENT'
+            ? ' · Proficient'
+            : ''}
+          {check.proficiencyBonus > 0 ? ` · +${check.proficiencyBonus} proficiency` : ''}
+          {check.abilityModifier !== 0 ? ` · ${check.abilityModifier > 0 ? '+' : ''}${check.abilityModifier} ability` : ''}
+        </p>
       </div>
-      <div className="text-right">
+
+      <div className="shrink-0 text-right">
         <p className="text-[10px] uppercase tracking-wide text-stone-600">DC</p>
         <p className="text-lg font-semibold text-stone-200">{check.difficultyClass}</p>
       </div>
     </div>
-    <div className="mt-3 flex items-center justify-between rounded-xl border border-stone-900 bg-stone-900/60 px-3 py-2">
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-stone-500">d20</span>
-        <span className="text-base font-semibold text-stone-200">{check.roll.individualDice[0]}</span>
-        <span className="text-stone-700">+</span>
-        <span className="text-xs text-stone-400">{check.totalModifier}</span>
-      </div>
-      <div className="text-right">
-        <p className="text-[10px] text-stone-600">Total</p>
-        <p className="text-xl font-semibold text-stone-100">{check.total}</p>
-      </div>
+
+    <div className="mt-3">
+      <DiceRollAnimation roll={check.roll} onComplete={onReveal} />
     </div>
-    <div className={`mt-2 flex items-center justify-between text-xs ${check.success ? 'text-stone-300' : 'text-stone-500'}`}>
-      <span>{check.criticalSuccess ? 'Critical success' : check.criticalFailure ? 'Critical failure' : check.success ? 'Success' : 'Failure'}</span>
-      <span className="text-[10px] text-stone-600">{check.reason}</span>
-    </div>
+
+    {revealed && (
+      <div className={`mt-3 flex items-center justify-between border-t border-stone-900 pt-3 text-xs ${
+        check.success ? 'text-stone-300' : 'text-stone-500'
+      }`}>
+        <span className="font-medium">
+          {check.criticalSuccess
+            ? 'Critical success'
+            : check.criticalFailure
+            ? 'Critical failure'
+            : check.success
+            ? 'Success'
+            : 'Failure'}
+        </span>
+        <span className="text-[10px] text-stone-600">
+          {check.total} total {check.totalModifier !== 0 ? `(${check.totalModifier >= 0 ? '+' : ''}${check.totalModifier})` : ''}
+        </span>
+      </div>
+    )}
   </div>
 );
+
 const Portrait: React.FC<{
   imageUrl?: string;
   emoji?: string;
@@ -135,6 +156,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
   const { playSpeech, isPlayingSpeech, triggerHaptic, playSfx } = useAudioHaptic();
 
   const [typedAction, setTypedAction] = useState('');
+  const [revealedCheckIds, setRevealedCheckIds] = useState<Record<string, boolean>>({});
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
@@ -526,32 +548,39 @@ export const StoryView: React.FC<StoryViewProps> = ({
                   </div>
                 </div>
 
-                {action.checkResult && <StoryCheckCard check={action.checkResult} />}
-
-                {(action.narrativeResponse || action.authoritativeFeedback) && (
-                  <div className="ml-[3.25rem] rounded-2xl rounded-tl-md border border-stone-800/80 bg-stone-950/60 px-4 py-3">
-                    <div className="mb-1 flex items-center gap-2">
-                      <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-stone-600">Narrator</span>
-                    </div>
-                    <p className="whitespace-pre-line font-serif text-sm leading-6 text-stone-200">
-                      {action.narrativeResponse || (
-                        action.epistemicValidation === 'REJECTED_BY_ENGINE'
-                          ? 'That action could not be carried out.'
-                          : action.authoritativeFeedback
-                      )}
-                    </p>
-                    {action.narrativeResponse && (
-                      <button
-                        onClick={() => handleReadAloud(action.narrativeResponse || '')}
-                        disabled={isPlayingSpeech}
-                        className="mt-2 inline-flex items-center gap-1.5 text-[10px] text-stone-600 transition hover:text-stone-300 disabled:opacity-50"
-                      >
-                        <Headphones className="h-3 w-3" />
-                        Listen
-                      </button>
-                    )}
-                  </div>
+                {action.checkResult && (
+                  <StoryCheckCard
+                    check={action.checkResult}
+                    revealed={Boolean(revealedCheckIds[action.id])}
+                    onReveal={() => setRevealedCheckIds((current) => ({ ...current, [action.id]: true }))}
+                  />
                 )}
+
+                {(!action.checkResult || revealedCheckIds[action.id]) &&
+                  (action.narrativeResponse || action.authoritativeFeedback) && (
+                    <div className="ml-[3.25rem] rounded-2xl rounded-tl-md border border-stone-800/80 bg-stone-950/60 px-4 py-3">
+                      <div className="mb-1 flex items-center gap-2">
+                        <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-stone-600">Narrator</span>
+                      </div>
+                      <p className="whitespace-pre-line font-serif text-sm leading-6 text-stone-200">
+                        {action.narrativeResponse || (
+                          action.epistemicValidation === 'REJECTED_BY_ENGINE'
+                            ? 'That action could not be carried out.'
+                            : action.authoritativeFeedback
+                        )}
+                      </p>
+                      {action.narrativeResponse && (
+                        <button
+                          onClick={() => handleReadAloud(action.narrativeResponse || '')}
+                          disabled={isPlayingSpeech}
+                          className="mt-2 inline-flex items-center gap-1.5 text-[10px] text-stone-600 transition hover:text-stone-300 disabled:opacity-50"
+                        >
+                          <Headphones className="h-3 w-3" />
+                          Listen
+                        </button>
+                      )}
+                    </div>
+                  )}
               </article>
             ))}
 

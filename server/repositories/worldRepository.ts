@@ -656,6 +656,18 @@ export class InMemoryWorldRepository implements WorldRepository {
         }
       });
 
+      // Anchor the canonical power-state HP to the confirmed character's D&D core stats.
+      // The capability system may still track its own energy/strain resources, but HP starts from
+      // CharacterGenesis rather than a hard-coded default.
+      const seededPowerState = capEngine.seedStarterPowerStateForActor(actorId);
+      if (char.coreStats) {
+        capEngine.setPowerState(actorId, {
+          ...seededPowerState,
+          healthCurrent: Math.max(0, Number(char.coreStats.hpCurrent ?? seededPowerState.healthCurrent)),
+          healthMax: Math.max(1, Number(char.coreStats.hpMax ?? seededPowerState.healthMax)),
+        });
+      }
+
       // 10. Epistemic Knowledge Boundary: Initial Facts
       const startLocNode = geographyGraph.getNode(startingLocationId);
       const startLocName = startLocNode?.name || char.startingLocation?.name || startingLocationId;
@@ -793,8 +805,10 @@ export class InMemoryWorldRepository implements WorldRepository {
         characterPortraitEmoji: char.portraitAsset?.emoji || '🧙‍♂️',
         characterPortraitUrl: char.portraitAsset?.imageUrl || char.portraitAsset?.url,
         currentLocationId: startingLocationId,
-        currentHp: 30,
-        maxHp: 30,
+        currentHp: Number(char.coreStats?.hpCurrent ?? char.startingState?.healthCurrent ?? 30),
+        maxHp: Number(char.coreStats?.hpMax ?? char.startingState?.healthMax ?? 30),
+        characterCoreStats: char.coreStats ? JSON.parse(JSON.stringify(char.coreStats)) : undefined,
+        characterSkills: char.skills ? JSON.parse(JSON.stringify(char.skills)) : undefined,
         protagonist: JSON.parse(JSON.stringify(char)), // Sealed snapshot
         characterAttributes: JSON.parse(JSON.stringify(char.attributes || [])),
         characterStats: JSON.parse(JSON.stringify(char.stats || [])),

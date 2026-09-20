@@ -781,7 +781,7 @@ export class TacticalCombatEngine {
     }
 
     // DEF-CH8-04: Enforce movement-restricting conditions
-    const immobilizingConditions = ['Immobilized', 'Paralyzed', 'Stunned', 'Restrained', 'Petrified', 'Asleep', 'Unconscious'];
+    const immobilizingConditions = ['Immobilized', 'Grappled', 'Paralyzed', 'Stunned', 'Restrained', 'Petrified', 'Asleep', 'Unconscious'];
     if (actor.conditions && actor.conditions.some((c) => immobilizingConditions.includes(c))) {
       const activeCond = actor.conditions.find((c) => immobilizingConditions.includes(c));
       return {
@@ -1192,12 +1192,52 @@ export class TacticalCombatEngine {
       };
     }
 
-    const targetDodging = target.conditions.includes('Dodge') || !!this.actionEconomy.get(targetId)?.dodging;
+    const attackerConditions = new Set(attacker.conditions.map((condition) => condition.toLowerCase()));
+    const targetConditions = new Set(target.conditions.map((condition) => condition.toLowerCase()));
+    const distanceToTarget = Math.hypot(target.x - attacker.x, target.y - attacker.y);
+
+    const attackerHasDisadvantage =
+      attackerConditions.has('blinded') ||
+      attackerConditions.has('poisoned') ||
+      attackerConditions.has('frightened') ||
+      attackerConditions.has('restrained') ||
+      attackerConditions.has('paralyzed') ||
+      attackerConditions.has('stunned') ||
+      attackerConditions.has('prone');
+
+    const attackerHasAdvantage =
+      attackerConditions.has('invisible');
+
+    const targetDodging = !!this.actionEconomy.get(targetId)?.dodging;
+    const targetHasAdvantageAgainst =
+      targetConditions.has('blinded') ||
+      targetConditions.has('restrained') ||
+      targetConditions.has('paralyzed') ||
+      targetConditions.has('stunned') ||
+      targetConditions.has('unconscious') ||
+      targetConditions.has('invisible');
+
+    const targetIsProne = targetConditions.has('prone');
+    const targetProneAdvantage = targetIsProne && distanceToTarget <= (attacker.reachCells ?? 1.5);
+    const targetProneDisadvantage = targetIsProne && distanceToTarget > (attacker.reachCells ?? 1.5);
+
     const attackRes = this.ruleset.resolveAttack({
       attackBonus: attacker.attackBonus,
       targetArmorClass: target.armorClass,
-      advantage: options?.advantage,
-      disadvantage: options?.disadvantage || targetDodging,
+      advantage: Boolean(
+        options?.advantage ||
+        attackerHasAdvantage ||
+        targetHasAdvantageAgainst ||
+        targetProneAdvantage ||
+        targetConditions.has('unconscious')
+      ),
+      disadvantage: Boolean(
+        options?.disadvantage ||
+        targetDodging ||
+        attackerHasDisadvantage ||
+        targetProneDisadvantage ||
+        targetConditions.has('invisible')
+      ),
       diceEngine: this.diceEngine,
     });
 
@@ -1206,13 +1246,23 @@ export class TacticalCombatEngine {
 
     if (attackRes.hits) {
       const formula = options?.overrideFormula || attacker.damageFormula;
-      const dmgRes = this.ruleset.resolveDamage(formula, attackRes.isCritical, this.diceEngine);
+      const unconsciousMeleeCritical =
+        targetConditions.has('unconscious') &&
+        distanceToTarget <= (attacker.reachCells ?? 1.5);
+      const dmgRes = this.ruleset.resolveDamage(
+        formula,
+        attackRes.isCritical || unconsciousMeleeCritical,
+        this.diceEngine
+      );
       damage = dmgRes.totalDamage;
+      const unconsciousMeleeCritical =
+        targetConditions.has('unconscious') &&
+        distanceToTarget <= (attacker.reachCells ?? 1.5);
       const damageResult = this.applyCombatDamage(
         target,
         damage,
         options?.damageType || attacker.damageType || 'slashing',
-        attackRes.isCritical
+        attackRes.isCritical || unconsciousMeleeCritical
       );
       damage = damageResult.damage;
       targetDied = damageResult.targetDied;
@@ -1348,13 +1398,23 @@ export class TacticalCombatEngine {
       const saveType = params.savingThrowType || 'DEX';
       const saveMod = target.saveModifiers?.[saveType] ?? 0;
       const dc = params.difficultyClass ?? 13;
+      const targetConditions = new Set(target.conditions.map((condition) => condition.toLowerCase()));
       const targetDodging = !!this.actionEconomy.get(params.targetId)?.dodging;
+      const automaticFailure =
+        ['paralyzed', 'petrified', 'stunned', 'unconscious'].some(
+          (condition) => targetConditions.has(condition)
+        ) &&
+        ['DEX', 'STR'].includes(saveType.toUpperCase());
       savingThrowResult = this.ruleset.resolveSavingThrow({
         saveModifier: saveMod,
         difficultyClass: dc,
         advantage: targetDodging && saveType.toUpperCase() === 'DEX',
+        disadvantage: targetConditions.has('restrained') && saveType.toUpperCase() === 'DEX',
         diceEngine: this.diceEngine,
       });
+      if (automaticFailure) {
+        savingThrowResult.succeeds = false;
+      }
 
       if (savingThrowResult.succeeds) {
         if (params.halfDamageOnSave !== false) {

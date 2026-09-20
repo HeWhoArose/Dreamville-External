@@ -55,7 +55,7 @@ gameRouter.get('/state', (req: Request, res: Response) => {
  * Validates and processes an ActionRequest using server-side mock authority.
  * Returns an ActionResult containing the updated ExternalViewState.
  */
-gameRouter.post('/action', (req: Request, res: Response) => {
+gameRouter.post('/action', async (req: Request, res: Response) => {
   try {
     const actionRequest = req.body as ActionRequest;
 

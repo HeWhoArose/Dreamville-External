@@ -127,6 +127,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [keySaveMessage, setKeySaveMessage] = useState<string | null>(null);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [isRefreshingRegistry, setIsRefreshingRegistry] = useState(false);
   const [providers, setProviders] = useState<ProviderInfo[]>(INITIAL_PROVIDERS);
 
   // Active Tooltip Explanations
@@ -144,6 +145,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [addingModelKey, setAddingModelKey] = useState<string>('');
 
   const loadOrchestratorData = async (forceRefresh = false) => {
+    if (forceRefresh) setIsRefreshingRegistry(true);
     try {
       await apiClient.discoverOrchestratorModels(forceRefresh);
 
@@ -176,6 +178,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     } catch (err: any) {
       console.error('Failed to load orchestrator data:', err);
       setTestResultFeedback(err?.message || 'Failed to refresh the model registry.');
+    } finally {
+      if (forceRefresh) setIsRefreshingRegistry(false);
     }
   };
 
@@ -814,8 +818,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   Verify readiness, context windows, and live ping latency for all registered provider models.
                 </p>
               </div>
-              <Button variant="subtle" size="sm" onClick={() => loadOrchestratorData(true)} disabled={loading}>
-                🔄 Refresh & Discover
+              <Button variant="subtle" size="sm" onClick={() => loadOrchestratorData(true)} disabled={isRefreshingRegistry}>
+                {isRefreshingRegistry ? '⟳ Discovering...' : '🔄 Refresh & Discover'}
               </Button>
             </div>
 

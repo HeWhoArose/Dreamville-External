@@ -291,7 +291,7 @@ Rules:
 
     // Build canonical draft assembling all sections
     const generatedProvenance: CharacterProvenanceSource =
-      generationSource === 'DETERMINISTIC_FALLBACK' ? 'DETERMINISTIC_FALLBACK' : generatedProvenance;
+      generationSource === 'DETERMINISTIC_FALLBACK' ? 'DETERMINISTIC_FALLBACK' : 'AI_GENERATED';
 
     const provenance: Record<string, CharacterProvenanceSource> = {
       sourceDescription: 'PLAYER_INPUT',
@@ -325,6 +325,7 @@ Rules:
             baseStrainCost: Number(c.baseStrainCost ?? 5),
             minVesselCapacityRequired: Number(c.minVesselCapacityRequired ?? 15),
             description: c.description || 'Special capability.',
+            effects: this.mapCharacterEffects(c.effects, c.id || `cap_${draftId}_${idx + 1}`, generatedProvenance),
             provenance: generatedProvenance,
           }))
     );
@@ -444,10 +445,26 @@ Rules:
         ...consumables.map((c: string, i: number) => ({
           id: `inv_c_${i}`,
           name: c,
-          category: 'Potion',
+          category: 'Food',
           isEquipped: false,
           quantity: 1,
           provenance: generatedProvenance as CharacterProvenanceSource,
+        })),
+        ...aiInventory.map((item: any, i: number) => ({
+          id: item.id || `inv_ai_${i}`,
+          name: String(item.name || `Item ${i + 1}`),
+          category: String(item.category || 'Miscellaneous'),
+          description: item.description ? String(item.description) : undefined,
+          slot: item.slot ? String(item.slot) : undefined,
+          isEquipped: Boolean(item.isEquipped),
+          quantity: Number(item.quantity ?? 1),
+          rarity: item.rarity ? String(item.rarity) : undefined,
+          weightKg: typeof item.weightKg === 'number' ? item.weightKg : undefined,
+          durability: typeof item.durability === 'number' ? item.durability : undefined,
+          maxDurability: typeof item.maxDurability === 'number' ? item.maxDurability : undefined,
+          properties: item.properties && typeof item.properties === 'object' ? item.properties : undefined,
+          provenance: generatedProvenance as CharacterProvenanceSource,
+          sourceUserPrompt: concept,
         })),
       ];
 
@@ -569,18 +586,8 @@ Rules:
       ? existingDraft.traits
       : (Array.isArray(extracted.traits) ? extracted.traits.map(String) : (Array.isArray(extracted.personality?.traits) ? extracted.personality.traits.map(String) : []));
 
-    const mapEffects = (effects: any, sourceId: string): any[] => Array.isArray(effects) ? effects.map((effect: any, idx: number) => ({
-      id: effect?.id || 'effect_' + sourceId + '_' + (idx + 1),
-      type: String(effect?.type || 'narrative_modifier'),
-      target: effect?.target,
-      scope: effect?.scope,
-      modifier: typeof effect?.modifier === 'number' ? effect.modifier : undefined,
-      value: effect?.value,
-      condition: effect?.condition,
-      description: String(effect?.description || 'Contextual effect.'),
-      sourceId,
-      provenance: generatedProvenance as CharacterProvenanceSource,
-    })) : [];
+    const mapEffects = (effects: any, sourceId: string): any[] =>
+      this.mapCharacterEffects(effects, sourceId, generatedProvenance);
 
     const feats = userEditedFields.has('feats') && Array.isArray(existingDraft?.feats)
       ? existingDraft.feats
@@ -661,7 +668,7 @@ Rules:
       portraitAsset,
       aiExtractionSummary,
       provenance,
-      fieldLocks: [],
+      fieldLocks: [...new Set([...(existingDraft?.fieldLocks || []), ...Array.from(userEditedFields)])],
       revision: 1,
       revisionHistory: [],
       validationState: {
@@ -677,6 +684,14 @@ Rules:
 
     // Run structural & world rule validation
     const validation = this.validateCharacterDraft(draft, worldTemplate);
+    if (generationFailureReason) {
+      validation.warnings = [
+        ...validation.warnings,
+        generationSource === 'DETERMINISTIC_FALLBACK'
+          ? 'AI extraction was unavailable or invalid; deterministic concept extraction was used.'
+          : `Character extraction used ${generationSource === 'AI_FALLBACK' ? 'an AI fallback provider' : 'the primary AI provider'}.`,
+      ];
+    }
     draft.validationState = validation;
 
     return draft;
@@ -963,6 +978,31 @@ OUTPUT STRICT JSON with this structure:
   // -------------------------------------------------------------
   // Internal Procedural Fallbacks & Keyword Parsers
   // -------------------------------------------------------------
+
+  private mapCharacterEffects(
+    effects: any,
+    sourceId: string,
+    provenance: CharacterProvenanceSource
+  ): import('../../src/types').CharacterEffect[] {
+    if (!Array.isArray(effects)) return [];
+    return effects.map((effect: any, idx: number) => ({
+      id: String(effect?.id || `effect_${sourceId}_${idx + 1}`),
+      type: String(effect?.type || 'narrative_modifier'),
+      target: effect?.target ? String(effect.target) : undefined,
+      scope: effect?.scope ? String(effect.scope) : undefined,
+      modifier: typeof effect?.modifier === 'number' ? effect.modifier : undefined,
+      value:
+        typeof effect?.value === 'string' ||
+        typeof effect?.value === 'number' ||
+        typeof effect?.value === 'boolean'
+          ? effect.value
+          : undefined,
+      condition: effect?.condition ? String(effect.condition) : undefined,
+      description: String(effect?.description || 'Contextual effect.'),
+      sourceId,
+      provenance,
+    }));
+  }
 
   /**
    * Robust JSON extractor from model output.

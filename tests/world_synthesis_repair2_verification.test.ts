@@ -1,9 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { worldSynthesisService } from '../server/services/worldSynthesisService';
+import { WorldSynthesisService } from '../server/services/worldSynthesisService';
 import { WorldSynthesisInput } from '../src/types';
+import { MultiModelOrchestrator } from '../server/domain/aiOrchestrator';
+
+
+function createForcedDeterministicService(): WorldSynthesisService {
+  const orchestrator = new MultiModelOrchestrator();
+  for (const model of orchestrator.getAllModels()) {
+    if (!model.isEmergencyFloor && model.roleEligibility.includes('narrative.generate')) {
+      orchestrator.updateModelHealth(model.providerId, model.modelId, 'Unavailable', 'Exhausted');
+    }
+  }
+  return new WorldSynthesisService(() => orchestrator);
+}
 
 test('World Synthesis Repair 2: Comprehensive Architecture Verification Suite', async (t) => {
+  const service = createForcedDeterministicService();
   // Test 1: Seed reproducibility
   await t.test('1. Same premise + same seed produces reproducible deterministic candidate', async () => {
     const inputA: WorldSynthesisInput = {
@@ -20,8 +33,10 @@ test('World Synthesis Repair 2: Comprehensive Architecture Verification Suite', 
       toneTags: ['Mysterious']
     };
 
-    const worldA = await worldSynthesisService.synthesizeWorldFromPremise(inputA);
-    const worldB = await worldSynthesisService.synthesizeWorldFromPremise(inputB);
+    const worldA = await service.synthesizeWorldFromPremise(inputA);
+    const worldB = await service.synthesizeWorldFromPremise(inputB);
+    assert.equal(worldA.provenance?.generationSource, 'DETERMINISTIC_FALLBACK');
+    assert.equal(worldB.provenance?.generationSource, 'DETERMINISTIC_FALLBACK');
 
     assert.equal(worldA.title, worldB.title, 'Titles should be identical for identical seed');
     assert.equal(worldA.setting, worldB.setting, 'Settings should be identical for identical seed');
@@ -46,8 +61,8 @@ test('World Synthesis Repair 2: Comprehensive Architecture Verification Suite', 
       toneTags: ['Gritty']
     };
 
-    const worldA = await worldSynthesisService.synthesizeWorldFromPremise(inputA);
-    const worldB = await worldSynthesisService.synthesizeWorldFromPremise(inputB);
+    const worldA = await service.synthesizeWorldFromPremise(inputA);
+    const worldB = await service.synthesizeWorldFromPremise(inputB);
 
     assert.notEqual(worldA.title, worldB.title, 'Different seeds should vary title or flavor');
     assert.notDeepEqual(worldA.geography.locations.map(l => l.name), worldB.geography.locations.map(l => l.name), 'Different seeds should vary location names');
@@ -71,11 +86,16 @@ test('World Synthesis Repair 2: Comprehensive Architecture Verification Suite', 
       'Gloomspire',
       'Obsidian Cathedral',
       'Vanguard Star-Terraces',
-      'Sacred Chord'
+      'Sacred Chord',
+      'Core Convergence Hub',
+      'Vanguard Alliance',
+      'Guide Vane',
+      'Convergence Threshold',
+      'Adaptive Resonance'
     ];
 
     for (let i = 0; i < premises.length; i++) {
-      const world = await worldSynthesisService.synthesizeWorldFromPremise({
+      const world = await service.synthesizeWorldFromPremise({
         naturalLanguagePremise: premises[i],
         generationSeed: `test_fixture_ban_${i}`
       });
@@ -92,7 +112,7 @@ test('World Synthesis Repair 2: Comprehensive Architecture Verification Suite', 
 
   // Test 4: Event quantity enforcement (5–10 events)
   await t.test('4. Event quantity is strictly bounded between 5 and 10 events with causal integrity', async () => {
-    const world = await worldSynthesisService.synthesizeWorldFromPremise({
+    const world = await service.synthesizeWorldFromPremise({
       naturalLanguagePremise: 'A desert planet where wandering dunes reveal forgotten robotic relics.',
       generationSeed: 'seed_desert_events_55'
     });
@@ -112,10 +132,58 @@ test('World Synthesis Repair 2: Comprehensive Architecture Verification Suite', 
     }
   });
 
-  // Test 5: Provenance and generation metadata
+  // Test 5: Trimming >10 events preserves causal closure and canonical date floor
+  await t.test('5. Trimming >10 events preserves causal closure and canonical date floor', () => {
+    const raw = Array.from({ length: 12 }, (_, index) => ({
+      id: `evt_${index + 1}`,
+      title: `Event ${index + 1}`,
+      description: 'Synthetic test event',
+      category: 'DISCOVERY',
+      scheduledTime: { year: 40, month: 1, day: 1 },
+      locationId: 'loc_1',
+      participatingActors: ['fac_1'],
+      preconditions: { requiredEvents: index === 0 ? [] : [`evt_${index}`], requiredWorldFacts: [] },
+      plannedConsequences: [{ type: 'location_state_change', targetId: 'loc_1', detail: 'Changed' }],
+      visibility: 'PUBLIC'
+    }));
+
+    const normalized = service.validateAndNormalizeEvents(raw, [{ id: 'loc_1', name: 'Test Region' }], [], [{ id: 'fac_1', name: 'Test Faction' }], 'A desert planet with buried machinery', 'trim-test-seed', true);
+
+    assert.equal(normalized.length, 10);
+    const ids = new Set(normalized.map((event: any) => event.id));
+    for (const event of normalized) {
+      const stamp = event.scheduledTime;
+      assert.ok(stamp.year > 42 || (stamp.year === 42 && stamp.month > 10) || (stamp.year === 42 && stamp.month === 10 && stamp.day >= 14));
+      for (const dep of event.preconditions.requiredEvents || []) {
+        assert.ok(ids.has(dep), `Trimmed event ${event.id} references omitted dependency ${dep}`);
+      }
+    }
+  });
+
+  // Test 6: Completing <5 events uses seeded premise-derived templates
+  await t.test('6. Completing <5 events uses seeded premise-derived templates', () => {
+    const normalized = service.validateAndNormalizeEvents([{
+      id: 'evt_existing',
+      title: 'Existing Relic Signal',
+      description: 'A relic signal appears.',
+      category: 'DISCOVERY',
+      scheduledTime: { year: 42, month: 10, day: 14 },
+      locationId: 'loc_1',
+      participatingActors: ['fac_1'],
+      preconditions: { requiredEvents: [], requiredWorldFacts: [] },
+      plannedConsequences: [{ type: 'location_state_change', targetId: 'loc_1', detail: 'Signal observed' }],
+      visibility: 'PUBLIC'
+    }], [{ id: 'loc_1', name: 'Buried Relay' }], [], [{ id: 'fac_1', name: 'Relay Keepers' }], 'A desert planet with buried robotic relics', 'completion-seed-42', true);
+
+    assert.ok(normalized.length >= 5);
+    assert.ok(normalized.length <= 10);
+    assert.ok(normalized.slice(1).some((event: any) => /desert|planet|buried|robotic|relic|relay/i.test(`${event.title} ${event.description}`)));
+  });
+
+  // Test 7: Provenance and generation metadata
   await t.test('5. WorldTemplate provenance records generationSeed and execution metadata', async () => {
     const seed = 'seed_provenance_check_42';
-    const world = await worldSynthesisService.synthesizeWorldFromPremise({
+    const world = await service.synthesizeWorldFromPremise({
       naturalLanguagePremise: 'A floating archipelago above an endless storm.',
       generationSeed: seed
     });

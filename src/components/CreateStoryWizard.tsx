@@ -93,15 +93,6 @@ export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRu
         generationSeed: `seed_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
       });
       setSynthesizedWorld(result);
-      if (result.suggestedProtagonist) {
-        setCharName(result.suggestedProtagonist.name || '');
-        setCharRole(result.suggestedProtagonist.role || 'Adventurer');
-        setCharBackground(result.suggestedProtagonist.background || '');
-        setCharAppearance(result.suggestedProtagonist.appearance || '');
-        setCharPersonality(result.suggestedProtagonist.personality || '');
-        setCharMotivations(result.suggestedProtagonist.motivations || '');
-        setCharEquipment((result.suggestedProtagonist.equipment || []).join(', '));
-      }
       setStage(2);
     } catch (e: any) {
       setError(e.message || 'We couldn\'t generate your world right now.');
@@ -419,6 +410,7 @@ export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRu
             </div>
           </div>
         )}
+      </div>
 
       {/* Control Buttons */}
       <div className="mt-10 flex justify-between border-t border-stone-800 pt-6">
@@ -430,7 +422,7 @@ export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRu
               setStage((s) => s - 1);
             }
           }}
-          disabled={isSynthesizing || isLaunching}
+          disabled={isSynthesizing}
           className="px-6 py-2.5 border border-stone-700 text-stone-300 hover:bg-stone-900 rounded-xl font-medium transition-colors disabled:opacity-50 flex items-center gap-2 cursor-pointer"
         >
           <ChevronLeft className="w-4 h-4" /> Back

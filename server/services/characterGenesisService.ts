@@ -32,6 +32,80 @@ export class CharacterGenesisService {
 
     const draftId = existingDraft?.draftId || `draft_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
+    let extracted: any = null;
+    const prompt = `You are a master character designer for narrative RPGs.
+Given this character concept and world context, extract and design a complete, deeply detailed character draft.
+
+WORLD CONTEXT:
+Title: ${worldTemplate?.title || 'Unknown World'}
+Genre: ${worldTemplate?.genreTags?.join(', ') || 'Fantasy'}
+Tone: ${worldTemplate?.toneTags?.join(', ') || 'Heroic'}
+Setting: ${worldTemplate?.setting || 'Realm'}
+Era: ${worldTemplate?.defaultEra || worldTemplate?.era || 'Current Era'}
+World Rules: ${JSON.stringify(worldTemplate?.worldRules || worldTemplate?.ruleConstraints || [])}
+Available Locations: ${JSON.stringify(
+      (worldTemplate?.geography?.nodes || []).map((n: any) => ({ id: n.id, name: n.name, region: n.region }))
+    )}
+
+CHARACTER CONCEPT:
+"${concept}"
+
+OUTPUT MUST BE STRICT JSON with the following structure:
+{
+  "identity": { "name": string, "species": string, "age": number or string, "gender": string },
+  "appearance": { "physicalDescription": string, "distinguishingTraits": [string] },
+  "personality": { "traits": [string], "temperament": string, "values": [string] },
+  "background": { "history": string, "upbringing": string, "importantEvents": [string] },
+  "role": { "archetype": string, "profession": string, "role": string },
+  "motivations": { "goals": [string], "fears": [string], "desires": [string] },
+  "relationships": { "allies": [string], "rivals": [string], "family": [string], "factions": [string] },
+  "condition": { "injuries": [string], "curses": [string], "forms": [string], "specialStates": [string] },
+  "capabilities": [
+    {
+      "id": string,
+      "name": string,
+      "category": "Combat" | "Magic" | "Movement" | "Domain" | "Perception" | "Biological" | "Social",
+      "activationMode": "immediate" | "passive" | "reaction" | "charged" | "channelled" | "toggled",
+      "powerTier": "Minor" | "Moderate" | "Major" | "WorldScale",
+      "baseEnergyCost": number,
+      "baseStrainCost": number,
+      "description": string
+    }
+  ],
+  "generatedSkills": [
+    {
+      "name": string,
+      "description": string,
+      "parentCapabilityName": string,
+      "activationType": string,
+      "energyCost": number,
+      "cooldownTurns": number,
+      "range": string
+    }
+  ],
+  "startingEquipment": {
+    "weapons": [string],
+    "armor": [string],
+    "tools": [string],
+    "consumables": [string]
+  },
+  "startingLocation": {
+    "locationId": string,
+    "name": string,
+    "region": string
+  },
+  "startingSituation": {
+    "summary": string,
+    "hook": string,
+    "initialConditions": string,
+    "whyHereNow": string
+  },
+  "portraitAsset": {
+    "promptFallback": string,
+    "emoji": string
+  }
+}`;
+
     // Use the canonical model orchestrator so Genesis respects configured
     // task routing, provider health, fallbacks, and deterministic emergency behavior.
     try {
@@ -419,6 +493,37 @@ export class CharacterGenesisService {
   ): Promise<CapabilityDefinition & { generatedSkills: GeneratedTechnique[] }> {
     const concept = input.capabilityConcept || 'Unique Ability';
     const capId = `cap_custom_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    let proposal: any = null;
+    const prompt = `You are a system designer for narrative RPG magic and combat systems.
+Given this custom capability concept and world setting, generate a structured capability definition with 2 to 3 linked concrete techniques.
+
+WORLD CONTEXT:
+Title: ${worldTemplate?.title || 'Unknown World'}
+Genre: ${worldTemplate?.genreTags?.join(', ') || 'Fantasy'}
+
+CAPABILITY CONCEPT:
+"${concept}"
+
+OUTPUT STRICT JSON with this structure:
+{
+  "name": string,
+  "category": "Combat" | "Magic" | "Movement" | "Domain" | "Perception" | "Biological" | "Social",
+  "activationMode": "immediate" | "passive" | "reaction" | "charged" | "channelled" | "toggled",
+  "powerTier": "Minor" | "Moderate" | "Major" | "WorldScale",
+  "baseEnergyCost": number,
+  "baseStrainCost": number,
+  "description": string,
+  "techniques": [
+    {
+      "name": string,
+      "description": string,
+      "activationType": string,
+      "energyCost": number,
+      "cooldownTurns": number,
+      "range": string
+    }
+  ]
+}`;
     try {
       const orchestrator = worldRepository.getAiOrchestrator();
       const response = await orchestrator.executeTaskGeneration(

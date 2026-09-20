@@ -437,7 +437,13 @@ export class ConditionEngine {
       }
       if (totalHealing > 0) notes.push(`Recovered ${totalHealing} HP.`);
 
-      if (instance.remainingDurationSeconds !== undefined && instance.remainingDurationSeconds !== null) {
+      // durationSeconds is real elapsed world time. Combat turns/actions do not have a
+      // canonical seconds length in DreamBook, so they must not silently consume seconds.
+      if (
+        instance.remainingDurationSeconds !== undefined &&
+        instance.remainingDurationSeconds !== null &&
+        (unit === 'MINUTE' || unit === 'HOUR' || unit === 'DAY' || unit === 'WORLD_TIME')
+      ) {
         const durationDelta = this.tickDurationSeconds(unit, every) * tickCount;
         instance.remainingDurationSeconds = Math.max(0, instance.remainingDurationSeconds - durationDelta);
       }

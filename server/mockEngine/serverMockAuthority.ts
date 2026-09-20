@@ -298,6 +298,8 @@ export class ServerMockAuthority {
         ...state.protagonist,
         name: player ? player.name : (run ? run.characterName : state.protagonist.name),
         title: run?.characterRole || state.protagonist.title,
+        portraitUrl: run?.characterPortraitUrl,
+        portraitEmoji: run?.characterPortraitEmoji || sanitizedCharacters[actorId]?.portraitEmoji || '🧙‍♂️',
         status: player?.isDead
           ? 'Deceased'
           : player?.isPossessed
@@ -392,6 +394,97 @@ export class ServerMockAuthority {
       };
     }
     return locs;
+  }
+
+  /**
+   * Asynchronous wrapper for freeform actions.
+   *
+   * The canonical action is first resolved synchronously through the existing authority.
+   * A separate presentation-only narrator then describes the committed result. The narrator
+   * cannot mutate state because MultiModelOrchestrator.generateNarrativeOnly strips state changes.
+   */
+  public async processCustomAction(request: ActionRequest): Promise<ActionResult> {
+    const baseResult = this.processAction(request);
+    if (!baseResult || request.type !== 'CUSTOM_ACTION') {
+      return baseResult;
+    }
+
+    const targetStoryId = (request as any).storyId || this.activeStoryId;
+    const freeformText =
+      (request as any).actionText ||
+      (request as any).customText ||
+      (request as any).description ||
+      (request as any).input ||
+      'Performed freeform action.';
+
+    let narrativeResponse = '';
+    try {
+      const narrator = worldRepository.getAiOrchestrator();
+      const generated = await narrator.generateNarrativeOnly({
+        storyId: targetStoryId,
+        playerAction: String(freeformText),
+        hardTokenBudget: 500,
+        timeoutMs: 5000,
+        maxRetries: 1,
+      });
+
+      if (generated.success && generated.turnPackage?.narrative?.length) {
+        narrativeResponse = generated.turnPackage.narrative.join('\n\n').trim();
+      }
+    } catch (error) {
+      console.warn('[ServerMockAuthority] Narrative presentation fallback:', error);
+    }
+
+    if (!narrativeResponse) {
+      narrativeResponse = this.synthesizeFreeformActionFallback(targetStoryId, String(freeformText));
+    }
+
+    const state = this.getDynamicStoryState(targetStoryId);
+    const actionLog = state.actionHistory.find((entry) => entry.id === baseResult.actionId);
+    if (actionLog) {
+      actionLog.narrativeResponse = narrativeResponse;
+    }
+
+    return {
+      ...baseResult,
+      message: narrativeResponse,
+      narrativeResponse,
+      viewState: this.filterForExternalClient(state, targetStoryId),
+    };
+  }
+
+  private synthesizeFreeformActionFallback(storyId: string, actionText: string): string {
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const run = worldRepository.getStoryRun(storyId);
+    const actorName = player?.name || run?.characterName || 'You';
+    const location = worldRepository.getGeographyGraph(storyId)
+      .getAllNodes()
+      .find((node) => node.id === player?.locationId || node.id === run?.currentLocationId);
+    const atmosphere = location?.ambientSensory || location?.description || 'The surroundings remain still.';
+
+    const normalized = actionText.toLowerCase();
+
+    if (/\\b(inhale|breathe|breath|take a breath)\\b/.test(normalized)) {
+      return `${actorName} draws a slow breath. The air is cool and clean against the lungs; for a moment, nothing asks anything of you but to be still. ${atmosphere}`;
+    }
+
+    if (/\\b(look|observe|inspect|search|scan|survey|examine|notice)\\b/.test(normalized)) {
+      return `${actorName} takes a careful look around. ${atmosphere}`;
+    }
+
+    if (/\\b(listen|hear|listen for)\\b/.test(normalized)) {
+      return `${actorName} pauses and listens. ${atmosphere}`;
+    }
+
+    if (/\\b(walk|move|step|approach|head|go)\\b/.test(normalized)) {
+      return `${actorName} follows through on the movement, changing position without disturbing the wider scene. ${atmosphere}`;
+    }
+
+    if (/\\b(touch|feel|pick up|grasp|hold)\\b/.test(normalized)) {
+      return `${actorName} follows the impulse and reaches out. ${atmosphere}`;
+    }
+
+    return `${actorName} follows through. ${atmosphere}`;
   }
 
   /**

@@ -1214,8 +1214,7 @@ export class TacticalCombatEngine {
       targetConditions.has('restrained') ||
       targetConditions.has('paralyzed') ||
       targetConditions.has('stunned') ||
-      targetConditions.has('unconscious') ||
-      targetConditions.has('invisible');
+      targetConditions.has('unconscious');
 
     const targetIsProne = targetConditions.has('prone');
     const targetProneAdvantage = targetIsProne && distanceToTarget <= (attacker.reachCells ?? 1.5);

@@ -53,7 +53,6 @@ const PORTRAITS = [
 export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRun, onWorldAccepted, onCancel }) => {
   const [stage, setStage] = useState<number>(1);
   const [isSynthesizing, setIsSynthesizing] = useState<boolean>(false);
-  const [isLaunching, setIsLaunching] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   // Stage 1 State: Premise & Optional Style
@@ -68,20 +67,6 @@ export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRu
   React.useEffect(() => {
     setSynthesizedWorld(null);
   }, [premise, selectedGenres, selectedTones, selectedMediums]);
-
-  // Stage 3 State: Character Genesis
-  const [charName, setCharName] = useState<string>('');
-  const [charRole, setCharRole] = useState<string>('Mage');
-  const [charBackground, setCharBackground] = useState<string>('');
-  const [charAppearance, setCharAppearance] = useState<string>('');
-  const [charPersonality, setCharPersonality] = useState<string>('');
-  const [charMotivations, setCharMotivations] = useState<string>('');
-  const [charEquipment, setCharEquipment] = useState<string>('');
-  const [charPortraitEmoji, setCharPortraitEmoji] = useState<string>('🧙‍♂️');
-
-  // Stage 4 State: Starting Conditions & Rules
-  const [storyMode, setStoryMode] = useState<string>('PROTAGONIST');
-  const [rulesetMode, setRulesetMode] = useState<string>('FULL_DND');
 
   const toggleTag = (tag: string, list: string[], setList: React.Dispatch<React.SetStateAction<string[]>>) => {
     if (list.includes(tag)) {
@@ -125,35 +110,6 @@ export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRu
     }
   };
 
-  const handleLaunchStory = async () => {
-    if (!synthesizedWorld) return;
-    setError(null);
-    setIsLaunching(true);
-    try {
-      const response = await apiClient.startWorldRun(synthesizedWorld.worldId, {
-        storyMode,
-        dndRulesMode: rulesetMode,
-        characterName: charName || 'Unnamed Protagonist',
-        characterRole: charRole,
-        characterBackground: charBackground,
-        characterAppearance: charAppearance,
-        characterPersonality: charPersonality,
-        characterMotivations: charMotivations,
-        characterEquipment: charEquipment ? charEquipment.split(',').map(s => s.trim()).filter(Boolean) : [],
-        characterPortraitEmoji: charPortraitEmoji,
-        capabilities: synthesizedWorld.capabilities || [],
-      });
-      if (response && response.storyId) {
-        onSelectRun(response.storyId);
-      } else {
-        throw new Error('Server starting run did not return a valid storyId.');
-      }
-    } catch (e: any) {
-      setError(e.message || 'Failed to launch the story. Please try again.');
-    } finally {
-      setIsLaunching(false);
-    }
-  };
 
   return (
     <div className="w-full max-w-5xl mx-auto py-10 px-6 text-stone-100 bg-stone-950 rounded-2xl border border-stone-800/80 shadow-2xl" id="create-story-wizard">

@@ -342,6 +342,7 @@ export class NpcTacticalDecisionPolicy {
           capabilityName: cap.name,
           powerTier: cap.powerTier,
           category: cap.category,
+          actionType: cap.actionType || 'action',
         });
 
         return {

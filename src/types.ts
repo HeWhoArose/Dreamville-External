@@ -760,6 +760,13 @@ export interface DiceTerm {
   sides: number;
 }
 
+export interface DeathSaveState {
+  successes: number;
+  failures: number;
+  stable: boolean;
+  lastRoll?: RollRecord;
+}
+
 export interface RollRecord {
   rollId: string;
   rulesetVersion: string;
@@ -788,6 +795,8 @@ export interface BattlefieldParticipant {
   damageFormula: string;
   conditions: string[];
   isDead: boolean;
+  usesDeathSaves?: boolean;
+  deathSaveState?: DeathSaveState;
 }
 
 export interface DynamicHazardZone {

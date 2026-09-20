@@ -318,4 +318,61 @@ test('Character Creation Slice 2 — Character Genesis Forensic Verification', a
     // Verify isolation guarantee: no story run was created!
     // The world repository or active story list has not been contaminated with an unrequested run.
   });
+
+  // 7. Robust AI JSON Parsing Helper
+  await t.test('7. Robust AI JSON Parsing: handles raw, markdown fenced, conversational and malformed JSON', async () => {
+    // A. Raw JSON
+    const rawJson = '{"identity": {"name": "Ichigo", "species": "Soul Reaper"}}';
+    const parsedRaw = characterGenesisService.parseJsonFromAiResponse(rawJson);
+    assert.equal(parsedRaw?.identity?.name, 'Ichigo');
+    assert.equal(parsedRaw?.identity?.species, 'Soul Reaper');
+
+    // B. Markdown fenced JSON
+    const fencedJson = '```json\n{"identity": {"name": "Rukia", "species": "Soul Reaper"}}\n```';
+    const parsedFenced = characterGenesisService.parseJsonFromAiResponse(fencedJson);
+    assert.equal(parsedFenced?.identity?.name, 'Rukia');
+
+    // C. Embedded in conversational text
+    const conversational = 'Here is the generated character for your concept:\n{"identity": {"name": "Byakuya", "species": "Soul Reaper"}}\nHope this meets your expectations!';
+    const parsedConv = characterGenesisService.parseJsonFromAiResponse(conversational);
+    assert.equal(parsedConv?.identity?.name, 'Byakuya');
+
+    // D. Trailing commas & quirks
+    const trailingCommaJson = '{"identity": {"name": "Renji", "species": "Soul Reaper", }, "capabilities": ["Zabimaru", ], }';
+    const parsedTrailing = characterGenesisService.parseJsonFromAiResponse(trailingCommaJson);
+    assert.equal(parsedTrailing?.identity?.name, 'Renji');
+    assert.equal(parsedTrailing?.capabilities?.length, 1);
+  });
+
+  // 8. Natural Language Concept Authority (No generic fallback)
+  await t.test('8. Authoritative Natural Language Extraction: extracts concept faithfully', async () => {
+    const concept = 'a soul reaper from bleach world got isekai to an apocalyptic one';
+    const draft = await characterGenesisService.extractCharacterDraft(
+      {
+        naturalLanguageConcept: concept,
+        worldId: testWorld.worldId,
+      },
+      testWorld
+    );
+
+    assert.ok(draft, 'Draft should be produced');
+    // Must reflect the concept, NOT generic Human Scout
+    assert.ok(
+      draft.identity.species.toLowerCase().includes('soul reaper') || draft.identity.species.toLowerCase().includes('otherworlder'),
+      `Species should reflect Soul Reaper concept, got: ${draft.identity.species}`
+    );
+    assert.ok(
+      draft.role.profession.toLowerCase().includes('soul reaper') || draft.role.archetype.toLowerCase().includes('spiritual'),
+      `Role/profession should reflect Soul Reaper concept, got: ${draft.role.profession} (${draft.role.archetype})`
+    );
+    assert.ok(
+      draft.capabilities.some((c) => c.name.toLowerCase().includes('zanpakuto') || c.name.toLowerCase().includes('spiritual') || c.name.toLowerCase().includes('reiatsu') || c.name.toLowerCase().includes('flash step')),
+      'Capabilities must reflect Soul Reaper / Bleach spiritual powers'
+    );
+    assert.ok(
+      draft.startingEquipment.weapons.some((w) => w.toLowerCase().includes('zanpakuto') || w.toLowerCase().includes('katana')),
+      'Starting weapon should reflect Zanpakuto or Katana'
+    );
+    assert.notEqual(draft.identity.name, 'Kaelen Thorne', 'Should not default to Kaelen Thorne');
+  });
 });

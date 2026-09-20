@@ -116,7 +116,7 @@ OUTPUT MUST BE STRICT JSON with the following structure:
         'Return only the requested Character Genesis JSON. Treat the player concept as authoritative input; do not overwrite preserved user fields.'
       );
       if (response.text) {
-        extracted = JSON.parse(response.text);
+        extracted = this.parseJsonFromAiResponse(response.text);
       }
     } catch (err) {
       console.warn('[CharacterGenesisService] Orchestrated extraction failed, using procedural fallback:', err);
@@ -532,7 +532,7 @@ OUTPUT STRICT JSON with this structure:
         'Return only the requested structured custom capability JSON.'
       );
       if (response.text) {
-        proposal = JSON.parse(response.text);
+        proposal = this.parseJsonFromAiResponse(response.text);
       }
     } catch (err) {
       console.warn('[CharacterGenesisService] Orchestrated custom capability proposal failed, using procedural fallback:', err);
@@ -765,70 +765,246 @@ OUTPUT STRICT JSON with this structure:
   // Internal Procedural Fallbacks & Keyword Parsers
   // -------------------------------------------------------------
 
-  private proceduralExtraction(concept: string, worldTemplate: WorldTemplate): any {
-    const lower = concept.toLowerCase();
+  /**
+   * Robust JSON extractor from model output. Handles raw JSON, markdown-fenced JSON,
+   * conversational surrounding text, trailing commas, and whitespace/control characters.
+   */
+  public parseJsonFromAiResponse(text: string): any {
+    if (!text || typeof text !== 'string') return null;
 
-    // Extract name or archetype
-    let name = 'Kaelen Thorne';
-    if (lower.includes('named ')) {
-      const match = concept.match(/named\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i);
-      if (match) name = match[1];
-    } else if (lower.includes('warrior')) {
-      name = 'Valen Ironheart';
-    } else if (lower.includes('mage') || lower.includes('wizard') || lower.includes('sorcerer')) {
-      name = 'Eldrin Spellweaver';
-    } else if (lower.includes('rogue') || lower.includes('thief') || lower.includes('shadow')) {
-      name = 'Lyra Nightshade';
-    } else if (lower.includes('paladin') || lower.includes('knight')) {
-      name = 'Sir Donald the Resolute';
+    let cleaned = text.trim();
+
+    // 1. Check for markdown code fences (```json ... ``` or ``` ... ```)
+    const codeBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (codeBlockMatch) {
+      cleaned = codeBlockMatch[1].trim();
     }
 
-    // Role / Archetype
+    // 2. Extract outermost JSON object or array if embedded in conversational text
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      cleaned = cleaned.substring(firstBrace, lastBrace + 1).trim();
+    }
+
+    // 3. First attempt direct parse
+    try {
+      return JSON.parse(cleaned);
+    } catch {
+      // 4. Sanitize trailing commas and stray control characters
+      try {
+        const sanitized = cleaned
+          .replace(/,\s*([\]\}])/g, '$1') // remove trailing commas before ] or }
+          .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, ''); // strip non-printable control chars
+        return JSON.parse(sanitized);
+      } catch {
+        return null;
+      }
+    }
+  }
+
+  private proceduralExtraction(concept: string, worldTemplate: WorldTemplate): any {
+    const rawConcept = (concept || '').trim();
+    const lower = rawConcept.toLowerCase();
+
+    // 1. Name Extraction / Concept-Themed Generation
+    let name = '';
+    // Check explicit name patterns
+    const nameMatch =
+      rawConcept.match(/(?:named|called|known as|name is|i am|protagonist|character is)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i) ||
+      rawConcept.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s+(?:is a|was a|who is|who was)/);
+
+    if (nameMatch && nameMatch[1]) {
+      name = nameMatch[1].trim();
+    }
+
+    // Determine Species/Origin
+    let species = 'Human';
+    if (lower.includes('soul reaper') || lower.includes('shinigami') || lower.includes('bleach')) {
+      species = lower.includes('isekai') ? 'Soul Reaper (Isekai)' : 'Soul Reaper';
+    } else if (lower.includes('cyborg') || lower.includes('android') || lower.includes('synthetic') || lower.includes('robot') || lower.includes('automaton')) {
+      species = 'Cyborg / Synthetic';
+    } else if (lower.includes('elf') || lower.includes('elven')) {
+      species = 'Elf';
+    } else if (lower.includes('dwarf') || lower.includes('dwarven')) {
+      species = 'Dwarf';
+    } else if (lower.includes('orc') || lower.includes('half-orc')) {
+      species = 'Orc';
+    } else if (lower.includes('tiefling') || lower.includes('demon') || lower.includes('fiend')) {
+      species = 'Tiefling / Fiend';
+    } else if (lower.includes('vampire') || lower.includes('dhampir')) {
+      species = 'Vampire';
+    } else if (lower.includes('dragonborn') || lower.includes('draconic') || lower.includes('dragon')) {
+      species = 'Dragonborn';
+    } else if (lower.includes('cosmic entity') || lower.includes('celestial') || lower.includes('astral entity') || lower.includes('starborn')) {
+      species = 'Cosmic Entity';
+    } else if (lower.includes('undead') || lower.includes('lich') || lower.includes('ghoul') || lower.includes('skeleton')) {
+      species = 'Undead';
+    } else if (lower.includes('beastfolk') || lower.includes('werewolf') || lower.includes('kitsune') || lower.includes('catgirl')) {
+      species = 'Beastfolk';
+    } else if (lower.includes('isekai') || lower.includes('transmigrat') || lower.includes('otherworld')) {
+      species = 'Otherworlder';
+    }
+
+    // Determine Archetype & Profession
     let archetype = 'Adventurer';
-    let profession = 'Scout';
-    if (lower.includes('mage') || lower.includes('wizard')) {
+    let profession = 'Specialist';
+
+    if (lower.includes('soul reaper') || lower.includes('shinigami') || lower.includes('bleach')) {
+      archetype = 'Spiritual Swordsman';
+      profession = 'Soul Reaper';
+    } else if (lower.includes('spellblade') || (lower.includes('sword') && lower.includes('magic'))) {
+      archetype = 'Arcane Combatant';
+      profession = 'Spellblade';
+    } else if (lower.includes('hacker') || lower.includes('netrunner') || lower.includes('cyber')) {
+      archetype = 'Cyber Infiltrator';
+      profession = 'Netrunner';
+    } else if (lower.includes('necromancer') || lower.includes('death magic')) {
+      archetype = 'Death Weaver';
+      profession = 'Necromancer';
+    } else if (lower.includes('alchemist') || lower.includes('potion')) {
+      archetype = 'Esoteric Artisan';
+      profession = 'Alchemist';
+    } else if (lower.includes('gunslinger') || lower.includes('marksman') || lower.includes('sniper')) {
+      archetype = 'Sharpshooter';
+      profession = 'Gunslinger';
+    } else if (lower.includes('samurai') || lower.includes('ronin') || lower.includes('katana')) {
+      archetype = 'Blademaster';
+      profession = 'Samurai';
+    } else if (lower.includes('paladin') || lower.includes('crusader') || lower.includes('holy knight')) {
+      archetype = 'Holy Champion';
+      profession = 'Paladin';
+    } else if (lower.includes('mage') || lower.includes('wizard') || lower.includes('sorcerer') || lower.includes('witch') || lower.includes('arcanist')) {
       archetype = 'Arcanist';
       profession = 'Mage';
-    } else if (lower.includes('warrior') || lower.includes('soldier') || lower.includes('knight')) {
+    } else if (lower.includes('assassin') || lower.includes('ninja') || lower.includes('stealth') || lower.includes('shadow')) {
+      archetype = 'Shadow Operative';
+      profession = 'Assassin';
+    } else if (lower.includes('monk') || lower.includes('martial artist') || lower.includes('brawler')) {
+      archetype = 'Martial Artist';
+      profession = 'Monk';
+    } else if (lower.includes('pilot') || lower.includes('mecha') || lower.includes('mech')) {
+      archetype = 'Vanguard Pilot';
+      profession = 'Mech Pilot';
+    } else if (lower.includes('scholar') || lower.includes('researcher') || lower.includes('detective') || lower.includes('inquisitor')) {
+      archetype = 'Investigator';
+      profession = 'Scholar';
+    } else if (lower.includes('ranger') || lower.includes('hunter') || lower.includes('archer')) {
+      archetype = 'Wilderness Tracker';
+      profession = 'Ranger';
+    } else if (lower.includes('warrior') || lower.includes('soldier') || lower.includes('knight') || lower.includes('fighter')) {
       archetype = 'Martial Specialist';
       profession = 'Warrior';
-    } else if (lower.includes('rogue') || lower.includes('assassin') || lower.includes('ranger')) {
-      archetype = 'Covert Scout';
-      profession = 'Ranger';
+    } else if (rawConcept.length > 0) {
+      // Derive profession from key noun in prompt if possible
+      const words = rawConcept.replace(/[^a-zA-Z\s]/g, '').split(/\s+/).filter((w) => w.length > 3);
+      if (words.length > 0) {
+        archetype = `${words[0].charAt(0).toUpperCase() + words[0].slice(1).toLowerCase()} Specialist`;
+        profession = words[0].charAt(0).toUpperCase() + words[0].slice(1).toLowerCase();
+      }
     }
 
-    // Species
-    let species = 'Human';
-    if (lower.includes('elf') || lower.includes('elven')) species = 'Elf';
-    else if (lower.includes('dwarf') || lower.includes('dwarven')) species = 'Dwarf';
-    else if (lower.includes('orc') || lower.includes('half-orc')) species = 'Orc';
-    else if (lower.includes('tiefling')) species = 'Tiefling';
-    else if (lower.includes('android') || lower.includes('cyborg')) species = 'Synthetic';
+    // Generate context-themed name if not explicitly provided
+    if (!name) {
+      if (profession === 'Soul Reaper' || lower.includes('bleach') || lower.includes('samurai')) {
+        name = 'Renjiro Kurosaki';
+      } else if (species.includes('Cyborg') || profession === 'Netrunner') {
+        name = 'Nova-09';
+      } else if (species === 'Elf' || profession === 'Spellblade') {
+        name = 'Lorien Silverleaf';
+      } else if (species === 'Dwarf') {
+        name = 'Thorin Ironforge';
+      } else if (species.includes('Tiefling') || species.includes('Fiend')) {
+        name = 'Malakor Voidwhisper';
+      } else if (species === 'Cosmic Entity') {
+        name = 'Astraea the Observer';
+      } else if (profession === 'Mage' || profession === 'Necromancer') {
+        name = 'Eldrin Spellweaver';
+      } else if (profession === 'Assassin' || profession === 'Ranger') {
+        name = 'Lyra Nightshade';
+      } else if (profession === 'Paladin') {
+        name = 'Valen Ironheart';
+      } else {
+        name = 'Dorian Vance';
+      }
+    }
 
-    // Capabilities based on concept
+    // Synthesize Capabilities based on authentic concept keywords
     const caps: any[] = [];
-    if (lower.includes('shadow') || lower.includes('stealth')) {
+    if (lower.includes('soul reaper') || lower.includes('shinigami') || lower.includes('bleach')) {
       caps.push({
         id: 'cap_proc_1',
-        name: 'Shadow Weaving',
-        category: 'Magic',
-        activationMode: 'channelled',
-        powerTier: 'Moderate',
+        name: 'Zanpakuto Manifestation',
+        category: 'Combat',
+        activationMode: 'immediate',
+        powerTier: 'Major',
         baseEnergyCost: 20,
-        baseStrainCost: 5,
-        description: 'Ability to meld into shadows and obscure one\'s presence from detection.',
+        baseStrainCost: 10,
+        description: 'Awaken the soul-cutter blade to release concentrated spiritual cutting force.',
       });
       caps.push({
         id: 'cap_proc_2',
-        name: 'Vanish',
+        name: 'Spiritual Pressure (Reiatsu)',
+        category: 'Domain',
+        activationMode: 'toggled',
+        powerTier: 'Moderate',
+        baseEnergyCost: 15,
+        baseStrainCost: 5,
+        description: 'Radiate dense spiritual aura that suppresses weaker foes and detects spiritual anomalies.',
+      });
+      caps.push({
+        id: 'cap_proc_3',
+        name: 'Flash Step (Shunpo)',
         category: 'Movement',
         activationMode: 'reaction',
-        powerTier: 'Minor',
-        baseEnergyCost: 15,
-        baseStrainCost: 10,
-        description: 'Instantly disengage from direct sightlines in response to sudden threat.',
+        powerTier: 'Moderate',
+        baseEnergyCost: 12,
+        baseStrainCost: 4,
+        description: 'Instantaneous high-speed spatial displacement using spirit particles.',
       });
-    } else if (lower.includes('magic') || lower.includes('fire') || lower.includes('elemental')) {
+    } else if (lower.includes('void') || lower.includes('spellblade')) {
+      caps.push({
+        id: 'cap_proc_1',
+        name: 'Void Blade Weaving',
+        category: 'Magic',
+        activationMode: 'immediate',
+        powerTier: 'Major',
+        baseEnergyCost: 20,
+        baseStrainCost: 8,
+        description: 'Infuse edge weapons with spatial void energy that ignores physical armor.',
+      });
+      caps.push({
+        id: 'cap_proc_2',
+        name: 'Astral Step',
+        category: 'Movement',
+        activationMode: 'reaction',
+        powerTier: 'Moderate',
+        baseEnergyCost: 15,
+        baseStrainCost: 5,
+        description: 'Blink through interstitial reality to evade lethal impacts.',
+      });
+    } else if (lower.includes('cyber') || lower.includes('hacker') || species.includes('Cyborg')) {
+      caps.push({
+        id: 'cap_proc_1',
+        name: 'Neural Breach Protocol',
+        category: 'Domain',
+        activationMode: 'immediate',
+        powerTier: 'Moderate',
+        baseEnergyCost: 15,
+        baseStrainCost: 8,
+        description: 'Transmit direct synaptic or digital exploits into target systems and synthetic nodes.',
+      });
+      caps.push({
+        id: 'cap_proc_2',
+        name: 'Subdermal Overclock',
+        category: 'Biological',
+        activationMode: 'charged',
+        powerTier: 'Moderate',
+        baseEnergyCost: 20,
+        baseStrainCost: 12,
+        description: 'Momentarily accelerate cybernetic reflex pathways to outpace organic adversaries.',
+      });
+    } else if (lower.includes('magic') || lower.includes('fire') || lower.includes('elemental') || profession === 'Mage') {
       caps.push({
         id: 'cap_proc_1',
         name: 'Elemental Surge',
@@ -849,20 +1025,41 @@ OUTPUT STRICT JSON with this structure:
         baseStrainCost: 5,
         description: 'Conjure a shimmering barrier of protective magical resonance.',
       });
+    } else if (lower.includes('shadow') || lower.includes('stealth') || profession === 'Assassin') {
+      caps.push({
+        id: 'cap_proc_1',
+        name: 'Shadow Weaving',
+        category: 'Magic',
+        activationMode: 'channelled',
+        powerTier: 'Moderate',
+        baseEnergyCost: 20,
+        baseStrainCost: 5,
+        description: "Ability to meld into shadows and obscure one's presence from detection.",
+      });
+      caps.push({
+        id: 'cap_proc_2',
+        name: 'Vanish',
+        category: 'Movement',
+        activationMode: 'reaction',
+        powerTier: 'Minor',
+        baseEnergyCost: 15,
+        baseStrainCost: 10,
+        description: 'Instantly disengage from direct sightlines in response to sudden threat.',
+      });
     } else {
       caps.push({
         id: 'cap_proc_1',
-        name: 'Battle Rhythm',
+        name: `${profession} Mastery`,
         category: 'Combat',
         activationMode: 'passive',
         powerTier: 'Moderate',
         baseEnergyCost: 10,
-        baseStrainCost: 10,
-        description: 'Heightened reflexes and tempo control under active physical duress.',
+        baseStrainCost: 5,
+        description: `Disciplined mastery and tactical execution tailored to ${profession}.`,
       });
       caps.push({
         id: 'cap_proc_2',
-        name: 'Keen Eye',
+        name: 'Heightened Perception',
         category: 'Perception',
         activationMode: 'passive',
         powerTier: 'Minor',
@@ -872,43 +1069,89 @@ OUTPUT STRICT JSON with this structure:
       });
     }
 
-    // Skills derived from capabilities
+    // Skills derived directly from capabilities
     const skills: any[] = caps.flatMap((c) => [
       {
-        name: `${c.name} Pulse`,
-        description: `Active discharge invoking ${c.name}.`,
+        name: `${c.name} Discharge`,
+        description: `Focused execution invoking ${c.name}.`,
         parentCapabilityName: c.name,
         activationType: 'Action',
-        energyCost: 12,
+        energyCost: Math.max(8, Math.round(c.baseEnergyCost * 0.8)),
         cooldownTurns: 1,
-        range: 'Close',
+        range: c.category === 'Movement' ? 'Self' : c.category === 'Combat' ? 'Melee' : 'Close',
       },
     ]);
 
-    // Locations from world
+    // Starting Equipment reflecting concept
+    const weapons: string[] = [];
+    const armor: string[] = [];
+    const tools: string[] = [];
+    const consumables: string[] = [];
+
+    // Check if player mentioned weapons explicitly
+    if (lower.includes('rapier')) weapons.push('Astral Rapier');
+    else if (lower.includes('katana') || lower.includes('zanpakuto') || lower.includes('soul reaper') || lower.includes('bleach') || lower.includes('samurai')) weapons.push('Zanpakuto (Katana)');
+    else if (lower.includes('bow')) weapons.push('Recurve Longbow');
+    else if (lower.includes('gun') || lower.includes('rifle') || lower.includes('pistol')) weapons.push('Heavy Energy Pistol');
+    else if (lower.includes('staff') || profession === 'Mage') weapons.push('Runed Oak Staff');
+    else if (lower.includes('dagger') || profession === 'Assassin') weapons.push('Shadowed Dagger');
+    else weapons.push('Tempered Steel Blade');
+
+    // Check armor
+    if (lower.includes('shihakusho') || lower.includes('soul reaper') || lower.includes('bleach')) armor.push('Black Shihakusho Robes');
+    else if (lower.includes('runic leather') || lower.includes('leather armor')) armor.push('Runic Leather Armor');
+    else if (lower.includes('plate') || lower.includes('power armor')) armor.push('Reinforced Plate Cuirass');
+    else if (lower.includes('robe') || profession === 'Mage') armor.push('Silk Woven Robes');
+    else armor.push('Reinforced Traveling Leathers');
+
+    // Tools & Consumables
+    if (lower.includes('soul reaper') || lower.includes('bleach')) {
+      tools.push('Denreishinki (Soul Pager)', 'Spiritual Tracking Compass');
+      consumables.push('Soul Candy (Gikongan)', 'Spirit Recovery Pill');
+    } else if (species.includes('Cyborg') || profession === 'Netrunner') {
+      tools.push('Cyberdeck Console', 'Multi-Frequency Signal Sniffer');
+      consumables.push('Neural Coolant Ampoule (x2)', 'Battery Pack');
+    } else {
+      tools.push('Flint & Steel', 'Surveyor Map', 'Writ of Passage');
+      consumables.push('Field Rations (3 days)', 'Vial of Healing Salve');
+    }
+
+    // World geography resolution
     const worldNodes = worldTemplate?.geography?.nodes || [];
     const firstLoc = worldNodes[0] || { id: 'loc_start_1', name: 'Sanctuary Gates', region: 'Borderland' };
+
+    // Background & Lore
+    let history = `Originating from distinct circumstances (${rawConcept}), ${name} now navigates ${worldTemplate?.title || 'this realm'}.`;
+    if (lower.includes('isekai') || lower.includes('bleach') || lower.includes('soul reaper')) {
+      history = `Formerly a Soul Reaper serving spiritual order, ${name} was violently transmigrated across dimensional rifts into ${worldTemplate?.title || 'an unfamiliar apocalyptic reality'}. Retaining spirit awareness and martial doctrine, ${name} must adapt to survive.`;
+    }
 
     return {
       identity: {
         name,
         species,
-        age: 30,
+        age: species === 'Elf' ? 120 : species === 'Soul Reaper' || species.includes('Soul Reaper') ? 150 : 26,
         gender: 'Not Specified',
       },
       appearance: {
-        physicalDescription: `Stalwart ${species} bearing field-worn traveling attire and watchful demeanor.`,
-        distinguishingTraits: ['Signature hooded cloak', 'Scar on knuckle'],
+        physicalDescription: `Stalwart ${species} ${profession} bearing field-worn traveling attire, focused posture, and an aura resonant with ${rawConcept}.`,
+        distinguishingTraits: [
+          lower.includes('bleach') || lower.includes('soul reaper') ? 'Black ceremonial robes with sheathed Zanpakuto' : 'Distinctive emblem and observant gaze',
+          'Aura of disciplined resolve',
+        ],
       },
       personality: {
         traits: ['Methodical', 'Pragmatic', 'Vigilant'],
-        temperament: 'Calm under pressure',
-        values: ['Honor', 'Curiosity'],
+        temperament: lower.includes('isekai') ? 'Displaced yet resolute' : 'Calm under pressure',
+        values: ['Honor', 'Survival', 'Mastery'],
       },
       background: {
-        history: `Trained across various frontiers before answering the call to explore ${worldTemplate?.title || 'the region'}.`,
-        upbringing: 'Settlement fringe',
-        importantEvents: ['Survived perilous crossing', 'Forged initial pact of neutrality'],
+        history,
+        upbringing: lower.includes('bleach') ? 'Seireitei Spiritual Academy' : 'Frontier territory',
+        importantEvents: [
+          lower.includes('isekai') ? 'Cataclysmic dimensional crossing' : 'Survived perilous border crossing',
+          'Initial foothold established in new realm',
+        ],
       },
       role: {
         archetype,
@@ -916,29 +1159,32 @@ OUTPUT STRICT JSON with this structure:
         role: 'Protagonist',
       },
       motivations: {
-        goals: ['Unravel rumors of ancient relics', 'Secure foothold in new territory'],
-        fears: ['Entrapment in forgotten depths'],
+        goals: [
+          lower.includes('isekai') ? 'Decipher dimensional rift and find anchor point' : 'Unravel rumors of ancient relics',
+          'Secure foothold in this territory',
+        ],
+        fears: ['Loss of identity or permanent entrapment'],
         desires: ['Mastery and freedom'],
       },
       relationships: {
-        allies: ['Local guildmaster'],
+        allies: ['Local ally'],
         rivals: ['Encroaching syndicate'],
-        family: ['Distant kinsfolk'],
-        factions: ['Explorers Guild'],
+        family: ['Distant origins'],
+        factions: [profession === 'Soul Reaper' ? 'Gotei Vanguard (Remnant)' : 'Explorers Guild'],
       },
       condition: {
         injuries: [],
         curses: [],
         forms: ['Humanoid'],
-        specialStates: ['Well-prepared'],
+        specialStates: ['Dimensional Acclimation'],
       },
       capabilities: caps,
       generatedSkills: skills,
       startingEquipment: {
-        weapons: [profession === 'Mage' ? 'Runed Oak Staff' : 'Tempered Steel Blade'],
-        armor: ['Reinforced Traveling Leathers'],
-        tools: ['Flint & Steel', 'Writ of Passage', 'Surveyor Map'],
-        consumables: ['Field Rations (3 days)', 'Vial of Antidote'],
+        weapons,
+        armor,
+        tools,
+        consumables,
       },
       startingLocation: {
         locationId: firstLoc.id,
@@ -946,10 +1192,10 @@ OUTPUT STRICT JSON with this structure:
         region: firstLoc.region || 'Frontier',
       },
       startingSituation: {
-        summary: `Standing at the threshold of ${firstLoc.name}.`,
-        hook: 'A messenger has failed to return from the outbound road.',
+        summary: `Arriving in ${firstLoc.name}, taking measure of the surroundings and strange local atmospheric currents.`,
+        hook: lower.includes('apocalyp') ? 'Ruinous anomalies pulse along the horizon as strange beasts prowl.' : 'An urgent summons arrives concerning local disruptions.',
         initialConditions: 'Dense twilight descending across the landscape.',
-        whyHereNow: 'Contracted to investigate anomalies within the local sector.',
+        whyHereNow: 'Seeking information on how to navigate this world and confront looming threats.',
       },
       portraitAsset: {
         promptFallback: `Heroic portrait of ${name}, ${species} ${profession} in ${worldTemplate?.title || 'fantasy'} setting, cinematic rim lighting.`,
@@ -990,14 +1236,16 @@ OUTPUT STRICT JSON with this structure:
 
   private getEmojiForRole(role: string): string {
     const r = (role || '').toLowerCase();
-    if (r.includes('mage') || r.includes('wizard')) return '🧙';
+    if (r.includes('soul reaper') || r.includes('shinigami') || r.includes('samurai')) return '⚔️';
+    if (r.includes('mage') || r.includes('wizard') || r.includes('arcanist')) return '🧙';
     if (r.includes('warrior') || r.includes('knight') || r.includes('paladin')) return '⚔️';
     if (r.includes('rogue') || r.includes('thief') || r.includes('shadow') || r.includes('assassin')) return '🗡️';
     if (r.includes('ranger') || r.includes('scout') || r.includes('archer')) return '🏹';
     if (r.includes('cleric') || r.includes('priest')) return '✨';
-    if (r.includes('cyborg') || r.includes('synthetic')) return '🤖';
+    if (r.includes('cyborg') || r.includes('synthetic') || r.includes('netrunner') || r.includes('hacker') || r.includes('robot')) return '🤖';
     return '👤';
   }
 }
 
 export const characterGenesisService = new CharacterGenesisService();
+

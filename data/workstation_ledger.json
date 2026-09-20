@@ -1627,6 +1627,16 @@
           "recordedAt": "2026-09-20T10:35:17.526Z",
           "valid": true,
           "trustedProvenance": false
+        },
+        {
+          "evidenceId": "ev_1789901295592_988",
+          "requirementId": "CH16.WORLD.LIBRARY",
+          "evidenceType": "UNIT_TEST",
+          "sourceReference": "tests/ch16_behavioral_verification.test.ts",
+          "description": "Verified world creation and retrieval tests pass",
+          "recordedAt": "2026-09-20T10:48:15.592Z",
+          "valid": true,
+          "trustedProvenance": false
         }
       ]
     },

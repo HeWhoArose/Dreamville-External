@@ -789,8 +789,8 @@ As regional tensions rise, rival factions maneuver for influence over critical r
 
       // 5. Scheduled Time Repair
       let scheduledTime = raw.scheduledTime || {};
-      const year = typeof scheduledTime.year === 'number' && scheduledTime.year > 0 ? scheduledTime.year : 42;
-      const month = typeof scheduledTime.month === 'number' && scheduledTime.month >= 1 && scheduledTime.month <= 12 ? scheduledTime.month : 10;
+      let year = typeof scheduledTime.year === 'number' && scheduledTime.year > 0 ? scheduledTime.year : 42;
+      let month = typeof scheduledTime.month === 'number' && scheduledTime.month >= 1 && scheduledTime.month <= 12 ? scheduledTime.month : 10;
       let day = typeof scheduledTime.day === 'number' && scheduledTime.day >= 1 && scheduledTime.day <= 30 ? scheduledTime.day : 14 + idx;
 
       if (

@@ -560,6 +560,7 @@ export interface CharacterStartingState {
   activeEffects: CharacterEffect[];
   reputations: Record<string, number>;
   relationshipModifiers: Record<string, number>;
+  conditionState?: CharacterStartingConditionState;
 }
 
 export type CharacterStartingChoiceMode = 'CHOOSE' | 'AI_SUGGEST' | 'SURPRISE_ME';
@@ -1179,6 +1180,127 @@ export interface CharacterCondition {
   specialStates: string[];
 }
 
+
+export type ConditionAlignment = 'HARMFUL' | 'BENEFICIAL' | 'NEUTRAL' | 'MIXED';
+export type ConditionTickUnit = 'ACTION' | 'TURN' | 'ROUND' | 'MINUTE' | 'HOUR' | 'DAY' | 'WORLD_TIME';
+export type ConditionStackMode = 'REPLACE' | 'ADD' | 'MAX' | 'REFRESH';
+export type BodyRegionId =
+  | 'HEAD'
+  | 'FACE'
+  | 'TORSO'
+  | 'HEART'
+  | 'LEFT_ARM'
+  | 'RIGHT_ARM'
+  | 'LEFT_HAND'
+  | 'RIGHT_HAND'
+  | 'LEFT_LEG'
+  | 'RIGHT_LEG'
+  | 'LEFT_FOOT'
+  | 'RIGHT_FOOT'
+  | 'WHOLE_BODY'
+  | string;
+
+export interface CharacterDamageProfile {
+  damageImmunities: string[];
+  damageResistances: string[];
+  damageVulnerabilities: string[];
+}
+
+export interface CharacterConditionProfile {
+  conditionImmunities: string[];
+  conditionResistances: string[];
+  conditionVulnerabilities: string[];
+}
+
+export interface CharacterBodyRegionState {
+  id: BodyRegionId;
+  label: string;
+  integrityCurrent: number;
+  integrityMax: number;
+  destroyed: boolean;
+  conditionIds: string[];
+}
+
+export interface CharacterConditionStage {
+  id: string;
+  name: string;
+  minIntensity: number;
+  maxIntensity?: number;
+  description: string;
+  effects: CharacterEffect[];
+  bodyEffects?: Array<{
+    regionId: BodyRegionId;
+    integrityDelta?: number;
+    integrityMultiplier?: number;
+  }>;
+}
+
+export interface CharacterConditionTrigger {
+  id: string;
+  event: 'ON_APPLY' | 'ON_ACTION' | 'ON_TICK' | 'ON_REMOVE' | 'ON_REST';
+  actionKeywords?: string[];
+  intensityDelta?: number;
+  description?: string;
+}
+
+export interface CharacterConditionInstance {
+  id: string;
+  definitionId: string;
+  name: string;
+  alignment: ConditionAlignment;
+  severity: number;
+  intensity: number;
+  maxIntensity?: number;
+  source?: string;
+  sourceActorId?: string;
+  appliedAtSeconds: number;
+  durationSeconds?: number | null;
+  remainingDurationSeconds?: number | null;
+  tickUnit?: ConditionTickUnit;
+  tickEvery?: number;
+  nextTickAtSeconds?: number;
+  stackCount: number;
+  stackMode: ConditionStackMode;
+  tags: string[];
+  affectedBodyRegions?: BodyRegionId[];
+  notes?: string;
+}
+
+export interface CharacterConditionDefinition {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  alignment: ConditionAlignment;
+  defaultSeverity: number;
+  defaultIntensity: number;
+  maxIntensity?: number;
+  stackMode?: ConditionStackMode;
+  defaultDurationSeconds?: number | null;
+  tickUnit?: ConditionTickUnit;
+  tickEvery?: number;
+  tags?: string[];
+  conditionKeywords?: string[];
+  damagePerTick?: number;
+  damageType?: string;
+  healingPerTick?: number;
+  intensityDeltaPerTick?: number;
+  decayIntensityPerRestTick?: number;
+  triggers?: CharacterConditionTrigger[];
+  stages?: CharacterConditionStage[];
+  bodyRegionDefaults?: BodyRegionId[];
+  blocksActions?: string[];
+  modifierEffects?: CharacterEffect[];
+}
+
+export interface CharacterStartingConditionState {
+  instances: CharacterConditionInstance[];
+  damageProfile: CharacterDamageProfile;
+  conditionProfile: CharacterConditionProfile;
+  bodyRegions: CharacterBodyRegionState[];
+}
+
+
 export interface GeneratedTechnique {
   id: string;
   name: string;
@@ -1286,6 +1408,7 @@ export interface CharacterGenesisDraft {
   motivations: CharacterMotivations;
   relationships: CharacterRelationships;
   condition: CharacterCondition;
+  conditionState?: CharacterStartingConditionState;
   coreStats?: CharacterCoreStats;
   attributes: CharacterStatDefinition[];
   stats: CharacterStatDefinition[];
@@ -1333,6 +1456,7 @@ export interface ConfirmedCharacter {
   motivations: CharacterMotivations;
   relationships: CharacterRelationships;
   condition: CharacterCondition;
+  conditionState?: CharacterStartingConditionState;
   coreStats?: CharacterCoreStats;
   attributes: CharacterStatDefinition[];
   stats: CharacterStatDefinition[];

@@ -1,5 +1,5 @@
-import { DeathSaveState } from '../../src/types';
-import { LocalDiceEngine, RollRecord } from './combatEngine';
+import type { DeathSaveState, RollRecord } from '../../src/types';
+import type { LocalDiceEngine } from './combatEngine';
 
 export interface DeathSaveResolution {
   roll: RollRecord;

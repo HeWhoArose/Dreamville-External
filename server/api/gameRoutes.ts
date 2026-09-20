@@ -2902,6 +2902,48 @@ gameRouter.post('/orchestrator/test-model', async (req: Request, res: Response) 
 });
 
 /**
+ * GET /api/game/orchestrator/fallbacks
+ * Returns all current task fallback chains.
+ */
+gameRouter.get('/orchestrator/fallbacks', async (req: Request, res: Response) => {
+  try {
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const orchestrator = worldRepository.getAiOrchestrator();
+    res.json({
+      success: true,
+      fallbackChains: orchestrator.getAllFallbackChains(),
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to retrieve fallback chains.' });
+  }
+});
+
+/**
+ * POST /api/game/orchestrator/fallback
+ * Updates the fallback chain for a task.
+ */
+gameRouter.post('/orchestrator/fallback', async (req: Request, res: Response) => {
+  try {
+    const { task, chain } = req.body;
+    if (!task || !Array.isArray(chain)) {
+      res.status(400).json({ error: 'task and chain array are required.' });
+      return;
+    }
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const orchestrator = worldRepository.getAiOrchestrator();
+    orchestrator.setFallbackChain(task, chain);
+    res.json({
+      success: true,
+      task,
+      chain,
+      fallbackChains: orchestrator.getAllFallbackChains(),
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update fallback chain.' });
+  }
+});
+
+/**
  * Challenge 13: Lossless Campaign Archive Endpoints (DEF-CH13-05)
  */
 

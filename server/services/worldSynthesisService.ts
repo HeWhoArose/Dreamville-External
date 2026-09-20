@@ -205,13 +205,122 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
 
     // FALLBACK PROCEDURAL GENERATION & VALIDATION Swappers
     if (locations.length === 0) {
-      // Analyze premise keywords for theme
+      if (input.geography && (Array.isArray(input.geography.locations) || Array.isArray(input.geography.majorLocations))) {
+        const rawLocs = input.geography.locations || input.geography.majorLocations || [];
+        locations = rawLocs.map((l: any, idx: number) => ({
+          id: l.id || `loc_${timestamp}_${idx}`,
+          name: l.name || l.title || `Location ${idx + 1}`,
+          description: l.description || `Location in ${setting}`,
+          coordinates: l.coordinates || { x: 40 + idx * 20, y: 50 },
+          ambientSensory: l.ambientSensory || `Visual: ${l.name || 'Location'}.`,
+        }));
+        capabilities = [
+          { capabilityId: 'cap_synthesized_primary', name: 'Synthesized Core Capability', description: 'Primary world capability.', source: 'AI_PROPOSAL', powerTier: 'Moderate', validated: true }
+        ];
+        worldRules = [
+          { ruleId: 'rule_synthesized_constraint', ruleType: 'CANON_RULE', description: 'Primary world operational constraint.', validated: true }
+        ];
+      } else {
+        // Analyze premise keywords for theme
       const premiseLower = input.naturalLanguagePremise.toLowerCase();
+      const isGlassTheme = premiseLower.includes('glass') || premiseLower.includes('crystal') || premiseLower.includes('prism') || premiseLower.includes('shard');
+      const isPlantTheme = premiseLower.includes('plant') || premiseLower.includes('overrun') || premiseLower.includes('forest') || premiseLower.includes('vine') || premiseLower.includes('flora');
       const isDarkTheme = premiseLower.includes('dark') || premiseLower.includes('grim') || premiseLower.includes('doom') || premiseLower.includes('shadow') || premiseLower.includes('blood') || premiseLower.includes('death') || premiseLower.includes('horror') || premiseLower.includes('sunken');
       const isSpaceTheme = premiseLower.includes('space') || premiseLower.includes('star') || premiseLower.includes('solar') || premiseLower.includes('void') || premiseLower.includes('alien') || premiseLower.includes('ship');
-      const isIndustrialTheme = premiseLower.includes('steam') || premiseLower.includes('gear') || premiseLower.includes('iron') || premiseLower.includes('clockwork') || premiseLower.includes('forge');
 
-      if (isDarkTheme) {
+      if (isGlassTheme) {
+        title = title || 'Glassbound Horizon';
+        summary = 'A breathtaking realm forged of translucent glass, reflective spires, and prismatic energy.';
+        description = `Grounded in the premise: "${input.naturalLanguagePremise}". A high-tech cybernetic and crystalline domain where architecture and technology are fused with indestructible tempered glass.`;
+        genreTags = input.genreTags && input.genreTags.length > 0 ? input.genreTags : ['Cyberpunk', 'Sci-Fi'];
+        toneTags = input.toneTags && input.toneTags.length > 0 ? input.toneTags : ['Sleek', 'Prismatic'];
+        era = 'Age of Crystalline Grid';
+        setting = 'The Prism Spire Metropolis';
+
+        locations = [
+          { id: 'loc_glass_core', name: 'The Obsidian Glass Spire', description: 'A towering monolith of black tempered glass housing quantum core terminals.', coordinates: { x: 30, y: 30 }, ambientSensory: 'Visual: Prismatic light bending through dark glass. Auditory: Humming quantum servers.' },
+          { id: 'loc_shard_district', name: 'Shattered Shard Market', description: 'A bustling commercial sector built among floating glass platforms.', coordinates: { x: 60, y: 35 }, ambientSensory: 'Visual: Neon reflections on transparent walkways. Auditory: Chimes and transaction pings.' }
+        ];
+
+        factions = [
+          { id: 'fac_glass_syndicate', name: 'The Prismatic Syndicate', description: 'Cybernetic architects who control the glass-fusion refineries.' },
+          { id: 'fac_glass_rebels', name: 'The Shard-Breaker Resistance', description: 'Outlaws fighting against corporate glass monopolies.' }
+        ];
+
+        characters = [
+          { id: 'char_glass_kora', name: 'Kora the Refractor', role: 'Chief Glasswright', locationId: 'loc_glass_core', motivation: 'To forge an unbreakable optical network across the sector.' }
+        ];
+
+        events = [
+          {
+            id: 'evt_glass_surge',
+            title: 'Prismatic Energy Surge',
+            description: 'A massive refraction overload causes glowing light pulses across all glass district conduits.',
+            category: 'SUPERNATURAL',
+            scheduledTime: { year: 42, month: 10, day: 15, hour: 12, minute: 0, second: 0 },
+            participatingActors: ['fac_glass_syndicate'],
+            locationId: 'loc_glass_core',
+            preconditions: { requiredEvents: [], requiredWorldFacts: [] },
+            plannedConsequences: [{ type: 'world_fact', targetId: 'loc_glass_core', detail: 'Grid efficiency increases by 20%.' }],
+            visibility: 'PUBLIC'
+          }
+        ];
+
+        capabilities = [
+          { capabilityId: 'cap_glass_refraction', name: 'Prismatic Laser Refraction', description: 'Bend light and energy beams through quantum glass focusers.', source: 'AI_PROPOSAL', powerTier: 'Major', validated: true }
+        ];
+
+        worldRules = [
+          { ruleId: 'rule_glass_integrity', ruleType: 'ENVIRONMENTAL_CONSTRAINT', description: 'Structural integrity of glass infrastructure must be maintained via cooling fields.', validated: true }
+        ];
+
+      } else if (isPlantTheme) {
+        title = title || 'Verdant Reclamation';
+        summary = 'An untamed world where colossal sentient flora and sprawling vines have choked industrial machinery.';
+        description = `Grounded in the premise: "${input.naturalLanguagePremise}". A cynical steampunk realm where massive, adaptive plant life constantly threatens rust-covered factories and brass boilers.`;
+        genreTags = input.genreTags && input.genreTags.length > 0 ? input.genreTags : ['Steampunk', 'Post-Apocalyptic'];
+        toneTags = input.toneTags && input.toneTags.length > 0 ? input.toneTags : ['Cynical', 'Wild'];
+        era = 'Age of the Great Root';
+        setting = 'The Overgrown Industrial Basin';
+
+        locations = [
+          { id: 'loc_plant_canopy', name: 'The Colossal World Root', description: 'A mile-thick ancient trunk housing steam-powered elevators and vine balconies.', coordinates: { x: 40, y: 40 }, ambientSensory: 'Visual: Bioluminescent moss and dripping sap. Auditory: Creaking wood and rhythmic steam pistons.' },
+          { id: 'loc_boiler_yard', name: 'Rust-Iron Boiler Yard', description: 'A smog-choked factory floor locked in constant battle with encroaching briars.', coordinates: { x: 65, y: 50 }, ambientSensory: 'Visual: Black smoke curling through emerald leaves. Auditory: Hissing steam valves and snapping vines.' }
+        ];
+
+        factions = [
+          { id: 'fac_plant_wardens', name: 'The Thorn Guild', description: 'Engineers who harvest resilient plant fibers to reinforce steampunk machinery.' },
+          { id: 'fac_plant_purists', name: 'The Root Ascendancy', description: 'Radicals seeking to completely purge industrial engines in favor of primordial nature.' }
+        ];
+
+        characters = [
+          { id: 'char_plant_silas', name: 'Mechanist Silas', role: 'Boiler Foreman', locationId: 'loc_boiler_yard', motivation: 'To keep the steam engines running against the suffocating overgrowth.' }
+        ];
+
+        events = [
+          {
+            id: 'evt_plant_bloom',
+            title: 'Great Spore Bloom',
+            description: 'Colossal spores burst across the industrial basin, inducing metallic corrosion in steam boilers.',
+            category: 'DISASTER',
+            scheduledTime: { year: 42, month: 10, day: 16, hour: 8, minute: 0, second: 0 },
+            participatingActors: ['fac_plant_wardens'],
+            locationId: 'loc_boiler_yard',
+            preconditions: { requiredEvents: [], requiredWorldFacts: [] },
+            plannedConsequences: [{ type: 'location_state_change', targetId: 'loc_boiler_yard', detail: 'Boiler efficiency drops; maintenance required.' }],
+            visibility: 'PUBLIC'
+          }
+        ];
+
+        capabilities = [
+          { capabilityId: 'cap_plant_sap', name: 'Bio-Steam Infusion', description: 'Combine botanical sap with pressurized steam to generate organic propulsion.', source: 'AI_PROPOSAL', powerTier: 'Moderate', validated: true }
+        ];
+
+        worldRules = [
+          { ruleId: 'rule_plant_corrosion', ruleType: 'ENVIRONMENTAL_CONSTRAINT', description: 'Unchecked botanical sap rapidly corrodes exposed iron and brass.', validated: true }
+        ];
+
+      } else if (isDarkTheme) {
         title = title || 'Gloomspire Under-Plains';
         summary = 'A shadow-shrouded sunken realm where basalt spires harvest residual spiritual embers.';
         description = 'An atmospheric, grim fantasy setting. Deep basalt canyons house defensive settlements keeping watch against the shifting abyssal tide.';
@@ -222,97 +331,34 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
 
         locations = [
           { id: 'loc_syn_temple', name: 'The Obsidian Cathedral', description: 'A massive basalt vault where acolytes tend the last dying spark of solar fire.', coordinates: { x: 30, y: 40 }, ambientSensory: 'Visual: Heavy ash drifting in candlelight. Auditory: Low, continuous harmonic chanting.' },
-          { id: 'loc_syn_keep', name: 'The Ashen Keep', description: 'A jagged stone military fortress overlooking the northern canyons.', coordinates: { x: 50, y: 25 }, ambientSensory: 'Visual: Flickering iron braziers lighting massive stonework. Auditory: Clanking armor and high-altitude wind.' },
-          { id: 'loc_syn_mire', name: 'Mire of Lost Embers', description: 'A dense, waterlogged peat bog illuminated by green bioluminescent gasses.', coordinates: { x: 70, y: 45 }, ambientSensory: 'Visual: Green phosphoresces shifting above bubbling dark mud. Auditory: Squelching wet earth and distant frog calls.' },
-          { id: 'loc_syn_rift', name: 'The Umbral Maw', description: 'A sheer, bottomless chasm where shadowy entities crawl from the deepest depths.', coordinates: { x: 45, y: 75 }, ambientSensory: 'Visual: Infinite darkness with occasional violet lightning. Auditory: Shrill, unearthly whisperings.' }
+          { id: 'loc_syn_keep', name: 'The Ashen Keep', description: 'A jagged stone military fortress overlooking the northern canyons.', coordinates: { x: 50, y: 25 }, ambientSensory: 'Visual: Flickering iron braziers lighting massive stonework. Auditory: Clanking armor and high-altitude wind.' }
         ];
 
         factions = [
-          { id: 'fac_syn_wardens', name: 'The Obsidian Wardens', description: 'The sworn protectors of the Cathedral dedicated to keeping the dark flame active.' },
-          { id: 'fac_syn_cult', name: 'The Void-Bound Tribunal', description: 'A radical sect seeking to plunge the remaining spires into the chasm.' }
+          { id: 'fac_syn_wardens', name: 'The Obsidian Wardens', description: 'The sworn protectors of the Cathedral dedicated to keeping the dark flame active.' }
         ];
 
         characters = [
-          { id: 'char_syn_vaelen', name: 'Inquisitor Vaelen', role: 'Cathedral Commander', locationId: 'loc_syn_temple', motivation: 'To find and secure a legendary prism-resonance seed before the Tribunal.' },
-          { id: 'char_syn_morana', name: 'Lady Morana', role: 'Tribunal High Priestess', locationId: 'loc_syn_rift', motivation: 'To trigger the Eclipse Protocol and shatter the solar crystalline barrier.' },
-          { id: 'char_syn_maren', name: 'Acolyte Maren', role: 'Archivist Priest', locationId: 'loc_syn_temple', motivation: 'To translate the ancient basalt slabs containing the planetary alignment calendar.' }
+          { id: 'char_syn_vaelen', name: 'Inquisitor Vaelen', role: 'Cathedral Commander', locationId: 'loc_syn_temple', motivation: 'To find and secure a legendary resonance seed.' }
         ];
 
         events = [
           {
             id: 'evt_syn_tremor',
             title: 'Subterranean Bedrock Tremor',
-            description: 'A massive geological anomaly causes structural micro-fractures in the foundation of the Obsidian Cathedral.',
+            description: 'A geological anomaly causes structural micro-fractures.',
             category: 'DISASTER',
             scheduledTime: { year: 42, month: 10, day: 15, hour: 6, minute: 0, second: 0 },
             participatingActors: ['fac_syn_wardens'],
             locationId: 'loc_syn_temple',
             preconditions: { requiredEvents: [], requiredWorldFacts: [] },
-            plannedConsequences: [
-              { type: 'location_state_change', targetId: 'loc_syn_temple', detail: 'Structural damage to the Prism pillars increases danger levels.' }
-            ],
-            visibility: 'PUBLIC'
-          },
-          {
-            id: 'evt_syn_infiltration',
-            title: 'Tribunal Infiltration Attempt',
-            description: 'Void-Bound Tribunal agents attempt to steal key liturgical records detailing the Cathedral seals.',
-            category: 'FACTION',
-            scheduledTime: { year: 42, month: 10, day: 18, hour: 23, minute: 15, second: 0 },
-            participatingActors: ['char_syn_morana', 'char_syn_vaelen'],
-            locationId: 'loc_syn_temple',
-            preconditions: { requiredEvents: ['evt_syn_tremor'], requiredWorldFacts: [] },
-            plannedConsequences: [
-              { type: 'world_fact', targetId: 'fac_syn_cult', detail: 'The cult obtains half of the ancient alignment blueprints.' }
-            ],
-            visibility: 'SECRET'
-          },
-          {
-            id: 'evt_syn_mobilization',
-            title: 'Warden Fortress Mobilization',
-            description: 'In response to increased cult activity, the Ashen Keep command sends armed patrols down into the canyons.',
-            category: 'MILITARY',
-            scheduledTime: { year: 42, month: 10, day: 22, hour: 8, minute: 0, second: 0 },
-            participatingActors: ['char_syn_vaelen'],
-            locationId: 'loc_syn_keep',
-            preconditions: { requiredEvents: ['evt_syn_infiltration'], requiredWorldFacts: [] },
-            plannedConsequences: [
-              { type: 'actor_state', targetId: 'char_syn_vaelen', detail: 'Commander Vaelen shifts his primary presence to the canyon patrol routes.' }
-            ],
-            visibility: 'PUBLIC'
-          },
-          {
-            id: 'evt_syn_consecration',
-            title: 'Ritual of Umbral Summoning',
-            description: 'The Void-Bound Tribunal initiates a deep summoning ceremony inside the bubbling vents of the Mire.',
-            category: 'SUPERNATURAL',
-            scheduledTime: { year: 42, month: 10, day: 26, hour: 2, minute: 0, second: 0 },
-            participatingActors: ['char_syn_morana'],
-            locationId: 'loc_syn_mire',
-            preconditions: { requiredEvents: ['evt_syn_infiltration'], requiredWorldFacts: [] },
-            plannedConsequences: [
-              { type: 'world_fact', targetId: 'loc_syn_mire', detail: 'Bioluminescent bog gas levels spike, triggering wild mutations.' }
-            ],
-            visibility: 'HIDDEN'
-          },
-          {
-            id: 'evt_syn_climax_clash',
-            title: 'The Great Shadow Aligning',
-            description: 'The ancient basalt alignment calendar reaches its zenith, temporarily weakening the solar crystalline shields.',
-            category: 'POLITICAL',
-            scheduledTime: { year: 42, month: 11, day: 2, hour: 12, minute: 0, second: 0 },
-            participatingActors: ['char_syn_morana', 'char_syn_vaelen', 'char_syn_maren'],
-            locationId: 'loc_syn_temple',
-            preconditions: { requiredEvents: ['evt_syn_consecration', 'evt_syn_mobilization'], requiredWorldFacts: [] },
-            plannedConsequences: [
-              { type: 'location_state_change', targetId: 'loc_syn_temple', detail: 'The solar fire dims significantly, plunging the temple into absolute shadow.' }
-            ],
+            plannedConsequences: [{ type: 'location_state_change', targetId: 'loc_syn_temple', detail: 'Structural micro-fractures increase danger.' }],
             visibility: 'PUBLIC'
           }
         ];
 
         capabilities = [
-          { capabilityId: 'cap_syn_flame', name: 'Basalt Resonance Spark', description: 'Manipulate residual solar embers inside basalt items to manifest fire magic.', source: 'AI_PROPOSAL', powerTier: 'Moderate', validated: true }
+          { capabilityId: 'cap_syn_flame', name: 'Basalt Resonance Spark', description: 'Manipulate residual solar embers.', source: 'AI_PROPOSAL', powerTier: 'Moderate', validated: true }
         ];
 
         worldRules = [
@@ -329,152 +375,81 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
         setting = 'The Deep Space Void Basin';
 
         locations = [
-          { id: 'loc_syn_command', name: 'Apex Control Terraces', description: 'The main administrative orbital hub regulating sector gravity beams.', coordinates: { x: 30, y: 35 }, ambientSensory: 'Visual: Holographic stellar maps drifting over chrome terminals. Auditory: Hum of gravity drives.' },
-          { id: 'loc_syn_hangar', name: 'Solaris Launch Deck', description: 'A massive vacuum-isolated shipyard holding light-skiff explorers.', coordinates: { x: 55, y: 30 }, ambientSensory: 'Visual: Distant star fields visible through forcefields. Auditory: Sparks flying from plasma welders.' },
-          { id: 'loc_syn_rift_edge', name: 'The Aether Rift Border', description: 'An observation station built extremely close to the stellar anomaly.', coordinates: { x: 45, y: 70 }, ambientSensory: 'Visual: Blinding purple and cyan plasma cascades swirling in space. Auditory: Heavy radio static pulses.' }
+          { id: 'loc_syn_command', name: 'Apex Control Terraces', description: 'The main administrative orbital hub regulating sector gravity beams.', coordinates: { x: 30, y: 35 }, ambientSensory: 'Visual: Holographic stellar maps. Auditory: Hum of gravity drives.' }
         ];
 
         factions = [
-          { id: 'fac_syn_scientists', name: 'The Apex Research Union', description: 'Pioneers researching high-efficiency gravity manipulation.' },
-          { id: 'fac_syn_scavengers', name: 'Void-Stray Alliance', description: 'A loose syndicate of space salvagers who trade in cosmic debris.' }
+          { id: 'fac_syn_scientists', name: 'The Apex Research Union', description: 'Pioneers researching high-efficiency gravity manipulation.' }
         ];
 
         characters = [
-          { id: 'char_syn_archon', name: 'Commander Selene', role: 'Apex Chief Director', locationId: 'loc_syn_command', motivation: 'To activate the super-rift using concentrated solar plasma arrays.' },
-          { id: 'char_syn_skiff_captain', name: 'Pilot Jax', role: 'Skiff Captain', locationId: 'loc_syn_hangar', motivation: 'To rescue a stray crew ship trapped near the event horizon.' }
+          { id: 'char_syn_archon', name: 'Commander Selene', role: 'Apex Chief Director', locationId: 'loc_syn_command', motivation: 'To activate the super-rift.' }
         ];
 
         events = [
           {
             id: 'evt_syn_alignment',
             title: 'Hyper-Spatial Star Conjunction',
-            description: 'Three local binary stars align, triggering an extreme gravitation flare from the Super-Rift.',
+            description: 'Binary stars align, triggering gravitation flares.',
             category: 'SUPERNATURAL',
             scheduledTime: { year: 42, month: 10, day: 15, hour: 14, minute: 0, second: 0 },
             participatingActors: ['fac_syn_scientists'],
-            locationId: 'loc_syn_rift_edge',
-            preconditions: { requiredEvents: [], requiredWorldFacts: [] },
-            plannedConsequences: [
-              { type: 'location_state_change', targetId: 'loc_syn_rift_edge', detail: 'Event horizon expands. Gravity-well pull increases by 35%.' }
-            ],
-            visibility: 'PUBLIC'
-          },
-          {
-            id: 'evt_syn_scav_raid',
-            title: 'Stray Void Incursion',
-            description: 'Void-Stray salvagers take advantage of sensor distortion to raid the Apex Launch Deck for plasma parts.',
-            category: 'FACTION',
-            scheduledTime: { year: 42, month: 10, day: 19, hour: 4, minute: 30, second: 0 },
-            participatingActors: ['char_syn_skiff_captain'],
-            locationId: 'loc_syn_hangar',
-            preconditions: { requiredEvents: ['evt_syn_alignment'], requiredWorldFacts: [] },
-            plannedConsequences: [
-              { type: 'resource_effect', targetId: 'loc_syn_hangar', detail: 'A solar-fusion engine is stolen from containment.' }
-            ],
-            visibility: 'PUBLIC'
-          },
-          {
-            id: 'evt_syn_realign',
-            title: 'Rift-Gate Super-Ignition Protocol',
-            description: 'Commander Selene attempts a controlled firing of the Apex solar laser to stabilize the spatial gravity rift.',
-            category: 'DISCOVERY',
-            scheduledTime: { year: 42, month: 10, day: 25, hour: 18, minute: 0, second: 0 },
-            participatingActors: ['char_syn_archon'],
             locationId: 'loc_syn_command',
-            preconditions: { requiredEvents: ['evt_syn_scav_raid'], requiredWorldFacts: [] },
-            plannedConsequences: [
-              { type: 'world_fact', targetId: 'loc_syn_rift_edge', detail: 'A stable hyperspace pathway opens between the Command Center and the Inner Rift.' }
-            ],
-            visibility: 'SECRET'
+            preconditions: { requiredEvents: [], requiredWorldFacts: [] },
+            plannedConsequences: [{ type: 'location_state_change', targetId: 'loc_syn_command', detail: 'Gravity-well pull increases.' }],
+            visibility: 'PUBLIC'
           }
         ];
 
         capabilities = [
-          { capabilityId: 'cap_syn_gravity', name: 'Grav-Beam Coalescence', description: 'Manipulate artificial gravity parameters to levitate and launch metallic structures.', source: 'AI_PROPOSAL', powerTier: 'Major', validated: true }
+          { capabilityId: 'cap_syn_gravity', name: 'Grav-Beam Coalescence', description: 'Manipulate artificial gravity parameters.', source: 'AI_PROPOSAL', powerTier: 'Major', validated: true }
         ];
 
         worldRules = [
-          { ruleId: 'rule_syn_vacuum', ruleType: 'ENVIRONMENTAL_CONSTRAINT', description: 'Atmosphere is strictly limited. Void zones require pressurized suits or active magnetic domes.', validated: true }
+          { ruleId: 'rule_syn_vacuum', ruleType: 'ENVIRONMENTAL_CONSTRAINT', description: 'Atmosphere is strictly limited. Void zones require pressurized suits.', validated: true }
         ];
 
       } else {
-        // Standard high fantasy default
-        title = title || 'Aetheria Resonant Orrery';
-        summary = 'A floating civilization of mechanical spires powered by pure celestial acoustics.';
-        description = 'An elegant, high-fantasy setting. Spire cities hover above misty clouds, powered by giant rotating celestial brass armatures.';
-        genreTags = input.genreTags && input.genreTags.length > 0 ? input.genreTags : ['High Fantasy', 'Steampunk'];
-        toneTags = input.toneTags && input.toneTags.length > 0 ? input.toneTags : ['Heroic', 'Inspiring'];
-        era = 'Age of Divine Resonance';
-        setting = 'The Whispering Spire Clusters';
+        // General Premise-Faithful Fallback
+        const cleanPremise = input.naturalLanguagePremise.trim();
+        title = title || (cleanPremise.length > 30 ? cleanPremise.substring(0, 27) + '...' : cleanPremise);
+        summary = `A dynamic world synthesized from premise: "${cleanPremise}".`;
+        description = `An expansive campaign setting grounded in the premise: "${cleanPremise}". Featuring local factions, emergent challenges, and dynamic geography.`;
+        genreTags = input.genreTags && input.genreTags.length > 0 ? input.genreTags : ['Original'];
+        toneTags = input.toneTags && input.toneTags.length > 0 ? input.toneTags : ['Dynamic'];
+        era = input.defaultEra || 'Current Age';
+        setting = input.setting || 'The Central Expanse';
 
         locations = [
-          { id: 'loc_syn_orrery', name: 'The Whispering Orrery', description: 'A cavernous brass observatory where massive clockwork rings mimic star movements.', coordinates: { x: 30, y: 30 }, ambientSensory: 'Visual: Concentric gleaming copper and brass rings revolving. Auditory: Deep rhythmic rhythmic metal hum and clicks.' },
-          { id: 'loc_syn_terrace', name: 'Highcrest Sky Terrace', description: 'A limestone platform overlooking the vast, sea-like misty cloud floor.', coordinates: { x: 60, y: 25 }, ambientSensory: 'Visual: Bright sunbeams reflecting off white marble pillars. Auditory: High-altitude birds chirping and gentle breezes.' },
-          { id: 'loc_syn_archive', name: 'The Core Scriptorium', description: 'The grand library storing thousands of ancient stellar frequency scrolls.', coordinates: { x: 45, y: 65 }, ambientSensory: 'Visual: Towers of parchment and stone slates. Auditory: Soft rustle of paper and ancient incense scent.' }
+          { id: 'loc_gen_center', name: 'Core Convergence Hub', description: `The primary nexus point of ${setting}.`, coordinates: { x: 50, y: 50 }, ambientSensory: 'Visual: Shifting horizons. Auditory: Ambient echoes.' }
         ];
-
         factions = [
-          { id: 'fac_syn_scribes', name: 'Scribes of the Astral Prism', description: 'An scholarly order devoted to keeping the clockwork mechanics calibrated.' },
-          { id: 'fac_syn_weavers', name: 'Resonant Sound-Weavers', description: 'Artisans who translate physical brass rotations into magical acoustic energy.' }
+          { id: 'fac_gen_vanguard', name: 'Vanguard Alliance', description: 'Independent actors navigating the shifting frontier.' }
         ];
-
         characters = [
-          { id: 'char_syn_maren', name: 'Maren the Archivist', role: 'Head Librarian', locationId: 'loc_syn_archive', motivation: 'To prevent the ancient brass alignment gears from seizing.' },
-          { id: 'char_syn_selene', name: 'Archon Selene', role: 'Prism Commander', locationId: 'loc_syn_orrery', motivation: 'To find and cleanse a mysterious crystalline resonance blight.' }
+          { id: 'char_gen_protagonist', name: 'Guide Vane', role: 'Expedition Lead', locationId: 'loc_gen_center', motivation: 'To chart the expanding frontiers of the realm.' }
         ];
-
         events = [
           {
-            id: 'evt_syn_alignment',
-            title: 'Great Celestial Alignment',
-            description: 'The three moons of Aetheria line up perfectly, producing a powerful harmonic vibration across the clockwork structures.',
-            category: 'SUPERNATURAL',
-            scheduledTime: { year: 42, month: 10, day: 15, hour: 12, minute: 0, second: 0 },
-            participatingActors: ['char_syn_maren'],
-            locationId: 'loc_syn_orrery',
+            id: 'evt_gen_start',
+            title: 'Convergence Threshold',
+            description: 'Local energies align to initiate the campaign era.',
+            category: 'DISCOVERY',
+            scheduledTime: { year: 42, month: 10, day: 14, hour: 12, minute: 0, second: 0 },
+            participatingActors: ['fac_gen_vanguard'],
+            locationId: 'loc_gen_center',
             preconditions: { requiredEvents: [], requiredWorldFacts: [] },
-            plannedConsequences: [
-              { type: 'location_state_change', targetId: 'loc_syn_orrery', detail: 'The clockwork rings spin with extreme friction, triggering thermal sparks.' }
-            ],
+            plannedConsequences: [{ type: 'world_fact', targetId: 'loc_gen_center', detail: 'Exploration vectors open.' }],
             visibility: 'PUBLIC'
-          },
-          {
-            id: 'evt_syn_blight_bloom',
-            title: 'Crystalline Blight Outbreak',
-            description: 'A parasitic crystal formation, fed by thermal friction sparks, blooms along the base gears of the Scriptorium.',
-            category: 'MONSTER',
-            scheduledTime: { year: 42, month: 10, day: 20, hour: 18, minute: 0, second: 0 },
-            participatingActors: ['char_syn_selene'],
-            locationId: 'loc_syn_archive',
-            preconditions: { requiredEvents: ['evt_syn_alignment'], requiredWorldFacts: [] },
-            plannedConsequences: [
-              { type: 'world_fact', targetId: 'loc_syn_archive', detail: 'Lower archives are quarantined due to aggressive crystal spikes.' }
-            ],
-            visibility: 'PUBLIC'
-          },
-          {
-            id: 'evt_syn_scribe_council',
-            title: 'Prism Order Emergency Convocation',
-            description: 'Scholar delegates meet to vote on executing the gear-override sequence to save the lower Scriptorium.',
-            category: 'POLITICAL',
-            scheduledTime: { year: 42, month: 10, day: 24, hour: 10, minute: 0, second: 0 },
-            participatingActors: ['char_syn_maren', 'char_syn_selene'],
-            locationId: 'loc_syn_orrery',
-            preconditions: { requiredEvents: ['evt_syn_blight_bloom'], requiredWorldFacts: [] },
-            plannedConsequences: [
-              { type: 'faction_state_change', targetId: 'fac_syn_scribes', detail: 'The order agrees to release classified high-reverb acoustic frequencies.' }
-            ],
-            visibility: 'SECRET'
           }
         ];
-
         capabilities = [
-          { capabilityId: 'cap_syn_acoustics', name: 'Celestial Resonance Acoustics', description: 'Channel physical gear frequencies through brass tuning rods to manifest kinetic shields.', source: 'AI_PROPOSAL', powerTier: 'Moderate', validated: true }
+          { capabilityId: 'cap_gen_adapt', name: 'Adaptive Resonance', description: 'Adapt to regional anomalies seamlessly.', source: 'AI_PROPOSAL', powerTier: 'Moderate', validated: true }
         ];
-
         worldRules = [
-          { ruleId: 'rule_syn_acoustics_only', ruleType: 'CANON_RULE', description: 'All active magic is acoustic and must draw upon rotating gears, wind, or voice frequencies.', validated: true }
+          { ruleId: 'rule_gen_frontier', ruleType: 'CANON_RULE', description: 'Frontier conditions require active resource management.', validated: true }
         ];
+      }
       }
     }
 
@@ -546,6 +521,7 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
         mediaSha256: '9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08',
       } : undefined),
       geography: {
+        ...(input.geography || {}),
         locations,
         nodes
       },

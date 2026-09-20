@@ -139,7 +139,7 @@ export const Header: React.FC<HeaderProps> = ({
               id="world-library-btn"
               onClick={onOpenWorldLibraryModal}
               className="flex items-center gap-1 px-2.5 py-0.5 rounded bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-200 border border-indigo-500/50 transition text-[11px] font-medium"
-              title="Reusable World Library & Campaign Discovery (CH16)"
+              title="Reusable World Library & Campaign Discovery"
             >
               <Globe className="w-3 h-3 text-indigo-400" />
               <span>World Library</span>

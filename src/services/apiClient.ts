@@ -1131,6 +1131,33 @@ class ApiClient {
   }
 
   /**
+   * Get all orchestrator fallback chains.
+   * GET /api/game/orchestrator/fallbacks
+   */
+  public async getOrchestratorFallbacks(): Promise<{ success: boolean; fallbackChains: Record<string, string[]> }> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/fallbacks`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Failed to get orchestrator fallbacks: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  /**
+   * Set orchestrator fallback chain for a task.
+   * POST /api/game/orchestrator/fallback
+   */
+  public async setOrchestratorFallbackChain(params: { task: string; chain: string[] }): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/fallback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) throw new Error(`Failed to set orchestrator fallback chain: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  /**
    * Challenge 15: Run story adaptation pipeline.
    * POST /api/game/adaptation/analyze
    */

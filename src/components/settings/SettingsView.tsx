@@ -129,23 +129,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [testResultFeedback, setTestResultFeedback] = useState<string | null>(null);
 
   // Fallback Chain State
-  const [fallbacks, setFallbacks] = useState<string[]>([
-    'Gemini 3.6 Flash (Primary)',
-    'Gemini 2.5 Flash (Fallback 1)',
-    'Deterministic Rule Engine (Emergency Floor)',
-  ]);
+  const [fallbackChains, setFallbackChains] = useState<Record<string, string[]>>({});
+  const [fallbackSelectedTask, setFallbackSelectedTask] = useState<string>('narrative.generate');
+  const [addingModelKey, setAddingModelKey] = useState<string>('');
 
   const loadOrchestratorData = async () => {
     try {
-      const [modelsRes, pinsRes] = await Promise.all([
+      const [modelsRes, pinsRes, fallbacksRes] = await Promise.all([
         apiClient.getOrchestratorModels(),
         apiClient.getOrchestratorPins(),
+        apiClient.getOrchestratorFallbacks(),
       ]);
       if (modelsRes?.models) {
         setOrchestratorModels(modelsRes.models);
       }
       if (pinsRes?.pins) {
         setTaskPins(pinsRes.pins);
+      }
+      if (fallbacksRes?.fallbackChains) {
+        setFallbackChains(fallbacksRes.fallbackChains);
       }
     } catch (err) {
       console.error('Failed to load orchestrator data:', err);
@@ -192,8 +194,58 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }, 1500);
   };
 
-  const handleAddFallback = () => {
-    setFallbacks((prev) => [...prev, `Backup Model ${prev.length + 1}`]);
+  const currentChain = fallbackChains[fallbackSelectedTask] || [
+    'google_gemini::gemini-3.6-flash',
+    'google_gemini::gemini-2.5-flash',
+    'provider_deterministic_emergency::emergency-fallback-local',
+  ];
+
+  const handleSaveChain = async (newChain: string[]) => {
+    try {
+      const res = await apiClient.setOrchestratorFallbackChain({ task: fallbackSelectedTask, chain: newChain });
+      if (res?.fallbackChains) {
+        setFallbackChains(res.fallbackChains);
+      }
+    } catch (err) {
+      console.error('Failed to update fallback chain:', err);
+    }
+  };
+
+  const handleMoveFallbackItem = (index: number, direction: 'up' | 'down') => {
+    const targetIdx = direction === 'up' ? index - 1 : index + 1;
+    if (targetIdx <= 0 || targetIdx >= currentChain.length) return;
+    const updated = [...currentChain];
+    const temp = updated[index];
+    updated[index] = updated[targetIdx];
+    updated[targetIdx] = temp;
+    handleSaveChain(updated);
+  };
+
+  const handleRemoveFallbackItem = (index: number) => {
+    if (index === 0 || currentChain.length <= 1) return;
+    const updated = currentChain.filter((_, i) => i !== index);
+    handleSaveChain(updated);
+  };
+
+  const handleReplaceFallbackItem = (index: number, newModelKey: string) => {
+    const updated = [...currentChain];
+    updated[index] = newModelKey;
+    handleSaveChain(updated);
+  };
+
+  const handleAddFallbackModel = () => {
+    if (!addingModelKey) return;
+    if (currentChain.includes(addingModelKey)) return;
+    const emergencyKey = 'provider_deterministic_emergency::emergency-fallback-local';
+    let updated = [...currentChain];
+    const emergencyIdx = updated.indexOf(emergencyKey);
+    if (emergencyIdx !== -1) {
+      updated.splice(emergencyIdx, 0, addingModelKey);
+    } else {
+      updated.push(addingModelKey);
+    }
+    handleSaveChain(updated);
+    setAddingModelKey('');
   };
 
   const handlePinTaskModel = async (taskKey: string, fullModelKey: string) => {
@@ -767,7 +819,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
           {/* Section C: Fallback Model Chain */}
           <div className="p-5 rounded-[var(--db-radius-lg)] bg-[var(--db-bg-card)] border border-[var(--db-border-default)] space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-[var(--db-border-subtle)]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-[var(--db-border-subtle)] gap-3">
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-serif font-bold text-[var(--db-text-primary)]">
                   Fallback Model Chain
@@ -782,9 +834,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </button>
               </div>
 
-              <Button variant="subtle" size="sm" onClick={handleAddFallback}>
-                + Add Fallback
-              </Button>
+              <div className="flex items-center gap-2">
+                <select
+                  value={fallbackSelectedTask}
+                  onChange={(e) => setFallbackSelectedTask(e.target.value)}
+                  className="px-2.5 py-1.5 rounded bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] text-xs text-[var(--db-text-primary)] focus:outline-none focus:border-[var(--db-purple-500)] cursor-pointer"
+                >
+                  <option value="narrative.generate">Narrative Storytelling</option>
+                  <option value="character.dialogue">Character Dialogue</option>
+                  <option value="memory.extract">Memory & Extraction</option>
+                  <option value="summary.scene">Summarization</option>
+                  <option value="rules.adjudicate">Canon Consistency</option>
+                  <option value="utility.inspect">Research & Search</option>
+                </select>
+              </div>
             </div>
 
             {/* Explanation Callout */}
@@ -797,23 +860,123 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </div>
             )}
 
-            <div className="space-y-2">
-              {fallbacks.map((item, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center justify-between p-3 rounded-[var(--db-radius-md)] bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] text-xs"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded bg-[var(--db-purple-500)]/20 text-[var(--db-purple-300)] text-[10px] font-mono font-bold flex items-center justify-center">
-                      {idx + 1}
-                    </span>
-                    <span className="font-medium text-[var(--db-text-primary)]">{item}</span>
+            {/* Add Fallback Model Bar */}
+            <div className="flex items-center gap-2 pt-1">
+              <select
+                value={addingModelKey}
+                onChange={(e) => setAddingModelKey(e.target.value)}
+                className="flex-1 px-3 py-1.5 rounded bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] text-xs text-[var(--db-text-primary)] focus:outline-none focus:border-[var(--db-purple-500)] cursor-pointer"
+              >
+                <option value="">Select model to add as fallback...</option>
+                {orchestratorModels
+                  .filter((m) => !currentChain.includes(`${m.providerId}::${m.modelId}`) && !m.isEmergencyFloor)
+                  .map((m) => {
+                    const fullKey = `${m.providerId}::${m.modelId}`;
+                    return (
+                      <option key={fullKey} value={fullKey}>
+                        {m.displayName || m.modelId} ({m.providerId})
+                      </option>
+                    );
+                  })}
+              </select>
+              <Button variant="primary" size="sm" disabled={!addingModelKey} onClick={handleAddFallbackModel}>
+                + Add Fallback
+              </Button>
+            </div>
+
+            <div className="space-y-2 pt-2">
+              {currentChain.map((modelKey, idx) => {
+                const modelRec = orchestratorModels.find(
+                  (m) => `${m.providerId}::${m.modelId}` === modelKey || m.modelId === modelKey
+                );
+                const isEmergency = modelKey.includes('emergency-fallback-local');
+                const isPrimary = idx === 0;
+
+                return (
+                  <div
+                    key={modelKey + idx}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-[var(--db-radius-md)] bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] gap-3 text-xs"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="w-5 h-5 rounded bg-[var(--db-purple-500)]/20 text-[var(--db-purple-300)] text-[10px] font-mono font-bold flex items-center justify-center shrink-0">
+                        {idx + 1}
+                      </span>
+                      <div>
+                        <div className="font-bold text-[var(--db-text-primary)]">
+                          {modelRec ? modelRec.displayName || modelRec.modelId : modelKey}
+                        </div>
+                        <div className="text-[10px] font-mono text-[var(--db-text-muted)]">
+                          {modelRec ? `Provider: ${modelRec.providerId} • Pool: ${modelRec.pool}` : 'Configured fallback'}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant={isPrimary ? 'purple' : isEmergency ? 'stone' : 'blue'} size="sm">
+                        {isPrimary ? 'Primary' : isEmergency ? 'Emergency Floor' : `Fallback ${idx}`}
+                      </Badge>
+
+                      {modelRec && !isEmergency && (
+                        <Button
+                          variant="subtle"
+                          size="sm"
+                          onClick={() => handleTestModel(modelRec.providerId, modelRec.modelId)}
+                        >
+                          Test
+                        </Button>
+                      )}
+
+                      {!isPrimary && !isEmergency && (
+                        <>
+                          <select
+                            value={modelKey}
+                            onChange={(e) => handleReplaceFallbackItem(idx, e.target.value)}
+                            className="px-2 py-1 rounded bg-[var(--db-bg-card)] border border-[var(--db-border-default)] text-[11px] text-[var(--db-text-primary)] cursor-pointer"
+                          >
+                            <option value={modelKey}>Replace...</option>
+                            {orchestratorModels
+                              .filter((m) => !currentChain.includes(`${m.providerId}::${m.modelId}`))
+                              .map((m) => (
+                                <option key={`${m.providerId}::${m.modelId}`} value={`${m.providerId}::${m.modelId}`}>
+                                  {m.displayName || m.modelId}
+                                </option>
+                              ))}
+                          </select>
+
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              disabled={idx <= 1}
+                              onClick={() => handleMoveFallbackItem(idx, 'up')}
+                              className="px-1.5 py-0.5 rounded bg-[var(--db-bg-card)] border border-[var(--db-border-default)] text-[11px] disabled:opacity-40 cursor-pointer"
+                              title="Move Up"
+                            >
+                              ↑
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx >= currentChain.length - 2}
+                              onClick={() => handleMoveFallbackItem(idx, 'down')}
+                              className="px-1.5 py-0.5 rounded bg-[var(--db-bg-card)] border border-[var(--db-border-default)] text-[11px] disabled:opacity-40 cursor-pointer"
+                              title="Move Down"
+                            >
+                              ↓
+                            </button>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveFallbackItem(idx)}
+                            className="text-[11px] text-[var(--db-rose-400)] hover:text-[var(--db-rose-300)] font-medium cursor-pointer ml-1"
+                          >
+                            Remove
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <Badge variant={idx === 0 ? 'purple' : 'blue'} size="sm">
-                    {idx === 0 ? 'Primary' : `Fallback ${idx}`}
-                  </Badge>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 

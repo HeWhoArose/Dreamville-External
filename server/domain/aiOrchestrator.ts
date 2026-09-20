@@ -1277,6 +1277,7 @@ export class MultiModelOrchestrator {
 
   private manualOverrides: Map<string, ManualModelOverride> = new Map();
   private taskPinnedModels: Map<TaskId, string> = new Map();
+  private taskFallbackChains: Map<TaskId, string[]> = new Map();
   private discoveredCatalog: DiscoveredModelMetadata[] = [];
   private excludedCatalog: { modelId: string; rawName: string; reason: string }[] = [];
   private lastDiscoveredAt: number = 0;
@@ -1307,6 +1308,13 @@ export class MultiModelOrchestrator {
               }
             }
           }
+          if (data.fallbackChains && typeof data.fallbackChains === 'object') {
+            for (const [task, chain] of Object.entries(data.fallbackChains)) {
+              if (Array.isArray(chain)) {
+                this.taskFallbackChains.set(task as TaskId, chain.filter(Boolean));
+              }
+            }
+          }
           if (Array.isArray(data.overrides)) {
             for (const ov of data.overrides) {
               if (ov && ov.modelId) {
@@ -1331,8 +1339,12 @@ export class MultiModelOrchestrator {
       for (const [task, key] of this.taskPinnedModels.entries()) {
         pins[task] = key;
       }
+      const fallbackChains: Record<string, string[]> = {};
+      for (const [task, chain] of this.taskFallbackChains.entries()) {
+        fallbackChains[task] = chain;
+      }
       const overrides = this.getManualOverrides();
-      fs.writeFileSync(this.configFilePath, JSON.stringify({ pins, overrides }, null, 2), 'utf-8');
+      fs.writeFileSync(this.configFilePath, JSON.stringify({ pins, fallbackChains, overrides }, null, 2), 'utf-8');
     } catch (e) {
       // Ignore save errors
     }
@@ -1347,6 +1359,40 @@ export class MultiModelOrchestrator {
     this.taskPinnedModels.set('utility.inspect', 'google_gemini::gemini-3.6-flash');
     this.taskPinnedModels.set('speech.generate', 'provider_mock_speech::mock-speech-v1');
     this.taskPinnedModels.set('image.generate', 'google_imagen::imagen-3.0-generate-002');
+
+    // Default Fallback Chains
+    const defaultChain = [
+      'google_gemini::gemini-3.6-flash',
+      'google_gemini::gemini-2.5-flash',
+      'provider_deterministic_emergency::emergency-fallback-local',
+    ];
+    this.taskFallbackChains.set('narrative.generate', defaultChain);
+    this.taskFallbackChains.set('character.dialogue', defaultChain);
+    this.taskFallbackChains.set('memory.extract', defaultChain);
+    this.taskFallbackChains.set('summary.scene', defaultChain);
+    this.taskFallbackChains.set('rules.adjudicate', defaultChain);
+    this.taskFallbackChains.set('utility.inspect', defaultChain);
+  }
+
+  public setFallbackChain(task: TaskId, chain: string[]): void {
+    this.taskFallbackChains.set(task, chain.filter(Boolean));
+    this.savePersistedConfig();
+  }
+
+  public getFallbackChain(task: TaskId): string[] {
+    return this.taskFallbackChains.get(task) || [
+      'google_gemini::gemini-3.6-flash',
+      'google_gemini::gemini-2.5-flash',
+      'provider_deterministic_emergency::emergency-fallback-local',
+    ];
+  }
+
+  public getAllFallbackChains(): Record<string, string[]> {
+    const result: Record<string, string[]> = {};
+    for (const [task, chain] of this.taskFallbackChains.entries()) {
+      result[task] = chain;
+    }
+    return result;
   }
 
   public setWorldRepository(repo: WorldRepository): void {
@@ -2271,6 +2317,41 @@ export class MultiModelOrchestrator {
             fallbacks,
           };
         }
+      }
+    }
+
+    const customChainKeys = this.taskFallbackChains.get(task);
+    if (customChainKeys && customChainKeys.length > 0) {
+      const resolvedChain: ModelRegistryRecord[] = [];
+      for (const key of customChainKeys) {
+        const m = Array.from(this.models.values()).find(
+          (mod) => `${mod.providerId}::${mod.modelId}` === key || mod.modelId === key
+        );
+        if (m && (m.isEmergencyFloor || (m.roleEligibility.includes(task) && m.health !== 'Unavailable' && m.health !== 'DisabledByUser' && m.health !== 'InvalidAuth'))) {
+          if (contextTokens === 0 || contextTokens <= m.contextWindow) {
+            if (!resolvedChain.some(existing => existing.modelId === m.modelId)) {
+              resolvedChain.push(m);
+            }
+          }
+        }
+      }
+      if (resolvedChain.length > 0) {
+        const pinnedKey = this.taskPinnedModels.get(task);
+        let primary = pinnedKey ? resolvedChain.find(r => `${r.providerId}::${r.modelId}` === pinnedKey || r.modelId === pinnedKey) : undefined;
+        if (!primary) {
+          primary = resolvedChain[0];
+        }
+        const fallbacks = resolvedChain.filter(m => m.modelId !== primary.modelId);
+        const emergency = Array.from(this.models.values()).find((m) => m.isEmergencyFloor);
+        if (emergency && emergency.roleEligibility.includes(task) && !fallbacks.some((f) => f.modelId === emergency.modelId) && primary.modelId !== emergency.modelId) {
+          fallbacks.push(emergency);
+        }
+        return {
+          selectedModel: primary,
+          selectionReason: `Selected via configured task fallback chain for '${task}'.`,
+          selectionScore: primary.userPriority + 400,
+          fallbacks,
+        };
       }
     }
 

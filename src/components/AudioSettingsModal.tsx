@@ -37,7 +37,7 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({ isOpen, 
                 Sensory & Audio Architecture
               </h2>
               <p className="text-[11px] font-mono text-stone-400">
-                CH14 • Soundscapes, Speech, and Haptic Feedback
+                Soundscapes, Speech, and Haptic Feedback
               </p>
             </div>
           </div>

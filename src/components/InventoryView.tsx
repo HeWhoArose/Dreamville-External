@@ -97,7 +97,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               </p>
             </div>
             <span className="text-[11px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-              CH5 Authoritative Rig
+              Authoritative Rig
             </span>
           </div>
 

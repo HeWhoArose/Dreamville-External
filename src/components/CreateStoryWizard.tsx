@@ -100,7 +100,7 @@ export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRu
     try {
       const result = await apiClient.synthesizeWorld({
         naturalLanguagePremise: premise,
-        title: selectedGenres.length > 0 ? `${selectedGenres[0]} Campaign` : 'DreamBook Campaign',
+        title: '',
         genreTags: selectedGenres,
         toneTags: selectedTones,
         mediumTags: selectedMediums,

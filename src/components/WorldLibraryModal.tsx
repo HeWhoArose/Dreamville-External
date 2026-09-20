@@ -54,6 +54,39 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
   // Selected World & Preview Drawer State
   const [previewWorld, setPreviewWorld] = useState<WorldTemplate | null>(null);
 
+  // Mobile Filter Sheet State
+  const [isFilterSheetOpen, setIsFilterSheetOpen] = useState<boolean>(false);
+
+  // Active Filter Calculation
+  const activeFilters = [
+    selectedGenre && { key: 'genre', label: `Genre: ${selectedGenre}`, onClear: () => setSelectedGenre('') },
+    selectedTone && { key: 'tone', label: `Tone: ${selectedTone}`, onClear: () => setSelectedTone('') },
+    selectedRules && {
+      key: 'rules',
+      label: `Rules: ${selectedRules === 'FULL_DND' ? 'Full D&D' : selectedRules === 'HYBRID_DND' ? 'Hybrid' : 'Custom'}`,
+      onClear: () => setSelectedRules(''),
+    },
+    selectedSetting && { key: 'setting', label: `Setting: ${selectedSetting}`, onClear: () => setSelectedSetting('') },
+    selectedSource && {
+      key: 'source',
+      label: `Source: ${selectedSource === 'ORIGINAL_CANON' ? 'Canon' : selectedSource === 'COMMUNITY_EXTENDED' ? 'Community' : 'Homebrew'}`,
+      onClear: () => setSelectedSource(''),
+    },
+    selectedPlaystyle && { key: 'playstyle', label: `Playstyle: ${selectedPlaystyle}`, onClear: () => setSelectedPlaystyle('') },
+  ].filter(Boolean) as { key: string; label: string; onClear: () => void }[];
+
+  const activeFilterCount = activeFilters.length;
+
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setSelectedGenre('');
+    setSelectedTone('');
+    setSelectedRules('');
+    setSelectedSetting('');
+    setSelectedSource('');
+    setSelectedPlaystyle('');
+  };
+
   // World Creation Form State
   const [isCreatingWorld, setIsCreatingWorld] = useState<boolean>(false);
   const [premiseText, setPremiseText] = useState<string>('');
@@ -171,42 +204,41 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
   return (
     <div
       id="world-library-modal-overlay"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/80 backdrop-blur-md p-4 overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-stone-950/80 backdrop-blur-md p-2 sm:p-4 md:p-6 overflow-y-auto"
     >
       <div
         id="world-library-modal-container"
-        className="relative w-full max-w-6xl max-h-[92vh] flex flex-col rounded-xl border border-stone-800 bg-stone-900 shadow-2xl text-stone-200 overflow-hidden"
+        className="relative w-full max-w-6xl h-[94vh] sm:h-auto sm:max-h-[90vh] flex flex-col rounded-xl border border-stone-800 bg-stone-900 shadow-2xl text-stone-200 overflow-hidden"
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-stone-800 bg-stone-950/70">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-400">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 border-b border-stone-800 bg-stone-950/80 gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="p-2 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-400 shrink-0">
               <Globe className="w-5 h-5" />
             </div>
-            <div>
-              <h2 className="text-lg font-semibold text-stone-100 flex items-center gap-2">
-                Reusable World Library & Campaign Discovery
-                <span className="text-xs px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-300 font-mono">
-                  CH16 Canonical
-                </span>
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg font-serif font-bold text-stone-100 truncate">
+                World Library
               </h2>
-              <p className="text-xs text-stone-400">
-                Discover canonical world templates, inspect world rules and capabilities, and launch independent Story Runs.
+              <p className="text-[11px] sm:text-xs text-stone-400 truncate">
+                Discover living worlds, campaigns, and reusable settings.
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button
               id="create-world-premise-btn"
               onClick={() => setIsCreatingWorld(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition shadow"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition shadow whitespace-nowrap"
             >
               <PlusCircle className="w-4 h-4" />
-              <span>Create World from Premise</span>
+              <span className="hidden sm:inline">Create World from Premise</span>
+              <span className="sm:hidden">Create</span>
             </button>
             <button
               onClick={onClose}
               className="p-1.5 rounded-lg text-stone-400 hover:text-stone-200 hover:bg-stone-800 transition"
+              aria-label="Close World Library"
             >
               <X className="w-5 h-5" />
             </button>
@@ -214,114 +246,171 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
         </div>
 
         {/* Search & Filter Bar */}
-        <div className="px-6 py-3 border-b border-stone-800/80 bg-stone-900/50 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2 flex-1 min-w-[240px]">
-            <div className="relative w-full">
+        <div className="px-4 sm:px-6 py-2.5 sm:py-3 border-b border-stone-800/80 bg-stone-900/50 space-y-2">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 min-w-0">
               <Search className="w-4 h-4 text-stone-500 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 id="world-search-input"
                 type="text"
-                placeholder="Search by title, setting, lore, genre, or keyword..."
+                placeholder="Search worlds by title, lore, genre, or keyword..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 text-xs rounded-lg bg-stone-950/60 border border-stone-800 text-stone-200 placeholder-stone-500 focus:outline-none focus:border-indigo-500"
+                className="w-full pl-9 pr-8 py-2 sm:py-1.5 text-xs rounded-lg bg-stone-950/60 border border-stone-800 text-stone-200 placeholder-stone-500 focus:outline-none focus:border-indigo-500"
               />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-500 hover:text-stone-300 p-0.5"
+                  aria-label="Clear search"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
+
+            {/* Mobile Filter Button (Visible on < md) */}
+            <button
+              id="mobile-filters-trigger-btn"
+              type="button"
+              onClick={() => setIsFilterSheetOpen(true)}
+              aria-expanded={isFilterSheetOpen}
+              aria-controls="mobile-filter-sheet-container"
+              className={`md:hidden flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium border transition shrink-0 ${
+                activeFilterCount > 0
+                  ? 'bg-indigo-600/20 border-indigo-500 text-indigo-200'
+                  : 'bg-stone-950/60 border-stone-800 text-stone-300 hover:bg-stone-800'
+              }`}
+              aria-label="Open world filters"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span>Filters</span>
+              {activeFilterCount > 0 && (
+                <span className="w-4 h-4 rounded-full bg-indigo-500 text-white text-[10px] font-bold flex items-center justify-center">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <select
-              id="genre-filter-select"
-              value={selectedGenre}
-              onChange={(e) => setSelectedGenre(e.target.value)}
-              className="px-2.5 py-1.5 text-xs rounded-lg bg-stone-950/60 border border-stone-800 text-stone-300 focus:outline-none focus:border-indigo-500"
-            >
-              <option value="">All Genres</option>
-              <option value="High Fantasy">High Fantasy</option>
-              <option value="Cosmic Horror">Cosmic Horror</option>
-              <option value="Steampunk">Steampunk</option>
-              <option value="Cyberpunk">Cyberpunk</option>
-              <option value="Mythic">Mythic</option>
-            </select>
+          {/* Mobile Active Filter Chips Summary */}
+          {activeFilters.length > 0 && (
+            <div className="md:hidden flex flex-wrap items-center gap-1.5 pt-0.5">
+              {activeFilters.map((af) => (
+                <span
+                  key={af.key}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-950/60 border border-indigo-800/50 text-indigo-300 text-[11px]"
+                >
+                  <span>{af.label}</span>
+                  <button
+                    type="button"
+                    onClick={af.onClear}
+                    className="p-0.5 hover:text-white"
+                    aria-label={`Remove ${af.label}`}
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="text-[11px] text-stone-400 hover:text-stone-200 underline ml-1 cursor-pointer"
+              >
+                Clear all
+              </button>
+            </div>
+          )}
 
-            <select
-              id="tone-filter-select"
-              value={selectedTone}
-              onChange={(e) => setSelectedTone(e.target.value)}
-              className="px-2.5 py-1.5 text-xs rounded-lg bg-stone-950/60 border border-stone-800 text-stone-300 focus:outline-none focus:border-indigo-500"
-            >
-              <option value="">All Tones</option>
-              <option value="Heroic">Heroic</option>
-              <option value="Grimdark">Grimdark</option>
-              <option value="Mysterious">Mysterious</option>
-              <option value="Whimsical">Whimsical</option>
-            </select>
+          {/* Desktop Filter Selects (Visible on >= md) */}
+          <div className="hidden md:flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <select
+                id="genre-filter-select"
+                value={selectedGenre}
+                onChange={(e) => setSelectedGenre(e.target.value)}
+                className="px-2.5 py-1.5 text-xs rounded-lg bg-stone-950/60 border border-stone-800 text-stone-300 focus:outline-none focus:border-indigo-500"
+              >
+                <option value="">All Genres</option>
+                <option value="High Fantasy">High Fantasy</option>
+                <option value="Cosmic Horror">Cosmic Horror</option>
+                <option value="Steampunk">Steampunk</option>
+                <option value="Cyberpunk">Cyberpunk</option>
+                <option value="Mythic">Mythic</option>
+              </select>
 
-            <select
-              id="rules-filter-select"
-              value={selectedRules}
-              onChange={(e) => setSelectedRules(e.target.value)}
-              className="px-2.5 py-1.5 text-xs rounded-lg bg-stone-950/60 border border-stone-800 text-stone-300 focus:outline-none focus:border-indigo-500"
-            >
-              <option value="">All Rulesets</option>
-              <option value="FULL_DND">Full D&D SRD</option>
-              <option value="HYBRID_DND">Hybrid Narrative D&D</option>
-              <option value="CUSTOM_HOMEBREW_DND">Custom Homebrew</option>
-            </select>
+              <select
+                id="tone-filter-select"
+                value={selectedTone}
+                onChange={(e) => setSelectedTone(e.target.value)}
+                className="px-2.5 py-1.5 text-xs rounded-lg bg-stone-950/60 border border-stone-800 text-stone-300 focus:outline-none focus:border-indigo-500"
+              >
+                <option value="">All Tones</option>
+                <option value="Heroic">Heroic</option>
+                <option value="Grimdark">Grimdark</option>
+                <option value="Mysterious">Mysterious</option>
+                <option value="Whimsical">Whimsical</option>
+              </select>
 
-            <select
-              id="setting-filter-select"
-              value={selectedSetting}
-              onChange={(e) => setSelectedSetting(e.target.value)}
-              className="px-2.5 py-1.5 text-xs rounded-lg bg-stone-950/60 border border-stone-800 text-stone-300 focus:outline-none focus:border-indigo-500"
-            >
-              <option value="">All Settings</option>
-              <option value="Citadel">Citadel</option>
-              <option value="Undersea">Undersea / Trenches</option>
-              <option value="Astral">Astral / Void</option>
-              <option value="Spire">Clockwork Spire</option>
-              <option value="Wilderness">Wilderness / Forest</option>
-            </select>
+              <select
+                id="rules-filter-select"
+                value={selectedRules}
+                onChange={(e) => setSelectedRules(e.target.value)}
+                className="px-2.5 py-1.5 text-xs rounded-lg bg-stone-950/60 border border-stone-800 text-stone-300 focus:outline-none focus:border-indigo-500"
+              >
+                <option value="">All Rulesets</option>
+                <option value="FULL_DND">Full D&D SRD</option>
+                <option value="HYBRID_DND">Hybrid Narrative D&D</option>
+                <option value="CUSTOM_HOMEBREW_DND">Custom Homebrew</option>
+              </select>
 
-            <select
-              id="source-filter-select"
-              value={selectedSource}
-              onChange={(e) => setSelectedSource(e.target.value)}
-              className="px-2.5 py-1.5 text-xs rounded-lg bg-stone-950/60 border border-stone-800 text-stone-300 focus:outline-none focus:border-indigo-500"
-            >
-              <option value="">All Sources</option>
-              <option value="ORIGINAL_CANON">Original Canon</option>
-              <option value="COMMUNITY_EXTENDED">Community Extended</option>
-              <option value="HOMEBREW">Homebrew</option>
-            </select>
+              <select
+                id="setting-filter-select"
+                value={selectedSetting}
+                onChange={(e) => setSelectedSetting(e.target.value)}
+                className="px-2.5 py-1.5 text-xs rounded-lg bg-stone-950/60 border border-stone-800 text-stone-300 focus:outline-none focus:border-indigo-500"
+              >
+                <option value="">All Settings</option>
+                <option value="Citadel">Citadel</option>
+                <option value="Undersea">Undersea / Trenches</option>
+                <option value="Astral">Astral / Void</option>
+                <option value="Spire">Clockwork Spire</option>
+                <option value="Wilderness">Wilderness / Forest</option>
+              </select>
 
-            <select
-              id="playstyle-filter-select"
-              value={selectedPlaystyle}
-              onChange={(e) => setSelectedPlaystyle(e.target.value)}
-              className="px-2.5 py-1.5 text-xs rounded-lg bg-stone-950/60 border border-stone-800 text-stone-300 focus:outline-none focus:border-indigo-500"
-            >
-              <option value="">All Playstyles</option>
-              <option value="Tactical">Tactical Combat</option>
-              <option value="Exploration">Exploration</option>
-              <option value="Survival">Survival</option>
-              <option value="Investigation">Investigation</option>
-              <option value="Narrative">Narrative-Driven</option>
-            </select>
+              <select
+                id="source-filter-select"
+                value={selectedSource}
+                onChange={(e) => setSelectedSource(e.target.value)}
+                className="px-2.5 py-1.5 text-xs rounded-lg bg-stone-950/60 border border-stone-800 text-stone-300 focus:outline-none focus:border-indigo-500"
+              >
+                <option value="">All Sources</option>
+                <option value="ORIGINAL_CANON">Original Canon</option>
+                <option value="COMMUNITY_EXTENDED">Community Extended</option>
+                <option value="HOMEBREW">Homebrew</option>
+              </select>
+
+              <select
+                id="playstyle-filter-select"
+                value={selectedPlaystyle}
+                onChange={(e) => setSelectedPlaystyle(e.target.value)}
+                className="px-2.5 py-1.5 text-xs rounded-lg bg-stone-950/60 border border-stone-800 text-stone-300 focus:outline-none focus:border-indigo-500"
+              >
+                <option value="">All Playstyles</option>
+                <option value="Tactical">Tactical Combat</option>
+                <option value="Exploration">Exploration</option>
+                <option value="Survival">Survival</option>
+                <option value="Investigation">Investigation</option>
+                <option value="Narrative">Narrative-Driven</option>
+              </select>
+            </div>
 
             {(searchQuery || selectedGenre || selectedTone || selectedRules || selectedSetting || selectedSource || selectedPlaystyle) && (
               <button
                 id="reset-filters-btn"
-                onClick={() => {
-                  setSearchQuery('');
-                  setSelectedGenre('');
-                  setSelectedTone('');
-                  setSelectedRules('');
-                  setSelectedSetting('');
-                  setSelectedSource('');
-                  setSelectedPlaystyle('');
-                }}
-                className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 transition"
+                onClick={handleResetFilters}
+                className="flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 transition shrink-0"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
                 <span>Reset</span>
@@ -331,7 +420,7 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
         </div>
 
         {/* Content Area */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           {error && (
             <div className="mb-4 p-3 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -356,19 +445,19 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5 sm:gap-4">
               {worlds.map((w) => (
                 <div
                   key={w.worldId}
                   id={`world-card-${w.worldId}`}
-                  className="rounded-xl border border-stone-800 bg-stone-950/40 hover:border-indigo-500/50 transition p-4 flex flex-col justify-between group shadow-sm hover:shadow-md"
+                  className="rounded-xl border border-stone-800 bg-stone-950/40 hover:border-indigo-500/50 transition p-3.5 sm:p-4 flex flex-col justify-between group shadow-sm hover:shadow-md"
                 >
                   <div>
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <h3 className="text-sm font-semibold text-stone-100 group-hover:text-indigo-300 transition">
                         {w.title}
                       </h3>
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-stone-800 text-stone-400 border border-stone-700">
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-stone-800 text-stone-400 border border-stone-700 shrink-0">
                         v{w.worldManifestVersion || 1}
                       </span>
                     </div>
@@ -377,7 +466,7 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
                       {w.summary || w.description}
                     </p>
 
-                    <div className="flex flex-wrap gap-1.5 mb-4">
+                    <div className="flex flex-wrap gap-1.5 mb-3.5">
                       {w.genreTags?.map((g) => (
                         <span
                           key={g}
@@ -402,7 +491,7 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
                     </div>
                   </div>
 
-                  <div className="pt-3 border-t border-stone-850 flex items-center justify-between gap-2">
+                  <div className="pt-3 border-t border-stone-850 flex flex-wrap items-center justify-between gap-2">
                     <button
                       id={`preview-world-btn-${w.worldId}`}
                       onClick={() => setPreviewWorld(w)}
@@ -410,7 +499,7 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
                     >
                       Preview Lore & Rules
                     </button>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
                       {onGenesisCharacter && (
                         <button
                           id={`genesis-char-btn-${w.worldId}`}
@@ -422,7 +511,8 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
                           title="Create Protagonist for this World"
                         >
                           <User className="w-3.5 h-3.5" />
-                          <span>Create Character</span>
+                          <span className="hidden sm:inline">Create Character</span>
+                          <span className="sm:hidden">Character</span>
                         </button>
                       )}
                       <button
@@ -826,6 +916,159 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
                   </div>
                 </form>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Mobile Filter Sheet Drawer */}
+        {isFilterSheetOpen && (
+          <div
+            id="mobile-filter-sheet-overlay"
+            className="fixed inset-0 z-60 flex items-end sm:items-center justify-center bg-stone-950/80 backdrop-blur-sm p-0 sm:p-4"
+          >
+            <div
+              id="mobile-filter-sheet-container"
+              className="relative w-full max-w-[100vw] sm:max-w-lg max-h-[85vh] flex flex-col rounded-t-2xl sm:rounded-xl border border-stone-800 bg-stone-900 shadow-2xl text-stone-200 overflow-hidden box-border"
+            >
+              {/* Sheet Header */}
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-stone-800 bg-stone-950/80">
+                <div className="flex items-center gap-2">
+                  <SlidersHorizontal className="w-4 h-4 text-indigo-400" />
+                  <h3 className="text-sm font-bold text-stone-100">Filters</h3>
+                  {activeFilterCount > 0 && (
+                    <span className="text-[11px] font-mono px-1.5 py-0.5 rounded bg-indigo-500/20 text-indigo-300">
+                      {activeFilterCount} active
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsFilterSheetOpen(false)}
+                  className="p-1.5 rounded-lg text-stone-400 hover:text-stone-200 hover:bg-stone-800 transition"
+                  aria-label="Close filters"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Sheet Filter Controls */}
+              <div className="p-5 space-y-4 overflow-y-auto flex-1 text-xs">
+                <div>
+                  <label className="block text-stone-300 font-medium mb-1.5">Genre</label>
+                  <select
+                    value={selectedGenre}
+                    onChange={(e) => setSelectedGenre(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-stone-950/70 border border-stone-800 text-stone-200 focus:outline-none focus:border-indigo-500 text-xs"
+                  >
+                    <option value="">All Genres</option>
+                    <option value="High Fantasy">High Fantasy</option>
+                    <option value="Cosmic Horror">Cosmic Horror</option>
+                    <option value="Steampunk">Steampunk</option>
+                    <option value="Cyberpunk">Cyberpunk</option>
+                    <option value="Mythic">Mythic</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-stone-300 font-medium mb-1.5">Tone</label>
+                  <select
+                    value={selectedTone}
+                    onChange={(e) => setSelectedTone(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-stone-950/70 border border-stone-800 text-stone-200 focus:outline-none focus:border-indigo-500 text-xs"
+                  >
+                    <option value="">All Tones</option>
+                    <option value="Heroic">Heroic</option>
+                    <option value="Grimdark">Grimdark</option>
+                    <option value="Mysterious">Mysterious</option>
+                    <option value="Whimsical">Whimsical</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-stone-300 font-medium mb-1.5">Ruleset</label>
+                  <select
+                    value={selectedRules}
+                    onChange={(e) => setSelectedRules(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-stone-950/70 border border-stone-800 text-stone-200 focus:outline-none focus:border-indigo-500 text-xs"
+                  >
+                    <option value="">All Rulesets</option>
+                    <option value="FULL_DND">Full D&D SRD</option>
+                    <option value="HYBRID_DND">Hybrid Narrative D&D</option>
+                    <option value="CUSTOM_HOMEBREW_DND">Custom Homebrew</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-stone-300 font-medium mb-1.5">Setting</label>
+                  <select
+                    value={selectedSetting}
+                    onChange={(e) => setSelectedSetting(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-stone-950/70 border border-stone-800 text-stone-200 focus:outline-none focus:border-indigo-500 text-xs"
+                  >
+                    <option value="">All Settings</option>
+                    <option value="Citadel">Citadel</option>
+                    <option value="Undersea">Undersea / Trenches</option>
+                    <option value="Astral">Astral / Void</option>
+                    <option value="Spire">Clockwork Spire</option>
+                    <option value="Wilderness">Wilderness / Forest</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-stone-300 font-medium mb-1.5">Source</label>
+                  <select
+                    value={selectedSource}
+                    onChange={(e) => setSelectedSource(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-stone-950/70 border border-stone-800 text-stone-200 focus:outline-none focus:border-indigo-500 text-xs"
+                  >
+                    <option value="">All Sources</option>
+                    <option value="ORIGINAL_CANON">Original Canon</option>
+                    <option value="COMMUNITY_EXTENDED">Community Extended</option>
+                    <option value="HOMEBREW">Homebrew</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-stone-300 font-medium mb-1.5">Playstyle</label>
+                  <select
+                    value={selectedPlaystyle}
+                    onChange={(e) => setSelectedPlaystyle(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-stone-950/70 border border-stone-800 text-stone-200 focus:outline-none focus:border-indigo-500 text-xs"
+                  >
+                    <option value="">All Playstyles</option>
+                    <option value="Tactical">Tactical Combat</option>
+                    <option value="Exploration">Exploration</option>
+                    <option value="Survival">Survival</option>
+                    <option value="Investigation">Investigation</option>
+                    <option value="Narrative">Narrative-Driven</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Sheet Footer Actions */}
+              <div className="p-4 border-t border-stone-800 bg-stone-950/80 flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedGenre('');
+                    setSelectedTone('');
+                    setSelectedRules('');
+                    setSelectedSetting('');
+                    setSelectedSource('');
+                    setSelectedPlaystyle('');
+                  }}
+                  className="px-4 py-2 text-xs rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 transition"
+                >
+                  Clear Filters
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsFilterSheetOpen(false)}
+                  className="flex-1 px-4 py-2 text-xs rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition shadow text-center"
+                >
+                  Apply Filters
+                </button>
+              </div>
             </div>
           </div>
         )}

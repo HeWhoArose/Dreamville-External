@@ -47,7 +47,7 @@ export const CharacterDossier: React.FC<CharacterDossierProps> = ({
         <Shield className="w-5 h-5 text-amber-400 mt-0.5 flex-shrink-0" />
         <div className="text-xs text-stone-400">
           <span className="font-semibold text-stone-200 block mb-1">
-            Epistemic Character Projection & Canonical Dossiers (CH4)
+            Epistemic Character Projection & Canonical Dossiers
           </span>
           Information in this dossier is projected from the authoritative Historical Chronicle Engine.
           Only verified observations, public reputation, and authorized milestones are surfaced.

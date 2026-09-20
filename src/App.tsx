@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AppRoute } from './routes';
 import { AppShell } from './components/shell/AppShell';
 import { StoryContextShell } from './components/storyContext/StoryContextShell';
@@ -70,6 +70,7 @@ export const App: React.FC = () => {
   const [worldTemplates, setWorldTemplates] = useState<WorldTemplate[]>([]);
   const [networkError, setNetworkError] = useState<string | null>(null);
   const [isProcessingAction, setIsProcessingAction] = useState<boolean>(false);
+  const actionSeqRef = useRef<number>(0);
 
   // Modal overlays
   const [isAudioSettingsOpen, setIsAudioSettingsOpen] = useState(false);
@@ -209,19 +210,27 @@ export const App: React.FC = () => {
     action: ActionRequest,
     onComplete?: (result: ActionResult) => void
   ) => {
+    const currentSeq = ++actionSeqRef.current;
     setIsProcessingAction(true);
     try {
       const payload = { ...action, storyId: (action as any).storyId || activeStoryId };
       const result = await apiClient.sendAction(payload);
+      if (currentSeq !== actionSeqRef.current) {
+        return;
+      }
       setViewState(result.viewState);
       fetchAuxiliaryData();
       if (onComplete) {
         onComplete(result);
       }
     } catch (err) {
-      console.error('Failed to execute story action:', err);
+      if (currentSeq === actionSeqRef.current) {
+        console.error('Failed to execute story action:', err);
+      }
     } finally {
-      setIsProcessingAction(false);
+      if (currentSeq === actionSeqRef.current) {
+        setIsProcessingAction(false);
+      }
     }
   };
 

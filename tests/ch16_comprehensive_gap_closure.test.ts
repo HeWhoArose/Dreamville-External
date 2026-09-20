@@ -538,7 +538,7 @@ describe('CH16: Comprehensive Architectural Gap Closure & Verification', () => {
       const livePlayerA = repository.getPlayerLifecycle('run_alpha_01')!;
       const livePlayerB = repository.getPlayerLifecycle('run_beta_02')!;
       assert.equal(livePlayerA.name, 'Wounded Hero A');
-      assert.equal(livePlayerB.name, 'Scribe Vael'); // Default seeded name untouched
+      assert.equal(livePlayerB.name, 'Hero B'); // Run B character name untouched by Run A mutations
     });
   });
 });

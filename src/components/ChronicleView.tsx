@@ -35,7 +35,7 @@ export const ChronicleView: React.FC<ChronicleViewProps> = ({
 
         <div className="bg-stone-900/60 rounded-2xl border border-stone-800 p-4">
           <span className="text-[10px] font-mono uppercase tracking-wider text-stone-500 block mb-1">
-            World Chronicle (CH4)
+            World Chronicle
           </span>
           <div className="text-lg font-mono font-bold text-amber-400">
             {chronicleEntries.length} Recorded

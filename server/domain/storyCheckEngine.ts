@@ -1,15 +1,19 @@
 import type {
   CharacterCoreStats,
   CharacterSkill,
-  RollRecord,
+  CharacterStartingConditionState,
+  StoryCheckModifierSource,
   StoryCheckAbility,
   StoryCheckResult,
+  StoryD20AdvantageState,
 } from '../../src/types';
 import { LocalDiceEngine } from './combatEngine';
 
 interface StoryCheckCharacter {
   coreStats?: CharacterCoreStats;
   skills?: CharacterSkill[];
+  conditionState?: CharacterStartingConditionState;
+  sceneText?: string;
 }
 
 interface CheckProfile {
@@ -18,10 +22,11 @@ interface CheckProfile {
   keywords: string[];
   dc: number;
   reason: string;
+  requiresSight?: boolean;
 }
 
 const CHECK_PROFILES: CheckProfile[] = [
-  { skill: 'Perception', ability: 'Wisdom', keywords: ['look', 'observe', 'notice', 'spot', 'scan', 'search', 'survey', 'watch', 'listen', 'hear', 'detect'], dc: 12, reason: 'Noticing or sensing something uncertain.' },
+  { skill: 'Perception', ability: 'Wisdom', keywords: ['look around', 'look', 'observe', 'notice', 'spot', 'scan', 'search', 'survey', 'watch', 'listen', 'hear', 'detect'], dc: 12, reason: 'Noticing something uncertain in the current scene.', requiresSight: true },
   { skill: 'Investigation', ability: 'Intelligence', keywords: ['investigate', 'examine', 'inspect', 'analyze', 'study', 'deduce', 'figure out', 'search the room'], dc: 12, reason: 'Reasoning from physical evidence or clues.' },
   { skill: 'Survival', ability: 'Wisdom', keywords: ['track', 'tracks', 'footprints', 'trail', 'forage', 'navigate', 'survive', 'follow the trail'], dc: 12, reason: 'Reading tracks, terrain, or environmental signs.' },
   { skill: 'Stealth', ability: 'Dexterity', keywords: ['sneak', 'hide', 'conceal', 'move quietly', 'stay hidden', 'creep'], dc: 12, reason: 'Avoiding notice while moving or acting.' },
@@ -83,6 +88,19 @@ function applyDcHint(actionText: string, baseDc: number): number {
   return baseDc;
 }
 
+function containsCondition(
+  state: CharacterStartingConditionState | undefined,
+  ...names: string[]
+): boolean {
+  if (!state?.instances?.length) return false;
+  const wanted = names.map((name) => name.toLowerCase());
+  return state.instances.some(
+    (instance) =>
+      wanted.includes(instance.name.toLowerCase()) ||
+      wanted.includes(instance.definitionId.toLowerCase())
+  );
+}
+
 export class StoryCheckEngine {
   private diceByStory = new Map<string, LocalDiceEngine>();
 
@@ -117,12 +135,87 @@ export class StoryCheckEngine {
       : proficiencyLevelValue === 'PROFICIENT'
       ? levelProficiencyBonus
       : 0;
+    const totalModifier = abilityMod + prof;
     const dc = applyDcHint(text, profile.dc);
-    const roll = this.dice(storyId).roll('1d20', abilityMod + prof);
-    const natural = roll.individualDice[0];
-    const criticalSuccess = natural === 20;
-    const criticalFailure = natural === 1;
-    const success = criticalSuccess || (!criticalFailure && roll.total >= dc);
+
+    const modifierSources: StoryCheckModifierSource[] = [
+      { label: `${profile.ability} modifier`, value: abilityMod, kind: 'ABILITY' },
+    ];
+    if (proficiencyLevelValue === 'EXPERTISE') {
+      modifierSources.push({ label: 'Proficiency (Expertise)', value: prof, kind: 'EXPERTISE' });
+    } else if (proficiencyLevelValue === 'PROFICIENT') {
+      modifierSources.push({ label: 'Proficiency', value: prof, kind: 'PROFICIENCY' });
+    }
+
+    const contextNotes: string[] = [];
+    let advantage = false;
+    let disadvantage = false;
+    let forcedFailure = false;
+
+    if (profile.requiresSight && containsCondition(character.conditionState, 'Blinded')) {
+      forcedFailure = true;
+      contextNotes.push('Blinded: sight-dependent checks automatically fail.');
+    }
+    if (containsCondition(character.conditionState, 'Poisoned')) {
+      disadvantage = true;
+      contextNotes.push('Poisoned: Disadvantage on ability checks.');
+    }
+
+    const sceneText = normalize(character.sceneText || '');
+    if (profile.skill === 'Perception' && /\b(dark|darkness|dim light|fog|smoke|heavily obscured)\b/.test(sceneText)) {
+      disadvantage = true;
+      contextNotes.push('The scene obscures sight: Disadvantage on this Perception check.');
+    }
+
+    if (advantage && disadvantage) {
+      contextNotes.push('Advantage and Disadvantage cancel.');
+      advantage = false;
+      disadvantage = false;
+    }
+
+    const advantageState: StoryD20AdvantageState = advantage
+      ? 'ADVANTAGE'
+      : disadvantage
+      ? 'DISADVANTAGE'
+      : 'NORMAL';
+
+    const firstRoll = this.dice(storyId).roll('1d20', 0);
+    let roll = firstRoll;
+    let selectedDieIndex = 0;
+
+    if (advantageState !== 'NORMAL') {
+      const secondRoll = this.dice(storyId).roll('1d20', 0);
+      const firstValue = firstRoll.individualDice[0];
+      const secondValue = secondRoll.individualDice[0];
+      const keepFirst = advantageState === 'ADVANTAGE'
+        ? firstValue >= secondValue
+        : firstValue <= secondValue;
+      selectedDieIndex = keepFirst ? 0 : 1;
+      const selected = keepFirst ? firstValue : secondValue;
+      roll = {
+        ...firstRoll,
+        rollId: `${firstRoll.rollId}_${secondRoll.rollId}`,
+        formula: '2d20',
+        diceTerms: [{ count: 2, sides: 20 }],
+        individualDice: [firstValue, secondValue],
+        modifier: totalModifier,
+        total: selected + totalModifier,
+        isCriticalSuccess: false,
+        isCriticalFailure: false,
+      };
+    } else {
+      roll = {
+        ...firstRoll,
+        modifier: totalModifier,
+        total: firstRoll.individualDice[0] + totalModifier,
+        isCriticalSuccess: false,
+        isCriticalFailure: false,
+      };
+    }
+
+    const success = forcedFailure ? false : roll.total >= dc;
+    const criticalSuccess = false;
+    const criticalFailure = false;
 
     return {
       checkId: `check_${storyId}_${roll.rollId}`,
@@ -132,16 +225,19 @@ export class StoryCheckEngine {
       proficiencyBonus: levelProficiencyBonus,
       proficiencyLevel: proficiencyLevelValue,
       abilityModifier: abilityMod,
-      totalModifier: abilityMod + prof,
+      totalModifier,
+      modifierSources,
+      advantageState,
+      selectedDieIndex,
       roll,
       total: roll.total,
       success,
       criticalSuccess,
       criticalFailure,
       reason: profile.reason,
+      contextNotes,
     };
   }
-
   private pickProfile(text: string): CheckProfile | null {
     const candidates = CHECK_PROFILES
       .map((profile) => ({

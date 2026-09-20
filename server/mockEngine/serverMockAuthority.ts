@@ -434,6 +434,15 @@ export class ServerMockAuthority {
     conditionEngine.tickActor(actorId, 'TURN', worldRepository.getWorldClock(targetStoryId).getAbsoluteTime());
 
     const conditionStateAfterAction = conditionEngine.getActorState(actorId);
+    const capabilityEngine = worldRepository.getCapabilityEngine(targetStoryId);
+    const currentPowerState = capabilityEngine.getPowerState(actorId);
+    if (conditionStateAfterAction && currentPowerState) {
+      capabilityEngine.setPowerState(actorId, {
+        ...currentPowerState,
+        healthCurrent: conditionStateAfterAction.healthCurrent,
+        healthMax: conditionStateAfterAction.healthMax,
+      });
+    }
     if (conditionStateAfterAction?.dead && player && !player.isDead) {
       worldRepository.updatePlayerLifecycle(targetStoryId, player.copyWith({
         deathRecord: {

@@ -19,7 +19,6 @@ const world: WorldTemplate = {
   creatorId: 'test',
   sourcePolicy: 'ORIGINAL_CANON',
   defaultEra: 'Current Era',
-  worldManifestVersion: 1,
   versionHash: 'test',
   canonicalCapabilities: [],
   capabilities: [],

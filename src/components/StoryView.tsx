@@ -14,6 +14,7 @@ import {
   AlertCircle,
   ArrowRight,
   Compass,
+  Dices,
   Headphones,
   Loader2,
   Mic,
@@ -47,6 +48,41 @@ interface StoryViewProps {
   onRetryOpening?: () => void;
 }
 
+const StoryCheckCard: React.FC<{ check: NonNullable<ActionLog['checkResult']> }> = ({ check }) => (
+  <div className="ml-[3.25rem] rounded-2xl border border-stone-800 bg-stone-950/80 px-4 py-3">
+    <div className="flex items-start justify-between gap-4">
+      <div className="flex items-center gap-2">
+        <Dices className="h-4 w-4 text-stone-500" />
+        <div>
+          <p className="text-xs font-semibold text-stone-300">{check.skill} Check</p>
+          <p className="text-[10px] text-stone-600">
+            {check.ability} {check.proficiencyLevel === 'EXPERTISE' ? '· Expertise' : check.proficiencyLevel === 'PROFICIENT' ? '· Proficient' : ''}
+          </p>
+        </div>
+      </div>
+      <div className="text-right">
+        <p className="text-[10px] uppercase tracking-wide text-stone-600">DC</p>
+        <p className="text-lg font-semibold text-stone-200">{check.difficultyClass}</p>
+      </div>
+    </div>
+    <div className="mt-3 flex items-center justify-between rounded-xl border border-stone-900 bg-stone-900/60 px-3 py-2">
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-stone-500">d20</span>
+        <span className="text-base font-semibold text-stone-200">{check.roll.individualDice[0]}</span>
+        <span className="text-stone-700">+</span>
+        <span className="text-xs text-stone-400">{check.totalModifier}</span>
+      </div>
+      <div className="text-right">
+        <p className="text-[10px] text-stone-600">Total</p>
+        <p className="text-xl font-semibold text-stone-100">{check.total}</p>
+      </div>
+    </div>
+    <div className={`mt-2 flex items-center justify-between text-xs ${check.success ? 'text-stone-300' : 'text-stone-500'}`}>
+      <span>{check.criticalSuccess ? 'Critical success' : check.criticalFailure ? 'Critical failure' : check.success ? 'Success' : 'Failure'}</span>
+      <span className="text-[10px] text-stone-600">{check.reason}</span>
+    </div>
+  </div>
+);
 const Portrait: React.FC<{
   imageUrl?: string;
   emoji?: string;
@@ -489,6 +525,8 @@ export const StoryView: React.FC<StoryViewProps> = ({
                     <p className="text-sm leading-6 text-stone-300">“{action.description}”</p>
                   </div>
                 </div>
+
+                {action.checkResult && <StoryCheckCard check={action.checkResult} />}
 
                 {(action.narrativeResponse || action.authoritativeFeedback) && (
                   <div className="ml-[3.25rem] rounded-2xl rounded-tl-md border border-stone-800/80 bg-stone-950/60 px-4 py-3">

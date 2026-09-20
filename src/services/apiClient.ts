@@ -1503,12 +1503,13 @@ class ApiClient {
     worldId: string,
     naturalLanguageConcept: string,
     existingDraft?: any,
-    userEditedFields?: string[]
+    userEditedFields?: string[],
+    narrativeRole?: 'PROTAGONIST' | 'SIDE_CHARACTER' | 'FREE_ROAM'
   ): Promise<any> {
     const res = await fetch(`${this.baseUrl}/worlds/${encodeURIComponent(worldId)}/characters/extract`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ naturalLanguageConcept, existingDraft, userEditedFields }),
+      body: JSON.stringify({ naturalLanguageConcept, existingDraft, userEditedFields, narrativeRole }),
     });
     if (!res.ok) throw new Error(`Failed to extract character draft: HTTP ${res.status}`);
     return await res.json();

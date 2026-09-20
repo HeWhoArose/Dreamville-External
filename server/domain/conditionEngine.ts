@@ -247,6 +247,33 @@ export class ConditionEngine {
     state.dead = state.healthCurrent <= 0;
   }
 
+  public markUnconsciousAtZero(actorId: string): void {
+    const state = this.requireActor(actorId);
+    state.healthCurrent = 0;
+    state.dead = false;
+    if (!state.instances.some((instance) => instance.name.toLowerCase() === 'unconscious')) {
+      this.applyConditionToState(state, {
+        definitionIdOrName: 'Unconscious',
+        nowSeconds: 0,
+      });
+    }
+  }
+
+  public markDead(actorId: string): void {
+    const state = this.requireActor(actorId);
+    state.dead = true;
+    state.healthCurrent = Math.max(0, state.healthCurrent);
+  }
+
+  public recoverFromZero(actorId: string, healthCurrent: number): void {
+    const state = this.requireActor(actorId);
+    state.healthCurrent = Math.max(1, Math.min(state.healthMax, Math.floor(healthCurrent)));
+    state.dead = false;
+    state.instances = state.instances.filter(
+      (instance) => instance.name.toLowerCase() !== 'unconscious'
+    );
+  }
+
   public setProfiles(
     actorId: string,
     profiles: {

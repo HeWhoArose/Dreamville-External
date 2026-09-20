@@ -1,5 +1,6 @@
 import { CharacterSkill, StartingEquipmentItem, ItemOrSkillIcon } from '../types';
 import { getEquipmentClass } from './equipmentRulesEngine';
+import { appendImageOutputSpecification } from './imageAssetSpecs';
 
 /**
   * Icon System Module
@@ -89,14 +90,9 @@ export function generateIconPrompt(
 ): string {
   const name = itemOrSkill.name;
   const desc = itemOrSkill.description || '';
-  const context = worldTitle ? `in the style of ${worldTitle}` : 'high-fantasy tabletop RPG style';
-
-  if (type === 'SKILL') {
-    const skill = itemOrSkill as CharacterSkill;
-    return `Game skill icon badge for "${name}", governing ability ${skill.governingAbility}. ${desc}. Clean square vector icon, vibrant colors, dark background, ${context}.`;
-  } else {
-    const item = itemOrSkill as StartingEquipmentItem;
-    const eqClass = getEquipmentClass(item);
-    return `Game equipment icon badge for "${name}" (${eqClass}). ${desc}. Detailed inventory item art, crisp object lighting, dark square frame, ${context}.`;
-  }
+  const context = worldTitle ? 'in the style of ' + worldTitle : 'high-fantasy tabletop RPG style';
+  const rawPrompt = type === 'SKILL'
+    ? 'Game skill icon badge for "' + name + '", governing ability ' + (itemOrSkill as CharacterSkill).governingAbility + '. ' + desc + '. Clean square vector icon, centered subject, simple readable silhouette, dark background, ' + context + '.'
+    : 'Game equipment icon badge for "' + name + '" (' + getEquipmentClass(itemOrSkill as StartingEquipmentItem) + '). ' + desc + '. Detailed inventory item art, fully visible centered object, crisp object lighting, dark square frame, ' + context + '.';
+  return appendImageOutputSpecification(rawPrompt, type === 'SKILL' ? 'skill_icon' : 'equipment');
 }

@@ -971,6 +971,28 @@ As regional tensions rise, rival factions maneuver for influence over critical r
         });
       }
 
+      const rawChallenges = Array.isArray(raw.storyCheckChallenges)
+        ? raw.storyCheckChallenges
+        : Array.isArray(raw.savingThrowChallenges)
+        ? raw.savingThrowChallenges
+        : [];
+      const storyCheckChallenges = rawChallenges
+        .filter((challenge: any) => challenge && typeof challenge === 'object')
+        .map((challenge: any, challengeIndex: number) => ({
+          ...challenge,
+          id: String(challenge.id || challenge.challengeId || `challenge_${id}_${challengeIndex + 1}`),
+          label: String(challenge.label || challenge.name || `Challenge in ${title}`),
+          sourceType: challenge.sourceType || 'EVENT',
+          sourceId: String(challenge.sourceId || id),
+          keywords: Array.isArray(challenge.keywords)
+            ? challenge.keywords.filter((keyword: any) => typeof keyword === 'string' && keyword.trim())
+            : typeof challenge.keywords === 'string'
+            ? [challenge.keywords]
+            : [],
+          difficultyClass: Number(challenge.difficultyClass ?? challenge.dc ?? 13),
+        }))
+        .filter((challenge: any) => challenge.keywords.length > 0 && Number.isFinite(challenge.difficultyClass));
+
       cleanedEvents.push({
         id,
         title,
@@ -981,6 +1003,7 @@ As regional tensions rise, rival factions maneuver for influence over critical r
         locationId,
         preconditions,
         plannedConsequences,
+        storyCheckChallenges,
         visibility,
         status
       });

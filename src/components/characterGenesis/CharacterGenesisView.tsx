@@ -73,6 +73,8 @@ import {
 } from '../../data/iconSystem';
 import { IconStudioModal } from './IconStudioModal';
 import { apiClient } from '../../services/apiClient';
+import { getImageAssetSpec, appendImageOutputSpecification } from '../../data/imageAssetSpecs';
+import { normalizeImageFile, normalizeImageUrl } from '../../utils/imageAssetNormalizer';
 
 interface CharacterGenesisViewProps {
   initialWorld?: WorldTemplate | null;
@@ -219,6 +221,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
   const [portraitError, setPortraitError] = useState<string | null>(null);
   const [imageFailed, setImageFailed] = useState<boolean>(false);
   const [customImageUrl, setCustomImageUrl] = useState<string>('');
+  const [isNormalizingPortrait, setIsNormalizingPortrait] = useState(false);
   const [customFeatName, setCustomFeatName] = useState<string>('');
   const [customFeatDescription, setCustomFeatDescription] = useState<string>('');
   const [customEquipmentName, setCustomEquipmentName] = useState<string>('');
@@ -1164,11 +1167,20 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
     setPortraitError(null);
     setImageFailed(false);
     try {
+      const spec = getImageAssetSpec('character_portrait');
+      const prompt = appendImageOutputSpecification(
+        draft.portraitAsset?.promptFallback ||
+          'Portrait of ' + draft.identity.name + ', ' + draft.identity.species + ' ' + draft.role.profession,
+        'character_portrait'
+      );
       const res = await apiClient.generateImage({
-        prompt: draft.portraitAsset?.promptFallback || `Portrait of ${draft.identity.name}, ${draft.identity.species} ${draft.role.profession}`,
+        prompt,
         storyId: 'default_story',
+        slotType: 'character_portrait',
+        aspectRatio: spec.aspectRatio,
+        tags: ['character_portrait'],
       });
-      if (res && res.success && res.imageUrl) {
+      if (res?.success && res.imageUrl) {
         setDraft({
           ...draft,
           portraitAsset: {
@@ -1182,27 +1194,14 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
         });
         markFieldEdited('portraitAsset');
       } else {
-        const reason = res?.errorReason || 'Image generation failed or returned no image.';
-        setPortraitError(reason);
-        setDraft({
-          ...draft,
-          portraitAsset: {
-            ...draft.portraitAsset!,
-            status: 'failed',
-            failureReason: reason,
-          },
-        });
+        throw new Error(res?.errorReason || 'Image generation failed or returned no image.');
       }
     } catch (err: any) {
       const reason = err?.message || 'Portrait generation request failed.';
       setPortraitError(reason);
       setDraft({
         ...draft,
-        portraitAsset: {
-          ...draft.portraitAsset!,
-          status: 'failed',
-          failureReason: reason,
-        },
+        portraitAsset: { ...draft.portraitAsset!, status: 'failed', failureReason: reason },
       });
     } finally {
       setIsGeneratingPortrait(false);
@@ -3440,7 +3439,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                           <img
                             src={imageUrl}
                             alt={draft.identity.name}
-                            className="w-full h-full max-w-full max-h-full object-cover"
+                            className="w-full h-full max-w-full max-h-full object-contain p-1"
                             onError={() => {
                               setImageFailed(true);
                               if (draft.portraitAsset) {
@@ -3484,23 +3483,26 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                         onChange={(e) => {
                           const file = e.target.files?.[0];
                           if (!file || !draft) return;
-                          const reader = new FileReader();
-                          reader.onload = () => {
-                            setImageFailed(false);
-                            setPortraitError(null);
-                            setDraft({
-                              ...draft,
-                              portraitAsset: {
-                                ...draft.portraitAsset!,
-                                imageUrl: String(reader.result),
-                                source: 'UPLOAD',
-                                isFallback: false,
-                                status: 'ready',
-                              },
-                            });
-                            markFieldEdited('portraitAsset');
-                          };
-                          reader.readAsDataURL(file);
+                          setIsNormalizingPortrait(true);
+                           setImageFailed(false);
+                           setPortraitError(null);
+                           normalizeImageFile(file, getImageAssetSpec('character_portrait'))
+                             .then((normalized) => {
+                               setDraft({
+                                 ...draft,
+                                 portraitAsset: {
+                                   ...draft.portraitAsset!,
+                                   imageUrl: normalized.dataUrl,
+                                   source: 'UPLOAD',
+                                   isFallback: false,
+                                   status: 'ready',
+                                   failureReason: undefined,
+                                 },
+                               });
+                               markFieldEdited('portraitAsset');
+                             })
+                             .catch((err: any) => setPortraitError(err?.message || 'Could not normalize the uploaded portrait.'))
+                             .finally(() => setIsNormalizingPortrait(false));
                         }}
                       />
                     </label>
@@ -3593,19 +3595,26 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                       <button
                         onClick={() => {
                           if (!customImageUrl.trim()) return;
-                          setImageFailed(false);
-                          setPortraitError(null);
-                          setDraft({
-                            ...draft,
-                            portraitAsset: {
-                              ...draft.portraitAsset!,
-                              imageUrl: customImageUrl.trim(),
-                              source: 'BROWSE',
-                              isFallback: false,
-                              status: 'ready',
-                            },
-                          });
-                          markFieldEdited('portraitAsset');
+                          setIsNormalizingPortrait(true);
+                           setImageFailed(false);
+                           setPortraitError(null);
+                           normalizeImageUrl(customImageUrl.trim(), getImageAssetSpec('character_portrait'))
+                             .then((normalized) => {
+                               setDraft({
+                                 ...draft,
+                                 portraitAsset: {
+                                   ...draft.portraitAsset!,
+                                   imageUrl: normalized.dataUrl,
+                                   source: 'BROWSE',
+                                   isFallback: false,
+                                   status: 'ready',
+                                   failureReason: undefined,
+                                 },
+                               });
+                               markFieldEdited('portraitAsset');
+                             })
+                             .catch((err: any) => setPortraitError(err?.message || 'The remote image could not be normalized. Upload the image file instead if the host blocks CORS.'))
+                             .finally(() => setIsNormalizingPortrait(false));
                         }}
                         className="shrink-0 px-3 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-white whitespace-nowrap"
                       >
@@ -3617,7 +3626,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                   <div className="pt-2">
                     <button
                       onClick={handleGeneratePortrait}
-                      disabled={isGeneratingPortrait}
+                      disabled={isGeneratingPortrait || isNormalizingPortrait}
                       className="max-w-full flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-xs font-medium text-white transition-colors"
                     >
                       {isGeneratingPortrait ? (

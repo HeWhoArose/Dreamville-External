@@ -460,6 +460,24 @@ export interface CharacterStatDefinition {
   min?: number;
   max?: number;
   description?: string;
+  category?: 'custom_attribute' | 'world_stat' | string;
+  mechanicalRole?: string;
+  worldCompatibility?: string;
+  provenance: CharacterProvenanceSource;
+}
+
+export interface CharacterSkill {
+  id: string;
+  name: string;
+  governingAbility: 'Strength' | 'Dexterity' | 'Constitution' | 'Intelligence' | 'Wisdom' | 'Charisma' | string;
+  proficiency: 'NONE' | 'PROFICIENT' | 'EXPERTISE';
+  isProficient?: boolean;
+  isExpertise?: boolean;
+  isCustom?: boolean;
+  description: string;
+  mechanicalDescription?: string;
+  tags?: string[];
+  worldCompatibility?: string;
   provenance: CharacterProvenanceSource;
 }
 
@@ -1223,6 +1241,7 @@ export interface CharacterGenesisDraft {
   traits: string[];
   capabilities: CapabilityDefinition[];
   generatedSkills: GeneratedTechnique[];
+  skills?: CharacterSkill[];
   feats: CharacterFeat[];
   titles: CharacterTitle[];
   startingEquipment: StartingEquipmentConfig;
@@ -1269,6 +1288,7 @@ export interface ConfirmedCharacter {
   traits: string[];
   capabilities: CapabilityDefinition[];
   generatedSkills: GeneratedTechnique[];
+  skills?: CharacterSkill[];
   feats: CharacterFeat[];
   titles: CharacterTitle[];
   startingEquipment: StartingEquipmentConfig;
@@ -1309,6 +1329,40 @@ export interface CustomFeatProposalRequest {
   worldId: string;
   featName: string;
   featConcept: string;
+  characterContext?: {
+    role?: string;
+    background?: string;
+    species?: string;
+  };
+}
+
+export interface CustomAttributeProposalRequest {
+  worldId: string;
+  attributeName: string;
+  attributeConcept: string;
+  category?: 'custom_attribute' | 'world_stat' | string;
+  characterContext?: {
+    role?: string;
+    background?: string;
+    species?: string;
+  };
+}
+
+export interface CustomSkillProposalRequest {
+  worldId: string;
+  skillName: string;
+  skillConcept: string;
+  characterContext?: {
+    role?: string;
+    background?: string;
+    species?: string;
+  };
+}
+
+export interface CustomEquipmentProposalRequest {
+  worldId: string;
+  itemName: string;
+  itemConcept: string;
   characterContext?: {
     role?: string;
     background?: string;

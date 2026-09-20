@@ -1616,6 +1616,52 @@ class ApiClient {
     return await res.json();
   }
 
+  public async proposeCustomAttribute(
+    worldId: string,
+    attributeName: string,
+    attributeConcept: string,
+    category?: string,
+    characterContext?: any
+  ): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/worlds/${encodeURIComponent(worldId)}/characters/custom-attribute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ attributeName, attributeConcept, category, characterContext }),
+    });
+    if (!res.ok) throw new Error(`Failed to propose custom attribute: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  public async proposeCustomSkill(
+    worldId: string,
+    skillName: string,
+    skillConcept: string,
+    characterContext?: any
+  ): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/worlds/${encodeURIComponent(worldId)}/characters/custom-skill`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ skillName, skillConcept, characterContext }),
+    });
+    if (!res.ok) throw new Error(`Failed to propose custom skill: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  public async proposeCustomEquipment(
+    worldId: string,
+    itemName: string,
+    itemConcept: string,
+    characterContext?: any
+  ): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/worlds/${encodeURIComponent(worldId)}/characters/custom-equipment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ itemName, itemConcept, characterContext }),
+    });
+    if (!res.ok) throw new Error(`Failed to propose custom equipment: HTTP ${res.status}`);
+    return await res.json();
+  }
+
   public async getCharacterDrafts(worldId: string): Promise<any> {
     const res = await fetch(`${this.baseUrl}/worlds/${encodeURIComponent(worldId)}/characters/drafts`, {
       method: 'GET',

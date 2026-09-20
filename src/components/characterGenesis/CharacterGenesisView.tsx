@@ -26,6 +26,14 @@ import {
   ChevronDown,
   Play,
   BarChart2,
+  Eye,
+  X,
+  Sword,
+  Package,
+  HelpCircle,
+  Briefcase,
+  Award,
+  BookOpen,
 } from 'lucide-react';
 import {
   CharacterGenesisDraft,
@@ -38,7 +46,14 @@ import {
   CharacterStoryMode,
   CharacterCoreStats,
   CharacterFeat,
+  CharacterSkill,
+  CharacterStatDefinition,
 } from '../../types';
+import {
+  STANDARD_DND_SKILLS_CATALOG,
+  getInitialDndSkills,
+  calculateSkillModifier,
+} from '../../data/dndSkillsCatalog';
 import { apiClient } from '../../services/apiClient';
 
 interface CharacterGenesisViewProps {
@@ -129,6 +144,29 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
   const [isProposingFeat, setIsProposingFeat] = useState<boolean>(false);
   const [featProposalError, setFeatProposalError] = useState<string | null>(null);
   const [pendingFeatProposal, setPendingFeatProposal] = useState<CharacterFeat | null>(null);
+
+  // Custom skill proposal state
+  const [customSkillName, setCustomSkillName] = useState<string>('');
+  const [customSkillConcept, setCustomSkillConcept] = useState<string>('');
+  const [isProposingSkill, setIsProposingSkill] = useState<boolean>(false);
+  const [skillProposalError, setSkillProposalError] = useState<string | null>(null);
+  const [pendingSkillProposal, setPendingSkillProposal] = useState<CharacterSkill | null>(null);
+
+  // Custom attribute proposal state
+  const [customAttributeConcept, setCustomAttributeConcept] = useState<string>('');
+  const [isProposingAttribute, setIsProposingAttribute] = useState<boolean>(false);
+  const [attributeProposalError, setAttributeProposalError] = useState<string | null>(null);
+  const [pendingAttributeProposal, setPendingAttributeProposal] = useState<CharacterStatDefinition | null>(null);
+
+  // Custom equipment proposal state
+  const [isProposingEquipment, setIsProposingEquipment] = useState<boolean>(false);
+  const [equipmentProposalError, setEquipmentProposalError] = useState<string | null>(null);
+  const [pendingEquipmentProposal, setPendingEquipmentProposal] = useState<StartingEquipmentItem | null>(null);
+
+  // Inspection & Modals
+  const [inspectingItem, setInspectingItem] = useState<StartingEquipmentItem | null>(null);
+  const [inspectingSkill, setInspectingSkill] = useState<CharacterSkill | null>(null);
+  const [equipSlotSelectModalItem, setEquipSlotSelectModalItem] = useState<StartingEquipmentItem | null>(null);
 
   // Draft persistence & history
   const [savedDrafts, setSavedDrafts] = useState<CharacterGenesisDraft[]>([]);
@@ -625,6 +663,283 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
 
   const handleRejectFeatProposal = () => {
     setPendingFeatProposal(null);
+  };
+
+  // Ensure standard D&D 18 skills exist on draft
+  useEffect(() => {
+    if (draft && (!draft.skills || draft.skills.length === 0)) {
+      const initialSkills = getInitialDndSkills(draft.skills || []);
+      setDraft((prev) => (prev ? { ...prev, skills: initialSkills } : prev));
+    }
+  }, [draft?.draftId]);
+
+  // 4. Propose Custom Skill (AI Proposal Review Gate)
+  const handleProposeCustomSkill = async () => {
+    if (!selectedWorld) return;
+    if (!customSkillName.trim() && !customSkillConcept.trim()) {
+      setSkillProposalError('Enter a skill name or skill concept description.');
+      return;
+    }
+
+    setSkillProposalError(null);
+    setIsProposingSkill(true);
+
+    try {
+      const res = await apiClient.proposeCustomSkill(
+        selectedWorld.worldId,
+        customSkillName,
+        customSkillConcept || customSkillName,
+        {
+          role: draft?.role?.role || draft?.role?.archetype || draft?.role?.profession,
+          background: draft?.background?.history,
+          species: draft?.identity?.species,
+        }
+      );
+
+      if (res.success && res.skill) {
+        setPendingSkillProposal(res.skill);
+      } else {
+        throw new Error(res.error || 'Failed to propose custom skill.');
+      }
+    } catch (err: any) {
+      setSkillProposalError(err.message || 'Error proposing custom skill.');
+    } finally {
+      setIsProposingSkill(false);
+    }
+  };
+
+  const handleAcceptSkillProposal = () => {
+    if (!pendingSkillProposal || !draft) return;
+    const currentSkills = getInitialDndSkills(draft.skills || []);
+    setDraft({
+      ...draft,
+      skills: [...currentSkills, pendingSkillProposal],
+    });
+
+    markFieldEdited('skills');
+    setPendingSkillProposal(null);
+    setCustomSkillName('');
+    setCustomSkillConcept('');
+  };
+
+  const handleRejectSkillProposal = () => {
+    setPendingSkillProposal(null);
+  };
+
+  const toggleSkillProficiency = (skillId: string) => {
+    if (!draft) return;
+    const currentSkills = getInitialDndSkills(draft.skills || []);
+    const updatedSkills = currentSkills.map((sk) => {
+      if (sk.id === skillId) {
+        let nextProf: 'NONE' | 'PROFICIENT' | 'EXPERTISE' = 'PROFICIENT';
+        if (sk.proficiency === 'NONE') nextProf = 'PROFICIENT';
+        else if (sk.proficiency === 'PROFICIENT') nextProf = 'EXPERTISE';
+        else nextProf = 'NONE';
+
+        return {
+          ...sk,
+          proficiency: nextProf,
+          isProficient: nextProf === 'PROFICIENT' || nextProf === 'EXPERTISE',
+          isExpertise: nextProf === 'EXPERTISE',
+          provenance: 'USER_EDITED' as CharacterProvenanceSource,
+        };
+      }
+      return sk;
+    });
+
+    setDraft({ ...draft, skills: updatedSkills });
+    markFieldEdited('skills');
+  };
+
+  // 5. Propose Custom Attribute (AI Proposal Review Gate)
+  const handleProposeCustomAttribute = async () => {
+    if (!selectedWorld) return;
+    if (!customAttributeName.trim() && !customAttributeConcept.trim()) {
+      setAttributeProposalError('Enter an attribute name or concept description.');
+      return;
+    }
+
+    setAttributeProposalError(null);
+    setIsProposingAttribute(true);
+
+    try {
+      const res = await apiClient.proposeCustomAttribute(
+        selectedWorld.worldId,
+        customAttributeName,
+        customAttributeConcept || customAttributeName,
+        'custom_attribute',
+        {
+          role: draft?.role?.role || draft?.role?.archetype || draft?.role?.profession,
+          background: draft?.background?.history,
+          species: draft?.identity?.species,
+        }
+      );
+
+      if (res.success && res.attribute) {
+        setPendingAttributeProposal(res.attribute);
+      } else {
+        throw new Error(res.error || 'Failed to propose custom attribute.');
+      }
+    } catch (err: any) {
+      setAttributeProposalError(err.message || 'Error proposing custom attribute.');
+    } finally {
+      setIsProposingAttribute(false);
+    }
+  };
+
+  const handleAcceptAttributeProposal = () => {
+    if (!pendingAttributeProposal || !draft) return;
+    setDraft({
+      ...draft,
+      attributes: [...(draft.attributes || []), pendingAttributeProposal],
+    });
+
+    markFieldEdited('attributes');
+    setPendingAttributeProposal(null);
+    setCustomAttributeName('');
+    setCustomAttributeConcept('');
+  };
+
+  const handleRejectAttributeProposal = () => {
+    setPendingAttributeProposal(null);
+  };
+
+  // 6. Propose Custom Equipment (AI Proposal Review Gate)
+  const handleProposeCustomEquipment = async () => {
+    if (!selectedWorld) return;
+    if (!customEquipmentName.trim() && !customEquipmentDescription.trim()) {
+      setEquipmentProposalError('Enter an equipment item name or concept description.');
+      return;
+    }
+
+    setEquipmentProposalError(null);
+    setIsProposingEquipment(true);
+
+    try {
+      const res = await apiClient.proposeCustomEquipment(
+        selectedWorld.worldId,
+        customEquipmentName,
+        customEquipmentDescription || customEquipmentName,
+        {
+          role: draft?.role?.role || draft?.role?.archetype || draft?.role?.profession,
+          background: draft?.background?.history,
+          species: draft?.identity?.species,
+        }
+      );
+
+      if (res.success && res.item) {
+        setPendingEquipmentProposal(res.item);
+      } else {
+        throw new Error(res.error || 'Failed to propose custom equipment.');
+      }
+    } catch (err: any) {
+      setEquipmentProposalError(err.message || 'Error proposing custom equipment.');
+    } finally {
+      setIsProposingEquipment(false);
+    }
+  };
+
+  const handleAcceptEquipmentProposal = () => {
+    if (!pendingEquipmentProposal || !draft) return;
+    setDraft({
+      ...draft,
+      startingEquipment: {
+        ...draft.startingEquipment,
+        inventory: [...draft.startingEquipment.inventory, pendingEquipmentProposal],
+      },
+    });
+
+    markFieldEdited('startingEquipment');
+    setPendingEquipmentProposal(null);
+    setCustomEquipmentName('');
+    setCustomEquipmentDescription('');
+  };
+
+  const handleRejectEquipmentProposal = () => {
+    setPendingEquipmentProposal(null);
+  };
+
+  // Equipment Equip / Unequip / Delete Handlers
+  const handleEquipItem = (itemToEquip: StartingEquipmentItem, targetSlot?: string) => {
+    if (!draft) return;
+    const slotToUse = targetSlot || itemToEquip.slot || 'mainHand';
+
+    const currentEquipped = draft.startingEquipment.equipped.filter((i) => i.id !== itemToEquip.id);
+    const currentInventory = draft.startingEquipment.inventory.filter((i) => i.id !== itemToEquip.id);
+
+    const occupyingItem = currentEquipped.find((i) => (i.slot || '').toLowerCase() === slotToUse.toLowerCase());
+
+    let newEquipped = currentEquipped.filter((i) => (i.slot || '').toLowerCase() !== slotToUse.toLowerCase());
+    let newInventory = [...currentInventory];
+
+    if (occupyingItem) {
+      newInventory.push({
+        ...occupyingItem,
+        isEquipped: false,
+        slot: undefined,
+        provenance: occupyingItem.provenance === 'PLAYER_INPUT' ? 'PLAYER_INPUT' : 'USER_EDITED',
+      });
+    }
+
+    newEquipped.push({
+      ...itemToEquip,
+      isEquipped: true,
+      slot: slotToUse,
+      provenance: itemToEquip.provenance === 'PLAYER_INPUT' ? 'PLAYER_INPUT' : 'USER_EDITED',
+    });
+
+    setDraft({
+      ...draft,
+      startingEquipment: {
+        ...draft.startingEquipment,
+        equipped: newEquipped,
+        inventory: newInventory,
+      },
+    });
+
+    markFieldEdited('startingEquipment');
+    setInspectingItem(null);
+    setEquipSlotSelectModalItem(null);
+  };
+
+  const handleUnequipItem = (itemToUnequip: StartingEquipmentItem) => {
+    if (!draft) return;
+    const updatedEquipped = draft.startingEquipment.equipped.filter((i) => i.id !== itemToUnequip.id);
+    const updatedInventory: StartingEquipmentItem[] = [
+      ...draft.startingEquipment.inventory.filter((i) => i.id !== itemToUnequip.id),
+      {
+        ...itemToUnequip,
+        isEquipped: false,
+        slot: undefined,
+        provenance: (itemToUnequip.provenance === 'PLAYER_INPUT' ? 'PLAYER_INPUT' : 'USER_EDITED') as CharacterProvenanceSource,
+      },
+    ];
+
+    setDraft({
+      ...draft,
+      startingEquipment: {
+        ...draft.startingEquipment,
+        equipped: updatedEquipped,
+        inventory: updatedInventory,
+      },
+    });
+
+    markFieldEdited('startingEquipment');
+    setInspectingItem(null);
+  };
+
+  const handleDeleteItem = (itemId: string) => {
+    if (!draft) return;
+    setDraft({
+      ...draft,
+      startingEquipment: {
+        ...draft.startingEquipment,
+        equipped: draft.startingEquipment.equipped.filter((i) => i.id !== itemId),
+        inventory: draft.startingEquipment.inventory.filter((i) => i.id !== itemId),
+      },
+    });
+    markFieldEdited('startingEquipment');
+    setInspectingItem(null);
   };
 
   // Update Core D&D Stats with 1-20 limits on ability scores
@@ -1955,41 +2270,281 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
               </div>
             </div>
 
+            {/* D&D Skills & Proficiencies Card */}
+            <div className="p-6 rounded-xl bg-neutral-950 border border-neutral-800 space-y-6">
+              <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
+                <div>
+                  <h2 className="text-base font-semibold text-white flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-indigo-400" />
+                    D&D Skills & Proficiencies
+                  </h2>
+                  <p className="text-xs text-neutral-400 mt-0.5">
+                    18 official D&D 5e skills automatically initialized and calculated from ability modifiers and proficiency bonus.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono px-2.5 py-1 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">
+                    PB: +{Math.floor(( (draft.coreStats?.level || 1) - 1) / 4) + 2}
+                  </span>
+                  <span className="text-xs font-mono px-2.5 py-1 rounded bg-neutral-900 text-neutral-300 border border-neutral-800">
+                    Proficient: {(draft.skills || []).filter(s => s.proficiency === 'PROFICIENT' || s.proficiency === 'EXPERTISE').length}
+                  </span>
+                </div>
+              </div>
+
+              {/* Skills Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-96 overflow-y-auto pr-1">
+                {getInitialDndSkills(draft.skills || []).map((skill) => {
+                  const modObj = calculateSkillModifier(skill, draft.coreStats);
+                  const modStr = modObj.modString;
+                  return (
+                    <div
+                      key={skill.id}
+                      className={`p-2.5 rounded-lg border transition-all flex items-center justify-between text-xs ${
+                        skill.proficiency === 'EXPERTISE'
+                          ? 'bg-purple-950/40 border-purple-500/50'
+                          : skill.proficiency === 'PROFICIENT'
+                          ? 'bg-emerald-950/40 border-emerald-500/50'
+                          : 'bg-neutral-900 border-neutral-800'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <button
+                          onClick={() => setInspectingSkill(skill)}
+                          className="text-neutral-500 hover:text-indigo-300 shrink-0"
+                          title="Inspect skill details"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        <div className="min-w-0">
+                          <div className="font-semibold text-white truncate flex items-center gap-1.5">
+                            <span className="truncate">{skill.name}</span>
+                            {skill.isCustom && (
+                              <span className="text-[9px] px-1 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 font-mono shrink-0">
+                                CUSTOM
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-neutral-400 font-mono">
+                            {skill.governingAbility.slice(0, 3)}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-mono text-xs font-bold text-indigo-300">
+                          {modStr}
+                        </span>
+                        <button
+                          onClick={() => toggleSkillProficiency(skill.id)}
+                          className={`px-2 py-0.5 rounded font-mono text-[10px] uppercase font-semibold transition-all ${
+                            skill.proficiency === 'EXPERTISE'
+                              ? 'bg-purple-600 text-white shadow-sm'
+                              : skill.proficiency === 'PROFICIENT'
+                              ? 'bg-emerald-600 text-white shadow-sm'
+                              : 'bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700'
+                          }`}
+                          title="Click to cycle: None -> Proficient -> Expertise -> None"
+                        >
+                          {skill.proficiency === 'EXPERTISE' ? 'EXP' : skill.proficiency === 'PROFICIENT' ? 'PROF' : '—'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* AI Custom Skill Synthesis */}
+              <div className="p-4 rounded-xl bg-neutral-900 border border-neutral-800 space-y-3 pt-3">
+                <div className="text-xs font-semibold text-indigo-300 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>AI Custom Skill Synthesis</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    value={customSkillName}
+                    onChange={(e) => setCustomSkillName(e.target.value)}
+                    placeholder="Custom skill name (e.g. Void Navigation)"
+                    className="px-3 py-2 rounded bg-neutral-950 border border-neutral-700 text-xs text-white"
+                  />
+                  <input
+                    type="text"
+                    value={customSkillConcept}
+                    onChange={(e) => setCustomSkillConcept(e.target.value)}
+                    placeholder="Skill concept or mechanical usage"
+                    className="px-3 py-2 rounded bg-neutral-950 border border-neutral-700 text-xs text-white"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <button
+                    id="btn-propose-skill"
+                    onClick={handleProposeCustomSkill}
+                    disabled={isProposingSkill || (!customSkillName.trim() && !customSkillConcept.trim())}
+                    className="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-xs text-white font-medium flex items-center gap-1.5 shadow-sm"
+                  >
+                    {isProposingSkill ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                    <span>Synthesize AI Skill</span>
+                  </button>
+                </div>
+                {skillProposalError && <div className="text-xs text-red-400">{skillProposalError}</div>}
+
+                {/* Skill Proposal Review Gate */}
+                {pendingSkillProposal && (
+                  <div className="p-4 rounded-lg bg-indigo-950/70 border-2 border-indigo-500 space-y-2 mt-2 shadow-lg">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-indigo-300 uppercase">
+                        AI Proposed Skill: {pendingSkillProposal.name}
+                      </span>
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-900 text-indigo-200 border border-indigo-700 font-mono">
+                        Governing: {pendingSkillProposal.governingAbility}
+                      </span>
+                    </div>
+                    <p className="text-xs text-neutral-300 leading-relaxed">{pendingSkillProposal.description}</p>
+                    {pendingSkillProposal.mechanicalDescription && (
+                      <div className="text-xs text-indigo-200 font-mono pt-1 border-t border-indigo-900">
+                        <span className="text-neutral-400">Mechanics:</span> {pendingSkillProposal.mechanicalDescription}
+                      </div>
+                    )}
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-indigo-900">
+                      <button
+                        onClick={handleRejectSkillProposal}
+                        className="px-3 py-1 rounded bg-neutral-900 border border-neutral-700 text-xs text-neutral-300 hover:text-white"
+                      >
+                        Reject
+                      </button>
+                      <button
+                        id="btn-accept-skill"
+                        onClick={handleAcceptSkillProposal}
+                        className="px-3.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white flex items-center gap-1"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Accept & Add Skill</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Extensible Custom Attributes & Stats */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Custom Attributes & World Stats */}
-              <div className="p-5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-3">
-                <h3 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">
-                  Custom Attributes & World Stats
-                </h3>
-                <div className="space-y-2">
+              <div className="p-5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Award className="w-3.5 h-3.5" />
+                    Custom Attributes & World Stats ({draft.attributes?.length || 0})
+                  </h3>
+                </div>
+
+                <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                   {(draft.attributes || []).map((entry) => (
-                    <div key={entry.id} className="flex items-center justify-between rounded bg-neutral-900 p-2.5 text-xs border border-neutral-800">
-                      <span className="text-neutral-200 font-medium">{entry.name}</span>
-                      <span className="font-mono text-indigo-300 font-bold">{entry.value}</span>
+                    <div key={entry.id} className="p-2.5 rounded-lg bg-neutral-900 border border-neutral-800 space-y-1 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-white font-semibold">{entry.name}</span>
+                        <div className="flex items-center gap-2">
+                          {entry.category && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-950 text-indigo-300 font-mono">
+                              {entry.category}
+                            </span>
+                          )}
+                          <input
+                            type="number"
+                            value={entry.value}
+                            onChange={(e) => {
+                              const val = Number(e.target.value) || 0;
+                              setDraft({
+                                ...draft,
+                                attributes: draft.attributes?.map((a) => (a.id === entry.id ? { ...a, value: val } : a)),
+                              });
+                              markFieldEdited('attributes');
+                            }}
+                            className="w-16 px-2 py-0.5 rounded bg-neutral-950 border border-neutral-700 text-right font-mono text-indigo-300 font-bold focus:outline-none focus:border-indigo-500"
+                          />
+                        </div>
+                      </div>
+                      {entry.description && (
+                        <p className="text-[11px] text-neutral-400 leading-tight">{entry.description}</p>
+                      )}
                     </div>
                   ))}
-                  <div className="flex gap-2 pt-2">
+                </div>
+
+                {/* AI Custom Attribute Generator */}
+                <div className="p-4 rounded-xl bg-neutral-900 border border-neutral-800 space-y-3 pt-3">
+                  <div className="text-xs font-semibold text-indigo-300 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>AI Custom Attribute Generator</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <input
+                      type="text"
                       value={customAttributeName}
                       onChange={(e) => setCustomAttributeName(e.target.value)}
-                      placeholder="Custom attribute (e.g. Mana)"
-                      className="flex-1 px-3 py-1.5 rounded bg-neutral-900 border border-neutral-700 text-xs text-white"
+                      placeholder="Attribute name (e.g. Mana Pool)"
+                      className="px-3 py-2 rounded bg-neutral-950 border border-neutral-700 text-xs text-white"
                     />
                     <input
-                      value={customAttributeValue}
-                      onChange={(e) => setCustomAttributeValue(e.target.value)}
-                      placeholder="Value"
-                      className="w-20 px-3 py-1.5 rounded bg-neutral-900 border border-neutral-700 text-xs text-white font-mono"
+                      type="text"
+                      value={customAttributeConcept}
+                      onChange={(e) => setCustomAttributeConcept(e.target.value)}
+                      placeholder="Concept or mechanical role"
+                      className="px-3 py-2 rounded bg-neutral-950 border border-neutral-700 text-xs text-white"
                     />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <button
+                      id="btn-propose-attribute"
+                      onClick={handleProposeCustomAttribute}
+                      disabled={isProposingAttribute || (!customAttributeName.trim() && !customAttributeConcept.trim())}
+                      className="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-xs text-white font-medium flex items-center gap-1.5 shadow-sm"
+                    >
+                      {isProposingAttribute ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                      <span>Synthesize AI Attribute</span>
+                    </button>
                     <button
                       onClick={() => addCustomStat('attribute')}
-                      className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-xs font-medium text-white flex items-center gap-1"
+                      disabled={!customAttributeName.trim()}
+                      className="px-3 py-2 rounded bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-xs text-neutral-300 font-medium"
                     >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add</span>
+                      Add Manual
                     </button>
                   </div>
+                  {attributeProposalError && <div className="text-xs text-red-400">{attributeProposalError}</div>}
+
+                  {/* Attribute Proposal Review Gate */}
+                  {pendingAttributeProposal && (
+                    <div className="p-4 rounded-lg bg-indigo-950/70 border-2 border-indigo-500 space-y-2 mt-2 shadow-lg">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-indigo-300 uppercase">
+                          AI Proposed Attribute: {pendingAttributeProposal.name}
+                        </span>
+                        <span className="text-[10px] font-mono text-indigo-300">
+                          Base Val: {pendingAttributeProposal.baseValue}
+                        </span>
+                      </div>
+                      {pendingAttributeProposal.description && (
+                        <p className="text-xs text-neutral-300 leading-relaxed">{pendingAttributeProposal.description}</p>
+                      )}
+                      <div className="flex items-center justify-end gap-2 pt-2 border-t border-indigo-900">
+                        <button
+                          onClick={handleRejectAttributeProposal}
+                          className="px-3 py-1 rounded bg-neutral-900 border border-neutral-700 text-xs text-neutral-300 hover:text-white"
+                        >
+                          Reject
+                        </button>
+                        <button
+                          id="btn-accept-attribute"
+                          onClick={handleAcceptAttributeProposal}
+                          className="px-3.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white flex items-center gap-1"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Accept Attribute</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -2124,7 +2679,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
           </div>
         )}
 
-        {/* STEP 5: STARTING EQUIPMENT & SLOTS */}
+        {/* STEP 5: STARTING EQUIPMENT & PAPER DOLL */}
         {draft && activeStep === 5 && (
           <div className="space-y-6">
             <div className="p-6 rounded-xl bg-neutral-950 border border-neutral-800 space-y-6">
@@ -2132,104 +2687,248 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 <div>
                   <h2 className="text-base font-semibold text-white flex items-center gap-2">
                     <Shield className="w-4 h-4 text-indigo-400" />
-                    Starting Equipment Loadout
+                    Starting Equipment Loadout & Paper Doll
                   </h2>
                   <p className="text-xs text-neutral-400 mt-0.5">
-                    Configure active equipped items and carried supplies.
+                    Configure active equipped paper-doll slots and carried pack supplies with interactive inspection.
                   </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono px-2.5 py-1 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">
+                    Equipped: {draft.startingEquipment.equipped.length} items
+                  </span>
+                  <span className="text-xs font-mono px-2.5 py-1 rounded bg-neutral-900 text-neutral-300 border border-neutral-800">
+                    Inventory: {draft.startingEquipment.inventory.length} items
+                  </span>
                 </div>
               </div>
 
-              {/* Equipped Items vs Inventory */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Equipped Slots */}
-                <div className="space-y-3">
-                  <h3 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">
-                    Equipped Slots
-                  </h3>
-                  <div className="space-y-2">
-                    {draft.startingEquipment.equipped.map((item) => (
-                      <div
-                        key={item.id}
-                        className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 flex items-center justify-between text-xs"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <span className="px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 font-mono text-[10px] uppercase">
-                            {item.slot || 'Body'}
-                          </span>
-                          <span className="font-medium text-white">{item.name}</span>
-                        </div>
-                        <button
-                          onClick={() => {
-                            // Move to inventory
-                            const updatedEq = draft.startingEquipment.equipped.filter((e) => e.id !== item.id);
-                            const updatedInv = [
-                              ...draft.startingEquipment.inventory,
-                              { ...item, isEquipped: false, slot: undefined },
-                            ];
-                            setDraft({
-                              ...draft,
-                              startingEquipment: {
-                                ...draft.startingEquipment,
-                                equipped: updatedEq,
-                                inventory: updatedInv,
-                              },
-                            });
-                            markFieldEdited('startingEquipment');
-                          }}
-                          className="text-neutral-400 hover:text-amber-300 text-[11px]"
-                        >
-                          Unequip
-                        </button>
+              {/* AI Custom Equipment Synthesis */}
+              <div className="p-4 rounded-xl bg-neutral-900 border border-neutral-800 space-y-3">
+                <div className="text-xs font-semibold text-indigo-300 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>AI Custom Equipment Synthesis</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    value={customEquipmentName}
+                    onChange={(e) => setCustomEquipmentName(e.target.value)}
+                    placeholder="Item concept (e.g. Solar Dagger)"
+                    className="px-3 py-2 rounded bg-neutral-950 border border-neutral-700 text-xs text-white"
+                  />
+                  <input
+                    type="text"
+                    value={customEquipmentDescription}
+                    onChange={(e) => setCustomEquipmentDescription(e.target.value)}
+                    placeholder="Desired properties / mechanical effect"
+                    className="px-3 py-2 rounded bg-neutral-950 border border-neutral-700 text-xs text-white"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <button
+                    id="btn-propose-equipment"
+                    onClick={handleProposeCustomEquipment}
+                    disabled={isProposingEquipment || (!customEquipmentName.trim() && !customEquipmentDescription.trim())}
+                    className="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-xs text-white font-medium flex items-center gap-1.5 shadow-sm"
+                  >
+                    {isProposingEquipment ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                    <span>Synthesize AI Item</span>
+                  </button>
+                  <button
+                    onClick={addCustomEquipment}
+                    disabled={!customEquipmentName.trim()}
+                    className="px-3 py-2 rounded bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 text-xs text-neutral-300 font-medium"
+                  >
+                    Add Manual Item
+                  </button>
+                </div>
+                {equipmentProposalError && <div className="text-xs text-red-400">{equipmentProposalError}</div>}
+
+                {/* Equipment Proposal Review Gate */}
+                {pendingEquipmentProposal && (
+                  <div className="p-4 rounded-lg bg-indigo-950/70 border-2 border-indigo-500 space-y-2 mt-2 shadow-lg">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-indigo-300 uppercase">
+                        AI Proposed Equipment: {pendingEquipmentProposal.name}
+                      </span>
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-900 text-indigo-200 border border-indigo-700 font-mono">
+                        {pendingEquipmentProposal.category} • Slot: {pendingEquipmentProposal.slot || 'Inventory'}
+                      </span>
+                    </div>
+                    <p className="text-xs text-neutral-300 leading-relaxed">{pendingEquipmentProposal.description}</p>
+                    {pendingEquipmentProposal.properties ? (
+                      <div className="text-xs text-indigo-200 font-mono pt-1 border-t border-indigo-900">
+                        <span className="text-neutral-400">Properties:</span>{' '}
+                        {Array.isArray(pendingEquipmentProposal.properties)
+                          ? (pendingEquipmentProposal.properties as any[]).join(', ')
+                          : Object.entries(pendingEquipmentProposal.properties).map(([k, v]) => `${k}: ${v}`).join(', ')}
                       </div>
-                    ))}
+                    ) : null}
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-indigo-900">
+                      <button
+                        onClick={handleRejectEquipmentProposal}
+                        className="px-3 py-1 rounded bg-neutral-900 border border-neutral-700 text-xs text-neutral-300 hover:text-white"
+                      >
+                        Reject
+                      </button>
+                      <button
+                        id="btn-accept-equipment"
+                        onClick={handleAcceptEquipmentProposal}
+                        className="px-3.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white flex items-center gap-1"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Accept & Add Item</span>
+                      </button>
+                    </div>
                   </div>
+                )}
+              </div>
+
+              {/* Interactive Visual Paper Doll */}
+              <div className="space-y-3">
+                <h3 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider flex items-center gap-2">
+                  <User className="w-4 h-4 text-indigo-400" />
+                  Equipped Paper-Doll Slots
+                </h3>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  {[
+                    { key: 'head', label: 'Head', icon: User },
+                    { key: 'neck', label: 'Neck / Amulet', icon: Shield },
+                    { key: 'back', label: 'Back / Cloak', icon: Shield },
+                    { key: 'body', label: 'Body Armor', icon: Shield },
+                    { key: 'mainHand', label: 'Main Hand', icon: Sword },
+                    { key: 'offHand', label: 'Off Hand / Shield', icon: Shield },
+                    { key: 'gloves', label: 'Gloves / Hands', icon: User },
+                    { key: 'belt', label: 'Waist / Belt', icon: Briefcase },
+                    { key: 'ring', label: 'Finger / Ring', icon: Award },
+                    { key: 'legs', label: 'Legs / Greaves', icon: User },
+                    { key: 'feet', label: 'Feet / Boots', icon: User },
+                    { key: 'ammunition', label: 'Ammunition / Quiver', icon: Package },
+                  ].map((slotDef) => {
+                    const equippedItem = draft.startingEquipment.equipped.find(
+                      (i) => (i.slot || '').toLowerCase() === slotDef.key.toLowerCase()
+                    );
+                    const IconComp = slotDef.icon;
+
+                    return (
+                      <div
+                        key={slotDef.key}
+                        className={`p-3 rounded-xl border text-left transition-all space-y-2 relative group ${
+                          equippedItem
+                            ? 'bg-neutral-900 border-indigo-500/60 shadow-sm hover:border-indigo-400'
+                            : 'bg-neutral-950/80 border-neutral-800 hover:border-neutral-700'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between text-[11px]">
+                          <span className="font-mono text-neutral-400 flex items-center gap-1">
+                            <IconComp className="w-3 h-3 text-indigo-400" />
+                            {slotDef.label}
+                          </span>
+                          {equippedItem && (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-950 text-indigo-300 font-mono border border-indigo-800">
+                              {equippedItem.rarity || 'Common'}
+                            </span>
+                          )}
+                        </div>
+
+                        {equippedItem ? (
+                          <div className="space-y-1.5">
+                            <div className="font-semibold text-xs text-white truncate">
+                              {equippedItem.name}
+                            </div>
+                            <div className="flex items-center justify-between gap-1 pt-1 border-t border-neutral-800">
+                              <button
+                                onClick={() => setInspectingItem(equippedItem)}
+                                className="text-[10px] text-indigo-300 hover:text-indigo-200 flex items-center gap-0.5"
+                              >
+                                <Eye className="w-3 h-3" />
+                                Inspect
+                              </button>
+                              <button
+                                onClick={() => handleUnequipItem(equippedItem)}
+                                className="text-[10px] text-amber-400 hover:text-amber-300 font-medium"
+                              >
+                                Unequip
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              // Find inventory items that fit or open slot picker
+                              const matchingInvs = draft.startingEquipment.inventory;
+                              if (matchingInvs.length > 0) {
+                                setEquipSlotSelectModalItem(matchingInvs[0]);
+                              }
+                            }}
+                            className="w-full py-2 rounded border border-dashed border-neutral-800 hover:border-indigo-500/50 text-[11px] text-neutral-500 hover:text-indigo-300 flex items-center justify-center gap-1 transition-colors"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>Equip Item</span>
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Carried Inventory Items (Pack Supplies) */}
+              <div className="space-y-3 pt-4 border-t border-neutral-800">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-semibold text-neutral-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Package className="w-3.5 h-3.5 text-neutral-400" />
+                    Carried Pack Supplies ({draft.startingEquipment.inventory.length})
+                  </h3>
                 </div>
 
-                {/* Carried Inventory Items */}
-                <div className="space-y-3">
-                  <h3 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">
-                    Carried Pack Supplies
-                  </h3>
-                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                {draft.startingEquipment.inventory.length === 0 ? (
+                  <div className="p-4 rounded-lg bg-neutral-900/50 border border-neutral-800 text-xs text-neutral-500 text-center">
+                    No items in carried inventory. Use AI item synthesis or manual entry above.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-72 overflow-y-auto pr-1">
                     {draft.startingEquipment.inventory.map((item) => (
                       <div
                         key={item.id}
-                        className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 flex items-center justify-between text-xs"
+                        className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 flex items-center justify-between text-xs hover:border-neutral-700 transition-colors"
                       >
-                        <div>
-                          <div className="font-medium text-neutral-200">{item.name}</div>
-                          <div className="text-[10px] text-neutral-500 uppercase">{item.category} (x{item.quantity})</div>
+                        <div className="min-w-0 space-y-0.5">
+                          <div className="font-medium text-white truncate flex items-center gap-1.5">
+                            <span className="truncate">{item.name}</span>
+                            {item.quantity > 1 && (
+                              <span className="text-[10px] font-mono text-neutral-400">x{item.quantity}</span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-neutral-400 uppercase font-mono">
+                            {item.category} • {item.rarity || 'Common'}
+                          </div>
                         </div>
-                        <button
-                          onClick={() => {
-                            // Equip item
-                            const updatedInv = draft.startingEquipment.inventory.filter((i) => i.id !== item.id);
-                            const updatedEq = [
-                              ...draft.startingEquipment.equipped,
-                              { ...item, isEquipped: true, slot: item.category === 'Armor' ? 'body' : 'mainHand' },
-                            ];
-                            setDraft({
-                              ...draft,
-                              startingEquipment: {
-                                ...draft.startingEquipment,
-                                equipped: updatedEq,
-                                inventory: updatedInv,
-                              },
-                            });
-                            markFieldEdited('startingEquipment');
-                          }}
-                          className="text-neutral-400 hover:text-indigo-400 text-[11px]"
-                        >
-                          Equip
-                        </button>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            onClick={() => setInspectingItem(item)}
+                            className="p-1.5 rounded hover:bg-neutral-800 text-neutral-400 hover:text-indigo-300"
+                            title="Inspect item"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleEquipItem(item)}
+                            className="px-2 py-1 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 hover:bg-indigo-900 text-[10px] font-semibold"
+                          >
+                            Equip
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
-                </div>
+                )}
               </div>
 
-              {/* Categorized Lists */}
+              {/* Categorized Equipment Lists */}
               <div className="pt-4 border-t border-neutral-800 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
                 <div>
                   <div className="font-medium text-neutral-300 mb-1">Weapons</div>
@@ -2264,15 +2963,6 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                   </div>
                 </div>
               </div>
-            </div>
-
-            <div className="p-5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-3">
-              <h3 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">Custom Equipment</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                <input value={customEquipmentName} onChange={(e) => setCustomEquipmentName(e.target.value)} placeholder="Item name" className="px-3 py-2 rounded bg-neutral-900 border border-neutral-700 text-xs" />
-                <input value={customEquipmentDescription} onChange={(e) => setCustomEquipmentDescription(e.target.value)} placeholder="Description / desired effect" className="px-3 py-2 rounded bg-neutral-900 border border-neutral-700 text-xs md:col-span-2" />
-              </div>
-              <button onClick={addCustomEquipment} className="px-3 py-1.5 rounded bg-indigo-700 text-xs"><Plus className="w-3.5 h-3.5 inline mr-1" />Add custom item</button>
             </div>
 
             {/* Navigation */}
@@ -2968,6 +3658,219 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* INSPECTION MODAL: EQUIPMENT ITEM */}
+      {inspectingItem && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Shield className="w-5 h-5 text-indigo-400" />
+                <h3 className="text-base font-bold text-white">{inspectingItem.name}</h3>
+              </div>
+              <button
+                onClick={() => setInspectingItem(null)}
+                className="text-neutral-400 hover:text-white p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 font-mono uppercase">
+                {inspectingItem.category}
+              </span>
+              <span className="px-2 py-0.5 rounded bg-neutral-900 text-neutral-300 border border-neutral-800 font-mono">
+                Rarity: {inspectingItem.rarity || 'Common'}
+              </span>
+              {inspectingItem.slot && (
+                <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono uppercase">
+                  Slot: {inspectingItem.slot}
+                </span>
+              )}
+              <span className="px-2 py-0.5 rounded bg-neutral-900 text-neutral-400 font-mono">
+                Qty: {inspectingItem.quantity}
+              </span>
+            </div>
+
+            <p className="text-xs text-neutral-300 leading-relaxed bg-neutral-900/60 p-3 rounded-lg border border-neutral-800">
+              {inspectingItem.description || 'No detailed description provided.'}
+            </p>
+
+            {inspectingItem.properties ? (
+              <div className="space-y-1">
+                <span className="text-[11px] font-semibold text-neutral-400 uppercase">Properties & Tagging:</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {(Array.isArray(inspectingItem.properties)
+                    ? (inspectingItem.properties as any[])
+                    : Object.entries(inspectingItem.properties).map(([k, v]) => `${k}: ${v}`)
+                  ).map((prop: any, i: number) => (
+                    <span key={i} className="text-[10px] px-2 py-0.5 rounded bg-neutral-900 text-neutral-300 border border-neutral-800">
+                      {String(prop)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
+            {inspectingItem.provenance && (
+              <div className="text-[10px] text-neutral-500 font-mono pt-2 border-t border-neutral-800">
+                Provenance: {String(inspectingItem.provenance)}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between pt-3 border-t border-neutral-800">
+              <button
+                onClick={() => handleDeleteItem(inspectingItem.id)}
+                className="px-3 py-1.5 rounded bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800 text-xs font-medium flex items-center gap-1"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete Item</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                {inspectingItem.isEquipped ? (
+                  <button
+                    onClick={() => handleUnequipItem(inspectingItem)}
+                    className="px-4 py-1.5 rounded bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold"
+                  >
+                    Unequip Item
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleEquipItem(inspectingItem)}
+                    className="px-4 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold"
+                  >
+                    Equip Item
+                  </button>
+                )}
+                <button
+                  onClick={() => setInspectingItem(null)}
+                  className="px-4 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-medium"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* INSPECTION MODAL: SKILL */}
+      {inspectingSkill && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-indigo-400" />
+                <h3 className="text-base font-bold text-white">{inspectingSkill.name}</h3>
+              </div>
+              <button
+                onClick={() => setInspectingSkill(null)}
+                className="text-neutral-400 hover:text-white p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="px-2 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 font-mono uppercase">
+                Governing: {inspectingSkill.governingAbility}
+              </span>
+              <span className="px-2 py-0.5 rounded bg-neutral-900 text-neutral-300 border border-neutral-800 font-mono">
+                Proficiency: {inspectingSkill.proficiency}
+              </span>
+              {inspectingSkill.isCustom && (
+                <span className="px-2 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800 font-mono">
+                  Custom AI Skill
+                </span>
+              )}
+            </div>
+
+            <p className="text-xs text-neutral-300 leading-relaxed bg-neutral-900/60 p-3 rounded-lg border border-neutral-800">
+              {inspectingSkill.description}
+            </p>
+
+            {inspectingSkill.mechanicalDescription && (
+              <div className="space-y-1">
+                <span className="text-[11px] font-semibold text-neutral-400 uppercase">Mechanical Application:</span>
+                <p className="text-xs text-indigo-200 font-mono bg-neutral-900 p-2.5 rounded border border-neutral-800">
+                  {inspectingSkill.mechanicalDescription}
+                </p>
+              </div>
+            )}
+
+            {inspectingSkill.provenance && (
+              <div className="text-[10px] text-neutral-500 font-mono pt-2 border-t border-neutral-800">
+                Provenance: {String(inspectingSkill.provenance)}
+              </div>
+            )}
+
+            <div className="flex justify-end pt-3 border-t border-neutral-800">
+              <button
+                onClick={() => setInspectingSkill(null)}
+                className="px-4 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EQUIP SLOT SELECTION MODAL */}
+      {equipSlotSelectModalItem && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
+              <h3 className="text-sm font-bold text-white">Select Slot to Equip {equipSlotSelectModalItem.name}</h3>
+              <button
+                onClick={() => setEquipSlotSelectModalItem(null)}
+                className="text-neutral-400 hover:text-white p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              {[
+                { key: 'head', label: 'Head' },
+                { key: 'neck', label: 'Neck / Amulet' },
+                { key: 'back', label: 'Back / Cloak' },
+                { key: 'body', label: 'Body Armor' },
+                { key: 'mainHand', label: 'Main Hand' },
+                { key: 'offHand', label: 'Off Hand / Shield' },
+                { key: 'gloves', label: 'Gloves / Hands' },
+                { key: 'belt', label: 'Waist / Belt' },
+                { key: 'ring', label: 'Finger / Ring' },
+                { key: 'legs', label: 'Legs / Greaves' },
+                { key: 'feet', label: 'Feet / Boots' },
+                { key: 'ammunition', label: 'Ammunition / Quiver' },
+              ].map((slotOption) => (
+                <button
+                  key={slotOption.key}
+                  onClick={() => {
+                    handleEquipItem(equipSlotSelectModalItem, slotOption.key);
+                    setEquipSlotSelectModalItem(null);
+                  }}
+                  className="p-2.5 rounded-lg bg-neutral-900 border border-neutral-800 hover:border-indigo-500 hover:bg-neutral-800 text-left text-neutral-200 transition-all font-medium"
+                >
+                  {slotOption.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-neutral-800">
+              <button
+                onClick={() => setEquipSlotSelectModalItem(null)}
+                className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-300"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         </div>

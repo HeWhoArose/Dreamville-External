@@ -5,9 +5,14 @@ import {
   CharacterExtractionRequest,
   CustomCapabilityProposalRequest,
   CustomFeatProposalRequest,
+  CustomAttributeProposalRequest,
+  CustomSkillProposalRequest,
+  CustomEquipmentProposalRequest,
   CapabilityDefinition,
   GeneratedTechnique,
   CharacterFeat,
+  CharacterSkill,
+  CharacterStatDefinition,
   CharacterCoreStats,
   StartingEquipmentConfig,
   StartingEquipmentItem,
@@ -1022,6 +1027,284 @@ IMPORTANT:
     };
 
     return feat;
+  }
+
+  /**
+   * Synthesizes and proposes a structured Custom Attribute or World Stat based on natural language input.
+   */
+  public async proposeCustomAttribute(
+    input: CustomAttributeProposalRequest,
+    worldTemplate: WorldTemplate
+  ): Promise<CharacterStatDefinition> {
+    const name = input.attributeName?.trim() || 'Custom Attribute';
+    const concept = input.attributeConcept?.trim() || name;
+    const category = input.category || 'custom_attribute';
+    const attrId = `stat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    let proposal: any = null;
+
+    const charCtxStr = input.characterContext
+      ? `CHARACTER CONTEXT:\nProfession/Role: ${input.characterContext.role || 'N/A'}\nSpecies: ${input.characterContext.species || 'N/A'}\nBackground: ${input.characterContext.background || 'N/A'}\n`
+      : '';
+
+    const prompt = `You are a system designer for narrative RPG mechanics.
+Given this attribute name, concept, character context, and world setting, generate a structured stat/attribute definition.
+Do NOT modify or propose changes to the 6 core D&D ability scores (Strength, Dexterity, Constitution, Intelligence, Wisdom, Charisma).
+
+WORLD CONTEXT:
+Title: ${worldTemplate?.title || 'Unknown World'}
+Genre: ${worldTemplate?.genreTags?.join(', ') || 'Fantasy'}
+
+${charCtxStr}ATTRIBUTE/STAT NAME: "${name}"
+ATTRIBUTE/STAT CONCEPT: "${concept}"
+CATEGORY: "${category}"
+
+OUTPUT STRICT JSON with this structure:
+{
+  "name": string,
+  "value": number,
+  "baseValue": number,
+  "min": number | null,
+  "max": number | null,
+  "description": string,
+  "mechanicalRole": string,
+  "worldCompatibility": string
+}
+
+IMPORTANT: Provide sensible starting default value, optional min/max, clear description and mechanical role for this stat.`;
+
+    let generatedProvenance: CharacterProvenanceSource = 'AI_GENERATED';
+    try {
+      const orchestrator = worldRepository.getAiOrchestrator();
+      const response = await orchestrator.executeTaskGeneration(
+        'narrative.generate',
+        prompt,
+        'Return only the requested structured stat definition JSON.'
+      );
+      if (response.text) {
+        proposal = this.parseJsonFromAiResponse(response.text);
+        if (response.source === 'DETERMINISTIC_FALLBACK') {
+          generatedProvenance = 'DETERMINISTIC_FALLBACK';
+        }
+      }
+    } catch (err) {
+      console.warn('[CharacterGenesisService] Custom attribute proposal failed, using fallback:', err);
+    }
+
+    if (!proposal || !proposal.name) {
+      proposal = {
+        name,
+        value: 10,
+        baseValue: 10,
+        min: 0,
+        max: 100,
+        description: concept,
+        mechanicalRole: 'Custom stat defining character capability.',
+        worldCompatibility: 'Compatible with world rules.',
+      };
+      generatedProvenance = 'DETERMINISTIC_FALLBACK';
+    }
+
+    return {
+      id: attrId,
+      name: proposal.name || name,
+      value: Number(proposal.value ?? 10),
+      baseValue: Number(proposal.baseValue ?? proposal.value ?? 10),
+      min: proposal.min != null ? Number(proposal.min) : undefined,
+      max: proposal.max != null ? Number(proposal.max) : undefined,
+      description: proposal.description || concept,
+      category,
+      mechanicalRole: proposal.mechanicalRole,
+      worldCompatibility: proposal.worldCompatibility,
+      provenance: generatedProvenance,
+    };
+  }
+
+  /**
+   * Synthesizes and proposes a structured Custom Skill based on natural language input.
+   */
+  public async proposeCustomSkill(
+    input: CustomSkillProposalRequest,
+    worldTemplate: WorldTemplate
+  ): Promise<CharacterSkill> {
+    const skillName = input.skillName?.trim() || 'Custom Skill';
+    const concept = input.skillConcept?.trim() || skillName;
+    const skillId = `skill_custom_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    let proposal: any = null;
+
+    const charCtxStr = input.characterContext
+      ? `CHARACTER CONTEXT:\nProfession/Role: ${input.characterContext.role || 'N/A'}\nSpecies: ${input.characterContext.species || 'N/A'}\nBackground: ${input.characterContext.background || 'N/A'}\n`
+      : '';
+
+    const prompt = `You are a game mechanics designer for narrative RPG and D&D systems.
+Given this custom skill name, concept, character context, and world setting, generate a structured custom skill definition.
+
+WORLD CONTEXT:
+Title: ${worldTemplate?.title || 'Unknown World'}
+Genre: ${worldTemplate?.genreTags?.join(', ') || 'Fantasy'}
+
+${charCtxStr}SKILL NAME: "${skillName}"
+SKILL CONCEPT: "${concept}"
+
+OUTPUT STRICT JSON with this structure:
+{
+  "name": string,
+  "governingAbility": "Strength" | "Dexterity" | "Constitution" | "Intelligence" | "Wisdom" | "Charisma",
+  "description": string,
+  "mechanicalDescription": string,
+  "tags": [string],
+  "worldCompatibility": string
+}
+
+IMPORTANT: Select the most appropriate governing D&D ability score. Provide a clear description and special mechanical behavior.`;
+
+    let generatedProvenance: CharacterProvenanceSource = 'AI_GENERATED';
+    try {
+      const orchestrator = worldRepository.getAiOrchestrator();
+      const response = await orchestrator.executeTaskGeneration(
+        'narrative.generate',
+        prompt,
+        'Return only the requested structured custom skill JSON.'
+      );
+      if (response.text) {
+        proposal = this.parseJsonFromAiResponse(response.text);
+        if (response.source === 'DETERMINISTIC_FALLBACK') {
+          generatedProvenance = 'DETERMINISTIC_FALLBACK';
+        }
+      }
+    } catch (err) {
+      console.warn('[CharacterGenesisService] Custom skill proposal failed, using fallback:', err);
+    }
+
+    if (!proposal || !proposal.name) {
+      proposal = {
+        name: skillName,
+        governingAbility: 'Dexterity',
+        description: concept,
+        mechanicalDescription: `Specialized skill proficiency derived from ${concept}.`,
+        tags: ['Custom', 'Skill'],
+        worldCompatibility: 'Fits world setting.',
+      };
+      generatedProvenance = 'DETERMINISTIC_FALLBACK';
+    }
+
+    return {
+      id: skillId,
+      name: proposal.name || skillName,
+      governingAbility: proposal.governingAbility || 'Dexterity',
+      proficiency: 'NONE',
+      isProficient: false,
+      isExpertise: false,
+      isCustom: true,
+      description: proposal.description || concept,
+      mechanicalDescription: proposal.mechanicalDescription,
+      tags: Array.isArray(proposal.tags) ? proposal.tags.map(String) : ['Custom'],
+      worldCompatibility: proposal.worldCompatibility,
+      provenance: generatedProvenance,
+    };
+  }
+
+  /**
+   * Synthesizes and proposes a structured Custom Starting Equipment Item based on natural language input.
+   */
+  public async proposeCustomEquipment(
+    input: CustomEquipmentProposalRequest,
+    worldTemplate: WorldTemplate
+  ): Promise<StartingEquipmentItem> {
+    const itemName = input.itemName?.trim() || 'Custom Item';
+    const concept = input.itemConcept?.trim() || itemName;
+    const itemId = `eq_custom_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    let proposal: any = null;
+
+    const charCtxStr = input.characterContext
+      ? `CHARACTER CONTEXT:\nProfession/Role: ${input.characterContext.role || 'N/A'}\nSpecies: ${input.characterContext.species || 'N/A'}\nBackground: ${input.characterContext.background || 'N/A'}\n`
+      : '';
+
+    const prompt = `You are an equipment and item designer for a narrative RPG.
+Given this equipment concept, character context, and world setting, generate a complete structured starting equipment item.
+
+WORLD CONTEXT:
+Title: ${worldTemplate?.title || 'Unknown World'}
+Genre: ${worldTemplate?.genreTags?.join(', ') || 'Fantasy'}
+
+${charCtxStr}ITEM NAME: "${itemName}"
+ITEM CONCEPT: "${concept}"
+
+OUTPUT STRICT JSON with this structure:
+{
+  "name": string,
+  "category": "Weapon" | "Armor" | "Shield" | "Potion" | "Scroll" | "Tool" | "Consumable" | "Accessory" | "Miscellaneous",
+  "slot": "head" | "neck" | "back" | "body" | "mainHand" | "offHand" | "gloves" | "belt" | "ring" | "legs" | "feet" | "ammunition" | null,
+  "description": string,
+  "rarity": "Common" | "Uncommon" | "Rare" | "Very Rare" | "Legendary",
+  "quantity": number,
+  "durability": number | null,
+  "maxDurability": number | null,
+  "properties": Record<string, string>,
+  "effects": [
+    {
+      "type": string,
+      "target": string,
+      "scope": string,
+      "modifier": number,
+      "value": string | number | boolean,
+      "condition": string,
+      "description": string
+    }
+  ]
+}
+
+IMPORTANT: Select an appropriate category and paper-doll slot. If the item is a weapon or armor, suggest a valid equipment slot like mainHand or body. Provide clear effects and properties matching "${concept}".`;
+
+    let generatedProvenance: CharacterProvenanceSource = 'AI_GENERATED';
+    try {
+      const orchestrator = worldRepository.getAiOrchestrator();
+      const response = await orchestrator.executeTaskGeneration(
+        'narrative.generate',
+        prompt,
+        'Return only the requested structured custom equipment JSON.'
+      );
+      if (response.text) {
+        proposal = this.parseJsonFromAiResponse(response.text);
+        if (response.source === 'DETERMINISTIC_FALLBACK') {
+          generatedProvenance = 'DETERMINISTIC_FALLBACK';
+        }
+      }
+    } catch (err) {
+      console.warn('[CharacterGenesisService] Custom equipment proposal failed, using fallback:', err);
+    }
+
+    if (!proposal || !proposal.name) {
+      proposal = {
+        name: itemName,
+        category: 'Weapon',
+        slot: 'mainHand',
+        description: concept,
+        rarity: 'Uncommon',
+        quantity: 1,
+        properties: { Special: concept },
+        effects: [],
+      };
+      generatedProvenance = 'DETERMINISTIC_FALLBACK';
+    }
+
+    return {
+      id: itemId,
+      name: proposal.name || itemName,
+      category: proposal.category || 'Weapon',
+      slot: proposal.slot || undefined,
+      description: proposal.description || concept,
+      isEquipped: false,
+      quantity: Number(proposal.quantity ?? 1),
+      rarity: proposal.rarity || 'Common',
+      durability: proposal.durability != null ? Number(proposal.durability) : undefined,
+      maxDurability: proposal.maxDurability != null ? Number(proposal.maxDurability) : undefined,
+      properties: proposal.properties || {},
+      effects: Array.isArray(proposal.effects)
+        ? this.mapCharacterEffects(proposal.effects, itemId, generatedProvenance)
+        : [],
+      sourceUserPrompt: concept,
+      provenance: generatedProvenance,
+    };
   }
 
   /**

@@ -3525,6 +3525,100 @@ gameRouter.post('/worlds/:worldId/characters/custom-feat', async (req: Request, 
 });
 
 /**
+ * POST /api/game/worlds/:worldId/characters/custom-attribute
+ * Synthesizes a structured custom attribute/stat proposal based on natural language input.
+ */
+gameRouter.post('/worlds/:worldId/characters/custom-attribute', async (req: Request, res: Response) => {
+  try {
+    const worldId = String(req.params.worldId);
+    const { attributeName, attributeConcept, category, characterContext } = req.body;
+    const worldTemplate = worldRepository.getWorldTemplate(worldId);
+    if (!worldTemplate) {
+      return res.status(404).json({ error: `World ${worldId} not found.` });
+    }
+
+    const { characterGenesisService } = await import('../services/characterGenesisService');
+    const attribute = await characterGenesisService.proposeCustomAttribute(
+      {
+        worldId,
+        attributeName: attributeName || '',
+        attributeConcept: attributeConcept || '',
+        category,
+        characterContext,
+      },
+      worldTemplate
+    );
+
+    res.json({ success: true, attribute });
+  } catch (error: any) {
+    console.error('Error proposing custom attribute:', error);
+    res.status(500).json({ error: error?.message || 'Failed to propose custom attribute.' });
+  }
+});
+
+/**
+ * POST /api/game/worlds/:worldId/characters/custom-skill
+ * Synthesizes a structured custom skill proposal based on skill concept.
+ */
+gameRouter.post('/worlds/:worldId/characters/custom-skill', async (req: Request, res: Response) => {
+  try {
+    const worldId = String(req.params.worldId);
+    const { skillName, skillConcept, characterContext } = req.body;
+    const worldTemplate = worldRepository.getWorldTemplate(worldId);
+    if (!worldTemplate) {
+      return res.status(404).json({ error: `World ${worldId} not found.` });
+    }
+
+    const { characterGenesisService } = await import('../services/characterGenesisService');
+    const skill = await characterGenesisService.proposeCustomSkill(
+      {
+        worldId,
+        skillName: skillName || '',
+        skillConcept: skillConcept || '',
+        characterContext,
+      },
+      worldTemplate
+    );
+
+    res.json({ success: true, skill });
+  } catch (error: any) {
+    console.error('Error proposing custom skill:', error);
+    res.status(500).json({ error: error?.message || 'Failed to propose custom skill.' });
+  }
+});
+
+/**
+ * POST /api/game/worlds/:worldId/characters/custom-equipment
+ * Synthesizes a structured starting equipment item proposal based on concept.
+ */
+gameRouter.post('/worlds/:worldId/characters/custom-equipment', async (req: Request, res: Response) => {
+  try {
+    const worldId = String(req.params.worldId);
+    const { itemName, itemConcept, characterContext } = req.body;
+    const worldTemplate = worldRepository.getWorldTemplate(worldId);
+    if (!worldTemplate) {
+      return res.status(404).json({ error: `World ${worldId} not found.` });
+    }
+
+    const { characterGenesisService } = await import('../services/characterGenesisService');
+    const item = await characterGenesisService.proposeCustomEquipment(
+      {
+        worldId,
+        itemName: itemName || '',
+        itemConcept: itemConcept || '',
+        characterContext,
+      },
+      worldTemplate
+    );
+
+    res.json({ success: true, item });
+  } catch (error: any) {
+    console.error('Error proposing custom equipment:', error);
+    res.status(500).json({ error: error?.message || 'Failed to propose custom equipment.' });
+  }
+});
+
+/**
  * GET /api/game/worlds/:worldId/characters/drafts
  * Retrieves all saved drafts for a specific world.
  */

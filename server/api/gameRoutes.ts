@@ -3352,7 +3352,7 @@ gameRouter.get('/story-runs/:storyId/opening/context', (req: Request, res: Respo
 gameRouter.post('/worlds/:worldId/characters/extract', async (req: Request, res: Response) => {
   try {
     const worldId = String(req.params.worldId);
-    const { naturalLanguageConcept, existingDraft, userEditedFields } = req.body;
+    const { naturalLanguageConcept, existingDraft, userEditedFields, narrativeRole } = req.body;
     const worldTemplate = worldRepository.getWorldTemplate(worldId);
     if (!worldTemplate) {
       return res.status(404).json({ error: `World ${worldId} not found.` });
@@ -3365,6 +3365,7 @@ gameRouter.post('/worlds/:worldId/characters/extract', async (req: Request, res:
         worldId,
         existingDraft,
         userEditedFields,
+        narrativeRole,
       },
       worldTemplate
     );

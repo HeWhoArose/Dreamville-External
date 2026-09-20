@@ -3352,7 +3352,13 @@ gameRouter.get('/story-runs/:storyId/opening/context', (req: Request, res: Respo
 gameRouter.post('/worlds/:worldId/characters/extract', async (req: Request, res: Response) => {
   try {
     const worldId = String(req.params.worldId);
-    const { naturalLanguageConcept, existingDraft, userEditedFields, narrativeRole } = req.body;
+    const {
+      naturalLanguageConcept,
+      existingDraft,
+      userEditedFields,
+      narrativeRole,
+      allowDeterministicFallback,
+    } = req.body;
     const worldTemplate = worldRepository.getWorldTemplate(worldId);
     if (!worldTemplate) {
       return res.status(404).json({ error: `World ${worldId} not found.` });
@@ -3366,6 +3372,7 @@ gameRouter.post('/worlds/:worldId/characters/extract', async (req: Request, res:
         existingDraft,
         userEditedFields,
         narrativeRole,
+        allowDeterministicFallback: allowDeterministicFallback === true,
       },
       worldTemplate
     );
@@ -3373,6 +3380,14 @@ gameRouter.post('/worlds/:worldId/characters/extract', async (req: Request, res:
     res.json({ success: true, draft });
   } catch (error: any) {
     console.error('Error extracting character draft:', error);
+    if (error?.code === 'AI_UNAVAILABLE' && error?.requiresDeterministicConfirmation) {
+      return res.status(503).json({
+        error: error?.message || 'AI character extraction is currently unavailable.',
+        code: 'AI_UNAVAILABLE',
+        requiresDeterministicConfirmation: true,
+        reason: error?.message || 'AI providers did not return a usable character extraction.',
+      });
+    }
     res.status(500).json({ error: error?.message || 'Failed to extract character draft.' });
   }
 });

@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from '@google/genai';
+import { worldRepository } from '../repositories/worldRepository';
 import {
   CharacterGenesisDraft,
   ConfirmedCharacter,
@@ -32,106 +32,21 @@ export class CharacterGenesisService {
 
     const draftId = existingDraft?.draftId || `draft_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
-    // Try Gemini extraction if API key is present
-    let extracted: any = null;
-    const apiKey = process.env.GEMINI_API_KEY;
-
-    if (apiKey && concept.trim().length > 0) {
-      try {
-        const ai = new GoogleGenAI({
-          apiKey,
-          httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
-        });
-
-        const prompt = `You are a master character designer for narrative RPGs.
-Given this character concept and world context, extract and design a complete, deeply detailed character draft.
-
-WORLD CONTEXT:
-Title: ${worldTemplate?.title || 'Unknown World'}
-Genre: ${worldTemplate?.genreTags?.join(', ') || 'Fantasy'}
-Tone: ${worldTemplate?.toneTags?.join(', ') || 'Heroic'}
-Setting: ${worldTemplate?.setting || 'Realm'}
-Era: ${worldTemplate?.defaultEra || worldTemplate?.era || 'Current Era'}
-World Rules: ${JSON.stringify(worldTemplate?.worldRules || worldTemplate?.ruleConstraints || [])}
-Available Locations: ${JSON.stringify(
-          (worldTemplate?.geography?.nodes || []).map((n: any) => ({ id: n.id, name: n.name, region: n.region }))
-        )}
-
-CHARACTER CONCEPT:
-"${concept}"
-
-OUTPUT MUST BE STRICT JSON with the following structure:
-{
-  "identity": { "name": string, "species": string, "age": number or string, "gender": string },
-  "appearance": { "physicalDescription": string, "distinguishingTraits": [string] },
-  "personality": { "traits": [string], "temperament": string, "values": [string] },
-  "background": { "history": string, "upbringing": string, "importantEvents": [string] },
-  "role": { "archetype": string, "profession": string, "role": string },
-  "motivations": { "goals": [string], "fears": [string], "desires": [string] },
-  "relationships": { "allies": [string], "rivals": [string], "family": [string], "factions": [string] },
-  "condition": { "injuries": [string], "curses": [string], "forms": [string], "specialStates": [string] },
-  "capabilities": [
-    {
-      "id": string,
-      "name": string,
-      "category": "Combat" | "Magic" | "Movement" | "Domain" | "Perception" | "Biological" | "Social",
-      "activationMode": "immediate" | "passive" | "reaction" | "charged" | "channelled" | "toggled",
-      "powerTier": "Minor" | "Moderate" | "Major" | "WorldScale",
-      "baseEnergyCost": number,
-      "baseStrainCost": number,
-      "description": string
-    }
-  ],
-  "generatedSkills": [
-    {
-      "name": string,
-      "description": string,
-      "parentCapabilityName": string,
-      "activationType": string,
-      "energyCost": number,
-      "cooldownTurns": number,
-      "range": string
-    }
-  ],
-  "startingEquipment": {
-    "weapons": [string],
-    "armor": [string],
-    "tools": [string],
-    "consumables": [string]
-  },
-  "startingLocation": {
-    "locationId": string,
-    "name": string,
-    "region": string
-  },
-  "startingSituation": {
-    "summary": string,
-    "hook": string,
-    "initialConditions": string,
-    "whyHereNow": string
-  },
-  "portraitAsset": {
-    "promptFallback": string,
-    "emoji": string
-  }
-}`;
-
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: prompt,
-          config: {
-            temperature: 0.4,
-            responseMimeType: 'application/json',
-          },
-        });
-
-        if (response.text) {
-          extracted = JSON.parse(response.text);
-        }
-      } catch (err) {
-        console.warn('[CharacterGenesisService] Gemini extraction failed or unavailable, using procedural fallback:', err);
-        extracted = null;
+    // Use the canonical model orchestrator so Genesis respects configured
+    // task routing, provider health, fallbacks, and deterministic emergency behavior.
+    try {
+      const orchestrator = worldRepository.getAiOrchestrator();
+      const response = await orchestrator.executeTaskGeneration(
+        'narrative.generate',
+        prompt,
+        'Return only the requested Character Genesis JSON. Treat the player concept as authoritative input; do not overwrite preserved user fields.'
+      );
+      if (response.text) {
+        extracted = JSON.parse(response.text);
       }
+    } catch (err) {
+      console.warn('[CharacterGenesisService] Orchestrated extraction failed, using procedural fallback:', err);
+      extracted = null;
     }
 
     // If Gemini was unavailable or returned invalid output, run procedural synthesis
@@ -393,6 +308,48 @@ OUTPUT MUST BE STRICT JSON with the following structure:
           status: 'idle',
         };
 
+    const toStat = (entry: any, idx: number, prefix: string) => ({
+      id: entry?.id || prefix + '_' + draftId + '_' + (idx + 1),
+      name: String(entry?.name || prefix + ' ' + (idx + 1)),
+      value: typeof entry?.value === 'number' ? entry.value : 10,
+      baseValue: typeof entry?.baseValue === 'number' ? entry.baseValue : (typeof entry?.value === 'number' ? entry.value : 10),
+      description: entry?.description || '',
+      provenance: 'AI_GENERATED' as CharacterProvenanceSource,
+    });
+
+    const attributes = Array.isArray(extracted.attributes) ? extracted.attributes.map((entry: any, idx: number) => toStat(entry, idx, 'Attribute')) : [];
+    const stats = Array.isArray(extracted.stats) ? extracted.stats.map((entry: any, idx: number) => toStat(entry, idx, 'Stat')) : [];
+    const traits = Array.isArray(extracted.traits) ? extracted.traits.map(String) : (Array.isArray(extracted.personality?.traits) ? extracted.personality.traits.map(String) : []);
+
+    const mapEffects = (effects: any, sourceId: string): any[] => Array.isArray(effects) ? effects.map((effect: any, idx: number) => ({
+      id: effect?.id || 'effect_' + sourceId + '_' + (idx + 1),
+      type: String(effect?.type || 'narrative_modifier'),
+      target: effect?.target,
+      scope: effect?.scope,
+      modifier: typeof effect?.modifier === 'number' ? effect.modifier : undefined,
+      value: effect?.value,
+      condition: effect?.condition,
+      description: String(effect?.description || 'Contextual effect.'),
+      sourceId,
+      provenance: 'AI_GENERATED' as CharacterProvenanceSource,
+    })) : [];
+
+    const feats = Array.isArray(extracted.feats) ? extracted.feats.map((feat: any, idx: number) => {
+      const id = feat?.id || 'feat_' + draftId + '_' + (idx + 1);
+      return { id, name: String(feat?.name || 'Feat ' + (idx + 1)), description: String(feat?.description || ''), effects: mapEffects(feat?.effects, id), prerequisites: Array.isArray(feat?.prerequisites) ? feat.prerequisites.map(String) : [], tags: Array.isArray(feat?.tags) ? feat.tags.map(String) : [], provenance: 'AI_GENERATED' as CharacterProvenanceSource, worldId };
+    }) : [];
+
+    const titles = Array.isArray(extracted.titles) ? extracted.titles.map((title: any, idx: number) => {
+      const id = title?.id || 'title_' + draftId + '_' + (idx + 1);
+      return { id, name: String(title?.name || 'Title ' + (idx + 1)), description: String(title?.description || ''), effects: mapEffects(title?.effects, id), provenance: 'AI_GENERATED' as CharacterProvenanceSource, worldId };
+    }) : [];
+
+    const aiExtractionSummary = extracted.aiExtractionSummary ? {
+      interpretation: String(extracted.aiExtractionSummary.interpretation || ''),
+      keyFacts: Array.isArray(extracted.aiExtractionSummary.keyFacts) ? extracted.aiExtractionSummary.keyFacts.map(String) : [],
+      proposedHighlights: Array.isArray(extracted.aiExtractionSummary.proposedHighlights) ? extracted.aiExtractionSummary.proposedHighlights.map(String) : [],
+      uncertainties: Array.isArray(extracted.aiExtractionSummary.uncertainties) ? extracted.aiExtractionSummary.uncertainties.map(String) : [],
+    } : { interpretation: concept, keyFacts: [identity.name, identity.species, role.profession || role.archetype].filter(Boolean), proposedHighlights: capabilities.map((c) => c.name), uncertainties: [] };
     const draft: CharacterGenesisDraft = {
       draftId,
       worldId,
@@ -406,13 +363,36 @@ OUTPUT MUST BE STRICT JSON with the following structure:
       motivations,
       relationships,
       condition,
+      attributes,
+      stats,
+      traits,
       capabilities,
       generatedSkills,
+      feats,
+      titles,
       startingEquipment,
       startingLocation,
       startingSituation,
+      startingLocationMode: 'AI_SUGGEST',
+      startingSituationMode: 'AI_SUGGEST',
+      startingState: {
+        healthCurrent: 100,
+        healthMax: 100,
+        energyCurrent: 100,
+        energyMax: 100,
+        fatigue: 0,
+        stress: 0,
+        conditions: [...condition.injuries.map(String), ...condition.curses.map(String), ...condition.specialStates.map(String)],
+        activeEffects: [],
+        reputations: {},
+        relationshipModifiers: {},
+      },
       portraitAsset,
+      aiExtractionSummary,
       provenance,
+      fieldLocks: [],
+      revision: 1,
+      revisionHistory: [],
       validationState: {
         isValid: true,
         errors: [],
@@ -439,59 +419,18 @@ OUTPUT MUST BE STRICT JSON with the following structure:
   ): Promise<CapabilityDefinition & { generatedSkills: GeneratedTechnique[] }> {
     const concept = input.capabilityConcept || 'Unique Ability';
     const capId = `cap_custom_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const apiKey = process.env.GEMINI_API_KEY;
-
-    let proposal: any = null;
-
-    if (apiKey && concept.trim().length > 0) {
-      try {
-        const ai = new GoogleGenAI({
-          apiKey,
-          httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
-        });
-
-        const prompt = `Propose a balanced, structured capability definition and 2 complementary techniques for this concept in an RPG world.
-
-WORLD: ${worldTemplate?.title} (${worldTemplate?.genreTags?.join(', ')})
-CONCEPT: "${concept}"
-CHARACTER CONTEXT: ${JSON.stringify(input.characterContext || {})}
-
-Respond in pure JSON:
-{
-  "name": string,
-  "category": "Combat" | "Magic" | "Movement" | "Domain" | "Perception" | "Biological" | "Social",
-  "activationMode": "immediate" | "passive" | "reaction" | "charged" | "channelled" | "toggled",
-  "powerTier": "Minor" | "Moderate" | "Major" | "WorldScale",
-  "baseEnergyCost": number,
-  "baseStrainCost": number,
-  "description": string,
-  "techniques": [
-    {
-      "name": string,
-      "description": string,
-      "activationType": string,
-      "energyCost": number,
-      "cooldownTurns": number,
-      "range": string
-    }
-  ]
-}`;
-
-        const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
-          contents: prompt,
-          config: {
-            temperature: 0.3,
-            responseMimeType: 'application/json',
-          },
-        });
-
-        if (response.text) {
-          proposal = JSON.parse(response.text);
-        }
-      } catch (err) {
-        console.warn('[CharacterGenesisService] Custom capability AI proposal failed, using procedural fallback:', err);
+    try {
+      const orchestrator = worldRepository.getAiOrchestrator();
+      const response = await orchestrator.executeTaskGeneration(
+        'narrative.generate',
+        prompt,
+        'Return only the requested structured custom capability JSON.'
+      );
+      if (response.text) {
+        proposal = JSON.parse(response.text);
       }
+    } catch (err) {
+      console.warn('[CharacterGenesisService] Orchestrated custom capability proposal failed, using procedural fallback:', err);
     }
 
     if (!proposal || !proposal.name) {
@@ -565,6 +504,28 @@ Respond in pure JSON:
         `Draft world version (${draft.worldVersion}) does not match template version (${worldTemplate.worldManifestVersion}). Auto-updating binding.`
       );
       draft.worldVersion = worldTemplate.worldManifestVersion;
+    }
+
+    // World compatibility is a warning-first gate: player creativity is allowed,
+    // but contradictions with hard world rules are surfaced before confirmation.
+    const conceptText = [
+      draft.sourceDescription,
+      draft.identity.species,
+      draft.background.history,
+      draft.capabilities.map((cap) => cap.name).join(' '),
+    ].join(' ').toLowerCase();
+
+    const hardConstraints = [...(worldTemplate?.ruleConstraints || []), ...(worldTemplate?.worldRules || [])]
+      .filter((rule: any) => rule && (rule.isHardConstraint || rule.hardConstraint));
+
+    for (const rule of hardConstraints) {
+      const ruleText = String(rule.description || rule.statement || '').toLowerCase();
+      if (ruleText.includes('no magic') && /(magic|spell|sorcer|wizard|arcane)/i.test(conceptText)) {
+        warnings.push('Character concept may conflict with a hard world rule: magic is restricted in this world.');
+      }
+      if (ruleText.includes('no supernatural') && /(supernatural|immortal|cosmic|telepath|teleport)/i.test(conceptText)) {
+        warnings.push('Character concept may conflict with a hard world rule: supernatural traits are restricted in this world.');
+      }
     }
 
     // World Rules / Capability Constraints Check
@@ -645,8 +606,13 @@ Respond in pure JSON:
       motivations: { ...draft.motivations },
       relationships: { ...draft.relationships },
       condition: { ...draft.condition },
-      capabilities: draft.capabilities ? draft.capabilities.map((c) => ({ ...c })) : [],
+      attributes: draft.attributes ? draft.attributes.map((entry) => ({ ...entry })) : [],
+      stats: draft.stats ? draft.stats.map((entry) => ({ ...entry })) : [],
+      traits: [...(draft.traits || [])],
+      capabilities: draft.capabilities ? draft.capabilities.map((c) => ({ ...c, effects: c.effects ? c.effects.map((effect) => ({ ...effect })) : [] })) : [],
       generatedSkills: draft.generatedSkills ? draft.generatedSkills.map((s) => ({ ...s })) : [],
+      feats: draft.feats ? draft.feats.map((feat) => ({ ...feat, effects: feat.effects ? feat.effects.map((effect) => ({ ...effect })) : [] })) : [],
+      titles: draft.titles ? draft.titles.map((title) => ({ ...title, effects: title.effects ? title.effects.map((effect) => ({ ...effect })) : [] })) : [],
       startingEquipment: {
         equipped: draft.startingEquipment?.equipped?.map((e) => ({ ...e })) || [],
         inventory: draft.startingEquipment?.inventory?.map((i) => ({ ...i })) || [],
@@ -657,8 +623,34 @@ Respond in pure JSON:
       },
       startingLocation: { ...draft.startingLocation },
       startingSituation: { ...draft.startingSituation },
+      startingLocationMode: draft.startingLocationMode || 'AI_SUGGEST',
+      startingSituationMode: draft.startingSituationMode || 'AI_SUGGEST',
+      startingState: draft.startingState ? {
+        ...draft.startingState,
+        conditions: [...draft.startingState.conditions],
+        activeEffects: draft.startingState.activeEffects.map((effect) => ({ ...effect })),
+        reputations: { ...draft.startingState.reputations },
+        relationshipModifiers: { ...draft.startingState.relationshipModifiers },
+      } : {
+        healthCurrent: 100,
+        healthMax: 100,
+        conditions: [],
+        activeEffects: [],
+        reputations: {},
+        relationshipModifiers: {},
+      },
       portraitAsset: draft.portraitAsset ? { ...draft.portraitAsset } : undefined,
+      aiExtractionSummary: draft.aiExtractionSummary ? {
+        ...draft.aiExtractionSummary,
+        keyFacts: [...draft.aiExtractionSummary.keyFacts],
+        proposedHighlights: [...draft.aiExtractionSummary.proposedHighlights],
+        uncertainties: [...(draft.aiExtractionSummary.uncertainties || [])],
+      } : undefined,
       provenance: { ...draft.provenance },
+      fieldLocks: [...(draft.fieldLocks || [])],
+      revision: draft.revision || 1,
+      storyMode: draft.storyMode,
+      dndRulesMode: draft.dndRulesMode,
     };
 
     return confirmed;

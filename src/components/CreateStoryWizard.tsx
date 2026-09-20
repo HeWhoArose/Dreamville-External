@@ -23,6 +23,7 @@ import { apiClient } from '../services/apiClient';
 
 interface CreateStoryWizardProps {
   onSelectRun: (storyId: string) => void;
+  onWorldAccepted?: (world: any) => void;
   onCancel: () => void;
 }
 
@@ -49,10 +50,9 @@ const PORTRAITS = [
   { emoji: '🧝‍♀️', label: 'Elf' }
 ];
 
-export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRun, onCancel }) => {
+export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRun, onWorldAccepted, onCancel }) => {
   const [stage, setStage] = useState<number>(1);
   const [isSynthesizing, setIsSynthesizing] = useState<boolean>(false);
-  const [isLaunching, setIsLaunching] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   // Stage 1 State: Premise & Optional Style
@@ -67,20 +67,6 @@ export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRu
   React.useEffect(() => {
     setSynthesizedWorld(null);
   }, [premise, selectedGenres, selectedTones, selectedMediums]);
-
-  // Stage 3 State: Character Genesis
-  const [charName, setCharName] = useState<string>('');
-  const [charRole, setCharRole] = useState<string>('Mage');
-  const [charBackground, setCharBackground] = useState<string>('');
-  const [charAppearance, setCharAppearance] = useState<string>('');
-  const [charPersonality, setCharPersonality] = useState<string>('');
-  const [charMotivations, setCharMotivations] = useState<string>('');
-  const [charEquipment, setCharEquipment] = useState<string>('');
-  const [charPortraitEmoji, setCharPortraitEmoji] = useState<string>('🧙‍♂️');
-
-  // Stage 4 State: Starting Conditions & Rules
-  const [storyMode, setStoryMode] = useState<string>('PROTAGONIST');
-  const [rulesetMode, setRulesetMode] = useState<string>('FULL_DND');
 
   const toggleTag = (tag: string, list: string[], setList: React.Dispatch<React.SetStateAction<string[]>>) => {
     if (list.includes(tag)) {
@@ -124,52 +110,21 @@ export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRu
     }
   };
 
-  const handleLaunchStory = async () => {
-    if (!synthesizedWorld) return;
-    setError(null);
-    setIsLaunching(true);
-    try {
-      const response = await apiClient.startWorldRun(synthesizedWorld.worldId, {
-        storyMode,
-        dndRulesMode: rulesetMode,
-        characterName: charName || 'Unnamed Protagonist',
-        characterRole: charRole,
-        characterBackground: charBackground,
-        characterAppearance: charAppearance,
-        characterPersonality: charPersonality,
-        characterMotivations: charMotivations,
-        characterEquipment: charEquipment ? charEquipment.split(',').map(s => s.trim()).filter(Boolean) : [],
-        characterPortraitEmoji: charPortraitEmoji,
-        capabilities: synthesizedWorld.capabilities || [],
-      });
-      if (response && response.storyId) {
-        onSelectRun(response.storyId);
-      } else {
-        throw new Error('Server starting run did not return a valid storyId.');
-      }
-    } catch (e: any) {
-      setError(e.message || 'Failed to launch the story. Please try again.');
-    } finally {
-      setIsLaunching(false);
-    }
-  };
 
   return (
     <div className="w-full max-w-5xl mx-auto py-10 px-6 text-stone-100 bg-stone-950 rounded-2xl border border-stone-800/80 shadow-2xl" id="create-story-wizard">
       {/* Step Header */}
       <div className="flex justify-between items-center mb-8 border-b border-stone-800 pb-4">
         <div>
-          <span className="text-xs uppercase tracking-widest text-purple-400 font-semibold">Stage {stage} of 5</span>
+          <span className="text-xs uppercase tracking-widest text-purple-400 font-semibold">Stage {stage} of 2</span>
           <h2 className="text-2xl font-serif font-bold text-stone-100 tracking-wide mt-1">
             {stage === 1 && 'Create Your World'}
             {stage === 2 && 'Generated World Concept'}
-            {stage === 3 && 'Character Genesis'}
-            {stage === 4 && 'Starting Scene & Campaign Rules'}
-            {stage === 5 && 'Final Campaign Dossier'}
+
           </h2>
         </div>
         <div className="flex items-center gap-1.5">
-          {[1, 2, 3, 4, 5].map((s) => (
+          {[1, 2].map((s) => (
             <div
               key={s}
               className={`h-2 w-8 rounded-full transition-all duration-300 ${
@@ -465,306 +420,6 @@ export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRu
           </div>
         )}
 
-        {stage === 3 && (
-          <div className="space-y-6">
-            <p className="text-stone-300 text-sm leading-relaxed max-w-3xl">
-              Establish the profile of your protagonist. This dossier is bound with server authority checks and determines how NPCs perceive and interact with you.
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Details & BIO */}
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-400 mb-1">Character Name</label>
-                  <input
-                    type="text"
-                    id="char-name-input"
-                    className="w-full px-4 py-2 border border-stone-800 rounded-xl bg-stone-900 text-stone-100 focus:outline-none focus:ring-2 focus:ring-purple-500/50 text-sm"
-                    placeholder="E.g., Vaelen of Highcrest"
-                    value={charName}
-                    onChange={(e) => setCharName(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-400 mb-1">Role / Archetype</label>
-                  <input
-                    type="text"
-                    className="w-full px-4 py-2 border border-stone-800 rounded-xl bg-stone-900 text-stone-100 focus:outline-none focus:ring-2 focus:ring-purple-500/50 text-sm"
-                    placeholder="E.g., Sky Warden, Aether Scribe, Rogue"
-                    value={charRole}
-                    onChange={(e) => setCharRole(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-400 mb-1">Background & History</label>
-                  <textarea
-                    className="w-full h-24 p-3 border border-stone-800 rounded-xl bg-stone-900 text-stone-100 focus:outline-none focus:ring-2 focus:ring-purple-500/50 text-xs resize-none"
-                    placeholder="Exiled astronomer from the lower terraces who discovered the armatures are drifting..."
-                    value={charBackground}
-                    onChange={(e) => setCharBackground(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-400 mb-1">Starting Equipment</label>
-                  <input
-                    type="text"
-                    className="w-full px-4 py-2 border border-stone-800 rounded-xl bg-stone-900 text-stone-100 focus:outline-none focus:ring-2 focus:ring-purple-500/50 text-xs"
-                    placeholder="E.g., Iron Staff, Windstone Diapason, Ancient Astral Atlas"
-                    value={charEquipment}
-                    onChange={(e) => setCharEquipment(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              {/* Portraits, Persona & Motivations */}
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-400 mb-2">Dossier Portrait</label>
-                  <div className="grid grid-cols-4 gap-3">
-                    {PORTRAITS.map((p) => (
-                      <button
-                        key={p.emoji}
-                        onClick={() => setCharPortraitEmoji(p.emoji)}
-                        className={`p-3 rounded-xl border text-center transition-all cursor-pointer ${
-                          charPortraitEmoji === p.emoji
-                            ? 'bg-purple-600/30 text-stone-100 border-purple-500/60 scale-105 shadow-[0_0_10px_rgba(168,85,247,0.3)]'
-                            : 'bg-stone-900 text-stone-400 border-stone-800 hover:border-stone-700'
-                        }`}
-                      >
-                        <div className="text-2xl mb-1">{p.emoji}</div>
-                        <div className="text-[10px] font-medium tracking-wide uppercase">{p.label}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-stone-400 mb-1">Personality</label>
-                    <input
-                      type="text"
-                      className="w-full px-3 py-1.5 border border-stone-800 rounded-xl bg-stone-900 text-stone-100 focus:outline-none focus:ring-2 focus:ring-purple-500/50 text-xs"
-                      placeholder="E.g., Pragmatic, obsessive, quiet"
-                      value={charPersonality}
-                      onChange={(e) => setCharPersonality(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-stone-400 mb-1">Motivations</label>
-                    <input
-                      type="text"
-                      className="w-full px-3 py-1.5 border border-stone-800 rounded-xl bg-stone-900 text-stone-100 focus:outline-none focus:ring-2 focus:ring-purple-500/50 text-xs"
-                      placeholder="E.g., Save family, solve anomaly"
-                      value={charMotivations}
-                      onChange={(e) => setCharMotivations(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-stone-400 mb-1">Physical Appearance</label>
-                  <input
-                    type="text"
-                    className="w-full px-3 py-2 border border-stone-800 rounded-xl bg-stone-900 text-stone-100 focus:outline-none focus:ring-2 focus:ring-purple-500/50 text-xs"
-                    placeholder="E.g., Tall, clad in dust-stained dark robes, glowing gray eyes"
-                    value={charAppearance}
-                    onChange={(e) => setCharAppearance(e.target.value)}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {stage === 4 && (
-          <div className="space-y-6">
-            <p className="text-stone-300 text-sm leading-relaxed max-w-3xl">
-              Configure the mechanical and roleplaying ruleset mode for this campaign. The server enforces rulesets to ensure consistency in action adjudication and narrative pacing.
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Campaign Rulesets */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-serif font-semibold text-stone-100 flex items-center gap-2">
-                  <Shield className="w-5 h-5 text-purple-400" />
-                  Campaign Ruleset Mode
-                </h3>
-
-                <div className="space-y-3">
-                  <label className={`block p-4 rounded-xl border cursor-pointer transition-all ${
-                    rulesetMode === 'FULL_DND'
-                      ? 'bg-purple-950/40 text-stone-100 border-purple-500/60 shadow-[0_0_12px_rgba(168,85,247,0.2)]'
-                      : 'bg-stone-900/60 text-stone-300 border-stone-800 hover:border-stone-700'
-                  }`}>
-                    <input
-                      type="radio"
-                      name="ruleset"
-                      value="FULL_DND"
-                      checked={rulesetMode === 'FULL_DND'}
-                      onChange={() => setRulesetMode('FULL_DND')}
-                      className="sr-only"
-                    />
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="font-semibold text-sm">Full D&D d20 Engine</span>
-                      <Dice5 className="w-4 h-4 text-purple-400" />
-                    </div>
-                    <p className="text-xs text-stone-400">Full attributes, combat rounds, spell levels, and mechanical item stats are mathematically calculated.</p>
-                  </label>
-
-                  <label className={`block p-4 rounded-xl border cursor-pointer transition-all ${
-                    rulesetMode === 'LITE_DND'
-                      ? 'bg-purple-950/40 text-stone-100 border-purple-500/60 shadow-[0_0_12px_rgba(168,85,247,0.2)]'
-                      : 'bg-stone-900/60 text-stone-300 border-stone-800 hover:border-stone-700'
-                  }`}>
-                    <input
-                      type="radio"
-                      name="ruleset"
-                      value="LITE_DND"
-                      checked={rulesetMode === 'LITE_DND'}
-                      onChange={() => setRulesetMode('LITE_DND')}
-                      className="sr-only"
-                    />
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="font-semibold text-sm">Lite D&D Mechanics</span>
-                      <Feather className="w-4 h-4 text-purple-400" />
-                    </div>
-                    <p className="text-xs text-stone-400">Soft mechanical checks and rules. Prioritizes narrative flow but keeps basic attribute-based probability checks.</p>
-                  </label>
-                </div>
-              </div>
-
-              {/* Story/Play Modes */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-serif font-semibold text-stone-100 flex items-center gap-2">
-                  <Compass className="w-5 h-5 text-blue-400" />
-                  Story Director Play Mode
-                </h3>
-
-                <div className="space-y-3">
-                  <label className={`block p-4 rounded-xl border cursor-pointer transition-all ${
-                    storyMode === 'PROTAGONIST'
-                      ? 'bg-purple-950/40 text-stone-100 border-purple-500/60 shadow-[0_0_12px_rgba(168,85,247,0.2)]'
-                      : 'bg-stone-900/60 text-stone-300 border-stone-800 hover:border-stone-700'
-                  }`}>
-                    <input
-                      type="radio"
-                      name="storyMode"
-                      value="PROTAGONIST"
-                      checked={storyMode === 'PROTAGONIST'}
-                      onChange={() => setStoryMode('PROTAGONIST')}
-                      className="sr-only"
-                    />
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="font-semibold text-sm">Active Protagonist</span>
-                      <User className="w-4 h-4 text-blue-400" />
-                    </div>
-                    <p className="text-xs text-stone-400">You play as the central actor of the story. Actions, dialogue, and travel decisions are explicitly driven by you.</p>
-                  </label>
-
-                  <label className={`block p-4 rounded-xl border cursor-pointer transition-all ${
-                    storyMode === 'SPECTATOR'
-                      ? 'bg-purple-950/40 text-stone-100 border-purple-500/60 shadow-[0_0_12px_rgba(168,85,247,0.2)]'
-                      : 'bg-stone-900/60 text-stone-300 border-stone-800 hover:border-stone-700'
-                  }`}>
-                    <input
-                      type="radio"
-                      name="storyMode"
-                      value="SPECTATOR"
-                      checked={storyMode === 'SPECTATOR'}
-                      onChange={() => setStoryMode('SPECTATOR')}
-                      className="sr-only"
-                    />
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="font-semibold text-sm">Astral Spectator</span>
-                      <Wand2 className="w-4 h-4 text-blue-400" />
-                    </div>
-                    <p className="text-xs text-stone-400">The protagonist acts offscreen. You observe the events, periodically shaping destiny through divine interventions or environment shifts.</p>
-                  </label>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {stage === 5 && (
-          <div className="space-y-6">
-            <p className="text-stone-300 text-sm leading-relaxed max-w-3xl">
-              Excellent! Review your campaign dossier before seeding the dynamic sandbox. Once started, you can immediately begin playing, travelling, and executing actions within this world.
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {/* Left Column: World Overview */}
-              <div className="border border-stone-800 rounded-xl p-6 bg-stone-900/60 space-y-4">
-                <h3 className="text-lg font-serif font-semibold text-stone-100">The World of {synthesizedWorld?.title}</h3>
-                <div className="space-y-3 text-sm">
-                  <div>
-                    <span className="text-xs font-semibold uppercase text-stone-500 block">Setting & Era</span>
-                    <span className="text-stone-300 text-xs">{synthesizedWorld?.setting || 'Known Realm'} • {synthesizedWorld?.era || 'Current Era'}</span>
-                  </div>
-                  <div>
-                    <span className="text-xs font-semibold uppercase text-stone-500 block">Original Premise</span>
-                    <p className="text-stone-300 text-xs italic bg-stone-950/60 p-3 rounded-lg border border-stone-800 mt-1">"{premise}"</p>
-                  </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="bg-stone-950/60 p-2 rounded-lg text-center border border-stone-800">
-                      <span className="text-[10px] uppercase text-stone-500 block">Genre</span>
-                      <span className="text-xs font-semibold text-stone-200">{selectedGenres.join(', ') || 'AI Inferred'}</span>
-                    </div>
-                    <div className="bg-stone-950/60 p-2 rounded-lg text-center border border-stone-800">
-                      <span className="text-[10px] uppercase text-stone-500 block">Tone</span>
-                      <span className="text-xs font-semibold text-stone-200">{selectedTones.join(', ') || 'AI Inferred'}</span>
-                    </div>
-                    <div className="bg-stone-950/60 p-2 rounded-lg text-center border border-stone-800">
-                      <span className="text-[10px] uppercase text-stone-500 block">Medium</span>
-                      <span className="text-xs font-semibold text-stone-200">{selectedMediums.join(', ') || 'AI Inferred'}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Right Column: Character & Rules Review */}
-              <div className="border border-stone-800 rounded-xl p-6 bg-stone-900/60 space-y-4">
-                <h3 className="text-lg font-serif font-semibold text-stone-100 flex items-center gap-2">
-                  <span className="text-2xl">{charPortraitEmoji}</span>
-                  {charName || 'Unnamed Hero'}
-                </h3>
-                <div className="space-y-3 text-sm">
-                  <div>
-                    <span className="text-xs font-semibold uppercase text-stone-500 block">Role & Archetype</span>
-                    <span className="text-stone-200">{charRole}</span>
-                  </div>
-                  {charBackground && (
-                    <div>
-                      <span className="text-xs font-semibold uppercase text-stone-500 block">Background</span>
-                      <p className="text-stone-300 text-xs">{charBackground}</p>
-                    </div>
-                  )}
-                  {charEquipment && (
-                    <div>
-                      <span className="text-xs font-semibold uppercase text-stone-500 block">Equipment</span>
-                      <span className="text-stone-300 text-xs">{charEquipment}</span>
-                    </div>
-                  )}
-                  <div className="grid grid-cols-2 gap-4 pt-2 border-t border-stone-800">
-                    <div>
-                      <span className="text-[10px] uppercase text-stone-500 block">Story Mode</span>
-                      <span className="text-xs font-semibold text-stone-200">{storyMode}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] uppercase text-stone-500 block">Ruleset</span>
-                      <span className="text-xs font-semibold text-stone-200">{rulesetMode}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
       {/* Control Buttons */}
       <div className="mt-10 flex justify-between border-t border-stone-800 pt-6">
         <button
@@ -781,55 +436,32 @@ export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRu
           <ChevronLeft className="w-4 h-4" /> Back
         </button>
 
-        {stage < 5 ? (
-          stage === 1 ? (
-            <button
-              onClick={handleSynthesizeWorld}
-              disabled={isSynthesizing || !premise.trim()}
-              id="generate-world-btn"
-              className="px-8 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl font-semibold transition-all shadow-[0_0_20px_rgba(168,85,247,0.3)] disabled:opacity-50 flex items-center gap-2 cursor-pointer text-sm"
-            >
-              {isSynthesizing ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" /> Dreaming up your world...
-                </>
-              ) : (
-                <>
-                  Create With AI <Sparkles className="w-4 h-4 text-purple-200" />
-                </>
-              )}
-            </button>
-          ) : stage === 2 ? (
-            <button
-              onClick={() => setStage(3)}
-              className="px-8 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl font-semibold transition-all shadow-[0_0_20px_rgba(168,85,247,0.3)] flex items-center gap-2 cursor-pointer text-sm"
-            >
-              Accept World & Continue <ChevronRight className="w-4 h-4" />
-            </button>
-          ) : (
-            <button
-              onClick={() => setStage((s) => s + 1)}
-              className="px-6 py-2.5 bg-stone-800 hover:bg-stone-700 text-stone-100 rounded-xl font-medium transition-colors flex items-center gap-2 cursor-pointer"
-            >
-              Next <ChevronRight className="w-4 h-4" />
-            </button>
-          )
-        ) : (
+        {stage === 1 ? (
           <button
-            onClick={handleLaunchStory}
-            disabled={isLaunching}
-            id="launch-story-btn"
-            className="px-8 py-3 bg-gradient-to-r from-amber-600 to-yellow-600 hover:from-amber-500 hover:to-yellow-500 text-stone-950 rounded-xl font-bold transition-all disabled:opacity-50 flex items-center gap-2 shadow-[0_0_20px_rgba(245,158,11,0.4)] cursor-pointer text-sm"
+            onClick={handleSynthesizeWorld}
+            disabled={isSynthesizing || !premise.trim()}
+            id="generate-world-btn"
+            className="px-8 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl font-semibold transition-all shadow-[0_0_20px_rgba(168,85,247,0.3)] disabled:opacity-50 flex items-center gap-2 cursor-pointer text-sm"
           >
-            {isLaunching ? (
+            {isSynthesizing ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" /> Seeding Sandbox...
+                <Loader2 className="w-4 h-4 animate-spin" /> Dreaming up your world...
               </>
             ) : (
               <>
-                <CheckCircle className="w-4 h-4" /> Bring World to Life
+                Create With AI <Sparkles className="w-4 h-4 text-purple-200" />
               </>
             )}
+          </button>
+        ) : (
+          <button
+            onClick={() => {
+              if (onWorldAccepted && synthesizedWorld) onWorldAccepted(synthesizedWorld);
+            }}
+            disabled={!synthesizedWorld}
+            className="px-8 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl font-semibold transition-all shadow-[0_0_20px_rgba(168,85,247,0.3)] disabled:opacity-50 flex items-center gap-2 cursor-pointer text-sm"
+          >
+            Accept World & Open Character Genesis <ChevronRight className="w-4 h-4" />
           </button>
         )}
       </div>

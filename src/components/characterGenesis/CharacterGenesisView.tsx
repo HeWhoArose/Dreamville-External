@@ -110,6 +110,29 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
   // Portrait generation state
   const [isGeneratingPortrait, setIsGeneratingPortrait] = useState<boolean>(false);
   const [customImageUrl, setCustomImageUrl] = useState<string>('');
+  const [customFeatName, setCustomFeatName] = useState<string>('');
+  const [customFeatDescription, setCustomFeatDescription] = useState<string>('');
+  const [customEquipmentName, setCustomEquipmentName] = useState<string>('');
+  const [customEquipmentDescription, setCustomEquipmentDescription] = useState<string>('');
+  const [customAttributeName, setCustomAttributeName] = useState<string>('');
+  const [customAttributeValue, setCustomAttributeValue] = useState<string>('10');
+  const [customStatName, setCustomStatName] = useState<string>('');
+  const [customStatValue, setCustomStatValue] = useState<string>('10');
+  const [autosaveStatus, setAutosaveStatus] = useState<string>('Not saved');
+  const [showInterpretation, setShowInterpretation] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (!draft || !selectedWorld) return;
+    const timer = window.setInterval(async () => {
+      try {
+        const res = await apiClient.saveCharacterDraft(selectedWorld.worldId, draft);
+        if (res.success) setAutosaveStatus('Autosaved ' + new Date().toLocaleTimeString());
+      } catch {
+        setAutosaveStatus('Autosave pending');
+      }
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [draft, selectedWorld]);
 
   // Load available worlds on mount if needed
   useEffect(() => {
@@ -168,9 +191,154 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
             ...prevDraft.provenance,
             [fieldKey]: 'USER_EDITED' as CharacterProvenanceSource,
           },
+          fieldLocks: Array.from(new Set([...(prevDraft.fieldLocks || []), fieldKey])),
         };
       });
     }
+  };
+
+  const isFieldLocked = (fieldKey: string): boolean => Boolean(draft?.fieldLocks?.includes(fieldKey));
+
+  const toggleFieldLock = (fieldKey: string) => {
+    setDraft((prev) => {
+      if (!prev) return prev;
+      const locks = new Set(prev.fieldLocks || []);
+      if (locks.has(fieldKey)) locks.delete(fieldKey);
+      else locks.add(fieldKey);
+      return { ...prev, fieldLocks: Array.from(locks) };
+    });
+  };
+
+  const saveRevisionSnapshot = (label: string) => {
+    if (!draft) return;
+    const nextRevision = (draft.revision || 0) + 1;
+    setDraft({
+      ...draft,
+      revision: nextRevision,
+      revisionHistory: [
+        ...(draft.revisionHistory || []).slice(-9),
+        {
+          revision: nextRevision,
+          savedAt: new Date().toISOString(),
+          label,
+          snapshot: JSON.parse(JSON.stringify(draft)),
+        },
+      ],
+    });
+  };
+
+  const addCustomFeat = () => {
+    if (!draft || !customFeatName.trim()) return;
+    const id = 'feat_player_' + Date.now();
+    const feat = {
+      id,
+      name: customFeatName.trim(),
+      description: customFeatDescription.trim() || 'Player-created achievement.',
+      effects: [],
+      prerequisites: [],
+      tags: ['PLAYER_CREATED'],
+      provenance: 'PLAYER_INPUT' as CharacterProvenanceSource,
+      worldId: selectedWorld?.worldId,
+    };
+    setDraft({ ...draft, feats: [...(draft.feats || []), feat] });
+    markFieldEdited('feats');
+    setCustomFeatName('');
+    setCustomFeatDescription('');
+  };
+
+  const addCustomEquipment = () => {
+    if (!draft || !customEquipmentName.trim()) return;
+    const item: StartingEquipmentItem = {
+      id: 'eq_player_' + Date.now(),
+      name: customEquipmentName.trim(),
+      category: 'Miscellaneous',
+      description: customEquipmentDescription.trim() || 'Player-created starting equipment.',
+      isEquipped: false,
+      quantity: 1,
+      provenance: 'PLAYER_INPUT',
+      sourceUserPrompt: customEquipmentDescription.trim() || customEquipmentName.trim(),
+    };
+    setDraft({
+      ...draft,
+      startingEquipment: {
+        ...draft.startingEquipment,
+        inventory: [...draft.startingEquipment.inventory, item],
+      },
+    });
+    markFieldEdited('startingEquipment');
+    setCustomEquipmentName('');
+    setCustomEquipmentDescription('');
+  };
+
+  const addCustomStat = (kind: 'attribute' | 'stat') => {
+    if (!draft) return;
+    const name = kind === 'attribute' ? customAttributeName.trim() : customStatName.trim();
+    const valueText = kind === 'attribute' ? customAttributeValue : customStatValue;
+    if (!name) return;
+    const entry = {
+      id: (kind === 'attribute' ? 'attr_' : 'stat_') + Date.now(),
+      name,
+      value: Number(valueText) || 10,
+      baseValue: Number(valueText) || 10,
+      provenance: 'PLAYER_INPUT' as CharacterProvenanceSource,
+    };
+    setDraft({
+      ...draft,
+      [kind === 'attribute' ? 'attributes' : 'stats']: [
+        ...(draft[kind === 'attribute' ? 'attributes' : 'stats'] || []),
+        entry,
+      ],
+    } as CharacterGenesisDraft);
+    markFieldEdited(kind === 'attribute' ? 'attributes' : 'stats');
+    if (kind === 'attribute') setCustomAttributeName('');
+    else setCustomStatName('');
+  };
+
+  const handleSuggestStartingContext = async (mode: 'AI_SUGGEST' | 'SURPRISE_ME') => {
+    if (!selectedWorld || !draft) return;
+    try {
+      const locked = [
+        'identity','appearance','personality','background','role','motivations',
+        'relationships','condition','capabilities','generatedSkills','feats',
+        'titles','startingEquipment','portraitAsset','attributes','stats','traits'
+      ];
+      const concept = naturalConcept + '\n\nStarting context instruction: ' +
+        (mode === 'SURPRISE_ME'
+          ? 'Surprise the player with a coherent but unexpected starting location and dramatic situation.'
+          : 'Suggest the most narratively coherent starting location and situation for this character and world.');
+      const res = await apiClient.extractCharacterFromConcept(selectedWorld.worldId, concept, draft, locked);
+      if (res.success && res.draft) {
+        setDraft({
+          ...draft,
+          startingLocation: res.draft.startingLocation,
+          startingSituation: res.draft.startingSituation,
+          startingLocationMode: mode,
+          startingSituationMode: mode,
+        });
+        markFieldEdited('startingLocation');
+        markFieldEdited('startingSituation');
+      }
+    } catch (err: any) {
+      setSaveDraftStatus('Could not generate a starting context: ' + (err.message || 'Unknown error'));
+    }
+  };
+
+  const restoreRevision = (revision: number) => {
+    if (!draft) return;
+    const target = (draft.revisionHistory || []).find((entry) => entry.revision === revision);
+    if (!target?.snapshot) return;
+    setDraft({
+      ...draft,
+      ...(target.snapshot as CharacterGenesisDraft),
+      revision: (draft.revision || 0) + 1,
+      revisionHistory: [...(draft.revisionHistory || []), {
+        revision: (draft.revision || 0) + 1,
+        savedAt: new Date().toISOString(),
+        label: 'Restored revision ' + revision,
+        snapshot: JSON.parse(JSON.stringify(target.snapshot)),
+      }],
+    });
+    setSaveDraftStatus('Restored revision ' + revision + '. Review before confirming.');
   };
 
   // 1. Natural Language Extraction Handler
@@ -279,7 +447,21 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
   const handleSaveDraft = async () => {
     if (!selectedWorld || !draft) return;
     try {
-      const res = await apiClient.saveCharacterDraft(selectedWorld.worldId, draft);
+      const revisedDraft = {
+        ...draft,
+        revision: (draft.revision || 0) + 1,
+        revisionHistory: [
+          ...(draft.revisionHistory || []).slice(-9),
+          {
+            revision: (draft.revision || 0) + 1,
+            savedAt: new Date().toISOString(),
+            label: 'Manual save',
+            snapshot: JSON.parse(JSON.stringify(draft)),
+          },
+        ],
+      };
+      setDraft(revisedDraft);
+      const res = await apiClient.saveCharacterDraft(selectedWorld.worldId, revisedDraft);
       if (res.success) {
         setSaveDraftStatus('Draft successfully saved to world archive.');
         setSavedDrafts((prev) => {
@@ -579,6 +761,28 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 </div>
               </div>
 
+              {draft?.aiExtractionSummary && (
+                <div className="rounded-lg border border-indigo-900/70 bg-indigo-950/30 p-4">
+                  <button
+                    onClick={() => setShowInterpretation(!showInterpretation)}
+                    className="w-full flex items-center justify-between text-left"
+                  >
+                    <span className="text-xs font-semibold text-indigo-300">AI Interpretation Before Editing</span>
+                    <ChevronDown className={`w-4 h-4 transition-transform ${showInterpretation ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showInterpretation && (
+                    <div className="mt-3 space-y-2 text-xs text-neutral-300">
+                      <p>{draft.aiExtractionSummary.interpretation}</p>
+                      <div><span className="text-neutral-500">Key facts:</span> {draft.aiExtractionSummary.keyFacts.join(' • ') || 'None'}</div>
+                      <div><span className="text-neutral-500">AI proposes:</span> {draft.aiExtractionSummary.proposedHighlights.join(' • ') || 'None'}</div>
+                      {draft.aiExtractionSummary.uncertainties?.length ? (
+                        <div className="text-amber-300"><span className="text-amber-400">Uncertainties:</span> {draft.aiExtractionSummary.uncertainties.join(' • ')}</div>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {extractionError && (
                 <div className="p-3 rounded-lg bg-red-950/50 border border-red-800 text-xs text-red-200 flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
@@ -667,9 +871,21 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                     Fine-tune demographic, psychological, and historical attributes. Manual edits are permanently marked with USER_EDITED provenance.
                   </p>
                 </div>
-                <span className="text-xs text-neutral-400 font-mono">
-                  Draft ID: {draft.draftId.slice(0, 14)}...
-                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => toggleFieldLock('identity')}
+                    className="text-[10px] px-2 py-1 rounded bg-neutral-900 border border-neutral-800 text-neutral-400"
+                  >
+                    {isFieldLocked('identity') ? '🔒 Identity locked' : '🔓 Lock identity'}
+                  </button>
+                  <button
+                    onClick={() => toggleFieldLock('capabilities')}
+                    className="text-[10px] px-2 py-1 rounded bg-neutral-900 border border-neutral-800 text-neutral-400"
+                  >
+                    {isFieldLocked('capabilities') ? '🔒 Capabilities locked' : '🔓 Lock capabilities'}
+                  </button>
+                  <span className="text-xs text-neutral-400 font-mono">Draft {draft.draftId.slice(0, 10)}…</span>
+                </div>
               </div>
 
               {/* 1. Identity Section */}
@@ -954,6 +1170,47 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
         {/* STEP 3: CAPABILITIES & SKILLS / TECHNIQUES */}
         {draft && activeStep === 3 && (
           <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="p-5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-3">
+                <h3 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">Attributes & Stats</h3>
+                <div className="space-y-2">
+                  {(draft.attributes || []).map((entry) => (
+                    <div key={entry.id} className="flex items-center justify-between rounded bg-neutral-900 p-2 text-xs">
+                      <span>{entry.name}</span><span className="font-mono text-indigo-300">{entry.value}</span>
+                    </div>
+                  ))}
+                  <div className="flex gap-2">
+                    <input value={customAttributeName} onChange={(e) => setCustomAttributeName(e.target.value)} placeholder="Custom attribute" className="flex-1 px-2 py-1.5 rounded bg-neutral-900 border border-neutral-700 text-xs" />
+                    <input value={customAttributeValue} onChange={(e) => setCustomAttributeValue(e.target.value)} className="w-16 px-2 py-1.5 rounded bg-neutral-900 border border-neutral-700 text-xs" />
+                    <button onClick={() => addCustomStat('attribute')} className="px-2 rounded bg-neutral-800"><Plus className="w-3.5 h-3.5" /></button>
+                  </div>
+                  <div className="flex gap-2">
+                    <input value={customStatName} onChange={(e) => setCustomStatName(e.target.value)} placeholder="Custom stat" className="flex-1 px-2 py-1.5 rounded bg-neutral-900 border border-neutral-700 text-xs" />
+                    <input value={customStatValue} onChange={(e) => setCustomStatValue(e.target.value)} className="w-16 px-2 py-1.5 rounded bg-neutral-900 border border-neutral-700 text-xs" />
+                    <button onClick={() => addCustomStat('stat')} className="px-2 rounded bg-neutral-800"><Plus className="w-3.5 h-3.5" /></button>
+                  </div>
+                </div>
+              </div>
+              <div className="p-5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">Feats & Titles</h3>
+                  <span className="text-[10px] text-neutral-500">Extensible • AI + Player + World</span>
+                </div>
+                {(draft.feats || []).map((feat) => (
+                  <div key={feat.id} className="rounded-lg bg-neutral-900 border border-neutral-800 p-3 text-xs">
+                    <div className="font-medium text-white">{feat.name}</div>
+                    <div className="text-neutral-400 mt-1">{feat.description}</div>
+                    {feat.effects?.length ? <div className="text-indigo-300 mt-1">{feat.effects.map((e) => e.description).join(' • ')}</div> : null}
+                  </div>
+                ))}
+                <div className="space-y-2">
+                  <input value={customFeatName} onChange={(e) => setCustomFeatName(e.target.value)} placeholder="Create a custom feat/title" className="w-full px-2.5 py-2 rounded bg-neutral-900 border border-neutral-700 text-xs" />
+                  <input value={customFeatDescription} onChange={(e) => setCustomFeatDescription(e.target.value)} placeholder="What happened and what does it do?" className="w-full px-2.5 py-2 rounded bg-neutral-900 border border-neutral-700 text-xs" />
+                  <button onClick={addCustomFeat} className="px-3 py-1.5 rounded bg-indigo-700 text-xs"><Plus className="w-3.5 h-3.5 inline mr-1" />Add custom feat</button>
+                </div>
+              </div>
+            </div>
+
             {/* Custom Capability Proposal Bar */}
             <div className="p-5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-3">
               <h3 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider flex items-center gap-2">
@@ -1245,6 +1502,15 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
               </div>
             </div>
 
+            <div className="p-5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-3">
+              <h3 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">Custom Equipment</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                <input value={customEquipmentName} onChange={(e) => setCustomEquipmentName(e.target.value)} placeholder="Item name" className="px-3 py-2 rounded bg-neutral-900 border border-neutral-700 text-xs" />
+                <input value={customEquipmentDescription} onChange={(e) => setCustomEquipmentDescription(e.target.value)} placeholder="Description / desired effect" className="px-3 py-2 rounded bg-neutral-900 border border-neutral-700 text-xs md:col-span-2" />
+              </div>
+              <button onClick={addCustomEquipment} className="px-3 py-1.5 rounded bg-indigo-700 text-xs"><Plus className="w-3.5 h-3.5 inline mr-1" />Add custom item</button>
+            </div>
+
             {/* Navigation */}
             <div className="flex items-center justify-between">
               <button
@@ -1279,6 +1545,16 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                     Select a canonical world location and establish the opening scene narrative conditions.
                   </p>
                 </div>
+              </div>
+
+              <div className="p-4 rounded-lg bg-indigo-950/20 border border-indigo-900/70 space-y-3">
+                <div className="text-xs font-semibold text-indigo-300">How should DreamBook choose your beginning?</div>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={() => handleSuggestStartingContext('AI_SUGGEST')} className="px-3 py-1.5 rounded bg-indigo-700 text-xs">AI Suggest</button>
+                  <button onClick={() => handleSuggestStartingContext('SURPRISE_ME')} className="px-3 py-1.5 rounded bg-neutral-800 text-xs">Surprise Me</button>
+                  <button onClick={() => setDraft({ ...draft, startingLocationMode: 'CHOOSE', startingSituationMode: 'CHOOSE' })} className="px-3 py-1.5 rounded bg-neutral-800 text-xs">I'll Choose</button>
+                </div>
+                <div className="text-[11px] text-neutral-400">Current mode: {draft.startingLocationMode} • Situation: {draft.startingSituationMode}</div>
               </div>
 
               {/* Canonical Location Selection */}
@@ -1456,6 +1732,45 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                     </p>
                   </div>
 
+                  <div className="flex flex-wrap items-center gap-2 pt-2">
+                    <label className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs cursor-pointer">
+                      Upload
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file || !draft) return;
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            setDraft({
+                              ...draft,
+                              portraitAsset: {
+                                ...draft.portraitAsset!,
+                                imageUrl: String(reader.result),
+                                source: 'UPLOAD',
+                                isFallback: false,
+                                status: 'ready',
+                              },
+                            });
+                            markFieldEdited('portraitAsset');
+                          };
+                          reader.readAsDataURL(file);
+                        }}
+                      />
+                    </label>
+                    <button
+                      onClick={() => draft && setDraft({
+                        ...draft,
+                        portraitAsset: { ...draft.portraitAsset!, pinned: !draft.portraitAsset?.pinned },
+                      })}
+                      className={`px-3 py-1.5 rounded-lg text-xs ${draft.portraitAsset?.pinned ? 'bg-indigo-700' : 'bg-neutral-800'}`}
+                    >
+                      {draft.portraitAsset?.pinned ? 'Pinned' : 'Pin Portrait'}
+                    </button>
+                  </div>
+
                   {/* Emoji Selector */}
                   <div className="flex items-center gap-2 pt-2">
                     {['🧙‍♂️', '⚔️', '🗡️', '🏹', '✨', '🤖', '🧝‍♀️', '👤'].map((emoji) => (
@@ -1624,6 +1939,39 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                   {draft.validationState.warnings?.map((warn, i) => (
                     <div key={i} className="text-amber-300 pl-5">• Warning: {warn}</div>
                   ))}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 rounded-lg bg-neutral-900 border border-neutral-800 text-xs">
+                  <div className="font-semibold text-indigo-400 uppercase tracking-wider">Rules & Achievements</div>
+                  <div className="mt-2 text-neutral-300">Attributes: {(draft.attributes || []).length} • Stats: {(draft.stats || []).length} • Feats: {(draft.feats || []).length} • Titles: {(draft.titles || []).length}</div>
+                  <div className="text-neutral-500 mt-1">Player edits are preserved and locked from accidental AI overwrite.</div>
+                </div>
+                <div className="p-4 rounded-lg bg-neutral-900 border border-neutral-800 text-xs">
+                  <div className="font-semibold text-indigo-400 uppercase tracking-wider">Starting State</div>
+                  <div className="mt-2 text-neutral-300">HP {draft.startingState.healthCurrent}/{draft.startingState.healthMax} • Conditions {(draft.startingState.conditions || []).length}</div>
+                  <div className="text-neutral-500 mt-1">Location mode: {draft.startingLocationMode} • Situation mode: {draft.startingSituationMode}</div>
+                </div>
+              </div>
+
+              {(draft.revisionHistory || []).length > 0 && (
+                <div className="p-4 rounded-lg bg-neutral-950 border border-neutral-800">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">Revision History</span>
+                    <span className="text-[10px] text-neutral-500">Restore any previous draft before confirmation</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {(draft.revisionHistory || []).slice().reverse().map((entry) => (
+                      <button
+                        key={entry.revision}
+                        onClick={() => restoreRevision(entry.revision)}
+                        className="px-2.5 py-1.5 rounded bg-neutral-900 border border-neutral-800 hover:border-indigo-600 text-[11px] text-neutral-300"
+                      >
+                        v{entry.revision} · {entry.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
 

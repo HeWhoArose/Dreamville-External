@@ -796,6 +796,18 @@ export class InMemoryWorldRepository implements WorldRepository {
         currentHp: 30,
         maxHp: 30,
         protagonist: JSON.parse(JSON.stringify(char)), // Sealed snapshot
+        characterAttributes: JSON.parse(JSON.stringify(char.attributes || [])),
+        characterStats: JSON.parse(JSON.stringify(char.stats || [])),
+        characterTraits: [...(char.traits || [])],
+        characterFeats: JSON.parse(JSON.stringify(char.feats || [])),
+        characterTitles: JSON.parse(JSON.stringify(char.titles || [])),
+        characterEffects: JSON.parse(JSON.stringify([
+          ...(char.startingState?.activeEffects || []),
+          ...(char.capabilities || []).flatMap((cap: any) => cap.effects || []),
+          ...(char.feats || []).flatMap((feat: any) => feat.effects || []),
+          ...(char.titles || []).flatMap((title: any) => title.effects || []),
+        ])),
+        startingState: JSON.parse(JSON.stringify(char.startingState || {})),
         startingLocation: JSON.parse(JSON.stringify(char.startingLocation || {})),
         startingSituation: JSON.parse(JSON.stringify(char.startingSituation || {})),
         plannedEvents,

@@ -3451,7 +3451,7 @@ gameRouter.post('/worlds/:worldId/characters/extract', async (req: Request, res:
   } catch (error: any) {
     if (error?.code === 'AI_UNAVAILABLE' && error?.requiresDeterministicConfirmation) {
       console.warn('[Character Genesis] AI extraction unavailable, prompting player for deterministic fallback confirmation:', error?.message);
-      return res.status(503).json({
+      return res.status(422).json({
         error: error?.message || 'AI character extraction is currently unavailable.',
         code: 'AI_UNAVAILABLE',
         requiresDeterministicConfirmation: true,

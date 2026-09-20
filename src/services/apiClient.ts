@@ -977,6 +977,10 @@ class ApiClient {
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(params),
     });
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.toLowerCase().includes('application/json')) {
+      throw new Error(`Orchestrator select returned non-JSON response (HTTP ${res.status}, ${contentType || 'no content-type'})`);
+    }
     if (!res.ok) throw new Error(`Failed to select model: HTTP ${res.status}`);
     return await res.json();
   }
@@ -1542,12 +1546,24 @@ class ApiClient {
       }),
     });
 
+    const contentType = res.headers.get('content-type') || '';
+    const isJson = contentType.toLowerCase().includes('application/json');
+
     if (!res.ok) {
       let payload: any = null;
-      try {
-        payload = await res.json();
-      } catch {
-        // Preserve the HTTP error when the response body is not JSON.
+      if (isJson) {
+        try {
+          payload = await res.json();
+        } catch {
+          // Ignore stream parse failure for truncated JSON
+        }
+      } else {
+        const textPreview = (await res.text().catch(() => '')).slice(0, 200);
+        const error: any = new Error(
+          `API returned non-JSON response (HTTP ${res.status}, ${contentType || 'no content-type'}). Preview: ${textPreview}`
+        );
+        error.code = 'NON_JSON_RESPONSE';
+        throw error;
       }
 
       const error: any = new Error(
@@ -1556,6 +1572,15 @@ class ApiClient {
       error.code = payload?.code;
       error.requiresDeterministicConfirmation = payload?.requiresDeterministicConfirmation === true;
       error.reason = payload?.reason;
+      throw error;
+    }
+
+    if (!isJson) {
+      const textPreview = (await res.text().catch(() => '')).slice(0, 200);
+      const error: any = new Error(
+        `API returned non-JSON response (HTTP ${res.status}, Content-Type: ${contentType || 'none'}). Preview: ${textPreview}`
+      );
+      error.code = 'UNEXPECTED_HTML_RESPONSE';
       throw error;
     }
 

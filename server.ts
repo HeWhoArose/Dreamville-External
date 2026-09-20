@@ -13,6 +13,12 @@ async function startServer() {
   // Middleware
   app.use(express.json());
 
+  // Development request logger for API routes
+  app.use('/api', (req, res, next) => {
+    console.log(`[API Request] ${req.method} ${req.originalUrl} | Host: ${req.headers.host || 'unknown'} | Content-Type: ${req.headers['content-type'] || 'none'}`);
+    next();
+  });
+
   // Health endpoint
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', runtime: 'Node.js Express Server Authority' });

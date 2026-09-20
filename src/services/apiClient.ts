@@ -1504,14 +1504,38 @@ class ApiClient {
     naturalLanguageConcept: string,
     existingDraft?: any,
     userEditedFields?: string[],
-    narrativeRole?: 'PROTAGONIST' | 'SIDE_CHARACTER' | 'FREE_ROAM'
+    narrativeRole?: 'PROTAGONIST' | 'SIDE_CHARACTER' | 'FREE_ROAM',
+    allowDeterministicFallback = false
   ): Promise<any> {
     const res = await fetch(`${this.baseUrl}/worlds/${encodeURIComponent(worldId)}/characters/extract`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ naturalLanguageConcept, existingDraft, userEditedFields, narrativeRole }),
+      body: JSON.stringify({
+        naturalLanguageConcept,
+        existingDraft,
+        userEditedFields,
+        narrativeRole,
+        allowDeterministicFallback,
+      }),
     });
-    if (!res.ok) throw new Error(`Failed to extract character draft: HTTP ${res.status}`);
+
+    if (!res.ok) {
+      let payload: any = null;
+      try {
+        payload = await res.json();
+      } catch {
+        // Preserve the HTTP error when the response body is not JSON.
+      }
+
+      const error: any = new Error(
+        payload?.error || `Failed to extract character draft: HTTP ${res.status}`
+      );
+      error.code = payload?.code;
+      error.requiresDeterministicConfirmation = payload?.requiresDeterministicConfirmation === true;
+      error.reason = payload?.reason;
+      throw error;
+    }
+
     return await res.json();
   }
 

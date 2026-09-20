@@ -427,7 +427,27 @@ export class ServerMockAuthority {
 
     const conditionEngine = worldRepository.getConditionEngine(targetStoryId);
     const player = worldRepository.getPlayerLifecycle(targetStoryId);
+    const run = worldRepository.getStoryRun(targetStoryId);
     const actorId = player?.actorId || `player_actor_${targetStoryId}`;
+
+    // Narrative skill checks are canonical dice resolutions. The AI may describe the result,
+    // but it never supplies the die value, modifier, DC, or success state.
+    const storyCheckEngine = worldRepository.getStoryCheckEngine(targetStoryId);
+    const storyCheck = storyCheckEngine.resolve(
+      targetStoryId,
+      String(freeformText),
+      {
+        coreStats: run?.characterCoreStats || run?.protagonist?.coreStats,
+        skills: run?.characterSkills || run?.protagonist?.skills,
+      }
+    );
+
+    let committedOutcome = baseResult.message;
+    if (storyCheck) {
+      committedOutcome = storyCheck.success
+        ? `${storyCheck.skill} check: ${storyCheck.total} vs DC ${storyCheck.difficultyClass} — success.`
+        : `${storyCheck.skill} check: ${storyCheck.total} vs DC ${storyCheck.difficultyClass} — failure.`;
+    }
 
     // Resolve condition-driven action triggers before narration so the narrator sees the committed result.
     conditionEngine.processAction(actorId, String(freeformText), worldRepository.getWorldClock(targetStoryId).getAbsoluteTime());
@@ -460,7 +480,7 @@ export class ServerMockAuthority {
       const generated = await narrator.generateNarrativeOnly({
         storyId: targetStoryId,
         playerAction: String(freeformText),
-        committedOutcome: baseResult.message,
+        committedOutcome,
         hardTokenBudget: 500,
         timeoutMs: 5000,
         maxRetries: 1,
@@ -481,7 +501,7 @@ export class ServerMockAuthority {
       narrativeResponse = this.synthesizeFreeformActionFallback(
         targetStoryId,
         String(freeformText),
-        baseResult.message
+        committedOutcome
       );
     }
 
@@ -489,12 +509,16 @@ export class ServerMockAuthority {
     const actionLog = state.actionHistory.find((entry) => entry.id === baseResult.actionId);
     if (actionLog) {
       actionLog.narrativeResponse = narrativeResponse;
+      if (storyCheck) {
+        actionLog.checkResult = storyCheck;
+      }
     }
 
     return {
       ...baseResult,
       message: narrativeResponse,
       narrativeResponse,
+      checkResult: storyCheck || undefined,
       viewState: this.filterForExternalClient(state, targetStoryId),
     };
   }

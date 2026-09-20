@@ -3698,7 +3698,7 @@ gameRouter.get('/worlds/:worldId/characters/confirmed', (req: Request, res: Resp
 
 gameRouter.post('/media/generate-image', async (req: Request, res: Response) => {
   try {
-    const { storyId = 'default_story', prompt, assetId, aspectRatio, tags } = req.body;
+    const { storyId = 'default_story', prompt, assetId, aspectRatio, tags, slotType } = req.body;
     const { mediaAdapterService } = await import('../services/mediaAdapterService');
     const result = await mediaAdapterService.generateImage({
       storyId,
@@ -3706,6 +3706,7 @@ gameRouter.post('/media/generate-image', async (req: Request, res: Response) => 
       assetId,
       aspectRatio,
       tags,
+      slotType,
     });
     res.json(result);
   } catch (error: any) {

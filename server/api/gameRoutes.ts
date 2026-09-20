@@ -1225,6 +1225,12 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
       damageType: doll.mainHand ? 'slashing' : 'bludgeoning',
       damageProfile: conditionState?.damageProfile,
       conditionProfile: conditionState?.conditionProfile,
+      usesDeathSaves: true,
+      deathSaveState: {
+        successes: 0,
+        failures: 0,
+        stable: false,
+      },
       conditions: [
         ...(conditionState?.instances.map((instance) => instance.name) || []),
         ...(player?.isDead || conditionState?.dead ? ['Dead'] : []),

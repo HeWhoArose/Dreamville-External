@@ -81,6 +81,7 @@ const DEFAULT_BODY_REGIONS: Array<{ id: BodyRegionId; label: string }> = [
   { id: 'RIGHT_LEG', label: 'Right Leg' },
   { id: 'LEFT_FOOT', label: 'Left Foot' },
   { id: 'RIGHT_FOOT', label: 'Right Foot' },
+  { id: 'WHOLE_BODY', label: 'Whole Body' },
 ];
 
 function slugify(value: string): string {
@@ -641,6 +642,10 @@ export class ConditionEngine {
           region.integrityCurrent = Math.max(0, region.integrityCurrent + effect.integrityDelta);
         }
         region.destroyed = region.integrityCurrent <= 0;
+        if (region.id === 'HEART' && region.destroyed) {
+          state.dead = true;
+          state.healthCurrent = 0;
+        }
         if (instance.affectedBodyRegions && !instance.affectedBodyRegions.includes(region.id)) {
           instance.affectedBodyRegions.push(region.id);
         }

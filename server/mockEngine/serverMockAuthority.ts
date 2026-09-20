@@ -460,10 +460,7 @@ export class ServerMockAuthority {
       const generated = await narrator.generateNarrativeOnly({
         storyId: targetStoryId,
         playerAction: String(freeformText),
-        committedOutcome: [
-          baseResult.message,
-          baseResult.authoritativeFeedback,
-        ].filter(Boolean).join(' '),
+        committedOutcome: baseResult.message,
         hardTokenBudget: 500,
         timeoutMs: 5000,
         maxRetries: 1,
@@ -481,7 +478,11 @@ export class ServerMockAuthority {
     }
 
     if (!narrativeResponse) {
-      narrativeResponse = this.synthesizeFreeformActionFallback(targetStoryId, String(freeformText));
+      narrativeResponse = this.synthesizeFreeformActionFallback(
+        targetStoryId,
+        String(freeformText),
+        baseResult.message
+      );
     }
 
     const state = this.getDynamicStoryState(targetStoryId);
@@ -498,7 +499,11 @@ export class ServerMockAuthority {
     };
   }
 
-  private synthesizeFreeformActionFallback(storyId: string, actionText: string): string {
+  private synthesizeFreeformActionFallback(
+    storyId: string,
+    actionText: string,
+    committedOutcome?: string
+  ): string {
     const player = worldRepository.getPlayerLifecycle(storyId);
     const run = worldRepository.getStoryRun(storyId);
     const actorName = player?.name || run?.characterName || 'You';
@@ -527,6 +532,10 @@ export class ServerMockAuthority {
 
     if (/\\b(touch|feel|pick up|grasp|hold)\\b/.test(normalized)) {
       return `${actorName} follows the impulse and reaches out. ${atmosphere}`;
+    }
+
+    if (committedOutcome) {
+      return `${actorName} acts. ${committedOutcome} ${atmosphere}`;
     }
 
     return `${actorName} follows through. ${atmosphere}`;

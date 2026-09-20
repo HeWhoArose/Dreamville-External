@@ -28,52 +28,133 @@ export class CharacterGenesisService {
     const worldId = worldTemplate?.worldId || input.worldId || 'unknown_world';
     const worldVersion = worldTemplate?.worldManifestVersion ?? 1;
     const existingDraft = input.existingDraft;
-    const userEditedFields = new Set(input.userEditedFields || []);
+    const userEditedFields = new Set([
+      ...(input.userEditedFields || []),
+      ...((existingDraft as any)?.fieldLocks || []),
+    ]);
 
     const draftId = existingDraft?.draftId || `draft_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
     let extracted: any = null;
-    const prompt = `You are a master character designer for narrative RPGs.
-Given this character concept and world context, extract and design a complete, deeply detailed character draft.
+    const prompt = `You are the canonical Character Genesis extraction engine for a narrative RPG.
+
+The player's natural-language concept is authoritative. Interpret it faithfully and transform it into a complete editable structured character dossier.
+
+Do NOT normalize unusual concepts into generic fantasy archetypes.
+Do NOT replace player intent with world defaults.
+The world provides context and constraints, but the PLAYER CONCEPT defines who the character is.
 
 WORLD CONTEXT:
 Title: ${worldTemplate?.title || 'Unknown World'}
-Genre: ${worldTemplate?.genreTags?.join(', ') || 'Fantasy'}
-Tone: ${worldTemplate?.toneTags?.join(', ') || 'Heroic'}
-Setting: ${worldTemplate?.setting || 'Realm'}
+Genre: ${worldTemplate?.genreTags?.join(', ') || 'Unknown'}
+Tone: ${worldTemplate?.toneTags?.join(', ') || 'Unknown'}
+Setting: ${worldTemplate?.setting || 'Unknown'}
 Era: ${worldTemplate?.defaultEra || worldTemplate?.era || 'Current Era'}
 World Rules: ${JSON.stringify(worldTemplate?.worldRules || worldTemplate?.ruleConstraints || [])}
 Available Locations: ${JSON.stringify(
-      (worldTemplate?.geography?.nodes || []).map((n: any) => ({ id: n.id, name: n.name, region: n.region }))
+      (worldTemplate?.geography?.nodes || []).map((n: any) => ({
+        id: n.id,
+        name: n.name,
+        region: n.region,
+        description: n.description,
+      }))
     )}
 
-CHARACTER CONCEPT:
+PLAYER CHARACTER CONCEPT:
 "${concept}"
 
-OUTPUT MUST BE STRICT JSON with the following structure:
+Return ONLY one JSON object matching this contract:
+
 {
-  "identity": { "name": string, "species": string, "age": number or string, "gender": string },
-  "appearance": { "physicalDescription": string, "distinguishingTraits": [string] },
-  "personality": { "traits": [string], "temperament": string, "values": [string] },
-  "background": { "history": string, "upbringing": string, "importantEvents": [string] },
-  "role": { "archetype": string, "profession": string, "role": string },
-  "motivations": { "goals": [string], "fears": [string], "desires": [string] },
-  "relationships": { "allies": [string], "rivals": [string], "family": [string], "factions": [string] },
-  "condition": { "injuries": [string], "curses": [string], "forms": [string], "specialStates": [string] },
+  "identity": {
+    "name": string,
+    "species": string,
+    "age": number | string,
+    "gender": string
+  },
+  "appearance": {
+    "physicalDescription": string,
+    "distinguishingTraits": [string]
+  },
+  "personality": {
+    "traits": [string],
+    "temperament": string,
+    "values": [string]
+  },
+  "background": {
+    "history": string,
+    "upbringing": string,
+    "importantEvents": [string]
+  },
+  "role": {
+    "archetype": string,
+    "profession": string,
+    "role": string
+  },
+  "motivations": {
+    "goals": [string],
+    "fears": [string],
+    "desires": [string]
+  },
+  "relationships": {
+    "allies": [string],
+    "rivals": [string],
+    "family": [string],
+    "factions": [string]
+  },
+  "condition": {
+    "injuries": [string],
+    "curses": [string],
+    "forms": [string],
+    "specialStates": [string]
+  },
+  "attributes": [
+    {
+      "name": string,
+      "value": number,
+      "baseValue": number,
+      "min": number | null,
+      "max": number | null,
+      "description": string
+    }
+  ],
+  "stats": [
+    {
+      "name": string,
+      "value": number,
+      "baseValue": number,
+      "min": number | null,
+      "max": number | null,
+      "description": string
+    }
+  ],
+  "traits": [string],
   "capabilities": [
     {
       "id": string,
       "name": string,
-      "category": "Combat" | "Magic" | "Movement" | "Domain" | "Perception" | "Biological" | "Social",
-      "activationMode": "immediate" | "passive" | "reaction" | "charged" | "channelled" | "toggled",
-      "powerTier": "Minor" | "Moderate" | "Major" | "WorldScale",
+      "category": string,
+      "activationMode": string,
+      "powerTier": string,
       "baseEnergyCost": number,
       "baseStrainCost": number,
-      "description": string
+      "description": string,
+      "effects": [
+        {
+          "type": string,
+          "target": string,
+          "scope": string,
+          "modifier": number,
+          "value": string | number | boolean,
+          "condition": string,
+          "description": string
+        }
+      ]
     }
   ],
   "generatedSkills": [
     {
+      "id": string,
       "name": string,
       "description": string,
       "parentCapabilityName": string,
@@ -83,16 +164,70 @@ OUTPUT MUST BE STRICT JSON with the following structure:
       "range": string
     }
   ],
+  "feats": [
+    {
+      "id": string,
+      "name": string,
+      "description": string,
+      "prerequisites": [string],
+      "tags": [string],
+      "effects": [
+        {
+          "type": string,
+          "target": string,
+          "scope": string,
+          "modifier": number,
+          "value": string | number | boolean,
+          "condition": string,
+          "description": string
+        }
+      ]
+    }
+  ],
+  "titles": [
+    {
+      "id": string,
+      "name": string,
+      "description": string,
+      "effects": [
+        {
+          "type": string,
+          "target": string,
+          "scope": string,
+          "modifier": number,
+          "value": string | number | boolean,
+          "condition": string,
+          "description": string
+        }
+      ]
+    }
+  ],
   "startingEquipment": {
     "weapons": [string],
     "armor": [string],
     "tools": [string],
-    "consumables": [string]
+    "consumables": [string],
+    "inventory": [
+      {
+        "name": string,
+        "category": string,
+        "description": string,
+        "quantity": number,
+        "isEquipped": boolean,
+        "slot": string,
+        "rarity": string,
+        "weightKg": number,
+        "durability": number,
+        "maxDurability": number,
+        "properties": object
+      }
+    ]
   },
   "startingLocation": {
     "locationId": string,
     "name": string,
-    "region": string
+    "region": string,
+    "description": string
   },
   "startingSituation": {
     "summary": string,
@@ -103,11 +238,26 @@ OUTPUT MUST BE STRICT JSON with the following structure:
   "portraitAsset": {
     "promptFallback": string,
     "emoji": string
+  },
+  "aiExtractionSummary": {
+    "interpretation": string,
+    "keyFacts": [string],
+    "proposedHighlights": [string],
+    "uncertainties": [string]
   }
-}`;
+}
 
-    // Use the canonical model orchestrator so Genesis respects configured
-    // task routing, provider health, fallbacks, and deterministic emergency behavior.
+Rules:
+- Preserve any explicit names, origins, species, jobs, powers, affiliations, source-fiction references, transport/isekaied state, equipment, motivations and conditions from the player's concept.
+- Do not invent a generic Human/Scout identity merely to fill fields.
+- Generated values may add coherent detail, but must remain faithful to the player's concept and world.
+- If something is genuinely uncertain, put it in aiExtractionSummary.uncertainties instead of silently contradicting the player.`;
+
+    let generationSource: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK' = 'DETERMINISTIC_FALLBACK';
+    let generationFailureReason = '';
+
+    // Use the canonical model orchestrator so Genesis respects configured task routing,
+    // provider health, fallbacks, and deterministic emergency behavior.
     try {
       const orchestrator = worldRepository.getAiOrchestrator();
       const response = await orchestrator.executeTaskGeneration(
@@ -115,35 +265,49 @@ OUTPUT MUST BE STRICT JSON with the following structure:
         prompt,
         'Return only the requested Character Genesis JSON. Treat the player concept as authoritative input; do not overwrite preserved user fields.'
       );
+
       if (response.text) {
-        extracted = this.parseJsonFromAiResponse(response.text);
+        const parsed = this.parseJsonFromAiResponse(response.text);
+        if (parsed && this.isValidCharacterExtractionShape(parsed)) {
+          extracted = parsed;
+          generationSource = response.source;
+          generationFailureReason = response.fallbackReason || '';
+        } else {
+          generationFailureReason = 'AI returned invalid or incomplete Character Genesis structure.';
+        }
+      } else {
+        generationFailureReason = response.fallbackReason || 'AI providers returned no usable Character Genesis text.';
       }
-    } catch (err) {
-      console.warn('[CharacterGenesisService] Orchestrated extraction failed, using procedural fallback:', err);
-      extracted = null;
+    } catch (err: any) {
+      generationFailureReason = err?.message || String(err);
+      console.warn('[CharacterGenesisService] Orchestrated extraction failed:', err);
     }
 
-    // If Gemini was unavailable or returned invalid output, run procedural synthesis
-    if (!extracted || !extracted.identity?.name) {
+    // Deterministic concept extraction is an emergency floor only.
+    if (!extracted) {
       extracted = this.proceduralExtraction(concept, worldTemplate);
+      generationSource = 'DETERMINISTIC_FALLBACK';
     }
 
     // Build canonical draft assembling all sections
+    const generatedProvenance: CharacterProvenanceSource =
+      generationSource === 'DETERMINISTIC_FALLBACK' ? 'DETERMINISTIC_FALLBACK' : generatedProvenance;
+
     const provenance: Record<string, CharacterProvenanceSource> = {
       sourceDescription: 'PLAYER_INPUT',
-      identity: userEditedFields.has('identity') || userEditedFields.has('identity.name') ? 'USER_EDITED' : 'AI_GENERATED',
-      appearance: userEditedFields.has('appearance') ? 'USER_EDITED' : 'AI_GENERATED',
-      personality: userEditedFields.has('personality') ? 'USER_EDITED' : 'AI_GENERATED',
-      background: userEditedFields.has('background') ? 'USER_EDITED' : 'AI_GENERATED',
-      role: userEditedFields.has('role') ? 'USER_EDITED' : 'AI_GENERATED',
-      motivations: userEditedFields.has('motivations') ? 'USER_EDITED' : 'AI_GENERATED',
-      relationships: userEditedFields.has('relationships') ? 'USER_EDITED' : 'AI_GENERATED',
-      condition: userEditedFields.has('condition') ? 'USER_EDITED' : 'AI_GENERATED',
-      capabilities: userEditedFields.has('capabilities') ? 'USER_EDITED' : 'AI_GENERATED',
-      generatedSkills: userEditedFields.has('generatedSkills') ? 'USER_EDITED' : 'AI_GENERATED',
-      startingEquipment: userEditedFields.has('startingEquipment') ? 'USER_EDITED' : 'AI_GENERATED',
+      identity: userEditedFields.has('identity') || userEditedFields.has('identity.name') ? 'USER_EDITED' : generatedProvenance,
+      appearance: userEditedFields.has('appearance') ? 'USER_EDITED' : generatedProvenance,
+      personality: userEditedFields.has('personality') ? 'USER_EDITED' : generatedProvenance,
+      background: userEditedFields.has('background') ? 'USER_EDITED' : generatedProvenance,
+      role: userEditedFields.has('role') ? 'USER_EDITED' : generatedProvenance,
+      motivations: userEditedFields.has('motivations') ? 'USER_EDITED' : generatedProvenance,
+      relationships: userEditedFields.has('relationships') ? 'USER_EDITED' : generatedProvenance,
+      condition: userEditedFields.has('condition') ? 'USER_EDITED' : generatedProvenance,
+      capabilities: userEditedFields.has('capabilities') ? 'USER_EDITED' : generatedProvenance,
+      generatedSkills: userEditedFields.has('generatedSkills') ? 'USER_EDITED' : generatedProvenance,
+      startingEquipment: userEditedFields.has('startingEquipment') ? 'USER_EDITED' : generatedProvenance,
       startingLocation: userEditedFields.has('startingLocation') ? 'USER_EDITED' : 'WORLD_DERIVED',
-      startingSituation: userEditedFields.has('startingSituation') ? 'USER_EDITED' : 'AI_GENERATED',
+      startingSituation: userEditedFields.has('startingSituation') ? 'USER_EDITED' : generatedProvenance,
       portraitAsset: userEditedFields.has('portraitAsset') ? 'USER_EDITED' : 'SYSTEM_DERIVED',
     };
 
@@ -159,8 +323,9 @@ OUTPUT MUST BE STRICT JSON with the following structure:
             powerTier: c.powerTier || 'Moderate',
             baseEnergyCost: Number(c.baseEnergyCost ?? 15),
             baseStrainCost: Number(c.baseStrainCost ?? 5),
+            minVesselCapacityRequired: Number(c.minVesselCapacityRequired ?? 15),
             description: c.description || 'Special capability.',
-            provenance: 'AI_GENERATED',
+            provenance: generatedProvenance,
           }))
     );
 
@@ -184,7 +349,7 @@ OUTPUT MUST BE STRICT JSON with the following structure:
               energyCost: Number(s.energyCost ?? 10),
               cooldownTurns: Number(s.cooldownTurns ?? 1),
               range: s.range || 'Melee',
-              provenance: 'AI_GENERATED' as CharacterProvenanceSource,
+              provenance: generatedProvenance as CharacterProvenanceSource,
             };
           })
     );
@@ -224,10 +389,11 @@ OUTPUT MUST BE STRICT JSON with the following structure:
       startingEquipment = existingDraft.startingEquipment;
     } else {
       const rawEq = extracted.startingEquipment || {};
-      const weapons = Array.isArray(rawEq.weapons) ? rawEq.weapons : ['Iron Longsword'];
-      const armor = Array.isArray(rawEq.armor) ? rawEq.armor : ['Leather Cuirass'];
-      const tools = Array.isArray(rawEq.tools) ? rawEq.tools : ['Torch', 'Lockpicks'];
-      const consumables = Array.isArray(rawEq.consumables) ? rawEq.consumables : ['Bread Rations (x3)', 'Healing Salve'];
+      const weapons = Array.isArray(rawEq.weapons) ? rawEq.weapons.map(String) : ['Iron Longsword'];
+      const armor = Array.isArray(rawEq.armor) ? rawEq.armor.map(String) : ['Leather Cuirass'];
+      const tools = Array.isArray(rawEq.tools) ? rawEq.tools.map(String) : ['Torch', 'Lockpicks'];
+      const consumables = Array.isArray(rawEq.consumables) ? rawEq.consumables.map(String) : ['Bread Rations (x3)', 'Healing Salve'];
+      const aiInventory = Array.isArray(rawEq.inventory) ? rawEq.inventory : [];
 
       const equipped: StartingEquipmentItem[] = [
         ...weapons.slice(0, 1).map((w: string, i: number) => ({
@@ -237,7 +403,7 @@ OUTPUT MUST BE STRICT JSON with the following structure:
           slot: 'mainHand',
           isEquipped: true,
           quantity: 1,
-          provenance: 'AI_GENERATED' as CharacterProvenanceSource,
+          provenance: generatedProvenance as CharacterProvenanceSource,
         })),
         ...armor.slice(0, 1).map((a: string, i: number) => ({
           id: `eq_a_${i}`,
@@ -246,7 +412,7 @@ OUTPUT MUST BE STRICT JSON with the following structure:
           slot: 'body',
           isEquipped: true,
           quantity: 1,
-          provenance: 'AI_GENERATED' as CharacterProvenanceSource,
+          provenance: generatedProvenance as CharacterProvenanceSource,
         })),
       ];
 
@@ -257,7 +423,7 @@ OUTPUT MUST BE STRICT JSON with the following structure:
           category: 'Weapon',
           isEquipped: false,
           quantity: 1,
-          provenance: 'AI_GENERATED' as CharacterProvenanceSource,
+          provenance: generatedProvenance as CharacterProvenanceSource,
         })),
         ...armor.slice(1).map((a: string, i: number) => ({
           id: `inv_a_${i}`,
@@ -265,7 +431,7 @@ OUTPUT MUST BE STRICT JSON with the following structure:
           category: 'Armor',
           isEquipped: false,
           quantity: 1,
-          provenance: 'AI_GENERATED' as CharacterProvenanceSource,
+          provenance: generatedProvenance as CharacterProvenanceSource,
         })),
         ...tools.map((t: string, i: number) => ({
           id: `inv_t_${i}`,
@@ -273,7 +439,7 @@ OUTPUT MUST BE STRICT JSON with the following structure:
           category: 'Tool',
           isEquipped: false,
           quantity: 1,
-          provenance: 'AI_GENERATED' as CharacterProvenanceSource,
+          provenance: generatedProvenance as CharacterProvenanceSource,
         })),
         ...consumables.map((c: string, i: number) => ({
           id: `inv_c_${i}`,
@@ -281,7 +447,7 @@ OUTPUT MUST BE STRICT JSON with the following structure:
           category: 'Potion',
           isEquipped: false,
           quantity: 1,
-          provenance: 'AI_GENERATED' as CharacterProvenanceSource,
+          provenance: generatedProvenance as CharacterProvenanceSource,
         })),
       ];
 
@@ -388,12 +554,20 @@ OUTPUT MUST BE STRICT JSON with the following structure:
       value: typeof entry?.value === 'number' ? entry.value : 10,
       baseValue: typeof entry?.baseValue === 'number' ? entry.baseValue : (typeof entry?.value === 'number' ? entry.value : 10),
       description: entry?.description || '',
-      provenance: 'AI_GENERATED' as CharacterProvenanceSource,
+      provenance: generatedProvenance as CharacterProvenanceSource,
     });
 
-    const attributes = Array.isArray(extracted.attributes) ? extracted.attributes.map((entry: any, idx: number) => toStat(entry, idx, 'Attribute')) : [];
-    const stats = Array.isArray(extracted.stats) ? extracted.stats.map((entry: any, idx: number) => toStat(entry, idx, 'Stat')) : [];
-    const traits = Array.isArray(extracted.traits) ? extracted.traits.map(String) : (Array.isArray(extracted.personality?.traits) ? extracted.personality.traits.map(String) : []);
+    const attributes = userEditedFields.has('attributes') && Array.isArray(existingDraft?.attributes)
+      ? existingDraft.attributes
+      : (Array.isArray(extracted.attributes) ? extracted.attributes.map((entry: any, idx: number) => toStat(entry, idx, 'Attribute')) : []);
+
+    const stats = userEditedFields.has('stats') && Array.isArray(existingDraft?.stats)
+      ? existingDraft.stats
+      : (Array.isArray(extracted.stats) ? extracted.stats.map((entry: any, idx: number) => toStat(entry, idx, 'Stat')) : []);
+
+    const traits = userEditedFields.has('traits') && Array.isArray(existingDraft?.traits)
+      ? existingDraft.traits
+      : (Array.isArray(extracted.traits) ? extracted.traits.map(String) : (Array.isArray(extracted.personality?.traits) ? extracted.personality.traits.map(String) : []));
 
     const mapEffects = (effects: any, sourceId: string): any[] => Array.isArray(effects) ? effects.map((effect: any, idx: number) => ({
       id: effect?.id || 'effect_' + sourceId + '_' + (idx + 1),
@@ -405,25 +579,48 @@ OUTPUT MUST BE STRICT JSON with the following structure:
       condition: effect?.condition,
       description: String(effect?.description || 'Contextual effect.'),
       sourceId,
-      provenance: 'AI_GENERATED' as CharacterProvenanceSource,
+      provenance: generatedProvenance as CharacterProvenanceSource,
     })) : [];
 
-    const feats = Array.isArray(extracted.feats) ? extracted.feats.map((feat: any, idx: number) => {
+    const feats = userEditedFields.has('feats') && Array.isArray(existingDraft?.feats)
+      ? existingDraft.feats
+      : (Array.isArray(extracted.feats) ? extracted.feats.map((feat: any, idx: number) => {
       const id = feat?.id || 'feat_' + draftId + '_' + (idx + 1);
-      return { id, name: String(feat?.name || 'Feat ' + (idx + 1)), description: String(feat?.description || ''), effects: mapEffects(feat?.effects, id), prerequisites: Array.isArray(feat?.prerequisites) ? feat.prerequisites.map(String) : [], tags: Array.isArray(feat?.tags) ? feat.tags.map(String) : [], provenance: 'AI_GENERATED' as CharacterProvenanceSource, worldId };
-    }) : [];
+      return { id, name: String(feat?.name || 'Feat ' + (idx + 1)), description: String(feat?.description || ''), effects: mapEffects(feat?.effects, id), prerequisites: Array.isArray(feat?.prerequisites) ? feat.prerequisites.map(String) : [], tags: Array.isArray(feat?.tags) ? feat.tags.map(String) : [], provenance: generatedProvenance as CharacterProvenanceSource, worldId };
+    }) : []);
 
-    const titles = Array.isArray(extracted.titles) ? extracted.titles.map((title: any, idx: number) => {
+    const titles = userEditedFields.has('titles') && Array.isArray(existingDraft?.titles)
+      ? existingDraft.titles
+      : (Array.isArray(extracted.titles) ? extracted.titles.map((title: any, idx: number) => {
       const id = title?.id || 'title_' + draftId + '_' + (idx + 1);
-      return { id, name: String(title?.name || 'Title ' + (idx + 1)), description: String(title?.description || ''), effects: mapEffects(title?.effects, id), provenance: 'AI_GENERATED' as CharacterProvenanceSource, worldId };
+      return { id, name: String(title?.name || 'Title ' + (idx + 1)), description: String(title?.description || ''), effects: mapEffects(title?.effects, id), provenance: generatedProvenance as CharacterProvenanceSource, worldId };
     }) : [];
 
-    const aiExtractionSummary = extracted.aiExtractionSummary ? {
-      interpretation: String(extracted.aiExtractionSummary.interpretation || ''),
-      keyFacts: Array.isArray(extracted.aiExtractionSummary.keyFacts) ? extracted.aiExtractionSummary.keyFacts.map(String) : [],
-      proposedHighlights: Array.isArray(extracted.aiExtractionSummary.proposedHighlights) ? extracted.aiExtractionSummary.proposedHighlights.map(String) : [],
-      uncertainties: Array.isArray(extracted.aiExtractionSummary.uncertainties) ? extracted.aiExtractionSummary.uncertainties.map(String) : [],
-    } : { interpretation: concept, keyFacts: [identity.name, identity.species, role.profession || role.archetype].filter(Boolean), proposedHighlights: capabilities.map((c) => c.name), uncertainties: [] };
+    const aiExtractionSummary = userEditedFields.has('aiExtractionSummary') && existingDraft?.aiExtractionSummary
+      ? {
+          ...existingDraft.aiExtractionSummary,
+          keyFacts: [...existingDraft.aiExtractionSummary.keyFacts],
+          proposedHighlights: [...existingDraft.aiExtractionSummary.proposedHighlights],
+          uncertainties: [...(existingDraft.aiExtractionSummary.uncertainties || [])],
+          generationSource: existingDraft.aiExtractionSummary.generationSource,
+        }
+      : {
+          interpretation:
+            generationSource === 'DETERMINISTIC_FALLBACK'
+              ? `AI extraction unavailable. Deterministic concept extraction preserved the player's input: ${concept}`
+              : String(extracted.aiExtractionSummary?.interpretation || `Interpreted from the player's concept: ${concept}`),
+          keyFacts: Array.isArray(extracted.aiExtractionSummary?.keyFacts)
+            ? extracted.aiExtractionSummary.keyFacts.map(String)
+            : [identity.name, identity.species, role.profession || role.archetype].filter(Boolean),
+          proposedHighlights: Array.isArray(extracted.aiExtractionSummary?.proposedHighlights)
+            ? extracted.aiExtractionSummary.proposedHighlights.map(String)
+            : capabilities.map((cap) => cap.name),
+          uncertainties: Array.isArray(extracted.aiExtractionSummary?.uncertainties)
+            ? extracted.aiExtractionSummary.uncertainties.map(String)
+            : [],
+          generationSource,
+        };
+
     const draft: CharacterGenesisDraft = {
       draftId,
       worldId,
@@ -447,8 +644,8 @@ OUTPUT MUST BE STRICT JSON with the following structure:
       startingEquipment,
       startingLocation,
       startingSituation,
-      startingLocationMode: 'AI_SUGGEST',
-      startingSituationMode: 'AI_SUGGEST',
+      startingLocationMode: existingDraft?.startingLocationMode || 'AI_SUGGEST',
+      startingSituationMode: existingDraft?.startingSituationMode || 'AI_SUGGEST',
       startingState: {
         healthCurrent: 100,
         healthMax: 100,
@@ -470,7 +667,9 @@ OUTPUT MUST BE STRICT JSON with the following structure:
       validationState: {
         isValid: true,
         errors: [],
-        warnings: [],
+        warnings: generationFailureReason
+          ? [`Generation note: ${generationSource === 'DETERMINISTIC_FALLBACK' ? 'AI extraction was unavailable or invalid; deterministic concept extraction was used.' : generationFailureReason}`]
+          : [],
       },
       createdAt: existingDraft?.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -566,7 +765,7 @@ OUTPUT STRICT JSON with this structure:
       energyCost: Number(t.energyCost ?? 15),
       cooldownTurns: Number(t.cooldownTurns ?? 1),
       range: t.range || 'Close',
-      provenance: 'AI_GENERATED' as CharacterProvenanceSource,
+      provenance: generatedProvenance as CharacterProvenanceSource,
     }));
 
     return {
@@ -766,41 +965,126 @@ OUTPUT STRICT JSON with this structure:
   // -------------------------------------------------------------
 
   /**
-   * Robust JSON extractor from model output. Handles raw JSON, markdown-fenced JSON,
-   * conversational surrounding text, trailing commas, and whitespace/control characters.
+   * Robust JSON extractor from model output.
+   * Supports raw JSON, fenced JSON, and short conversational wrappers.
+   * Uses a quote-aware balanced scanner instead of first/last-brace slicing.
    */
   public parseJsonFromAiResponse(text: string): any {
     if (!text || typeof text !== 'string') return null;
 
-    let cleaned = text.trim();
+    const candidates: string[] = [];
+    const trimmed = text.trim();
 
-    // 1. Check for markdown code fences (```json ... ``` or ``` ... ```)
-    const codeBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-    if (codeBlockMatch) {
-      cleaned = codeBlockMatch[1].trim();
+    const fencedMatches = Array.from(trimmed.matchAll(/```(?:json)?\s*([\s\S]*?)\s*```/gi));
+    for (const match of fencedMatches) {
+      if (match[1]) candidates.push(match[1].trim());
+    }
+    candidates.push(trimmed);
+
+    for (const candidate of candidates) {
+      const direct = this.tryParseJsonCandidate(candidate);
+      if (direct !== null) return direct;
+
+      const extracted = this.extractBalancedJson(candidate);
+      if (extracted) {
+        const parsed = this.tryParseJsonCandidate(extracted);
+        if (parsed !== null) return parsed;
+      }
     }
 
-    // 2. Extract outermost JSON object or array if embedded in conversational text
-    const firstBrace = cleaned.indexOf('{');
-    const lastBrace = cleaned.lastIndexOf('}');
-    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
-      cleaned = cleaned.substring(firstBrace, lastBrace + 1).trim();
-    }
+    return null;
+  }
 
-    // 3. First attempt direct parse
+  private tryParseJsonCandidate(candidate: string): any {
     try {
-      return JSON.parse(cleaned);
+      return JSON.parse(candidate);
     } catch {
-      // 4. Sanitize trailing commas and stray control characters
       try {
-        const sanitized = cleaned
-          .replace(/,\s*([\]\}])/g, '$1') // remove trailing commas before ] or }
-          .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, ''); // strip non-printable control chars
+        const sanitized = candidate
+          .replace(/,\s*([\]\}])/g, '$1')
+          .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
         return JSON.parse(sanitized);
       } catch {
         return null;
       }
     }
+  }
+
+  private extractBalancedJson(text: string): string | null {
+    const firstObject = text.indexOf('{');
+    const firstArray = text.indexOf('[');
+    let start = -1;
+    let opening = '';
+    let closing = '';
+
+    if (firstObject !== -1 && (firstArray === -1 || firstObject < firstArray)) {
+      start = firstObject;
+      opening = '{';
+      closing = '}';
+    } else if (firstArray !== -1) {
+      start = firstArray;
+      opening = '[';
+      closing = ']';
+    }
+
+    if (start < 0) return null;
+
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+
+    for (let i = start; i < text.length; i++) {
+      const ch = text[i];
+
+      if (inString) {
+        if (escaped) {
+          escaped = false;
+        } else if (ch === '\\') {
+          escaped = true;
+        } else if (ch === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (ch === '"') {
+        inString = true;
+        continue;
+      }
+
+      if (ch === opening) depth++;
+      if (ch === closing) {
+        depth--;
+        if (depth === 0) return text.slice(start, i + 1);
+      }
+    }
+
+    return null;
+  }
+
+  private isValidCharacterExtractionShape(value: any): boolean {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+
+    const requiredObjectKeys = [
+      'identity',
+      'appearance',
+      'personality',
+      'background',
+      'role',
+      'motivations',
+      'relationships',
+      'condition',
+      'startingEquipment',
+      'startingLocation',
+      'startingSituation',
+    ];
+
+    if (!requiredObjectKeys.every((key) => value[key] && typeof value[key] === 'object')) return false;
+    if (!value.identity.name || !value.identity.species) return false;
+    if (!value.role.profession && !value.role.archetype) return false;
+    if (!Array.isArray(value.capabilities) || value.capabilities.length === 0) return false;
+
+    return true;
   }
 
   private proceduralExtraction(concept: string, worldTemplate: WorldTemplate): any {

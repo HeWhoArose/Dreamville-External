@@ -1,31 +1,26 @@
-import React, { useState, useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   Location,
   DialogueNode,
   DialogueChoice,
   ActionLog,
   OpeningScene,
-  StructuredNarrativeEvent,
-  NarrativeEventType,
 } from '../types';
 import { useAudioHaptic } from './AudioHapticManager';
 import { getCharacterSpeakerTheme } from './voiceResolver';
 import { StoryHUDDrawer } from './StoryHUDDrawer';
 import {
-  Sparkles,
-  MessageSquare,
-  Compass,
+  AlertCircle,
   ArrowRight,
-  CornerDownRight,
-  Volume2,
+  Compass,
+  Headphones,
+  Loader2,
   Mic,
   MicOff,
-  Send,
-  Loader2,
-  AlertCircle,
-  Headphones,
-  BookOpen,
   RotateCcw,
+  Send,
+  Sparkles,
+  Volume2,
 } from 'lucide-react';
 
 interface StoryViewProps {
@@ -43,10 +38,39 @@ interface StoryViewProps {
   storyId?: string;
   protagonistName?: string;
   protagonistRole?: string;
+  protagonistPortraitUrl?: string;
+  protagonistPortraitEmoji?: string;
   isLoadingOpening?: boolean;
   openingError?: string | null;
   onRetryOpening?: () => void;
 }
+
+const Portrait: React.FC<{
+  imageUrl?: string;
+  emoji?: string;
+  size?: 'sm' | 'md';
+  className?: string;
+}> = ({ imageUrl, emoji = '🧙‍♂️', size = 'md', className = '' }) => {
+  const [failed, setFailed] = useState(false);
+  const dimension = size === 'sm' ? 'h-9 w-9 text-lg' : 'h-12 w-12 text-2xl';
+
+  return (
+    <div
+      className={`shrink-0 overflow-hidden rounded-full border border-stone-700/80 bg-stone-900/90 ${dimension} ${className}`}
+    >
+      {imageUrl && !failed ? (
+        <img
+          src={imageUrl}
+          alt=""
+          className="h-full w-full object-contain p-0.5"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center">{emoji}</div>
+      )}
+    </div>
+  );
+};
 
 export const StoryView: React.FC<StoryViewProps> = ({
   location,
@@ -63,45 +87,47 @@ export const StoryView: React.FC<StoryViewProps> = ({
   storyId,
   protagonistName,
   protagonistRole,
+  protagonistPortraitUrl,
+  protagonistPortraitEmoji,
   isLoadingOpening = false,
   openingError = null,
   onRetryOpening,
 }) => {
   const { playSpeech, isPlayingSpeech, triggerHaptic, playSfx } = useAudioHaptic();
 
-  const [typedAction, setTypedAction] = useState<string>('');
-  const [isRecording, setIsRecording] = useState<boolean>(false);
-  const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
+  const [typedAction, setTypedAction] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
-
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  // Start microphone capture for transcription
   const startRecording = async () => {
     setTranscriptionError(null);
     triggerHaptic('light');
 
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    const fallbackTranscribe = async (payload: string, delayMs: number) => {
       setIsTranscribing(true);
-      setTimeout(async () => {
+      window.setTimeout(async () => {
         try {
           const res = await fetch('/api/game/sensory/transcribe', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ audioBase64: 'sample_audio_capture_payload' }),
+            body: JSON.stringify({ audioBase64: payload }),
           });
           const data = await res.json();
-          if (data.text) {
-            setTypedAction((prev) => (prev ? `${prev} ${data.text}` : data.text));
-            triggerHaptic('medium');
-          }
+          if (data.text) setTypedAction((prev) => (prev ? `${prev} ${data.text}` : data.text));
+          triggerHaptic('medium');
         } catch {
           setTranscriptionError('Transcription request failed.');
         } finally {
           setIsTranscribing(false);
         }
-      }, 800);
+      }, delayMs);
+    };
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      await fallbackTranscribe('sample_audio_capture_payload', 500);
       return;
     }
 
@@ -112,9 +138,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
       audioChunksRef.current = [];
 
       mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
+        if (event.data.size > 0) audioChunksRef.current.push(event.data);
       };
 
       mediaRecorder.onstop = async () => {
@@ -133,10 +157,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
               body: JSON.stringify({ audioBase64: base64Audio }),
             });
             const data = await res.json();
-            if (data.text) {
-              setTypedAction((prev) => (prev ? `${prev} ${data.text}` : data.text));
-              triggerHaptic('medium');
-            }
+            if (data.text) setTypedAction((prev) => (prev ? `${prev} ${data.text}` : data.text));
             setIsTranscribing(false);
           };
         } catch {
@@ -148,25 +169,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
       mediaRecorder.start();
       setIsRecording(true);
     } catch {
-      setIsTranscribing(true);
-      setTimeout(async () => {
-        try {
-          const res = await fetch('/api/game/sensory/transcribe', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ audioBase64: 'mock_mic_capture' }),
-          });
-          const data = await res.json();
-          if (data.text) {
-            setTypedAction((prev) => (prev ? `${prev} ${data.text}` : data.text));
-            triggerHaptic('medium');
-          }
-        } catch {
-          setTranscriptionError('Audio capture failed.');
-        } finally {
-          setIsTranscribing(false);
-        }
-      }, 700);
+      await fallbackTranscribe('mock_mic_capture', 500);
     }
   };
 
@@ -178,534 +181,346 @@ export const StoryView: React.FC<StoryViewProps> = ({
     }
   };
 
-  const handleSubmitAction = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!typedAction.trim() || isProcessingAction) return;
+  const handleSubmitAction = (event: React.FormEvent) => {
+    event.preventDefault();
+    const actionText = typedAction.trim();
+    if (!actionText || isProcessingAction) return;
 
     triggerHaptic('medium');
     playSfx('ui.click', 'LOW', 0.5);
-
-    if (onCustomAction) {
-      onCustomAction(typedAction.trim());
-    } else {
-      onRequestInspect();
-    }
+    onCustomAction?.(actionText);
     setTypedAction('');
   };
 
-  const handleReadAloud = (text: string, speakerId?: string) => {
+  const handleReadAloud = (text: string, speakerId = 'narrator') => {
     triggerHaptic('light');
-    playSpeech(text, speakerId || 'narrator');
-  };
-
-  const getEventBadge = (type: NarrativeEventType) => {
-    switch (type) {
-      case 'location':
-        return { bg: 'bg-emerald-950/70 text-emerald-300 border-emerald-800', label: 'LOCATION', icon: '📍' };
-      case 'dialogue':
-        return { bg: 'bg-purple-950/70 text-purple-300 border-purple-800', label: 'DIALOGUE', icon: '💬' };
-      case 'action':
-        return { bg: 'bg-blue-950/70 text-blue-300 border-blue-800', label: 'ACTION', icon: '⚔️' };
-      case 'quest':
-        return { bg: 'bg-amber-950/70 text-amber-300 border-amber-800', label: 'QUEST', icon: '✨' };
-      case 'system':
-        return { bg: 'bg-stone-900 text-stone-300 border-stone-800', label: 'SYSTEM', icon: '⚙️' };
-      case 'magic':
-        return { bg: 'bg-indigo-950/70 text-indigo-300 border-indigo-800', label: 'MAGIC', icon: '🔮' };
-      case 'item':
-        return { bg: 'bg-teal-950/70 text-teal-300 border-teal-800', label: 'ITEM', icon: '🎒' };
-      case 'damage':
-        return { bg: 'bg-red-950/70 text-red-300 border-red-800', label: 'DAMAGE', icon: '💥' };
-      case 'heal':
-        return { bg: 'bg-emerald-950/70 text-emerald-300 border-emerald-800', label: 'HEAL', icon: '💚' };
-      default:
-        return { bg: 'bg-amber-950/50 text-amber-200/90 border-amber-800/60', label: 'NARRATIVE', icon: '📜' };
-    }
+    playSpeech(text, speakerId);
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-12">
+    <div className="mx-auto w-full max-w-4xl space-y-4 pb-10 text-stone-100">
       <StoryHUDDrawer storyId={storyId} />
 
-      {/* Top Story Bar — Atmospheric Header (Cinematic UX Polish) */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-stone-950 via-stone-900 to-stone-950 border border-stone-800/80 p-5 shadow-2xl">
-        <div className="absolute top-0 right-0 w-80 h-80 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-80 h-80 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
+      {/* Quiet identity bar */}
+      <header className="rounded-2xl border border-stone-800/80 bg-stone-950/80 px-4 py-3 shadow-sm">
+        <div className="flex flex-wrap items-center gap-3">
+          <Portrait
+            imageUrl={protagonistPortraitUrl}
+            emoji={protagonistPortraitEmoji}
+            size="md"
+          />
 
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-mono tracking-widest text-amber-400 uppercase font-semibold">
-                {worldTitle || openingScene?.worldName || 'Living Chronicle'}
-              </span>
-              <span className="text-stone-600">•</span>
-              <span className="text-[11px] font-mono text-emerald-400/90">
-                {location.region || 'Sanctuary'}
-              </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <h1 className="truncate text-base font-semibold text-stone-100">
+                {protagonistName || 'Protagonist'}
+              </h1>
+              {protagonistRole && (
+                <span className="rounded-md border border-stone-800 bg-stone-900 px-2 py-0.5 text-[10px] uppercase tracking-wide text-stone-400">
+                  {protagonistRole}
+                </span>
+              )}
             </div>
-            <h1 className="text-xl md:text-2xl font-serif font-bold text-stone-100 tracking-wide">
-              {location.name}
-            </h1>
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 text-xs text-stone-500">
+              <span>{location.name}</span>
+              {location.region && <span>· {location.region}</span>}
+              {openingScene?.worldTime?.formattedTime && (
+                <>
+                  <span>·</span>
+                  <span>{openingScene.worldTime.formattedTime}</span>
+                </>
+              )}
+            </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
-            {protagonistName && (
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-stone-900/90 border border-stone-800 text-xs font-mono">
-                <span className="text-stone-400">Protagonist:</span>
-                <span className="text-stone-200 font-semibold">{protagonistName}</span>
-                {protagonistRole && (
-                  <span className="px-1.5 py-0.5 rounded bg-purple-950/80 text-purple-300 text-[10px] border border-purple-800/80">
-                    {protagonistRole}
-                  </span>
-                )}
-              </div>
-            )}
-            {openingScene?.worldTime?.formattedTime && (
-              <div className="px-3 py-1.5 rounded-xl bg-stone-900/90 border border-stone-800 text-xs font-mono text-amber-300/90">
-                {openingScene.worldTime.formattedTime}
-              </div>
-            )}
-          </div>
+          {worldTitle && (
+            <div className="hidden max-w-[210px] truncate text-right text-[11px] text-stone-600 md:block">
+              {worldTitle}
+            </div>
+          )}
         </div>
-      </div>
+      </header>
 
-      {/* Loading State */}
       {isLoadingOpening && (
-        <div className="rounded-3xl border border-stone-800 bg-stone-900/60 p-12 text-center backdrop-blur-md shadow-xl">
-          <Loader2 className="w-10 h-10 mx-auto mb-4 text-amber-400 animate-spin" />
-          <h3 className="text-lg font-serif font-bold text-stone-100 mb-1">
-            Weaving the Atmospheric Opening
-          </h3>
-          <p className="text-xs text-stone-400 font-mono">
-            Grounding {protagonistName || 'the protagonist'} in {worldTitle || location.name}...
+        <div className="rounded-2xl border border-stone-800/80 bg-stone-950/70 px-5 py-8 text-center">
+          <Loader2 className="mx-auto mb-3 h-7 w-7 animate-spin text-stone-500" />
+          <p className="text-sm text-stone-300">Preparing the opening scene…</p>
+          <p className="mt-1 text-xs text-stone-600">
+            Grounding {protagonistName || 'your character'} in {location.name}.
           </p>
         </div>
       )}
 
-      {/* Recoverable Error State */}
       {openingError && !isLoadingOpening && (
-        <div className="rounded-3xl border border-red-900/80 bg-red-950/40 p-6 backdrop-blur-md shadow-xl">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-400 mt-0.5 flex-shrink-0" />
-            <div className="flex-1">
-              <h3 className="text-sm font-semibold text-red-200">Narrative Generation Notice</h3>
-              <p className="text-xs text-red-300/90 mt-1 mb-2">{openingError}</p>
-              <p className="text-[11px] text-stone-400 font-mono mb-4">
-                Your StoryRun and character state remain fully intact and safe.
-              </p>
-              {onRetryOpening && (
-                <button
-                  onClick={onRetryOpening}
-                  className="px-4 py-2 rounded-xl bg-red-900/80 hover:bg-red-800 text-red-100 border border-red-700 text-xs font-medium transition inline-flex items-center gap-2 cursor-pointer shadow-lg"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Retry Opening Generation</span>
-                </button>
-              )}
-            </div>
+        <div className="flex items-start gap-3 rounded-2xl border border-red-900/70 bg-red-950/30 px-4 py-4">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm text-red-200">The opening scene could not be generated.</p>
+            <p className="mt-1 text-xs text-red-300/70">{openingError}</p>
           </div>
+          {onRetryOpening && (
+            <button
+              onClick={onRetryOpening}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-stone-800 bg-stone-900 px-2.5 py-1.5 text-xs text-stone-300 transition hover:bg-stone-800"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Retry
+            </button>
+          )}
         </div>
       )}
 
-      {/* Opening Chronicle Scene Card (Cinematic Success View) */}
+      {/* Opening scene: one readable piece of narration */}
       {openingScene && (
-        <div className="bg-gradient-to-b from-stone-900/90 via-stone-950/90 to-stone-950 rounded-3xl border border-amber-500/30 p-7 md:p-8 shadow-2xl relative overflow-hidden backdrop-blur-md">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
-
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-stone-800/80">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-inner">
-                <BookOpen className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-lg font-serif font-bold text-stone-100 tracking-wide">
-                  The Opening Chronicle
-                </h3>
-                <span className="text-xs font-mono text-stone-400">
-                  {openingScene.worldTime?.formattedTime || 'Dawn, Cycle 1'} • {openingScene.startingLocationName}
-                </span>
-              </div>
+        <section className="rounded-2xl border border-stone-800/80 bg-stone-950/70 px-5 py-5 shadow-sm">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-stone-600">Opening</p>
+              <p className="mt-1 text-xs text-stone-500">{openingScene.startingLocationName}</p>
             </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => handleReadAloud(openingScene.narrativeText, 'narrator')}
-                disabled={isPlayingSpeech}
-                className="px-3.5 py-2 rounded-xl bg-stone-900 hover:bg-stone-850 text-stone-300 hover:text-amber-300 border border-stone-800 text-xs font-mono flex items-center gap-2 transition disabled:opacity-50 cursor-pointer shadow-sm"
-              >
-                <Headphones className="w-4 h-4 text-amber-400" />
-                <span>{isPlayingSpeech ? 'Narrating...' : 'Listen'}</span>
-              </button>
-            </div>
+            <button
+              onClick={() => handleReadAloud(openingScene.narrativeText)}
+              disabled={isPlayingSpeech}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-stone-800 bg-stone-900 px-2.5 py-1.5 text-xs text-stone-400 transition hover:text-stone-200 disabled:opacity-50"
+            >
+              <Headphones className="h-3.5 w-3.5" />
+              {isPlayingSpeech ? 'Playing' : 'Listen'}
+            </button>
           </div>
 
-          <div className="space-y-4 mb-6">
-            {openingScene.narrativeText.split('\n\n').map((para, pIdx) => (
-              <p
-                key={pIdx}
-                className="text-stone-200 text-base md:text-lg leading-relaxed font-serif tracking-wide"
-              >
-                {para}
-              </p>
+          <div className="space-y-3 font-serif text-[15px] leading-7 text-stone-200 md:text-base">
+            {openingScene.narrativeText.split('\n\n').map((paragraph, index) => (
+              <p key={index}>{paragraph}</p>
             ))}
           </div>
 
           {openingScene.startingSituation && (
-            <div className="rounded-2xl bg-stone-900/80 border border-amber-500/20 p-4 mb-6 flex items-start gap-3 shadow-inner">
-              <span className="text-amber-400 text-base mt-0.5">🕯️</span>
-              <div>
-                <span className="text-xs font-mono uppercase tracking-wider text-amber-400 font-semibold block mb-1">
-                  Immediate Epistemic Horizon
-                </span>
-                <p className="text-sm text-stone-300 italic font-serif leading-relaxed">
-                  {openingScene.startingSituation}
-                </p>
-              </div>
+            <div className="mt-4 border-l border-stone-700 pl-3">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-stone-600">Right now</p>
+              <p className="mt-1 text-sm italic leading-6 text-stone-400">{openingScene.startingSituation}</p>
             </div>
           )}
-
-          {openingScene.structuredEvents && openingScene.structuredEvents.length > 0 && (
-            <div className="pt-4 border-t border-stone-800/60">
-              <span className="text-xs font-mono uppercase tracking-wider text-stone-400 font-semibold block mb-3">
-                Key Narrative Moments
-              </span>
-              <div className="grid gap-2.5">
-                {openingScene.structuredEvents.map((evt) => {
-                  const badge = getEventBadge(evt.type);
-                  return (
-                    <div
-                      key={evt.id}
-                      className="flex items-start gap-3 p-3 rounded-xl bg-stone-900/70 border border-stone-800 text-xs shadow-sm"
-                    >
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-mono font-semibold border flex-shrink-0 ${badge.bg}`}
-                      >
-                        <span>{badge.icon}</span>
-                        <span>{badge.label}</span>
-                      </span>
-                      <div className="flex-1">
-                        {evt.speaker && (
-                          <span className="font-semibold text-amber-300 mr-2 font-serif text-sm">
-                            {evt.speaker}:
-                          </span>
-                        )}
-                        <span className="text-stone-200 font-sans text-sm">{evt.text}</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
+        </section>
       )}
 
-      {/* Current Location & Atmospheric Environment */}
-      <div className="bg-stone-900/60 rounded-3xl border border-stone-800/80 p-6 md:p-7 backdrop-blur-md shadow-xl relative overflow-hidden">
-        <div className="absolute -right-16 -top-16 w-64 h-64 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 pb-4 border-b border-stone-800/80">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-amber-400 text-sm">📍</span>
-              <h2 className="text-xl md:text-2xl font-serif font-bold text-stone-100">
-                {location.name}
-              </h2>
-            </div>
-            <span className="text-xs text-stone-400 font-mono">
-              Region: {location.region}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
+      {/* Location is a compact orientation row, not a second narrative card. */}
+      <section className="rounded-xl border border-stone-800/70 bg-stone-950/50 px-4 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Sparkles className="h-3.5 w-3.5 text-stone-500" />
+          <span className="text-sm font-medium text-stone-300">{location.name}</span>
+          {location.ambientSensory && (
+            <>
+              <span className="text-stone-700">·</span>
+              <span className="min-w-0 flex-1 text-xs text-stone-500">{location.ambientSensory}</span>
+            </>
+          )}
+          <div className="ml-auto flex items-center gap-1.5">
             <button
               disabled={isProcessingAction}
               onClick={onRequestInspect}
-              className="px-3.5 py-2 rounded-xl bg-stone-800 hover:bg-stone-750 text-stone-200 border border-stone-700 text-xs font-medium transition flex items-center gap-2 disabled:opacity-50 cursor-pointer shadow-sm"
+              className="rounded-lg border border-stone-800 bg-stone-900 px-2.5 py-1.5 text-xs text-stone-400 transition hover:text-stone-200 disabled:opacity-50"
             >
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>Inspect</span>
+              Inspect
             </button>
             <button
               disabled={isProcessingAction}
               onClick={onRequestRest}
-              className="px-3.5 py-2 rounded-xl bg-stone-800 hover:bg-stone-750 text-stone-200 border border-stone-700 text-xs font-medium transition flex items-center gap-2 disabled:opacity-50 cursor-pointer shadow-sm"
+              className="rounded-lg border border-stone-800 bg-stone-900 px-2.5 py-1.5 text-xs text-stone-400 transition hover:text-stone-200 disabled:opacity-50"
             >
-              <Compass className="w-3.5 h-3.5 text-amber-400" />
-              <span>Advance Time</span>
+              Advance time
             </button>
           </div>
         </div>
+      </section>
 
-        <div className="space-y-4">
-          <p className="text-stone-300 text-base md:text-lg leading-relaxed font-serif">
-            {location.description}
-          </p>
-
-          <div className="flex items-center justify-between">
-            <button
-              onClick={() => handleReadAloud(location.description, 'narrator')}
-              disabled={isPlayingSpeech}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-stone-950/80 hover:bg-stone-800 border border-stone-800 text-stone-400 hover:text-amber-300 text-xs font-mono transition cursor-pointer"
-            >
-              <Headphones className="w-3.5 h-3.5 text-amber-400" />
-              <span>{isPlayingSpeech ? 'Narrating...' : 'Listen to Scene'}</span>
-            </button>
-          </div>
-
-          {location.ambientSensory && (
-            <div className="rounded-2xl bg-stone-950/80 border border-stone-800/80 p-4 flex items-start gap-3 shadow-inner">
-              <span className="text-base select-none mt-0.5">🕯️</span>
-              <div>
-                <span className="text-xs font-mono uppercase tracking-wider text-amber-400/90 font-semibold block mb-0.5">
-                  Atmosphere
-                </span>
-                <p className="text-sm text-stone-300 italic font-serif">
-                  {location.ambientSensory}
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Active Dialogue / Interaction Panel */}
-      {activeDialogue ? (() => {
+      {activeDialogue && (() => {
         const theme = getCharacterSpeakerTheme(activeDialogue.speakerName);
         return (
-          <div className={`bg-stone-900/90 rounded-3xl border ${theme.bubbleBorder} p-7 shadow-2xl backdrop-blur-md relative`}>
-            <div className="flex items-center justify-between gap-4 mb-5 pb-4 border-b border-stone-800">
-              <div className="flex items-center gap-3.5">
-                <div className={`h-12 w-12 rounded-2xl ${theme.badgeBg} border ${theme.badgeBorder} flex items-center justify-center text-2xl shadow-inner`}>
+          <section className={`rounded-2xl border ${theme.bubbleBorder} bg-stone-950/80 px-5 py-5`}>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className={`flex h-9 w-9 items-center justify-center rounded-full border ${theme.badgeBorder} ${theme.badgeBg} text-lg`}>
                   💬
                 </div>
                 <div>
-                  <h3 className={`text-lg font-serif font-bold ${theme.nameColor}`}>
-                    {activeDialogue.speakerName}
-                  </h3>
-                  <span className="text-xs font-mono text-emerald-400 flex items-center gap-1 mt-0.5">
-                    <span>🔒</span> {activeDialogue.epistemicNote}
-                  </span>
+                  <p className={`text-sm font-semibold ${theme.nameColor}`}>{activeDialogue.speakerName}</p>
+                  <p className="text-[10px] text-stone-600">{activeDialogue.epistemicNote}</p>
                 </div>
               </div>
-
               <button
                 onClick={() => handleReadAloud(activeDialogue.text, activeDialogue.speakerName)}
                 disabled={isPlayingSpeech}
-                className={`px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-750 ${theme.nameColor} border border-stone-700 text-xs font-mono flex items-center gap-1.5 transition cursor-pointer shadow-sm`}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-stone-800 bg-stone-900 px-2.5 py-1.5 text-xs text-stone-400 transition hover:text-stone-200 disabled:opacity-50"
               >
-                <Volume2 className="w-4 h-4" />
-                <span>{isPlayingSpeech ? 'Speaking...' : 'Listen'}</span>
+                <Volume2 className="h-3.5 w-3.5" />
+                Listen
               </button>
             </div>
 
-            <div className={`bg-stone-950/80 rounded-2xl p-5 border ${theme.bubbleBorder} mb-6 shadow-inner`}>
-              <p className={`${theme.textColor} text-base md:text-lg leading-relaxed font-serif italic`}>
-                "{activeDialogue.text}"
-              </p>
-            </div>
+            <p className="border-l border-stone-700 pl-3 font-serif text-base italic leading-7 text-stone-200">
+              “{activeDialogue.text}”
+            </p>
 
-            <div className="space-y-3">
-              <span className="text-xs font-mono uppercase tracking-wider text-stone-400 block font-semibold">
-                Available Responses
-              </span>
-              <div className="grid gap-2.5">
-                {activeDialogue.choices.map((choice) => (
-                  <button
-                    key={choice.id}
-                    id={`dialogue-choice-${choice.id}`}
-                    disabled={isProcessingAction}
-                    onClick={() => onSelectChoice(choice)}
-                    className="group w-full text-left p-4 rounded-2xl bg-stone-950 hover:bg-stone-850 border border-stone-800 hover:border-amber-500/40 transition flex items-center justify-between gap-4 disabled:opacity-50 cursor-pointer shadow-sm"
-                  >
-                    <div className="flex items-start gap-3">
-                      <ArrowRight className="w-4 h-4 text-amber-400/60 group-hover:text-amber-400 mt-1 flex-shrink-0 transition-transform group-hover:translate-x-1" />
-                      <div>
-                        <span className="text-sm font-medium text-stone-200 group-hover:text-amber-200 transition font-serif">
-                          {choice.label}
-                        </span>
-                        {choice.epistemicContext && (
-                          <p className="text-xs text-stone-500 group-hover:text-stone-400 mt-1 font-mono">
-                            {choice.epistemicContext}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                    <span className="text-[11px] font-mono uppercase tracking-wider text-stone-500 group-hover:text-amber-400/90 px-2.5 py-1 rounded-xl bg-stone-900 border border-stone-800 flex-shrink-0">
-                      {choice.intent}
-                    </span>
-                  </button>
-                ))}
-              </div>
+            <div className="mt-4 space-y-2">
+              {activeDialogue.choices.map((choice) => (
+                <button
+                  key={choice.id}
+                  disabled={isProcessingAction}
+                  onClick={() => onSelectChoice(choice)}
+                  className="group flex w-full items-start justify-between gap-4 rounded-xl border border-stone-800 bg-stone-900/60 px-4 py-3 text-left transition hover:bg-stone-900 disabled:opacity-50"
+                >
+                  <span className="flex items-start gap-2.5">
+                    <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-stone-600 transition group-hover:text-stone-300" />
+                    <span className="text-sm text-stone-300 group-hover:text-stone-100">{choice.label}</span>
+                  </span>
+                  <span className="hidden text-[10px] uppercase tracking-wide text-stone-600 sm:inline">{choice.intent}</span>
+                </button>
+              ))}
             </div>
-          </div>
+          </section>
         );
-      })() : null}
+      })()}
 
-      {/* Action Input Dock — Primary Interaction Hub (Cinematic UX) */}
-      <div className="rounded-3xl border border-stone-800/80 bg-gradient-to-b from-stone-900/90 to-stone-950/90 p-5 md:p-6 shadow-2xl backdrop-blur-md">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-mono uppercase tracking-wider text-amber-400/90 font-semibold flex items-center gap-2">
-            <span>⚔️</span> What do you wish to do?
-          </span>
-          <span className="text-[11px] font-mono text-stone-400">
-            Type freeform actions or dictate via mic
-          </span>
+      {/* Main interaction: deliberately obvious and simple. */}
+      <section className="rounded-2xl border border-stone-700/80 bg-stone-950 px-4 py-4 shadow-md md:px-5">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-stone-500">Your turn</p>
+            <p className="mt-1 text-sm text-stone-300">What do you do?</p>
+          </div>
+          <span className="text-[10px] text-stone-700">Actions are resolved by the world.</span>
         </div>
 
-        <form onSubmit={handleSubmitAction} className="flex items-center gap-3">
+        <form onSubmit={handleSubmitAction} className="flex items-center gap-2">
           <button
             type="button"
             onClick={isRecording ? stopRecording : startRecording}
             disabled={isTranscribing || isProcessingAction}
-            className={`p-3.5 rounded-2xl border transition flex items-center justify-center flex-shrink-0 relative cursor-pointer shadow-md ${
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition disabled:opacity-50 ${
               isRecording
-                ? 'bg-red-950/80 border-red-700 text-red-300 animate-pulse ring-2 ring-red-500/50'
-                : isTranscribing
-                ? 'bg-amber-950/60 border-amber-700 text-amber-300'
-                : 'bg-stone-950 hover:bg-stone-850 border-stone-800 text-stone-300 hover:border-amber-500/50'
+                ? 'border-red-800 bg-red-950/50 text-red-300'
+                : 'border-stone-800 bg-stone-900 text-stone-400 hover:text-stone-200'
             }`}
-            title={isRecording ? 'Click to stop and transcribe' : 'Dictate action with microphone'}
             aria-label="Dictate action"
           >
             {isTranscribing ? (
-              <Loader2 className="w-5 h-5 animate-spin text-amber-400" />
+              <Loader2 className="h-4 w-4 animate-spin" />
             ) : isRecording ? (
-              <MicOff className="w-5 h-5 text-red-400" />
+              <MicOff className="h-4 w-4" />
             ) : (
-              <Mic className="w-5 h-5 text-stone-300" />
+              <Mic className="h-4 w-4" />
             )}
           </button>
 
-          <div className="relative flex-1">
-            <input
-              type="text"
-              value={typedAction}
-              onChange={(e) => setTypedAction(e.target.value)}
-              placeholder={
-                isRecording
-                  ? 'Listening to speech...'
-                  : isTranscribing
-                  ? 'Transcribing audio input...'
-                  : isProcessingAction
-                  ? 'Resolving action in the living world...'
-                  : 'Type your action (e.g. I inspect the strange footprints beside the doorway)...'
-              }
-              disabled={isProcessingAction || isRecording}
-              className="w-full bg-stone-950 border border-stone-800 focus:border-amber-500/80 rounded-2xl px-5 py-3 text-sm text-stone-100 placeholder:text-stone-500 focus:outline-none transition font-sans shadow-inner"
-            />
-          </div>
+          <input
+            type="text"
+            value={typedAction}
+            onChange={(event) => setTypedAction(event.target.value)}
+            disabled={isProcessingAction || isRecording}
+            placeholder={
+              isRecording
+                ? 'Listening…'
+                : isTranscribing
+                ? 'Transcribing…'
+                : isProcessingAction
+                ? 'The world is responding…'
+                : 'Describe what you do…'
+            }
+            className="h-11 min-w-0 flex-1 rounded-xl border border-stone-800 bg-stone-900/80 px-4 text-sm text-stone-100 placeholder:text-stone-600 focus:border-stone-600 focus:outline-none"
+          />
 
           <button
             type="submit"
             disabled={!typedAction.trim() || isProcessingAction || isRecording}
-            className="px-6 py-3 rounded-2xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-sm transition flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0 cursor-pointer shadow-lg"
+            className="flex h-11 shrink-0 items-center gap-2 rounded-xl bg-stone-100 px-4 text-sm font-semibold text-stone-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-30"
           >
-            {isProcessingAction ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Resolving...</span>
-              </>
-            ) : (
-              <>
-                <Send className="w-4 h-4" />
-                <span>Send</span>
-              </>
-            )}
+            {isProcessingAction ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            <span className="hidden sm:inline">Send</span>
           </button>
         </form>
 
         {transcriptionError && (
-          <div className="mt-3 text-xs font-mono text-red-400 flex items-center gap-2">
-            <AlertCircle className="w-4 h-4" />
-            <span>{transcriptionError}</span>
-          </div>
+          <p className="mt-2 flex items-center gap-1.5 text-xs text-red-400">
+            <AlertCircle className="h-3.5 w-3.5" />
+            {transcriptionError}
+          </p>
         )}
-      </div>
+      </section>
 
-      {/* Chronological Narrative Stream — Immersive Story Reading Feed */}
+      {/* Narrative feed: action first, engine implementation details hidden. */}
       {(dialogueHistory.length > 0 || actionHistory.length > 0) && (
-        <div className="rounded-3xl border border-stone-800/80 bg-stone-900/40 p-6 md:p-7 shadow-2xl backdrop-blur-md">
-          <div className="flex items-center justify-between mb-4 pb-3 border-b border-stone-800">
-            <h4 className="text-xs font-mono uppercase tracking-wider text-amber-400 font-semibold flex items-center gap-2">
-              <CornerDownRight className="w-4 h-4 text-amber-400" />
-              <span>Chronological Narrative Stream</span>
-            </h4>
-            <span className="text-[11px] font-mono text-stone-500">
-              {actionHistory.length + dialogueHistory.length} recorded events
+        <section className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-stone-600">Recent story</p>
+            <span className="text-[10px] text-stone-700">
+              {actionHistory.length + dialogueHistory.length} events
             </span>
           </div>
 
-          <div className="space-y-4 max-h-[500px] overflow-y-auto pr-3">
-            {[
-              ...actionHistory.map((act) => ({
-                id: act.id,
-                type: 'action' as const,
-                timestamp: act.timestamp,
-                title: protagonistName || 'Protagonist',
-                body: act.description,
-                outcome: act.authoritativeFeedback,
-                success: act.epistemicValidation !== 'REJECTED_BY_ENGINE',
-              })),
-              ...dialogueHistory.map((diag, idx) => ({
-                id: `diag-${idx}`,
-                type: 'dialogue' as const,
-                timestamp: `Cycle ${diag.cycle}`,
-                title: diag.speaker,
-                body: diag.text,
-                outcome: null,
-                success: true,
-              })),
-            ].map((item) => {
-              if (item.type === 'dialogue') {
-                const theme = getCharacterSpeakerTheme(item.title);
-                return (
-                  <div key={item.id} className={`p-4 rounded-2xl bg-stone-950/80 border ${theme.bubbleBorder} shadow-sm space-y-1.5`}>
-                    <div className="flex items-center justify-between">
-                      <span className={`font-serif font-bold text-sm ${theme.nameColor}`}>
-                        {item.title}
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-mono text-stone-500">{item.timestamp}</span>
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-lg bg-stone-900 text-purple-300 border border-stone-800">
-                          Dialogue
-                        </span>
-                      </div>
+          <div className="space-y-3">
+            {actionHistory.slice(0, 8).map((action) => (
+              <article key={action.id} className="space-y-2">
+                <div className="flex items-start gap-2.5">
+                  <Portrait
+                    imageUrl={protagonistPortraitUrl}
+                    emoji={protagonistPortraitEmoji}
+                    size="sm"
+                  />
+                  <div className="min-w-0 flex-1 rounded-2xl rounded-tl-md border border-stone-800 bg-stone-900/70 px-4 py-3">
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <span className="text-xs font-medium text-stone-400">{protagonistName || 'You'}</span>
+                      <span className="text-[10px] text-stone-700">{action.timestamp}</span>
                     </div>
-                    <p className={`${theme.textColor} font-serif italic text-sm md:text-base`}>
-                      "{item.body}"
-                    </p>
+                    <p className="text-sm leading-6 text-stone-300">“{action.description}”</p>
                   </div>
-                );
-              } else {
-                return (
-                  <div key={item.id} className="p-4 rounded-2xl bg-stone-950/60 border border-stone-800/80 shadow-sm space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="font-serif font-bold text-sm text-amber-200">
-                        {item.title} (Action)
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-mono text-stone-500">{item.timestamp}</span>
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded-lg bg-stone-900 text-amber-400 border border-stone-800">
-                          Action
-                        </span>
-                      </div>
+                </div>
+
+                {(action.narrativeResponse || action.authoritativeFeedback) && (
+                  <div className="ml-[3.25rem] rounded-2xl rounded-tl-md border border-stone-800/80 bg-stone-950/60 px-4 py-3">
+                    <div className="mb-1 flex items-center gap-2">
+                      <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-stone-600">Narrator</span>
                     </div>
-                    <p className="text-stone-200 font-sans text-sm md:text-base font-medium">
-                      "{item.body}"
+                    <p className="whitespace-pre-line font-serif text-sm leading-6 text-stone-200">
+                      {action.narrativeResponse || (
+                        action.epistemicValidation === 'REJECTED_BY_ENGINE'
+                          ? 'That action could not be carried out.'
+                          : action.authoritativeFeedback
+                      )}
                     </p>
-                    {item.outcome && (
-                      <div className="p-3 rounded-xl bg-stone-900/80 border border-stone-800 text-stone-300 text-xs md:text-sm font-serif italic leading-relaxed">
-                        <span className="text-amber-400 font-semibold mr-1.5">Result:</span>
-                        {item.outcome}
-                      </div>
+                    {action.narrativeResponse && (
+                      <button
+                        onClick={() => handleReadAloud(action.narrativeResponse || '')}
+                        disabled={isPlayingSpeech}
+                        className="mt-2 inline-flex items-center gap-1.5 text-[10px] text-stone-600 transition hover:text-stone-300 disabled:opacity-50"
+                      >
+                        <Headphones className="h-3 w-3" />
+                        Listen
+                      </button>
                     )}
                   </div>
-                );
-              }
+                )}
+              </article>
+            ))}
+
+            {dialogueHistory.slice(0, 6).map((dialogue, index) => {
+              const theme = getCharacterSpeakerTheme(dialogue.speaker);
+              return (
+                <article key={`dialogue-${dialogue.cycle}-${index}`} className="flex items-start gap-2.5">
+                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${theme.badgeBorder} ${theme.badgeBg} text-base`}>
+                    💬
+                  </div>
+                  <div className={`min-w-0 flex-1 rounded-2xl rounded-tl-md border ${theme.bubbleBorder} bg-stone-900/60 px-4 py-3`}>
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <span className={`text-xs font-medium ${theme.nameColor}`}>{dialogue.speaker}</span>
+                      <span className="text-[10px] text-stone-700">Cycle {dialogue.cycle}</span>
+                    </div>
+                    <p className="font-serif text-sm italic leading-6 text-stone-200">“{dialogue.text}”</p>
+                  </div>
+                </article>
+              );
             })}
           </div>
-        </div>
+        </section>
       )}
     </div>
   );

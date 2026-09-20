@@ -325,35 +325,28 @@ export const StoryView: React.FC<StoryViewProps> = ({
         </section>
       )}
 
-      {/* Location is a compact orientation row, not a second narrative card. */}
-      <section className="rounded-xl border border-stone-800/70 bg-stone-950/50 px-4 py-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Sparkles className="h-3.5 w-3.5 text-stone-500" />
-          <span className="text-sm font-medium text-stone-300">{location.name}</span>
-          {location.ambientSensory && (
-            <>
-              <span className="text-stone-700">·</span>
-              <span className="min-w-0 flex-1 text-xs text-stone-500">{location.ambientSensory}</span>
-            </>
-          )}
-          <div className="ml-auto flex items-center gap-1.5">
-            <button
-              disabled={isProcessingAction}
-              onClick={onRequestInspect}
-              className="rounded-lg border border-stone-800 bg-stone-900 px-2.5 py-1.5 text-xs text-stone-400 transition hover:text-stone-200 disabled:opacity-50"
-            >
-              Inspect
-            </button>
-            <button
-              disabled={isProcessingAction}
-              onClick={onRequestRest}
-              className="rounded-lg border border-stone-800 bg-stone-900 px-2.5 py-1.5 text-xs text-stone-400 transition hover:text-stone-200 disabled:opacity-50"
-            >
-              Advance time
-            </button>
-          </div>
+      {/* Quiet world controls — deliberately kept out of the narrative flow. */}
+      <div className="flex flex-wrap items-center gap-2 px-1 text-xs">
+        <Sparkles className="h-3.5 w-3.5 text-stone-600" />
+        <span className="font-medium text-stone-400">{location.name}</span>
+        {location.region && <span className="text-stone-700">· {location.region}</span>}
+        <div className="ml-auto flex items-center gap-1.5">
+          <button
+            disabled={isProcessingAction}
+            onClick={onRequestInspect}
+            className="rounded-lg px-2.5 py-1.5 text-stone-500 transition hover:bg-stone-900 hover:text-stone-200 disabled:opacity-50"
+          >
+            Inspect
+          </button>
+          <button
+            disabled={isProcessingAction}
+            onClick={onRequestRest}
+            className="rounded-lg px-2.5 py-1.5 text-stone-500 transition hover:bg-stone-900 hover:text-stone-200 disabled:opacity-50"
+          >
+            Advance time
+          </button>
         </div>
-      </section>
+      </div>
 
       {activeDialogue && (() => {
         const theme = getCharacterSpeakerTheme(activeDialogue.speakerName);
@@ -473,14 +466,14 @@ export const StoryView: React.FC<StoryViewProps> = ({
       {(dialogueHistory.length > 0 || actionHistory.length > 0) && (
         <section className="space-y-3">
           <div className="flex items-center justify-between px-1">
-            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-stone-600">Recent story</p>
+            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-stone-600">Recent actions</p>
             <span className="text-[10px] text-stone-700">
-              {actionHistory.length + dialogueHistory.length} events
+              {actionHistory.length} actions
             </span>
           </div>
 
           <div className="space-y-3">
-            {actionHistory.slice(0, 8).map((action) => (
+            {actionHistory.slice(0, 4).map((action) => (
               <article key={action.id} className="space-y-2">
                 <div className="flex items-start gap-2.5">
                   <Portrait
@@ -524,23 +517,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
               </article>
             ))}
 
-            {dialogueHistory.slice(0, 6).map((dialogue, index) => {
-              const theme = getCharacterSpeakerTheme(dialogue.speaker);
-              return (
-                <article key={`dialogue-${dialogue.cycle}-${index}`} className="flex items-start gap-2.5">
-                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${theme.badgeBorder} ${theme.badgeBg} text-base`}>
-                    💬
-                  </div>
-                  <div className={`min-w-0 flex-1 rounded-2xl rounded-tl-md border ${theme.bubbleBorder} bg-stone-900/60 px-4 py-3`}>
-                    <div className="mb-1 flex items-center justify-between gap-2">
-                      <span className={`text-xs font-medium ${theme.nameColor}`}>{dialogue.speaker}</span>
-                      <span className="text-[10px] text-stone-700">Cycle {dialogue.cycle}</span>
-                    </div>
-                    <p className="font-serif text-sm italic leading-6 text-stone-200">“{dialogue.text}”</p>
-                  </div>
-                </article>
-              );
-            })}
+            {/* Past dialogue is intentionally omitted here; active dialogue remains above. */}
           </div>
         </section>
       )}

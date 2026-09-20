@@ -611,7 +611,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
               </span>
             </h1>
             <p className="text-xs text-neutral-400">
-              Canonical Protagonist Architect & Provenance Engine
+              Canonical Character Architect & Provenance Engine
             </p>
           </div>
         </div>
@@ -726,7 +726,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
             <Compass className="w-10 h-10 text-indigo-400 mx-auto" />
             <h2 className="text-xl font-semibold text-white">Select a Target World</h2>
             <p className="text-sm text-neutral-400">
-              Character Genesis binds your protagonist to the canonical rules, geography, and ontology of a specific world template.
+              Character Genesis binds your player character to the canonical rules, geography, and ontology of a specific world template.
             </p>
             <div className="grid grid-cols-1 gap-2 pt-2">
               {availableWorlds.map((w) => (

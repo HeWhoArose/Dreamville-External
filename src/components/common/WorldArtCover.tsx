@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { ImageAssetControl } from './ImageAssetControl';
 import { ImageAssetMeta } from './imageAssetTypes';
+import { getImageAssetSpec } from '../../data/imageAssetSpecs';
 
 export interface WorldArtCoverProps {
   imageUrl?: string;
   worldName: string;
   genre?: string;
   aspectRatio?: 'banner' | 'card' | 'compact' | 'square';
+  assetSlotType?: 'world_cover' | 'story_run_cover';
   className?: string;
   showOverlay?: boolean;
   altText?: string;
@@ -19,6 +21,7 @@ export const WorldArtCover: React.FC<WorldArtCoverProps> = ({
   worldName,
   genre = 'Fantasy',
   aspectRatio = 'card',
+  assetSlotType,
   className = '',
   showOverlay = true,
   altText,
@@ -29,11 +32,13 @@ export const WorldArtCover: React.FC<WorldArtCoverProps> = ({
   const [imageLoaded, setImageLoaded] = useState(false);
 
   const ratioClass = {
-    banner: 'aspect-[21/9] sm:aspect-[16/6]',
-    card: 'aspect-[16/9]',
+    banner: 'aspect-[16/9]',
+    card: 'aspect-[4/3]',
     compact: 'aspect-[4/3]',
     square: 'aspect-square',
   }[aspectRatio];
+  const resolvedSlotType = assetSlotType || (aspectRatio === 'banner' ? 'story_run_cover' : 'world_cover');
+  const resolvedSpec = getImageAssetSpec(resolvedSlotType);
 
   // Genre-themed vector icon generator for placeholder
   const renderGenreSigil = (genreName: string) => {
@@ -126,6 +131,11 @@ export const WorldArtCover: React.FC<WorldArtCoverProps> = ({
         <ImageAssetControl
           meta={{
             ...assetMeta,
+            slotType: resolvedSlotType,
+            width: resolvedSpec.width,
+            height: resolvedSpec.height,
+            aspectRatio: resolvedSpec.aspectRatio,
+            fitMode: resolvedSpec.fitMode,
             currentImageUrl: imageUrl || assetMeta.currentImageUrl,
           }}
           onAssetChange={onAssetChange}

@@ -171,6 +171,9 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
 
   const currentActor = combatState?.currentActor;
   const isPlayerTurn = combatState?.isPlayerTurn ?? false;
+  const turnResources = combatState?.viewerTurnResources;
+  const actionAvailable = turnResources?.actionAvailable ?? true;
+  const movementRemaining = turnResources?.movementRemainingCells ?? 0;
 
   // Grid constants (8x8)
   const gridSize = 8;
@@ -189,6 +192,34 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
           <div className="h-10 w-10 rounded-lg bg-red-950/60 border border-red-800/40 flex items-center justify-center text-red-400">
             <Swords className="w-5 h-5" />
           </div>
+
+        <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="p-3 bg-stone-900/60 border border-stone-800 rounded-xl">
+            <span className="text-[10px] uppercase font-mono tracking-wider text-stone-500">Action</span>
+            <div className={`mt-1 font-mono text-sm font-bold ${actionAvailable ? 'text-emerald-300' : 'text-stone-500'}`}>
+              {actionAvailable ? 'Available' : 'Spent'}
+            </div>
+          </div>
+          <div className="p-3 bg-stone-900/60 border border-stone-800 rounded-xl">
+            <span className="text-[10px] uppercase font-mono tracking-wider text-stone-500">Bonus Action</span>
+            <div className={`mt-1 font-mono text-sm font-bold ${turnResources?.bonusActionAvailable ? 'text-emerald-300' : 'text-stone-500'}`}>
+              {turnResources?.bonusActionAvailable ? 'Available' : 'Spent'}
+            </div>
+          </div>
+          <div className="p-3 bg-stone-900/60 border border-stone-800 rounded-xl">
+            <span className="text-[10px] uppercase font-mono tracking-wider text-stone-500">Reaction</span>
+            <div className={`mt-1 font-mono text-sm font-bold ${turnResources?.reactionAvailable ? 'text-emerald-300' : 'text-stone-500'}`}>
+              {turnResources?.reactionAvailable ? 'Available' : 'Spent'}
+            </div>
+          </div>
+          <div className="p-3 bg-stone-900/60 border border-stone-800 rounded-xl">
+            <span className="text-[10px] uppercase font-mono tracking-wider text-stone-500">Movement</span>
+            <div className="mt-1 font-mono text-sm font-bold text-blue-300">
+              {movementRemaining.toFixed(1)} / {turnResources?.movementMaxCells ?? currentActor?.speedCells ?? 0} cells
+            </div>
+          </div>
+        </div>
+        </>
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-serif font-bold text-stone-100">Tactical Combat Workstation</h2>
@@ -225,6 +256,7 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
 
       {/* Combat State Banner */}
       {combatState && (
+        <>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div className="p-3 bg-stone-900/60 border border-stone-800 rounded-xl">
             <span className="text-[10px] uppercase font-mono tracking-wider text-stone-500">Battle Round</span>
@@ -299,7 +331,7 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
                 <div
                   key={`${x}-${y}`}
                   onClick={() => {
-                    if (isPlayerTurn && currentActor && !participant) {
+                    if (isPlayerTurn && currentActor && !participant && movementRemaining > 0 && !actionLoading) {
                       handleMove(x, y);
                     } else if (participant && participant.team === 'enemies') {
                       setSelectedTargetId(participant.id);
@@ -466,7 +498,7 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
               <button
                 id="combat-attack-btn"
                 onClick={handleAttack}
-                disabled={actionLoading || !isPlayerTurn || combatState?.victory || combatState?.defeat}
+                disabled={actionLoading || !isPlayerTurn || !actionAvailable || combatState?.victory || combatState?.defeat}
                 className="w-full py-2 px-3 rounded-lg bg-red-900/80 hover:bg-red-800 text-red-100 text-xs font-semibold flex items-center justify-center gap-2 border border-red-700 transition disabled:opacity-50"
               >
                 <Swords className="w-3.5 h-3.5" />
@@ -496,7 +528,7 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
               <button
                 id="combat-cast-btn"
                 onClick={handleCastCapability}
-                disabled={actionLoading || !isPlayerTurn || combatState?.victory || combatState?.defeat}
+                disabled={actionLoading || !isPlayerTurn || !actionAvailable || combatState?.victory || combatState?.defeat}
                 className="w-full py-2 px-3 rounded-lg bg-cyan-950/80 hover:bg-cyan-900 text-cyan-100 text-xs font-semibold flex items-center justify-center gap-2 border border-cyan-700/60 transition disabled:opacity-50"
               >
                 <Zap className="w-3.5 h-3.5 text-cyan-400" />

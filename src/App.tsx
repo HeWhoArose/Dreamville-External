@@ -494,6 +494,7 @@ export const App: React.FC = () => {
           protagonistRole={viewState.protagonist?.title}
           protagonistPortraitUrl={viewState.protagonist?.portraitUrl}
           protagonistPortraitEmoji={viewState.protagonist?.portraitEmoji}
+          protagonistConditionState={viewState.protagonist?.conditionState}
           isLoadingOpening={isLoadingOpening}
           openingError={openingError}
           onRetryOpening={handleRetryOpening}

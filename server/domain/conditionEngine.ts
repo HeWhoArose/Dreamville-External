@@ -291,6 +291,20 @@ export class ConditionEngine {
             );
             this.applyStageBodyEffects(state, instance, definition);
           }
+          if (trigger.healingAmount && trigger.healingAmount > 0) {
+            const healed = Math.min(trigger.healingAmount, state.healthMax - state.healthCurrent);
+            state.healthCurrent += healed;
+          }
+          for (const conditionId of trigger.addConditionIds || []) {
+            this.applyConditionToState(state, { definitionIdOrName: conditionId, nowSeconds }, this.resolveOrCreateDefinition(conditionId));
+          }
+          for (const conditionId of trigger.removeConditionIds || []) {
+            state.instances = state.instances.filter(
+              (candidate) =>
+                candidate.definitionId !== conditionId &&
+                candidate.name.toLowerCase() !== conditionId.toLowerCase()
+            );
+          }
           if (instance.intensity <= 0) {
             state.instances = state.instances.filter((item) => item.id !== instance.id);
           }
@@ -302,7 +316,10 @@ export class ConditionEngine {
             intensityBefore: before,
             intensityAfter: instance.intensity,
             removed: instance.intensity <= 0,
-            notes: trigger.description ? [trigger.description] : [],
+            notes: [
+              ...(trigger.description ? [trigger.description] : []),
+              trigger.healingAmount ? `Recovered up to ${trigger.healingAmount} HP.` : '',
+            ].filter(Boolean),
           });
         }
       }
@@ -797,7 +814,16 @@ export class ConditionEngine {
           event: 'ON_ACTION',
           actionKeywords: ['fire', 'flame', 'ignite', 'burn', 'flare', 'fireball'],
           intensityDelta: 1,
-          description: 'Using fire accelerates the Living Flame.',
+          removeConditionIds: ['regenerating'],
+          description: 'Using fire accelerates the Living Flame and suppresses recovery.',
+        },
+        {
+          id: 'living_flame_stop_action',
+          event: 'ON_ACTION',
+          actionKeywords: ['stop', 'extinguish', 'rest', 'cool down', 'cease'],
+          intensityDelta: -1,
+          addConditionIds: ['regenerating'],
+          description: 'Stopping the flame allows the body to enter regenerative recovery.',
         },
       ],
       stages: [

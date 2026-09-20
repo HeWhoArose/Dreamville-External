@@ -853,9 +853,21 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                     Fine-tune demographic, psychological, and historical attributes. Manual edits are permanently marked with USER_EDITED provenance.
                   </p>
                 </div>
-                <span className="text-xs text-neutral-400 font-mono">
-                  Draft ID: {draft.draftId.slice(0, 14)}...
-                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => toggleFieldLock('identity')}
+                    className="text-[10px] px-2 py-1 rounded bg-neutral-900 border border-neutral-800 text-neutral-400"
+                  >
+                    {isFieldLocked('identity') ? '🔒 Identity locked' : '🔓 Lock identity'}
+                  </button>
+                  <button
+                    onClick={() => toggleFieldLock('capabilities')}
+                    className="text-[10px] px-2 py-1 rounded bg-neutral-900 border border-neutral-800 text-neutral-400"
+                  >
+                    {isFieldLocked('capabilities') ? '🔒 Capabilities locked' : '🔓 Lock capabilities'}
+                  </button>
+                  <span className="text-xs text-neutral-400 font-mono">Draft {draft.draftId.slice(0, 10)}…</span>
+                </div>
               </div>
 
               {/* 1. Identity Section */}
@@ -1700,6 +1712,45 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                     <p className="text-xs text-neutral-400">
                       {draft.identity.species} {draft.role.profession}
                     </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-2">
+                    <label className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs cursor-pointer">
+                      Upload
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file || !draft) return;
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            setDraft({
+                              ...draft,
+                              portraitAsset: {
+                                ...draft.portraitAsset!,
+                                imageUrl: String(reader.result),
+                                source: 'UPLOAD',
+                                isFallback: false,
+                                status: 'ready',
+                              },
+                            });
+                            markFieldEdited('portraitAsset');
+                          };
+                          reader.readAsDataURL(file);
+                        }}
+                      />
+                    </label>
+                    <button
+                      onClick={() => draft && setDraft({
+                        ...draft,
+                        portraitAsset: { ...draft.portraitAsset!, pinned: !draft.portraitAsset?.pinned },
+                      })}
+                      className={`px-3 py-1.5 rounded-lg text-xs ${draft.portraitAsset?.pinned ? 'bg-indigo-700' : 'bg-neutral-800'}`}
+                    >
+                      {draft.portraitAsset?.pinned ? 'Pinned' : 'Pin Portrait'}
+                    </button>
                   </div>
 
                   {/* Emoji Selector */}

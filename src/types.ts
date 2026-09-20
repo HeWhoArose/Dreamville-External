@@ -439,6 +439,74 @@ export interface PowerState {
   activeConditions: string[];
 }
 
+export interface CharacterEffect {
+  id: string;
+  type: string;
+  target?: string;
+  scope?: string;
+  modifier?: number;
+  value?: string | number | boolean;
+  condition?: string;
+  description: string;
+  sourceId?: string;
+  provenance: CharacterProvenanceSource;
+}
+
+export interface CharacterStatDefinition {
+  id: string;
+  name: string;
+  value: number;
+  baseValue?: number;
+  min?: number;
+  max?: number;
+  description?: string;
+  provenance: CharacterProvenanceSource;
+}
+
+export interface CharacterFeat {
+  id: string;
+  name: string;
+  description: string;
+  effects: CharacterEffect[];
+  prerequisites?: string[];
+  tags?: string[];
+  provenance: CharacterProvenanceSource;
+  sourceEventId?: string;
+  worldId?: string;
+}
+
+export interface CharacterTitle {
+  id: string;
+  name: string;
+  description: string;
+  effects: CharacterEffect[];
+  provenance: CharacterProvenanceSource;
+  sourceEventId?: string;
+  worldId?: string;
+}
+
+export interface CharacterStartingState {
+  healthCurrent: number;
+  healthMax: number;
+  energyCurrent?: number;
+  energyMax?: number;
+  fatigue?: number;
+  stress?: number;
+  conditions: string[];
+  activeEffects: CharacterEffect[];
+  reputations: Record<string, number>;
+  relationshipModifiers: Record<string, number>;
+}
+
+export type CharacterStartingChoiceMode = 'CHOOSE' | 'AI_SUGGEST' | 'SURPRISE_ME';
+
+export interface CharacterAiExtractionSummary {
+  interpretation: string;
+  keyFacts: string[];
+  proposedHighlights: string[];
+  uncertainties?: string[];
+}
+
 export interface CapabilityDefinition {
   id: string;
   name: string;
@@ -460,8 +528,9 @@ export interface CapabilityDefinition {
   rangeScope?: 'melee' | 'close' | 'ranged' | 'realm' | 'global' | string;
   actionType?: 'action' | 'bonus_action' | 'reaction' | 'free' | string;
   sourceUserPrompt?: string;
+  effects?: CharacterEffect[];
   generatedSkills?: GeneratedTechnique[];
-}
+
 
 export interface CapabilityGraphNode {
   capabilityId: string;
@@ -1064,6 +1133,13 @@ export interface StartingEquipmentItem {
   slot?: string;
   isEquipped: boolean;
   quantity: number;
+  rarity?: string;
+  weightKg?: number;
+  durability?: number;
+  maxDurability?: number;
+  properties?: Record<string, unknown>;
+  effects?: CharacterEffect[];
+  sourceUserPrompt?: string;
   provenance: CharacterProvenanceSource;
 }
 
@@ -1098,6 +1174,15 @@ export interface CharacterPortraitAsset {
   isFallback: boolean;
   status: 'idle' | 'generating' | 'ready' | 'fallback' | 'failed';
   failureReason?: string;
+  source?: 'UPLOAD' | 'AI_GENERATED' | 'BROWSE' | 'EMOJI';
+  pinned?: boolean;
+}
+
+export interface CharacterGenesisRevision {
+  revision: number;
+  savedAt: string;
+  label: string;
+  snapshot: Partial<CharacterGenesisDraft>;
 }
 
 export interface CharacterGenesisDraft {
@@ -1113,18 +1198,32 @@ export interface CharacterGenesisDraft {
   motivations: CharacterMotivations;
   relationships: CharacterRelationships;
   condition: CharacterCondition;
+  attributes: CharacterStatDefinition[];
+  stats: CharacterStatDefinition[];
+  traits: string[];
   capabilities: CapabilityDefinition[];
   generatedSkills: GeneratedTechnique[];
+  feats: CharacterFeat[];
+  titles: CharacterTitle[];
   startingEquipment: StartingEquipmentConfig;
   startingLocation: StartingLocationConfig;
   startingSituation: StartingSituationConfig;
+  startingLocationMode: CharacterStartingChoiceMode;
+  startingSituationMode: CharacterStartingChoiceMode;
+  startingState: CharacterStartingState;
   portraitAsset?: CharacterPortraitAsset;
+  aiExtractionSummary?: CharacterAiExtractionSummary;
   provenance: Record<string, CharacterProvenanceSource>;
+  fieldLocks: string[];
   validationState: {
     isValid: boolean;
     errors: string[];
     warnings: string[];
   };
+  revision: number;
+  revisionHistory: CharacterGenesisRevision[];
+  storyMode?: 'PROTAGONIST' | 'SIDE_CHARACTER' | 'FREE_ROAM';
+  dndRulesMode?: 'FULL_DND' | 'HYBRID_DND' | 'CUSTOM_HOMEBREW_DND';
   createdAt?: string;
   updatedAt?: string;
 }
@@ -1144,13 +1243,26 @@ export interface ConfirmedCharacter {
   motivations: CharacterMotivations;
   relationships: CharacterRelationships;
   condition: CharacterCondition;
+  attributes: CharacterStatDefinition[];
+  stats: CharacterStatDefinition[];
+  traits: string[];
   capabilities: CapabilityDefinition[];
   generatedSkills: GeneratedTechnique[];
+  feats: CharacterFeat[];
+  titles: CharacterTitle[];
   startingEquipment: StartingEquipmentConfig;
   startingLocation: StartingLocationConfig;
   startingSituation: StartingSituationConfig;
+  startingLocationMode: CharacterStartingChoiceMode;
+  startingSituationMode: CharacterStartingChoiceMode;
+  startingState: CharacterStartingState;
   portraitAsset?: CharacterPortraitAsset;
+  aiExtractionSummary?: CharacterAiExtractionSummary;
   provenance: Record<string, CharacterProvenanceSource>;
+  fieldLocks: string[];
+  revision: number;
+  storyMode?: 'PROTAGONIST' | 'SIDE_CHARACTER' | 'FREE_ROAM';
+  dndRulesMode?: 'FULL_DND' | 'HYBRID_DND' | 'CUSTOM_HOMEBREW_DND';
 }
 
 export interface CharacterExtractionRequest {

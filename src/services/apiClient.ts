@@ -478,6 +478,36 @@ class ApiClient {
   }
 
   /**
+   * Executes a canonical D&D combat Action such as Dash, Dodge, or Disengage.
+   * POST /api/game/combat/action
+   */
+  public async executeCombatAction(params: {
+    actorId?: string;
+    action: 'DASH' | 'DODGE' | 'DISENGAGE';
+  }): Promise<{
+    success: boolean;
+    errorReason?: string;
+    action?: 'DASH' | 'DODGE' | 'DISENGAGE';
+    combatState: import('../types').CombatStateResponse;
+  }> {
+    const res = await fetch(`${this.baseUrl}/combat/action`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(params),
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => null);
+      throw new Error(errorData?.errorReason || errorData?.error || `Combat action failed with HTTP ${res.status}`);
+    }
+
+    return await res.json();
+  }
+
+  /**
    * Resolves D&D SRD 5.2.1 attack against target (CH8).
    * POST /api/game/combat/attack
    */

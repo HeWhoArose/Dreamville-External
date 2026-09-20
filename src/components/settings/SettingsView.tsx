@@ -341,29 +341,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     ]);
   };
 
-  const handlePinTaskModel = async (taskKey: string, fullModelKey: string) => {
-    const orchestratorTaskId = TASK_ID_MAP[taskKey];
-    try {
-      setTaskPins((prev) => ({ ...prev, [orchestratorTaskId]: fullModelKey }));
-      await apiClient.pinModelForTask({ task: orchestratorTaskId, modelKey: fullModelKey });
-
-      const emergencyKey = 'provider_deterministic_emergency::emergency-fallback-local';
-      const existingChain = fallbackChains[orchestratorTaskId] || [];
-      const nextFallbacks = existingChain.filter(
-        (key) => key !== emergencyKey && key !== fullModelKey
-      );
-
-      await apiClient.setOrchestratorFallbackChain({
-        task: orchestratorTaskId,
-        chain: [fullModelKey, ...nextFallbacks, emergencyKey],
-      });
-
-      await loadOrchestratorData();
-    } catch (err) {
-      console.error(`Failed to pin model for task ${taskKey}:`, err);
-    }
-  };
-
   const handleTestModel = async (providerId: string, modelId: string) => {
     const key = `${providerId}::${modelId}`;
     setTestingModelKey(key);

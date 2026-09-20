@@ -374,6 +374,58 @@ export const AudioHapticProvider: React.FC<{ children: React.ReactNode }> = ({ c
           setTimeout(() => {
             try { osc.disconnect(); gain.disconnect(); } catch {}
           }, 600);
+        } else if (cleanCue.includes('dice.roll') || cleanCue.includes('dice result') || cleanCue.includes('dice.critical') || cleanCue.includes('dice.failure')) {
+          // Procedural dice SFX: a short rolling hiss/click sequence followed by a
+          // distinct result chime. No external audio asset is required.
+          const duration = cleanCue.includes('dice.roll') ? 0.75 : 0.32;
+          const bufferSize = Math.floor(ctx.sampleRate * duration);
+          const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+          const data = buffer.getChannelData(0);
+          for (let i = 0; i < bufferSize; i++) {
+            const envelope = 1 - i / bufferSize;
+            data[i] = (Math.random() * 2 - 1) * envelope * 0.32;
+          }
+
+          const source = ctx.createBufferSource();
+          const noiseGain = ctx.createGain();
+          source.buffer = buffer;
+          noiseGain.gain.setValueAtTime(effVolume * (cleanCue.includes('dice.roll') ? 0.24 : 0.08), now);
+          noiseGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+          source.connect(noiseGain);
+          noiseGain.connect(masterGainRef.current);
+          source.start(now);
+          source.stop(now + duration);
+
+          if (cleanCue.includes('dice.roll')) {
+            for (let i = 0; i < 6; i++) {
+              const click = ctx.createOscillator();
+              const clickGain = ctx.createGain();
+              const clickStart = now + 0.06 + i * 0.095;
+              click.type = 'square';
+              click.frequency.value = 180 + (i % 3) * 55;
+              clickGain.gain.setValueAtTime(effVolume * 0.07, clickStart);
+              clickGain.gain.exponentialRampToValueAtTime(0.001, clickStart + 0.035);
+              click.connect(clickGain);
+              clickGain.connect(masterGainRef.current);
+              click.start(clickStart);
+              click.stop(clickStart + 0.04);
+            }
+          } else {
+            const tone = ctx.createOscillator();
+            const toneGain = ctx.createGain();
+            tone.type = 'sine';
+            tone.frequency.value = cleanCue.includes('dice.failure') ? 170 : cleanCue.includes('dice.critical') ? 880 : 660;
+            toneGain.gain.setValueAtTime(effVolume * 0.18, now);
+            toneGain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+            tone.connect(toneGain);
+            toneGain.connect(masterGainRef.current);
+            tone.start(now);
+            tone.stop(now + 0.3);
+          }
+
+          setTimeout(() => {
+            try { source.disconnect(); noiseGain.disconnect(); } catch {}
+          }, Math.ceil((duration + 0.1) * 1000));
         } else if (cleanCue.includes('quest') || cleanCue.includes('victory')) {
           [440, 554.37, 659.25, 880].forEach((freq, idx) => {
             const osc = ctx.createOscillator();

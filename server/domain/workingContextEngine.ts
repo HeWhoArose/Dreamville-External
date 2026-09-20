@@ -678,6 +678,22 @@ export class WorkingContextEngine {
       ...formStrings,
       ...activeConditionStrings,
     ]));
+    const conditionDefenseSummary = canonicalConditionState
+      ? [
+          canonicalConditionState.damageProfile.damageImmunities.length
+            ? `Damage immunities: ${canonicalConditionState.damageProfile.damageImmunities.join(', ')}`
+            : '',
+          canonicalConditionState.damageProfile.damageResistances.length
+            ? `Damage resistances: ${canonicalConditionState.damageProfile.damageResistances.join(', ')}`
+            : '',
+          canonicalConditionState.damageProfile.damageVulnerabilities.length
+            ? `Damage vulnerabilities: ${canonicalConditionState.damageProfile.damageVulnerabilities.join(', ')}`
+            : '',
+          canonicalConditionState.conditionProfile.conditionImmunities.length
+            ? `Condition immunities: ${canonicalConditionState.conditionProfile.conditionImmunities.join(', ')}`
+            : '',
+        ].filter(Boolean).join(' | ')
+      : '';
 
     // 4. Capabilities & Equipment
     const actorId = player?.actorId || `player_actor_${storyId}`;
@@ -712,7 +728,7 @@ export class WorkingContextEngine {
         id: `chunk_${storyId}_b1_protagonist`,
         band: 'B1_CRITICAL',
         label: 'PROTAGONIST_IDENTITY',
-        content: `Protagonist: ${charName} | Role: ${charRole} | Background: ${charBackground} | Personality: ${charPersonality} | Motivations: ${charMotivations} | Conditions: ${conditionList.length > 0 ? conditionList.join(', ') : 'Nominal'}.`,
+        content: `Protagonist: ${charName} | Role: ${charRole} | Background: ${charBackground} | Personality: ${charPersonality} | Motivations: ${charMotivations} | Conditions: ${conditionList.length > 0 ? conditionList.join(', ') : 'Nominal'}${conditionDefenseSummary ? ` | ${conditionDefenseSummary}` : ''}.`,
         estimatedTokens: WorkingContextEngine.estimateTokens(charName + charRole + charBackground),
         isProtected: true,
         relevanceScore: 1.0,
@@ -810,7 +826,10 @@ export class WorkingContextEngine {
           role: charRole,
           background: charBackground,
           capabilities: capDescriptions,
-          conditions: conditionList,
+          conditions: [
+            ...conditionList,
+            conditionDefenseSummary,
+          ].filter(Boolean),
           startingSituation: situationHook,
           equipment: equipList,
         },

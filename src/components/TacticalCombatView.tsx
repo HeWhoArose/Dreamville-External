@@ -190,6 +190,12 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
   const turnResources = combatState?.viewerTurnResources;
   const actionAvailable = turnResources?.actionAvailable ?? true;
   const movementRemaining = turnResources?.movementRemainingCells ?? 0;
+  const actorCanAct = Boolean(
+    currentActor &&
+    !currentActor.isDead &&
+    currentActor.hpCurrent > 0 &&
+    !currentActor.conditions.includes('Unconscious')
+  );
 
   // Grid constants (8x8)
   const gridSize = 8;
@@ -282,6 +288,22 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
             </div>
           </div>
 
+          {currentActor?.usesDeathSaves && currentActor.hpCurrent <= 0 && !currentActor.isDead && (
+            <div className="col-span-2 sm:col-span-4 p-3 bg-red-950/20 border border-red-900/40 rounded-xl">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[10px] uppercase font-mono tracking-wider text-red-300">Death Saves</span>
+                <span className="text-xs font-mono text-stone-300">
+                  {currentActor.deathSaveState?.successes ?? 0} successes • {currentActor.deathSaveState?.failures ?? 0} failures
+                </span>
+              </div>
+              <div className="mt-1 text-[11px] text-stone-400">
+                {currentActor.deathSaveState?.stable
+                  ? 'Stable at 0 HP. Healing is required to regain consciousness.'
+                  : 'Unconscious at 0 HP. A death save is resolved at the start of the character’s turn.'}
+              </div>
+            </div>
+          )}
+
           <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-3 bg-stone-900/60 border border-stone-800 rounded-xl">
               <span className="text-[10px] uppercase font-mono tracking-wider text-stone-500">Action</span>
@@ -347,7 +369,7 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
                 <div
                   key={`${x}-${y}`}
                   onClick={() => {
-                    if (isPlayerTurn && currentActor && !participant && movementRemaining > 0 && !actionLoading) {
+                    if (isPlayerTurn && actorCanAct && currentActor && !participant && movementRemaining > 0 && !actionLoading) {
                       handleMove(x, y);
                     } else if (participant && participant.team === 'enemies') {
                       setSelectedTargetId(participant.id);
@@ -514,7 +536,7 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
               <button
                 id="combat-dash-btn"
                 onClick={() => handleCoreCombatAction('DASH')}
-                disabled={actionLoading || !isPlayerTurn || !actionAvailable || combatState?.victory || combatState?.defeat}
+                disabled={actionLoading || !isPlayerTurn || !actorCanAct || !actionAvailable || combatState?.victory || combatState?.defeat}
                 className="py-2 px-2 rounded-lg bg-amber-950/70 hover:bg-amber-900 text-amber-100 text-[11px] font-semibold border border-amber-800/60 transition disabled:opacity-50"
                 title="Dash: spend your Action to gain additional movement equal to Speed."
               >
@@ -523,7 +545,7 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
               <button
                 id="combat-dodge-btn"
                 onClick={() => handleCoreCombatAction('DODGE')}
-                disabled={actionLoading || !isPlayerTurn || !actionAvailable || combatState?.victory || combatState?.defeat}
+                disabled={actionLoading || !isPlayerTurn || !actorCanAct || !actionAvailable || combatState?.victory || combatState?.defeat}
                 className="py-2 px-2 rounded-lg bg-blue-950/70 hover:bg-blue-900 text-blue-100 text-[11px] font-semibold border border-blue-800/60 transition disabled:opacity-50"
                 title="Dodge: attacks against you have disadvantage and your Dexterity saves have advantage."
               >
@@ -532,7 +554,7 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
               <button
                 id="combat-disengage-btn"
                 onClick={() => handleCoreCombatAction('DISENGAGE')}
-                disabled={actionLoading || !isPlayerTurn || !actionAvailable || combatState?.victory || combatState?.defeat}
+                disabled={actionLoading || !isPlayerTurn || !actorCanAct || !actionAvailable || combatState?.victory || combatState?.defeat}
                 className="py-2 px-2 rounded-lg bg-stone-800 hover:bg-stone-750 text-stone-200 text-[11px] font-semibold border border-stone-700 transition disabled:opacity-50"
                 title="Disengage: prevents opportunity attacks from your movement."
               >
@@ -545,7 +567,7 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
               <button
                 id="combat-attack-btn"
                 onClick={handleAttack}
-                disabled={actionLoading || !isPlayerTurn || !actionAvailable || combatState?.victory || combatState?.defeat}
+                disabled={actionLoading || !isPlayerTurn || !actorCanAct || !actionAvailable || combatState?.victory || combatState?.defeat}
                 className="w-full py-2 px-3 rounded-lg bg-red-900/80 hover:bg-red-800 text-red-100 text-xs font-semibold flex items-center justify-center gap-2 border border-red-700 transition disabled:opacity-50"
               >
                 <Swords className="w-3.5 h-3.5" />
@@ -575,7 +597,7 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
               <button
                 id="combat-cast-btn"
                 onClick={handleCastCapability}
-                disabled={actionLoading || !isPlayerTurn || !actionAvailable || combatState?.victory || combatState?.defeat}
+                disabled={actionLoading || !isPlayerTurn || !actorCanAct || !actionAvailable || combatState?.victory || combatState?.defeat}
                 className="w-full py-2 px-3 rounded-lg bg-cyan-950/80 hover:bg-cyan-900 text-cyan-100 text-xs font-semibold flex items-center justify-center gap-2 border border-cyan-700/60 transition disabled:opacity-50"
               >
                 <Zap className="w-3.5 h-3.5 text-cyan-400" />

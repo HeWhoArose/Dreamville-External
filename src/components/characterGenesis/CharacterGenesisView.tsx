@@ -216,6 +216,8 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
 
   // Portrait generation state
   const [isGeneratingPortrait, setIsGeneratingPortrait] = useState<boolean>(false);
+  const [portraitError, setPortraitError] = useState<string | null>(null);
+  const [imageFailed, setImageFailed] = useState<boolean>(false);
   const [customImageUrl, setCustomImageUrl] = useState<string>('');
   const [customFeatName, setCustomFeatName] = useState<string>('');
   const [customFeatDescription, setCustomFeatDescription] = useState<string>('');
@@ -1155,32 +1157,78 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
     setActiveStep(2);
   };
 
-  // Portrait AI generation / test fallback
+  // Portrait AI generation / presentation adapter
   const handleGeneratePortrait = async () => {
     if (!draft) return;
     setIsGeneratingPortrait(true);
+    setPortraitError(null);
+    setImageFailed(false);
     try {
       const res = await apiClient.generateImage({
-        prompt: draft.portraitAsset?.promptFallback || `Portrait of ${draft.identity.name}`,
+        prompt: draft.portraitAsset?.promptFallback || `Portrait of ${draft.identity.name}, ${draft.identity.species} ${draft.role.profession}`,
         storyId: 'default_story',
       });
-      if (res && res.imageUrl) {
+      if (res && res.success && res.imageUrl) {
         setDraft({
           ...draft,
           portraitAsset: {
             ...draft.portraitAsset!,
             imageUrl: res.imageUrl,
-            isFallback: false,
+            source: 'AI_GENERATED',
+            isFallback: Boolean(res.isFallback),
             status: 'ready',
+            failureReason: undefined,
           },
         });
         markFieldEdited('portraitAsset');
+      } else {
+        const reason = res?.errorReason || 'Image generation failed or returned no image.';
+        setPortraitError(reason);
+        setDraft({
+          ...draft,
+          portraitAsset: {
+            ...draft.portraitAsset!,
+            status: 'failed',
+            failureReason: reason,
+          },
+        });
       }
-    } catch (err) {
-      console.warn('Portrait generation failed, fallback preserved:', err);
+    } catch (err: any) {
+      const reason = err?.message || 'Portrait generation request failed.';
+      setPortraitError(reason);
+      setDraft({
+        ...draft,
+        portraitAsset: {
+          ...draft.portraitAsset!,
+          status: 'failed',
+          failureReason: reason,
+        },
+      });
     } finally {
       setIsGeneratingPortrait(false);
     }
+  };
+
+  // Restore Default Portrait
+  const handleRestoreDefaultPortrait = () => {
+    if (!draft) return;
+    const defaultEmoji = draft.portraitAsset?.emoji || '👤';
+    setImageFailed(false);
+    setPortraitError(null);
+    setCustomImageUrl('');
+    setDraft({
+      ...draft,
+      portraitAsset: {
+        ...draft.portraitAsset!,
+        imageUrl: undefined,
+        emoji: defaultEmoji,
+        source: 'DEFAULT',
+        isFallback: true,
+        status: 'idle',
+        failureReason: undefined,
+      },
+    });
+    markFieldEdited('portraitAsset');
   };
 
   // Explicit Character Confirmation (Strictly does NOT start a StoryRun!)
@@ -3360,19 +3408,58 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 </div>
               </div>
 
+              {portraitError && (
+                <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-800 text-xs text-amber-200 flex items-start gap-2.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="font-semibold text-amber-300">Portrait Generation Notice</div>
+                    <p className="text-amber-200/90 mt-0.5">{portraitError}</p>
+                    <p className="text-[11px] text-neutral-400 mt-1">
+                      Your character identity and stats remain fully intact. You can try again or select an emoji / uploaded image.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
                 {/* Visual Avatar Card */}
                 <div className="min-w-0 max-w-full p-6 rounded-xl bg-neutral-900 border border-neutral-800 flex flex-col items-center text-center space-y-4 overflow-hidden">
                   <div className="w-32 h-32 max-w-full max-h-32 shrink-0 rounded-2xl bg-neutral-950 border-2 border-indigo-500/40 flex items-center justify-center overflow-hidden shadow-inner relative">
-                    {draft.portraitAsset?.imageUrl ? (
-                      <img
-                        src={draft.portraitAsset.imageUrl}
-                        alt={draft.identity.name}
-                        className="w-full h-full max-w-full max-h-full object-cover"
-                      />
-                    ) : (
-                      <div className="text-5xl select-none">{draft.portraitAsset?.emoji || '👤'}</div>
-                    )}
+                    {(() => {
+                      const source = draft.portraitAsset?.source || 'DEFAULT';
+                      const imageUrl = draft.portraitAsset?.imageUrl;
+                      const emoji = draft.portraitAsset?.emoji || '👤';
+
+                      const shouldRenderImage =
+                        !imageFailed &&
+                        Boolean(imageUrl) &&
+                        (source === 'AI_GENERATED' || source === 'UPLOAD' || source === 'BROWSE' || source === 'DEFAULT');
+
+                      if (shouldRenderImage && imageUrl) {
+                        return (
+                          <img
+                            src={imageUrl}
+                            alt={draft.identity.name}
+                            className="w-full h-full max-w-full max-h-full object-cover"
+                            onError={() => {
+                              setImageFailed(true);
+                              if (draft.portraitAsset) {
+                                setDraft({
+                                  ...draft,
+                                  portraitAsset: {
+                                    ...draft.portraitAsset,
+                                    status: 'failed',
+                                    failureReason: 'Image asset failed to load in browser.',
+                                  },
+                                });
+                              }
+                            }}
+                          />
+                        );
+                      }
+
+                      return <div className="text-5xl select-none">{emoji}</div>;
+                    })()}
                   </div>
 
                   <div className="w-full max-w-full min-w-0 px-2 overflow-hidden">
@@ -3380,10 +3467,15 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                     <p className="text-xs text-neutral-400 break-words">
                       {draft.identity.species} {draft.role.profession}
                     </p>
+                    <div className="mt-1">
+                      <span className="inline-block px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-neutral-800 text-neutral-300">
+                        Source: {draft.portraitAsset?.source || 'DEFAULT'}
+                      </span>
+                    </div>
                   </div>
 
                   <div className="flex flex-wrap items-center justify-center gap-2 pt-2 max-w-full">
-                    <label className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs cursor-pointer shrink-0">
+                    <label className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-white cursor-pointer shrink-0">
                       Upload
                       <input
                         type="file"
@@ -3394,6 +3486,8 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                           if (!file || !draft) return;
                           const reader = new FileReader();
                           reader.onload = () => {
+                            setImageFailed(false);
+                            setPortraitError(null);
                             setDraft({
                               ...draft,
                               portraitAsset: {
@@ -3410,12 +3504,20 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                         }}
                       />
                     </label>
+
+                    <button
+                      onClick={handleRestoreDefaultPortrait}
+                      className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-300 shrink-0"
+                    >
+                      Restore Default
+                    </button>
+
                     <button
                       onClick={() => draft && setDraft({
                         ...draft,
                         portraitAsset: { ...draft.portraitAsset!, pinned: !draft.portraitAsset?.pinned },
                       })}
-                      className={`px-3 py-1.5 rounded-lg text-xs shrink-0 ${draft.portraitAsset?.pinned ? 'bg-indigo-700' : 'bg-neutral-800'}`}
+                      className={`px-3 py-1.5 rounded-lg text-xs shrink-0 ${draft.portraitAsset?.pinned ? 'bg-indigo-700 text-white' : 'bg-neutral-800 text-neutral-300'}`}
                     >
                       {draft.portraitAsset?.pinned ? 'Pinned' : 'Pin Portrait'}
                     </button>
@@ -3427,17 +3529,22 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                       <button
                         key={emoji}
                         onClick={() => {
+                          setImageFailed(false);
+                          setPortraitError(null);
                           setDraft({
                             ...draft,
                             portraitAsset: {
                               ...draft.portraitAsset!,
                               emoji,
+                              source: 'EMOJI',
+                              imageUrl: undefined, // Explicitly clear imageUrl so emoji renders immediately!
+                              status: 'ready',
                             },
                           });
                           markFieldEdited('portraitAsset');
                         }}
                         className={`text-xl p-1.5 rounded-lg border transition-colors shrink-0 ${
-                          draft.portraitAsset?.emoji === emoji
+                          draft.portraitAsset?.source === 'EMOJI' && draft.portraitAsset?.emoji === emoji
                             ? 'bg-indigo-950 border-indigo-500'
                             : 'bg-neutral-950 border-neutral-800 hover:border-neutral-700'
                         }`}
@@ -3486,11 +3593,14 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                       <button
                         onClick={() => {
                           if (!customImageUrl.trim()) return;
+                          setImageFailed(false);
+                          setPortraitError(null);
                           setDraft({
                             ...draft,
                             portraitAsset: {
                               ...draft.portraitAsset!,
-                              imageUrl: customImageUrl,
+                              imageUrl: customImageUrl.trim(),
+                              source: 'BROWSE',
                               isFallback: false,
                               status: 'ready',
                             },

@@ -1,4 +1,5 @@
 import express from 'express';
+import fs from 'node:fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { gameRouter } from './server/api/gameRoutes';
@@ -11,7 +12,8 @@ async function startServer() {
   const PORT = 3000;
 
   // Middleware
-  app.use(express.json());
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
   // Development request logger for API routes
   app.use('/api', (req, res, next) => {
@@ -26,6 +28,48 @@ async function startServer() {
 
   // API Routes MUST come FIRST
   app.use('/api/game', gameRouter);
+
+  // Static generated assets & placeholders serving
+  const publicAssetsPath = path.join(process.cwd(), 'public', 'assets');
+  app.use('/assets', express.static(publicAssetsPath));
+
+  app.get('/assets/generated/:filename', (req, res) => {
+    const filename = req.params.filename;
+    const filePath = path.join(process.cwd(), 'public', 'assets', 'generated', filename);
+    if (path.extname(filename) === '.svg' || fs.existsSync(filePath + '.svg')) {
+      const target = fs.existsSync(filePath) ? filePath : filePath + '.svg';
+      if (fs.existsSync(target)) {
+        res.setHeader('Content-Type', 'image/svg+xml');
+        res.sendFile(target);
+        return;
+      }
+    }
+    if (fs.existsSync(filePath)) {
+      res.setHeader('Content-Type', path.extname(filename) === '.png' ? 'image/png' : 'image/jpeg');
+      res.sendFile(filePath);
+      return;
+    }
+    res.status(404).send('Generated asset not found');
+  });
+
+  app.get('/assets/placeholders/:filename', (req, res) => {
+    const filename = req.params.filename;
+    const filePath = path.join(process.cwd(), 'public', 'assets', 'placeholders', filename);
+    if (path.extname(filename) === '.svg' || fs.existsSync(filePath + '.svg')) {
+      const target = fs.existsSync(filePath) ? filePath : filePath + '.svg';
+      if (fs.existsSync(target)) {
+        res.setHeader('Content-Type', 'image/svg+xml');
+        res.sendFile(target);
+        return;
+      }
+    }
+    if (fs.existsSync(filePath)) {
+      res.setHeader('Content-Type', path.extname(filename) === '.png' ? 'image/png' : 'image/jpeg');
+      res.sendFile(filePath);
+      return;
+    }
+    res.status(404).send('Placeholder asset not found');
+  });
 
   // Never let an unmatched API request fall through to the SPA HTML fallback.
   // This keeps API failures JSON-shaped and prevents `Unexpected token '<'` errors

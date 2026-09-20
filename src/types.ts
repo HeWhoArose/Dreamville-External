@@ -1241,7 +1241,7 @@ export interface CharacterPortraitAsset {
   isFallback: boolean;
   status: 'idle' | 'generating' | 'ready' | 'fallback' | 'failed';
   failureReason?: string;
-  source?: 'UPLOAD' | 'AI_GENERATED' | 'BROWSE' | 'EMOJI';
+  source?: 'UPLOAD' | 'AI_GENERATED' | 'BROWSE' | 'EMOJI' | 'DEFAULT';
   pinned?: boolean;
 }
 

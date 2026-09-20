@@ -1,4 +1,5 @@
 import { WorldTimestamp } from './types';
+import { ConditionEngine } from './conditionEngine';
 
 export type VesselType = 'mortal_human' | 'ascended_avatar' | 'primordial_form' | 'ethereal_spirit';
 export type SealState = 'absolute' | 'partial' | 'dormant' | 'broken';
@@ -292,8 +293,10 @@ export class CapabilityEngine {
   private actorSkillInstances: Map<string, Map<string, SkillInstance>> = new Map(); // actorId -> capabilityId -> SkillInstance
   private synthesisCounter: number = 0;
   private progressionPolicy: WorldProgressionPolicy = { ...DEFAULT_PROGRESSION_POLICY };
+  private conditionEngine?: ConditionEngine;
 
-  constructor() {
+  constructor(conditionEngine?: ConditionEngine) {
+    this.conditionEngine = conditionEngine;
     this.seedDefaultCapabilities();
   }
 
@@ -1433,6 +1436,12 @@ export class CapabilityEngine {
 
     // Deduct state deterministically
     power.healthCurrent = Math.max(1, power.healthCurrent - hpCost);
+    if (this.conditionEngine) {
+      const conditionState = this.conditionEngine.getActorState(proposal.actorId);
+      if (conditionState) {
+        this.conditionEngine.setHealth(proposal.actorId, power.healthCurrent, power.healthMax);
+      }
+    }
     power.magicalEnergy = Math.max(0, power.magicalEnergy - energyCost);
     power.physicalStrain += strainCost;
     power.fatigue = Math.min(100, power.fatigue + 10);

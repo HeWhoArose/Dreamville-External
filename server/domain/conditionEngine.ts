@@ -157,6 +157,11 @@ export class ConditionEngine {
     if (existing) return clone(existing);
 
     const conditionState = input?.conditionState;
+    for (const definition of conditionState?.customDefinitions || []) {
+      if (definition?.id && definition?.name) {
+        this.registerDefinition(definition);
+      }
+    }
     const damageProfile = clone(
       conditionState?.damageProfile ||
       input?.damageProfile || {
@@ -499,6 +504,12 @@ export class ConditionEngine {
     if (!state) return undefined;
     return {
       instances: clone(state.instances),
+      customDefinitions: state.instances
+        .map((instance) => this.definitions.get(instance.definitionId))
+        .filter((definition): definition is CharacterConditionDefinition =>
+          Boolean(definition && definition.category === 'CUSTOM')
+        )
+        .map((definition) => clone(definition)),
       damageProfile: clone(state.damageProfile),
       conditionProfile: clone(state.conditionProfile),
       bodyRegions: clone(state.bodyRegions),

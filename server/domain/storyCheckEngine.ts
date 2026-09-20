@@ -181,10 +181,15 @@ export class StoryCheckEngine {
     character: StoryCheckCharacter
   ): StoryCheckResult | null {
     const text = normalize(actionText);
-    if (!text || this.isRoutine(text)) return null;
+    if (!text) return null;
 
     const sceneText = normalize(character.sceneText || '');
     const saveSelection = this.pickSaveProfile(text, sceneText);
+
+    // A routine action remains narration-only unless the current world context
+    // creates a real saving-throw trigger.
+    if (!saveSelection && this.isRoutine(text)) return null;
+
     const profile = saveSelection ? null : this.pickProfile(text);
     if (!saveSelection && !profile) return null;
 
@@ -224,6 +229,10 @@ export class StoryCheckEngine {
     }
 
     const contextNotes: string[] = [];
+    if (saveSelection?.worldTriggered) {
+      contextNotes.push(saveSelection.profile.triggerReason);
+    }
+
     let advantage = false;
     let disadvantage = false;
     let forcedFailure = false;

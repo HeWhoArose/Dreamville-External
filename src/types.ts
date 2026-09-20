@@ -813,7 +813,7 @@ export interface BattleEvent {
   turnNumber: number;
   actorId: string;
   targetId?: string;
-  actionType: 'MOVE' | 'ATTACK' | 'CAST' | 'CONDITION_TICK';
+  actionType: 'MOVE' | 'ATTACK' | 'CAST' | 'ACTION' | 'CONDITION_TICK' | 'START_ACTIVATION' | 'INTERRUPT';
   headline: string;
   damageInflicted?: number;
   rollRecord?: RollRecord;

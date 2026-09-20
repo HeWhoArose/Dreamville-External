@@ -452,6 +452,45 @@ export interface CharacterEffect {
   provenance: CharacterProvenanceSource;
 }
 
+export interface ItemOrSkillIcon {
+  source: 'DEFAULT' | 'AI_GENERATED' | 'IMPORTED' | 'EMOJI';
+  url?: string;
+  prompt?: string;
+  alt?: string;
+  status?: 'DEFAULT' | 'GENERATING' | 'READY' | 'FAILED';
+  emoji?: string;
+}
+
+export type EquipmentClass =
+  | 'WEAPON'
+  | 'ARMOR'
+  | 'SHIELD'
+  | 'ACCESSORY'
+  | 'TOOL'
+  | 'CONSUMABLE'
+  | 'FOOD'
+  | 'POTION'
+  | 'DOCUMENT'
+  | 'QUEST'
+  | 'MATERIAL'
+  | 'MISC';
+
+export type HandUsage = 'NONE' | 'MAIN_HAND' | 'OFF_HAND' | 'ONE_HAND' | 'TWO_HAND';
+
+export type EquipmentSlotId =
+  | 'head'
+  | 'neck'
+  | 'back'
+  | 'body'
+  | 'mainHand'
+  | 'offHand'
+  | 'gloves'
+  | 'belt'
+  | 'ring'
+  | 'legs'
+  | 'feet'
+  | 'ammunition';
+
 export interface CharacterStatDefinition {
   id: string;
   name: string;
@@ -479,6 +518,7 @@ export interface CharacterSkill {
   tags?: string[];
   worldCompatibility?: string;
   provenance: CharacterProvenanceSource;
+  icon?: ItemOrSkillIcon;
 }
 
 export interface CharacterFeat {
@@ -1151,18 +1191,23 @@ export interface StartingEquipmentItem {
   defId?: string;
   name: string;
   category: 'Weapon' | 'Armor' | 'Shield' | 'Potion' | 'Scroll' | 'Quest' | 'Material' | 'Document' | 'Food' | 'Accessory' | 'Tool' | 'Miscellaneous' | string;
+  equipmentClass?: EquipmentClass;
+  equipable?: boolean;
+  allowedSlots?: EquipmentSlotId[];
+  handUsage?: HandUsage;
   description?: string;
-  slot?: string;
+  slot?: EquipmentSlotId | string;
   isEquipped: boolean;
   quantity: number;
   rarity?: string;
   weightKg?: number;
   durability?: number;
   maxDurability?: number;
-  properties?: Record<string, unknown>;
+  properties?: Record<string, unknown> | string[];
   effects?: CharacterEffect[];
   sourceUserPrompt?: string;
   provenance: CharacterProvenanceSource;
+  icon?: ItemOrSkillIcon;
 }
 
 export interface StartingEquipmentConfig {

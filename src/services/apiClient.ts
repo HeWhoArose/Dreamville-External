@@ -1472,16 +1472,6 @@ class ApiClient {
     return await res.json();
   }
 
-  public async generateImage(params: { storyId: string; prompt: string; assetId?: string }): Promise<any> {
-    const res = await fetch(`${this.baseUrl}/media/generate-image`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(params),
-    });
-    if (!res.ok) throw new Error(`Failed to generate image: HTTP ${res.status}`);
-    return await res.json();
-  }
-
   public async setFaultInjection(mode: string): Promise<any> {
     const res = await fetch(`${this.baseUrl}/media/fault-injection`, {
       method: 'POST',
@@ -1756,6 +1746,33 @@ class ApiClient {
       const errorData = await res.json().catch(() => null);
       throw new Error(errorData?.error || `Failed to fetch opening context: HTTP ${res.status}`);
     }
+    return await res.json();
+  }
+
+  /**
+   * Generates or requests media image via the server's MediaAdapterService.
+   */
+  public async generateImage(payload: {
+    storyId?: string;
+    prompt: string;
+    assetId?: string;
+    aspectRatio?: string;
+    tags?: string[];
+  }): Promise<{ success: boolean; imageUrl?: string; isFallback?: boolean; promptFallback?: string; errorReason?: string }> {
+    const res = await fetch(`${this.baseUrl}/media/generate-image`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.errorReason || `Image generation failed: HTTP ${res.status}`);
+    }
+
     return await res.json();
   }
 }

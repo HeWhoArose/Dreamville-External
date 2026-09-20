@@ -1287,11 +1287,59 @@ IMPORTANT: Select an appropriate category and paper-doll slot. If the item is a 
       generatedProvenance = 'DETERMINISTIC_FALLBACK';
     }
 
+    const finalCategory = proposal.category || 'Weapon';
+    const catLower = finalCategory.toLowerCase();
+    const itemLower = (proposal.name || itemName).toLowerCase();
+
+    let eqClass = 'MISC';
+    let equipable = false;
+    let handUsage = 'NONE';
+    let allowedSlots: string[] = [];
+
+    if (catLower.includes('weapon') || itemLower.includes('blade') || itemLower.includes('sword') || itemLower.includes('bow') || itemLower.includes('dagger') || itemLower.includes('staff')) {
+      eqClass = 'WEAPON';
+      equipable = true;
+      if (itemLower.includes('two-hand') || itemLower.includes('2h') || itemLower.includes('greatsword') || itemLower.includes('bow') || itemLower.includes('staff')) {
+        handUsage = 'TWO_HAND';
+        allowedSlots = ['mainHand', 'offHand'];
+      } else {
+        handUsage = 'ONE_HAND';
+        allowedSlots = ['mainHand', 'offHand'];
+      }
+    } else if (catLower.includes('shield') || itemLower.includes('shield')) {
+      eqClass = 'SHIELD';
+      equipable = true;
+      handUsage = 'OFF_HAND';
+      allowedSlots = ['offHand'];
+    } else if (catLower.includes('armor') || itemLower.includes('cuirass') || itemLower.includes('plate') || itemLower.includes('robes') || itemLower.includes('helmet')) {
+      eqClass = 'ARMOR';
+      equipable = true;
+      handUsage = 'NONE';
+      if (itemLower.includes('helmet') || itemLower.includes('hat') || itemLower.includes('hood')) allowedSlots = ['head'];
+      else if (itemLower.includes('boots') || itemLower.includes('shoes')) allowedSlots = ['feet'];
+      else if (itemLower.includes('gloves') || itemLower.includes('bracers')) allowedSlots = ['gloves'];
+      else allowedSlots = ['body'];
+    } else if (catLower.includes('accessory') || catLower.includes('ring') || catLower.includes('necklace') || itemLower.includes('ring') || itemLower.includes('amulet')) {
+      eqClass = 'ACCESSORY';
+      equipable = true;
+      handUsage = 'NONE';
+      if (itemLower.includes('ring')) allowedSlots = ['ring'];
+      else if (itemLower.includes('neck') || itemLower.includes('amulet')) allowedSlots = ['neck'];
+      else allowedSlots = ['ring'];
+    } else {
+      eqClass = catLower.includes('potion') ? 'POTION' : catLower.includes('food') ? 'FOOD' : catLower.includes('tool') ? 'TOOL' : 'MISC';
+      equipable = false;
+    }
+
     return {
       id: itemId,
       name: proposal.name || itemName,
-      category: proposal.category || 'Weapon',
-      slot: proposal.slot || undefined,
+      category: finalCategory,
+      equipmentClass: eqClass as any,
+      equipable,
+      allowedSlots: allowedSlots as any,
+      handUsage: handUsage as any,
+      slot: equipable ? (proposal.slot || allowedSlots[0] || undefined) : undefined,
       description: proposal.description || concept,
       isEquipped: false,
       quantity: Number(proposal.quantity ?? 1),
@@ -1304,6 +1352,7 @@ IMPORTANT: Select an appropriate category and paper-doll slot. If the item is a 
         : [],
       sourceUserPrompt: concept,
       provenance: generatedProvenance,
+      icon: { source: 'DEFAULT', status: 'DEFAULT' },
     };
   }
 

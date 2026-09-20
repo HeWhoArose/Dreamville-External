@@ -48,12 +48,30 @@ import {
   CharacterFeat,
   CharacterSkill,
   CharacterStatDefinition,
+  EquipmentSlotId,
+  ItemOrSkillIcon,
 } from '../../types';
 import {
   STANDARD_DND_SKILLS_CATALOG,
   getInitialDndSkills,
   calculateSkillModifier,
 } from '../../data/dndSkillsCatalog';
+import {
+  getEquipmentClass,
+  isEquipable,
+  getHandUsage,
+  getCompatibleEquipmentSlots,
+  getOccupiedSlots,
+  canEquipItemToSlot,
+  getItemsCompatibleWithSlot,
+  getConflictingEquippedItems,
+  normalizeItemEquipmentMetadata,
+} from '../../data/equipmentRulesEngine';
+import {
+  getDefaultIconForSkill,
+  getDefaultIconForEquipment,
+} from '../../data/iconSystem';
+import { IconStudioModal } from './IconStudioModal';
 import { apiClient } from '../../services/apiClient';
 
 interface CharacterGenesisViewProps {
@@ -167,6 +185,19 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
   const [inspectingItem, setInspectingItem] = useState<StartingEquipmentItem | null>(null);
   const [inspectingSkill, setInspectingSkill] = useState<CharacterSkill | null>(null);
   const [equipSlotSelectModalItem, setEquipSlotSelectModalItem] = useState<StartingEquipmentItem | null>(null);
+
+  // Icon Studio & Equipment Rule Engine Modals
+  const [iconStudioTarget, setIconStudioTarget] = useState<{
+    itemOrSkill: CharacterSkill | StartingEquipmentItem;
+    type: 'SKILL' | 'EQUIPMENT';
+  } | null>(null);
+  const [slotPickerModalItem, setSlotPickerModalItem] = useState<StartingEquipmentItem | null>(null);
+  const [paperDollPickerSlot, setPaperDollPickerSlot] = useState<EquipmentSlotId | null>(null);
+  const [equipConflictState, setEquipConflictState] = useState<{
+    itemToEquip: StartingEquipmentItem;
+    targetSlot: EquipmentSlotId;
+    conflicts: StartingEquipmentItem[];
+  } | null>(null);
 
   // Draft persistence & history
   const [savedDrafts, setSavedDrafts] = useState<CharacterGenesisDraft[]>([]);
@@ -324,7 +355,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
 
   const addCustomEquipment = () => {
     if (!draft || !customEquipmentName.trim()) return;
-    const item: StartingEquipmentItem = {
+    const rawItem: StartingEquipmentItem = {
       id: 'eq_player_' + Date.now(),
       name: customEquipmentName.trim(),
       category: 'Miscellaneous',
@@ -334,6 +365,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
       provenance: 'PLAYER_INPUT',
       sourceUserPrompt: customEquipmentDescription.trim() || customEquipmentName.trim(),
     };
+    const item = normalizeItemEquipmentMetadata(rawItem);
     setDraft({
       ...draft,
       startingEquipment: {
@@ -841,11 +873,12 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
 
   const handleAcceptEquipmentProposal = () => {
     if (!pendingEquipmentProposal || !draft) return;
+    const normalizedItem = normalizeItemEquipmentMetadata(pendingEquipmentProposal);
     setDraft({
       ...draft,
       startingEquipment: {
         ...draft.startingEquipment,
-        inventory: [...draft.startingEquipment.inventory, pendingEquipmentProposal],
+        inventory: [...draft.startingEquipment.inventory, normalizedItem],
       },
     });
 
@@ -859,47 +892,83 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
     setPendingEquipmentProposal(null);
   };
 
-  // Equipment Equip / Unequip / Delete Handlers
-  const handleEquipItem = (itemToEquip: StartingEquipmentItem, targetSlot?: string) => {
+  // Equipment Rules Engine Handler Functions
+  const executeEquip = (itemToEquip: StartingEquipmentItem, targetSlot: EquipmentSlotId) => {
     if (!draft) return;
-    const slotToUse = targetSlot || itemToEquip.slot || 'mainHand';
+    const normalized = normalizeItemEquipmentMetadata(itemToEquip);
+    const currentEquipped = draft.startingEquipment.equipped;
+    const currentInventory = draft.startingEquipment.inventory;
 
-    const currentEquipped = draft.startingEquipment.equipped.filter((i) => i.id !== itemToEquip.id);
-    const currentInventory = draft.startingEquipment.inventory.filter((i) => i.id !== itemToEquip.id);
+    // Determine conflicting items currently equipped
+    const conflicts = getConflictingEquippedItems(normalized, targetSlot, currentEquipped);
+    const conflictIds = new Set(conflicts.map((c) => c.id));
 
-    const occupyingItem = currentEquipped.find((i) => (i.slot || '').toLowerCase() === slotToUse.toLowerCase());
+    // Remove itemToEquip and any conflicting items from equipped array
+    const remainingEquipped = currentEquipped.filter(
+      (i) => i.id !== normalized.id && !conflictIds.has(i.id)
+    );
 
-    let newEquipped = currentEquipped.filter((i) => (i.slot || '').toLowerCase() !== slotToUse.toLowerCase());
-    let newInventory = [...currentInventory];
+    // Remove itemToEquip from inventory array
+    const remainingInventory = currentInventory.filter((i) => i.id !== normalized.id);
 
-    if (occupyingItem) {
-      newInventory.push({
-        ...occupyingItem,
-        isEquipped: false,
-        slot: undefined,
-        provenance: occupyingItem.provenance === 'PLAYER_INPUT' ? 'PLAYER_INPUT' : 'USER_EDITED',
-      });
-    }
+    // Convert conflicting items back to unequipped inventory items
+    const unequippedConflicts = conflicts.map((c) => ({
+      ...c,
+      isEquipped: false,
+      slot: undefined,
+      provenance: (c.provenance === 'PLAYER_INPUT' ? 'PLAYER_INPUT' : 'USER_EDITED') as CharacterProvenanceSource,
+    }));
 
-    newEquipped.push({
-      ...itemToEquip,
+    const newlyEquippedItem: StartingEquipmentItem = {
+      ...normalized,
       isEquipped: true,
-      slot: slotToUse,
-      provenance: itemToEquip.provenance === 'PLAYER_INPUT' ? 'PLAYER_INPUT' : 'USER_EDITED',
-    });
+      slot: targetSlot,
+      provenance: (normalized.provenance === 'PLAYER_INPUT' ? 'PLAYER_INPUT' : 'USER_EDITED') as CharacterProvenanceSource,
+    };
 
     setDraft({
       ...draft,
       startingEquipment: {
         ...draft.startingEquipment,
-        equipped: newEquipped,
-        inventory: newInventory,
+        equipped: [...remainingEquipped, newlyEquippedItem],
+        inventory: [...remainingInventory, ...unequippedConflicts],
       },
     });
 
     markFieldEdited('startingEquipment');
     setInspectingItem(null);
-    setEquipSlotSelectModalItem(null);
+    setSlotPickerModalItem(null);
+    setPaperDollPickerSlot(null);
+    setEquipConflictState(null);
+  };
+
+  const handleInitiateEquip = (item: StartingEquipmentItem, chosenSlot?: EquipmentSlotId) => {
+    if (!draft) return;
+    const normalized = normalizeItemEquipmentMetadata(item);
+    if (!isEquipable(normalized)) return;
+
+    if (chosenSlot) {
+      if (!canEquipItemToSlot(normalized, chosenSlot)) return;
+      const conflicts = getConflictingEquippedItems(normalized, chosenSlot, draft.startingEquipment.equipped);
+      if (conflicts.length > 0) {
+        setEquipConflictState({
+          itemToEquip: normalized,
+          targetSlot: chosenSlot,
+          conflicts,
+        });
+      } else {
+        executeEquip(normalized, chosenSlot);
+      }
+      return;
+    }
+
+    const compatibleSlots = getCompatibleEquipmentSlots(normalized);
+    if (compatibleSlots.length === 0) return;
+    if (compatibleSlots.length === 1) {
+      handleInitiateEquip(normalized, compatibleSlots[0]);
+    } else {
+      setSlotPickerModalItem(normalized);
+    }
   };
 
   const handleUnequipItem = (itemToUnequip: StartingEquipmentItem) => {
@@ -926,6 +995,44 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
 
     markFieldEdited('startingEquipment');
     setInspectingItem(null);
+  };
+
+  const handleSaveIconFromStudio = (updatedIcon: ItemOrSkillIcon) => {
+    if (!draft || !iconStudioTarget) return;
+    const target = iconStudioTarget.itemOrSkill;
+
+    if (iconStudioTarget.type === 'SKILL') {
+      const updatedSkills = (draft.skills || []).map((sk) => {
+        if (sk.id === target.id) {
+          return { ...sk, icon: updatedIcon };
+        }
+        return sk;
+      });
+      setDraft({ ...draft, skills: updatedSkills });
+      markFieldEdited('skills');
+    } else {
+      const isEquipped = draft.startingEquipment.equipped.some((i) => i.id === target.id);
+      if (isEquipped) {
+        const updatedEquipped = draft.startingEquipment.equipped.map((i) =>
+          i.id === target.id ? { ...i, icon: updatedIcon } : i
+        );
+        setDraft({
+          ...draft,
+          startingEquipment: { ...draft.startingEquipment, equipped: updatedEquipped },
+        });
+      } else {
+        const updatedInv = draft.startingEquipment.inventory.map((i) =>
+          i.id === target.id ? { ...i, icon: updatedIcon } : i
+        );
+        setDraft({
+          ...draft,
+          startingEquipment: { ...draft.startingEquipment, inventory: updatedInv },
+        });
+      }
+      markFieldEdited('startingEquipment');
+    }
+
+    setIconStudioTarget(null);
   };
 
   const handleDeleteItem = (itemId: string) => {
@@ -2309,6 +2416,27 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                       }`}
                     >
                       <div className="flex items-center gap-2 min-w-0">
+                        {/* Icon & Icon Studio Button */}
+                        <div className="relative group/icon shrink-0">
+                          <div className="w-7 h-7 rounded bg-neutral-950 border border-neutral-800 flex items-center justify-center text-sm overflow-hidden shadow-inner">
+                            {skill.icon?.url ? (
+                              <img src={skill.icon.url} alt={skill.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <span>{getDefaultIconForSkill(skill).emoji}</span>
+                            )}
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setIconStudioTarget({ itemOrSkill: skill, type: 'SKILL' });
+                            }}
+                            className="absolute -top-1 -right-1 p-0.5 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white opacity-0 group-hover/icon:opacity-100 transition-opacity text-[9px] shadow z-10"
+                            title="Customize Icon in Icon Studio"
+                          >
+                            <Edit3 className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+
                         <button
                           onClick={() => setInspectingSkill(skill)}
                           className="text-neutral-500 hover:text-indigo-300 shrink-0"
@@ -2807,17 +2935,27 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                     { key: 'feet', label: 'Feet / Boots', icon: User },
                     { key: 'ammunition', label: 'Ammunition / Quiver', icon: Package },
                   ].map((slotDef) => {
-                    const equippedItem = draft.startingEquipment.equipped.find(
-                      (i) => (i.slot || '').toLowerCase() === slotDef.key.toLowerCase()
-                    );
+                    const slotKey = slotDef.key as EquipmentSlotId;
                     const IconComp = slotDef.icon;
+
+                    // Find item that occupies this slot
+                    const equippedItem = draft.startingEquipment.equipped.find((item) => {
+                      const itemSlot = (item.slot || 'mainHand') as EquipmentSlotId;
+                      const occupied = getOccupiedSlots(item, itemSlot);
+                      return occupied.includes(slotKey);
+                    });
+
+                    const isPrimarySlot = equippedItem && (equippedItem.slot || '').toLowerCase() === slotKey.toLowerCase();
+                    const isTwoHandedOffHand = equippedItem && !isPrimarySlot && getHandUsage(equippedItem) === 'TWO_HAND';
 
                     return (
                       <div
                         key={slotDef.key}
                         className={`p-3 rounded-xl border text-left transition-all space-y-2 relative group ${
                           equippedItem
-                            ? 'bg-neutral-900 border-indigo-500/60 shadow-sm hover:border-indigo-400'
+                            ? isTwoHandedOffHand
+                              ? 'bg-purple-950/30 border-purple-800/60'
+                              : 'bg-neutral-900 border-indigo-500/60 shadow-sm hover:border-indigo-400'
                             : 'bg-neutral-950/80 border-neutral-800 hover:border-neutral-700'
                         }`}
                       >
@@ -2835,9 +2973,38 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
 
                         {equippedItem ? (
                           <div className="space-y-1.5">
-                            <div className="font-semibold text-xs text-white truncate">
-                              {equippedItem.name}
+                            <div className="flex items-center gap-2">
+                              {/* Icon & Icon Studio trigger */}
+                              <div className="relative group/icon shrink-0">
+                                <div className="w-6 h-6 rounded bg-neutral-950 border border-neutral-800 flex items-center justify-center text-xs overflow-hidden">
+                                  {equippedItem.icon?.url ? (
+                                    <img src={equippedItem.icon.url} alt={equippedItem.name} className="w-full h-full object-cover" />
+                                  ) : (
+                                    <span>{getDefaultIconForEquipment(equippedItem).emoji}</span>
+                                  )}
+                                </div>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setIconStudioTarget({ itemOrSkill: equippedItem, type: 'EQUIPMENT' });
+                                  }}
+                                  className="absolute -top-1 -right-1 p-0.5 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white opacity-0 group-hover/icon:opacity-100 transition-opacity text-[8px] shadow z-10"
+                                  title="Customize Icon in Icon Studio"
+                                >
+                                  <Edit3 className="w-2 h-2" />
+                                </button>
+                              </div>
+                              <div className="font-semibold text-xs text-white truncate min-w-0">
+                                {equippedItem.name}
+                              </div>
                             </div>
+
+                            {isTwoHandedOffHand && (
+                              <div className="text-[10px] text-purple-300 font-mono italic">
+                                ↔ Occupied by 2H Main Hand
+                              </div>
+                            )}
+
                             <div className="flex items-center justify-between gap-1 pt-1 border-t border-neutral-800">
                               <button
                                 onClick={() => setInspectingItem(equippedItem)}
@@ -2856,13 +3023,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                           </div>
                         ) : (
                           <button
-                            onClick={() => {
-                              // Find inventory items that fit or open slot picker
-                              const matchingInvs = draft.startingEquipment.inventory;
-                              if (matchingInvs.length > 0) {
-                                setEquipSlotSelectModalItem(matchingInvs[0]);
-                              }
-                            }}
+                            onClick={() => setPaperDollPickerSlot(slotKey)}
                             className="w-full py-2 rounded border border-dashed border-neutral-800 hover:border-indigo-500/50 text-[11px] text-neutral-500 hover:text-indigo-300 flex items-center justify-center gap-1 transition-colors"
                           >
                             <Plus className="w-3 h-3" />
@@ -2890,40 +3051,75 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-72 overflow-y-auto pr-1">
-                    {draft.startingEquipment.inventory.map((item) => (
-                      <div
-                        key={item.id}
-                        className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 flex items-center justify-between text-xs hover:border-neutral-700 transition-colors"
-                      >
-                        <div className="min-w-0 space-y-0.5">
-                          <div className="font-medium text-white truncate flex items-center gap-1.5">
-                            <span className="truncate">{item.name}</span>
-                            {item.quantity > 1 && (
-                              <span className="text-[10px] font-mono text-neutral-400">x{item.quantity}</span>
+                    {draft.startingEquipment.inventory.map((item) => {
+                      const normalized = normalizeItemEquipmentMetadata(item);
+                      const equipable = isEquipable(normalized);
+                      const defaultIcon = getDefaultIconForEquipment(normalized);
+
+                      return (
+                        <div
+                          key={item.id}
+                          className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 flex items-center justify-between text-xs hover:border-neutral-700 transition-colors"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            {/* Icon & Icon Studio trigger */}
+                            <div className="relative group/icon shrink-0">
+                              <div className="w-8 h-8 rounded bg-neutral-950 border border-neutral-800 flex items-center justify-center text-base overflow-hidden shadow-inner">
+                                {normalized.icon?.url ? (
+                                  <img src={normalized.icon.url} alt={normalized.name} className="w-full h-full object-cover" />
+                                ) : (
+                                  <span>{defaultIcon.emoji}</span>
+                                )}
+                              </div>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setIconStudioTarget({ itemOrSkill: normalized, type: 'EQUIPMENT' });
+                                }}
+                                className="absolute -top-1 -right-1 p-0.5 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white opacity-0 group-hover/icon:opacity-100 transition-opacity text-[8px] shadow z-10"
+                                title="Customize Icon in Icon Studio"
+                              >
+                                <Edit3 className="w-2.5 h-2.5" />
+                              </button>
+                            </div>
+
+                            <div className="min-w-0 space-y-0.5">
+                              <div className="font-medium text-white truncate flex items-center gap-1.5">
+                                <span className="truncate">{normalized.name}</span>
+                                {normalized.quantity > 1 && (
+                                  <span className="text-[10px] font-mono text-neutral-400">x{normalized.quantity}</span>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-neutral-400 uppercase font-mono">
+                                {normalized.category} • {normalized.rarity || 'Common'}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                            <button
+                              onClick={() => setInspectingItem(normalized)}
+                              className="p-1.5 rounded hover:bg-neutral-800 text-neutral-400 hover:text-indigo-300"
+                              title="Inspect item"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                            </button>
+                            {equipable ? (
+                              <button
+                                onClick={() => handleInitiateEquip(normalized)}
+                                className="px-2 py-1 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 hover:bg-indigo-900 text-[10px] font-semibold"
+                              >
+                                Equip
+                              </button>
+                            ) : (
+                              <span className="px-2 py-1 rounded bg-neutral-950 text-neutral-500 border border-neutral-800 text-[10px] font-mono uppercase">
+                                Pack Item
+                              </span>
                             )}
                           </div>
-                          <div className="text-[10px] text-neutral-400 uppercase font-mono">
-                            {item.category} • {item.rarity || 'Common'}
-                          </div>
                         </div>
-
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <button
-                            onClick={() => setInspectingItem(item)}
-                            className="p-1.5 rounded hover:bg-neutral-800 text-neutral-400 hover:text-indigo-300"
-                            title="Inspect item"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleEquipItem(item)}
-                            className="px-2 py-1 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 hover:bg-indigo-900 text-[10px] font-semibold"
-                          >
-                            Equip
-                          </button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -3740,13 +3936,17 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                   >
                     Unequip Item
                   </button>
-                ) : (
+                ) : isEquipable(inspectingItem) ? (
                   <button
-                    onClick={() => handleEquipItem(inspectingItem)}
+                    onClick={() => handleInitiateEquip(inspectingItem)}
                     className="px-4 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold"
                   >
                     Equip Item
                   </button>
+                ) : (
+                  <span className="px-3 py-1.5 rounded bg-neutral-900 border border-neutral-800 text-neutral-500 text-xs font-mono uppercase">
+                    Pack Item
+                  </span>
                 )}
                 <button
                   onClick={() => setInspectingItem(null)}
@@ -3822,54 +4022,163 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
         </div>
       )}
 
-      {/* EQUIP SLOT SELECTION MODAL */}
-      {equipSlotSelectModalItem && (
+      {/* ICON STUDIO MODAL */}
+      <IconStudioModal
+        isOpen={!!iconStudioTarget}
+        onClose={() => setIconStudioTarget(null)}
+        targetItemOrSkill={iconStudioTarget?.itemOrSkill || null}
+        targetType={iconStudioTarget?.type || 'EQUIPMENT'}
+        onSaveIcon={handleSaveIconFromStudio}
+      />
+
+      {/* COMPATIBLE SLOT SELECTION MODAL */}
+      {slotPickerModalItem && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-neutral-950 border border-neutral-800 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
-              <h3 className="text-sm font-bold text-white">Select Slot to Equip {equipSlotSelectModalItem.name}</h3>
+              <div>
+                <h3 className="text-sm font-bold text-white">Select Legal Slot</h3>
+                <p className="text-xs text-neutral-400">Compatible slots for {slotPickerModalItem.name}</p>
+              </div>
               <button
-                onClick={() => setEquipSlotSelectModalItem(null)}
+                onClick={() => setSlotPickerModalItem(null)}
                 className="text-neutral-400 hover:text-white p-1"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              {[
-                { key: 'head', label: 'Head' },
-                { key: 'neck', label: 'Neck / Amulet' },
-                { key: 'back', label: 'Back / Cloak' },
-                { key: 'body', label: 'Body Armor' },
-                { key: 'mainHand', label: 'Main Hand' },
-                { key: 'offHand', label: 'Off Hand / Shield' },
-                { key: 'gloves', label: 'Gloves / Hands' },
-                { key: 'belt', label: 'Waist / Belt' },
-                { key: 'ring', label: 'Finger / Ring' },
-                { key: 'legs', label: 'Legs / Greaves' },
-                { key: 'feet', label: 'Feet / Boots' },
-                { key: 'ammunition', label: 'Ammunition / Quiver' },
-              ].map((slotOption) => (
+            <div className="grid grid-cols-1 gap-2 text-xs">
+              {getCompatibleEquipmentSlots(slotPickerModalItem).map((slotKey) => (
                 <button
-                  key={slotOption.key}
-                  onClick={() => {
-                    handleEquipItem(equipSlotSelectModalItem, slotOption.key);
-                    setEquipSlotSelectModalItem(null);
-                  }}
-                  className="p-2.5 rounded-lg bg-neutral-900 border border-neutral-800 hover:border-indigo-500 hover:bg-neutral-800 text-left text-neutral-200 transition-all font-medium"
+                  key={slotKey}
+                  onClick={() => handleInitiateEquip(slotPickerModalItem, slotKey)}
+                  className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 hover:border-indigo-500 hover:bg-neutral-850 text-left text-neutral-200 transition-all font-medium flex items-center justify-between"
                 >
-                  {slotOption.label}
+                  <span className="capitalize font-mono text-indigo-300">{slotKey}</span>
+                  <span className="text-[10px] text-neutral-500">Legal Equipment Slot</span>
                 </button>
               ))}
             </div>
 
             <div className="flex justify-end pt-2 border-t border-neutral-800">
               <button
-                onClick={() => setEquipSlotSelectModalItem(null)}
+                onClick={() => setSlotPickerModalItem(null)}
                 className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-300"
               >
                 Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PAPER DOLL SLOT PICKER MODAL (WHEN CLICKING AN EMPTY SLOT) */}
+      {paperDollPickerSlot && draft && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-neutral-800 pb-3">
+              <div>
+                <h3 className="text-sm font-bold text-white capitalize">Equip Item to {paperDollPickerSlot}</h3>
+                <p className="text-xs text-neutral-400">Showing items in pack supplies compatible with this slot.</p>
+              </div>
+              <button
+                onClick={() => setPaperDollPickerSlot(null)}
+                className="text-neutral-400 hover:text-white p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {(() => {
+              const compatibleItems = draft.startingEquipment.inventory.filter((item) =>
+                canEquipItemToSlot(item, paperDollPickerSlot)
+              );
+
+              if (compatibleItems.length === 0) {
+                return (
+                  <div className="p-6 text-center space-y-2 bg-neutral-900/50 rounded-xl border border-neutral-800">
+                    <p className="text-xs text-neutral-400">No compatible equipment items found in carried supplies for this slot.</p>
+                    <p className="text-[11px] text-neutral-500">Synthesize an item or add one to your inventory first.</p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="grid grid-cols-1 gap-2 max-h-64 overflow-y-auto pr-1">
+                  {compatibleItems.map((item) => (
+                    <div
+                      key={item.id}
+                      className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 flex items-center justify-between hover:border-indigo-500/50 transition-colors"
+                    >
+                      <div>
+                        <div className="text-xs font-semibold text-white">{item.name}</div>
+                        <div className="text-[10px] text-neutral-400 uppercase font-mono">{item.category} • {item.rarity || 'Common'}</div>
+                      </div>
+                      <button
+                        onClick={() => handleInitiateEquip(item, paperDollPickerSlot)}
+                        className="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold"
+                      >
+                        Equip Here
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+
+            <div className="flex justify-end pt-2 border-t border-neutral-800">
+              <button
+                onClick={() => setPaperDollPickerSlot(null)}
+                className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-300"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EQUIPMENT CONFLICT RESOLUTION MODAL */}
+      {equipConflictState && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-neutral-950 border border-amber-500/50 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3 border-b border-neutral-800 pb-3">
+              <div className="p-2 rounded-lg bg-amber-950 text-amber-400 border border-amber-800">
+                <Shield className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-white">Equipment Slot Conflict</h3>
+                <p className="text-xs text-amber-300/90">Equipping requires un-equipping existing items</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-neutral-300 leading-relaxed">
+              Equipping <strong className="text-white">{equipConflictState.itemToEquip.name}</strong> to{' '}
+              <span className="font-mono text-indigo-300 capitalize">{equipConflictState.targetSlot}</span> will safely move the following equipped item(s) back to your carried pack supplies:
+            </p>
+
+            <div className="space-y-1.5 bg-neutral-900 p-3 rounded-lg border border-neutral-800">
+              {equipConflictState.conflicts.map((item) => (
+                <div key={item.id} className="flex items-center justify-between text-xs text-amber-200">
+                  <span className="font-medium">• {item.name}</span>
+                  <span className="text-[10px] font-mono text-neutral-400">({item.slot || 'Equipped'})</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-neutral-800">
+              <button
+                onClick={() => setEquipConflictState(null)}
+                className="px-3.5 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-300"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => executeEquip(equipConflictState.itemToEquip, equipConflictState.targetSlot)}
+                className="px-4 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white shadow-sm"
+              >
+                Confirm & Swap Equipment
               </button>
             </div>
           </div>

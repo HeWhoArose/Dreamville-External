@@ -35,7 +35,7 @@ const CHECK_PROFILES: CheckProfile[] = [
   { skill: 'Persuasion', ability: 'Charisma', keywords: ['persuade', 'convince', 'negotiate', 'bargain', 'reason with'], dc: 12, reason: 'Influencing someone through honest persuasion.' },
   { skill: 'Deception', ability: 'Charisma', keywords: ['lie', 'deceive', 'mislead', 'bluff', 'pretend', 'disguise'], dc: 13, reason: 'Convincing others of something untrue or misleading.' },
   { skill: 'Intimidation', ability: 'Charisma', keywords: ['intimidate', 'threaten', 'coerce', 'scare'], dc: 12, reason: 'Using pressure or threat to influence someone.' },
-  { skill: 'Animal Handling', ability: 'Wisdom', keywords: ['animal', 'calm the horse', 'handle the beast', 'soothe the animal'], dc: 11, reason: 'Handling or calming an animal.' },
+  { skill: 'Animal Handling', ability: 'Wisdom', keywords: ['calm the horse', 'handle the beast', 'handle the animal', 'soothe the animal', 'calm the animal'], dc: 11, reason: 'Handling or calming an animal.' },
   { skill: 'Sleight of Hand', ability: 'Dexterity', keywords: ['pickpocket', 'palming', 'sleight', 'lift the coin', 'conceal the item'], dc: 13, reason: 'Performing precise manual manipulation unnoticed.' },
 ];
 

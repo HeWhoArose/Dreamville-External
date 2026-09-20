@@ -1130,6 +1130,8 @@ export interface WorldTemplate {
   audioConfig?: any;
   narrativeConfig?: any;
   events?: any[];
+  hazards?: any[];
+  storyCheckChallenges?: StoryCheckChallenge[];
   generationStatus?: string;
   provenance?: {
     generationSource: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK';
@@ -1189,6 +1191,8 @@ export interface WorldSynthesisInput {
   audioConfig?: any;
   narrativeConfig?: any;
   events?: any[];
+  hazards?: any[];
+  storyCheckChallenges?: StoryCheckChallenge[];
 }
 
 export interface ResearchEvidenceItem {

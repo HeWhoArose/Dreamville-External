@@ -2,6 +2,8 @@ import { WorldTimestamp } from './types';
 import { PendingActivationState } from './capabilityEngine';
 import { ConditionEngine } from './conditionEngine';
 import { CombatActionEconomy, CombatTurnResourceSnapshot } from './combatActionEconomy';
+import { DeathSaveEngine, deathSaveEngine } from './deathSaveEngine';
+import type { DeathSaveState } from '../../src/types';
 
 export interface DiceTerm {
   count: number;
@@ -322,6 +324,8 @@ export interface BattlefieldParticipant {
   isDead: boolean;
   damageProfile?: import('../../src/types').CharacterDamageProfile;
   conditionProfile?: import('../../src/types').CharacterConditionProfile;
+  usesDeathSaves?: boolean;
+  deathSaveState?: DeathSaveState;
 }
 
 export interface DynamicHazardZone {
@@ -526,6 +530,9 @@ export class TacticalCombatEngine {
 
   public addParticipant(p: BattlefieldParticipant): void {
     const participant = { ...p };
+    if (participant.usesDeathSaves && !participant.deathSaveState) {
+      participant.deathSaveState = deathSaveEngine.createState();
+    }
     if (this.conditionEngine) {
       const existing = this.conditionEngine.getActorState(participant.id);
       if (!existing) {
@@ -668,17 +675,25 @@ export class TacticalCombatEngine {
       return p ? isKnown(p) : false;
     };
 
+    const projectParticipant = (p: BattlefieldParticipant): BattlefieldParticipant => {
+      const projected = { ...p };
+      if (p.id !== viewerActorId) {
+        projected.deathSaveState = undefined;
+      }
+      return projected;
+    };
+
     // Filter participants
     const projectedParticipants = Array.from(this.participants.values())
       .filter((p) => isKnown(p))
-      .map((p) => ({ ...p }));
+      .map(projectParticipant);
 
     // Canonical current actor projection
     const canonicalCurrentActor = this.getCurrentActor();
     let projectedCurrentActor: BattlefieldParticipant | undefined;
     if (canonicalCurrentActor) {
       if (isKnown(canonicalCurrentActor)) {
-        projectedCurrentActor = { ...canonicalCurrentActor };
+        projectedCurrentActor = projectParticipant(canonicalCurrentActor);
       } else {
         projectedCurrentActor = {
           id: 'unknown_actor',
@@ -857,6 +872,14 @@ export class TacticalCombatEngine {
         combatState: this.getTurnResources(actorId),
       };
     }
+    if (currentActor.isDead || currentActor.hpCurrent <= 0 || currentActor.conditions.includes('Unconscious')) {
+      return {
+        success: false,
+        action,
+        errorReason: 'An unconscious or dead actor cannot take a combat action.',
+        combatState: this.getTurnResources(actorId),
+      };
+    }
 
     let result: { success: boolean; errorReason?: string };
     switch (action) {
@@ -902,6 +925,118 @@ export class TacticalCombatEngine {
     };
   }
 
+  private applyCombatDamage(
+    target: BattlefieldParticipant,
+    requestedAmount: number,
+    damageType: string,
+    criticalHit = false
+  ): {
+    damage: number;
+    targetDied: boolean;
+    immune?: boolean;
+    resisted?: boolean;
+    vulnerable?: boolean;
+  } {
+    const amount = Math.max(0, requestedAmount);
+    const previousHp = Math.max(0, target.hpCurrent);
+
+    if (target.usesDeathSaves && previousHp <= 0 && amount > 0) {
+      const currentState = target.deathSaveState || deathSaveEngine.createState();
+      const damageResult = deathSaveEngine.applyDamageAtZero(currentState, criticalHit);
+      target.deathSaveState = damageResult.state;
+
+      if (damageResult.died) {
+        target.isDead = true;
+        if (this.conditionEngine?.getActorState(target.id)) {
+          this.conditionEngine.markDead(target.id);
+        }
+        if (!target.conditions.includes('Dead')) target.conditions.push('Dead');
+      } else {
+        target.isDead = false;
+      }
+
+      return {
+        damage: amount,
+        targetDied: damageResult.died,
+      };
+    }
+
+    if (this.conditionEngine?.getActorState(target.id)) {
+      const resolvedDamage = this.conditionEngine.resolveDamage(
+        target.id,
+        amount,
+        damageType
+      );
+      target.hpCurrent = resolvedDamage.healthCurrent;
+      target.isDead = resolvedDamage.targetDied;
+      target.conditions = this.conditionEngine.getActorState(target.id)?.instances.map((instance) => instance.name) || [];
+
+      if (
+        target.usesDeathSaves &&
+        previousHp > 0 &&
+        target.hpCurrent <= 0 &&
+        !target.isDead
+      ) {
+        target.deathSaveState = deathSaveEngine.createState();
+      }
+
+      if (
+        target.usesDeathSaves &&
+        previousHp > 0 &&
+        target.hpCurrent <= 0 &&
+        target.isDead
+      ) {
+        const massiveDamage = resolvedDamage.finalAmount >= previousHp + target.hpMax;
+        const terminalBody = resolvedDamage.destroyedBodyRegions.includes('HEART');
+        if (!massiveDamage && !terminalBody) {
+          this.conditionEngine.markUnconsciousAtZero(target.id);
+          target.hpCurrent = 0;
+          target.isDead = false;
+          target.deathSaveState = deathSaveEngine.createState();
+          target.conditions = this.conditionEngine.getActorState(target.id)?.instances.map((instance) => instance.name) || [];
+        } else {
+          this.conditionEngine.markDead(target.id);
+        }
+      }
+
+      if (target.isDead && !target.conditions.includes('Dead')) {
+        target.conditions.push('Dead');
+      }
+
+      return {
+        damage: resolvedDamage.finalAmount,
+        targetDied: target.isDead,
+        immune: resolvedDamage.immune,
+        resisted: resolvedDamage.resisted,
+        vulnerable: resolvedDamage.vulnerable,
+      };
+    }
+
+    target.hpCurrent = Math.max(0, target.hpCurrent - amount);
+
+    if (target.usesDeathSaves && previousHp > 0 && target.hpCurrent <= 0) {
+      const massiveDamage = amount >= previousHp + target.hpMax;
+      if (!massiveDamage) {
+        target.isDead = false;
+        target.deathSaveState = deathSaveEngine.createState();
+        if (!target.conditions.includes('Unconscious')) target.conditions.push('Unconscious');
+      } else {
+        target.isDead = true;
+      }
+    } else if (target.hpCurrent <= 0) {
+      target.isDead = true;
+    }
+
+    if (target.isDead && !target.conditions.includes('Dead')) {
+      target.conditions.push('Dead');
+    }
+
+    return {
+      damage: amount,
+      targetDied: target.isDead,
+    };
+  }
+
   public executeAttack(
     attackerId: string,
     targetId: string,
@@ -929,6 +1064,16 @@ export class TacticalCombatEngine {
       return {
         success: false,
         errorReason: "It is not this attacker's turn.",
+        hits: false,
+        damage: 0,
+        targetDied: target.isDead,
+        isCritical: false,
+      };
+    }
+    if (attacker.isDead || attacker.hpCurrent <= 0 || attacker.conditions.includes('Unconscious')) {
+      return {
+        success: false,
+        errorReason: 'An unconscious or dead actor cannot attack.',
         hits: false,
         damage: 0,
         targetDied: target.isDead,
@@ -964,31 +1109,14 @@ export class TacticalCombatEngine {
       const formula = options?.overrideFormula || attacker.damageFormula;
       const dmgRes = this.ruleset.resolveDamage(formula, attackRes.isCritical, this.diceEngine);
       damage = dmgRes.totalDamage;
-      if (this.conditionEngine?.getActorState(targetId)) {
-        const resolvedDamage = this.conditionEngine.resolveDamage(
-          targetId,
-          damage,
-          options?.damageType || attacker.damageType || 'slashing'
-        );
-        damage = resolvedDamage.finalAmount;
-        target.hpCurrent = resolvedDamage.healthCurrent;
-        target.isDead = resolvedDamage.targetDied;
-        const conditionState = this.conditionEngine.getActorState(targetId);
-        target.conditions = conditionState?.instances.map((instance) => instance.name) || [];
-        if (target.isDead && !target.conditions.includes('Dead')) {
-          target.conditions.push('Dead');
-        }
-      } else {
-        target.hpCurrent = Math.max(0, target.hpCurrent - damage);
-        if (target.hpCurrent === 0) {
-          target.isDead = true;
-          targetDied = true;
-          if (!target.conditions.includes('Dead')) {
-            target.conditions.push('Dead');
-          }
-        }
-      }
-      targetDied = target.isDead || target.hpCurrent <= 0;
+      const damageResult = this.applyCombatDamage(
+        target,
+        damage,
+        options?.damageType || attacker.damageType || 'slashing',
+        attackRes.isCritical
+      );
+      damage = damageResult.damage;
+      targetDied = damageResult.targetDied;
 
       // Interrupt pending activation on taking damage
       if (damage > 0 && this.pendingActivations.has(targetId)) {
@@ -1053,6 +1181,16 @@ export class TacticalCombatEngine {
         damage: 0,
         targetDied: target.isDead,
         headline: "It is not this actor's turn.",
+        targetHpRemaining: target.hpCurrent,
+        interruptedPendingActivation: false,
+      };
+    }
+    if (actor.isDead || actor.hpCurrent <= 0 || actor.conditions.includes('Unconscious')) {
+      return {
+        success: false,
+        damage: 0,
+        targetDied: target.isDead,
+        headline: 'An unconscious or dead actor cannot cast a capability.',
         targetHpRemaining: target.hpCurrent,
         interruptedPendingActivation: false,
       };
@@ -1146,38 +1284,17 @@ export class TacticalCombatEngine {
     }
 
     let targetDied = false;
-    if (this.conditionEngine?.getActorState(params.targetId)) {
-      const resolvedDamage = this.conditionEngine.resolveDamage(
-        params.targetId,
-        damage,
-        params.damageType || 'force'
-      );
-      damage = resolvedDamage.finalAmount;
-      target.hpCurrent = resolvedDamage.healthCurrent;
-      target.isDead = resolvedDamage.targetDied;
-      const conditionState = this.conditionEngine.getActorState(params.targetId);
-      target.conditions = conditionState?.instances.map((instance) => instance.name) || [];
-      if (resolvedDamage.immune) saveStatusText += ` [Immune to ${params.damageType || 'force'}]`;
-      else if (resolvedDamage.resisted) saveStatusText += ` [Resisted ${params.damageType || 'force'}]`;
-      else if (resolvedDamage.vulnerable) saveStatusText += ` [Vulnerable to ${params.damageType || 'force'}]`;
-      targetDied = resolvedDamage.targetDied;
-      if (targetDied && !target.conditions.includes('Dead')) {
-        target.conditions.push('Dead');
-      }
-    } else {
-      if (params.damageType && target.resistances?.includes(params.damageType)) {
-        damage = Math.floor(damage / 2);
-        saveStatusText += ` [Resisted ${params.damageType}]`;
-      }
-      target.hpCurrent = Math.max(0, target.hpCurrent - damage);
-      if (target.hpCurrent === 0) {
-        target.isDead = true;
-        targetDied = true;
-        if (!target.conditions.includes('Dead')) {
-          target.conditions.push('Dead');
-        }
-      }
-    }
+    const damageResult = this.applyCombatDamage(
+      target,
+      damage,
+      params.damageType || 'force',
+      attackResult?.isCritical || false
+    );
+    damage = damageResult.damage;
+    if (damageResult.immune) saveStatusText += ` [Immune to ${params.damageType || 'force'}]`;
+    else if (damageResult.resisted) saveStatusText += ` [Resisted ${params.damageType || 'force'}]`;
+    else if (damageResult.vulnerable) saveStatusText += ` [Vulnerable to ${params.damageType || 'force'}]`;
+    targetDied = damageResult.targetDied;
 
     // Interrupt pending activation on taking damage
     let interruptedPendingActivation = false;
@@ -1259,6 +1376,58 @@ export class TacticalCombatEngine {
     const currentActor = this.getCurrentActor();
     if (currentActor) {
       this.actionEconomy.beginTurn(currentActor.id, currentActor.speedCells, this.currentRound);
+
+      if (
+        currentActor.usesDeathSaves &&
+        currentActor.hpCurrent <= 0 &&
+        !currentActor.isDead &&
+        !currentActor.deathSaveState?.stable
+      ) {
+        const deathSaveResult = deathSaveEngine.resolveTurnStart(
+          currentActor.deathSaveState || deathSaveEngine.createState(),
+          this.diceEngine
+        );
+        currentActor.deathSaveState = deathSaveResult.state;
+
+        const deathEvent: BattleEvent = {
+          turnNumber: this.currentRound,
+          actorId: currentActor.id,
+          actionType: 'CONDITION_TICK',
+          headline: deathSaveResult.summary,
+          rollRecord: deathSaveResult.roll,
+          metadata: {
+            deathSave: true,
+            successes: deathSaveResult.state.successes,
+            failures: deathSaveResult.state.failures,
+            stabilized: deathSaveResult.stabilized,
+            revived: deathSaveResult.revived,
+            died: deathSaveResult.died,
+          },
+        };
+        this.eventLog.push(deathEvent);
+        hazardEvents.push(deathEvent);
+
+        if (deathSaveResult.revived) {
+          currentActor.hpCurrent = 1;
+          currentActor.isDead = false;
+          currentActor.deathSaveState = deathSaveEngine.createState();
+          if (this.conditionEngine?.getActorState(currentActor.id)) {
+            this.conditionEngine.recoverFromZero(currentActor.id, 1);
+            const state = this.conditionEngine.getActorState(currentActor.id);
+            currentActor.conditions = state?.instances.map((instance) => instance.name) || [];
+          } else {
+            currentActor.conditions = currentActor.conditions.filter((condition) => condition !== 'Unconscious');
+          }
+        } else if (deathSaveResult.died) {
+          currentActor.isDead = true;
+          if (this.conditionEngine?.getActorState(currentActor.id)) {
+            this.conditionEngine.markDead(currentActor.id);
+          }
+          if (!currentActor.conditions.includes('Dead')) {
+            currentActor.conditions.push('Dead');
+          }
+        }
+      }
     }
     if (currentActor && !currentActor.isDead) {
       if (this.conditionEngine) {
@@ -1272,6 +1441,9 @@ export class TacticalCombatEngine {
           currentActor.hpCurrent = conditionState.healthCurrent;
           currentActor.isDead = conditionState.dead;
           currentActor.conditions = conditionState.instances.map((instance) => instance.name);
+          if (currentActor.usesDeathSaves && currentActor.hpCurrent > 0) {
+            currentActor.deathSaveState = deathSaveEngine.createState();
+          }
           if (currentActor.isDead && !currentActor.conditions.includes('Dead')) {
             currentActor.conditions.push('Dead');
           }
@@ -1306,20 +1478,13 @@ export class TacticalCombatEngine {
               hazard.type === 'ice_patch' ? 'cold' :
               hazard.type === 'poison_cloud' ? 'poison' : 'custom';
             let damage = hazard.damagePerTurn;
-            if (this.conditionEngine?.getActorState(currentActor.id)) {
-              const resolved = this.conditionEngine.resolveDamage(currentActor.id, damage, hazardType);
-              damage = resolved.finalAmount;
-              currentActor.hpCurrent = resolved.healthCurrent;
-              currentActor.isDead = resolved.targetDied;
-              const state = this.conditionEngine.getActorState(currentActor.id);
-              currentActor.conditions = state?.instances.map((instance) => instance.name) || [];
-            } else {
-              currentActor.hpCurrent = Math.max(0, currentActor.hpCurrent - damage);
-              currentActor.isDead = currentActor.hpCurrent <= 0;
-            }
-            if (currentActor.isDead && !currentActor.conditions.includes('Dead')) {
-              currentActor.conditions.push('Dead');
-            }
+            const damageResult = this.applyCombatDamage(
+              currentActor,
+              damage,
+              hazardType,
+              false
+            );
+            damage = damageResult.damage;
             const event: BattleEvent = {
               turnNumber: this.currentRound,
               actorId: currentActor.id,

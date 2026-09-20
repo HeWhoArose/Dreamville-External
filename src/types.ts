@@ -1275,6 +1275,7 @@ export interface CharacterExtractionRequest {
   existingDraft?: Partial<CharacterGenesisDraft>;
   userEditedFields?: string[];
   narrativeRole?: CharacterStoryMode;
+  allowDeterministicFallback?: boolean;
 }
 
 export interface CustomCapabilityProposalRequest {

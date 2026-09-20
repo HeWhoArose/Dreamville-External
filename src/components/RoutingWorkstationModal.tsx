@@ -62,6 +62,8 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
     setLoading(true);
     setError(null);
     try {
+      await apiClient.discoverOrchestratorModels(false);
+
       const [modelsRes, telemetryRes, cpRes, overridesRes] = await Promise.all([
         apiClient.getOrchestratorModels().catch(() => ({ models: [] })),
         apiClient.getOrchestratorTelemetry().catch(() => ({ stats: null, lastTurnTelemetry: null })),
@@ -181,10 +183,20 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
             <div className="flex items-center space-x-2">
               <button
                 id="routing-refresh-btn"
-                onClick={loadData}
+                onClick={async () => {
+                  setLoading(true);
+                  setError(null);
+                  try {
+                    await apiClient.discoverOrchestratorModels(true);
+                  } catch (err: any) {
+                    setError(err?.message || 'Model discovery refresh failed.');
+                  } finally {
+                    await loadData();
+                  }
+                }}
                 disabled={loading}
                 className="p-1.5 rounded-md hover:bg-stone-800 text-stone-400 hover:text-amber-300 transition"
-                title="Refresh Orchestrator State"
+                title="Refresh model discovery and orchestrator state"
               >
                 <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-amber-400' : ''}`} />
               </button>

@@ -173,8 +173,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       }
       if (pinsRes?.pins) setTaskPins(pinsRes.pins);
       if (fallbacksRes?.fallbackChains) setFallbackChains(fallbacksRes.fallbackChains);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to load orchestrator data:', err);
+      setTestResultFeedback(err?.message || 'Failed to refresh the model registry.');
     }
   };
 

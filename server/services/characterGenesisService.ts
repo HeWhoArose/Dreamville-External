@@ -291,54 +291,56 @@ Rules:
     let generationSource: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK' = 'DETERMINISTIC_FALLBACK';
     let generationFailureReason = '';
 
-    // Use the canonical model orchestrator so Genesis respects configured task routing
-    // and provider health. Deterministic extraction is deliberately NOT automatic.
-    try {
-      const orchestrator = worldRepository.getAiOrchestrator();
-      const response = await orchestrator.executeTaskGeneration(
-        'narrative.generate',
-        prompt,
-        'Return only the requested Character Genesis JSON. Treat the player concept as authoritative input; do not overwrite preserved user fields.'
-      );
-
-      // The orchestrator may report a deterministic emergency source. Treat that as
-      // AI unavailability here so the player can explicitly consent before we use it.
-      if (response.source === 'DETERMINISTIC_FALLBACK') {
-        generationFailureReason =
-          response.fallbackReason ||
-          'AI providers did not return usable Character Genesis output.';
-      } else if (response.text) {
-        const parsed = this.parseJsonFromAiResponse(response.text);
-        if (parsed && this.isValidCharacterExtractionShape(parsed)) {
-          extracted = parsed;
-          generationSource = response.source;
-          generationFailureReason = response.fallbackReason || '';
-        } else {
-          generationFailureReason = 'AI returned invalid or incomplete Character Genesis structure.';
-        }
-      } else {
-        generationFailureReason =
-          response.fallbackReason ||
-          'AI providers returned no usable Character Genesis text.';
-      }
-    } catch (err: any) {
-      generationFailureReason = err?.message || String(err);
-      console.warn('[CharacterGenesisService] Orchestrated extraction failed:', err);
-    }
-
-    // Never silently downgrade a failed AI extraction. The first request stops here
-    // and lets the UI ask the player whether deterministic extraction is acceptable.
-    if (!extracted && !input.allowDeterministicFallback) {
-      throw new CharacterGenesisAiUnavailableError(
-        generationFailureReason ||
-          'AI character extraction is currently unavailable. No character draft has been generated yet.'
-      );
-    }
-
-    // Deterministic concept extraction only runs after explicit player consent.
-    if (!extracted) {
+    if (input.allowDeterministicFallback) {
+      // This path is reached only after the player explicitly accepted the fallback prompt.
       extracted = this.proceduralExtraction(concept, worldTemplate);
       generationSource = 'DETERMINISTIC_FALLBACK';
+      generationFailureReason =
+        'Player explicitly chose deterministic character extraction after AI unavailability.';
+    } else {
+      // Use the canonical model orchestrator so Genesis respects configured task routing
+      // and provider health. Deterministic extraction is deliberately NOT automatic.
+      try {
+        const orchestrator = worldRepository.getAiOrchestrator();
+        const response = await orchestrator.executeTaskGeneration(
+          'narrative.generate',
+          prompt,
+          'Return only the requested Character Genesis JSON. Treat the player concept as authoritative input; do not overwrite preserved user fields.'
+        );
+
+        // The orchestrator may report a deterministic emergency source. Treat that as
+        // AI unavailability here so the player can explicitly consent before we use it.
+        if (response.source === 'DETERMINISTIC_FALLBACK') {
+          generationFailureReason =
+            response.fallbackReason ||
+            'AI providers did not return usable Character Genesis output.';
+        } else if (response.text) {
+          const parsed = this.parseJsonFromAiResponse(response.text);
+          if (parsed && this.isValidCharacterExtractionShape(parsed)) {
+            extracted = parsed;
+            generationSource = response.source;
+            generationFailureReason = response.fallbackReason || '';
+          } else {
+            generationFailureReason = 'AI returned invalid or incomplete Character Genesis structure.';
+          }
+        } else {
+          generationFailureReason =
+            response.fallbackReason ||
+            'AI providers returned no usable Character Genesis text.';
+        }
+      } catch (err: any) {
+        generationFailureReason = err?.message || String(err);
+        console.warn('[CharacterGenesisService] Orchestrated extraction failed:', err);
+      }
+
+      // Never silently downgrade a failed AI extraction. The first request stops here
+      // and lets the UI ask the player whether deterministic extraction is acceptable.
+      if (!extracted) {
+        throw new CharacterGenesisAiUnavailableError(
+          generationFailureReason ||
+            'AI character extraction is currently unavailable. No character draft has been generated yet.'
+        );
+      }
     }
 
     // Build canonical draft assembling all sections

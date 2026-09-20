@@ -13,6 +13,7 @@ import {
   CharacterPortraitAsset,
   CharacterProvenanceSource,
   CharacterEffect,
+  CharacterStoryMode,
   WorldTemplate,
 } from '../../src/types';
 
@@ -33,6 +34,19 @@ export class CharacterGenesisService {
       ...(input.userEditedFields || []),
       ...((existingDraft as any)?.fieldLocks || []),
     ]);
+    const narrativeRole: CharacterStoryMode =
+      input.narrativeRole ||
+      (existingDraft as any)?.storyMode ||
+      'PROTAGONIST';
+
+    const narrativeRoleGuidance: Record<CharacterStoryMode, string> = {
+      PROTAGONIST:
+        'PROTAGONIST: the player character is the central viewpoint and primary driver of the campaign. The world, major conflicts, opening situation, and narrative opportunities should meaningfully center on this character.',
+      SIDE_CHARACTER:
+        'SIDE_CHARACTER: the player character exists inside a larger story rather than being its central hero. Major canonical protagonists, factions, and conflicts may continue independently. The character has agency and personal goals, but the main plot does not need to revolve around them.',
+      FREE_ROAM:
+        'FREE_ROAM: the player character is an autonomous participant in an open-ended sandbox. Do not force a predetermined hero arc. Give the character a coherent reason to exist in the world while leaving long-term direction, alliances, exploration, occupations, and conflicts open to player choice.',
+    };
 
     const draftId = existingDraft?.draftId || `draft_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
@@ -63,6 +77,13 @@ Available Locations: ${JSON.stringify(
 
 PLAYER CHARACTER CONCEPT:
 "${concept}"
+
+NARRATIVE ROLE MODE: ${narrativeRole}
+
+NARRATIVE ROLE SEMANTICS:
+${narrativeRoleGuidance[narrativeRole]}
+
+Apply these semantics to the character's background, motivations, relationships, starting situation, and overall narrative positioning. This is a gameplay/narrative mode, not an in-world profession.
 
 Return ONLY one JSON object matching this contract:
 
@@ -654,6 +675,7 @@ Rules:
       startingSituation,
       startingLocationMode: existingDraft?.startingLocationMode || 'AI_SUGGEST',
       startingSituationMode: existingDraft?.startingSituationMode || 'AI_SUGGEST',
+      storyMode: narrativeRole,
       startingState: {
         healthCurrent: 100,
         healthMax: 100,

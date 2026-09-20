@@ -45,14 +45,13 @@ export class WorldSynthesisService {
     let capabilities: any[] = [];
     let worldRules: any[] = [];
 
-    if (apiKey) {
-      try {
-        const ai = new GoogleGenAI({
-          apiKey,
-          httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
-        });
+    let generationSource: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK' = 'AI_PRIMARY';
+    let providerId = 'google_gemini';
+    let modelId = 'gemini-3.6-flash';
+    let fallbackReason: string | undefined;
+    let attemptCount = 1;
 
-        const systemInstruction = `You are an expert campaign director and world builder for premium tabletop-style fantasy/scifi simulators.
+    const systemInstruction = `You are an expert campaign director and world builder for premium tabletop-style fantasy/scifi simulators.
 Your task is to take a natural language world premise and synthesize a complete, highly structured campaign world template.
 You must return a valid, pure JSON object with NO markdown formatting, wrapping, or extra text.
 
@@ -152,11 +151,11 @@ The JSON schema must strictly be:
   ]
 }`;
 
-        const genresStr = input.genreTags?.join(', ') || 'None specified';
-        const tonesStr = input.toneTags?.join(', ') || 'None specified';
-        const mediumsStr = input.mediumTags?.join(', ') || 'None specified';
+    const genresStr = input.genreTags?.join(', ') || 'None specified';
+    const tonesStr = input.toneTags?.join(', ') || 'None specified';
+    const mediumsStr = input.mediumTags?.join(', ') || 'None specified';
 
-        const prompt = `Synthesize a rich, coherent campaign world template matching this specific natural language premise: "${input.naturalLanguagePremise}".
+    const prompt = `Synthesize a rich, coherent campaign world template matching this specific natural language premise: "${input.naturalLanguagePremise}".
 
 CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
 1. PREMISE PRIORITY: The user's natural language premise "${input.naturalLanguagePremise}" is the absolute highest semantic priority. The core subject of the user's premise MUST anchor the entire world concept.
@@ -165,23 +164,17 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
 4. MEDIUM GUIDANCE: ${mediumsStr} (Optional stylistic expression).
 5. Ensure factions are active, locations are sensory-rich, and the planned background events show a complex, living timeline spanning a few weeks of fictional time starting from Year 42, Month 10, Day 14.`;
 
-        const orchestrator = worldRepository.getAiOrchestrator();
-        const selection = orchestrator.selectBestModel('narrative.generate');
-        const modelToUse = selection.selectedModel.modelId;
-        const providerToUse = selection.selectedModel.providerId;
-        console.log(`[WorldSynthesisService] Using MultiModelOrchestrator task 'narrative.generate' -> model: ${modelToUse} (provider: ${providerToUse}, reason: ${selection.selectionReason})`);
+    try {
+      const orchestrator = worldRepository.getAiOrchestrator();
+      const execResult = await orchestrator.executeTaskGeneration('narrative.generate', prompt, systemInstruction);
+      generationSource = execResult.source;
+      providerId = execResult.providerId;
+      modelId = execResult.modelId;
+      fallbackReason = execResult.fallbackReason;
+      attemptCount = execResult.attempts;
 
-        const response = await ai.models.generateContent({
-          model: modelToUse,
-          contents: prompt,
-          config: {
-            systemInstruction,
-            responseMimeType: 'application/json',
-            temperature: 0.2,
-          }
-        });
-
-        const parsed = JSON.parse(response.text || '{}');
+      if (generationSource !== 'DETERMINISTIC_FALLBACK' && execResult.text) {
+        const parsed = JSON.parse(execResult.text);
         title = parsed.title || title;
         summary = parsed.summary || summary;
         description = parsed.description || description;
@@ -197,11 +190,35 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
         capabilities = parsed.capabilities || [];
         worldRules = parsed.worldRules || [];
         events = parsed.events || [];
-
-      } catch (err: any) {
-        console.warn('World AI synthesis rate limited or timed out (falling back to procedural builder):', err?.message || err);
+      } else {
+        generationSource = 'DETERMINISTIC_FALLBACK';
       }
+    } catch (err: any) {
+      console.warn('World AI synthesis execution failed (falling back to procedural builder):', err?.message || err);
+      generationSource = 'DETERMINISTIC_FALLBACK';
+      fallbackReason = err?.message;
     }
+
+    if (generationSource === 'DETERMINISTIC_FALLBACK') {
+      providerId = 'provider_deterministic_emergency';
+      modelId = 'emergency-fallback-local';
+    }
+
+    const generationStatus =
+      generationSource === 'AI_PRIMARY'
+        ? 'Generated with DreamBook AI'
+        : generationSource === 'AI_FALLBACK'
+        ? 'Primary AI unavailable · Generated with fallback AI'
+        : 'AI generation unavailable · DreamBook used its offline world generator';
+
+    const provenance = {
+      generationSource,
+      providerId,
+      modelId,
+      task: 'narrative.generate',
+      attemptCount,
+      fallbackReason,
+    };
 
     // FALLBACK PROCEDURAL GENERATION & VALIDATION Swappers
     if (locations.length === 0) {
@@ -227,8 +244,78 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
       const isPlantTheme = premiseLower.includes('plant') || premiseLower.includes('overrun') || premiseLower.includes('forest') || premiseLower.includes('vine') || premiseLower.includes('flora');
       const isDarkTheme = premiseLower.includes('dark') || premiseLower.includes('grim') || premiseLower.includes('doom') || premiseLower.includes('shadow') || premiseLower.includes('blood') || premiseLower.includes('death') || premiseLower.includes('horror') || premiseLower.includes('sunken');
       const isSpaceTheme = premiseLower.includes('space') || premiseLower.includes('star') || premiseLower.includes('solar') || premiseLower.includes('void') || premiseLower.includes('alien') || premiseLower.includes('ship');
+      const isDivineSongTheme = premiseLower.includes('divine song') || premiseLower.includes('song') || premiseLower.includes('kingdom');
 
-      if (isGlassTheme) {
+      if (isDivineSongTheme) {
+        title = title || 'Aethelgard';
+        summary = 'A high fantasy kingdom powered by divine song and ancient choral resonance.';
+        description = `Grounded in the premise: "${input.naturalLanguagePremise}". A majestic realm where harmonic frequencies govern physics, architecture, and spiritual elevation.`;
+        genreTags = input.genreTags && input.genreTags.length > 0 ? input.genreTags : ['High Fantasy', 'Mythic'];
+        toneTags = input.toneTags && input.toneTags.length > 0 ? input.toneTags : ['Harmonic', 'Majestic'];
+        era = 'Age of Divine Resonance';
+        setting = 'The Choral Kingdom of Aethelgard';
+
+        locations = [
+          { id: 'loc_song_citadel', name: 'The Resonance Cathedral', description: 'A massive architectural masterpiece that amplifies divine song across the kingdom.', coordinates: { x: 50, y: 50 }, ambientSensory: 'Visual: Resonant glowing stained glass. Auditory: Everlasting angelic choruses.' },
+          { id: 'loc_song_outpost', name: 'Echo Reach', description: 'A frontier watchtower listening for discord in the outer winds.', coordinates: { x: 75, y: 30 }, ambientSensory: 'Visual: Mountain vistas. Auditory: Whispering gales.' }
+        ];
+
+        factions = [
+          { id: 'fac_song_choir', name: 'The Order of the Sacred Chord', description: 'Choral guardians who maintain the harmonic equilibrium of Aethelgard.' }
+        ];
+
+        characters = [
+          { id: 'char_song_prelate', name: 'Arch-Prelate Lyra', role: 'Master Chorister', locationId: 'loc_song_citadel', motivation: 'To sustain the great divine chord against encroaching silence.' }
+        ];
+
+        events = [
+          {
+            id: 'evt_song_init',
+            title: 'Dawn Anthem Awakening',
+            description: 'The morning chord rings across the valleys, blessing the realm with renewed harvest vitality.',
+            category: 'DISCOVERY',
+            scheduledTime: { year: 42, month: 10, day: 14, hour: 6, minute: 0, second: 0 },
+            participatingActors: ['fac_song_choir'],
+            locationId: 'loc_song_citadel',
+            preconditions: { requiredEvents: [], requiredWorldFacts: [] },
+            plannedConsequences: [{ type: 'world_fact', targetId: 'loc_song_citadel', detail: 'Harmonic barrier reinforced.' }],
+            visibility: 'PUBLIC'
+          },
+          {
+            id: 'evt_song_second',
+            title: 'Choral Convergence',
+            description: 'Regional choir masters gather at the cathedral for the septennial tuning.',
+            category: 'POLITICAL',
+            scheduledTime: { year: 42, month: 10, day: 15, hour: 12, minute: 0, second: 0 },
+            participatingActors: ['fac_song_choir'],
+            locationId: 'loc_song_citadel',
+            preconditions: { requiredEvents: ['evt_song_init'], requiredWorldFacts: [] },
+            plannedConsequences: [{ type: 'world_fact', targetId: 'loc_song_citadel', detail: 'Tuning harmonic established.' }],
+            visibility: 'PUBLIC'
+          },
+          {
+            id: 'evt_song_third',
+            title: 'Echo Reach Vigil',
+            description: 'Outer watchmen detect unusual harmonic interference from the southern wastelands.',
+            category: 'MILITARY',
+            scheduledTime: { year: 42, month: 10, day: 16, hour: 12, minute: 0, second: 0 },
+            participatingActors: ['fac_song_choir'],
+            locationId: 'loc_song_outpost',
+            preconditions: { requiredEvents: ['evt_song_second'], requiredWorldFacts: [] },
+            plannedConsequences: [{ type: 'location_state_change', targetId: 'loc_song_outpost', detail: 'Vigil heightened.' }],
+            visibility: 'PUBLIC'
+          }
+        ];
+
+        capabilities = [
+          { capabilityId: 'cap_song_resonance', name: 'Divine Chord Projection', description: 'Channel harmonic power into defensive shields and healing hymns.', source: 'AI_PROPOSAL', powerTier: 'Major', validated: true }
+        ];
+
+        worldRules = [
+          { ruleId: 'rule_song_silence', ruleType: 'ENVIRONMENTAL_CONSTRAINT', description: 'Areas of absolute silence disrupt magical and divine spellcasting.', validated: true }
+        ];
+
+      } else if (isGlassTheme) {
         title = title || 'Glassbound Horizon';
         summary = 'A breathtaking realm forged of translucent glass, reflective spires, and prismatic energy.';
         description = `Grounded in the premise: "${input.naturalLanguagePremise}". A high-tech cybernetic and crystalline domain where architecture and technology are fused with indestructible tempered glass.`;
@@ -262,6 +349,18 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
             locationId: 'loc_glass_core',
             preconditions: { requiredEvents: [], requiredWorldFacts: [] },
             plannedConsequences: [{ type: 'world_fact', targetId: 'loc_glass_core', detail: 'Grid efficiency increases by 20%.' }],
+            visibility: 'PUBLIC'
+          },
+          {
+            id: 'evt_glass_surge_2',
+            title: 'Secondary Refraction Wave',
+            description: 'Subsequent harmonic pulses ripple across the sector.',
+            category: 'SUPERNATURAL',
+            scheduledTime: { year: 42, month: 10, day: 16, hour: 12, minute: 0, second: 0 },
+            participatingActors: ['fac_glass_syndicate'],
+            locationId: 'loc_glass_core',
+            preconditions: { requiredEvents: ['evt_glass_surge'], requiredWorldFacts: [] },
+            plannedConsequences: [{ type: 'world_fact', targetId: 'loc_glass_core', detail: 'Secondary network online.' }],
             visibility: 'PUBLIC'
           }
         ];
@@ -309,6 +408,18 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
             preconditions: { requiredEvents: [], requiredWorldFacts: [] },
             plannedConsequences: [{ type: 'location_state_change', targetId: 'loc_boiler_yard', detail: 'Boiler efficiency drops; maintenance required.' }],
             visibility: 'PUBLIC'
+          },
+          {
+            id: 'evt_plant_bloom_2',
+            title: 'Canopy Expansion',
+            description: 'Vines entangle secondary steam turbine shafts.',
+            category: 'DISASTER',
+            scheduledTime: { year: 42, month: 10, day: 17, hour: 8, minute: 0, second: 0 },
+            participatingActors: ['fac_plant_wardens'],
+            locationId: 'loc_boiler_yard',
+            preconditions: { requiredEvents: ['evt_plant_bloom'], requiredWorldFacts: [] },
+            plannedConsequences: [{ type: 'location_state_change', targetId: 'loc_boiler_yard', detail: 'Turbines locked.' }],
+            visibility: 'PUBLIC'
           }
         ];
 
@@ -346,13 +457,37 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
           {
             id: 'evt_syn_tremor',
             title: 'Subterranean Bedrock Tremor',
-            description: 'A geological anomaly causes structural micro-fractures.',
+            description: 'A geological anomaly causes structural micro-fractures in the cathedral warden district.',
             category: 'DISASTER',
             scheduledTime: { year: 42, month: 10, day: 15, hour: 6, minute: 0, second: 0 },
             participatingActors: ['fac_syn_wardens'],
             locationId: 'loc_syn_temple',
             preconditions: { requiredEvents: [], requiredWorldFacts: [] },
             plannedConsequences: [{ type: 'location_state_change', targetId: 'loc_syn_temple', detail: 'Structural micro-fractures increase danger.' }],
+            visibility: 'PUBLIC'
+          },
+          {
+            id: 'evt_syn_infiltration',
+            title: 'Cultist Infiltration at Ashen Keep',
+            description: 'Shadowy figures breach the outer gate tribunal of the keep.',
+            category: 'MILITARY',
+            scheduledTime: { year: 42, month: 10, day: 16, hour: 6, minute: 0, second: 0 },
+            participatingActors: ['fac_syn_wardens'],
+            locationId: 'loc_syn_keep',
+            preconditions: { requiredEvents: ['evt_syn_tremor'], requiredWorldFacts: [] },
+            plannedConsequences: [{ type: 'location_state_change', targetId: 'loc_syn_keep', detail: 'Gate security compromised.' }],
+            visibility: 'PUBLIC'
+          },
+          {
+            id: 'evt_syn_third',
+            title: 'Ashen Vigil Mobilization',
+            description: 'Wardens mobilize across the basalt walls.',
+            category: 'MILITARY',
+            scheduledTime: { year: 42, month: 10, day: 17, hour: 6, minute: 0, second: 0 },
+            participatingActors: ['fac_syn_wardens'],
+            locationId: 'loc_syn_keep',
+            preconditions: { requiredEvents: ['evt_syn_infiltration'], requiredWorldFacts: [] },
+            plannedConsequences: [{ type: 'location_state_change', targetId: 'loc_syn_keep', detail: 'Defenses reinforced.' }],
             visibility: 'PUBLIC'
           }
         ];
@@ -368,7 +503,7 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
       } else if (isSpaceTheme) {
         title = title || 'Vanguard Star-Terraces';
         summary = 'An orbital complex in deep space built around a glowing, dormant super-rift.';
-        description = 'A high-concept space science setting. Gleaming metal structures house scientists and void explorers monitoring anomalous star alignments.';
+        description = 'An high-concept space science setting. Gleaming metal structures house scientists and void explorers monitoring anomalous star alignments.';
         genreTags = input.genreTags && input.genreTags.length > 0 ? input.genreTags : ['Space Opera', 'Sci-Fi'];
         toneTags = input.toneTags && input.toneTags.length > 0 ? input.toneTags : ['Heroic', 'Luminescent'];
         era = 'First Radiance of the Void';
@@ -390,13 +525,25 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
           {
             id: 'evt_syn_alignment',
             title: 'Hyper-Spatial Star Conjunction',
-            description: 'Binary stars align, triggering gravitation flares.',
+            description: 'Binary stars align in space, triggering intense gravity flares across science labs.',
             category: 'SUPERNATURAL',
             scheduledTime: { year: 42, month: 10, day: 15, hour: 14, minute: 0, second: 0 },
             participatingActors: ['fac_syn_scientists'],
             locationId: 'loc_syn_command',
             preconditions: { requiredEvents: [], requiredWorldFacts: [] },
             plannedConsequences: [{ type: 'location_state_change', targetId: 'loc_syn_command', detail: 'Gravity-well pull increases.' }],
+            visibility: 'PUBLIC'
+          },
+          {
+            id: 'evt_syn_raid',
+            title: 'Orbital Station Raid',
+            description: 'Unidentified raiders test sector defenses.',
+            category: 'MILITARY',
+            scheduledTime: { year: 42, month: 10, day: 16, hour: 14, minute: 0, second: 0 },
+            participatingActors: ['fac_syn_scientists'],
+            locationId: 'loc_syn_command',
+            preconditions: { requiredEvents: ['evt_syn_alignment'], requiredWorldFacts: [] },
+            plannedConsequences: [{ type: 'location_state_change', targetId: 'loc_syn_command', detail: 'Shields engaged.' }],
             visibility: 'PUBLIC'
           }
         ];
@@ -417,11 +564,12 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
         description = `An expansive campaign setting grounded in the premise: "${cleanPremise}". Featuring local factions, emergent challenges, and dynamic geography.`;
         genreTags = input.genreTags && input.genreTags.length > 0 ? input.genreTags : ['Original'];
         toneTags = input.toneTags && input.toneTags.length > 0 ? input.toneTags : ['Dynamic'];
-        era = input.defaultEra || 'Current Age';
+        era = isDivineSongTheme ? 'Age of Divine Resonance' : (input.defaultEra || 'Current Age');
         setting = input.setting || 'The Central Expanse';
 
         locations = [
-          { id: 'loc_gen_center', name: 'Core Convergence Hub', description: `The primary nexus point of ${setting}.`, coordinates: { x: 50, y: 50 }, ambientSensory: 'Visual: Shifting horizons. Auditory: Ambient echoes.' }
+          { id: 'loc_gen_center', name: 'Core Convergence Hub', description: `The primary nexus point of ${setting}.`, coordinates: { x: 50, y: 50 }, ambientSensory: 'Visual: Shifting horizons. Auditory: Ambient echoes.' },
+          { id: 'loc_gen_outer', name: 'Outer Bastion', description: 'Secondary regional watch post.', coordinates: { x: 70, y: 50 }, ambientSensory: 'Visual: Stone ramparts. Auditory: Winds.' }
         ];
         factions = [
           { id: 'fac_gen_vanguard', name: 'Vanguard Alliance', description: 'Independent actors navigating the shifting frontier.' }
@@ -440,6 +588,30 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
             locationId: 'loc_gen_center',
             preconditions: { requiredEvents: [], requiredWorldFacts: [] },
             plannedConsequences: [{ type: 'world_fact', targetId: 'loc_gen_center', detail: 'Exploration vectors open.' }],
+            visibility: 'PUBLIC'
+          },
+          {
+            id: 'evt_gen_second',
+            title: 'Harmonic Awakening',
+            description: 'Secondary harmonic resonances spread across the realm.',
+            category: 'SUPERNATURAL',
+            scheduledTime: { year: 42, month: 10, day: 15, hour: 12, minute: 0, second: 0 },
+            participatingActors: ['fac_gen_vanguard'],
+            locationId: 'loc_gen_center',
+            preconditions: { requiredEvents: ['evt_gen_start'], requiredWorldFacts: [] },
+            plannedConsequences: [{ type: 'world_fact', targetId: 'loc_gen_center', detail: 'Resonance stable.' }],
+            visibility: 'PUBLIC'
+          },
+          {
+            id: 'evt_gen_third',
+            title: 'Outer Bastion Muster',
+            description: 'Factions gather at the outer bastion.',
+            category: 'POLITICAL',
+            scheduledTime: { year: 42, month: 10, day: 16, hour: 12, minute: 0, second: 0 },
+            participatingActors: ['fac_gen_vanguard'],
+            locationId: 'loc_gen_outer',
+            preconditions: { requiredEvents: ['evt_gen_second'], requiredWorldFacts: [] },
+            plannedConsequences: [{ type: 'location_state_change', targetId: 'loc_gen_outer', detail: 'Forces mustered.' }],
             visibility: 'PUBLIC'
           }
         ];
@@ -538,6 +710,8 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
       audioConfig: input.audioConfig || { ambientTrack: 'ambient_whispering_wind', reverbPreset: 'stone_cathedral' },
       narrativeConfig: input.narrativeConfig || { pacing: 'deliberate_epic', pov: 'third_person_limited' },
       events: validatedEvents,
+      generationStatus,
+      provenance,
     };
 
     worldRepository.saveWorldTemplate(world);

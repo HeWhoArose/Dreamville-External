@@ -879,6 +879,15 @@ export interface WorldTemplate {
   audioConfig?: any;
   narrativeConfig?: any;
   events?: any[];
+  generationStatus?: string;
+  provenance?: {
+    generationSource: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK';
+    providerId: string;
+    modelId: string;
+    task: string;
+    attemptCount: number;
+    fallbackReason?: string;
+  };
 }
 
 export interface WorldSearchCriteria {

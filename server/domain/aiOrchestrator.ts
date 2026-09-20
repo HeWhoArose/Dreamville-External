@@ -1311,7 +1311,11 @@ export class MultiModelOrchestrator {
           if (data.fallbackChains && typeof data.fallbackChains === 'object') {
             for (const [task, chain] of Object.entries(data.fallbackChains)) {
               if (Array.isArray(chain)) {
-                this.taskFallbackChains.set(task as TaskId, chain.filter(Boolean));
+                const cleaned = chain.filter(Boolean) as string[];
+                if (!cleaned.some(c => c.includes('emergency-fallback-local'))) {
+                  cleaned.push('provider_deterministic_emergency::emergency-fallback-local');
+                }
+                this.taskFallbackChains.set(task as TaskId, cleaned);
               }
             }
           }
@@ -3457,6 +3461,98 @@ export class MultiModelOrchestrator {
   public clearIdempotencyCache(): void {
     this.turnResultsByIdempotencyKey.clear();
     this.inFlightTurnPromises.clear();
+  }
+
+  public async executeTaskGeneration(
+    task: TaskId,
+    prompt: string,
+    systemInstruction?: string,
+    options?: { timeoutMs?: number }
+  ): Promise<{
+    text: string;
+    source: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK';
+    providerId: string;
+    modelId: string;
+    fallbackReason?: string;
+    attempts: number;
+  }> {
+    const timeoutMs = options?.timeoutMs || 15000;
+    const selection = this.selectBestModel(task);
+    const candidateChain: ModelRegistryRecord[] = [selection.selectedModel, ...selection.fallbacks];
+    let totalAttempts = 0;
+    let lastError = '';
+
+    for (let cIdx = 0; cIdx < candidateChain.length; cIdx++) {
+      const currentCandidate = candidateChain[cIdx];
+      const modelKey = `${currentCandidate.providerId}::${currentCandidate.modelId}`;
+
+      if (this.isCircuitBreakerTripped(currentCandidate.providerId, currentCandidate.modelId)) {
+        continue;
+      }
+
+      const adapter = this.getAdapter(currentCandidate.providerId);
+      if (!adapter) {
+        continue;
+      }
+
+      try {
+        totalAttempts++;
+        const abortController = new AbortController();
+        const timer = setTimeout(() => abortController.abort(), timeoutMs);
+
+        let providerRes: ProviderGenerateResult;
+        try {
+          providerRes = await adapter.generate(task, prompt, {
+            timeoutMs,
+            abortSignal: abortController.signal,
+            modelId: currentCandidate.modelId,
+            systemInstruction,
+          });
+        } finally {
+          clearTimeout(timer);
+        }
+
+        this.consecutiveFailures.set(modelKey, 0);
+
+        if (!providerRes || !providerRes.text) {
+          throw new Error('Provider returned empty response.');
+        }
+
+        const source = cIdx === 0 ? 'AI_PRIMARY' : 'AI_FALLBACK';
+        const fallbackReason = cIdx > 0 ? `Primary model unavailable or exhausted; fell back to ${currentCandidate.modelId}` : undefined;
+
+        return {
+          text: providerRes.text,
+          source,
+          providerId: currentCandidate.providerId,
+          modelId: currentCandidate.modelId,
+          fallbackReason,
+          attempts: totalAttempts,
+        };
+      } catch (err: any) {
+        lastError = err?.message || String(err);
+        const failures = (this.consecutiveFailures.get(modelKey) || 0) + 1;
+        this.consecutiveFailures.set(modelKey, failures);
+        if (failures >= 2) {
+          this.circuitBreakersTripped.add(modelKey);
+          currentCandidate.health = 'Unavailable';
+        }
+      }
+    }
+
+    const emergency = Array.from(this.models.values()).find((m) => m.isEmergencyFloor) || {
+      providerId: 'provider_deterministic_emergency',
+      modelId: 'emergency-fallback-local',
+    };
+
+    return {
+      text: '',
+      source: 'DETERMINISTIC_FALLBACK',
+      providerId: emergency.providerId,
+      modelId: emergency.modelId,
+      fallbackReason: `All AI providers failed. Last error: ${lastError}`,
+      attempts: totalAttempts,
+    };
   }
 
   public getStatus(): {

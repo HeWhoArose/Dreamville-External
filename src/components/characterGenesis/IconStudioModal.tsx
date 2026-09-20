@@ -72,6 +72,7 @@ export const IconStudioModal: React.FC<IconStudioModalProps> = ({
       console.error('Failed to generate icon image:', err);
       setErrorMessage(err?.message || 'Failed to generate image icon.');
     } finally {
+      setIsNormalizing(false);
       setIsGenerating(false);
     }
   };

@@ -17,6 +17,16 @@ import {
   WorldTemplate,
 } from '../../src/types';
 
+export class CharacterGenesisAiUnavailableError extends Error {
+  public readonly code = 'AI_UNAVAILABLE';
+  public readonly requiresDeterministicConfirmation = true;
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'CharacterGenesisAiUnavailableError';
+  }
+}
+
 export class CharacterGenesisService {
   /**
    * Extracts a structured CharacterGenesisDraft from a natural language concept,
@@ -78,12 +88,15 @@ Available Locations: ${JSON.stringify(
 PLAYER CHARACTER CONCEPT:
 "${concept}"
 
-NARRATIVE ROLE MODE: ${narrativeRole}
+NARRATIVE ROLE MODE:
+${input.narrativeRole || (existingDraft as any)?.storyMode || 'NOT_SELECTED_YET'}
 
 NARRATIVE ROLE SEMANTICS:
-${narrativeRoleGuidance[narrativeRole]}
+${input.narrativeRole || (existingDraft as any)?.storyMode
+        ? narrativeRoleGuidance[narrativeRole]
+        : 'The player will choose the narrative role in the Character Dossier step. Do not assume Protagonist, Side Character, or Free Roam semantics during initial concept extraction.'}
 
-Apply these semantics to the character's background, motivations, relationships, starting situation, and overall narrative positioning. This is a gameplay/narrative mode, not an in-world profession.
+Apply these semantics to the character's background, motivations, relationships, starting situation, and overall narrative positioning only when a narrative role has already been selected. The three modes are gameplay/narrative positioning, not in-world professions.
 
 Return ONLY one JSON object matching this contract:
 
@@ -278,8 +291,8 @@ Rules:
     let generationSource: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK' = 'DETERMINISTIC_FALLBACK';
     let generationFailureReason = '';
 
-    // Use the canonical model orchestrator so Genesis respects configured task routing,
-    // provider health, fallbacks, and deterministic emergency behavior.
+    // Use the canonical model orchestrator so Genesis respects configured task routing
+    // and provider health. Deterministic extraction is deliberately NOT automatic.
     try {
       const orchestrator = worldRepository.getAiOrchestrator();
       const response = await orchestrator.executeTaskGeneration(
@@ -288,7 +301,13 @@ Rules:
         'Return only the requested Character Genesis JSON. Treat the player concept as authoritative input; do not overwrite preserved user fields.'
       );
 
-      if (response.text) {
+      // The orchestrator may report a deterministic emergency source. Treat that as
+      // AI unavailability here so the player can explicitly consent before we use it.
+      if (response.source === 'DETERMINISTIC_FALLBACK') {
+        generationFailureReason =
+          response.fallbackReason ||
+          'AI providers did not return usable Character Genesis output.';
+      } else if (response.text) {
         const parsed = this.parseJsonFromAiResponse(response.text);
         if (parsed && this.isValidCharacterExtractionShape(parsed)) {
           extracted = parsed;
@@ -298,14 +317,25 @@ Rules:
           generationFailureReason = 'AI returned invalid or incomplete Character Genesis structure.';
         }
       } else {
-        generationFailureReason = response.fallbackReason || 'AI providers returned no usable Character Genesis text.';
+        generationFailureReason =
+          response.fallbackReason ||
+          'AI providers returned no usable Character Genesis text.';
       }
     } catch (err: any) {
       generationFailureReason = err?.message || String(err);
       console.warn('[CharacterGenesisService] Orchestrated extraction failed:', err);
     }
 
-    // Deterministic concept extraction is an emergency floor only.
+    // Never silently downgrade a failed AI extraction. The first request stops here
+    // and lets the UI ask the player whether deterministic extraction is acceptable.
+    if (!extracted && !input.allowDeterministicFallback) {
+      throw new CharacterGenesisAiUnavailableError(
+        generationFailureReason ||
+          'AI character extraction is currently unavailable. No character draft has been generated yet.'
+      );
+    }
+
+    // Deterministic concept extraction only runs after explicit player consent.
     if (!extracted) {
       extracted = this.proceduralExtraction(concept, worldTemplate);
       generationSource = 'DETERMINISTIC_FALLBACK';

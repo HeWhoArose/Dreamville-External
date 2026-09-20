@@ -2578,6 +2578,23 @@ export class MultiModelOrchestrator {
     fallbacks: ModelRegistryRecord[];
   } {
     const contextTokens = options?.contextTokens ?? 0;
+    const customChainKeys = this.taskFallbackChains.get(task);
+
+    const findConfiguredModel = (key: string): ModelRegistryRecord | undefined => {
+      return Array.from(this.models.values()).find(
+        (m) =>
+          `${m.providerId}::${m.modelId}` === key ||
+          m.modelId === key
+      );
+    };
+
+    const isUsableCandidate = (model: ModelRegistryRecord): boolean => {
+      if (!model.roleEligibility.includes(task)) return false;
+      if (model.health === 'Unavailable' || model.health === 'DisabledByUser' || model.health === 'InvalidAuth') return false;
+      if (this.isCircuitBreakerTripped(model.providerId, model.modelId)) return false;
+      if (contextTokens > 0 && contextTokens > model.contextWindow) return false;
+      return true;
+    };
 
     // Check if a model is manually pinned for this task
     const pinnedKey = this.taskPinnedModels.get(task);
@@ -2592,18 +2609,38 @@ export class MultiModelOrchestrator {
         !this.isCircuitBreakerTripped(pinnedModel.providerId, pinnedModel.modelId)
       ) {
         if (contextTokens === 0 || contextTokens <= pinnedModel.contextWindow) {
-          const rawFallbacks = Array.from(this.models.values()).filter(
-            (m) => m.modelId !== pinnedModel.modelId && m.roleEligibility.includes(task)
-          );
-          const fallbacks = rawFallbacks.sort((a, b) => {
-            const scoreA = a.userPriority + (a.health === 'Healthy' ? 50 : 0) - (this.consecutiveFailures.get(`${a.providerId}::${a.modelId}`) || 0) * 25;
-            const scoreB = b.userPriority + (b.health === 'Healthy' ? 50 : 0) - (this.consecutiveFailures.get(`${b.providerId}::${b.modelId}`) || 0) * 25;
-            if (scoreB !== scoreA) return scoreB - scoreA;
-            return a.modelId.localeCompare(b.modelId);
-          });
+          let fallbacks: ModelRegistryRecord[];
+          if (customChainKeys) {
+            fallbacks = customChainKeys
+              .map(findConfiguredModel)
+              .filter((m): m is ModelRegistryRecord => Boolean(m))
+              .filter((m) => m.modelId !== pinnedModel.modelId && isUsableCandidate(m));
+
+            const emergency = Array.from(this.models.values()).find((m) => m.isEmergencyFloor);
+            if (
+              emergency &&
+              emergency.roleEligibility.includes(task) &&
+              !fallbacks.some((m) => m.modelId === emergency.modelId)
+            ) {
+              fallbacks.push(emergency);
+            }
+          } else {
+            const rawFallbacks = Array.from(this.models.values()).filter(
+              (m) => m.modelId !== pinnedModel.modelId && m.roleEligibility.includes(task)
+            );
+            fallbacks = rawFallbacks.sort((a, b) => {
+              const scoreA = a.userPriority + (a.health === 'Healthy' ? 50 : 0) - (this.consecutiveFailures.get(`${a.providerId}::${a.modelId}`) || 0) * 25;
+              const scoreB = b.userPriority + (b.health === 'Healthy' ? 50 : 0) - (this.consecutiveFailures.get(`${b.providerId}::${b.modelId}`) || 0) * 25;
+              if (scoreB !== scoreA) return scoreB - scoreA;
+              return a.modelId.localeCompare(b.modelId);
+            });
+          }
+
           return {
             selectedModel: pinnedModel,
-            selectionReason: `Model '${pinnedModel.modelId}' was manually pinned for task '${task}'.`,
+            selectionReason: customChainKeys
+              ? `Model '${pinnedModel.modelId}' was pinned for '${task}', using only the configured fallback models.`
+              : `Model '${pinnedModel.modelId}' was manually pinned for task '${task}'.`,
             selectionScore: pinnedModel.userPriority + 500,
             fallbacks,
           };
@@ -2660,16 +2697,36 @@ export class MultiModelOrchestrator {
       };
     }
 
-    const customChainKeys = this.taskFallbackChains.get(task);
+    if (customChainKeys && customChainKeys.length > 0) {
+      const configuredModels = customChainKeys
+        .map(findConfiguredModel)
+        .filter((m): m is ModelRegistryRecord => Boolean(m))
+        .filter(isUsableCandidate);
+
+      if (configuredModels.length > 0) {
+        const selectedFromChain = configuredModels[0];
+        const fallbackModels = configuredModels.slice(1);
+
+        const emergency = Array.from(this.models.values()).find((m) => m.isEmergencyFloor);
+        if (
+          emergency &&
+          emergency.roleEligibility.includes(task) &&
+          !fallbackModels.some((m) => m.modelId === emergency.modelId)
+        ) {
+          fallbackModels.push(emergency);
+        }
+
+        return {
+          selectedModel: selectedFromChain,
+          selectionReason: `Using the configured AI fallback order for '${task}'.`,
+          selectionScore: selectedFromChain.userPriority + 500,
+          fallbacks: fallbackModels,
+        };
+      }
+    }
 
     const scored = eligible.map((model) => {
       let score = model.userPriority;
-      if (customChainKeys) {
-        const chainIndex = customChainKeys.findIndex((k) => k === `${model.providerId}::${model.modelId}` || k === model.modelId);
-        if (chainIndex !== -1) {
-          score += (customChainKeys.length - chainIndex) * 200;
-        }
-      }
       if (model.health === 'Healthy') score += 50;
       else if (model.health === 'Degraded') score += 10;
       else if (model.health === 'Throttled') score -= 30;

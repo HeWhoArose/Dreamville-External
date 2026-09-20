@@ -106,6 +106,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
   const [selectedNarrativeRole, setSelectedNarrativeRole] = useState<CharacterStoryMode>('PROTAGONIST');
   const [isExtracting, setIsExtracting] = useState<boolean>(false);
   const [extractionError, setExtractionError] = useState<string | null>(null);
+  const [deterministicFallbackPrompt, setDeterministicFallbackPrompt] = useState<{ reason: string } | null>(null);
 
   // The active Draft
   const [draft, setDraft] = useState<CharacterGenesisDraft | null>(null);
@@ -372,7 +373,9 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
   };
 
   // 1. Natural Language Extraction Handler
-  const handleExtractCharacter = async () => {
+  // The first attempt may only use AI. Deterministic extraction requires an explicit
+  // player decision after DreamBook reports that no usable AI result is available.
+  const handleExtractCharacter = async (allowDeterministicFallback = false) => {
     if (!selectedWorld) {
       setExtractionError('Please select an active world template first.');
       return;
@@ -383,6 +386,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
     }
 
     setExtractionError(null);
+    setDeterministicFallbackPrompt(null);
     setIsExtracting(true);
 
     try {
@@ -391,20 +395,37 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
         naturalConcept,
         draft || undefined,
         Array.from(userEditedFields),
-        selectedNarrativeRole
+        draft?.storyMode || undefined,
+        allowDeterministicFallback
       );
 
       if (res.success && res.draft) {
         setDraft(res.draft);
+        setSelectedNarrativeRole(res.draft.storyMode || 'PROTAGONIST');
         setActiveStep(2); // Advance to dossier review
       } else {
         throw new Error(res.error || 'Failed to extract character draft.');
       }
     } catch (err: any) {
-      setExtractionError(err.message || 'An error occurred during character extraction.');
+      if (err?.requiresDeterministicConfirmation) {
+        setExtractionError(null);
+        setDeterministicFallbackPrompt({
+          reason:
+            err?.reason ||
+            err?.message ||
+            'AI providers did not return a usable character extraction.',
+        });
+      } else {
+        setExtractionError(err?.message || 'An error occurred during character extraction.');
+      }
     } finally {
       setIsExtracting(false);
     }
+  };
+
+  const handleContinueWithDeterministicExtraction = async () => {
+    setDeterministicFallbackPrompt(null);
+    await handleExtractCharacter(true);
   };
 
   // 2. Propose Custom Capability
@@ -514,6 +535,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
   // Reload Draft
   const handleLoadDraft = (d: CharacterGenesisDraft) => {
     setDraft(d);
+    setSelectedNarrativeRole(d.storyMode || 'PROTAGONIST');
     setShowDraftsModal(false);
     setActiveStep(2);
   };
@@ -792,49 +814,6 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 </div>
               </div>
 
-              <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4 space-y-3">
-                <div>
-                  <label className="block text-xs font-semibold text-neutral-200">Narrative Role</label>
-                  <p className="text-xs text-neutral-500 mt-1">
-                    This controls how the campaign treats your character. It is separate from their in-world profession or archetype.
-                  </p>
-                </div>
-                <select
-                  value={draft?.storyMode || selectedNarrativeRole}
-                  onChange={(e) => {
-                    const mode = e.target.value as CharacterStoryMode;
-                    setSelectedNarrativeRole(mode);
-                    setDraft((prev) => prev ? {
-                      ...prev,
-                      storyMode: mode,
-                      role: {
-                        ...prev.role,
-                        role: mode === 'PROTAGONIST'
-                          ? 'Protagonist'
-                          : mode === 'SIDE_CHARACTER'
-                          ? 'Side Character'
-                          : 'Free Roam',
-                      },
-                      provenance: {
-                        ...prev.provenance,
-                        role: 'USER_EDITED',
-                      },
-                      fieldLocks: Array.from(new Set([...(prev.fieldLocks || []), 'storyMode', 'role'])),
-                    } : prev);
-                  }}
-                  className="w-full px-3 py-2.5 rounded-lg bg-neutral-950 border border-neutral-700 text-sm text-white focus:outline-none focus:border-indigo-500"
-                >
-                  {NARRATIVE_ROLE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-                <div className="text-xs text-neutral-400">
-                  {NARRATIVE_ROLE_OPTIONS.find((option) => option.value === (draft?.storyMode || selectedNarrativeRole))?.description}
-                </div>
-              </div>
-
               {draft?.aiExtractionSummary && (
                 <div className="rounded-lg border border-indigo-900/70 bg-indigo-950/30 p-4">
                   <button
@@ -871,6 +850,44 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 </div>
               )}
 
+              {deterministicFallbackPrompt && (
+                <div className="rounded-lg border border-amber-700/70 bg-amber-950/30 p-4 space-y-3">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <div className="text-sm font-semibold text-amber-200">AI character extraction is unavailable</div>
+                      <p className="text-xs text-amber-100/80">
+                        DreamBook could not get a usable AI result, so no character draft has been generated yet.
+                      </p>
+                      <p className="text-xs text-amber-100/80">
+                        Continuing will use the deterministic concept extractor instead. It will preserve the concept you entered,
+                        but it will not provide AI-generated interpretation.
+                      </p>
+                      {deterministicFallbackPrompt.reason && (
+                        <p className="text-[11px] text-amber-300/70">Reason: {deterministicFallbackPrompt.reason}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setDeterministicFallbackPrompt(null)}
+                      className="px-4 py-2 rounded-lg border border-neutral-700 bg-neutral-900 text-xs font-medium text-neutral-300 hover:text-white hover:bg-neutral-800 transition-colors"
+                    >
+                      Keep Editing Concept
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleContinueWithDeterministicExtraction}
+                      disabled={isExtracting}
+                      className="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-xs font-semibold text-white transition-colors"
+                    >
+                      {isExtracting ? 'Building Deterministic Draft...' : 'Continue with Deterministic Extraction'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {extractionError && (
                 <div className="p-3 rounded-lg bg-red-950/50 border border-red-800 text-xs text-red-200 flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
@@ -891,7 +908,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 <button
                   id="btn-extract-character"
                   onClick={handleExtractCharacter}
-                  disabled={isExtracting || !naturalConcept.trim()}
+                  disabled={isExtracting || !naturalConcept.trim() || Boolean(deterministicFallbackPrompt)}
                   className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-sm font-medium text-white transition-colors shadow-sm"
                 >
                   {isExtracting ? (
@@ -1114,6 +1131,9 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                         </option>
                       ))}
                     </select>
+                    <p className="mt-2 text-[11px] leading-relaxed text-neutral-400">
+                      {NARRATIVE_ROLE_OPTIONS.find((option) => option.value === (draft.storyMode || 'PROTAGONIST'))?.description}
+                    </p>
                   </div>
                 </div>
               </div>

@@ -2,7 +2,7 @@ import { WorldTimestamp } from './types';
 import { PendingActivationState } from './capabilityEngine';
 import { ConditionEngine } from './conditionEngine';
 import { CombatActionEconomy, CombatTurnResourceSnapshot } from './combatActionEconomy';
-import { DeathSaveEngine, deathSaveEngine } from './deathSaveEngine';
+import { deathSaveEngine } from './deathSaveEngine';
 import type { DeathSaveState } from '../../src/types';
 
 export interface DiceTerm {

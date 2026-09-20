@@ -148,6 +148,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [fallbackChains, setFallbackChains] = useState<Record<string, string[]>>({});
   const [fallbackSelectedTask, setFallbackSelectedTask] = useState<string>('narrative.generate');
   const [addingModelKey, setAddingModelKey] = useState<string>('');
+  const [fallbackEditorTask, setFallbackEditorTask] = useState<string | null>(null);
+  const [fallbackEditorSearch, setFallbackEditorSearch] = useState('');
 
   const loadOrchestratorData = async (forceRefresh = false) => {
     if (forceRefresh) setIsRefreshingRegistry(true);
@@ -236,79 +238,106 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
-  const currentChain = fallbackChains[fallbackSelectedTask] || [
-    'google_gemini::gemini-3.6-flash',
-    'google_gemini::gemini-2.5-flash',
-    'provider_deterministic_emergency::emergency-fallback-local',
-  ];
+  const getTaskChain = (taskId: string): string[] => {
+    const emergencyKey = 'provider_deterministic_emergency::emergency-fallback-local';
+    const configured = fallbackChains[taskId] || [];
+    return configured.filter((key, index, arr) => key !== emergencyKey && arr.indexOf(key) === index);
+  };
 
-  const handleSaveChain = async (newChain: string[]) => {
+  const persistTaskRoute = async (taskId: string, orderedModelKeys: string[]) => {
+    const emergencyKey = 'provider_deterministic_emergency::emergency-fallback-local';
+    const cleanKeys = Array.from(new Set(orderedModelKeys.filter(Boolean)));
+
     try {
-      const res = await apiClient.setOrchestratorFallbackChain({ task: fallbackSelectedTask, chain: newChain });
+      const primaryKey = cleanKeys[0] || null;
+
+      if (primaryKey) {
+        await apiClient.pinModelForTask({
+          task: taskId,
+          modelKey: primaryKey,
+        });
+      } else {
+        await apiClient.pinModelForTask({
+          task: taskId,
+          modelKey: '',
+        });
+      }
+
+      const res = await apiClient.setOrchestratorFallbackChain({
+        task: taskId,
+        chain: [...cleanKeys, emergencyKey],
+      });
+
       if (res?.fallbackChains) {
         setFallbackChains(res.fallbackChains);
+      } else {
+        setFallbackChains((prev) => ({
+          ...prev,
+          [taskId]: [...cleanKeys, emergencyKey],
+        }));
       }
+
+      setTaskPins((prev) => {
+        const next = { ...prev };
+        if (primaryKey) next[taskId] = primaryKey;
+        else delete next[taskId];
+        return next;
+      });
     } catch (err) {
-      console.error('Failed to update fallback chain:', err);
+      console.error(`Failed to update ${taskId} model route:`, err);
     }
   };
 
-  const handleMoveFallbackItem = (index: number, direction: 'up' | 'down') => {
-    const targetIdx = direction === 'up' ? index - 1 : index + 1;
-    if (targetIdx <= 0 || targetIdx >= currentChain.length) return;
-    const updated = [...currentChain];
-    const temp = updated[index];
-    updated[index] = updated[targetIdx];
-    updated[targetIdx] = temp;
-    handleSaveChain(updated);
+  const openFallbackEditor = (taskId: string) => {
+    setFallbackSelectedTask(taskId);
+    setFallbackEditorTask(taskId);
+    setFallbackEditorSearch('');
   };
 
-  const handleRemoveFallbackItem = (index: number) => {
-    if (index === 0 || currentChain.length <= 1) return;
-    const updated = currentChain.filter((_, i) => i !== index);
-    handleSaveChain(updated);
+  const closeFallbackEditor = () => {
+    setFallbackEditorTask(null);
+    setFallbackEditorSearch('');
   };
 
-  const handleReplaceFallbackItem = (index: number, newModelKey: string) => {
-    const updated = [...currentChain];
-    updated[index] = newModelKey;
-    handleSaveChain(updated);
-  };
-
-  const handleAddFallbackModel = () => {
-    if (!addingModelKey) return;
-    if (currentChain.includes(addingModelKey)) return;
-    const emergencyKey = 'provider_deterministic_emergency::emergency-fallback-local';
-    let updated = [...currentChain];
-    const emergencyIdx = updated.indexOf(emergencyKey);
-    if (emergencyIdx !== -1) {
-      updated.splice(emergencyIdx, 0, addingModelKey);
-    } else {
-      updated.push(addingModelKey);
+  const handleReorderFallbackModel = async (
+    taskId: string,
+    index: number,
+    direction: 'up' | 'down'
+  ) => {
+    const current = getTaskChain(taskId);
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    if (index < 0 || index >= current.length || targetIndex < 0 || targetIndex >= current.length) {
+      return;
     }
-    handleSaveChain(updated);
-    setAddingModelKey('');
+
+    const updated = [...current];
+    [updated[index], updated[targetIndex]] = [updated[targetIndex], updated[index]];
+    await persistTaskRoute(taskId, updated);
   };
 
-  const handleToggleFallbackModel = (modelKey: string, enabled: boolean) => {
-    const emergencyKey = 'provider_deterministic_emergency::emergency-fallback-local';
-    const primaryKey =
-      taskPins[fallbackSelectedTask] ||
-      currentChain.find((key) => key !== emergencyKey) ||
-      '';
-
-    const selectedFallbacks = currentChain.filter(
-      (key) => key !== emergencyKey && key !== primaryKey
+  const handleRemoveFallbackModel = async (taskId: string, modelKey: string) => {
+    const current = getTaskChain(taskId);
+    if (!current.includes(modelKey)) return;
+    await persistTaskRoute(
+      taskId,
+      current.filter((key) => key !== modelKey)
     );
+  };
 
-    const nextFallbacks = enabled
-      ? Array.from(new Set([...selectedFallbacks, modelKey]))
-      : selectedFallbacks.filter((key) => key !== modelKey);
+  const handleAddFallbackModel = async (taskId: string, modelKey: string) => {
+    const current = getTaskChain(taskId);
+    if (current.includes(modelKey)) return;
 
-    handleSaveChain([
-      ...(primaryKey ? [primaryKey] : []),
-      ...nextFallbacks,
-      emergencyKey,
+    // The first chosen model becomes primary. Every later selection is appended
+    // beneath the current last model and therefore becomes the next fallback.
+    await persistTaskRoute(taskId, [...current, modelKey]);
+  };
+
+  const handlePinTaskModel = async (taskKey: string, fullModelKey: string) => {
+    const orchestratorTaskId = TASK_ID_MAP[taskKey];
+    await persistTaskRoute(orchestratorTaskId, [
+      fullModelKey,
+      ...getTaskChain(orchestratorTaskId).filter((key) => key !== fullModelKey),
     ]);
   };
 
@@ -884,13 +913,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="space-y-6 max-w-6xl">
           <div className="p-5 rounded-[var(--db-radius-lg)] bg-[var(--db-bg-card)] border border-[var(--db-border-default)]">
             <div className="pb-4 border-b border-[var(--db-border-subtle)]">
-              <h3 className="text-base font-serif font-bold text-[var(--db-text-primary)]">Task Primary & Fallback Routing</h3>
+              <h3 className="text-base font-serif font-bold text-[var(--db-text-primary)]">
+                Task Fallback Routing
+              </h3>
               <p className="text-xs text-[var(--db-text-muted)] mt-0.5">
-                Each task has its own primary AI and its own ordered AI fallback set. These choices are authoritative for runtime routing.
+                Choose a task, then manage its exact ordered model route. The first model is primary;
+                the models below it are tried in order when the previous model fails.
               </p>
             </div>
 
-            <div className="pt-5 space-y-4">
+            <div className="pt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
               {[
                 { key: 'narrative', label: 'Narrative Storytelling', desc: 'Main prose, scene descriptions, world narration' },
                 { key: 'dialogue', label: 'Character Dialogue', desc: 'NPC speech and interpersonal exchanges' },
@@ -902,82 +934,47 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 { key: 'image', label: 'Image Generation', desc: 'Artwork and cover generation' },
               ].map((task) => {
                 const taskId = TASK_ID_MAP[task.key];
-                const chain = fallbackChains[taskId] || [];
-                const emergencyKey = 'provider_deterministic_emergency::emergency-fallback-local';
-                const primaryKey = taskPins[taskId] || chain.find((key) => key !== emergencyKey) || '';
-                const eligible = getEligibleModelsForTask(task.key)
-                  .filter((m) => !m.isEmergencyFloor);
-
-                const selectedFallbacks = new Set(
-                  chain.filter((key) => key !== emergencyKey && key !== primaryKey)
+                const chain = getTaskChain(taskId);
+                const primaryKey = chain[0] || '';
+                const fallbackCount = Math.max(0, chain.length - 1);
+                const primaryModel = orchestratorModels.find(
+                  (model) => `${model.providerId}::${model.modelId}` === primaryKey
                 );
 
                 return (
-                  <div key={task.key} className="p-4 rounded-[var(--db-radius-md)] bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] space-y-4">
-                    <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
-                      <div>
+                  <button
+                    key={task.key}
+                    type="button"
+                    onClick={() => openFallbackEditor(taskId)}
+                    className="text-left p-4 rounded-[var(--db-radius-md)] bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] hover:border-[var(--db-purple-500)]/60 hover:bg-[var(--db-surface-purple)]/20 transition-colors cursor-pointer"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
                         <div className="text-sm font-bold text-[var(--db-text-primary)]">{task.label}</div>
-                        <div className="text-[11px] text-[var(--db-text-muted)]">{task.desc}</div>
+                        <div className="text-[11px] text-[var(--db-text-muted)] mt-0.5">{task.desc}</div>
                       </div>
-                      <select
-                        value={primaryKey}
-                        onChange={(e) => handlePinTaskModel(task.key, e.target.value)}
-                        className="w-full xl:w-80 px-3 py-2 rounded bg-[var(--db-bg-card)] border border-[var(--db-border-default)] text-xs text-[var(--db-text-primary)]"
-                      >
-                        <option value="">Choose primary model...</option>
-                        {eligible.map((model) => {
-                          const fullKey = `${model.providerId}::${model.modelId}`;
-                          return <option key={fullKey} value={fullKey}>{getProviderDisplayName(model.providerId)} • {model.displayName || model.modelId}</option>;
-                        })}
-                      </select>
+                      <span className="text-[var(--db-text-muted)] text-sm shrink-0">›</span>
                     </div>
 
-                    <div>
-                      <div className="text-[11px] font-semibold text-[var(--db-text-secondary)] mb-2">
-                        Allowed AI fallbacks — checked models are tried in the order shown below.
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        {eligible
-                          .filter((model) => `${model.providerId}::${model.modelId}` !== primaryKey)
-                          .map((model) => {
-                            const fullKey = `${model.providerId}::${model.modelId}`;
-                            const info = getModelStatusInfo(model);
-                            const checked = selectedFallbacks.has(fullKey);
-                            return (
-                              <label
-                                key={fullKey}
-                                className="flex items-center justify-between gap-3 p-3 rounded-lg border border-[var(--db-border-default)] bg-[var(--db-bg-card)] cursor-pointer hover:border-[var(--db-purple-500)]/50"
-                              >
-                                <div className="flex items-center gap-2 min-w-0">
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    onChange={(e) => handleToggleFallbackModel(fullKey, e.target.checked)}
-                                    className="w-4 h-4 accent-[var(--db-purple-500)] cursor-pointer shrink-0"
-                                  />
-                                  <div className="min-w-0">
-                                    <div className="text-xs text-[var(--db-text-primary)] truncate">
-                                      {model.displayName || model.modelId}
-                                    </div>
-                                    <div className="text-[10px] text-[var(--db-text-muted)] truncate">
-                                      {getProviderDisplayName(model.providerId)}
-                                    </div>
-                                  </div>
-                                </div>
-                                <Badge variant={info.variant} size="sm">{info.label}</Badge>
-                              </label>
-                            );
-                          })}
-                      </div>
+                    <div className="mt-4 p-3 rounded-lg bg-[var(--db-bg-card)] border border-[var(--db-border-subtle)]">
+                      <div className="text-[10px] uppercase tracking-wider text-[var(--db-text-muted)]">Current route</div>
+                      {primaryModel ? (
+                        <>
+                          <div className="text-xs font-semibold text-[var(--db-text-primary)] mt-1 truncate">
+                            1. {primaryModel.displayName || primaryModel.modelId}
+                          </div>
+                          <div className="text-[10px] text-[var(--db-text-muted)] mt-0.5 truncate">
+                            {getProviderDisplayName(primaryModel.providerId)}
+                          </div>
+                          <div className="text-[10px] text-[var(--db-text-muted)] mt-2">
+                            {fallbackCount} fallback model{fallbackCount === 1 ? '' : 's'} configured
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-xs text-[var(--db-text-muted)] mt-1">No model selected yet</div>
+                      )}
                     </div>
-
-                    <div className="pt-2 border-t border-[var(--db-border-subtle)] text-[10px] text-[var(--db-text-muted)]">
-                      Runtime order: <span className="font-mono text-[var(--db-text-secondary)]">
-                        {primaryKey ? getProviderDisplayName(primaryKey.split('::')[0]) + ' / ' + (primaryKey.split('::')[1] || primaryKey) : 'No primary selected'}
-                        {' → your checked AI fallbacks → deterministic emergency floor'}
-                      </span>
-                    </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -1136,6 +1133,266 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {fallbackEditorTask && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
+          <div className="w-full max-w-5xl max-h-[90vh] overflow-hidden rounded-2xl bg-[var(--db-bg-card)] border border-[var(--db-border-default)] shadow-2xl flex flex-col">
+            {(() => {
+              const taskLabelMap: Record<string, string> = {
+                'narrative.generate': 'Narrative Storytelling',
+                'character.dialogue': 'Character Dialogue',
+                'memory.extract': 'Memory & Extraction',
+                'summary.scene': 'Summarization',
+                'rules.adjudicate': 'Canon Consistency',
+                'utility.inspect': 'Research & Search',
+                'speech.generate': 'Voice TTS',
+                'image.generate': 'Image Generation',
+              };
+              const taskKeyMap: Record<string, string> = {
+                'narrative.generate': 'narrative',
+                'character.dialogue': 'dialogue',
+                'memory.extract': 'memory',
+                'summary.scene': 'summarization',
+                'rules.adjudicate': 'consistency',
+                'utility.inspect': 'research',
+                'speech.generate': 'tts',
+                'image.generate': 'image',
+              };
+
+              const taskId = fallbackEditorTask;
+              const taskKey = taskKeyMap[taskId] || 'narrative';
+              const activeKeys = getTaskChain(taskId);
+              const selectedSet = new Set(activeKeys);
+              const eligibleModels = getUniqueModels(
+                getEligibleModelsForTask(taskKey).filter((model) => !model.isEmergencyFloor)
+              );
+
+              const query = fallbackEditorSearch.trim().toLowerCase();
+              const availableModels = eligibleModels
+                .filter((model) => !selectedSet.has(`${model.providerId}::${model.modelId}`))
+                .filter((model) => {
+                  if (!query) return true;
+                  const haystack = [
+                    model.displayName,
+                    model.modelId,
+                    model.providerId,
+                    model.description,
+                    ...(Array.isArray(model.capabilities) ? model.capabilities : []),
+                  ].filter(Boolean).join(' ').toLowerCase();
+                  return haystack.includes(query);
+                })
+                .sort((a, b) => {
+                  const providerDiff = getProviderDisplayName(a.providerId).localeCompare(
+                    getProviderDisplayName(b.providerId)
+                  );
+                  if (providerDiff !== 0) return providerDiff;
+                  return String(a.displayName || a.modelId).localeCompare(
+                    String(b.displayName || b.modelId)
+                  );
+                });
+
+              const grouped = availableModels.reduce<Record<string, any[]>>((acc, model) => {
+                const provider = getProviderDisplayName(model.providerId);
+                if (!acc[provider]) acc[provider] = [];
+                acc[provider].push(model);
+                return acc;
+              }, {});
+
+              const providersSorted = Object.keys(grouped).sort((a, b) => a.localeCompare(b));
+
+              return (
+                <>
+                  <div className="p-5 border-b border-[var(--db-border-subtle)] space-y-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="text-[10px] uppercase tracking-wider text-[var(--db-text-muted)]">Fallback route editor</div>
+                        <h3 className="text-lg font-serif font-bold text-[var(--db-text-primary)] mt-1">
+                          {taskLabelMap[taskId] || taskId}
+                        </h3>
+                        <p className="text-xs text-[var(--db-text-muted)] mt-1">
+                          The models at the top are the active ordered route. The first is primary; the rest are fallbacks.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={closeFallbackEditor}
+                        className="px-3 py-1.5 rounded-lg border border-[var(--db-border-default)] text-xs text-[var(--db-text-secondary)] hover:text-[var(--db-text-primary)] cursor-pointer"
+                      >
+                        Close
+                      </button>
+                    </div>
+
+                    <input
+                      type="search"
+                      autoFocus
+                      value={fallbackEditorSearch}
+                      onChange={(e) => setFallbackEditorSearch(e.target.value)}
+                      placeholder="Search models by name, model ID, provider, or capability..."
+                      className="w-full px-4 py-2.5 rounded-lg bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] text-xs text-[var(--db-text-primary)] focus:outline-none focus:border-[var(--db-purple-500)]"
+                    />
+                  </div>
+
+                  <div className="flex-1 min-h-0 overflow-y-auto p-5 space-y-6">
+                    <section>
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <h4 className="text-xs font-semibold text-[var(--db-text-secondary)] uppercase tracking-wider">
+                            Active Route
+                          </h4>
+                          <p className="text-[10px] text-[var(--db-text-muted)] mt-1">
+                            Checkboxes show which models are selected. Use the arrows to change their order.
+                          </p>
+                        </div>
+                        <Badge variant="purple" size="sm">{activeKeys.length} selected</Badge>
+                      </div>
+
+                      {activeKeys.length === 0 ? (
+                        <div className="p-5 rounded-lg border border-dashed border-[var(--db-border-default)] text-center text-xs text-[var(--db-text-muted)]">
+                          No AI models selected. Click a model below to add the first primary model.
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {activeKeys.map((key, index) => {
+                            const model = orchestratorModels.find(
+                              (candidate) => `${candidate.providerId}::${candidate.modelId}` === key
+                            );
+                            const [providerId, ...modelParts] = key.split('::');
+                            const modelId = modelParts.join('::');
+                            const info = model ? getModelStatusInfo(model) : null;
+
+                            return (
+                              <div
+                                key={key}
+                                className="flex items-center gap-3 p-3 rounded-lg bg-[var(--db-bg-canvas)] border border-[var(--db-purple-500)]/30"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked
+                                  onChange={() => handleRemoveFallbackModel(taskId, key)}
+                                  className="w-4 h-4 accent-[var(--db-purple-500)] cursor-pointer shrink-0"
+                                  aria-label={`Remove ${model?.displayName || modelId} from route`}
+                                />
+
+                                <div className="w-7 text-center text-xs font-mono text-[var(--db-text-muted)]">
+                                  {index + 1}
+                                </div>
+
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-xs font-bold text-[var(--db-text-primary)]">
+                                      {model?.displayName || modelId}
+                                    </span>
+                                    {index === 0 ? (
+                                      <Badge variant="purple" size="sm">PRIMARY</Badge>
+                                    ) : (
+                                      <Badge variant="stone" size="sm">FALLBACK {index}</Badge>
+                                    )}
+                                    {info && <Badge variant={info.variant} size="sm">{info.label}</Badge>}
+                                  </div>
+                                  <div className="text-[10px] text-[var(--db-text-muted)] mt-0.5 font-mono">
+                                    {getProviderDisplayName(providerId)} • {model?.modelId || modelId}
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <button
+                                    type="button"
+                                    disabled={index === 0}
+                                    onClick={() => handleReorderFallbackModel(taskId, index, 'up')}
+                                    className="w-7 h-7 rounded border border-[var(--db-border-default)] text-xs text-[var(--db-text-secondary)] hover:text-white disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+                                    title="Move up"
+                                  >
+                                    ↑
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={index === activeKeys.length - 1}
+                                    onClick={() => handleReorderFallbackModel(taskId, index, 'down')}
+                                    className="w-7 h-7 rounded border border-[var(--db-border-default)] text-xs text-[var(--db-text-secondary)] hover:text-white disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed"
+                                    title="Move down"
+                                  >
+                                    ↓
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveFallbackModel(taskId, key)}
+                                    className="w-7 h-7 rounded border border-rose-900/60 text-xs text-rose-300 hover:text-rose-200 cursor-pointer"
+                                    title="Remove from route"
+                                  >
+                                    ×
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </section>
+
+                    <section className="space-y-4">
+                      <div>
+                        <h4 className="text-xs font-semibold text-[var(--db-text-secondary)] uppercase tracking-wider">
+                          Available Models
+                        </h4>
+                        <p className="text-[10px] text-[var(--db-text-muted)] mt-1">
+                          Click any model to add it to the bottom of this task's fallback route.
+                        </p>
+                      </div>
+
+                      {providersSorted.length === 0 ? (
+                        <div className="p-5 rounded-lg border border-dashed border-[var(--db-border-default)] text-center text-xs text-[var(--db-text-muted)]">
+                          No models match your search for this task.
+                        </div>
+                      ) : (
+                        providersSorted.map((provider) => (
+                          <div key={provider} className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <h5 className="text-xs font-bold text-[var(--db-text-primary)]">{provider}</h5>
+                              <Badge variant="stone" size="sm">{grouped[provider].length}</Badge>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                              {grouped[provider].map((model) => {
+                                const fullKey = `${model.providerId}::${model.modelId}`;
+                                const info = getModelStatusInfo(model);
+
+                                return (
+                                  <button
+                                    key={fullKey}
+                                    type="button"
+                                    onClick={() => handleAddFallbackModel(taskId, fullKey)}
+                                    className="text-left flex items-center justify-between gap-3 p-3 rounded-lg bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] hover:border-[var(--db-purple-500)]/60 cursor-pointer transition-colors"
+                                  >
+                                    <div className="min-w-0">
+                                      <div className="text-xs font-semibold text-[var(--db-text-primary)] truncate">
+                                        {model.displayName || model.modelId}
+                                      </div>
+                                      <div className="text-[10px] text-[var(--db-text-muted)] font-mono truncate mt-0.5">
+                                        {model.modelId}
+                                      </div>
+                                      <div className="text-[10px] text-[var(--db-text-muted)] mt-1">
+                                        {getProviderDisplayName(model.providerId)}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      <Badge variant={info.variant} size="sm">{info.label}</Badge>
+                                      <span className="text-[var(--db-purple-300)] text-lg">+</span>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </section>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}

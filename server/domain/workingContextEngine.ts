@@ -666,7 +666,18 @@ export class WorkingContextEngine {
       : (Array.isArray(run.protagonist?.condition?.forms) && run.protagonist.condition.forms.length > 0
         ? [`Form: ${run.protagonist.condition.forms[0]}`]
         : []);
-    const conditionList = [...injuryStrings, ...formStrings];
+    const conditionEngine = repo.getConditionEngine(storyId);
+    const canonicalConditionState = player
+      ? conditionEngine.getActorState(player.actorId)
+      : undefined;
+    const activeConditionStrings = canonicalConditionState?.instances.map(
+      (instance) => `${instance.name} (severity ${instance.severity}, intensity ${instance.intensity})`
+    ) || [];
+    const conditionList = Array.from(new Set([
+      ...injuryStrings,
+      ...formStrings,
+      ...activeConditionStrings,
+    ]));
 
     // 4. Capabilities & Equipment
     const actorId = player?.actorId || `player_actor_${storyId}`;

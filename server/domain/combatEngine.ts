@@ -1,5 +1,6 @@
 import { WorldTimestamp } from './types';
 import { PendingActivationState } from './capabilityEngine';
+import { ConditionEngine } from './conditionEngine';
 
 export interface RollRecord {
   rollId: string;
@@ -232,8 +233,11 @@ export interface BattlefieldParticipant {
   speedCells: number; // Cells per turn
   attackBonus: number;
   damageFormula: string;
+  damageType?: string;
   conditions: string[];
   isDead: boolean;
+  damageProfile?: import('../../src/types').CharacterDamageProfile;
+  conditionProfile?: import('../../src/types').CharacterConditionProfile;
 }
 
 export interface DynamicHazardZone {
@@ -309,9 +313,11 @@ export class TacticalCombatEngine {
   private currentRound = 1;
   private eventLog: BattleEvent[] = [];
   private pendingActivations: Map<string, PendingActivationState> = new Map();
+  private conditionEngine?: ConditionEngine;
 
-  constructor(seed = 1337, ruleset?: IRulesetAdapter) {
+  constructor(seed = 1337, ruleset?: IRulesetAdapter, conditionEngine?: ConditionEngine) {
     this.diceEngine = new LocalDiceEngine(seed);
+    this.conditionEngine = conditionEngine;
     if (ruleset) {
       this.ruleset = ruleset;
     }
@@ -431,9 +437,29 @@ export class TacticalCombatEngine {
   }
 
   public addParticipant(p: BattlefieldParticipant): void {
-    this.participants.set(p.id, { ...p });
-    if (!this.turnQueue.includes(p.id)) {
-      this.turnQueue.push(p.id);
+    const participant = { ...p };
+    if (this.conditionEngine) {
+      const existing = this.conditionEngine.getActorState(participant.id);
+      if (!existing) {
+        this.conditionEngine.seedActor(participant.id, {
+          healthCurrent: participant.hpCurrent,
+          healthMax: participant.hpMax,
+          damageProfile: participant.damageProfile,
+          conditionProfile: participant.conditionProfile,
+          legacyConditions: participant.conditions,
+        });
+      } else {
+        participant.hpCurrent = existing.healthCurrent;
+        participant.hpMax = existing.healthMax;
+        participant.isDead = existing.dead;
+        participant.damageProfile = existing.damageProfile;
+        participant.conditionProfile = existing.conditionProfile;
+        participant.conditions = existing.instances.map((instance) => instance.name);
+      }
+    }
+    this.participants.set(participant.id, participant);
+    if (!this.turnQueue.includes(participant.id)) {
+      this.turnQueue.push(participant.id);
     }
   }
 
@@ -700,6 +726,7 @@ export class TacticalCombatEngine {
       overrideFormula?: string;
       advantage?: boolean;
       disadvantage?: boolean;
+      damageType?: string;
     }
   ): {
     hits: boolean;
@@ -727,14 +754,31 @@ export class TacticalCombatEngine {
       const formula = options?.overrideFormula || attacker.damageFormula;
       const dmgRes = this.ruleset.resolveDamage(formula, attackRes.isCritical, this.diceEngine);
       damage = dmgRes.totalDamage;
-      target.hpCurrent = Math.max(0, target.hpCurrent - damage);
-      if (target.hpCurrent === 0) {
-        target.isDead = true;
-        targetDied = true;
-        if (!target.conditions.includes('Dead')) {
+      if (this.conditionEngine?.getActorState(targetId)) {
+        const resolvedDamage = this.conditionEngine.resolveDamage(
+          targetId,
+          damage,
+          options?.damageType || attacker.damageType || 'slashing'
+        );
+        damage = resolvedDamage.finalAmount;
+        target.hpCurrent = resolvedDamage.healthCurrent;
+        target.isDead = resolvedDamage.targetDied;
+        const conditionState = this.conditionEngine.getActorState(targetId);
+        target.conditions = conditionState?.instances.map((instance) => instance.name) || [];
+        if (target.isDead && !target.conditions.includes('Dead')) {
           target.conditions.push('Dead');
         }
+      } else {
+        target.hpCurrent = Math.max(0, target.hpCurrent - damage);
+        if (target.hpCurrent === 0) {
+          target.isDead = true;
+          targetDied = true;
+          if (!target.conditions.includes('Dead')) {
+            target.conditions.push('Dead');
+          }
+        }
       }
+      targetDied = target.isDead || target.hpCurrent <= 0;
 
       // Interrupt pending activation on taking damage
       if (damage > 0 && this.pendingActivations.has(targetId)) {
@@ -853,19 +897,37 @@ export class TacticalCombatEngine {
       }
     }
 
-    // Apply target damage resistance if applicable
-    if (params.damageType && target.resistances?.includes(params.damageType)) {
-      damage = Math.floor(damage / 2);
-      saveStatusText += ` [Resisted ${params.damageType}]`;
-    }
-
-    target.hpCurrent = Math.max(0, target.hpCurrent - damage);
     let targetDied = false;
-    if (target.hpCurrent === 0) {
-      target.isDead = true;
-      targetDied = true;
-      if (!target.conditions.includes('Dead')) {
+    if (this.conditionEngine?.getActorState(params.targetId)) {
+      const resolvedDamage = this.conditionEngine.resolveDamage(
+        params.targetId,
+        damage,
+        params.damageType || 'force'
+      );
+      damage = resolvedDamage.finalAmount;
+      target.hpCurrent = resolvedDamage.healthCurrent;
+      target.isDead = resolvedDamage.targetDied;
+      const conditionState = this.conditionEngine.getActorState(params.targetId);
+      target.conditions = conditionState?.instances.map((instance) => instance.name) || [];
+      if (resolvedDamage.immune) saveStatusText += ` [Immune to ${params.damageType || 'force'}]`;
+      else if (resolvedDamage.resisted) saveStatusText += ` [Resisted ${params.damageType || 'force'}]`;
+      else if (resolvedDamage.vulnerable) saveStatusText += ` [Vulnerable to ${params.damageType || 'force'}]`;
+      targetDied = resolvedDamage.targetDied;
+      if (targetDied && !target.conditions.includes('Dead')) {
         target.conditions.push('Dead');
+      }
+    } else {
+      if (params.damageType && target.resistances?.includes(params.damageType)) {
+        damage = Math.floor(damage / 2);
+        saveStatusText += ` [Resisted ${params.damageType}]`;
+      }
+      target.hpCurrent = Math.max(0, target.hpCurrent - damage);
+      if (target.hpCurrent === 0) {
+        target.isDead = true;
+        targetDied = true;
+        if (!target.conditions.includes('Dead')) {
+          target.conditions.push('Dead');
+        }
       }
     }
 
@@ -939,32 +1001,83 @@ export class TacticalCombatEngine {
       this.hazards = this.hazards.filter((h) => h.durationTurns > 0);
     }
 
-    // Process hazard zone ticking for actors
+    // Process canonical condition ticks first, then environmental hazards.
     const hazardEvents: BattleEvent[] = [];
     const currentActor = this.getCurrentActor();
     if (currentActor && !currentActor.isDead) {
-      for (const hazard of this.hazards) {
-        const dist = Math.hypot(currentActor.x - hazard.x, currentActor.y - hazard.y);
-        if (dist <= hazard.radiusCells) {
-          currentActor.hpCurrent = Math.max(0, currentActor.hpCurrent - hazard.damagePerTurn);
-          if (currentActor.hpCurrent === 0) {
-            currentActor.isDead = true;
-            if (!currentActor.conditions.includes('Dead')) {
-              currentActor.conditions.push('Dead');
-            }
+      if (this.conditionEngine) {
+        const conditionTicks = this.conditionEngine.tickActor(
+          currentActor.id,
+          'TURN',
+          this.currentRound
+        );
+        const conditionState = this.conditionEngine.getActorState(currentActor.id);
+        if (conditionState) {
+          currentActor.hpCurrent = conditionState.healthCurrent;
+          currentActor.isDead = conditionState.dead;
+          currentActor.conditions = conditionState.instances.map((instance) => instance.name);
+          if (currentActor.isDead && !currentActor.conditions.includes('Dead')) {
+            currentActor.conditions.push('Dead');
           }
+        }
+        for (const tick of conditionTicks) {
           const event: BattleEvent = {
             turnNumber: this.currentRound,
             actorId: currentActor.id,
             actionType: 'CONDITION_TICK',
-            headline: `${currentActor.name} took ${hazard.damagePerTurn} damage from ${hazard.type}.`,
-            damageInflicted: hazard.damagePerTurn,
+            headline: tick.damage?.finalAmount
+              ? `${currentActor.name} suffered ${tick.damage.finalAmount} ${tick.damage.damageType} damage from ${tick.conditionName}.`
+              : `${currentActor.name}'s ${tick.conditionName} condition progressed.`,
+            damageInflicted: tick.damage?.finalAmount,
+            metadata: {
+              conditionId: tick.conditionId,
+              intensityBefore: tick.intensityBefore,
+              intensityAfter: tick.intensityAfter,
+              notes: tick.notes,
+            },
           };
           this.eventLog.push(event);
           hazardEvents.push(event);
+        }
+      }
 
-          if (hazard.damagePerTurn > 0 && this.pendingActivations.has(currentActor.id)) {
-            this.interruptActivation(currentActor.id, `Damaged for ${hazard.damagePerTurn} points by ${hazard.type}`);
+      if (!currentActor.isDead) {
+        for (const hazard of this.hazards) {
+          const dist = Math.hypot(currentActor.x - hazard.x, currentActor.y - hazard.y);
+          if (dist <= hazard.radiusCells) {
+            const hazardType =
+              hazard.type === 'fire_zone' ? 'fire' :
+              hazard.type === 'ice_patch' ? 'cold' :
+              hazard.type === 'poison_cloud' ? 'poison' : 'custom';
+            let damage = hazard.damagePerTurn;
+            if (this.conditionEngine?.getActorState(currentActor.id)) {
+              const resolved = this.conditionEngine.resolveDamage(currentActor.id, damage, hazardType);
+              damage = resolved.finalAmount;
+              currentActor.hpCurrent = resolved.healthCurrent;
+              currentActor.isDead = resolved.targetDied;
+              const state = this.conditionEngine.getActorState(currentActor.id);
+              currentActor.conditions = state?.instances.map((instance) => instance.name) || [];
+            } else {
+              currentActor.hpCurrent = Math.max(0, currentActor.hpCurrent - damage);
+              currentActor.isDead = currentActor.hpCurrent <= 0;
+            }
+            if (currentActor.isDead && !currentActor.conditions.includes('Dead')) {
+              currentActor.conditions.push('Dead');
+            }
+            const event: BattleEvent = {
+              turnNumber: this.currentRound,
+              actorId: currentActor.id,
+              actionType: 'CONDITION_TICK',
+              headline: `${currentActor.name} took ${damage} damage from ${hazard.type}.`,
+              damageInflicted: damage,
+              metadata: { damageType: hazardType },
+            };
+            this.eventLog.push(event);
+            hazardEvents.push(event);
+
+            if (damage > 0 && this.pendingActivations.has(currentActor.id)) {
+              this.interruptActivation(currentActor.id, `Damaged for ${damage} points by ${hazard.type}`);
+            }
           }
         }
       }

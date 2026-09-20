@@ -688,7 +688,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
       </div>
 
       {/* Main Workspace Body */}
-      <div className="flex-1 max-w-6xl w-full mx-auto p-6 flex flex-col gap-6">
+      <div className="flex-1 max-w-6xl w-full mx-auto p-4 sm:p-6 flex flex-col gap-6 min-w-0">
         {/* World Selection View if no world selected */}
         {!selectedWorld && (
           <div className="p-8 rounded-xl bg-neutral-950 border border-neutral-800 text-center max-w-xl mx-auto space-y-4 my-auto">
@@ -1712,28 +1712,28 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
                 {/* Visual Avatar Card */}
-                <div className="p-6 rounded-xl bg-neutral-900 border border-neutral-800 flex flex-col items-center text-center space-y-4">
-                  <div className="w-32 h-32 rounded-2xl bg-neutral-950 border-2 border-indigo-500/40 flex items-center justify-center overflow-hidden shadow-inner relative">
+                <div className="min-w-0 max-w-full p-6 rounded-xl bg-neutral-900 border border-neutral-800 flex flex-col items-center text-center space-y-4 overflow-hidden">
+                  <div className="w-32 h-32 max-w-full max-h-32 shrink-0 rounded-2xl bg-neutral-950 border-2 border-indigo-500/40 flex items-center justify-center overflow-hidden shadow-inner relative">
                     {draft.portraitAsset?.imageUrl ? (
                       <img
                         src={draft.portraitAsset.imageUrl}
                         alt={draft.identity.name}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full max-w-full max-h-full object-cover"
                       />
                     ) : (
-                      <div className="text-5xl">{draft.portraitAsset?.emoji || '👤'}</div>
+                      <div className="text-5xl select-none">{draft.portraitAsset?.emoji || '👤'}</div>
                     )}
                   </div>
 
-                  <div>
-                    <h3 className="text-base font-semibold text-white">{draft.identity.name}</h3>
-                    <p className="text-xs text-neutral-400">
+                  <div className="w-full max-w-full min-w-0 px-2 overflow-hidden">
+                    <h3 className="text-base font-semibold text-white truncate max-w-full">{draft.identity.name}</h3>
+                    <p className="text-xs text-neutral-400 break-words">
                       {draft.identity.species} {draft.role.profession}
                     </p>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-2 pt-2">
-                    <label className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs cursor-pointer">
+                  <div className="flex flex-wrap items-center justify-center gap-2 pt-2 max-w-full">
+                    <label className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs cursor-pointer shrink-0">
                       Upload
                       <input
                         type="file"
@@ -1765,14 +1765,14 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                         ...draft,
                         portraitAsset: { ...draft.portraitAsset!, pinned: !draft.portraitAsset?.pinned },
                       })}
-                      className={`px-3 py-1.5 rounded-lg text-xs ${draft.portraitAsset?.pinned ? 'bg-indigo-700' : 'bg-neutral-800'}`}
+                      className={`px-3 py-1.5 rounded-lg text-xs shrink-0 ${draft.portraitAsset?.pinned ? 'bg-indigo-700' : 'bg-neutral-800'}`}
                     >
                       {draft.portraitAsset?.pinned ? 'Pinned' : 'Pin Portrait'}
                     </button>
                   </div>
 
                   {/* Emoji Selector */}
-                  <div className="flex items-center gap-2 pt-2">
+                  <div className="flex flex-wrap items-center justify-center gap-2 pt-2 max-w-full">
                     {['🧙‍♂️', '⚔️', '🗡️', '🏹', '✨', '🤖', '🧝‍♀️', '👤'].map((emoji) => (
                       <button
                         key={emoji}
@@ -1786,7 +1786,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                           });
                           markFieldEdited('portraitAsset');
                         }}
-                        className={`text-xl p-1.5 rounded-lg border transition-colors ${
+                        className={`text-xl p-1.5 rounded-lg border transition-colors shrink-0 ${
                           draft.portraitAsset?.emoji === emoji
                             ? 'bg-indigo-950 border-indigo-500'
                             : 'bg-neutral-950 border-neutral-800 hover:border-neutral-700'
@@ -1799,7 +1799,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 </div>
 
                 {/* Portrait Prompt & Custom URL */}
-                <div className="space-y-4">
+                <div className="space-y-4 min-w-0 max-w-full">
                   <div>
                     <label className="block text-xs font-medium text-neutral-300 mb-1">
                       Synthesized AI Portrait Prompt
@@ -1817,7 +1817,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                         });
                         markFieldEdited('portraitAsset');
                       }}
-                      className="w-full p-3 rounded-lg bg-neutral-900 border border-neutral-700 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono"
+                      className="w-full max-w-full p-3 rounded-lg bg-neutral-900 border border-neutral-700 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono resize-y"
                     />
                   </div>
 
@@ -1825,13 +1825,13 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                     <label className="block text-xs font-medium text-neutral-300">
                       Import Custom Image URL (Optional)
                     </label>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 max-w-full">
                       <input
                         type="text"
                         value={customImageUrl}
                         onChange={(e) => setCustomImageUrl(e.target.value)}
                         placeholder="https://example.com/character.png"
-                        className="flex-1 px-3 py-2 rounded-lg bg-neutral-900 border border-neutral-700 text-xs text-white focus:outline-none focus:border-indigo-500"
+                        className="flex-1 min-w-0 w-full px-3 py-2 rounded-lg bg-neutral-900 border border-neutral-700 text-xs text-white focus:outline-none focus:border-indigo-500"
                       />
                       <button
                         onClick={() => {
@@ -1847,7 +1847,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                           });
                           markFieldEdited('portraitAsset');
                         }}
-                        className="px-3 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-white"
+                        className="shrink-0 px-3 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-white whitespace-nowrap"
                       >
                         Apply
                       </button>
@@ -1858,14 +1858,14 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                     <button
                       onClick={handleGeneratePortrait}
                       disabled={isGeneratingPortrait}
-                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-xs font-medium text-white transition-colors"
+                      className="max-w-full flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-xs font-medium text-white transition-colors"
                     >
                       {isGeneratingPortrait ? (
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
                       ) : (
-                        <Sparkles className="w-3.5 h-3.5" />
+                        <Sparkles className="w-3.5 h-3.5 shrink-0" />
                       )}
-                      <span>Synthesize Portrait via Presentation Adapter</span>
+                      <span className="break-words text-left">Synthesize Portrait via Presentation Adapter</span>
                     </button>
                   </div>
                 </div>

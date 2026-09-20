@@ -355,7 +355,8 @@ Return ONLY one JSON object matching this contract:
     "constitution": number,
     "intelligence": number,
     "wisdom": number,
-    "charisma": number
+    "charisma": number,
+    "savingThrowProficiencies": ["Strength" | "Dexterity" | "Constitution" | "Intelligence" | "Wisdom" | "Charisma"]
   },
   "aiExtractionSummary": {
     "interpretation": string,
@@ -926,6 +927,11 @@ Rules:
           intelligence: clampAbility(rawCore.intelligence),
           wisdom: clampAbility(rawCore.wisdom),
           charisma: clampAbility(rawCore.charisma),
+          savingThrowProficiencies: Array.isArray(rawCore.savingThrowProficiencies)
+            ? rawCore.savingThrowProficiencies.filter((ability: any) =>
+                ['Strength','Dexterity','Constitution','Intelligence','Wisdom','Charisma'].includes(ability)
+              )
+            : [],
         };
 
     const draft: CharacterGenesisDraft = {

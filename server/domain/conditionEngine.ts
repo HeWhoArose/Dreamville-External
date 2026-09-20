@@ -760,7 +760,7 @@ export class ConditionEngine {
       'Blinded',
       'Charmed',
       'Deafened',
-      'Exhausted',
+      'Exhaustion',
       'Frightened',
       'Grappled',
       'Incapacitated',

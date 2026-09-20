@@ -115,3 +115,53 @@ test('Character Genesis narrative role modes', async (t) => {
     }
   });
 });
+
+test('Character Genesis does not silently use deterministic fallback before player consent', async () => {
+  const repository = worldRepository as any;
+  const original = repository.getAiOrchestrator;
+  repository.getAiOrchestrator = () => ({
+    executeTaskGeneration: async () => ({
+      text: '',
+      source: 'DETERMINISTIC_FALLBACK',
+      providerId: 'none',
+      modelId: 'none',
+      attempts: 1,
+      fallbackReason: 'No AI provider returned a usable response.',
+    }),
+  });
+
+  try {
+    await assert.rejects(
+      () =>
+        characterGenesisService.extractCharacterDraft(
+          {
+            naturalLanguageConcept: 'A shinobi carrying a strange device.',
+            worldId: world.worldId,
+          },
+          world
+        ),
+      (error: any) => {
+        assert.equal(error?.code, 'AI_UNAVAILABLE');
+        assert.equal(error?.requiresDeterministicConfirmation, true);
+        return true;
+      }
+    );
+
+    const draft = await characterGenesisService.extractCharacterDraft(
+      {
+        naturalLanguageConcept: 'A shinobi carrying a strange device.',
+        worldId: world.worldId,
+        allowDeterministicFallback: true,
+      },
+      world
+    );
+
+    assert.equal(draft.aiExtractionSummary?.generationSource, 'DETERMINISTIC_FALLBACK');
+    assert.match(
+      draft.aiExtractionSummary?.interpretation || '',
+      /AI extraction unavailable/i
+    );
+  } finally {
+    repository.getAiOrchestrator = original;
+  }
+});

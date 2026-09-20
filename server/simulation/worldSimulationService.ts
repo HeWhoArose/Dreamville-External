@@ -203,6 +203,63 @@ export class WorldSimulationService {
       geography,
     });
 
+    // Condition authority advances with canonical world time. This covers persistent
+    // poisons, regeneration, curses, self-burning and other non-combat effects.
+    const conditionEngine = this.worldRepo.getConditionEngine(storyId);
+    const currentPlayer = this.worldRepo.getPlayerLifecycle(storyId);
+    if (currentPlayer) {
+      const conditionEvents = conditionEngine.tickActor(
+        currentPlayer.actorId,
+        'WORLD_TIME',
+        currentElapsed
+      );
+      const conditionState = conditionEngine.getActorState(currentPlayer.actorId);
+      if (conditionState) {
+        const capabilityEngine = this.worldRepo.getCapabilityEngine(storyId);
+        const powerState = capabilityEngine.getPowerState(currentPlayer.actorId);
+        if (powerState) {
+          capabilityEngine.setPowerState(currentPlayer.actorId, {
+            ...powerState,
+            healthCurrent: conditionState.healthCurrent,
+            healthMax: conditionState.healthMax,
+          });
+        }
+
+        if (conditionState.dead && !currentPlayer.isDead) {
+          this.worldRepo.updatePlayerLifecycle(storyId, currentPlayer.copyWith({
+            deathRecord: {
+              isDead: true,
+              diedAtTimestamp: updatedClockState.timestamp,
+              cause: 'A persistent condition reached a terminal state.',
+              revivalPossible: true,
+            },
+          }));
+        }
+      }
+
+      // Condition events are canonical state changes; the chronicle can later expose
+      // them to narrative presentation without allowing the narrator to invent them.
+      if (conditionEvents.length > 0) {
+        const chronicle = this.worldRepo.getHistoricalChronicleEngine(storyId);
+        for (const event of conditionEvents) {
+          chronicle.recordEvidence({
+            id: 'ev_condition_tick_' + storyId + '_' + currentElapsed + '_' + event.conditionId,
+            category: 'INJURY_OR_RECOVERY',
+            timestamp: updatedClockState.timestamp,
+            primarySubjectId: currentPlayer.actorId,
+            locationId: currentPlayer.locationId,
+            summary: event.damage?.finalAmount
+              ? event.conditionName + ' caused ' + event.damage.finalAmount + ' ' + event.damage.damageType + ' damage.'
+              : event.conditionName + ' progressed or recovered.',
+            details: event.notes.join(' '),
+            sourceEventId: event.conditionId,
+            provenance: 'condition_engine',
+            visibility: 'PUBLIC',
+          });
+        }
+      }
+    }
+
     // Evaluate StoryRun Planned World Events (Slice 7 Living World Timeline Execution)
     const run = this.worldRepo.getStoryRun(storyId);
     if (run && run.plannedEvents && Array.isArray(run.plannedEvents)) {

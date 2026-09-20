@@ -107,6 +107,9 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
   const [isExtracting, setIsExtracting] = useState<boolean>(false);
   const [extractionError, setExtractionError] = useState<string | null>(null);
   const [deterministicFallbackPrompt, setDeterministicFallbackPrompt] = useState<{ reason: string } | null>(null);
+  const [extractionActivity, setExtractionActivity] = useState<string | null>(null);
+  const [extractionModel, setExtractionModel] = useState<string | null>(null);
+  const [extractionElapsedSeconds, setExtractionElapsedSeconds] = useState(0);
 
   // The active Draft
   const [draft, setDraft] = useState<CharacterGenesisDraft | null>(null);
@@ -372,6 +375,18 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
     setSaveDraftStatus('Restored revision ' + revision + '. Review before confirming.');
   };
 
+  useEffect(() => {
+    if (!isExtracting) return;
+    const startedAt = Date.now();
+    setExtractionElapsedSeconds(0);
+
+    const timer = window.setInterval(() => {
+      setExtractionElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [isExtracting]);
+
   // 1. Natural Language Extraction Handler
   // The first attempt may only use AI. Deterministic extraction requires an explicit
   // player decision after DreamBook reports that no usable AI result is available.
@@ -387,9 +402,50 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
 
     setExtractionError(null);
     setDeterministicFallbackPrompt(null);
+    setExtractionElapsedSeconds(0);
+    setExtractionModel(null);
+    setExtractionActivity(
+      allowDeterministicFallback
+        ? 'Building the deterministic draft you explicitly requested...'
+        : 'Preparing the Character Genesis extraction...'
+    );
     setIsExtracting(true);
 
     try {
+      if (!allowDeterministicFallback) {
+        try {
+          const selection = await apiClient.selectOrchestratorModel({
+            task: 'narrative.generate',
+            contextTokens: Math.max(1000, Math.ceil((naturalConcept.length + 5000) / 4)),
+          });
+          const selected = selection?.selectedModel;
+          if (selected && !selected.isEmergencyFloor) {
+            const modelName = selected.displayName || selected.modelId;
+            const fallbackCount = Array.isArray(selection.fallbacks)
+              ? selection.fallbacks.filter((model: any) => !model?.isEmergencyFloor).length
+              : 0;
+            setExtractionModel(modelName);
+            setExtractionActivity(
+              fallbackCount > 0
+                ? `Contacting ${modelName} • ${fallbackCount} AI fallback model(s) available`
+                : `Contacting ${modelName}`
+            );
+          } else {
+            setExtractionActivity('Checking AI availability...');
+          }
+        } catch {
+          setExtractionActivity('Contacting the configured AI model...');
+        }
+      }
+
+      setExtractionActivity(
+        allowDeterministicFallback
+          ? 'Building the deterministic character draft...'
+          : extractionModel
+          ? `Waiting for ${extractionModel} to return the character interpretation...`
+          : 'Waiting for the AI model to return the character interpretation...'
+      );
+
       const res = await apiClient.extractCharacterFromConcept(
         selectedWorld.worldId,
         naturalConcept,
@@ -399,16 +455,24 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
         allowDeterministicFallback
       );
 
+      setExtractionActivity(
+        allowDeterministicFallback
+          ? 'Assembling the deterministic character dossier...'
+          : 'AI response received • validating the structured Character Genesis response...'
+      );
+
       if (res.success && res.draft) {
         setDraft(res.draft);
         setSelectedNarrativeRole(res.draft.storyMode || 'PROTAGONIST');
-        setActiveStep(2); // Advance to dossier review
+        setExtractionActivity('Character extraction complete • opening the dossier for review.');
+        setActiveStep(2);
       } else {
         throw new Error(res.error || 'Failed to extract character draft.');
       }
     } catch (err: any) {
       if (err?.requiresDeterministicConfirmation) {
         setExtractionError(null);
+        setExtractionActivity('AI providers did not return a usable response.');
         setDeterministicFallbackPrompt({
           reason:
             err?.reason ||
@@ -416,6 +480,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
             'AI providers did not return a usable character extraction.',
         });
       } else {
+        setExtractionActivity(null);
         setExtractionError(err?.message || 'An error occurred during character extraction.');
       }
     } finally {
@@ -804,6 +869,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                   <span className="text-xs text-neutral-400">Quick Inspirations:</span>
                   {PRESET_CONCEPTS.map((preset) => (
                     <button
+                      type="button"
                       key={preset.label}
                       onClick={() => setNaturalConcept(preset.concept)}
                       className="text-xs px-2.5 py-1 rounded-md bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-neutral-300 hover:text-white transition-colors"
@@ -817,7 +883,8 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
               {draft?.aiExtractionSummary && (
                 <div className="rounded-lg border border-indigo-900/70 bg-indigo-950/30 p-4">
                   <button
-                    onClick={() => setShowInterpretation(!showInterpretation)}
+                    type="button"
+                    onClick={() => setShowInterpretation(!showInterpretation)
                     className="w-full flex items-center justify-between text-left"
                   >
                     <span className="text-xs font-semibold text-indigo-300">AI Interpretation Before Editing</span>
@@ -906,6 +973,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 </div>
 
                 <button
+                  type="button"
                   id="btn-extract-character"
                   onClick={() => handleExtractCharacter()}
                   disabled={isExtracting || !naturalConcept.trim() || Boolean(deterministicFallbackPrompt)}
@@ -923,6 +991,25 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                     </>
                   )}
                 </button>
+
+                {isExtracting && (
+                  <div className="mt-3 w-full max-w-xl rounded-lg border border-indigo-900/70 bg-indigo-950/25 px-3 py-2.5">
+                    <div className="flex items-center gap-2 text-xs text-indigo-200">
+                      <span className="inline-flex items-center gap-1">
+                        <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-pulse" />
+                        <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-pulse [animation-delay:150ms]" />
+                        <span className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-pulse [animation-delay:300ms]" />
+                      </span>
+                      <span>{extractionActivity || 'Working on your character...'}</span>
+                      <span className="ml-auto text-[10px] text-indigo-300/70">{extractionElapsedSeconds}s</span>
+                    </div>
+                    {extractionModel && (
+                      <div className="mt-1 text-[10px] text-neutral-400">
+                        Active AI model: <span className="font-mono text-neutral-300">{extractionModel}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 

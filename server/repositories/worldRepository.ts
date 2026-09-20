@@ -1211,7 +1211,7 @@ export class InMemoryWorldRepository implements WorldRepository {
   public getCapabilityEngine(storyId: string): CapabilityEngine {
     let engine = this.capabilityEngines.get(storyId);
     if (!engine) {
-      engine = new CapabilityEngine();
+      engine = new CapabilityEngine(this.getConditionEngine(storyId));
       const player = this.getPlayerLifecycle(storyId);
       const actorId = player ? player.actorId : `player_actor_${storyId}`;
       engine.seedStarterPowerStateForActor(actorId);

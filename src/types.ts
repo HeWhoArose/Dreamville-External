@@ -1299,6 +1299,7 @@ export interface CharacterConditionDefinition {
 
 export interface CharacterStartingConditionState {
   instances: CharacterConditionInstance[];
+  customDefinitions?: CharacterConditionDefinition[];
   damageProfile: CharacterDamageProfile;
   conditionProfile: CharacterConditionProfile;
   bodyRegions: CharacterBodyRegionState[];

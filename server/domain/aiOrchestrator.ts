@@ -1107,7 +1107,7 @@ export class GoogleGeminiAdapter implements IProviderAdapter {
         });
 
         const targetModel = options?.modelId || 'gemini-2.5-flash';
-        const systemPrompt = `You are the Dreamville canonical narrator. Produce ONLY a valid JSON turn package matching this exact schema:
+        const defaultSystemPrompt = `You are the Dreamville canonical narrator. Produce ONLY a valid JSON turn package matching this exact schema:
 {
   "narrative": ["text describing world events"],
   "dialogue": [{"speaker": "string", "text": "string"}],
@@ -1117,9 +1117,9 @@ export class GoogleGeminiAdapter implements IProviderAdapter {
   "audioCues": ["string"]
 }
 Do not enclose in markdown ticks, output pure JSON.`;
+        const systemPrompt = options?.systemInstruction || defaultSystemPrompt;
 
-        
-        let reqConfig = {
+        let reqConfig: Record<string, any> = {
           systemInstruction: systemPrompt,
           responseMimeType: 'application/json',
         };

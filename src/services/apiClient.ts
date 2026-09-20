@@ -1758,6 +1758,7 @@ class ApiClient {
     assetId?: string;
     aspectRatio?: string;
     tags?: string[];
+    slotType?: import('../components/common/imageAssetTypes').ImageAssetSlotType;
   }): Promise<{ success: boolean; imageUrl?: string; isFallback?: boolean; promptFallback?: string; errorReason?: string }> {
     const res = await fetch(`${this.baseUrl}/media/generate-image`, {
       method: 'POST',

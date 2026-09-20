@@ -124,9 +124,22 @@ test('stopping Living Flame starts regeneration and recovery ticks heal', () => 
 test('elapsed WORLD_TIME advances all missed condition ticks', () => {
   const engine = new ConditionEngine();
   seeded(engine);
+  engine.registerDefinition({
+    id: 'timed_poison',
+    name: 'Timed Poison',
+    description: 'Test condition with canonical world-time ticks.',
+    category: 'TEST',
+    alignment: 'HARMFUL',
+    defaultSeverity: 1,
+    defaultIntensity: 1,
+    tickUnit: 'WORLD_TIME',
+    tickEvery: 60,
+    damagePerTick: 1,
+    damageType: 'poison',
+  });
 
   engine.applyCondition('actor_test', {
-    definitionIdOrName: 'Poisoned',
+    definitionIdOrName: 'Timed Poison',
     nowSeconds: 0,
   });
 

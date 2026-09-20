@@ -46,6 +46,8 @@ export interface IRulesetAdapter {
   resolveSavingThrow(params: {
     saveModifier: number;
     difficultyClass: number;
+    advantage?: boolean;
+    disadvantage?: boolean;
     diceEngine?: LocalDiceEngine;
   }): { roll: RollRecord; succeeds: boolean };
   resolveDamage(
@@ -248,13 +250,25 @@ export class Dnd521RulesetAdapter implements IRulesetAdapter {
   public resolveSavingThrow(params: {
     saveModifier: number;
     difficultyClass: number;
+    advantage?: boolean;
+    disadvantage?: boolean;
     diceEngine?: LocalDiceEngine;
   }): { roll: RollRecord; succeeds: boolean } {
     const dice = params.diceEngine || LocalDiceEngine;
-    const roll = dice.roll('1d20', params.saveModifier);
+    const roll1 = dice.roll('1d20', params.saveModifier);
+    let chosenRoll = roll1;
+
+    if (params.advantage && !params.disadvantage) {
+      const roll2 = dice.roll('1d20', params.saveModifier);
+      chosenRoll = roll2.total > roll1.total ? roll2 : roll1;
+    } else if (params.disadvantage && !params.advantage) {
+      const roll2 = dice.roll('1d20', params.saveModifier);
+      chosenRoll = roll2.total < roll1.total ? roll2 : roll1;
+    }
+
     return {
-      roll,
-      succeeds: roll.total >= params.difficultyClass,
+      roll: chosenRoll,
+      succeeds: chosenRoll.total >= params.difficultyClass,
     };
   }
 
@@ -283,6 +297,8 @@ export class Dnd521RulesetAdapter implements IRulesetAdapter {
   }
 }
 
+export type CoreCombatAction = 'DASH' | 'DODGE' | 'DISENGAGE';
+
 export interface BattlefieldParticipant {
   id: string;
   name: string;
@@ -301,6 +317,8 @@ export interface BattlefieldParticipant {
   damageFormula: string;
   damageType?: string;
   conditions: string[];
+  reachCells?: number;
+  savingThrowModifiers?: Record<string, number>;
   isDead: boolean;
   damageProfile?: import('../../src/types').CharacterDamageProfile;
   conditionProfile?: import('../../src/types').CharacterConditionProfile;
@@ -320,7 +338,7 @@ export interface BattleEvent {
   turnNumber: number;
   actorId: string;
   targetId?: string;
-  actionType: 'MOVE' | 'ATTACK' | 'CAST' | 'CONDITION_TICK' | 'START_ACTIVATION' | 'INTERRUPT';
+  actionType: 'MOVE' | 'ATTACK' | 'CAST' | 'ACTION' | 'CONDITION_TICK' | 'START_ACTIVATION' | 'INTERRUPT';
   headline: string;
   damageInflicted?: number;
   rollRecord?: RollRecord;
@@ -816,6 +834,74 @@ export class TacticalCombatEngine {
     return { success: true };
   }
 
+  public executeCoreAction(
+    actorId: string,
+    action: CoreCombatAction
+  ): {
+    success: boolean;
+    action: CoreCombatAction;
+    errorReason?: string;
+    combatState?: CombatTurnResourceSnapshot;
+  } {
+    const actor = this.participants.get(actorId);
+    if (!actor) {
+      return { success: false, action, errorReason: 'Actor not found.' };
+    }
+
+    const currentActor = this.getCurrentActor();
+    if (!currentActor || currentActor.id !== actorId) {
+      return {
+        success: false,
+        action,
+        errorReason: "It is not this actor's turn.",
+        combatState: this.getTurnResources(actorId),
+      };
+    }
+
+    let result: { success: boolean; errorReason?: string };
+    switch (action) {
+      case 'DASH':
+        result = this.actionEconomy.grantDash(actorId);
+        break;
+      case 'DODGE':
+        result = this.actionEconomy.setDodging(actorId);
+        break;
+      case 'DISENGAGE':
+        result = this.actionEconomy.setDisengaging(actorId);
+        break;
+      default:
+        result = { success: false, errorReason: `Unsupported combat action: ${String(action)}` };
+        break;
+    }
+
+    if (!result.success) {
+      return { success: false, action, errorReason: result.errorReason, combatState: this.getTurnResources(actorId) };
+    }
+
+    const headline =
+      action === 'DASH'
+        ? `${actor.name} took the Dash action.`
+        : action === 'DODGE'
+          ? `${actor.name} took the Dodge action.`
+          : `${actor.name} took the Disengage action.`;
+
+    this.eventLog.push({
+      turnNumber: this.currentRound,
+      actorId,
+      actionType: 'ACTION',
+      headline,
+      metadata: {
+        coreAction: action,
+      },
+    });
+
+    return {
+      success: true,
+      action,
+      combatState: this.getTurnResources(actorId),
+    };
+  }
+
   public executeAttack(
     attackerId: string,
     targetId: string,
@@ -862,11 +948,12 @@ export class TacticalCombatEngine {
       };
     }
 
+    const targetDodging = target.conditions.includes('Dodge') || !!this.actionEconomy.get(targetId)?.dodging;
     const attackRes = this.ruleset.resolveAttack({
       attackBonus: attacker.attackBonus,
       targetArmorClass: target.armorClass,
       advantage: options?.advantage,
-      disadvantage: options?.disadvantage,
+      disadvantage: options?.disadvantage || targetDodging,
       diceEngine: this.diceEngine,
     });
 
@@ -943,6 +1030,8 @@ export class TacticalCombatEngine {
     difficultyClass?: number;
     halfDamageOnSave?: boolean;
     damageType?: string;
+    actionType?: 'action' | 'bonus_action' | 'reaction' | 'free';
+    consumeResource?: boolean;
   }): {
     success: boolean;
     damage: number;
@@ -969,16 +1058,25 @@ export class TacticalCombatEngine {
       };
     }
 
-    const actionResult = this.actionEconomy.consume(params.actorId, 'ACTION');
-    if (!actionResult.success) {
-      return {
-        success: false,
-        damage: 0,
-        targetDied: target.isDead,
-        headline: actionResult.errorReason || 'Action unavailable.',
-        targetHpRemaining: target.hpCurrent,
-        interruptedPendingActivation: false,
-      };
+    const resource =
+      params.actionType === 'bonus_action'
+        ? 'BONUS_ACTION'
+        : params.actionType === 'reaction'
+          ? 'REACTION'
+          : 'ACTION';
+
+    if (params.consumeResource !== false && params.actionType !== 'free') {
+      const actionResult = this.actionEconomy.consume(params.actorId, resource);
+      if (!actionResult.success) {
+        return {
+          success: false,
+          damage: 0,
+          targetDied: target.isDead,
+          headline: actionResult.errorReason || 'Combat resource unavailable.',
+          targetHpRemaining: target.hpCurrent,
+          interruptedPendingActivation: false,
+        };
+      }
     }
 
     // Calculate deterministic base damage
@@ -1013,9 +1111,11 @@ export class TacticalCombatEngine {
       const saveType = params.savingThrowType || 'DEX';
       const saveMod = target.saveModifiers?.[saveType] ?? 0;
       const dc = params.difficultyClass ?? 13;
+      const targetDodging = !!this.actionEconomy.get(params.targetId)?.dodging;
       savingThrowResult = this.ruleset.resolveSavingThrow({
         saveModifier: saveMod,
         difficultyClass: dc,
+        advantage: targetDodging && saveType.toUpperCase() === 'DEX',
         diceEngine: this.diceEngine,
       });
 

@@ -34,6 +34,7 @@ import {
   StartingEquipmentItem,
   WorldTemplate,
   CharacterProvenanceSource,
+  CharacterStoryMode,
 } from '../../types';
 import { apiClient } from '../../services/apiClient';
 
@@ -44,6 +45,28 @@ interface CharacterGenesisViewProps {
   onCancel?: () => void;
   onNavigateToWorldLibrary?: () => void;
 }
+
+const NARRATIVE_ROLE_OPTIONS: Array<{
+  value: CharacterStoryMode;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: 'PROTAGONIST',
+    label: 'Protagonist',
+    description: 'You are the central character. The main campaign and opening arc are built around your character.',
+  },
+  {
+    value: 'SIDE_CHARACTER',
+    label: 'Side Character',
+    description: 'You play a character inside a larger story. Major protagonists and world events can continue without revolving around you.',
+  },
+  {
+    value: 'FREE_ROAM',
+    label: 'Free Roam',
+    description: 'You are an independent character in an open sandbox. No predetermined hero arc is forced onto you.',
+  },
+];
 
 const PRESET_CONCEPTS = [
   {
@@ -80,6 +103,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
 
   // Concept & draft state
   const [naturalConcept, setNaturalConcept] = useState<string>('');
+  const [selectedNarrativeRole, setSelectedNarrativeRole] = useState<CharacterStoryMode>('PROTAGONIST');
   const [isExtracting, setIsExtracting] = useState<boolean>(false);
   const [extractionError, setExtractionError] = useState<string | null>(null);
 
@@ -306,7 +330,13 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
         (mode === 'SURPRISE_ME'
           ? 'Surprise the player with a coherent but unexpected starting location and dramatic situation.'
           : 'Suggest the most narratively coherent starting location and situation for this character and world.');
-      const res = await apiClient.extractCharacterFromConcept(selectedWorld.worldId, concept, draft, locked);
+      const res = await apiClient.extractCharacterFromConcept(
+        selectedWorld.worldId,
+        concept,
+        draft,
+        locked,
+        draft.storyMode || selectedNarrativeRole
+      );
       if (res.success && res.draft) {
         setDraft({
           ...draft,
@@ -360,7 +390,8 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
         selectedWorld.worldId,
         naturalConcept,
         draft || undefined,
-        Array.from(userEditedFields)
+        Array.from(userEditedFields),
+        selectedNarrativeRole
       );
 
       if (res.success && res.draft) {
@@ -548,7 +579,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
     try {
       const res = await apiClient.startWorldRun(selectedWorld.worldId, {
         confirmedCharacter,
-        storyMode: 'PROTAGONIST',
+        storyMode: confirmedCharacter.storyMode || 'PROTAGONIST',
       });
       if (res.success && res.storyId) {
         if (onStartStoryRun) {
@@ -758,6 +789,49 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                       {preset.label}
                     </button>
                   ))}
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4 space-y-3">
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-200">Narrative Role</label>
+                  <p className="text-xs text-neutral-500 mt-1">
+                    This controls how the campaign treats your character. It is separate from their in-world profession or archetype.
+                  </p>
+                </div>
+                <select
+                  value={draft?.storyMode || selectedNarrativeRole}
+                  onChange={(e) => {
+                    const mode = e.target.value as CharacterStoryMode;
+                    setSelectedNarrativeRole(mode);
+                    setDraft((prev) => prev ? {
+                      ...prev,
+                      storyMode: mode,
+                      role: {
+                        ...prev.role,
+                        role: mode === 'PROTAGONIST'
+                          ? 'Protagonist'
+                          : mode === 'SIDE_CHARACTER'
+                          ? 'Side Character'
+                          : 'Free Roam',
+                      },
+                      provenance: {
+                        ...prev.provenance,
+                        role: 'USER_EDITED',
+                      },
+                      fieldLocks: Array.from(new Set([...(prev.fieldLocks || []), 'storyMode', 'role'])),
+                    } : prev);
+                  }}
+                  className="w-full px-3 py-2.5 rounded-lg bg-neutral-950 border border-neutral-700 text-sm text-white focus:outline-none focus:border-indigo-500"
+                >
+                  {NARRATIVE_ROLE_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <div className="text-xs text-neutral-400">
+                  {NARRATIVE_ROLE_OPTIONS.find((option) => option.value === (draft?.storyMode || selectedNarrativeRole))?.description}
                 </div>
               </div>
 
@@ -1010,18 +1084,36 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-neutral-300 mb-1">Narrative Role</label>
-                    <input
-                      type="text"
-                      value={draft.role.role}
+                    <select
+                      value={draft.storyMode || 'PROTAGONIST'}
                       onChange={(e) => {
+                        const mode = e.target.value as CharacterStoryMode;
+                        const roleLabel =
+                          mode === 'PROTAGONIST'
+                            ? 'Protagonist'
+                            : mode === 'SIDE_CHARACTER'
+                            ? 'Side Character'
+                            : 'Free Roam';
+                        setSelectedNarrativeRole(mode);
                         setDraft({
                           ...draft,
-                          role: { ...draft.role, role: e.target.value },
+                          storyMode: mode,
+                          role: { ...draft.role, role: roleLabel },
+                          provenance: {
+                            ...draft.provenance,
+                            role: 'USER_EDITED',
+                          },
+                          fieldLocks: Array.from(new Set([...(draft.fieldLocks || []), 'storyMode', 'role'])),
                         });
-                        markFieldEdited('role');
                       }}
                       className="w-full px-3 py-2 rounded-lg bg-neutral-900 border border-neutral-700 text-sm text-white focus:outline-none focus:border-indigo-500"
-                    />
+                    >
+                      {NARRATIVE_ROLE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               </div>

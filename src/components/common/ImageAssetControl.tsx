@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { Button } from './Button';
 import { Badge } from './Badge';
 import { ImageAssetMeta, compileProviderNeutralPrompt } from './imageAssetTypes';
+import { getImageAssetSpec } from '../../data/imageAssetSpecs';
+import { normalizeImageFile, normalizeImageUrl } from '../../utils/imageAssetNormalizer';
+import { apiClient } from '../../services/apiClient';
 
 export interface ImageAssetControlProps {
   meta: ImageAssetMeta;
@@ -17,6 +20,7 @@ export const ImageAssetControl: React.FC<ImageAssetControlProps> = ({
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [activeModal, setActiveModal] = useState<'NONE' | 'PROMPT' | 'IMPORT' | 'CANDIDATE' | 'FAILURE'>('NONE');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isNormalizing, setIsNormalizing] = useState(false);
   const [generatedPrompt, setGeneratedPrompt] = useState('');
   const [copiedPrompt, setCopiedPrompt] = useState(false);
   const [importUrl, setImportUrl] = useState('');
@@ -48,50 +52,67 @@ export const ImageAssetControl: React.FC<ImageAssetControlProps> = ({
     setActiveModal('IMPORT');
   };
 
-  const handleApplyImport = () => {
-    if (!importUrl || importUrl.trim() === '') {
+  const handleApplyImport = async () => {
+    if (!importUrl.trim()) {
       setErrorMessage('Please enter a valid image URL or upload a file.');
       return;
     }
-    onAssetChange?.(importUrl.trim(), `Imported asset for ${meta.slotId}`);
-    setActiveModal('NONE');
+    setIsNormalizing(true);
+    setErrorMessage(null);
+    try {
+      const normalized = await normalizeImageUrl(importUrl.trim(), getImageAssetSpec(meta.slotType));
+      onAssetChange?.(normalized.dataUrl, 'Imported and normalized asset for ' + meta.slotId);
+      setActiveModal('NONE');
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'The remote image could not be normalized. Upload the image file if the host blocks CORS.');
+    } finally {
+      setIsNormalizing(false);
+    }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     if (!file.type.startsWith('image/')) {
-      setErrorMessage('Please select a valid image file (PNG, JPG, WebP, SVG).');
+      setErrorMessage('Please select a valid image file.');
       return;
     }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = event.target?.result as string;
-      if (dataUrl) {
-        onAssetChange?.(dataUrl, `Uploaded local asset (${file.name})`);
-        setActiveModal('NONE');
-      }
-    };
-    reader.readAsDataURL(file);
+    setIsNormalizing(true);
+    setErrorMessage(null);
+    try {
+      const normalized = await normalizeImageFile(file, getImageAssetSpec(meta.slotType));
+      onAssetChange?.(normalized.dataUrl, 'Uploaded and normalized asset (' + file.name + ')');
+      setActiveModal('NONE');
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Could not normalize the imported image.');
+    } finally {
+      setIsNormalizing(false);
+    }
   };
 
   const handleRegenerate = async () => {
     setIsMenuOpen(false);
     setIsGenerating(true);
     setErrorMessage(null);
-
-    // Simulate / Trigger asset candidate generation via configured pipeline
     try {
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      // In testing / offline mode or sandbox, provide candidate version
-      const simulatedCandidate = `https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=800&auto=format&fit=crop&q=80&sig=${Date.now()}`;
-      setCandidateUrl(simulatedCandidate);
+      const spec = getImageAssetSpec(meta.slotType);
+      const res = await apiClient.generateImage({
+        prompt: compileProviderNeutralPrompt(meta),
+        aspectRatio: spec.aspectRatio,
+        slotType: meta.slotType,
+        assetId: meta.slotId,
+        tags: ['image_asset', meta.slotType],
+      });
+      if (!res.success || !res.imageUrl) throw new Error(res.errorReason || 'Image generation returned no usable image.');
+      setIsNormalizing(true);
+      const normalized = await normalizeImageUrl(res.imageUrl, spec);
+      setCandidateUrl(normalized.dataUrl);
       setActiveModal('CANDIDATE');
-    } catch {
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Image generation failed.');
       setActiveModal('FAILURE');
     } finally {
+      setIsNormalizing(false);
       setIsGenerating(false);
     }
   };
@@ -365,7 +386,7 @@ export const ImageAssetControl: React.FC<ImageAssetControlProps> = ({
                       src={meta.currentImageUrl}
                       alt="Current approved"
                       referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover"
+                      className={getImageAssetSpec(meta.slotType).fitMode === 'cover' ? 'w-full h-full object-cover' : 'w-full h-full object-contain'}
                     />
                   ) : (
                     <span className="text-xs text-[var(--db-text-muted)]">No prior image</span>

@@ -7,6 +7,7 @@ import type {
   StoryCheckResult,
   StoryD20AdvantageState,
   StoryTestType,
+  StoryCheckChallenge,
 } from '../../src/types';
 import { LocalDiceEngine } from './combatEngine';
 
@@ -178,24 +179,39 @@ export class StoryCheckEngine {
   public resolve(
     storyId: string,
     actionText: string,
-    character: StoryCheckCharacter
+    character: StoryCheckCharacter,
+    challenge?: StoryCheckChallenge
   ): StoryCheckResult | null {
     const text = normalize(actionText);
     if (!text) return null;
 
     const sceneText = normalize(character.sceneText || '');
-    const saveSelection = this.pickSaveProfile(text, sceneText);
+    const inferredSaveSelection = this.pickSaveProfile(text, sceneText);
+    const saveSelection = challenge?.savingThrowAbility
+      ? {
+          profile: {
+            ability: challenge.savingThrowAbility,
+            explicitKeywords: [],
+            sceneHazards: [],
+            actionTriggers: [],
+            dc: challenge.difficultyClass,
+            reason: challenge.reason || challenge.label,
+            triggerReason: challenge.triggerReason || ('Authored challenge: ' + challenge.label + '.'),
+          },
+          worldTriggered: true,
+        }
+      : inferredSaveSelection;
 
     // A routine action remains narration-only unless the current world context
-    // creates a real saving-throw trigger.
+    // creates a real saving-throw trigger or an authored challenge requires one.
     if (!saveSelection && this.isRoutine(text)) return null;
 
     const profile = saveSelection ? null : this.pickProfile(text);
     if (!saveSelection && !profile) return null;
 
-    const testType: StoryTestType = saveSelection ? 'SAVING_THROW' : 'ABILITY_CHECK';
+    const testType: StoryTestType = challenge?.testType || (saveSelection ? 'SAVING_THROW' : 'ABILITY_CHECK');
     const ability = saveSelection ? saveSelection.profile.ability : profile!.ability;
-    const skillName = saveSelection ? 'Saving Throw' : profile!.skill;
+    const skillName = challenge?.skill || (saveSelection ? 'Saving Throw' : profile!.skill);
 
     const characterLevel = Math.max(1, Number(character.coreStats?.level ?? 1));
     const abilityMod = modifier(abilityScore(character.coreStats, ability));
@@ -213,7 +229,9 @@ export class StoryCheckEngine {
       ? levelProficiencyBonus
       : 0;
     const totalModifier = abilityMod + prof;
-    const dc = applyDcHint(text, saveSelection ? saveSelection.profile.dc : profile!.dc);
+    const dc = challenge?.difficultyClass !== undefined
+      ? challenge.difficultyClass
+      : applyDcHint(text, saveSelection ? saveSelection.profile.dc : profile!.dc);
 
     const modifierSources: StoryCheckModifierSource[] = [
       { label: `${ability} modifier`, value: abilityMod, kind: 'ABILITY' },
@@ -229,6 +247,9 @@ export class StoryCheckEngine {
     }
 
     const contextNotes: string[] = [];
+    if (challenge) {
+      contextNotes.push('Authored challenge: ' + challenge.label + '.');
+    }
     if (saveSelection?.worldTriggered) {
       contextNotes.push(saveSelection.profile.triggerReason);
     }
@@ -324,10 +345,12 @@ export class StoryCheckEngine {
       success,
       criticalSuccess,
       criticalFailure,
-      reason: saveSelection ? saveSelection.profile.reason : profile!.reason,
+      reason: challenge?.reason || (saveSelection ? saveSelection.profile.reason : profile!.reason),
       contextNotes,
-      worldTriggered: saveSelection?.worldTriggered || false,
-      triggerReason: saveSelection?.profile.triggerReason,
+      worldTriggered: Boolean(challenge || saveSelection?.worldTriggered),
+      triggerReason: challenge?.triggerReason || saveSelection?.profile.triggerReason,
+      challengeId: challenge?.id,
+      challengeLabel: challenge?.label,
     };
   }
 

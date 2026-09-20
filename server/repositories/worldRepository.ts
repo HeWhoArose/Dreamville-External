@@ -508,8 +508,6 @@ export class InMemoryWorldRepository implements WorldRepository {
         activeJourney: null,
         injuries: initialInjuries,
         transformationRecord: activeForm,
-        activeConditions: Array.isArray(char.startingState?.conditions) ? [...char.startingState.conditions] : [],
-        reputationModifiers: { ...(char.startingState?.reputations || {}) },
       });
       this.playerLifecycles.set(storyId, player);
 

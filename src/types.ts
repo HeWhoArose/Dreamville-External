@@ -1432,6 +1432,7 @@ export interface CharacterCoreStats {
   intelligence: number;
   wisdom: number;
   charisma: number;
+  savingThrowProficiencies?: StoryCheckAbility[];
 }
 
 export interface CharacterGenesisDraft {

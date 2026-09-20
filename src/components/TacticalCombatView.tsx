@@ -107,6 +107,22 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
     }
   };
 
+  const handleCoreCombatAction = async (action: 'DASH' | 'DODGE' | 'DISENGAGE') => {
+    try {
+      setActionLoading(true);
+      setErrorMsg(null);
+      const res = await apiClient.executeCombatAction({
+        action,
+      });
+      setCombatState(res.combatState);
+      onRefreshWorldState?.();
+    } catch (err: any) {
+      setErrorMsg(err.message || `${action} failed.`);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleAttack = async () => {
     if (!selectedTargetId) {
       setErrorMsg('Please select a target to attack.');
@@ -491,6 +507,37 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
                   </option>
                 ))}
               </select>
+            </div>
+
+            {/* Core D&D Actions */}
+            <div className="grid grid-cols-3 gap-2 pt-1">
+              <button
+                id="combat-dash-btn"
+                onClick={() => handleCoreCombatAction('DASH')}
+                disabled={actionLoading || !isPlayerTurn || !actionAvailable || combatState?.victory || combatState?.defeat}
+                className="py-2 px-2 rounded-lg bg-amber-950/70 hover:bg-amber-900 text-amber-100 text-[11px] font-semibold border border-amber-800/60 transition disabled:opacity-50"
+                title="Dash: spend your Action to gain additional movement equal to Speed."
+              >
+                Dash
+              </button>
+              <button
+                id="combat-dodge-btn"
+                onClick={() => handleCoreCombatAction('DODGE')}
+                disabled={actionLoading || !isPlayerTurn || !actionAvailable || combatState?.victory || combatState?.defeat}
+                className="py-2 px-2 rounded-lg bg-blue-950/70 hover:bg-blue-900 text-blue-100 text-[11px] font-semibold border border-blue-800/60 transition disabled:opacity-50"
+                title="Dodge: attacks against you have disadvantage and your Dexterity saves have advantage."
+              >
+                Dodge
+              </button>
+              <button
+                id="combat-disengage-btn"
+                onClick={() => handleCoreCombatAction('DISENGAGE')}
+                disabled={actionLoading || !isPlayerTurn || !actionAvailable || combatState?.victory || combatState?.defeat}
+                className="py-2 px-2 rounded-lg bg-stone-800 hover:bg-stone-750 text-stone-200 text-[11px] font-semibold border border-stone-700 transition disabled:opacity-50"
+                title="Disengage: prevents opportunity attacks from your movement."
+              >
+                Disengage
+              </button>
             </div>
 
             {/* Standard Attack Button */}

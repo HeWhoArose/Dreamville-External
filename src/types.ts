@@ -349,6 +349,7 @@ export interface ActionResult {
   status: 'MOCK_ENGINE_COMMITTED' | 'MOCK_ENGINE_REJECTED';
   message: string;
   authoritativeFeedback: string;
+  narrativeResponse?: string;
   viewState: ExternalViewState;
 }
 

@@ -1144,9 +1144,16 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
 
     const doll = inv.getActorPaperDoll(actorId);
     const powerState = capEngine.getPowerState(actorId);
+    const run = worldRepository.getStoryRun(storyId);
+    const coreStats = run?.protagonist?.coreStats;
+    const characterLevel = Math.max(1, Math.min(20, Number(coreStats?.level ?? 1)));
+    const proficiencyBonus = Math.ceil(characterLevel / 4) + 1;
+    const abilityModifier = (score: number) => Math.floor((score - 10) / 2);
+    const strMod = abilityModifier(Number(coreStats?.strength ?? 10));
+    const dexMod = abilityModifier(Number(coreStats?.dexterity ?? 10));
 
-    // Derive AC from equipped armor and shield (CH5 Integration - DEF-CH8-03)
-    let computedAC = 10;
+    // Derive AC from the confirmed D&D Dexterity modifier plus equipped armor/shield.
+    let computedAC = 10 + dexMod;
     if (doll.body) {
       const def = inv.getItemDefinition(doll.body.defId);
       const armorBonus = (doll.body.defId === 'def_steel_cuirass' || def?.properties?.armorBonus) ? (Number(def?.properties?.armorBonus) || 4) : 2;
@@ -1158,14 +1165,23 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
       computedAC += shieldBonus;
     }
 
-    // Derive weapon damage from equipped main-hand (DEF-CH8-03)
-    let weaponFormula = '1d4+2';
+    // Derive weapon damage and attack ability from equipped main-hand.
+    let weaponFormula = '1d4+0';
+    let weaponAttackBonus = strMod + proficiencyBonus;
     if (doll.mainHand) {
       const def = inv.getItemDefinition(doll.mainHand.defId);
+      const props = def?.properties || {};
+      const tags = Array.isArray(def?.tags) ? def!.tags.map((t: string) => t.toLowerCase()) : [];
+      const explicitAttackAbility = typeof props.attackAbility === 'string' ? props.attackAbility.toLowerCase() : '';
+      const isRanged = explicitAttackAbility === 'dexterity' || explicitAttackAbility === 'dex' || tags.some((tag: string) => tag.includes('ranged'));
+      const isFinesse = tags.includes('finesse') || Boolean(props.finesse);
+      const attackAbilityMod = (isRanged || isFinesse) ? Math.max(strMod, dexMod) : strMod;
+      weaponAttackBonus = attackAbilityMod + proficiencyBonus;
+
       if (doll.mainHand.defId === 'def_iron_sword' || doll.mainHand.name.includes('Sword')) {
         weaponFormula = '1d8+3';
       } else {
-        weaponFormula = (def?.properties?.damageFormula as string) || '1d6+2';
+        weaponFormula = (props.damageFormula as string) || '1d6+0';
       }
     }
 
@@ -1188,12 +1204,21 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
       x: 1,
       y: 1,
       initiative: 18,
+      initiativeModifier: dexMod,
+      saveModifiers: {
+        STR: strMod,
+        DEX: dexMod,
+        CON: abilityModifier(Number(coreStats?.constitution ?? 10)),
+        INT: abilityModifier(Number(coreStats?.intelligence ?? 10)),
+        WIS: abilityModifier(Number(coreStats?.wisdom ?? 10)),
+        CHA: abilityModifier(Number(coreStats?.charisma ?? 10)),
+      },
       team: 'player_allies',
-      hpCurrent: Math.max(1, powerState?.healthCurrent ?? 100),
-      hpMax: powerState?.healthMax ?? 100,
+      hpCurrent: Math.max(1, powerState?.healthCurrent ?? Number(coreStats?.hpCurrent ?? 100)),
+      hpMax: powerState?.healthMax ?? Number(coreStats?.hpMax ?? 100),
       armorClass: computedAC,
       speedCells,
-      attackBonus: 5,
+      attackBonus: weaponAttackBonus,
       damageFormula: weaponFormula,
       conditions: player?.isDead ? ['Dead'] : [],
       isDead: player?.isDead ?? false,

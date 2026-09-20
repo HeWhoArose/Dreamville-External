@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { GoogleGenAI } from '@google/genai';
 import { MediaGenerationResult } from '../../src/types';
+import type { ImageAssetSlotType } from '../../src/components/common/imageAssetTypes';
+import { appendImageOutputSpecification, getImageAssetSpec, isProviderSupportedImageAspectRatio } from '../../src/data/imageAssetSpecs';
 import { getProviderApiKey } from './providerCredentialService';
 
 export interface ImageGenerationOptions {
@@ -11,6 +13,7 @@ export interface ImageGenerationOptions {
   aspectRatio?: string;
   tags?: string[];
   characterName?: string;
+  slotType?: ImageAssetSlotType;
 }
 
 /**
@@ -109,32 +112,45 @@ export class MediaAdapterService {
       };
     }
 
-    // Normal Provider Generation
-    const assetKey = options.assetId || `asset_gen_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const slotType = options.slotType || 'character_portrait';
+    const spec = getImageAssetSpec(slotType);
+    const requestedAspectRatio = options.aspectRatio || spec.aspectRatio;
+    const finalPrompt = appendImageOutputSpecification(options.prompt || 'DreamBook image', slotType);
+
+    if (!isProviderSupportedImageAspectRatio(requestedAspectRatio)) {
+      return {
+        success: false,
+        isFallback: true,
+        promptFallback: finalPrompt,
+        errorReason: 'Unsupported image aspect ratio "' + requestedAspectRatio + '".',
+      };
+    }
+
+    const assetKey = options.assetId || 'asset_gen_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6);
+    const publicDir = path.join(process.cwd(), 'public', 'assets', 'generated');
+    fs.mkdirSync(publicDir, { recursive: true });
     const apiKey = getProviderApiKey('google_gemini') || process.env.GEMINI_API_KEY;
 
     if (apiKey) {
       try {
         const ai = new GoogleGenAI({ apiKey });
-        const response = await ai.models.generateImages({
-          model: 'imagen-3.0-generate-002',
-          prompt: options.prompt,
-          config: {
-            numberOfImages: 1,
-            outputMimeType: 'image/png',
-            aspectRatio: (options.aspectRatio as any) || '1:1',
+        const interaction = await ai.interactions.create({
+          model: 'gemini-3.1-flash-image',
+          input: finalPrompt,
+          response_format: {
+            type: 'image',
+            aspect_ratio: requestedAspectRatio,
+            image_size: spec.imageSize,
           },
-        });
+        } as any);
 
-        const imageBytes = response.generatedImages?.[0]?.image?.imageBytes;
-        if (imageBytes) {
-          const buffer = Buffer.from(imageBytes, 'base64');
-          const publicDir = path.join(process.cwd(), 'public', 'assets', 'generated');
-          fs.mkdirSync(publicDir, { recursive: true });
-          const filePath = path.join(publicDir, `${assetKey}.png`);
+        const outputImage = (interaction as any).output_image;
+        if (outputImage?.data) {
+          const buffer = Buffer.from(outputImage.data, 'base64');
+          const filePath = path.join(publicDir, assetKey + '.png');
           fs.writeFileSync(filePath, buffer);
 
-          const generatedUrl = `/assets/generated/${assetKey}.png`;
+          const generatedUrl = '/assets/generated/' + assetKey + '.png';
           return {
             success: true,
             isFallback: false,
@@ -144,32 +160,34 @@ export class MediaAdapterService {
               assetId: assetKey,
               url: generatedUrl,
               format: 'png',
-              aspectRatio: options.aspectRatio || '1:1',
-              tags: options.tags || ['generated', 'portrait'],
+              aspectRatio: spec.aspectRatio,
+              width: spec.width,
+              height: spec.height,
+              fitMode: spec.fitMode,
+              tags: options.tags || ['generated', slotType],
             },
-            promptFallback: fallbackText,
+            promptFallback: finalPrompt,
             assetMetadata: {
               assetId: assetKey,
               storyId: options.storyId,
-              promptFallback: fallbackText,
-              rightsStatus: 'generated_canonical_free',
+              promptFallback: finalPrompt,
+              rightsStatus: 'generated_ai_provider',
+              provider: 'google_gemini',
+              model: 'gemini-3.1-flash-image',
               generatedAt: new Date().toISOString(),
             },
           };
         }
       } catch (err: any) {
-        console.warn('[MediaAdapterService] Imagen API call failed or unavailable:', err?.message || err);
+        console.warn('[MediaAdapterService] Gemini image generation failed:', err?.message || err);
       }
     }
 
-    // Fallback vector portrait file generation when Imagen API is unconfigured or unavailable
-    const svgBuffer = this.generateFallbackSvgBuffer(assetKey, options.prompt);
-    const publicDir = path.join(process.cwd(), 'public', 'assets', 'generated');
-    fs.mkdirSync(publicDir, { recursive: true });
-    const filePath = path.join(publicDir, `${assetKey}.svg`);
+    const svgBuffer = this.generateFallbackSvgBuffer(assetKey, finalPrompt, spec.width, spec.height);
+    const filePath = path.join(publicDir, assetKey + '.svg');
     fs.writeFileSync(filePath, svgBuffer);
+    const generatedUrl = '/assets/generated/' + assetKey + '.svg';
 
-    const generatedUrl = `/assets/generated/${assetKey}.svg`;
     return {
       success: true,
       isFallback: true,
@@ -179,15 +197,20 @@ export class MediaAdapterService {
         assetId: assetKey,
         url: generatedUrl,
         format: 'svg',
-        aspectRatio: options.aspectRatio || '1:1',
-        tags: options.tags || ['generated', 'portrait', 'vector_fallback'],
+        aspectRatio: spec.aspectRatio,
+        width: spec.width,
+        height: spec.height,
+        fitMode: spec.fitMode,
+        tags: options.tags || ['generated', slotType, 'vector_fallback'],
       },
-      promptFallback: fallbackText,
+      promptFallback: finalPrompt,
       assetMetadata: {
         assetId: assetKey,
         storyId: options.storyId,
-        promptFallback: fallbackText,
+        promptFallback: finalPrompt,
         rightsStatus: 'generated_vector_fallback',
+        provider: 'deterministic',
+        model: 'vector-fallback',
         generatedAt: new Date().toISOString(),
       },
     };

@@ -3353,6 +3353,7 @@ export class MultiModelOrchestrator {
   public async generateNarrativeOnly(params: {
     storyId?: string;
     playerAction: string;
+    committedOutcome?: string;
     hardTokenBudget?: number;
     timeoutMs?: number;
     maxRetries?: number;
@@ -3373,8 +3374,13 @@ export class MultiModelOrchestrator {
     const hardTokenBudget = params.hardTokenBudget ?? 500;
     const timeoutMs = params.timeoutMs ?? 5000;
     const maxRetries = params.maxRetries ?? 1;
+    const authoritativeOutcome = (params.committedOutcome || '').trim();
     const styleInstruction = params.styleInstruction || [
       'Write the immediate player-facing narrator response to the current action.',
+      authoritativeOutcome
+        ? `The authoritative game engine has already committed this outcome. Acknowledge and narrate THIS outcome; do not replace it with a different result: ${authoritativeOutcome}`
+        : 'There is no additional mechanical outcome supplied. Do not invent one.',
+
       'Return only what the character can reasonably perceive and what the world immediately does in response.',
       'Keep it concise: 1–3 short paragraphs, normally under 90 words.',
       'Do not restate the player action verbatim.',

@@ -2,6 +2,8 @@ import React, { useState, useRef } from 'react';
 import { CharacterSkill, StartingEquipmentItem, ItemOrSkillIcon } from '../../types';
 import { generateIconPrompt, getDefaultIconForSkill, getDefaultIconForEquipment } from '../../data/iconSystem';
 import { apiClient } from '../../services/apiClient';
+import { getImageAssetSpec } from '../../data/imageAssetSpecs';
+import { normalizeImageFile, normalizeImageUrl } from '../../utils/imageAssetNormalizer';
 import { Sparkles, Upload, RotateCcw, Check, X, Loader2, Image as ImageIcon } from 'lucide-react';
 
 interface IconStudioModalProps {
@@ -35,6 +37,7 @@ export const IconStudioModal: React.FC<IconStudioModalProps> = ({
   );
   const [workingIcon, setWorkingIcon] = useState<ItemOrSkillIcon>(currentIcon);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [isNormalizing, setIsNormalizing] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -48,14 +51,17 @@ export const IconStudioModal: React.FC<IconStudioModalProps> = ({
       const res = await apiClient.generateImage({
         prompt: prompt.trim(),
         aspectRatio: '1:1',
+        slotType: targetType === 'SKILL' ? 'skill_icon' : 'equipment',
         tags: [targetType.toLowerCase(), 'icon'],
       });
 
       if (res && res.imageUrl) {
+        setIsNormalizing(true);
+        const normalized = await normalizeImageUrl(res.imageUrl, getImageAssetSpec(targetType === 'SKILL' ? 'skill_icon' : 'equipment'));
         setWorkingIcon({
           source: 'AI_GENERATED',
           status: 'READY',
-          url: res.imageUrl,
+          url: normalized.dataUrl,
           prompt: prompt.trim(),
           alt: `${targetItemOrSkill.name} Icon`,
         });
@@ -70,29 +76,28 @@ export const IconStudioModal: React.FC<IconStudioModalProps> = ({
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     if (!file.type.startsWith('image/')) {
       setErrorMessage('Please select a valid image file (PNG, JPG, WebP).');
       return;
     }
-
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const dataUrl = evt.target?.result as string;
-      if (dataUrl) {
-        setWorkingIcon({
-          source: 'IMPORTED',
-          status: 'READY',
-          url: dataUrl,
-          alt: `${targetItemOrSkill.name} Icon (Imported)`,
-        });
-        setErrorMessage(null);
-      }
-    };
-    reader.readAsDataURL(file);
+    setIsNormalizing(true);
+    setErrorMessage(null);
+    try {
+      const normalized = await normalizeImageFile(file, getImageAssetSpec(targetType === 'SKILL' ? 'skill_icon' : 'equipment'));
+      setWorkingIcon({
+        source: 'IMPORTED',
+        status: 'READY',
+        url: normalized.dataUrl,
+        alt: targetItemOrSkill.name + ' Icon (Imported)',
+      });
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Could not normalize the imported icon.');
+    } finally {
+      setIsNormalizing(false);
+    }
   };
 
   const handleRestoreDefault = () => {
@@ -143,7 +148,7 @@ export const IconStudioModal: React.FC<IconStudioModalProps> = ({
               <img
                 src={workingIcon.url}
                 alt={workingIcon.alt || targetItemOrSkill.name}
-                className="w-full h-full object-cover"
+                className="w-full h-full object-contain p-1"
               />
             ) : (
               <span className="text-4xl select-none">{workingIcon.emoji || defaultIcon.emoji || '✨'}</span>

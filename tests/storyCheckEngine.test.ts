@@ -29,7 +29,7 @@ test('investigation action produces a canonical d20 skill check', () => {
           governingAbility: 'Intelligence',
           proficiency: 'PROFICIENT',
           description: 'Investigate clues.',
-          provenance: 'PLAYER_CONFIRMED',
+          provenance: 'PLAYER_INPUT',
         },
       ],
     }

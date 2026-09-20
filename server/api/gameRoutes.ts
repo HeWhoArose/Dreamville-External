@@ -1903,7 +1903,9 @@ gameRouter.post('/combat/end-turn', async (req: Request, res: Response) => {
           deathRecord: {
             isDead: true,
             diedAtTimestamp: worldRepository.getWorldClock('default_story').getTimestamp(),
-            cause: 'Defeated in tactical combat by environmental hazard.',
+            cause: playerPart?.deathSaveState?.failures >= 3
+              ? 'Failed three death saves in tactical combat.'
+              : 'Defeated in tactical combat by environmental hazard.',
             revivalPossible: true,
           },
         });
@@ -1994,7 +1996,9 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
           deathRecord: {
             isDead: true,
             diedAtTimestamp: worldRepository.getWorldClock('default_story').getTimestamp(),
-            cause: 'Defeated in tactical combat by environmental hazard.',
+            cause: playerPart?.deathSaveState?.failures >= 3
+              ? 'Failed three death saves in tactical combat.'
+              : 'Defeated in tactical combat by environmental hazard.',
             revivalPossible: true,
           },
         });

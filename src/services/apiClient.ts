@@ -925,6 +925,28 @@ class ApiClient {
    * Challenge 12: List all registered orchestrator models, pools, health, and latency.
    * GET /api/game/orchestrator/models
    */
+  public async getProviderCredentialStatus(providerId: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/providers/${encodeURIComponent(providerId)}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Failed to get provider status: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  public async saveProviderApiKey(providerId: string, apiKey: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/providers/${encodeURIComponent(providerId)}/key`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ apiKey }),
+    });
+    const payload = await res.json().catch(() => null);
+    if (!res.ok) {
+      throw new Error(payload?.error || `Failed to save provider API key: HTTP ${res.status}`);
+    }
+    return payload;
+  }
+
   public async getOrchestratorModels(): Promise<{ success: boolean; count: number; models: any[] }> {
     const res = await fetch(`${this.baseUrl}/orchestrator/models`, {
       method: 'GET',

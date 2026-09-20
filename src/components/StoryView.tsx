@@ -110,6 +110,56 @@ const StoryCheckCard: React.FC<{
           <span className="font-medium">{check.success ? 'Success' : 'Failure'}</span>
           <span className="text-[10px] text-stone-600">{check.total} total {check.totalModifier !== 0 ? `(${check.totalModifier >= 0 ? '+' : ''}${check.totalModifier})` : ''}</span>
         </div>
+
+        {check.consequence && (
+          <div className="mt-3 rounded-xl border border-stone-800 bg-stone-900/50 px-3 py-2">
+            <div className="mb-1 flex items-center justify-between gap-3">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-500">
+                {check.consequence.branch === 'SUCCESS' ? 'Outcome' : 'Consequence'}
+              </span>
+              <span className="text-[10px] text-stone-600">
+                {check.consequence.applied ? 'Committed' : 'No effect'}
+              </span>
+            </div>
+            <p className="text-xs leading-5 text-stone-300">{check.consequence.summary}</p>
+
+            {check.consequence.damage && (
+              <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-stone-500">
+                <span className="rounded-md border border-stone-800 bg-stone-950 px-2 py-1">
+                  Damage {check.consequence.damage.finalAmount} {check.consequence.damage.damageType}
+                </span>
+                <span className="rounded-md border border-stone-800 bg-stone-950 px-2 py-1">
+                  HP {check.consequence.damage.healthCurrent}
+                </span>
+                {check.consequence.damage.immune && (
+                  <span className="rounded-md border border-stone-800 bg-stone-950 px-2 py-1">Immune</span>
+                )}
+                {check.consequence.damage.resisted && (
+                  <span className="rounded-md border border-stone-800 bg-stone-950 px-2 py-1">Resisted</span>
+                )}
+                {check.consequence.damage.vulnerable && (
+                  <span className="rounded-md border border-stone-800 bg-stone-950 px-2 py-1">Vulnerable</span>
+                )}
+              </div>
+            )}
+
+            {check.consequence.appliedConditions.length > 0 && (
+              <p className="mt-2 text-[10px] text-stone-500">
+                Applied: {check.consequence.appliedConditions.join(', ')}
+              </p>
+            )}
+
+            {check.consequence.removedConditions.length > 0 && (
+              <p className="mt-1 text-[10px] text-stone-500">
+                Removed: {check.consequence.removedConditions.join(', ')}
+              </p>
+            )}
+
+            {check.consequence.noEffectReason && (
+              <p className="mt-1 text-[10px] text-stone-600">{check.consequence.noEffectReason}</p>
+            )}
+          </div>
+        )}
       </>
     )}
   </div>

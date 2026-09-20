@@ -367,6 +367,9 @@ Return ONLY one JSON object matching this contract:
 
 Rules:
 - Preserve any explicit names, origins, species, jobs, powers, affiliations, source-fiction references, transport/isekaied state, equipment, motivations and conditions from the player's concept.
+- Treat mechanically meaningful current circumstances (imprisoned, poisoned, weak, starving, burning, transformed, restrained, hunted, etc.) as conditionState instances, not as prose-only flavor.
+- Use customDefinitions when a condition has ongoing damage, healing, intensity growth/decay, body-region progression, self-damage, recovery, triggers, or terminal consequences.
+- Self-inflicted mechanics are valid. A condition may damage, heal, transform, or progressively destroy the same character who carries it.
 - Do not invent a generic Human/Scout identity merely to fill fields.
 - Generated values may add coherent detail, but must remain faithful to the player's concept and world.
 - If something is genuinely uncertain, put it in aiExtractionSummary.uncertainties instead of silently contradicting the player.`;

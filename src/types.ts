@@ -1240,6 +1240,9 @@ export interface CharacterConditionTrigger {
   event: 'ON_APPLY' | 'ON_ACTION' | 'ON_TICK' | 'ON_REMOVE' | 'ON_REST';
   actionKeywords?: string[];
   intensityDelta?: number;
+  healingAmount?: number;
+  addConditionIds?: string[];
+  removeConditionIds?: string[];
   description?: string;
 }
 

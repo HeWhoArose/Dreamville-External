@@ -626,6 +626,10 @@ export const App: React.FC = () => {
 
           {(currentRoute === 'create' || currentRoute === 'create.bring-to-life') && (
             <CreateStoryWizard
+              onWorldAccepted={(world) => {
+                setGenesisWorld(world as WorldTemplate);
+                setCurrentRoute('create.genesis');
+              }}
               onSelectRun={(runStoryId) => {
                 if (runStoryId) {
                   apiClient.setActiveStoryId(runStoryId);

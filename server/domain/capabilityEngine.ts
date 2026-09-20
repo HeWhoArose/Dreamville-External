@@ -75,6 +75,7 @@ export interface CapabilityDefinition {
   actionType?: 'action' | 'bonus_action' | 'reaction' | 'free';
   counters?: string[];
   visualIdentityRef?: VisualIdentityRef;
+  storyCheckChallenges?: import('../../src/types').StoryCheckChallenge[];
 }
 
 export interface ProgressionHistoryEntry {

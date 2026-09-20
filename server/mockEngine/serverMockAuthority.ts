@@ -674,7 +674,7 @@ export class ServerMockAuthority {
 
       case 'DISCOVER_LOCATION': {
         const targetId = request.targetLocationId;
-        const targetStoryId = (request as any).storyId || 'default_story';
+        const targetStoryId = (request as any).storyId || targetStoryId;
         const graphNodes = worldRepository.getGeographyGraph().getAllNodes();
         const targetNode = graphNodes.find(n => n.id === targetId);
         if (targetNode) {
@@ -709,9 +709,9 @@ export class ServerMockAuthority {
       }
 
       case 'EQUIP_REQUEST': {
-        const player = worldRepository.getPlayerLifecycle('default_story');
+        const player = worldRepository.getPlayerLifecycle(targetStoryId);
         const actorId = player ? player.actorId : 'player_actor_default_story';
-        const invEngine = worldRepository.getInventoryEngine('default_story');
+        const invEngine = worldRepository.getInventoryEngine(targetStoryId);
 
         const slotMapping: Record<string, string> = {
           head: 'head',
@@ -762,9 +762,9 @@ export class ServerMockAuthority {
       }
 
       case 'UNEQUIP_REQUEST': {
-        const player = worldRepository.getPlayerLifecycle('default_story');
+        const player = worldRepository.getPlayerLifecycle(targetStoryId);
         const actorId = player ? player.actorId : 'player_actor_default_story';
-        const invEngine = worldRepository.getInventoryEngine('default_story');
+        const invEngine = worldRepository.getInventoryEngine(targetStoryId);
 
         const slotMapping: Record<string, string> = {
           head: 'head',
@@ -806,9 +806,9 @@ export class ServerMockAuthority {
       }
 
       case 'INSPECT_ITEM': {
-        const player = worldRepository.getPlayerLifecycle('default_story');
+        const player = worldRepository.getPlayerLifecycle(targetStoryId);
         const actorId = player ? player.actorId : 'player_actor_default_story';
-        const invEngine = worldRepository.getInventoryEngine('default_story');
+        const invEngine = worldRepository.getInventoryEngine(targetStoryId);
         const item = invEngine.getItemInstance(request.itemId) || invEngine.getActorInventory(actorId).find((i) => i.id === request.itemId);
         const def = item ? invEngine.getItemDefinition(item.defId) : undefined;
         if (item) {
@@ -855,8 +855,8 @@ export class ServerMockAuthority {
             ? (request as any).seconds
             : 14400; // 4 hours per cycle step
 
-        const advanceResult = worldSimulationService.advanceTime('default_story', secondsToAdvance);
-        const clock = worldRepository.getWorldClock('default_story');
+        const advanceResult = worldSimulationService.advanceTime(targetStoryId, secondsToAdvance);
+        const clock = worldRepository.getWorldClock(targetStoryId);
         const ts = clock.getTimestamp();
         const phase = clock.getState().currentDayPhase;
 
@@ -908,7 +908,7 @@ export class ServerMockAuthority {
       }
 
       case 'APPLY_INJURY': {
-        const res = worldSimulationService.applyPlayerInjury('default_story', {
+        const res = worldSimulationService.applyPlayerInjury(targetStoryId, {
           type: (request as any).injuryType || 'Wound',
           severity: (request as any).severity || 'Moderate',
           location: (request as any).location || 'Torso',
@@ -930,7 +930,7 @@ export class ServerMockAuthority {
       }
 
       case 'HEAL_INJURY': {
-        const res = worldSimulationService.healPlayerInjury('default_story', (request as any).injuryId);
+        const res = worldSimulationService.healPlayerInjury(targetStoryId, (request as any).injuryId);
         success = res.success;
         message = res.message;
         authoritativeFeedback = `WorldSimulationService updated canonical injuries: ${res.message}`;
@@ -947,7 +947,7 @@ export class ServerMockAuthority {
       }
 
       case 'APPLY_TRANSFORMATION': {
-        const res = worldSimulationService.applyPlayerTransformation('default_story', {
+        const res = worldSimulationService.applyPlayerTransformation(targetStoryId, {
           formName: (request as any).formName,
           vesselType: (request as any).vesselType || 'Aetherial',
         });
@@ -967,7 +967,7 @@ export class ServerMockAuthority {
       }
 
       case 'REVERT_TRANSFORMATION': {
-        const res = worldSimulationService.revertPlayerTransformation('default_story');
+        const res = worldSimulationService.revertPlayerTransformation(targetStoryId);
         success = res.success;
         message = res.message;
         authoritativeFeedback = `WorldSimulationService reverted canonical transformation.`;
@@ -985,7 +985,7 @@ export class ServerMockAuthority {
 
       case 'RECORD_DEATH': {
         const res = worldSimulationService.recordPlayerDeath(
-          'default_story',
+          targetStoryId,
           (request as any).cause || 'Unknown tragedy',
           (request as any).revivalPossible ?? true
         );
@@ -1005,7 +1005,7 @@ export class ServerMockAuthority {
       }
 
       case 'REVIVE_PLAYER': {
-        const res = worldSimulationService.revivePlayer('default_story');
+        const res = worldSimulationService.revivePlayer(targetStoryId);
         success = res.success;
         message = res.message;
         authoritativeFeedback = `WorldSimulationService restored player life.`;

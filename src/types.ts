@@ -185,6 +185,7 @@ export interface ProtagonistProfile {
   isPossessed?: boolean;
   portraitUrl?: string;
   portraitEmoji?: string;
+  conditionState?: CharacterStartingConditionState;
 }
 
 /**

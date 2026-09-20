@@ -703,6 +703,14 @@ describe('CH1 Live Runtime Proof — Canonical Domain & HTTP API Path', () => {
   });
 
   it('CH8 Live API: POST /api/game/combat/cast adjudicates capability via CapabilityEngine and inflicts combat damage', async () => {
+    // Start a fresh encounter so this test has an unused Action resource regardless
+    // of what the preceding attack test consumed.
+    const encounterRes = await fetch(`${baseUrl}/combat/encounter/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    assert.strictEqual(encounterRes.status, 200);
+
     // 1. Get capabilities to pick a valid one
     const capRes = await fetch(`${baseUrl}/capabilities`);
     const capData = (await capRes.json()) as any;
@@ -712,6 +720,7 @@ describe('CH1 Live Runtime Proof — Canonical Domain & HTTP API Path', () => {
     const stateRes = await fetch(`${baseUrl}/combat/state`);
     const stateData = (await stateRes.json()) as any;
     const enemy = stateData.participants.find((p: any) => p.team === 'enemies');
+    assert.ok(enemy, 'Enemy must exist to cast at');
 
     const res = await fetch(`${baseUrl}/combat/cast`, {
       method: 'POST',
@@ -730,6 +739,7 @@ describe('CH1 Live Runtime Proof — Canonical Domain & HTTP API Path', () => {
     assert.ok(data.castResult);
     assert.ok(data.castResult.damage > 0);
     assert.ok(data.powerState, 'Must return updated power state after cast');
+    assert.strictEqual(data.combatState.viewerTurnResources.actionAvailable, false);
   });
 
   it('CH8 Live API: POST /api/game/combat/end-turn advances turn queue and ticks hazards', async () => {

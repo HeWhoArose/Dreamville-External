@@ -146,8 +146,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
 
   // Fallback Chain State
   const [fallbackChains, setFallbackChains] = useState<Record<string, string[]>>({});
-  const [fallbackSelectedTask, setFallbackSelectedTask] = useState<string>('narrative.generate');
-  const [addingModelKey, setAddingModelKey] = useState<string>('');
   const [fallbackEditorTask, setFallbackEditorTask] = useState<string | null>(null);
   const [fallbackEditorSearch, setFallbackEditorSearch] = useState('');
 
@@ -289,7 +287,6 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   const openFallbackEditor = (taskId: string) => {
-    setFallbackSelectedTask(taskId);
     setFallbackEditorTask(taskId);
     setFallbackEditorSearch('');
   };

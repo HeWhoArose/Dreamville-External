@@ -1434,7 +1434,17 @@ gameRouter.post('/combat/attack', async (req: Request, res: Response) => {
       });
     }
 
-    // CH5 Integration: If player attacks with equipped weapon, degrade its durability (DEF-CH8-03)
+    // Execute attack with D&D adapter. The combat engine owns the canonical Action resource.
+    const attackResult = combatEngine.executeAttack(attackerId, targetId);
+    if (!attackResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: attackResult.errorReason || 'Attack action could not be resolved.',
+        combatState: getCombatStateHelper(combatEngine, 'default_story', attackerId),
+      });
+    }
+
+    // CH5 Integration: If player attacks with equipped weapon, degrade its durability only after the attack action is accepted.
     if (attacker.team === 'player_allies') {
       const doll = inv.getActorPaperDoll(actorId);
       if (doll.mainHand) {
@@ -1442,8 +1452,6 @@ gameRouter.post('/combat/attack', async (req: Request, res: Response) => {
       }
     }
 
-    // Execute attack with D&D adapter
-    const attackResult = combatEngine.executeAttack(attackerId, targetId);
     const updatedTarget = combatEngine.getParticipant(targetId) || target;
 
     // DEF-CH8-02: Canonical PlayerLifecycleState & PowerState Synchronization
@@ -1584,6 +1592,17 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, errorReason: 'Attacker or target participant not found.' });
     }
 
+    // D&D action economy: capability invocation normally consumes the current Action.
+    // Check availability before CapabilityEngine.adjudicate(), because that adjudication
+    // may deduct canonical power resources on approval.
+    if (!combatEngine.getActionEconomy().canConsume(actorId, 'ACTION')) {
+      return res.status(400).json({
+        success: false,
+        errorReason: 'Action already used this turn.',
+        combatState: getCombatStateHelper(combatEngine, 'default_story', actorId),
+      });
+    }
+
     // CH2-08 Epistemic Target-ID Security Authorization using durable repository authority
     const perceptionOptions = worldRepository.getCombatPerceptionOptions('default_story', actorId);
     if (!combatEngine.isParticipantKnownToActor(actorId, target, perceptionOptions)) {
@@ -1611,6 +1630,14 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
           channelSustainedTurns: 0,
           startedAtRound: combatEngine.getCurrentRound(),
         };
+        const actionUse = combatEngine.getActionEconomy().consume(actorId, 'ACTION');
+        if (!actionUse.success) {
+          return res.status(400).json({
+            success: false,
+            errorReason: actionUse.errorReason || 'Action unavailable.',
+            combatState: getCombatStateHelper(combatEngine, 'default_story', actorId),
+          });
+        }
         combatEngine.startActivation(act);
         const state = getCombatStateHelper(combatEngine, 'default_story', actorId);
         return res.json({
@@ -1630,6 +1657,14 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
       }
     } else if (capDef.activationMode === 'channelled') {
       if (!existingActivation || existingActivation.capabilityId !== capabilityId) {
+        const actionUse = combatEngine.getActionEconomy().consume(actorId, 'ACTION');
+        if (!actionUse.success) {
+          return res.status(400).json({
+            success: false,
+            errorReason: actionUse.errorReason || 'Action unavailable.',
+            combatState: getCombatStateHelper(combatEngine, 'default_story', actorId),
+          });
+        }
         combatEngine.startActivation({
           activationId: `act_${actorId}_${capabilityId}_${Date.now()}`,
           actorId,
@@ -1670,6 +1705,15 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
       powerTier: capDef.powerTier,
       category: capDef.category,
     });
+
+    if (!castResult.success) {
+      return res.status(400).json({
+        success: false,
+        adjudication,
+        errorReason: castResult.headline || 'Capability action could not be resolved.',
+        combatState: getCombatStateHelper(combatEngine, 'default_story', actorId),
+      });
+    }
 
     // 3. Sync target lifecycle & power state if target was player
     const updatedTarget = combatEngine.getParticipant(targetId);

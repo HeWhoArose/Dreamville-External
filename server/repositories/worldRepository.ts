@@ -615,6 +615,7 @@ export class InMemoryWorldRepository implements WorldRepository {
             minVesselCapacityRequired: cap.minVesselCapacityRequired || 0,
             description: cap.description || 'Synthesized capability.',
             provenance: cap.provenance || cap.source || 'WORLD_CANON',
+            storyCheckChallenges: cap.storyCheckChallenges || cap.savingThrowChallenges,
           };
 
           capEngine.registerCapability(capDef);

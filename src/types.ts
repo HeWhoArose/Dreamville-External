@@ -159,6 +159,31 @@ export type EpistemicValidationStatus =
   | 'PROPOSAL_VALIDATED'
   | 'REJECTED_BY_ENGINE';
 
+export type StoryCheckAbility =
+  | 'Strength'
+  | 'Dexterity'
+  | 'Constitution'
+  | 'Intelligence'
+  | 'Wisdom'
+  | 'Charisma';
+
+export interface StoryCheckResult {
+  checkId: string;
+  skill: string;
+  ability: StoryCheckAbility;
+  difficultyClass: number;
+  proficiencyBonus: number;
+  proficiencyLevel: 'NONE' | 'PROFICIENT' | 'EXPERTISE';
+  abilityModifier: number;
+  totalModifier: number;
+  roll: RollRecord;
+  total: number;
+  success: boolean;
+  criticalSuccess: boolean;
+  criticalFailure: boolean;
+  reason: string;
+}
+
 export interface ActionLog {
   id: string;
   timestamp: string;
@@ -169,6 +194,7 @@ export interface ActionLog {
   authoritativeFeedback: string;
   /** Player-facing narrator response, separate from internal/mechanical engine feedback. */
   narrativeResponse?: string;
+  checkResult?: StoryCheckResult;
 }
 
 export interface ProtagonistProfile {
@@ -351,6 +377,7 @@ export interface ActionResult {
   message: string;
   authoritativeFeedback: string;
   narrativeResponse?: string;
+  checkResult?: StoryCheckResult;
   viewState: ExternalViewState;
 }
 

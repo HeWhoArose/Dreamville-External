@@ -472,6 +472,22 @@ Rules:
       ];
 
       const inventory: StartingEquipmentItem[] = [
+        ...aiInventory.map((item: any, i: number) => ({
+          id: item.id || `inv_ai_${i}`,
+          name: String(item.name || `Item ${i + 1}`),
+          category: String(item.category || 'Miscellaneous'),
+          description: item.description ? String(item.description) : undefined,
+          slot: item.slot ? String(item.slot) : undefined,
+          isEquipped: Boolean(item.isEquipped),
+          quantity: Number(item.quantity ?? 1),
+          rarity: item.rarity ? String(item.rarity) : undefined,
+          weightKg: typeof item.weightKg === 'number' ? item.weightKg : undefined,
+          durability: typeof item.durability === 'number' ? item.durability : undefined,
+          maxDurability: typeof item.maxDurability === 'number' ? item.maxDurability : undefined,
+          properties: item.properties && typeof item.properties === 'object' ? item.properties : undefined,
+          provenance: generatedProvenance as CharacterProvenanceSource,
+          sourceUserPrompt: concept,
+        })),
         ...weapons.slice(1).map((w: string, i: number) => ({
           id: `inv_w_${i}`,
           name: w,
@@ -503,22 +519,6 @@ Rules:
           isEquipped: false,
           quantity: 1,
           provenance: generatedProvenance as CharacterProvenanceSource,
-        })),
-        ...aiInventory.map((item: any, i: number) => ({
-          id: item.id || `inv_ai_${i}`,
-          name: String(item.name || `Item ${i + 1}`),
-          category: String(item.category || 'Miscellaneous'),
-          description: item.description ? String(item.description) : undefined,
-          slot: item.slot ? String(item.slot) : undefined,
-          isEquipped: Boolean(item.isEquipped),
-          quantity: Number(item.quantity ?? 1),
-          rarity: item.rarity ? String(item.rarity) : undefined,
-          weightKg: typeof item.weightKg === 'number' ? item.weightKg : undefined,
-          durability: typeof item.durability === 'number' ? item.durability : undefined,
-          maxDurability: typeof item.maxDurability === 'number' ? item.maxDurability : undefined,
-          properties: item.properties && typeof item.properties === 'object' ? item.properties : undefined,
-          provenance: generatedProvenance as CharacterProvenanceSource,
-          sourceUserPrompt: concept,
         })),
       ];
 
@@ -660,7 +660,7 @@ Rules:
       : (Array.isArray(extracted.titles) ? extracted.titles.map((title: any, idx: number) => {
       const id = title?.id || 'title_' + draftId + '_' + (idx + 1);
       return { id, name: String(title?.name || 'Title ' + (idx + 1)), description: String(title?.description || ''), effects: mapEffects(title?.effects, id), provenance: generatedProvenance as CharacterProvenanceSource, worldId };
-    }) : [];
+    }) : []);
 
     const aiExtractionSummary = userEditedFields.has('aiExtractionSummary') && existingDraft?.aiExtractionSummary
       ? {
@@ -798,6 +798,7 @@ OUTPUT STRICT JSON with this structure:
     }
   ]
 }`;
+    let generatedProvenance: CharacterProvenanceSource = 'AI_GENERATED';
     try {
       const orchestrator = worldRepository.getAiOrchestrator();
       const response = await orchestrator.executeTaskGeneration(
@@ -807,6 +808,9 @@ OUTPUT STRICT JSON with this structure:
       );
       if (response.text) {
         proposal = this.parseJsonFromAiResponse(response.text);
+        if (response.source === 'DETERMINISTIC_FALLBACK') {
+          generatedProvenance = 'DETERMINISTIC_FALLBACK';
+        }
       }
     } catch (err) {
       console.warn('[CharacterGenesisService] Orchestrated custom capability proposal failed, using procedural fallback:', err);
@@ -814,6 +818,7 @@ OUTPUT STRICT JSON with this structure:
 
     if (!proposal || !proposal.name) {
       proposal = this.proceduralCustomCapability(concept);
+      generatedProvenance = 'DETERMINISTIC_FALLBACK';
     }
 
     const capability: CapabilityDefinition = {

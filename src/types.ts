@@ -705,6 +705,7 @@ export interface CapabilityDefinition {
   sourceUserPrompt?: string;
   effects?: CharacterEffect[];
   generatedSkills?: GeneratedTechnique[];
+  storyCheckChallenges?: StoryCheckChallenge[];
 }
 
 export interface CapabilityGraphNode {

@@ -823,6 +823,20 @@ export class TacticalCombatEngine {
       };
     }
 
+    const opportunityThreat = !this.actionEconomy.get(actorId)?.disengaging
+      ? Array.from(this.participants.values())
+          .filter((other) => {
+            if (other.id === actorId || other.isDead || other.team === actor.team || other.team === 'neutral') return false;
+            if (other.hpCurrent <= 0 || other.conditions.includes('Unconscious')) return false;
+            const reach = other.reachCells ?? 1.5;
+            const beforeDistance = Math.hypot(actor.x - other.x, actor.y - other.y);
+            const afterDistance = Math.hypot(targetX - other.x, targetY - other.y);
+            return beforeDistance <= reach && afterDistance > reach;
+          })
+          .sort((a, b) => a.id.localeCompare(b.id))
+          .find((other) => this.actionEconomy.get(other.id)?.reactionAvailable)
+      : undefined;
+
     // Check occupied cells
     for (const other of this.participants.values()) {
       if (other.id !== actorId && !other.isDead && other.x === targetX && other.y === targetY) {
@@ -844,9 +858,94 @@ export class TacticalCombatEngine {
       actorId,
       actionType: 'MOVE',
       headline: `${actor.name} moved to (${targetX}, ${targetY}).`,
+      metadata: {
+        movementDistance: distance,
+        provokedOpportunityAttack: Boolean(opportunityThreat),
+      },
     });
 
+    if (opportunityThreat) {
+      this.executeOpportunityAttack(opportunityThreat.id, actorId);
+    }
+
     return { success: true };
+  }
+
+  private executeOpportunityAttack(attackerId: string, targetId: string): {
+    triggered: boolean;
+    hit: boolean;
+    damage: number;
+    targetDied: boolean;
+  } {
+    const attacker = this.participants.get(attackerId);
+    const target = this.participants.get(targetId);
+    const reaction = this.actionEconomy.get(attackerId);
+
+    if (
+      !attacker ||
+      !target ||
+      attacker.isDead ||
+      target.isDead ||
+      attacker.hpCurrent <= 0 ||
+      attacker.conditions.includes('Unconscious') ||
+      !reaction?.reactionAvailable
+    ) {
+      return { triggered: false, hit: false, damage: 0, targetDied: target?.isDead ?? false };
+    }
+
+    const reactionUse = this.actionEconomy.consumeReaction(attackerId);
+    if (!reactionUse.success) {
+      return { triggered: false, hit: false, damage: 0, targetDied: target.isDead };
+    }
+
+    const targetDodging = !!this.actionEconomy.get(targetId)?.dodging;
+    const attackResult = this.ruleset.resolveAttack({
+      attackBonus: attacker.attackBonus,
+      targetArmorClass: target.armorClass,
+      disadvantage: targetDodging,
+      diceEngine: this.diceEngine,
+    });
+
+    let damage = 0;
+    let targetDied = false;
+    if (attackResult.hits) {
+      const damageResult = this.ruleset.resolveDamage(
+        attacker.damageFormula,
+        attackResult.isCritical,
+        this.diceEngine
+      );
+      const resolved = this.applyCombatDamage(
+        target,
+        damageResult.totalDamage,
+        attacker.damageType || 'slashing',
+        attackResult.isCritical
+      );
+      damage = resolved.damage;
+      targetDied = resolved.targetDied;
+    }
+
+    this.eventLog.push({
+      turnNumber: this.currentRound,
+      actorId: attackerId,
+      targetId,
+      actionType: 'ATTACK',
+      headline: attackResult.hits
+        ? `${attacker.name} made an opportunity attack against ${target.name} for ${damage} damage!${targetDied ? ` ${target.name} has fallen!` : ''}`
+        : `${attacker.name}'s opportunity attack missed ${target.name}.`,
+      damageInflicted: damage,
+      rollRecord: attackResult.roll,
+      metadata: {
+        reaction: true,
+        reason: 'Target left reach without Disengaging.',
+      },
+    });
+
+    return {
+      triggered: true,
+      hit: attackResult.hits,
+      damage,
+      targetDied,
+    };
   }
 
   public executeCoreAction(

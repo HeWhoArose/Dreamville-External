@@ -1388,6 +1388,53 @@ gameRouter.post('/combat/move', async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/game/combat/action
+ * Executes a canonical core combat Action (Dash, Dodge, or Disengage).
+ * The turn-resource ledger is authoritative; no client-side action is trusted.
+ */
+gameRouter.post('/combat/action', async (req: Request, res: Response) => {
+  try {
+    const { actorId: reqActorId, action } = req.body;
+    const player = worldRepository.getPlayerLifecycle('default_story');
+    const serverPlayerActorId = player?.actorId || 'player_actor_default_story';
+
+    if (reqActorId && reqActorId !== serverPlayerActorId) {
+      return res.status(403).json({
+        success: false,
+        errorReason: `Unauthorized: cannot execute combat action as actor '${reqActorId}'.`,
+      });
+    }
+
+    if (!['DASH', 'DODGE', 'DISENGAGE'].includes(action)) {
+      return res.status(400).json({
+        success: false,
+        errorReason: 'action must be one of DASH, DODGE, or DISENGAGE.',
+      });
+    }
+
+    const combatEngine = worldRepository.getCombatEngine('default_story');
+    const result = combatEngine.executeCoreAction(serverPlayerActorId, action);
+    const state = getCombatStateHelper(combatEngine, 'default_story', serverPlayerActorId);
+
+    if (!result.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: result.errorReason,
+        combatState: state,
+      });
+    }
+
+    res.json({
+      success: true,
+      action: result.action,
+      combatState: state,
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to execute combat action.' });
+  }
+});
+
+/**
  * POST /api/game/combat/attack
  * Executes D&D SRD 5.2.1 attack resolution with canonical inventory & lifecycle synchronization (DEF-CH8-02, DEF-CH8-03, DEF-CH8-04).
  * Identity is bound to server-authoritative player actor.
@@ -1592,13 +1639,24 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, errorReason: 'Attacker or target participant not found.' });
     }
 
-    // D&D action economy: capability invocation normally consumes the current Action.
-    // Check availability before CapabilityEngine.adjudicate(), because that adjudication
-    // may deduct canonical power resources on approval.
-    if (!combatEngine.getActionEconomy().canConsume(actorId, 'ACTION')) {
+    const capabilityResource =
+      capDef.actionType === 'bonus_action'
+        ? 'BONUS_ACTION'
+        : capDef.actionType === 'reaction'
+          ? 'REACTION'
+          : 'ACTION';
+    const capabilityConsumesResource = capDef.actionType !== 'free';
+
+    // D&D action economy: check the declared capability action type before adjudication.
+    // This prevents a rejected turn action from consuming energy/strain through CapabilityEngine.
+    if (capabilityConsumesResource && !combatEngine.getActionEconomy().canConsume(actorId, capabilityResource)) {
       return res.status(400).json({
         success: false,
-        errorReason: 'Action already used this turn.',
+        errorReason: capabilityResource === 'BONUS_ACTION'
+          ? 'Bonus Action already used this turn.'
+          : capabilityResource === 'REACTION'
+            ? 'Reaction already used.'
+            : 'Action already used this turn.',
         combatState: getCombatStateHelper(combatEngine, 'default_story', actorId),
       });
     }
@@ -1613,6 +1671,7 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
     }
 
     // Multi-turn activation checking (charged/channelled)
+    let activationResourceConsumed = false;
     const existingActivation = combatEngine.getPendingActivation(actorId);
     if (capDef.activationMode === 'charged') {
       if (!existingActivation || existingActivation.capabilityId !== capabilityId) {
@@ -1630,7 +1689,9 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
           channelSustainedTurns: 0,
           startedAtRound: combatEngine.getCurrentRound(),
         };
-        const actionUse = combatEngine.getActionEconomy().consume(actorId, 'ACTION');
+        const actionUse = capabilityConsumesResource
+          ? combatEngine.getActionEconomy().consume(actorId, capabilityResource)
+          : { success: true as const };
         if (!actionUse.success) {
           return res.status(400).json({
             success: false,
@@ -1638,6 +1699,7 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
             combatState: getCombatStateHelper(combatEngine, 'default_story', actorId),
           });
         }
+        activationResourceConsumed = capabilityConsumesResource;
         combatEngine.startActivation(act);
         const state = getCombatStateHelper(combatEngine, 'default_story', actorId);
         return res.json({
@@ -1657,7 +1719,9 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
       }
     } else if (capDef.activationMode === 'channelled') {
       if (!existingActivation || existingActivation.capabilityId !== capabilityId) {
-        const actionUse = combatEngine.getActionEconomy().consume(actorId, 'ACTION');
+        const actionUse = capabilityConsumesResource
+          ? combatEngine.getActionEconomy().consume(actorId, capabilityResource)
+          : { success: true as const };
         if (!actionUse.success) {
           return res.status(400).json({
             success: false,
@@ -1665,6 +1729,7 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
             combatState: getCombatStateHelper(combatEngine, 'default_story', actorId),
           });
         }
+        activationResourceConsumed = capabilityConsumesResource;
         combatEngine.startActivation({
           activationId: `act_${actorId}_${capabilityId}_${Date.now()}`,
           actorId,
@@ -1704,6 +1769,8 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
       capabilityName: capDef.name,
       powerTier: capDef.powerTier,
       category: capDef.category,
+      actionType: capDef.actionType || 'action',
+      consumeResource: !activationResourceConsumed,
     });
 
     if (!castResult.success) {

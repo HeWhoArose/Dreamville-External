@@ -167,6 +167,75 @@ export type StoryCheckAbility =
   | 'Wisdom'
   | 'Charisma';
 
+export type StoryTestType = 'ABILITY_CHECK' | 'SAVING_THROW';
+export type StoryD20AdvantageState = 'NORMAL' | 'ADVANTAGE' | 'DISADVANTAGE';
+
+export interface StoryCheckModifierSource {
+  label: string;
+  value: number;
+  kind: 'ABILITY' | 'PROFICIENCY' | 'EXPERTISE' | 'CONTEXT' | 'OTHER';
+}
+
+export interface StoryCheckChallengeCondition {
+  definitionIdOrName: string;
+  intensity?: number;
+  severity?: number;
+  durationSeconds?: number | null;
+  affectedBodyRegions?: BodyRegionId[];
+}
+
+export interface StoryCheckOutcomeDefinition {
+  damageFormula?: string;
+  damageType?: string;
+  damageMultiplier?: number;
+  targetBodyRegionId?: BodyRegionId;
+  conditions?: StoryCheckChallengeCondition[];
+  removeConditions?: string[];
+  summary?: string;
+}
+
+export interface StoryCheckChallenge {
+  id: string;
+  label: string;
+  sourceType: 'HAZARD' | 'EVENT' | 'CAPABILITY' | 'EFFECT';
+  sourceId: string;
+  keywords: string[];
+  testType?: StoryTestType;
+  savingThrowAbility?: StoryCheckAbility;
+  skill?: string;
+  difficultyClass: number;
+  reason?: string;
+  triggerReason?: string;
+  onFailure?: StoryCheckOutcomeDefinition;
+  onSuccess?: StoryCheckOutcomeDefinition;
+  provenance?: string;
+}
+
+export interface StoryCheckDamageOutcome {
+  requestedAmount: number;
+  rolledAmount: number;
+  finalAmount: number;
+  damageType: string;
+  immune: boolean;
+  resisted: boolean;
+  vulnerable: boolean;
+  healthCurrent: number;
+  targetDied: boolean;
+  destroyedBodyRegions: BodyRegionId[];
+}
+
+export interface StoryCheckConsequenceResult {
+  challengeId: string;
+  applied: boolean;
+  branch: 'SUCCESS' | 'FAILURE';
+  summary: string;
+  damageRoll?: RollRecord;
+  damage?: StoryCheckDamageOutcome;
+  appliedConditions: string[];
+  removedConditions: string[];
+  noEffectReason?: string;
+}
+
 export interface StoryCheckResult {
   checkId: string;
   testType: StoryTestType;
@@ -177,12 +246,21 @@ export interface StoryCheckResult {
   proficiencyLevel: 'NONE' | 'PROFICIENT' | 'EXPERTISE';
   abilityModifier: number;
   totalModifier: number;
+  modifierSources: StoryCheckModifierSource[];
+  advantageState: StoryD20AdvantageState;
+  selectedDieIndex: number;
   roll: RollRecord;
   total: number;
   success: boolean;
   criticalSuccess: boolean;
   criticalFailure: boolean;
   reason: string;
+  contextNotes: string[];
+  worldTriggered: boolean;
+  triggerReason?: string;
+  challengeId?: string;
+  challengeLabel?: string;
+  consequence?: StoryCheckConsequenceResult;
 }
 
 export interface ActionLog {

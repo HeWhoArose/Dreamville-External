@@ -412,6 +412,8 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
     setIsExtracting(true);
 
     try {
+      let activeModelName: string | null = null;
+
       if (!allowDeterministicFallback) {
         try {
           const selection = await apiClient.selectOrchestratorModel({
@@ -420,15 +422,15 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
           });
           const selected = selection?.selectedModel;
           if (selected && !selected.isEmergencyFloor) {
-            const modelName = selected.displayName || selected.modelId;
+            activeModelName = selected.displayName || selected.modelId;
             const fallbackCount = Array.isArray(selection.fallbacks)
               ? selection.fallbacks.filter((model: any) => !model?.isEmergencyFloor).length
               : 0;
-            setExtractionModel(modelName);
+            setExtractionModel(activeModelName);
             setExtractionActivity(
               fallbackCount > 0
-                ? `Contacting ${modelName} • ${fallbackCount} AI fallback model(s) available`
-                : `Contacting ${modelName}`
+                ? `Contacting ${activeModelName} • ${fallbackCount} AI fallback model(s) available`
+                : `Contacting ${activeModelName}`
             );
           } else {
             setExtractionActivity('Checking AI availability...');
@@ -441,8 +443,8 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
       setExtractionActivity(
         allowDeterministicFallback
           ? 'Building the deterministic character draft...'
-          : extractionModel
-          ? `Waiting for ${extractionModel} to return the character interpretation...`
+          : activeModelName
+          ? `Waiting for ${activeModelName} to return the character interpretation...`
           : 'Waiting for the AI model to return the character interpretation...'
       );
 

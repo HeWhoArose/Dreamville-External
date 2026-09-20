@@ -305,7 +305,8 @@ Rules:
         const response = await orchestrator.executeTaskGeneration(
           'narrative.generate',
           prompt,
-          'Return only the requested Character Genesis JSON. Treat the player concept as authoritative input; do not overwrite preserved user fields.'
+          'Return only the requested Character Genesis JSON. Treat the player concept as authoritative input; do not overwrite preserved user fields.',
+          { timeoutMs: 45000 }
         );
 
         // The orchestrator may report a deterministic emergency source. Treat that as
@@ -366,7 +367,7 @@ Rules:
     };
 
     // Sanitize & link capabilities
-    const capabilities: CapabilityDefinition[] = (
+    let capabilities: CapabilityDefinition[] = (
       userEditedFields.has('capabilities') && existingDraft?.capabilities
         ? existingDraft.capabilities
         : (extracted.capabilities || []).map((c: any, idx: number) => ({
@@ -383,6 +384,25 @@ Rules:
             provenance: generatedProvenance,
           }))
     );
+
+    if (capabilities.length === 0) {
+      const defaultCapName = extracted.role?.archetype ? `${extracted.role.archetype} Stance` : 'Signature Technique';
+      capabilities = [
+        {
+          id: `cap_${draftId}_1`,
+          name: defaultCapName,
+          category: 'Combat',
+          activationMode: 'immediate',
+          powerTier: 'Moderate',
+          baseEnergyCost: 15,
+          baseStrainCost: 5,
+          minVesselCapacityRequired: 15,
+          description: `Primary signature capability derived from ${extracted.identity?.name || concept}.`,
+          effects: [],
+          provenance: generatedProvenance,
+        },
+      ];
+    }
 
     // Link skills/techniques to their parent capabilities
     const generatedSkills: GeneratedTechnique[] = (
@@ -1187,7 +1207,7 @@ OUTPUT STRICT JSON with this structure:
     if (!requiredObjectKeys.every((key) => value[key] && typeof value[key] === 'object')) return false;
     if (!value.identity.name || !value.identity.species) return false;
     if (!value.role.profession && !value.role.archetype) return false;
-    if (!Array.isArray(value.capabilities) || value.capabilities.length === 0) return false;
+    if (!Array.isArray(value.capabilities)) return false;
 
     return true;
   }

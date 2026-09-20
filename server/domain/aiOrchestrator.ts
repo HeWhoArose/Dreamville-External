@@ -1590,19 +1590,20 @@ export class MultiModelOrchestrator {
   }
 
   private seedDefaultPins(): void {
-    this.taskPinnedModels.set('narrative.generate', 'google_gemini::gemini-3.6-flash');
-    this.taskPinnedModels.set('character.dialogue', 'google_gemini::gemini-3.6-flash');
-    this.taskPinnedModels.set('memory.extract', 'google_gemini::gemini-3.6-flash');
-    this.taskPinnedModels.set('summary.scene', 'google_gemini::gemini-3.6-flash');
-    this.taskPinnedModels.set('rules.adjudicate', 'google_gemini::gemini-3.6-flash');
-    this.taskPinnedModels.set('utility.inspect', 'google_gemini::gemini-3.6-flash');
+    this.taskPinnedModels.set('narrative.generate', 'google_gemini::gemini-3.5-flash');
+    this.taskPinnedModels.set('character.dialogue', 'google_gemini::gemini-3.5-flash');
+    this.taskPinnedModels.set('memory.extract', 'google_gemini::gemini-3.5-flash');
+    this.taskPinnedModels.set('summary.scene', 'google_gemini::gemini-3.5-flash');
+    this.taskPinnedModels.set('rules.adjudicate', 'google_gemini::gemini-3.5-flash');
+    this.taskPinnedModels.set('utility.inspect', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('speech.generate', 'provider_mock_speech::mock-speech-v1');
     this.taskPinnedModels.set('image.generate', 'google_imagen::imagen-3.0-generate-002');
 
     // Default Fallback Chains
     const defaultChain = [
-      'google_gemini::gemini-3.6-flash',
-      'google_gemini::gemini-2.5-flash',
+      'google_gemini::gemini-3.5-flash',
+      'google_gemini::gemini-3.8-flash',
+      'google_gemini::gemini-3.5-flash-lite',
       'provider_deterministic_emergency::emergency-fallback-local',
     ];
     this.taskFallbackChains.set('narrative.generate', defaultChain);
@@ -1643,18 +1644,18 @@ export class MultiModelOrchestrator {
   }
 
   private seedDefaultModels(): void {
-    // 0. Primary Operational Text Model: Gemini 3.6 Flash (LIVE & READY)
+    // 0. Primary Operational Text Model: Gemini 3.5 Flash (LIVE & READY)
     this.registerModel({
       providerId: 'google_gemini',
-      modelId: 'gemini-3.6-flash',
-      displayName: 'Gemini 3.6 Flash (Primary Live Text Engine)',
+      modelId: 'gemini-3.5-flash',
+      displayName: 'Gemini 3.5 Flash (Primary Live Text Engine)',
       pool: 'fast',
       capabilities: ['fast', 'creative_writing', 'structured_extraction', 'long_context', 'low_cost'],
-      contextWindow: 1000000,
+      contextWindow: 1048576,
       health: 'Healthy',
       quota: 'Healthy',
       latencyMs: 250,
-      userPriority: 120,
+      userPriority: 125,
       roleEligibility: [
         'narrative.generate',
         'character.dialogue',
@@ -1665,6 +1666,84 @@ export class MultiModelOrchestrator {
       ],
       fallbackEligibility: true,
       accessStatus: 'accessible',
+      lifecycleState: 'active',
+      isEmergencyFloor: false,
+    });
+
+    // 0b. Gemini 3.8 Flash (Fallback Text Model)
+    this.registerModel({
+      providerId: 'google_gemini',
+      modelId: 'gemini-3.8-flash',
+      displayName: 'Gemini 3.8 Flash',
+      pool: 'fast',
+      capabilities: ['fast', 'creative_writing', 'structured_extraction', 'long_context'],
+      contextWindow: 1048576,
+      health: 'Healthy',
+      quota: 'Healthy',
+      latencyMs: 250,
+      userPriority: 115,
+      roleEligibility: [
+        'narrative.generate',
+        'character.dialogue',
+        'memory.extract',
+        'summary.scene',
+        'rules.adjudicate',
+        'utility.inspect',
+      ],
+      fallbackEligibility: true,
+      accessStatus: 'accessible',
+      lifecycleState: 'active',
+      isEmergencyFloor: false,
+    });
+
+    // 0c. Gemini 3.5 Flash Lite (Fast Utility Model)
+    this.registerModel({
+      providerId: 'google_gemini',
+      modelId: 'gemini-3.5-flash-lite',
+      displayName: 'Gemini 3.5 Flash Lite',
+      pool: 'fast',
+      capabilities: ['fast', 'structured_extraction', 'low_cost'],
+      contextWindow: 1048576,
+      health: 'Healthy',
+      quota: 'Healthy',
+      latencyMs: 200,
+      userPriority: 110,
+      roleEligibility: [
+        'narrative.generate',
+        'character.dialogue',
+        'memory.extract',
+        'summary.scene',
+        'rules.adjudicate',
+        'utility.inspect',
+      ],
+      fallbackEligibility: true,
+      accessStatus: 'accessible',
+      lifecycleState: 'active',
+      isEmergencyFloor: false,
+    });
+
+    // Gemini 3.6 Flash
+    this.registerModel({
+      providerId: 'google_gemini',
+      modelId: 'gemini-3.6-flash',
+      displayName: 'Gemini 3.6 Flash (Quota Limited 429)',
+      pool: 'fast',
+      capabilities: ['fast', 'creative_writing', 'structured_extraction', 'long_context', 'low_cost'],
+      contextWindow: 1000000,
+      health: 'Throttled',
+      quota: 'Exhausted',
+      latencyMs: 250,
+      userPriority: 100,
+      roleEligibility: [
+        'narrative.generate',
+        'character.dialogue',
+        'memory.extract',
+        'summary.scene',
+        'rules.adjudicate',
+        'utility.inspect',
+      ],
+      fallbackEligibility: true,
+      accessStatus: 'quota_limited',
       lifecycleState: 'active',
       isEmergencyFloor: false,
     });
@@ -3844,7 +3923,7 @@ export class MultiModelOrchestrator {
     fallbackReason?: string;
     attempts: number;
   }> {
-    const timeoutMs = options?.timeoutMs || 15000;
+    const timeoutMs = options?.timeoutMs || 35000;
     const selection = this.selectBestModel(task);
     const candidateChain: ModelRegistryRecord[] = [selection.selectedModel, ...selection.fallbacks];
     let totalAttempts = 0;

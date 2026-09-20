@@ -1,42 +1,49 @@
 {
   "pins": {
-    "narrative.generate": "google_gemini::gemini-3.6-flash",
-    "character.dialogue": "google_gemini::gemini-3.6-flash",
-    "memory.extract": "google_gemini::gemini-3.6-flash",
-    "summary.scene": "google_gemini::gemini-3.6-flash",
-    "rules.adjudicate": "google_gemini::gemini-3.6-flash",
-    "utility.inspect": "google_gemini::gemini-3.6-flash",
+    "narrative.generate": "google_gemini::gemini-3.5-flash",
+    "character.dialogue": "google_gemini::gemini-3.5-flash",
+    "memory.extract": "google_gemini::gemini-3.5-flash",
+    "summary.scene": "google_gemini::gemini-3.5-flash",
+    "rules.adjudicate": "google_gemini::gemini-3.5-flash",
+    "utility.inspect": "google_gemini::gemini-3.5-flash",
     "speech.generate": "provider_mock_speech::mock-speech-v1",
     "image.generate": "google_imagen::imagen-3.0-generate-002"
   },
   "fallbackChains": {
     "narrative.generate": [
-      "google_gemini::gemini-3.6-flash",
-      "google_gemini::gemini-2.5-flash"
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
+      "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "character.dialogue": [
-      "google_gemini::gemini-3.6-flash",
-      "google_gemini::gemini-2.5-flash",
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "memory.extract": [
-      "google_gemini::gemini-3.6-flash",
-      "google_gemini::gemini-2.5-flash",
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "summary.scene": [
-      "google_gemini::gemini-3.6-flash",
-      "google_gemini::gemini-2.5-flash",
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "rules.adjudicate": [
-      "google_gemini::gemini-3.6-flash",
-      "google_gemini::gemini-2.5-flash",
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "utility.inspect": [
-      "google_gemini::gemini-3.6-flash",
-      "google_gemini::gemini-2.5-flash",
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
       "provider_deterministic_emergency::emergency-fallback-local"
     ]
   },

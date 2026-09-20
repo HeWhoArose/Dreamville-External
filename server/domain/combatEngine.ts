@@ -2,10 +2,21 @@ import { WorldTimestamp } from './types';
 import { PendingActivationState } from './capabilityEngine';
 import { ConditionEngine } from './conditionEngine';
 
+export interface DiceTerm {
+  count: number;
+  sides: number;
+}
+
+export interface ParsedDiceFormula {
+  terms: DiceTerm[];
+  flatModifier: number;
+}
+
 export interface RollRecord {
   rollId: string;
   rulesetVersion: string;
   formula: string;
+  diceTerms: DiceTerm[];
   individualDice: number[];
   modifier: number;
   total: number;
@@ -81,32 +92,82 @@ export class LocalDiceEngine {
   }
 
   public roll(formula: string, modifier = 0): RollRecord {
-    const match = formula.trim().match(/^(\d+)d(\d+)$/i);
-    const count = match ? parseInt(match[1], 10) : 1;
-    const sides = match ? parseInt(match[2], 10) : 20;
-
+    const parsed = LocalDiceEngine.parseFormula(formula);
     const dice: number[] = [];
-    for (let i = 0; i < count; i++) {
-      dice.push(this.rollDie(sides));
+
+    for (const term of parsed.terms) {
+      for (let i = 0; i < term.count; i++) {
+        dice.push(this.rollDie(term.sides));
+      }
     }
 
     const diceSum = dice.reduce((a, b) => a + b, 0);
-    const total = diceSum + modifier;
+    const combinedModifier = parsed.flatModifier + modifier;
+    const total = diceSum + combinedModifier;
+    const hasD20 = parsed.terms.some((term) => term.sides === 20);
+    const naturalD20Values: number[] = [];
+    let diceOffset = 0;
+    for (const term of parsed.terms) {
+      const termValues = dice.slice(diceOffset, diceOffset + term.count);
+      if (term.sides === 20) naturalD20Values.push(...termValues);
+      diceOffset += term.count;
+    }
 
     this.rollCounter++;
     return {
       rollId: `roll_${this.rollCounter}`,
       rulesetVersion: 'SRD-5.2.1',
-      formula: `${count}d${sides}${modifier >= 0 ? '+' : ''}${modifier}`,
+      formula: LocalDiceEngine.formatFormula(parsed.terms, combinedModifier),
+      diceTerms: parsed.terms,
       individualDice: dice,
-      modifier,
+      modifier: combinedModifier,
       total,
-      isCriticalSuccess: sides === 20 && dice.includes(20),
-      isCriticalFailure: sides === 20 && dice.includes(1),
+      isCriticalSuccess: hasD20 && naturalD20Values.includes(20),
+      isCriticalFailure: hasD20 && naturalD20Values.includes(1),
       timestamp: Math.floor(Date.now() / 1000),
     };
   }
 
+  public static parseFormula(formula: string): ParsedDiceFormula {
+    const normalized = (formula || '').replace(/\s+/g, '').toLowerCase();
+    if (!normalized) return { terms: [{ count: 1, sides: 20 }], flatModifier: 0 };
+
+    const terms: DiceTerm[] = [];
+    let flatModifier = 0;
+    let index = 0;
+    let expectingOperator: '+' | '-' = '+';
+
+    while (index < normalized.length) {
+      if (normalized[index] === '+' || normalized[index] === '-') {
+        expectingOperator = normalized[index] as '+' | '-';
+        index += 1;
+      }
+
+      const diceMatch = normalized.slice(index).match(/^(\d*)d(\d+)/i);
+      if (diceMatch) {
+        const count = Math.max(1, Number(diceMatch[1] || 1));
+        const sides = Math.max(2, Number(diceMatch[2]));
+        if (count > 1000 || sides > 1000) throw new Error('Dice formula exceeds the supported safety limits.');
+        terms.push({ count, sides });
+        index += diceMatch[0].length;
+      } else {
+        const numberMatch = normalized.slice(index).match(/^\d+/);
+        if (!numberMatch) throw new Error(`Invalid dice formula near "${normalized.slice(index)}".`);
+        const number = Number(numberMatch[0]);
+        flatModifier += expectingOperator === '-' ? -number : number;
+        index += numberMatch[0].length;
+      }
+      expectingOperator = '+';
+    }
+
+    if (terms.length === 0) terms.push({ count: 1, sides: 20 });
+    return { terms, flatModifier };
+  }
+
+  public static formatFormula(terms: DiceTerm[], modifier: number): string {
+    const dicePart = terms.map((term) => `${term.count}d${term.sides}`).join('+');
+    return modifier === 0 ? dicePart : `${dicePart}${modifier > 0 ? '+' : ''}${modifier}`;
+  }
   // Static fallback instance for backwards compatibility
   private static defaultInstance = new LocalDiceEngine(1337);
 
@@ -202,14 +263,18 @@ export class Dnd521RulesetAdapter implements IRulesetAdapter {
     diceEngine?: LocalDiceEngine
   ): { roll: RollRecord; totalDamage: number } {
     const dice = diceEngine || LocalDiceEngine;
-    let roll = dice.roll(damageFormula, 0);
-    let total = roll.total;
+    const parsed = LocalDiceEngine.parseFormula(damageFormula);
+    const baseRoll = dice.roll(damageFormula, 0);
+    let total = baseRoll.total;
+    let roll = baseRoll;
+
     if (isCritical) {
-      const extraCritRoll = dice.roll(damageFormula, 0);
-      total += extraCritRoll.total;
+      const diceOnlyFormula = parsed.terms.map((term) => `${term.count}d${term.sides}`).join('+');
+      const extraCritRoll = dice.roll(diceOnlyFormula, 0);
+      total += extraCritRoll.individualDice.reduce((sum, value) => sum + value, 0);
       roll = {
-        ...roll,
-        individualDice: [...roll.individualDice, ...extraCritRoll.individualDice],
+        ...baseRoll,
+        individualDice: [...baseRoll.individualDice, ...extraCritRoll.individualDice],
         total,
       };
     }

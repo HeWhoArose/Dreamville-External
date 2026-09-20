@@ -675,10 +675,16 @@ export interface SynthesisResponse {
   graph?: CapabilityGraphNode[];
 }
 
+export interface DiceTerm {
+  count: number;
+  sides: number;
+}
+
 export interface RollRecord {
   rollId: string;
   rulesetVersion: string;
   formula: string;
+  diceTerms?: DiceTerm[];
   individualDice: number[];
   modifier: number;
   total: number;

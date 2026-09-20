@@ -166,6 +166,7 @@ export class ServerMockAuthority {
         disposition: char.disposition,
         playerVisibleKnowledge: [...char.playerVisibleKnowledge],
         portraitEmoji: char.portraitEmoji,
+        portraitUrl: (char as any).portraitUrl,
       };
     }
 

@@ -1529,6 +1529,7 @@ class ApiClient {
     narrativeRole?: 'PROTAGONIST' | 'SIDE_CHARACTER' | 'FREE_ROAM',
     allowDeterministicFallback = false
   ): Promise<any> {
+    const deterministicFallback = allowDeterministicFallback === true;
     const res = await fetch(`${this.baseUrl}/worlds/${encodeURIComponent(worldId)}/characters/extract`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -1537,7 +1538,7 @@ class ApiClient {
         existingDraft,
         userEditedFields,
         narrativeRole,
-        allowDeterministicFallback,
+        allowDeterministicFallback: deterministicFallback,
       }),
     });
 

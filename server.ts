@@ -21,6 +21,20 @@ async function startServer() {
   // API Routes MUST come FIRST
   app.use('/api/game', gameRouter);
 
+  // Never let an unmatched API request fall through to the SPA HTML fallback.
+  // This keeps API failures JSON-shaped and prevents `Unexpected token '<'` errors
+  // when the frontend accidentally reaches a missing or mis-mounted endpoint.
+  app.use('/api', (req, res, next) => {
+    if (!res.headersSent) {
+      res.status(404).json({
+        error: `API route not found: ${req.method} ${req.originalUrl}`,
+        code: 'API_ROUTE_NOT_FOUND',
+      });
+      return;
+    }
+    next();
+  });
+
   // Vite middleware for development vs static files for production
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');

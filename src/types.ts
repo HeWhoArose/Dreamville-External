@@ -500,6 +500,8 @@ export interface CharacterStartingState {
 
 export type CharacterStartingChoiceMode = 'CHOOSE' | 'AI_SUGGEST' | 'SURPRISE_ME';
 
+export type CharacterStoryMode = 'PROTAGONIST' | 'SIDE_CHARACTER' | 'FREE_ROAM';
+
 export interface CharacterAiExtractionSummary {
   interpretation: string;
   keyFacts: string[];
@@ -983,7 +985,7 @@ export interface WorldSynthesisInput {
   defaultEra?: string;
   canonMode?: string;
   rulesetId?: string;
-  storyMode?: 'PROTAGONIST' | 'SIDE_CHARACTER' | 'FREE_ROAM';
+  storyMode?: CharacterStoryMode;
   dndRulesMode?: 'FULL_DND' | 'HYBRID_DND' | 'CUSTOM_HOMEBREW_DND';
   setting?: string;
   sourcePolicy?: string;
@@ -1224,7 +1226,7 @@ export interface CharacterGenesisDraft {
   };
   revision: number;
   revisionHistory: CharacterGenesisRevision[];
-  storyMode?: 'PROTAGONIST' | 'SIDE_CHARACTER' | 'FREE_ROAM';
+  storyMode?: CharacterStoryMode;
   dndRulesMode?: 'FULL_DND' | 'HYBRID_DND' | 'CUSTOM_HOMEBREW_DND';
   createdAt?: string;
   updatedAt?: string;
@@ -1272,6 +1274,7 @@ export interface CharacterExtractionRequest {
   worldId: string;
   existingDraft?: Partial<CharacterGenesisDraft>;
   userEditedFields?: string[];
+  narrativeRole?: CharacterStoryMode;
 }
 
 export interface CustomCapabilityProposalRequest {

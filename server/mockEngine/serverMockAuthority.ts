@@ -460,6 +460,10 @@ export class ServerMockAuthority {
       const generated = await narrator.generateNarrativeOnly({
         storyId: targetStoryId,
         playerAction: String(freeformText),
+        committedOutcome: [
+          baseResult.message,
+          baseResult.authoritativeFeedback,
+        ].filter(Boolean).join(' '),
         hardTokenBudget: 500,
         timeoutMs: 5000,
         maxRetries: 1,

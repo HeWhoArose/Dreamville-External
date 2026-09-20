@@ -139,6 +139,56 @@ test('Bonus Action and Reaction capability types use their declared resource rat
   assert.equal(engine.getTurnResources('hero')?.reactionAvailable, false);
 });
 
+test('leaving an enemy reach triggers one opportunity attack and consumes its Reaction', () => {
+  const engine = new TacticalCombatEngine(1337);
+  engine.addParticipant(participant({ x: 2, y: 0, initiativeModifier: 100 }));
+  engine.addParticipant(participant({
+    id: 'enemy',
+    name: 'Enemy',
+    x: 3,
+    y: 0,
+    team: 'enemies',
+    initiativeModifier: 0,
+    attackBonus: 100,
+    damageFormula: '1d4+1',
+  }));
+  engine.rollInitiative();
+
+  assert.equal(engine.getCurrentActor()?.id, 'hero');
+  const move = engine.moveActor('hero', 0, 0);
+  assert.equal(move.success, true);
+  assert.equal(engine.getTurnResources('enemy')?.reactionAvailable, false);
+
+  const opportunity = engine.getBattleEvents().find((event) => event.metadata && (event.metadata as any).reaction === true);
+  assert.ok(opportunity, 'Opportunity attack event should be recorded');
+  assert.equal(opportunity?.actionType, 'ATTACK');
+});
+
+test('Disengage prevents the opportunity attack while preserving movement', () => {
+  const engine = new TacticalCombatEngine(1337);
+  engine.addParticipant(participant({ x: 2, y: 0, initiativeModifier: 100 }));
+  engine.addParticipant(participant({
+    id: 'enemy',
+    name: 'Enemy',
+    x: 3,
+    y: 0,
+    team: 'enemies',
+    initiativeModifier: 0,
+    attackBonus: 100,
+    damageFormula: '1d4+1',
+  }));
+  engine.rollInitiative();
+
+  const disengage = engine.executeCoreAction('hero', 'DISENGAGE');
+  assert.equal(disengage.success, true);
+  assert.equal(engine.getTurnResources('hero')?.disengaging, true);
+
+  const move = engine.moveActor('hero', 0, 0);
+  assert.equal(move.success, true);
+  assert.equal(engine.getTurnResources('enemy')?.reactionAvailable, true);
+  assert.equal(engine.getBattleEvents().some((event) => (event.metadata as any)?.reaction === true), false);
+});
+
 test('D&D adapter uses advantage/disadvantage for saving throws', () => {
   const adapter = new Dnd521RulesetAdapter();
   const advantageRoll = adapter.resolveSavingThrow({

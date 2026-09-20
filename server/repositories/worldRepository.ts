@@ -16,6 +16,7 @@ import { SensoryEngine } from '../domain/sensoryEngine';
 import { LivingWorldSimulation } from '../domain/livingWorldSimulation';
 import { MultiModelOrchestrator } from '../domain/aiOrchestrator';
 import { CharacterAlignmentEngine } from '../domain/characterAlignment';
+import { ConditionEngine } from '../domain/conditionEngine';
 import { CampaignArchiveService, PartitionedArchive } from '../domain/campaignArchive';
 import { dndSpellRulesEvaluator } from '../domain/dndSpellRulesModel';
 import {
@@ -52,6 +53,7 @@ export interface WorldRepository {
     actorId: string
   ): import('../domain/capabilityEngine').EffectiveCapability[];
   getCombatEngine(storyId: string): TacticalCombatEngine;
+  getConditionEngine(storyId: string): ConditionEngine;
   getCombatPerceptionOptions(storyId: string, viewerActorId: string): CombatPerceptionOptions;
   isEntityEpistemicallyKnown(storyId: string, viewerActorId: string, targetId: string): boolean;
   getMemoryEngine(storyId: string): MemoryOpportunityEngine;
@@ -165,6 +167,7 @@ export class InMemoryWorldRepository implements WorldRepository {
   private inventoryEngines: Map<string, InventoryItemEngine> = new Map();
   private capabilityEngines: Map<string, CapabilityEngine> = new Map();
   private combatEngines: Map<string, TacticalCombatEngine> = new Map();
+  private conditionEngines: Map<string, ConditionEngine> = new Map();
   private memoryEngines: Map<string, MemoryOpportunityEngine> = new Map();
   private livingSimulations: Map<string, LivingWorldSimulation> = new Map();
   private aiOrchestrator: MultiModelOrchestrator | null = null;
@@ -660,6 +663,16 @@ export class InMemoryWorldRepository implements WorldRepository {
       // The capability system may still track its own energy/strain resources, but HP starts from
       // CharacterGenesis rather than a hard-coded default.
       const seededPowerState = capEngine.seedStarterPowerStateForActor(actorId);
+      const conditionEngine = this.getConditionEngine(storyId);
+      const confirmedConditionState = char.conditionState || char.startingState?.conditionState;
+      conditionEngine.seedActor(actorId, {
+        healthCurrent: Number(char.coreStats?.hpCurrent ?? char.startingState?.healthCurrent ?? 50),
+        healthMax: Number(char.coreStats?.hpMax ?? char.startingState?.healthMax ?? 50),
+        fatigue: Number(char.startingState?.fatigue ?? 0),
+        stress: Number(char.startingState?.stress ?? 0),
+        legacyConditions: Array.isArray(char.startingState?.conditions) ? char.startingState.conditions : [],
+        conditionState: confirmedConditionState,
+      });
       if (char.coreStats) {
         capEngine.setPowerState(actorId, {
           ...seededPowerState,
@@ -808,6 +821,9 @@ export class InMemoryWorldRepository implements WorldRepository {
         currentHp: Number(char.coreStats?.hpCurrent ?? char.startingState?.healthCurrent ?? 30),
         maxHp: Number(char.coreStats?.hpMax ?? char.startingState?.healthMax ?? 30),
         characterCoreStats: char.coreStats ? JSON.parse(JSON.stringify(char.coreStats)) : undefined,
+        conditionState: char.conditionState || char.startingState?.conditionState
+          ? JSON.parse(JSON.stringify(char.conditionState || char.startingState?.conditionState))
+          : undefined,
         characterSkills: char.skills ? JSON.parse(JSON.stringify(char.skills)) : undefined,
         protagonist: JSON.parse(JSON.stringify(char)), // Sealed snapshot
         characterAttributes: JSON.parse(JSON.stringify(char.attributes || [])),
@@ -1226,10 +1242,31 @@ export class InMemoryWorldRepository implements WorldRepository {
     return capEngine.getEffectiveActorCapabilities(actorId, invEngine);
   }
 
+  public getConditionEngine(storyId: string): ConditionEngine {
+    let engine = this.conditionEngines.get(storyId);
+    if (!engine) {
+      engine = new ConditionEngine();
+      const player = this.getPlayerLifecycle(storyId);
+      const run = this.getStoryRun(storyId);
+      const actorId = player ? player.actorId : `player_actor_${storyId}`;
+      const coreStats = run?.characterCoreStats || run?.protagonist?.coreStats;
+      engine.seedActor(actorId, {
+        healthCurrent: Number(coreStats?.hpCurrent ?? run?.currentHp ?? 50),
+        healthMax: Number(coreStats?.hpMax ?? run?.maxHp ?? 50),
+        legacyConditions: run?.startingState?.conditions || [],
+        conditionState: run?.conditionState || run?.startingState?.conditionState,
+        fatigue: Number(run?.startingState?.fatigue ?? 0),
+        stress: Number(run?.startingState?.stress ?? 0),
+      });
+      this.conditionEngines.set(storyId, engine);
+    }
+    return engine;
+  }
+
   public getCombatEngine(storyId: string): TacticalCombatEngine {
     let engine = this.combatEngines.get(storyId);
     if (!engine) {
-      engine = new TacticalCombatEngine();
+      engine = new TacticalCombatEngine(1337, undefined, this.getConditionEngine(storyId));
       this.combatEngines.set(storyId, engine);
     }
     return engine;

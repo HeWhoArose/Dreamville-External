@@ -195,7 +195,13 @@ export class StoryCheckEngine {
     const characterLevel = Math.max(1, Number(character.coreStats?.level ?? 1));
     const abilityMod = modifier(abilityScore(character.coreStats, ability));
     const levelProficiencyBonus = proficiencyBonus(characterLevel);
-    const proficiencyLevelValue = saveSelection ? 'NONE' as const : proficiencyLevel(character.skills, profile!.skill);
+    const saveProficient = Boolean(
+      saveSelection &&
+      character.coreStats?.savingThrowProficiencies?.includes(ability)
+    );
+    const proficiencyLevelValue = saveSelection
+      ? (saveProficient ? 'PROFICIENT' : 'NONE')
+      : proficiencyLevel(character.skills, profile!.skill);
     const prof = proficiencyLevelValue === 'EXPERTISE'
       ? levelProficiencyBonus * 2
       : proficiencyLevelValue === 'PROFICIENT'
@@ -210,7 +216,11 @@ export class StoryCheckEngine {
     if (proficiencyLevelValue === 'EXPERTISE') {
       modifierSources.push({ label: 'Proficiency (Expertise)', value: prof, kind: 'EXPERTISE' });
     } else if (proficiencyLevelValue === 'PROFICIENT') {
-      modifierSources.push({ label: 'Proficiency', value: prof, kind: 'PROFICIENCY' });
+      modifierSources.push({
+        label: saveSelection ? 'Saving Throw Proficiency' : 'Proficiency',
+        value: prof,
+        kind: 'PROFICIENCY',
+      });
     }
 
     const contextNotes: string[] = [];

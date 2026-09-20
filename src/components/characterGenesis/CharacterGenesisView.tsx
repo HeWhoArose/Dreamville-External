@@ -772,6 +772,20 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                   </button>
                   {showInterpretation && (
                     <div className="mt-3 space-y-2 text-xs text-neutral-300">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[10px] uppercase tracking-wider text-neutral-500">Extraction source</span>
+                        <span
+                          className={
+                            draft.aiExtractionSummary.generationSource === 'DETERMINISTIC_FALLBACK'
+                              ? 'text-[10px] px-2 py-0.5 rounded border border-amber-800 bg-amber-950/40 text-amber-300'
+                              : draft.aiExtractionSummary.generationSource === 'AI_FALLBACK'
+                              ? 'text-[10px] px-2 py-0.5 rounded border border-yellow-800 bg-yellow-950/30 text-yellow-300'
+                              : 'text-[10px] px-2 py-0.5 rounded border border-indigo-800 bg-indigo-950/40 text-indigo-300'
+                          }
+                        >
+                          {draft.aiExtractionSummary.generationSource || 'LEGACY_UNKNOWN'}
+                        </span>
+                      </div>
                       <p>{draft.aiExtractionSummary.interpretation}</p>
                       <div><span className="text-neutral-500">Key facts:</span> {draft.aiExtractionSummary.keyFacts.join(' • ') || 'None'}</div>
                       <div><span className="text-neutral-500">AI proposes:</span> {draft.aiExtractionSummary.proposedHighlights.join(' • ') || 'None'}</div>

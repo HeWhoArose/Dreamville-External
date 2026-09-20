@@ -505,6 +505,7 @@ export interface CharacterAiExtractionSummary {
   keyFacts: string[];
   proposedHighlights: string[];
   uncertainties?: string[];
+  generationSource?: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK';
 }
 
 export interface CapabilityDefinition {
@@ -1057,6 +1058,7 @@ export interface NpcDialogueContextResponse {
 export type CharacterProvenanceSource =
   | 'PLAYER_INPUT'
   | 'AI_GENERATED'
+  | 'DETERMINISTIC_FALLBACK'
   | 'USER_EDITED'
   | 'WORLD_DERIVED'
   | 'SYSTEM_DERIVED';

@@ -10,7 +10,10 @@ export type SettingsTab =
   | 'APPEARANCE'
   | 'STORYTELLING'
   | 'AUDIO'
+  | 'PROVIDERS'
   | 'MODELS'
+  | 'FALLBACKS'
+  | 'REGISTRY_TEST'
   | 'DATA'
   | 'ADVANCED';
 
@@ -138,6 +141,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [taskPins, setTaskPins] = useState<Record<string, string>>({});
   const [testingModelKey, setTestingModelKey] = useState<string | null>(null);
   const [testResultFeedback, setTestResultFeedback] = useState<string | null>(null);
+  const [modelSearch, setModelSearch] = useState('');
+  const [selectedModel, setSelectedModel] = useState<any | null>(null);
 
   // Fallback Chain State
   const [fallbackChains, setFallbackChains] = useState<Record<string, string[]>>({});
@@ -312,6 +317,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     try {
       setTaskPins((prev) => ({ ...prev, [orchestratorTaskId]: fullModelKey }));
       await apiClient.pinModelForTask({ task: orchestratorTaskId, modelKey: fullModelKey });
+
+      const emergencyKey = 'provider_deterministic_emergency::emergency-fallback-local';
+      const existingChain = fallbackChains[orchestratorTaskId] || [];
+      const nextFallbacks = existingChain.filter(
+        (key) => key !== emergencyKey && key !== fullModelKey
+      );
+
+      await apiClient.setOrchestratorFallbackChain({
+        task: orchestratorTaskId,
+        chain: [fullModelKey, ...nextFallbacks, emergencyKey],
+      });
+
       await loadOrchestratorData();
     } catch (err) {
       console.error(`Failed to pin model for task ${taskKey}:`, err);
@@ -347,6 +364,53 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       return { emoji: '🔴', label: 'UNAVAILABLE (404)', color: 'text-rose-400', variant: 'rose' as const };
     }
     return { emoji: '⚪', label: 'NOT CONFIGURED', color: 'text-slate-400', variant: 'stone' as const };
+  };
+
+  const getProviderDisplayName = (providerId: string) => {
+    if (providerId === 'google_gemini' || providerId === 'provider_google_gemini') return 'Google Gemini';
+    if (providerId === 'openrouter') return 'OpenRouter';
+    if (providerId === 'openai') return 'OpenAI';
+    if (providerId === 'anthropic') return 'Anthropic';
+    if (providerId === 'elevenlabs') return 'ElevenLabs';
+    if (providerId === 'dreambook-native') return 'DreamBook Native';
+    if (providerId === 'provider_deterministic_emergency') return 'DreamBook Emergency';
+    return providerId;
+  };
+
+  const getUniqueModels = (models: any[]) => {
+    const seen = new Set<string>();
+    return models.filter((model) => {
+      const key = `${model.providerId}::${model.modelId}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
+  const getFilteredModels = () => {
+    const query = modelSearch.trim().toLowerCase();
+    return getUniqueModels(orchestratorModels)
+      .filter((model) => {
+        if (!query) return true;
+        const haystack = [
+          model.displayName,
+          model.modelId,
+          model.providerId,
+          model.description,
+          ...(Array.isArray(model.capabilities) ? model.capabilities : []),
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        return haystack.includes(query);
+      })
+      .sort((a, b) => {
+        const providerDiff = getProviderDisplayName(a.providerId).localeCompare(
+          getProviderDisplayName(b.providerId)
+        );
+        if (providerDiff !== 0) return providerDiff;
+        return String(a.displayName || a.modelId).localeCompare(String(b.displayName || b.modelId));
+      });
   };
 
   const getEligibleModelsForTask = (taskKey: string) => {
@@ -395,7 +459,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           { id: 'APPEARANCE', label: 'Appearance', icon: '🎨' },
           { id: 'STORYTELLING', label: 'Storytelling', icon: '📜' },
           { id: 'AUDIO', label: 'Audio & Voice', icon: '🔊' },
-          { id: 'MODELS', label: 'Models & Providers', icon: '⚡' },
+          { id: 'PROVIDERS', label: 'Providers', icon: '🔑' },
+          { id: 'MODELS', label: 'Models', icon: '🧠' },
+          { id: 'FALLBACKS', label: 'Fallbacks', icon: '🔁' },
+          { id: 'REGISTRY_TEST', label: 'Registry & Tests', icon: '🧪' },
           { id: 'DATA', label: 'Data & Backup', icon: '💾' },
           { id: 'ADVANCED', label: 'Advanced', icon: '🛠️' },
         ].map((tab) => {
@@ -628,26 +695,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       )}
 
-      {/* TAB 5: MODELS & PROVIDERS */}
-      {activeTab === 'MODELS' && (
-        <div className="space-y-8 max-w-5xl">
-          {/* Section A: Providers */}
+      {/* TAB 5: PROVIDERS */}
+      {activeTab === 'PROVIDERS' && (
+        <div className="space-y-6 max-w-5xl">
           <div className="p-5 rounded-[var(--db-radius-lg)] bg-[var(--db-bg-card)] border border-[var(--db-border-default)] space-y-5">
             <div className="flex items-center justify-between pb-3 border-b border-[var(--db-border-subtle)]">
               <div>
-                <h3 className="text-base font-serif font-bold text-[var(--db-text-primary)]">
-                  Connected Models & Providers
-                </h3>
+                <h3 className="text-base font-serif font-bold text-[var(--db-text-primary)]">AI Providers</h3>
                 <p className="text-xs text-[var(--db-text-muted)] mt-0.5">
-                  Built-in DreamBook models and external connected API providers.
+                  Connect and manage the services that supply DreamBook's models.
                 </p>
               </div>
-              <Badge variant="purple" size="sm">
-                Secure Secret Vault
-              </Badge>
+              <Badge variant="purple" size="sm">Secure Secret Vault</Badge>
             </div>
 
-            {/* Provider Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {providers.map((p) => {
                 const isEditing = editingProviderId === p.id;
@@ -656,33 +717,28 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     key={p.id}
                     className="p-4 rounded-[var(--db-radius-md)] bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] space-y-3"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="text-xs font-bold text-[var(--db-text-primary)]">
-                            {p.name}
-                          </h4>
-                          {p.type === 'BUILTIN' && (
-                            <Badge variant="gold" size="sm">Built-In</Badge>
-                          )}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="text-xs font-bold text-[var(--db-text-primary)]">{p.name}</h4>
+                          {p.type === 'BUILTIN' && <Badge variant="gold" size="sm">Built-In</Badge>}
                         </div>
                         <div className="text-[11px] text-[var(--db-text-muted)] mt-0.5">
                           {p.modelCount} Available Models • {p.modalities.join(', ')}
                         </div>
                       </div>
-
-                      <Badge
-                        variant={p.status === 'CONNECTED' ? 'emerald' : 'amber'}
-                        size="sm"
-                      >
+                      <Badge variant={p.status === 'CONNECTED' ? 'emerald' : 'amber'} size="sm">
                         {p.status === 'CONNECTED' ? 'Connected' : 'Not Configured'}
                       </Badge>
                     </div>
 
-                    {/* Secret Mask / API Key Action */}
-                    <div className="pt-2 border-t border-[var(--db-border-subtle)] flex items-center justify-between text-xs">
+                    <div className="pt-2 border-t border-[var(--db-border-subtle)] flex items-center justify-between gap-3 text-xs">
                       <span className="text-[11px] text-[var(--db-text-muted)]">
-                        {p.hasKeySaved ? 'API Key Saved (Secret Vault Protected)' : p.type === 'BUILTIN' ? 'Internal Runtime' : 'No Key Configured'}
+                        {p.hasKeySaved
+                          ? 'API Key Saved (Secret Vault Protected)'
+                          : p.type === 'BUILTIN'
+                          ? 'Internal Runtime'
+                          : 'No Key Configured'}
                       </span>
                       {p.type !== 'BUILTIN' && (
                         <button
@@ -695,9 +751,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       )}
                     </div>
 
-                    {/* Edit Key Form */}
                     {isEditing && (
-                      <div className="mt-3 p-3 rounded bg-[var(--db-bg-card)] border border-[var(--db-border-default)] space-y-3 animate-in fade-in duration-150">
+                      <div className="mt-3 p-3 rounded bg-[var(--db-bg-card)] border border-[var(--db-border-default)] space-y-3">
                         <label className="text-[11px] font-semibold text-[var(--db-text-secondary)] block">
                           Enter {p.name} API Key
                         </label>
@@ -709,9 +764,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                           className="w-full px-3 py-1.5 rounded bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] text-xs text-[var(--db-text-primary)] font-mono focus:outline-none focus:border-[var(--db-purple-500)]"
                         />
                         {keySaveMessage && (
-                          <div className="text-[11px] text-[var(--db-emerald-400)] font-mono">
-                            {keySaveMessage}
-                          </div>
+                          <div className="text-[11px] text-[var(--db-emerald-400)] font-mono">{keySaveMessage}</div>
                         )}
                         <div className="flex items-center gap-2 pt-1">
                           <Button
@@ -725,6 +778,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                           <Button
                             variant="primary"
                             size="sm"
+                            disabled={isTestingConnection}
                             onClick={() => handleSaveKey(p.id)}
                           >
                             Save API Key
@@ -737,284 +791,351 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               })}
             </div>
           </div>
+        </div>
+      )}
 
-          {/* Section B: Task Model Selection */}
+      {/* TAB 6: MODELS */}
+      {activeTab === 'MODELS' && (
+        <div className="space-y-6 max-w-6xl">
           <div className="p-5 rounded-[var(--db-radius-lg)] bg-[var(--db-bg-card)] border border-[var(--db-border-default)] space-y-5">
-            <div className="flex items-center justify-between pb-3 border-b border-[var(--db-border-subtle)]">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
               <div>
-                <h3 className="text-base font-serif font-bold text-[var(--db-text-primary)]">
-                  Task Model Assignment
-                </h3>
+                <h3 className="text-base font-serif font-bold text-[var(--db-text-primary)]">Model Catalog</h3>
                 <p className="text-xs text-[var(--db-text-muted)] mt-0.5">
-                  Assign primary models to specialized storytelling tasks. Dynamic authority connected to MultiModelOrchestrator.
+                  Browse every registered model, grouped by provider. Click a model for its full capability profile.
                 </p>
+              </div>
+              <div className="relative w-full lg:w-96">
+                <input
+                  type="search"
+                  value={modelSearch}
+                  onChange={(e) => setModelSearch(e.target.value)}
+                  placeholder="Search by model, provider, capability..."
+                  className="w-full px-3 py-2 rounded-lg bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] text-xs text-[var(--db-text-primary)] focus:outline-none focus:border-[var(--db-purple-500)]"
+                />
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-6">
+              {(() => {
+                const filteredModels = getFilteredModels();
+                const groups = filteredModels.reduce<Record<string, any[]>>((acc, model) => {
+                  const providerName = getProviderDisplayName(model.providerId);
+                  if (!acc[providerName]) acc[providerName] = [];
+                  acc[providerName].push(model);
+                  return acc;
+                }, {});
+
+                const providerNames = Object.keys(groups).sort((a, b) => a.localeCompare(b));
+
+                return providerNames.length > 0 ? (
+                  providerNames.map((providerName) => (
+                    <div key={providerName} className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <h4 className="text-sm font-serif font-bold text-[var(--db-text-primary)]">{providerName}</h4>
+                        <Badge variant="stone" size="sm">{groups[providerName].length} models</Badge>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                        {groups[providerName].map((model) => {
+                          const info = getModelStatusInfo(model);
+                          return (
+                            <button
+                              key={`${model.providerId}::${model.modelId}`}
+                              type="button"
+                              onClick={() => setSelectedModel(model)}
+                              className="text-left p-4 rounded-[var(--db-radius-md)] bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] hover:border-[var(--db-purple-500)]/60 hover:bg-[var(--db-surface-purple)]/30 transition-colors cursor-pointer"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <div className="text-xs font-bold text-[var(--db-text-primary)] truncate">
+                                    {model.displayName || model.modelId}
+                                  </div>
+                                  <div className="text-[10px] font-mono text-[var(--db-text-muted)] truncate mt-0.5">
+                                    {model.modelId}
+                                  </div>
+                                </div>
+                                <Badge variant={info.variant} size="sm">{info.label}</Badge>
+                              </div>
+                              <div className="mt-3 text-[10px] text-[var(--db-text-muted)] space-y-1">
+                                <div>{(model.contextWindow || 0).toLocaleString()} token context</div>
+                                <div className="truncate">
+                                  {Array.isArray(model.roleEligibility) ? model.roleEligibility.slice(0, 3).join(' • ') : 'General AI'}
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="p-8 rounded-lg border border-dashed border-[var(--db-border-default)] text-center text-xs text-[var(--db-text-muted)]">
+                    No models match “{modelSearch}”. Try a model ID, provider name, or capability.
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 7: FALLBACKS */}
+      {activeTab === 'FALLBACKS' && (
+        <div className="space-y-6 max-w-6xl">
+          <div className="p-5 rounded-[var(--db-radius-lg)] bg-[var(--db-bg-card)] border border-[var(--db-border-default)]">
+            <div className="pb-4 border-b border-[var(--db-border-subtle)]">
+              <h3 className="text-base font-serif font-bold text-[var(--db-text-primary)]">Task Primary & Fallback Routing</h3>
+              <p className="text-xs text-[var(--db-text-muted)] mt-0.5">
+                Each task has its own primary AI and its own ordered AI fallback set. These choices are authoritative for runtime routing.
+              </p>
+            </div>
+
+            <div className="pt-5 space-y-4">
               {[
-                { key: 'narrative', label: 'Narrative Storytelling', desc: 'Main prose and scene descriptions' },
+                { key: 'narrative', label: 'Narrative Storytelling', desc: 'Main prose, scene descriptions, world narration' },
                 { key: 'dialogue', label: 'Character Dialogue', desc: 'NPC speech and interpersonal exchanges' },
                 { key: 'memory', label: 'Memory & Extraction', desc: 'Fact extraction and chronicle indexing' },
                 { key: 'summarization', label: 'Summarization', desc: 'Context compression and story memory' },
-                { key: 'consistency', label: 'Canon Consistency', desc: 'Epistemic verification & world validation' },
-                { key: 'tts', label: 'Voice TTS', desc: 'Audio speech generation for speech read-aloud' },
-                { key: 'image', label: 'Image Generation', desc: 'Card artwork and cover rendering' },
-                { key: 'research', label: 'Research & Search', desc: 'World codex lookup and grounding' },
+                { key: 'consistency', label: 'Canon Consistency', desc: 'Rules, canon, and world validation' },
+                { key: 'research', label: 'Research & Search', desc: 'Codex lookup and grounded inspection' },
+                { key: 'tts', label: 'Voice TTS', desc: 'Speech synthesis' },
+                { key: 'image', label: 'Image Generation', desc: 'Artwork and cover generation' },
               ].map((task) => {
-                const orchestratorTaskId = TASK_ID_MAP[task.key];
-                const currentPinnedKey = taskPins[orchestratorTaskId] || '';
-                const eligibleModels = getEligibleModelsForTask(task.key);
+                const taskId = TASK_ID_MAP[task.key];
+                const chain = fallbackChains[taskId] || [];
+                const emergencyKey = 'provider_deterministic_emergency::emergency-fallback-local';
+                const primaryKey = taskPins[taskId] || chain.find((key) => key !== emergencyKey) || '';
+                const eligible = getEligibleModelsForTask(task.key)
+                  .filter((m) => !m.isEmergencyFloor);
+
+                const selectedFallbacks = new Set(
+                  chain.filter((key) => key !== emergencyKey && key !== primaryKey)
+                );
 
                 return (
-                  <div
-                    key={task.key}
-                    className="p-3.5 rounded-[var(--db-radius-md)] bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                  >
-                    <div>
-                      <div className="text-xs font-bold text-[var(--db-text-primary)]">
-                        {task.label}
+                  <div key={task.key} className="p-4 rounded-[var(--db-radius-md)] bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] space-y-4">
+                    <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
+                      <div>
+                        <div className="text-sm font-bold text-[var(--db-text-primary)]">{task.label}</div>
+                        <div className="text-[11px] text-[var(--db-text-muted)]">{task.desc}</div>
                       </div>
-                      <div className="text-[10px] text-[var(--db-text-muted)]">
-                        {task.desc}
+                      <select
+                        value={primaryKey}
+                        onChange={(e) => handlePinTaskModel(task.key, e.target.value)}
+                        className="w-full xl:w-80 px-3 py-2 rounded bg-[var(--db-bg-card)] border border-[var(--db-border-default)] text-xs text-[var(--db-text-primary)]"
+                      >
+                        <option value="">Choose primary model...</option>
+                        {eligible.map((model) => {
+                          const fullKey = `${model.providerId}::${model.modelId}`;
+                          return <option key={fullKey} value={fullKey}>{getProviderDisplayName(model.providerId)} • {model.displayName || model.modelId}</option>;
+                        })}
+                      </select>
+                    </div>
+
+                    <div>
+                      <div className="text-[11px] font-semibold text-[var(--db-text-secondary)] mb-2">
+                        Allowed AI fallbacks — checked models are tried in the order shown below.
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {eligible
+                          .filter((model) => `${model.providerId}::${model.modelId}` !== primaryKey)
+                          .map((model) => {
+                            const fullKey = `${model.providerId}::${model.modelId}`;
+                            const info = getModelStatusInfo(model);
+                            const checked = selectedFallbacks.has(fullKey);
+                            return (
+                              <label
+                                key={fullKey}
+                                className="flex items-center justify-between gap-3 p-3 rounded-lg border border-[var(--db-border-default)] bg-[var(--db-bg-card)] cursor-pointer hover:border-[var(--db-purple-500)]/50"
+                              >
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={(e) => handleToggleFallbackModel(fullKey, e.target.checked)}
+                                    className="w-4 h-4 accent-[var(--db-purple-500)] cursor-pointer shrink-0"
+                                  />
+                                  <div className="min-w-0">
+                                    <div className="text-xs text-[var(--db-text-primary)] truncate">
+                                      {model.displayName || model.modelId}
+                                    </div>
+                                    <div className="text-[10px] text-[var(--db-text-muted)] truncate">
+                                      {getProviderDisplayName(model.providerId)}
+                                    </div>
+                                  </div>
+                                </div>
+                                <Badge variant={info.variant} size="sm">{info.label}</Badge>
+                              </label>
+                            );
+                          })}
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={currentPinnedKey}
-                        onChange={(e) => handlePinTaskModel(task.key, e.target.value)}
-                        className="px-2.5 py-1.5 rounded bg-[var(--db-bg-card)] border border-[var(--db-border-default)] text-xs text-[var(--db-text-primary)] focus:outline-none focus:border-[var(--db-purple-500)] cursor-pointer max-w-[240px]"
-                      >
-                        {eligibleModels.length === 0 ? (
-                          <option value="">No eligible models</option>
-                        ) : (
-                          eligibleModels.map((m) => {
-                            const info = getModelStatusInfo(m);
-                            const fullKey = `${m.providerId}::${m.modelId}`;
-                            return (
-                              <option key={fullKey} value={fullKey}>
-                                {info.emoji} {m.displayName || m.modelId} — {info.label}
-                              </option>
-                            );
-                          })
-                        )}
-                      </select>
+                    <div className="pt-2 border-t border-[var(--db-border-subtle)] text-[10px] text-[var(--db-text-muted)]">
+                      Runtime order: <span className="font-mono text-[var(--db-text-secondary)]">
+                        {primaryKey ? getProviderDisplayName(primaryKey.split('::')[0]) + ' / ' + (primaryKey.split('::')[1] || primaryKey) : 'No primary selected'}
+                        {' → your checked AI fallbacks → deterministic emergency floor'}
+                      </span>
                     </div>
                   </div>
                 );
               })}
             </div>
           </div>
+        </div>
+      )}
 
-          {/* Section B2: Live Orchestrator Registry & Readiness Testbench */}
+      {/* TAB 8: REGISTRY & REAL-TIME TESTS */}
+      {activeTab === 'REGISTRY_TEST' && (
+        <div className="space-y-6 max-w-6xl">
           <div className="p-5 rounded-[var(--db-radius-lg)] bg-[var(--db-bg-card)] border border-[var(--db-border-default)] space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-[var(--db-border-subtle)]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[var(--db-border-subtle)]">
               <div>
-                <h3 className="text-base font-serif font-bold text-[var(--db-text-primary)]">
-                  Registered Models & Real-Time Testbench
-                </h3>
+                <h3 className="text-base font-serif font-bold text-[var(--db-text-primary)]">Registered Models</h3>
                 <p className="text-xs text-[var(--db-text-muted)] mt-0.5">
-                  Verify readiness, context windows, and live ping latency for all registered provider models.
+                  The live server-side model registry after provider discovery.
                 </p>
               </div>
-              <Button variant="subtle" size="sm" onClick={() => loadOrchestratorData(true)} disabled={isRefreshingRegistry}>
+              <Button
+                variant="subtle"
+                size="sm"
+                onClick={() => loadOrchestratorData(true)}
+                disabled={isRefreshingRegistry}
+              >
                 {isRefreshingRegistry ? '⟳ Discovering...' : '🔄 Refresh & Discover'}
               </Button>
             </div>
 
-            {testResultFeedback && (
-              <div className="p-3 rounded-[var(--db-radius-md)] bg-[var(--db-surface-purple)] border border-[var(--db-purple-500)]/40 text-xs font-mono text-[var(--db-purple-300)] animate-in fade-in duration-150">
-                {testResultFeedback}
+            {orchestratorModels.length === 0 ? (
+              <div className="p-8 text-center text-xs text-[var(--db-text-muted)]">
+                No registered models are currently available. Configure a provider and refresh discovery.
               </div>
-            )}
-
-            <div className="space-y-2 overflow-x-auto">
-              {orchestratorModels.map((m) => {
-                const info = getModelStatusInfo(m);
-                const fullKey = `${m.providerId}::${m.modelId}`;
-                const isTesting = testingModelKey === fullKey;
-
-                return (
-                  <div
-                    key={fullKey}
-                    className="p-3 rounded-[var(--db-radius-md)] bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] flex items-center justify-between gap-3 text-xs"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="text-base">{info.emoji}</span>
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-[var(--db-text-primary)]">
-                            {m.displayName || m.modelId}
-                          </span>
-                          <span className="text-[10px] text-[var(--db-text-muted)] font-mono">
-                            ({m.providerId})
-                          </span>
-                        </div>
-                        <div className="text-[10px] font-mono text-[var(--db-text-muted)] mt-0.5">
-                          Context: {(m.contextWindow / 1000).toFixed(0)}k tokens • Latency: {m.latencyMs ?? 0}ms • Pool: {m.pool}
-                        </div>
+            ) : (
+              <div className="space-y-2">
+                {getFilteredModels().map((model) => (
+                  <div key={`${model.providerId}::${model.modelId}`} className="p-3 rounded-lg bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedModel(model)}
+                      className="text-left min-w-0 cursor-pointer"
+                    >
+                      <div className="text-xs font-bold text-[var(--db-text-primary)] truncate">{model.displayName || model.modelId}</div>
+                      <div className="text-[10px] font-mono text-[var(--db-text-muted)] mt-0.5">
+                        {getProviderDisplayName(model.providerId)} • {model.modelId}
                       </div>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <Badge variant={info.variant} size="sm">
-                        {info.label}
-                      </Badge>
+                    </button>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={getModelStatusInfo(model).variant} size="sm">{getModelStatusInfo(model).label}</Badge>
                       <Button
                         variant="subtle"
                         size="sm"
-                        disabled={isTesting}
-                        onClick={() => handleTestModel(m.providerId, m.modelId)}
+                        disabled={testingModelKey === `${model.providerId}::${model.modelId}`}
+                        onClick={() => handleTestModel(model.providerId, model.modelId)}
                       >
-                        {isTesting ? 'Testing...' : 'Test Model'}
+                        {testingModelKey === `${model.providerId}::${model.modelId}` ? 'Testing...' : 'Test Model'}
                       </Button>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Section C: Fallback Model Selection */}
-          <div className="p-5 rounded-[var(--db-radius-lg)] bg-[var(--db-bg-card)] border border-[var(--db-border-default)] space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-[var(--db-border-subtle)] gap-3">
-              <div className="flex items-center gap-2">
-                <div>
-                  <h3 className="text-base font-serif font-bold text-[var(--db-text-primary)]">
-                    Fallback Models
-                  </h3>
-                  <p className="text-xs text-[var(--db-text-muted)] mt-0.5">
-                    Pick the AI models allowed to take over when the selected task's primary model fails.
-                    Only checked models participate in that task's AI fallback path.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => toggleTooltip('fallback')}
-                  className="w-5 h-5 rounded-full bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] text-[11px] font-bold text-[var(--db-purple-400)] hover:text-white flex items-center justify-center cursor-pointer"
-                  title="Click for explanation"
-                >
-                  ⓘ
-                </button>
-              </div>
-
-              <select
-                value={fallbackSelectedTask}
-                onChange={(e) => setFallbackSelectedTask(e.target.value)}
-                className="px-2.5 py-1.5 rounded bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] text-xs text-[var(--db-text-primary)] focus:outline-none focus:border-[var(--db-purple-500)] cursor-pointer"
-              >
-                <option value="narrative.generate">Narrative Storytelling</option>
-                <option value="character.dialogue">Character Dialogue</option>
-                <option value="memory.extract">Memory & Extraction</option>
-                <option value="summary.scene">Summarization</option>
-                <option value="rules.adjudicate">Canon Consistency</option>
-                <option value="utility.inspect">Research & Search</option>
-              </select>
-            </div>
-
-            {activeTooltip === 'fallback' && (
-              <div className="p-3.5 rounded-[var(--db-radius-md)] bg-[var(--db-surface-purple)] border border-[var(--db-purple-500)]/40 text-xs text-[var(--db-text-primary)] space-y-1">
-                <span className="font-bold text-[var(--db-purple-300)] block">ⓘ How fallback selection works</span>
-                <p className="text-[11px] text-[var(--db-text-secondary)] leading-relaxed">
-                  The primary model is chosen above. Every checked model below becomes an allowed AI fallback for this task,
-                  in the order it appears in the saved chain. DreamBook keeps the deterministic emergency floor as the final
-                  system safety net; it is not treated as one of your selected AI models.
-                </p>
+                ))}
               </div>
             )}
-
-            {(() => {
-              const taskKeyMap: Record<string, string> = {
-                'narrative.generate': 'narrative',
-                'character.dialogue': 'dialogue',
-                'memory.extract': 'memory',
-                'summary.scene': 'summarization',
-                'rules.adjudicate': 'consistency',
-                'utility.inspect': 'research',
-              };
-              const eligible = getEligibleModelsForTask(taskKeyMap[fallbackSelectedTask] || 'narrative');
-              const emergencyKey = 'provider_deterministic_emergency::emergency-fallback-local';
-              const primaryKey =
-                taskPins[fallbackSelectedTask] ||
-                currentChain.find((key) => key !== emergencyKey) ||
-                '';
-              const checked = new Set(
-                currentChain.filter((key) => key !== emergencyKey && key !== primaryKey)
-              );
-              const fallbackCandidates = eligible.filter(
-                (model) =>
-                  `${model.providerId}::${model.modelId}` !== primaryKey &&
-                  !model.isEmergencyFloor
-              );
-
-              return (
-                <div className="space-y-2">
-                  {fallbackCandidates.map((model) => {
-                    const fullKey = `${model.providerId}::${model.modelId}`;
-                    const info = getModelStatusInfo(model);
-                    const isChecked = checked.has(fullKey);
-
-                    return (
-                      <label
-                        key={fullKey}
-                        className="flex items-center justify-between gap-3 p-3 rounded-[var(--db-radius-md)] bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] hover:border-[var(--db-purple-500)]/50 cursor-pointer"
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={(e) => handleToggleFallbackModel(fullKey, e.target.checked)}
-                            className="w-4 h-4 accent-[var(--db-purple-500)] cursor-pointer shrink-0"
-                          />
-                          <div className="min-w-0">
-                            <div className="text-xs font-bold text-[var(--db-text-primary)] truncate">
-                              {model.displayName || model.modelId}
-                            </div>
-                            <div className="text-[10px] text-[var(--db-text-muted)] font-mono truncate">
-                              {model.providerId} • {model.health}
-                            </div>
-                          </div>
-                        </div>
-                        <Badge variant={info.variant} size="sm">
-                          {info.label}
-                        </Badge>
-                      </label>
-                    );
-                  })}
-
-                  {fallbackCandidates.length === 0 && (
-                    <div className="p-4 rounded-[var(--db-radius-md)] border border-[var(--db-border-default)] text-xs text-[var(--db-text-muted)]">
-                      No eligible AI models are currently registered for this task. Configure a provider and use Refresh & Discover.
-                    </div>
-                  )}
-
-                  <div className="pt-2 text-[10px] text-[var(--db-text-muted)]">
-                    The deterministic emergency floor remains system-managed after your selected AI fallbacks.
-                  </div>
-                </div>
-              );
-            })()}
           </div>
 
-          {/* Section D: Advanced Workstation Link */}
-          <div className="p-5 rounded-[var(--db-radius-lg)] bg-[var(--db-bg-card)] border border-[var(--db-border-default)] flex items-center justify-between">
-            <div>
-              <h4 className="text-sm font-serif font-bold text-[var(--db-text-primary)]">
-                Advanced Model Routing Workstation
-              </h4>
-              <p className="text-xs text-[var(--db-text-muted)] mt-0.5">
-                Access model pool simulation, manual pinning, live latency telemetry, and circuit breakers.
-              </p>
+          {testResultFeedback && (
+            <div className="p-3 rounded-[var(--db-radius-md)] bg-[var(--db-surface-purple)] border border-[var(--db-purple-500)]/40 text-xs font-mono text-[var(--db-purple-300)]">
+              {testResultFeedback}
+            </div>
+          )}
+
+          <div className="p-5 rounded-[var(--db-radius-lg)] bg-[var(--db-bg-card)] border border-[var(--db-border-default)]">
+            <h3 className="text-base font-serif font-bold text-[var(--db-text-primary)]">Provider Discovery & Test Notes</h3>
+            <p className="text-xs text-[var(--db-text-muted)] mt-1">
+              Refresh performs provider discovery. Test Model performs a live readiness request against the specific model.
+              Discovery and testing are separate so an available catalog entry is not mistaken for a healthy runtime model.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {selectedModel && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-2xl max-h-[85vh] overflow-y-auto rounded-xl bg-[var(--db-bg-card)] border border-[var(--db-border-default)] shadow-2xl">
+            <div className="flex items-start justify-between gap-4 p-5 border-b border-[var(--db-border-subtle)]">
+              <div className="min-w-0">
+                <div className="text-[10px] uppercase tracking-wider text-[var(--db-text-muted)]">
+                  {getProviderDisplayName(selectedModel.providerId)}
+                </div>
+                <h3 className="text-lg font-serif font-bold text-[var(--db-text-primary)] mt-1">
+                  {selectedModel.displayName || selectedModel.modelId}
+                </h3>
+                <div className="text-xs font-mono text-[var(--db-text-muted)] mt-1 break-all">
+                  {selectedModel.modelId}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedModel(null)}
+                className="px-3 py-1.5 rounded-lg border border-[var(--db-border-default)] text-xs text-[var(--db-text-secondary)] hover:text-[var(--db-text-primary)] cursor-pointer"
+              >
+                Close
+              </button>
             </div>
 
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => onOpenAdvancedRouting?.()}
-            >
-              Open Workstation →
-            </Button>
+            <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="p-3 rounded-lg bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)]">
+                <div className="text-[10px] text-[var(--db-text-muted)]">Health</div>
+                <div className="text-sm text-[var(--db-text-primary)] mt-1">
+                  {getModelStatusInfo(selectedModel).label}
+                </div>
+              </div>
+              <div className="p-3 rounded-lg bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)]">
+                <div className="text-[10px] text-[var(--db-text-muted)]">Provider</div>
+                <div className="text-sm text-[var(--db-text-primary)] mt-1">{getProviderDisplayName(selectedModel.providerId)}</div>
+              </div>
+              <div className="p-3 rounded-lg bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)]">
+                <div className="text-[10px] text-[var(--db-text-muted)]">Context Window</div>
+                <div className="text-sm text-[var(--db-text-primary)] mt-1">{(selectedModel.contextWindow || 0).toLocaleString()} tokens</div>
+              </div>
+              <div className="p-3 rounded-lg bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)]">
+                <div className="text-[10px] text-[var(--db-text-muted)]">Pool</div>
+                <div className="text-sm text-[var(--db-text-primary)] mt-1">{selectedModel.pool || 'general'}</div>
+              </div>
+              <div className="p-3 rounded-lg bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)]">
+                <div className="text-[10px] text-[var(--db-text-muted)]">Access</div>
+                <div className="text-sm text-[var(--db-text-primary)] mt-1">{selectedModel.accessStatus || 'unknown'}</div>
+              </div>
+              <div className="p-3 rounded-lg bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)]">
+                <div className="text-[10px] text-[var(--db-text-muted)]">Lifecycle</div>
+                <div className="text-sm text-[var(--db-text-primary)] mt-1">{selectedModel.lifecycleState || 'active'}</div>
+              </div>
+            </div>
+
+            <div className="px-5 pb-5 space-y-4">
+              <div>
+                <div className="text-xs font-semibold text-[var(--db-text-secondary)] mb-2">Eligible Tasks</div>
+                <div className="flex flex-wrap gap-2">
+                  {(Array.isArray(selectedModel.roleEligibility) ? selectedModel.roleEligibility : []).map((role: string) => (
+                    <Badge key={role} variant="stone" size="sm">{role}</Badge>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-xs font-semibold text-[var(--db-text-secondary)] mb-2">Capabilities</div>
+                <div className="flex flex-wrap gap-2">
+                  {(Array.isArray(selectedModel.capabilities) ? selectedModel.capabilities : []).map((cap: string) => (
+                    <Badge key={cap} variant="blue" size="sm">{cap}</Badge>
+                  ))}
+                </div>
+              </div>
+
+              {selectedModel.description && (
+                <div>
+                  <div className="text-xs font-semibold text-[var(--db-text-secondary)] mb-2">Description</div>
+                  <p className="text-xs leading-relaxed text-[var(--db-text-muted)]">{selectedModel.description}</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -1,6 +1,7 @@
 import { WorldTimestamp } from './types';
 import { PendingActivationState } from './capabilityEngine';
 import { ConditionEngine } from './conditionEngine';
+import { CombatActionEconomy, CombatTurnResourceSnapshot } from './combatActionEconomy';
 
 export interface DiceTerm {
   count: number;
@@ -336,6 +337,7 @@ export interface TacticalCombatStateExport {
   currentRound: number;
   eventLog: BattleEvent[];
   pendingActivations?: PendingActivationState[];
+  turnResources?: CombatTurnResourceSnapshot[];
   seed?: number;
   rollCounter?: number;
 }
@@ -354,6 +356,7 @@ export interface ProjectedCombatState {
   victory: boolean;
   defeat: boolean;
   isPlayerTurn: boolean;
+  viewerTurnResources?: CombatTurnResourceSnapshot;
   pendingActivations?: PendingActivationState[];
 }
 
@@ -378,6 +381,7 @@ export class TacticalCombatEngine {
   private currentRound = 1;
   private eventLog: BattleEvent[] = [];
   private pendingActivations: Map<string, PendingActivationState> = new Map();
+  private actionEconomy: CombatActionEconomy = new CombatActionEconomy();
   private conditionEngine?: ConditionEngine;
 
   constructor(seed = 1337, ruleset?: IRulesetAdapter, conditionEngine?: ConditionEngine) {
@@ -430,6 +434,7 @@ export class TacticalCombatEngine {
     this.currentRound = 1;
     this.eventLog = [];
     this.pendingActivations.clear();
+    this.actionEconomy.clear();
   }
 
   public startActivation(activation: PendingActivationState): void {
@@ -523,6 +528,7 @@ export class TacticalCombatEngine {
       }
     }
     this.participants.set(participant.id, participant);
+    this.actionEconomy.registerActor(participant.id, participant.speedCells, this.currentRound);
     if (!this.turnQueue.includes(participant.id)) {
       this.turnQueue.push(participant.id);
     }
@@ -558,6 +564,11 @@ export class TacticalCombatEngine {
       .sort((a, b) => (b.initiative !== a.initiative ? b.initiative - a.initiative : a.id.localeCompare(b.id)))
       .map((p) => p.id);
     this.currentTurnIndex = 0;
+
+    const currentActor = this.getCurrentActor();
+    if (currentActor) {
+      this.actionEconomy.beginTurn(currentActor.id, currentActor.speedCells, this.currentRound);
+    }
   }
 
   public getCurrentActor(): BattlefieldParticipant | undefined {
@@ -576,6 +587,14 @@ export class TacticalCombatEngine {
 
   public getTurnQueue(): string[] {
     return [...this.turnQueue];
+  }
+
+  public getTurnResources(actorId: string): CombatTurnResourceSnapshot | undefined {
+    return this.actionEconomy.get(actorId);
+  }
+
+  public getActionEconomy(): CombatActionEconomy {
+    return this.actionEconomy;
   }
 
   public getHazards(): DynamicHazardZone[] {
@@ -694,6 +713,7 @@ export class TacticalCombatEngine {
     const defeat = aliveAllies.length === 0 && projectedParticipants.some((p) => p.team === 'player_allies');
     const isEncounterActive = !victory && !defeat && projectedParticipants.length > 0;
     const isPlayerTurn = canonicalCurrentActor?.id === viewerActorId && !canonicalCurrentActor.isDead;
+    const viewerTurnResources = this.actionEconomy.get(viewerActorId);
 
     return {
       participants: projectedParticipants,
@@ -709,6 +729,7 @@ export class TacticalCombatEngine {
       victory,
       defeat,
       isPlayerTurn,
+      viewerTurnResources,
       pendingActivations: this.getAllPendingActivations().filter((a) => isKnownById(a.actorId)),
     };
   }
@@ -720,6 +741,11 @@ export class TacticalCombatEngine {
     const actor = this.participants.get(actorId);
     if (!actor) return { success: false, errorReason: "Actor not found." };
     if (actor.isDead) return { success: false, errorReason: "Dead actors cannot move." };
+
+    const currentActor = this.getCurrentActor();
+    if (!currentActor || currentActor.id !== actorId) {
+      return { success: false, errorReason: "It is not this actor's turn." };
+    }
 
     // DEF-CH8-04: Enforce movement-restricting conditions
     const immobilizingConditions = ['Immobilized', 'Paralyzed', 'Stunned', 'Restrained', 'Petrified', 'Asleep', 'Unconscious'];
@@ -771,6 +797,12 @@ export class TacticalCombatEngine {
       }
     }
 
+    const movementCost = distance;
+    const movementResult = this.actionEconomy.consumeMovement(actorId, movementCost);
+    if (!movementResult.success) {
+      return movementResult;
+    }
+
     actor.x = targetX;
     actor.y = targetY;
 
@@ -794,15 +826,41 @@ export class TacticalCombatEngine {
       damageType?: string;
     }
   ): {
+    success: boolean;
+    errorReason?: string;
     hits: boolean;
     damage: number;
     targetDied: boolean;
-    roll: RollRecord;
+    roll?: RollRecord;
     isCritical: boolean;
   } {
     const attacker = this.participants.get(attackerId);
     const target = this.participants.get(targetId);
     if (!attacker || !target) throw new Error('Invalid combatants.');
+
+    const currentActor = this.getCurrentActor();
+    if (!currentActor || currentActor.id !== attackerId) {
+      return {
+        success: false,
+        errorReason: "It is not this attacker's turn.",
+        hits: false,
+        damage: 0,
+        targetDied: target.isDead,
+        isCritical: false,
+      };
+    }
+
+    const actionResult = this.actionEconomy.consume(attackerId, 'ACTION');
+    if (!actionResult.success) {
+      return {
+        success: false,
+        errorReason: actionResult.errorReason,
+        hits: false,
+        damage: 0,
+        targetDied: target.isDead,
+        isCritical: false,
+      };
+    }
 
     const attackRes = this.ruleset.resolveAttack({
       attackBonus: attacker.attackBonus,
@@ -864,6 +922,7 @@ export class TacticalCombatEngine {
     });
 
     return {
+      success: true,
       hits: attackRes.hits,
       damage,
       targetDied,
@@ -897,6 +956,30 @@ export class TacticalCombatEngine {
     const actor = this.participants.get(params.actorId);
     const target = this.participants.get(params.targetId);
     if (!actor || !target) throw new Error('Invalid combatants for cast.');
+
+    const currentActor = this.getCurrentActor();
+    if (!currentActor || currentActor.id !== params.actorId) {
+      return {
+        success: false,
+        damage: 0,
+        targetDied: target.isDead,
+        headline: "It is not this actor's turn.",
+        targetHpRemaining: target.hpCurrent,
+        interruptedPendingActivation: false,
+      };
+    }
+
+    const actionResult = this.actionEconomy.consume(params.actorId, 'ACTION');
+    if (!actionResult.success) {
+      return {
+        success: false,
+        damage: 0,
+        targetDied: target.isDead,
+        headline: actionResult.errorReason || 'Action unavailable.',
+        targetHpRemaining: target.hpCurrent,
+        interruptedPendingActivation: false,
+      };
+    }
 
     // Calculate deterministic base damage
     let damage = params.baseDamage;
@@ -1056,6 +1139,11 @@ export class TacticalCombatEngine {
       };
     }
 
+    const endingActor = this.getCurrentActor();
+    if (endingActor) {
+      this.actionEconomy.endTurn(endingActor.id);
+    }
+
     this.currentTurnIndex++;
     if (this.currentTurnIndex >= this.turnQueue.length) {
       this.currentTurnIndex = 0;
@@ -1069,6 +1157,9 @@ export class TacticalCombatEngine {
     // Process canonical condition ticks first, then environmental hazards.
     const hazardEvents: BattleEvent[] = [];
     const currentActor = this.getCurrentActor();
+    if (currentActor) {
+      this.actionEconomy.beginTurn(currentActor.id, currentActor.speedCells, this.currentRound);
+    }
     if (currentActor && !currentActor.isDead) {
       if (this.conditionEngine) {
         const conditionTicks = this.conditionEngine.tickActor(
@@ -1192,6 +1283,7 @@ export class TacticalCombatEngine {
       currentRound: this.currentRound,
       eventLog: this.getBattleEvents(),
       pendingActivations: this.getAllPendingActivations(),
+      turnResources: this.actionEconomy.exportState(),
       seed: this.diceEngine.getSeed(),
       rollCounter: this.diceEngine.getRollCounter(),
     };
@@ -1232,6 +1324,14 @@ export class TacticalCombatEngine {
     if (data.pendingActivations) {
       for (const act of data.pendingActivations) {
         this.pendingActivations.set(act.actorId, JSON.parse(JSON.stringify(act)));
+      }
+    }
+    if (data.turnResources) {
+      this.actionEconomy.importState(data.turnResources);
+    } else {
+      const currentActor = this.getCurrentActor();
+      if (currentActor) {
+        this.actionEconomy.beginTurn(currentActor.id, currentActor.speedCells, this.currentRound);
       }
     }
     if (typeof data.seed === 'number') {

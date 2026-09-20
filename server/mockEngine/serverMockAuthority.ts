@@ -428,7 +428,11 @@ export class ServerMockAuthority {
         maxRetries: 1,
       });
 
-      if (generated.success && generated.turnPackage?.narrative?.length) {
+      if (
+        generated.success &&
+        generated.turnPackage?.narrative?.length &&
+        generated.providerId !== 'provider_deterministic_emergency'
+      ) {
         narrativeResponse = generated.turnPackage.narrative.join('\n\n').trim();
       }
     } catch (error) {

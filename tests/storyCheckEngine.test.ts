@@ -173,3 +173,130 @@ test('blinded characters automatically fail sight-based perception checks', () =
   assert.match(result!.contextNotes.join(' '), /Blinded/);
 });
 
+
+
+test('a direct dodge action resolves as a Dexterity saving throw', () => {
+  const engine = new StoryCheckEngine();
+  const result = engine.resolve(
+    'story_save_test',
+    'I dodge the blast.',
+    {
+      coreStats: {
+        level: 1,
+        strength: 10,
+        dexterity: 14,
+        constitution: 10,
+        intelligence: 10,
+        wisdom: 10,
+        charisma: 10,
+        ac: 12,
+        speed: 30,
+        hitDice: '1d10',
+        hpCurrent: 10,
+        hpMax: 10,
+        savingThrowProficiencies: ['Dexterity'],
+      },
+      skills: [],
+      sceneText: 'An explosion erupts nearby.',
+    }
+  );
+
+  assert.ok(result);
+  assert.equal(result!.testType, 'SAVING_THROW');
+  assert.equal(result!.ability, 'Dexterity');
+  assert.equal(result!.skill, 'Saving Throw');
+  assert.equal(result!.proficiencyLevel, 'PROFICIENT');
+  assert.equal(result!.proficiencyBonus, 2);
+  assert.equal(result!.totalModifier, 4);
+});
+
+test('the world can initiate a saving throw from scene hazard context', () => {
+  const engine = new StoryCheckEngine();
+  const result = engine.resolve(
+    'story_world_save_test',
+    'I walk forward.',
+    {
+      coreStats: {
+        level: 1,
+        strength: 10,
+        dexterity: 12,
+        constitution: 10,
+        intelligence: 10,
+        wisdom: 10,
+        charisma: 10,
+        ac: 11,
+        speed: 30,
+        hitDice: '1d10',
+        hpCurrent: 10,
+        hpMax: 10,
+      },
+      skills: [],
+      sceneText: 'The corridor begins collapsing and falling debris fills the air.',
+    }
+  );
+
+  assert.ok(result);
+  assert.equal(result!.testType, 'SAVING_THROW');
+  assert.equal(result!.ability, 'Dexterity');
+  assert.equal(result!.worldTriggered, true);
+  assert.match(result!.contextNotes.join(' '), /physical hazard/i);
+});
+
+test('a routine breath remains narration-only in a safe scene', () => {
+  const engine = new StoryCheckEngine();
+  const result = engine.resolve(
+    'story_routine_breath',
+    'I inhale and breathe in the fresh air.',
+    {
+      coreStats: {
+        level: 1,
+        strength: 10,
+        dexterity: 10,
+        constitution: 10,
+        intelligence: 10,
+        wisdom: 10,
+        charisma: 10,
+        ac: 10,
+        speed: 30,
+        hitDice: '1d10',
+        hpCurrent: 10,
+        hpMax: 10,
+      },
+      skills: [],
+      sceneText: 'The quiet forest air is fresh and clean.',
+    }
+  );
+
+  assert.equal(result, null);
+});
+
+test('a dangerous breath can trigger a Constitution saving throw', () => {
+  const engine = new StoryCheckEngine();
+  const result = engine.resolve(
+    'story_poison_breath',
+    'I inhale the gas.',
+    {
+      coreStats: {
+        level: 1,
+        strength: 10,
+        dexterity: 10,
+        constitution: 14,
+        intelligence: 10,
+        wisdom: 10,
+        charisma: 10,
+        ac: 10,
+        speed: 30,
+        hitDice: '1d10',
+        hpCurrent: 10,
+        hpMax: 10,
+      },
+      skills: [],
+      sceneText: 'Thick toxic gas fills the chamber.',
+    }
+  );
+
+  assert.ok(result);
+  assert.equal(result!.testType, 'SAVING_THROW');
+  assert.equal(result!.ability, 'Constitution');
+  assert.equal(result!.worldTriggered, true);
+});

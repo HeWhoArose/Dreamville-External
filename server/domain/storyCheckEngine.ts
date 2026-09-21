@@ -403,16 +403,16 @@ export class StoryCheckEngine {
 
     return {
       checkId: `custom_check_${storyId}_${roll.rollId}`,
-      testType: 'ABILITY_CHECK',
+      testType: 'CUSTOM_CHECK',
       skill: 'Custom Rule',
-      ability: 'Strength',
+      ability: 'CUSTOM',
       difficultyClass,
       proficiencyBonus: 0,
       proficiencyLevel: 'NONE',
       abilityModifier: 0,
       totalModifier: customModifier,
       modifierSources: [
-        { label: 'Custom rule modifier', value: customModifier, kind: 'OTHER' },
+        { label: 'Custom rule modifier', value: customModifier, kind: 'CUSTOM_RULE' },
       ],
       advantageState: 'NORMAL',
       selectedDieIndex: 0,

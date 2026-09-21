@@ -55,16 +55,22 @@ export class CharacterGenesisService {
       ...(input.userEditedFields || []),
       ...((existingDraft as any)?.fieldLocks || []),
     ]);
-    const narrativeRole: CharacterStoryMode =
-      input.narrativeRole ||
-      (existingDraft as any)?.storyMode ||
-      worldTemplate?.storyMode ||
-      worldTemplate?.narrativeProfile?.mode ||
-      'PROTAGONIST';
-    const narrativeProfile = narrativeProfileEngine.createDefault(narrativeRole);
+    const narrativeResolution = narrativeProfileEngine.resolve({
+      mode: input.narrativeRole,
+      narrativeProfile: (existingDraft as any)?.narrativeProfile,
+      fallbackMode:
+        (existingDraft as any)?.storyMode ||
+        worldTemplate?.storyMode ||
+        worldTemplate?.narrativeProfile?.mode ||
+        'PROTAGONIST',
+      source: 'WORLD',
+    });
+    const narrativeRole: CharacterStoryMode = narrativeResolution.profile.mode;
+    const narrativeProfile = narrativeResolution.profile;
     const hasNarrativeSelection = Boolean(
       input.narrativeRole ||
       (existingDraft as any)?.storyMode ||
+      (existingDraft as any)?.narrativeProfile?.mode ||
       worldTemplate?.storyMode ||
       worldTemplate?.narrativeProfile?.mode
     );

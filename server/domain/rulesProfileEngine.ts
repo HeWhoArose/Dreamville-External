@@ -10,12 +10,14 @@ const IMPLICIT_SAVING_THROWS = 'implicit_saving_throws';
 const STANDARD_DND_SPELL_RULES = 'standard_dnd_spell_rules';
 const DND_TACTICAL_COMBAT = 'dnd_tactical_combat';
 const REST_RECOVERY_RULES = 'rest_recovery_rules';
+const CHARACTER_PROGRESSION = 'character_progression';
 const KNOWN_MECHANICS = new Set([
 	IMPLICIT_ABILITY_CHECKS,
 	IMPLICIT_SAVING_THROWS,
 	STANDARD_DND_SPELL_RULES,
 	DND_TACTICAL_COMBAT,
 	REST_RECOVERY_RULES,
+	CHARACTER_PROGRESSION,
 ]);
 
 export interface RulesProfileSource {
@@ -142,6 +144,52 @@ function applyOverrides(profile: RulesProfile, rawOverrides: unknown): RulesProf
 				};
 				next.overrides.push(override);
 				continue;
+			}
+
+			if (override.ruleId === CHARACTER_PROGRESSION) {
+				if (override.operation === 'SET') {
+					if (!override.value || typeof override.value !== 'object') continue;
+					const value = override.value as Record<string, unknown>;
+					const normalized: Record<string, boolean | number | string[]> = {};
+					for (const key of [
+						'allowCharacterProgression',
+						'allowClassSelection',
+						'allowSubclassSelection',
+						'allowSpeciesSelection',
+						'allowFeatSelection',
+						'allowLevelUp',
+						'allowCustomModules',
+					]) {
+						if (value[key] !== undefined) {
+							if (typeof value[key] !== 'boolean') continue;
+							normalized[key] = value[key] as boolean;
+						}
+					}
+					if (value.maxCharacterLevel !== undefined) {
+						if (typeof value.maxCharacterLevel !== 'number' || !Number.isFinite(value.maxCharacterLevel) || value.maxCharacterLevel < 1 || value.maxCharacterLevel > 20) continue;
+						normalized.maxCharacterLevel = Math.floor(value.maxCharacterLevel as number);
+					}
+					for (const key of ['enabledModuleIds', 'disabledModuleIds']) {
+						if (value[key] !== undefined) {
+							if (!Array.isArray(value[key]) || !(value[key] as unknown[]).every((item) => typeof item === 'string' && String(item).trim())) continue;
+							normalized[key] = (value[key] as string[]).map((item) => item.trim());
+						}
+					}
+					if (Object.keys(normalized).length === 0) continue;
+					next.parameterOverrides[CHARACTER_PROGRESSION] = normalized;
+					next.overrides.push(override);
+					continue;
+				}
+				if (override.operation === 'DISABLE') {
+					next.enabledMechanics = next.enabledMechanics.filter((id) => id !== CHARACTER_PROGRESSION);
+					if (!next.disabledMechanics.includes(CHARACTER_PROGRESSION)) next.disabledMechanics.push(CHARACTER_PROGRESSION);
+					continue;
+				}
+				if (override.operation === 'ENABLE') {
+					next.disabledMechanics = next.disabledMechanics.filter((id) => id !== CHARACTER_PROGRESSION);
+					if (!next.enabledMechanics.includes(CHARACTER_PROGRESSION)) next.enabledMechanics.push(CHARACTER_PROGRESSION);
+					continue;
+				}
 			}
 
 			if (override.ruleId === REST_RECOVERY_RULES) {

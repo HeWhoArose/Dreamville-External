@@ -353,6 +353,48 @@ test('Phase 3 — STAGED commands keep live canonical state unchanged until comm
 	assert.equal(result.event?.mutationCount && result.event.mutationCount > 0, true);
 });
 
+test('Phase 3 — STAGED handlers that leak into the live repository are rejected and rolled back', async () => {
+	const storyId = 'phase3_staged_live_leak_guard';
+	const repo = seedRepo(storyId);
+	const before = captureCanonicalStateSnapshot(storyId, repo);
+	const actorId = repo.getPlayerLifecycle(storyId)?.actorId || 'player_actor_' + storyId;
+
+	const result = await canonicalCommandEngine.execute(
+		repo,
+		{
+			commandId: 'cmd_staged_live_leak_guard_001',
+			storyId,
+			actorId,
+			type: 'INTERACT',
+			payload: { action: 'FORCE_LIVE_REPOSITORY_LEAK' },
+			source: 'SYSTEM',
+			transactionMode: 'STAGED',
+		},
+		async (_command, context) => {
+			const stagedRun = context.repository.getStoryRun(storyId)!;
+			stagedRun.stagedMarker = 'isolated';
+			context.repository.saveStoryRun(stagedRun);
+
+			// Simulate a legacy/global dependency accidentally mutating the live repository.
+			const liveRun = repo.getStoryRun(storyId)!;
+			liveRun.leakedMarker = 'must_not_survive';
+			repo.saveStoryRun(liveRun);
+
+			return {
+				success: true,
+				data: { accepted: true },
+				summary: 'Intentional staged live-repository leak test.',
+			};
+		}
+	);
+
+	assert.equal(result.success, false);
+	assert.equal(result.rolledBack, true);
+	assert.match(result.errorReason || '', /mutated live canonical state/i);
+	assert.equal(compareCanonicalSnapshots(before, captureCanonicalStateSnapshot(storyId, repo)).identical, true);
+	assert.equal(repo.getStoryRun(storyId)?.leakedMarker, undefined);
+	assert.equal(repo.getCanonicalCommandEvents(storyId).length, 0);
+});
 test('Phase 3 — rejected STAGED commands never touch live canonical state', async () => {
 	const storyId = 'phase3_staged_reject';
 	const repo = seedRepo(storyId);

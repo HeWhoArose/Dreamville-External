@@ -528,37 +528,73 @@ gameRouter.post('/inventory/craft', async (req: Request, res: Response) => {
     const player = worldRepository.getPlayerLifecycle('default_story');
     const actorId = player ? player.actorId : 'player_actor_default_story';
     const invEngine = worldRepository.getInventoryEngine('default_story');
-    const result = invEngine.craftItem(actorId, recipeId);
-    if (!result.success) {
-      return res.status(400).json(result);
-    }
+    const actorId = worldRepository.getPlayerLifecycle('default_story')?.actorId || 'player_actor_default_story';
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      `craft_default_story_${actorId}_${recipeId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-    const clock = worldRepository.getWorldClock('default_story');
-    if (result.craftingTimeSeconds) {
-      clock.advanceSeconds(result.craftingTimeSeconds);
-    }
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId: 'default_story',
+        actorId,
+        type: 'USE_ITEM',
+        payload: { recipeId },
+        source: 'PLAYER',
+      },
+      async () => {
+        const result = invEngine.craftItem(actorId, recipeId);
+        if (!result.success) {
+          return { success: false, errorReason: result.errorReason || 'Crafting rejected.' };
+        }
 
-    // CH4 Integration: record crafted item historical evidence if milestone
-    const chronicle = worldRepository.getHistoricalChronicleEngine('default_story');
-    const ts = clock.getTimestamp();
-    chronicle.recordEvidence({
-      id: `ev_craft_${recipeId}_${ts.totalElapsedSeconds}_${chronicle.getChronicleEntries().length}`,
-      category: 'SACRED_OR_HISTORIC',
-      timestamp: ts,
-      primarySubjectId: actorId,
-      secondarySubjectId: result.producedItem?.id || recipeId,
-      locationId: player?.locationId || 'loc_whispering_orrery',
-      summary: `Crafted ${result.producedItem?.name || 'an item'}`,
-      details: `Forged ${result.producedItem?.name || 'an artifact'} via recipe ${recipeId}.`,
-      sourceEventId: `evt_craft_${recipeId}_${ts.totalElapsedSeconds}`,
-      provenance: 'system_simulation',
-      visibility: 'PUBLIC',
-      metadata: { recipeId, producedDefId: result.producedItem?.defId },
+        const clock = worldRepository.getWorldClock('default_story');
+        if (result.craftingTimeSeconds) clock.advanceSeconds(result.craftingTimeSeconds);
+
+        const chronicle = worldRepository.getHistoricalChronicleEngine('default_story');
+        const ts = clock.getTimestamp();
+        chronicle.recordEvidence({
+          id: `ev_craft_${recipeId}_${ts.totalElapsedSeconds}_${chronicle.getChronicleEntries().length}`,
+          category: 'SACRED_OR_HISTORIC',
+          timestamp: ts,
+          primarySubjectId: actorId,
+          secondarySubjectId: result.producedItem?.id || recipeId,
+          locationId: worldRepository.getPlayerLifecycle('default_story')?.locationId || 'loc_whispering_orrery',
+          summary: `Crafted ${result.producedItem?.name || 'an item'}`,
+          details: `Forged ${result.producedItem?.name || 'an artifact'} via recipe ${recipeId}.`,
+          sourceEventId: `evt_craft_${recipeId}_${ts.totalElapsedSeconds}`,
+          provenance: 'system_simulation',
+          visibility: 'PUBLIC',
+          metadata: { recipeId, producedDefId: result.producedItem?.defId },
+        });
+
+        return {
+          success: true,
+          data: {
+            ...result,
+            items: invEngine.getActorInventory(actorId),
+            paperDoll: invEngine.getActorPaperDoll(actorId),
+          },
+          summary: `Crafted ${result.producedItem?.name || recipeId}.`,
+        };
+      }
+    );
+
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
+      });
+    }
+    res.json({
+      ...(commandResult.data as any),
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
     });
-
-    const items = invEngine.getActorInventory(actorId);
-    const paperDoll = invEngine.getActorPaperDoll(actorId);
-    res.json({ ...result, items, paperDoll });
   } catch (error) {
     res.status(500).json({ error: 'Failed to craft item.' });
   }
@@ -606,33 +642,66 @@ gameRouter.post('/inventory/transfer', async (req: Request, res: Response) => {
     }
 
     const invEngine = worldRepository.getInventoryEngine('default_story');
-    const result = invEngine.transferItem(itemId, sourceOwnerId, targetOwnerId, targetContainerType, quantity);
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      `transfer_default_story_${itemId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-    if (!result.success) {
-      return res.status(400).json(result);
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId: 'default_story',
+        actorId,
+        type: 'USE_ITEM',
+        payload: { itemId, sourceOwnerId, targetOwnerId, targetContainerType, quantity },
+        source: 'PLAYER',
+      },
+      async () => {
+        const result = invEngine.transferItem(itemId, sourceOwnerId, targetOwnerId, targetContainerType, quantity);
+        if (!result.success) {
+          return { success: false, errorReason: result.errorReason || 'Item transfer rejected.' };
+        }
+
+        const chronicle = worldRepository.getHistoricalChronicleEngine('default_story');
+        const clock = worldRepository.getWorldClock('default_story');
+        const ts = clock.getTimestamp();
+        chronicle.recordEvidence({
+          id: `ev_transfer_${itemId}_${ts.totalElapsedSeconds}_${chronicle.getChronicleEntries().length}`,
+          category: 'SACRED_OR_HISTORIC',
+          timestamp: ts,
+          primarySubjectId: actorId,
+          secondarySubjectId: result.transferredItem?.id || itemId,
+          locationId: player?.locationId || 'loc_whispering_orrery',
+          summary: `Transferred ${result.transferredItem?.name || 'an item'}`,
+          details: `Moved ${result.transferredItem?.name || 'an item'} from ${sourceOwnerId} to ${targetOwnerId}.`,
+          sourceEventId: `evt_transfer_${itemId}_${ts.totalElapsedSeconds}`,
+          provenance: 'system_simulation',
+          visibility: 'PUBLIC',
+          metadata: { itemId, sourceOwnerId, targetOwnerId },
+        });
+
+        return {
+          success: true,
+          data: { ...result, items: invEngine.getActorInventory(actorId) },
+          summary: `Transferred item ${itemId}.`,
+        };
+      }
+    );
+
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
+      });
     }
-    
-    // Record historical evidence if significant
-    const chronicle = worldRepository.getHistoricalChronicleEngine('default_story');
-    const clock = worldRepository.getWorldClock('default_story');
-    const ts = clock.getTimestamp();
-    chronicle.recordEvidence({
-      id: `ev_transfer_${itemId}_${ts.totalElapsedSeconds}_${chronicle.getChronicleEntries().length}`,
-      category: 'SACRED_OR_HISTORIC',
-      timestamp: ts,
-      primarySubjectId: actorId,
-      secondarySubjectId: result.transferredItem?.id || itemId,
-      locationId: player?.locationId || 'loc_whispering_orrery',
-      summary: `Transferred ${result.transferredItem?.name || 'an item'}`,
-      details: `Moved ${result.transferredItem?.name || 'an item'} from ${sourceOwnerId} to ${targetOwnerId}.`,
-      sourceEventId: `evt_transfer_${itemId}_${ts.totalElapsedSeconds}`,
-      provenance: 'system_simulation',
-      visibility: 'PUBLIC',
-      metadata: { itemId, sourceOwnerId, targetOwnerId }
+    res.json({
+      ...(commandResult.data as any),
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
     });
-
-    const items = invEngine.getActorInventory(actorId);
-    res.json({ ...result, items });
   } catch (error) {
     res.status(500).json({ error: 'Failed to transfer item.' });
   }
@@ -652,22 +721,55 @@ gameRouter.post('/inventory/repair', async (req: Request, res: Response) => {
     const player = worldRepository.getPlayerLifecycle('default_story');
     const actorId = player ? player.actorId : 'player_actor_default_story';
     const invEngine = worldRepository.getInventoryEngine('default_story');
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      `repair_default_story_${itemId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-    const item = invEngine.getItemInstance(itemId);
-    if (!item) {
-      return res.status(400).json({ success: false, errorReason: `Item ${itemId} not found.` });
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId: 'default_story',
+        actorId,
+        type: 'USE_ITEM',
+        payload: { itemId, repairAmount },
+        source: 'PLAYER',
+      },
+      async () => {
+        const item = invEngine.getItemInstance(itemId);
+        if (!item) return { success: false, errorReason: `Item ${itemId} not found.` };
+        if (item.ownerEntityId !== actorId) return { success: false, errorReason: 'Cannot repair an item owned by another actor.' };
+
+        const amount = typeof repairAmount === 'number' && repairAmount > 0 ? repairAmount : 50;
+        const result = invEngine.repairItem(itemId, amount);
+        return {
+          success: true,
+          data: {
+            success: true,
+            ...result,
+            item: invEngine.getItemInstance(itemId),
+            items: invEngine.getActorInventory(actorId),
+            paperDoll: invEngine.getActorPaperDoll(actorId),
+          },
+          summary: `Repaired item ${itemId}.`,
+        };
+      }
+    );
+
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
+      });
     }
-    if (item.ownerEntityId !== actorId) {
-      return res.status(403).json({ success: false, errorReason: 'Cannot repair an item owned by another actor.' });
-    }
-
-    const amount = typeof repairAmount === 'number' && repairAmount > 0 ? repairAmount : 50;
-    const result = invEngine.repairItem(itemId, amount);
-
-    const updatedItem = invEngine.getItemInstance(itemId);
-    const items = invEngine.getActorInventory(actorId);
-    const paperDoll = invEngine.getActorPaperDoll(actorId);
-    res.json({ success: true, ...result, item: updatedItem, items, paperDoll });
+    res.json({
+      ...(commandResult.data as any),
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
+    });
   } catch (error) {
     res.status(500).json({ error: 'Failed to repair item.' });
   }
@@ -688,19 +790,53 @@ gameRouter.post('/inventory/degrade', async (req: Request, res: Response) => {
     const player = worldRepository.getPlayerLifecycle(storyId);
     const actorId = player ? player.actorId : `player_actor_${storyId}`;
     const invEngine = worldRepository.getInventoryEngine(storyId);
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      `degrade_${storyId}_${itemId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-    const item = invEngine.getItemInstance(itemId);
-    if (!item) {
-      return res.status(400).json({ success: false, errorReason: `Item ${itemId} not found.` });
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'USE_ITEM',
+        payload: { itemId, wearAmount },
+        source: 'SYSTEM',
+      },
+      async () => {
+        const item = invEngine.getItemInstance(itemId);
+        if (!item) return { success: false, errorReason: `Item ${itemId} not found.` };
+        const amount = typeof wearAmount === 'number' && wearAmount > 0 ? wearAmount : 20;
+        const result = invEngine.degradeDurability(itemId, amount);
+        return {
+          success: true,
+          data: {
+            success: true,
+            ...result,
+            item: invEngine.getItemInstance(itemId),
+            items: invEngine.getActorInventory(actorId),
+            paperDoll: invEngine.getActorPaperDoll(actorId),
+          },
+          summary: `Degraded durability for item ${itemId}.`,
+        };
+      }
+    );
+
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
+      });
     }
-
-    const amount = typeof wearAmount === 'number' && wearAmount > 0 ? wearAmount : 20;
-    const result = invEngine.degradeDurability(itemId, amount);
-
-    const updatedItem = invEngine.getItemInstance(itemId);
-    const items = invEngine.getActorInventory(actorId);
-    const paperDoll = invEngine.getActorPaperDoll(actorId);
-    res.json({ success: true, ...result, item: updatedItem, items, paperDoll });
+    res.json({
+      ...(commandResult.data as any),
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
+    });
   } catch (error) {
     res.status(500).json({ error: 'Failed to degrade item durability.' });
   }

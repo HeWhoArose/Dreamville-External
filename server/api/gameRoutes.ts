@@ -189,6 +189,108 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/game/rest/state
+ * Returns the authoritative active/last rest state without mutation.
+ */
+gameRouter.get('/rest/state', (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    const { worldRepository } = require('../repositories/worldRepository');
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = (req.query.actorId as string | undefined) || (player ? player.actorId : `player_actor_${storyId}`);
+    const restEngine = worldRepository.getRestRecoveryEngine(storyId);
+    res.json({
+      success: true,
+      storyId,
+      actorId,
+      activeRest: restEngine.getRestState(actorId) || null,
+      lastRest: restEngine.getLastRestResult(actorId) || null,
+      hitDice: restEngine.getHitDiceState(actorId),
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, errorReason: error?.message || 'Failed to retrieve rest state.' });
+  }
+});
+
+/**
+ * POST /api/game/rest
+ * Canonical rest/recovery command. All state changes are executed in a staged transaction.
+ */
+gameRouter.post('/rest', async (req: Request, res: Response) => {
+  try {
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const storyId = resolveStoryId(req, true);
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = (typeof req.body?.actorId === 'string' && req.body.actorId.trim())
+      ? req.body.actorId.trim()
+      : (player ? player.actorId : `player_actor_${storyId}`);
+    const action = req.body?.action as 'BEGIN' | 'ADVANCE' | 'COMPLETE' | 'INTERRUPT' | 'PERFORM';
+    const restType = req.body?.restType as 'SHORT_REST' | 'LONG_REST' | undefined;
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      deterministicId('cmd_route', storyId, '/rest', req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'REST',
+        payload: {
+          action,
+          restType,
+          seconds: req.body?.seconds,
+          hitDiceToSpend: req.body?.hitDiceToSpend,
+          interruptionReason: req.body?.interruptionReason,
+          interruptAfterSeconds: req.body?.interruptAfterSeconds,
+        },
+        source: 'PLAYER',
+        transactionMode: 'STAGED',
+      },
+      async (command, context) => {
+        const result = context.repository.getRestRecoveryEngine(storyId).execute({
+          storyId,
+          actorId,
+          action: command.payload.action as any,
+          restType: command.payload.restType as any,
+          seconds: command.payload.seconds as any,
+          hitDiceToSpend: command.payload.hitDiceToSpend as any,
+          interruptionReason: command.payload.interruptionReason as any,
+          interruptAfterSeconds: command.payload.interruptAfterSeconds as any,
+        });
+        return {
+          success: result.success,
+          data: result,
+          errorReason: result.errorReason,
+          summary: result.success
+            ? `Authoritative ${String(action)} ${String(restType || 'rest')} command resolved.`
+            : result.errorReason || 'Rest command rejected.',
+        };
+      }
+    );
+
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
+      });
+    }
+
+    res.json({
+      ...(commandResult.data as any),
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, errorReason: error?.message || 'Failed to resolve rest command.' });
+  }
+});
+
+/**
  * GET /api/game/epistemic-status
  * Provides non-sensitive diagnostic metrics for the Epistemic Inspector modal.
  * Proves the boundary status without leaking any secrets to the client.

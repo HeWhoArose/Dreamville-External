@@ -237,10 +237,10 @@ export class CanonicalCommandEngine {
 				break;
 			case 'PROGRESSION': {
 				const operation = payload.operation;
-				if (!['SELECT_CLASS', 'SELECT_SUBCLASS', 'SELECT_SPECIES', 'ACQUIRE_FEAT', 'LEVEL_UP', 'ENABLE_MODULE', 'DISABLE_MODULE', 'TRIGGER_ABILITY'].includes(String(operation))) {
+				if (!['SELECT_CLASS', 'SELECT_SUBCLASS', 'SELECT_SPECIES', 'ACQUIRE_FEAT', 'LEVEL_UP', 'ENABLE_MODULE', 'DISABLE_MODULE', 'TRIGGER_ABILITY', 'REGISTER_MODULE', 'ACQUIRE_CAPABILITY', 'AWARD_XP', 'EVOLVE_CAPABILITY', 'DOWNGRADE_CAPABILITY', 'RELEARN_CAPABILITY'].includes(String(operation))) {
 					return 'PROGRESSION command requires a valid operation.';
 				}
-				if (['SELECT_CLASS', 'SELECT_SUBCLASS', 'SELECT_SPECIES', 'ACQUIRE_FEAT', 'ENABLE_MODULE', 'DISABLE_MODULE'].includes(String(operation))
+				if (['SELECT_CLASS', 'SELECT_SUBCLASS', 'SELECT_SPECIES', 'ACQUIRE_FEAT', 'ENABLE_MODULE', 'DISABLE_MODULE', 'REGISTER_MODULE', 'EVOLVE_CAPABILITY'].includes(String(operation))
 					&& typeof payload.moduleId !== 'string') {
 					return 'PROGRESSION module operations require moduleId.';
 				}

@@ -1,3 +1,6 @@
+import type { RulesProfile } from '../../src/types';
+import { rulesProfileEngine } from './rulesProfileEngine';
+
 // Standard D&D 5e Spell Slot progression table for full casters
 export const DND_5E_MAX_SPELL_SLOT_BY_LEVEL: Record<number, number> = {
   1: 1,
@@ -34,6 +37,7 @@ export interface SpellProposalInput {
   customRulesOverrides?: {
     maxAllowedSpellLevel?: number;
   };
+  rulesProfile?: RulesProfile;
 }
 
 export interface SpellEvaluationResult {
@@ -43,6 +47,7 @@ export interface SpellEvaluationResult {
   maxAvailableLevel: number;
   modeApplied: string;
   overrideGranted: boolean;
+  requiresCustomRule?: boolean;
   downgradeRequirement?: {
     requiredCasterLevel: number;
     suggestedDowngradeLevel: number;
@@ -54,6 +59,23 @@ export class DndSpellRulesEvaluator {
   public evaluateSpellProposal(input: SpellProposalInput): SpellEvaluationResult {
     const { proposal, characterLevel, dndMode, overrideCapabilities = [], customRulesOverrides } = input;
     const requestedLevel = proposal.spellLevel;
+    const profile = input.rulesProfile || rulesProfileEngine.createDefault(dndMode);
+
+    // CUSTOM_HOMEBREW_DND does not inherit D&D spell-slot legality. A later
+    // custom-rule resolver must explicitly define how this spell is governed.
+    if (!rulesProfileEngine.allowsStandardDndSpellRules(profile)) {
+      if (dndMode === 'CUSTOM_HOMEBREW_DND') {
+        return {
+          approved: false,
+          spellName: proposal.spellName,
+          requestedLevel,
+          maxAvailableLevel: 0,
+          modeApplied: 'CUSTOM_HOMEBREW_DND',
+          overrideGranted: false,
+          requiresCustomRule: true,
+        };
+      }
+    }
     const level = Math.max(1, Math.min(20, characterLevel));
 
     // Determine max available slot level based on D&D 5e table

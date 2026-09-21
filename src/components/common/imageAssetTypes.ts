@@ -116,7 +116,7 @@ export function compileProviderNeutralPrompt(meta: ImageAssetMeta): string {
   parts.push('Artistic style: ' + inferredStyle);
   parts.push('Lighting: ' + (meta.lightingColor || 'Lighting appropriate to the world tone, environment, and era.'));
   parts.push('Framing: ' + (meta.composition || ('Cinematic centered focal framing for ' + spec.aspectRatio)));
-  parts.push('Constraints: No UI framing, watermarks, unintended borders, or arbitrary text; preserve the defining visual elements supplied by the world metadata.');
+  parts.push('Constraints: No modern artifacts, no UI framing, watermarks, unintended borders, or arbitrary text; preserve the defining visual elements supplied by the world metadata.');
 
   return appendImageOutputSpecification(parts.join('.\n'), meta.slotType);
 }

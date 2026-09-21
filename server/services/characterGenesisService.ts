@@ -418,6 +418,10 @@ Rules:
           generationFailureReason =
             response.fallbackReason ||
             'AI providers did not return usable Character Genesis output.';
+          const error: any = new Error(generationFailureReason);
+          error.code = 'AI_UNAVAILABLE';
+          error.requiresDeterministicConfirmation = true;
+          throw error;
         } else if (response.text) {
           const parsed = this.parseJsonFromAiResponse(response.text);
           if (parsed && this.isValidCharacterExtractionShape(parsed)) {
@@ -433,6 +437,9 @@ Rules:
             'AI providers returned no usable Character Genesis text.';
         }
       } catch (err: any) {
+        if (err?.code === 'AI_UNAVAILABLE') {
+          throw err;
+        }
         generationFailureReason = err?.message || String(err);
         console.warn('[CharacterGenesisService] Orchestrated extraction failed:', err);
       }

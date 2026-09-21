@@ -36,6 +36,82 @@ const world: WorldTemplate = {
   },
 };
 
+// Global mock for AI orchestrator in refinement tests
+const originalGetAiOrchestrator = worldRepository.getAiOrchestrator;
+worldRepository.getAiOrchestrator = () => {
+  return {
+    executeTaskGeneration: async (task: string, prompt: string, systemInstruction?: string, options?: any) => {
+      const mockDraft = {
+        draftId: 'draft_mock_refinement',
+        worldId: 'world_genesis_refinement',
+        worldVersion: 1,
+        identity: {
+          name: 'Astraea',
+          species: 'Cosmic Entity',
+          age: 'Eternal',
+        },
+        appearance: {
+          physicalDescription: 'A shifting constellation of starlight.',
+          distinguishingTraits: ['Glows in the dark'],
+        },
+        personality: {
+          traits: ['Curious', 'Detached'],
+        },
+        background: {
+          history: 'Arrived from the cosmos to observe mortals.',
+        },
+        role: {
+          profession: 'Scholar',
+          archetype: 'Investigator',
+        },
+        capabilities: [],
+        generatedSkills: [],
+        startingEquipment: {
+          equipped: [],
+          inventory: [],
+          weapons: [],
+          armor: [],
+          tools: [],
+          consumables: [],
+        },
+        startingLocation: {
+          locationId: 'loc_village',
+        },
+        startingSituation: {
+          summary: 'Observing local customs.',
+          hook: 'A bright flash of light.',
+          whyHereNow: 'Curiosity.',
+        },
+        attributes: [],
+        stats: [],
+        feats: [],
+        titles: [],
+        traits: [],
+        startingState: {
+          health: 10,
+          maxHealth: 10,
+        },
+        fieldLocks: [],
+        revision: 1,
+        aiExtractionSummary: {
+          keyFacts: ['Is a cosmic entity'],
+          proposedHighlights: ['Loves stargazing'],
+          uncertainties: [],
+          generationSource: 'AI_PRIMARY',
+        },
+      };
+
+      return {
+        text: JSON.stringify(mockDraft),
+        source: 'AI_PRIMARY',
+        providerId: 'google_gemini',
+        modelId: 'gemini-3.5-flash',
+        attempts: 1,
+      };
+    },
+  } as any;
+};
+
 test('Character Genesis refinement: canonical structured character survives confirmation and StoryRun creation', async () => {
   worldRepository.saveWorldTemplate(world);
 
@@ -124,4 +200,7 @@ test('Character Genesis refinement: player-owned fields remain preserved during 
   assert.equal(second.identity.name, 'Player Chosen Name');
   assert.equal(second.identity.species, 'Moonborn');
   assert.equal(second.provenance.identity, 'USER_EDITED');
+  
+  // Clean up mock
+  worldRepository.getAiOrchestrator = originalGetAiOrchestrator;
 });

@@ -13,15 +13,33 @@ const EMPTY_STORE: PersistentGameStoreData = {
 	storyRuns: {},
 };
 
-export class PersistentGameStore {
-	private readonly filePath: string;
+function isRunningUnderTests(): boolean {
+	return Boolean(
+		process.env.NODE_TEST_CONTEXT ||
+		process.env.npm_lifecycle_event === 'test' ||
+		process.argv.some((arg) => arg.includes('--test'))
+	);
+}
 
-	constructor(filePath = process.env.DREAMBOOK_PERSISTENCE_PATH || resolve(process.cwd(), '.dreambook', 'data.json')) {
-		this.filePath = resolve(filePath);
+export class PersistentGameStore {
+	private readonly filePath?: string;
+	private readonly isEnabled: boolean;
+
+	constructor(filePath = process.env.DREAMBOOK_PERSISTENCE_PATH) {
+		if (filePath) {
+			this.filePath = resolve(filePath);
+			this.isEnabled = true;
+		} else if (isRunningUnderTests()) {
+			this.filePath = undefined;
+			this.isEnabled = false;
+		} else {
+			this.filePath = resolve(process.cwd(), '.dreambook', 'data.json');
+			this.isEnabled = true;
+		}
 	}
 
 	load(): PersistentGameStoreData {
-		if (!existsSync(this.filePath)) {
+		if (!this.isEnabled || !this.filePath || !existsSync(this.filePath)) {
 			return structuredClone(EMPTY_STORE);
 		}
 
@@ -43,6 +61,10 @@ export class PersistentGameStore {
 	}
 
 	save(data: PersistentGameStoreData): void {
+		if (!this.isEnabled || !this.filePath) {
+			return;
+		}
+
 		const directory = dirname(this.filePath);
 		mkdirSync(directory, { recursive: true });
 
@@ -52,7 +74,7 @@ export class PersistentGameStore {
 		renameSync(temporaryPath, this.filePath);
 	}
 
-	getPath(): string {
+	getPath(): string | undefined {
 		return this.filePath;
 	}
 }

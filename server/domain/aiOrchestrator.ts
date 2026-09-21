@@ -1601,9 +1601,9 @@ export class MultiModelOrchestrator {
 
     // Default Fallback Chains
     const defaultChain = [
+      'google_gemini::gemini-3.6-flash',
+      'google_gemini::gemini-2.5-flash',
       'google_gemini::gemini-3.5-flash',
-      'google_gemini::gemini-3.8-flash',
-      'google_gemini::gemini-3.5-flash-lite',
       'provider_deterministic_emergency::emergency-fallback-local',
     ];
     this.taskFallbackChains.set('narrative.generate', defaultChain);

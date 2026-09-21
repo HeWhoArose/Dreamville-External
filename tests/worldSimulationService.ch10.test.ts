@@ -9,6 +9,20 @@ import { HistoricalChronicleEngine } from '../server/domain/historicalChronicleE
 import { MemoryOpportunityEngine } from '../server/domain/memoryOpportunityEngine';
 import { GeographyGraph } from '../server/domain/geographyGraph';
 
+function advanceCanonical(repo: InMemoryWorldRepository, service: WorldSimulationService, seconds: number, label: string) {
+  const commandId = `test_ch10_${label}`;
+  const eventId = `evt_${commandId}`;
+  repo.beginCanonicalCommandTransaction('default_story', commandId);
+  try {
+    const result = service.advanceTime('default_story', seconds);
+    repo.commitCanonicalCommandTransaction('default_story', eventId);
+    return result;
+  } catch (error) {
+    repo.rollbackCanonicalCommandTransaction('default_story');
+    throw error;
+  }
+}
+
 describe('CH10 DEF-CH10-07 and DEF-CH10-08 Verifications', () => {
   it('TEST A: Advance time across a sunrise boundary while the sunrise-linked condition is active', () => {
     const repo = new InMemoryWorldRepository();
@@ -36,7 +50,7 @@ describe('CH10 DEF-CH10-07 and DEF-CH10-08 Verifications', () => {
     }));
     
     // Advance to 07:00:00 (crossing 06:00:00)
-    service.advanceTime('default_story', 2 * 3600);
+    advanceCanonical(repo, service, 2 * 3600, 'A');
     
     const updatedPlayer = repo.getPlayerLifecycle('default_story');
     assert.strictEqual(updatedPlayer?.transformationRecord?.active, false, 'Transformation should be reverted');
@@ -78,7 +92,7 @@ describe('CH10 DEF-CH10-07 and DEF-CH10-08 Verifications', () => {
     }));
     
     // Advance by 12 hours (crosses midnight and sunrise next day)
-    service.advanceTime('default_story', 12 * 3600);
+    advanceCanonical(repo, service, 12 * 3600, 'B');
     
     const updatedPlayer = repo.getPlayerLifecycle('default_story');
     assert.strictEqual(updatedPlayer?.transformationRecord?.active, false, 'Transformation should be reverted over large jump');
@@ -97,7 +111,7 @@ describe('CH10 DEF-CH10-07 and DEF-CH10-08 Verifications', () => {
       triggerTimestamp: { totalElapsedSeconds: 3600, turn: 1, hour: 1, minute: 0, day: 1, month: 1, year: 1000 }
     });
     
-    service.advanceTime('default_story', 3600);
+    advanceCanonical(repo, service, 3600, 'C');
     
     const chronicle = repo.getHistoricalChronicleEngine('default_story');
     const ev = chronicle.exportState().evidenceStore.find(e => e.sourceEventId === 'event_1');
@@ -120,7 +134,7 @@ describe('CH10 DEF-CH10-07 and DEF-CH10-08 Verifications', () => {
       triggerTimestamp: { totalElapsedSeconds: 3600, turn: 1, hour: 1, minute: 0, day: 1, month: 1, year: 1000 }
     });
     
-    service.advanceTime('default_story', 3600);
+    advanceCanonical(repo, service, 3600, 'D');
     
     const memoryEngine = repo.getMemoryEngine('default_story');
     let memories = memoryEngine.getAllMemories('default_story').filter(m => m.sourceEventId?.includes('event_2'));
@@ -147,7 +161,7 @@ describe('CH10 DEF-CH10-07 and DEF-CH10-08 Verifications', () => {
       triggerTimestamp: { totalElapsedSeconds: 7200, turn: 2, hour: 2, minute: 0, day: 1, month: 1, year: 1000 }
     });
     
-    service.advanceTime('default_story', 3600);
+    advanceCanonical(repo, service, 3600, 'E');
     memories = memoryEngine.getAllMemories('default_story').filter(m => m.sourceEventId?.includes('event_2'));
     // We actually expect 2 memories now because the timestamp is different (event_id includes timestamp).
     // Wait, memoryId is `mem_world_${ev.id}_${timestamp}`. So if timestamp differs, it creates a new memory.

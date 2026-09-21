@@ -833,7 +833,9 @@ export class TacticalCombatEngine {
     const actor = this.participants.get(actorId);
     if (!this.tacticalCombatEnabled()) return { success: false, errorReason: 'Tactical combat is disabled by the active rules profile.' };
     if (!actor) return { success: false, errorReason: "Actor not found." };
-    if (actor.isDead || actor.hpCurrent <= 0 || actor.conditions.includes('Unconscious')) {\n      return { success: false, errorReason: "Dead, unconscious, or zero-HP actors cannot move." };\n    }
+    if (actor.isDead || actor.hpCurrent <= 0 || actor.conditions.includes('Unconscious')) {
+      return { success: false, errorReason: 'Dead, unconscious, or zero-HP actors cannot move.' };
+    }
 
     const currentActor = this.getCurrentActor();
     if (!currentActor || currentActor.id !== actorId) {
@@ -893,8 +895,7 @@ export class TacticalCombatEngine {
             if (other.hpCurrent <= 0 || other.conditions.includes('Unconscious')) return false;
             if (!this.actionEconomy.get(other.id)?.reactionAvailable) return false;
             const reach = other.reachCells ?? 1.5;
-            const startsWithinReach = Math.hypot(path[0].x - other.x, path[0].y - other.y) <= reach;
-            if (!startsWithinReach) return false;
+            if (Math.hypot(path[0].x - other.x, path[0].y - other.y) > reach) return false;
             return path.slice(1).some((cell) => Math.hypot(cell.x - other.x, cell.y - other.y) > reach);
           })
           .sort((a, b) => a.id.localeCompare(b.id))
@@ -1112,28 +1113,17 @@ export class TacticalCombatEngine {
     }
   }
 
-  private resolveStandardAttack(
-    attacker: BattlefieldParticipant,
-    target: BattlefieldParticipant,
-    options?: { advantage?: boolean; disadvantage?: boolean }
-  ): { blocked: boolean; roll?: { roll: RollRecord; hits: boolean; isCritical: boolean } } {
-    if (target.cover === 'TOTAL') return { blocked: true };
-
-    const attackResolution = this.resolveStandardAttack(attacker, target, {
-      advantage: options?.advantage,
-      disadvantage: options?.disadvantage,
-    });
-    if (attackResolution.blocked || !attackResolution.roll) {
-      return {
-        success: false,
-        errorReason: 'Target cannot be directly targeted because it has Total Cover.',
-        hits: false,
-        damage: 0,
-        targetDied: target.isDead,
-        isCritical: false,
-      };
+  private resolveReactionAttack(attackerId: string, targetId: string): { hits: boolean; damage: number; targetDied: boolean; roll?: RollRecord; isCritical: boolean } {
+    const attacker = this.participants.get(attackerId);
+    const target = this.participants.get(targetId);
+    if (!attacker || !target || attacker.isDead || target.isDead) {
+      return { hits: false, damage: 0, targetDied: target?.isDead ?? false, isCritical: false };
     }
-    const attackRes = attackResolution.roll;
+    const resolution = this.resolveStandardAttack(attacker, target);
+    if (resolution.blocked || !resolution.roll) {
+      return { hits: false, damage: 0, targetDied: target.isDead, isCritical: false };
+    }
+    const attackResult = resolution.roll;
     let damage = 0;
     let targetDied = false;
     if (attackResult.hits) {
@@ -1294,6 +1284,47 @@ export class TacticalCombatEngine {
     return !Array.from(this.participants.values()).some((p) => !p.isDead && p.x === x && p.y === y);
   }
 
+  private resolveStandardAttack(
+    attacker: BattlefieldParticipant,
+    target: BattlefieldParticipant,
+    options?: { advantage?: boolean; disadvantage?: boolean }
+  ): { blocked: boolean; roll?: { roll: RollRecord; hits: boolean; isCritical: boolean } } {
+    if (target.cover === 'TOTAL') return { blocked: true };
+
+    const attackerConditions = new Set(attacker.conditions.map((condition) => condition.toLowerCase()));
+    const targetConditions = new Set(target.conditions.map((condition) => condition.toLowerCase()));
+    const distanceToTarget = Math.hypot(target.x - attacker.x, target.y - attacker.y);
+    const attackerHasDisadvantage =
+      attackerConditions.has('blinded') ||
+      attackerConditions.has('poisoned') ||
+      attackerConditions.has('frightened') ||
+      attackerConditions.has('restrained') ||
+      attackerConditions.has('paralyzed') ||
+      attackerConditions.has('stunned') ||
+      attackerConditions.has('prone');
+    const attackerHasAdvantage = attackerConditions.has('invisible');
+    const targetDodging = Boolean(this.actionEconomy.get(target.id)?.dodging);
+    const targetHasAdvantageAgainst =
+      targetConditions.has('blinded') ||
+      targetConditions.has('restrained') ||
+      targetConditions.has('paralyzed') ||
+      targetConditions.has('stunned') ||
+      targetConditions.has('unconscious');
+    const targetIsProne = targetConditions.has('prone');
+    const targetProneAdvantage = targetIsProne && distanceToTarget <= (attacker.reachCells ?? 1.5);
+    const targetProneDisadvantage = targetIsProne && distanceToTarget > (attacker.reachCells ?? 1.5);
+
+    return {
+      blocked: false,
+      roll: this.ruleset.resolveAttack({
+        attackBonus: attacker.attackBonus,
+        targetArmorClass: target.armorClass + this.getCoverBonus(target),
+        advantage: Boolean(options?.advantage || attackerHasAdvantage || targetHasAdvantageAgainst || targetProneAdvantage || targetConditions.has('unconscious')),
+        disadvantage: Boolean(options?.disadvantage || targetDodging || attackerHasDisadvantage || targetProneDisadvantage || targetConditions.has('invisible')),
+        diceEngine: this.diceEngine,
+      }),
+    };
+  }
   private executeOpportunityAttack(attackerId: string, targetId: string): {
     triggered: boolean;
     hit: boolean;
@@ -1328,7 +1359,6 @@ export class TacticalCombatEngine {
       return { triggered: false, hit: false, damage: 0, targetDied: target.isDead };
     }
     const attackResult = resolution.roll;
-
     let damage = 0;
     let targetDied = false;
     if (attackResult.hits) {
@@ -1617,14 +1647,7 @@ export class TacticalCombatEngine {
     isCritical: boolean;
   } {
     if (!this.tacticalCombatEnabled()) {
-      return {
-        success: false,
-        errorReason: 'Tactical combat is disabled by the active rules profile.',
-        hits: false,
-        damage: 0,
-        targetDied: false,
-        isCritical: false,
-      };
+      return { success: false, errorReason: 'Tactical combat is disabled by the active rules profile.', hits: false, damage: 0, targetDied: false, isCritical: false };
     }
 
     const attacker = this.participants.get(attackerId);
@@ -1675,54 +1698,14 @@ export class TacticalCombatEngine {
       };
     }
 
-    const attackerConditions = new Set(attacker.conditions.map((condition) => condition.toLowerCase()));
-    const targetConditions = new Set(target.conditions.map((condition) => condition.toLowerCase()));
-    const distanceToTarget = Math.hypot(target.x - attacker.x, target.y - attacker.y);
-
-    const attackerHasDisadvantage =
-      attackerConditions.has('blinded') ||
-      attackerConditions.has('poisoned') ||
-      attackerConditions.has('frightened') ||
-      attackerConditions.has('restrained') ||
-      attackerConditions.has('paralyzed') ||
-      attackerConditions.has('stunned') ||
-      attackerConditions.has('prone');
-
-    const attackerHasAdvantage =
-      attackerConditions.has('invisible');
-
-    const targetDodging = !!this.actionEconomy.get(targetId)?.dodging;
-    const targetHasAdvantageAgainst =
-      targetConditions.has('blinded') ||
-      targetConditions.has('restrained') ||
-      targetConditions.has('paralyzed') ||
-      targetConditions.has('stunned') ||
-      targetConditions.has('unconscious');
-
-    const targetIsProne = targetConditions.has('prone');
-    const targetProneAdvantage = targetIsProne && distanceToTarget <= (attacker.reachCells ?? 1.5);
-    const targetProneDisadvantage = targetIsProne && distanceToTarget > (attacker.reachCells ?? 1.5);
-
-    const attackRes = this.ruleset.resolveAttack({
-      attackBonus: attacker.attackBonus,
-      targetArmorClass: target.armorClass + this.getCoverBonus(target),
-      advantage: Boolean(
-        options?.advantage ||
-        attackerHasAdvantage ||
-        targetHasAdvantageAgainst ||
-        targetProneAdvantage ||
-        targetConditions.has('unconscious')
-      ),
-      disadvantage: Boolean(
-        options?.disadvantage ||
-        targetDodging ||
-        attackerHasDisadvantage ||
-        targetProneDisadvantage ||
-        targetConditions.has('invisible')
-      ),
-      diceEngine: this.diceEngine,
+    const attackResolution = this.resolveStandardAttack(attacker, target, {
+      advantage: options?.advantage,
+      disadvantage: options?.disadvantage,
     });
-
+    if (attackResolution.blocked || !attackResolution.roll) {
+      return { success: false, errorReason: 'Target cannot be directly targeted because it has Total Cover.', hits: false, damage: 0, targetDied: target.isDead, isCritical: false };
+    }
+    const attackRes = attackResolution.roll;
     let damage = 0;
     let targetDied = false;
 
@@ -1914,14 +1897,7 @@ export class TacticalCombatEngine {
     } else if (params.defenseModel === 'attack_vs_ac') {
       const resolution = this.resolveStandardAttack(actor, target);
       if (resolution.blocked || !resolution.roll) {
-        return {
-          success: false,
-          damage: 0,
-          targetDied: target.isDead,
-          headline: 'Target has Total Cover and cannot be targeted directly.',
-          targetHpRemaining: target.hpCurrent,
-          interruptedPendingActivation: false,
-        };
+        return { success: false, damage: 0, targetDied: target.isDead, headline: 'Target has Total Cover and cannot be targeted directly.', targetHpRemaining: target.hpCurrent, interruptedPendingActivation: false };
       }
       attackResult = resolution.roll;
       if (!attackResult.hits) {

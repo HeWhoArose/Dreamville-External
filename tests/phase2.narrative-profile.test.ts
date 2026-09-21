@@ -10,6 +10,7 @@ import { WorldSynthesisService } from '../server/services/worldSynthesisService'
 import { InMemoryWorldRepository, worldRepository } from '../server/repositories/worldRepository';
 import { CharacterStoryMode, DndRulesMode } from '../src/types';
 import { WorkingContextEngine } from '../server/domain/workingContextEngine';
+import { resolveCanonicalConfirmedCharacter } from '../server/api/gameRoutes';
 
 const NARRATIVE_MODES: CharacterStoryMode[] = [
 	'PROTAGONIST',
@@ -122,6 +123,73 @@ test('Phase 2 — confirmed character narrative mode is authoritative at StoryRu
 	assert.equal(result.run.storyMode, 'SIDE_CHARACTER');
 	assert.equal(result.run.narrativeProfile?.mode, 'SIDE_CHARACTER');
 	assert.equal(repo.getNarrativeProfile(result.storyId)?.mode, 'SIDE_CHARACTER');
+});
+
+test('Phase 2 — StoryRun API uses the stored confirmed character instead of trusting a submitted character payload', () => {
+	const repo = new InMemoryWorldRepository();
+	const worldId = 'phase2_api_character_authority_world';
+
+	repo.saveWorldTemplate({
+		worldId,
+		title: 'API Authority World',
+		summary: 'API authority test',
+		description: 'API authority test',
+		rulesetId: 'FULL_DND',
+		dndRulesMode: 'FULL_DND',
+		rulesProfile: rulesProfileEngine.createDefault('FULL_DND'),
+		storyMode: 'PROTAGONIST',
+		narrativeProfile: narrativeProfileEngine.createDefault('PROTAGONIST'),
+	});
+
+	const canonicalCharacter = {
+		characterId: 'phase2_api_canonical_character',
+		worldId,
+		worldVersion: 1,
+		identity: { name: 'Canonical Character' },
+		role: { profession: 'Scout', archetype: 'Scout', role: 'Side Character' },
+		storyMode: 'SIDE_CHARACTER' as CharacterStoryMode,
+		narrativeProfile: narrativeProfileEngine.createDefault('SIDE_CHARACTER'),
+	};
+
+	repo.saveConfirmedCharacter(worldId, canonicalCharacter);
+
+	const previousGlobal = (worldRepository as any).getConfirmedCharacter;
+	(worldRepository as any).getConfirmedCharacter = (lookupWorldId: string, lookupCharacterId: string) =>
+		repo.getConfirmedCharacter(lookupWorldId, lookupCharacterId);
+
+	try {
+		const submittedTamperedCharacter = {
+			...canonicalCharacter,
+			storyMode: 'FREE_ROAM' as CharacterStoryMode,
+			narrativeProfile: narrativeProfileEngine.createDefault('FREE_ROAM'),
+		};
+
+		const resolution = resolveCanonicalConfirmedCharacter(
+			worldId,
+			submittedTamperedCharacter,
+			canonicalCharacter.characterId
+		);
+
+		assert.equal(resolution.error, undefined);
+		assert.equal(resolution.character.storyMode, 'SIDE_CHARACTER');
+		assert.equal(resolution.character.narrativeProfile.mode, 'SIDE_CHARACTER');
+
+		const missing = resolveCanonicalConfirmedCharacter(
+			worldId,
+			{ characterId: 'does_not_exist' },
+			'does_not_exist'
+		);
+		assert.equal(missing.character, null);
+		assert.equal(missing.error?.status, 404);
+
+		const missingId = resolveCanonicalConfirmedCharacter(worldId, {
+			identity: { name: 'Unbound' },
+		});
+		assert.equal(missingId.character, null);
+		assert.equal(missingId.error?.status, 400);
+	} finally {
+		(worldRepository as any).getConfirmedCharacter = previousGlobal;
+	}
 });
 
 test('Phase 2 — repository preserves narrative and rules selections independently across all nine combinations', () => {

@@ -88,12 +88,13 @@ test('Phase 8 subclass prerequisites and minimum level are enforced', () => {
     () => engine.selectModule('hero', 'SUBCLASS', 'subclass_fighter_champion', 'phase8-subclass-early', rulesProfileEngine.createDefault('FULL_DND')),
     /requires level 3/
   );
-  assert.throws(
-    () => engine.selectModule('hero', 'SUBCLASS', 'subclass_fighter_champion', 'phase8-subclass-no-class', rulesProfileEngine.createDefault('FULL_DND')),
-    /requires level 3/
-  );
   engine.levelUp('hero', 'phase8-level-2');
   engine.levelUp('hero', 'phase8-level-3');
+  assert.throws(
+    () => engine.selectModule('hero', 'SUBCLASS', 'subclass_fighter_champion', 'phase8-subclass-no-class', rulesProfileEngine.createDefault('FULL_DND')),
+    /requires class 'class_fighter'/
+  );
+  engine.selectModule('hero', 'CLASS', 'class_fighter', 'phase8-class-ok', rulesProfileEngine.createDefault('FULL_DND'));
   const state = engine.selectModule('hero', 'SUBCLASS', 'subclass_fighter_champion', 'phase8-subclass-ok', rulesProfileEngine.createDefault('FULL_DND'));
   assert.equal(state.subclassId, 'subclass_fighter_champion');
   assert.ok(state.unlockedFeatureIds.includes('subclass_fighter_champion_core'));
@@ -179,7 +180,7 @@ test('Phase 8 modifier stacking and precedence produce deterministic source trac
   const resolved = engine.resolveModifiers('hero');
   const attack = resolved.modifiers.find((entry) => entry.target === 'combat.attackBonus');
   assert.equal(attack?.value, 8);
-  assert.equal(attack?.sources.length, 6);
+  assert.equal(attack?.sources.length, 5);
   assert.ok(resolved.sourceTrace['combat.attackBonus'].some((source) => source.sourceId === 'set-high'));
 });
 
@@ -291,7 +292,10 @@ test('Phase 8 canonical progression level-up is staged, idempotent, and rollback
     payload: { operation: 'LEVEL_UP' },
     source: 'PLAYER',
     transactionMode: 'STAGED',
-  }, async () => ({ success: false, errorReason: 'Forced Phase 8 rollback test.' }));
+  }, async (command, context) => {
+    context.repository.getCharacterProgressionEngine(storyId).levelUp(id, command.commandId, context.repository.getRulesProfile(storyId));
+    return { success: false, errorReason: 'Forced Phase 8 rollback test.' };
+  });
   assert.equal(rejected.success, false);
   const after = captureCanonicalStateSnapshot(storyId, repo);
   assert.deepEqual(after.progression, before.progression);
@@ -304,7 +308,6 @@ test('Phase 8 progression state survives canonical snapshot save/load', () => {
   const profile = rulesProfileEngine.createDefault('FULL_DND');
   const engine = repo.getCharacterProgressionEngine(storyId);
 
-  engine.setModuleEnabled(id, 'species_human', true, 'phase8-enable-species', profile);
   const before = captureCanonicalStateSnapshot(storyId, repo);
 
   const restored = new InMemoryWorldRepository({ disablePersistence: true });

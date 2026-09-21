@@ -1455,7 +1455,7 @@ class ApiClient {
   }
 
   public async saveWorldVisualAsset(worldId: string, asset: {
-    imageAsset?: string;
+    imageAsset?: string | null;
     imageMetadata?: any;
   }): Promise<any> {
     const res = await fetch(`${this.baseUrl}/worlds/${encodeURIComponent(worldId)}/visual-asset`, {
@@ -1519,7 +1519,7 @@ class ApiClient {
   }
 
   public async saveStoryRunVisualAsset(storyId: string, asset: {
-    imageAsset?: string;
+    imageAsset?: string | null;
     imageMetadata?: any;
   }): Promise<any> {
     const res = await fetch(`${this.baseUrl}/worlds/runs/${encodeURIComponent(storyId)}/visual-asset`, {

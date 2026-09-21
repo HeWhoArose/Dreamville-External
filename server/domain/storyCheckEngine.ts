@@ -167,6 +167,22 @@ function containsCondition(
 export class StoryCheckEngine {
   private diceByStory = new Map<string, LocalDiceEngine>();
 
+  public exportState(): Record<string, ReturnType<LocalDiceEngine['exportState']>> {
+    const state: Record<string, ReturnType<LocalDiceEngine['exportState']>> = {};
+    for (const [storyId, engine] of this.diceByStory.entries()) {
+      state[storyId] = engine.exportState();
+    }
+    return state;
+  }
+
+  public importState(state: Record<string, Partial<ReturnType<LocalDiceEngine['exportState']>> | undefined>): void {
+    this.diceByStory.clear();
+    for (const [storyId, diceState] of Object.entries(state || {})) {
+      const engine = this.dice(storyId);
+      if (diceState) engine.importState(diceState);
+    }
+  }
+
   private dice(storyId: string): LocalDiceEngine {
     let engine = this.diceByStory.get(storyId);
     if (!engine) {

@@ -61,3 +61,25 @@ test('Phase 4 — Chronicle-producing routes are all behind canonical command re
     assert.match(block, /canonicalCommandEngine\.execute/, `Route ${route} bypasses canonical transaction resolution.`);
   }
 });
+
+test('Phase 4 — every game route that writes Historical Chronicle evidence is canonical-command bound', () => {
+  const blocks: Array<{ route: string; block: string }> = [];
+  const routePattern = /gameRouter\.post\('([^']+)'/g;
+  let match: RegExpExecArray | null;
+  while ((match = routePattern.exec(gameRoutes)) !== null) {
+    const start = match.index;
+    const next = gameRoutes.indexOf('gameRouter.', start + 1);
+    blocks.push({
+      route: match[1],
+      block: gameRoutes.slice(start, next >= 0 ? next : gameRoutes.length),
+    });
+  }
+
+  for (const candidate of blocks.filter(({ block }) => block.includes('chronicle.recordEvidence('))) {
+    assert.match(
+      candidate.block,
+      /canonicalCommandEngine\.execute/,
+      `Chronicle-writing route ${candidate.route} bypasses canonical command authority.`
+    );
+  }
+});

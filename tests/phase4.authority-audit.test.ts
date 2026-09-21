@@ -8,6 +8,7 @@ const canonicalEngine = readFileSync(resolve(process.cwd(), 'server/domain/canon
 const worldRepository = readFileSync(resolve(process.cwd(), 'server/repositories/worldRepository.ts'), 'utf8');
 const mockAuthority = readFileSync(resolve(process.cwd(), 'server/mockEngine/serverMockAuthority.ts'), 'utf8');
 const deterministicRng = readFileSync(resolve(process.cwd(), 'server/domain/deterministicRng.ts'), 'utf8');
+const aiOrchestrator = readFileSync(resolve(process.cwd(), 'server/domain/aiOrchestrator.ts'), 'utf8');
 
 function routeBlock(route: string): string {
   const start = gameRoutes.indexOf(`gameRouter.post('${route}'`);
@@ -51,6 +52,14 @@ test('Phase 4 — legacy Story Run creation does not use wall-clock or Math.rand
 test('Phase 4 — legacy mock action identifiers are deterministic', () => {
 	assert.doesNotMatch(mockAuthority, /const actionId = .*Date\.now|const actionId = .*Math\.random/);
 	assert.match(mockAuthority, /deterministicId\(\s*['"]act_srv['"]/);
+});
+test('Phase 4 — command, turn, and checkpoint identities are not wall-clock generated', () => {
+	assert.doesNotMatch(gameRoutes, /Date\.now\(\)|Math\.random\(\)/);
+	assert.doesNotMatch(aiOrchestrator, /`turn_\$\{Date\.now/);
+	assert.doesNotMatch(aiOrchestrator, /`cp_\$\{Date\.now/);
+	assert.doesNotMatch(aiOrchestrator, /cp_restored_\$\{Date\.now/);
+	assert.match(aiOrchestrator, /deterministicId\('turn'/);
+	assert.match(aiOrchestrator, /deterministicId\('cp'/);
 });
 test('Phase 4 — canonical action handlers do not derive canonical evidence ids from wall-clock randomness', () => {
   const routes = [

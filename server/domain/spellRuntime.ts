@@ -1446,7 +1446,103 @@ export class SpellRuntime {
     // Upcasting scaling calculations
     const upcastLevelDelta = Math.max(0, effectiveSlotLevel - spell.level);
 
-    if (spell.defenseModel === 'ATTACK_VS_AC' && targetParticipant) {
+    const isAreaSpell = spell.targetType === 'AREA_SPHERE' || spell.targetType === 'AREA_LINE' || spell.targetType === 'AREA_CONE';
+    const areaTargets = isAreaSpell
+      ? this.resolveAreaTargets(spell, casterParticipant, targetParticipant, request.targetPosition, allParticipants)
+      : [];
+
+    if (isAreaSpell && areaTargets.length === 0) {
+      return {
+        success: false,
+        errorCode: 'NO_AREA_TARGETS',
+        errorReason: 'Spell "' + spell.name + '" did not resolve any valid targets at the selected point.',
+        spellId: spell.id,
+        spellName: spell.name,
+        slotLevelUsed: 0,
+        isRitual,
+        requiresConcentration: spell.requiresConcentration,
+        headline: 'Cannot cast ' + spell.name + ': no valid creatures were affected.',
+      };
+    }
+
+    if (isAreaSpell) {
+      for (const areaTarget of areaTargets) {
+        if (spell.defenseModel === 'SAVING_THROW') {
+          const ability = spell.savingThrowAbility || 'DEX';
+          const saveMod = areaTarget.saveModifiers?.[ability] ?? 0;
+          const dc = state.spellSaveDc;
+          const roll = dice.roll('1d20', saveMod);
+          const targetConditions = new Set((areaTarget.conditions || []).map((c) => c.toLowerCase()));
+          const automaticFailure =
+            ['paralyzed', 'petrified', 'stunned', 'unconscious'].some((cond) => targetConditions.has(cond)) &&
+            ['STR', 'DEX'].includes(ability);
+          const succeeds = automaticFailure ? false : roll.total >= dc;
+          savingThrowResult = { roll, succeeds, ability, dc };
+
+          if (spell.damageFormula) {
+            let baseDmg = dice.roll(spell.damageFormula).total;
+            if (upcastLevelDelta > 0 && spell.upcastDamageDicePerLevel) {
+              for (let u = 0; u < upcastLevelDelta; u++) baseDmg += dice.roll(spell.upcastDamageDicePerLevel).total;
+            }
+            if (succeeds) baseDmg = spell.halfDamageOnSave ? Math.floor(baseDmg / 2) : 0;
+            if (baseDmg > 0) {
+              const dmgRes = request.damageResolver
+                ? request.damageResolver(areaTarget, baseDmg, spell.damageType || 'force', false)
+                : this.applyAuthoritativeDamage(areaTarget, baseDmg, spell.damageType || 'force');
+              damageInflicted += dmgRes.damage;
+              targetDied = targetDied || dmgRes.targetDied;
+              targetHpRemaining = areaTarget.hpCurrent;
+              targetImmune = targetImmune || Boolean(dmgRes.immune);
+              targetResisted = targetResisted || Boolean(dmgRes.resisted);
+              targetVulnerable = targetVulnerable || Boolean(dmgRes.vulnerable);
+              if (dmgRes.damage > 0 && !request.damageResolver) {
+                targetConcCheck = this.resolveDamageConcentrationCheck(areaTarget, dmgRes.damage, dice, allParticipants);
+              }
+            }
+          }
+
+          if (!succeeds && Array.isArray(spell.appliedConditions)) {
+            for (const cond of spell.appliedConditions) {
+              this.conditionEngine.applyCondition(areaTarget.id, {
+                definitionIdOrName: cond,
+                sourceActorId: casterId,
+                durationSeconds: (spell.durationRounds || 1) * 6,
+              });
+              if (!areaTarget.conditions.includes(cond)) areaTarget.conditions.push(cond);
+              conditionsApplied.push(cond);
+              concentrationAppliedConditions.push({ targetId: areaTarget.id, condition: cond });
+            }
+          }
+        } else if (spell.defenseModel === 'AUTOMATIC') {
+          if (!spell.damageFormula) continue;
+          let baseDmg = dice.roll(spell.damageFormula).total;
+          if (upcastLevelDelta > 0 && spell.upcastDamageDicePerLevel) {
+            for (let u = 0; u < upcastLevelDelta; u++) baseDmg += dice.roll(spell.upcastDamageDicePerLevel).total;
+          }
+          const dmgRes = request.damageResolver
+            ? request.damageResolver(areaTarget, baseDmg, spell.damageType || 'force', false)
+            : this.applyAuthoritativeDamage(areaTarget, baseDmg, spell.damageType || 'force');
+          damageInflicted += dmgRes.damage;
+          targetDied = targetDied || dmgRes.targetDied;
+          targetHpRemaining = areaTarget.hpCurrent;
+          targetImmune = targetImmune || Boolean(dmgRes.immune);
+          targetResisted = targetResisted || Boolean(dmgRes.resisted);
+          targetVulnerable = targetVulnerable || Boolean(dmgRes.vulnerable);
+          if (dmgRes.damage > 0 && !request.damageResolver) {
+            targetConcCheck = this.resolveDamageConcentrationCheck(areaTarget, dmgRes.damage, dice, allParticipants);
+          }
+        } else if (spell.defenseModel === 'HEAL' && spell.healingFormula) {
+          let healAmt = dice.roll(spell.healingFormula).total;
+          if (upcastLevelDelta > 0 && spell.upcastHealingDicePerLevel) {
+            for (let u = 0; u < upcastLevelDelta; u++) healAmt += dice.roll(spell.upcastHealingDicePerLevel).total;
+          }
+          const oldHp = areaTarget.hpCurrent;
+          areaTarget.hpCurrent = Math.min(areaTarget.hpMax, areaTarget.hpCurrent + healAmt);
+          healingApplied += areaTarget.hpCurrent - oldHp;
+          targetHpRemaining = areaTarget.hpCurrent;
+        }
+      }
+    } else if (spell.defenseModel === 'ATTACK_VS_AC' && targetParticipant) {
       const roll1 = dice.roll('1d20', state.spellAttackBonus);
       let chosenRoll = roll1;
       if (advantage && !disadvantage) {

@@ -267,6 +267,7 @@ test('Phase 2 — legacy worlds and runs are migrated on persistence reload', ()
 
 		assert.equal(repo.getWorldTemplate('legacy_world')?.storyMode, 'PROTAGONIST');
 		assert.equal(repo.getWorldTemplate('legacy_world')?.narrativeProfile?.mode, 'PROTAGONIST');
+		assert.equal(repo.getWorldTemplate('legacy_world')?.playstyle, 'legacy-playstyle');
 		assert.equal(repo.getWorldTemplate('canonical_playstyle_world')?.storyMode, 'FREE_ROAM');
 		assert.equal(repo.getWorldTemplate('canonical_playstyle_world')?.narrativeProfile?.mode, 'FREE_ROAM');
 		assert.equal(repo.getStoryRun('legacy_story')?.storyMode, 'PROTAGONIST');

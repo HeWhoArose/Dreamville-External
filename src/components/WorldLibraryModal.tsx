@@ -125,7 +125,7 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
 
     try {
       const saved = await apiClient.saveWorldVisualAsset(world.worldId, {
-        imageAsset: newUrl,
+        imageAsset: newUrl ?? null,
         imageMetadata: nextWorld.imageMetadata,
       });
       setWorlds((current) => current.map((entry) => entry.worldId === world.worldId ? saved : entry));

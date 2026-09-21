@@ -1615,6 +1615,18 @@ export class InMemoryWorldRepository implements WorldRepository {
     const newStoryId = `${parentStoryId}_branch_${newBranchId}`;
     this.seedStory(newStoryId);
 
+    const parentRun = this.getStoryRun(parentStoryId);
+    if (parentRun) {
+      const clonedRun = JSON.parse(JSON.stringify(parentRun));
+      this.saveStoryRun({
+        ...clonedRun,
+        storyId: newStoryId,
+        id: newStoryId,
+        parentStoryId,
+        branchId: newBranchId,
+      });
+    }
+
     const parentPlayer = this.getPlayerLifecycle(parentStoryId);
     if (parentPlayer) {
       const clonedPlayer = PlayerLifecycleState.fromJSON(parentPlayer.toJSON());

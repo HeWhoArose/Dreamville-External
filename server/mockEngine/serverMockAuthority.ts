@@ -299,6 +299,9 @@ export class ServerMockAuthority {
     };
 
     return {
+      storyId: targetStoryId,
+      narrativeProfile: worldRepository.getNarrativeProfile(targetStoryId) || undefined,
+      rulesProfile: worldRepository.getRulesProfile(targetStoryId) || undefined,
       worldTime: { ...state.worldTime },
       activeLocationId: canonicalLocationId,
       activeLocation,

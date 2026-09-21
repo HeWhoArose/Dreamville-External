@@ -681,3 +681,79 @@ test('Phase 6 audit: concentration duration decrements in authoritative state an
   assert.equal(runtime.getActorState(caster.id)?.activeConcentration, null);
   assert.deepEqual(ally.conditions, []);
 });
+
+
+test('Phase 6 audit: breaking concentration preserves independent pre-existing buff modifiers', () => {
+  const engine = new TacticalCombatEngine(1337);
+  const caster = participant('caster', 20, 30);
+  const ally = participant('ally', 10, 30);
+  ally.team = 'player_allies';
+  ally.x = 1;
+  ally.armorClass = 10;
+
+  engine.addParticipant(caster);
+  engine.addParticipant(ally);
+  engine.rollInitiative();
+
+  const runtime = engine.getSpellRuntime();
+  const independentBuff: SpellDefinition = {
+    id: 'phase6_independent_buff',
+    name: 'Phase 6 Independent Buff',
+    level: 0,
+    school: 'abjuration',
+    castingTime: 'BONUS_ACTION',
+    range: 5,
+    rangeType: 'TOUCH',
+    targetType: 'SINGLE_ALLY',
+    durationRounds: 10,
+    requiresConcentration: false,
+    isRitual: false,
+    defenseModel: 'BUFF',
+    buffEffect: { armorClassBonus: 2 },
+    description: 'Test-only independent armor modifier.',
+  };
+  const concentrationBuff: SpellDefinition = {
+    id: 'phase6_concentration_buff',
+    name: 'Phase 6 Concentration Buff',
+    level: 1,
+    school: 'abjuration',
+    castingTime: 'ACTION',
+    range: 5,
+    rangeType: 'TOUCH',
+    targetType: 'SINGLE_ALLY',
+    durationRounds: 10,
+    requiresConcentration: true,
+    isRitual: false,
+    defenseModel: 'BUFF',
+    buffEffect: { armorClassBonus: 3 },
+    description: 'Test-only concentration armor modifier.',
+  };
+  runtime.registerSpell(independentBuff);
+  runtime.registerSpell(concentrationBuff);
+  runtime.initializeSlots(caster.id, { 1: { current: 1, max: 1 } });
+  runtime.learnSpell(caster.id, independentBuff.id);
+  runtime.learnSpell(caster.id, concentrationBuff.id);
+  runtime.prepareSpell(caster.id, independentBuff.id);
+  runtime.prepareSpell(caster.id, concentrationBuff.id);
+
+  const independent = engine.executeSpellCast({
+    actorId: caster.id,
+    spellId: independentBuff.id,
+    targetId: ally.id,
+  });
+  assert.equal(independent.success, true);
+  assert.equal(ally.armorClass, 12);
+
+  const concentrated = engine.executeSpellCast({
+    actorId: caster.id,
+    spellId: concentrationBuff.id,
+    targetId: ally.id,
+    slotLevel: 1,
+  });
+  assert.equal(concentrated.success, true);
+  assert.equal(ally.armorClass, 15);
+
+  const broken = engine.interruptConcentration(caster.id, 'Phase 6 buff ownership audit');
+  assert.equal(broken.interrupted, true);
+  assert.equal(ally.armorClass, 12);
+});

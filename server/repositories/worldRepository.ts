@@ -222,8 +222,10 @@ export class InMemoryWorldRepository implements WorldRepository {
   private characterDraftsMap: Map<string, any[]> = new Map();
   private confirmedCharactersMap: Map<string, any[]> = new Map();
   private readonly persistentStore = new PersistentGameStore();
+  private readonly persistenceSuppressed: boolean;
 
-  constructor() {
+  constructor(options: { disablePersistence?: boolean } = {}) {
+    this.persistenceSuppressed = options.disablePersistence === true;
     const persisted = this.persistentStore.load();
     let requiresNarrativeMigration = false;
 
@@ -2070,6 +2072,7 @@ export class InMemoryWorldRepository implements WorldRepository {
   }
 
   private persistLibrary(): void {
+    if (this.persistenceSuppressed) return;
     this.persistentStore.save({
       version: 1,
       worldTemplates: Object.fromEntries(this.worldTemplates),

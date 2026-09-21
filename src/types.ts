@@ -1185,6 +1185,7 @@ export interface WorldTemplate {
   mediumTags: string[];
   canonMode: string;
   rulesetId: string;
+  rulesProfile?: RulesProfile;
   visibility: string;
   creatorId: string;
   sourcePolicy: string;
@@ -1263,7 +1264,8 @@ export interface WorldSynthesisInput {
   canonMode?: string;
   rulesetId?: string;
   storyMode?: CharacterStoryMode;
-  dndRulesMode?: 'FULL_DND' | 'HYBRID_DND' | 'CUSTOM_HOMEBREW_DND';
+  dndRulesMode?: DndRulesMode;
+  rulesProfile?: Partial<RulesProfile>;
   setting?: string;
   sourcePolicy?: string;
   imageAsset?: string;

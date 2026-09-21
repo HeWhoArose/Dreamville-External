@@ -79,6 +79,7 @@ function stableStringify(value: unknown): string {
 export class CanonicalCommandEngine {
 	private static readonly instance = new CanonicalCommandEngine();
 	private readonly inFlight = new Map<string, Promise<CanonicalCommandResult>>();
+	private readonly storyQueues = new Map<string, Promise<void>>();
 
 	public static getInstance(): CanonicalCommandEngine {
 		return CanonicalCommandEngine.instance;
@@ -211,12 +212,35 @@ export class CanonicalCommandEngine {
 			return clone(await existingFlight) as CanonicalCommandResult<TResult>;
 		}
 
-		const promise = this.executeFresh(repository, command, handler, fingerprint);
+		const promise = this.enqueueStoryCommand(
+			command.storyId,
+			() => this.executeFresh(repository, command, handler, fingerprint)
+		);
 		this.inFlight.set(key, promise as Promise<CanonicalCommandResult>);
 		try {
 			return await promise;
 		} finally {
 			this.inFlight.delete(key);
+		}
+	}
+
+	private async enqueueStoryCommand<T>(
+		storyId: string,
+		work: () => Promise<T>
+	): Promise<T> {
+		const previous = this.storyQueues.get(storyId) || Promise.resolve();
+		const next = previous.then(work, work);
+		const queueTail = next.then(
+			() => undefined,
+			() => undefined
+		);
+		this.storyQueues.set(storyId, queueTail);
+		try {
+			return await next;
+		} finally {
+			if (this.storyQueues.get(storyId) === queueTail) {
+				this.storyQueues.delete(storyId);
+			}
 		}
 	}
 

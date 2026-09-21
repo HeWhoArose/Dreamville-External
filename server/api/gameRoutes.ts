@@ -1921,171 +1921,200 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
       });
     }
 
-    // Multi-turn activation checking (charged/channelled)
-    let activationResourceConsumed = false;
-    const existingActivation = combatEngine.getPendingActivation(actorId);
-    if (capDef.activationMode === 'charged') {
-      if (!existingActivation || existingActivation.capabilityId !== capabilityId) {
-        // Start charging
-        const turns = capDef.chargeTurnsRequired || 1;
-        const act = {
-          activationId: `act_${actorId}_${capabilityId}_${Date.now()}`,
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      `cast_${storyId}_${actorId}_${capabilityId}_${targetId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'CAST',
+        payload: { targetId, capabilityId, requestedScale },
+        source: 'PLAYER',
+      },
+      async () => {
+        let activationResourceConsumed = false;
+        const existingActivation = combatEngine.getPendingActivation(actorId);
+
+        if (capDef.activationMode === 'charged') {
+          if (!existingActivation || existingActivation.capabilityId !== capabilityId) {
+            const turns = capDef.chargeTurnsRequired || 1;
+            const act = {
+              activationId: `act_${actorId}_${capabilityId}_${Date.now()}`,
+              actorId,
+              capabilityId,
+              activationMode: 'charged' as const,
+              totalTurnsRequired: turns,
+              remainingTurns: turns,
+              targetId,
+              isInterruptible: capDef.isInterruptible !== false,
+              channelSustainedTurns: 0,
+              startedAtRound: combatEngine.getCurrentRound(),
+            };
+            const actionUse = capabilityConsumesResource
+              ? combatEngine.getActionEconomy().consume(actorId, capabilityResource)
+              : { success: true as const };
+            if (!actionUse.success) {
+              return {
+                success: false,
+                errorReason: actionUse.errorReason || 'Action unavailable.',
+              };
+            }
+            activationResourceConsumed = capabilityConsumesResource;
+            combatEngine.startActivation(act);
+            return {
+              success: true,
+              data: {
+                pendingActivation: act,
+                adjudication: null,
+                castResult: null,
+              },
+              summary: `${attacker.name} began charging ${capDef.name} (${turns} turn(s) remaining).`,
+            };
+          }
+          if (existingActivation.remainingTurns > 0) {
+            return {
+              success: false,
+              errorReason: `${capDef.name} is still charging (${existingActivation.remainingTurns} turn(s) remaining).`,
+            };
+          }
+          combatEngine.removePendingActivation(actorId);
+        } else if (capDef.activationMode === 'channelled') {
+          if (!existingActivation || existingActivation.capabilityId !== capabilityId) {
+            const actionUse = capabilityConsumesResource
+              ? combatEngine.getActionEconomy().consume(actorId, capabilityResource)
+              : { success: true as const };
+            if (!actionUse.success) {
+              return {
+                success: false,
+                errorReason: actionUse.errorReason || 'Action unavailable.',
+              };
+            }
+            activationResourceConsumed = capabilityConsumesResource;
+            combatEngine.startActivation({
+              activationId: `act_${actorId}_${capabilityId}_${Date.now()}`,
+              actorId,
+              capabilityId,
+              activationMode: 'channelled',
+              totalTurnsRequired: 0,
+              remainingTurns: 0,
+              targetId,
+              isInterruptible: capDef.isInterruptible !== false,
+              channelSustainedTurns: 1,
+              startedAtRound: combatEngine.getCurrentRound(),
+            });
+          }
+        }
+
+        const adjProposal = {
           actorId,
-          capabilityId,
-          activationMode: 'charged' as const,
-          totalTurnsRequired: turns,
-          remainingTurns: turns,
-          targetId,
-          isInterruptible: capDef.isInterruptible !== false,
-          channelSustainedTurns: 0,
-          startedAtRound: combatEngine.getCurrentRound(),
+          intendedCapabilityId: capabilityId,
+          requestedScale: requestedScale || 'Local',
+          actionDescription: `Combat invocation of ${capDef.name}`,
         };
-        const actionUse = capabilityConsumesResource
-          ? combatEngine.getActionEconomy().consume(actorId, capabilityResource)
-          : { success: true as const };
-        if (!actionUse.success) {
-          return res.status(400).json({
+        const adjudication = capEngine.adjudicate(adjProposal);
+
+        if (!adjudication.approved) {
+          return {
             success: false,
-            errorReason: actionUse.errorReason || 'Action unavailable.',
-            combatState: getCombatStateHelper(combatEngine, storyId, actorId),
-          });
+            errorReason: `Capability rejected: ${adjudication.rejectionReason}`,
+          };
         }
-        activationResourceConsumed = capabilityConsumesResource;
-        combatEngine.startActivation(act);
-        const state = getCombatStateHelper(combatEngine, storyId, actorId);
-        return res.json({
-          success: true,
-          pendingActivation: act,
-          headline: `${attacker.name} began charging ${capDef.name} (${turns} turn(s) remaining).`,
-          combatState: state,
-        });
-      } else if (existingActivation.remainingTurns > 0) {
-        return res.status(400).json({
-          success: false,
-          errorReason: `${capDef.name} is still charging (${existingActivation.remainingTurns} turn(s) remaining).`,
-        });
-      } else {
-        // Charging complete, release pending activation
-        combatEngine.removePendingActivation(actorId);
-      }
-    } else if (capDef.activationMode === 'channelled') {
-      if (!existingActivation || existingActivation.capabilityId !== capabilityId) {
-        const actionUse = capabilityConsumesResource
-          ? combatEngine.getActionEconomy().consume(actorId, capabilityResource)
-          : { success: true as const };
-        if (!actionUse.success) {
-          return res.status(400).json({
-            success: false,
-            errorReason: actionUse.errorReason || 'Action unavailable.',
-            combatState: getCombatStateHelper(combatEngine, storyId, actorId),
-          });
-        }
-        activationResourceConsumed = capabilityConsumesResource;
-        combatEngine.startActivation({
-          activationId: `act_${actorId}_${capabilityId}_${Date.now()}`,
+
+        const castResult = combatEngine.executeCapabilityCast({
           actorId,
-          capabilityId,
-          activationMode: 'channelled',
-          totalTurnsRequired: 0,
-          remainingTurns: 0,
           targetId,
-          isInterruptible: capDef.isInterruptible !== false,
-          channelSustainedTurns: 1,
-          startedAtRound: combatEngine.getCurrentRound(),
+          capabilityName: capDef.name,
+          powerTier: capDef.powerTier,
+          category: capDef.category,
+          actionType: capDef.actionType || 'action',
+          consumeResource: !activationResourceConsumed,
         });
-      }
-    }
 
-    // 1. Adjudicate via CapabilityEngine (deducts canonical energy & strain)
-    const adjProposal = {
-      actorId,
-      intendedCapabilityId: capabilityId,
-      requestedScale: requestedScale || 'Local',
-      actionDescription: `Combat invocation of ${capDef.name}`,
-    };
-    const adjudication = capEngine.adjudicate(adjProposal);
+        if (!castResult.success) {
+          return {
+            success: false,
+            errorReason: castResult.headline || 'Capability action could not be resolved.',
+          };
+        }
 
-    if (!adjudication.approved) {
-      return res.status(400).json({
-        success: false,
-        adjudication,
-        errorReason: `Capability rejected: ${adjudication.rejectionReason}`,
-      });
-    }
+        const updatedTarget = combatEngine.getParticipant(targetId);
+        if (updatedTarget && updatedTarget.id === actorId) {
+          const currentPower = capEngine.getPowerState(actorId);
+          if (currentPower) {
+            capEngine.setPowerState(actorId, {
+              ...currentPower,
+              healthCurrent: updatedTarget.hpCurrent,
+            });
+          }
+          if (updatedTarget.isDead && player && !player.isDead) {
+            worldRepository.updatePlayerLifecycle(
+              storyId,
+              player.copyWith({
+                deathRecord: {
+                  isDead: true,
+                  diedAtTimestamp: clock.getTimestamp(),
+                  cause: 'Overwhelmed by magical power invocation',
+                  revivalPossible: true,
+                },
+              })
+            );
+          }
+        } else if (updatedTarget && updatedTarget.id !== actorId && updatedTarget.isDead) {
+          syncNpcCombatDeath(storyId, updatedTarget, `${attacker.name}'s ${capDef.name}`, player?.locationId);
+        }
 
-    // 2. Execute capability damage & effect in combat engine
-    const castResult = combatEngine.executeCapabilityCast({
-      actorId,
-      targetId,
-      capabilityName: capDef.name,
-      powerTier: capDef.powerTier,
-      category: capDef.category,
-      actionType: capDef.actionType || 'action',
-      consumeResource: !activationResourceConsumed,
-    });
+        const state = getCombatStateHelper(combatEngine, storyId, actorId);
+        if (state.victory) {
+          const ts = clock.getTimestamp();
+          chronicle.recordEvidence({
+            id: `ev_victory_cast_${actorId}_${capabilityId}_${ts.totalElapsedSeconds}_${chronicle.getChronicleEntries().length}`,
+            category: 'SACRED_OR_HISTORIC',
+            timestamp: ts,
+            primarySubjectId: actorId,
+            secondarySubjectId: capabilityId,
+            locationId: player?.locationId || 'loc_whispering_orrery',
+            summary: 'Triumphant Power Invocation in Combat',
+            details: `${player?.name || 'Vael'} used ${capDef.name} (${capDef.powerTier} Tier) to secure battlefield victory.`,
+            sourceEventId: `evt_cast_victory_${actorId}_${ts.totalElapsedSeconds}`,
+            provenance: 'tactical_power_invocation',
+            visibility: 'PUBLIC',
+          });
+        }
 
-    if (!castResult.success) {
-      return res.status(400).json({
-        success: false,
-        adjudication,
-        errorReason: castResult.headline || 'Capability action could not be resolved.',
-        combatState: getCombatStateHelper(combatEngine, storyId, actorId),
-      });
-    }
-
-    // 3. Sync target lifecycle & power state if target was player
-    const updatedTarget = combatEngine.getParticipant(targetId);
-    if (updatedTarget && updatedTarget.id === actorId) {
-      const currentPower = capEngine.getPowerState(actorId);
-      if (currentPower) {
-        capEngine.setPowerState(actorId, {
-          ...currentPower,
-          healthCurrent: updatedTarget.hpCurrent,
-        });
-      }
-      if (updatedTarget.isDead && player && !player.isDead) {
-        const deadPlayer = player.copyWith({
-          deathRecord: {
-            isDead: true,
-            diedAtTimestamp: clock.getTimestamp(),
-            cause: `Overwhelmed by magical power invocation`,
-            revivalPossible: true,
+        return {
+          success: true,
+          data: {
+            adjudication,
+            castResult,
+            powerState: capEngine.getPowerState(actorId),
           },
-        });
-        worldRepository.updatePlayerLifecycle(storyId, deadPlayer);
+          summary: `${capDef.name} cast committed against ${target.name}.`,
+        };
       }
-    } else if (updatedTarget && updatedTarget.id !== actorId && updatedTarget.isDead) {
-      // Immediate NPC death synchronization for capability cast
-      syncNpcCombatDeath(storyId, updatedTarget, `${attacker.name}'s ${capDef.name}`, player?.locationId);
-    }
+    );
 
-    // Check victory condition
     const state = getCombatStateHelper(combatEngine, storyId, actorId);
-    if (state.victory) {
-      const ts = clock.getTimestamp();
-      chronicle.recordEvidence({
-        id: `ev_victory_cast_${actorId}_${capabilityId}_${ts.totalElapsedSeconds}_${chronicle.getChronicleEntries().length}`,
-        category: 'SACRED_OR_HISTORIC',
-        timestamp: ts,
-        primarySubjectId: actorId,
-        secondarySubjectId: capabilityId,
-        locationId: player?.locationId || 'loc_whispering_orrery',
-        summary: `Triumphant Power Invocation in Combat`,
-        details: `${player?.name || 'Vael'} used ${capDef.name} (${capDef.powerTier} Tier) to secure battlefield victory.`,
-        sourceEventId: `evt_cast_victory_${actorId}_${ts.totalElapsedSeconds}`,
-        provenance: 'tactical_power_invocation',
-        visibility: 'PUBLIC',
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        combatState: state,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
       });
     }
-
-    const updatedPowerState = capEngine.getPowerState(actorId);
 
     res.json({
       success: true,
-      adjudication,
-      castResult,
-      powerState: updatedPowerState,
+      ...(commandResult.data as any),
       combatState: state,
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to cast capability in combat.' });

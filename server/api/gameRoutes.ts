@@ -1443,21 +1443,55 @@ gameRouter.post('/combat/move', async (req: Request, res: Response) => {
       });
     }
 
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      `move_${storyId}_${serverPlayerActorId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId: serverPlayerActorId,
+        type: 'MOVE',
+        payload: { targetX, targetY },
+        source: 'PLAYER',
+      },
+      async () => {
+        const combatEngine = worldRepository.getCombatEngine(storyId);
+        const moveResult = combatEngine.moveActor(serverPlayerActorId, targetX, targetY);
+        if (!moveResult.success) {
+          return {
+            success: false,
+            errorReason: moveResult.errorReason || 'Movement rejected.',
+          };
+        }
+        return {
+          success: true,
+          data: { moveResult },
+          summary: `Player movement committed to (${targetX}, ${targetY}).`,
+        };
+      }
+    );
+
     const combatEngine = worldRepository.getCombatEngine(storyId);
-    const moveResult = combatEngine.moveActor(serverPlayerActorId, targetX, targetY);
     const state = getCombatStateHelper(combatEngine, storyId, serverPlayerActorId);
 
-    if (!moveResult.success) {
+    if (!commandResult.success) {
       return res.status(400).json({
         success: false,
-        errorReason: moveResult.errorReason,
+        errorReason: commandResult.errorReason,
         combatState: state,
+        rolledBack: commandResult.rolledBack,
       });
     }
 
     res.json({
       success: true,
       combatState: state,
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to execute combat movement.' });
@@ -1491,22 +1525,56 @@ gameRouter.post('/combat/action', async (req: Request, res: Response) => {
       });
     }
 
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      `core_action_${storyId}_${serverPlayerActorId}_${action}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId: serverPlayerActorId,
+        type: 'CORE_ACTION',
+        payload: { action },
+        source: 'PLAYER',
+      },
+      async () => {
+        const combatEngine = worldRepository.getCombatEngine(storyId);
+        const result = combatEngine.executeCoreAction(serverPlayerActorId, action);
+        if (!result.success) {
+          return {
+            success: false,
+            errorReason: result.errorReason || 'Core action rejected.',
+          };
+        }
+        return {
+          success: true,
+          data: { result },
+          summary: `Core combat action ${action} committed.`,
+        };
+      }
+    );
+
     const combatEngine = worldRepository.getCombatEngine(storyId);
-    const result = combatEngine.executeCoreAction(serverPlayerActorId, action);
     const state = getCombatStateHelper(combatEngine, storyId, serverPlayerActorId);
 
-    if (!result.success) {
+    if (!commandResult.success) {
       return res.status(400).json({
         success: false,
-        errorReason: result.errorReason,
+        errorReason: commandResult.errorReason,
         combatState: state,
+        rolledBack: commandResult.rolledBack,
       });
     }
 
     res.json({
       success: true,
-      action: result.action,
+      action: (commandResult.data as any)?.result?.action,
       combatState: state,
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to execute combat action.' });

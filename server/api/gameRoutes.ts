@@ -5104,16 +5104,18 @@ gameRouter.post('/worlds/runs/:storyId/actions/execute', async (req: Request, re
         type: 'INTERACT',
         payload: { actionType: actionType || 'INVESTIGATE_AREA', locationId },
         source: 'PLAYER',
+        transactionMode: 'STAGED',
       },
-      async () => {
-        const run = worldRepository.getStoryRun(storyId);
+      async (_command, context) => {
+        const transactionRepo = context.repository;
+        const run = transactionRepo.getStoryRun(storyId);
         if (!run) {
           return { success: false, errorReason: 'Story run not found.' };
         }
 
         if (locationId) {
           run.currentLocationId = locationId;
-          worldRepository.saveStoryRun(run);
+          transactionRepo.saveStoryRun(run);
         }
 
         const gameplayEvent = {
@@ -5127,8 +5129,8 @@ gameRouter.post('/worlds/runs/:storyId/actions/execute', async (req: Request, re
           timestamp: new Date().toISOString(),
         };
 
-        const narrativeResult = emergentNarrativeEngine.processCanonicalEvent(gameplayEvent);
-        const storyThreads = worldRepository.getStoryThreads(storyId);
+        const narrativeResult = emergentNarrativeEngine.processCanonicalEvent(gameplayEvent, transactionRepo);
+        const storyThreads = transactionRepo.getStoryThreads(storyId);
 
         return {
           success: true,

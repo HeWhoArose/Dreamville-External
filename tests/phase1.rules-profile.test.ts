@@ -201,3 +201,33 @@ test('Phase 1: mismatched persisted profile overrides cannot leak across selecte
 	assert.equal(resolved.profile.overrides.length, 0);
 	assert.ok(resolved.warnings.some((warning) => warning.includes('mismatched profile overrides were ignored')));
 });
+
+test('Phase 1: explicit custom spell rules are honored when standard D&D spell rules are disabled', () => {
+	const profile = rulesProfileEngine.createDefault('CUSTOM_HOMEBREW_DND');
+	const result = dndSpellRulesEvaluator.evaluateSpellProposal({
+		proposal: { spellName: 'Custom Burst', spellLevel: 5 },
+		characterLevel: 1,
+		dndMode: 'CUSTOM_HOMEBREW_DND',
+		rulesProfile: profile,
+		customRulesOverrides: { maxAllowedSpellLevel: 5 },
+	});
+
+	assert.equal(result.approved, true);
+	assert.equal(result.maxAvailableLevel, 5);
+	assert.equal(result.requiresCustomRule, false);
+});
+
+test('Phase 1: unknown rule identifiers are not executable overrides', () => {
+	const resolved = rulesProfileEngine.resolve({
+		mode: 'HYBRID_DND',
+		rulesProfile: {
+			overrides: [{
+				ruleId: 'invented_runtime_rule',
+				operation: 'DISABLE',
+				reason: 'This identifier is not implemented by the rules engine.',
+			}],
+		},
+	});
+
+	assert.equal(resolved.profile.overrides.length, 0);
+});

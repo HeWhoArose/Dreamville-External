@@ -1708,6 +1708,12 @@ IMPORTANT: Select an appropriate category and paper-doll slot. If the item is a 
 
     const characterId = `char_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
     const confirmedAt = new Date().toISOString();
+    const resolvedNarrativeProfile = narrativeProfileEngine.resolve({
+      mode: draft.storyMode,
+      narrativeProfile: draft.narrativeProfile,
+      fallbackMode: worldTemplate.storyMode || worldTemplate.narrativeProfile?.mode || 'PROTAGONIST',
+      source: 'RUN',
+    }).profile;
 
     const confirmed: ConfirmedCharacter = {
       characterId,
@@ -1781,8 +1787,8 @@ IMPORTANT: Select an appropriate category and paper-doll slot. If the item is a 
       provenance: { ...draft.provenance },
       fieldLocks: [...(draft.fieldLocks || [])],
       revision: draft.revision || 1,
-      storyMode: draft.storyMode,
-      narrativeProfile: draft.narrativeProfile,
+      storyMode: resolvedNarrativeProfile.mode,
+      narrativeProfile: resolvedNarrativeProfile,
       dndRulesMode: draft.dndRulesMode,
     };
 

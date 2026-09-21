@@ -104,7 +104,7 @@ export function compileProviderNeutralPrompt(meta: ImageAssetMeta): string {
   const inferredStyle = meta.artDirection ||
     (meta.genreTags?.length
       ? 'Use visual language appropriate to the stated genres (' + meta.genreTags.join(', ') + '); do not impose fantasy aesthetics when the genres indicate science fiction, cyberpunk, modern, post-apocalyptic, or other non-fantasy settings.'
-      : 'Cohesive cinematic concept art with a clear visual identity appropriate to the subject and setting.'));
+      : 'Cohesive cinematic concept art with a clear visual identity appropriate to the subject and setting.');
   parts.push('Artistic style: ' + inferredStyle);
   parts.push('Lighting: ' + (meta.lightingColor || 'Lighting appropriate to the world tone, environment, and era.'));
   parts.push('Framing: ' + (meta.composition || ('Cinematic centered focal framing for ' + spec.aspectRatio)));

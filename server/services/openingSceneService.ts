@@ -73,7 +73,7 @@ export class OpeningSceneService {
         const systemInstruction = `You are the Authoritative World Narrator for an interactive story engine.
 Generate a concise, player-friendly opening scene for a newly begun story run based strictly on the canonical context provided.
 The opening should orient the player without over-explaining. Mention the place, time, immediate sensory impression, current situation, and one clear thing that could be acted on next.
-Use 60–120 words of prose and at most 3 short structured events.
+Use 60–120 words of prose and at least 4 short structured events (e.g. 4 to 5 events).
 Do not recap the entire world history, character biography, or quest lore unless it is necessary to understand the first moment.
 Do not use headings such as "Key Narrative Moments" or "Immediate Epistemic Horizon" in the generated prose.
 
@@ -85,7 +85,7 @@ STRICT ANTI-CONTAMINATION RULES:
         const promptText = `Assemble the dynamic opening scene using this canonical working context:
 ${workingContext.assembledText}
 
-Produce a concise narrative between 60 and 120 words, plus 2 to 3 structured narrative events.
+Produce a concise narrative between 60 and 120 words, plus 4 to 5 structured narrative events.
 Event types MUST be chosen from: ["location", "normal", "action", "dialogue", "magic", "damage", "heal", "quest", "item", "system"].`;
 
         const responsePromise = ai.models.generateContent({

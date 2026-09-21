@@ -213,15 +213,17 @@ Event types MUST be chosen from: ["location", "normal", "action", "dialogue", "m
     let p1 = '';
     let p2 = '';
 
+    const narrativeMode = facts.world.narrativeProfile?.mode || 'PROTAGONIST';
+
     if (isSciFi) {
       p1 = `${time.formattedHeader}. ${character.name} stands in ${location.name}, listening to the quiet machinery beneath the floor. ${location.ambientSensory}`;
-      p2 = `${character.startingSituation || 'The immediate systems are stable.'} Ahead, the scene offers a small number of obvious choices, but nothing forces your hand.`;
+      p2 = narrativeMode === 'SIDE_CHARACTER' ? `${character.startingSituation || 'The immediate systems are stable.'} Beyond this room, other people and conflicts continue without waiting for you; your place in them matters, but the world is larger than your story.` : narrativeMode === 'FREE_ROAM' ? `${character.startingSituation || 'The immediate systems are stable.'} No predetermined path claims you. The world remains in motion beyond this room, and your next direction is yours to choose.` : `${character.startingSituation || 'The immediate systems are stable.'} The immediate situation is responsive to your presence, and the next move is yours.`;
     } else if (summary.includes('werewolf') || summary.includes('lycanthro')) {
       p1 = `${time.formattedHeader}. ${location.name} is still, cold, and close around ${character.name}, the ${character.role || 'scholar'}. ${location.ambientSensory}`;
-      p2 = `${character.startingSituation || 'Your hidden werewolf condition remains under control for now.'} Sifting through archives for a cure to your curse, something in the surroundings gives you reason to pay attention.`;
+      p2 = narrativeMode === 'SIDE_CHARACTER' ? `${character.startingSituation || 'Your hidden werewolf condition remains under control for now.'} The world's larger conflicts continue beyond you; this curse matters personally even when the main story moves elsewhere.` : narrativeMode === 'FREE_ROAM' ? `${character.startingSituation || 'Your hidden werewolf condition remains under control for now.'} You are free to pursue a cure, a life, or another path entirely; no fixed hero arc demands your next choice.` : `${character.startingSituation || 'Your hidden werewolf condition remains under control for now.'} Sifting through archives for a cure to your curse, something in the surroundings gives you reason to pay attention.`;
     } else {
       p1 = `${time.formattedHeader}. ${character.name} arrives in ${location.name}, within ${location.region}. ${location.ambientSensory}`;
-      p2 = `${character.startingSituation || 'For the moment, the way forward is open.'} Nothing has happened yet that demands a single answer; the next move is yours.`;
+      p2 = narrativeMode === 'SIDE_CHARACTER' ? `${character.startingSituation || 'For the moment, the way forward is open.'} The wider world does not pause for you; other actors, factions, and conflicts may continue to change while you decide where to stand.` : narrativeMode === 'FREE_ROAM' ? `${character.startingSituation || 'For the moment, the way forward is open.'} Nothing assigns you a single destiny. The world continues around you while you choose what matters next.` : `${character.startingSituation || 'For the moment, the way forward is open.'} The immediate situation is ready to respond to your choices, and the next move is yours.`;
     }
 
     const structuredEvents: StructuredNarrativeEvent[] = [

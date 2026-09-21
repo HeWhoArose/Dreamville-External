@@ -1378,13 +1378,14 @@ gameRouter.get('/combat/state', async (req: Request, res: Response) => {
  */
 gameRouter.post('/combat/move', async (req: Request, res: Response) => {
   try {
-    if (!requireDndTacticalCombat(res, 'default_story')) return;
+    const storyId = resolveStoryId(req, true);
+    if (!requireDndTacticalCombat(res, storyId)) return;
     const { actorId: reqActorId, targetX, targetY } = req.body;
     if (typeof targetX !== 'number' || typeof targetY !== 'number') {
       return res.status(400).json({ success: false, errorReason: 'targetX and targetY numbers required.' });
     }
 
-    const player = worldRepository.getPlayerLifecycle('default_story');
+    const player = worldRepository.getPlayerLifecycle(storyId);
     const serverPlayerActorId = player?.actorId || 'player_actor_default_story';
 
     // Reject impersonation of other actors on public HTTP route
@@ -1395,9 +1396,9 @@ gameRouter.post('/combat/move', async (req: Request, res: Response) => {
       });
     }
 
-    const combatEngine = worldRepository.getCombatEngine('default_story');
+    const combatEngine = worldRepository.getCombatEngine(storyId);
     const moveResult = combatEngine.moveActor(serverPlayerActorId, targetX, targetY);
-    const state = getCombatStateHelper(combatEngine, 'default_story', serverPlayerActorId);
+    const state = getCombatStateHelper(combatEngine, storyId, serverPlayerActorId);
 
     if (!moveResult.success) {
       return res.status(400).json({
@@ -1423,9 +1424,10 @@ gameRouter.post('/combat/move', async (req: Request, res: Response) => {
  */
 gameRouter.post('/combat/action', async (req: Request, res: Response) => {
   try {
-    if (!requireDndTacticalCombat(res, 'default_story')) return;
+    const storyId = resolveStoryId(req, true);
+    if (!requireDndTacticalCombat(res, storyId)) return;
     const { actorId: reqActorId, action } = req.body;
-    const player = worldRepository.getPlayerLifecycle('default_story');
+    const player = worldRepository.getPlayerLifecycle(storyId);
     const serverPlayerActorId = player?.actorId || 'player_actor_default_story';
 
     if (reqActorId && reqActorId !== serverPlayerActorId) {
@@ -1442,9 +1444,9 @@ gameRouter.post('/combat/action', async (req: Request, res: Response) => {
       });
     }
 
-    const combatEngine = worldRepository.getCombatEngine('default_story');
+    const combatEngine = worldRepository.getCombatEngine(storyId);
     const result = combatEngine.executeCoreAction(serverPlayerActorId, action);
-    const state = getCombatStateHelper(combatEngine, 'default_story', serverPlayerActorId);
+    const state = getCombatStateHelper(combatEngine, storyId, serverPlayerActorId);
 
     if (!result.success) {
       return res.status(400).json({
@@ -1471,13 +1473,14 @@ gameRouter.post('/combat/action', async (req: Request, res: Response) => {
  */
 gameRouter.post('/combat/attack', async (req: Request, res: Response) => {
   try {
-    if (!requireDndTacticalCombat(res, 'default_story')) return;
+    const storyId = resolveStoryId(req, true);
+    if (!requireDndTacticalCombat(res, storyId)) return;
     const { attackerId: reqAttackerId, targetId } = req.body;
     if (!targetId) {
       return res.status(400).json({ success: false, errorReason: 'targetId string is required.' });
     }
 
-    const player = worldRepository.getPlayerLifecycle('default_story');
+    const player = worldRepository.getPlayerLifecycle(storyId);
     const serverPlayerActorId = player ? player.actorId : 'player_actor_default_story';
 
     // Reject impersonation of other attackers on public HTTP route
@@ -1490,11 +1493,11 @@ gameRouter.post('/combat/attack', async (req: Request, res: Response) => {
 
     const attackerId = serverPlayerActorId;
     const actorId = serverPlayerActorId;
-    const combatEngine = worldRepository.getCombatEngine('default_story');
-    const inv = worldRepository.getInventoryEngine('default_story');
-    const capEngine = worldRepository.getCapabilityEngine('default_story');
-    const chronicle = worldRepository.getHistoricalChronicleEngine('default_story');
-    const clock = worldRepository.getWorldClock('default_story');
+    const combatEngine = worldRepository.getCombatEngine(storyId);
+    const inv = worldRepository.getInventoryEngine(storyId);
+    const capEngine = worldRepository.getCapabilityEngine(storyId);
+    const chronicle = worldRepository.getHistoricalChronicleEngine(storyId);
+    const clock = worldRepository.getWorldClock(storyId);
 
     const attacker = combatEngine.getParticipant(attackerId);
     const target = combatEngine.getParticipant(targetId);
@@ -1504,7 +1507,7 @@ gameRouter.post('/combat/attack', async (req: Request, res: Response) => {
     }
 
     // CH2-08 Epistemic Target-ID Security Authorization using durable repository authority
-    const perceptionOptions = worldRepository.getCombatPerceptionOptions('default_story', attackerId);
+    const perceptionOptions = worldRepository.getCombatPerceptionOptions(storyId, attackerId);
     if (!combatEngine.isParticipantKnownToActor(attackerId, target, perceptionOptions)) {
       return res.status(403).json({
         success: false,
@@ -1518,7 +1521,7 @@ gameRouter.post('/combat/attack', async (req: Request, res: Response) => {
       return res.status(400).json({
         success: false,
         errorReason: attackResult.errorReason || 'Attack action could not be resolved.',
-        combatState: getCombatStateHelper(combatEngine, 'default_story', attackerId),
+        combatState: getCombatStateHelper(combatEngine, storyId, attackerId),
       });
     }
 
@@ -1553,7 +1556,7 @@ gameRouter.post('/combat/attack', async (req: Request, res: Response) => {
             revivalPossible: true,
           },
         });
-        worldRepository.updatePlayerLifecycle('default_story', deadPlayer);
+        worldRepository.updatePlayerLifecycle(storyId, deadPlayer);
 
         // CH4 Integration: Record character death in chronicle
         const ts = clock.getTimestamp();
@@ -1584,15 +1587,15 @@ gameRouter.post('/combat/attack', async (req: Request, res: Response) => {
         const injuredPlayer = player.copyWith({
           injuries: [...player.injuries, injury],
         });
-        worldRepository.updatePlayerLifecycle('default_story', injuredPlayer);
+        worldRepository.updatePlayerLifecycle(storyId, injuredPlayer);
       }
     } else if (updatedTarget.id !== actorId && updatedTarget.isDead) {
       // CH5-COMBAT-01 & CH5-COMBAT-02: Immediate NPC Death Synchronization
-      syncNpcCombatDeath('default_story', updatedTarget, attacker.name, player?.locationId);
+      syncNpcCombatDeath(storyId, updatedTarget, attacker.name, player?.locationId);
     }
 
     // Check for encounter victory / defeat and emit HistoricalEvidence (DEF-CH8-04)
-    const state = getCombatStateHelper(combatEngine, 'default_story', attackerId);
+    const state = getCombatStateHelper(combatEngine, storyId, attackerId);
     if (state.victory) {
       const ts = clock.getTimestamp();
       chronicle.recordEvidence({
@@ -1625,13 +1628,14 @@ gameRouter.post('/combat/attack', async (req: Request, res: Response) => {
  */
 gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
   try {
-    if (!requireDndTacticalCombat(res, 'default_story')) return;
+    const storyId = resolveStoryId(req, true);
+    if (!requireDndTacticalCombat(res, storyId)) return;
     const { actorId: reqActorId, targetId, capabilityId, requestedScale } = req.body;
     if (!targetId || !capabilityId) {
       return res.status(400).json({ success: false, errorReason: 'targetId and capabilityId are required.' });
     }
 
-    const player = worldRepository.getPlayerLifecycle('default_story');
+    const player = worldRepository.getPlayerLifecycle(storyId);
     const serverPlayerActorId = player?.actorId || 'player_actor_default_story';
 
     // Reject impersonation of other casters on public HTTP route
@@ -1643,10 +1647,10 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
     }
 
     const actorId = serverPlayerActorId;
-    const capEngine = worldRepository.getCapabilityEngine('default_story');
-    const combatEngine = worldRepository.getCombatEngine('default_story');
-    const chronicle = worldRepository.getHistoricalChronicleEngine('default_story');
-    const clock = worldRepository.getWorldClock('default_story');
+    const capEngine = worldRepository.getCapabilityEngine(storyId);
+    const combatEngine = worldRepository.getCombatEngine(storyId);
+    const chronicle = worldRepository.getHistoricalChronicleEngine(storyId);
+    const clock = worldRepository.getWorldClock(storyId);
 
     const capDef = capEngine.getCapability(capabilityId);
     if (!capDef) {
@@ -1654,7 +1658,7 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
     }
 
     // CH3.2 Server-authoritative capability grant check
-    const inv = worldRepository.getInventoryEngine('default_story');
+    const inv = worldRepository.getInventoryEngine(storyId);
     const effectiveCaps = capEngine.getEffectiveActorCapabilities(actorId, inv);
     if (!effectiveCaps.some((c) => c.id === capabilityId)) {
       return res.status(403).json({
@@ -1688,12 +1692,12 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
           : capabilityResource === 'REACTION'
             ? 'Reaction already used.'
             : 'Action already used this turn.',
-        combatState: getCombatStateHelper(combatEngine, 'default_story', actorId),
+        combatState: getCombatStateHelper(combatEngine, storyId, actorId),
       });
     }
 
     // CH2-08 Epistemic Target-ID Security Authorization using durable repository authority
-    const perceptionOptions = worldRepository.getCombatPerceptionOptions('default_story', actorId);
+    const perceptionOptions = worldRepository.getCombatPerceptionOptions(storyId, actorId);
     if (!combatEngine.isParticipantKnownToActor(actorId, target, perceptionOptions)) {
       return res.status(403).json({
         success: false,
@@ -1727,12 +1731,12 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
           return res.status(400).json({
             success: false,
             errorReason: actionUse.errorReason || 'Action unavailable.',
-            combatState: getCombatStateHelper(combatEngine, 'default_story', actorId),
+            combatState: getCombatStateHelper(combatEngine, storyId, actorId),
           });
         }
         activationResourceConsumed = capabilityConsumesResource;
         combatEngine.startActivation(act);
-        const state = getCombatStateHelper(combatEngine, 'default_story', actorId);
+        const state = getCombatStateHelper(combatEngine, storyId, actorId);
         return res.json({
           success: true,
           pendingActivation: act,
@@ -1757,7 +1761,7 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
           return res.status(400).json({
             success: false,
             errorReason: actionUse.errorReason || 'Action unavailable.',
-            combatState: getCombatStateHelper(combatEngine, 'default_story', actorId),
+            combatState: getCombatStateHelper(combatEngine, storyId, actorId),
           });
         }
         activationResourceConsumed = capabilityConsumesResource;
@@ -1809,7 +1813,7 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
         success: false,
         adjudication,
         errorReason: castResult.headline || 'Capability action could not be resolved.',
-        combatState: getCombatStateHelper(combatEngine, 'default_story', actorId),
+        combatState: getCombatStateHelper(combatEngine, storyId, actorId),
       });
     }
 
@@ -1832,15 +1836,15 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
             revivalPossible: true,
           },
         });
-        worldRepository.updatePlayerLifecycle('default_story', deadPlayer);
+        worldRepository.updatePlayerLifecycle(storyId, deadPlayer);
       }
     } else if (updatedTarget && updatedTarget.id !== actorId && updatedTarget.isDead) {
       // Immediate NPC death synchronization for capability cast
-      syncNpcCombatDeath('default_story', updatedTarget, `${attacker.name}'s ${capDef.name}`, player?.locationId);
+      syncNpcCombatDeath(storyId, updatedTarget, `${attacker.name}'s ${capDef.name}`, player?.locationId);
     }
 
     // Check victory condition
-    const state = getCombatStateHelper(combatEngine, 'default_story', actorId);
+    const state = getCombatStateHelper(combatEngine, storyId, actorId);
     if (state.victory) {
       const ts = clock.getTimestamp();
       chronicle.recordEvidence({
@@ -1878,14 +1882,15 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
  */
 gameRouter.post('/combat/interrupt', async (req: Request, res: Response) => {
   try {
-    if (!requireDndTacticalCombat(res, 'default_story')) return;
+    const storyId = resolveStoryId(req, true);
+    if (!requireDndTacticalCombat(res, storyId)) return;
     const { targetActorId, reason } = req.body;
     if (!targetActorId) {
       return res.status(400).json({ success: false, errorReason: 'targetActorId is required.' });
     }
-    const combatEngine = worldRepository.getCombatEngine('default_story');
+    const combatEngine = worldRepository.getCombatEngine(storyId);
     const result = combatEngine.interruptActivation(targetActorId, reason || 'Interrupted');
-    const state = getCombatStateHelper(combatEngine, 'default_story', targetActorId);
+    const state = getCombatStateHelper(combatEngine, storyId, targetActorId);
     res.json({
       ...result,
       combatState: state,
@@ -1902,8 +1907,9 @@ gameRouter.post('/combat/interrupt', async (req: Request, res: Response) => {
  */
 gameRouter.post('/combat/end-turn', async (req: Request, res: Response) => {
   try {
-    if (!requireDndTacticalCombat(res, 'default_story')) return;
-    const player = worldRepository.getPlayerLifecycle('default_story');
+    const storyId = resolveStoryId(req, true);
+    if (!requireDndTacticalCombat(res, storyId)) return;
+    const player = worldRepository.getPlayerLifecycle(storyId);
     const serverPlayerActorId = player?.actorId || 'player_actor_default_story';
 
     if (req.body?.actorId && req.body.actorId !== serverPlayerActorId) {
@@ -1913,13 +1919,13 @@ gameRouter.post('/combat/end-turn', async (req: Request, res: Response) => {
       });
     }
 
-    const combatEngine = worldRepository.getCombatEngine('default_story');
+    const combatEngine = worldRepository.getCombatEngine(storyId);
     const advanceResult = combatEngine.advanceTurn();
 
     // Synchronize newly deceased NPC participants from hazard ticks during advanceTurn() (CH5 Issue A)
     const deadParticipants = combatEngine.getParticipants().filter(p => p.isDead && p.id !== serverPlayerActorId);
     for (const dp of deadParticipants) {
-      syncNpcCombatDeath('default_story', dp, 'environmental hazard', player?.locationId);
+      syncNpcCombatDeath(storyId, dp, 'environmental hazard', player?.locationId);
     }
 
     // If player took lethal hazard damage, update player lifecycle mortality
@@ -1929,18 +1935,18 @@ gameRouter.post('/combat/end-turn', async (req: Request, res: Response) => {
         const deadPlayer = player.copyWith({
           deathRecord: {
             isDead: true,
-            diedAtTimestamp: worldRepository.getWorldClock('default_story').getTimestamp(),
+            diedAtTimestamp: worldRepository.getWorldClock(storyId).getTimestamp(),
             cause: (playerPart?.deathSaveState?.failures ?? 0) >= 3
               ? 'Failed three death saves in tactical combat.'
               : 'Defeated in tactical combat by environmental hazard.',
             revivalPossible: true,
           },
         });
-        worldRepository.updatePlayerLifecycle('default_story', deadPlayer);
+        worldRepository.updatePlayerLifecycle(storyId, deadPlayer);
       }
     }
 
-    const state = getCombatStateHelper(combatEngine, 'default_story', serverPlayerActorId);
+    const state = getCombatStateHelper(combatEngine, storyId, serverPlayerActorId);
 
     res.json({
       success: true,
@@ -1960,11 +1966,12 @@ gameRouter.post('/combat/end-turn', async (req: Request, res: Response) => {
  */
 gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
   try {
-    if (!requireDndTacticalCombat(res, 'default_story')) return;
-    const player = worldRepository.getPlayerLifecycle('default_story');
+    const storyId = resolveStoryId(req, true);
+    if (!requireDndTacticalCombat(res, storyId)) return;
+    const player = worldRepository.getPlayerLifecycle(storyId);
     const serverPlayerActorId = player?.actorId || 'player_actor_default_story';
-    const combatEngine = worldRepository.getCombatEngine('default_story');
-    const capEngine = worldRepository.getCapabilityEngine('default_story');
+    const combatEngine = worldRepository.getCombatEngine(storyId);
+    const capEngine = worldRepository.getCapabilityEngine(storyId);
 
     const currentActor = combatEngine.getCurrentActor();
     if (!currentActor) {
@@ -1987,7 +1994,7 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
       });
     }
 
-    const perceptionOptions = worldRepository.getCombatPerceptionOptions('default_story', currentActor.id);
+    const perceptionOptions = worldRepository.getCombatPerceptionOptions(storyId, currentActor.id);
     const proposal = NpcTacticalDecisionPolicy.decide({
       actorId: currentActor.id,
       combatEngine,
@@ -2004,7 +2011,7 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
     // Sync any dead NPC participants resulting from NPC turn
     const deadParticipants = combatEngine.getParticipants().filter(p => p.isDead && p.id !== serverPlayerActorId);
     for (const dp of deadParticipants) {
-      syncNpcCombatDeath('default_story', dp, currentActor.name, player?.locationId);
+      syncNpcCombatDeath(storyId, dp, currentActor.name, player?.locationId);
     }
 
     // If turn didn't advance or ended, advance turn queue
@@ -2013,7 +2020,7 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
     // Synchronize newly deceased NPC participants from hazard ticks during advanceTurn() (CH5 Issue A)
     const postAdvanceDead = combatEngine.getParticipants().filter(p => p.isDead && p.id !== serverPlayerActorId);
     for (const dp of postAdvanceDead) {
-      syncNpcCombatDeath('default_story', dp, 'environmental hazard', player?.locationId);
+      syncNpcCombatDeath(storyId, dp, 'environmental hazard', player?.locationId);
     }
 
     // If player took lethal hazard damage, update player lifecycle mortality
@@ -2023,18 +2030,18 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
         const deadPlayer = player.copyWith({
           deathRecord: {
             isDead: true,
-            diedAtTimestamp: worldRepository.getWorldClock('default_story').getTimestamp(),
+            diedAtTimestamp: worldRepository.getWorldClock(storyId).getTimestamp(),
             cause: (playerPart?.deathSaveState?.failures ?? 0) >= 3
               ? 'Failed three death saves in tactical combat.'
               : 'Defeated in tactical combat by environmental hazard.',
             revivalPossible: true,
           },
         });
-        worldRepository.updatePlayerLifecycle('default_story', deadPlayer);
+        worldRepository.updatePlayerLifecycle(storyId, deadPlayer);
       }
     }
 
-    const state = getCombatStateHelper(combatEngine, 'default_story', serverPlayerActorId);
+    const state = getCombatStateHelper(combatEngine, storyId, serverPlayerActorId);
 
     res.json({
       success: true,

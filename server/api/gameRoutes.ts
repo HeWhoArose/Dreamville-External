@@ -6237,6 +6237,8 @@ gameRouter.post('/spells/cast', async (req: Request, res: Response) => {
               requireAuthoritativeTarget: true,
               damageResolver: (damageTarget, amount, damageType, criticalHit = false) =>
                 transactionCombat.resolveAuthoritativeSpellDamage(damageTarget, amount, damageType, criticalHit),
+              healingResolver: (healingTarget, amount) =>
+                transactionCombat.resolveAuthoritativeSpellHealing(healingTarget, amount),
             },
             casterParticipant: caster,
             targetParticipant: target,

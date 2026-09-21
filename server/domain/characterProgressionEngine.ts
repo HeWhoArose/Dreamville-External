@@ -1033,6 +1033,6 @@ export class CharacterProgressionEngine {
         provenance: 'SYSTEM_CANON',
       },
     ];
-    this.registerModules(modules);
+    for (const module of modules) this.registerModuleInternal(module);
   }
 }

@@ -1466,6 +1466,22 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
     const speedBonus = feetDef ? (Number(feetDef.properties?.speedBonus) || 1) : 0;
     const speedCells = 5 + speedBonus;
 
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      `combat_start_${storyId}_${actorId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'CORE_ACTION',
+        payload: { action: 'START_ENCOUNTER', enemyId: req.body?.enemyId, enemyName: req.body?.enemyName },
+        source: 'SYSTEM',
+      },
+      async () => {
     // Preserve corpses before clearing (CH5-004 / CH5-COMBAT-01)
     const deadParticipants = combatEngine.getParticipants().filter(p => p.isDead && p.id !== actorId);
     for (const dp of deadParticipants) {
@@ -1585,10 +1601,33 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
     combatEngine.rollInitiative();
 
     const state = getCombatStateHelper(combatEngine, storyId, actorId);
+
+        const state = getCombatStateHelper(combatEngine, storyId, actorId);
+        return {
+          success: true,
+          data: { combatState: state },
+          summary: 'Tactical combat encounter initialized.',
+        };
+      }
+    );
+
+    const state = getCombatStateHelper(combatEngine, storyId, actorId);
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        combatState: state,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
+      });
+    }
+
     res.json({
       success: true,
       message: 'Encounter initialized with canonical equipment & lifecycle stats.',
       combatState: state,
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to start combat encounter.' });

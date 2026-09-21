@@ -3388,6 +3388,61 @@ gameRouter.get('/worlds/:worldId', async (req: Request, res: Response) => {
   }
 });
 
+gameRouter.get('/story-runs', async (_req: Request, res: Response) => {
+  try {
+    const runs = worldRepository.getAllStoryRuns();
+    const summaries = runs
+      .filter((run: any) => run && run.storyId)
+      .map((run: any) => {
+        const world = run.worldId ? worldRepository.getWorldTemplate(run.worldId) : null;
+        const turnCount = Array.isArray(run.actionHistory) ? run.actionHistory.length : 0;
+        const currentLocation =
+          run.currentLocation?.name ||
+          run.currentLocationName ||
+          run.currentLocationId ||
+          run.startingLocation?.name ||
+          'Unknown Location';
+
+        return {
+          storyId: run.storyId,
+          runId: run.id || run.storyId,
+          worldId: run.worldId,
+          worldTitle: world?.title || run.worldTitle || 'Unknown World',
+          worldName: world?.title || run.worldTitle || 'Unknown World',
+          storyTitle:
+            run.title ||
+            run.storyTitle ||
+            run.initialSceneTitle ||
+            `Chronicle of ${world?.title || 'Unknown World'}`,
+          title:
+            run.title ||
+            run.storyTitle ||
+            run.initialSceneTitle ||
+            `Chronicle of ${world?.title || 'Unknown World'}`,
+          characterName: run.characterName || run.protagonist?.identity?.name || 'Protagonist',
+          characterRole: run.characterRole || run.protagonist?.role?.profession || run.protagonist?.role?.archetype,
+          storyMode: run.storyMode || world?.storyMode || 'PROTAGONIST',
+          dndRulesMode: run.dndRulesMode || world?.dndRulesMode || world?.rulesetId || 'FULL_DND',
+          currentLocation,
+          turnCount,
+          lastPlayed: run.updatedAt || run.createdAt || null,
+          createdAt: run.createdAt || null,
+          updatedAt: run.updatedAt || run.createdAt || null,
+          imageAsset: run.imageAsset || run.storyRunCover || world?.imageAsset,
+          imageMetadata: run.imageMetadata || world?.imageMetadata,
+          excerpt: run.initialScene || run.openingScene?.narrativeText || '',
+          status: run.status || 'ACTIVE',
+        };
+      })
+      .sort((a: any, b: any) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
+
+    res.json(summaries);
+  } catch (error) {
+    console.error('Error listing story runs:', error);
+    res.status(500).json({ error: 'Failed to retrieve Story Run library.' });
+  }
+});
+
 gameRouter.post('/worlds/:worldId/start-run', async (req: Request, res: Response) => {
   try {
     const { worldRepository } = await import('../repositories/worldRepository');

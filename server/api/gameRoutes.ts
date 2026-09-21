@@ -2052,7 +2052,7 @@ gameRouter.post('/combat/ready', async (req: Request, res: Response) => {
     const storyId = resolveStoryId(req, true);
     if (!requireDndTacticalCombat(res, storyId)) return;
     const player = worldRepository.getPlayerLifecycle(storyId);
-    const actorId = player?.actorId || `player_actor_\${storyId}`;
+    const actorId = player?.actorId || `player_actor_${storyId}`;
     if (req.body?.actorId && req.body.actorId !== actorId) {
       return res.status(403).json({ success: false, errorReason: 'Unauthorized actor.' });
     }
@@ -2114,7 +2114,7 @@ gameRouter.post('/combat/grapple/escape', async (req: Request, res: Response) =>
     const storyId = resolveStoryId(req, true);
     if (!requireDndTacticalCombat(res, storyId)) return;
     const player = worldRepository.getPlayerLifecycle(storyId);
-    const actorId = player?.actorId || `player_actor_\${storyId}`;
+    const actorId = player?.actorId || `player_actor_${storyId}`;
     if (req.body?.actorId && req.body.actorId !== actorId) {
       return res.status(403).json({ success: false, errorReason: 'Unauthorized actor.' });
     }
@@ -2163,7 +2163,7 @@ gameRouter.post('/combat/control', async (req: Request, res: Response) => {
     const storyId = resolveStoryId(req, true);
     if (!requireDndTacticalCombat(res, storyId)) return;
     const player = worldRepository.getPlayerLifecycle(storyId);
-    const actorId = player?.actorId || `player_actor_\${storyId}`;
+    const actorId = player?.actorId || `player_actor_${storyId}`;
     if (req.body?.actorId && req.body.actorId !== actorId) {
       return res.status(403).json({ success: false, errorReason: 'Unauthorized actor.' });
     }
@@ -2196,7 +2196,7 @@ gameRouter.post('/combat/control', async (req: Request, res: Response) => {
           ? combat.executeGrapple(actorId, targetId)
           : combat.executeShove(actorId, targetId, req.body?.prone === true);
         if (!result.success) return { success: false, errorReason: result.errorReason };
-        return { success: true, data: { result }, summary: `Combat control action \${action} resolved.` };
+        return { success: true, data: { result }, summary: `Combat control action ${action} resolved.` };
       }
     );
 

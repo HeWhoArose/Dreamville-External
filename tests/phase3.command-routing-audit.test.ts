@@ -40,11 +40,9 @@ test('Phase 3 — core authoritative action routes all use the canonical command
 		'/worlds/runs/:storyId/actions/execute',
 		'/worlds/runs/:storyId/actions/apply-ability',
 		'/worlds/runs/:storyId/dice-clash/resolve',
-		'/living-world/advance',
-		'/living-world/schedule-event',
-		'/living-world/schedule-event',
 		'/orchestrator/turn',
 		'/living-world/advance',
+		'/living-world/schedule-event',
 	];
 
 	for (const route of requiredRoutes) {
@@ -80,6 +78,8 @@ test('Phase 3 — migrated core action routes use true staged transactions', () 
 		'/combat/npc-turn',
 		'/capabilities/adjudicate',
 		'/worlds/runs/:storyId/dice-clash/resolve',
+		'/living-world/advance',
+		'/living-world/schedule-event',
 	];
 
 	for (const route of stagedRoutes) {

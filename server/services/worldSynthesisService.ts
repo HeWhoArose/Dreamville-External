@@ -525,9 +525,9 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
       setting: setting,
       era: era,
       source: input.sourcePolicy || 'Synthesized Template',
-      playstyle: requestedStoryMode,
+      // Narrative mode is canonical metadata and intentionally remains separate from
+      // the legacy gameplay-oriented playstyle axis.
       rules: resolvedRules.profile.mode,
-      supportedPlaystyles: ['PROTAGONIST', 'SIDE_CHARACTER', 'FREE_ROAM'],
       imageAsset: input.imageAsset,
       imageMetadata: input.imageMetadata || (input.imageAsset ? {
         promptFallback: `Visual rendition for ${title}`,

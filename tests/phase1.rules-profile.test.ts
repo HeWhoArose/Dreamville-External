@@ -105,3 +105,31 @@ test('Phase 1: FULL_DND still applies standard spell-slot progression', () => {
 	assert.equal(result.modeApplied, 'FULL_DND');
 	assert.equal(result.maxAvailableLevel, 1);
 });
+
+test('Phase 1: synthesized-world fields preserve the canonical mode and profile contract', () => {
+	const resolved = rulesProfileEngine.resolve({
+		mode: 'HYBRID_DND',
+		rulesProfile: {
+			overrides: [{
+				ruleId: 'standard_dnd_spell_rules',
+				operation: 'DISABLE',
+				reason: 'This hybrid world uses custom spell legality.',
+			}],
+		},
+	});
+
+	assert.equal(resolved.profile.mode, 'HYBRID_DND');
+	assert.equal(resolved.profile.allowStandardDndSpellRules, false);
+	assert.equal(resolved.profile.overrides.length, 1);
+
+	const spellResult = dndSpellRulesEvaluator.evaluateSpellProposal({
+		proposal: { spellName: 'Hybrid Burst', spellLevel: 3 },
+		characterLevel: 1,
+		dndMode: 'HYBRID_DND',
+		rulesProfile: resolved.profile,
+	});
+
+	assert.equal(spellResult.requiresCustomRule, true);
+	assert.equal(spellResult.modeApplied, 'HYBRID_DND');
+	assert.equal(spellResult.maxAvailableLevel, 0);
+});

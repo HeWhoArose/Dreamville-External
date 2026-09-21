@@ -84,7 +84,12 @@ export class WorldVisualIdentityService {
 				startingSituation && `Immediate situation: ${startingSituation}`,
 			].filter(Boolean).join('. '),
 			characterName,
-			storyMode: run?.storyMode || world?.storyMode || 'PROTAGONIST',
+			storyMode:
+				run?.narrativeProfile?.mode ||
+				run?.storyMode ||
+				world?.narrativeProfile?.mode ||
+				world?.storyMode ||
+				'PROTAGONIST',
 			dndRulesMode: run?.dndRulesMode || world?.dndRulesMode || world?.rulesetId || 'FULL_DND',
 		};
 	}

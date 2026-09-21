@@ -240,6 +240,8 @@ export class WorkingContextEngine {
 
     // 2. Epistemic Projection: Scene & Geography
     const run = repo.getStoryRun(storyId);
+    const narrativeProfile = repo.getNarrativeProfile(storyId);
+    const rulesProfile = repo.getRulesProfile(storyId);
     const locId = player ? player.locationId : (run?.startingLocationId || run?.currentLocationId || (storyId === 'default_story' ? 'loc_whispering_orrery' : 'loc_unknown'));
     const locNode = geography.getNode(locId);
 		const isDiscovered = player ? player.discoveredLocationIds.includes(locId) : false;
@@ -398,7 +400,17 @@ export class WorkingContextEngine {
 
     // Construct Prioritized Candidate Context Chunks
     const candidateChunks: ContextChunk[] = [
-      // B1_CRITICAL: Invariant physical, mechanical, and epistemic boundaries
+      // B1_CRITICAL: Canonical campaign mode boundaries
+      {
+        id: 'b1_campaign_modes',
+        band: 'B1_CRITICAL',
+        label: 'Canonical Campaign Modes',
+        content: `Rules Mode: ${rulesProfile?.mode || run?.dndRulesMode || 'FULL_DND'} | Narrative Mode: ${narrativeProfile?.mode || run?.storyMode || 'PROTAGONIST'} | Narrative Camera: ${narrativeProfile?.camera || 'PLAYER_CENTRIC'} | Player Agency: ${narrativeProfile?.playerAgency || 'PRIMARY_PLAYER'}`,
+        estimatedTokens: WorkingContextEngine.estimateTokens(`Rules Mode: ${rulesProfile?.mode || run?.dndRulesMode || 'FULL_DND'} | Narrative Mode: ${narrativeProfile?.mode || run?.storyMode || 'PROTAGONIST'} | Narrative Camera: ${narrativeProfile?.camera || 'PLAYER_CENTRIC'} | Player Agency: ${narrativeProfile?.playerAgency || 'PRIMARY_PLAYER'}`),
+        sourceAuthority: 'WorldRepository canonical profiles (Phase 2)',
+        isProtected: true,
+        relevanceScore: 1.0,
+      },
       {
         id: 'b1_system_invariants',
         band: 'B1_CRITICAL',

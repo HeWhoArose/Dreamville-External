@@ -1630,106 +1630,135 @@ gameRouter.post('/combat/attack', async (req: Request, res: Response) => {
       });
     }
 
-    // Execute attack with D&D adapter. The combat engine owns the canonical Action resource.
-    const attackResult = combatEngine.executeAttack(attackerId, targetId);
-    if (!attackResult.success) {
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      `attack_${storyId}_${attackerId}_${targetId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId: attackerId,
+        type: 'ATTACK',
+        payload: { targetId },
+        source: 'PLAYER',
+      },
+      async () => {
+        const attackResult = combatEngine.executeAttack(attackerId, targetId);
+        if (!attackResult.success) {
+          return {
+            success: false,
+            errorReason: attackResult.errorReason || 'Attack action could not be resolved.',
+          };
+        }
+
+        if (attacker.team === 'player_allies') {
+          const doll = inv.getActorPaperDoll(actorId);
+          if (doll.mainHand) {
+            inv.degradeDurability(doll.mainHand.id, 1);
+          }
+        }
+
+        const updatedTarget = combatEngine.getParticipant(targetId) || target;
+
+        if (updatedTarget.id === actorId && attackResult.damage > 0) {
+          const currentPower = capEngine.getPowerState(actorId);
+          if (currentPower) {
+            capEngine.setPowerState(actorId, {
+              ...currentPower,
+              healthCurrent: updatedTarget.hpCurrent,
+            });
+          }
+
+          if (updatedTarget.isDead && player && !player.isDead) {
+            const deadPlayer = player.copyWith({
+              deathRecord: {
+                isDead: true,
+                diedAtTimestamp: clock.getTimestamp(),
+                cause: `Struck down in tactical combat by ${attacker.name}`,
+                revivalPossible: true,
+              },
+            });
+            worldRepository.updatePlayerLifecycle(storyId, deadPlayer);
+
+            const ts = clock.getTimestamp();
+            chronicle.recordEvidence({
+              id: `ev_death_${actorId}_${attackerId}_${ts.totalElapsedSeconds}_${chronicle.getChronicleEntries().length}`,
+              category: 'LIFECYCLE_TRANSITION',
+              timestamp: ts,
+              primarySubjectId: actorId,
+              secondarySubjectId: attackerId,
+              locationId: player.locationId,
+              summary: 'Player Character Slain in Combat',
+              details: `${player.name} succumbed to mortal trauma from ${attacker.name}'s strike.`,
+              sourceEventId: `evt_combat_death_${actorId}_${ts.totalElapsedSeconds}`,
+              provenance: 'tactical_battlefield_mortality',
+              visibility: 'PUBLIC',
+            });
+          } else if (attackResult.damage >= 15 && player) {
+            const injury: import('../domain/types').InjuryRecord = {
+              id: `inj_combat_${clock.getTimestamp().totalElapsedSeconds}_${player.injuries.length}`,
+              type: 'Combat Trauma',
+              severity: attackResult.damage >= 25 ? 'Critical' : 'Moderate',
+              location: 'Torso',
+              description: `Combat wound from ${attacker.name} (${attackResult.damage} damage)`,
+              acquiredAtTimestamp: clock.getTimestamp(),
+              healed: false,
+            };
+            worldRepository.updatePlayerLifecycle(
+              storyId,
+              player.copyWith({ injuries: [...player.injuries, injury] })
+            );
+          }
+        } else if (updatedTarget.id !== actorId && updatedTarget.isDead) {
+          syncNpcCombatDeath(storyId, updatedTarget, attacker.name, player?.locationId);
+        }
+
+        const state = getCombatStateHelper(combatEngine, storyId, attackerId);
+        if (state.victory) {
+          const ts = clock.getTimestamp();
+          chronicle.recordEvidence({
+            id: `ev_victory_${actorId}_${ts.totalElapsedSeconds}_${chronicle.getChronicleEntries().length}`,
+            category: 'SACRED_OR_HISTORIC',
+            timestamp: ts,
+            primarySubjectId: actorId,
+            locationId: player?.locationId || 'loc_whispering_orrery',
+            summary: 'Tactical Battlefield Victory',
+            details: `${player?.name || 'Vael'} emerged victorious, neutralizing all hostile entities in combat.`,
+            sourceEventId: `evt_combat_victory_${actorId}_${ts.totalElapsedSeconds}`,
+            provenance: 'tactical_battlefield_outcome',
+            visibility: 'PUBLIC',
+          });
+        }
+
+        return {
+          success: true,
+          data: { attackResult },
+          summary: attackResult.hits
+            ? `Attack committed against ${target.name} for ${attackResult.damage} damage.`
+            : `Attack committed against ${target.name} and missed.`,
+        };
+      }
+    );
+
+    const state = getCombatStateHelper(combatEngine, storyId, attackerId);
+    if (!commandResult.success) {
       return res.status(400).json({
         success: false,
-        errorReason: attackResult.errorReason || 'Attack action could not be resolved.',
-        combatState: getCombatStateHelper(combatEngine, storyId, attackerId),
-      });
-    }
-
-    // CH5 Integration: If player attacks with equipped weapon, degrade its durability only after the attack action is accepted.
-    if (attacker.team === 'player_allies') {
-      const doll = inv.getActorPaperDoll(actorId);
-      if (doll.mainHand) {
-        inv.degradeDurability(doll.mainHand.id, 1);
-      }
-    }
-
-    const updatedTarget = combatEngine.getParticipant(targetId) || target;
-
-    // DEF-CH8-02: Canonical PlayerLifecycleState & PowerState Synchronization
-    if (updatedTarget.id === actorId && attackResult.damage > 0) {
-      // Sync PowerState healthCurrent
-      const currentPower = capEngine.getPowerState(actorId);
-      if (currentPower) {
-        capEngine.setPowerState(actorId, {
-          ...currentPower,
-          healthCurrent: updatedTarget.hpCurrent,
-        });
-      }
-
-      // Sync PlayerLifecycleState mortality if player died
-      if (updatedTarget.isDead && player && !player.isDead) {
-        const deadPlayer = player.copyWith({
-          deathRecord: {
-            isDead: true,
-            diedAtTimestamp: clock.getTimestamp(),
-            cause: `Struck down in tactical combat by ${attacker.name}`,
-            revivalPossible: true,
-          },
-        });
-        worldRepository.updatePlayerLifecycle(storyId, deadPlayer);
-
-        // CH4 Integration: Record character death in chronicle
-        const ts = clock.getTimestamp();
-        chronicle.recordEvidence({
-          id: `ev_death_${actorId}_${attackerId}_${ts.totalElapsedSeconds}_${chronicle.getChronicleEntries().length}`,
-          category: 'LIFECYCLE_TRANSITION',
-          timestamp: ts,
-          primarySubjectId: actorId,
-          secondarySubjectId: attackerId,
-          locationId: player.locationId,
-          summary: `Player Character Slain in Combat`,
-          details: `${player.name} succumbed to mortal trauma from ${attacker.name}'s strike.`,
-          sourceEventId: `evt_combat_death_${actorId}_${ts.totalElapsedSeconds}`,
-          provenance: 'tactical_battlefield_mortality',
-          visibility: 'PUBLIC',
-        });
-      } else if (attackResult.damage >= 15 && player) {
-        // Record severe combat injury in canonical lifecycle state
-        const injury: import('../domain/types').InjuryRecord = {
-          id: `inj_combat_${clock.getTimestamp().totalElapsedSeconds}_${player.injuries.length}`,
-          type: 'Combat Trauma',
-          severity: attackResult.damage >= 25 ? 'Critical' : 'Moderate',
-          location: 'Torso',
-          description: `Combat wound from ${attacker.name} (${attackResult.damage} damage)`,
-          acquiredAtTimestamp: clock.getTimestamp(),
-          healed: false,
-        };
-        const injuredPlayer = player.copyWith({
-          injuries: [...player.injuries, injury],
-        });
-        worldRepository.updatePlayerLifecycle(storyId, injuredPlayer);
-      }
-    } else if (updatedTarget.id !== actorId && updatedTarget.isDead) {
-      // CH5-COMBAT-01 & CH5-COMBAT-02: Immediate NPC Death Synchronization
-      syncNpcCombatDeath(storyId, updatedTarget, attacker.name, player?.locationId);
-    }
-
-    // Check for encounter victory / defeat and emit HistoricalEvidence (DEF-CH8-04)
-    const state = getCombatStateHelper(combatEngine, storyId, attackerId);
-    if (state.victory) {
-      const ts = clock.getTimestamp();
-      chronicle.recordEvidence({
-        id: `ev_victory_${actorId}_${ts.totalElapsedSeconds}_${chronicle.getChronicleEntries().length}`,
-        category: 'SACRED_OR_HISTORIC',
-        timestamp: ts,
-        primarySubjectId: actorId,
-        locationId: player?.locationId || 'loc_whispering_orrery',
-        summary: `Tactical Battlefield Victory`,
-        details: `${player?.name || 'Vael'} emerged victorious, neutralizing all hostile entities in combat.`,
-        sourceEventId: `evt_combat_victory_${actorId}_${ts.totalElapsedSeconds}`,
-        provenance: 'tactical_battlefield_outcome',
-        visibility: 'PUBLIC',
+        errorReason: commandResult.errorReason,
+        combatState: state,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
       });
     }
 
     res.json({
-      ...attackResult,
+      ...(commandResult.data as any)?.attackResult,
       combatState: state,
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to execute combat attack.' });

@@ -17,10 +17,8 @@ gameRouter.use('/adaptation', adaptationRouter);
 
 
 function requireDndTacticalCombat(res: Response, storyId: string): boolean {
-	const run = worldRepository.getStoryRun(storyId);
-	const profile = run?.rulesProfile || rulesProfileEngine.resolve({
-		mode: run?.dndRulesMode || run?.ruleset || 'FULL_DND',
-	}).profile;
+	const profile = worldRepository.getRulesProfile(storyId)
+		|| rulesProfileEngine.createDefault('FULL_DND');
 	if (rulesProfileEngine.allowsDndTacticalCombat(profile)) {
 		return true;
 	}
@@ -1484,7 +1482,7 @@ gameRouter.post('/combat/attack', async (req: Request, res: Response) => {
     }
 
     const player = worldRepository.getPlayerLifecycle(storyId);
-    const serverPlayerActorId = player ? player.actorId : '${storyId}';
+    const serverPlayerActorId = player ? player.actorId : `player_actor_${storyId}`;
 
     // Reject impersonation of other attackers on public HTTP route
     if (reqAttackerId && reqAttackerId !== serverPlayerActorId) {

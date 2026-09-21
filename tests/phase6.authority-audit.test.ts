@@ -263,6 +263,73 @@ test('Phase 6 audit: FULL, HYBRID, and CUSTOM rules modes do not silently cross 
   assert.equal(customRuntime.getActorState('custom')?.spellSlots[1].current, 0);
 });
 
+test('Phase 6 audit: area spells resolve multiple authoritative targets', () => {
+  const engine = new TacticalCombatEngine(1337);
+  const caster = participant('caster', 20, 30);
+  const firstTarget = participant('target_a', 10, 20);
+  const secondTarget = participant('target_b', 5, 20);
+  firstTarget.x = 3;
+  secondTarget.x = 4;
+  engine.addParticipant(caster);
+  engine.addParticipant(firstTarget);
+  engine.addParticipant(secondTarget);
+  engine.rollInitiative();
+
+  const runtime = engine.getSpellRuntime();
+  runtime.initializeSlots(caster.id, { 3: { current: 1, max: 1 } });
+  runtime.learnSpell(caster.id, 'fireball');
+  runtime.prepareSpell(caster.id, 'fireball');
+
+  const cast = engine.executeSpellCast({
+    actorId: caster.id,
+    spellId: 'fireball',
+    targetPosition: { x: 3, y: 0 },
+    slotLevel: 3,
+  });
+
+  assert.equal(cast.success, true);
+  assert.ok((cast.result?.damageInflicted || 0) > 0);
+  assert.notEqual(engine.getParticipant(firstTarget.id)?.hpCurrent, firstTarget.hpMax);
+  assert.notEqual(engine.getParticipant(secondTarget.id)?.hpCurrent, secondTarget.hpMax);
+  assert.match(cast.result?.headline || '', /affecting 2 creatures/);
+});
+
+test('Phase 6 audit: concentration buffs are reverted when concentration breaks', () => {
+  const engine = new TacticalCombatEngine(1337);
+  const caster = participant('caster', 20, 30);
+  const ally = participant('ally', 10, 30);
+  ally.team = 'player_allies';
+  ally.x = 5;
+  ally.armorClass = 14;
+  ally.speedCells = 6;
+  engine.addParticipant(caster);
+  engine.addParticipant(ally);
+  engine.rollInitiative();
+
+  const runtime = engine.getSpellRuntime();
+  runtime.initializeSlots(caster.id, { 3: { current: 1, max: 1 } });
+  runtime.learnSpell(caster.id, 'haste');
+  runtime.prepareSpell(caster.id, 'haste');
+
+  const cast = engine.executeSpellCast({
+    actorId: caster.id,
+    spellId: 'haste',
+    targetId: ally.id,
+    slotLevel: 3,
+  });
+
+  assert.equal(cast.success, true);
+  assert.equal(engine.getParticipant(ally.id)?.armorClass, 16);
+  assert.equal(engine.getParticipant(ally.id)?.speedCells, 12);
+  assert.equal(runtime.getActorState(caster.id)?.activeConcentration?.spellId, 'haste');
+
+  const interrupted = engine.interruptConcentration(caster.id, 'Phase 6 audit');
+  assert.equal(interrupted.interrupted, true);
+  assert.equal(engine.getParticipant(ally.id)?.armorClass, 14);
+  assert.equal(engine.getParticipant(ally.id)?.speedCells, 6);
+  assert.equal(runtime.getActorState(caster.id)?.activeConcentration, null);
+});
+
 test('Phase 6 audit: authoritative target rejection is side-effect free', () => {
   const runtime = new SpellRuntime();
   runtime.initializeSlots('caster', { 1: { current: 1, max: 1 } });

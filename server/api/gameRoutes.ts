@@ -2042,6 +2042,126 @@ gameRouter.post('/combat/action', async (req: Request, res: Response) => {
   }
 });
 
+
+/**
+ * POST /api/game/combat/ready
+ * Canonically consumes the Action and arms a reaction-based Ready Action.
+ */
+gameRouter.post('/combat/ready', async (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    if (!requireDndTacticalCombat(res, storyId)) return;
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player?.actorId || \`player_actor_\${storyId}\`;
+    if (req.body?.actorId && req.body.actorId !== actorId) {
+      return res.status(403).json({ success: false, errorReason: 'Unauthorized actor.' });
+    }
+
+    const triggerType = req.body?.triggerType;
+    if (!['ACTOR_MOVED', 'ACTOR_ATTACKED', 'TARGET_ENTERED_REACH'].includes(triggerType)) {
+      return res.status(400).json({ success: false, errorReason: 'triggerType is required and must be a supported Ready trigger.' });
+    }
+
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      deterministicId('cmd_route', storyId, '/combat/ready', req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'CORE_ACTION',
+        payload: { action: 'READY', triggerType, triggerActorId: req.body?.triggerActorId, targetId: req.body?.targetId },
+        source: 'PLAYER',
+        transactionMode: 'STAGED',
+      },
+      async (_command, context) => {
+        const combat = context.repository.getCombatEngine(storyId);
+        const result = combat.getActionEconomy().setReadyAction(
+          actorId,
+          typeof req.body?.actionDescription === 'string' ? req.body.actionDescription : 'Prepared attack',
+          typeof req.body?.triggerDescription === 'string' ? req.body.triggerDescription : 'Configured trigger.',
+          {
+            triggerType,
+            triggerActorId: typeof req.body?.triggerActorId === 'string' ? req.body.triggerActorId : undefined,
+            targetId: typeof req.body?.targetId === 'string' ? req.body.targetId : undefined,
+            actionType: 'ATTACK',
+          }
+        );
+        if (!result.success) return { success: false, errorReason: result.errorReason };
+        return { success: true, data: { readyAction: combat.getActionEconomy().getReadyAction(actorId) }, summary: 'Ready Action armed.' };
+      }
+    );
+
+    const state = getCombatStateHelper(worldRepository.getCombatEngine(storyId), storyId, actorId);
+    if (!commandResult.success) {
+      return res.status(400).json({ success: false, errorReason: commandResult.errorReason, combatState: state, rolledBack: commandResult.rolledBack });
+    }
+    return res.json({ success: true, combatState: state, readyAction: (commandResult.data as any)?.readyAction, commandId, canonicalEvent: commandResult.event });
+  } catch {
+    return res.status(500).json({ error: 'Failed to arm Ready Action.' });
+  }
+});
+
+/**
+ * POST /api/game/combat/control
+ * Canonically resolves Grapple or Shove.
+ */
+gameRouter.post('/combat/control', async (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    if (!requireDndTacticalCombat(res, storyId)) return;
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player?.actorId || \`player_actor_\${storyId}\`;
+    if (req.body?.actorId && req.body.actorId !== actorId) {
+      return res.status(403).json({ success: false, errorReason: 'Unauthorized actor.' });
+    }
+
+    const action = req.body?.action;
+    const targetId = req.body?.targetId;
+    if (!['GRAPPLE', 'SHOVE'].includes(action) || typeof targetId !== 'string') {
+      return res.status(400).json({ success: false, errorReason: 'action must be GRAPPLE or SHOVE and targetId is required.' });
+    }
+
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      deterministicId('cmd_route', storyId, '/combat/control', req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'CORE_ACTION',
+        payload: { action, targetId, prone: req.body?.prone === true },
+        source: 'PLAYER',
+        transactionMode: 'STAGED',
+      },
+      async (_command, context) => {
+        const combat = context.repository.getCombatEngine(storyId);
+        const result = action === 'GRAPPLE'
+          ? combat.executeGrapple(actorId, targetId)
+          : combat.executeShove(actorId, targetId, req.body?.prone === true);
+        if (!result.success) return { success: false, errorReason: result.errorReason };
+        return { success: true, data: { result }, summary: \`Combat control action \${action} resolved.\` };
+      }
+    );
+
+    const state = getCombatStateHelper(worldRepository.getCombatEngine(storyId), storyId, actorId);
+    if (!commandResult.success) {
+      return res.status(400).json({ success: false, errorReason: commandResult.errorReason, combatState: state, rolledBack: commandResult.rolledBack });
+    }
+    return res.json({ success: true, result: (commandResult.data as any)?.result, combatState: state, commandId, canonicalEvent: commandResult.event });
+  } catch {
+    return res.status(500).json({ error: 'Failed to resolve combat control action.' });
+  }
+});
+
 /**
  * POST /api/game/combat/attack
  * Executes D&D SRD 5.2.1 attack resolution with canonical inventory & lifecycle synchronization (DEF-CH8-02, DEF-CH8-03, DEF-CH8-04).

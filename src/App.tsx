@@ -702,15 +702,20 @@ export const App: React.FC = () => {
           )}
 
           {currentRoute === 'worlds' && (
-            <DashboardView
-              activeStory={activeStorySummary}
-              recentStories={storyLibraryStories}
-              curatedWorlds={worldTemplates}
-              onResumeStory={() => setCurrentRoute('play.story')}
-              onNewStory={() => setIsImportModalOpen(true)}
-              onExploreWorlds={() => setIsWorldLibraryModalOpen(true)}
-              onOpenLibrary={() => setCurrentRoute('story-library')}
-              onOpenSettings={() => setIsAudioSettingsOpen(true)}
+            <WorldLibraryModal
+              isOpen={true}
+              onClose={() => setCurrentRoute('dashboard')}
+              onSelectRun={(storyId) => {
+                apiClient.setActiveStoryId(storyId);
+                setActiveStoryId(storyId);
+                setCurrentRoute('play.story');
+                initializeApp(storyId);
+                fetchStoryLibrary();
+              }}
+              onGenesisCharacter={(world) => {
+                setGenesisWorld(world);
+                setCurrentRoute('create.genesis');
+              }}
             />
           )}
 

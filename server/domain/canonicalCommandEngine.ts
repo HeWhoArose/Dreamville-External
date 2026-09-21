@@ -90,6 +90,63 @@ export class CanonicalCommandEngine {
 		if (!command.type) return 'command type is required.';
 		if (!command.source) return 'command source is required.';
 		if (command.type !== 'INTERACT' && !command.actorId?.trim()) return 'actorId is required for authoritative actor commands.';
+
+		const payload = (command.payload || {}) as Record<string, unknown>;
+		switch (command.type) {
+			case 'MOVE':
+				if (typeof payload.targetX !== 'number' || typeof payload.targetY !== 'number') {
+					return 'MOVE command requires numeric targetX and targetY.';
+				}
+				break;
+			case 'CORE_ACTION':
+				if (typeof payload.action !== 'string' || !payload.action.trim()) {
+					return 'CORE_ACTION command requires a non-empty action.';
+				}
+				break;
+			case 'ATTACK':
+				if (payload.npcTurn !== true && typeof payload.targetId !== 'string') {
+					return 'ATTACK command requires targetId.';
+				}
+				break;
+			case 'CAST':
+				if (
+					typeof payload.capabilityId !== 'string' &&
+					typeof payload.intendedCapabilityId !== 'string'
+				) {
+					return 'CAST command requires capabilityId or intendedCapabilityId.';
+				}
+				break;
+			case 'EQUIP':
+				if (typeof payload.itemId !== 'string' || typeof payload.slot !== 'string') {
+					return 'EQUIP command requires itemId and slot.';
+				}
+				break;
+			case 'UNEQUIP':
+				if (typeof payload.slot !== 'string') {
+					return 'UNEQUIP command requires slot.';
+				}
+				break;
+			case 'USE_ITEM':
+				if (
+					typeof payload.itemId !== 'string' &&
+					typeof payload.recipeId !== 'string'
+				) {
+					return 'USE_ITEM command requires itemId or recipeId.';
+				}
+				break;
+			case 'APPLY_ABILITY':
+				if (typeof payload.abilityId !== 'string' || typeof payload.targetId !== 'string') {
+					return 'APPLY_ABILITY command requires abilityId and targetId.';
+				}
+				break;
+			case 'INTERACT':
+				if (typeof payload !== 'object' || payload === null) {
+					return 'INTERACT command requires an object payload.';
+				}
+				break;
+			default:
+				break;
+		}
 		return undefined;
 	}
 

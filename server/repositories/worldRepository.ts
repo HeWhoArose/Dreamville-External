@@ -9,6 +9,7 @@ import { GeographyGraph } from '../domain/geographyGraph';
 import { HistoricalChronicleEngine } from '../domain/historicalChronicleEngine';
 import { InventoryItemEngine, EquipmentSlot, ItemCategory } from '../domain/inventoryItem';
 import { CapabilityEngine, CapabilityDefinition } from '../domain/capabilityEngine';
+import { CharacterProgressionEngine, ProgressionModuleDefinition } from '../domain/characterProgressionEngine';
 import { ReusableSkillRegistry } from '../domain/reusableSkillRegistry';
 import { TacticalCombatEngine, CombatPerceptionOptions } from '../domain/combatEngine';
 import { MemoryOpportunityEngine } from '../domain/memoryOpportunityEngine';
@@ -56,6 +57,7 @@ export interface WorldRepository {
   getHistoricalChronicleEngine(storyId: string): HistoricalChronicleEngine;
   getInventoryEngine(storyId: string): InventoryItemEngine;
   getCapabilityEngine(storyId: string): CapabilityEngine;
+  getCharacterProgressionEngine(storyId: string): CharacterProgressionEngine;
   getEffectiveActorCapabilities(
     storyId: string,
     actorId: string
@@ -196,6 +198,7 @@ export class InMemoryWorldRepository implements WorldRepository {
   private chronicleEngines: Map<string, HistoricalChronicleEngine> = new Map();
   private inventoryEngines: Map<string, InventoryItemEngine> = new Map();
   private capabilityEngines: Map<string, CapabilityEngine> = new Map();
+  private characterProgressionEngines: Map<string, CharacterProgressionEngine> = new Map();
   private combatEngines: Map<string, TacticalCombatEngine> = new Map();
   private conditionEngines: Map<string, ConditionEngine> = new Map();
   private restRecoveryEngines: Map<string, RestRecoveryEngine> = new Map();
@@ -1395,6 +1398,31 @@ export class InMemoryWorldRepository implements WorldRepository {
       const persisted = this.getStoryRun(storyId)?.runtimeState?.capabilities;
       if (persisted) engine.importState(persisted);
       this.capabilityEngines.set(storyId, engine);
+    }
+    return engine;
+  }
+
+  public getCharacterProgressionEngine(storyId: string): CharacterProgressionEngine {
+    let engine = this.characterProgressionEngines.get(storyId);
+    if (!engine) {
+      engine = new CharacterProgressionEngine();
+      const run = this.getStoryRun(storyId);
+      const persisted = run?.runtimeState?.progression;
+      if (persisted) {
+        engine.importState(persisted);
+      } else {
+        const player = this.getPlayerLifecycle(storyId);
+        const actorId = player ? player.actorId : run?.protagonist?.characterId || `player_actor_${storyId}`;
+        if (run?.protagonist) {
+          engine.seedFromCharacter(actorId, run.protagonist, deterministicId('prg_genesis_cmd', storyId, actorId), {
+            rulesProfile: this.getRulesProfile(storyId),
+            worldModules: Array.isArray(this.getWorldTemplate(run.worldId)?.characterProgressionModules)
+              ? this.getWorldTemplate(run.worldId).characterProgressionModules as ProgressionModuleDefinition[]
+              : undefined,
+          });
+        }
+      }
+      this.characterProgressionEngines.set(storyId, engine);
     }
     return engine;
   }
@@ -2653,6 +2681,7 @@ export class InMemoryWorldRepository implements WorldRepository {
     this.geographies.delete(storyId);
     this.inventoryEngines.delete(storyId);
     this.capabilityEngines.delete(storyId);
+    this.characterProgressionEngines.delete(storyId);
     this.chronicleEngines.delete(storyId);
     this.knowledgeBases.delete(storyId);
     this.combatEngines.delete(storyId);

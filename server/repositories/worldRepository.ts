@@ -17,6 +17,7 @@ import { LivingWorldSimulation } from '../domain/livingWorldSimulation';
 import { MultiModelOrchestrator } from '../domain/aiOrchestrator';
 import { CharacterAlignmentEngine } from '../domain/characterAlignment';
 import { ConditionEngine } from '../domain/conditionEngine';
+import { RestRecoveryEngine } from '../domain/restRecoveryEngine';
 import { StoryCheckEngine } from '../domain/storyCheckEngine';
 import { CampaignArchiveService, PartitionedArchive } from '../domain/campaignArchive';
 import { dndSpellRulesEvaluator } from '../domain/dndSpellRulesModel';
@@ -61,6 +62,7 @@ export interface WorldRepository {
   ): import('../domain/capabilityEngine').EffectiveCapability[];
   getCombatEngine(storyId: string): TacticalCombatEngine;
   getConditionEngine(storyId: string): ConditionEngine;
+  getRestRecoveryEngine(storyId: string): RestRecoveryEngine;
   getStoryCheckEngine(storyId: string): StoryCheckEngine;
   getCombatPerceptionOptions(storyId: string, viewerActorId: string): CombatPerceptionOptions;
   isEntityEpistemicallyKnown(storyId: string, viewerActorId: string, targetId: string): boolean;
@@ -196,6 +198,7 @@ export class InMemoryWorldRepository implements WorldRepository {
   private capabilityEngines: Map<string, CapabilityEngine> = new Map();
   private combatEngines: Map<string, TacticalCombatEngine> = new Map();
   private conditionEngines: Map<string, ConditionEngine> = new Map();
+  private restRecoveryEngines: Map<string, RestRecoveryEngine> = new Map();
   private storyCheckEngines: Map<string, StoryCheckEngine> = new Map();
   private canonicalCommandScopeDepth = 0;
   private memoryEngines: Map<string, MemoryOpportunityEngine> = new Map();
@@ -1306,6 +1309,8 @@ export class InMemoryWorldRepository implements WorldRepository {
     let clock = this.worldClocks.get(storyId);
     if (!clock) {
       clock = new WorldClock();
+      const persisted = this.getStoryRun(storyId)?.runtimeState?.worldClock;
+      if (persisted) clock.importState(persisted);
       this.worldClocks.set(storyId, clock);
     }
     return clock;
@@ -1342,6 +1347,8 @@ export class InMemoryWorldRepository implements WorldRepository {
       engine = new HistoricalChronicleEngine({
         writeMode: 'TRANSACTIONAL',
       });
+      const persisted = this.getStoryRun(storyId)?.runtimeState?.chronicle;
+      if (persisted) engine.importState(persisted);
       this.chronicleEngines.set(storyId, engine);
     }
     return engine;
@@ -1385,6 +1392,8 @@ export class InMemoryWorldRepository implements WorldRepository {
       const player = this.getPlayerLifecycle(storyId);
       const actorId = player ? player.actorId : `player_actor_${storyId}`;
       engine.seedStarterPowerStateForActor(actorId);
+      const persisted = this.getStoryRun(storyId)?.runtimeState?.capabilities;
+      if (persisted) engine.importState(persisted);
       this.capabilityEngines.set(storyId, engine);
     }
     return engine;
@@ -1428,7 +1437,20 @@ export class InMemoryWorldRepository implements WorldRepository {
         fatigue: Number(run?.startingState?.fatigue ?? 0),
         stress: Number(run?.startingState?.stress ?? 0),
       });
+      const persisted = run?.runtimeState?.conditions;
+      if (persisted) engine.importState(persisted);
       this.conditionEngines.set(storyId, engine);
+    }
+    return engine;
+  }
+
+  public getRestRecoveryEngine(storyId: string): RestRecoveryEngine {
+    let engine = this.restRecoveryEngines.get(storyId);
+    if (!engine) {
+      engine = new RestRecoveryEngine(this);
+      const persisted = this.getStoryRun(storyId)?.runtimeState?.rest;
+      if (persisted) engine.importState(persisted);
+      this.restRecoveryEngines.set(storyId, engine);
     }
     return engine;
   }
@@ -1452,6 +1474,8 @@ export class InMemoryWorldRepository implements WorldRepository {
           : `combat::${storyId}`;
       const seed = hashStringToSeed(canonicalSeedSource);
       engine = new TacticalCombatEngine(seed, undefined, this.getConditionEngine(storyId));
+      const persisted = run?.runtimeState?.combat;
+      if (persisted) engine.importState(persisted);
       this.combatEngines.set(storyId, engine);
     }
     engine.setRulesProfile(this.getRulesProfile(storyId) || undefined);
@@ -1602,6 +1626,8 @@ export class InMemoryWorldRepository implements WorldRepository {
     let sim = this.livingSimulations.get(storyId);
     if (!sim) {
       sim = new LivingWorldSimulation();
+      const persisted = this.getStoryRun(storyId)?.runtimeState?.livingWorld;
+      if (persisted) sim.importState(persisted);
       this.livingSimulations.set(storyId, sim);
     }
     return sim;
@@ -2117,6 +2143,23 @@ export class InMemoryWorldRepository implements WorldRepository {
 
   private persistLibrary(): void {
     if (this.persistenceSuppressed) return;
+
+    for (const [storyId, run] of this.storyRuns.entries()) {
+      const runtimeState = {
+        ...(run?.runtimeState || {}),
+        ...(this.worldClocks.has(storyId) ? { worldClock: this.worldClocks.get(storyId)!.exportState() } : {}),
+        ...(this.chronicleEngines.has(storyId) ? { chronicle: this.chronicleEngines.get(storyId)!.exportState() } : {}),
+        ...(this.conditionEngines.has(storyId) ? { conditions: this.conditionEngines.get(storyId)!.exportState() } : {}),
+        ...(this.capabilityEngines.has(storyId) ? { capabilities: this.capabilityEngines.get(storyId)!.exportState() } : {}),
+        ...(this.combatEngines.has(storyId) ? { combat: this.combatEngines.get(storyId)!.exportState() } : {}),
+        ...(this.livingSimulations.has(storyId) ? { livingWorld: this.livingSimulations.get(storyId)!.exportState() } : {}),
+        ...(this.restRecoveryEngines.has(storyId) ? { rest: this.restRecoveryEngines.get(storyId)!.exportState() } : {}),
+      };
+      if (Object.keys(runtimeState).length > 0) {
+        run.runtimeState = runtimeState;
+      }
+    }
+
     this.persistentStore.save({
       version: 1,
       worldTemplates: Object.fromEntries(this.worldTemplates),
@@ -2388,6 +2431,7 @@ export class InMemoryWorldRepository implements WorldRepository {
     if (snapshot.capabilities) this.getCapabilityEngine(storyId).importState(clone(snapshot.capabilities));
     if (snapshot.conditions) this.getConditionEngine(storyId).importState(clone(snapshot.conditions));
     if (snapshot.combat) this.getCombatEngine(storyId).importState(clone(snapshot.combat));
+    if (snapshot.rest) this.getRestRecoveryEngine(storyId).importState(clone(snapshot.rest));
     if (snapshot.storyChecks) this.getStoryCheckEngine(storyId).importState(clone(snapshot.storyChecks));
     if (snapshot.memories) this.getMemoryEngine(storyId).importState(clone(snapshot.memories));
     if (snapshot.livingWorld) this.getLivingWorldSimulation(storyId).importState(clone(snapshot.livingWorld));

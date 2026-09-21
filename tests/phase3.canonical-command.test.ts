@@ -311,3 +311,71 @@ test('Phase 3 — commands for the same story serialize to prevent snapshot race
 	assert.deepEqual(repo.getStoryRun(storyId)?.commandSequence, ['cmd_serial_1', 'cmd_serial_2']);
 	assert.equal(repo.getCanonicalCommandEvents(storyId).length, 2);
 });
+
+test('Phase 3 — STAGED commands keep live canonical state unchanged until commit', async () => {
+	const storyId = 'phase3_staged_commit';
+	const repo = seedRepo(storyId);
+	const actorId = repo.getPlayerLifecycle(storyId)?.actorId || `player_actor_${storyId}`;
+
+	const result = await canonicalCommandEngine.execute(
+		repo,
+		{
+			commandId: 'cmd_staged_commit_001',
+			storyId,
+			actorId,
+			type: 'INTERACT',
+			payload: { action: 'STAGED_MUTATION' },
+			source: 'PLAYER',
+			transactionMode: 'STAGED',
+		},
+		async (_command, context) => {
+			const stagedRun = context.repository.getStoryRun(storyId)!;
+			stagedRun.stagedMutationMarker = 'committed';
+			context.repository.saveStoryRun(stagedRun);
+
+			assert.equal(repo.getStoryRun(storyId)?.stagedMutationMarker, undefined);
+			return {
+				success: true,
+				data: { committed: true },
+				summary: 'Staged mutation committed.',
+			};
+		}
+	);
+
+	assert.equal(result.success, true);
+	assert.equal(repo.getStoryRun(storyId)?.stagedMutationMarker, 'committed');
+	assert.equal(result.event?.mutationCount && result.event.mutationCount > 0, true);
+});
+
+test('Phase 3 — rejected STAGED commands never touch live canonical state', async () => {
+	const storyId = 'phase3_staged_reject';
+	const repo = seedRepo(storyId);
+	const actorId = repo.getPlayerLifecycle(storyId)?.actorId || `player_actor_${storyId}`;
+
+	const result = await canonicalCommandEngine.execute(
+		repo,
+		{
+			commandId: 'cmd_staged_reject_001',
+			storyId,
+			actorId,
+			type: 'INTERACT',
+			payload: { action: 'STAGED_REJECT' },
+			source: 'PLAYER',
+			transactionMode: 'STAGED',
+		},
+		async (_command, context) => {
+			const stagedRun = context.repository.getStoryRun(storyId)!;
+			stagedRun.rejectedMarker = 'must_not_commit';
+			context.repository.saveStoryRun(stagedRun);
+			return {
+				success: false,
+				errorReason: 'Intentional staged rejection.',
+			};
+		}
+	);
+
+	assert.equal(result.success, false);
+	assert.equal(result.rolledBack, true);
+	assert.equal(repo.getStoryRun(storyId)?.rejectedMarker, undefined);
+	assert.equal(repo.getCanonicalCommandEvents(storyId).length, 0);
+});

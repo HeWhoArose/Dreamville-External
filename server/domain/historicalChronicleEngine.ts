@@ -70,6 +70,25 @@ export class HistoricalChronicleEngine {
     this.transactionCommandId = undefined;
   }
 
+  /**
+   * Bootstrap-only evidence insertion used while constructing a canonical story/world.
+   * This bypasses command transaction requirements without reopening DIRECT writes for
+   * runtime callers; all normal mutation paths must continue through recordEvidence().
+   */
+  public recordBootstrapEvidence(evidence: HistoricalEvidence): {
+    evidenceId: string;
+    promotedToDossier: boolean;
+    promotedToChronicle: boolean;
+  } {
+    if (this.writeMode !== 'TRANSACTIONAL') {
+      throw new Error('Bootstrap Chronicle writes require a transactional Chronicle engine.');
+    }
+    if (this.transactionOpen) {
+      throw new Error('Bootstrap Chronicle writes cannot run during an active canonical transaction.');
+    }
+    return this.commitEvidence(evidence);
+  }
+
   private commitEvidence(evidence: HistoricalEvidence): {
     evidenceId: string;
     promotedToDossier: boolean;

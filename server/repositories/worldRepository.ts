@@ -22,6 +22,8 @@ import { CampaignArchiveService, PartitionedArchive } from '../domain/campaignAr
 import { dndSpellRulesEvaluator } from '../domain/dndSpellRulesModel';
 import type { RulesProfile } from '../../src/types';
 import { rulesProfileEngine } from '../domain/rulesProfileEngine';
+import { narrativeProfileEngine } from '../domain/narrativeProfileEngine';
+import type { NarrativeProfile } from '../../src/types';
 import { PersistentGameStore } from '../services/persistentGameStore';
 import {
   AdaptedStoryBible,
@@ -106,11 +108,13 @@ export interface WorldRepository {
     confirmedCharacter: any;
     storyId?: string;
     storyMode?: string;
+    narrativeProfile?: Partial<NarrativeProfile>;
     dndRulesMode?: string;
   }): { storyId: string; run: any };
   deleteStoryRun(storyId: string): void;
   getStoryRun(storyId: string): any;
   getRulesProfile(storyId: string): RulesProfile | null;
+  getNarrativeProfile(storyId: string): NarrativeProfile | null;
   getAllStoryRuns(): any[];
   saveStoryRun(run: any): void;
   registerStoryRun(run: any): void;
@@ -205,16 +209,59 @@ export class InMemoryWorldRepository implements WorldRepository {
 
   constructor() {
     const persisted = this.persistentStore.load();
+    let requiresNarrativeMigration = false;
+
     for (const [worldId, world] of Object.entries(persisted.worldTemplates)) {
-      this.worldTemplates.set(worldId, world);
+      const resolvedNarrative = narrativeProfileEngine.resolve({
+        mode: (world as any)?.storyMode,
+        narrativeProfile: (world as any)?.narrativeProfile,
+        fallbackMode: 'PROTAGONIST',
+        source: 'WORLD',
+      }).profile;
+      const migratedWorld = {
+        ...(world as any),
+        storyMode: resolvedNarrative.mode,
+        narrativeProfile: resolvedNarrative,
+        playstyle: resolvedNarrative.mode,
+      };
+      if (
+        (world as any)?.storyMode !== migratedWorld.storyMode ||
+        JSON.stringify((world as any)?.narrativeProfile || null) !== JSON.stringify(migratedWorld.narrativeProfile)
+      ) {
+        requiresNarrativeMigration = true;
+      }
+      this.worldTemplates.set(worldId, migratedWorld);
     }
+
     for (const [storyId, run] of Object.entries(persisted.storyRuns)) {
-      this.storyRuns.set(storyId, run);
+      const world = run && (run as any).worldId ? this.worldTemplates.get((run as any).worldId) : null;
+      const resolvedNarrative = narrativeProfileEngine.resolve({
+        mode: (run as any)?.storyMode || (world as any)?.storyMode,
+        narrativeProfile: (run as any)?.narrativeProfile || (world as any)?.narrativeProfile,
+        fallbackMode: 'PROTAGONIST',
+        source: 'RUN',
+      }).profile;
+      const migratedRun = {
+        ...(run as any),
+        storyMode: resolvedNarrative.mode,
+        narrativeProfile: resolvedNarrative,
+      };
+      if (
+        (run as any)?.storyMode !== migratedRun.storyMode ||
+        JSON.stringify((run as any)?.narrativeProfile || null) !== JSON.stringify(migratedRun.narrativeProfile)
+      ) {
+        requiresNarrativeMigration = true;
+      }
+      this.storyRuns.set(storyId, migratedRun);
     }
 
     this.geographies.set('default_story', new GeographyGraph());
     this.seedDefaultTemplates();
     this.seedDefaultStory('default_story');
+
+    if (requiresNarrativeMigration) {
+      this.persistLibrary();
+    }
   }
 
   private seedDefaultTemplates(): void {
@@ -307,6 +354,7 @@ export class InMemoryWorldRepository implements WorldRepository {
             confirmedCharacter: run.protagonist,
             storyId,
             storyMode: run.storyMode,
+            narrativeProfile: run.narrativeProfile,
             dndRulesMode: run.dndRulesMode,
           });
         } else {
@@ -323,6 +371,7 @@ export class InMemoryWorldRepository implements WorldRepository {
             capabilities: run.capabilities,
             initialConditions: run.initialConditions,
             storyMode: run.storyMode,
+            narrativeProfile: run.narrativeProfile,
             dndRulesMode: run.dndRulesMode,
           });
         }
@@ -334,6 +383,8 @@ export class InMemoryWorldRepository implements WorldRepository {
             ...persistedRun,
             storyId,
             id: persistedRun.id || rebuiltRun.id || storyId,
+            storyMode: rebuiltRun.storyMode,
+            narrativeProfile: rebuiltRun.narrativeProfile,
             dndRulesMode: rebuiltRun.dndRulesMode,
             ruleset: rebuiltRun.ruleset,
             rulesProfile: rebuiltRun.rulesProfile,
@@ -351,6 +402,7 @@ export class InMemoryWorldRepository implements WorldRepository {
     confirmedCharacter: any;
     storyId?: string;
     storyMode?: string;
+    narrativeProfile?: Partial<NarrativeProfile>;
     dndRulesMode?: string;
   }): { storyId: string; run: any } {
     const { worldId, confirmedCharacter: char } = params;
@@ -838,6 +890,13 @@ export class InMemoryWorldRepository implements WorldRepository {
         canonicalCapabilities: world.canonicalCapabilities || [],
       }).profile;
 
+      const resolvedNarrativeProfile = narrativeProfileEngine.resolve({
+        mode: params.storyMode || char.storyMode || world.storyMode,
+        narrativeProfile: params.narrativeProfile || char.narrativeProfile || world.narrativeProfile,
+        fallbackMode: 'PROTAGONIST',
+        source: 'RUN',
+      }).profile;
+
       const run = {
         id: storyId,
         storyId,
@@ -845,7 +904,8 @@ export class InMemoryWorldRepository implements WorldRepository {
         worldVersion: pinnedWorldVersion,
         pinnedWorldVersion,
         activeCharacterId: char.characterId,
-        storyMode: params.storyMode || world.storyMode || 'PROTAGONIST',
+        storyMode: resolvedNarrativeProfile.mode,
+        narrativeProfile: resolvedNarrativeProfile,
         dndRulesMode: resolvedRulesProfile.mode,
         ruleset: resolvedRulesProfile.mode,
         rulesProfile: resolvedRulesProfile,
@@ -906,6 +966,7 @@ export class InMemoryWorldRepository implements WorldRepository {
     world: any,
     characterData: {
       storyMode?: string;
+      narrativeProfile?: Partial<NarrativeProfile>;
       dndRulesMode?: string;
       characterName: string;
       characterRole?: string;
@@ -984,6 +1045,7 @@ export class InMemoryWorldRepository implements WorldRepository {
       confirmedCharacter: syntheticConfirmedChar,
       storyId,
       storyMode: characterData.storyMode,
+      narrativeProfile: characterData.narrativeProfile,
       dndRulesMode: characterData.dndRulesMode,
     });
   }
@@ -1951,7 +2013,19 @@ export class InMemoryWorldRepository implements WorldRepository {
   }
 
   public saveWorldTemplate(world: any): void {
-    this.worldTemplates.set(world.worldId, world);
+    const resolvedNarrative = narrativeProfileEngine.resolve({
+      mode: world?.storyMode,
+      narrativeProfile: world?.narrativeProfile,
+      fallbackMode: 'PROTAGONIST',
+      source: 'WORLD',
+    }).profile;
+    const canonicalWorld = {
+      ...world,
+      storyMode: resolvedNarrative.mode,
+      narrativeProfile: resolvedNarrative,
+      playstyle: resolvedNarrative.mode,
+    };
+    this.worldTemplates.set(canonicalWorld.worldId, canonicalWorld);
     this.persistLibrary();
   }
 
@@ -2071,13 +2145,38 @@ export class InMemoryWorldRepository implements WorldRepository {
     }).profile;
   }
 
+  public getNarrativeProfile(storyId: string): NarrativeProfile | null {
+    const run = this.getStoryRun(storyId);
+    const world = run?.worldId ? this.getWorldTemplate(run.worldId) : null;
+    if (!run && !world && storyId !== 'default_story') return null;
+
+    return narrativeProfileEngine.resolve({
+      mode: run?.storyMode || world?.storyMode,
+      narrativeProfile: run?.narrativeProfile || world?.narrativeProfile,
+      fallbackMode: 'PROTAGONIST',
+      source: run ? 'RUN' : world ? 'WORLD' : 'DEFAULT',
+    }).profile;
+  }
+
   public getAllStoryRuns(): any[] {
     return Array.from(this.storyRuns.values());
   }
 
   public saveStoryRun(run: any): void {
-    this.storyRuns.set(run.storyId, run);
-    if (run && run.storyId && run.characterName) {
+    const world = run?.worldId ? this.getWorldTemplate(run.worldId) : null;
+    const resolvedNarrative = narrativeProfileEngine.resolve({
+      mode: run?.storyMode || world?.storyMode,
+      narrativeProfile: run?.narrativeProfile || world?.narrativeProfile,
+      fallbackMode: 'PROTAGONIST',
+      source: 'RUN',
+    }).profile;
+    const canonicalRun = {
+      ...run,
+      storyMode: resolvedNarrative.mode,
+      narrativeProfile: resolvedNarrative,
+    };
+    this.storyRuns.set(canonicalRun.storyId, canonicalRun);
+    if (canonicalRun && canonicalRun.storyId && canonicalRun.characterName) {
       const existingPlayer = this.playerLifecycles.get(run.storyId);
       if (existingPlayer && existingPlayer.name === 'Scribe Vael' && run.characterName !== 'Scribe Vael') {
         this.playerLifecycles.set(run.storyId, existingPlayer.copyWith({ name: run.characterName }));

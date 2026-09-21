@@ -56,6 +56,7 @@ function baseProfile(mode: DndRulesMode): RulesProfile {
 				STANDARD_DND_SPELL_RULES,
 				DND_TACTICAL_COMBAT,
 			],
+			parameterOverrides: {},
 			overrides: [],
 		};
 	}
@@ -111,14 +112,33 @@ function applyOverrides(profile: RulesProfile, rawOverrides: unknown): RulesProf
 	const overrides = Array.isArray(rawOverrides) ? rawOverrides : [];
 	const next = clone(profile);
 	next.overrides = [];
+	next.parameterOverrides = { ...(next.parameterOverrides || {}) };
 
 	for (const raw of overrides) {
 		if (!raw || typeof raw !== 'object') continue;
 		const override = raw as RuleOverride;
 		if (!override.ruleId || !override.operation || !override.reason) continue;
-		if (override.operation !== 'ENABLE' && override.operation !== 'DISABLE') continue;
+		if (override.operation !== 'ENABLE' && override.operation !== 'DISABLE' && override.operation !== 'SET') continue;
 		if (!KNOWN_MECHANICS.has(override.ruleId)) continue;
 		if (!next.allowWorldRuleOverrides && next.mode === 'FULL_DND') continue;
+
+		if (override.operation === 'SET') {
+			if (
+				override.ruleId !== STANDARD_DND_SPELL_RULES ||
+				!override.value ||
+				typeof override.value !== 'object'
+			) continue;
+
+			const value = override.value as { maxAllowedSpellLevel?: unknown };
+			const rawMax = Number(value.maxAllowedSpellLevel);
+			if (!Number.isFinite(rawMax) || rawMax < 0 || rawMax > 9) continue;
+
+			next.parameterOverrides[STANDARD_DND_SPELL_RULES] = {
+				maxAllowedSpellLevel: Math.floor(rawMax),
+			};
+			next.overrides.push(override);
+			continue;
+		}
 
 		next.overrides.push(override);
 

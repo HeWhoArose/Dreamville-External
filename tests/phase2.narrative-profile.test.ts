@@ -9,6 +9,7 @@ import { rulesProfileEngine } from '../server/domain/rulesProfileEngine';
 import { WorldSynthesisService } from '../server/services/worldSynthesisService';
 import { InMemoryWorldRepository, worldRepository } from '../server/repositories/worldRepository';
 import { CharacterStoryMode, DndRulesMode } from '../src/types';
+import { WorkingContextEngine } from '../server/domain/workingContextEngine';
 
 const NARRATIVE_MODES: CharacterStoryMode[] = [
 	'PROTAGONIST',
@@ -137,6 +138,13 @@ test('Phase 2 — legacy worlds and runs are migrated on persistence reload', ()
 					dndRulesMode: 'HYBRID_DND',
 					playstyle: 'legacy-playstyle',
 				},
+				canonical_playstyle_world: {
+					worldId: 'canonical_playstyle_world',
+					title: 'Canonical Legacy World',
+					rulesetId: 'FULL_DND',
+					dndRulesMode: 'FULL_DND',
+					playstyle: 'FREE_ROAM',
+				},
 			},
 			storyRuns: {
 				legacy_story: {
@@ -153,6 +161,8 @@ test('Phase 2 — legacy worlds and runs are migrated on persistence reload', ()
 
 		assert.equal(repo.getWorldTemplate('legacy_world')?.storyMode, 'PROTAGONIST');
 		assert.equal(repo.getWorldTemplate('legacy_world')?.narrativeProfile?.mode, 'PROTAGONIST');
+		assert.equal(repo.getWorldTemplate('canonical_playstyle_world')?.storyMode, 'FREE_ROAM');
+		assert.equal(repo.getWorldTemplate('canonical_playstyle_world')?.narrativeProfile?.mode, 'FREE_ROAM');
 		assert.equal(repo.getStoryRun('legacy_story')?.storyMode, 'PROTAGONIST');
 		assert.equal(repo.getStoryRun('legacy_story')?.narrativeProfile?.mode, 'PROTAGONIST');
 
@@ -171,6 +181,43 @@ test('Phase 2 — legacy worlds and runs are migrated on persistence reload', ()
 		}
 		rmSync(path, { force: true });
 	}
+});
+
+test('Phase 2 — normal working context carries canonical campaign modes', () => {
+	const worldId = 'phase2_context_world';
+	const storyId = 'phase2_context_story';
+	worldRepository.saveWorldTemplate({
+		worldId,
+		title: 'Context Test World',
+		summary: 'Context test',
+		description: 'Context test',
+		rulesetId: 'HYBRID_DND',
+		dndRulesMode: 'HYBRID_DND',
+		rulesProfile: rulesProfileEngine.createDefault('HYBRID_DND'),
+		storyMode: 'SIDE_CHARACTER',
+		narrativeProfile: narrativeProfileEngine.createDefault('SIDE_CHARACTER'),
+	});
+	worldRepository.saveStoryRun({
+		storyId,
+		id: storyId,
+		worldId,
+		characterName: 'Context Character',
+		storyMode: 'SIDE_CHARACTER',
+		narrativeProfile: narrativeProfileEngine.createDefault('SIDE_CHARACTER'),
+		dndRulesMode: 'HYBRID_DND',
+		rulesProfile: rulesProfileEngine.createDefault('HYBRID_DND'),
+	});
+
+	const context = WorkingContextEngine.assembleTurnContext({
+		storyId,
+		hardTokenBudget: 1000,
+		worldRepo: worldRepository,
+	});
+	const modeChunk = context.chunks.find((chunk) => chunk.id === 'b1_campaign_modes');
+	assert.ok(modeChunk);
+	assert.match(modeChunk.content, /Rules Mode: HYBRID_DND/);
+	assert.match(modeChunk.content, /Narrative Mode: SIDE_CHARACTER/);
+	assert.match(modeChunk.content, /SUPPORTING_CAST/);
 });
 
 test('Phase 2 — runtime projection exposes canonical narrative and rules profiles', () => {

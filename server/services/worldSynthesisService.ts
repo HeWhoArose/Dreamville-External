@@ -98,6 +98,7 @@ export class WorldSynthesisService {
         })).toString(16)}`;
 
     const worldId = deterministicId('world_syn', generationSeed, input.naturalLanguagePremise, input.title || '');
+    const timestamp = hashStringToSeed(generationSeed).toString(16);
 
     let title = input.title || '';
     let summary = '';

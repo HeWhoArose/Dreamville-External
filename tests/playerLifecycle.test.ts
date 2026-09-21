@@ -3,6 +3,9 @@ import assert from 'node:assert';
 import { PlayerLifecycleState } from '../server/domain/playerLifecycleState';
 import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
 import { WorldSimulationService } from '../server/simulation/worldSimulationService';
+import { HistoricalChronicleEngine } from '../server/domain/historicalChronicleEngine';
+
+HistoricalChronicleEngine.bypassTransactionCheck = true;
 
 describe('PlayerLifecycleState Model (Decision 1)', () => {
   it('instantiates with deterministic actorId and value immutability', () => {

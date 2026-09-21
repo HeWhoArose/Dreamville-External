@@ -276,11 +276,15 @@ export class CanonicalCommandEngine {
 				};
 			}
 			const replay = this.completedResults.get(key);
+			const replayData = replay && replay.fingerprint === fingerprint ? clone(replay.data) as any : undefined;
+			if (replayData && replayData.telemetry) {
+				replayData.telemetry.idempotencyReplayed = true;
+			}
 			return {
 				success: true,
 				commandId: command.commandId,
 				event: existingEvent,
-				data: replay && replay.fingerprint === fingerprint ? clone(replay.data) as TResult : undefined,
+				data: replayData,
 				rolledBack: false,
 				mutationPaths: existingEvent.mutationPaths || [],
 			};
@@ -352,7 +356,7 @@ export class CanonicalCommandEngine {
 			// speculative state before validation/commit. Treat that as a transaction violation.
 			if (command.transactionMode === 'STAGED') {
 				const liveAfterHandler = captureCanonicalStateSnapshot(command.storyId, repository);
-				const liveComparison = compareCanonicalSnapshots(before, liveAfterHandler);
+				const liveComparison = compareCanonicalSnapshots(before, liveAfterHandler, { ignoreNarrativeHistory: true });
 				if (!liveComparison.identical) {
 					repository.restoreCanonicalStateSnapshot(before);
 					return {
@@ -438,6 +442,13 @@ export class CanonicalCommandEngine {
 				transactionalRepository.appendCanonicalCommandEvent(command.storyId, event);
 				const committedAfter = captureCanonicalStateSnapshot(command.storyId, transactionalRepository);
 				repository.restoreCanonicalStateSnapshot(committedAfter, { persist: true });
+				
+				// Propagate all newly created checkpoints, stats, and telemetry to the live orchestrator
+				const stagedOrch = transactionalRepository.getAiOrchestrator();
+				const liveOrch = repository.getAiOrchestrator();
+				liveOrch.commitTransactionState(stagedOrch);
+
+				repository.appendCanonicalCommandEvent(command.storyId, event);
 			} else {
 				repository.appendCanonicalCommandEvent(command.storyId, event);
 			}

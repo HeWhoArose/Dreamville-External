@@ -701,7 +701,7 @@ export class ConditionEngine {
 
     const nowSeconds = Math.max(0, Number(input.nowSeconds ?? 0));
     const instance: CharacterConditionInstance = {
-      id: deterministicId('cond', state.actorId, slugify(def.id), nowSeconds, state.conditions?.length || 0),
+      id: deterministicId('cond', state.actorId, slugify(def.id), nowSeconds, state.instances?.length || 0),
       definitionId: def.id,
       name: conditionName,
       alignment: def.alignment,

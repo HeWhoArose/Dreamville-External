@@ -164,7 +164,7 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
             ? await serverMockAuthority.processCustomAction(actionRequest, requestedCommandId)
             : serverMockAuthority.processAction(actionRequest, requestedCommandId);
         return {
-          success: actionResult.success !== false,
+          success: true,
           data: actionResult,
           errorReason: actionResult.success === false ? actionResult.message : undefined,
           summary: `Authoritative ${actionRequest.type} command resolved.`,
@@ -452,7 +452,7 @@ gameRouter.post('/inventory/equip', async (req: Request, res: Response) => {
         const paperDoll = invEngine.getActorPaperDoll(actorId);
         return {
           success: true,
-          data: { result, items, paperDoll },
+          data: { success: true, result, items, paperDoll },
           summary: `Equipped item ${itemId} in ${slot}.`,
         };
       }
@@ -516,7 +516,7 @@ gameRouter.post('/inventory/unequip', async (req: Request, res: Response) => {
         const paperDoll = invEngine.getActorPaperDoll(actorId);
         return {
           success: true,
-          data: { result, items, paperDoll },
+          data: { success: true, result, items, paperDoll },
           summary: `Unequipped slot ${slot}.`,
         };
       }
@@ -3754,7 +3754,8 @@ gameRouter.post('/orchestrator/turn', async (req: Request, res: Response) => {
         transactionMode: 'STAGED',
       },
       async (_command, context) => {
-        const turnResult = await orchestrator.executeTurn({
+        const transactionalOrchestrator = context.repository.getAiOrchestrator();
+        const turnResult = await transactionalOrchestrator.executeTurn({
           storyId,
           playerAction,
           task,

@@ -2973,6 +2973,25 @@ export class MultiModelOrchestrator {
     }));
   }
 
+  public commitTransactionState(staged: MultiModelOrchestrator): void {
+    for (const [id, cp] of staged.checkpoints.entries()) {
+      this.checkpoints.set(id, { ...cp });
+    }
+    for (const [id, val] of staged.consecutiveFailures.entries()) {
+      this.consecutiveFailures.set(id, val);
+    }
+    for (const item of staged.circuitBreakersTripped) {
+      this.circuitBreakersTripped.add(item);
+    }
+    this.totalTurnsExecuted = staged.totalTurnsExecuted;
+    if (staged.lastTurnTelemetry) {
+      this.lastTurnTelemetry = { ...staged.lastTurnTelemetry };
+    }
+    for (const [key, val] of staged.turnResultsByIdempotencyKey.entries()) {
+      this.turnResultsByIdempotencyKey.set(key, val);
+    }
+  }
+
   /**
    * Challenge 13: Lossless Committed Narrative History Restore
    * Restores committed narrative checkpoints for a story into the continuation checkpoint authority.

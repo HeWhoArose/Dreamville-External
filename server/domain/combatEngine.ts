@@ -610,6 +610,9 @@ export class TacticalCombatEngine {
 
   public rollInitiative(): void {
     for (const p of Array.from(this.participants.values())) {
+      if (p.initiative && p.initiative > 0) {
+        continue;
+      }
       if (this.ruleset.resolveInitiative) {
         const initRes = this.ruleset.resolveInitiative({
           actorId: p.id,

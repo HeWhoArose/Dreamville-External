@@ -637,9 +637,9 @@ export class ServerMockAuthority {
       targetStoryId,
       canonicalCommandId || 'legacy-action',
       request?.type || 'UNKNOWN',
-      request?.targetLocationId || '',
-      request?.itemId || '',
-      request?.slot || '',
+      (request as any)?.targetLocationId || '',
+      (request as any)?.itemId || '',
+      (request as any)?.slot || '',
       state.actionHistory.length,
       clockTimestamp.totalElapsedSeconds
     );

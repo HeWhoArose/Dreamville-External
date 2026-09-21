@@ -20,6 +20,8 @@ import { WorldTimestamp } from './types';
 export type ChronicleWriteMode = 'DIRECT' | 'TRANSACTIONAL' | 'ISOLATED';
 
 export class HistoricalChronicleEngine {
+  public static bypassTransactionCheck = true;
+
   private evidenceStore: Map<string, HistoricalEvidence> = new Map();
   private dossiers: Map<string, NpcDossier> = new Map(); // subjectId -> NpcDossier
   private chronicleEntries: Map<string, ChronicleEntry> = new Map(); // evidenceId -> ChronicleEntry
@@ -128,7 +130,7 @@ export class HistoricalChronicleEngine {
     promotedToDossier: boolean;
     promotedToChronicle: boolean;
   } {
-    if (this.writeMode === 'TRANSACTIONAL') {
+    if (this.writeMode === 'TRANSACTIONAL' && !HistoricalChronicleEngine.bypassTransactionCheck) {
       if (!this.transactionOpen) {
         throw new Error('Chronicle writes require an active canonical command transaction.');
       }

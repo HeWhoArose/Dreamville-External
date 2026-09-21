@@ -7,13 +7,15 @@
     "rules.adjudicate": "google_gemini::gemini-3.5-flash",
     "utility.inspect": "google_gemini::gemini-3.5-flash",
     "speech.generate": "provider_mock_speech::mock-speech-v1",
-    "image.generate": "google_imagen::imagen-3.0-generate-002"
+    "image.generate": "google_imagen::imagen-3.0-generate-002",
+    "combat.tactics": "anthropic::claude-3-7-sonnet"
   },
   "fallbackChains": {
     "narrative.generate": [
       "provider_primary_failing::primary-fail-m1",
       "provider_secondary_failing::secondary-fail-m2",
-      "provider_tertiary_success::tertiary-success-m3"
+      "provider_tertiary_success::tertiary-success-m3",
+      "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "character.dialogue": [
       "google_gemini::gemini-3.6-flash",

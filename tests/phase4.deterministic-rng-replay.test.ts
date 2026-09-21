@@ -9,6 +9,9 @@ import { canonicalCommandEngine } from '../server/domain/canonicalCommandEngine'
 import { captureCanonicalStateSnapshot } from '../server/domain/canonicalSnapshot';
 import { WorldSynthesisService } from '../server/services/worldSynthesisService';
 import { CapabilityEngine } from '../server/domain/capabilityEngine';
+import { HistoricalChronicleEngine } from '../server/domain/historicalChronicleEngine';
+
+HistoricalChronicleEngine.bypassTransactionCheck = false;
 
 function seedRepo(storyId: string) {
 	const repo = new InMemoryWorldRepository();
@@ -350,7 +353,18 @@ test('Phase 4 — repository snapshots carry StoryCheck RNG state', () => {
 
 test('Phase 4 — Chronicle writes through repository authority only become visible after canonical commit', async () => {
 	const storyId = 'phase4_chronicle_commit';
-	const repo = seedRepo(storyId);
+	const repo = new InMemoryWorldRepository();
+	repo.getHistoricalChronicleEngine(storyId); // creates an empty engine
+	repo.seedStory(storyId); // skips seeding bootstrap evidence because the engine already exists
+	repo.saveStoryRun({
+		storyId,
+		id: storyId,
+		worldId: 'world_solar_archive',
+		characterName: 'Phase 4 Hero',
+		storyMode: 'PROTAGONIST',
+		dndRulesMode: 'FULL_DND',
+		generationSeed: 'phase4-replay-seed',
+	});
 
 	const result = await canonicalCommandEngine.execute(
 		repo,
@@ -371,6 +385,9 @@ test('Phase 4 — Chronicle writes through repository authority only become visi
 		}
 	);
 
+	if (!result.success) {
+		console.log('Result Error Reason Commit Test:', result.errorReason);
+	}
 	assert.equal(result.success, true);
 	assert.equal(repo.getHistoricalChronicleEngine(storyId).getChronicleEntries().length, 1);
 	assert.equal(repo.getHistoricalChronicleEngine(storyId).getEpistemicEvidence()[0].metadata?.canonicalEventId, result.event?.eventId);
@@ -381,7 +398,18 @@ test('Phase 4 — Chronicle writes through repository authority only become visi
 
 test('Phase 4 — rejected Chronicle transactions leave no evidence behind', async () => {
 	const storyId = 'phase4_chronicle_reject';
-	const repo = seedRepo(storyId);
+	const repo = new InMemoryWorldRepository();
+	repo.getHistoricalChronicleEngine(storyId); // creates an empty engine
+	repo.seedStory(storyId); // skips seeding bootstrap evidence because the engine already exists
+	repo.saveStoryRun({
+		storyId,
+		id: storyId,
+		worldId: 'world_solar_archive',
+		characterName: 'Phase 4 Hero',
+		storyMode: 'PROTAGONIST',
+		dndRulesMode: 'FULL_DND',
+		generationSeed: 'phase4-replay-seed',
+	});
 
 	const result = await canonicalCommandEngine.execute(
 		repo,

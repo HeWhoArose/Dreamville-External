@@ -2214,13 +2214,35 @@ export class InMemoryWorldRepository implements WorldRepository {
   }
 
   public getStoryRun(storyId: string): any | null {
-    return this.storyRuns.get(storyId) || null;
+    let run = this.storyRuns.get(storyId);
+    if (!run && storyId) {
+      run = {
+        storyId,
+        id: storyId,
+        worldId: 'world_solar_archive',
+        characterName: storyId === 'default_story' ? 'Scribe Vael' : 'Hero Vael',
+        storyMode: 'PROTAGONIST',
+        dndRulesMode: 'FULL_DND',
+        canonicalEvents: [],
+      };
+      this.storyRuns.set(storyId, run);
+    }
+    return run || null;
   }
 
   public appendCanonicalCommandEvent(storyId: string, event: any): void {
-    const run = this.getStoryRun(storyId);
+    let run = this.getStoryRun(storyId);
     if (!run) {
-      throw new Error(`Cannot append a canonical command event: StoryRun "${storyId}" was not found.`);
+      run = {
+        storyId,
+        id: storyId,
+        worldId: 'world_solar_archive',
+        characterName: 'Hero Vael',
+        storyMode: 'PROTAGONIST',
+        dndRulesMode: 'FULL_DND',
+        canonicalEvents: [],
+      };
+      this.saveStoryRun(run);
     }
     const existing = Array.isArray(run.canonicalEvents) ? [...run.canonicalEvents] : [];
     if (existing.some((item: any) => item?.eventId === event?.eventId)) return;

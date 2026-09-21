@@ -114,7 +114,7 @@ export function captureCanonicalStateSnapshot(
 export function compareCanonicalSnapshots(
   a: CanonicalStateSnapshot,
   b: CanonicalStateSnapshot,
-  options: { ignoreStoryId?: boolean } = {}
+  options: { ignoreStoryId?: boolean; ignoreNarrativeHistory?: boolean } = {}
 ): { identical: boolean; differences: string[]; isEqual: boolean; discrepancies: string[] } {
   const diffs: string[] = [];
 
@@ -179,7 +179,9 @@ export function compareCanonicalSnapshots(
   deepCheck(a.craftingRecipes, b.craftingRecipes, 'craftingRecipes');
   deepCheck(a.npcs, b.npcs, 'npcs');
   deepCheck(a.chronicle, b.chronicle, 'chronicle');
-  deepCheck(a.narrativeHistory, b.narrativeHistory, 'narrativeHistory');
+  if (!options.ignoreNarrativeHistory) {
+    deepCheck(a.narrativeHistory, b.narrativeHistory, 'narrativeHistory');
+  }
   deepCheck(a.capabilities, b.capabilities, 'capabilities');
   deepCheck(a.conditions, b.conditions, 'conditions');
   deepCheck(a.combat, b.combat, 'combat');

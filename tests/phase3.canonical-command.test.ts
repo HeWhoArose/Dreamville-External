@@ -552,3 +552,26 @@ test('Phase 3 — staged story-director resolution reads and writes the transact
 	assert.equal(result.success, true);
 	assert.equal(repo.getWorldFacts(storyId).some((fact) => fact.factId === 'phase3_coded_cipher'), true);
 });
+
+
+test('Phase 3 — canonical snapshots are deep-isolated from later repository mutations', () => {
+	const storyId = 'phase3_snapshot_deep_isolation';
+	const repo = seedRepo(storyId);
+	const run = repo.getStoryRun(storyId)!;
+	run.nestedTransactionProbe = {
+		thread: { title: 'Original', stage: 1 },
+		effects: [{ effectId: 'effect_1', charges: 2 }],
+	};
+	repo.saveStoryRun(run);
+
+	const snapshot = captureCanonicalStateSnapshot(storyId, repo);
+	const liveRun = repo.getStoryRun(storyId)!;
+	liveRun.nestedTransactionProbe.thread.title = 'Mutated';
+	liveRun.nestedTransactionProbe.thread.stage = 99;
+	liveRun.nestedTransactionProbe.effects[0].charges = 0;
+	repo.saveStoryRun(liveRun);
+
+	assert.equal(snapshot.adaptation.ch16Run?.nestedTransactionProbe?.thread?.title, 'Original');
+	assert.equal(snapshot.adaptation.ch16Run?.nestedTransactionProbe?.thread?.stage, 1);
+	assert.equal(snapshot.adaptation.ch16Run?.nestedTransactionProbe?.effects?.[0]?.charges, 2);
+});

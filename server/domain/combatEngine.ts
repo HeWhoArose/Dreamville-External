@@ -1004,7 +1004,7 @@ export class TacticalCombatEngine {
         if (cornerBlocked) return undefined;
       }
 
-      if (this.participants.values && Array.from(this.participants.values()).some((participant) =>
+      if (Array.from(this.participants.values()).some((participant) =>
         participant.id !== actorId &&
         !participant.isDead &&
         participant.x === x &&

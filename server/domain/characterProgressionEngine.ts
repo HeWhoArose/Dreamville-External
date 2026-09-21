@@ -238,12 +238,17 @@ export class CharacterProgressionEngine {
 
   public registerModule(module: ProgressionModuleDefinition): void {
     this.assertCanonicalMutationAuthority();
-    this.validateModule(module);
-    this.modules.set(module.id, clone(module));
+    this.registerModuleInternal(module);
   }
 
   public registerModules(modules: ProgressionModuleDefinition[]): void {
-    for (const module of modules || []) this.registerModule(module);
+    this.assertCanonicalMutationAuthority();
+    for (const module of modules || []) this.registerModuleInternal(module);
+  }
+
+  private registerModuleInternal(module: ProgressionModuleDefinition): void {
+    this.validateModule(module);
+    this.modules.set(module.id, clone(module));
   }
 
   public registerFeatModule(feat: CharacterFeat): ProgressionModuleDefinition {
@@ -664,7 +669,9 @@ export class CharacterProgressionEngine {
     this.actorStates.clear();
     this.config = { ...DEFAULT_CHARACTER_PROGRESSION_CONFIG };
     if (snapshot?.config) this.setConfig(snapshot.config);
-    if (Array.isArray(snapshot?.modules)) this.registerModules(snapshot.modules);
+    if (Array.isArray(snapshot?.modules)) {
+      for (const module of snapshot.modules) this.registerModuleInternal(module);
+    }
     if (!this.modules.size) this.registerBuiltIns();
     for (const actor of Array.isArray(snapshot?.actors) ? snapshot.actors : []) {
       if (!actor?.actorId) continue;

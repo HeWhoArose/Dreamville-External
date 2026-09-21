@@ -29,8 +29,7 @@ test('Phase 4 — canonical action handlers do not derive canonical evidence ids
   ];
   for (const route of routes) {
     const block = routeBlock(route);
-    assert.doesNotMatch(block, /\b(?:eventId|sourceEventId|factId|threadId)\s*:\s*[^
-]*(?:Date\.now|Math\.random)/, `Canonical route ${route} must not derive canonical identifiers from wall-clock/random entropy.`);
+    assert.doesNotMatch(block, /\b(?:eventId|sourceEventId|factId|threadId)\s*:\s*[^\r\n]*(?:Date\.now|Math\.random)/, `Canonical route ${route} must not derive canonical identifiers from wall-clock/random entropy.`);
   }
 });
 

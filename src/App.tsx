@@ -101,8 +101,10 @@ export const App: React.FC = () => {
         runId: run.runId || run.storyId,
         title: run.title || run.storyTitle || 'Untitled Story',
         worldName: run.worldName || run.worldTitle || 'Unknown World',
-        genre: run.genre || 'Dynamic Adventure',
+        genre: run.genre || run.genreTags?.[0] || 'Dynamic Adventure',
         imageUrl: run.imageAsset,
+        imageMetadata: run.imageMetadata,
+        visualIdentity: run.visualIdentity,
         characterName: run.characterName,
         currentLocation: run.currentLocation,
         turnCount: run.turnCount || 0,
@@ -481,12 +483,14 @@ export const App: React.FC = () => {
     }
   }
 
+  const activeRunFromLibrary = storyLibraryStories.find((story) => story.storyId === activeStoryId || story.runId === activeStoryId);
+
   const activeStoryConfig = {
     storyId: activeStoryId,
-    runId: `run_${activeStoryId}`,
+    runId: activeRunFromLibrary?.runId || `run_${activeStoryId}`,
     title: activeStorySummary?.title || 'The Awakening Chronicle',
     worldName: activeStorySummary?.worldName || 'Living Aethelgard',
-    ruleset: 'FULL_DND',
+    ruleset: activeRunFromLibrary?.dndRulesMode || 'FULL_DND',
     genre: activeStorySummary?.genre || 'Dark Fantasy',
     characterName: activeStorySummary?.characterName || 'Protagonist',
     currentLocation: activeStorySummary?.currentLocation || 'Sanctum Gateway',
@@ -609,11 +613,11 @@ export const App: React.FC = () => {
           {currentRoute === 'dashboard' && (
             <DashboardView
               activeStory={activeStorySummary}
-              recentStories={sampleStories}
+              recentStories={storyLibraryStories}
               curatedWorlds={worldTemplates}
               isLoading={!viewState}
               onResumeStory={() => setCurrentRoute('play.story')}
-              onNewStory={() => setIsImportModalOpen(true)}
+              onNewStory={() => setCurrentRoute('create')}
               onExploreWorlds={() => setIsWorldLibraryModalOpen(true)}
               onOpenLibrary={() => setCurrentRoute('story-library')}
               onOpenSettings={() => setIsAudioSettingsOpen(true)}
@@ -623,7 +627,7 @@ export const App: React.FC = () => {
 
           {currentRoute === 'story-library' && (
             <StoryLibraryView
-              stories={sampleStories}
+              stories={storyLibraryStories}
               isLoading={isLoadingStoryLibrary}
               errorMessage={storyLibraryError || undefined}
               onRetry={fetchStoryLibrary}
@@ -637,6 +641,21 @@ export const App: React.FC = () => {
               }}
               onNewStory={() => setCurrentRoute('create')}
               onBranchStory={() => setIsStoryLibraryModalOpen(true)}
+              onStoryAssetChange={async (runId, newUrl, provenance) => {
+                try {
+                  const updated = await apiClient.saveStoryRunVisualAsset(runId, {
+                    imageAsset: newUrl,
+                    imageMetadata: provenance ? { provenance, rightsStatus: 'UNKNOWN' } : undefined,
+                  });
+                  setStoryLibraryStories((current) => current.map((story) =>
+                    story.runId === runId
+                      ? { ...story, imageUrl: updated.imageAsset, imageMetadata: updated.imageMetadata, visualIdentity: updated.visualIdentity }
+                      : story
+                  ));
+                } catch (err) {
+                  console.error('Failed to save Story Run artwork:', err);
+                }
+              }}
             />
           )}
 

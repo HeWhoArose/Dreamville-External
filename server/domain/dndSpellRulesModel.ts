@@ -80,7 +80,14 @@ export class DndSpellRulesEvaluator {
 		// FULL_DND is authoritative. An ad-hoc custom cap cannot replace the
 		// standard D&D spell-slot system.
 		const standardMaxAvailableLevel = DND_5E_MAX_SPELL_SLOT_BY_LEVEL[level] || 1;
-		if (effectiveMode === 'FULL_DND' && customRulesOverrides?.maxAllowedSpellLevel !== undefined) {
+		const profileSpellOverride = profile.parameterOverrides?.standard_dnd_spell_rules as
+			{ maxAllowedSpellLevel?: unknown } | undefined;
+		const effectiveCustomMax =
+			customRulesOverrides?.maxAllowedSpellLevel !== undefined
+				? customRulesOverrides.maxAllowedSpellLevel
+				: profileSpellOverride?.maxAllowedSpellLevel;
+
+		if (effectiveMode === 'FULL_DND' && effectiveCustomMax !== undefined) {
 			return {
 				approved: requestedLevel >= 0 && requestedLevel <= standardMaxAvailableLevel,
 				spellName: proposal.spellName,
@@ -95,10 +102,10 @@ export class DndSpellRulesEvaluator {
 		// Explicit custom spell rules are permitted in modes that allow explicit
 		// overrides, including a hybrid world that disables standard spell rules.
 		if (
-			customRulesOverrides?.maxAllowedSpellLevel !== undefined &&
+			effectiveCustomMax !== undefined &&
 			effectiveMode !== 'FULL_DND'
 		) {
-			const rawAllowed = Number(customRulesOverrides.maxAllowedSpellLevel);
+			const rawAllowed = Number(effectiveCustomMax);
 			const allowed = Number.isFinite(rawAllowed)
 				? Math.max(0, Math.min(9, Math.floor(rawAllowed)))
 				: -1;

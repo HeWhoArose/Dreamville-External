@@ -1378,6 +1378,7 @@ gameRouter.get('/combat/state', async (req: Request, res: Response) => {
  */
 gameRouter.post('/combat/move', async (req: Request, res: Response) => {
   try {
+    if (!requireDndTacticalCombat(res, 'default_story')) return;
     const { actorId: reqActorId, targetX, targetY } = req.body;
     if (typeof targetX !== 'number' || typeof targetY !== 'number') {
       return res.status(400).json({ success: false, errorReason: 'targetX and targetY numbers required.' });
@@ -1422,6 +1423,7 @@ gameRouter.post('/combat/move', async (req: Request, res: Response) => {
  */
 gameRouter.post('/combat/action', async (req: Request, res: Response) => {
   try {
+    if (!requireDndTacticalCombat(res, 'default_story')) return;
     const { actorId: reqActorId, action } = req.body;
     const player = worldRepository.getPlayerLifecycle('default_story');
     const serverPlayerActorId = player?.actorId || 'player_actor_default_story';
@@ -1469,6 +1471,7 @@ gameRouter.post('/combat/action', async (req: Request, res: Response) => {
  */
 gameRouter.post('/combat/attack', async (req: Request, res: Response) => {
   try {
+    if (!requireDndTacticalCombat(res, 'default_story')) return;
     const { attackerId: reqAttackerId, targetId } = req.body;
     if (!targetId) {
       return res.status(400).json({ success: false, errorReason: 'targetId string is required.' });
@@ -1622,6 +1625,7 @@ gameRouter.post('/combat/attack', async (req: Request, res: Response) => {
  */
 gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
   try {
+    if (!requireDndTacticalCombat(res, 'default_story')) return;
     const { actorId: reqActorId, targetId, capabilityId, requestedScale } = req.body;
     if (!targetId || !capabilityId) {
       return res.status(400).json({ success: false, errorReason: 'targetId and capabilityId are required.' });
@@ -1874,6 +1878,7 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
  */
 gameRouter.post('/combat/interrupt', async (req: Request, res: Response) => {
   try {
+    if (!requireDndTacticalCombat(res, 'default_story')) return;
     const { targetActorId, reason } = req.body;
     if (!targetActorId) {
       return res.status(400).json({ success: false, errorReason: 'targetActorId is required.' });
@@ -1897,6 +1902,7 @@ gameRouter.post('/combat/interrupt', async (req: Request, res: Response) => {
  */
 gameRouter.post('/combat/end-turn', async (req: Request, res: Response) => {
   try {
+    if (!requireDndTacticalCombat(res, 'default_story')) return;
     const player = worldRepository.getPlayerLifecycle('default_story');
     const serverPlayerActorId = player?.actorId || 'player_actor_default_story';
 
@@ -1954,6 +1960,7 @@ gameRouter.post('/combat/end-turn', async (req: Request, res: Response) => {
  */
 gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
   try {
+    if (!requireDndTacticalCombat(res, 'default_story')) return;
     const player = worldRepository.getPlayerLifecycle('default_story');
     const serverPlayerActorId = player?.actorId || 'player_actor_default_story';
     const combatEngine = worldRepository.getCombatEngine('default_story');

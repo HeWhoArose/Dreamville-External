@@ -1,7 +1,8 @@
 import { WorldTimestamp } from './types';
 import { PendingActivationState } from './capabilityEngine';
 import { ConditionEngine } from './conditionEngine';
-import { CombatActionEconomy, CombatTurnResourceSnapshot } from './combatActionEconomy';
+import { CombatActionEconomy, CombatTurnResourceSnapshot, ReadyTriggerType } from './combatActionEconomy';
+import { CombatReactionEngine } from './combatReactionEngine';
 import { deathSaveEngine } from './deathSaveEngine';
 import type { DeathSaveState } from '../../src/types';
 
@@ -322,7 +323,9 @@ export class Dnd521RulesetAdapter implements IRulesetAdapter {
   }
 }
 
-export type CoreCombatAction = 'DASH' | 'DODGE' | 'DISENGAGE';
+export type CoreCombatAction = 'DASH' | 'DODGE' | 'DISENGAGE' | 'READY' | 'GRAPPLE' | 'SHOVE';
+
+export type CoverLevel = 'NONE' | 'HALF' | 'THREE_QUARTERS' | 'TOTAL';
 
 export interface BattlefieldParticipant {
   id: string;
@@ -335,6 +338,7 @@ export interface BattlefieldParticipant {
   resistances?: string[]; // e.g. ['fire', 'poison', 'cold'] (CH8.DEFENSE)
   immunities?: string[];
   vulnerabilities?: string[];
+  cover?: CoverLevel;
   team: 'player_allies' | 'enemies' | 'neutral';
   hpCurrent: number;
   hpMax: number;
@@ -430,6 +434,7 @@ export class TacticalCombatEngine {
   private pendingActivations: Map<string, PendingActivationState> = new Map();
   private actionEconomy: CombatActionEconomy = new CombatActionEconomy();
   private conditionEngine?: ConditionEngine;
+  private readonly reactionEngine = new CombatReactionEngine();
 
   constructor(seed = 1337, ruleset?: IRulesetAdapter, conditionEngine?: ConditionEngine) {
     this.diceEngine = new LocalDiceEngine(seed);
@@ -864,7 +869,7 @@ export class TacticalCombatEngine {
       };
     }
 
-    const opportunityThreat = !this.actionEconomy.get(actorId)?.disengaging
+    const opportunityThreats = !this.actionEconomy.get(actorId)?.disengaging
       ? Array.from(this.participants.values())
           .filter((other) => {
             if (other.id === actorId || other.isDead || other.team === actor.team || other.team === 'neutral') return false;
@@ -872,11 +877,26 @@ export class TacticalCombatEngine {
             const reach = other.reachCells ?? 1.5;
             const beforeDistance = Math.hypot(actor.x - other.x, actor.y - other.y);
             const afterDistance = Math.hypot(targetX - other.x, targetY - other.y);
-            return beforeDistance <= reach && afterDistance > reach;
+            return beforeDistance <= reach && afterDistance > reach && Boolean(this.actionEconomy.get(other.id)?.reactionAvailable);
           })
           .sort((a, b) => a.id.localeCompare(b.id))
-          .find((other) => this.actionEconomy.get(other.id)?.reactionAvailable)
-      : undefined;
+      : [];
+
+    const path = this.calculateMovementPath(actor.x, actor.y, targetX, targetY);
+    if (!path) {
+      return {
+        success: false,
+        errorReason: 'Movement path is blocked or leaves the configured map bounds.',
+      };
+    }
+
+    const movementCost = this.calculateMovementCost(path);
+    if (movementCost > this.actionEconomy.get(actorId)?.movementRemainingCells! + 1e-9) {
+      return {
+        success: false,
+        errorReason: `Movement requires ${movementCost.toFixed(1)} cells but only ${this.actionEconomy.get(actorId)?.movementRemainingCells ?? 0} remain.`,
+      };
+    }
 
     // Check occupied cells
     for (const other of this.participants.values()) {
@@ -885,7 +905,6 @@ export class TacticalCombatEngine {
       }
     }
 
-    const movementCost = distance;
     const movementResult = this.actionEconomy.consumeMovement(actorId, movementCost);
     if (!movementResult.success) {
       return movementResult;
@@ -901,15 +920,228 @@ export class TacticalCombatEngine {
       headline: `${actor.name} moved to (${targetX}, ${targetY}).`,
       metadata: {
         movementDistance: distance,
-        provokedOpportunityAttack: Boolean(opportunityThreat),
+        movementDistance: distance,
+        movementCost,
+        path,
+        difficultTerrainCells: Math.max(0, movementCost - distance),
+        provokedOpportunityAttack: opportunityThreats.length > 0,
       },
     });
 
-    if (opportunityThreat) {
-      this.executeOpportunityAttack(opportunityThreat.id, actorId);
+    if (opportunityThreats.length > 0) {
+      this.resolveOpportunityReactions(actorId, opportunityThreats);
     }
 
+    this.resolveReadyTriggers({
+      type: 'ACTOR_MOVED',
+      actorId,
+      from: { x: path[0]?.x ?? actor.x, y: path[0]?.y ?? actor.y },
+      to: { x: targetX, y: targetY },
+    });
+
     return { success: true };
+  }
+
+  private calculateMovementPath(fromX: number, fromY: number, targetX: number, targetY: number): { x: number; y: number }[] | undefined {
+    const steps = Math.max(Math.abs(targetX - fromX), Math.abs(targetY - fromY));
+    if (steps === 0) return [{ x: fromX, y: fromY }];
+
+    const path: { x: number; y: number }[] = [{ x: fromX, y: fromY }];
+    for (let i = 1; i <= steps; i++) {
+      const x = Math.round(fromX + ((targetX - fromX) * i) / steps);
+      const y = Math.round(fromY + ((targetY - fromY) * i) / steps);
+      if (this.mapBounds && (x < this.mapBounds.minX || x > this.mapBounds.maxX || y < this.mapBounds.minY || y > this.mapBounds.maxY)) {
+        return undefined;
+      }
+      const obstacle = this.obstacles.find((obs) => obs.x === x && obs.y === y && obs.isImpassable !== false);
+      if (obstacle) return undefined;
+      path.push({ x, y });
+    }
+    return path;
+  }
+
+  private calculateMovementCost(path: { x: number; y: number }[]): number {
+    let cost = 0;
+    for (let i = 1; i < path.length; i++) {
+      const previous = path[i - 1];
+      const current = path[i];
+      const diagonal = previous.x !== current.x && previous.y !== current.y;
+      const base = diagonal ? Math.SQRT2 : 1;
+      const difficult = this.hazards.some((hazard) =>
+        hazard.type === 'ice_patch' &&
+        Math.hypot(current.x - hazard.x, current.y - hazard.y) <= hazard.radiusCells
+      );
+      cost += difficult ? base * 2 : base;
+    }
+    return cost;
+  }
+
+  private resolveOpportunityReactions(actorId: string, threats: BattlefieldParticipant[]): void {
+    this.reactionEngine.resolve(
+      {
+        type: 'ACTOR_MOVED',
+        actorId,
+        metadata: { reason: 'Target left reach without Disengaging.' },
+      },
+      threats.map((attacker) => ({
+        reactionId: `opportunity:${attacker.id}:${actorId}`,
+        actorId: attacker.id,
+        priority: 0,
+        triggerType: 'ACTOR_MOVED' as const,
+        targetId: actorId,
+        resolve: () => this.executeOpportunityAttack(attacker.id, actorId),
+      }))
+    );
+  }
+
+  private resolveReadyTriggers(event: {
+    type: ReadyTriggerType;
+    actorId: string;
+    targetId?: string;
+    from?: { x: number; y: number };
+    to?: { x: number; y: number };
+  }): void {
+    const candidates: Array<{ actorId: string; ready: NonNullable<ReturnType<CombatActionEconomy['getReadyAction']>> }> = [];
+    for (const participant of this.participants.values()) {
+      const ready = this.actionEconomy.getReadyAction(participant.id);
+      if (!ready) continue;
+      if (ready.triggerType !== event.type) continue;
+      if (ready.triggerActorId && ready.triggerActorId !== event.actorId) continue;
+      if (ready.targetId && ready.targetId !== event.targetId) continue;
+      candidates.push({ actorId: participant.id, ready });
+    }
+
+    for (const candidate of candidates.sort((a, b) => a.actorId.localeCompare(b.actorId))) {
+      const reaction = this.actionEconomy.consumeReadyReaction(candidate.actorId);
+      if (!reaction.success) continue;
+      const targetId = candidate.ready.targetId || event.actorId;
+      if (candidate.ready.actionType === 'ATTACK' && this.participants.has(targetId)) {
+        const result = this.resolveReactionAttack(candidate.actorId, targetId, 'Ready Action');
+        this.eventLog.push({
+          turnNumber: this.currentRound,
+          actorId: candidate.actorId,
+          targetId,
+          actionType: 'ATTACK',
+          headline: result.hits
+            ? `${this.participants.get(candidate.actorId)?.name || candidate.actorId} triggered Ready Action against ${this.participants.get(targetId)?.name || targetId}.`
+            : `${this.participants.get(candidate.actorId)?.name || candidate.actorId} triggered Ready Action and missed.`,
+          damageInflicted: result.damage,
+          rollRecord: result.roll,
+          metadata: { reaction: true, reason: 'Ready Action trigger.' },
+        });
+      }
+    }
+  }
+
+  private resolveReactionAttack(attackerId: string, targetId: string, reason: string): { hits: boolean; damage: number; targetDied: boolean; roll?: RollRecord; isCritical: boolean } {
+    const attacker = this.participants.get(attackerId);
+    const target = this.participants.get(targetId);
+    if (!attacker || !target || attacker.isDead || target.isDead) {
+      return { hits: false, damage: 0, targetDied: target?.isDead ?? false, isCritical: false };
+    }
+    const targetDodging = Boolean(this.actionEconomy.get(targetId)?.dodging);
+    const attackResult = this.ruleset.resolveAttack({
+      attackBonus: attacker.attackBonus,
+      targetArmorClass: target.armorClass + this.getCoverBonus(target),
+      disadvantage: targetDodging,
+      diceEngine: this.diceEngine,
+    });
+    let damage = 0;
+    let targetDied = false;
+    if (attackResult.hits) {
+      const damageResult = this.ruleset.resolveDamage(attacker.damageFormula, attackResult.isCritical, this.diceEngine);
+      const resolved = this.applyCombatDamage(target, damageResult.totalDamage, attacker.damageType || 'slashing', attackResult.isCritical);
+      damage = resolved.damage;
+      targetDied = resolved.targetDied;
+    }
+    return { hits: attackResult.hits, damage, targetDied, roll: attackResult.roll, isCritical: attackResult.isCritical };
+  }
+
+  private getCoverBonus(target: BattlefieldParticipant): number {
+    switch (target.cover) {
+      case 'HALF': return 2;
+      case 'THREE_QUARTERS': return 5;
+      case 'TOTAL': return 1000;
+      default: return 0;
+    }
+  }
+
+  public getCoverLevel(targetId: string): CoverLevel {
+    return this.participants.get(targetId)?.cover || 'NONE';
+  }
+
+  public setCover(targetId: string, cover: CoverLevel): { success: boolean; errorReason?: string } {
+    const target = this.participants.get(targetId);
+    if (!target) return { success: false, errorReason: 'Target not found.' };
+    target.cover = cover;
+    return { success: true };
+  }
+
+  public executeGrapple(attackerId: string, targetId: string): { success: boolean; errorReason?: string; applied?: boolean } {
+    return this.executeControlAction(attackerId, targetId, 'GRAPPLE');
+  }
+
+  public executeShove(attackerId: string, targetId: string, prone = false): { success: boolean; errorReason?: string; applied?: boolean } {
+    const result = this.executeControlAction(attackerId, targetId, 'SHOVE');
+    if (!result.success || !result.applied) return result;
+    const target = this.participants.get(targetId);
+    if (!target) return result;
+    if (prone && !target.conditions.includes('Prone')) target.conditions.push('Prone');
+    if (!prone) {
+      const attacker = this.participants.get(attackerId)!;
+      const dx = Math.sign(target.x - attacker.x);
+      const dy = Math.sign(target.y - attacker.y);
+      const pushX = target.x + dx;
+      const pushY = target.y + dy;
+      if (this.isCellFree(pushX, pushY)) {
+        target.x = pushX;
+        target.y = pushY;
+      }
+    }
+    return result;
+  }
+
+  private executeControlAction(attackerId: string, targetId: string, action: 'GRAPPLE' | 'SHOVE'): { success: boolean; errorReason?: string; applied?: boolean } {
+    const attacker = this.participants.get(attackerId);
+    const target = this.participants.get(targetId);
+    if (!attacker || !target) return { success: false, errorReason: 'Attacker or target not found.' };
+    if (this.getCurrentActor()?.id !== attackerId) return { success: false, errorReason: "It is not this actor's turn." };
+    if (attacker.isDead || target.isDead || attacker.hpCurrent <= 0 || target.hpCurrent <= 0) {
+      return { success: false, errorReason: 'Dead or incapacitated combatants cannot resolve this action.' };
+    }
+    const reach = attacker.reachCells ?? 1.5;
+    if (Math.hypot(target.x - attacker.x, target.y - attacker.y) > reach) {
+      return { success: false, errorReason: 'Target is outside melee reach.' };
+    }
+    const resource = this.actionEconomy.consume(attackerId, 'ACTION');
+    if (!resource.success) return { success: false, errorReason: resource.errorReason };
+    const strMod = attacker.saveModifiers?.STR ?? attacker.savingThrowModifiers?.STR ?? 0;
+    const proficiency = Math.max(0, Math.floor((attacker.attackBonus - strMod)));
+    const dc = 8 + strMod + proficiency;
+    const saveAbility = target.saveModifiers?.STR ?? target.savingThrowModifiers?.STR ?? 0;
+    const save = this.ruleset.resolveSavingThrow({ saveModifier: saveAbility, difficultyClass: dc, diceEngine: this.diceEngine });
+    const applied = !save.succeeds;
+    if (applied) {
+      if (action === 'GRAPPLE' && !target.conditions.includes('Grappled')) target.conditions.push('Grappled');
+    }
+    this.eventLog.push({
+      turnNumber: this.currentRound,
+      actorId: attackerId,
+      targetId,
+      actionType: 'ACTION',
+      headline: applied
+        ? `${attacker.name} used ${action.toLowerCase()} against ${target.name}.`
+        : `${target.name} resisted ${action.toLowerCase()}.`,
+      rollRecord: save.roll,
+      metadata: { combatAction: action, dc, saveAbility: 'STR' },
+    });
+    return { success: true, applied };
+  }
+
+  private isCellFree(x: number, y: number): boolean {
+    if (this.mapBounds && (x < this.mapBounds.minX || x > this.mapBounds.maxX || y < this.mapBounds.minY || y > this.mapBounds.maxY)) return false;
+    if (this.obstacles.some((o) => o.x === x && o.y === y && o.isImpassable !== false)) return false;
+    return !Array.from(this.participants.values()).some((p) => !p.isDead && p.x === x && p.y === y);
   }
 
   private executeOpportunityAttack(attackerId: string, targetId: string): {
@@ -942,7 +1174,7 @@ export class TacticalCombatEngine {
     const targetDodging = !!this.actionEconomy.get(targetId)?.dodging;
     const attackResult = this.ruleset.resolveAttack({
       attackBonus: attacker.attackBonus,
-      targetArmorClass: target.armorClass,
+      targetArmorClass: target.armorClass + this.getCoverBonus(target),
       disadvantage: targetDodging,
       diceEngine: this.diceEngine,
     });
@@ -1031,6 +1263,17 @@ export class TacticalCombatEngine {
         break;
       case 'DISENGAGE':
         result = this.actionEconomy.setDisengaging(actorId);
+        break;
+      case 'READY':
+        result = this.actionEconomy.setReadyAction(actorId, 'Prepared attack', 'Configured trigger.', {
+          triggerType: 'ACTOR_MOVED',
+          triggerActorId: undefined,
+          actionType: 'ATTACK',
+        });
+        break;
+      case 'GRAPPLE':
+      case 'SHOVE':
+        result = { success: false, errorReason: 'Use executeGrapple or executeShove with a targetId.' };
         break;
       default:
         result = { success: false, errorReason: `Unsupported combat action: ${String(action)}` };

@@ -196,6 +196,7 @@ export class InMemoryWorldRepository implements WorldRepository {
   private combatEngines: Map<string, TacticalCombatEngine> = new Map();
   private conditionEngines: Map<string, ConditionEngine> = new Map();
   private storyCheckEngines: Map<string, StoryCheckEngine> = new Map();
+  private canonicalCommandScopeDepth = 0;
   private memoryEngines: Map<string, MemoryOpportunityEngine> = new Map();
   private livingSimulations: Map<string, LivingWorldSimulation> = new Map();
   private aiOrchestrator: MultiModelOrchestrator | null = null;
@@ -1323,10 +1324,31 @@ export class InMemoryWorldRepository implements WorldRepository {
   public getHistoricalChronicleEngine(storyId: string): HistoricalChronicleEngine {
     let engine = this.chronicleEngines.get(storyId);
     if (!engine) {
-      engine = new HistoricalChronicleEngine();
+      engine = new HistoricalChronicleEngine({
+        writeMode: this.persistenceSuppressed ? 'ISOLATED' : 'TRANSACTIONAL',
+      });
       this.chronicleEngines.set(storyId, engine);
     }
     return engine;
+  }
+
+  public beginCanonicalCommandTransaction(storyId: string, commandId: string): void {
+    this.canonicalCommandScopeDepth += 1;
+    this.getHistoricalChronicleEngine(storyId).beginCanonicalTransaction(commandId);
+  }
+
+  public commitCanonicalCommandTransaction(storyId: string, canonicalEventId: string): void {
+    this.getHistoricalChronicleEngine(storyId).commitCanonicalTransaction(canonicalEventId);
+    this.canonicalCommandScopeDepth = Math.max(0, this.canonicalCommandScopeDepth - 1);
+  }
+
+  public rollbackCanonicalCommandTransaction(storyId: string): void {
+    this.getHistoricalChronicleEngine(storyId).rollbackCanonicalTransaction();
+    this.canonicalCommandScopeDepth = Math.max(0, this.canonicalCommandScopeDepth - 1);
+  }
+
+  public isCanonicalCommandTransactionActive(): boolean {
+    return this.canonicalCommandScopeDepth > 0;
   }
 
   public getInventoryEngine(storyId: string): InventoryItemEngine {
@@ -2291,11 +2313,14 @@ export class InMemoryWorldRepository implements WorldRepository {
     this.protagonistAgendas.set(storyId, agenda);
   }
 
-  public restoreCanonicalStateSnapshot(snapshot: any, options?: { persist?: boolean }): void {
+  public restoreCanonicalStateSnapshot(snapshot: any, options?: { persist?: boolean; preserveCanonicalEvents?: boolean }): void {
     const storyId = snapshot?.storyId;
     if (!storyId) throw new Error('Canonical snapshot restore requires storyId.');
 
     const clone = <T>(value: T): T => value === undefined ? value : JSON.parse(JSON.stringify(value));
+    const preservedCanonicalEvents = options?.preserveCanonicalEvents
+      ? clone(this.getStoryRun(storyId)?.canonicalEvents || [])
+      : undefined;
 
     if (snapshot.worldClock) this.getWorldClock(storyId).importState(clone(snapshot.worldClock));
     if (snapshot.geography) this.getGeographyGraph(storyId).importState(clone(snapshot.geography));
@@ -2324,8 +2349,15 @@ export class InMemoryWorldRepository implements WorldRepository {
     if (snapshot.chronicle) this.getHistoricalChronicleEngine(storyId).importState(clone(snapshot.chronicle));
 
     const run = snapshot.adaptation?.ch16Run;
-    if (run) this.storyRuns.set(storyId, clone(run));
-    else this.storyRuns.delete(storyId);
+    if (run) {
+      const restoredRun = clone(run);
+      if (preservedCanonicalEvents) {
+        restoredRun.canonicalEvents = preservedCanonicalEvents;
+      }
+      this.storyRuns.set(storyId, restoredRun);
+    } else {
+      this.storyRuns.delete(storyId);
+    }
 
     this.storyThreads.set(storyId, clone(snapshot.adaptation?.ch16Threads || []));
     this.activeEffects.set(storyId, clone(snapshot.adaptation?.ch16ActiveEffects || []));

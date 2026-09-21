@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { WorldTemplate, WorldSearchCriteria, WorldSynthesisInput } from '../types';
+import { WorldTemplate, WorldSearchCriteria, WorldSynthesisInput, CharacterStoryMode, DndRulesMode } from '../types';
 import { WorldArtCover } from './common/WorldArtCover';
 import { apiClient } from '../services/apiClient';
 import {
@@ -103,7 +103,7 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
   const [launchingWorld, setLaunchingWorld] = useState<WorldTemplate | null>(null);
   const [runCharacterName, setRunCharacterName] = useState<string>('Hero Vael');
   const [runStoryMode, setRunStoryMode] = useState<'PROTAGONIST' | 'SIDE_CHARACTER' | 'FREE_ROAM'>('PROTAGONIST');
-  const [runRulesMode, setRunRulesMode] = useState<string>('FULL_DND');
+  const [runRulesMode, setRunRulesMode] = useState<DndRulesMode>('FULL_DND');
   const [activeRuns, setActiveRuns] = useState<any[]>([]);
   const [launchSuccessMessage, setLaunchSuccessMessage] = useState<string | null>(null);
 
@@ -207,6 +207,22 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
     }
   };
 
+  const openRunLauncher = (world: WorldTemplate) => {
+    const requestedStoryMode = world.storyMode || world.narrativeProfile?.mode || 'PROTAGONIST';
+    const persistedRulesMode = world.dndRulesMode || world.rulesProfile?.mode;
+    const requestedRulesMode: DndRulesMode =
+      persistedRulesMode === 'FULL_DND' ||
+      persistedRulesMode === 'HYBRID_DND' ||
+      persistedRulesMode === 'CUSTOM_HOMEBREW_DND'
+        ? persistedRulesMode
+        : 'FULL_DND';
+
+    setLaunchingWorld(world);
+    setRunStoryMode(requestedStoryMode as CharacterStoryMode);
+    setRunRulesMode(requestedRulesMode);
+    setIsLaunchingRun(true);
+  };
+
   const handleStartRunSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!launchingWorld) return;
@@ -214,6 +230,7 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
     try {
       const run = await apiClient.startWorldRun(launchingWorld.worldId, {
         storyMode: runStoryMode,
+        narrativeProfile: launchingWorld.narrativeProfile,
         dndRulesMode: runRulesMode,
         characterName: runCharacterName.trim() || 'Hero Vael',
       });
@@ -578,10 +595,7 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
                       )}
                       <button
                         id={`start-run-btn-${w.worldId}`}
-                        onClick={() => {
-                          setLaunchingWorld(w);
-                          setIsLaunchingRun(true);
-                        }}
+                        onClick={() => openRunLauncher(w)}
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition shadow"
                       >
                         <Play className="w-3.5 h-3.5 fill-current" />
@@ -628,14 +642,18 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
                   </p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="bg-stone-950/50 p-3 rounded-lg border border-stone-800">
                     <span className="text-stone-400 block mb-1">Era & Timeline</span>
                     <span className="font-medium text-amber-300">{previewWorld.defaultEra || 'Default Era'}</span>
                   </div>
                   <div className="bg-stone-950/50 p-3 rounded-lg border border-stone-800">
-                    <span className="text-stone-400 block mb-1">Ruleset & Mode</span>
-                    <span className="font-medium text-indigo-300">{previewWorld.rulesetId || 'Standard D&D'}</span>
+                    <span className="text-stone-400 block mb-1">Rules Mode</span>
+                    <span className="font-medium text-indigo-300">{previewWorld.dndRulesMode || previewWorld.rulesProfile?.mode || previewWorld.rulesetId || 'FULL_DND'}</span>
+                  </div>
+                  <div className="bg-stone-950/50 p-3 rounded-lg border border-stone-800">
+                    <span className="text-stone-400 block mb-1">Narrative Mode</span>
+                    <span className="font-medium text-purple-300">{previewWorld.narrativeProfile?.mode || previewWorld.storyMode || 'PROTAGONIST'}</span>
                   </div>
                 </div>
 
@@ -710,8 +728,7 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
                   onClick={() => {
                     const target = previewWorld;
                     setPreviewWorld(null);
-                    setLaunchingWorld(target);
-                    setIsLaunchingRun(true);
+                    if (target) openRunLauncher(target);
                   }}
                   className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium transition"
                 >
@@ -945,9 +962,8 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
                       onChange={(e) => setRunRulesMode(e.target.value)}
                       className="w-full px-3 py-2 rounded-lg bg-stone-950/60 border border-stone-800 text-stone-200 focus:outline-none focus:border-indigo-500"
                     >
-                      <option value="FULL_DND">Full D&D SRD Tactical Combat</option>
-                      <option value="NARRATIVE_DICE_CLASH">Narrative Dice Clash</option>
-                      <option value="HYBRID_DND">Hybrid Tactical / Narrative</option>
+                      <option value="FULL_DND">Full D&D</option>
+                      <option value="HYBRID_DND">Hybrid D&D</option>
                       <option value="CUSTOM_HOMEBREW_DND">Custom Homebrew</option>
                     </select>
                   </div>

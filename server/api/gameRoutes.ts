@@ -9,6 +9,7 @@ import { WorkingContextEngine } from '../domain/workingContextEngine';
 import { worldVisualIdentityService } from '../services/worldVisualIdentityService';
 import { rulesProfileEngine } from '../domain/rulesProfileEngine';
 import { resolveCanonicalConfirmedCharacter } from '../services/confirmedCharacterAuthority';
+import { canonicalCommandEngine } from '../domain/canonicalCommandEngine';
 
 export const gameRouter = Router();
 import { sensoryRouter } from './sensoryRoutes';

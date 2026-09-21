@@ -1,4 +1,4 @@
-import { deterministicId, stableStringify } from './deterministicRng';
+import { deterministicId } from './deterministicRng';
 import type { CharacterFeat, CharacterEffect, CharacterGenesisDraft, ConfirmedCharacter, RulesProfile } from '../../src/types';
 import type { CapabilityDefinition } from './capabilityEngine';
 
@@ -202,15 +202,6 @@ function effectToModifier(
       stackGroup: effect.type || 'CHARACTER_EFFECT',
     },
   };
-}
-
-function moduleTypePrecedence(type: ProgressionModuleType): number {
-  switch (type) {
-    case 'SPECIES': return 20;
-    case 'CLASS': return 30;
-    case 'SUBCLASS': return 40;
-    case 'FEAT': return 50;
-  }
 }
 
 export class CharacterProgressionEngine {
@@ -582,6 +573,7 @@ export class CharacterProgressionEngine {
         .filter((entry) => entry.mode === 'SET')
         .sort((a, b) => b.precedence - a.precedence || a.id.localeCompare(b.id));
       const winningSet = setEntries[0];
+      const hasSet = Boolean(winningSet);
 
       let value = winningSet ? winningSet.value : 0;
       let multiply = 1;

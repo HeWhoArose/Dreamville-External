@@ -183,6 +183,47 @@ test('Phase 2 — legacy worlds and runs are migrated on persistence reload', ()
 	}
 });
 
+test('Phase 2 — duplicated story branches preserve canonical narrative and rules profiles', () => {
+	const repo = new InMemoryWorldRepository();
+	const worldId = 'phase2_branch_world';
+	const parentStoryId = 'phase2_branch_parent';
+
+	repo.saveWorldTemplate({
+		worldId,
+		title: 'Branch Test World',
+		summary: 'Branch test',
+		description: 'Branch test',
+		rulesetId: 'CUSTOM_HOMEBREW_DND',
+		dndRulesMode: 'CUSTOM_HOMEBREW_DND',
+		rulesProfile: rulesProfileEngine.createDefault('CUSTOM_HOMEBREW_DND'),
+		storyMode: 'FREE_ROAM',
+		narrativeProfile: narrativeProfileEngine.createDefault('FREE_ROAM'),
+	});
+
+	repo.saveStoryRun({
+		storyId: parentStoryId,
+		id: parentStoryId,
+		worldId,
+		characterName: 'Branch Parent',
+		storyMode: 'FREE_ROAM',
+		narrativeProfile: narrativeProfileEngine.createDefault('FREE_ROAM'),
+		dndRulesMode: 'CUSTOM_HOMEBREW_DND',
+		rulesProfile: rulesProfileEngine.createDefault('CUSTOM_HOMEBREW_DND'),
+	});
+
+	const result = repo.duplicateAdaptationBranch(parentStoryId, 'child');
+	assert.equal(result.success, true);
+
+	const childRun = repo.getStoryRun(result.newStoryId);
+	assert.equal(childRun?.storyMode, 'FREE_ROAM');
+	assert.equal(childRun?.narrativeProfile?.mode, 'FREE_ROAM');
+	assert.equal(childRun?.dndRulesMode, 'CUSTOM_HOMEBREW_DND');
+	assert.equal(repo.getNarrativeProfile(result.newStoryId)?.mode, 'FREE_ROAM');
+	assert.equal(repo.getRulesProfile(result.newStoryId)?.mode, 'CUSTOM_HOMEBREW_DND');
+	assert.equal(childRun?.parentStoryId, parentStoryId);
+	assert.equal(childRun?.branchId, 'child');
+});
+
 test('Phase 2 — normal working context carries canonical campaign modes', () => {
 	const worldId = 'phase2_context_world';
 	const storyId = 'phase2_context_story';

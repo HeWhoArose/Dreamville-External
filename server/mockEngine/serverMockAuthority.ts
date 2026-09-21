@@ -21,7 +21,7 @@ import { PlayerLifecycleState } from '../domain/playerLifecycleState';
 import { storyCheckConsequenceEngine } from '../domain/storyCheckConsequenceEngine';
 import { storyCheckChallengeResolver } from '../domain/storyCheckChallengeResolver';
 import { rulesProfileEngine } from '../domain/rulesProfileEngine';
-import { deterministicId } from '../domain/deterministicRng';
+import { deterministicId, formatCanonicalTimestamp } from '../domain/deterministicRng';
 
 /**
  * ServerMockAuthority
@@ -631,7 +631,7 @@ export class ServerMockAuthority {
     const state = this.getDynamicStoryState(targetStoryId);
     const clock = worldRepository.getWorldClock(targetStoryId);
     const clockTimestamp = clock.getTimestamp();
-    const now = `canonical:${clockTimestamp.totalElapsedSeconds}`;
+    const now = formatCanonicalTimestamp(clockTimestamp);
     const actionId = deterministicId(
       'act_srv',
       targetStoryId,

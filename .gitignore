@@ -1,2 +1,5 @@
 # Local provider credentials (never commit API keys)
 server/data/.provider_credentials.json
+
+# Local DreamBook runtime persistence
+.dreambook/

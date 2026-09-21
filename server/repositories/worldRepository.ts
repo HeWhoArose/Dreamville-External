@@ -932,6 +932,7 @@ export class InMemoryWorldRepository implements WorldRepository {
            ? world.characterProgressionModules as ProgressionModuleDefinition[]
            : undefined,
        });
+       progressionEngine.setCanonicalMutationGuard(() => this.isCanonicalCommandTransactionActive());
        this.characterProgressionEngines.set(storyId, progressionEngine);
 
        // 13. Construct and Persist StoryRun
@@ -1435,6 +1436,7 @@ export class InMemoryWorldRepository implements WorldRepository {
           });
         }
       }
+      engine.setCanonicalMutationGuard(() => this.isCanonicalCommandTransactionActive());
       this.characterProgressionEngines.set(storyId, engine);
     }
     return engine;
@@ -2084,6 +2086,7 @@ export class InMemoryWorldRepository implements WorldRepository {
         this.sensoryEngine.restoreVoiceProfiles(effectiveStoryId, stagedVoiceProfiles);
       }
       this.capabilityEngines.set(effectiveStoryId, stagedCapability);
+       stagedProgression.setCanonicalMutationGuard(() => this.isCanonicalCommandTransactionActive());
        this.characterProgressionEngines.set(effectiveStoryId, stagedProgression);
       this.combatEngines.set(effectiveStoryId, stagedCombat);
       this.memoryEngines.set(effectiveStoryId, stagedMemory);

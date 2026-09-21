@@ -5232,15 +5232,24 @@ gameRouter.post('/worlds/runs/:storyId/actions/execute', async (req: Request, re
           transactionRepo.saveStoryRun(run);
         }
 
-        const gameplayEvent = {
-          eventId: `evt_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+        const canonicalTimestamp = transactionRepo.getWorldClock(storyId).getTimestamp();
+        const canonicalActionType = actionType || 'INVESTIGATE_AREA';
+        const gameplayEventId = deterministicId(
+          'evt_gameplay',
           storyId,
-          eventType: actionType || 'INVESTIGATE_AREA',
+          canonicalActionType,
+          locationId || run.currentLocationId || 'loc_unknown',
+          commandId
+        );
+        const gameplayEvent = {
+          eventId: gameplayEventId,
+          storyId,
+          eventType: canonicalActionType,
           actorId: run.characterName || 'Player',
           locationId: run.currentLocationId || 'loc_unknown',
-          details: `Server resolved action ${actionType || 'INVESTIGATE_AREA'} at ${run.currentLocationId}`,
-          evidenceItems: [`ev_${actionType || 'action'}_${Date.now()}`],
-          timestamp: new Date().toISOString(),
+          details: `Server resolved action ${canonicalActionType} at ${run.currentLocationId}`,
+          evidenceItems: [deterministicId('ev_gameplay', gameplayEventId)],
+          timestamp: `canonical:${canonicalTimestamp.totalElapsedSeconds}`,
         };
 
         const narrativeResult = emergentNarrativeEngine.processCanonicalEvent(gameplayEvent, transactionRepo);

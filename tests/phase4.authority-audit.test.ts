@@ -5,6 +5,9 @@ import { resolve } from 'node:path';
 
 const gameRoutes = readFileSync(resolve(process.cwd(), 'server/api/gameRoutes.ts'), 'utf8');
 const canonicalEngine = readFileSync(resolve(process.cwd(), 'server/domain/canonicalCommandEngine.ts'), 'utf8');
+const worldRepository = readFileSync(resolve(process.cwd(), 'server/repositories/worldRepository.ts'), 'utf8');
+const mockAuthority = readFileSync(resolve(process.cwd(), 'server/mockEngine/serverMockAuthority.ts'), 'utf8');
+const deterministicRng = readFileSync(resolve(process.cwd(), 'server/domain/deterministicRng.ts'), 'utf8');
 
 function routeBlock(route: string): string {
   const start = gameRoutes.indexOf(`gameRouter.post('${route}'`);
@@ -13,6 +16,30 @@ function routeBlock(route: string): string {
   return gameRoutes.slice(start, next >= 0 ? next : gameRoutes.length);
 }
 
+test('Phase 4 — canonical repository identifiers do not depend on wall-clock or Math.random entropy', () => {
+	assert.doesNotMatch(
+		worldRepository,
+		/const storyId = params\.storyId \\|\\| .*Date\.now|const storyId = params\.storyId \\|\\| .*Math\.random/,
+		'StoryRun identifiers must be deterministic when the caller does not supply one.'
+	);
+	assert.doesNotMatch(
+		worldRepository,
+		/const capId = cap\.id \\|\\| .*Date\.now|const capId = cap\.id \\|\\| .*Math\.random/,
+		'Canonical capability identifiers must be deterministic when the source lacks an explicit id.'
+	);
+	assert.doesNotMatch(
+		worldRepository,
+		/sessionId:\s*['`]session_.*Date\.now\(\)/,
+		'Canonical adaptation session identifiers must not use wall-clock entropy.'
+	);
+	assert.match(worldRepository, /deterministicId\('cap'/);
+	assert.match(deterministicRng, /export function stableStringify/);
+});
+
+test('Phase 4 — legacy mock action identifiers are deterministic', () => {
+	assert.doesNotMatch(mockAuthority, /const actionId = .*Date\.now|const actionId = .*Math\.random/);
+	assert.match(mockAuthority, /deterministicId\(\s*['"]act_srv['"]/);
+});
 test('Phase 4 — canonical action handlers do not derive canonical evidence ids from wall-clock randomness', () => {
   const routes = [
     '/action',

@@ -10,6 +10,8 @@ import type {
   StoryCheckChallenge,
 } from '../../src/types';
 import { LocalDiceEngine } from './combatEngine';
+import { rulesProfileEngine } from './rulesProfileEngine';
+import type { RulesProfile } from '../../src/types';
 
 interface StoryCheckCharacter {
   coreStats?: CharacterCoreStats;
@@ -180,10 +182,20 @@ export class StoryCheckEngine {
     storyId: string,
     actionText: string,
     character: StoryCheckCharacter,
-    challenge?: StoryCheckChallenge
+    challenge?: StoryCheckChallenge,
+    rulesProfile?: RulesProfile
   ): StoryCheckResult | null {
     const text = normalize(actionText);
     if (!text) return null;
+
+    const effectiveRulesProfile = rulesProfile || rulesProfileEngine.createDefault('FULL_DND');
+    const hasAuthoredChallenge = Boolean(challenge);
+    if (
+      effectiveRulesProfile.requireAuthoredChallengeForCustomChecks &&
+      !hasAuthoredChallenge
+    ) {
+      return null;
+    }
 
     const sceneText = normalize(character.sceneText || '');
     const inferredSaveSelection = this.pickSaveProfile(text, sceneText);
@@ -204,6 +216,22 @@ export class StoryCheckEngine {
 
     // A routine action remains narration-only unless the current world context
     // creates a real saving-throw trigger or an authored challenge requires one.
+    if (
+      !challenge &&
+      !rulesProfileEngine.allowsImplicitSavingThrows(effectiveRulesProfile)
+    ) {
+      // An implicit save may not be invented when the active rules profile disables it.
+      saveSelection = null;
+    }
+
+    if (
+      !challenge &&
+      !rulesProfileEngine.allowsImplicitAbilityChecks(effectiveRulesProfile)
+    ) {
+      // An implicit ability check may not be invented when the active rules profile disables it.
+      return null;
+    }
+
     if (!saveSelection && this.isRoutine(text)) return null;
 
     const profile = saveSelection ? null : this.pickProfile(text);

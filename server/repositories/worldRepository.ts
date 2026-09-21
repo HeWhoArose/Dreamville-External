@@ -1326,7 +1326,7 @@ export class InMemoryWorldRepository implements WorldRepository {
     let engine = this.chronicleEngines.get(storyId);
     if (!engine) {
       engine = new HistoricalChronicleEngine({
-        writeMode: this.persistenceSuppressed ? 'ISOLATED' : 'TRANSACTIONAL',
+        writeMode: 'TRANSACTIONAL',
       });
       this.chronicleEngines.set(storyId, engine);
     }

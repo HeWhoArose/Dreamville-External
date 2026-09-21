@@ -215,11 +215,11 @@ export class InMemoryWorldRepository implements WorldRepository {
       const resolvedNarrative = narrativeProfileEngine.resolve({
         mode: ['PROTAGONIST', 'SIDE_CHARACTER', 'FREE_ROAM'].includes((world as any)?.storyMode)
           ? (world as any)?.storyMode
-          : ['PROTAGONIST', 'SIDE_CHARACTER', 'FREE_ROAM'].includes((world as any)?.playstyle)
-          ? (world as any)?.playstyle
           : undefined,
         narrativeProfile: (world as any)?.narrativeProfile,
-        fallbackMode: 'PROTAGONIST',
+        fallbackMode: ['PROTAGONIST', 'SIDE_CHARACTER', 'FREE_ROAM'].includes((world as any)?.playstyle)
+          ? (world as any)?.playstyle
+          : 'PROTAGONIST',
         source: 'WORLD',
       }).profile;
       const migratedWorld = {
@@ -2024,11 +2024,11 @@ export class InMemoryWorldRepository implements WorldRepository {
     const resolvedNarrative = narrativeProfileEngine.resolve({
       mode: ['PROTAGONIST', 'SIDE_CHARACTER', 'FREE_ROAM'].includes(world?.storyMode)
         ? world?.storyMode
-        : ['PROTAGONIST', 'SIDE_CHARACTER', 'FREE_ROAM'].includes(world?.playstyle)
-        ? world?.playstyle
         : undefined,
       narrativeProfile: world?.narrativeProfile,
-      fallbackMode: 'PROTAGONIST',
+      fallbackMode: ['PROTAGONIST', 'SIDE_CHARACTER', 'FREE_ROAM'].includes(world?.playstyle)
+        ? world?.playstyle
+        : 'PROTAGONIST',
       source: 'WORLD',
     }).profile;
     const canonicalWorld = {

@@ -334,6 +334,9 @@ export class InMemoryWorldRepository implements WorldRepository {
             ...persistedRun,
             storyId,
             id: persistedRun.id || rebuiltRun.id || storyId,
+            dndRulesMode: rebuiltRun.dndRulesMode,
+            ruleset: rebuiltRun.ruleset,
+            rulesProfile: rebuiltRun.rulesProfile,
           });
           this.persistLibrary();
         }

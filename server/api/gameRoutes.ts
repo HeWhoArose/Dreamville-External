@@ -1156,7 +1156,7 @@ function syncNpcCombatDeath(
  */
 gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) => {
   try {
-    const storyId = req.body?.storyId || 'default_story';
+    const storyId = resolveStoryId(req, true);
     if (!requireDndTacticalCombat(res, storyId)) return;
     const player = worldRepository.getPlayerLifecycle(storyId);
     const actorId = player ? player.actorId : `player_actor_${storyId}`;
@@ -1350,18 +1350,21 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
  */
 gameRouter.get('/combat/state', async (req: Request, res: Response) => {
   try {
-    const player = worldRepository.getPlayerLifecycle('default_story');
-    const serverPlayerActorId = player?.actorId || 'player_actor_default_story';
+    const storyId = resolveStoryId(req, true);
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const serverPlayerActorId = player?.actorId || `player_actor_${storyId}`;
 
-    // Public combat actor identity is server-bound to the existing player actor
+    // Public combat actor identity is server-bound to the existing player actor.
     if (req.query.actorId && req.query.actorId !== serverPlayerActorId) {
       return res.status(403).json({
         error: `Cannot query combat state for actor '${req.query.actorId}'. Caller is bound to server player '${serverPlayerActorId}'.`,
       });
     }
 
-    const combatEngine = worldRepository.getCombatEngine('default_story');
-    const state = getCombatStateHelper(combatEngine, 'default_story', serverPlayerActorId);
+    const combatEngine = worldRepository.getCombatEngine(storyId);
+    const profile = requireDndTacticalCombat(res, storyId);
+    if (!profile) return;
+    const state = getCombatStateHelper(combatEngine, storyId, serverPlayerActorId);
     res.json({
       ...state,
       viewingActorId: serverPlayerActorId,
@@ -1386,7 +1389,7 @@ gameRouter.post('/combat/move', async (req: Request, res: Response) => {
     }
 
     const player = worldRepository.getPlayerLifecycle(storyId);
-    const serverPlayerActorId = player?.actorId || '${storyId}';
+    const serverPlayerActorId = player?.actorId || `player_actor_${storyId}`;
 
     // Reject impersonation of other actors on public HTTP route
     if (reqActorId && reqActorId !== serverPlayerActorId) {
@@ -1428,7 +1431,7 @@ gameRouter.post('/combat/action', async (req: Request, res: Response) => {
     if (!requireDndTacticalCombat(res, storyId)) return;
     const { actorId: reqActorId, action } = req.body;
     const player = worldRepository.getPlayerLifecycle(storyId);
-    const serverPlayerActorId = player?.actorId || '${storyId}';
+    const serverPlayerActorId = player?.actorId || `player_actor_${storyId}`;
 
     if (reqActorId && reqActorId !== serverPlayerActorId) {
       return res.status(403).json({
@@ -1636,7 +1639,7 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
     }
 
     const player = worldRepository.getPlayerLifecycle(storyId);
-    const serverPlayerActorId = player?.actorId || '${storyId}';
+    const serverPlayerActorId = player?.actorId || `player_actor_${storyId}`;
 
     // Reject impersonation of other casters on public HTTP route
     if (reqActorId && reqActorId !== serverPlayerActorId) {
@@ -1910,7 +1913,7 @@ gameRouter.post('/combat/end-turn', async (req: Request, res: Response) => {
     const storyId = resolveStoryId(req, true);
     if (!requireDndTacticalCombat(res, storyId)) return;
     const player = worldRepository.getPlayerLifecycle(storyId);
-    const serverPlayerActorId = player?.actorId || '${storyId}';
+    const serverPlayerActorId = player?.actorId || `player_actor_${storyId}`;
 
     if (req.body?.actorId && req.body.actorId !== serverPlayerActorId) {
       return res.status(403).json({
@@ -1969,7 +1972,7 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
     const storyId = resolveStoryId(req, true);
     if (!requireDndTacticalCombat(res, storyId)) return;
     const player = worldRepository.getPlayerLifecycle(storyId);
-    const serverPlayerActorId = player?.actorId || '${storyId}';
+    const serverPlayerActorId = player?.actorId || `player_actor_${storyId}`;
     const combatEngine = worldRepository.getCombatEngine(storyId);
     const capEngine = worldRepository.getCapabilityEngine(storyId);
 

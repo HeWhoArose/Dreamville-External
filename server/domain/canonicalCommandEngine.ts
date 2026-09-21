@@ -100,8 +100,18 @@ export class CanonicalCommandEngine {
 		const payload = (command.payload || {}) as Record<string, unknown>;
 		switch (command.type) {
 			case 'MOVE':
-				if (typeof payload.targetX !== 'number' || typeof payload.targetY !== 'number') {
-					return 'MOVE command requires numeric targetX and targetY.';
+				if (
+					!(
+						typeof payload.targetLocationId === 'string' ||
+						(typeof payload.targetX === 'number' && typeof payload.targetY === 'number')
+					)
+				) {
+					return 'MOVE command requires targetLocationId or numeric targetX and targetY.';
+				}
+				break;
+			case 'ADVANCE_TIME':
+				if (typeof payload.seconds !== 'number' || !Number.isFinite(payload.seconds) || payload.seconds <= 0) {
+					return 'ADVANCE_TIME command requires a positive numeric seconds value.';
 				}
 				break;
 			case 'CORE_ACTION':

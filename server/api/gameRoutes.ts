@@ -3446,17 +3446,55 @@ gameRouter.post('/orchestrator/turn', async (req: Request, res: Response) => {
     const { worldRepository } = await import('../repositories/worldRepository');
     const orchestrator = worldRepository.getAiOrchestrator();
 
-    const turnResult = await orchestrator.executeTurn({
-      storyId,
-      playerAction,
-      task,
-      hardTokenBudget: Number(hardTokenBudget),
-      timeoutMs: Number(timeoutMs),
-      maxRetries: Number(maxRetries),
-      forceModelId,
-      idempotencyKey,
-    });
+    const commandId = idempotencyKey || `ai_turn_${storyId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId: String(storyId),
+        type: 'INTERACT',
+        payload: {
+          playerAction,
+          task,
+          hardTokenBudget: Number(hardTokenBudget),
+          timeoutMs: Number(timeoutMs),
+          maxRetries: Number(maxRetries),
+          forceModelId,
+          idempotencyKey,
+        },
+        source: 'AI',
+      },
+      async () => {
+        const turnResult = await orchestrator.executeTurn({
+          storyId,
+          playerAction,
+          task,
+          hardTokenBudget: Number(hardTokenBudget),
+          timeoutMs: Number(timeoutMs),
+          maxRetries: Number(maxRetries),
+          forceModelId,
+          idempotencyKey,
+        });
+        return {
+          success: turnResult.success,
+          data: turnResult,
+          errorReason: turnResult.error,
+          summary: `AI turn ${task} resolved through the canonical command path.`,
+        };
+      }
+    );
 
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
+        event: commandResult.event,
+      });
+    }
+
+    const turnResult = commandResult.data as any;
     if (turnResult.telemetry?.idempotencyReplayed) {
       res.setHeader('X-Idempotent-Replay', 'true');
     }

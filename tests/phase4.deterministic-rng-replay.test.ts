@@ -274,6 +274,29 @@ test('Phase 4 — direct repository Chronicle writes outside canonical transacti
 	);
 });
 
+test('Phase 4 — replay output hashing handles commands without result data', async () => {
+	const storyId = 'phase4_replay_undefined_data';
+	const repo = seedRepo(storyId);
+	const result = await canonicalCommandEngine.execute(
+		repo,
+		{
+			commandId: 'phase4_replay_undefined_data_001',
+			storyId,
+			actorId: repo.getPlayerLifecycle(storyId)?.actorId,
+			type: 'INTERACT',
+			payload: { action: 'NO_RESULT_DATA' },
+			source: 'SYSTEM',
+			transactionMode: 'STAGED',
+		},
+		async () => ({
+			success: true,
+			summary: 'No result payload.',
+		})
+	);
+	assert.equal(result.success, true);
+	assert.match(result.event?.replay.resolvedDataHash || '', /^[0-9a-f]{8}$/);
+});
+
 test('Phase 4 — canonical command replay metadata is deterministic', async () => {
 	const run = async (repo: InMemoryWorldRepository) => canonicalCommandEngine.execute(
 		repo,

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { StoryCheckEngine } from '../server/domain/storyCheckEngine';
 import { rulesProfileEngine } from '../server/domain/rulesProfileEngine';
+import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
 
 const character = {
 	coreStats: {
@@ -181,4 +182,32 @@ test('Phase 1 integration: CUSTOM_HOMEBREW_DND custom D20 resolution does not ap
 	assert.equal(result?.proficiencyBonus, 0);
 	assert.equal(result?.abilityModifier, 0);
 	assert.equal(result?.modifierSources[0]?.kind, 'CUSTOM_RULE');
+});
+
+test('Phase 1 integration: persisted StoryRun profile is re-canonicalized from the run mode', () => {
+	const repository = new InMemoryWorldRepository();
+
+	repository.saveWorldTemplate({
+		worldId: 'phase1_profile_world',
+		dndRulesMode: 'CUSTOM_HOMEBREW_DND',
+		rulesProfile: rulesProfileEngine.createDefault('CUSTOM_HOMEBREW_DND'),
+		worldRules: [],
+		ruleConstraints: [],
+		canonicalCapabilities: [],
+		rulesetId: 'CUSTOM_HOMEBREW_DND',
+	});
+
+	repository.saveStoryRun({
+		storyId: 'phase1_profile_run',
+		worldId: 'phase1_profile_world',
+		dndRulesMode: 'CUSTOM_HOMEBREW_DND',
+		ruleset: 'CUSTOM_HOMEBREW_DND',
+		rulesProfile: rulesProfileEngine.createDefault('FULL_DND'),
+	});
+
+	const resolved = repository.getRulesProfile('phase1_profile_run');
+	assert.equal(resolved?.mode, 'CUSTOM_HOMEBREW_DND');
+	assert.equal(resolved?.baseRuleset, 'NONE');
+	assert.equal(resolved?.allowImplicitAbilityChecks, false);
+	assert.equal(resolved?.allowStandardDndSpellRules, false);
 });

@@ -1397,11 +1397,12 @@ export class TacticalCombatEngine {
     const targetIsProne = targetConditions.has('prone');
     const targetProneAdvantage = targetIsProne && distanceToTarget <= (attacker.reachCells ?? 1.5);
     const targetProneDisadvantage = targetIsProne && distanceToTarget > (attacker.reachCells ?? 1.5);
+    const exhaustionPenalty = this.conditionEngine?.getExhaustionModifiers(attacker.id).d20Penalty || 0;
 
     return {
       blocked: false,
       roll: this.ruleset.resolveAttack({
-        attackBonus: attacker.attackBonus,
+        attackBonus: attacker.attackBonus + exhaustionPenalty,
         targetArmorClass: target.armorClass + this.getCoverBonus(target),
         advantage: Boolean(options?.advantage || attackerHasAdvantage || targetHasAdvantageAgainst || targetProneAdvantage || targetConditions.has('unconscious')),
         disadvantage: Boolean(options?.disadvantage || targetDodging || attackerHasDisadvantage || targetProneDisadvantage || targetConditions.has('invisible')),

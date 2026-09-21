@@ -89,9 +89,14 @@ export class StoryDirectorService {
     };
   }
 
-  public recordChoice(storyId: string, beatId: string, optionId: string): { success: boolean; consequences: string[] } {
+  public recordChoice(
+    storyId: string,
+    beatId: string,
+    optionId: string,
+    repository = worldRepository
+  ): { success: boolean; consequences: string[] } {
     const consequences: string[] = [];
-    const profile = worldRepository.getNarrativeProfile(storyId) || narrativeProfileEngine.createDefault('PROTAGONIST');
+    const profile = repository.getNarrativeProfile(storyId) || narrativeProfileEngine.createDefault('PROTAGONIST');
     const playerLabel = profile.mode === 'PROTAGONIST' ? 'Protagonist' : 'Player Character';
 
     if (optionId === 'opt_refuse' || optionId === 'refuse_quest') {
@@ -109,7 +114,7 @@ export class StoryDirectorService {
         confidence: 1.0,
         acquiredAtTimestamp: { totalElapsedSeconds: 0, cycle: 1, period: 'Dawn' },
       };
-      worldRepository.saveWorldFact(storyId, refusalFact);
+      repository.saveWorldFact(storyId, refusalFact);
       consequences.push('Protagonist refusal canonically persisted.');
       consequences.push('Consequence escalation path unlocked.');
     } else {
@@ -119,13 +124,16 @@ export class StoryDirectorService {
     return { success: true, consequences };
   }
 
-  public advanceOffscreenProtagonist(storyId: string): { success: boolean; actionTaken: string; rumorLogged: boolean } {
-    const profile = worldRepository.getNarrativeProfile(storyId) || narrativeProfileEngine.createDefault('PROTAGONIST');
+  public advanceOffscreenProtagonist(
+    storyId: string,
+    repository = worldRepository
+  ): { success: boolean; actionTaken: string; rumorLogged: boolean } {
+    const profile = repository.getNarrativeProfile(storyId) || narrativeProfileEngine.createDefault('PROTAGONIST');
     if (profile.mode === 'PROTAGONIST') {
       return { success: true, actionTaken: 'No separate offscreen protagonist advanced because the player character is the canonical narrative focus.', rumorLogged: false };
     }
 
-    let agenda = worldRepository.getProtagonistAgenda(storyId);
+    let agenda = repository.getProtagonistAgenda(storyId);
     if (!agenda) {
       agenda = {
         protagonistId: 'char_secondary_hero',
@@ -133,14 +141,14 @@ export class StoryDirectorService {
         currentLocation: 'loc_lantern_vault',
         progressState: 0,
       };
-      worldRepository.saveProtagonistAgenda(storyId, agenda);
+      repository.saveProtagonistAgenda(storyId, agenda);
     }
 
     // Advance state
     const actorLabel = profile.mode === 'SIDE_CHARACTER' ? 'Offscreen principal actor' : 'Independent world actor';
     const actionTaken = `${actorLabel} ${agenda.protagonistId} executed goal '${agenda.goal}' at ${agenda.currentLocation}`;
     agenda.progressState = (agenda.progressState || 0) + 1;
-    worldRepository.saveProtagonistAgenda(storyId, agenda);
+    repository.saveProtagonistAgenda(storyId, agenda);
 
     // Save rumor knowledge fact
     const rumorFact: WorldFact = {
@@ -156,7 +164,7 @@ export class StoryDirectorService {
       confidence: 0.7,
       acquiredAtTimestamp: { totalElapsedSeconds: 0, cycle: 1, period: 'Dawn' },
     };
-    worldRepository.saveWorldFact(storyId, rumorFact);
+    repository.saveWorldFact(storyId, rumorFact);
 
     return { success: true, actionTaken, rumorLogged: true };
   }

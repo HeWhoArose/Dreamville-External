@@ -82,6 +82,7 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
     setSearchQuery('');
     setSelectedGenre('');
     setSelectedTone('');
+    setSelectedMedium('');
     setSelectedRules('');
     setSelectedSetting('');
     setSelectedSource('');

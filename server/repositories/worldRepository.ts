@@ -23,7 +23,7 @@ import { dndSpellRulesEvaluator } from '../domain/dndSpellRulesModel';
 import type { RulesProfile } from '../../src/types';
 import { rulesProfileEngine } from '../domain/rulesProfileEngine';
 import { narrativeProfileEngine } from '../domain/narrativeProfileEngine';
-import { hashStringToSeed } from '../domain/deterministicRng';
+import { deterministicId, hashStringToSeed } from '../domain/deterministicRng';
 import type { NarrativeProfile } from '../../src/types';
 import { PersistentGameStore } from '../services/persistentGameStore';
 import {
@@ -451,7 +451,15 @@ export class InMemoryWorldRepository implements WorldRepository {
     }
 
     // 3. Atomicity & Story ID Setup
-    const storyId = params.storyId || `story_${worldId}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    const storyRunSequence =
+      this.getAllStoryRuns().filter((existingRun: any) => existingRun?.worldId === worldId).length + 1;
+    const storyId = params.storyId || deterministicId(
+      'story',
+      worldId,
+      storyRunSequence,
+      char.characterId,
+      char.identity.name
+    );
 
     try {
       // 4. Pin World Version (strictly from confirmed character or manifest)
@@ -713,9 +721,15 @@ export class InMemoryWorldRepository implements WorldRepository {
         ...(Array.isArray(char.capabilities) ? char.capabilities : []),
       ];
 
-      allCaps.forEach((cap: any) => {
+      allCaps.forEach((cap: any, capIndex: number) => {
         if (cap && (cap.name || cap.id)) {
-          const capId = cap.id || `cap_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+          const capId = cap.id || deterministicId(
+            'cap',
+            storyId,
+            capIndex,
+            cap.name || '',
+            cap.provenance || cap.source || 'WORLD_CANON'
+          );
           const capDef: CapabilityDefinition = {
             id: capId,
             name: cap.name || capId,
@@ -1708,7 +1722,7 @@ export class InMemoryWorldRepository implements WorldRepository {
     if (parentSession) {
       this.saveAdaptationSession(newStoryId, {
         ...parentSession,
-        sessionId: `session_${newStoryId}_${Date.now()}`,
+        sessionId: deterministicId('session', newStoryId, newBranchId, parentStoryId),
         storyId: newStoryId,
         branchId: newBranchId,
         parentStoryId,

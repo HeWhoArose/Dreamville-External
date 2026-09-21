@@ -1708,6 +1708,7 @@ export class TacticalCombatEngine {
       if (resolvedDamage.finalAmount > 0 && this.spellRuntime) {
         const concRes = this.spellRuntime.resolveDamageConcentrationCheck(target, resolvedDamage.finalAmount, this.diceEngine);
         if (concRes?.concentrationBroken) {
+          target.activeConcentration = null;
           this.eventLog.push({
             turnNumber: this.currentRound,
             actorId: target.id,
@@ -1718,6 +1719,7 @@ export class TacticalCombatEngine {
       }
       if ((target.isDead || target.hpCurrent <= 0) && this.spellRuntime) {
         this.spellRuntime.breakConcentration(target.id, 'Creature dropped to 0 HP');
+        target.activeConcentration = null;
       }
 
       return {
@@ -2337,12 +2339,14 @@ export class TacticalCombatEngine {
       // Decrement concentration duration through the authoritative spell runtime.
       for (const participant of this.participants.values()) {
         const conc = this.spellRuntime.advanceConcentrationRound(participant.id);
+        if (conc) {
+          participant.activeConcentration = conc.remainingRounds > 0 ? conc : null;
+        }
         if (conc && conc.remainingRounds <= 0) {
           const breakRes = this.spellRuntime.breakConcentration(
             participant.id,
             `Concentration duration on ${conc.spellName} completed`
           );
-          participant.activeConcentration = null;
           this.eventLog.push({
             turnNumber: this.currentRound,
             actorId: participant.id,

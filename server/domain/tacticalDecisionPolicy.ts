@@ -276,8 +276,20 @@ export class NpcTacticalDecisionPolicy {
   public static executeDecidedAction(
     proposal: TacticalActionProposal,
     combatEngine: TacticalCombatEngine,
-    capabilityEngine?: CapabilityEngine
+    capabilityEngine?: CapabilityEngine,
+    rulesProfile?: RulesProfile
   ): TacticalExecutionResult {
+    if (
+      rulesProfile &&
+      !rulesProfileEngine.allowsDndTacticalCombat(rulesProfile)
+    ) {
+      return {
+        success: false,
+        proposal,
+        errorReason: 'The active rules profile does not permit the legacy D&D tactical combat engine.',
+      };
+    }
+
     switch (proposal.actionType) {
       case 'MOVE':
       case 'RETREAT':

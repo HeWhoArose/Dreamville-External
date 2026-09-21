@@ -18,6 +18,7 @@ export interface CanonicalStateSnapshot {
   capabilities: any;
   conditions: any;
   combat: any;
+  storyChecks: any;
   memories: any;
   livingWorld: any;
   sensory: {
@@ -87,6 +88,7 @@ export function captureCanonicalStateSnapshot(
     capabilities: safeClone(capEngine.exportState()),
     conditions: safeClone(conditionEngine.exportState()),
     combat: safeClone(combatEngine.exportState()),
+    storyChecks: safeClone(repo.getStoryCheckEngine(storyId).exportState()),
     memories: safeClone(memoryEngine.exportState()),
     livingWorld: safeClone(livingSim.exportState()),
     sensory: {
@@ -181,6 +183,7 @@ export function compareCanonicalSnapshots(
   deepCheck(a.capabilities, b.capabilities, 'capabilities');
   deepCheck(a.conditions, b.conditions, 'conditions');
   deepCheck(a.combat, b.combat, 'combat');
+  deepCheck(a.storyChecks, b.storyChecks, 'storyChecks');
   deepCheck(a.memories, b.memories, 'memories');
   deepCheck(a.livingWorld, b.livingWorld, 'livingWorld');
   deepCheck(a.sensory, b.sensory, 'sensory');

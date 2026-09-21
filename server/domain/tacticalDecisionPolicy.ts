@@ -1,4 +1,6 @@
+import type { RulesProfile } from '../../src/types';
 import { BattlefieldParticipant, CombatPerceptionOptions, DynamicHazardZone, TacticalCombatEngine } from './combatEngine';
+import { rulesProfileEngine } from './rulesProfileEngine';
 import { CapabilityEngine } from './capabilityEngine';
 
 export type TacticalActionType = 'MOVE' | 'ATTACK' | 'CAST' | 'RETREAT' | 'DEFEND_ALLY' | 'END_TURN';

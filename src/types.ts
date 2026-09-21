@@ -1108,6 +1108,33 @@ export interface WorldFact {
   acquiredAtTimestamp: any;
 }
 
+export interface WorldVisualIdentity {
+  version: number;
+  kind: 'WORLD';
+  worldId: string;
+  title: string;
+  worldSummary: string;
+  setting?: string;
+  environment?: string;
+  genreTags: string[];
+  toneTags: string[];
+  era?: string;
+  factions: string[];
+  magicOrTechnology?: string;
+  geography?: string;
+  visualMotifs: string[];
+}
+
+export interface StoryRunVisualIdentity extends Omit<WorldVisualIdentity, 'kind' | 'worldId'> {
+  kind: 'STORY_RUN';
+  storyId: string;
+  worldId: string;
+  adventureContext: string;
+  characterName: string;
+  storyMode: string;
+  dndRulesMode: string;
+}
+
 export interface WorldTemplate {
   worldId: string;
   title: string;

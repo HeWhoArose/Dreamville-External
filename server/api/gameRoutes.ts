@@ -6,6 +6,7 @@ import { NpcTacticalDecisionPolicy } from '../domain/tacticalDecisionPolicy';
 import { PlayerLifecycleState } from '../domain/playerLifecycleState';
 import { OpeningSceneService } from '../services/openingSceneService';
 import { WorkingContextEngine } from '../domain/workingContextEngine';
+import { worldVisualIdentityService } from '../services/worldVisualIdentityService';
 
 export const gameRouter = Router();
 import { sensoryRouter } from './sensoryRoutes';
@@ -3417,6 +3418,9 @@ gameRouter.get('/story-runs', async (_req: Request, res: Response) => {
           worldId: run.worldId,
           worldTitle: world?.title || run.worldTitle || 'Unknown World',
           worldName: world?.title || run.worldTitle || 'Unknown World',
+          genre: world?.genreTags?.[0] || run.genre || 'Dynamic Adventure',
+          genreTags: Array.isArray(world?.genreTags) ? world.genreTags : [],
+          toneTags: Array.isArray(world?.toneTags) ? world.toneTags : [],
           storyTitle:
             run.title ||
             run.storyTitle ||
@@ -3438,6 +3442,9 @@ gameRouter.get('/story-runs', async (_req: Request, res: Response) => {
           updatedAt: run.updatedAt || run.createdAt || null,
           imageAsset: run.imageAsset || run.storyRunCover || world?.imageAsset,
           imageMetadata: run.imageMetadata || world?.imageMetadata,
+          visualIdentity: world
+            ? worldVisualIdentityService.buildStoryRunIdentity(run, world)
+            : undefined,
           excerpt: run.initialScene || run.openingScene?.narrativeText || '',
           status: run.status || 'ACTIVE',
         };
@@ -4013,6 +4020,40 @@ gameRouter.post('/research/adjudicate', async (req: Request, res: Response) => {
     res.json(result);
   } catch (error: any) {
     res.status(500).json({ success: false, errorReason: error?.message || 'Adjudication failed.' });
+  }
+});
+
+gameRouter.put('/worlds/runs/:storyId/visual-asset', async (req: Request, res: Response) => {
+  try {
+    const storyId = String(req.params.storyId);
+    const run = worldRepository.getStoryRun(storyId);
+    if (!run) {
+      return res.status(404).json({ error: `Story Run "${storyId}" not found.` });
+    }
+
+    const { imageAsset, imageMetadata } = req.body || {};
+    if (imageAsset !== undefined && typeof imageAsset !== 'string') {
+      return res.status(400).json({ error: 'imageAsset must be a string when provided.' });
+    }
+
+    const updatedRun = {
+      ...run,
+      ...(imageAsset !== undefined ? { imageAsset } : {}),
+      ...(imageMetadata !== undefined ? { imageMetadata } : {}),
+      updatedAt: new Date().toISOString(),
+    };
+
+    worldRepository.saveStoryRun(updatedRun);
+    const world = worldRepository.getWorldTemplate(updatedRun.worldId);
+    res.json({
+      ...updatedRun,
+      visualIdentity: world
+        ? worldVisualIdentityService.buildStoryRunIdentity(updatedRun, world)
+        : undefined,
+    });
+  } catch (error: any) {
+    console.error('Error saving Story Run visual asset:', error);
+    res.status(500).json({ error: error?.message || 'Failed to save Story Run visual asset.' });
   }
 });
 

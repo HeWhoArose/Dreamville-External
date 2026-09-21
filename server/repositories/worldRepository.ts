@@ -827,6 +827,14 @@ export class InMemoryWorldRepository implements WorldRepository {
         ...inventoryItems.map((i: any) => i.name),
       ];
 
+      const resolvedRulesProfile = rulesProfileEngine.resolve({
+        mode: params.dndRulesMode || world.dndRulesMode || world.rulesetId || 'FULL_DND',
+        rulesProfile: world.rulesProfile,
+        worldRules: world.worldRules || [],
+        ruleConstraints: world.ruleConstraints || [],
+        canonicalCapabilities: world.canonicalCapabilities || [],
+      }).profile;
+
       const run = {
         id: storyId,
         storyId,
@@ -835,15 +843,9 @@ export class InMemoryWorldRepository implements WorldRepository {
         pinnedWorldVersion,
         activeCharacterId: char.characterId,
         storyMode: params.storyMode || world.storyMode || 'PROTAGONIST',
-        dndRulesMode: params.dndRulesMode || world.dndRulesMode || world.rulesetId || 'FULL_DND',
-        ruleset: params.dndRulesMode || world.rulesetId || 'FULL_DND',
-        rulesProfile: rulesProfileEngine.resolve({
-          mode: params.dndRulesMode || world.dndRulesMode || world.rulesetId || 'FULL_DND',
-          rulesProfile: world.rulesProfile,
-          worldRules: world.worldRules || [],
-          ruleConstraints: world.ruleConstraints || [],
-          canonicalCapabilities: world.canonicalCapabilities || [],
-        }).profile,
+        dndRulesMode: resolvedRulesProfile.mode,
+        ruleset: resolvedRulesProfile.mode,
+        rulesProfile: resolvedRulesProfile,
         characterName: char.identity.name,
         characterRole: char.role?.profession || char.role?.archetype || 'Adventurer',
         characterBackground: [char.background?.history, ...(char.background?.notableEvents || [])].filter(Boolean).join('. ') || '',

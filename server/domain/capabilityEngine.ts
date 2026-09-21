@@ -1,3 +1,4 @@
+import { deterministicId } from './deterministicRng';
 import { WorldTimestamp } from './types';
 import { ConditionEngine } from './conditionEngine';
 
@@ -2040,7 +2041,7 @@ export class CapabilityEngine {
       }
 
       const previewCap: CapabilityDefinition = {
-        id: `cap_preview_${Date.now()}`,
+        id: deterministicId('cap_preview', actorId, actionText, powerTier, tags.slice().sort()),
         name: actionText.slice(0, 60),
         category: inferred.category,
         activationMode: inferred.activationMode,

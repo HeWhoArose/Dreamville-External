@@ -1801,9 +1801,11 @@ gameRouter.post('/combat/move', async (req: Request, res: Response) => {
         type: 'MOVE',
         payload: { targetX, targetY },
         source: 'PLAYER',
+        transactionMode: 'STAGED',
       },
-      async () => {
-        const combatEngine = worldRepository.getCombatEngine(storyId);
+      async (_command, context) => {
+        const transactionRepo = context.repository;
+        const combatEngine = transactionRepo.getCombatEngine(storyId);
         const moveResult = combatEngine.moveActor(serverPlayerActorId, targetX, targetY);
         if (!moveResult.success) {
           return {

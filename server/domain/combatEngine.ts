@@ -1578,6 +1578,56 @@ export class TacticalCombatEngine {
     return this.applyCombatDamage(target, requestedAmount, damageType, criticalHit);
   }
 
+  /**
+   * Canonical spell-healing entry point. Keeps participant HP and the
+   * condition-system health ledger synchronized, including revival from 0 HP.
+   */
+  public resolveAuthoritativeSpellHealing(
+    target: BattlefieldParticipant,
+    requestedAmount: number
+  ): { healing: number; revived: boolean } {
+    const amount = Math.max(0, Math.floor(Number(requestedAmount) || 0));
+    if (amount <= 0) return { healing: 0, revived: false };
+
+    const conditionState = this.conditionEngine?.getActorState(target.id);
+    if (conditionState) {
+      const previousHp = Math.max(0, conditionState.healthCurrent);
+      const maxHp = Math.max(1, conditionState.healthMax, target.hpMax);
+      const healed = Math.max(0, Math.min(amount, maxHp - previousHp));
+      if (healed <= 0) return { healing: 0, revived: false };
+
+      const nextHp = previousHp + healed;
+      if (previousHp <= 0) {
+        this.conditionEngine.recoverFromZero(target.id, nextHp);
+      } else {
+        this.conditionEngine.setHealth(target.id, nextHp, maxHp);
+      }
+
+      const refreshed = this.conditionEngine.getActorState(target.id);
+      target.hpMax = maxHp;
+      target.hpCurrent = refreshed?.healthCurrent ?? nextHp;
+      target.isDead = Boolean(refreshed?.dead) || target.hpCurrent <= 0;
+      target.conditions = refreshed?.instances.map((instance) => instance.name) || target.conditions.filter(
+        (condition) => condition !== 'Dead' && condition !== 'Unconscious'
+      );
+      return {
+        healing: healed,
+        revived: previousHp <= 0 && target.hpCurrent > 0,
+      };
+    }
+
+    const previousHp = Math.max(0, target.hpCurrent);
+    const healed = Math.max(0, Math.min(amount, Math.max(1, target.hpMax) - previousHp));
+    if (healed <= 0) return { healing: 0, revived: false };
+    target.hpCurrent = previousHp + healed;
+    const revived = previousHp <= 0 && target.hpCurrent > 0;
+    if (revived) {
+      target.isDead = false;
+      target.conditions = target.conditions.filter((condition) => condition !== 'Dead' && condition !== 'Unconscious');
+    }
+    return { healing: healed, revived };
+  }
+
 
   private applyCombatDamage(
     target: BattlefieldParticipant,
@@ -2165,6 +2215,8 @@ export class TacticalCombatEngine {
         requireAuthoritativeTarget: true,
         damageResolver: (damageTarget, amount, damageType, criticalHit = false) =>
           this.applyCombatDamage(damageTarget, amount, damageType, criticalHit),
+        healingResolver: (healingTarget, amount) =>
+          this.resolveAuthoritativeSpellHealing(healingTarget, amount),
       },
       casterParticipant: actor,
       targetParticipant: target,

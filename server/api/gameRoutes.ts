@@ -3359,6 +3359,7 @@ gameRouter.post('/worlds', async (req: Request, res: Response) => {
       canonMode,
       rulesetId,
       storyMode,
+      narrativeProfile,
       dndRulesMode,
       rulesProfile,
       setting,
@@ -3397,6 +3398,7 @@ gameRouter.post('/worlds', async (req: Request, res: Response) => {
       canonMode,
       rulesetId,
       storyMode,
+      narrativeProfile,
       dndRulesMode,
       rulesProfile,
       setting,
@@ -3551,7 +3553,8 @@ gameRouter.post('/worlds/:worldId/start-run', async (req: Request, res: Response
     const {
       confirmedCharacter,
       characterId,
-      storyMode = 'PROTAGONIST',
+      storyMode,
+      narrativeProfile,
       dndRulesMode,
       characterName,
       characterRole,
@@ -3584,6 +3587,7 @@ gameRouter.post('/worlds/:worldId/start-run', async (req: Request, res: Response
         worldId,
         confirmedCharacter: targetConfirmedCharacter,
         storyMode,
+        narrativeProfile,
         dndRulesMode,
       });
       storyId = creationResult.storyId;
@@ -3593,6 +3597,7 @@ gameRouter.post('/worlds/:worldId/start-run', async (req: Request, res: Response
       storyId = `run_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
       worldRepository.seedDynamicStoryRun(storyId, world, {
         storyMode,
+        narrativeProfile,
         dndRulesMode,
         characterName: characterName || 'Hero Vael',
         characterRole,
@@ -3624,8 +3629,9 @@ gameRouter.post('/worlds/:worldId/start-run', async (req: Request, res: Response
     res.status(201).json({
       success: true,
       storyId,
-      storyMode: run?.storyMode || storyMode,
-      dndRulesMode: run?.dndRulesMode || dndRulesMode || world.dndRulesMode || 'FULL_DND',
+      storyMode: worldRepository.getNarrativeProfile(storyId)?.mode || run?.storyMode || world.storyMode || 'PROTAGONIST',
+      narrativeProfile: worldRepository.getNarrativeProfile(storyId),
+      dndRulesMode: worldRepository.getRulesProfile(storyId)?.mode || run?.dndRulesMode || dndRulesMode || world.dndRulesMode || 'FULL_DND',
       run,
       viewState,
       openingScene: openingScene || run?.openingScene || null,

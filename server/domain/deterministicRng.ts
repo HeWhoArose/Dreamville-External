@@ -10,6 +10,13 @@ function normalizeSeed(seed: number): number {
 	return unsigned === 0 ? 1 : unsigned;
 }
 
+export function stableStringify(value: unknown): string {
+	if (value === null || typeof value !== 'object') return JSON.stringify(value);
+	if (Array.isArray(value)) return '[' + value.map(stableStringify).join(',') + ']';
+	const record = value as Record<string, unknown>;
+	return '{' + Object.keys(record).sort().map((key) => JSON.stringify(key) + ':' + stableStringify(record[key])).join(',') + '}';
+}
+
 export function hashStringToSeed(input: string): number {
 	let hash = 2166136261 >>> 0;
 	for (let i = 0; i < input.length; i++) {
@@ -23,7 +30,7 @@ export function deterministicId(prefix: string, ...parts: unknown[]): string {
 	const payload = parts.map((part) => {
 		if (typeof part === 'string') return part;
 		if (part === undefined) return 'undefined';
-		return JSON.stringify(part);
+		return stableStringify(part);
 	}).join('|');
 	return `${prefix}_${hashStringToSeed(payload).toString(16).padStart(8, '0')}`;
 }

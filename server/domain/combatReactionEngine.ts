@@ -21,6 +21,7 @@ export interface CombatReactionCandidate<T = unknown> {
 	triggerType: CombatReactionTrigger;
 	triggerActorId?: string;
 	targetId?: string;
+	canResolve?: () => boolean;
 	resolve: () => T;
 }
 
@@ -46,7 +47,7 @@ export class CombatReactionEngine {
 		candidates: CombatReactionCandidate<T>[]
 	): CombatReactionResult<T>[] {
 		const eligible = candidates
-			.filter((candidate) => this.matches(event, candidate))
+			.filter((candidate) => this.matches(event, candidate) && (candidate.canResolve ? candidate.canResolve() : true))
 			.sort((a, b) =>
 				b.priority - a.priority ||
 				a.actorId.localeCompare(b.actorId) ||

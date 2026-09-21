@@ -1085,6 +1085,28 @@ export class TacticalCombatEngine {
     return { success: true };
   }
 
+  public armReadyAction(
+    actorId: string,
+    actionDescription: string,
+    triggerDescription: string,
+    options: {
+      triggerType: ReadyTriggerType;
+      triggerActorId?: string;
+      targetId?: string;
+    }
+  ): { success: boolean; errorReason?: string } {
+    if (!this.tacticalCombatEnabled()) {
+      return { success: false, errorReason: 'Tactical combat is disabled by the active rules profile.' };
+    }
+    if (this.getCurrentActor()?.id !== actorId) {
+      return { success: false, errorReason: "It is not this actor's turn." };
+    }
+    return this.actionEconomy.setReadyAction(actorId, actionDescription, triggerDescription, {
+      ...options,
+      actionType: 'ATTACK',
+    });
+  }
+
   public executeGrapple(attackerId: string, targetId: string): { success: boolean; errorReason?: string; applied?: boolean } {
     return this.executeControlAction(attackerId, targetId, 'GRAPPLE');
   }

@@ -913,6 +913,15 @@ export class TacticalCombatEngine {
       }
     }
 
+    // Opportunity attacks resolve before the mover leaves the attacker's reach.
+    if (opportunityThreats.length > 0) {
+      this.resolveOpportunityReactions(actorId, opportunityThreats);
+    }
+
+    if (actor.isDead || actor.hpCurrent <= 0 || actor.conditions.includes('Unconscious')) {
+      return { success: false, errorReason: 'Movement was interrupted before the actor could leave reach.' };
+    }
+
     const movementResult = this.actionEconomy.consumeMovement(actorId, movementCost);
     if (!movementResult.success) {
       return movementResult;
@@ -935,9 +944,6 @@ export class TacticalCombatEngine {
       },
     });
 
-    if (opportunityThreats.length > 0) {
-      this.resolveOpportunityReactions(actorId, opportunityThreats);
-    }
 
     this.resolveReadyTriggers({
       type: 'ACTOR_MOVED',
@@ -1192,7 +1198,9 @@ export class TacticalCombatEngine {
       target.isDead ||
       attacker.hpCurrent <= 0 ||
       attacker.conditions.includes('Unconscious') ||
-      !reaction?.reactionAvailable
+      !reaction?.reactionAvailable ||
+      Math.hypot(target.x - attacker.x, target.y - attacker.y) > (attacker.reachCells ?? 1.5) ||
+      target.conditions.some((condition) => ['Invisible', 'Hidden', 'Unperceived'].includes(condition))
     ) {
       return { triggered: false, hit: false, damage: 0, targetDied: target?.isDead ?? false };
     }
@@ -1498,6 +1506,16 @@ export class TacticalCombatEngine {
     const attacker = this.participants.get(attackerId);
     const target = this.participants.get(targetId);
     if (!attacker || !target) throw new Error('Invalid combatants.');
+    if (target.cover === 'TOTAL') {
+      return {
+        success: false,
+        errorReason: 'Target has Total Cover and cannot be targeted directly.',
+        hits: false,
+        damage: 0,
+        targetDied: target.isDead,
+        isCritical: false,
+      };
+    }
 
     const currentActor = this.getCurrentActor();
     if (!currentActor || currentActor.id !== attackerId) {
@@ -1620,6 +1638,12 @@ export class TacticalCombatEngine {
         : `${attacker.name} missed ${target.name}.`,
       damageInflicted: damage,
       rollRecord: attackRes.roll,
+    });
+
+    this.resolveReadyTriggers({
+      type: 'ACTOR_ATTACKED',
+      actorId: attackerId,
+      targetId,
     });
 
     return {

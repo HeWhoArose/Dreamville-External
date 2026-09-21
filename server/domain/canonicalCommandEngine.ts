@@ -297,6 +297,25 @@ export class CanonicalCommandEngine {
 			}
 
 			const after = captureCanonicalStateSnapshot(command.storyId, transactionalRepository);
+
+			// STAGED handlers must mutate only the isolated transaction repository. A hidden dependency
+			// on the live singleton repository would otherwise bypass the staged boundary and could leak
+			// speculative state before validation/commit. Treat that as a transaction violation.
+			if (command.transactionMode === 'STAGED') {
+				const liveAfterHandler = captureCanonicalStateSnapshot(command.storyId, repository);
+				const liveComparison = compareCanonicalSnapshots(before, liveAfterHandler);
+				if (!liveComparison.identical) {
+					repository.restoreCanonicalStateSnapshot(before);
+					return {
+						success: false,
+						commandId: command.commandId,
+						errorReason: 'STAGED transaction handler mutated live canonical state instead of the transaction repository.',
+						rolledBack: true,
+						mutationPaths: liveComparison.differences,
+					};
+				}
+			}
+
 			const comparison = compareCanonicalSnapshots(before, after);
 			const mutationPaths = comparison.differences.map((difference) => {
 				const match = difference.match(/(?:at|in )((?:worldClock|geography|worldFacts|player|inventory|equipment|craftingRecipes|npcs|chronicle|narrativeHistory|capabilities|conditions|combat|memories|livingWorld|sensory|adaptation)[^:]*):?/);

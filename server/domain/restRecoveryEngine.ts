@@ -350,6 +350,15 @@ export class RestRecoveryEngine {
 
     const restEvents = conditionEngine.processRest(request.actorId, active.restType, now).events;
     this.syncCanonicalMirrors(request.storyId, request.actorId);
+    const physiological = this.repository.getLivingWorldSimulation(request.storyId).getEntityPhysiology(request.actorId);
+    const finalCondition = conditionEngine.getActorState(request.actorId);
+    if (physiological && finalCondition) {
+      this.repository.getLivingWorldSimulation(request.storyId).registerEntityPhysiology({
+        ...physiological,
+        fatigue: finalCondition.fatigue,
+        lastRestedTimestamp: this.repository.getWorldClock(request.storyId).getTimestamp(),
+      });
+    }
     const run = this.repository.getStoryRun(request.storyId);
     if (run) {
       const stateAfter = conditionEngine.getActorState(request.actorId);
@@ -433,12 +442,21 @@ export class RestRecoveryEngine {
     const from = clock.getAbsoluteTime();
     const next = clock.advanceSeconds(seconds);
     const conditionEvents = this.repository.getConditionEngine(storyId).advanceElapsedTime(actorId, from, next.timestamp.totalElapsedSeconds);
-    const livingWorldSummary = this.repository.getLivingWorldSimulation(storyId).advanceSimulation({
+    const livingSimulation = this.repository.getLivingWorldSimulation(storyId);
+    const livingWorldSummary = livingSimulation.advanceSimulation({
       elapsedSeconds: seconds,
       currentClock: next.timestamp,
       playerLocationId: this.repository.getCurrentLocation(storyId) || 'loc_whispering_orrery',
       geography: this.repository.getGeographyGraph(storyId),
     });
+    const physiology = livingSimulation.getEntityPhysiology(actorId);
+    if (physiology) {
+      this.repository.getConditionEngine(storyId).setFatigueStress(
+        actorId,
+        physiology.fatigue,
+        this.repository.getConditionEngine(storyId).getActorState(actorId)?.stress || 0
+      );
+    }
     this.syncCanonicalMirrors(storyId, actorId);
     const run = this.repository.getStoryRun(storyId);
     const condition = this.repository.getConditionEngine(storyId).getActorState(actorId);

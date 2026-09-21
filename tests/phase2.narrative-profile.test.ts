@@ -83,6 +83,7 @@ test('Phase 2 — world synthesis preserves every rules × narrative combination
 			assert.equal(world.dndRulesMode, rulesMode);
 			assert.equal(world.rulesProfile?.mode, rulesMode);
 			assert.notEqual(world.narrativeProfile?.profileId, undefined);
+			assert.notEqual(world.playstyle, narrativeMode);
 		}
 	}
 });
@@ -366,6 +367,13 @@ test('Phase 2 — normal working context carries canonical campaign modes', () =
 	assert.match(modeChunk.content, /Rules Mode: HYBRID_DND/);
 	assert.match(modeChunk.content, /Narrative Mode: SIDE_CHARACTER/);
 	assert.match(modeChunk.content, /SUPPORTING_CAST/);
+
+	const behaviorChunk = context.chunks.find((chunk) => chunk.id === 'b1_narrative_behavior_contract');
+	assert.ok(behaviorChunk);
+	assert.match(behaviorChunk.content, /supporting participant/i);
+	assert.doesNotMatch(context.assembledText, /PROTAGONIST_IDENTITY/);
+	assert.doesNotMatch(context.assembledText, /PROTAGONIST_CAPABILITIES_EQUIPMENT/);
+	assert.match(context.assembledText, /PLAYER_CHARACTER_IDENTITY/);
 });
 
 test('Phase 2 — campaign archive round-trip preserves canonical narrative and rules profiles', () => {

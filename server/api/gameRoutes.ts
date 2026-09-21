@@ -3477,7 +3477,10 @@ gameRouter.put('/worlds/:worldId/visual-asset', async (req: Request, res: Respon
       ...(imageMetadata !== undefined ? { imageMetadata } : {}),
       updatedAt: new Date().toISOString(),
     };
-    if (imageAsset === null) delete updatedWorld.imageAsset;
+    if (imageAsset === null) {
+      delete updatedWorld.imageAsset;
+      if (imageMetadata === undefined) delete updatedWorld.imageMetadata;
+    }
 
     worldRepository.saveWorldTemplate(updatedWorld);
     res.json(updatedWorld);
@@ -4043,7 +4046,10 @@ gameRouter.put('/worlds/runs/:storyId/visual-asset', async (req: Request, res: R
       ...(imageMetadata !== undefined ? { imageMetadata } : {}),
       updatedAt: new Date().toISOString(),
     };
-    if (imageAsset === null) delete updatedRun.imageAsset;
+    if (imageAsset === null) {
+      delete updatedRun.imageAsset;
+      if (imageMetadata === undefined) delete updatedRun.imageMetadata;
+    }
 
     worldRepository.saveStoryRun(updatedRun);
     const world = worldRepository.getWorldTemplate(updatedRun.worldId);

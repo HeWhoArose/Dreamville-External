@@ -6,6 +6,7 @@ import {
   AdaptedStoryBible,
 } from '../domain/storyAdaptation';
 import { PlayerLifecycleState } from '../domain/playerLifecycleState';
+import { deterministicId } from '../domain/deterministicRng';
 
 export const adaptationRouter = Router();
 
@@ -254,7 +255,7 @@ adaptationRouter.post('/:storyId/create-session', (req: Request, res: Response) 
     }
 
     const session = worldRepository.getAdaptationSession(storyId) || {
-      sessionId: `session_${storyId}_${Date.now()}`,
+      sessionId: deterministicId('session', storyId, 'main_branch', entryPointId || 'ep_default', playerRole || bible.profile.playerRole),
       storyId,
       branchId: 'main_branch',
       entryPointId: entryPointId || 'ep_default',

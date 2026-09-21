@@ -2161,7 +2161,7 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, errorReason: 'targetId and capabilityId are required.' });
     }
 
-    const player = worldRepository.getPlayerLifecycle(storyId);
+    const player = transactionRepo.getPlayerLifecycle(storyId);
     const serverPlayerActorId = player?.actorId || `player_actor_${storyId}`;
 
     // Reject impersonation of other casters on public HTTP route
@@ -2173,10 +2173,10 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
     }
 
     const actorId = serverPlayerActorId;
-    const capEngine = worldRepository.getCapabilityEngine(storyId);
-    const combatEngine = worldRepository.getCombatEngine(storyId);
-    const chronicle = worldRepository.getHistoricalChronicleEngine(storyId);
-    const clock = worldRepository.getWorldClock(storyId);
+    const capEngine = transactionRepo.getCapabilityEngine(storyId);
+    const combatEngine = transactionRepo.getCombatEngine(storyId);
+    const chronicle = transactionRepo.getHistoricalChronicleEngine(storyId);
+    const clock = transactionRepo.getWorldClock(storyId);
 
     const capDef = capEngine.getCapability(capabilityId);
     if (!capDef) {
@@ -2184,7 +2184,7 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
     }
 
     // CH3.2 Server-authoritative capability grant check
-    const inv = worldRepository.getInventoryEngine(storyId);
+    const inv = transactionRepo.getInventoryEngine(storyId);
     const effectiveCaps = capEngine.getEffectiveActorCapabilities(actorId, inv);
     if (!effectiveCaps.some((c) => c.id === capabilityId)) {
       return res.status(403).json({
@@ -2200,30 +2200,30 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, errorReason: 'Attacker or target participant not found.' });
     }
 
-    const capabilityResource =
-      capDef.actionType === 'bonus_action'
+    const transactionCapabilityResource =
+      transactionCapDefForExecution.actionType === 'bonus_action'
         ? 'BONUS_ACTION'
-        : capDef.actionType === 'reaction'
+        : transactionCapDefForExecution.actionType === 'reaction'
           ? 'REACTION'
           : 'ACTION';
-    const capabilityConsumesResource = capDef.actionType !== 'free';
+    const transactionCapabilityConsumesResource = transactionCapDefForExecution.actionType !== 'free';
 
     // D&D action economy: check the declared capability action type before adjudication.
     // This prevents a rejected turn action from consuming energy/strain through CapabilityEngine.
-    if (capabilityConsumesResource && !combatEngine.getActionEconomy().canConsume(actorId, capabilityResource)) {
+    if (transactionCapabilityConsumesResource && !combatEngine.getActionEconomy().canConsume(actorId, transactionCapabilityResource)) {
       return res.status(400).json({
         success: false,
-        errorReason: capabilityResource === 'BONUS_ACTION'
+        errorReason: transactionCapabilityResource === 'BONUS_ACTION'
           ? 'Bonus Action already used this turn.'
-          : capabilityResource === 'REACTION'
+          : transactionCapabilityResource === 'REACTION'
             ? 'Reaction already used.'
             : 'Action already used this turn.',
-        combatState: getCombatStateHelper(combatEngine, storyId, actorId),
+        combatState: getCombatStateHelper(combatEngine, storyId, actorId, transactionRepo),
       });
     }
 
     // CH2-08 Epistemic Target-ID Security Authorization using durable repository authority
-    const perceptionOptions = worldRepository.getCombatPerceptionOptions(storyId, actorId);
+    const perceptionOptions = transactionRepo.getCombatPerceptionOptions(storyId, actorId);
     if (!combatEngine.isParticipantKnownToActor(actorId, target, perceptionOptions)) {
       return res.status(403).json({
         success: false,
@@ -2245,14 +2245,70 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
         type: 'CAST',
         payload: { targetId, capabilityId, requestedScale },
         source: 'PLAYER',
+        transactionMode: 'STAGED',
       },
-      async () => {
+      async (_command, context) => {
+        const transactionRepo = context.repository;
+        const combatEngine = transactionRepo.getCombatEngine(storyId);
+        const capEngine = transactionRepo.getCapabilityEngine(storyId);
+        const chronicle = transactionRepo.getHistoricalChronicleEngine(storyId);
+        const clock = transactionRepo.getWorldClock(storyId);
+        const player = transactionRepo.getPlayerLifecycle(storyId);
+        const transactionCapDef = capEngine.getCapability(capabilityId);
+        const transactionAttacker = combatEngine.getParticipant(actorId);
+        const transactionTarget = combatEngine.getParticipant(targetId);
+        if (!transactionCapDef || !transactionAttacker || !transactionTarget) {
+          return {
+            success: false,
+            errorReason: 'Capability, caster, or target is no longer available.',
+          };
+        }
+        const effectiveCaps = capEngine.getEffectiveActorCapabilities(
+          actorId,
+          transactionRepo.getInventoryEngine(storyId)
+        );
+        if (!effectiveCaps.some((cap) => cap.id === capabilityId)) {
+          return {
+            success: false,
+            errorReason: `Actor '${actorId}' no longer possesses capability '${capabilityId}'.`,
+          };
+        }
+        const transactionPerception = transactionRepo.getCombatPerceptionOptions(storyId, actorId);
+        if (!combatEngine.isParticipantKnownToActor(actorId, transactionTarget, transactionPerception)) {
+          return {
+            success: false,
+            errorReason: `Target '${targetId}' is not legitimately perceived or known by actor '${actorId}'.`,
+          };
+        }
+        const transactionCapabilityResource =
+          transactionCapDef.actionType === 'bonus_action'
+            ? 'BONUS_ACTION'
+            : transactionCapDef.actionType === 'reaction'
+              ? 'REACTION'
+              : 'ACTION';
+        const transactionCapabilityConsumesResource = transactionCapDef.actionType !== 'free';
+        if (
+          transactionCapabilityConsumesResource &&
+          !combatEngine.getActionEconomy().canConsume(actorId, transactionCapabilityResource)
+        ) {
+          return {
+            success: false,
+            errorReason: transactionCapabilityResource === 'BONUS_ACTION'
+              ? 'Bonus Action already used this turn.'
+              : transactionCapabilityResource === 'REACTION'
+                ? 'Reaction already used.'
+                : 'Action already used this turn.',
+          };
+        }
+
+        const transactionCapDefForExecution = transactionCapDef;
+        const transactionAttackerName = transactionAttacker.name;
         let activationResourceConsumed = false;
         const existingActivation = combatEngine.getPendingActivation(actorId);
 
-        if (capDef.activationMode === 'charged') {
+        if (transactionCapDefForExecution.activationMode === 'charged') {
           if (!existingActivation || existingActivation.capabilityId !== capabilityId) {
-            const turns = capDef.chargeTurnsRequired || 1;
+            const turns = transactionCapDefForExecution.chargeTurnsRequired || 1;
             const act = {
               activationId: `act_${actorId}_${capabilityId}_${Date.now()}`,
               actorId,
@@ -2261,12 +2317,12 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
               totalTurnsRequired: turns,
               remainingTurns: turns,
               targetId,
-              isInterruptible: capDef.isInterruptible !== false,
+              isInterruptible: transactionCapDefForExecution.isInterruptible !== false,
               channelSustainedTurns: 0,
               startedAtRound: combatEngine.getCurrentRound(),
             };
-            const actionUse = capabilityConsumesResource
-              ? combatEngine.getActionEconomy().consume(actorId, capabilityResource)
+            const actionUse = transactionCapabilityConsumesResource
+              ? combatEngine.getActionEconomy().consume(actorId, transactionCapabilityResource)
               : { success: true as const };
             if (!actionUse.success) {
               return {
@@ -2274,7 +2330,7 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
                 errorReason: actionUse.errorReason || 'Action unavailable.',
               };
             }
-            activationResourceConsumed = capabilityConsumesResource;
+            activationResourceConsumed = transactionCapabilityConsumesResource;
             combatEngine.startActivation(act);
             return {
               success: true,
@@ -2283,20 +2339,20 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
                 adjudication: null,
                 castResult: null,
               },
-              summary: `${attacker.name} began charging ${capDef.name} (${turns} turn(s) remaining).`,
+              summary: `${transactionAttackerName} began charging ${transactionCapDefForExecution.name} (${turns} turn(s) remaining).`,
             };
           }
           if (existingActivation.remainingTurns > 0) {
             return {
               success: false,
-              errorReason: `${capDef.name} is still charging (${existingActivation.remainingTurns} turn(s) remaining).`,
+              errorReason: `${transactionCapDefForExecution.name} is still charging (${existingActivation.remainingTurns} turn(s) remaining).`,
             };
           }
           combatEngine.removePendingActivation(actorId);
-        } else if (capDef.activationMode === 'channelled') {
+        } else if (transactionCapDefForExecution.activationMode === 'channelled') {
           if (!existingActivation || existingActivation.capabilityId !== capabilityId) {
-            const actionUse = capabilityConsumesResource
-              ? combatEngine.getActionEconomy().consume(actorId, capabilityResource)
+            const actionUse = transactionCapabilityConsumesResource
+              ? combatEngine.getActionEconomy().consume(actorId, transactionCapabilityResource)
               : { success: true as const };
             if (!actionUse.success) {
               return {
@@ -2304,7 +2360,7 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
                 errorReason: actionUse.errorReason || 'Action unavailable.',
               };
             }
-            activationResourceConsumed = capabilityConsumesResource;
+            activationResourceConsumed = transactionCapabilityConsumesResource;
             combatEngine.startActivation({
               activationId: `act_${actorId}_${capabilityId}_${Date.now()}`,
               actorId,
@@ -2313,7 +2369,7 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
               totalTurnsRequired: 0,
               remainingTurns: 0,
               targetId,
-              isInterruptible: capDef.isInterruptible !== false,
+              isInterruptible: transactionCapDefForExecution.isInterruptible !== false,
               channelSustainedTurns: 1,
               startedAtRound: combatEngine.getCurrentRound(),
             });
@@ -2324,7 +2380,7 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
           actorId,
           intendedCapabilityId: capabilityId,
           requestedScale: requestedScale || 'Local',
-          actionDescription: `Combat invocation of ${capDef.name}`,
+          actionDescription: `Combat invocation of ${transactionCapDefForExecution.name}`,
         };
         const adjudication = capEngine.adjudicate(adjProposal);
 
@@ -2338,10 +2394,10 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
         const castResult = combatEngine.executeCapabilityCast({
           actorId,
           targetId,
-          capabilityName: capDef.name,
-          powerTier: capDef.powerTier,
-          category: capDef.category,
-          actionType: capDef.actionType || 'action',
+          capabilityName: transactionCapDefForExecution.name,
+          powerTier: transactionCapDefForExecution.powerTier,
+          category: transactionCapDefForExecution.category,
+          actionType: transactionCapDefForExecution.actionType || 'action',
           consumeResource: !activationResourceConsumed,
         });
 
@@ -2362,7 +2418,7 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
             });
           }
           if (updatedTarget.isDead && player && !player.isDead) {
-            worldRepository.updatePlayerLifecycle(
+            transactionRepo.updatePlayerLifecycle(
               storyId,
               player.copyWith({
                 deathRecord: {
@@ -2375,7 +2431,7 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
             );
           }
         } else if (updatedTarget && updatedTarget.id !== actorId && updatedTarget.isDead) {
-          syncNpcCombatDeath(storyId, updatedTarget, `${attacker.name}'s ${capDef.name}`, player?.locationId);
+          syncNpcCombatDeath(storyId, updatedTarget, `${transactionAttackerName}'s ${transactionCapDefForExecution.name}`, player?.locationId);
         }
 
         const state = getCombatStateHelper(combatEngine, storyId, actorId);
@@ -2389,7 +2445,7 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
             secondarySubjectId: capabilityId,
             locationId: player?.locationId || 'loc_whispering_orrery',
             summary: 'Triumphant Power Invocation in Combat',
-            details: `${player?.name || 'Vael'} used ${capDef.name} (${capDef.powerTier} Tier) to secure battlefield victory.`,
+            details: `${player?.name || 'Vael'} used ${transactionCapDefForExecution.name} (${transactionCapDefForExecution.powerTier} Tier) to secure battlefield victory.`,
             sourceEventId: `evt_cast_victory_${actorId}_${ts.totalElapsedSeconds}`,
             provenance: 'tactical_power_invocation',
             visibility: 'PUBLIC',
@@ -2403,7 +2459,7 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
             castResult,
             powerState: capEngine.getPowerState(actorId),
           },
-          summary: `${capDef.name} cast committed against ${target.name}.`,
+          summary: `${transactionCapDefForExecution.name} cast committed against ${target.name}.`,
         };
       }
     );

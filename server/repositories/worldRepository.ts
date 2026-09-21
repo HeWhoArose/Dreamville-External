@@ -895,11 +895,11 @@ export class InMemoryWorldRepository implements WorldRepository {
       }, {});
 
       // 12. Historical Chronicle Engine
-      const chronicle = new HistoricalChronicleEngine();
+      const chronicle = new HistoricalChronicleEngine({ writeMode: 'TRANSACTIONAL' });
       this.chronicleEngines.set(storyId, chronicle);
 
       const initialSceneHook = char.startingSituation?.summary || char.startingSituation?.hook || world.summary || `You awaken in ${startLocName} as ${char.identity.name}. The journey begins.`;
-      chronicle.recordEvidence({
+      chronicle.recordBootstrapEvidence({
         id: `ev_genesis_${storyId}`,
         category: 'SACRED_OR_HISTORIC',
         timestamp: clock.getTimestamp(),
@@ -1102,11 +1102,11 @@ export class InMemoryWorldRepository implements WorldRepository {
     const clock = this.worldClocks.get(storyId)!;
 
     if (!this.chronicleEngines.has(storyId)) {
-      const chronicleEngine = new HistoricalChronicleEngine();
+      const chronicleEngine = new HistoricalChronicleEngine({ writeMode: 'TRANSACTIONAL' });
       this.chronicleEngines.set(storyId, chronicleEngine);
 
       // Seed canonical initial historical evidence into HistoricalChronicleEngine
-      chronicleEngine.recordEvidence({
+      chronicleEngine.recordBootstrapEvidence({
         id: 'ev_init_orrery_halt',
         category: 'WORLD_ANOMALY',
         timestamp: clock.getTimestamp(),
@@ -1121,7 +1121,7 @@ export class InMemoryWorldRepository implements WorldRepository {
         metadata: { subjectName: 'The Whispering Orrery' },
       });
 
-      chronicleEngine.recordEvidence({
+      chronicleEngine.recordBootstrapEvidence({
         id: 'ev_init_maren_inspection',
         category: 'LIFECYCLE_TRANSITION',
         timestamp: clock.getTimestamp(),
@@ -1931,7 +1931,7 @@ export class InMemoryWorldRepository implements WorldRepository {
 
       const stagedNarrative = Array.isArray(restored.narrative) ? [...restored.narrative] : [];
 
-      const stagedChronicle = new HistoricalChronicleEngine();
+      const stagedChronicle = new HistoricalChronicleEngine({ writeMode: 'TRANSACTIONAL' });
       if (restored.chronicle) {
         stagedChronicle.importState(restored.chronicle);
       }

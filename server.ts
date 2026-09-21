@@ -1,11 +1,7 @@
 import express from 'express';
 import fs from 'node:fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { gameRouter } from './server/api/gameRoutes';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 async function startServer() {
   const app = express();

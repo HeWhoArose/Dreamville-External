@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
 import { canonicalCommandEngine } from '../server/domain/canonicalCommandEngine';
@@ -459,4 +462,92 @@ test('Phase 3 — commit failure rolls a STAGED transaction back to the pre-comm
 	} finally {
 		(repo as any).appendCanonicalCommandEvent = originalAppend;
 	}
+});
+
+
+test('Phase 3 — staged transaction does not persist speculative repository state before commit', async () => {
+	const storyId = 'phase3_transaction_persistence_boundary';
+	const tempDir = mkdtempSync(join(tmpdir(), 'dreambook-phase3-'));
+	const persistencePath = join(tempDir, 'data.json');
+	const previousPath = process.env.DREAMBOOK_PERSISTENCE_PATH;
+
+	process.env.DREAMBOOK_PERSISTENCE_PATH = persistencePath;
+	try {
+		const repo = seedRepo(storyId);
+		const before = JSON.parse(readFileSync(persistencePath, 'utf8'));
+		const beforeCounter = before.storyRuns?.[storyId]?.canonicalCommandTestCounter;
+
+		let persistedDuringHandler: number | undefined;
+		const result = await canonicalCommandEngine.execute(
+			repo,
+			{
+				commandId: 'cmd_staged_persistence_001',
+				storyId,
+				actorId: repo.getPlayerLifecycle(storyId)?.actorId || `player_actor_${storyId}`,
+				type: 'INTERACT',
+				payload: { action: 'PERSISTENCE_BOUNDARY' },
+				source: 'PLAYER',
+				transactionMode: 'STAGED',
+			},
+			async (_command, context) => {
+				const run = context.repository.getStoryRun(storyId);
+				run.canonicalCommandTestCounter = 7;
+				context.repository.saveStoryRun(run);
+				persistedDuringHandler = JSON.parse(readFileSync(persistencePath, 'utf8')).storyRuns?.[storyId]?.canonicalCommandTestCounter;
+				return { success: true, data: { committed: true }, summary: 'Staged persistence boundary committed.' };
+			}
+		);
+
+		assert.equal(result.success, true);
+		assert.equal(persistedDuringHandler, beforeCounter);
+		const persistedAfterCommit = JSON.parse(readFileSync(persistencePath, 'utf8'));
+		assert.equal(persistedAfterCommit.storyRuns?.[storyId]?.canonicalCommandTestCounter, 7);
+		assert.equal(repo.getStoryRun(storyId)?.canonicalCommandTestCounter, 7);
+	} finally {
+		if (previousPath === undefined) delete process.env.DREAMBOOK_PERSISTENCE_PATH;
+		else process.env.DREAMBOOK_PERSISTENCE_PATH = previousPath;
+		rmSync(tempDir, { recursive: true, force: true });
+	}
+});
+
+test('Phase 3 — staged story-director resolution reads and writes the transaction repository', async () => {
+	const storyId = 'phase3_story_director_transaction_scope';
+	const repo = seedRepo(storyId);
+
+	const result = await canonicalCommandEngine.execute(
+		repo,
+		{
+			commandId: 'cmd_story_director_transaction_scope_001',
+			storyId,
+			actorId: repo.getPlayerLifecycle(storyId)?.actorId || `player_actor_${storyId}`,
+			type: 'INTERACT',
+			payload: { action: 'STORY_DIRECTOR_STEP' },
+			source: 'SYSTEM',
+			transactionMode: 'STAGED',
+		},
+		async (_command, context) => {
+			context.repository.saveWorldFact(storyId, {
+				factId: 'phase3_coded_cipher',
+				statement: 'Coded cipher evidence discovered.',
+				category: 'world_lore',
+				subjectEntityId: 'player_character',
+				predicate: 'has_evidence',
+				objectValue: 'coded cipher',
+				provenanceClass: 'DIRECT_RECORD',
+				provenanceSummary: 'Phase 3 transaction test',
+				sourceSegmentIds: [],
+				confidence: 1,
+				acquiredAtTimestamp: { totalElapsedSeconds: 0, cycle: 1, period: 'Dawn' },
+			});
+
+			const { storyDirectorService } = await import('../server/services/storyDirectorService');
+			const result = storyDirectorService.stepDirector(storyId, context.repository);
+			assert.equal(result.eventGenerated, true);
+			assert.equal(result.beat?.beatId, 'beat_coded_cipher');
+			return { success: true, data: result, summary: 'Story Director observed staged transaction state.' };
+		}
+	);
+
+	assert.equal(result.success, true);
+	assert.equal(repo.getWorldFacts(storyId).some((fact) => fact.factId === 'phase3_coded_cipher'), true);
 });

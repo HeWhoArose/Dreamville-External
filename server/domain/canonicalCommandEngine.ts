@@ -48,8 +48,14 @@ export interface CanonicalCommandEvent {
 		postStateHash: string;
 		canonicalSequence: number;
 		rngState: {
-			combat: { seed: number; rollCounter: number };
-			storyChecks: Record<string, unknown>;
+			combat: {
+				before: { seed: number; rollCounter: number };
+				after: { seed: number; rollCounter: number };
+			};
+			storyChecks: {
+				before: Record<string, unknown>;
+				after: Record<string, unknown>;
+			};
 		};
 	};
 }
@@ -371,12 +377,22 @@ export class CanonicalCommandEngine {
 					preStateHash: stableHash(before),
 					postStateHash: stableHash(after),
 					canonicalSequence,
+					resolvedDataHash: stableHash(resolved.data),
 					rngState: {
 						combat: {
+						before: {
+							seed: Number(before.combat?.seed ?? 0),
+							rollCounter: Number(before.combat?.rollCounter ?? 0),
+						},
+						after: {
 							seed: Number(after.combat?.seed ?? 0),
 							rollCounter: Number(after.combat?.rollCounter ?? 0),
 						},
-						storyChecks: clone(after.storyChecks || {}),
+					},
+					storyChecks: {
+						before: clone(before.storyChecks || {}),
+						after: clone(after.storyChecks || {}),
+					},
 					},
 				},
 			};

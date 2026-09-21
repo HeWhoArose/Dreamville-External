@@ -446,6 +446,8 @@ export const App: React.FC = () => {
     ? `${viewState.worldTime.period}, Cycle ${viewState.worldTime.cycle} (${viewState.worldTime.era})`
     : undefined;
 
+  const activeRunFromLibrary = storyLibraryStories.find((story) => story.storyId === activeStoryId || story.runId === activeStoryId);
+
   const activeStorySummary: StorySummary | null = viewState
     ? {
         storyId: activeStoryId,
@@ -484,8 +486,6 @@ export const App: React.FC = () => {
       compendiumCategory = sub;
     }
   }
-
-  const activeRunFromLibrary = storyLibraryStories.find((story) => story.storyId === activeStoryId || story.runId === activeStoryId);
 
   const activeStoryConfig = {
     storyId: activeStoryId,

@@ -899,8 +899,8 @@ export class InMemoryWorldRepository implements WorldRepository {
       }).profile;
 
       const resolvedNarrativeProfile = narrativeProfileEngine.resolve({
-        mode: params.storyMode || char.storyMode,
-        narrativeProfile: params.narrativeProfile || char.narrativeProfile || world.narrativeProfile,
+        mode: char.storyMode || params.storyMode,
+        narrativeProfile: char.narrativeProfile || params.narrativeProfile || world.narrativeProfile,
         fallbackMode: world.storyMode || 'PROTAGONIST',
         source: 'RUN',
       }).profile;

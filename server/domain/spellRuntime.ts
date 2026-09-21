@@ -1005,8 +1005,10 @@ export class SpellRuntime {
   public resolveDamageConcentrationCheck(
     targetParticipant: BattlefieldParticipant,
     damageTaken: number,
-    diceEngine?: LocalDiceEngine
+    diceEngine?: LocalDiceEngine,
+    participantContext: BattlefieldParticipant[] = []
   ): ConcentrationCheckResult | undefined {
+    if (participantContext.length > 0) this.setParticipantContext(participantContext);
     const state = this.getActorState(targetParticipant.id);
     const active = state?.activeConcentration;
     if (!state || !active || damageTaken <= 0) return undefined;
@@ -1440,6 +1442,14 @@ export class SpellRuntime {
     let targetVulnerable = false;
     const conditionsApplied: string[] = [];
     const conditionsRemoved: string[] = [];
+    const concentrationAppliedConditions: Array<{ targetId: string; condition: string }> = [];
+    const concentrationBuffEffects: Array<{
+      targetId: string;
+      previousArmorClass: number;
+      previousSpeedCells: number;
+      previousAttackBonus: number;
+      previousSavingThrowModifiers?: Record<string, number>;
+    }> = [];
     let movementApplied: { from: { x: number; y: number }; to: { x: number; y: number } } | undefined;
     let targetConcCheck: ConcentrationCheckResult | undefined;
 
@@ -1639,6 +1649,7 @@ export class SpellRuntime {
             targetParticipant.conditions.push(cond);
           }
           conditionsApplied.push(cond);
+          concentrationAppliedConditions.push({ targetId: targetParticipant.id, condition: cond });
         }
       }
     } else if (spell.defenseModel === 'AUTOMATIC' && targetParticipant) {
@@ -1737,11 +1748,17 @@ export class SpellRuntime {
     // Establish Concentration if spell requires it and was successfully cast
     let concentrationEstablished = false;
     if (spell.requiresConcentration && !targetDied) {
-      const targetIds = targetParticipant ? [targetParticipant.id] : [casterId];
-      const concConditions = conditionsApplied.map((cond) => ({
-        targetId: targetParticipant?.id || casterId,
-        condition: cond,
-      }));
+      const targetIds = areaTargets.length > 0
+        ? areaTargets.map((p) => p.id)
+        : targetParticipant
+          ? [targetParticipant.id]
+          : [casterId];
+      const concConditions = concentrationAppliedConditions.length > 0
+        ? concentrationAppliedConditions
+        : conditionsApplied.map((cond) => ({
+            targetId: targetParticipant?.id || casterId,
+            condition: cond,
+          }));
       state.activeConcentration = {
         spellId: spell.id,
         spellName: spell.name,
@@ -1753,6 +1770,7 @@ export class SpellRuntime {
         casterId,
         targetIds,
         appliedConditions: concConditions,
+        effects: concentrationBuffEffects.length > 0 ? { buffs: concentrationBuffEffects } : undefined,
       };
       concentrationEstablished = true;
     }

@@ -1,0 +1,351 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import { CharacterProgressionEngine, type ProgressionModuleDefinition } from '../server/domain/characterProgressionEngine';
+import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
+import { canonicalCommandEngine } from '../server/domain/canonicalCommandEngine';
+import { captureCanonicalStateSnapshot } from '../server/domain/canonicalSnapshot';
+import { rulesProfileEngine, CHARACTER_PROGRESSION } from '../server/domain/rulesProfileEngine';
+
+function seedRepo(storyId = 'phase8_test'): InMemoryWorldRepository {
+  const repo = new InMemoryWorldRepository({ disablePersistence: true });
+  repo.seedStory(storyId);
+  repo.saveStoryRun({
+    storyId,
+    id: storyId,
+    worldId: 'world_solar_archive',
+    characterName: 'Phase 8 Test Hero',
+    storyMode: 'PROTAGONIST',
+    dndRulesMode: 'FULL_DND',
+    rulesProfile: rulesProfileEngine.createDefault('FULL_DND'),
+    ruleset: 'FULL_DND',
+    generationSeed: 'phase8-tests',
+    protagonist: {
+      characterId: 'phase8-character',
+      identity: { name: 'Phase 8 Test Hero', species: 'Human', age: 24 },
+      role: { profession: 'Fighter', archetype: 'Warrior' },
+      coreStats: {
+        level: 1,
+        armorClass: 10,
+        speed: 30,
+        hitDice: '1d10',
+        hpCurrent: 12,
+        hpMax: 12,
+        strength: 10,
+        dexterity: 10,
+        constitution: 10,
+        intelligence: 10,
+        wisdom: 10,
+        charisma: 10,
+      },
+      feats: [],
+      progression: { classId: 'class_fighter', speciesId: 'species_human', featIds: [] },
+    },
+    characterCoreStats: {
+      level: 1,
+      armorClass: 10,
+      speed: 30,
+      hitDice: '1d10',
+      hpCurrent: 12,
+      hpMax: 12,
+      strength: 10,
+      dexterity: 10,
+      constitution: 10,
+      intelligence: 10,
+      wisdom: 10,
+      charisma: 10,
+    },
+    currentHp: 12,
+    maxHp: 12,
+  });
+  return repo;
+}
+
+function actorId(repo: InMemoryWorldRepository, storyId: string): string {
+  return repo.getPlayerLifecycle(storyId)?.actorId || `player_actor_${storyId}`;
+}
+
+test('Phase 8 built-in class/species modules seed deterministically from Genesis', () => {
+  const engine = new CharacterProgressionEngine();
+  const state = engine.seedFromCharacter('hero', {
+    identity: { name: 'Hero', species: 'Human', age: 20 },
+    role: { profession: 'Fighter' },
+    coreStats: { level: 1 } as any,
+    feats: [],
+  });
+  assert.equal(state.classId, 'class_fighter');
+  assert.equal(state.speciesId, 'species_human');
+  assert.deepEqual(state.featIds, []);
+  assert.ok(state.genesisSelectionFingerprint);
+  assert.ok(state.enabledModuleIds.includes('class_fighter'));
+  assert.ok(state.enabledModuleIds.includes('species_human'));
+});
+
+test('Phase 8 subclass prerequisites and minimum level are enforced', () => {
+  const engine = new CharacterProgressionEngine();
+  engine.seedFromCharacter('hero', { identity: { name: 'Hero', species: 'Human' }, role: { profession: 'Fighter' }, coreStats: { level: 1 } as any, feats: [] });
+  assert.throws(
+    () => engine.selectModule('hero', 'SUBCLASS', 'subclass_fighter_champion', 'phase8-subclass-early', rulesProfileEngine.createDefault('FULL_DND')),
+    /requires level 3/
+  );
+  assert.throws(
+    () => engine.selectModule('hero', 'SUBCLASS', 'subclass_fighter_champion', 'phase8-subclass-no-class', rulesProfileEngine.createDefault('FULL_DND')),
+    /requires level 3/
+  );
+  engine.levelUp('hero', 'phase8-level-2');
+  engine.levelUp('hero', 'phase8-level-3');
+  const state = engine.selectModule('hero', 'SUBCLASS', 'subclass_fighter_champion', 'phase8-subclass-ok', rulesProfileEngine.createDefault('FULL_DND'));
+  assert.equal(state.subclassId, 'subclass_fighter_champion');
+  assert.ok(state.unlockedFeatureIds.includes('subclass_fighter_champion_core'));
+});
+
+test('Phase 8 feats become canonical progression modules with deterministic identity', () => {
+  const engine = new CharacterProgressionEngine();
+  const feat = {
+    id: 'feat-alert',
+    name: 'Alert',
+    description: 'A canonical feat.',
+    effects: [{ id: 'fx1', type: 'STAT_MODIFIER', target: 'combat.attackBonus', scope: 'combat', modifier: 1, value: 1, condition: '', description: 'Alert training.' }],
+    prerequisites: [],
+    tags: ['combat'],
+    provenance: 'CHARACTER_GENESIS',
+    worldId: 'world_solar_archive',
+  } as any;
+  const moduleA = engine.registerFeatModule(feat);
+  const moduleB = engine.registerFeatModule(feat);
+  assert.equal(moduleA.id, moduleB.id);
+  engine.seedFromCharacter('hero', { identity: { name: 'Hero', species: 'Human' }, role: { profession: 'Fighter' }, coreStats: { level: 1 } as any, feats: [] });
+  const state = engine.acquireFeat('hero', moduleA.id, 'phase8-feat', rulesProfileEngine.createDefault('FULL_DND'));
+  assert.ok(state.featIds.includes(moduleA.id));
+  assert.ok(state.unlockedFeatureIds.includes(moduleA.features[0].id));
+});
+
+test('Phase 8 modifier stacking and precedence produce deterministic source traces', () => {
+  const engine = new CharacterProgressionEngine();
+  engine.seedFromCharacter('hero', { identity: { name: 'Hero', species: 'Human' }, role: { profession: 'Fighter' }, coreStats: { level: 1 } as any, feats: [] });
+  const module: ProgressionModuleDefinition = {
+    id: 'feat_modifier_audit',
+    type: 'FEAT',
+    name: 'Modifier Audit',
+    version: 1,
+    enabled: true,
+    provenance: 'CHARACTER_GENESIS',
+    features: [{
+      id: 'feat_modifier_audit_feature',
+      name: 'Audit Feature',
+      description: 'Tests precedence.',
+      level: 1,
+      enabled: true,
+      passiveModifiers: [
+        {
+          id: 'set-low',
+          target: 'combat.attackBonus',
+          mode: 'SET',
+          value: 2,
+          precedence: 20,
+          source: { moduleId: 'feat_modifier_audit', moduleType: 'FEAT', featureId: 'feat_modifier_audit_feature', sourceId: 'set-low', sourceName: 'Low set', precedence: 20 },
+        },
+        {
+          id: 'set-high',
+          target: 'combat.attackBonus',
+          mode: 'SET',
+          value: 5,
+          precedence: 40,
+          source: { moduleId: 'feat_modifier_audit', moduleType: 'FEAT', featureId: 'feat_modifier_audit_feature', sourceId: 'set-high', sourceName: 'High set', precedence: 40 },
+        },
+        {
+          id: 'add-a',
+          target: 'combat.attackBonus',
+          mode: 'ADD',
+          value: 1,
+          precedence: 50,
+          stackGroup: 'BONUS',
+          source: { moduleId: 'feat_modifier_audit', moduleType: 'FEAT', featureId: 'feat_modifier_audit_feature', sourceId: 'add-a', sourceName: 'Add A', precedence: 50, stackGroup: 'BONUS' },
+        },
+        {
+          id: 'add-b',
+          target: 'combat.attackBonus',
+          mode: 'ADD',
+          value: 2,
+          precedence: 50,
+          stackGroup: 'BONUS',
+          source: { moduleId: 'feat_modifier_audit', moduleType: 'FEAT', featureId: 'feat_modifier_audit_feature', sourceId: 'add-b', sourceName: 'Add B', precedence: 50, stackGroup: 'BONUS' },
+        },
+      ],
+    }],
+  };
+  engine.registerModule(module);
+  engine.acquireFeat('hero', module.id, 'phase8-modifier-enable', rulesProfileEngine.createDefault('FULL_DND'));
+  const resolved = engine.resolveModifiers('hero');
+  const attack = resolved.modifiers.find((entry) => entry.target === 'combat.attackBonus');
+  assert.equal(attack?.value, 8);
+  assert.equal(attack?.sources.length, 6);
+  assert.ok(resolved.sourceTrace['combat.attackBonus'].some((source) => source.sourceId === 'set-high'));
+});
+
+test('Phase 8 triggered abilities unlock with level and enforce charges', () => {
+  const engine = new CharacterProgressionEngine();
+  engine.seedFromCharacter('hero', { identity: { name: 'Hero', species: 'Human' }, role: { profession: 'Fighter' }, coreStats: { level: 1 } as any, feats: [] });
+  engine.levelUp('hero', 'phase8-l2');
+  engine.levelUp('hero', 'phase8-l3');
+  engine.levelUp('hero', 'phase8-l4');
+  engine.levelUp('hero', 'phase8-l5');
+  const ability = engine.getTriggeredAbilities('hero', 'REACTION').find((entry) => entry.id === 'ability_fighter_second_wind');
+  assert.ok(ability);
+  const first = engine.consumeTriggeredAbility('hero', ability!.id, 'phase8-trigger-1');
+  assert.equal(first.success, true);
+  assert.equal(engine.getState('hero')?.usage[ability!.id].chargesRemaining, 0);
+  assert.throws(() => engine.consumeTriggeredAbility('hero', ability!.id, 'phase8-trigger-2'), /no charges remaining/);
+});
+
+test('Phase 8 rules profiles gate progression and allow explicit Hybrid overrides', () => {
+  const full = rulesProfileEngine.createDefault('FULL_DND');
+  const hybrid = rulesProfileEngine.createDefault('HYBRID_DND');
+  const custom = rulesProfileEngine.createDefault('CUSTOM_HOMEBREW_DND');
+  assert.equal(rulesProfileEngine.allowsCharacterProgression(full), true);
+  assert.equal(rulesProfileEngine.allowsCharacterProgression(hybrid), true);
+  assert.equal(rulesProfileEngine.allowsCharacterProgression(custom), false);
+
+  const hybridDisabled = rulesProfileEngine.resolve({
+    mode: 'HYBRID_DND',
+    rulesProfile: {
+      mode: 'HYBRID_DND',
+      overrides: [{ ruleId: CHARACTER_PROGRESSION, operation: 'DISABLE', reason: 'Phase 8 test disable.' }],
+    },
+  }).profile;
+  assert.equal(rulesProfileEngine.allowsCharacterProgression(hybridDisabled), false);
+
+  const hybridEnabled = rulesProfileEngine.resolve({
+    mode: 'HYBRID_DND',
+    rulesProfile: {
+      mode: 'HYBRID_DND',
+      overrides: [{
+        ruleId: CHARACTER_PROGRESSION,
+        operation: 'SET',
+        reason: 'Phase 8 test module allowlist.',
+        value: { maxCharacterLevel: 12, allowClassSelection: true },
+      }],
+    },
+  }).profile;
+  assert.equal(hybridEnabled.parameterOverrides[CHARACTER_PROGRESSION]['maxCharacterLevel'], 12);
+});
+
+test('Phase 8 Custom Homebrew requires explicit progression enable and custom module authority', () => {
+  const engine = new CharacterProgressionEngine();
+  engine.seedFromCharacter('hero', { identity: { name: 'Hero', species: 'Human' }, role: { profession: 'Fighter' }, coreStats: { level: 1 } as any, feats: [] });
+  const customDefault = rulesProfileEngine.createDefault('CUSTOM_HOMEBREW_DND');
+  assert.throws(() => engine.levelUp('hero', 'phase8-custom-disabled', customDefault), /disabled/);
+
+  const customEnabled = rulesProfileEngine.resolve({
+    mode: 'CUSTOM_HOMEBREW_DND',
+    rulesProfile: {
+      mode: 'CUSTOM_HOMEBREW_DND',
+      overrides: [
+        { ruleId: CHARACTER_PROGRESSION, operation: 'ENABLE', reason: 'Explicitly enable homebrew progression.' },
+        { ruleId: CHARACTER_PROGRESSION, operation: 'SET', reason: 'Permit custom modules.', value: { allowCustomModules: true, allowLevelUp: true } },
+      ],
+    },
+  }).profile;
+  assert.equal(rulesProfileEngine.allowsCharacterProgression(customEnabled), true);
+  assert.equal(engine.levelUp('hero', 'phase8-custom-enabled', customEnabled).currentLevel, 2);
+});
+
+test('Phase 8 canonical progression level-up is staged, idempotent, and rollback-safe', async () => {
+  const storyId = 'phase8_canonical';
+  const repo = seedRepo(storyId);
+  const id = actorId(repo, storyId);
+
+  const execute = (commandId: string) => canonicalCommandEngine.execute(
+    repo,
+    {
+      commandId,
+      storyId,
+      actorId: id,
+      type: 'PROGRESSION',
+      payload: { operation: 'LEVEL_UP' },
+      source: 'PLAYER',
+      transactionMode: 'STAGED',
+    },
+    async (command, context) => {
+      const progression = context.repository.getCharacterProgressionEngine(storyId);
+      const rules = context.repository.getRulesProfile(storyId);
+      const state = progression.levelUp(id, command.commandId, rules);
+      return { success: true, data: { state }, summary: 'Phase 8 level-up.' };
+    }
+  );
+
+  const first = await execute('phase8-level-up-001');
+  assert.equal(first.success, true);
+  assert.equal(repo.getCharacterProgressionEngine(storyId).getState(id)?.currentLevel, 2);
+  const replay = await execute('phase8-level-up-001');
+  assert.equal(replay.success, true);
+  assert.equal(repo.getCharacterProgressionEngine(storyId).getState(id)?.currentLevel, 2);
+  assert.equal(replay.event?.replay.postStateHash, first.event?.replay.postStateHash);
+
+  const before = captureCanonicalStateSnapshot(storyId, repo);
+  const rejected = await canonicalCommandEngine.execute(repo, {
+    commandId: 'phase8-level-up-invalid',
+    storyId,
+    actorId: id,
+    type: 'PROGRESSION',
+    payload: { operation: 'LEVEL_UP' },
+    source: 'PLAYER',
+    transactionMode: 'STAGED',
+  }, async () => ({ success: false, errorReason: 'Forced Phase 8 rollback test.' }));
+  assert.equal(rejected.success, false);
+  const after = captureCanonicalStateSnapshot(storyId, repo);
+  assert.deepEqual(after.progression, before.progression);
+});
+
+test('Phase 8 progression state survives canonical snapshot save/load', () => {
+  const storyId = 'phase8_snapshot';
+  const repo = seedRepo(storyId);
+  const id = actorId(repo, storyId);
+  const profile = rulesProfileEngine.createDefault('FULL_DND');
+  const engine = repo.getCharacterProgressionEngine(storyId);
+
+  engine.setModuleEnabled(id, 'species_human', true, 'phase8-enable-species', profile);
+  const before = captureCanonicalStateSnapshot(storyId, repo);
+
+  const restored = new InMemoryWorldRepository({ disablePersistence: true });
+  restored.seedStory(storyId);
+  restored.restoreCanonicalStateSnapshot(before);
+
+  assert.deepEqual(restored.getCharacterProgressionEngine(storyId).getState(id), engine.getState(id));
+  assert.deepEqual(restored.getCharacterProgressionEngine(storyId).resolveModifiers(id), engine.resolveModifiers(id));
+});
+
+test('Phase 8 campaign archive preserves progression state without changing legacy archives', () => {
+  const storyId = 'phase8_archive';
+  const repo = seedRepo(storyId);
+  const id = actorId(repo, storyId);
+  const engine = repo.getCharacterProgressionEngine(storyId);
+  const archive = repo.exportCampaignArchive(storyId, 'Phase 8 Archive');
+  assert.ok(archive.partitions['canonical/progression.json']);
+  assert.ok(archive.manifest.partitionHashes['canonical/progression.json']);
+
+  const restored = new InMemoryWorldRepository({ disablePersistence: true });
+  const result = restored.restoreCampaignArchive(archive, storyId);
+  assert.equal(result.success, true);
+  assert.deepEqual(restored.getCharacterProgressionEngine(storyId).getState(id), engine.getState(id));
+});
+
+test('Phase 8 authoritative progression engine rejects direct runtime mutation outside canonical scope', () => {
+  const storyId = 'phase8_authority';
+  const repo = seedRepo(storyId);
+  const id = actorId(repo, storyId);
+  const engine = repo.getCharacterProgressionEngine(storyId);
+  assert.throws(() => engine.levelUp(id, 'outside-command'), /active canonical command transaction/);
+  assert.equal(engine.getState(id)?.currentLevel, 1);
+});
+
+test('Phase 8 Genesis/runtime divergence audit detects sealed-character progression drift', () => {
+  const storyId = 'phase8_divergence';
+  const repo = seedRepo(storyId);
+  const id = actorId(repo, storyId);
+  const engine = repo.getCharacterProgressionEngine(storyId);
+  const original = repo.getStoryRun(storyId)?.protagonist;
+  assert.equal(engine.detectGenesisDivergence(id, original).divergent, false);
+  const drifted = { ...original, coreStats: { ...original.coreStats, level: 2 } };
+  assert.equal(engine.detectGenesisDivergence(id, drifted).divergent, true);
+});

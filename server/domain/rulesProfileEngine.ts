@@ -150,26 +150,35 @@ function applyOverrides(profile: RulesProfile, rawOverrides: unknown): RulesProf
 			if (!override.value || typeof override.value !== 'object') continue;
 			const value = override.value as Record<string, unknown>;
 			const normalized: Record<string, boolean | number | string[]> = {};
+			let invalid = false;
 			for (const key of ['allowCharacterProgression','allowClassSelection','allowSubclassSelection','allowSpeciesSelection','allowFeatSelection','allowLevelUp','allowCustomModules']) {
 				if (value[key] !== undefined) {
-					if (typeof value[key] !== 'boolean') continue;
+					if (typeof value[key] !== 'boolean') {
+						invalid = true;
+						break;
+					}
 					normalized[key] = value[key] as boolean;
 				}
 			}
+			if (invalid) continue;
 			if (value.maxCharacterLevel !== undefined) {
 				if (typeof value.maxCharacterLevel !== 'number' || !Number.isFinite(value.maxCharacterLevel) || value.maxCharacterLevel < 1 || value.maxCharacterLevel > 20) continue;
 				normalized.maxCharacterLevel = Math.floor(value.maxCharacterLevel as number);
 			}
 			for (const key of ['enabledModuleIds', 'disabledModuleIds']) {
 				if (value[key] !== undefined) {
-					if (!Array.isArray(value[key]) || !(value[key] as unknown[]).every((item) => typeof item === 'string' && String(item).trim())) continue;
+					if (!Array.isArray(value[key]) || !(value[key] as unknown[]).every((item) => typeof item === 'string' && String(item).trim())) {
+						invalid = true;
+						break;
+					}
 					normalized[key] = (value[key] as string[]).map((item) => item.trim());
 				}
 			}
-			if (Object.keys(normalized).length === 0) continue;
+			if (invalid || Object.keys(normalized).length === 0) continue;
 			next.parameterOverrides[CHARACTER_PROGRESSION] = normalized;
 			next.overrides.push(override);
 			continue;
+
 		}
 
 		if (override.operation === 'SET') {

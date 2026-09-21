@@ -1518,6 +1518,22 @@ class ApiClient {
     return await res.json();
   }
 
+  public async saveStoryRunVisualAsset(storyId: string, asset: {
+    imageAsset?: string;
+    imageMetadata?: any;
+  }): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/worlds/runs/${encodeURIComponent(storyId)}/visual-asset`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(asset),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.error || `Failed to save Story Run visual asset: HTTP ${res.status}`);
+    }
+    return await res.json();
+  }
+
   public async getStoryRun(storyId: string): Promise<any> {
     const res = await fetch(`${this.baseUrl}/worlds/runs/${encodeURIComponent(storyId)}`, {
       method: 'GET',

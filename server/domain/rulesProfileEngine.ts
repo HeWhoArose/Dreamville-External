@@ -148,6 +148,8 @@ export class RulesProfileEngine {
 
 		const defaults = baseProfile(mode);
 		const supplied = source.rulesProfile;
+		const suppliedMode = supplied?.mode ? normalizeMode(supplied.mode) : mode;
+		const suppliedModeMatches = suppliedMode === mode;
 		let profile = defaults;
 
 		if (supplied && typeof supplied === 'object') {
@@ -158,13 +160,15 @@ export class RulesProfileEngine {
 				...defaults,
 				profileId: String(supplied.profileId || defaults.profileId),
 				version: Number(supplied.version || defaults.version),
-				overrides: Array.isArray(supplied.overrides) ? clone(supplied.overrides) : [],
+				overrides: suppliedModeMatches && Array.isArray(supplied.overrides)
+					? clone(supplied.overrides)
+					: [],
 				mode,
 			};
 		}
 
-		if (source.rulesProfile?.mode && normalizeMode(source.rulesProfile.mode) !== mode) {
-			warnings.push('Rules profile mode did not match requested mode; requested mode takes precedence.');
+		if (!suppliedModeMatches) {
+			warnings.push('Rules profile mode did not match requested mode; mismatched profile overrides were ignored.');
 		}
 
 		// Mode is authoritative. A supplied profile may customize metadata and

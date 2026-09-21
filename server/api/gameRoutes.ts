@@ -1386,7 +1386,7 @@ gameRouter.post('/combat/move', async (req: Request, res: Response) => {
     }
 
     const player = worldRepository.getPlayerLifecycle(storyId);
-    const serverPlayerActorId = player?.actorId || 'player_actor_default_story';
+    const serverPlayerActorId = player?.actorId || '${storyId}';
 
     // Reject impersonation of other actors on public HTTP route
     if (reqActorId && reqActorId !== serverPlayerActorId) {
@@ -1428,7 +1428,7 @@ gameRouter.post('/combat/action', async (req: Request, res: Response) => {
     if (!requireDndTacticalCombat(res, storyId)) return;
     const { actorId: reqActorId, action } = req.body;
     const player = worldRepository.getPlayerLifecycle(storyId);
-    const serverPlayerActorId = player?.actorId || 'player_actor_default_story';
+    const serverPlayerActorId = player?.actorId || '${storyId}';
 
     if (reqActorId && reqActorId !== serverPlayerActorId) {
       return res.status(403).json({
@@ -1481,7 +1481,7 @@ gameRouter.post('/combat/attack', async (req: Request, res: Response) => {
     }
 
     const player = worldRepository.getPlayerLifecycle(storyId);
-    const serverPlayerActorId = player ? player.actorId : 'player_actor_default_story';
+    const serverPlayerActorId = player ? player.actorId : '${storyId}';
 
     // Reject impersonation of other attackers on public HTTP route
     if (reqAttackerId && reqAttackerId !== serverPlayerActorId) {
@@ -1636,7 +1636,7 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
     }
 
     const player = worldRepository.getPlayerLifecycle(storyId);
-    const serverPlayerActorId = player?.actorId || 'player_actor_default_story';
+    const serverPlayerActorId = player?.actorId || '${storyId}';
 
     // Reject impersonation of other casters on public HTTP route
     if (reqActorId && reqActorId !== serverPlayerActorId) {
@@ -1910,7 +1910,7 @@ gameRouter.post('/combat/end-turn', async (req: Request, res: Response) => {
     const storyId = resolveStoryId(req, true);
     if (!requireDndTacticalCombat(res, storyId)) return;
     const player = worldRepository.getPlayerLifecycle(storyId);
-    const serverPlayerActorId = player?.actorId || 'player_actor_default_story';
+    const serverPlayerActorId = player?.actorId || '${storyId}';
 
     if (req.body?.actorId && req.body.actorId !== serverPlayerActorId) {
       return res.status(403).json({
@@ -1969,7 +1969,7 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
     const storyId = resolveStoryId(req, true);
     if (!requireDndTacticalCombat(res, storyId)) return;
     const player = worldRepository.getPlayerLifecycle(storyId);
-    const serverPlayerActorId = player?.actorId || 'player_actor_default_story';
+    const serverPlayerActorId = player?.actorId || '${storyId}';
     const combatEngine = worldRepository.getCombatEngine(storyId);
     const capEngine = worldRepository.getCapabilityEngine(storyId);
 

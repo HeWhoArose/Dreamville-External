@@ -64,17 +64,15 @@ export class DndSpellRulesEvaluator {
     // CUSTOM_HOMEBREW_DND does not inherit D&D spell-slot legality. A later
     // custom-rule resolver must explicitly define how this spell is governed.
     if (!rulesProfileEngine.allowsStandardDndSpellRules(profile)) {
-      if (dndMode === 'CUSTOM_HOMEBREW_DND') {
-        return {
-          approved: false,
-          spellName: proposal.spellName,
-          requestedLevel,
-          maxAvailableLevel: 0,
-          modeApplied: 'CUSTOM_HOMEBREW_DND',
-          overrideGranted: false,
-          requiresCustomRule: true,
-        };
-      }
+      return {
+        approved: false,
+        spellName: proposal.spellName,
+        requestedLevel,
+        maxAvailableLevel: 0,
+        modeApplied: dndMode,
+        overrideGranted: false,
+        requiresCustomRule: true,
+      };
     }
     const level = Math.max(1, Math.min(20, characterLevel));
 

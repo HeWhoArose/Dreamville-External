@@ -4765,10 +4765,48 @@ gameRouter.post('/worlds/runs/:storyId/story-director/choice', async (req: Reque
     }
     const { storyDirectorService } = await import('../services/storyDirectorService');
     const storyId = req.params.storyId as string;
-    const result = storyDirectorService.recordChoice(storyId, beatId, optionId);
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player?.actorId || `player_actor_${storyId}`;
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      `story_choice_${storyId}_${beatId}_${optionId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'INTERACT',
+        payload: { beatId, optionId },
+        source: 'PLAYER',
+      },
+      async () => {
+        const result = storyDirectorService.recordChoice(storyId, beatId, optionId);
+        return {
+          success: result.success,
+          data: { ...result, recordedChoice: { beatId, optionId } },
+          errorReason: result.success ? undefined : (result.consequences?.join('; ') || 'Story choice rejected.'),
+          summary: `Story choice ${optionId} recorded for beat ${beatId}.`,
+        };
+      }
+    );
+
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
+      });
+    }
+
     res.json({
-      ...result,
-      recordedChoice: { beatId, optionId },
+      success: true,
+      ...(commandResult.data as any),
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to record story director choice.' });
@@ -4779,8 +4817,48 @@ gameRouter.post('/worlds/runs/:storyId/story-director/offscreen', async (req: Re
   try {
     const { storyDirectorService } = await import('../services/storyDirectorService');
     const storyId = req.params.storyId as string;
-    const result = storyDirectorService.advanceOffscreenProtagonist(storyId);
-    res.json(result);
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player?.actorId || `player_actor_${storyId}`;
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      `story_offscreen_${storyId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'INTERACT',
+        payload: { action: 'ADVANCE_OFFSCREEN_WORLD_ACTOR' },
+        source: 'SYSTEM',
+      },
+      async () => {
+        const result = storyDirectorService.advanceOffscreenProtagonist(storyId);
+        return {
+          success: result.success,
+          data: result,
+          errorReason: result.success ? undefined : result.actionTaken,
+          summary: 'Offscreen narrative activity resolved.',
+        };
+      }
+    );
+
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
+      });
+    }
+
+    res.json({
+      ...(commandResult.data as any),
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
+    });
   } catch (error) {
     res.status(500).json({ error: 'Failed to advance offscreen protagonist.' });
   }

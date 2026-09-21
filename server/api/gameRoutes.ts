@@ -2161,7 +2161,7 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, errorReason: 'targetId and capabilityId are required.' });
     }
 
-    const player = transactionRepo.getPlayerLifecycle(storyId);
+    const player = worldRepository.getPlayerLifecycle(storyId);
     const serverPlayerActorId = player?.actorId || `player_actor_${storyId}`;
 
     // Reject impersonation of other casters on public HTTP route
@@ -2173,10 +2173,10 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
     }
 
     const actorId = serverPlayerActorId;
-    const capEngine = transactionRepo.getCapabilityEngine(storyId);
-    const combatEngine = transactionRepo.getCombatEngine(storyId);
-    const chronicle = transactionRepo.getHistoricalChronicleEngine(storyId);
-    const clock = transactionRepo.getWorldClock(storyId);
+    const capEngine = worldRepository.getCapabilityEngine(storyId);
+    const combatEngine = worldRepository.getCombatEngine(storyId);
+    const chronicle = worldRepository.getHistoricalChronicleEngine(storyId);
+    const clock = worldRepository.getWorldClock(storyId);
 
     const capDef = capEngine.getCapability(capabilityId);
     if (!capDef) {
@@ -2184,7 +2184,7 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
     }
 
     // CH3.2 Server-authoritative capability grant check
-    const inv = transactionRepo.getInventoryEngine(storyId);
+    const inv = worldRepository.getInventoryEngine(storyId);
     const effectiveCaps = capEngine.getEffectiveActorCapabilities(actorId, inv);
     if (!effectiveCaps.some((c) => c.id === capabilityId)) {
       return res.status(403).json({
@@ -2200,30 +2200,27 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, errorReason: 'Attacker or target participant not found.' });
     }
 
-    const transactionCapabilityResource =
-      transactionCapDefForExecution.actionType === 'bonus_action'
+    const capabilityResource =
+      capDef.actionType === 'bonus_action'
         ? 'BONUS_ACTION'
-        : transactionCapDefForExecution.actionType === 'reaction'
+        : capDef.actionType === 'reaction'
           ? 'REACTION'
           : 'ACTION';
-    const transactionCapabilityConsumesResource = transactionCapDefForExecution.actionType !== 'free';
+    const capabilityConsumesResource = capDef.actionType !== 'free';
 
-    // D&D action economy: check the declared capability action type before adjudication.
-    // This prevents a rejected turn action from consuming energy/strain through CapabilityEngine.
-    if (transactionCapabilityConsumesResource && !combatEngine.getActionEconomy().canConsume(actorId, transactionCapabilityResource)) {
+    if (capabilityConsumesResource && !combatEngine.getActionEconomy().canConsume(actorId, capabilityResource)) {
       return res.status(400).json({
         success: false,
-        errorReason: transactionCapabilityResource === 'BONUS_ACTION'
+        errorReason: capabilityResource === 'BONUS_ACTION'
           ? 'Bonus Action already used this turn.'
-          : transactionCapabilityResource === 'REACTION'
+          : capabilityResource === 'REACTION'
             ? 'Reaction already used.'
             : 'Action already used this turn.',
-        combatState: getCombatStateHelper(combatEngine, storyId, actorId, transactionRepo),
+        combatState: getCombatStateHelper(combatEngine, storyId, actorId),
       });
     }
 
-    // CH2-08 Epistemic Target-ID Security Authorization using durable repository authority
-    const perceptionOptions = transactionRepo.getCombatPerceptionOptions(storyId, actorId);
+    const perceptionOptions = worldRepository.getCombatPerceptionOptions(storyId, actorId);
     if (!combatEngine.isParticipantKnownToActor(actorId, target, perceptionOptions)) {
       return res.status(403).json({
         success: false,

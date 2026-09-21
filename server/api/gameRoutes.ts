@@ -42,6 +42,47 @@ function requireDndTacticalCombat(res: Response, storyId: string): boolean {
 	return false;
 }
 
+function resolveCanonicalConfirmedCharacter(
+	worldId: string,
+	submittedCharacter?: any,
+	requestedCharacterId?: unknown
+): { character: any | null; error?: { status: number; message: string; code?: string } } {
+	const candidateId =
+		typeof requestedCharacterId === 'string' && requestedCharacterId.trim()
+			? requestedCharacterId.trim()
+			: typeof submittedCharacter?.characterId === 'string' && submittedCharacter.characterId.trim()
+			? submittedCharacter.characterId.trim()
+			: null;
+
+	if (!candidateId) {
+		if (submittedCharacter) {
+			return {
+				character: null,
+				error: {
+					status: 400,
+					code: 'CONFIRMED_CHARACTER_ID_REQUIRED',
+					message: 'A confirmedCharacter.characterId is required for StoryRun creation.',
+				},
+			};
+		}
+		return { character: null };
+	}
+
+	const canonicalCharacter = worldRepository.getConfirmedCharacter(worldId, candidateId);
+	if (!canonicalCharacter) {
+		return {
+			character: null,
+			error: {
+				status: 404,
+				code: 'CONFIRMED_CHARACTER_NOT_FOUND',
+				message: `Confirmed character "${candidateId}" not found in world "${worldId}".`,
+			},
+		};
+	}
+
+	return { character: canonicalCharacter };
+}
+
 function resolveStoryId(req: Request, allowDefault = true): string {
   const headerId = req.headers['x-story-id'];
   if (typeof headerId === 'string' && headerId) {
@@ -3570,13 +3611,17 @@ gameRouter.post('/worlds/:worldId/start-run', async (req: Request, res: Response
       initialConditions,
     } = req.body;
 
-    let targetConfirmedCharacter = confirmedCharacter;
+    let targetConfirmedCharacter: any = null;
 
-    if (!targetConfirmedCharacter && characterId) {
-      targetConfirmedCharacter = worldRepository.getConfirmedCharacter(worldId, characterId);
-      if (!targetConfirmedCharacter) {
-        return res.status(404).json({ error: `Confirmed character "${characterId}" not found in world "${worldId}".` });
+    if (confirmedCharacter || characterId) {
+      const resolution = resolveCanonicalConfirmedCharacter(worldId, confirmedCharacter, characterId);
+      if (resolution.error) {
+        return res.status(resolution.error.status).json({
+          error: resolution.error.message,
+          code: resolution.error.code,
+        });
       }
+      targetConfirmedCharacter = resolution.character;
     }
 
     let storyId: string;

@@ -67,6 +67,10 @@ test('Phase 4 — legacy mock action identifiers are deterministic', () => {
 	assert.doesNotMatch(mockAuthority, /const actionId = .*Date\.now|const actionId = .*Math\.random/);
 	assert.match(mockAuthority, /deterministicId\(\s*['"]act_srv['"]/);
 });
+test('Phase 4 — AI turn identity does not depend on process-global turn counters', () => {
+	assert.doesNotMatch(aiOrchestrator, /const turnSequence = \+\+this\.totalTurnsExecuted/);
+	assert.match(aiOrchestrator, /const turnSequence = repo\.getCanonicalCommandEvents\(storyId\)\.length \+ 1/);
+});
 test('Phase 4 — command, turn, and checkpoint identities are not wall-clock generated', () => {
 	assert.doesNotMatch(gameRoutes, /Date\.now\(\)|Math\.random\(\)/);
 	assert.doesNotMatch(aiOrchestrator, /`turn_\$\{Date\.now/);

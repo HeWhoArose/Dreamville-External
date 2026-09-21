@@ -106,7 +106,9 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
       `action_${storyId}_${actionRequest.type}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-    const source = ((req.body?.source || 'PLAYER') as any) === 'AI' ? 'AI' : 'PLAYER';
+    const source = 'PLAYER' as const;
+
+    const mockStateBefore = serverMockAuthority.exportTransactionalState(storyId);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -134,6 +136,7 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
     );
 
     if (!commandResult.success) {
+      serverMockAuthority.importTransactionalState(storyId, mockStateBefore);
       return res.status(400).json({
         ...commandResult,
         error: commandResult.errorReason,

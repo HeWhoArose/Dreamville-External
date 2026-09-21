@@ -51,6 +51,7 @@ test('Phase 3 — canonical command commits once and emits one canonical event',
 	assert.equal(result.success, true);
 	assert.equal(executions, 1);
 	assert.equal(repo.getCanonicalCommandEvents(storyId).length, 1);
+	assert.equal('resultData' in repo.getCanonicalCommandEvents(storyId)[0], false);
 	assert.equal(repo.getCanonicalCommandEvents(storyId)[0].commandId, 'cmd_commit_001');
 	assert.ok(result.event?.mutationCount && result.event.mutationCount > 0);
 

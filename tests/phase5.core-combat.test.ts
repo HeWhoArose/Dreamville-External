@@ -136,6 +136,40 @@ test('Phase 5: cover modifies canonical attack defense and persists through expo
 	assert.equal(restored.getCoverLevel('enemy'), 'THREE_QUARTERS');
 });
 
+test('Phase 5: Total Cover blocks direct attacks without consuming the Action', () => {
+	const engine = new TacticalCombatEngine(1337);
+	engine.addParticipant(actor({ attackBonus: 20 }));
+	engine.addParticipant(actor({ id: 'enemy', team: 'enemies', x: 1, y: 0, initiative: 1, cover: 'TOTAL' }));
+	engine.rollInitiative();
+
+	const result = engine.executeAttack('hero', 'enemy');
+	assert.equal(result.success, false);
+	assert.match(result.errorReason || '', /Total Cover/i);
+	assert.equal(engine.getTurnResources('hero')?.actionAvailable, true);
+});
+
+test('Phase 5: opportunity attacks share normal attack condition modifiers', () => {
+	const engine = new TacticalCombatEngine(1337);
+	engine.addParticipant(actor());
+	engine.addParticipant(actor({ id: 'enemy', name: 'Invisible Enemy', x: 0, y: 1, team: 'enemies', initiative: 10, attackBonus: 8, conditions: ['Invisible'] }));
+	engine.rollInitiative();
+
+	assert.equal(engine.moveActor('hero', 2, 0).success, true);
+	const reaction = engine.getBattleEvents().find((event) => event.actionType === 'ATTACK' && (event.metadata as any)?.reaction === true);
+	assert.ok(reaction);
+	assert.equal(reaction?.rollRecord?.individualDice?.length, 2);
+});
+
+test('Phase 5: zero-HP combatants cannot move or provoke opportunity reactions', () => {
+	const engine = new TacticalCombatEngine(1337);
+	engine.addParticipant(actor({ hpCurrent: 0 }));
+	engine.addParticipant(actor({ id: 'enemy', x: 1, y: 0, team: 'enemies', initiative: 1, attackBonus: 20 }));
+	engine.rollInitiative();
+
+	assert.equal(engine.moveActor('hero', 2, 0).success, false);
+	assert.equal(engine.getTurnResources('enemy')?.reactionAvailable, true);
+});
+
 test('Phase 5: tactical combat respects the canonical rules profile', () => {
 	const engine = new TacticalCombatEngine(1337);
 	engine.setRulesProfile(rulesProfileEngine.createDefault('CUSTOM_HOMEBREW_DND'));

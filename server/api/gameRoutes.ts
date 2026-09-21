@@ -939,9 +939,21 @@ gameRouter.post('/capabilities/adjudicate', async (req: Request, res: Response) 
           modifiers,
         },
         source: 'PLAYER',
+        transactionMode: 'STAGED',
       },
-      async () => {
-        const result = capEngine.adjudicate({
+      async (_command, context) => {
+        const transactionRepo = context.repository;
+        const transactionCapEngine = transactionRepo.getCapabilityEngine(storyId);
+        const transactionInvEngine = transactionRepo.getInventoryEngine(storyId);
+        const transactionPlayer = transactionRepo.getPlayerLifecycle(storyId);
+        const effectiveCapsAtCommit = transactionCapEngine.getEffectiveActorCapabilities(actorId, transactionInvEngine);
+        if (!effectiveCapsAtCommit.some((c) => c.id === intendedCapabilityId)) {
+          return {
+            success: false,
+            errorReason: `Actor '${actorId}' does not possess capability '${intendedCapabilityId}' at commit time.`,
+          };
+        }
+        const result = transactionCapEngine.adjudicate({
           actorId,
           intendedCapabilityId,
           requestedScale: requestedScale || 'Moderate',
@@ -953,10 +965,10 @@ gameRouter.post('/capabilities/adjudicate', async (req: Request, res: Response) 
         });
 
         if (result.approved) {
-          const cap = capEngine.getCapability(intendedCapabilityId);
+          const cap = transactionCapEngine.getCapability(intendedCapabilityId);
           const isWorldScale = requestedScale === 'WorldScale' || cap?.powerTier === 'WorldScale';
-          const chronicle = worldRepository.getHistoricalChronicleEngine(storyId);
-          const clock = worldRepository.getWorldClock(storyId);
+          const chronicle = transactionRepo.getHistoricalChronicleEngine(storyId);
+          const clock = transactionRepo.getWorldClock(storyId);
           const ts = clock.getTimestamp();
           chronicle.recordEvidence({
             id: `ev_cap_${intendedCapabilityId}_${ts.totalElapsedSeconds}_${chronicle.getChronicleEntries().length}`,
@@ -964,7 +976,7 @@ gameRouter.post('/capabilities/adjudicate', async (req: Request, res: Response) 
             timestamp: ts,
             primarySubjectId: actorId,
             secondarySubjectId: intendedCapabilityId,
-            locationId: player?.locationId || 'loc_whispering_orrery',
+            locationId: transactionPlayer?.locationId || 'loc_whispering_orrery',
             summary: `Invoked ${cap?.name || intendedCapabilityId}`,
             details: result.emittedObservation.sensoryDescription || result.narrativeDirective,
             sourceEventId: `evt_cap_${intendedCapabilityId}_${ts.totalElapsedSeconds}`,

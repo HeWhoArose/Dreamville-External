@@ -2003,8 +2003,31 @@ gameRouter.post('/combat/attack', async (req: Request, res: Response) => {
         type: 'ATTACK',
         payload: { targetId },
         source: 'PLAYER',
+        transactionMode: 'STAGED',
       },
-      async () => {
+      async (_command, context) => {
+        const transactionRepo = context.repository;
+        const combatEngine = transactionRepo.getCombatEngine(storyId);
+        const inv = transactionRepo.getInventoryEngine(storyId);
+        const capEngine = transactionRepo.getCapabilityEngine(storyId);
+        const chronicle = transactionRepo.getHistoricalChronicleEngine(storyId);
+        const clock = transactionRepo.getWorldClock(storyId);
+        const player = transactionRepo.getPlayerLifecycle(storyId);
+        const attacker = combatEngine.getParticipant(attackerId);
+        const target = combatEngine.getParticipant(targetId);
+        if (!attacker || !target) {
+          return {
+            success: false,
+            errorReason: 'Attacker or target participant is no longer available.',
+          };
+        }
+        const perceptionOptions = transactionRepo.getCombatPerceptionOptions(storyId, attackerId);
+        if (!combatEngine.isParticipantKnownToActor(attackerId, target, perceptionOptions)) {
+          return {
+            success: false,
+            errorReason: `Target '${targetId}' is not legitimately perceived or known by actor '${attackerId}'.`,
+          };
+        }
         const attackResult = combatEngine.executeAttack(attackerId, targetId);
         if (!attackResult.success) {
           return {
@@ -2072,10 +2095,10 @@ gameRouter.post('/combat/attack', async (req: Request, res: Response) => {
             );
           }
         } else if (updatedTarget.id !== actorId && updatedTarget.isDead) {
-          syncNpcCombatDeath(storyId, updatedTarget, attacker.name, player?.locationId);
+          syncNpcCombatDeath(storyId, updatedTarget, attacker.name, player?.locationId, transactionRepo);
         }
 
-        const state = getCombatStateHelper(combatEngine, storyId, attackerId);
+        const state = getCombatStateHelper(combatEngine, storyId, attackerId, transactionRepo);
         if (state.victory) {
           const ts = clock.getTimestamp();
           chronicle.recordEvidence({

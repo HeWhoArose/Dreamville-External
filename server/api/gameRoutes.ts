@@ -1336,59 +1336,111 @@ gameRouter.post('/capabilities/synthesize', async (req: Request, res: Response) 
 
     const { targetType, rangeScope, actionType, cooldownTurns, durationTurns, restrictions, counters } = req.body;
 
-    const { worldRepository } = await import('../repositories/worldRepository');
     const storyId = reqStoryId || 'default_story';
     const player = worldRepository.getPlayerLifecycle(storyId);
     const actorId = reqActorId || (player ? player.actorId : `player_actor_${storyId}`);
-    const capEngine = worldRepository.getCapabilityEngine(storyId);
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      `capability_synthesis_${storyId}_${conceptName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_')}_${Date.now()}`;
 
-    const synthesisResult = capEngine.synthesizeCustomPower({
-      actorId,
-      conceptName: conceptName.trim(),
-      description: description.trim(),
-      tags: Array.isArray(tags) ? tags : [],
-      powerTier: chosenTier,
-      targetType,
-      rangeScope,
-      actionType,
-      cooldownTurns,
-      durationTurns,
-      restrictions,
-      counters,
-    });
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'INTERACT',
+        payload: {
+          action: 'SYNTHESIZE_CUSTOM_POWER',
+          conceptName: conceptName.trim(),
+          description: description.trim(),
+          tags: Array.isArray(tags) ? tags : [],
+          powerTier: chosenTier,
+          targetType,
+          rangeScope,
+          actionType,
+          cooldownTurns,
+          durationTurns,
+          restrictions,
+          counters,
+        },
+        source: 'PLAYER',
+        transactionMode: 'STAGED',
+      },
+      async (_command, context) => {
+        const transactionRepo = context.repository;
+        const transactionPlayer = transactionRepo.getPlayerLifecycle(storyId);
+        const transactionActorId = reqActorId || (transactionPlayer ? transactionPlayer.actorId : `player_actor_${storyId}`);
+        const capEngine = transactionRepo.getCapabilityEngine(storyId);
 
-    // CH4 Integration: record custom synthesis evidence
-    const chronicle = worldRepository.getHistoricalChronicleEngine(storyId);
-    const clock = worldRepository.getWorldClock(storyId);
-    const ts = clock.getTimestamp();
-    chronicle.recordEvidence({
-      id: `ev_synth_${synthesisResult.primaryCapability.id}_${ts.totalElapsedSeconds}_${chronicle.getChronicleEntries().length}`,
-      category: 'SACRED_OR_HISTORIC',
-      timestamp: ts,
-      primarySubjectId: actorId,
-      secondarySubjectId: synthesisResult.primaryCapability.id,
-      locationId: player?.locationId || 'loc_whispering_orrery',
-      summary: `Synthesized Custom Power: ${conceptName}`,
-      details: `Forged custom technique '${conceptName}' (${chosenTier} Tier). Derived: ${synthesisResult.derivedSkills.join(', ')}.`,
-      sourceEventId: `evt_synth_${synthesisResult.primaryCapability.id}_${ts.totalElapsedSeconds}`,
-      provenance: 'custom_power_synthesis',
-      visibility: 'PUBLIC',
-      metadata: { conceptName, powerTier: chosenTier, derivedSkills: synthesisResult.derivedSkills },
-    });
+        const synthesisResult = capEngine.synthesizeCustomPower({
+          actorId: transactionActorId,
+          conceptName: conceptName.trim(),
+          description: description.trim(),
+          tags: Array.isArray(tags) ? tags : [],
+          powerTier: chosenTier,
+          targetType,
+          rangeScope,
+          actionType,
+          cooldownTurns,
+          durationTurns,
+          restrictions,
+          counters,
+        });
 
-    const powerState = capEngine.getPowerState(actorId);
-    const capabilities = capEngine.getAllCapabilities();
-    const graph = capEngine.getCapabilityGraph();
+        const clock = transactionRepo.getWorldClock(storyId);
+        const ts = clock.getTimestamp();
+        const evidenceId = deterministicId('ev_synth', storyId, commandId, synthesisResult.primaryCapability.id);
+        transactionRepo.getHistoricalChronicleEngine(storyId).recordEvidence({
+          id: evidenceId,
+          category: 'SACRED_OR_HISTORIC',
+          timestamp: ts,
+          primarySubjectId: transactionActorId,
+          secondarySubjectId: synthesisResult.primaryCapability.id,
+          locationId: transactionPlayer?.locationId || 'loc_whispering_orrery',
+          summary: `Synthesized Custom Power: ${conceptName}`,
+          details: `Forged custom technique '${conceptName}' (${chosenTier} Tier). Derived: ${synthesisResult.derivedSkills.join(', ')}.`,
+          sourceEventId: evidenceId,
+          provenance: 'custom_power_synthesis',
+          visibility: 'PUBLIC',
+          metadata: { conceptName, powerTier: chosenTier, derivedSkills: synthesisResult.derivedSkills },
+        });
 
+        return {
+          success: true,
+          data: {
+            synthesisResult,
+            powerState: capEngine.getPowerState(transactionActorId),
+            capabilities: capEngine.getAllCapabilities(),
+            graph: capEngine.getCapabilityGraph(),
+          },
+          summary: `Synthesized Custom Power: ${conceptName}.`,
+        };
+      }
+    );
+
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
+      });
+    }
+
+    const data = commandResult.data as any;
     res.json({
       success: true,
-      ...synthesisResult,
-      powerState,
-      capabilities,
-      graph,
+      ...(data?.synthesisResult || {}),
+      powerState: data?.powerState,
+      capabilities: data?.capabilities,
+      graph: data?.graph,
+      commandId: commandResult.commandId,
+      event: commandResult.event,
     });
   } catch (error: any) {
-    res.status(500).json({ error: error.message || 'Failed to synthesize custom power.' });
+    res.status(400).json({ success: false, errorReason: error?.message || 'Failed to synthesize custom power.' });
   }
 });
 

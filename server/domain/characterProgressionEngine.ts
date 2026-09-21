@@ -719,6 +719,24 @@ export class CharacterProgressionEngine {
         genesisSelectionFingerprint: actor.genesisSelectionFingerprint,
         genesisSelectionSource: actor.genesisSelectionSource ? clone(actor.genesisSelectionSource) : undefined,
       };
+
+      if (state.classId && this.modules.get(state.classId)?.type !== 'CLASS') {
+        throw new Error(`Progression snapshot references invalid class module '${state.classId}'.`);
+      }
+      if (state.subclassId && this.modules.get(state.subclassId)?.type !== 'SUBCLASS') {
+        throw new Error(`Progression snapshot references invalid subclass module '${state.subclassId}'.`);
+      }
+      if (state.speciesId && this.modules.get(state.speciesId)?.type !== 'SPECIES') {
+        throw new Error(`Progression snapshot references invalid species module '${state.speciesId}'.`);
+      }
+      for (const moduleId of [...state.featIds, ...state.enabledModuleIds]) {
+        if (!this.modules.has(moduleId)) throw new Error(`Progression snapshot references unknown module '${moduleId}'.`);
+      }
+      for (const featureId of state.unlockedFeatureIds) {
+        const featureKnown = Array.from(this.modules.values()).some((module) => module.features.some((feature) => feature.id === featureId));
+        if (!featureKnown) throw new Error(`Progression snapshot references unknown feature '${featureId}'.`);
+      }
+
       this.actorStates.set(state.actorId, state);
     }
   }

@@ -5090,14 +5090,52 @@ gameRouter.post('/worlds/runs/:storyId/actions/apply-ability', async (req: Reque
 gameRouter.post('/worlds/runs/:storyId/dice-clash/resolve', async (req: Request, res: Response) => {
   try {
     const { playerPool, enemyPool, exchangeIndex, attackerStats, defenderStats } = req.body;
-    const { worldRepository } = await import('../repositories/worldRepository');
     const storyId = req.params.storyId as string;
-    const result = worldRepository.resolveDiceClashExchange(storyId, playerPool, enemyPool, {
-      exchangeIndex,
-      attackerStats,
-      defenderStats,
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player?.actorId || `player_actor_${storyId}`;
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      `dice_clash_${storyId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'CORE_ACTION',
+        payload: { action: 'DICE_CLASH', playerPool, enemyPool, exchangeIndex, attackerStats, defenderStats },
+        source: 'PLAYER',
+      },
+      async () => {
+        const result = worldRepository.resolveDiceClashExchange(storyId, playerPool, enemyPool, {
+          exchangeIndex,
+          attackerStats,
+          defenderStats,
+        });
+        return {
+          success: result.success !== false,
+          data: result,
+          errorReason: result.success === false ? 'Dice clash rejected.' : undefined,
+          summary: 'Legacy dice-clash exchange resolved through the canonical command path.',
+        };
+      }
+    );
+
+    if (!commandResult.success) {
+      return res.status(400).json({
+        error: commandResult.errorReason,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
+      });
+    }
+
+    res.json({
+      ...(commandResult.data as any),
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
     });
-    res.json(result);
   } catch (error: any) {
     res.status(400).json({ error: error?.message || 'Failed to resolve dice clash.' });
   }

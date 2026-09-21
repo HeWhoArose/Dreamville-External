@@ -120,6 +120,29 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
               ? 'ADVANCE_TIME'
               : 'INTERACT';
 
+    const commandPayload: Record<string, unknown> =
+      canonicalActionType === 'MOVE'
+        ? {
+            targetLocationId: (actionRequest as any).targetLocationId,
+            mode: (actionRequest as any).mode,
+          }
+        : canonicalActionType === 'EQUIP'
+          ? {
+              itemId: (actionRequest as any).itemId,
+              slot: (actionRequest as any).slot,
+            }
+          : canonicalActionType === 'UNEQUIP'
+            ? {
+                slot: (actionRequest as any).slot,
+              }
+            : canonicalActionType === 'ADVANCE_TIME'
+              ? {
+                  seconds: (actionRequest as any).seconds,
+                }
+              : {
+                  actionRequest,
+                };
+
     const mockStateBefore = serverMockAuthority.exportTransactionalState(storyId);
 
     const commandResult = await canonicalCommandEngine.execute(
@@ -129,7 +152,7 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
         storyId,
         actorId,
         type: canonicalActionType,
-        payload: { actionRequest } as Record<string, unknown>,
+        payload: commandPayload,
         source,
         idempotencyKey: req.body?.idempotencyKey,
         transactionMode: 'ROLLBACK',

@@ -104,6 +104,7 @@ function baseProfile(mode: DndRulesMode): RulesProfile {
 			DND_TACTICAL_COMBAT,
 		],
 		disabledMechanics: [],
+		parameterOverrides: {},
 		overrides: [],
 	};
 }

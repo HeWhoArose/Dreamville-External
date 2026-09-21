@@ -2006,7 +2006,8 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
     const executionResult = NpcTacticalDecisionPolicy.executeDecidedAction(
       proposal,
       combatEngine,
-      capEngine
+      capEngine,
+      worldRepository.getRulesProfile(storyId) || rulesProfileEngine.createDefault('FULL_DND')
     );
 
     // Sync any dead NPC participants resulting from NPC turn

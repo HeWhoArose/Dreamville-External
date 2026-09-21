@@ -393,7 +393,7 @@ export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRu
                     {synthesizedWorld.description || synthesizedWorld.summary}
                   </p>
 
-                  <div className="pt-4 border-t border-stone-800 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+                  <div className="pt-4 border-t border-stone-800 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 text-xs">
                     <div>
                       <span className="text-stone-500 uppercase tracking-wider block text-[10px]">Setting</span>
                       <span className="text-stone-200 font-medium">{synthesizedWorld.setting || 'Known Realm'}</span>
@@ -409,6 +409,14 @@ export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRu
                     <div>
                       <span className="text-stone-500 uppercase tracking-wider block text-[10px]">Capabilities</span>
                       <span className="text-stone-200 font-medium">{(synthesizedWorld.capabilities || []).length} active</span>
+                    </div>
+                    <div>
+                      <span className="text-stone-500 uppercase tracking-wider block text-[10px]">Narrative Mode</span>
+                      <span className="text-purple-300 font-medium">{synthesizedWorld.narrativeProfile?.mode || synthesizedWorld.storyMode || 'PROTAGONIST'}</span>
+                    </div>
+                    <div>
+                      <span className="text-stone-500 uppercase tracking-wider block text-[10px]">Rules Mode</span>
+                      <span className="text-blue-300 font-medium">{synthesizedWorld.dndRulesMode || synthesizedWorld.rulesProfile?.mode || synthesizedWorld.rulesetId || 'FULL_DND'}</span>
                     </div>
                   </div>
                 </div>

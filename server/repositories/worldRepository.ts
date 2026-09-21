@@ -1454,6 +1454,7 @@ export class InMemoryWorldRepository implements WorldRepository {
       engine = new TacticalCombatEngine(seed, undefined, this.getConditionEngine(storyId));
       this.combatEngines.set(storyId, engine);
     }
+    engine.setRulesProfile(this.getRulesProfile(storyId) || undefined);
     return engine;
   }
 

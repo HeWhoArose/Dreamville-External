@@ -1281,7 +1281,92 @@ export class SpellRuntime {
     }
 
     // Rule 4: Targeting & Range Verification
-    if (targetParticipant) {
+    const targetTypeRequiresCreature = new Set<SpellTargetType>(['TOUCH', 'SINGLE_CREATURE', 'SINGLE_ENEMY', 'SINGLE_ALLY']);
+    if (targetTypeRequiresCreature.has(spell.targetType) && !targetParticipant) {
+      return {
+        success: false,
+        errorCode: 'TARGET_REQUIRED',
+        errorReason: 'Spell "' + spell.name + '" requires a creature target.',
+        spellId: spell.id,
+        spellName: spell.name,
+        slotLevelUsed: effectiveSlotLevel,
+        isRitual,
+        requiresConcentration: spell.requiresConcentration,
+        headline: 'Cannot cast ' + spell.name + ': no creature target was provided.',
+      };
+    }
+    if (spell.targetType === 'SELF' && targetParticipant && targetParticipant.id !== casterId) {
+      return {
+        success: false,
+        errorCode: 'INVALID_TARGET_TYPE',
+        errorReason: 'Spell "' + spell.name + '" is self-targeted and cannot target "' + targetParticipant.name + '".',
+        spellId: spell.id,
+        spellName: spell.name,
+        slotLevelUsed: effectiveSlotLevel,
+        isRitual,
+        requiresConcentration: spell.requiresConcentration,
+        headline: 'Cannot cast ' + spell.name + ': invalid self target.',
+      };
+    }
+    if (spell.targetType === 'SINGLE_ALLY' && targetParticipant && targetParticipant.team !== casterParticipant.team) {
+      return {
+        success: false,
+        errorCode: 'INVALID_ALLY_TARGET',
+        errorReason: 'Target "' + targetParticipant.name + '" is not allied with the caster.',
+        spellId: spell.id,
+        spellName: spell.name,
+        slotLevelUsed: effectiveSlotLevel,
+        isRitual,
+        requiresConcentration: spell.requiresConcentration,
+        headline: 'Cannot cast ' + spell.name + ': target is not an ally.',
+      };
+    }
+    if (spell.targetType === 'SINGLE_ENEMY' && (!targetParticipant || targetParticipant.team === casterParticipant.team || targetParticipant.team === 'neutral')) {
+      return {
+        success: false,
+        errorCode: 'INVALID_ENEMY_TARGET',
+        errorReason: 'Target "' + (targetParticipant?.name || targetId || 'unknown') + '" is not a hostile creature.',
+        spellId: spell.id,
+        spellName: spell.name,
+        slotLevelUsed: effectiveSlotLevel,
+        isRitual,
+        requiresConcentration: spell.requiresConcentration,
+        headline: 'Cannot cast ' + spell.name + ': target is not hostile.',
+      };
+    }
+    const isAreaOrPointTarget = spell.targetType === 'POINT' || spell.targetType === 'AREA_SPHERE' || spell.targetType === 'AREA_LINE' || spell.targetType === 'AREA_CONE';
+    if (isAreaOrPointTarget && !request.targetPosition && !targetParticipant) {
+      return {
+        success: false,
+        errorCode: 'TARGET_POSITION_REQUIRED',
+        errorReason: 'Spell "' + spell.name + '" requires a target point or center.',
+        spellId: spell.id,
+        spellName: spell.name,
+        slotLevelUsed: effectiveSlotLevel,
+        isRitual,
+        requiresConcentration: spell.requiresConcentration,
+        headline: 'Cannot cast ' + spell.name + ': no target position was provided.',
+      };
+    }
+    if (isAreaOrPointTarget && request.targetPosition && spell.rangeType !== 'SELF' && spell.rangeType !== 'UNLIMITED' && spell.range > 0) {
+      const dx = (request.targetPosition.x - casterParticipant.x) * 5;
+      const dy = (request.targetPosition.y - casterParticipant.y) * 5;
+      const distanceFeet = Math.hypot(dx, dy);
+      if (distanceFeet > spell.range + 0.1) {
+        return {
+          success: false,
+          errorCode: 'TARGET_OUT_OF_RANGE',
+          errorReason: 'Target point is ' + Math.round(distanceFeet) + 'ft away, exceeding spell range of ' + spell.range + 'ft.',
+          spellId: spell.id,
+          spellName: spell.name,
+          slotLevelUsed: effectiveSlotLevel,
+          isRitual,
+          requiresConcentration: spell.requiresConcentration,
+          headline: 'Target point is out of range (' + Math.round(distanceFeet) + 'ft / ' + spell.range + 'ft).',
+        };
+      }
+    }
+        if (targetParticipant) {
       // Check Total Cover
       if (targetParticipant.cover === 'TOTAL' && spell.targetType !== 'SELF') {
         return {

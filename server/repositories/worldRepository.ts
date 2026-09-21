@@ -123,6 +123,19 @@ export interface WorldRepository {
   getAllWorldTemplates(): any[];
 }
 
+const NARRATIVE_MODE_VALUES = new Set(['PROTAGONIST', 'SIDE_CHARACTER', 'FREE_ROAM']);
+
+function isCanonicalNarrativeMode(value: unknown): value is 'PROTAGONIST' | 'SIDE_CHARACTER' | 'FREE_ROAM' {
+	return typeof value === 'string' && NARRATIVE_MODE_VALUES.has(value);
+}
+
+function preserveWorldPlaystyle(existingPlaystyle: unknown, resolvedMode: string): string {
+	if (typeof existingPlaystyle === 'string' && existingPlaystyle.trim() && !isCanonicalNarrativeMode(existingPlaystyle)) {
+		return existingPlaystyle;
+	}
+	return resolvedMode;
+}
+
 function normalizeEquipmentSlot(slot?: string, category?: string): EquipmentSlot {
   if (!slot && category) {
     const catLower = category.toLowerCase();
@@ -226,7 +239,7 @@ export class InMemoryWorldRepository implements WorldRepository {
         ...(world as any),
         storyMode: resolvedNarrative.mode,
         narrativeProfile: resolvedNarrative,
-        playstyle: resolvedNarrative.mode,
+        playstyle: preserveWorldPlaystyle((world as any)?.playstyle, resolvedNarrative.mode),
       };
       if (
         (world as any)?.storyMode !== migratedWorld.storyMode ||
@@ -2047,7 +2060,7 @@ export class InMemoryWorldRepository implements WorldRepository {
       ...world,
       storyMode: resolvedNarrative.mode,
       narrativeProfile: resolvedNarrative,
-      playstyle: resolvedNarrative.mode,
+      playstyle: preserveWorldPlaystyle(world?.playstyle, resolvedNarrative.mode),
     };
     this.worldTemplates.set(canonicalWorld.worldId, canonicalWorld);
     this.persistLibrary();

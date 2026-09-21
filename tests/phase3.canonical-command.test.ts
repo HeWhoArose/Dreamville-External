@@ -268,3 +268,46 @@ test('Phase 3 — AI commands use the same payload validation as player commands
 	assert.match(result.errorReason || '', /numeric targetX and targetY/i);
 	assert.equal(repo.getCanonicalCommandEvents(storyId).length, 0);
 });
+
+test('Phase 3 — commands for the same story serialize to prevent snapshot races', async () => {
+	const storyId = 'phase3_story_serialization';
+	const repo = seedRepo(storyId);
+	const actorId = repo.getPlayerLifecycle(storyId)?.actorId || `player_actor_${storyId}`;
+	const order: string[] = [];
+
+	const makeCommand = (commandId: string, delayMs: number) =>
+		canonicalCommandEngine.execute(
+			repo,
+			{
+				commandId,
+				storyId,
+				actorId,
+				type: 'INTERACT',
+				payload: { action: commandId },
+				source: 'PLAYER',
+			},
+			async () => {
+				order.push(`${commandId}:start`);
+				await new Promise((resolve) => setTimeout(resolve, delayMs));
+				const run = repo.getStoryRun(storyId);
+				run.commandSequence = [...(run.commandSequence || []), commandId];
+				repo.saveStoryRun(run);
+				order.push(`${commandId}:end`);
+				return { success: true, data: { commandId }, summary: `${commandId} committed.` };
+			}
+		);
+
+	await Promise.all([
+		makeCommand('cmd_serial_1', 30),
+		makeCommand('cmd_serial_2', 0),
+	]);
+
+	assert.deepEqual(order, [
+		'cmd_serial_1:start',
+		'cmd_serial_1:end',
+		'cmd_serial_2:start',
+		'cmd_serial_2:end',
+	]);
+	assert.deepEqual(repo.getStoryRun(storyId)?.commandSequence, ['cmd_serial_1', 'cmd_serial_2']);
+	assert.equal(repo.getCanonicalCommandEvents(storyId).length, 2);
+});

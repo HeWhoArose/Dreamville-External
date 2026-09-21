@@ -344,6 +344,7 @@ test('Phase 3 — STAGED commands keep live canonical state unchanged until comm
 	);
 
 	assert.equal(result.success, true);
+	assert.equal(result.event?.transactionMode, 'STAGED');
 	assert.equal(repo.getStoryRun(storyId)?.stagedMutationMarker, 'committed');
 	assert.equal(result.event?.mutationCount && result.event.mutationCount > 0, true);
 });

@@ -1,6 +1,7 @@
 import { narrativeProfileEngine } from '../domain/narrativeProfileEngine';
 import { InMemoryWorldRepository, worldRepository } from '../repositories/worldRepository';
 import { WorldFact } from '../../src/types';
+import { deterministicId } from '../domain/deterministicRng';
 
 export interface NarrativeBeat {
   beatId: string;
@@ -103,7 +104,8 @@ export class StoryDirectorService {
     const playerLabel = profile.mode === 'PROTAGONIST' ? 'Protagonist' : 'Player Character';
 
     if (optionId === 'opt_refuse' || optionId === 'refuse_quest') {
-      const factId = `fact_refusal_${Date.now()}`;
+      const timestamp = repository.getWorldClock(storyId).getTimestamp();
+      const factId = deterministicId('fact_refusal', storyId, beatId, optionId, repository.getWorldFacts(storyId).length);
       const refusalFact: WorldFact = {
         factId,
         statement: `${playerLabel} explicitly refused narrative path for beat ${beatId}`,
@@ -115,7 +117,7 @@ export class StoryDirectorService {
         provenanceSummary: 'Player Narrative Choice',
         sourceSegmentIds: [],
         confidence: 1.0,
-        acquiredAtTimestamp: { totalElapsedSeconds: 0, cycle: 1, period: 'Dawn' },
+        acquiredAtTimestamp: timestamp,
       };
       repository.saveWorldFact(storyId, refusalFact);
       consequences.push('Protagonist refusal canonically persisted.');
@@ -155,7 +157,7 @@ export class StoryDirectorService {
 
     // Save rumor knowledge fact
     const rumorFact: WorldFact = {
-      factId: `fact_rumor_${Date.now()}`,
+      factId: deterministicId('fact_rumor', storyId, agenda.protagonistId, agenda.goal, agenda.progressState),
       statement: `Rumor: ${agenda.protagonistId} was spotted attempting '${agenda.goal}'`,
       category: 'world_lore',
       subjectEntityId: agenda.protagonistId,

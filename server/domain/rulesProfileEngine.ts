@@ -8,6 +8,7 @@ import type {
 const IMPLICIT_ABILITY_CHECKS = 'implicit_ability_checks';
 const IMPLICIT_SAVING_THROWS = 'implicit_saving_throws';
 const STANDARD_DND_SPELL_RULES = 'standard_dnd_spell_rules';
+const DND_TACTICAL_COMBAT = 'dnd_tactical_combat';
 
 export interface RulesProfileSource {
 	mode?: DndRulesMode | string;
@@ -47,6 +48,7 @@ function baseProfile(mode: DndRulesMode): RulesProfile {
 				IMPLICIT_ABILITY_CHECKS,
 				IMPLICIT_SAVING_THROWS,
 				STANDARD_DND_SPELL_RULES,
+				DND_TACTICAL_COMBAT,
 			],
 			overrides: [],
 		};
@@ -106,6 +108,7 @@ function applyOverrides(profile: RulesProfile, rawOverrides: unknown): RulesProf
 		if (!raw || typeof raw !== 'object') continue;
 		const override = raw as RuleOverride;
 		if (!override.ruleId || !override.operation || !override.reason) continue;
+		if (override.operation !== 'ENABLE' && override.operation !== 'DISABLE') continue;
 		if (!next.allowWorldRuleOverrides && next.mode === 'FULL_DND') continue;
 
 		next.overrides.push(override);
@@ -224,6 +227,10 @@ export class RulesProfileEngine {
 		return profile.allowStandardDndSpellRules && !profile.disabledMechanics.includes(STANDARD_DND_SPELL_RULES);
 	}
 
+	public allowsDndTacticalCombat(profile: RulesProfile): boolean {
+		return !profile.disabledMechanics.includes(DND_TACTICAL_COMBAT);
+	}
+
 	public validate(profile: RulesProfile): string[] {
 		const errors: string[] = [];
 		if (!profile.profileId) errors.push('profileId is required.');
@@ -250,4 +257,5 @@ export {
 	IMPLICIT_ABILITY_CHECKS,
 	IMPLICIT_SAVING_THROWS,
 	STANDARD_DND_SPELL_RULES,
+	DND_TACTICAL_COMBAT,
 };

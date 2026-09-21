@@ -1043,17 +1043,45 @@ export class SpellRuntime {
       previousSpeedCells: number;
       previousAttackBonus: number;
       previousSavingThrowModifiers?: Record<string, number>;
+      appliedArmorClassBonus?: number;
+      appliedSpeedMultiplier?: number;
+      appliedAttackBonusModifier?: number;
+      appliedSaveBonusModifier?: number;
     }> | undefined;
     if (Array.isArray(buffEffects)) {
       for (const effect of buffEffects) {
         const participant = this.participantRefs.get(effect.targetId);
         if (!participant) continue;
-        participant.armorClass = effect.previousArmorClass;
-        participant.speedCells = effect.previousSpeedCells;
-        participant.attackBonus = effect.previousAttackBonus;
-        participant.savingThrowModifiers = effect.previousSavingThrowModifiers
-          ? { ...effect.previousSavingThrowModifiers }
-          : participant.savingThrowModifiers;
+
+        if (typeof effect.appliedArmorClassBonus === 'number') {
+          participant.armorClass -= effect.appliedArmorClassBonus;
+        } else {
+          participant.armorClass = effect.previousArmorClass;
+        }
+
+        if (typeof effect.appliedSpeedMultiplier === 'number' && effect.appliedSpeedMultiplier > 0) {
+          participant.speedCells /= effect.appliedSpeedMultiplier;
+        } else {
+          participant.speedCells = effect.previousSpeedCells;
+        }
+
+        if (typeof effect.appliedAttackBonusModifier === 'number') {
+          participant.attackBonus -= effect.appliedAttackBonusModifier;
+        } else {
+          participant.attackBonus = effect.previousAttackBonus;
+        }
+
+        if (typeof effect.appliedSaveBonusModifier === 'number') {
+          const nextSaves = { ...(participant.savingThrowModifiers || {}) };
+          for (const ability of ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA']) {
+            if (nextSaves[ability] !== undefined) {
+              nextSaves[ability] -= effect.appliedSaveBonusModifier;
+            }
+          }
+          participant.savingThrowModifiers = nextSaves;
+        } else if (effect.previousSavingThrowModifiers) {
+          participant.savingThrowModifiers = { ...effect.previousSavingThrowModifiers };
+        }
       }
     }
 
@@ -1556,6 +1584,10 @@ export class SpellRuntime {
       previousSpeedCells: number;
       previousAttackBonus: number;
       previousSavingThrowModifiers?: Record<string, number>;
+      appliedArmorClassBonus?: number;
+      appliedSpeedMultiplier?: number;
+      appliedAttackBonusModifier?: number;
+      appliedSaveBonusModifier?: number;
     }> = [];
     let movementApplied: { from: { x: number; y: number }; to: { x: number; y: number } } | undefined;
     let targetConcCheck: ConcentrationCheckResult | undefined;
@@ -1840,27 +1872,38 @@ export class SpellRuntime {
         const previousSavingThrowModifiers = buffTarget.savingThrowModifiers
           ? { ...buffTarget.savingThrowModifiers }
           : undefined;
+        const appliedArmorClassBonus = Number(spell.buffEffect.armorClassBonus || 0);
+        const appliedSpeedMultiplier = Number(spell.buffEffect.speedMultiplier || 0);
+        const appliedAttackBonusModifier = Number(spell.buffEffect.attackBonusModifier || 0);
+        const appliedSaveBonusModifier = Number(spell.buffEffect.saveBonusModifier || 0);
+
         concentrationBuffEffects.push({
           targetId: buffTarget.id,
           previousArmorClass: buffTarget.armorClass,
           previousSpeedCells: buffTarget.speedCells,
           previousAttackBonus: buffTarget.attackBonus,
           previousSavingThrowModifiers,
+          appliedArmorClassBonus: appliedArmorClassBonus !== 0 ? appliedArmorClassBonus : undefined,
+          appliedSpeedMultiplier: appliedSpeedMultiplier > 0 && appliedSpeedMultiplier !== 1
+            ? appliedSpeedMultiplier
+            : undefined,
+          appliedAttackBonusModifier: appliedAttackBonusModifier !== 0 ? appliedAttackBonusModifier : undefined,
+          appliedSaveBonusModifier: appliedSaveBonusModifier !== 0 ? appliedSaveBonusModifier : undefined,
         });
 
-        if (spell.buffEffect.armorClassBonus) {
-          buffTarget.armorClass += spell.buffEffect.armorClassBonus;
+        if (appliedArmorClassBonus !== 0) {
+          buffTarget.armorClass += appliedArmorClassBonus;
         }
-        if (spell.buffEffect.speedMultiplier) {
-          buffTarget.speedCells *= spell.buffEffect.speedMultiplier;
+        if (appliedSpeedMultiplier > 0) {
+          buffTarget.speedCells *= appliedSpeedMultiplier;
         }
-        if (spell.buffEffect.attackBonusModifier) {
-          buffTarget.attackBonus += spell.buffEffect.attackBonusModifier;
+        if (appliedAttackBonusModifier !== 0) {
+          buffTarget.attackBonus += appliedAttackBonusModifier;
         }
-        if (spell.buffEffect.saveBonusModifier) {
+        if (appliedSaveBonusModifier !== 0) {
           const nextSaves = { ...(buffTarget.savingThrowModifiers || {}) };
           for (const ability of ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA']) {
-            nextSaves[ability] = (nextSaves[ability] || 0) + spell.buffEffect.saveBonusModifier;
+            nextSaves[ability] = (nextSaves[ability] || 0) + appliedSaveBonusModifier;
           }
           buffTarget.savingThrowModifiers = nextSaves;
         }

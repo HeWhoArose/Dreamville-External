@@ -646,7 +646,7 @@ export const App: React.FC = () => {
               onStoryAssetChange={async (runId, newUrl, provenance) => {
                 try {
                   const updated = await apiClient.saveStoryRunVisualAsset(runId, {
-                    imageAsset: newUrl,
+                    imageAsset: newUrl ?? null,
                     imageMetadata: provenance ? { provenance, rightsStatus: 'UNKNOWN' } : undefined,
                   });
                   setStoryLibraryStories((current) => current.map((story) =>

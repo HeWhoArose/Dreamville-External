@@ -673,6 +673,46 @@ export interface CharacterStartingState {
 export type CharacterStartingChoiceMode = 'CHOOSE' | 'AI_SUGGEST' | 'SURPRISE_ME';
 
 export type CharacterStoryMode = 'PROTAGONIST' | 'SIDE_CHARACTER' | 'FREE_ROAM';
+export type DndRulesMode = 'FULL_DND' | 'HYBRID_DND' | 'CUSTOM_HOMEBREW_DND';
+
+export type RulesResolutionPolicy =
+  | 'DND_STANDARD'
+  | 'DND_WITH_EXPLICIT_OVERRIDES'
+  | 'CUSTOM_EXPLICIT_RULES';
+
+export type RuleOverrideOperation = 'ENABLE' | 'DISABLE' | 'REPLACE';
+
+export interface RuleOverride {
+  ruleId: string;
+  operation: RuleOverrideOperation;
+  value?: unknown;
+  reason: string;
+  provenance?: string;
+}
+
+export interface RulesProfile {
+  profileId: string;
+  version: number;
+  mode: DndRulesMode;
+  policy: RulesResolutionPolicy;
+  baseRuleset: 'DND_5E' | 'NONE';
+  allowImplicitAbilityChecks: boolean;
+  allowImplicitSavingThrows: boolean;
+  allowStandardDndSpellRules: boolean;
+  requireAuthoredChallengeForCustomChecks: boolean;
+  allowWorldRuleOverrides: boolean;
+  allowCapabilityOverrides: boolean;
+  enabledMechanics: string[];
+  disabledMechanics: string[];
+  overrides: RuleOverride[];
+}
+
+export interface RuleProfileResolution {
+  profile: RulesProfile;
+  source: 'RUN' | 'WORLD' | 'DEFAULT';
+  warnings: string[];
+}
+
 
 export interface CharacterAiExtractionSummary {
   interpretation: string;

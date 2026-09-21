@@ -47,6 +47,7 @@ export interface CanonicalCommandEvent {
 		preStateHash: string;
 		postStateHash: string;
 		canonicalSequence: number;
+		resolvedDataHash: string;
 		rngState: {
 			combat: {
 				before: { seed: number; rollCounter: number };

@@ -94,4 +94,6 @@ test('Phase 3 — legacy action endpoint maps movement/equipment/time intent to 
 	assert.match(block, /actionRequest\.type === 'UNEQUIP_REQUEST'/);
 	assert.match(block, /actionRequest\.type === 'ADVANCE_TIME'/);
 	assert.match(block, /transactionMode: 'ROLLBACK'/);
+	assert.match(block, /serverMockAuthority\.exportTransactionalState\(storyId\)/);
+	assert.match(block, /serverMockAuthority\.importTransactionalState\(storyId, mockStateBefore\)/);
 });

@@ -33,6 +33,7 @@ export interface PartitionedArchive {
     'canonical/chronicle.json': string;
     'canonical/narrative.json': string;
     'canonical/capabilities.json'?: string;
+    'canonical/progression.json'?: string;
     'canonical/combat.json'?: string;
     'canonical/memories.json'?: string;
     'canonical/living_world.json'?: string;
@@ -113,6 +114,7 @@ export class CampaignArchiveService {
     chronicleState: unknown;
     narrativeState: unknown;
     capabilitiesState?: unknown;
+    progressionState?: unknown;
     combatState?: unknown;
     memoriesState?: unknown;
     livingWorldState?: unknown;
@@ -127,6 +129,7 @@ export class CampaignArchiveService {
     const chronicleJson = JSON.stringify(params.chronicleState ?? {}, null, 2);
     const narrativeJson = JSON.stringify(params.narrativeState ?? [], null, 2);
     const capabilitiesJson = JSON.stringify(params.capabilitiesState ?? {}, null, 2);
+    const progressionJson = JSON.stringify(params.progressionState ?? {}, null, 2);
     const combatJson = JSON.stringify(params.combatState ?? {}, null, 2);
     const memoriesJson = JSON.stringify(params.memoriesState ?? [], null, 2);
     const livingWorldJson = JSON.stringify(params.livingWorldState ?? {}, null, 2);
@@ -143,6 +146,7 @@ export class CampaignArchiveService {
       'canonical/chronicle.json': this.computeSha256(chronicleJson),
       'canonical/narrative.json': this.computeSha256(narrativeJson),
       'canonical/capabilities.json': this.computeSha256(capabilitiesJson),
+      'canonical/progression.json': this.computeSha256(progressionJson),
       'canonical/combat.json': this.computeSha256(combatJson),
       'canonical/memories.json': this.computeSha256(memoriesJson),
       'canonical/living_world.json': this.computeSha256(livingWorldJson),
@@ -176,6 +180,7 @@ export class CampaignArchiveService {
         'canonical/chronicle.json': chronicleJson,
         'canonical/narrative.json': narrativeJson,
         'canonical/capabilities.json': capabilitiesJson,
+        'canonical/progression.json': progressionJson,
         'canonical/combat.json': combatJson,
         'canonical/memories.json': memoriesJson,
         'canonical/living_world.json': livingWorldJson,
@@ -238,6 +243,9 @@ export class CampaignArchiveService {
 
       if (archive.partitions['canonical/capabilities.json']) {
         JSON.parse(archive.partitions['canonical/capabilities.json']);
+      }
+      if (archive.partitions['canonical/progression.json']) {
+        JSON.parse(archive.partitions['canonical/progression.json']);
       }
       if (archive.partitions['canonical/combat.json']) {
         JSON.parse(archive.partitions['canonical/combat.json']);
@@ -315,6 +323,9 @@ export class CampaignArchiveService {
       const capabilities = archive.partitions['canonical/capabilities.json']
         ? JSON.parse(archive.partitions['canonical/capabilities.json'])
         : undefined;
+      const progression = archive.partitions['canonical/progression.json']
+        ? JSON.parse(archive.partitions['canonical/progression.json'])
+        : undefined;
       const combat = archive.partitions['canonical/combat.json']
         ? JSON.parse(archive.partitions['canonical/combat.json'])
         : undefined;
@@ -344,6 +355,7 @@ export class CampaignArchiveService {
           chronicle,
           narrative,
           capabilities,
+          progression,
           combat,
           memories,
           livingWorld,

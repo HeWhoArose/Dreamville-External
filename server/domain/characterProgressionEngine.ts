@@ -488,10 +488,22 @@ export class CharacterProgressionEngine {
     const module = this.requireModule(moduleId);
     if (enabled && !this.isModuleAllowed(moduleId, rulesProfile)) throw new Error(`Module '${moduleId}' is disabled by the active rules profile.`);
     if (enabled) {
+      if (module.type !== 'FEAT') {
+        state.enabledModuleIds = state.enabledModuleIds.filter((id) => {
+          const enabledModule = this.modules.get(id);
+          return enabledModule?.type !== module.type || id === moduleId;
+        });
+        if (module.type === 'CLASS') state.classId = moduleId;
+        if (module.type === 'SUBCLASS') state.subclassId = moduleId;
+        if (module.type === 'SPECIES') state.speciesId = moduleId;
+      }
       if (!state.enabledModuleIds.includes(moduleId)) state.enabledModuleIds.push(moduleId);
       module.enabled = true;
     } else {
       state.enabledModuleIds = state.enabledModuleIds.filter((id) => id !== moduleId);
+      if (module.type === 'CLASS' && state.classId === moduleId) state.classId = undefined;
+      if (module.type === 'SUBCLASS' && state.subclassId === moduleId) state.subclassId = undefined;
+      if (module.type === 'SPECIES' && state.speciesId === moduleId) state.speciesId = undefined;
     }
     state.progressionHistory.push({
       sequence: state.progressionHistory.length,

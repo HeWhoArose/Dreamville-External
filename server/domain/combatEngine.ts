@@ -2060,6 +2060,8 @@ export class TacticalCombatEngine {
   }
 
   public executeSpellCast(params: {
+    const preState = this.exportState();
+    try {
     actorId: string;
     spellId: string;
     targetId?: string;
@@ -2138,6 +2140,9 @@ export class TacticalCombatEngine {
         combatTurnIndex: this.currentTurnIndex,
         rulesProfile: this.rulesProfile,
         diceEngine: this.diceEngine,
+        requireAuthoritativeTarget: true,
+        damageResolver: (damageTarget, amount, damageType, criticalHit = false) =>
+          this.applyCombatDamage(damageTarget, amount, damageType, criticalHit),
       },
       casterParticipant: actor,
       targetParticipant: target,
@@ -2192,6 +2197,13 @@ export class TacticalCombatEngine {
       result,
       headline: result.headline,
     };
+    } catch (error: any) {
+      this.importState(preState);
+      return {
+        success: false,
+        errorReason: error?.message || 'Spell cast failed and was rolled back.',
+      };
+    }
   }
 
   public interruptConcentration(

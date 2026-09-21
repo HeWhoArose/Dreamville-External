@@ -338,17 +338,23 @@ export class CanonicalCommandEngine {
 				};
 			}
 
-			const after = captureCanonicalStateSnapshot(command.storyId, transactionalRepository);
+			const canonicalSequence = repository.getCanonicalCommandEvents(command.storyId).length + 1;
+			const eventId = deterministicId('evt_cmd', command.storyId, canonicalSequence, fingerprint);
 
+			// Finalize staged Chronicle evidence against the deterministic canonical event identity
+			// before constructing the committed snapshot. The event itself is appended to the staged
+			// repository immediately afterward, then both are transferred to live state together.
+			transactionalRepository.commitCanonicalCommandTransaction(command.storyId, eventId);
+
+			const after = captureCanonicalStateSnapshot(command.storyId, transactionalRepository);
 			const comparison = compareCanonicalSnapshots(before, after);
 			const mutationPaths = comparison.differences.map((difference) => {
 				const match = difference.match(/(?:at|in )((?:worldClock|geography|worldFacts|player|inventory|equipment|craftingRecipes|npcs|chronicle|narrativeHistory|capabilities|conditions|combat|storyChecks|memories|livingWorld|sensory|adaptation)[^:]*):?/);
 				return match?.[1] || difference;
 			});
 
-			const canonicalSequence = repository.getCanonicalCommandEvents(command.storyId).length + 1;
 			const event: CanonicalCommandEvent = {
-				eventId: deterministicId('evt_cmd', command.storyId, canonicalSequence, fingerprint),
+				eventId,
 				commandId: command.commandId,
 				storyId: command.storyId,
 				actorId: command.actorId,
@@ -375,16 +381,13 @@ export class CanonicalCommandEngine {
 				},
 			};
 
-			// The canonical event becomes authoritative before staged Chronicle state is
-			// copied into the live repository. This enforces event -> Chronicle ordering.
-			repository.appendCanonicalCommandEvent(command.storyId, event);
 			if (command.transactionMode === 'STAGED') {
-				repository.restoreCanonicalStateSnapshot(after, {
-					preserveCanonicalEvents: true,
-					persist: true,
-				});
+				transactionalRepository.appendCanonicalCommandEvent(command.storyId, event);
+				const committedAfter = captureCanonicalStateSnapshot(command.storyId, transactionalRepository);
+				event.replay.postStateHash = stableHash(committedAfter);
+				repository.restoreCanonicalStateSnapshot(committedAfter, { persist: true });
 			} else {
-				transactionalRepository.commitCanonicalCommandTransaction(command.storyId, event.eventId);
+				repository.appendCanonicalCommandEvent(command.storyId, event);
 			}
 			this.completedResults.set(
 				`${command.storyId}::${command.commandId}`,

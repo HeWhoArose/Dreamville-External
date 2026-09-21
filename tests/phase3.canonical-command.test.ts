@@ -97,6 +97,41 @@ test('Phase 3 — rejected command rolls back every mutation made before rejecti
 	assert.equal(compareCanonicalSnapshots(before, captureCanonicalStateSnapshot(storyId, repo)).identical, true);
 });
 
+test('Phase 3 — rejected STAGED handlers cannot leak mutations into the live repository', async () => {
+	const storyId = 'phase3_staged_rejected_live_leak';
+	const repo = seedRepo(storyId);
+	const before = captureCanonicalStateSnapshot(storyId, repo);
+	const actorId = repo.getPlayerLifecycle(storyId)?.actorId || 'player_actor_' + storyId;
+
+	const result = await canonicalCommandEngine.execute(
+		repo,
+		{
+			commandId: 'cmd_staged_rejected_live_leak_001',
+			storyId,
+			actorId,
+			type: 'INTERACT',
+			payload: { action: 'FORCE_REJECTED_LIVE_REPOSITORY_LEAK' },
+			source: 'SYSTEM',
+			transactionMode: 'STAGED',
+		},
+		async () => {
+			const liveRun = repo.getStoryRun(storyId)!;
+			liveRun.rejectedLeakMarker = 'must_not_survive';
+			repo.saveStoryRun(liveRun);
+			return {
+				success: false,
+				errorReason: 'Intentional rejection after live repository leak.',
+			};
+		}
+	);
+
+	assert.equal(result.success, false);
+	assert.equal(result.rolledBack, true);
+	assert.match(result.errorReason || '', /mutated live canonical state/i);
+	assert.equal(compareCanonicalSnapshots(before, captureCanonicalStateSnapshot(storyId, repo)).identical, true);
+	assert.equal(repo.getStoryRun(storyId)?.rejectedLeakMarker, undefined);
+	assert.equal(repo.getCanonicalCommandEvents(storyId).length, 0);
+});
 test('Phase 3 — duplicate commandId cannot execute a second time', async () => {
 	const storyId = 'phase3_command_duplicate';
 	const repo = seedRepo(storyId);

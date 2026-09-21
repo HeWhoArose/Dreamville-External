@@ -730,7 +730,6 @@ export class SpellRuntime {
   public prepareSpell(actorId: string, spellId: string): { success: boolean; errorReason?: string } {
     const state = this.getOrCreateActorState(actorId);
     const spell = this.getSpell(spellId);
-    this.setParticipantContext(allParticipants.length > 0 ? allParticipants : [params.casterParticipant].filter(Boolean) as BattlefieldParticipant[]);
     if (!spell) return { success: false, errorReason: `Spell "${spellId}" not found in catalog.` };
     if (spell.level === 0) return { success: true }; // Cantrips are always prepared
 
@@ -1077,6 +1076,7 @@ export class SpellRuntime {
     const spell = this.getSpell(spellId);
     if (!spell) {
       return {
+    this.setParticipantContext(allParticipants.length > 0 ? allParticipants : [params.casterParticipant].filter(Boolean) as BattlefieldParticipant[]);
         success: false,
         errorCode: 'SPELL_NOT_FOUND',
         errorReason: `Spell "${spellId}" does not exist in canonical spell catalog.`,

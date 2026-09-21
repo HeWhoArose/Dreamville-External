@@ -210,7 +210,7 @@ describe('Phase 6 Live HTTP API Test Suite', () => {
       body: JSON.stringify({
         actorId,
         spellId: 'magic_missile',
-        targetId: 'target_creature',
+        targetId: actorId,
         slotLevel: 1,
       }),
     });

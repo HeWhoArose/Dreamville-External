@@ -141,21 +141,52 @@ export class RulesProfileEngine {
 		const warnings: string[] = [];
 		const mode = normalizeMode(source.mode || source.rulesProfile?.mode);
 
-		let profile = baseProfile(mode);
+		const defaults = baseProfile(mode);
 		const supplied = source.rulesProfile;
+		let profile = defaults;
 
 		if (supplied && typeof supplied === 'object') {
+			const suppliedOverrides = Array.isArray(supplied.overrides) ? clone(supplied.overrides) : [];
 			profile = {
-				...profile,
+				...defaults,
 				...clone(supplied),
 				mode,
-				profileId: String(supplied.profileId || profile.profileId),
-				version: Number(supplied.version || profile.version),
+				profileId: String(supplied.profileId || defaults.profileId),
+				version: Number(supplied.version || defaults.version),
+				overrides: suppliedOverrides,
 			};
 		}
 
 		if (source.rulesProfile?.mode && normalizeMode(source.rulesProfile.mode) !== mode) {
 			warnings.push('Rules profile mode did not match requested mode; requested mode takes precedence.');
+		}
+
+		// Mode is authoritative. A supplied profile may customize metadata and
+		// explicit overrides, but it cannot silently turn a mode into another rules policy.
+		if (mode === 'CUSTOM_HOMEBREW_DND') {
+			profile = {
+				...profile,
+				policy: 'CUSTOM_EXPLICIT_RULES',
+				baseRuleset: 'NONE',
+				allowImplicitAbilityChecks: false,
+				allowImplicitSavingThrows: false,
+				allowStandardDndSpellRules: false,
+				requireAuthoredChallengeForCustomChecks: true,
+			};
+		} else if (mode === 'FULL_DND') {
+			profile = {
+				...profile,
+				policy: 'DND_STANDARD',
+				baseRuleset: 'DND_5E',
+				allowWorldRuleOverrides: false,
+			};
+		} else {
+			profile = {
+				...profile,
+				policy: 'DND_WITH_EXPLICIT_OVERRIDES',
+				baseRuleset: 'DND_5E',
+				allowWorldRuleOverrides: true,
+			};
 		}
 
 		profile = applyOverrides(profile, profile.overrides);

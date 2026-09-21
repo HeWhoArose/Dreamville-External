@@ -457,7 +457,12 @@ export const App: React.FC = () => {
           ? `Chronicle of ${activeLocation.name}`
           : 'The Awakening Chronicle',
         worldName: viewState.openingScene?.worldName || activeLocation?.region || 'Living Realm',
-        genre: 'Dynamic Adventure',
+        genre: activeRunFromLibrary?.genre || 'Dynamic Adventure',
+        storyMode: activeRunFromLibrary?.storyMode,
+        dndRulesMode: activeRunFromLibrary?.dndRulesMode,
+        imageUrl: activeRunFromLibrary?.imageUrl,
+        imageMetadata: activeRunFromLibrary?.imageMetadata,
+        visualIdentity: activeRunFromLibrary?.visualIdentity,
         characterName: viewState.protagonist?.name || viewState.characters?.[0]?.name || 'Protagonist',
         currentLocation: activeLocation?.name || 'Sanctum Gateway',
         turnCount: viewState.actionHistory?.length || 1,
@@ -467,9 +472,7 @@ export const App: React.FC = () => {
           viewState.activeDialogue?.text ||
           'The shadows lengthen across the ancient stone archways...',
       }
-    : null;
-
-  const sampleStories: StorySummary[] = storyLibraryStories;
+    : null; 
 
 
   const isPlayRoute = currentRoute.startsWith('play.');
@@ -490,7 +493,7 @@ export const App: React.FC = () => {
     runId: activeRunFromLibrary?.runId || `run_${activeStoryId}`,
     title: activeStorySummary?.title || 'The Awakening Chronicle',
     worldName: activeStorySummary?.worldName || 'Living Aethelgard',
-    ruleset: activeRunFromLibrary?.dndRulesMode || 'FULL_DND',
+    ruleset: activeRunFromLibrary?.dndRulesMode || activeStorySummary?.dndRulesMode || 'FULL_DND',
     genre: activeStorySummary?.genre || 'Dark Fantasy',
     characterName: activeStorySummary?.characterName || 'Protagonist',
     currentLocation: activeStorySummary?.currentLocation || 'Sanctum Gateway',
@@ -701,7 +704,7 @@ export const App: React.FC = () => {
           {currentRoute === 'worlds' && (
             <DashboardView
               activeStory={activeStorySummary}
-              recentStories={sampleStories}
+              recentStories={storyLibraryStories}
               curatedWorlds={worldTemplates}
               onResumeStory={() => setCurrentRoute('play.story')}
               onNewStory={() => setIsImportModalOpen(true)}

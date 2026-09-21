@@ -7,6 +7,10 @@ import {
   NpcDossier,
   InventoryStateResponse,
   CraftingRecipe,
+  CharacterStoryMode,
+  DndRulesMode,
+  NarrativeProfile,
+  WorldSynthesisInput,
 } from '../types';
 
 /**
@@ -1479,7 +1483,7 @@ class ApiClient {
     return await res.json();
   }
 
-  public async synthesizeWorld(input: any): Promise<any> {
+  public async synthesizeWorld(input: WorldSynthesisInput): Promise<any> {
     const res = await fetch(`${this.baseUrl}/worlds`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
@@ -1492,8 +1496,9 @@ class ApiClient {
   public async startWorldRun(worldId: string, options: {
     confirmedCharacter?: any;
     characterId?: string;
-    storyMode?: string;
-    dndRulesMode?: string;
+    storyMode?: CharacterStoryMode;
+    narrativeProfile?: Partial<NarrativeProfile>;
+    dndRulesMode?: DndRulesMode;
     characterName?: string;
     characterRole?: string;
     characterBackground?: string;

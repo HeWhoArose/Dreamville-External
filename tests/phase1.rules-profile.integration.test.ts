@@ -85,3 +85,19 @@ test('Phase 1 integration: HYBRID_DND can disable implicit ability checks while 
 	);
 	assert.notEqual(authored, null);
 });
+
+test('Phase 1 integration: StoryCheckEngine honors the StoryRun profile passed by authority', () => {
+	const engine = new StoryCheckEngine();
+	const customProfile = rulesProfileEngine.createDefault('CUSTOM_HOMEBREW_DND');
+
+	assert.equal(
+		engine.resolve(
+			'phase1_authority_profile',
+			'I inspect the rune',
+			character,
+			undefined,
+			customProfile
+		),
+		null
+	);
+});

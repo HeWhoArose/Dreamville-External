@@ -3,6 +3,7 @@ import { narrativeProfileEngine } from '../domain/narrativeProfileEngine';
 import { worldRepository } from '../repositories/worldRepository';
 import { WorldTemplate, WorldSynthesisInput } from '../../src/types';
 import { MultiModelOrchestrator } from '../domain/aiOrchestrator';
+import { deterministicId, hashStringToSeed } from '../domain/deterministicRng';
 
 export interface StructuredWorldRule {
   ruleId: string;
@@ -82,12 +83,21 @@ export class WorldSynthesisService {
    * Falls back to a deterministic, premise-faithful procedural world builder when offline.
    */
   public async synthesizeWorldFromPremise(input: WorldSynthesisInput): Promise<WorldTemplate> {
-    const timestamp = Date.now();
     const generationSeed = input.generationSeed && input.generationSeed.trim()
       ? input.generationSeed.trim()
-      : `seed_${timestamp}_${Math.random().toString(36).substring(2, 9)}`;
+      : `seed_${hashStringToSeed(JSON.stringify({
+          premise: input.naturalLanguagePremise,
+          title: input.title || '',
+          setting: input.setting || '',
+          era: input.defaultEra || '',
+          genreTags: input.genreTags || [],
+          toneTags: input.toneTags || [],
+          mediumTags: input.mediumTags || [],
+          dndRulesMode: input.dndRulesMode || 'FULL_DND',
+          storyMode: input.storyMode || 'PROTAGONIST',
+        })).toString(16)}`;
 
-    const worldId = `world_syn_${timestamp}`;
+    const worldId = deterministicId('world_syn', generationSeed, input.naturalLanguagePremise, input.title || '');
 
     let title = input.title || '';
     let summary = '';
@@ -891,9 +901,11 @@ As regional tensions rise, rival factions maneuver for influence over critical r
       }
 
       // 1. Unique ID Generation / De-duplication
-      let id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : `evt_syn_event_${Date.now()}_${idx}`;
+      let id = typeof raw.id === 'string' && raw.id.trim()
+      ? raw.id.trim()
+      : deterministicId('evt_syn_event', seed, idx, raw.title || raw.name || raw.kind || 'event');
       if (eventIds.has(id)) {
-        id = `evt_syn_event_${Date.now()}_${idx}_unique`;
+        id = deterministicId('evt_syn_event_unique', seed, idx, raw.title || raw.name || raw.kind || 'event');
       }
       eventIds.add(id);
 

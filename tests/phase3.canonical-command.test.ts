@@ -381,3 +381,37 @@ test('Phase 3 — rejected STAGED commands never touch live canonical state', as
 	assert.equal(repo.getStoryRun(storyId)?.rejectedMarker, undefined);
 	assert.equal(repo.getCanonicalCommandEvents(storyId).length, 0);
 });
+
+test('Phase 3 — canonical validator accepts location movement and time advancement payloads', async () => {
+	const storyId = 'phase3_payload_variants';
+	const repo = seedRepo(storyId);
+	const actorId = repo.getPlayerLifecycle(storyId)?.actorId || `player_actor_${storyId}`;
+
+	const moveResult = await canonicalCommandEngine.execute(
+		repo,
+		{
+			commandId: 'cmd_location_move_001',
+			storyId,
+			actorId,
+			type: 'MOVE',
+			payload: { targetLocationId: 'loc_north_gate' },
+			source: 'PLAYER',
+		},
+		async () => ({ success: true, data: { accepted: true }, summary: 'Location move accepted.' })
+	);
+	assert.equal(moveResult.success, true);
+
+	const timeResult = await canonicalCommandEngine.execute(
+		repo,
+		{
+			commandId: 'cmd_advance_time_001',
+			storyId,
+			actorId,
+			type: 'ADVANCE_TIME',
+			payload: { seconds: 60 },
+			source: 'PLAYER',
+		},
+		async () => ({ success: true, data: { accepted: true }, summary: 'Time advance accepted.' })
+	);
+	assert.equal(timeResult.success, true);
+});

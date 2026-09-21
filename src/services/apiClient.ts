@@ -1429,6 +1429,15 @@ class ApiClient {
   // Challenge 16: Worlds & Campaign Discovery
   // ==========================================
 
+  public async getStoryRuns(): Promise<any[]> {
+    const res = await fetch(`${this.baseUrl}/story-runs`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Failed to fetch Story Runs: HTTP ${res.status}`);
+    return await res.json();
+  }
+
   public async getWorlds(filters?: any): Promise<any[]> {
     const params = new URLSearchParams();
     if (filters) {
@@ -1442,6 +1451,22 @@ class ApiClient {
       headers: { Accept: 'application/json' },
     });
     if (!res.ok) throw new Error(`Failed to fetch worlds: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  public async saveWorldVisualAsset(worldId: string, asset: {
+    imageAsset?: string;
+    imageMetadata?: any;
+  }): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/worlds/${encodeURIComponent(worldId)}/visual-asset`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(asset),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.error || `Failed to save world visual asset: HTTP ${res.status}`);
+    }
     return await res.json();
   }
 

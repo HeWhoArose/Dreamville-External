@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { WorldTemplate, WorldSearchCriteria, WorldSynthesisInput } from '../types';
+import { WorldArtCover } from './common/WorldArtCover';
 import { apiClient } from '../services/apiClient';
 import {
   Globe,
@@ -105,6 +106,37 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
   const [runRulesMode, setRunRulesMode] = useState<string>('FULL_DND');
   const [activeRuns, setActiveRuns] = useState<any[]>([]);
   const [launchSuccessMessage, setLaunchSuccessMessage] = useState<string | null>(null);
+
+  const handleWorldAssetChange = async (world: WorldTemplate, newUrl?: string, provenance?: string) => {
+    const nextWorld: WorldTemplate = {
+      ...world,
+      imageAsset: newUrl,
+      imageMetadata: {
+        ...(world.imageMetadata || { promptFallback: '', rightsStatus: 'UNKNOWN', provenance: 'USER_SELECTED' }),
+        provenance: provenance || 'USER_SELECTED',
+      },
+      updatedAt: new Date().toISOString(),
+    };
+
+    setWorlds((current) => current.map((entry) => entry.worldId === world.worldId ? nextWorld : entry));
+    if (previewWorld?.worldId === world.worldId) {
+      setPreviewWorld(nextWorld);
+    }
+
+    try {
+      const saved = await apiClient.saveWorldVisualAsset(world.worldId, {
+        imageAsset: newUrl,
+        imageMetadata: nextWorld.imageMetadata,
+      });
+      setWorlds((current) => current.map((entry) => entry.worldId === world.worldId ? saved : entry));
+      if (previewWorld?.worldId === world.worldId) {
+        setPreviewWorld(saved);
+      }
+    } catch (err: any) {
+      setError(err?.message || 'Failed to persist world artwork.');
+      await fetchWorlds();
+    }
+  };
 
   const fetchWorlds = async () => {
     setIsLoading(true);
@@ -453,7 +485,36 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
                   className="rounded-xl border border-stone-800 bg-stone-950/40 hover:border-indigo-500/50 transition p-3.5 sm:p-4 flex flex-col justify-between group shadow-sm hover:shadow-md"
                 >
                   <div>
-                    <div className="flex items-start justify-between gap-2 mb-2">
+                    <WorldArtCover
+                      imageUrl={w.imageAsset}
+                      worldName={w.title}
+                      genre={w.genreTags?.[0] || 'Fantasy'}
+                      aspectRatio="card"
+                      assetSlotType="world_cover"
+                      assetMeta={{
+                        slotId: `world_cover_${w.worldId}`,
+                        slotType: 'world_cover',
+                        title: w.title,
+                        subject: w.title,
+                        worldSummary: w.summary || w.description,
+                        genreTags: w.genreTags,
+                        toneTags: w.toneTags,
+                        era: w.era || w.defaultEra,
+                        factions: Array.isArray(w.factions) ? w.factions.map((f: any) => typeof f === 'string' ? f : (f.name || f.title || '')).filter(Boolean) : [],
+                        magicOrTechnology: typeof w.magicRules === 'string'
+                          ? w.magicRules
+                          : w.magicRules ? JSON.stringify(w.magicRules) : undefined,
+                        geography: w.setting || (w.geography ? JSON.stringify(w.geography) : undefined),
+                        visualMotifs: Array.isArray(w.artConfig?.visualMotifs) ? w.artConfig.visualMotifs : [],
+                        setting: w.setting,
+                        environment: w.description,
+                        mood: w.toneTags?.join(', '),
+                        artDirection: w.artConfig?.style || w.artConfig?.artDirection,
+                        isEditable: true,
+                      }}
+                      onAssetChange={(newUrl, provenance) => handleWorldAssetChange(w, newUrl, provenance)}
+                    />
+                    <div className="flex items-start justify-between gap-2 mb-2 mt-3">
                       <h3 className="text-sm font-semibold text-stone-100 group-hover:text-indigo-300 transition">
                         {w.title}
                       </h3>

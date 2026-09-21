@@ -107,6 +107,7 @@ export interface WorldRepository {
   }): { storyId: string; run: any };
   deleteStoryRun(storyId: string): void;
   getStoryRun(storyId: string): any;
+  getAllStoryRuns(): any[];
   saveStoryRun(run: any): void;
   registerStoryRun(run: any): void;
   getWorldTemplate(worldId: string): any;

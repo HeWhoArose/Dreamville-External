@@ -10,6 +10,7 @@ import { worldVisualIdentityService } from '../services/worldVisualIdentityServi
 import { rulesProfileEngine } from '../domain/rulesProfileEngine';
 import { resolveCanonicalConfirmedCharacter } from '../services/confirmedCharacterAuthority';
 import { canonicalCommandEngine } from '../domain/canonicalCommandEngine';
+import { deterministicId } from '../domain/deterministicRng';
 
 export const gameRouter = Router();
 import { sensoryRouter } from './sensoryRoutes';

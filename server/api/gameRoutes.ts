@@ -4983,9 +4983,15 @@ gameRouter.post('/worlds/runs/:storyId/story-director/choice', async (req: Reque
         type: 'INTERACT',
         payload: { beatId, optionId },
         source: 'PLAYER',
+        transactionMode: 'STAGED',
       },
-      async () => {
-        const result = storyDirectorService.recordChoice(storyId, beatId, optionId);
+      async (_command, context) => {
+        const result = storyDirectorService.recordChoice(
+          storyId,
+          beatId,
+          optionId,
+          context.repository
+        );
         return {
           success: result.success,
           data: { ...result, recordedChoice: { beatId, optionId } },
@@ -5035,9 +5041,13 @@ gameRouter.post('/worlds/runs/:storyId/story-director/offscreen', async (req: Re
         type: 'INTERACT',
         payload: { action: 'ADVANCE_OFFSCREEN_WORLD_ACTOR' },
         source: 'SYSTEM',
+        transactionMode: 'STAGED',
       },
-      async () => {
-        const result = storyDirectorService.advanceOffscreenProtagonist(storyId);
+      async (_command, context) => {
+        const result = storyDirectorService.advanceOffscreenProtagonist(
+          storyId,
+          context.repository
+        );
         return {
           success: result.success,
           data: result,

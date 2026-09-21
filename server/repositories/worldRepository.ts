@@ -2217,13 +2217,27 @@ export class InMemoryWorldRepository implements WorldRepository {
   public evaluateCustomSpellProposal(storyId: string, spellProposal: any) {
     const run = this.getStoryRun(storyId);
     const profile = this.getRulesProfile(storyId) || rulesProfileEngine.createDefault('FULL_DND');
-    const characterLevel = spellProposal.casterLevel || 5;
+    const safeProposal = {
+      spellName: String(spellProposal?.spellName || ''),
+      spellLevel: Number(spellProposal?.spellLevel ?? 0),
+      school: spellProposal?.school ? String(spellProposal.school) : undefined,
+      casterLevel: Number(spellProposal?.casterLevel ?? 5),
+    };
+    const characterLevel = Number.isFinite(safeProposal.casterLevel)
+      ? safeProposal.casterLevel
+      : 5;
 
     return dndSpellRulesEvaluator.evaluateSpellProposal({
-      proposal: spellProposal,
+      proposal: {
+        spellName: safeProposal.spellName,
+        spellLevel: safeProposal.spellLevel,
+        school: safeProposal.school,
+      },
       characterLevel,
       dndMode: profile.mode,
-      overrideCapabilities: run?.canonicalCapabilities || [],
+      overrideCapabilities: profile.allowCapabilityOverrides
+        ? (run?.canonicalCapabilities || [])
+        : [],
       rulesProfile: profile,
     });
   }

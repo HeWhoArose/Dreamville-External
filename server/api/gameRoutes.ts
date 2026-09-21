@@ -3589,8 +3589,9 @@ gameRouter.post('/orchestrator/turn', async (req: Request, res: Response) => {
           idempotencyKey,
         },
         source: 'AI',
+        transactionMode: 'STAGED',
       },
-      async () => {
+      async (_command, context) => {
         const turnResult = await orchestrator.executeTurn({
           storyId,
           playerAction,
@@ -3600,6 +3601,7 @@ gameRouter.post('/orchestrator/turn', async (req: Request, res: Response) => {
           maxRetries: Number(maxRetries),
           forceModelId,
           idempotencyKey,
+          repository: context.repository,
         });
         return {
           success: turnResult.success,

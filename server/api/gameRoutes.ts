@@ -4425,31 +4425,70 @@ gameRouter.post('/worlds/runs/:storyId/actions/execute', async (req: Request, re
       return res.status(404).json({ error: 'Story run not found.' });
     }
 
-    if (locationId) {
-      run.currentLocationId = locationId;
-      worldRepository.saveStoryRun(run);
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      `interact_${storyId}_${actionType || 'INVESTIGATE_AREA'}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player?.actorId || `player_actor_${storyId}`;
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'INTERACT',
+        payload: { actionType: actionType || 'INVESTIGATE_AREA', locationId },
+        source: 'PLAYER',
+      },
+      async () => {
+        const run = worldRepository.getStoryRun(storyId);
+        if (!run) {
+          return { success: false, errorReason: 'Story run not found.' };
+        }
+
+        if (locationId) {
+          run.currentLocationId = locationId;
+          worldRepository.saveStoryRun(run);
+        }
+
+        const gameplayEvent = {
+          eventId: `evt_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+          storyId,
+          eventType: actionType || 'INVESTIGATE_AREA',
+          actorId: run.characterName || 'Player',
+          locationId: run.currentLocationId || 'loc_unknown',
+          details: `Server resolved action ${actionType || 'INVESTIGATE_AREA'} at ${run.currentLocationId}`,
+          evidenceItems: [`ev_${actionType || 'action'}_${Date.now()}`],
+          timestamp: new Date().toISOString(),
+        };
+
+        const narrativeResult = emergentNarrativeEngine.processCanonicalEvent(gameplayEvent);
+        const storyThreads = worldRepository.getStoryThreads(storyId);
+
+        return {
+          success: true,
+          data: { gameplayEvent, narrativeResult, storyThreads, storyRun: run },
+          summary: `Interaction ${actionType || 'INVESTIGATE_AREA'} committed.`,
+        };
+      }
+    );
+
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
+      });
     }
-
-    const gameplayEvent = {
-      eventId: `evt_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-      storyId,
-      eventType: actionType || 'INVESTIGATE_AREA',
-      actorId: run.characterName || 'Player',
-      locationId: run.currentLocationId || 'loc_unknown',
-      details: `Server resolved action ${actionType || 'INVESTIGATE_AREA'} at ${run.currentLocationId}`,
-      evidenceItems: [`ev_${actionType || 'action'}_${Date.now()}`],
-      timestamp: new Date().toISOString(),
-    };
-
-    const narrativeResult = emergentNarrativeEngine.processCanonicalEvent(gameplayEvent);
-    const storyThreads = worldRepository.getStoryThreads(storyId);
 
     res.json({
       success: true,
-      gameplayEvent,
-      narrativeResult,
-      storyThreads,
-      storyRun: run,
+      ...(commandResult.data as any),
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to execute player action.' });
@@ -4462,13 +4501,58 @@ gameRouter.post('/worlds/runs/:storyId/actions/apply-ability', async (req: Reque
     if (!abilityId || !targetId) {
       return res.status(400).json({ error: 'abilityId and targetId are required.' });
     }
-    const { abilityService } = await import('../services/abilityService');
     const storyId = req.params.storyId as string;
-    const result = abilityService.resolveAbilityApplication(storyId, abilityId, targetId, req.body);
-    if (!result.success) {
-      return res.status(result.statusCode || 400).json({ error: result.errorReason });
+    const { abilityId, targetId } = req.body;
+    if (!abilityId || !targetId) {
+      return res.status(400).json({ error: 'abilityId and targetId are required.' });
     }
-    res.json(result);
+    const { abilityService } = await import('../services/abilityService');
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player?.actorId || `player_actor_${storyId}`;
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      `ability_${storyId}_${actorId}_${abilityId}_${targetId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'APPLY_ABILITY',
+        payload: { abilityId, targetId },
+        source: 'PLAYER',
+      },
+      async () => {
+        const result = abilityService.resolveAbilityApplication(storyId, abilityId, targetId, req.body);
+        if (!result.success) {
+          return {
+            success: false,
+            errorReason: result.errorReason || 'Ability application rejected.',
+          };
+        }
+        return {
+          success: true,
+          data: result,
+          summary: `Ability ${abilityId} applied to ${targetId}.`,
+        };
+      }
+    );
+
+    if (!commandResult.success) {
+      return res.status(400).json({
+        error: commandResult.errorReason,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
+      });
+    }
+
+    res.json({
+      ...(commandResult.data as any),
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
+    });
   } catch (error) {
     res.status(500).json({ error: 'Failed to apply ability.' });
   }

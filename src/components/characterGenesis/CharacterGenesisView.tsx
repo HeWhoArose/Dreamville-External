@@ -269,6 +269,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
   useEffect(() => {
     if (initialWorld) {
       setSelectedWorld(initialWorld);
+      setSelectedNarrativeRole(initialWorld.storyMode || initialWorld.narrativeProfile?.mode || 'PROTAGONIST');
     }
   }, [initialWorld]);
 
@@ -1264,7 +1265,9 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
     try {
       const res = await apiClient.startWorldRun(selectedWorld.worldId, {
         confirmedCharacter,
-        storyMode: confirmedCharacter.storyMode || 'PROTAGONIST',
+        storyMode: confirmedCharacter.storyMode || selectedWorld.storyMode || selectedWorld.narrativeProfile?.mode || 'PROTAGONIST',
+        narrativeProfile: confirmedCharacter.narrativeProfile || selectedWorld.narrativeProfile,
+        dndRulesMode: selectedWorld.dndRulesMode || selectedWorld.rulesProfile?.mode,
       });
       if (res.success && res.storyId) {
         if (onStartStoryRun) {
@@ -1418,7 +1421,10 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
               {availableWorlds.map((w) => (
                 <button
                   key={w.worldId}
-                  onClick={() => setSelectedWorld(w)}
+                  onClick={() => {
+                    setSelectedWorld(w);
+                    setSelectedNarrativeRole(w.storyMode || w.narrativeProfile?.mode || 'PROTAGONIST');
+                  }}
                   className="p-3 rounded-lg border border-neutral-800 hover:border-indigo-500/50 bg-neutral-900 text-left flex items-center justify-between transition-colors"
                 >
                   <div>

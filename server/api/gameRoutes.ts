@@ -4533,8 +4533,17 @@ gameRouter.post('/worlds/:worldId/start-run', async (req: Request, res: Response
       storyId = creationResult.storyId;
       run = creationResult.run;
     } else {
-      // Legacy backwards-compatibility
-      storyId = `run_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+      // Legacy backwards-compatibility. Use canonical repository order rather than wall-clock entropy
+      // so the same starting repository + input produces the same run identity.
+      const legacyRunSequence = worldRepository.getAllStoryRuns().length + 1;
+      storyId = deterministicId(
+        'run_legacy',
+        worldId,
+        legacyRunSequence,
+        characterName || 'Hero Vael',
+        characterRole || '',
+        characterBackground || ''
+      );
       worldRepository.seedDynamicStoryRun(storyId, world, {
         storyMode,
         narrativeProfile,

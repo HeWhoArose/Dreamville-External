@@ -248,3 +248,37 @@ test('Phase 1 integration: internal NPC tactical execution honors the active rul
 
 	assert.equal(result.success, false);
 });
+
+test('Phase 1 integration: client-supplied spell rule overrides cannot bypass canonical StoryRun rules', () => {
+	const repository = new InMemoryWorldRepository();
+	const profile = rulesProfileEngine.createDefault('HYBRID_DND');
+
+	repository.saveWorldTemplate({
+		worldId: 'phase1_spell_authority_world',
+		dndRulesMode: 'HYBRID_DND',
+		rulesProfile: profile,
+		worldRules: [],
+		ruleConstraints: [],
+		canonicalCapabilities: [],
+		rulesetId: 'HYBRID_DND',
+	});
+
+	repository.saveStoryRun({
+		storyId: 'phase1_spell_authority_run',
+		worldId: 'phase1_spell_authority_world',
+		dndRulesMode: 'HYBRID_DND',
+		ruleset: 'HYBRID_DND',
+		rulesProfile: profile,
+		canonicalCapabilities: [],
+	});
+
+	const result = repository.evaluateCustomSpellProposal('phase1_spell_authority_run', {
+		spellName: 'Client Override Spell',
+		spellLevel: 9,
+		casterLevel: 1,
+		customRulesOverrides: { maxAllowedSpellLevel: 9 },
+	});
+
+	assert.equal(result.approved, false);
+	assert.equal(result.maxAvailableLevel, 1);
+});

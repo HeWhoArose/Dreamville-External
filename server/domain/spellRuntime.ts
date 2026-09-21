@@ -898,30 +898,6 @@ export class SpellRuntime {
     };
     state.activeConcentration = null;
 
-    if (this.chronicleEngine) {
-      const now = Date.now();
-      this.chronicleEngine.recordBootstrapEvidence?.({
-        id: deterministicId('chronicle_conc_break', actorId, previousSpell.spellId, now),
-        sourceEventId: deterministicId('evt_conc_break', actorId),
-        timestamp: {
-          year: 1,
-          month: 1,
-          day: 1,
-          hour: 12,
-          minute: 0,
-          second: 0,
-          totalElapsedSeconds: 0,
-        },
-        category: 'INJURY_OR_RECOVERY',
-        primarySubjectId: actorId,
-        locationId: 'battlefield',
-        summary: `Concentration on ${previousSpell.spellName} broken`,
-        details: `Concentration on ${previousSpell.spellName} broken for ${actorId}: ${reason}.`,
-        provenance: 'direct_observation',
-        visibility: 'PUBLIC',
-      });
-    }
-
     return {
       broken: true,
       previousSpell,

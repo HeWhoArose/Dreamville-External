@@ -4,7 +4,7 @@ import { ConditionEngine } from './conditionEngine';
 import { CombatActionEconomy, CombatTurnResourceSnapshot, ReadyTriggerType } from './combatActionEconomy';
 import { CombatReactionEngine } from './combatReactionEngine';
 import { deathSaveEngine } from './deathSaveEngine';
-import type { DeathSaveState } from '../../src/types';
+import type { DeathSaveState, RulesProfile } from '../../src/types';
 
 export interface DiceTerm {
   count: number;
@@ -391,6 +391,7 @@ export interface TacticalCombatStateExport {
   turnResources?: CombatTurnResourceSnapshot[];
   seed?: number;
   rollCounter?: number;
+  rulesProfile?: RulesProfile;
 }
 
 export interface ProjectedCombatState {
@@ -434,6 +435,7 @@ export class TacticalCombatEngine {
   private pendingActivations: Map<string, PendingActivationState> = new Map();
   private actionEconomy: CombatActionEconomy = new CombatActionEconomy();
   private conditionEngine?: ConditionEngine;
+  private rulesProfile?: RulesProfile;
   private readonly reactionEngine = new CombatReactionEngine();
 
   constructor(seed = 1337, ruleset?: IRulesetAdapter, conditionEngine?: ConditionEngine) {
@@ -458,6 +460,18 @@ export class TacticalCombatEngine {
 
   public getRuleset(): IRulesetAdapter {
     return this.ruleset;
+  }
+
+  public setRulesProfile(profile?: RulesProfile): void {
+    this.rulesProfile = profile ? JSON.parse(JSON.stringify(profile)) : undefined;
+  }
+
+  public getRulesProfile(): RulesProfile | undefined {
+    return this.rulesProfile ? JSON.parse(JSON.stringify(this.rulesProfile)) : undefined;
+  }
+
+  private tacticalCombatEnabled(): boolean {
+    return !this.rulesProfile || !this.rulesProfile.disabledMechanics.includes('dnd_tactical_combat');
   }
 
   public setMapBounds(bounds?: { minX: number; maxX: number; minY: number; maxY: number }): void {
@@ -818,6 +832,7 @@ export class TacticalCombatEngine {
     errorReason?: string;
   } {
     const actor = this.participants.get(actorId);
+    if (!this.tacticalCombatEnabled()) return { success: false, errorReason: 'Tactical combat is disabled by the active rules profile.' };
     if (!actor) return { success: false, errorReason: "Actor not found." };
     if (actor.isDead) return { success: false, errorReason: "Dead actors cannot move." };
 
@@ -862,13 +877,6 @@ export class TacticalCombatEngine {
     }
 
     const distance = Math.hypot(targetX - actor.x, targetY - actor.y);
-    if (distance > actor.speedCells) {
-      return {
-        success: false,
-        errorReason: `Movement exceeds speed allowance: requested ${distance.toFixed(1)}, allowed ${actor.speedCells}.`,
-      };
-    }
-
     const opportunityThreats = !this.actionEconomy.get(actorId)?.disengaging
       ? Array.from(this.participants.values())
           .filter((other) => {
@@ -919,7 +927,6 @@ export class TacticalCombatEngine {
       actionType: 'MOVE',
       headline: `${actor.name} moved to (${targetX}, ${targetY}).`,
       metadata: {
-        movementDistance: distance,
         movementDistance: distance,
         movementCost,
         path,
@@ -981,6 +988,7 @@ export class TacticalCombatEngine {
       {
         type: 'ACTOR_MOVED',
         actorId,
+        targetId: actorId,
         metadata: { reason: 'Target left reach without Disengaging.' },
       },
       threats.map((attacker) => ({
@@ -1016,7 +1024,7 @@ export class TacticalCombatEngine {
       if (!reaction.success) continue;
       const targetId = candidate.ready.targetId || event.actorId;
       if (candidate.ready.actionType === 'ATTACK' && this.participants.has(targetId)) {
-        const result = this.resolveReactionAttack(candidate.actorId, targetId, 'Ready Action');
+        const result = this.resolveReactionAttack(candidate.actorId, targetId);
         this.eventLog.push({
           turnNumber: this.currentRound,
           actorId: candidate.actorId,
@@ -1033,7 +1041,7 @@ export class TacticalCombatEngine {
     }
   }
 
-  private resolveReactionAttack(attackerId: string, targetId: string, reason: string): { hits: boolean; damage: number; targetDied: boolean; roll?: RollRecord; isCritical: boolean } {
+  private resolveReactionAttack(attackerId: string, targetId: string): { hits: boolean; damage: number; targetDied: boolean; roll?: RollRecord; isCritical: boolean } {
     const attacker = this.participants.get(attackerId);
     const target = this.participants.get(targetId);
     if (!attacker || !target || attacker.isDead || target.isDead) {
@@ -1102,6 +1110,7 @@ export class TacticalCombatEngine {
   }
 
   private executeControlAction(attackerId: string, targetId: string, action: 'GRAPPLE' | 'SHOVE'): { success: boolean; errorReason?: string; applied?: boolean } {
+    if (!this.tacticalCombatEnabled()) return { success: false, errorReason: 'Tactical combat is disabled by the active rules profile.' };
     const attacker = this.participants.get(attackerId);
     const target = this.participants.get(targetId);
     if (!attacker || !target) return { success: false, errorReason: 'Attacker or target not found.' };
@@ -2016,6 +2025,7 @@ export class TacticalCombatEngine {
       turnResources: this.actionEconomy.exportState(),
       seed: this.diceEngine.getSeed(),
       rollCounter: this.diceEngine.getRollCounter(),
+      rulesProfile: this.getRulesProfile(),
     };
   }
 
@@ -2069,6 +2079,9 @@ export class TacticalCombatEngine {
     }
     if (typeof data.rollCounter === 'number') {
       this.diceEngine.setRollCounter(data.rollCounter);
+    }
+    if (data.rulesProfile) {
+      this.setRulesProfile(data.rulesProfile);
     }
   }
 }

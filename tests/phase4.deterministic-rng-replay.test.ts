@@ -296,6 +296,8 @@ test('Phase 4 — canonical command replay metadata is deterministic', async () 
 	const second = await run(seedRepo('phase4_replay_metadata'));
 	assert.deepEqual(first.event?.replay, second.event?.replay);
 	assert.equal(first.event?.eventId, second.event?.eventId);
+	assert.equal(first.event?.replay.resolvedDataHash, second.event?.replay.resolvedDataHash);
+	assert.deepEqual(first.event?.replay.rngState, second.event?.replay.rngState);
 });
 
 test('Phase 4 — deterministic world synthesis uses identical deterministic candidate output for the same seed', () => {

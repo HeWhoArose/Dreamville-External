@@ -8,6 +8,7 @@ import { OpeningSceneService } from '../services/openingSceneService';
 import { WorkingContextEngine } from '../domain/workingContextEngine';
 import { worldVisualIdentityService } from '../services/worldVisualIdentityService';
 import { rulesProfileEngine } from '../domain/rulesProfileEngine';
+import { resolveCanonicalConfirmedCharacter } from '../services/confirmedCharacterAuthority';
 
 export const gameRouter = Router();
 import { sensoryRouter } from './sensoryRoutes';
@@ -40,47 +41,6 @@ function requireDndTacticalCombat(res: Response, storyId: string): boolean {
 		requiresCustomRule: true,
 	});
 	return false;
-}
-
-export function resolveCanonicalConfirmedCharacter(
-	worldId: string,
-	submittedCharacter?: any,
-	requestedCharacterId?: unknown
-): { character: any | null; error?: { status: number; message: string; code?: string } } {
-	const candidateId =
-		typeof requestedCharacterId === 'string' && requestedCharacterId.trim()
-			? requestedCharacterId.trim()
-			: typeof submittedCharacter?.characterId === 'string' && submittedCharacter.characterId.trim()
-			? submittedCharacter.characterId.trim()
-			: null;
-
-	if (!candidateId) {
-		if (submittedCharacter) {
-			return {
-				character: null,
-				error: {
-					status: 400,
-					code: 'CONFIRMED_CHARACTER_ID_REQUIRED',
-					message: 'A confirmedCharacter.characterId is required for StoryRun creation.',
-				},
-			};
-		}
-		return { character: null };
-	}
-
-	const canonicalCharacter = worldRepository.getConfirmedCharacter(worldId, candidateId);
-	if (!canonicalCharacter) {
-		return {
-			character: null,
-			error: {
-				status: 404,
-				code: 'CONFIRMED_CHARACTER_NOT_FOUND',
-				message: `Confirmed character "${candidateId}" not found in world "${worldId}".`,
-			},
-		};
-	}
-
-	return { character: canonicalCharacter };
 }
 
 function resolveStoryId(req: Request, allowDefault = true): string {

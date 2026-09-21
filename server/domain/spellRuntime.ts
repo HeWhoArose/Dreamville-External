@@ -992,7 +992,9 @@ export class SpellRuntime {
     previousSpell?: { spellId: string; spellName: string };
     cleanedUpConditions: Array<{ targetId: string; condition: string }>;
   } {
-    const state = this.getActorState(actorId);
+    // Concentration cancellation is a state mutation, so it must operate on
+    // the authoritative actor-state object rather than the read-only projection.
+    const state = this.actorStates.get(actorId);
     const active = state?.activeConcentration;
     if (!state || !active) {
       return { broken: false, cleanedUpConditions: [] };

@@ -13,7 +13,7 @@ test('Phase 0.5 navigation exposes Story Library consistently', () => {
 
 	assert.ok(desktop.includes('story-library'));
 	assert.ok(mobilePrimary.includes('story-library'));
-	assert.equal(new Set([...desktop, ...mobilePrimary]).size, new Set([...desktop, ...mobilePrimary]).size);
+	assert.equal(mobilePrimary.length, 5);
 });
 
 test('Phase 0.5 mobile drawer contains only canonical secondary destinations', () => {

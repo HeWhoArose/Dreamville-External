@@ -3182,8 +3182,7 @@ gameRouter.get('/living-world/state', async (req: Request, res: Response) => {
  */
 gameRouter.post('/living-world/advance', async (req: Request, res: Response) => {
   try {
-    const { storyId = 'default_story', secondsToAdvance, hoursToAdvance } = req.body;
-    const { worldSimulationService } = await import('../simulation/worldSimulationService');
+    const { storyId = 'default_story', secondsToAdvance, hoursToAdvance, commandId: bodyCommandId } = req.body;
 
     let seconds = Number(secondsToAdvance);
     if (isNaN(seconds) || seconds <= 0) {
@@ -3194,15 +3193,56 @@ gameRouter.post('/living-world/advance', async (req: Request, res: Response) => 
       }
     }
 
-    const result = worldSimulationService.advanceTime(storyId, seconds);
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player?.actorId || `player_actor_${storyId}`;
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.headers['idempotency-key'] as string | undefined) ||
+      bodyCommandId ||
+      `living_world_advance_${storyId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId: String(storyId),
+        actorId,
+        type: 'ADVANCE_TIME',
+        payload: { seconds },
+        source: 'SYSTEM',
+        transactionMode: 'STAGED',
+      },
+      async (_command, context) => {
+        const { WorldSimulationService } = await import('../simulation/worldSimulationService');
+        const transactionSimulation = new WorldSimulationService(context.repository);
+        const result = transactionSimulation.advanceTime(storyId, seconds);
+        return {
+          success: true,
+          data: {
+            storyId,
+            secondsAdvanced: seconds,
+            ...result,
+          },
+          summary: `Advanced living world time by ${seconds} seconds.`,
+        };
+      }
+    );
+
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        storyId,
+        commandId: commandResult.commandId,
+        errorReason: commandResult.errorReason,
+        rolledBack: commandResult.rolledBack,
+      });
+    }
 
     res.json({
       success: true,
-      storyId,
-      secondsAdvanced: seconds,
-      newTimestamp: result.newTimestamp,
-      completedArrivals: result.completedArrivals,
-      livingWorldSummary: result.livingWorldSummary,
+      ...(commandResult.data as any),
+      commandId: commandResult.commandId,
+      event: commandResult.event,
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to advance living world simulation.' });

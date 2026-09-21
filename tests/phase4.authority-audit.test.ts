@@ -38,7 +38,7 @@ test('Phase 4 — canonical command events use deterministic identity and canoni
   assert.doesNotMatch(canonicalEngine, /eventId:\s*\`evt_cmd_\$\{command\.storyId\}_\$\{command\.commandId\}/);
   assert.doesNotMatch(canonicalEngine, /committedAt:\s*new Date\(/);
   assert.match(canonicalEngine, /deterministicId\('evt_cmd'/);
-  assert.match(canonicalEngine, /committedAt:\s*\`canonical:/);
+  assert.match(canonicalEngine, /formatCanonicalTimestamp\(after\.worldClock\.timestamp\)/);
 });
 
 test('Phase 4 — Chronicle-producing routes are all behind canonical command resolution', () => {

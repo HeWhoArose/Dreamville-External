@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { DeterministicRng, deterministicId, hashStringToSeed } from '../server/domain/deterministicRng';
-import { LocalDiceEngine } from '../server/domain/combatEngine';
+import { Dnd521RulesetAdapter, LocalDiceEngine } from '../server/domain/combatEngine';
 import { StoryCheckEngine } from '../server/domain/storyCheckEngine';
 import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
 import { canonicalCommandEngine } from '../server/domain/canonicalCommandEngine';
@@ -128,6 +128,61 @@ test('Phase 4 — StoryCheckEngine persists and restores its RNG position', () =
 	assert.deepEqual(aNext?.roll.individualDice, bNext?.roll.individualDice);
 	assert.equal(aNext?.total, bNext?.total);
 	assert.deepEqual(a.exportState(), b.exportState());
+});
+
+test('Phase 4 — combat attack replay matches from the same seeded state', () => {
+	const adapter = new Dnd521RulesetAdapter();
+	const a = new LocalDiceEngine(31415);
+	const b = new LocalDiceEngine(31415);
+	const first = adapter.resolveAttack({
+		attackBonus: 5,
+		targetArmorClass: 14,
+		diceEngine: a,
+	});
+	const second = adapter.resolveAttack({
+		attackBonus: 5,
+		targetArmorClass: 14,
+		diceEngine: b,
+	});
+	assert.deepEqual(first.roll.individualDice, second.roll.individualDice);
+	assert.equal(first.hits, second.hits);
+	assert.equal(first.isCritical, second.isCritical);
+});
+
+test('Phase 4 — rejected story-check commands restore RNG state exactly', async () => {
+	const storyId = 'phase4_rng_rollback';
+	const repo = seedRepo(storyId);
+	const before = captureCanonicalStateSnapshot(storyId, repo);
+	const character = {
+		coreStats: {
+			level: 1, strength: 10, dexterity: 10, constitution: 10,
+			intelligence: 16, wisdom: 12, charisma: 10, ac: 10,
+			speed: 30, hitDice: '1d10', hpCurrent: 10, hpMax: 10,
+		},
+		skills: [],
+	};
+	const result = await canonicalCommandEngine.execute(
+		repo,
+		{
+			commandId: 'phase4_rng_rollback_001',
+			storyId,
+			type: 'INTERACT',
+			payload: { action: 'ROLL_AND_REJECT' },
+			source: 'SYSTEM',
+			transactionMode: 'STAGED',
+		},
+		async (_command, context) => {
+			const check = context.repository.getStoryCheckEngine(storyId).resolve(
+				storyId,
+				'I investigate the strange markings on the wall.',
+				character
+			);
+			assert.ok(check);
+			return { success: false, errorReason: 'Intentional RNG rollback test.' };
+		}
+	);
+	assert.equal(result.success, false);
+	assert.deepEqual(captureCanonicalStateSnapshot(storyId, repo).storyChecks, before.storyChecks);
 });
 
 test('Phase 4 — repository snapshots carry StoryCheck RNG state', () => {

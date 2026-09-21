@@ -41,6 +41,8 @@ test('Phase 3 — core authoritative action routes all use the canonical command
 		'/worlds/runs/:storyId/actions/apply-ability',
 		'/worlds/runs/:storyId/dice-clash/resolve',
 		'/living-world/advance',
+		'/living-world/schedule-event',
+		'/living-world/schedule-event',
 		'/orchestrator/turn',
 		'/living-world/advance',
 	];
@@ -106,4 +108,12 @@ test('Phase 3 — authoritative living-world time advancement uses a canonical s
 	assert.match(block, /type: 'ADVANCE_TIME'/);
 	assert.match(block, /transactionMode: 'STAGED'/);
 	assert.match(block, /new WorldSimulationService\(context\.repository\)/);
+});
+
+test('Phase 3 — authoritative living-world scheduling uses a canonical staged command', () => {
+	const block = routeBlock('/living-world/schedule-event');
+	assert.match(block, /canonicalCommandEngine\.execute/);
+	assert.match(block, /action: 'SCHEDULE_LIVING_WORLD_EVENT'/);
+	assert.match(block, /transactionMode: 'STAGED'/);
+	assert.match(block, /context\.repository\.getLivingWorldSimulation\(storyId\)\.scheduleEvent/);
 });

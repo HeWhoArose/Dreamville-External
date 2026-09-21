@@ -1447,7 +1447,7 @@ export class InMemoryWorldRepository implements WorldRepository {
   public getRestRecoveryEngine(storyId: string): RestRecoveryEngine {
     let engine = this.restRecoveryEngines.get(storyId);
     if (!engine) {
-      engine = new RestRecoveryEngine(this);
+      engine = new RestRecoveryEngine(this, storyId);
       const persisted = this.getStoryRun(storyId)?.runtimeState?.rest;
       if (persisted) engine.importState(persisted);
       this.restRecoveryEngines.set(storyId, engine);

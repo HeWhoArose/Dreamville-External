@@ -1,6 +1,7 @@
 import { worldRepository } from '../repositories/worldRepository';
 import { narrativeProfileEngine } from '../domain/narrativeProfileEngine';
-import { WorldFact, StoryThread } from '../../src/types';
+import { InMemoryWorldRepository, worldRepository } from '../repositories/worldRepository';
+import { WorldFact } from '../../src/types';
 
 export interface NarrativeBeat {
   beatId: string;
@@ -12,7 +13,7 @@ export interface NarrativeBeat {
 export interface NarrativeTriggerDefinition {
   triggerId: string;
   description: string;
-  conditionPredicate: (storyId: string) => boolean;
+  conditionPredicate: (storyId: string, repository: InMemoryWorldRepository) => boolean;
   generatedBeat: NarrativeBeat;
 }
 
@@ -20,8 +21,8 @@ export const NARRATIVE_TRIGGER_REGISTRY: NarrativeTriggerDefinition[] = [
   {
     triggerId: 'trig_coded_cipher',
     description: 'Triggers when coded cipher evidence or fact exists in world',
-    conditionPredicate: (storyId: string) => {
-      const facts = worldRepository.getWorldFacts(storyId);
+    conditionPredicate: (storyId: string, repository: InMemoryWorldRepository) => {
+      const facts = repository.getWorldFacts(storyId);
       return facts.some((f) => f.predicate === 'has_evidence' && f.objectValue?.includes('coded cipher')) ||
              facts.some((f) => f.predicate === 'discovered_fact' && f.objectValue?.includes('cipher'));
     },
@@ -38,8 +39,8 @@ export const NARRATIVE_TRIGGER_REGISTRY: NarrativeTriggerDefinition[] = [
   {
     triggerId: 'trig_refusal_consequence',
     description: 'Triggers when protagonist has refused a narrative path',
-    conditionPredicate: (storyId: string) => {
-      const facts = worldRepository.getWorldFacts(storyId);
+    conditionPredicate: (storyId: string, repository: InMemoryWorldRepository) => {
+      const facts = repository.getWorldFacts(storyId);
       return facts.some((f) => f.predicate === 'refused_path');
     },
     generatedBeat: {
@@ -55,9 +56,9 @@ export const NARRATIVE_TRIGGER_REGISTRY: NarrativeTriggerDefinition[] = [
   {
     triggerId: 'trig_ruins_echoes',
     description: 'Triggers when player is at ancient ruins location',
-    conditionPredicate: (storyId: string) => {
-      const run = worldRepository.getStoryRun(storyId);
-      const player = worldRepository.getPlayerLifecycle(storyId);
+    conditionPredicate: (storyId: string, repository: InMemoryWorldRepository) => {
+      const run = repository.getStoryRun(storyId);
+      const player = repository.getPlayerLifecycle(storyId);
       const loc = run?.currentLocationId || player?.locationId;
       return loc === 'loc_ancient_ruins';
     },
@@ -74,9 +75,12 @@ export const NARRATIVE_TRIGGER_REGISTRY: NarrativeTriggerDefinition[] = [
 ];
 
 export class StoryDirectorService {
-  public stepDirector(storyId: string): { eventGenerated: boolean; beat?: NarrativeBeat; message?: string } {
+  public stepDirector(
+    storyId: string,
+    repository = worldRepository
+  ): { eventGenerated: boolean; beat?: NarrativeBeat; message?: string } {
     for (const trigger of NARRATIVE_TRIGGER_REGISTRY) {
-      if (trigger.conditionPredicate(storyId)) {
+      if (trigger.conditionPredicate(storyId, repository)) {
         return {
           eventGenerated: true,
           beat: trigger.generatedBeat,

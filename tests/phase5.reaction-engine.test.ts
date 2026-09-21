@@ -47,6 +47,36 @@ test('Phase 5: generic reaction adjudicator filters triggers and orders eligible
 	assert.deepEqual(results.map((result) => result.actorId), ['alpha', 'zeta']);
 });
 
+test('Phase 5: generic reaction adjudicator respects explicit eligibility checks', () => {
+	const engine = new CombatReactionEngine();
+	let calls = 0;
+
+	const results = engine.resolve(
+		{ type: 'CUSTOM', actorId: 'source' },
+		[
+			{
+				reactionId: 'ineligible',
+				actorId: 'reactor_a',
+				priority: 100,
+				triggerType: 'CUSTOM',
+				canResolve: () => false,
+				resolve: () => { calls++; return { triggered: true }; },
+			},
+			{
+				reactionId: 'eligible',
+				actorId: 'reactor_b',
+				priority: 0,
+				triggerType: 'CUSTOM',
+				canResolve: () => true,
+				resolve: () => { calls++; return { triggered: true }; },
+			},
+		]
+	);
+
+	assert.equal(calls, 1);
+	assert.deepEqual(results.map((result) => result.actorId), ['reactor_b']);
+});
+
 test('Phase 5: one actor cannot resolve two reactions from the same trigger event', () => {
 	const engine = new CombatReactionEngine();
 	let count = 0;

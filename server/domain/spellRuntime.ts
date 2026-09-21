@@ -1814,7 +1814,9 @@ export class SpellRuntime {
     } else if (isRitual) {
       headline += ` as a ritual`;
     }
-    if (targetParticipant) {
+    if (isAreaSpell) {
+      headline += ` affecting ${areaTargets.length} creature${areaTargets.length === 1 ? '' : 's'}`;
+    } else if (targetParticipant) {
       headline += ` on ${targetParticipant.name}`;
     }
     if (damageInflicted > 0) {

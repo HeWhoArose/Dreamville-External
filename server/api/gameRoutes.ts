@@ -389,7 +389,6 @@ gameRouter.post('/inventory/equip', async (req: Request, res: Response) => {
     const storyId = resolveStoryId(req);
     const player = worldRepository.getPlayerLifecycle(storyId);
     const actorId = player ? player.actorId : `player_actor_${storyId}`;
-    const invEngine = worldRepository.getInventoryEngine(storyId);
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
@@ -404,8 +403,10 @@ gameRouter.post('/inventory/equip', async (req: Request, res: Response) => {
         type: 'EQUIP',
         payload: { itemId, slot },
         source: 'PLAYER',
+        transactionMode: 'STAGED',
       },
-      async () => {
+      async (_command, context) => {
+        const invEngine = context.repository.getInventoryEngine(storyId);
         const result = invEngine.equipItem(actorId, itemId, slot);
         if (!result.success) {
           return { success: false, errorReason: result.errorReason || 'Equipment request rejected.' };
@@ -452,7 +453,6 @@ gameRouter.post('/inventory/unequip', async (req: Request, res: Response) => {
     const storyId = resolveStoryId(req);
     const player = worldRepository.getPlayerLifecycle(storyId);
     const actorId = player ? player.actorId : `player_actor_${storyId}`;
-    const invEngine = worldRepository.getInventoryEngine(storyId);
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
@@ -467,8 +467,10 @@ gameRouter.post('/inventory/unequip', async (req: Request, res: Response) => {
         type: 'UNEQUIP',
         payload: { slot },
         source: 'PLAYER',
+        transactionMode: 'STAGED',
       },
-      async () => {
+      async (_command, context) => {
+        const invEngine = context.repository.getInventoryEngine(storyId);
         const result = invEngine.unequipItem(actorId, slot);
         if (!result.success) {
           return { success: false, errorReason: result.errorReason || 'Unequip request rejected.' };
@@ -531,7 +533,6 @@ gameRouter.post('/inventory/craft', async (req: Request, res: Response) => {
     const storyId = resolveStoryId(req);
     const player = worldRepository.getPlayerLifecycle(storyId);
     const actorId = player ? player.actorId : `player_actor_${storyId}`;
-    const invEngine = worldRepository.getInventoryEngine(storyId);
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
@@ -546,8 +547,11 @@ gameRouter.post('/inventory/craft', async (req: Request, res: Response) => {
         type: 'USE_ITEM',
         payload: { recipeId },
         source: 'PLAYER',
+        transactionMode: 'STAGED',
       },
-      async () => {
+      async (_command, context) => {
+        const transactionRepo = context.repository;
+        const invEngine = transactionRepo.getInventoryEngine(storyId);
         const result = invEngine.craftItem(actorId, recipeId);
         if (!result.success) {
           return { success: false, errorReason: result.errorReason || 'Crafting rejected.' };

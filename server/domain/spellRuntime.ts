@@ -1607,8 +1607,8 @@ export class SpellRuntime {
       for (const areaTarget of areaTargets) {
         if (spell.defenseModel === 'SAVING_THROW') {
           const ability = spell.savingThrowAbility || 'DEX';
-          const saveMod = areaTarget.saveModifiers?.[ability] ?? 0;
-          const dc = state.spellSaveDc;
+          const saveMod = (areaTarget.saveModifiers?.[ability] ?? 0) + this.conditionEngine.getExhaustionModifiers(areaTarget.id).d20Penalty;
+          const dc = state.spellSaveDc + this.conditionEngine.getExhaustionModifiers(casterId).saveDcPenalty;
           const roll = dice.roll('1d20', saveMod);
           const targetConditions = new Set((areaTarget.conditions || []).map((c) => c.toLowerCase()));
           const automaticFailure =
@@ -1738,8 +1738,8 @@ export class SpellRuntime {
       }
     } else if (spell.defenseModel === 'SAVING_THROW' && targetParticipant) {
       const ability = spell.savingThrowAbility || 'DEX';
-      const saveMod = targetParticipant.saveModifiers?.[ability] ?? 0;
-      const dc = state.spellSaveDc;
+      const saveMod = (targetParticipant.saveModifiers?.[ability] ?? 0) + this.conditionEngine.getExhaustionModifiers(targetParticipant.id).d20Penalty;
+      const dc = state.spellSaveDc + this.conditionEngine.getExhaustionModifiers(casterId).saveDcPenalty;
 
       const roll = dice.roll('1d20', saveMod);
       const targetConditions = new Set((targetParticipant.conditions || []).map((c) => c.toLowerCase()));

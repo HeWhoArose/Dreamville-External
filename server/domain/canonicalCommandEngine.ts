@@ -98,7 +98,11 @@ function stableStringify(value: unknown): string {
 }
 
 function stableHash(value: unknown): string {
-	const serialized = typeof value === 'string' ? value : stableStringify(value);
+	const serialized = value === undefined
+		? 'undefined'
+		: typeof value === 'string'
+			? value
+			: stableStringify(value);
 	let hash = 2166136261 >>> 0;
 	for (let i = 0; i < serialized.length; i++) {
 		hash ^= serialized.charCodeAt(i);

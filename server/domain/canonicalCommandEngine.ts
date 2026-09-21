@@ -328,9 +328,7 @@ export class CanonicalCommandEngine {
 				mutationPaths,
 			};
 		} catch (error: any) {
-			if (command.transactionMode !== 'STAGED') {
-				repository.restoreCanonicalStateSnapshot(before);
-			}
+			repository.restoreCanonicalStateSnapshot(before);
 			return {
 				success: false,
 				commandId: command.commandId,

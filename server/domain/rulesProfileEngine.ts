@@ -147,52 +147,64 @@ function applyOverrides(profile: RulesProfile, rawOverrides: unknown): RulesProf
 			if (override.ruleId === REST_RECOVERY_RULES) {
 				const value = override.value as Record<string, unknown>;
 				const normalized: Record<string, number | boolean | string> = {};
-				const numericKeys = [
-					'shortRestSeconds',
-					'longRestSeconds',
-					'longRestHitDiceRecoveryFraction',
-					'longRestExhaustionRecovery',
-					'shortRestHitDiceSpend',
-					'shortRestFatigueRecovery',
-					'shortRestStressRecovery',
-					'longRestFatigueRecovery',
-					'longRestStressRecovery',
-					'shortRestPhysicalStrainRecoveryFraction',
-					'longRestPhysicalStrainRecoveryFraction',
-					'shortRestMagicalEnergyRecoveryFraction',
-					'longRestMagicalEnergyRecoveryFraction',
-				];
-				for (const key of numericKeys) {
+				const numericBounds: Record<string, { min: number; max?: number }> = {
+					shortRestSeconds: { min: 1 },
+					longRestSeconds: { min: 1 },
+					longRestHitDiceRecoveryFraction: { min: 0, max: 1 },
+					longRestExhaustionRecovery: { min: 0, max: 6 },
+					shortRestFatigueRecovery: { min: 0, max: 100 },
+					shortRestStressRecovery: { min: 0, max: 100 },
+					longRestFatigueRecovery: { min: 0, max: 100 },
+					longRestStressRecovery: { min: 0, max: 100 },
+					shortRestPhysicalStrainRecoveryFraction: { min: 0, max: 1 },
+					longRestPhysicalStrainRecoveryFraction: { min: 0, max: 1 },
+					shortRestMagicalEnergyRecoveryFraction: { min: 0, max: 1 },
+					longRestMagicalEnergyRecoveryFraction: { min: 0, max: 1 },
+				};
+				for (const [key, bounds] of Object.entries(numericBounds)) {
 					if (value[key] === undefined) continue;
-					const n = Number(value[key]);
-					if (!Number.isFinite(n) || n < 0) continue;
-					normalized[key] = n;
+					if (typeof value[key] !== 'number' || !Number.isFinite(value[key])) continue;
+					if (value[key] < bounds.min || (bounds.max !== undefined && value[key] > bounds.max)) {
+						continue;
+					}
+					normalized[key] = value[key] as number;
 				}
-				for (const key of [
+
+				const booleanKeys = [
 					'longRestRestoreHp',
 					'longRestRestoreSpellSlots',
 					'longRestBreakConcentration',
 					'allowRestWhileTraveling',
 					'allowRestInCombat',
 					'clearConditionsOnLongRest',
-				]) {
+				];
+				for (const key of booleanKeys) {
 					if (value[key] === undefined) continue;
 					if (typeof value[key] !== 'boolean') continue;
 					normalized[key] = value[key] as boolean;
 				}
-				if (value['conditionIdsToClearOnLongRest'] !== undefined) {
-					if (!Array.isArray(value['conditionIdsToClearOnLongRest']) || !value['conditionIdsToClearOnLongRest'].every((v) => typeof v === 'string')) continue;
-					normalized['conditionIdsToClearOnLongRest'] = (value['conditionIdsToClearOnLongRest'] as string[]).join('|');
+
+				if (value.shortRestRecoveryModel !== undefined) {
+					if (value.shortRestRecoveryModel !== 'HIT_DICE' && value.shortRestRecoveryModel !== 'NONE') continue;
+					normalized.shortRestRecoveryModel = value.shortRestRecoveryModel as string;
 				}
-				if (value['shortRestRecoveryModel'] !== undefined) {
-					if (value['shortRestRecoveryModel'] !== 'HIT_DICE' && value['shortRestRecoveryModel'] !== 'NONE') continue;
-					normalized['shortRestRecoveryModel'] = value['shortRestRecoveryModel'] as string;
+
+				if (value.conditionIdsToClearOnLongRest !== undefined) {
+					if (
+						!Array.isArray(value.conditionIdsToClearOnLongRest) ||
+						!value.conditionIdsToClearOnLongRest.every((item) => typeof item === 'string' && item.trim())
+					) {
+						continue;
+					}
+					normalized.conditionIdsToClearOnLongRest =
+						(value.conditionIdsToClearOnLongRest as string[]).map((item) => item.trim()).join('|');
 				}
+
 				if (Object.keys(normalized).length === 0) continue;
 				next.parameterOverrides[REST_RECOVERY_RULES] = normalized;
 				next.overrides.push(override);
 				continue;
-			}
+			}}
 
 			continue;
 		}

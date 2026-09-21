@@ -172,6 +172,122 @@ test('Phase 4 — combat attack replay matches from the same seeded state', () =
 	assert.equal(first.isCritical, second.isCritical);
 });
 
+test('Phase 4 — full canonical combat attack replay matches from identical seeded state', async () => {
+	const makeRepo = (storyId: string) => {
+		const repo = seedRepo(storyId);
+		const combat = repo.getCombatEngine(storyId);
+		const hero = repo.getPlayerLifecycle(storyId)?.actorId || 'player_actor_' + storyId;
+		combat.addParticipant({
+			id: hero,
+			name: 'Replay Hero',
+			x: 0,
+			y: 0,
+			initiative: 20,
+			team: 'player_allies',
+			hpCurrent: 20,
+			hpMax: 20,
+			armorClass: 14,
+			speedCells: 6,
+			attackBonus: 5,
+			damageFormula: '1d4+1',
+			conditions: [],
+			isDead: false,
+		});
+		combat.addParticipant({
+			id: 'phase4_replay_enemy',
+			name: 'Replay Enemy',
+			x: 1,
+			y: 0,
+			initiative: 1,
+			team: 'enemies',
+			hpCurrent: 20,
+			hpMax: 20,
+			armorClass: 14,
+			speedCells: 6,
+			attackBonus: 3,
+			damageFormula: '1d4+1',
+			conditions: [],
+			isDead: false,
+		});
+		combat.rollInitiative();
+		return { repo, hero };
+	};
+
+	const firstState = makeRepo('phase4_canonical_combat_replay');
+	const secondState = makeRepo('phase4_canonical_combat_replay');
+	const execute = (repo: InMemoryWorldRepository, hero: string) => canonicalCommandEngine.execute(
+		repo,
+		{
+			commandId: 'phase4_canonical_combat_replay_001',
+			storyId: 'phase4_canonical_combat_replay',
+			actorId: hero,
+			type: 'ATTACK',
+			payload: { targetId: 'phase4_replay_enemy' },
+			source: 'PLAYER',
+			transactionMode: 'STAGED',
+		},
+		async (_command, context) => {
+			const result = context.repository.getCombatEngine('phase4_canonical_combat_replay').executeAttack(hero, 'phase4_replay_enemy');
+			return result.success
+				? { success: true, data: result, summary: 'Canonical replay attack committed.' }
+				: { success: false, errorReason: result.errorReason || 'Replay attack rejected.' };
+		}
+	);
+
+	const first = await execute(firstState.repo, firstState.hero);
+	const second = await execute(secondState.repo, secondState.hero);
+	assert.equal(first.success, true);
+	assert.equal(second.success, true);
+	assert.equal(first.event?.eventId, second.event?.eventId);
+	assert.deepEqual(first.event?.replay, second.event?.replay);
+	assert.deepEqual(first.data, second.data);
+	assert.deepEqual(
+		firstState.repo.getCombatEngine('phase4_canonical_combat_replay').exportState(),
+		secondState.repo.getCombatEngine('phase4_canonical_combat_replay').exportState()
+	);
+});
+
+test('Phase 4 — full canonical story-check replay produces identical roll and replay metadata', async () => {
+	const character = {
+		coreStats: {
+			level: 1, strength: 10, dexterity: 10, constitution: 10,
+			intelligence: 16, wisdom: 12, charisma: 10, ac: 10,
+			speed: 30, hitDice: '1d10', hpCurrent: 10, hpMax: 10,
+		},
+		skills: [],
+	};
+	const makeRepo = () => seedRepo('phase4_canonical_story_check_replay');
+	const execute = (repo: InMemoryWorldRepository) => canonicalCommandEngine.execute(
+		repo,
+		{
+			commandId: 'phase4_canonical_story_check_replay_001',
+			storyId: 'phase4_canonical_story_check_replay',
+			actorId: repo.getPlayerLifecycle('phase4_canonical_story_check_replay')?.actorId,
+			type: 'INTERACT',
+			payload: { action: 'STORY_CHECK_REPLAY' },
+			source: 'PLAYER',
+			transactionMode: 'STAGED',
+		},
+		async (_command, context) => {
+			const check = context.repository.getStoryCheckEngine('phase4_canonical_story_check_replay').resolve(
+				'phase4_canonical_story_check_replay',
+				'I investigate the strange markings on the wall.',
+				character
+			);
+			if (!check) return { success: false, errorReason: 'Story check did not resolve.' };
+			return { success: true, data: check, summary: 'Canonical story check replay committed.' };
+		}
+	);
+
+	const first = await execute(makeRepo());
+	const second = await execute(makeRepo());
+	assert.equal(first.success, true);
+	assert.equal(second.success, true);
+	assert.deepEqual(first.data?.roll.individualDice, second.data?.roll.individualDice);
+	assert.equal(first.data?.total, second.data?.total);
+	assert.deepEqual(first.event?.replay, second.event?.replay);
+	assert.equal(first.event?.eventId, second.event?.eventId);
+});
 test('Phase 4 — rejected story-check commands restore RNG state exactly', async () => {
 	const storyId = 'phase4_rng_rollback';
 	const repo = seedRepo(storyId);

@@ -1006,7 +1006,10 @@ export class InMemoryWorldRepository implements WorldRepository {
         eventStates,
         createdAt: new Date().toISOString(),
         initialScene: initialSceneHook,
-      };
+         runtimeState: {
+           progression: progressionEngine.exportState(),
+         },
+             };
 
       this.saveStoryRun(run);
 
@@ -1891,6 +1894,7 @@ export class InMemoryWorldRepository implements WorldRepository {
     const chronicleState = chronicleEngine.exportState();
     const narrativeState = orchestrator.exportNarrativeHistory(storyId);
     const capabilitiesState = capabilityEngine.exportState();
+    const progressionState = this.getCharacterProgressionEngine(storyId).exportState();
     const combatState = combatEngine.exportState();
     const memoriesState = memoryEngine.exportState();
     const livingWorldState = livingSim.exportState();
@@ -1926,6 +1930,7 @@ export class InMemoryWorldRepository implements WorldRepository {
       chronicleState,
       narrativeState,
       capabilitiesState,
+      progressionState,
       combatState,
       memoriesState,
       livingWorldState,
@@ -2078,6 +2083,7 @@ export class InMemoryWorldRepository implements WorldRepository {
         this.sensoryEngine.restoreVoiceProfiles(effectiveStoryId, stagedVoiceProfiles);
       }
       this.capabilityEngines.set(effectiveStoryId, stagedCapability);
+       this.characterProgressionEngines.set(effectiveStoryId, stagedProgression);
       this.combatEngines.set(effectiveStoryId, stagedCombat);
       this.memoryEngines.set(effectiveStoryId, stagedMemory);
       this.livingSimulations.set(effectiveStoryId, stagedLivingWorld);

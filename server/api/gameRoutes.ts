@@ -17,6 +17,16 @@ gameRouter.use('/adaptation', adaptationRouter);
 
 
 function requireDndTacticalCombat(res: Response, storyId: string): boolean {
+	const run = worldRepository.getStoryRun(storyId);
+	if (!run && storyId !== 'default_story') {
+		res.status(404).json({
+			success: false,
+			code: 'STORY_RUN_NOT_FOUND',
+			errorReason: `StoryRun with ID "${storyId}" was not found.`,
+		});
+		return false;
+	}
+
 	const profile = worldRepository.getRulesProfile(storyId)
 		|| rulesProfileEngine.createDefault('FULL_DND');
 	if (rulesProfileEngine.allowsDndTacticalCombat(profile)) {
@@ -4240,6 +4250,13 @@ gameRouter.post('/worlds/runs/:storyId/spells/evaluate', async (req: Request, re
     const { spellProposal } = req.body;
     const { worldRepository } = await import('../repositories/worldRepository');
     const storyId = req.params.storyId as string;
+    if (!worldRepository.getStoryRun(storyId)) {
+      return res.status(404).json({
+        success: false,
+        code: 'STORY_RUN_NOT_FOUND',
+        errorReason: `StoryRun with ID "${storyId}" was not found.`,
+      });
+    }
     const result = worldRepository.evaluateCustomSpellProposal(storyId, spellProposal || req.body);
     res.json(result);
   } catch (error: any) {

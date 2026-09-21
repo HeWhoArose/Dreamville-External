@@ -742,11 +742,11 @@ export class SpellRuntime {
   }
 
   public prepareSpell(actorId: string, spellId: string): { success: boolean; errorReason?: string } {
-    const state = this.getOrCreateActorState(actorId);
     const spell = this.getSpell(spellId);
     if (!spell) return { success: false, errorReason: `Spell "${spellId}" not found in catalog.` };
     if (spell.level === 0) return { success: true }; // Cantrips are always prepared
 
+    const state = this.getOrCreateActorState(actorId);
     const normId = spell.id;
     if (state.preparedSpells.includes(normId)) {
       return { success: true };
@@ -762,11 +762,11 @@ export class SpellRuntime {
   }
 
   public unprepareSpell(actorId: string, spellId: string): { success: boolean; errorReason?: string } {
-    const state = this.getOrCreateActorState(actorId);
     const spell = this.getSpell(spellId);
     if (!spell) return { success: false, errorReason: `Spell "${spellId}" not found.` };
     if (spell.level === 0) return { success: false, errorReason: 'Cannot unprepare a cantrip.' };
 
+    const state = this.getOrCreateActorState(actorId);
     const normId = spell.id;
     state.preparedSpells = state.preparedSpells.filter((id) => id !== normId);
     return { success: true };
@@ -806,9 +806,17 @@ export class SpellRuntime {
   }
 
   public learnSpell(actorId: string, spellId: string): { success: boolean; errorReason?: string; knownSpells: string[] } {
-    const state = this.getOrCreateActorState(actorId);
     const spell = this.getSpell(spellId);
-    if (!spell) return { success: false, errorReason: `Spell "${spellId}" not found in catalog.`, knownSpells: [...state.knownSpells] };
+    if (!spell) {
+      const existing = this.actorStates.get(actorId);
+      return {
+        success: false,
+        errorReason: `Spell "${spellId}" not found in catalog.`,
+        knownSpells: existing ? [...existing.knownSpells] : [],
+      };
+    }
+
+    const state = this.getOrCreateActorState(actorId);
     if (!state.knownSpells.includes(spell.id)) {
       state.knownSpells.push(spell.id);
     }

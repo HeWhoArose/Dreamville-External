@@ -5687,7 +5687,7 @@ function buildCanonicalSelfParticipant(
   const npc = player?.actorId === actorId ? null : repository.getNpcLifecycle(storyId, actorId);
   const state = runtime.getOrCreateActorState(actorId);
   const hpCurrent = Math.max(0, Number(conditionState?.healthCurrent ?? 30));
-  const hpMax = Math.max(1, Number(conditionState?.healthMax ?? hpCurrent || 30));
+  const hpMax = Math.max(1, Number(conditionState?.healthMax ?? (hpCurrent || 30)));
   const dead = Boolean(conditionState?.dead || hpCurrent <= 0);
 
   return {
@@ -5721,7 +5721,8 @@ function recordCanonicalSpellEvidence(
   storyId: string,
   commandId: string,
   actorId: string,
-  result: import('../domain/spellRuntime').CastSpellExecutionResult
+  result: import('../domain/spellRuntime').CastSpellExecutionResult,
+  targetId?: string
 ): void {
   const player = repository.getPlayerLifecycle(storyId);
   const clock = repository.getWorldClock(storyId);
@@ -5732,7 +5733,7 @@ function recordCanonicalSpellEvidence(
     category: 'SACRED_OR_HISTORIC',
     timestamp,
     primarySubjectId: actorId,
-    secondarySubjectId: result.targetHpRemaining !== undefined ? result.spellId : undefined,
+    secondarySubjectId: targetId,
     locationId: player?.locationId || 'loc_unknown',
     summary: result.headline,
     details: result.headline,
@@ -6235,7 +6236,7 @@ gameRouter.post('/spells/cast', async (req: Request, res: Response) => {
               diceEngine: transactionCombat.getDiceEngine(),
               requireAuthoritativeTarget: true,
               damageResolver: (damageTarget, amount, damageType, criticalHit = false) =>
-                transactionCombat['applyCombatDamage'](damageTarget, amount, damageType, criticalHit),
+                transactionCombat.resolveAuthoritativeSpellDamage(damageTarget, amount, damageType, criticalHit),
             },
             casterParticipant: caster,
             targetParticipant: target,
@@ -6246,7 +6247,7 @@ gameRouter.post('/spells/cast', async (req: Request, res: Response) => {
           }
         }
 
-        recordCanonicalSpellEvidence(context.repository, storyId, commandId, actorId, castData);
+        recordCanonicalSpellEvidence(context.repository, storyId, commandId, actorId, castData, targetId);
 
         return {
           success: true,

@@ -1196,6 +1196,9 @@ gameRouter.get('/worlds/runs/:storyId/progression', async (req: Request, res: Re
       unlockedFeatures: engine.getUnlockedFeatures(actorId),
       triggeredAbilities: engine.getTriggeredAbilities(actorId),
       modifiers: engine.resolveModifiers(actorId),
+      genesisDivergence: worldRepository.getStoryRun(storyId)?.protagonist
+        ? engine.detectGenesisDivergence(actorId, worldRepository.getStoryRun(storyId).protagonist)
+        : null,
       rulesProfile,
     });
   } catch (error: any) {

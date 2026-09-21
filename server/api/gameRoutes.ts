@@ -1352,17 +1352,66 @@ gameRouter.post('/capabilities/interpret', async (req: Request, res: Response) =
     const actorId = reqActorId || (player ? player.actorId : `player_actor_${storyId}`);
     const capEngine = worldRepository.getCapabilityEngine(storyId);
 
-    const interpretationResult = capEngine.interpretFreeformAction({
-      actorId,
-      actionText: actionText.trim(),
-      tags: Array.isArray(tags) ? tags : undefined,
-      intendedCapabilityId,
-      requestedModifiers,
-      requestedScale,
-      environment,
-      actorConditions,
-      executeIfValid: Boolean(executeIfValid),
-    });
+    let interpretationResult: any;
+    if (Boolean(executeIfValid)) {
+      const commandId =
+        (req.headers['x-command-id'] as string | undefined) ||
+        (req.body?.commandId as string | undefined) ||
+        `freeform_${storyId}_${actorId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const commandResult = await canonicalCommandEngine.execute(
+        worldRepository,
+        {
+          commandId,
+          storyId,
+          actorId,
+          type: 'CAST',
+          payload: { actionText, intendedCapabilityId, requestedScale },
+          source: 'PLAYER',
+        },
+        async () => {
+          const result = capEngine.interpretFreeformAction({
+            actorId,
+            actionText: actionText.trim(),
+            tags: Array.isArray(tags) ? tags : undefined,
+            intendedCapabilityId,
+            requestedModifiers,
+            requestedScale,
+            environment,
+            actorConditions,
+            executeIfValid: true,
+          });
+          return {
+            success: result.validationSuccess,
+            data: result,
+            errorReason: result.validationReason || result.rejectionReason,
+            summary: result.validationSuccess
+              ? 'Freeform action interpreted and committed.'
+              : 'Freeform action rejected without mutation.',
+          };
+        }
+      );
+      if (!commandResult.success) {
+        return res.status(400).json({
+          success: false,
+          errorReason: commandResult.errorReason,
+          rolledBack: commandResult.rolledBack,
+          commandId: commandResult.commandId,
+        });
+      }
+      interpretationResult = commandResult.data;
+    } else {
+      interpretationResult = capEngine.interpretFreeformAction({
+        actorId,
+        actionText: actionText.trim(),
+        tags: Array.isArray(tags) ? tags : undefined,
+        intendedCapabilityId,
+        requestedModifiers,
+        requestedScale,
+        environment,
+        actorConditions,
+        executeIfValid: false,
+      });
+    }
 
     const powerState = capEngine.getPowerState(actorId);
     const capabilities = capEngine.getAllCapabilities();

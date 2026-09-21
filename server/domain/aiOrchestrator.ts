@@ -3548,12 +3548,15 @@ export class MultiModelOrchestrator {
     const timeoutMs = params.timeoutMs ?? 3000;
     const maxRetries = params.maxRetries ?? 2;
 
-    // V6.34 Stable Identifiers: all turn identities are deterministic.
-    const turnSequence = ++this.totalTurnsExecuted;
+    const repo = params.repository || this.getWorldRepository();
+    // V6.34 Stable Identifiers: stats remain process-local, but canonical turn identity
+    // derives from the authoritative story command sequence so replay does not depend on
+    // unrelated turns executed elsewhere in the process.
+    this.totalTurnsExecuted += 1;
+    const turnSequence = repo.getCanonicalCommandEvents(storyId).length + 1;
     const turnId = rawIdempotencyKey
       ? deterministicId('turn', storyId, rawIdempotencyKey.replace(/[^a-zA-Z0-9_-]/g, '_'))
       : deterministicId('turn', storyId, turnSequence, task, params.playerAction || '');
-    const repo = params.repository || this.getWorldRepository();
 
     // Checkpoint continuation awareness (V6.15 / V6.06)
     let priorCheckpoint: ContinuationCheckpoint | undefined;

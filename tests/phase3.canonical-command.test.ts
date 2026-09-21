@@ -143,3 +143,95 @@ test('Phase 3 — duplicate commandId with a different payload is rejected', asy
 	assert.equal(conflict.success, false);
 	assert.match(conflict.errorReason || '', /different payload/i);
 });
+
+test('Phase 3 — command payload validation rejects malformed MOVE before mutation', async () => {
+	const storyId = 'phase3_command_validation';
+	const repo = seedRepo(storyId);
+	const before = captureCanonicalStateSnapshot(storyId, repo);
+
+	const result = await canonicalCommandEngine.execute(
+		repo,
+		{
+			commandId: 'cmd_validation_001',
+			storyId,
+			actorId: before.player?.actorId || `player_actor_${storyId}`,
+			type: 'MOVE',
+			payload: { targetX: '10', targetY: 4 } as any,
+			source: 'PLAYER',
+		},
+		async () => {
+			throw new Error('Handler must not run when validation fails.');
+		}
+	);
+
+	assert.equal(result.success, false);
+	assert.match(result.errorReason || '', /numeric targetX and targetY/i);
+	assert.equal(result.rolledBack, false);
+	assert.equal(compareCanonicalSnapshots(before, captureCanonicalStateSnapshot(storyId, repo)).identical, true);
+});
+
+test('Phase 3 — rollback restores a real combat mutation after downstream rejection', async () => {
+	const storyId = 'phase3_combat_rollback';
+	const repo = seedRepo(storyId);
+	const combat = repo.getCombatEngine(storyId);
+	const hero = repo.getPlayerLifecycle(storyId)?.actorId || `player_actor_${storyId}`;
+
+	combat.addParticipant({
+		id: hero,
+		name: 'Hero',
+		x: 0,
+		y: 0,
+		initiative: 20,
+		team: 'player_allies',
+		hpCurrent: 20,
+		hpMax: 20,
+		armorClass: 12,
+		speedCells: 6,
+		attackBonus: 5,
+		damageFormula: '1d4+1',
+		conditions: [],
+		isDead: false,
+	});
+	combat.addParticipant({
+		id: 'phase3_enemy',
+		name: 'Enemy',
+		x: 10,
+		y: 10,
+		initiative: 1,
+		team: 'enemies',
+		hpCurrent: 20,
+		hpMax: 20,
+		armorClass: 12,
+		speedCells: 6,
+		attackBonus: 3,
+		damageFormula: '1d4+1',
+		conditions: [],
+		isDead: false,
+	});
+	combat.rollInitiative();
+
+	const before = captureCanonicalStateSnapshot(storyId, repo);
+	const command = {
+		commandId: 'cmd_combat_rollback_001',
+		storyId,
+		actorId: hero,
+		type: 'MOVE' as const,
+		payload: { targetX: 3, targetY: 0 },
+		source: 'PLAYER' as const,
+	};
+
+	const result = await canonicalCommandEngine.execute(repo, command, async () => {
+		const move = combat.moveActor(hero, 3, 0);
+		assert.equal(move.success, true);
+		return {
+			success: false,
+			errorReason: 'Simulated post-resolution failure after movement mutation.',
+		};
+	});
+
+	assert.equal(result.success, false);
+	assert.equal(result.rolledBack, true);
+	assert.equal(combat.getParticipant(hero)?.x, 0);
+	assert.equal(combat.getParticipant(hero)?.y, 0);
+	assert.equal(compareCanonicalSnapshots(before, captureCanonicalStateSnapshot(storyId, repo)).identical, true);
+});

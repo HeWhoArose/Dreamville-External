@@ -146,14 +146,15 @@ export class RulesProfileEngine {
 		let profile = defaults;
 
 		if (supplied && typeof supplied === 'object') {
-			const suppliedOverrides = Array.isArray(supplied.overrides) ? clone(supplied.overrides) : [];
+			// Only identity/version and explicit overrides are accepted from persisted
+			// profile data. Executable mechanic flags always come from the canonical
+			// mode defaults plus explicit RuleOverride records.
 			profile = {
 				...defaults,
-				...clone(supplied),
-				mode,
 				profileId: String(supplied.profileId || defaults.profileId),
 				version: Number(supplied.version || defaults.version),
-				overrides: suppliedOverrides,
+				overrides: Array.isArray(supplied.overrides) ? clone(supplied.overrides) : [],
+				mode,
 			};
 		}
 

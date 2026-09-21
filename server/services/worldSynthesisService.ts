@@ -1,4 +1,5 @@
 import { rulesProfileEngine } from '../domain/rulesProfileEngine';
+import { narrativeProfileEngine } from '../domain/narrativeProfileEngine';
 import { worldRepository } from '../repositories/worldRepository';
 import { WorldTemplate, WorldSynthesisInput } from '../../src/types';
 import { MultiModelOrchestrator } from '../domain/aiOrchestrator';
@@ -113,6 +114,14 @@ export class WorldSynthesisService {
     let fallbackReason: string | undefined;
     let attemptCount = 1;
 
+    const resolvedNarrativeProfile = narrativeProfileEngine.resolve({
+      mode: input.storyMode,
+      narrativeProfile: input.narrativeProfile,
+      fallbackMode: 'PROTAGONIST',
+      source: 'WORLD',
+    });
+    const requestedStoryMode = resolvedNarrativeProfile.profile.mode;
+
     const requestedRulesMode = input.dndRulesMode || 'FULL_DND';
     const challengeResolutionInstruction = requestedRulesMode === 'CUSTOM_HOMEBREW_DND'
       ? 'ACTIVE RULE MODE: CUSTOM_HOMEBREW_DND.\n- Do not assume D&D checks, saving throws, spell slots, attack rolls, or tactical combat.\n- Every authored storyCheckChallenge MUST declare resolutionMode as "CUSTOM_D20" or "NARRATIVE".\n- Use "DND_STANDARD" only when the authored world rule explicitly requires the D&D resolver.\n- CUSTOM_D20 may include customModifier; its modifier is the authored custom rule, not a D&D ability/proficiency modifier.'
@@ -126,6 +135,14 @@ You must return a valid, pure JSON object with NO markdown formatting, wrapping,
 
 CRITICAL INSTRUCTIONS FOR RULE RESOLUTION:
 ${challengeResolutionInstruction}
+
+CRITICAL INSTRUCTIONS FOR NARRATIVE MODE:
+- ACTIVE NARRATIVE MODE: ${requestedStoryMode}
+- NARRATIVE PROFILE ID: ${resolvedNarrativeProfile.profile.profileId}
+- CAMERA: ${resolvedNarrativeProfile.profile.camera}
+- PLAYER AGENCY: ${resolvedNarrativeProfile.profile.playerAgency}
+- ${resolvedNarrativeProfile.profile.description}
+- Narrative mode is canonical campaign metadata. Do not encode it as a world event and do not let generated prose silently change it.
 
 CRITICAL INSTRUCTIONS FOR PLANNED WORLD EVENTS:
 - You must generate between 5 and 10 meaningful planned world events.
@@ -285,6 +302,7 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
 2. GENRE GUIDANCE: ${genresStr} (Optional modifier to flavor the world, never override the premise).
 3. TONE GUIDANCE: ${tonesStr} (Optional modifier for narrative atmosphere).
 4. MEDIUM GUIDANCE: ${mediumsStr} (Optional stylistic expression).
+0. CANONICAL NARRATIVE MODE: ${requestedStoryMode} (${resolvedNarrativeProfile.profile.profileId}).
 5. Ensure factions are active, locations are sensory-rich, and the planned background events show a complex, living timeline of 5 to 10 events starting from Year 42, Month 10, Day 14.`;
 
     try {
@@ -475,6 +493,8 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
       rulesetId: resolvedRules.profile.mode,
       dndRulesMode: resolvedRules.profile.mode,
       rulesProfile: resolvedRules.profile,
+      storyMode: requestedStoryMode,
+      narrativeProfile: resolvedNarrativeProfile.profile,
       visibility: 'public',
       creatorId: 'system',
       sourcePolicy: input.sourcePolicy || 'Synthesized Template',
@@ -505,7 +525,7 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
       setting: setting,
       era: era,
       source: input.sourcePolicy || 'Synthesized Template',
-      playstyle: input.storyMode || 'PROTAGONIST',
+      playstyle: requestedStoryMode,
       rules: resolvedRules.profile.mode,
       supportedPlaystyles: ['PROTAGONIST', 'SIDE_CHARACTER', 'FREE_ROAM'],
       imageAsset: input.imageAsset,

@@ -185,11 +185,16 @@ function applyOverrides(profile: RulesProfile, rawOverrides: unknown): RulesProf
 					'allowRestInCombat',
 					'clearConditionsOnLongRest',
 				];
+				let invalidBooleanOverride = false;
 				for (const key of booleanKeys) {
 					if (value[key] === undefined) continue;
-					if (typeof value[key] !== 'boolean') continue;
+					if (typeof value[key] !== 'boolean') {
+						invalidBooleanOverride = true;
+						break;
+					}
 					normalized[key] = value[key] as boolean;
 				}
+				if (invalidBooleanOverride) continue;
 
 				if (value.shortRestRecoveryModel !== undefined) {
 					if (value.shortRestRecoveryModel !== 'HIT_DICE' && value.shortRestRecoveryModel !== 'NONE') continue;

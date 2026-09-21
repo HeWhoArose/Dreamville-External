@@ -5,21 +5,13 @@ import type {
 } from '../../src/types';
 import { LocalDiceEngine } from './combatEngine';
 import { ConditionEngine } from './conditionEngine';
+import { hashStringToSeed } from './deterministicRng';
 
 export class StoryCheckConsequenceEngine {
-  private diceByStory = new Map<string, LocalDiceEngine>();
-
-  private dice(storyId: string): LocalDiceEngine {
-    let engine = this.diceByStory.get(storyId);
-    if (!engine) {
-      let seed = 7919;
-      for (let i = 0; i < storyId.length; i++) {
-        seed = (seed * 31 + storyId.charCodeAt(i)) % 233280;
-      }
-      engine = new LocalDiceEngine(seed);
-      this.diceByStory.set(storyId, engine);
-    }
-    return engine;
+  private dice(storyId: string, check: StoryCheckResult, formula: string): LocalDiceEngine {
+    return new LocalDiceEngine(
+      hashStringToSeed(`story-check-consequence::${storyId}::${check.checkId}::${check.roll.rollId}::${formula}`)
+    );
   }
 
   public apply(
@@ -53,7 +45,7 @@ export class StoryCheckConsequenceEngine {
     let damage: StoryCheckConsequenceResult['damage'];
 
     if (outcome.damageFormula) {
-      const rolled = this.dice(storyId).roll(outcome.damageFormula, 0);
+      const rolled = this.dice(storyId, check, outcome.damageFormula).roll(outcome.damageFormula, 0);
       const multiplier = Math.max(0, Number(outcome.damageMultiplier ?? 1));
       const requestedAmount = Math.max(0, Math.floor(rolled.total * multiplier));
       const resolved = conditionEngine.resolveDamage(

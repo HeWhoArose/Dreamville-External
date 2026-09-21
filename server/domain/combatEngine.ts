@@ -339,6 +339,7 @@ export interface BattlefieldParticipant {
   immunities?: string[];
   vulnerabilities?: string[];
   cover?: CoverLevel;
+  grappledBy?: string;
   team: 'player_allies' | 'enemies' | 'neutral';
   hpCurrent: number;
   hpMax: number;
@@ -945,6 +946,8 @@ export class TacticalCombatEngine {
     });
 
 
+    this.releaseInvalidGrapples();
+
     this.resolveReadyTriggers({
       type: 'ACTOR_MOVED',
       actorId,
@@ -972,6 +975,23 @@ export class TacticalCombatEngine {
     if (this.mapBounds && (x < this.mapBounds.minX || x > this.mapBounds.maxX || y < this.mapBounds.minY || y > this.mapBounds.maxY)) return true;
     if (this.obstacles.some((obs) => obs.x === x && obs.y === y && obs.isImpassable !== false)) return true;
     return this.hazards.some((hazard) => hazard.type === 'barricade' && hazard.x === x && hazard.y === y);
+  }
+
+  private releaseInvalidGrapples(): void {
+    for (const target of this.participants.values()) {
+      if (!target.grappledBy || !target.conditions.includes('Grappled')) continue;
+      const grappler = this.participants.get(target.grappledBy);
+      if (!grappler || grappler.isDead || grappler.hpCurrent <= 0 || grappler.conditions.includes('Incapacitated') || grappler.conditions.includes('Unconscious')) {
+        target.conditions = target.conditions.filter((condition) => condition !== 'Grappled');
+        target.grappledBy = undefined;
+        continue;
+      }
+      const reach = grappler.reachCells ?? 1.5;
+      if (Math.hypot(target.x - grappler.x, target.y - grappler.y) > reach) {
+        target.conditions = target.conditions.filter((condition) => condition !== 'Grappled');
+        target.grappledBy = undefined;
+      }
+    }
   }
 
   private calculateMovementPath(actorId: string, fromX: number, fromY: number, targetX: number, targetY: number): { x: number; y: number }[] | undefined {
@@ -1162,6 +1182,43 @@ export class TacticalCombatEngine {
     return this.executeControlAction(attackerId, targetId, 'GRAPPLE');
   }
 
+  public escapeGrapple(actorId: string, ability: 'STR' | 'DEX' = 'STR'): { success: boolean; escaped?: boolean; errorReason?: string } {
+    const actor = this.participants.get(actorId);
+    if (!actor) return { success: false, errorReason: 'Actor not found.' };
+    if (!actor.conditions.includes('Grappled')) return { success: false, errorReason: 'Actor is not Grappled.' };
+    const grappler = actor.grappledBy ? this.participants.get(actor.grappledBy) : undefined;
+    if (!grappler) return { success: false, errorReason: 'The source of the Grapple is no longer present.' };
+
+    const action = this.actionEconomy.consume(actorId, 'ACTION');
+    if (!action.success) return { success: false, errorReason: action.errorReason };
+
+    const escapeDc = 8 +
+      (grappler.saveModifiers?.STR ?? grappler.savingThrowModifiers?.STR ?? 0) +
+      Math.max(0, Math.floor((grappler.attackBonus - (grappler.saveModifiers?.STR ?? 0))));
+    const modifier = actor.saveModifiers?.[ability] ?? actor.savingThrowModifiers?.[ability] ?? 0;
+    const check = this.diceEngine.roll('1d20', modifier);
+    const escaped = check.total >= escapeDc;
+
+    if (escaped) {
+      actor.conditions = actor.conditions.filter((condition) => condition !== 'Grappled');
+      actor.grappledBy = undefined;
+    }
+
+    this.eventLog.push({
+      turnNumber: this.currentRound,
+      actorId,
+      targetId: grappler.id,
+      actionType: 'ACTION',
+      headline: escaped
+        ? `${actor.name} escaped the Grapple.`
+        : `${actor.name} failed to escape the Grapple.`,
+      rollRecord: check,
+      metadata: { combatAction: 'ESCAPE_GRAPPLE', escapeDc, ability },
+    });
+
+    return { success: true, escaped };
+  }
+
   public executeShove(attackerId: string, targetId: string, prone = false): { success: boolean; errorReason?: string; applied?: boolean } {
     const result = this.executeControlAction(attackerId, targetId, 'SHOVE');
     if (!result.success || !result.applied) return result;
@@ -1204,7 +1261,10 @@ export class TacticalCombatEngine {
     const save = this.ruleset.resolveSavingThrow({ saveModifier: saveAbility, difficultyClass: dc, diceEngine: this.diceEngine });
     const applied = !save.succeeds;
     if (applied) {
-      if (action === 'GRAPPLE' && !target.conditions.includes('Grappled')) target.conditions.push('Grappled');
+      if (action === 'GRAPPLE' && !target.conditions.includes('Grappled')) {
+        target.conditions.push('Grappled');
+        target.grappledBy = attackerId;
+      }
     }
     this.eventLog.push({
       turnNumber: this.currentRound,

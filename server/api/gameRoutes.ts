@@ -107,6 +107,18 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
       (req.body?.commandId as string | undefined) ||
       `action_${storyId}_${actionRequest.type}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const source = 'PLAYER' as const;
+    const serverPlayer = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = serverPlayer?.actorId || `player_actor_${storyId}`;
+    const canonicalActionType =
+      actionRequest.type === 'TRAVEL_REQUEST'
+        ? 'MOVE'
+        : actionRequest.type === 'EQUIP_REQUEST'
+          ? 'EQUIP'
+          : actionRequest.type === 'UNEQUIP_REQUEST'
+            ? 'UNEQUIP'
+            : actionRequest.type === 'ADVANCE_TIME'
+              ? 'ADVANCE_TIME'
+              : 'INTERACT';
 
     const mockStateBefore = serverMockAuthority.exportTransactionalState(storyId);
 
@@ -115,11 +127,12 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
       {
         commandId: requestedCommandId,
         storyId,
-        actorId: (actionRequest as any).actorId,
-        type: 'INTERACT',
+        actorId,
+        type: canonicalActionType,
         payload: { actionRequest } as Record<string, unknown>,
         source,
         idempotencyKey: req.body?.idempotencyKey,
+        transactionMode: 'ROLLBACK',
       },
       async () => {
         const actionResult =

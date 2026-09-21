@@ -11,7 +11,6 @@ import { rulesProfileEngine } from '../domain/rulesProfileEngine';
 import { resolveCanonicalConfirmedCharacter } from '../services/confirmedCharacterAuthority';
 import { canonicalCommandEngine } from '../domain/canonicalCommandEngine';
 import { deterministicId, formatCanonicalTimestamp } from '../domain/deterministicRng';
-import { spellRuntime } from '../domain/spellRuntime';
 
 export const gameRouter = Router();
 import { sensoryRouter } from './sensoryRoutes';
@@ -5663,43 +5662,128 @@ gameRouter.post('/worlds/runs/:storyId/spells/evaluate', async (req: Request, re
  * GET /api/game/spells/catalog
  * Returns the authoritative spell catalog, with optional filtering.
  */
+function resolveSpellCommandId(req: Request, storyId: string, route: string): string {
+  return (
+    (req.headers['x-command-id'] as string | undefined) ||
+    (req.body?.commandId as string | undefined) ||
+    deterministicId(
+      'cmd_route',
+      storyId,
+      route,
+      req.body || {},
+      worldRepository.getCanonicalCommandEvents(storyId).length + 1
+    )
+  );
+}
+
+function buildCanonicalSelfParticipant(
+  repository: import('../repositories/worldRepository').InMemoryWorldRepository,
+  storyId: string,
+  actorId: string,
+  runtime: import('../domain/spellRuntime').SpellRuntime
+): import('../domain/combatEngine').BattlefieldParticipant {
+  const conditionState = repository.getConditionEngine(storyId).getActorState(actorId);
+  const player = repository.getPlayerLifecycle(storyId);
+  const npc = player?.actorId === actorId ? null : repository.getNpcLifecycle(storyId, actorId);
+  const state = runtime.getOrCreateActorState(actorId);
+  const hpCurrent = Math.max(0, Number(conditionState?.healthCurrent ?? 30));
+  const hpMax = Math.max(1, Number(conditionState?.healthMax ?? hpCurrent || 30));
+  const dead = Boolean(conditionState?.dead || hpCurrent <= 0);
+
+  return {
+    id: actorId,
+    name: player?.actorId === actorId ? player.name : (npc?.name || actorId),
+    team: player?.actorId === actorId ? 'player_allies' : 'neutral',
+    x: 0,
+    y: 0,
+    initiative: 0,
+    armorClass: 10,
+    hpCurrent,
+    hpMax,
+    speedCells: 6,
+    attackBonus: state.spellAttackBonus,
+    damageFormula: '1d4',
+    conditions: conditionState?.instances.map((instance) => instance.name) || (dead ? ['Dead'] : []),
+    isDead: dead,
+    saveModifiers: {},
+    savingThrowModifiers: {},
+    spellAttackBonus: state.spellAttackBonus,
+    spellSaveDc: state.spellSaveDc,
+    spellSlots: state.spellSlots,
+    knownSpells: state.knownSpells,
+    preparedSpells: state.preparedSpells,
+    activeConcentration: state.activeConcentration,
+  };
+}
+
+function recordCanonicalSpellEvidence(
+  repository: import('../repositories/worldRepository').InMemoryWorldRepository,
+  storyId: string,
+  commandId: string,
+  actorId: string,
+  result: import('../domain/spellRuntime').CastSpellExecutionResult
+): void {
+  const player = repository.getPlayerLifecycle(storyId);
+  const clock = repository.getWorldClock(storyId);
+  const timestamp = clock.getTimestamp();
+  repository.getHistoricalChronicleEngine(storyId).recordEvidence({
+    id: deterministicId('ev_spell_cast', storyId, commandId),
+    sourceEventId: commandId,
+    category: 'SACRED_OR_HISTORIC',
+    timestamp,
+    primarySubjectId: actorId,
+    secondarySubjectId: result.targetHpRemaining !== undefined ? result.spellId : undefined,
+    locationId: player?.locationId || 'loc_unknown',
+    summary: result.headline,
+    details: result.headline,
+    provenance: 'canonical_spell_runtime',
+    visibility: 'PUBLIC',
+    metadata: {
+      spellId: result.spellId,
+      spellName: result.spellName,
+      slotLevelUsed: result.slotLevelUsed,
+      targetDied: result.targetDied,
+      damageInflicted: result.damageInflicted,
+      healingApplied: result.healingApplied,
+      targetHpRemaining: result.targetHpRemaining,
+      targetImmune: result.targetImmune,
+      targetResisted: result.targetResisted,
+      targetVulnerable: result.targetVulnerable,
+      concentrationEstablished: result.concentrationEstablished,
+      conditionsApplied: result.conditionsApplied,
+      conditionsRemoved: result.conditionsRemoved,
+    },
+  });
+}
+
+/**
+ * GET /api/game/spells/catalog
+ * Returns the authoritative spell catalog for the active story.
+ */
 gameRouter.get('/spells/catalog', (req: Request, res: Response) => {
   try {
+    const storyId = resolveStoryId(req, true);
+    const runtime = worldRepository.getCombatEngine(storyId).getSpellRuntime();
     const levelStr = req.query.level as string | undefined;
     const school = req.query.school as string | undefined;
     const ritual = req.query.ritual as string | undefined;
     const concentration = req.query.concentration as string | undefined;
     const search = req.query.search as string | undefined;
 
-    let spells = spellRuntime.getAllSpells();
-
+    let spells = runtime.getAllSpells();
     if (levelStr !== undefined && levelStr !== '') {
       const level = parseInt(levelStr, 10);
-      if (!isNaN(level)) {
-        spells = spells.filter((s) => s.level === level);
-      }
+      if (!isNaN(level)) spells = spells.filter((s) => s.level === level);
     }
-    if (school) {
-      spells = spells.filter((s) => s.school.toLowerCase() === school.toLowerCase());
-    }
-    if (ritual !== undefined) {
-      const isRitual = ritual === 'true' || ritual === '1';
-      spells = spells.filter((s) => Boolean(s.isRitual) === isRitual);
-    }
-    if (concentration !== undefined) {
-      const isConc = concentration === 'true' || concentration === '1';
-      spells = spells.filter((s) => Boolean(s.requiresConcentration) === isConc);
-    }
+    if (school) spells = spells.filter((s) => s.school.toLowerCase() === school.toLowerCase());
+    if (ritual !== undefined) spells = spells.filter((s) => Boolean(s.isRitual) === (ritual === 'true' || ritual === '1'));
+    if (concentration !== undefined) spells = spells.filter((s) => Boolean(s.requiresConcentration) === (concentration === 'true' || concentration === '1'));
     if (search) {
       const q = search.toLowerCase();
       spells = spells.filter((s) => s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q));
     }
 
-    res.json({
-      success: true,
-      count: spells.length,
-      spells,
-    });
+    res.json({ success: true, count: spells.length, spells });
   } catch (error: any) {
     res.status(500).json({ success: false, errorReason: error?.message || 'Failed to list spells.' });
   }
@@ -5707,15 +5791,14 @@ gameRouter.get('/spells/catalog', (req: Request, res: Response) => {
 
 /**
  * GET /api/game/spells/catalog/:spellId
- * Returns the definition of a specific spell.
  */
 gameRouter.get('/spells/catalog/:spellId', (req: Request, res: Response) => {
   try {
+    const storyId = resolveStoryId(req, true);
+    const runtime = worldRepository.getCombatEngine(storyId).getSpellRuntime();
     const spellId = req.params.spellId as string;
-    const spell = spellRuntime.getSpell(spellId);
-    if (!spell) {
-      return res.status(404).json({ success: false, errorReason: `Spell "${spellId}" not found in catalog.` });
-    }
+    const spell = runtime.getSpell(spellId);
+    if (!spell) return res.status(404).json({ success: false, errorReason: `Spell "${spellId}" not found in catalog.` });
     res.json({ success: true, spell });
   } catch (error: any) {
     res.status(500).json({ success: false, errorReason: error?.message || 'Failed to get spell.' });
@@ -5724,17 +5807,22 @@ gameRouter.get('/spells/catalog/:spellId', (req: Request, res: Response) => {
 
 /**
  * GET /api/game/spells/actor/:actorId
- * Returns spellcasting state (slots, prepared, known, concentration) for an actor.
+ * Read-only spellcasting state for an actor.
  */
 gameRouter.get('/spells/actor/:actorId', (req: Request, res: Response) => {
   try {
+    const storyId = resolveStoryId(req, true);
+    const runtime = worldRepository.getCombatEngine(storyId).getSpellRuntime();
     const actorId = req.params.actorId as string;
-    const state = spellRuntime.getOrCreateActorState(actorId);
-    res.json({
-      success: true,
-      actorId,
-      state,
-    });
+    const state = runtime.getActorState(actorId);
+    if (!state) {
+      return res.status(404).json({
+        success: false,
+        code: 'SPELL_STATE_NOT_FOUND',
+        errorReason: `No spellcasting state exists for actor "${actorId}".`,
+      });
+    }
+    res.json({ success: true, actorId, state });
   } catch (error: any) {
     res.status(500).json({ success: false, errorReason: error?.message || 'Failed to get actor spell state.' });
   }
@@ -5742,17 +5830,48 @@ gameRouter.get('/spells/actor/:actorId', (req: Request, res: Response) => {
 
 /**
  * POST /api/game/spells/slots/initialize
- * Configures an actor's spell slots.
  */
-gameRouter.post('/spells/slots/initialize', (req: Request, res: Response) => {
+gameRouter.post('/spells/slots/initialize', async (req: Request, res: Response) => {
   try {
+    const storyId = resolveStoryId(req, true);
     const { actorId, slots } = req.body;
     if (!actorId || !slots || typeof slots !== 'object') {
       return res.status(400).json({ success: false, errorReason: 'actorId and slots mapping required.' });
     }
-    spellRuntime.initializeSlots(actorId, slots);
-    const state = spellRuntime.getOrCreateActorState(actorId);
-    res.json({ success: true, actorId, spellSlots: state.spellSlots });
+
+    const commandId = resolveSpellCommandId(req, storyId, '/spells/slots/initialize');
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'CAST',
+        payload: { spellId: '__spell_slots__', action: 'INITIALIZE_SLOTS', slots },
+        source: 'PLAYER',
+        transactionMode: 'STAGED',
+      },
+      async (_command, context) => {
+        const runtime = context.repository.getCombatEngine(storyId).getSpellRuntime();
+        runtime.initializeSlots(actorId, slots);
+        const state = runtime.getOrCreateActorState(actorId);
+        return {
+          success: true,
+          data: { success: true, actorId, spellSlots: state.spellSlots },
+          summary: `Initialized spell slots for ${actorId}.`,
+        };
+      }
+    );
+
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
+      });
+    }
+    res.json({ ...(commandResult.data as any), commandId: commandResult.commandId, canonicalEvent: commandResult.event });
   } catch (error: any) {
     res.status(400).json({ success: false, errorReason: error?.message || 'Failed to initialize spell slots.' });
   }
@@ -5760,23 +5879,52 @@ gameRouter.post('/spells/slots/initialize', (req: Request, res: Response) => {
 
 /**
  * POST /api/game/spells/prepare
- * Prepares or un-prepares a spell for an actor.
  */
-gameRouter.post('/spells/prepare', (req: Request, res: Response) => {
+gameRouter.post('/spells/prepare', async (req: Request, res: Response) => {
   try {
+    const storyId = resolveStoryId(req, true);
     const { actorId, spellId, prepare } = req.body;
     if (!actorId || !spellId) {
       return res.status(400).json({ success: false, errorReason: 'actorId and spellId are required.' });
     }
-    if (prepare === false) {
-      const result = spellRuntime.unprepareSpell(actorId, spellId);
-      const state = spellRuntime.getOrCreateActorState(actorId);
-      return res.json({ success: result.success, prepared: false, errorReason: result.errorReason, preparedSpells: state.preparedSpells });
-    } else {
-      const result = spellRuntime.prepareSpell(actorId, spellId);
-      const state = spellRuntime.getOrCreateActorState(actorId);
-      return res.json({ success: result.success, prepared: true, errorReason: result.errorReason, preparedSpells: state.preparedSpells });
+
+    const commandId = resolveSpellCommandId(req, storyId, '/spells/prepare');
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'CAST',
+        payload: { spellId, action: prepare === false ? 'UNPREPARE' : 'PREPARE' },
+        source: 'PLAYER',
+        transactionMode: 'STAGED',
+      },
+      async (_command, context) => {
+        const runtime = context.repository.getCombatEngine(storyId).getSpellRuntime();
+        const result = prepare === false
+          ? runtime.unprepareSpell(actorId, spellId)
+          : runtime.prepareSpell(actorId, spellId);
+        if (!result.success) return { success: false, errorReason: result.errorReason };
+        const state = runtime.getOrCreateActorState(actorId);
+        return {
+          success: true,
+          data: {
+            success: true,
+            actorId,
+            spellId,
+            prepared: prepare !== false,
+            preparedSpells: state.preparedSpells,
+          },
+          summary: `${prepare === false ? 'Unprepared' : 'Prepared'} ${spellId} for ${actorId}.`,
+        };
+      }
+    );
+
+    if (!commandResult.success) {
+      return res.status(400).json({ success: false, errorReason: commandResult.errorReason, rolledBack: commandResult.rolledBack, commandId: commandResult.commandId });
     }
+    res.json({ ...(commandResult.data as any), commandId: commandResult.commandId, canonicalEvent: commandResult.event });
   } catch (error: any) {
     res.status(400).json({ success: false, errorReason: error?.message || 'Failed to update prepared spell.' });
   }
@@ -5784,16 +5932,43 @@ gameRouter.post('/spells/prepare', (req: Request, res: Response) => {
 
 /**
  * POST /api/game/spells/learn
- * Adds a spell to an actor's known spells.
  */
-gameRouter.post('/spells/learn', (req: Request, res: Response) => {
+gameRouter.post('/spells/learn', async (req: Request, res: Response) => {
   try {
+    const storyId = resolveStoryId(req, true);
     const { actorId, spellId } = req.body;
     if (!actorId || !spellId) {
       return res.status(400).json({ success: false, errorReason: 'actorId and spellId are required.' });
     }
-    const result = spellRuntime.learnSpell(actorId, spellId);
-    res.json({ success: result.success, errorReason: result.errorReason, knownSpells: result.knownSpells });
+
+    const commandId = resolveSpellCommandId(req, storyId, '/spells/learn');
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'CAST',
+        payload: { spellId, action: 'LEARN' },
+        source: 'PLAYER',
+        transactionMode: 'STAGED',
+      },
+      async (_command, context) => {
+        const runtime = context.repository.getCombatEngine(storyId).getSpellRuntime();
+        const result = runtime.learnSpell(actorId, spellId);
+        if (!result.success) return { success: false, errorReason: result.errorReason };
+        return {
+          success: true,
+          data: { success: true, actorId, knownSpells: result.knownSpells },
+          summary: `Learned spell ${spellId} for ${actorId}.`,
+        };
+      }
+    );
+
+    if (!commandResult.success) {
+      return res.status(400).json({ success: false, errorReason: commandResult.errorReason, rolledBack: commandResult.rolledBack, commandId: commandResult.commandId });
+    }
+    res.json({ ...(commandResult.data as any), commandId: commandResult.commandId, canonicalEvent: commandResult.event });
   } catch (error: any) {
     res.status(400).json({ success: false, errorReason: error?.message || 'Failed to learn spell.' });
   }
@@ -5801,17 +5976,43 @@ gameRouter.post('/spells/learn', (req: Request, res: Response) => {
 
 /**
  * POST /api/game/spells/slots/reset
- * Resets spell slots on short or long rest.
+ * Slot recovery remains available as a canonical state transition; rest-policy ownership is
+ * intentionally left to the Phase 7 recovery system.
  */
-gameRouter.post('/spells/slots/reset', (req: Request, res: Response) => {
+gameRouter.post('/spells/slots/reset', async (req: Request, res: Response) => {
   try {
+    const storyId = resolveStoryId(req, true);
     const { actorId, restType } = req.body;
-    if (!actorId) {
-      return res.status(400).json({ success: false, errorReason: 'actorId is required.' });
-    }
+    if (!actorId) return res.status(400).json({ success: false, errorReason: 'actorId is required.' });
     const type: 'SHORT' | 'LONG' = restType === 'SHORT' ? 'SHORT' : 'LONG';
-    const state = spellRuntime.resetSlots(actorId, type);
-    res.json({ success: true, actorId, restType: type, spellSlots: state.spellSlots });
+    const commandId = resolveSpellCommandId(req, storyId, '/spells/slots/reset');
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'CAST',
+        payload: { spellId: '__spell_slots__', action: 'RESET_SLOTS', restType: type },
+        source: 'SYSTEM',
+        transactionMode: 'STAGED',
+      },
+      async (_command, context) => {
+        const runtime = context.repository.getCombatEngine(storyId).getSpellRuntime();
+        const state = runtime.resetSlots(actorId, type);
+        return {
+          success: true,
+          data: { success: true, actorId, restType: type, spellSlots: state.spellSlots },
+          summary: `Reset spell slots for ${actorId} using ${type} recovery.`,
+        };
+      }
+    );
+
+    if (!commandResult.success) {
+      return res.status(400).json({ success: false, errorReason: commandResult.errorReason, rolledBack: commandResult.rolledBack, commandId: commandResult.commandId });
+    }
+    res.json({ ...(commandResult.data as any), commandId: commandResult.commandId, canonicalEvent: commandResult.event });
   } catch (error: any) {
     res.status(400).json({ success: false, errorReason: error?.message || 'Failed to reset spell slots.' });
   }
@@ -5819,16 +6020,42 @@ gameRouter.post('/spells/slots/reset', (req: Request, res: Response) => {
 
 /**
  * POST /api/game/spells/concentration/break
- * Breaks concentration on active spell.
  */
-gameRouter.post('/spells/concentration/break', (req: Request, res: Response) => {
+gameRouter.post('/spells/concentration/break', async (req: Request, res: Response) => {
   try {
+    const storyId = resolveStoryId(req, true);
     const { actorId, reason } = req.body;
-    if (!actorId) {
-      return res.status(400).json({ success: false, errorReason: 'actorId is required.' });
+    if (!actorId) return res.status(400).json({ success: false, errorReason: 'actorId is required.' });
+    const commandId = resolveSpellCommandId(req, storyId, '/spells/concentration/break');
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'CAST',
+        payload: { spellId: '__concentration__', action: 'BREAK_CONCENTRATION' },
+        source: 'PLAYER',
+        transactionMode: 'STAGED',
+      },
+      async (_command, context) => {
+        const runtime = context.repository.getCombatEngine(storyId).getSpellRuntime();
+        const result = runtime.breakConcentration(actorId, reason || 'Manual cancellation');
+        return {
+          success: true,
+          data: { success: true, ...result },
+          summary: result.broken
+            ? `Concentration on ${result.previousSpell?.spellName || 'active spell'} broken for ${actorId}.`
+            : `No active concentration existed for ${actorId}.`,
+        };
+      }
+    );
+
+    if (!commandResult.success) {
+      return res.status(400).json({ success: false, errorReason: commandResult.errorReason, rolledBack: commandResult.rolledBack, commandId: commandResult.commandId });
     }
-    const result = spellRuntime.breakConcentration(actorId, reason || 'Manual cancellation');
-    res.json({ success: true, ...result });
+    res.json({ ...(commandResult.data as any), commandId: commandResult.commandId, canonicalEvent: commandResult.event });
   } catch (error: any) {
     res.status(400).json({ success: false, errorReason: error?.message || 'Failed to break concentration.' });
   }
@@ -5836,16 +6063,18 @@ gameRouter.post('/spells/concentration/break', (req: Request, res: Response) => 
 
 /**
  * POST /api/game/spells/evaluate
- * Evaluates custom/novel spell proposal.
+ * Read-only evaluation of a proposed custom spell.
  */
 gameRouter.post('/spells/evaluate', (req: Request, res: Response) => {
   try {
+    const storyId = resolveStoryId(req, true);
+    const runtime = worldRepository.getCombatEngine(storyId).getSpellRuntime();
+    const profile = worldRepository.getRulesProfile(storyId) || rulesProfileEngine.createDefault('FULL_DND');
     const proposal = req.body?.proposal || req.body;
     if (!proposal || typeof proposal !== 'object') {
       return res.status(400).json({ success: false, errorReason: 'Spell proposal object is required.' });
     }
-    const result = spellRuntime.evaluateCustomSpellProposal(proposal);
-    res.json(result);
+    res.json(runtime.evaluateCustomSpellProposal(proposal, proposal.casterLevel, profile));
   } catch (error: any) {
     res.status(400).json({ success: false, errorReason: error?.message || 'Failed to evaluate spell proposal.' });
   }
@@ -5853,30 +6082,71 @@ gameRouter.post('/spells/evaluate', (req: Request, res: Response) => {
 
 /**
  * POST /api/game/spells/register-custom
- * Evaluates and registers a custom spell into the runtime catalog if valid.
+ * Evaluates and registers a custom spell through the canonical transaction path.
  */
-gameRouter.post('/spells/register-custom', (req: Request, res: Response) => {
+gameRouter.post('/spells/register-custom', async (req: Request, res: Response) => {
   try {
+    const storyId = resolveStoryId(req, true);
     const proposal = req.body?.proposal || req.body;
     if (!proposal || typeof proposal !== 'object') {
       return res.status(400).json({ success: false, errorReason: 'Spell proposal object is required.' });
     }
-    const evalResult = spellRuntime.evaluateCustomSpellProposal(proposal);
-    if (!evalResult.approved || !evalResult.sanitizedSpell) {
+
+    const actorId =
+      (req.body?.actorId as string | undefined) ||
+      worldRepository.getPlayerLifecycle(storyId)?.actorId ||
+      `player_actor_${storyId}`;
+    const commandId = resolveSpellCommandId(req, storyId, '/spells/register-custom');
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'CAST',
+        payload: {
+          spellId: String(proposal.spellName || proposal.name || 'custom_spell'),
+          action: 'REGISTER_CUSTOM_SPELL',
+        },
+        source: 'PLAYER',
+        transactionMode: 'STAGED',
+      },
+      async (_command, context) => {
+        const profile = context.repository.getRulesProfile(storyId) || rulesProfileEngine.createDefault('FULL_DND');
+        const runtime = context.repository.getCombatEngine(storyId).getSpellRuntime();
+        const evalResult = runtime.evaluateCustomSpellProposal(proposal, proposal.casterLevel, profile);
+        if (!evalResult.approved || !evalResult.sanitizedSpell) {
+          return {
+            success: false,
+            errorReason: evalResult.adjudicationNotes || 'Custom spell proposal was rejected by rules evaluator.',
+            data: { evaluation: evalResult },
+          };
+        }
+        runtime.registerSpell(evalResult.sanitizedSpell);
+        return {
+          success: true,
+          data: {
+            success: true,
+            approved: true,
+            spell: evalResult.sanitizedSpell,
+            evaluation: evalResult,
+          },
+          summary: `Registered custom spell ${evalResult.sanitizedSpell.id}.`,
+        };
+      }
+    );
+
+    if (!commandResult.success) {
       return res.status(400).json({
         success: false,
-        approved: false,
-        errorReason: evalResult.adjudicationNotes || 'Custom spell proposal was rejected by rules evaluator.',
-        evaluation: evalResult,
+        errorReason: commandResult.errorReason,
+        evaluation: (commandResult.data as any)?.evaluation,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
       });
     }
-    spellRuntime.registerSpell(evalResult.sanitizedSpell);
-    res.json({
-      success: true,
-      approved: true,
-      spell: evalResult.sanitizedSpell,
-      evaluation: evalResult,
-    });
+    res.json({ ...(commandResult.data as any), commandId: commandResult.commandId, canonicalEvent: commandResult.event });
   } catch (error: any) {
     res.status(400).json({ success: false, errorReason: error?.message || 'Failed to register custom spell.' });
   }
@@ -5884,71 +6154,131 @@ gameRouter.post('/spells/register-custom', (req: Request, res: Response) => {
 
 /**
  * POST /api/game/spells/cast
- * Authoritative spell cast endpoint.
+ * Canonical, transactional spell cast endpoint.
  */
 gameRouter.post('/spells/cast', async (req: Request, res: Response) => {
   try {
-    const { storyId: reqStoryId, actorId, spellId, targetId, targetPosition, slotLevel, isRitual, advantage, disadvantage } = req.body;
+    const storyId = resolveStoryId(req, true);
+    const { actorId, spellId, targetId, targetPosition, slotLevel, isRitual, advantage, disadvantage } = req.body;
     if (!actorId || !spellId) {
       return res.status(400).json({ success: false, errorReason: 'actorId and spellId are required.' });
     }
 
-    const { worldRepository } = await import('../repositories/worldRepository');
-    const storyId = reqStoryId || 'default_story';
-
-    // If an active tactical combat exists, execute through combat engine
-    const activeCombat = worldRepository.getCombatEngine(storyId);
-    if (activeCombat && activeCombat.getParticipant(actorId)) {
-      const combatRes = activeCombat.executeSpellCast({
+    const commandId = resolveSpellCommandId(req, storyId, '/spells/cast');
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
         actorId,
-        spellId,
-        targetId,
-        targetPosition,
-        slotLevel,
-        isRitual,
-        advantage,
-        disadvantage,
-      });
-      if (!combatRes.success) {
-        return res.status(400).json({
-          success: false,
-          errorReason: combatRes.errorReason,
-          result: combatRes.result,
-        });
-      }
-      return res.json({
-        inCombat: true,
-        ...combatRes,
-      });
-    }
-
-    // Otherwise, out-of-combat authoritative cast
-    const castResult = spellRuntime.castSpellAuthoritative({
-      request: {
-        casterId: actorId,
-        spellId,
-        targetId,
-        targetPosition,
-        slotLevel,
-        isRitual,
-        advantage,
-        disadvantage,
+        type: 'CAST',
+        payload: {
+          spellId,
+          targetId,
+          targetPosition,
+          slotLevel,
+          isRitual,
+          advantage,
+          disadvantage,
+        },
+        source: 'PLAYER',
+        transactionMode: 'STAGED',
       },
-    });
+      async (_command, context) => {
+        const transactionCombat = context.repository.getCombatEngine(storyId);
+        const transactionRuntime = transactionCombat.getSpellRuntime();
+        const profile = context.repository.getRulesProfile(storyId) || rulesProfileEngine.createDefault('FULL_DND');
+        const activeActor = transactionCombat.getParticipant(actorId);
 
-    if (!castResult.success) {
+        let castData: import('../domain/spellRuntime').CastSpellExecutionResult;
+        let inCombat = false;
+
+        if (activeActor) {
+          const combatResult = transactionCombat.executeSpellCast({
+            actorId,
+            spellId,
+            targetId,
+            targetPosition,
+            slotLevel,
+            isRitual,
+            advantage,
+            disadvantage,
+          });
+          if (!combatResult.success || !combatResult.result) {
+            return { success: false, errorReason: combatResult.errorReason || combatResult.result?.errorReason || 'Spell cast was rejected.' };
+          }
+          castData = combatResult.result;
+          inCombat = true;
+        } else {
+          // Outside tactical combat the runtime only supports self/targetless spells. External
+          // targets require an authoritative battlefield participant and cannot be fabricated.
+          if (targetId && targetId !== actorId) {
+            return {
+              success: false,
+              errorReason: `Target "${targetId}" is unavailable because actor "${actorId}" is not in an active authoritative combat encounter.`,
+            };
+          }
+
+          const caster = buildCanonicalSelfParticipant(context.repository, storyId, actorId, transactionRuntime);
+          const target = targetId === actorId ? caster : undefined;
+          castData = transactionRuntime.castSpellAuthoritative({
+            request: {
+              casterId: actorId,
+              spellId,
+              targetId,
+              targetPosition,
+              slotLevel,
+              isRitual,
+              advantage,
+              disadvantage,
+              rulesProfile: profile,
+              diceEngine: transactionCombat.getDiceEngine(),
+              requireAuthoritativeTarget: true,
+              damageResolver: (damageTarget, amount, damageType, criticalHit = false) =>
+                transactionCombat['applyCombatDamage'](damageTarget, amount, damageType, criticalHit),
+            },
+            casterParticipant: caster,
+            targetParticipant: target,
+            allParticipants: transactionCombat.getParticipants(),
+          });
+          if (!castData.success) {
+            return { success: false, errorReason: castData.errorReason || 'Spell cast was rejected.' };
+          }
+        }
+
+        recordCanonicalSpellEvidence(context.repository, storyId, commandId, actorId, castData);
+
+        return {
+          success: true,
+          data: {
+            success: true,
+            inCombat,
+            result: castData,
+            headline: castData.headline,
+          },
+          summary: `Cast ${castData.spellName} for ${actorId}.`,
+        };
+      }
+    );
+
+    if (!commandResult.success) {
       return res.status(400).json({
         success: false,
-        errorReason: castResult.errorReason,
-        result: castResult,
+        errorReason: commandResult.errorReason,
+        result: undefined,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
       });
     }
 
+    const data = commandResult.data as any;
     res.json({
-      inCombat: false,
-      ...castResult,
-      result: castResult,
-      headline: castResult.headline,
+      inCombat: Boolean(data?.inCombat),
+      ...data?.result,
+      result: data?.result,
+      headline: data?.headline,
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
     });
   } catch (error: any) {
     res.status(400).json({ success: false, errorReason: error?.message || 'Failed to execute spell cast.' });
@@ -6053,7 +6383,6 @@ gameRouter.get('/run-canonical-state', (req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to fetch canonical run state.' });
   }
 });
-
 
 
 

@@ -352,3 +352,66 @@ test('Phase 8 Genesis/runtime divergence audit detects sealed-character progress
   const drifted = { ...original, coreStats: { ...original.coreStats, level: 2 } };
   assert.equal(engine.detectGenesisDivergence(id, drifted).divergent, true);
 });
+
+
+test('Phase 8 module enable/disable remains singular for class/species and prevents stale modifier stacking', () => {
+  const engine = new CharacterProgressionEngine();
+  const full = rulesProfileEngine.createDefault('FULL_DND');
+  engine.seedFromCharacter('hero', { identity: { name: 'Hero', species: 'Human' }, role: { profession: 'Fighter' }, coreStats: { level: 1 } as any, feats: [] });
+  engine.setModuleEnabled('hero', 'class_rogue', true, 'phase8-switch-class', full);
+  const state = engine.getState('hero')!;
+  assert.equal(state.classId, 'class_rogue');
+  assert.equal(state.enabledModuleIds.includes('class_fighter'), false);
+  assert.equal(state.enabledModuleIds.includes('class_rogue'), true);
+  const attack = engine.resolveModifiers('hero').modifiers.find((entry) => entry.target === 'combat.attackBonus');
+  assert.equal(attack?.value, 1);
+  engine.setModuleEnabled('hero', 'class_rogue', false, 'phase8-disable-class', full);
+  assert.equal(engine.getState('hero')?.classId, undefined);
+  assert.equal(engine.resolveModifiers('hero').modifiers.some((entry) => entry.target === 'combat.attackBonus'), false);
+});
+
+test('Phase 8 malformed progression rule overrides fail closed', () => {
+  const profile = rulesProfileEngine.resolve({
+    mode: 'HYBRID_DND',
+    rulesProfile: {
+      mode: 'HYBRID_DND',
+      overrides: [{
+        ruleId: CHARACTER_PROGRESSION,
+        operation: 'SET',
+        reason: 'Malformed boolean test.',
+        value: { allowLevelUp: 'yes' as any, maxCharacterLevel: 12 },
+      }],
+    },
+  }).profile;
+  assert.equal(profile.parameterOverrides[CHARACTER_PROGRESSION], undefined);
+  assert.equal(rulesProfileEngine.allowsCharacterProgression(profile), true);
+});
+
+test('Phase 8 ability effects require canonical scope and commit deterministic active effects', async () => {
+  const storyId = 'phase8_ability_authority';
+  const repo = seedRepo(storyId);
+  const id = actorId(repo, storyId);
+  const run = repo.getStoryRun(storyId);
+  repo.saveStoryRun({ ...run, canonicalCapabilities: ['abil_arcane_shield'] });
+  const { abilityService } = await import('../server/services/abilityService');
+
+  const direct = abilityService.resolveAbilityApplication(storyId, 'abil_arcane_shield', id, {}, repo);
+  assert.equal(direct.success, false);
+  assert.equal(direct.statusCode, 409);
+
+  const command = await canonicalCommandEngine.execute(repo, {
+    commandId: 'phase8-ability-command-001',
+    storyId,
+    actorId: id,
+    type: 'APPLY_ABILITY',
+    payload: { abilityId: 'abil_arcane_shield', targetId: id },
+    source: 'PLAYER',
+    transactionMode: 'STAGED',
+  }, async (_command, context) => {
+    const result = abilityService.resolveAbilityApplication(storyId, 'abil_arcane_shield', id, {}, context.repository);
+    return { success: result.success, data: result, errorReason: result.errorReason, summary: 'Phase 8 canonical ability effect.' };
+  });
+  assert.equal(command.success, true);
+  assert.ok((command.data as any)?.activeEffect?.effectId);
+  assert.equal(repo.getActiveEffects(storyId).length, 1);
+});

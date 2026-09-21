@@ -136,7 +136,7 @@ export class RestRecoveryEngine {
   private hitDice = new Map<string, HitDiceRecoveryState>();
   private lastRestResults = new Map<string, RestRecoverySnapshot['lastRestResults'][string]>();
 
-  constructor(private readonly repository: InMemoryWorldRepository) {}
+  constructor(private readonly repository: InMemoryWorldRepository, private readonly storyId: string) {}
 
   public exportState(): RestRecoverySnapshot {
     return {
@@ -551,11 +551,8 @@ export class RestRecoveryEngine {
     };
   }
 
-  private getCoreStatsForRead(actorId: string): { level: number; hitDice?: string } {
-    const storyId = Array.from(this.activeRests.values()).find((state) => state.actorId === actorId)?.actorId
-      ? Array.from(this.activeRests.values()).find((state) => state.actorId === actorId)?.actorId
-      : actorId;
-    const run = this.repository.getStoryRun(storyId);
+  private getCoreStatsForRead(_actorId: string): { level: number; hitDice?: string } {
+    const run = this.repository.getStoryRun(this.storyId);
     const core = run?.characterCoreStats || run?.protagonist?.coreStats || {};
     return {
       level: Math.max(1, Math.min(20, Math.trunc(Number(core.level || 1)))),

@@ -1079,38 +1079,70 @@ export class TacticalCombatEngine {
     from?: { x: number; y: number };
     to?: { x: number; y: number };
   }): void {
-    const candidates: Array<{ actorId: string; ready: NonNullable<ReturnType<CombatActionEconomy['getReadyAction']>> }> = [];
-    for (const participant of this.participants.values()) {
-      const ready = this.actionEconomy.getReadyAction(participant.id);
-      if (!ready) continue;
-      if (ready.triggerType !== event.type) continue;
-      if (ready.triggerActorId && ready.triggerActorId !== event.actorId) continue;
-      if (ready.targetId && event.targetId && ready.targetId !== event.targetId && ready.targetId !== event.actorId) continue;
-      candidates.push({ actorId: participant.id, ready });
-    }
+    this.reactionEngine.resolve(
+      {
+        type: event.type,
+        actorId: event.actorId,
+        targetId: event.targetId,
+        from: event.from,
+        to: event.to,
+      },
+      Array.from(this.participants.values()).map((participant) => {
+        const ready = this.actionEconomy.getReadyAction(participant.id);
+        return {
+          reactionId: `ready:${participant.id}:${event.type}:${event.actorId}`,
+          actorId: participant.id,
+          priority: 0,
+          triggerType: event.type,
+          triggerActorId: ready?.triggerActorId,
+          targetId: ready?.targetId,
+          canResolve: () => {
+            const currentReady = this.actionEconomy.getReadyAction(participant.id);
+            const currentParticipant = this.participants.get(participant.id);
+            return Boolean(
+              currentReady &&
+              currentReady.triggerType === event.type &&
+              !currentParticipant?.isDead &&
+              (currentParticipant?.hpCurrent ?? 0) > 0 &&
+              !currentParticipant?.conditions.includes('Unconscious')
+            );
+          },
+          resolve: () => {
+            const currentReady = this.actionEconomy.getReadyAction(participant.id);
+            if (!currentReady) {
+              return { triggered: false, hits: false, damage: 0, targetDied: false };
+            }
 
-    for (const candidate of candidates.sort((a, b) => a.actorId.localeCompare(b.actorId))) {
-      const reaction = this.actionEconomy.consumeReadyReaction(candidate.actorId);
-      if (!reaction.success) continue;
-      const targetId = candidate.ready.targetId || event.actorId;
-      if (candidate.ready.actionType === 'ATTACK' && this.participants.has(targetId)) {
-        const result = this.resolveReactionAttack(candidate.actorId, targetId);
-        this.eventLog.push({
-          turnNumber: this.currentRound,
-          actorId: candidate.actorId,
-          targetId,
-          actionType: 'ATTACK',
-          headline: result.hits
-            ? `${this.participants.get(candidate.actorId)?.name || candidate.actorId} triggered Ready Action against ${this.participants.get(targetId)?.name || targetId}.`
-            : `${this.participants.get(candidate.actorId)?.name || candidate.actorId} triggered Ready Action and missed.`,
-          damageInflicted: result.damage,
-          rollRecord: result.roll,
-          metadata: { reaction: true, reason: 'Ready Action trigger.' },
-        });
-      }
-    }
+            const reaction = this.actionEconomy.consumeReadyReaction(participant.id);
+            if (!reaction.success) {
+              return { triggered: false, hits: false, damage: 0, targetDied: false };
+            }
+
+            const targetId = currentReady.targetId || event.actorId;
+            if (currentReady.actionType !== 'ATTACK' || !this.participants.has(targetId)) {
+              return { triggered: true, hits: false, damage: 0, targetDied: false };
+            }
+
+            const result = this.resolveReactionAttack(participant.id, targetId);
+            this.eventLog.push({
+              turnNumber: this.currentRound,
+              actorId: participant.id,
+              targetId,
+              actionType: 'ATTACK',
+              headline: result.hits
+                ? `${this.participants.get(participant.id)?.name || participant.id} triggered Ready Action against ${this.participants.get(targetId)?.name || targetId}.`
+                : `${this.participants.get(participant.id)?.name || participant.id} triggered Ready Action and missed.`,
+              damageInflicted: result.damage,
+              rollRecord: result.roll,
+              metadata: { reaction: true, reason: 'Ready Action trigger.' },
+            });
+
+            return { triggered: true, ...result };
+          },
+        };
+      })
+    );
   }
-
   private resolveReactionAttack(attackerId: string, targetId: string): { hits: boolean; damage: number; targetDied: boolean; roll?: RollRecord; isCritical: boolean } {
     const attacker = this.participants.get(attackerId);
     const target = this.participants.get(targetId);

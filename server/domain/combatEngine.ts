@@ -15,6 +15,11 @@ export interface ParsedDiceFormula {
   flatModifier: number;
 }
 
+export interface LocalDiceEngineState {
+  seed: number;
+  rollCounter: number;
+}
+
 export interface RollRecord {
   rollId: string;
   rulesetVersion: string;
@@ -84,7 +89,21 @@ export class LocalDiceEngine {
   }
 
   public setRollCounter(counter: number): void {
-    this.rollCounter = counter;
+    this.rollCounter = Math.max(0, Math.trunc(counter));
+  }
+
+  public exportState(): LocalDiceEngineState {
+    return {
+      seed: this.seed,
+      rollCounter: this.rollCounter,
+    };
+  }
+
+  public importState(state: Partial<LocalDiceEngineState>): void {
+    if (typeof state.seed === 'number' && Number.isFinite(state.seed)) this.seed = state.seed;
+    if (typeof state.rollCounter === 'number' && Number.isFinite(state.rollCounter)) {
+      this.rollCounter = Math.max(0, Math.trunc(state.rollCounter));
+    }
   }
 
   private pseudoRandom(): number {
@@ -93,6 +112,7 @@ export class LocalDiceEngine {
   }
 
   public rollDie(sides: number): number {
+    if (!Number.isInteger(sides) || sides < 2) throw new Error('Dice sides must be an integer >= 2.');
     return Math.floor(this.pseudoRandom() * sides) + 1;
   }
 
@@ -129,7 +149,10 @@ export class LocalDiceEngine {
       total,
       isCriticalSuccess: hasD20 && naturalD20Values.includes(20),
       isCriticalFailure: hasD20 && naturalD20Values.includes(1),
-      timestamp: Math.floor(Date.now() / 1000),
+      // Canonical roll records must not depend on wall-clock time. The logical
+      // roll sequence is deterministic and is sufficient for replay ordering.
+      timestamp: this.rollCounter,
+      seedOrEntropyMetadata: `seed:${this.seed};roll:${this.rollCounter}`,
     };
   }
 

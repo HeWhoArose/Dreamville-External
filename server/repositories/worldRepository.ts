@@ -2528,7 +2528,13 @@ export class InMemoryWorldRepository implements WorldRepository {
   public saveCharacterDraft(worldId: string, draft: any): void {
     if (!worldId || !draft) return;
     const existing = this.getCharacterDrafts(worldId);
-    const draftId = draft.draftId || draft.id || `draft_${Date.now()}`;
+    const draftSequence = existing.length + 1;
+    const draftId = draft.draftId || draft.id || deterministicId(
+      'draft',
+      worldId,
+      draftSequence,
+      draft.characterName || draft.name || ''
+    );
     draft.draftId = draftId;
     draft.worldId = worldId;
     const idx = existing.findIndex((d) => (d.draftId || d.id) === draftId);
@@ -2548,7 +2554,13 @@ export class InMemoryWorldRepository implements WorldRepository {
   public saveConfirmedCharacter(worldId: string, char: any): void {
     if (!worldId || !char) return;
     const existing = this.getConfirmedCharacters(worldId);
-    const charId = char.characterId || char.id || `char_${Date.now()}`;
+    const characterSequence = existing.length + 1;
+    const charId = char.characterId || char.id || deterministicId(
+      'char',
+      worldId,
+      characterSequence,
+      char.identity?.name || char.name || ''
+    );
     char.characterId = charId;
     char.worldId = worldId;
     const idx = existing.findIndex((c) => (c.characterId || c.id) === charId);

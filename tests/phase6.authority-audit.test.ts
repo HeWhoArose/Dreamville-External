@@ -496,3 +496,136 @@ test('Phase 6 audit: rejected canonical spell transaction rolls back spell state
     beforeEvidenceCount
   );
 });
+
+
+test('Phase 6 audit: rejected cast does not create spell state for a previously unseen actor', () => {
+  const runtime = new SpellRuntime();
+
+  assert.equal(runtime.getActorState('unseen_caster'), undefined);
+
+  const rejected = runtime.castSpellAuthoritative({
+    request: {
+      casterId: 'unseen_caster',
+      spellId: 'magic_missile',
+      targetId: 'missing_target',
+      slotLevel: 1,
+      requireAuthoritativeTarget: true,
+    },
+  });
+
+  assert.equal(rejected.success, false);
+  assert.equal(rejected.errorCode, 'TARGET_NOT_FOUND');
+  assert.equal(runtime.getActorState('unseen_caster'), undefined);
+});
+
+test('Phase 6 audit: invalid spell-slot ledgers are rejected atomically', () => {
+  const runtime = new SpellRuntime();
+  runtime.initializeSlots('slot_auditor', { 1: { current: 1, max: 2 } });
+  const before = runtime.getActorState('slot_auditor');
+
+  assert.throws(
+    () => runtime.initializeSlots('slot_auditor', { 1: { current: 3, max: 2 } }),
+    /current must be between 0 and max/
+  );
+  assert.deepEqual(runtime.getActorState('slot_auditor'), before);
+
+  assert.throws(
+    () => runtime.initializeSlots('slot_auditor', { 0: { current: 0, max: 1 } }),
+    /Expected an integer from 1 to 9/
+  );
+  assert.deepEqual(runtime.getActorState('slot_auditor'), before);
+});
+
+test('Phase 6 audit: concentration cleanup does not remove a pre-existing condition source', () => {
+  const engine = new TacticalCombatEngine(1337);
+  const caster = participant('caster', 20, 30);
+  const ally = participant('ally', 10, 30);
+  ally.team = 'player_allies';
+  ally.x = 1;
+
+  engine.addParticipant(caster);
+  engine.addParticipant(ally);
+  engine.rollInitiative();
+
+  const runtime = engine.getSpellRuntime();
+
+  const priorInvisible: SpellDefinition = {
+    id: 'phase6_prior_invisible',
+    name: 'Phase 6 Prior Invisible',
+    level: 0,
+    school: 'illusion',
+    castingTime: 'ACTION',
+    range: 5,
+    rangeType: 'TOUCH',
+    targetType: 'SINGLE_ALLY',
+    durationRounds: 1,
+    requiresConcentration: false,
+    isRitual: false,
+    defenseModel: 'BUFF',
+    appliedConditions: ['Invisible'],
+  };
+  runtime.registerSpell(priorInvisible);
+  runtime.initializeSlots(caster.id, {});
+  runtime.prepareSpell(caster.id, priorInvisible.id);
+
+  const prior = engine.executeSpellCast({
+    actorId: caster.id,
+    spellId: priorInvisible.id,
+    targetId: ally.id,
+  });
+  assert.equal(prior.success, true);
+  assert.deepEqual(ally.conditions, ['Invisible']);
+
+  runtime.initializeSlots(caster.id, { 2: { current: 1, max: 1 } });
+  runtime.learnSpell(caster.id, 'invisibility');
+  runtime.prepareSpell(caster.id, 'invisibility');
+
+  const concentrated = engine.executeSpellCast({
+    actorId: caster.id,
+    spellId: 'invisibility',
+    targetId: ally.id,
+    slotLevel: 2,
+  });
+  assert.equal(concentrated.success, true);
+  assert.equal(runtime.getActorState(caster.id)?.activeConcentration?.spellId, 'invisibility');
+
+  const broken = engine.interruptConcentration(caster.id, 'Phase 6 condition ownership audit');
+  assert.equal(broken.interrupted, true);
+  assert.deepEqual(ally.conditions, ['Invisible']);
+});
+
+test('Phase 6 audit: canonical healing updates the damage authority before later damage', () => {
+  const engine = new TacticalCombatEngine(1337);
+  const caster = participant('caster', 20, 30);
+  const ally = participant('ally', 10, 30);
+  ally.team = 'player_allies';
+  ally.x = 1;
+
+  engine.addParticipant(caster);
+  engine.addParticipant(ally);
+  engine.rollInitiative();
+
+  const wounded = engine.resolveAuthoritativeSpellDamage(ally, 15, 'force');
+  assert.equal(wounded.damage, 15);
+  assert.equal(ally.hpCurrent, 15);
+
+  const runtime = engine.getSpellRuntime();
+  runtime.initializeSlots(caster.id, { 1: { current: 1, max: 1 } });
+  runtime.learnSpell(caster.id, 'cure_wounds');
+  runtime.prepareSpell(caster.id, 'cure_wounds');
+
+  const healed = engine.executeSpellCast({
+    actorId: caster.id,
+    spellId: 'cure_wounds',
+    targetId: ally.id,
+    slotLevel: 1,
+  });
+  assert.equal(healed.success, true);
+  assert.ok((healed.result?.healingApplied || 0) > 0);
+  const hpAfterHealing = ally.hpCurrent;
+  assert.ok(hpAfterHealing > 15);
+
+  const laterDamage = engine.resolveAuthoritativeSpellDamage(ally, 5, 'force');
+  assert.equal(laterDamage.damage, 5);
+  assert.equal(ally.hpCurrent, hpAfterHealing - 5);
+});

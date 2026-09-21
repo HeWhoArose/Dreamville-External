@@ -3443,6 +3443,34 @@ gameRouter.get('/story-runs', async (_req: Request, res: Response) => {
   }
 });
 
+gameRouter.put('/worlds/:worldId/visual-asset', async (req: Request, res: Response) => {
+  try {
+    const worldId = String(req.params.worldId);
+    const world = worldRepository.getWorldTemplate(worldId);
+    if (!world) {
+      return res.status(404).json({ error: `World template "${worldId}" not found.` });
+    }
+
+    const { imageAsset, imageMetadata } = req.body || {};
+    if (imageAsset !== undefined && typeof imageAsset !== 'string') {
+      return res.status(400).json({ error: 'imageAsset must be a string when provided.' });
+    }
+
+    const updatedWorld = {
+      ...world,
+      ...(imageAsset !== undefined ? { imageAsset } : {}),
+      ...(imageMetadata !== undefined ? { imageMetadata } : {}),
+      updatedAt: new Date().toISOString(),
+    };
+
+    worldRepository.saveWorldTemplate(updatedWorld);
+    res.json(updatedWorld);
+  } catch (error: any) {
+    console.error('Error saving world visual asset:', error);
+    res.status(500).json({ error: error?.message || 'Failed to save world visual asset.' });
+  }
+});
+
 gameRouter.post('/worlds/:worldId/start-run', async (req: Request, res: Response) => {
   try {
     const { worldRepository } = await import('../repositories/worldRepository');

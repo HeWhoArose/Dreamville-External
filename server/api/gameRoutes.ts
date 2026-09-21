@@ -11,6 +11,7 @@ import { rulesProfileEngine } from '../domain/rulesProfileEngine';
 import { resolveCanonicalConfirmedCharacter } from '../services/confirmedCharacterAuthority';
 import { canonicalCommandEngine } from '../domain/canonicalCommandEngine';
 import { deterministicId, formatCanonicalTimestamp } from '../domain/deterministicRng';
+import { spellRuntime } from '../domain/spellRuntime';
 
 export const gameRouter = Router();
 import { sensoryRouter } from './sensoryRoutes';
@@ -5651,6 +5652,306 @@ gameRouter.post('/worlds/runs/:storyId/spells/evaluate', async (req: Request, re
     res.json(result);
   } catch (error: any) {
     res.status(400).json({ error: error?.message || 'Failed to evaluate spell proposal.' });
+  }
+});
+
+// ============================================================
+// PHASE 6: AUTHORITATIVE SPELL RUNTIME API ROUTES
+// ============================================================
+
+/**
+ * GET /api/game/spells/catalog
+ * Returns the authoritative spell catalog, with optional filtering.
+ */
+gameRouter.get('/spells/catalog', (req: Request, res: Response) => {
+  try {
+    const levelStr = req.query.level as string | undefined;
+    const school = req.query.school as string | undefined;
+    const ritual = req.query.ritual as string | undefined;
+    const concentration = req.query.concentration as string | undefined;
+    const search = req.query.search as string | undefined;
+
+    let spells = spellRuntime.getAllSpells();
+
+    if (levelStr !== undefined && levelStr !== '') {
+      const level = parseInt(levelStr, 10);
+      if (!isNaN(level)) {
+        spells = spells.filter((s) => s.level === level);
+      }
+    }
+    if (school) {
+      spells = spells.filter((s) => s.school.toLowerCase() === school.toLowerCase());
+    }
+    if (ritual !== undefined) {
+      const isRitual = ritual === 'true' || ritual === '1';
+      spells = spells.filter((s) => Boolean(s.isRitual) === isRitual);
+    }
+    if (concentration !== undefined) {
+      const isConc = concentration === 'true' || concentration === '1';
+      spells = spells.filter((s) => Boolean(s.requiresConcentration) === isConc);
+    }
+    if (search) {
+      const q = search.toLowerCase();
+      spells = spells.filter((s) => s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q));
+    }
+
+    res.json({
+      success: true,
+      count: spells.length,
+      spells,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, errorReason: error?.message || 'Failed to list spells.' });
+  }
+});
+
+/**
+ * GET /api/game/spells/catalog/:spellId
+ * Returns the definition of a specific spell.
+ */
+gameRouter.get('/spells/catalog/:spellId', (req: Request, res: Response) => {
+  try {
+    const spellId = req.params.spellId as string;
+    const spell = spellRuntime.getSpell(spellId);
+    if (!spell) {
+      return res.status(404).json({ success: false, errorReason: `Spell "${spellId}" not found in catalog.` });
+    }
+    res.json({ success: true, spell });
+  } catch (error: any) {
+    res.status(500).json({ success: false, errorReason: error?.message || 'Failed to get spell.' });
+  }
+});
+
+/**
+ * GET /api/game/spells/actor/:actorId
+ * Returns spellcasting state (slots, prepared, known, concentration) for an actor.
+ */
+gameRouter.get('/spells/actor/:actorId', (req: Request, res: Response) => {
+  try {
+    const actorId = req.params.actorId as string;
+    const state = spellRuntime.getOrCreateActorState(actorId);
+    res.json({
+      success: true,
+      actorId,
+      state,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, errorReason: error?.message || 'Failed to get actor spell state.' });
+  }
+});
+
+/**
+ * POST /api/game/spells/slots/initialize
+ * Configures an actor's spell slots.
+ */
+gameRouter.post('/spells/slots/initialize', (req: Request, res: Response) => {
+  try {
+    const { actorId, slots } = req.body;
+    if (!actorId || !slots || typeof slots !== 'object') {
+      return res.status(400).json({ success: false, errorReason: 'actorId and slots mapping required.' });
+    }
+    spellRuntime.initializeSlots(actorId, slots);
+    const state = spellRuntime.getOrCreateActorState(actorId);
+    res.json({ success: true, actorId, spellSlots: state.spellSlots });
+  } catch (error: any) {
+    res.status(400).json({ success: false, errorReason: error?.message || 'Failed to initialize spell slots.' });
+  }
+});
+
+/**
+ * POST /api/game/spells/prepare
+ * Prepares or un-prepares a spell for an actor.
+ */
+gameRouter.post('/spells/prepare', (req: Request, res: Response) => {
+  try {
+    const { actorId, spellId, prepare } = req.body;
+    if (!actorId || !spellId) {
+      return res.status(400).json({ success: false, errorReason: 'actorId and spellId are required.' });
+    }
+    if (prepare === false) {
+      const result = spellRuntime.unprepareSpell(actorId, spellId);
+      const state = spellRuntime.getOrCreateActorState(actorId);
+      return res.json({ success: result.success, prepared: false, errorReason: result.errorReason, preparedSpells: state.preparedSpells });
+    } else {
+      const result = spellRuntime.prepareSpell(actorId, spellId);
+      const state = spellRuntime.getOrCreateActorState(actorId);
+      return res.json({ success: result.success, prepared: true, errorReason: result.errorReason, preparedSpells: state.preparedSpells });
+    }
+  } catch (error: any) {
+    res.status(400).json({ success: false, errorReason: error?.message || 'Failed to update prepared spell.' });
+  }
+});
+
+/**
+ * POST /api/game/spells/learn
+ * Adds a spell to an actor's known spells.
+ */
+gameRouter.post('/spells/learn', (req: Request, res: Response) => {
+  try {
+    const { actorId, spellId } = req.body;
+    if (!actorId || !spellId) {
+      return res.status(400).json({ success: false, errorReason: 'actorId and spellId are required.' });
+    }
+    const result = spellRuntime.learnSpell(actorId, spellId);
+    res.json({ success: result.success, errorReason: result.errorReason, knownSpells: result.knownSpells });
+  } catch (error: any) {
+    res.status(400).json({ success: false, errorReason: error?.message || 'Failed to learn spell.' });
+  }
+});
+
+/**
+ * POST /api/game/spells/slots/reset
+ * Resets spell slots on short or long rest.
+ */
+gameRouter.post('/spells/slots/reset', (req: Request, res: Response) => {
+  try {
+    const { actorId, restType } = req.body;
+    if (!actorId) {
+      return res.status(400).json({ success: false, errorReason: 'actorId is required.' });
+    }
+    const type: 'SHORT' | 'LONG' = restType === 'SHORT' ? 'SHORT' : 'LONG';
+    const state = spellRuntime.resetSlots(actorId, type);
+    res.json({ success: true, actorId, restType: type, spellSlots: state.spellSlots });
+  } catch (error: any) {
+    res.status(400).json({ success: false, errorReason: error?.message || 'Failed to reset spell slots.' });
+  }
+});
+
+/**
+ * POST /api/game/spells/concentration/break
+ * Breaks concentration on active spell.
+ */
+gameRouter.post('/spells/concentration/break', (req: Request, res: Response) => {
+  try {
+    const { actorId, reason } = req.body;
+    if (!actorId) {
+      return res.status(400).json({ success: false, errorReason: 'actorId is required.' });
+    }
+    const result = spellRuntime.breakConcentration(actorId, reason || 'Manual cancellation');
+    res.json({ success: true, ...result });
+  } catch (error: any) {
+    res.status(400).json({ success: false, errorReason: error?.message || 'Failed to break concentration.' });
+  }
+});
+
+/**
+ * POST /api/game/spells/evaluate
+ * Evaluates custom/novel spell proposal.
+ */
+gameRouter.post('/spells/evaluate', (req: Request, res: Response) => {
+  try {
+    const proposal = req.body?.proposal || req.body;
+    if (!proposal || typeof proposal !== 'object') {
+      return res.status(400).json({ success: false, errorReason: 'Spell proposal object is required.' });
+    }
+    const result = spellRuntime.evaluateCustomSpellProposal(proposal);
+    res.json(result);
+  } catch (error: any) {
+    res.status(400).json({ success: false, errorReason: error?.message || 'Failed to evaluate spell proposal.' });
+  }
+});
+
+/**
+ * POST /api/game/spells/register-custom
+ * Evaluates and registers a custom spell into the runtime catalog if valid.
+ */
+gameRouter.post('/spells/register-custom', (req: Request, res: Response) => {
+  try {
+    const proposal = req.body?.proposal || req.body;
+    if (!proposal || typeof proposal !== 'object') {
+      return res.status(400).json({ success: false, errorReason: 'Spell proposal object is required.' });
+    }
+    const evalResult = spellRuntime.evaluateCustomSpellProposal(proposal);
+    if (!evalResult.approved || !evalResult.sanitizedSpell) {
+      return res.status(400).json({
+        success: false,
+        approved: false,
+        errorReason: evalResult.adjudicationNotes || 'Custom spell proposal was rejected by rules evaluator.',
+        evaluation: evalResult,
+      });
+    }
+    spellRuntime.registerSpell(evalResult.sanitizedSpell);
+    res.json({
+      success: true,
+      approved: true,
+      spell: evalResult.sanitizedSpell,
+      evaluation: evalResult,
+    });
+  } catch (error: any) {
+    res.status(400).json({ success: false, errorReason: error?.message || 'Failed to register custom spell.' });
+  }
+});
+
+/**
+ * POST /api/game/spells/cast
+ * Authoritative spell cast endpoint.
+ */
+gameRouter.post('/spells/cast', async (req: Request, res: Response) => {
+  try {
+    const { storyId: reqStoryId, actorId, spellId, targetId, targetPosition, slotLevel, isRitual, advantage, disadvantage } = req.body;
+    if (!actorId || !spellId) {
+      return res.status(400).json({ success: false, errorReason: 'actorId and spellId are required.' });
+    }
+
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const storyId = reqStoryId || 'default_story';
+
+    // If an active tactical combat exists, execute through combat engine
+    const activeCombat = worldRepository.getCombatEngine(storyId);
+    if (activeCombat && activeCombat.getParticipant(actorId)) {
+      const combatRes = activeCombat.executeSpellCast({
+        actorId,
+        spellId,
+        targetId,
+        targetPosition,
+        slotLevel,
+        isRitual,
+        advantage,
+        disadvantage,
+      });
+      if (!combatRes.success) {
+        return res.status(400).json({
+          success: false,
+          errorReason: combatRes.errorReason,
+          result: combatRes.result,
+        });
+      }
+      return res.json({
+        inCombat: true,
+        ...combatRes,
+      });
+    }
+
+    // Otherwise, out-of-combat authoritative cast
+    const castResult = spellRuntime.castSpellAuthoritative({
+      request: {
+        casterId: actorId,
+        spellId,
+        targetId,
+        targetPosition,
+        slotLevel,
+        isRitual,
+        advantage,
+        disadvantage,
+      },
+    });
+
+    if (!castResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: castResult.errorReason,
+        result: castResult,
+      });
+    }
+
+    res.json({
+      inCombat: false,
+      ...castResult,
+      result: castResult,
+      headline: castResult.headline,
+    });
+  } catch (error: any) {
+    res.status(400).json({ success: false, errorReason: error?.message || 'Failed to execute spell cast.' });
   }
 });
 

@@ -190,9 +190,11 @@ export class CanonicalCommandEngine {
 			case 'CAST':
 				if (
 					typeof payload.capabilityId !== 'string' &&
-					typeof payload.intendedCapabilityId !== 'string'
+					typeof payload.intendedCapabilityId !== 'string' &&
+					typeof payload.actionText !== 'string' &&
+					typeof payload.spellId !== 'string'
 				) {
-					return 'CAST command requires capabilityId or intendedCapabilityId.';
+					return 'CAST command requires capabilityId, intendedCapabilityId, spellId, or actionText.';
 				}
 				break;
 			case 'EQUIP':

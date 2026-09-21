@@ -5,6 +5,13 @@ import { CombatActionEconomy, CombatTurnResourceSnapshot, ReadyTriggerType } fro
 import { CombatReactionEngine } from './combatReactionEngine';
 import { deathSaveEngine } from './deathSaveEngine';
 import type { DeathSaveState, RulesProfile } from '../../src/types';
+import {
+  SpellRuntime,
+  spellRuntime as defaultSpellRuntime,
+  CastSpellRequest,
+  CastSpellExecutionResult,
+  ActiveConcentration,
+} from './spellRuntime';
 
 export interface DiceTerm {
   count: number;
@@ -354,6 +361,12 @@ export interface BattlefieldParticipant {
   conditionProfile?: import('../../src/types').CharacterConditionProfile;
   usesDeathSaves?: boolean;
   deathSaveState?: DeathSaveState;
+  spellSlots?: Record<number, { current: number; max: number }>;
+  knownSpells?: string[];
+  preparedSpells?: string[];
+  activeConcentration?: ActiveConcentration | null;
+  spellSaveDc?: number;
+  spellAttackBonus?: number;
 }
 
 export interface DynamicHazardZone {
@@ -391,6 +404,7 @@ export interface TacticalCombatStateExport {
   seed?: number;
   rollCounter?: number;
   rulesProfile?: RulesProfile;
+  spellRuntimeState?: ReturnType<SpellRuntime['exportState']>;
 }
 
 export interface ProjectedCombatState {
@@ -436,13 +450,25 @@ export class TacticalCombatEngine {
   private conditionEngine?: ConditionEngine;
   private rulesProfile?: RulesProfile;
   private readonly reactionEngine = new CombatReactionEngine();
+  private spellRuntime: SpellRuntime;
+  private initialSeed: number;
 
   constructor(seed = 1337, ruleset?: IRulesetAdapter, conditionEngine?: ConditionEngine) {
+    this.initialSeed = seed;
     this.diceEngine = new LocalDiceEngine(seed);
     this.conditionEngine = conditionEngine;
+    this.spellRuntime = new SpellRuntime({ conditionEngine: this.conditionEngine });
     if (ruleset) {
       this.ruleset = ruleset;
     }
+  }
+
+  public getSpellRuntime(): SpellRuntime {
+    return this.spellRuntime;
+  }
+
+  public setSpellRuntime(runtime: SpellRuntime): void {
+    this.spellRuntime = runtime;
   }
 
   public getDiceEngine(): LocalDiceEngine {
@@ -500,6 +526,8 @@ export class TacticalCombatEngine {
     this.eventLog = [];
     this.pendingActivations.clear();
     this.actionEconomy.clear();
+    this.diceEngine.setSeed(this.initialSeed);
+    this.diceEngine.setRollCounter(0);
   }
 
   public startActivation(activation: PendingActivationState): void {
@@ -1207,7 +1235,7 @@ export class TacticalCombatEngine {
     if (!this.tacticalCombatEnabled()) {
       return { success: false, errorReason: 'Tactical combat is disabled by the active rules profile.' };
     }
-    if (this.getCurrentActor()?.id !== actorId) {
+    if (this.turnQueue.length > 0 && this.getCurrentActor()?.id !== actorId) {
       return { success: false, errorReason: "It is not this actor's turn." };
     }
     return this.actionEconomy.setReadyAction(actorId, actionDescription, triggerDescription, {
@@ -1280,7 +1308,7 @@ export class TacticalCombatEngine {
     const attacker = this.participants.get(attackerId);
     const target = this.participants.get(targetId);
     if (!attacker || !target) return { success: false, errorReason: 'Attacker or target not found.' };
-    if (this.getCurrentActor()?.id !== attackerId) return { success: false, errorReason: "It is not this actor's turn." };
+    if (this.turnQueue.length > 0 && this.getCurrentActor()?.id !== attackerId) return { success: false, errorReason: "It is not this actor's turn." };
     if (attacker.isDead || target.isDead || attacker.hpCurrent <= 0 || target.hpCurrent <= 0) {
       return { success: false, errorReason: 'Dead or incapacitated combatants cannot resolve this action.' };
     }
@@ -1457,7 +1485,7 @@ export class TacticalCombatEngine {
     }
 
     const currentActor = this.getCurrentActor();
-    if (!currentActor || currentActor.id !== actorId) {
+    if (this.turnQueue.length > 0 && (!currentActor || currentActor.id !== actorId)) {
       return {
         success: false,
         action,
@@ -1465,7 +1493,7 @@ export class TacticalCombatEngine {
         combatState: this.getTurnResources(actorId),
       };
     }
-    if (currentActor.isDead || currentActor.hpCurrent <= 0 || currentActor.conditions.includes('Unconscious')) {
+    if (actor.isDead || actor.hpCurrent <= 0 || actor.conditions.includes('Unconscious')) {
       return {
         success: false,
         action,
@@ -1605,6 +1633,21 @@ export class TacticalCombatEngine {
         target.conditions.push('Dead');
       }
 
+      if (resolvedDamage.finalAmount > 0 && this.spellRuntime) {
+        const concRes = this.spellRuntime.resolveDamageConcentrationCheck(target, resolvedDamage.finalAmount, this.diceEngine);
+        if (concRes?.concentrationBroken) {
+          this.eventLog.push({
+            turnNumber: this.currentRound,
+            actorId: target.id,
+            actionType: 'INTERRUPT',
+            headline: concRes.headline,
+          });
+        }
+      }
+      if ((target.isDead || target.hpCurrent <= 0) && this.spellRuntime) {
+        this.spellRuntime.breakConcentration(target.id, 'Creature dropped to 0 HP');
+      }
+
       return {
         damage: resolvedDamage.finalAmount,
         targetDied: target.isDead,
@@ -1656,6 +1699,21 @@ export class TacticalCombatEngine {
       target.conditions.push('Dead');
     }
 
+    if (finalAmount > 0 && this.spellRuntime) {
+      const concRes = this.spellRuntime.resolveDamageConcentrationCheck(target, finalAmount, this.diceEngine);
+      if (concRes?.concentrationBroken) {
+        this.eventLog.push({
+          turnNumber: this.currentRound,
+          actorId: target.id,
+          actionType: 'INTERRUPT',
+          headline: concRes.headline,
+        });
+      }
+    }
+    if ((target.isDead || target.hpCurrent <= 0) && this.spellRuntime) {
+      this.spellRuntime.breakConcentration(target.id, 'Creature dropped to 0 HP');
+    }
+
     return {
       damage: finalAmount,
       targetDied: target.isDead,
@@ -1702,7 +1760,7 @@ export class TacticalCombatEngine {
     }
 
     const currentActor = this.getCurrentActor();
-    if (!currentActor || currentActor.id !== attackerId) {
+    if (this.turnQueue.length > 0 && (!currentActor || currentActor.id !== attackerId)) {
       return {
         success: false,
         errorReason: "It is not this attacker's turn.",
@@ -1831,7 +1889,7 @@ export class TacticalCombatEngine {
     if (!actor || !target) throw new Error('Invalid combatants for cast.');
 
     const currentActor = this.getCurrentActor();
-    if (!currentActor || currentActor.id !== params.actorId) {
+    if (this.turnQueue.length > 0 && (!currentActor || currentActor.id !== params.actorId)) {
       return {
         success: false,
         damage: 0,
@@ -2001,6 +2059,162 @@ export class TacticalCombatEngine {
     };
   }
 
+  public executeSpellCast(params: {
+    actorId: string;
+    spellId: string;
+    targetId?: string;
+    targetPosition?: { x: number; y: number };
+    slotLevel?: number;
+    isRitual?: boolean;
+    advantage?: boolean;
+    disadvantage?: boolean;
+  }): {
+    success: boolean;
+    errorReason?: string;
+    result?: CastSpellExecutionResult;
+    headline?: string;
+  } {
+    if (!this.tacticalCombatEnabled()) {
+      return { success: false, errorReason: 'Tactical combat is disabled by the active rules profile.' };
+    }
+    const actor = this.participants.get(params.actorId);
+    if (!actor) {
+      return { success: false, errorReason: 'Actor not found.' };
+    }
+    if (actor.isDead || actor.hpCurrent <= 0 || actor.conditions.includes('Unconscious')) {
+      return { success: false, errorReason: 'An unconscious or dead actor cannot cast spells.' };
+    }
+
+    const spell = this.spellRuntime.getSpell(params.spellId);
+    if (!spell) {
+      return { success: false, errorReason: `Spell "${params.spellId}" not found in catalog.` };
+    }
+
+    const isReaction = spell.castingTime === 'REACTION';
+    const isBonusAction = spell.castingTime === 'BONUS_ACTION';
+
+    const resourceType: 'ACTION' | 'BONUS_ACTION' | 'REACTION' = isReaction
+      ? 'REACTION'
+      : isBonusAction
+        ? 'BONUS_ACTION'
+        : 'ACTION';
+
+    if (isReaction) {
+      if (!this.actionEconomy.canConsume(params.actorId, 'REACTION')) {
+        return { success: false, errorReason: 'Reaction already spent this round.' };
+      }
+    } else {
+      const currentActor = this.getCurrentActor();
+      if (this.turnQueue.length > 0 && (!currentActor || currentActor.id !== params.actorId)) {
+        return { success: false, errorReason: "It is not this actor's turn." };
+      }
+      if (!this.actionEconomy.canConsume(params.actorId, resourceType)) {
+        return { success: false, errorReason: `${resourceType === 'BONUS_ACTION' ? 'Bonus action' : 'Action'} already spent this turn.` };
+      }
+    }
+
+    const target = params.targetId ? this.participants.get(params.targetId) : undefined;
+    if (params.targetId && !target) {
+      return { success: false, errorReason: `Target "${params.targetId}" not found on battlefield.` };
+    }
+
+    // Sync actor's state if configured on participant
+    const state = this.spellRuntime.getOrCreateActorState(actor.id);
+    if (actor.spellSlots) {
+      state.spellSlots = actor.spellSlots;
+    }
+    if (actor.preparedSpells) {
+      state.preparedSpells = actor.preparedSpells;
+    }
+    if (actor.knownSpells) {
+      state.knownSpells = actor.knownSpells;
+    }
+
+    const result = this.spellRuntime.castSpellAuthoritative({
+      request: {
+        ...params,
+        casterId: params.actorId,
+        combatRound: this.currentRound,
+        combatTurnIndex: this.currentTurnIndex,
+        rulesProfile: this.rulesProfile,
+        diceEngine: this.diceEngine,
+      },
+      casterParticipant: actor,
+      targetParticipant: target,
+      allParticipants: this.getParticipants(),
+    });
+
+    if (!result.success) {
+      return { success: false, errorReason: result.errorReason, result };
+    }
+
+    // Consume action resource upon successful cast
+    this.actionEconomy.consume(params.actorId, resourceType);
+
+    // Synchronize state back to participant
+    actor.spellSlots = state.spellSlots;
+    actor.activeConcentration = state.activeConcentration;
+
+    this.eventLog.push({
+      turnNumber: this.currentRound,
+      actorId: params.actorId,
+      targetId: params.targetId,
+      actionType: 'CAST',
+      headline: result.headline,
+      damageInflicted: result.damageInflicted,
+      rollRecord: result.savingThrowResult?.roll || result.attackResult?.roll,
+      metadata: {
+        spellId: result.spellId,
+        spellName: result.spellName,
+        slotLevelUsed: result.slotLevelUsed,
+        isRitual: result.isRitual,
+        requiresConcentration: result.requiresConcentration,
+        brokenPreviousConcentration: result.brokenPreviousConcentration,
+        savingThrowResult: result.savingThrowResult,
+        attackResult: result.attackResult,
+        conditionsApplied: result.conditionsApplied,
+        conditionsRemoved: result.conditionsRemoved,
+        movementApplied: result.movementApplied,
+      },
+    });
+
+    if (result.targetConcentrationCheck?.concentrationBroken && target) {
+      this.eventLog.push({
+        turnNumber: this.currentRound,
+        actorId: target.id,
+        actionType: 'INTERRUPT',
+        headline: result.targetConcentrationCheck.headline,
+      });
+    }
+
+    return {
+      success: true,
+      result,
+      headline: result.headline,
+    };
+  }
+
+  public interruptConcentration(
+    actorId: string,
+    reason: string
+  ): { interrupted: boolean; spellName?: string } {
+    const res = this.spellRuntime.breakConcentration(actorId, reason);
+    if (res.broken) {
+      const actor = this.participants.get(actorId);
+      if (actor) {
+        actor.activeConcentration = null;
+      }
+      this.eventLog.push({
+        turnNumber: this.currentRound,
+        actorId,
+        actionType: 'INTERRUPT',
+        headline: `${actor?.name || actorId}'s concentration on ${res.previousSpell?.spellName} was broken: ${reason}.`,
+      });
+      return { interrupted: true, spellName: res.previousSpell?.spellName };
+    }
+    return { interrupted: false };
+  }
+
   public advanceTurn(): {
     currentActor: BattlefieldParticipant | undefined;
     currentRound: number;
@@ -2033,6 +2247,33 @@ export class TacticalCombatEngine {
         hazard.durationTurns--;
       }
       this.hazards = this.hazards.filter((h) => h.durationTurns > 0);
+
+      // Decrement concentration duration for concentrating participants
+      for (const participant of this.participants.values()) {
+        const actorState = this.spellRuntime.getOrCreateActorState(participant.id);
+        const conc = actorState.activeConcentration;
+        if (conc) {
+          conc.remainingRounds = Math.max(0, conc.remainingRounds - 1);
+          if (conc.remainingRounds <= 0) {
+            const breakRes = this.spellRuntime.breakConcentration(
+              participant.id,
+              `Concentration duration on ${conc.spellName} completed`
+            );
+            participant.activeConcentration = null;
+            this.eventLog.push({
+              turnNumber: this.currentRound,
+              actorId: participant.id,
+              actionType: 'INTERRUPT',
+              headline: `${participant.name}'s concentration on ${conc.spellName} ended (duration expired).`,
+              metadata: {
+                spellId: conc.spellId,
+                spellName: conc.spellName,
+                cleanedUpConditions: breakRes.cleanedUpConditions,
+              },
+            });
+          }
+        }
+      }
     }
 
     // Process canonical condition ticks first, then environmental hazards.
@@ -2214,6 +2455,7 @@ export class TacticalCombatEngine {
       seed: this.diceEngine.getSeed(),
       rollCounter: this.diceEngine.getRollCounter(),
       rulesProfile: this.getRulesProfile(),
+      spellRuntimeState: this.spellRuntime.exportState(),
     };
   }
 
@@ -2270,6 +2512,9 @@ export class TacticalCombatEngine {
     }
     if (data.rulesProfile) {
       this.setRulesProfile(data.rulesProfile);
+    }
+    if (data.spellRuntimeState) {
+      this.spellRuntime.importState(data.spellRuntimeState);
     }
   }
 }

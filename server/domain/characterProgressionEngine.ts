@@ -235,6 +235,11 @@ export class CharacterProgressionEngine {
     return clone(this.config);
   }
 
+  public getEffectiveConfigForRulesProfile(profile?: RulesProfile | null): CharacterProgressionConfig {
+    return this.getConfigForProfile(profile);
+  }
+
+
   public registerModule(module: ProgressionModuleDefinition): void {
     this.validateModule(module);
     this.modules.set(module.id, clone(module));
@@ -390,8 +395,13 @@ export class CharacterProgressionEngine {
   ): CharacterProgressionState {
     this.assertMutationAllowed(rulesProfile);
     const state = this.requireActor(actorId);
+    const config = this.getConfigForProfile(rulesProfile);
     const module = this.requireModule(moduleId);
     if (module.type !== type) throw new Error(`Module '${moduleId}' is not a ${type} module.`);
+    if (type === 'CLASS' && !config.allowClassSelection) throw new Error('Class selection is disabled by the active rules profile.');
+    if (type === 'SUBCLASS' && !config.allowSubclassSelection) throw new Error('Subclass selection is disabled by the active rules profile.');
+    if (type === 'SPECIES' && !config.allowSpeciesSelection) throw new Error('Species selection is disabled by the active rules profile.');
+    if (type === 'FEAT' && !config.allowFeatSelection) throw new Error('Feat selection is disabled by the active rules profile.');
     if (!this.isModuleAllowed(moduleId, rulesProfile)) throw new Error(`Module '${moduleId}' is disabled by the active rules profile.`);
     if (module.minLevel && state.currentLevel < module.minLevel) {
       throw new Error(`Module '${moduleId}' requires level ${module.minLevel}.`);
@@ -568,8 +578,12 @@ export class CharacterProgressionEngine {
         a.id.localeCompare(b.id)
       );
 
-      let hasSet = false;
-      let value = 0;
+      const setEntries = sorted
+        .filter((entry) => entry.mode === 'SET')
+        .sort((a, b) => b.precedence - a.precedence || a.id.localeCompare(b.id));
+      const winningSet = setEntries[0];
+
+      let value = winningSet ? winningSet.value : 0;
       let multiply = 1;
       let minValue: number | undefined;
       let maxValue: number | undefined;
@@ -577,12 +591,7 @@ export class CharacterProgressionEngine {
 
       for (const entry of sorted) {
         sources.push(clone(entry.source));
-        if (entry.mode === 'SET') {
-          if (!hasSet || entry.precedence >= (sorted.find((candidate) => candidate.mode === 'SET' && candidate.precedence === entry.precedence)?.precedence ?? entry.precedence)) {
-            value = entry.value;
-            hasSet = true;
-          }
-        } else if (entry.mode === 'ADD') {
+        if (entry.mode === 'ADD') {
           value += entry.value;
         } else if (entry.mode === 'MULTIPLY') {
           multiply *= entry.value;
@@ -596,6 +605,7 @@ export class CharacterProgressionEngine {
       value *= multiply;
       if (minValue !== undefined) value = Math.min(value, minValue);
       if (maxValue !== undefined) value = Math.max(value, maxValue);
+
       modifiers.push({
         target,
         value,
@@ -719,7 +729,8 @@ export class CharacterProgressionEngine {
     if (config.disabledModuleIds.includes(moduleId)) return false;
     if (config.enabledModuleIds.length && !config.enabledModuleIds.includes(moduleId)) return false;
     if (profile?.mode === 'CUSTOM_HOMEBREW_DND' && !config.allowCustomModules) {
-      return this.modules.get(moduleId)?.provenance === 'CHARACTER_GENESIS';
+      const provenance = this.modules.get(moduleId)?.provenance;
+      return provenance === 'CHARACTER_GENESIS' || provenance === 'CUSTOM_HOMEBREW';
     }
     return true;
   }

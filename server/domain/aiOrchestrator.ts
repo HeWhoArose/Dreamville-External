@@ -2986,10 +2986,10 @@ export class MultiModelOrchestrator {
 
     if (!Array.isArray(records)) return;
 
-    for (const rec of records) {
+    for (const [recordIndex, rec] of records.entries()) {
       if (!rec) continue;
       if (typeof rec === 'string') {
-        const id = `cp_restored_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        const id = deterministicId('cp_restored', storyId, recordIndex, rec);
         this.checkpoints.set(id, {
           checkpointId: id,
           storyId,
@@ -3008,7 +3008,7 @@ export class MultiModelOrchestrator {
           handoffEligible: true,
         });
       } else {
-        const checkpointId = rec.checkpointId || `cp_${storyId}_${rec.turnId || Date.now()}`;
+        const checkpointId = rec.checkpointId || deterministicId('cp_restore', storyId, recordIndex, rec.turnId || 'turn_0', rec.summaryText || rec.sceneSummary || '');
         this.checkpoints.set(checkpointId, {
           checkpointId,
           storyId,
@@ -3548,10 +3548,11 @@ export class MultiModelOrchestrator {
     const timeoutMs = params.timeoutMs ?? 3000;
     const maxRetries = params.maxRetries ?? 2;
 
-    // V6.34 Stable Identifiers: Deterministically scoped when idempotencyKey is present
+    // V6.34 Stable Identifiers: all turn identities are deterministic.
+    const turnSequence = ++this.totalTurnsExecuted;
     const turnId = rawIdempotencyKey
-      ? `turn_${storyId}_${rawIdempotencyKey.replace(/[^a-zA-Z0-9_-]/g, '_')}`
-      : `turn_${Date.now()}_${++this.totalTurnsExecuted}`;
+      ? deterministicId('turn', storyId, rawIdempotencyKey.replace(/[^a-zA-Z0-9_-]/g, '_'))
+      : deterministicId('turn', storyId, turnSequence, task, params.playerAction || '');
     const repo = params.repository || this.getWorldRepository();
 
     // Checkpoint continuation awareness (V6.15 / V6.06)
@@ -3753,8 +3754,8 @@ export class MultiModelOrchestrator {
 
             // 6. Create Continuation Checkpoint (DEF-CH12-06, V6.15 completeness)
             const checkpointId = rawIdempotencyKey
-              ? `cp_${storyId}_${rawIdempotencyKey.replace(/[^a-zA-Z0-9_-]/g, '_')}`
-              : `cp_${Date.now()}_${turnId}`;
+              ? deterministicId('cp', storyId, rawIdempotencyKey.replace(/[^a-zA-Z0-9_-]/g, '_'), attempt, currentCandidate.modelId)
+              : deterministicId('cp', storyId, turnId, attempt, currentCandidate.modelId);
             const checkpoint: ContinuationCheckpoint = {
               checkpointId,
               storyId,
@@ -3885,8 +3886,8 @@ export class MultiModelOrchestrator {
               storyId
             );
             const checkpointId = rawIdempotencyKey
-              ? `cp_emergency_${storyId}_${rawIdempotencyKey.replace(/[^a-zA-Z0-9_-]/g, '_')}`
-              : `cp_emergency_${Date.now()}`;
+              ? deterministicId('cp_emergency', storyId, rawIdempotencyKey.replace(/[^a-zA-Z0-9_-]/g, '_'), totalAttempts)
+              : deterministicId('cp_emergency', storyId, turnId, totalAttempts);
             const checkpoint: ContinuationCheckpoint = {
               checkpointId,
               storyId,

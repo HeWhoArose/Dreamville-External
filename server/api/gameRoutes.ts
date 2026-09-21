@@ -2692,13 +2692,7 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
       });
     }
 
-    const perceptionOptions = worldRepository.getCombatPerceptionOptions(storyId, currentActor.id);
-    const proposal = NpcTacticalDecisionPolicy.decide({
-      actorId: currentActor.id,
-      combatEngine,
-      capabilityEngine: capEngine,
-      perceptionOptions,
-    });
+    const proposalPreview = { actorId: currentActor.id };
 
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
@@ -2712,7 +2706,7 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
         storyId,
         actorId: currentActor.id,
         type: 'ATTACK',
-        payload: { npcTurn: true, proposal },
+        payload: { npcTurn: true, actorId: currentActor.id },
         source: 'AI',
         transactionMode: 'STAGED',
       },
@@ -2721,6 +2715,23 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
         const transactionPlayer = transactionRepo.getPlayerLifecycle(storyId);
         const transactionCombatEngine = transactionRepo.getCombatEngine(storyId);
         const transactionCapEngine = transactionRepo.getCapabilityEngine(storyId);
+        const transactionCurrentActor = transactionCombatEngine.getCurrentActor();
+        if (!transactionCurrentActor || transactionCurrentActor.id !== currentActor.id) {
+          return {
+            success: false,
+            errorReason: 'NPC turn became stale before canonical resolution.',
+          };
+        }
+        const transactionPerceptionOptions = transactionRepo.getCombatPerceptionOptions(
+          storyId,
+          transactionCurrentActor.id
+        );
+        const proposal = NpcTacticalDecisionPolicy.decide({
+          actorId: transactionCurrentActor.id,
+          combatEngine: transactionCombatEngine,
+          capabilityEngine: transactionCapEngine,
+          perceptionOptions: transactionPerceptionOptions,
+        });
         const executionResult = NpcTacticalDecisionPolicy.executeDecidedAction(
           proposal,
           transactionCombatEngine,
@@ -2763,7 +2774,7 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
 
         return {
           success: true,
-          data: { executionResult, advanceResult },
+          data: { executionResult, advanceResult, proposal },
           summary: `NPC turn for ${currentActor.name} resolved and committed.`,
         };
       }
@@ -2782,7 +2793,7 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
     res.json({
       success: true,
       npcActorId: currentActor.id,
-      proposal,
+      proposal: (commandResult.data as any)?.proposal || proposalPreview,
       ...(commandResult.data as any),
       combatState: state,
       commandId: commandResult.commandId,

@@ -12,6 +12,7 @@ import {
   ConditionStackMode,
   ConditionTickUnit,
 } from '../../src/types';
+import { deterministicId } from './deterministicRng';
 
 export interface ConditionActorState {
   actorId: string;
@@ -700,7 +701,7 @@ export class ConditionEngine {
 
     const nowSeconds = Math.max(0, Number(input.nowSeconds ?? 0));
     const instance: CharacterConditionInstance = {
-      id: `cond_${state.actorId}_${slugify(def.id)}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      id: deterministicId('cond', state.actorId, slugify(def.id), nowSeconds, state.conditions?.length || 0),
       definitionId: def.id,
       name: conditionName,
       alignment: def.alignment,

@@ -7,12 +7,32 @@ import { PlayerLifecycleState } from '../domain/playerLifecycleState';
 import { OpeningSceneService } from '../services/openingSceneService';
 import { WorkingContextEngine } from '../domain/workingContextEngine';
 import { worldVisualIdentityService } from '../services/worldVisualIdentityService';
+import { rulesProfileEngine } from '../domain/rulesProfileEngine';
 
 export const gameRouter = Router();
 import { sensoryRouter } from './sensoryRoutes';
 import { adaptationRouter } from './adaptationRoutes';
 gameRouter.use('/sensory', sensoryRouter);
 gameRouter.use('/adaptation', adaptationRouter);
+
+
+function requireDndTacticalCombat(res: Response, storyId: string): boolean {
+	const run = worldRepository.getStoryRun(storyId);
+	const profile = run?.rulesProfile || rulesProfileEngine.resolve({
+		mode: run?.dndRulesMode || run?.ruleset || 'FULL_DND',
+	}).profile;
+	if (rulesProfileEngine.allowsDndTacticalCombat(profile)) {
+		return true;
+	}
+	res.status(409).json({
+		success: false,
+		code: 'DND_TACTICAL_COMBAT_NOT_ALLOWED',
+		errorReason: 'The active rules profile does not permit the legacy D&D tactical combat engine.',
+		mode: profile.mode,
+		requiresCustomRule: true,
+	});
+	return false;
+}
 
 function resolveStoryId(req: Request, allowDefault = true): string {
   const headerId = req.headers['x-story-id'];
@@ -1137,6 +1157,7 @@ function syncNpcCombatDeath(
 gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) => {
   try {
     const storyId = req.body?.storyId || 'default_story';
+    if (!requireDndTacticalCombat(res, storyId)) return;
     const player = worldRepository.getPlayerLifecycle(storyId);
     const actorId = player ? player.actorId : `player_actor_${storyId}`;
     const inv = worldRepository.getInventoryEngine(storyId);

@@ -113,9 +113,19 @@ export class WorldSynthesisService {
     let fallbackReason: string | undefined;
     let attemptCount = 1;
 
+    const requestedRulesMode = input.dndRulesMode || 'FULL_DND';
+    const challengeResolutionInstruction = requestedRulesMode === 'CUSTOM_HOMEBREW_DND'
+      ? 'ACTIVE RULE MODE: CUSTOM_HOMEBREW_DND.\n- Do not assume D&D checks, saving throws, spell slots, attack rolls, or tactical combat.\n- Every authored storyCheckChallenge MUST declare resolutionMode as "CUSTOM_D20" or "NARRATIVE".\n- Use "DND_STANDARD" only when the authored world rule explicitly requires the D&D resolver.\n- CUSTOM_D20 may include customModifier; its modifier is the authored custom rule, not a D&D ability/proficiency modifier.'
+      : requestedRulesMode === 'HYBRID_DND'
+      ? 'ACTIVE RULE MODE: HYBRID_DND.\n- D&D mechanics are the baseline.\n- Any deviation must be explicit in an authored rule or override.\n- Challenge resolutionMode may be "DND_STANDARD", "CUSTOM_D20", or "NARRATIVE" when the world explicitly defines it.'
+      : 'ACTIVE RULE MODE: FULL_DND.\n- Use standard D&D mechanics for mechanical challenges.\n- Do not invent custom overrides from prose; explicit world overrides are not permitted in FULL_DND.';
+
     const systemInstruction = `You are an expert campaign director and world builder for premium tabletop-style fantasy/scifi simulators.
 Your task is to take a natural language world premise and synthesize a complete, highly structured campaign world template.
 You must return a valid, pure JSON object with NO markdown formatting, wrapping, or extra text.
+
+CRITICAL INSTRUCTIONS FOR RULE RESOLUTION:
+${challengeResolutionInstruction}
 
 CRITICAL INSTRUCTIONS FOR PLANNED WORLD EVENTS:
 - You must generate between 5 and 10 meaningful planned world events.
@@ -181,7 +191,9 @@ The JSON schema must strictly be:
           "testType": "SAVING_THROW",
           "savingThrowAbility": "Dexterity" | "Constitution" | "Wisdom" | "Intelligence" | "Charisma" | "Strength",
           "difficultyClass": 13,
-          "reason": "Why the roll is required",
+          "resolutionMode": "DND_STANDARD" | "CUSTOM_D20" | "NARRATIVE",
+          "customModifier": number,
+          "reason": "Why the resolution is required",
           "triggerReason": "What in the world triggers it",
           "onFailure": {
             "damageFormula": "1d6",
@@ -242,7 +254,9 @@ The JSON schema must strictly be:
           "testType": "SAVING_THROW",
           "savingThrowAbility": "Dexterity",
           "difficultyClass": 13,
-          "reason": "Why a save is required",
+          "resolutionMode": "DND_STANDARD" | "CUSTOM_D20" | "NARRATIVE",
+          "customModifier": number,
+          "reason": "Why the resolution is required",
           "triggerReason": "What hazard or event triggers the save",
           "onFailure": {
             "damageFormula": "1d6",
@@ -1000,6 +1014,12 @@ As regional tensions rise, rival factions maneuver for influence over critical r
             ? [challenge.keywords]
             : [],
           difficultyClass: Number(challenge.difficultyClass ?? challenge.dc ?? 13),
+          resolutionMode: ['DND_STANDARD', 'CUSTOM_D20', 'NARRATIVE'].includes(challenge.resolutionMode)
+            ? challenge.resolutionMode
+            : undefined,
+          customModifier: Number.isFinite(Number(challenge.customModifier))
+            ? Number(challenge.customModifier)
+            : undefined,
         }))
         .filter((challenge: any) => challenge.keywords.length > 0 && Number.isFinite(challenge.difficultyClass));
 

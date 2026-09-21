@@ -13,7 +13,8 @@ export type CanonicalCommandType =
 	| 'UNEQUIP'
 	| 'ADVANCE_TIME'
 	| 'REST'
-	| 'APPLY_ABILITY';
+	| 'APPLY_ABILITY'
+	| 'PROGRESSION';
 
 export type CanonicalCommandSource = 'PLAYER' | 'AI' | 'SYSTEM';
 
@@ -234,6 +235,20 @@ export class CanonicalCommandEngine {
 					return 'USE_ITEM command requires itemId or recipeId.';
 				}
 				break;
+			case 'PROGRESSION': {
+				const operation = payload.operation;
+				if (!['SELECT_CLASS', 'SELECT_SUBCLASS', 'SELECT_SPECIES', 'ACQUIRE_FEAT', 'LEVEL_UP', 'ENABLE_MODULE', 'DISABLE_MODULE', 'TRIGGER_ABILITY'].includes(String(operation))) {
+					return 'PROGRESSION command requires a valid operation.';
+				}
+				if (['SELECT_CLASS', 'SELECT_SUBCLASS', 'SELECT_SPECIES', 'ACQUIRE_FEAT', 'ENABLE_MODULE', 'DISABLE_MODULE'].includes(String(operation))
+					&& typeof payload.moduleId !== 'string') {
+					return 'PROGRESSION module operations require moduleId.';
+				}
+				if (operation === 'TRIGGER_ABILITY' && typeof payload.abilityId !== 'string') {
+					return 'PROGRESSION trigger requires abilityId.';
+				}
+				break;
+			}
 			case 'APPLY_ABILITY':
 				if (typeof payload.abilityId !== 'string' || typeof payload.targetId !== 'string') {
 					return 'APPLY_ABILITY command requires abilityId and targetId.';
@@ -417,7 +432,7 @@ export class CanonicalCommandEngine {
 			const after = captureCanonicalStateSnapshot(command.storyId, transactionalRepository);
 			const comparison = compareCanonicalSnapshots(before, after);
 			const mutationPaths = comparison.differences.map((difference) => {
-				const match = difference.match(/(?:at|in )((?:worldClock|geography|worldFacts|player|inventory|equipment|craftingRecipes|npcs|chronicle|narrativeHistory|capabilities|conditions|rest|combat|storyChecks|memories|livingWorld|sensory|adaptation)[^:]*):?/);
+				const match = difference.match(/(?:at|in )((?:worldClock|geography|worldFacts|player|inventory|equipment|craftingRecipes|npcs|chronicle|narrativeHistory|capabilities|conditions|rest|combat|storyChecks|memories|livingWorld|progression|sensory|adaptation)[^:]*):?/);
 				return match?.[1] || difference;
 			});
 

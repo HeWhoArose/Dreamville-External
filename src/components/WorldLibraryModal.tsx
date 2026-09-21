@@ -62,6 +62,7 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
   const activeFilters = [
     selectedGenre && { key: 'genre', label: `Genre: ${selectedGenre}`, onClear: () => setSelectedGenre('') },
     selectedTone && { key: 'tone', label: `Tone: ${selectedTone}`, onClear: () => setSelectedTone('') },
+    selectedMedium && { key: 'medium', label: `Medium: ${selectedMedium}`, onClear: () => setSelectedMedium('') },
     selectedRules && {
       key: 'rules',
       label: `Rules: ${selectedRules === 'FULL_DND' ? 'Full D&D' : selectedRules === 'HYBRID_DND' ? 'Hybrid' : 'Custom'}`,

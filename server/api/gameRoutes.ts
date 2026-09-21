@@ -195,7 +195,6 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
 gameRouter.get('/rest/state', (req: Request, res: Response) => {
   try {
     const storyId = resolveStoryId(req, true);
-    const { worldRepository } = { worldRepository: worldRepository };
     const player = worldRepository.getPlayerLifecycle(storyId);
     const actorId = (req.query.actorId as string | undefined) || (player ? player.actorId : `player_actor_${storyId}`);
     const restEngine = worldRepository.getRestRecoveryEngine(storyId);

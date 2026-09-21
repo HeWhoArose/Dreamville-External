@@ -302,6 +302,9 @@ export interface ProtagonistProfile {
  * Strictly free of server-side canonical secrets.
  */
 export interface ExternalViewState {
+	storyId?: string;
+	narrativeProfile?: NarrativeProfile;
+	rulesProfile?: RulesProfile;
   worldTime: WorldTime;
   activeLocationId: string;
   activeLocation: Location;
@@ -344,6 +347,8 @@ export interface StructuredNarrativeEvent {
 }
 
 export interface OpeningScene {
+	narrativeProfile?: NarrativeProfile;
+	dndRulesMode?: DndRulesMode;
   storyId: string;
   worldId: string;
   worldName: string;
@@ -677,6 +682,19 @@ export interface CharacterStartingState {
 export type CharacterStartingChoiceMode = 'CHOOSE' | 'AI_SUGGEST' | 'SURPRISE_ME';
 
 export type CharacterStoryMode = 'PROTAGONIST' | 'SIDE_CHARACTER' | 'FREE_ROAM';
+
+export type NarrativeCameraMode = 'PLAYER_CENTRIC' | 'SUPPORTING_CAST' | 'WORLD_SANDBOX';
+export type NarrativeAgencyMode = 'PRIMARY_PLAYER' | 'SUPPORTING_PLAYER' | 'OPEN_AGENCY';
+
+export interface NarrativeProfile {
+	profileId: string;
+	version: number;
+	mode: CharacterStoryMode;
+	camera: NarrativeCameraMode;
+	playerAgency: NarrativeAgencyMode;
+	description: string;
+}
+
 export type DndRulesMode = 'FULL_DND' | 'HYBRID_DND' | 'CUSTOM_HOMEBREW_DND';
 
 export type RulesResolutionPolicy =

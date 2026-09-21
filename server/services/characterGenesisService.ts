@@ -62,6 +62,12 @@ export class CharacterGenesisService {
       worldTemplate?.narrativeProfile?.mode ||
       'PROTAGONIST';
     const narrativeProfile = narrativeProfileEngine.createDefault(narrativeRole);
+    const hasNarrativeSelection = Boolean(
+      input.narrativeRole ||
+      (existingDraft as any)?.storyMode ||
+      worldTemplate?.storyMode ||
+      worldTemplate?.narrativeProfile?.mode
+    );
 
     const narrativeRoleGuidance: Record<CharacterStoryMode, string> = {
       PROTAGONIST:
@@ -109,7 +115,7 @@ CANONICAL NARRATIVE PROFILE:
 ${JSON.stringify(narrativeProfile)}
 
 NARRATIVE ROLE SEMANTICS:
-${input.narrativeRole || (existingDraft as any)?.storyMode
+${hasNarrativeSelection
         ? narrativeRoleGuidance[narrativeRole]
         : 'The player will choose the narrative role in the Character Dossier step. Do not assume Protagonist, Side Character, or Free Roam semantics during initial concept extraction.'}
 

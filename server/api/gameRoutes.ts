@@ -101,11 +101,45 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
       (actionRequest as any).storyId = resolveStoryId(req, true);
     }
 
-    const actionResult =
-      actionRequest.type === 'CUSTOM_ACTION'
-        ? await serverMockAuthority.processCustomAction(actionRequest)
-        : serverMockAuthority.processAction(actionRequest);
-    res.json(actionResult);
+    const storyId = (actionRequest as any).storyId as string;
+    const requestedCommandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      `action_${storyId}_${actionRequest.type}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const source = ((req.body?.source || 'PLAYER') as any) === 'AI' ? 'AI' : 'PLAYER';
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId: requestedCommandId,
+        storyId,
+        actorId: (actionRequest as any).actorId,
+        type: 'INTERACT',
+        payload: { actionRequest } as Record<string, unknown>,
+        source,
+        idempotencyKey: req.body?.idempotencyKey,
+      },
+      async () => {
+        const actionResult =
+          actionRequest.type === 'CUSTOM_ACTION'
+            ? await serverMockAuthority.processCustomAction(actionRequest)
+            : serverMockAuthority.processAction(actionRequest);
+        return {
+          success: actionResult.success !== false,
+          data: actionResult,
+          errorReason: actionResult.success === false ? actionResult.message : undefined,
+          summary: `Authoritative ${actionRequest.type} command resolved.`,
+        };
+      }
+    );
+
+    if (!commandResult.success) {
+      return res.status(400).json({
+        ...commandResult,
+        error: commandResult.errorReason,
+      });
+    }
+    res.json(commandResult.data);
   } catch (error) {
     console.error('Error processing authoritative action request:', error);
     res.status(500).json({

@@ -58,6 +58,13 @@ test('Phase 4 — seeded RNG produces identical sequences and deterministic ids'
 	assert.equal(hashStringToSeed('same-input'), hashStringToSeed('same-input'));
 });
 
+test('Phase 4 — deterministic ids are independent of object key order', () => {
+	assert.equal(
+		deterministicId('object', { alpha: 1, beta: 2 }),
+		deterministicId('object', { beta: 2, alpha: 1 })
+	);
+});
+
 test('Phase 4 — RNG state export/import resumes at the exact replay position', () => {
 	const rng = new DeterministicRng(123456);
 	rng.next();
@@ -322,6 +329,58 @@ test('Phase 4 — canonical command replay metadata is deterministic', async () 
 	assert.equal(first.event?.eventId, second.event?.eventId);
 	assert.equal(first.event?.replay.resolvedDataHash, second.event?.replay.resolvedDataHash);
 	assert.deepEqual(first.event?.replay.rngState, second.event?.replay.rngState);
+});
+
+test('Phase 4 — replay state hashing ignores presentation-only wall-clock metadata', async () => {
+	const makeRepo = (createdAt: string, narrative: string) => {
+		const repo = seedRepo('phase4_replay_volatile_metadata');
+		const run = repo.getStoryRun('phase4_replay_volatile_metadata')!;
+		run.createdAt = createdAt;
+		run.updatedAt = createdAt;
+		repo.saveStoryRun(run);
+		repo.getAiOrchestrator().recordNarrativeHistory(
+			'phase4_replay_volatile_metadata',
+			{ role: 'narrator', content: narrative }
+		);
+		return repo;
+	};
+
+	const execute = async (repo: InMemoryWorldRepository) => canonicalCommandEngine.execute(
+		repo,
+		{
+			commandId: 'phase4_replay_volatile_metadata_001',
+			storyId: 'phase4_replay_volatile_metadata',
+			actorId: repo.getPlayerLifecycle('phase4_replay_volatile_metadata')?.actorId,
+			type: 'INTERACT',
+			payload: { action: 'REPLAY_VOLATILE_METADATA' },
+			source: 'SYSTEM',
+			transactionMode: 'STAGED',
+		},
+		async (_command, context) => {
+			const run = context.repository.getStoryRun('phase4_replay_volatile_metadata')!;
+			run.replayStableMarker = 'same';
+			context.repository.saveStoryRun(run);
+			return {
+				success: true,
+				data: {
+					mechanicalResult: 'same',
+					createdAt: run.createdAt,
+					latencyMs: 999,
+					narrative: ['presentation must not affect replay checksum'],
+				},
+				summary: 'Replay volatile metadata test.',
+			};
+		}
+	);
+
+	const first = await execute(makeRepo('2026-01-01T00:00:00.000Z', 'first narrative'));
+	const second = await execute(makeRepo('2026-09-21T15:00:00.000Z', 'second narrative'));
+
+	assert.equal(first.success, true);
+	assert.equal(second.success, true);
+	assert.equal(first.event?.replay.preStateHash, second.event?.replay.preStateHash);
+	assert.equal(first.event?.replay.postStateHash, second.event?.replay.postStateHash);
+	assert.equal(first.event?.replay.resolvedDataHash, second.event?.replay.resolvedDataHash);
 });
 
 test('Phase 4 — deterministic world synthesis uses identical deterministic candidate output for the same seed', () => {

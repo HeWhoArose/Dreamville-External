@@ -1583,7 +1583,7 @@ export class SpellRuntime {
                 sourceActorId: casterId,
                 durationSeconds: (spell.durationRounds || 1) * 6,
               });
-              if (conditionResult.applied && !conditionResult.immune) {
+              if (conditionResult.applied && !conditionResult.immune && conditionResult.reason !== 'Existing condition updated.') {
                 areaTarget.conditions = this.conditionEngine.getActorState(areaTarget.id)?.instances.map((instance) => instance.name) || areaTarget.conditions;
                 conditionsApplied.push(cond);
                 concentrationAppliedConditions.push({
@@ -1723,7 +1723,7 @@ export class SpellRuntime {
             sourceActorId: casterId,
             durationSeconds: (spell.durationRounds || 1) * 6,
           });
-          if (conditionResult.applied && !conditionResult.immune) {
+          if (conditionResult.applied && !conditionResult.immune && conditionResult.reason !== 'Existing condition updated.') {
             targetParticipant.conditions = this.conditionEngine.getActorState(targetParticipant.id)?.instances.map((instance) => instance.name) || targetParticipant.conditions;
             conditionsApplied.push(cond);
             concentrationAppliedConditions.push({
@@ -1801,7 +1801,7 @@ export class SpellRuntime {
             sourceActorId: casterId,
             durationSeconds: (spell.durationRounds || 1) * 6,
           });
-          if (conditionResult.applied && !conditionResult.immune) {
+          if (conditionResult.applied && !conditionResult.immune && conditionResult.reason !== 'Existing condition updated.') {
             buffTarget.conditions = this.conditionEngine.getActorState(buffTarget.id)?.instances.map((instance) => instance.name) || buffTarget.conditions;
             conditionsApplied.push(cond);
             concentrationAppliedConditions.push({

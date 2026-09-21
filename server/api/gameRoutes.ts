@@ -1730,9 +1730,7 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
 
     combatEngine.rollInitiative();
 
-    const state = getCombatStateHelper(combatEngine, storyId, actorId);
-
-        const state = getCombatStateHelper(combatEngine, storyId, actorId);
+        const state = getCombatStateHelper(combatEngine, storyId, actorId, transactionRepo);
         return {
           success: true,
           data: { combatState: state },

@@ -16,6 +16,7 @@ export interface CanonicalStateSnapshot {
   chronicle: any;
   narrativeHistory: any[];
   capabilities: any;
+  progression: any;
   conditions: any;
   rest: any;
   combat: any;
@@ -87,6 +88,7 @@ export function captureCanonicalStateSnapshot(
     chronicle: safeClone(chronicle.exportState()),
     narrativeHistory: safeClone(orchestrator.exportNarrativeHistory(storyId)),
     capabilities: safeClone(capEngine.exportState()),
+    progression: safeClone(repo.getCharacterProgressionEngine(storyId).exportState()),
     conditions: safeClone(conditionEngine.exportState()),
     rest: safeClone(repo.getRestRecoveryEngine(storyId).exportState()),
     combat: safeClone(combatEngine.exportState()),

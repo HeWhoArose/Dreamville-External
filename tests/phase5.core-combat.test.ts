@@ -28,7 +28,7 @@ function actor(overrides: Partial<Parameters<TacticalCombatEngine['addParticipan
 test('Phase 5: multiple eligible opportunity attackers resolve deterministically and consume each Reaction', () => {
 	const engine = new TacticalCombatEngine(1337);
 	engine.addParticipant(actor());
-	engine.addParticipant(actor({ id: 'enemy_b', name: 'Enemy B', x: 1, y: 0, team: 'enemies', initiative: 10, attackBonus: 20 }));
+	engine.addParticipant(actor({ id: 'enemy_b', name: 'Enemy B', x: 1, y: 1, team: 'enemies', initiative: 10, attackBonus: 20 }));
 	engine.addParticipant(actor({ id: 'enemy_a', name: 'Enemy A', x: 0, y: 1, team: 'enemies', initiative: 9, attackBonus: 20 }));
 	engine.rollInitiative();
 

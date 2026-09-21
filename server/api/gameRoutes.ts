@@ -10,7 +10,7 @@ import { worldVisualIdentityService } from '../services/worldVisualIdentityServi
 import { rulesProfileEngine } from '../domain/rulesProfileEngine';
 import { resolveCanonicalConfirmedCharacter } from '../services/confirmedCharacterAuthority';
 import { canonicalCommandEngine } from '../domain/canonicalCommandEngine';
-import { deterministicId } from '../domain/deterministicRng';
+import { deterministicId, formatCanonicalTimestamp } from '../domain/deterministicRng';
 
 export const gameRouter = Router();
 import { sensoryRouter } from './sensoryRoutes';
@@ -5302,7 +5302,7 @@ gameRouter.post('/worlds/runs/:storyId/actions/execute', async (req: Request, re
           locationId: run.currentLocationId || 'loc_unknown',
           details: `Server resolved action ${canonicalActionType} at ${run.currentLocationId}`,
           evidenceItems: [deterministicId('ev_gameplay', gameplayEventId)],
-          timestamp: `canonical:${canonicalTimestamp.totalElapsedSeconds}`,
+          timestamp: formatCanonicalTimestamp(canonicalTimestamp),
         };
 
         const narrativeResult = emergentNarrativeEngine.processCanonicalEvent(gameplayEvent, transactionRepo);

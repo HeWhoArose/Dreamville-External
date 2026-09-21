@@ -41,6 +41,7 @@ export interface CanonicalCommandEvent {
 	mutationCount: number;
 	/** Internal deduplication fingerprint; contains command metadata only. */
 	fingerprint?: string;
+	transactionMode: 'STAGED' | 'ROLLBACK';
 }
 
 export interface CanonicalCommandResult<T = unknown> {
@@ -309,6 +310,7 @@ export class CanonicalCommandEngine {
 				mutationPaths,
 				mutationCount: mutationPaths.length,
 				fingerprint,
+				transactionMode: command.transactionMode || 'ROLLBACK',
 			};
 
 			repository.appendCanonicalCommandEvent(command.storyId, event);

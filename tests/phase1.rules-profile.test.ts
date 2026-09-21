@@ -166,3 +166,19 @@ test('Phase 1: FULL_DND and HYBRID_DND retain D&D tactical combat baseline', () 
 		true
 	);
 });
+
+test('Phase 1: custom homebrew can explicitly enable the legacy D&D tactical mechanic', () => {
+	const resolved = rulesProfileEngine.resolve({
+		mode: 'CUSTOM_HOMEBREW_DND',
+		rulesProfile: {
+			overrides: [{
+				ruleId: 'dnd_tactical_combat',
+				operation: 'ENABLE',
+				reason: 'This homebrew explicitly opts into the D&D tactical combat subsystem.',
+			}],
+		},
+	});
+
+	assert.equal(rulesProfileEngine.allowsDndTacticalCombat(resolved.profile), true);
+	assert.equal(resolved.profile.overrides.length, 1);
+});

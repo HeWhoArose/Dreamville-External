@@ -1601,12 +1601,21 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
         type: 'CORE_ACTION',
         payload: { action: 'START_ENCOUNTER', enemyId: req.body?.enemyId, enemyName: req.body?.enemyName },
         source: 'SYSTEM',
+        transactionMode: 'STAGED',
       },
-      async () => {
+      async (_command, context) => {
+    const transactionRepo = context.repository;
+    const player = transactionRepo.getPlayerLifecycle(storyId);
+    const inv = transactionRepo.getInventoryEngine(storyId);
+    const capEngine = transactionRepo.getCapabilityEngine(storyId);
+    const conditionEngine = transactionRepo.getConditionEngine(storyId);
+    const combatEngine = transactionRepo.getCombatEngine(storyId);
+    const run = transactionRepo.getStoryRun(storyId);
+
     // Preserve corpses before clearing (CH5-004 / CH5-COMBAT-01)
     const deadParticipants = combatEngine.getParticipants().filter(p => p.isDead && p.id !== actorId);
     for (const dp of deadParticipants) {
-      syncNpcCombatDeath(storyId, dp, undefined, player?.locationId);
+      syncNpcCombatDeath(storyId, dp, undefined, player?.locationId, transactionRepo);
     }
     // Reset combat state and seed encounter
     combatEngine.clear();
@@ -1659,14 +1668,14 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
       ? req.body.enemyName.trim()
       : 'Astral Void Sentry';
 
-    const existingCandidate = worldRepository.getNpcLifecycle(storyId, enemyId);
+    const existingCandidate = transactionRepo.getNpcLifecycle(storyId, enemyId);
     const shouldSkipIfDead = Boolean(req.body?.skipIfDead);
 
     if (existingCandidate?.isDead) {
       if (!shouldSkipIfDead) {
         // Generate a dynamic spawn identity so the deceased persistent identity is never resurrected as alive
         let counter = 2;
-        while (worldRepository.getNpcLifecycle(storyId, `${enemyId}_${counter}`)?.isDead) {
+        while (transactionRepo.getNpcLifecycle(storyId, `${enemyId}_${counter}`)?.isDead) {
           counter++;
         }
         enemyId = `${enemyId}_${counter}`;

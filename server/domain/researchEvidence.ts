@@ -1,6 +1,7 @@
 import { ResearchEvidenceItem, WorldFact } from '../../src/types';
 import { KnowledgeFact } from './types';
 import type { InMemoryWorldRepository } from '../repositories/worldRepository';
+import { deterministicId } from './deterministicRng';
 
 /**
  * ResearchEvidencePipeline
@@ -59,7 +60,7 @@ export class ResearchEvidencePipeline {
     }
 
     item.validationStatus = 'VALIDATED';
-    const factId = `fact_research_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const factId = deterministicId('fact_research', storyId, evidenceId, item.canonicalPromotionTarget?.predicate || 'researched_fact');
     const clock = worldRepo.getWorldClock(storyId);
 
     const canonicalFact: KnowledgeFact = {

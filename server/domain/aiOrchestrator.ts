@@ -3507,6 +3507,7 @@ export class MultiModelOrchestrator {
     audioInputBase64?: string;
     voiceProfile?: any;
     idempotencyKey?: string;
+    repository?: WorldRepository;
   }): Promise<OrchestratedTurnResult> {
     const storyId = params.storyId || 'default_story';
     const rawIdempotencyKey = params.idempotencyKey ? String(params.idempotencyKey).trim() : undefined;
@@ -3550,7 +3551,7 @@ export class MultiModelOrchestrator {
     const turnId = rawIdempotencyKey
       ? `turn_${storyId}_${rawIdempotencyKey.replace(/[^a-zA-Z0-9_-]/g, '_')}`
       : `turn_${Date.now()}_${++this.totalTurnsExecuted}`;
-    const repo = this.getWorldRepository();
+    const repo = params.repository || this.getWorldRepository();
 
     // Checkpoint continuation awareness (V6.15 / V6.06)
     let priorCheckpoint: ContinuationCheckpoint | undefined;

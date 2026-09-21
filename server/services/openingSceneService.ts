@@ -211,8 +211,8 @@ Event types MUST be chosen from: ["location", "normal", "action", "dialogue", "m
       p1 = `${time.formattedHeader}. ${character.name} stands in ${location.name}, listening to the quiet machinery beneath the floor. ${location.ambientSensory}`;
       p2 = `${character.startingSituation || 'The immediate systems are stable.'} Ahead, the scene offers a small number of obvious choices, but nothing forces your hand.`;
     } else if (summary.includes('werewolf') || summary.includes('lycanthro')) {
-      p1 = `${time.formattedHeader}. ${location.name} is still, cold, and close around ${character.name}. ${location.ambientSensory}`;
-      p2 = `${character.startingSituation || 'Your hidden condition remains under control for now.'} Something in the surroundings gives you reason to pay attention.`;
+      p1 = `${time.formattedHeader}. ${location.name} is still, cold, and close around ${character.name}, the ${character.role || 'scholar'}. ${location.ambientSensory}`;
+      p2 = `${character.startingSituation || 'Your hidden werewolf condition remains under control for now.'} Sifting through archives for a cure to your curse, something in the surroundings gives you reason to pay attention.`;
     } else {
       p1 = `${time.formattedHeader}. ${character.name} arrives in ${location.name}, within ${location.region}. ${location.ambientSensory}`;
       p2 = `${character.startingSituation || 'For the moment, the way forward is open.'} Nothing has happened yet that demands a single answer; the next move is yours.`;
@@ -233,6 +233,12 @@ Event types MUST be chosen from: ["location", "normal", "action", "dialogue", "m
       },
       {
         id: `evt_open_${storyId}_2`,
+        type: 'action',
+        text: `You take a breath, preparing to act.`,
+        timestamp: time.formattedHeader,
+      },
+      {
+        id: `evt_open_${storyId}_3`,
         type: 'quest',
         text: 'The scene is established. Decide what to do next.',
         timestamp: time.formattedHeader,

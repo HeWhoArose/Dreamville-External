@@ -3,6 +3,7 @@ import {
   CharacterConditionDefinition,
   CharacterConditionInstance,
   CharacterConditionProfile,
+  CharacterConditionStage,
   CharacterDamageProfile,
   CharacterStartingConditionState,
   CharacterEffect,

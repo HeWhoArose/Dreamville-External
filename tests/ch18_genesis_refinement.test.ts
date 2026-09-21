@@ -96,7 +96,7 @@ test('Character Genesis refinement: canonical structured character survives conf
   assert.deepEqual(created.run.characterAttributes, confirmed.attributes);
   assert.deepEqual(created.run.characterStats, confirmed.stats);
   assert.ok(created.run.characterEffects.some((effect: any) => effect.id === 'effect_town_saver'));
-  assert.deepEqual(created.run.startingState, confirmed.startingState);
+  assert.deepEqual(created.run.startingState, JSON.parse(JSON.stringify(confirmed.startingState)));
 
   worldRepository.deleteStoryRun(created.storyId);
 });

@@ -45,9 +45,13 @@ describe('MODEL ROUTING & TASK ASSIGNMENT OPERATIONAL INTEGRATION', () => {
     assert.ok(flash25Model);
     assert.equal(flash25Model?.health, 'Throttled');
 
+    const flash35Model = models.find((m) => m.modelId === 'gemini-3.5-flash');
+    assert.ok(flash35Model);
+    assert.equal(flash35Model?.health, 'Healthy');
+
     const flash36Model = models.find((m) => m.modelId === 'gemini-3.6-flash');
     assert.ok(flash36Model);
-    assert.equal(flash36Model?.health, 'Healthy');
+    assert.equal(flash36Model?.health, 'Throttled');
 
     const floorModel = models.find((m) => m.modelId === 'emergency-fallback-local');
     assert.ok(floorModel);
@@ -89,7 +93,7 @@ describe('MODEL ROUTING & TASK ASSIGNMENT OPERATIONAL INTEGRATION', () => {
     
     // Must NOT be gemini-2.5-pro because it's unavailable
     assert.notEqual(selected?.selectedModel?.modelId, 'gemini-2.5-pro');
-    assert.ok(['gemini-3.6-flash', 'emergency-fallback-local'].includes(selected?.selectedModel?.modelId));
+    assert.ok(['gemini-3.5-flash', 'gemini-3.6-flash', 'emergency-fallback-local'].includes(selected?.selectedModel?.modelId));
   });
 
   it('6. Real Connectivity Testbench: Returns truthful health result without crashing', { timeout: 15000 }, async () => {

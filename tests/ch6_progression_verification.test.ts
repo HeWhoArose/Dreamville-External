@@ -201,6 +201,8 @@ describe('CH6 Comprehensive Verification: Dynamic Powers & Progression', () => {
       };
       combat.addParticipant(p1);
       combat.addParticipant(p2);
+      combat.turnQueue = ['enemy_1', 'sorcerer_1'];
+      combat.currentTurnIndex = 0;
 
       // Sorcerer starts charging a 2-turn charged spell
       combat.startActivation({
@@ -268,6 +270,8 @@ describe('CH6 Comprehensive Verification: Dynamic Powers & Progression', () => {
       };
       combat.addParticipant(p1);
       combat.addParticipant(p2);
+      combat.turnQueue = ['enemy_2', 'titan_1'];
+      combat.currentTurnIndex = 0;
 
       combat.startActivation({
         activationId: 'act_iron_form',

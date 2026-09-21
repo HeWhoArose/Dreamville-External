@@ -310,6 +310,8 @@ export interface BattlefieldParticipant {
   initiativeModifier?: number; // Permitted participant input (CH8.INITIATIVE)
   saveModifiers?: Record<string, number>; // e.g. { DEX: 2, CON: 3, WIS: 1 } (CH8.DEFENSE)
   resistances?: string[]; // e.g. ['fire', 'poison', 'cold'] (CH8.DEFENSE)
+  immunities?: string[];
+  vulnerabilities?: string[];
   team: 'player_allies' | 'enemies' | 'neutral';
   hpCurrent: number;
   hpMax: number;
@@ -536,10 +538,15 @@ export class TacticalCombatEngine {
     if (this.conditionEngine) {
       const existing = this.conditionEngine.getActorState(participant.id);
       if (!existing) {
+        const damageProfile = participant.damageProfile || {
+          damageImmunities: participant.immunities || [],
+          damageResistances: participant.resistances || [],
+          damageVulnerabilities: participant.vulnerabilities || [],
+        };
         this.conditionEngine.seedActor(participant.id, {
           healthCurrent: participant.hpCurrent,
           healthMax: participant.hpMax,
-          damageProfile: participant.damageProfile,
+          damageProfile,
           conditionProfile: participant.conditionProfile,
           legacyConditions: participant.conditions,
         });
@@ -1111,10 +1118,33 @@ export class TacticalCombatEngine {
       };
     }
 
-    target.hpCurrent = Math.max(0, target.hpCurrent - amount);
+    let finalAmount = amount;
+    let isImmune = false;
+    let isResisted = false;
+    let isVulnerable = false;
+
+    if (damageType) {
+      const type = damageType.toLowerCase();
+      const imm = target.immunities?.map((i) => i.toLowerCase()) || [];
+      const res = target.resistances?.map((r) => r.toLowerCase()) || [];
+      const vul = target.vulnerabilities?.map((v) => v.toLowerCase()) || [];
+
+      if (imm.includes(type)) {
+        finalAmount = 0;
+        isImmune = true;
+      } else if (res.includes(type)) {
+        finalAmount = Math.floor(finalAmount / 2);
+        isResisted = true;
+      } else if (vul.includes(type)) {
+        finalAmount = finalAmount * 2;
+        isVulnerable = true;
+      }
+    }
+
+    target.hpCurrent = Math.max(0, target.hpCurrent - finalAmount);
 
     if (target.usesDeathSaves && previousHp > 0 && target.hpCurrent <= 0) {
-      const massiveDamage = amount >= previousHp + target.hpMax;
+      const massiveDamage = finalAmount >= previousHp + target.hpMax;
       if (!massiveDamage) {
         target.isDead = false;
         target.deathSaveState = deathSaveEngine.createState();
@@ -1131,8 +1161,11 @@ export class TacticalCombatEngine {
     }
 
     return {
-      damage: amount,
+      damage: finalAmount,
       targetDied: target.isDead,
+      immune: isImmune,
+      resisted: isResisted,
+      vulnerable: isVulnerable,
     };
   }
 
@@ -1254,9 +1287,6 @@ export class TacticalCombatEngine {
         this.diceEngine
       );
       damage = dmgRes.totalDamage;
-      const unconsciousMeleeCritical =
-        targetConditions.has('unconscious') &&
-        distanceToTarget <= (attacker.reachCells ?? 1.5);
       const damageResult = this.applyCombatDamage(
         target,
         damage,
@@ -1552,7 +1582,7 @@ export class TacticalCombatEngine {
           actorId: currentActor.id,
           actionType: 'CONDITION_TICK',
           headline: deathSaveResult.summary,
-          rollRecord: deathSaveResult.roll,
+          rollRecord: deathSaveResult.roll as any,
           metadata: {
             deathSave: true,
             successes: deathSaveResult.state.successes,

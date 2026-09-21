@@ -20,7 +20,7 @@ import {
  * - NEVER accesses hidden canonical secrets.
  * - Simply issues HTTP requests to the server and receives sanitized ExternalViewState.
  */
-const originalFetch = window.fetch;
+const originalFetch = typeof window !== 'undefined' ? window.fetch : globalThis.fetch;
 let globalActiveStoryId = 'default_story';
 
 const fetch = (url: RequestInfo | URL, init?: RequestInit): Promise<Response> => {

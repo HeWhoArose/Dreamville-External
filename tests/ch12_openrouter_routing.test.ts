@@ -66,7 +66,7 @@ test('OpenRouter adapter discovers models and executes chat completions with the
 
 test('configured fallback chain controls the actual fallback candidate set', () => {
   const orchestrator = new MultiModelOrchestrator();
-  const task = 'narrative.generate';
+  const task = 'rules.adjudicate';
 
   const primaryKey = 'google_gemini::gemini-3.6-flash';
   const secondaryKey = 'provider_mock_reasoning::mock-reasoning-pro';

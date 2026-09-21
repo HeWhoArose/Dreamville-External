@@ -1585,7 +1585,6 @@ gameRouter.post('/combat/attack', async (req: Request, res: Response) => {
     }
 
     res.json({
-      success: true,
       ...attackResult,
       combatState: state,
     });
@@ -1903,7 +1902,7 @@ gameRouter.post('/combat/end-turn', async (req: Request, res: Response) => {
           deathRecord: {
             isDead: true,
             diedAtTimestamp: worldRepository.getWorldClock('default_story').getTimestamp(),
-            cause: playerPart?.deathSaveState?.failures >= 3
+            cause: (playerPart?.deathSaveState?.failures ?? 0) >= 3
               ? 'Failed three death saves in tactical combat.'
               : 'Defeated in tactical combat by environmental hazard.',
             revivalPossible: true,
@@ -1996,7 +1995,7 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
           deathRecord: {
             isDead: true,
             diedAtTimestamp: worldRepository.getWorldClock('default_story').getTimestamp(),
-            cause: playerPart?.deathSaveState?.failures >= 3
+            cause: (playerPart?.deathSaveState?.failures ?? 0) >= 3
               ? 'Failed three death saves in tactical combat.'
               : 'Defeated in tactical combat by environmental hazard.',
             revivalPossible: true,

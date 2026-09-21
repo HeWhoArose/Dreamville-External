@@ -1,5 +1,7 @@
-import { describe, it } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { InventoryItemEngine } from '../server/domain/inventoryItem';
 import { CapabilityEngine } from '../server/domain/capabilityEngine';
 import {
@@ -1442,6 +1444,20 @@ describe('Broad Implementation Pass — Domain Subsystems', () => {
   });
 
   describe('Challenge 12: Multi-Model AI Orchestrator', () => {
+    beforeEach(() => {
+      const testConfigPath = path.resolve(process.cwd(), 'server', 'data', 'orchestrator_config_test.json');
+      if (fs.existsSync(testConfigPath)) {
+        fs.unlinkSync(testConfigPath);
+      }
+    });
+
+    afterEach(() => {
+      const testConfigPath = path.resolve(process.cwd(), 'server', 'data', 'orchestrator_config_test.json');
+      if (fs.existsSync(testConfigPath)) {
+        fs.unlinkSync(testConfigPath);
+      }
+    });
+
     it('registers canonical model pools and specialized roles (DEF-CH12-04)', () => {
       const orchestrator = new MultiModelOrchestrator();
       const models = orchestrator.getAllModels();
@@ -1465,6 +1481,7 @@ describe('Broad Implementation Pass — Domain Subsystems', () => {
     it('validates context-window capacity and excludes models whose context window is smaller than contextTokens (DEF-CH12-02)', () => {
       const orchestrator = new MultiModelOrchestrator();
       orchestrator.pinModelForTask('narrative.generate', null);
+      orchestrator.setFallbackChain('narrative.generate', []);
 
       // Register a tiny context model with high priority
       orchestrator.registerModel({
@@ -1493,6 +1510,7 @@ describe('Broad Implementation Pass — Domain Subsystems', () => {
 
     it('enforces deterministic multi-tier tie breaking in model selection (DEF-CH12-03)', () => {
       const orchestrator = new MultiModelOrchestrator();
+      orchestrator.setFallbackChain('narrative.generate', []);
 
       // Register two models with identical priority, health, quota, and latency
       orchestrator.registerModel({
@@ -1527,6 +1545,9 @@ describe('Broad Implementation Pass — Domain Subsystems', () => {
       orchestrator.updateModelHealth('provider_google_gemini', 'gemini-2.5-pro', 'Unavailable');
       orchestrator.updateModelHealth('provider_google_gemini', 'gemini-2.5-flash', 'Unavailable');
       orchestrator.updateModelHealth('google_gemini', 'gemini-3.6-flash', 'Unavailable');
+      orchestrator.updateModelHealth('google_gemini', 'gemini-3.5-flash', 'Unavailable');
+      orchestrator.updateModelHealth('google_gemini', 'gemini-3.8-flash', 'Unavailable');
+      orchestrator.updateModelHealth('google_gemini', 'gemini-3.5-flash-lite', 'Unavailable');
 
       // Tie-breaking must be lexicographical by modelId (model_alpha < model_beta)
       const sel1 = orchestrator.selectBestModel('narrative.generate', { contextTokens: 100 });
@@ -1688,6 +1709,10 @@ describe('Broad Implementation Pass — Domain Subsystems', () => {
 
     it('executes end-to-end turn orchestration with CH11 context assembly and telemetry (DEF-CH12-01, DEF-CH12-02)', async () => {
       const orchestrator = new MultiModelOrchestrator();
+      const gemini = orchestrator.getAdapter('google_gemini') as any;
+      if (gemini) {
+        gemini.isMockOnly = true;
+      }
       const { worldRepository } = await import('../server/repositories/worldRepository');
       orchestrator.setWorldRepository(worldRepository);
 

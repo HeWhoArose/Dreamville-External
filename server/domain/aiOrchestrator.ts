@@ -1256,7 +1256,7 @@ Do not enclose in markdown ticks, output pure JSON.`;
       ],
       events: ['CELESTIAL_ALIGNMENT_OBSERVED'],
       stateChanges: [
-        { kind: 'CHRONICLE', targetId: 'ev_celestial_alignment', value: 'Observed prismatic celestial alignment' },
+        { kind: 'ALIGNMENT', targetId: 'ev_celestial_alignment', value: 'Observed prismatic celestial alignment' },
       ],
       memoryCandidates: ['The prismatic lenses aligned with the third astral ring.'],
       audioCues: ['glass_harmonic', 'brass_gear_click'],
@@ -2769,7 +2769,7 @@ export class MultiModelOrchestrator {
           return {
             selectedModel: pinnedModel,
             selectionReason: customChainKeys
-              ? `Model '${pinnedModel.modelId}' was pinned for '${task}', using only the configured fallback models.`
+              ? `Model '${pinnedModel.modelId}' was manually pinned for '${task}', using only the configured fallback models.`
               : `Model '${pinnedModel.modelId}' was manually pinned for task '${task}'.`,
             selectionScore: pinnedModel.userPriority + 500,
             fallbacks,
@@ -2827,7 +2827,13 @@ export class MultiModelOrchestrator {
       };
     }
 
-    if (customChainKeys && customChainKeys.length > 0) {
+    const hasActiveManualOverrideForTask = Array.from(this.models.values()).some((m) => {
+      const override = this.manualOverrides.get(m.modelId) || this.manualOverrides.get(`${m.providerId}::${m.modelId}`);
+      const roles = override?.roleEligibility || (override as any)?.roles;
+      return override && roles && roles.includes(task);
+    });
+
+    if (customChainKeys && customChainKeys.length > 0 && !hasActiveManualOverrideForTask) {
       const configuredModels = customChainKeys
         .map(findConfiguredModel)
         .filter((m): m is ModelRegistryRecord => Boolean(m))
@@ -3807,7 +3813,7 @@ export class MultiModelOrchestrator {
               fallbackChain: candidateChain.slice(0, cIdx + 1).map((m) => m.modelId),
               attempts: totalAttempts,
               latencyMs: providerRes.latencyMs,
-              inputTokens: providerRes.inputTokens || assembledContext.totalTokens,
+              inputTokens: Math.min(providerRes.inputTokens || assembledContext.totalTokens, assembledContext.totalTokens),
               outputTokens: providerRes.outputTokens || 50,
               validated: true,
               adjudicationResult: adjudication,

@@ -84,7 +84,7 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
   };
 
   return (
-    <div className={\`rounded-xl border border-stone-900 bg-stone-950/70 px-3 py-3 \${className}\`}>
+    <div className={`rounded-xl border border-stone-900 bg-stone-950/70 px-3 py-3 ${className}`}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Dices className="h-3.5 w-3.5 text-stone-600" />
@@ -99,7 +99,7 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
             disabled={isRolling}
             className="inline-flex items-center gap-1.5 rounded-lg bg-stone-100 px-3 py-1.5 text-xs font-semibold text-stone-950 transition hover:bg-white disabled:cursor-wait disabled:opacity-60"
           >
-            <RotateCw className={\`h-3.5 w-3.5 \${isRolling ? 'animate-spin' : ''}\`} />
+            <RotateCw className={`h-3.5 w-3.5 ${isRolling ? 'animate-spin' : ''}`} />
             {isRolling ? 'Rolling…' : 'Roll'}
           </button>
         )}
@@ -113,12 +113,12 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
           const face = faces[index] ?? 1;
           const finalValue = roll.individualDice[index] ?? face;
           const transform = isRolling
-            ? \`rotateX(\${720 + index * 97}deg) rotateY(\${1080 + index * 131}deg) rotateZ(\${360 + index * 47}deg) scale(1.05)\`
+            ? `rotateX(${720 + index * 97}deg) rotateY(${1080 + index * 131}deg) rotateZ(${360 + index * 47}deg) scale(1.05)`
             : 'rotateX(0deg) rotateY(0deg) rotateZ(0deg) scale(1)';
 
           return (
             <div
-              key={\`\${roll.rollId}-\${index}\`}
+              key={`${roll.rollId}-${index}`}
               className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-stone-700 bg-stone-900 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03),0_10px_24px_rgba(0,0,0,0.3)]"
               style={{
                 transform,

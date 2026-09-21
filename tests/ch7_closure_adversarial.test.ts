@@ -199,6 +199,9 @@ describe('CH7 Final Closure Adversarial Audit', () => {
       });
       assert.strictEqual(res.status, 200);
       const data = await res.json();
+      if (data.success !== true) {
+        console.log('DEBUG: Outcome 3A failed! Body:', JSON.stringify(data, null, 2));
+      }
       assert.strictEqual(data.success, true);
       assert.strictEqual(data.interpretationType, 'NOVEL_CAPABILITY_PROPOSAL');
       assert.ok(data.proposedCapability);

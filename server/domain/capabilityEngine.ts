@@ -1923,6 +1923,7 @@ export class CapabilityEngine {
       'ward', 'barrier', 'shield', 'invoke', 'channel', 'overcharge',
       'activate', 'ability', 'power', 'energy', 'blast', 'beam', 'curse',
       'enchant', 'manifest', 'transform', 'fireball', 'lightning',
+      'weave', 'veil', 'aura', 'aegis', 'hex', 'starlight',
     ];
     const hasCapabilityIntent = capabilityIntentKeywords.some((keyword) => normalizedText.includes(keyword));
     if (!hasCapabilityIntent) {

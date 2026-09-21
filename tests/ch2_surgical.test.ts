@@ -358,6 +358,8 @@ describe('CH2 SURGICAL REPAIR VERIFICATION — EPISTEMIC HORIZON & ACTOR DISCOVE
         conditions: ['Hidden'],
         isDead: false,
       });
+      combat.turnQueue = ['actor_hidden_stalker', 'actor_vael'];
+      combat.currentTurnIndex = 0;
 
       // Stalker executes an attack internally
       combat.executeAttack('actor_hidden_stalker', 'actor_vael');

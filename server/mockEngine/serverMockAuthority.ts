@@ -748,18 +748,18 @@ export class ServerMockAuthority {
 
       case 'DISCOVER_LOCATION': {
         const targetId = request.targetLocationId;
-        const targetStoryId = (request as any).storyId || targetStoryId;
+        const actionStoryId = (request as any).storyId || targetStoryId;
         const graphNodes = worldRepository.getGeographyGraph().getAllNodes();
         const targetNode = graphNodes.find(n => n.id === targetId);
         if (targetNode) {
-          const player = worldRepository.getPlayerLifecycle(targetStoryId);
+          const player = worldRepository.getPlayerLifecycle(actionStoryId);
           if (player) {
             const currentList = player.discoveredLocationIds || [];
             if (!currentList.includes(targetId)) {
               const updatedPlayer = player.copyWith({
                 discoveredLocationIds: [...currentList, targetId],
               });
-              worldRepository.updatePlayerLifecycle(targetStoryId, updatedPlayer);
+              worldRepository.updatePlayerLifecycle(actionStoryId, updatedPlayer);
             }
           }
           const targetLoc = targetNode;

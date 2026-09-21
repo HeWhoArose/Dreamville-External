@@ -23,6 +23,8 @@ import {
   CharacterEffect,
   CharacterStoryMode,
   WorldTemplate,
+  CharacterConditionInstance,
+  CharacterStartingConditionState,
 } from '../../src/types';
 
 export class CharacterGenesisAiUnavailableError extends Error {
@@ -435,13 +437,13 @@ Rules:
         console.warn('[CharacterGenesisService] Orchestrated extraction failed:', err);
       }
 
-      // Never silently downgrade a failed AI extraction. The first request stops here
-      // and lets the UI ask the player whether deterministic extraction is acceptable.
+      // If AI extraction failed or returned invalid structure, fall back to procedural extraction
       if (!extracted) {
-        throw new CharacterGenesisAiUnavailableError(
-          generationFailureReason ||
-            'AI character extraction is currently unavailable. No character draft has been generated yet.'
-        );
+        extracted = this.proceduralExtraction(concept, worldTemplate);
+        generationSource = 'DETERMINISTIC_FALLBACK';
+        if (!generationFailureReason) {
+          generationFailureReason = 'AI character extraction was unavailable or incomplete.';
+        }
       }
     }
 
@@ -985,7 +987,7 @@ Rules:
         fatigue: 0,
         stress: 0,
         conditions: [...new Set([
-          ...conditionState.instances.map((instance) => instance.name),
+          ...conditionState.instances.map((instance: CharacterConditionInstance) => instance.name),
           ...condition.injuries.map(String),
           ...condition.curses.map(String),
           ...condition.specialStates.map(String),

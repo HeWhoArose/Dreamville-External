@@ -185,6 +185,10 @@ test('Gap 2 — Fallback Runtime Proof: Primary failure -> Fallback model invoke
   });
 
   orchestrator.pinModelForTask('narrative.generate', 'provider_primary_failing::primary-model-01');
+  orchestrator.setFallbackChain('narrative.generate', [
+    'provider_primary_failing::primary-model-01',
+    'provider_fallback_success::fallback-model-01'
+  ]);
 
   // Execute turn
   const result = await orchestrator.executeTurn({
@@ -310,6 +314,11 @@ test('Gap 2c — Primary failure -> Secondary failure -> Tertiary fallback attem
   });
 
   orchestrator.pinModelForTask('narrative.generate', 'provider_primary_failing::primary-fail-m1');
+  orchestrator.setFallbackChain('narrative.generate', [
+    'provider_primary_failing::primary-fail-m1',
+    'provider_secondary_failing::secondary-fail-m2',
+    'provider_tertiary_success::tertiary-success-m3'
+  ]);
 
   const result = await orchestrator.executeTurn({
     storyId: 'story_cascade_fallback_test',

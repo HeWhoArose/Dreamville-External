@@ -717,8 +717,16 @@ describe('CH1 Live Runtime Proof — Canonical Domain & HTTP API Path', () => {
     assert.ok(capData.capabilities.length > 0);
     const chosenCap = capData.capabilities[0];
 
-    const stateRes = await fetch(`${baseUrl}/combat/state`);
-    const stateData = (await stateRes.json()) as any;
+    let stateRes = await fetch(`${baseUrl}/combat/state`);
+    let stateData = (await stateRes.json()) as any;
+    if (!stateData.isPlayerTurn) {
+      await fetch(`${baseUrl}/combat/end-turn`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      stateRes = await fetch(`${baseUrl}/combat/state`);
+      stateData = (await stateRes.json()) as any;
+    }
     const enemy = stateData.participants.find((p: any) => p.team === 'enemies');
     assert.ok(enemy, 'Enemy must exist to cast at');
 
@@ -732,8 +740,11 @@ describe('CH1 Live Runtime Proof — Canonical Domain & HTTP API Path', () => {
       }),
     });
 
-    assert.strictEqual(res.status, 200);
     const data = (await res.json()) as any;
+    if (res.status !== 200 || data.success !== true) {
+      console.log('DEBUG: combat/cast failed! Status:', res.status, 'Body:', JSON.stringify(data, null, 2));
+    }
+    assert.strictEqual(res.status, 200);
     assert.strictEqual(data.success, true);
     assert.ok(data.adjudication.approved);
     assert.ok(data.castResult);

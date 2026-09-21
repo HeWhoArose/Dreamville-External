@@ -288,12 +288,12 @@ export class StoryCheckEngine {
       ? 'DISADVANTAGE'
       : 'NORMAL';
 
-    const firstRoll = this.dice(storyId).roll('1d20', 0);
+    const firstRoll = this.dice(storyId).roll('1d20', totalModifier);
     let roll = firstRoll;
     let selectedDieIndex = 0;
 
     if (advantageState !== 'NORMAL') {
-      const secondRoll = this.dice(storyId).roll('1d20', 0);
+      const secondRoll = this.dice(storyId).roll('1d20', totalModifier);
       const firstValue = firstRoll.individualDice[0];
       const secondValue = secondRoll.individualDice[0];
       const keepFirst = advantageState === 'ADVANTAGE'
@@ -304,7 +304,7 @@ export class StoryCheckEngine {
       roll = {
         ...firstRoll,
         rollId: `${firstRoll.rollId}_${secondRoll.rollId}`,
-        formula: '2d20',
+        formula: '2d20' + (totalModifier > 0 ? `+${totalModifier}` : totalModifier < 0 ? `${totalModifier}` : ''),
         diceTerms: [{ count: 2, sides: 20 }],
         individualDice: [firstValue, secondValue],
         modifier: totalModifier,
@@ -313,13 +313,7 @@ export class StoryCheckEngine {
         isCriticalFailure: false,
       };
     } else {
-      roll = {
-        ...firstRoll,
-        modifier: totalModifier,
-        total: firstRoll.individualDice[0] + totalModifier,
-        isCriticalSuccess: false,
-        isCriticalFailure: false,
-      };
+      roll = firstRoll;
     }
 
     const success = forcedFailure ? false : roll.total >= dc;

@@ -56,118 +56,148 @@ export interface SpellEvaluationResult {
 }
 
 export class DndSpellRulesEvaluator {
-  public evaluateSpellProposal(input: SpellProposalInput): SpellEvaluationResult {
-    const { proposal, characterLevel, dndMode, overrideCapabilities = [], customRulesOverrides } = input;
-    const requestedLevel = proposal.spellLevel;
-    const profile = input.rulesProfile || rulesProfileEngine.createDefault(dndMode);
+	public evaluateSpellProposal(input: SpellProposalInput): SpellEvaluationResult {
+		const { proposal, characterLevel, dndMode, overrideCapabilities = [], customRulesOverrides } = input;
+		const requestedLevel = proposal.spellLevel;
+		const profile = input.rulesProfile || rulesProfileEngine.createDefault(dndMode);
+		const effectiveMode = profile.mode;
+		const level = Math.max(1, Math.min(20, characterLevel));
 
-    const level = Math.max(1, Math.min(20, characterLevel));
+		// The profile and the requested mode are two views of the same policy. They
+		// must agree before any mechanic is executed.
+		if (effectiveMode !== dndMode) {
+			return {
+				approved: false,
+				spellName: proposal.spellName,
+				requestedLevel,
+				maxAvailableLevel: 0,
+				modeApplied: effectiveMode,
+				overrideGranted: false,
+				requiresCustomRule: true,
+			};
+		}
 
-    // Explicit custom spell rules take precedence over the absence of the standard
-    // D&D spell-slot mechanic. They are a declared world rule, not a silent fallback.
-    if (customRulesOverrides?.maxAllowedSpellLevel !== undefined) {
-      const allowed = Math.max(0, Number(customRulesOverrides.maxAllowedSpellLevel));
-      return {
-        approved: requestedLevel >= 0 && requestedLevel <= allowed,
-        spellName: proposal.spellName,
-        requestedLevel,
-        maxAvailableLevel: allowed,
-        modeApplied: dndMode,
-        overrideGranted: false,
-        requiresCustomRule: false,
-        downgradeRequirement: requestedLevel > allowed ? {
-          requiredCasterLevel: level,
-          suggestedDowngradeLevel: allowed,
-          reason: `Spell level ${requestedLevel} exceeds custom maximum of ${allowed}.`,
-        } : undefined,
-      };
-    }
+		// FULL_DND is authoritative. An ad-hoc custom cap cannot replace the
+		// standard D&D spell-slot system.
+		const standardMaxAvailableLevel = DND_5E_MAX_SPELL_SLOT_BY_LEVEL[level] || 1;
+		if (effectiveMode === 'FULL_DND' && customRulesOverrides?.maxAllowedSpellLevel !== undefined) {
+			return {
+				approved: requestedLevel >= 0 && requestedLevel <= standardMaxAvailableLevel,
+				spellName: proposal.spellName,
+				requestedLevel,
+				maxAvailableLevel: standardMaxAvailableLevel,
+				modeApplied: effectiveMode,
+				overrideGranted: false,
+				requiresCustomRule: false,
+			};
+		}
 
-    // When the standard D&D spell mechanic is disabled, the evaluator cannot invent
-    // D&D legality. The caller must supply an explicit custom rule.
-    if (!rulesProfileEngine.allowsStandardDndSpellRules(profile)) {
-      return {
-        approved: false,
-        spellName: proposal.spellName,
-        requestedLevel,
-        maxAvailableLevel: 0,
-        modeApplied: dndMode,
-        overrideGranted: false,
-        requiresCustomRule: true,
-      };
-    }
+		// Explicit custom spell rules are permitted in modes that allow explicit
+		// overrides, including a hybrid world that disables standard spell rules.
+		if (
+			customRulesOverrides?.maxAllowedSpellLevel !== undefined &&
+			effectiveMode !== 'FULL_DND'
+		) {
+			const rawAllowed = Number(customRulesOverrides.maxAllowedSpellLevel);
+			const allowed = Number.isFinite(rawAllowed)
+				? Math.max(0, Math.min(9, Math.floor(rawAllowed)))
+				: -1;
 
-    // Determine max available slot level based on D&D 5e table
-    const maxAvailableLevel = DND_5E_MAX_SPELL_SLOT_BY_LEVEL[level] || 1;
+			if (allowed < 0) {
+				return {
+					approved: false,
+					spellName: proposal.spellName,
+					requestedLevel,
+					maxAvailableLevel: 0,
+					modeApplied: effectiveMode,
+					overrideGranted: false,
+					requiresCustomRule: true,
+				};
+			}
 
-    // Check HYBRID_DND override
-    const hasCapabilityOverride = overrideCapabilities.some(
-      (cap) => cap.toLowerCase().includes(proposal.spellName.toLowerCase()) || cap.toLowerCase().includes('override_spell_slots')
-    );
+			return {
+				approved: requestedLevel >= 0 && requestedLevel <= allowed,
+				spellName: proposal.spellName,
+				requestedLevel,
+				maxAvailableLevel: allowed,
+				modeApplied: effectiveMode,
+				overrideGranted: false,
+				requiresCustomRule: false,
+				downgradeRequirement: requestedLevel > allowed ? {
+					requiredCasterLevel: level,
+					suggestedDowngradeLevel: allowed,
+					reason: `Spell level ${requestedLevel} exceeds custom maximum of ${allowed}.`,
+				} : undefined,
+			};
+		}
 
-    if (dndMode === 'HYBRID_DND' && hasCapabilityOverride) {
-      return {
-        approved: true,
-        spellName: proposal.spellName,
-        requestedLevel,
-        maxAvailableLevel,
-        modeApplied: 'HYBRID_DND',
-        overrideGranted: true,
-      };
-    }
+		// If the standard D&D spell mechanic is disabled, this evaluator must not
+		// invent D&D legality. An explicit custom rule is required.
+		if (!rulesProfileEngine.allowsStandardDndSpellRules(profile)) {
+			return {
+				approved: false,
+				spellName: proposal.spellName,
+				requestedLevel,
+				maxAvailableLevel: 0,
+				modeApplied: effectiveMode,
+				overrideGranted: false,
+				requiresCustomRule: true,
+			};
+		}
 
-    if (dndMode === 'CUSTOM_HOMEBREW_DND' && customRulesOverrides?.maxAllowedSpellLevel) {
-      const allowed = customRulesOverrides.maxAllowedSpellLevel;
-      return {
-        approved: requestedLevel <= allowed,
-        spellName: proposal.spellName,
-        requestedLevel,
-        maxAvailableLevel: allowed,
-        modeApplied: 'CUSTOM_HOMEBREW_DND',
-        overrideGranted: false,
-        downgradeRequirement: requestedLevel > allowed ? {
-          requiredCasterLevel: level,
-          suggestedDowngradeLevel: allowed,
-          reason: `Spell level ${requestedLevel} exceeds custom homebrew maximum of ${allowed}.`,
-        } : undefined,
-      };
-    }
+		// Standard D&D spell-slot progression.
+		const maxAvailableLevel = standardMaxAvailableLevel;
 
-    // Standard FULL_DND evaluation
-    if (requestedLevel <= maxAvailableLevel) {
-      return {
-        approved: true,
-        spellName: proposal.spellName,
-        requestedLevel,
-        maxAvailableLevel,
-        modeApplied: 'FULL_DND',
-        overrideGranted: false,
-      };
-    }
+		const hasCapabilityOverride = overrideCapabilities.some(
+			(cap) =>
+				cap.toLowerCase().includes(proposal.spellName.toLowerCase()) ||
+				cap.toLowerCase().includes('override_spell_slots')
+		);
 
-    // Find required caster level for requested slot level
-    let requiredCasterLevel = 20;
-    for (let l = 1; l <= 20; l++) {
-      if ((DND_5E_MAX_SPELL_SLOT_BY_LEVEL[l] || 1) >= requestedLevel) {
-        requiredCasterLevel = l;
-        break;
-      }
-    }
+		if (effectiveMode === 'HYBRID_DND' && hasCapabilityOverride) {
+			return {
+				approved: true,
+				spellName: proposal.spellName,
+				requestedLevel,
+				maxAvailableLevel,
+				modeApplied: effectiveMode,
+				overrideGranted: true,
+			};
+		}
 
-    return {
-      approved: false,
-      spellName: proposal.spellName,
-      requestedLevel,
-      maxAvailableLevel,
-      modeApplied: 'FULL_DND',
-      overrideGranted: false,
-      downgradeRequirement: {
-        requiredCasterLevel,
-        suggestedDowngradeLevel: maxAvailableLevel,
-        reason: `Level ${level} caster cannot cast level ${requestedLevel} spell. Max slot level available is ${maxAvailableLevel}.`,
-      },
-    };
-  }
+		if (requestedLevel <= maxAvailableLevel) {
+			return {
+				approved: true,
+				spellName: proposal.spellName,
+				requestedLevel,
+				maxAvailableLevel,
+				modeApplied: effectiveMode,
+				overrideGranted: false,
+			};
+		}
+
+		let requiredCasterLevel = 20;
+		for (let l = 1; l <= 20; l++) {
+			if ((DND_5E_MAX_SPELL_SLOT_BY_LEVEL[l] || 1) >= requestedLevel) {
+				requiredCasterLevel = l;
+				break;
+			}
+		}
+
+		return {
+			approved: false,
+			spellName: proposal.spellName,
+			requestedLevel,
+			maxAvailableLevel,
+			modeApplied: effectiveMode,
+			overrideGranted: false,
+			downgradeRequirement: {
+				requiredCasterLevel,
+				suggestedDowngradeLevel: maxAvailableLevel,
+				reason: `Level ${level} caster cannot cast level ${requestedLevel} spell. Max slot level available is ${maxAvailableLevel}.`,
+			},
+		};
+	}
 }
 
 export const dndSpellRulesEvaluator = new DndSpellRulesEvaluator();

@@ -167,14 +167,15 @@ export type StoryCheckAbility =
   | 'Wisdom'
   | 'Charisma';
 
-export type StoryTestType = 'ABILITY_CHECK' | 'SAVING_THROW';
+export type StoryTestType = 'ABILITY_CHECK' | 'SAVING_THROW' | 'CUSTOM_CHECK';
 export type StoryCheckResolutionMode = 'DND_STANDARD' | 'CUSTOM_D20' | 'NARRATIVE';
+export type ResolvedStoryCheckAbility = StoryCheckAbility | 'CUSTOM';
 export type StoryD20AdvantageState = 'NORMAL' | 'ADVANTAGE' | 'DISADVANTAGE';
 
 export interface StoryCheckModifierSource {
   label: string;
   value: number;
-  kind: 'ABILITY' | 'PROFICIENCY' | 'EXPERTISE' | 'CONTEXT' | 'OTHER';
+  kind: 'ABILITY' | 'PROFICIENCY' | 'EXPERTISE' | 'CONTEXT' | 'CUSTOM_RULE' | 'OTHER';
 }
 
 export interface StoryCheckChallengeCondition {
@@ -243,7 +244,7 @@ export interface StoryCheckResult {
   checkId: string;
   testType: StoryTestType;
   skill: string;
-  ability: StoryCheckAbility;
+  ability: ResolvedStoryCheckAbility;
   difficultyClass: number;
   proficiencyBonus: number;
   proficiencyLevel: 'NONE' | 'PROFICIENT' | 'EXPERTISE';

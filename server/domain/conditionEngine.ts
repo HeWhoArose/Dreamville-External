@@ -141,6 +141,35 @@ export class ConditionEngine {
     return Array.from(this.definitions.values()).map((d) => clone(d));
   }
 
+  public exportState(): {
+    definitions: CharacterConditionDefinition[];
+    actors: ConditionActorState[];
+  } {
+    return {
+      definitions: this.getDefinitions(),
+      actors: Array.from(this.actors.values()).map((state) => clone(state)),
+    };
+  }
+
+  public importState(state: {
+    definitions?: CharacterConditionDefinition[];
+    actors?: ConditionActorState[];
+  } | null | undefined): void {
+    this.definitions.clear();
+    this.actors.clear();
+    this.seedStandardDefinitions();
+    for (const definition of state?.definitions || []) {
+      if (definition?.id && definition?.name) {
+        this.registerDefinition(definition);
+      }
+    }
+    for (const actor of state?.actors || []) {
+      if (actor?.actorId) {
+        this.actors.set(actor.actorId, clone(actor));
+      }
+    }
+  }
+
   public seedActor(
     actorId: string,
     input?: {

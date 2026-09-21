@@ -73,20 +73,27 @@ describe('CH13: Comprehensive Lossless Archive Round-Trip & Atomic Verification'
       triggerConditionTags: ['chronocrystal', 'orrery'],
     });
 
-    // 6. Chronicle Entry
-    repository.getHistoricalChronicleEngine(storyId).recordEvidence({
-      id: 'evidence_ch13_01',
-      category: 'SACRED_OR_HISTORIC',
-      timestamp: repository.getWorldClock(storyId).getTimestamp(),
-      primarySubjectId: 'player',
-      secondarySubjectId: 'npc_archivist_orla',
-      locationId: 'loc_whispering_orrery',
-      summary: 'The Great Resonation occurred in the Whispering Orrery.',
-      details: 'The chronocrystal resonated through the Orrery.',
-      sourceEventId: 'evt_chronocrystal_activation',
-      provenance: 'direct_observation',
-      visibility: 'PUBLIC',
-    });
+    // 6. Chronicle Entry — authored through the canonical Chronicle transaction boundary
+    repository.beginCanonicalCommandTransaction(storyId, 'ch13_fixture_chronicle_01');
+    try {
+      repository.getHistoricalChronicleEngine(storyId).recordEvidence({
+        id: 'evidence_ch13_01',
+        category: 'SACRED_OR_HISTORIC',
+        timestamp: repository.getWorldClock(storyId).getTimestamp(),
+        primarySubjectId: 'player',
+        secondarySubjectId: 'npc_archivist_orla',
+        locationId: 'loc_whispering_orrery',
+        summary: 'The Great Resonation occurred in the Whispering Orrery.',
+        details: 'The chronocrystal resonated through the Orrery.',
+        sourceEventId: 'evt_chronocrystal_activation',
+        provenance: 'direct_observation',
+        visibility: 'PUBLIC',
+      });
+      repository.commitCanonicalCommandTransaction(storyId, 'evt_ch13_fixture_chronicle_01');
+    } catch (error) {
+      repository.rollbackCanonicalCommandTransaction(storyId);
+      throw error;
+    }
 
     // 7. Capabilities & Power State
     repository.getCapabilityEngine(storyId).registerCapability({

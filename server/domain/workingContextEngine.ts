@@ -1,5 +1,6 @@
 import { WorldTimestamp } from './types';
 import type { WorldRepository } from '../repositories/worldRepository';
+import type { DndRulesMode, NarrativeProfile } from '../../src/types';
 import { worldRepository } from '../repositories/worldRepository';
 
 export interface WorkingContextPacket {
@@ -72,7 +73,7 @@ export interface AssembledOpeningContext {
   evictionReasons: Record<string, string>;
   epistemicallySanitized: boolean;
   rawOpeningFacts: {
-    world: { id: string; title: string; genre?: string; tone?: string; rulesetId?: string; summary?: string; setting?: string };
+    world: { id: string; title: string; genre?: string; tone?: string; rulesetId?: string; dndRulesMode?: DndRulesMode; narrativeProfile?: NarrativeProfile; summary?: string; setting?: string };
     character: { name: string; role?: string; background?: string; capabilities: string[]; conditions: string[]; startingSituation?: string; equipment: string[] };
     location: { id: string; name: string; description: string; ambientSensory?: string; region?: string };
     time: { cycle: number; period: string; era: string; formattedHeader: string };
@@ -636,6 +637,8 @@ export class WorkingContextEngine {
     }
 
     const world = repo.getWorldTemplate(run.worldId);
+    const narrativeProfile = repo.getNarrativeProfile(storyId);
+    const rulesProfile = repo.getRulesProfile(storyId);
     const player = repo.getPlayerLifecycle(storyId);
     const clock = repo.getWorldClock(storyId);
     const geography = repo.getGeographyGraph(storyId);
@@ -719,7 +722,7 @@ export class WorkingContextEngine {
         id: `chunk_${storyId}_b1_world`,
         band: 'B1_CRITICAL',
         label: 'CANONICAL_WORLD_IDENTITY',
-        content: `World: "${world?.title || run.worldId}". Genre: ${world?.genre || (Array.isArray(world?.genreTags) ? world.genreTags.join(', ') : 'Fantasy')}, Tone: ${world?.tone || (Array.isArray(world?.toneTags) ? world.toneTags.join(', ') : 'Atmospheric')}. Setting: ${world?.setting || world?.description || ''}. Ruleset: ${run.ruleset || run.dndRulesMode || 'Standard'}.`,
+        content: `World: "${world?.title || run.worldId}". Genre: ${world?.genre || (Array.isArray(world?.genreTags) ? world.genreTags.join(', ') : 'Fantasy')}, Tone: ${world?.tone || (Array.isArray(world?.toneTags) ? world.toneTags.join(', ') : 'Atmospheric')}. Setting: ${world?.setting || world?.description || ''}. Ruleset: ${rulesProfile?.mode || run.ruleset || run.dndRulesMode || 'Standard'}. Narrative Mode: ${narrativeProfile?.mode || run.storyMode || 'PROTAGONIST'}. Narrative Camera: ${narrativeProfile?.camera || 'PLAYER_CENTRIC'}.`,
         estimatedTokens: WorkingContextEngine.estimateTokens(`World: "${world?.title || run.worldId}"`),
         isProtected: true,
         relevanceScore: 1.0,
@@ -815,6 +818,9 @@ export class WorkingContextEngine {
         world: {
           id: run.worldId,
           title: world?.title || run.worldId,
+          dndRulesMode: rulesProfile?.mode || run.dndRulesMode || world?.dndRulesMode,
+          narrativeProfile: narrativeProfile || world?.narrativeProfile,
+
           genre: world?.genre || (Array.isArray(world?.genreTags) ? world.genreTags[0] : undefined),
           tone: world?.tone || (Array.isArray(world?.toneTags) ? world.toneTags[0] : undefined),
           rulesetId: run.ruleset || world?.rulesetId,

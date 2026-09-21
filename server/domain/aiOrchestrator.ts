@@ -7,7 +7,7 @@ import type { WorldRepository } from '../repositories/worldRepository';
 import { worldRepository } from '../repositories/worldRepository';
 import { StoryAdaptationPipeline } from './storyAdaptation';
 import { getProviderApiKey } from '../services/providerCredentialService';
-import { deterministicId } from './deterministicRng';
+import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
 
 export type TaskId =
   | 'narrative.generate'
@@ -3653,7 +3653,7 @@ export class MultiModelOrchestrator {
             branchId: session?.branchId || 'main_branch',
             type: 'DIVERGENCE',
             involvedEntities: ['player'],
-            timestamp: `canonical:${canonicalTimestamp.totalElapsedSeconds}`,
+            timestamp: formatCanonicalTimestamp(canonicalTimestamp),
             reason: evalResult.reason,
             details: { action: params.playerAction },
           });

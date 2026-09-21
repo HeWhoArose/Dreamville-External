@@ -12,6 +12,7 @@ export type CanonicalCommandType =
 	| 'EQUIP'
 	| 'UNEQUIP'
 	| 'ADVANCE_TIME'
+	| 'REST'
 	| 'APPLY_ABILITY';
 
 export type CanonicalCommandSource = 'PLAYER' | 'AI' | 'SYSTEM';
@@ -416,7 +417,7 @@ export class CanonicalCommandEngine {
 			const after = captureCanonicalStateSnapshot(command.storyId, transactionalRepository);
 			const comparison = compareCanonicalSnapshots(before, after);
 			const mutationPaths = comparison.differences.map((difference) => {
-				const match = difference.match(/(?:at|in )((?:worldClock|geography|worldFacts|player|inventory|equipment|craftingRecipes|npcs|chronicle|narrativeHistory|capabilities|conditions|combat|storyChecks|memories|livingWorld|sensory|adaptation)[^:]*):?/);
+				const match = difference.match(/(?:at|in )((?:worldClock|geography|worldFacts|player|inventory|equipment|craftingRecipes|npcs|chronicle|narrativeHistory|capabilities|conditions|rest|combat|storyChecks|memories|livingWorld|sensory|adaptation)[^:]*):?/);
 				return match?.[1] || difference;
 			});
 

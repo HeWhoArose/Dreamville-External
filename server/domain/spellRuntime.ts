@@ -878,9 +878,9 @@ export class SpellRuntime {
     previousSpell?: { spellId: string; spellName: string };
     cleanedUpConditions: Array<{ targetId: string; condition: string }>;
   } {
-    const state = this.getOrCreateActorState(actorId);
-    const active = state.activeConcentration;
-    if (!active) {
+    const state = this.getActorState(actorId);
+    const active = state?.activeConcentration;
+    if (!state || !active) {
       return { broken: false, cleanedUpConditions: [] };
     }
 
@@ -910,9 +910,9 @@ export class SpellRuntime {
     damageTaken: number,
     diceEngine?: LocalDiceEngine
   ): ConcentrationCheckResult | undefined {
-    const state = this.getOrCreateActorState(targetParticipant.id);
-    const active = state.activeConcentration;
-    if (!active || damageTaken <= 0) return undefined;
+    const state = this.getActorState(targetParticipant.id);
+    const active = state?.activeConcentration;
+    if (!state || !active || damageTaken <= 0) return undefined;
 
     const dc = Math.max(10, Math.floor(damageTaken / 2));
     const conMod = targetParticipant.saveModifiers?.CON ?? 0;

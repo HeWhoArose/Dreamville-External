@@ -1228,6 +1228,8 @@ export interface WorldTemplate {
   era?: string;
   source?: string;
   playstyle?: string;
+  storyMode?: CharacterStoryMode;
+  narrativeProfile?: NarrativeProfile;
   rules?: string;
   supportedPlaystyles?: string[];
   imageAsset?: string;
@@ -1288,6 +1290,7 @@ export interface WorldSynthesisInput {
   canonMode?: string;
   rulesetId?: string;
   storyMode?: CharacterStoryMode;
+  narrativeProfile?: Partial<NarrativeProfile>;
   dndRulesMode?: DndRulesMode;
   rulesProfile?: Partial<RulesProfile>;
   setting?: string;

@@ -11,7 +11,7 @@ export interface StoryCheckChallengeSourceContext {
 }
 
 function normalize(value: string): string {
-  return String(value || '').toLowerCase().replace(/[^a-z0-9\\s]/g, ' ').replace(/\\s+/g, ' ').trim();
+  return String(value || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 function asArray(value: any): any[] {

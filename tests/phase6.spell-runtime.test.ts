@@ -64,6 +64,7 @@ test('Phase 6 Requirement 1: Spell resources and slot consumption', () => {
       spellId: 'magic_missile',
       targetId: 'dummy_target',
       slotLevel: 1,
+      allowSyntheticTarget: true,
     },
   });
 
@@ -79,6 +80,7 @@ test('Phase 6 Requirement 1: Spell resources and slot consumption', () => {
       spellId: 'magic_missile',
       targetId: 'dummy_target',
       slotLevel: 1,
+      allowSyntheticTarget: true,
     },
   });
   assert.equal(cast2.success, true);
@@ -91,6 +93,7 @@ test('Phase 6 Requirement 1: Spell resources and slot consumption', () => {
       spellId: 'magic_missile',
       targetId: 'dummy_target',
       slotLevel: 1,
+      allowSyntheticTarget: true,
     },
   });
   assert.equal(cast3.success, false);
@@ -104,6 +107,7 @@ test('Phase 6 Requirement 1: Spell resources and slot consumption', () => {
       spellId: 'fire_bolt',
       targetId: 'dummy_target',
       slotLevel: 0,
+      allowSyntheticTarget: true,
     },
   });
   assert.equal(cantripCast.success, true);
@@ -124,6 +128,7 @@ test('Phase 6 Requirement 2: Prepared and known spell state enforcement', () => 
       casterId: actorId,
       spellId: 'shield',
       slotLevel: 1,
+      allowSyntheticTarget: true,
     },
   });
   assert.equal(failCast.success, false);
@@ -139,6 +144,7 @@ test('Phase 6 Requirement 2: Prepared and known spell state enforcement', () => 
       casterId: actorId,
       spellId: 'shield',
       slotLevel: 1,
+      allowSyntheticTarget: true,
     },
   });
   assert.equal(successCast.success, true);
@@ -337,6 +343,7 @@ test('Phase 6 Requirement 8: Ritual casting without slot consumption', () => {
       spellId: 'detect_magic',
       isRitual: true,
       slotLevel: 0,
+      allowSyntheticTarget: true,
     },
   });
   assert.equal(ritualCast.success, true);

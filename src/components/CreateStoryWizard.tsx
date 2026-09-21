@@ -68,7 +68,7 @@ export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRu
 
   React.useEffect(() => {
     setSynthesizedWorld(null);
-  }, [premise, selectedGenres, selectedTones, selectedMediums]);
+  }, [premise, selectedGenres, selectedTones, selectedMediums, selectedStoryMode, selectedRulesMode]);
 
   const toggleTag = (tag: string, list: string[], setList: React.Dispatch<React.SetStateAction<string[]>>) => {
     if (list.includes(tag)) {

@@ -730,6 +730,7 @@ export class SpellRuntime {
   public prepareSpell(actorId: string, spellId: string): { success: boolean; errorReason?: string } {
     const state = this.getOrCreateActorState(actorId);
     const spell = this.getSpell(spellId);
+    this.setParticipantContext(allParticipants.length > 0 ? allParticipants : [params.casterParticipant].filter(Boolean) as BattlefieldParticipant[]);
     if (!spell) return { success: false, errorReason: `Spell "${spellId}" not found in catalog.` };
     if (spell.level === 0) return { success: true }; // Cantrips are always prepared
 
@@ -1152,6 +1153,10 @@ export class SpellRuntime {
           headline: 'Cannot cast ' + spell.name + ': target ' + targetId + ' was not found in authoritative state.',
         };
       }
+    }
+
+    if (spell.targetType === 'SELF' && !targetParticipant) {
+      targetParticipant = casterParticipant;
     }
 
     if (request.requireAuthoritativeTarget && spell.targetType !== 'SELF' && !targetParticipant) {

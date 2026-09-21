@@ -33,6 +33,8 @@ test('Phase 4 — canonical repository identifiers do not depend on wall-clock o
 		'Canonical adaptation session identifiers must not use wall-clock entropy.'
 	);
 	assert.match(worldRepository, /deterministicId\('cap'/);
+	assert.match(worldRepository, /deterministicId\('draft'/);
+	assert.match(worldRepository, /deterministicId\('char'/);
 	assert.match(deterministicRng, /export function stableStringify/);
 });
 

@@ -1643,6 +1643,14 @@ export interface CharacterCoreStats {
   savingThrowProficiencies?: StoryCheckAbility[];
 }
 
+export interface CharacterProgressionSelection {
+  classId?: string;
+  subclassId?: string;
+  speciesId?: string;
+  featIds?: string[];
+  moduleIds?: string[];
+}
+
 export interface CharacterGenesisDraft {
   draftId: string;
   worldId: string;
@@ -1686,6 +1694,7 @@ export interface CharacterGenesisDraft {
   storyMode?: CharacterStoryMode;
   narrativeProfile?: NarrativeProfile;
   dndRulesMode?: 'FULL_DND' | 'HYBRID_DND' | 'CUSTOM_HOMEBREW_DND';
+  progression?: CharacterProgressionSelection;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -1729,6 +1738,7 @@ export interface ConfirmedCharacter {
   storyMode?: CharacterStoryMode;
   narrativeProfile?: NarrativeProfile;
   dndRulesMode?: 'FULL_DND' | 'HYBRID_DND' | 'CUSTOM_HOMEBREW_DND';
+  progression?: CharacterProgressionSelection;
 }
 
 export interface CharacterExtractionRequest {

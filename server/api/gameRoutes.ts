@@ -2409,7 +2409,7 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
           if (!existingActivation || existingActivation.capabilityId !== capabilityId) {
             const turns = transactionCapDefForExecution.chargeTurnsRequired || 1;
             const act = {
-              activationId: `act_${actorId}_${capabilityId}_${Date.now()}`,
+              activationId: deterministicId('act', storyId, commandId, actorId, capabilityId, 'charged', combatEngine.getCurrentRound()),
               actorId,
               capabilityId,
               activationMode: 'charged' as const,
@@ -2461,7 +2461,7 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
             }
             activationResourceConsumed = transactionCapabilityConsumesResource;
             combatEngine.startActivation({
-              activationId: `act_${actorId}_${capabilityId}_${Date.now()}`,
+              activationId: deterministicId('act', storyId, commandId, actorId, capabilityId, 'channelled', combatEngine.getCurrentRound()),
               actorId,
               capabilityId,
               activationMode: 'channelled',

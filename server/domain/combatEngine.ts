@@ -1557,6 +1557,26 @@ export class TacticalCombatEngine {
     };
   }
 
+  /**
+   * Canonical spell-damage entry point. Keeps spell resolution on the combat
+   * authority for HP, resistances, immunities, vulnerabilities, death saves,
+   * death, and concentration interruption.
+   */
+  public resolveAuthoritativeSpellDamage(
+    target: BattlefieldParticipant,
+    requestedAmount: number,
+    damageType: string,
+    criticalHit = false
+  ): {
+    damage: number;
+    targetDied: boolean;
+    immune?: boolean;
+    resisted?: boolean;
+    vulnerable?: boolean;
+  } {
+    return this.applyCombatDamage(target, requestedAmount, damageType, criticalHit);
+  }
+
   private applyCombatDamage(
     target: BattlefieldParticipant,
     requestedAmount: number,

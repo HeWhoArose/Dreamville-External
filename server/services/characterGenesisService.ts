@@ -1,4 +1,5 @@
 import { worldRepository } from '../repositories/worldRepository';
+import { narrativeProfileEngine } from '../domain/narrativeProfileEngine';
 import {
   CharacterGenesisDraft,
   ConfirmedCharacter,
@@ -57,7 +58,10 @@ export class CharacterGenesisService {
     const narrativeRole: CharacterStoryMode =
       input.narrativeRole ||
       (existingDraft as any)?.storyMode ||
+      worldTemplate?.storyMode ||
+      worldTemplate?.narrativeProfile?.mode ||
       'PROTAGONIST';
+    const narrativeProfile = narrativeProfileEngine.createDefault(narrativeRole);
 
     const narrativeRoleGuidance: Record<CharacterStoryMode, string> = {
       PROTAGONIST:
@@ -99,7 +103,10 @@ PLAYER CHARACTER CONCEPT:
 "${concept}"
 
 NARRATIVE ROLE MODE:
-${input.narrativeRole || (existingDraft as any)?.storyMode || 'NOT_SELECTED_YET'}
+${input.narrativeRole || (existingDraft as any)?.storyMode || worldTemplate?.storyMode || worldTemplate?.narrativeProfile?.mode || 'NOT_SELECTED_YET'}
+
+CANONICAL NARRATIVE PROFILE:
+${JSON.stringify(narrativeProfile)}
 
 NARRATIVE ROLE SEMANTICS:
 ${input.narrativeRole || (existingDraft as any)?.storyMode
@@ -986,6 +993,7 @@ Rules:
       startingLocationMode: existingDraft?.startingLocationMode || 'AI_SUGGEST',
       startingSituationMode: existingDraft?.startingSituationMode || 'AI_SUGGEST',
       storyMode: narrativeRole,
+      narrativeProfile,
       startingState: {
         healthCurrent: coreStats.hpCurrent,
         healthMax: coreStats.hpMax,
@@ -1768,6 +1776,7 @@ IMPORTANT: Select an appropriate category and paper-doll slot. If the item is a 
       fieldLocks: [...(draft.fieldLocks || [])],
       revision: draft.revision || 1,
       storyMode: draft.storyMode,
+      narrativeProfile: draft.narrativeProfile,
       dndRulesMode: draft.dndRulesMode,
     };
 

@@ -278,3 +278,18 @@ test('Phase 1: FULL_DND cannot execute spell parameter overrides', () => {
 	assert.equal(resolved.profile.overrides.length, 0);
 	assert.deepEqual(resolved.profile.parameterOverrides, {});
 });
+
+test('Phase 1: FULL_DND ignores client-style custom spell caps', () => {
+	const profile = rulesProfileEngine.createDefault('FULL_DND');
+	const result = dndSpellRulesEvaluator.evaluateSpellProposal({
+		proposal: { spellName: 'Fireball', spellLevel: 9 },
+		characterLevel: 1,
+		dndMode: 'FULL_DND',
+		rulesProfile: profile,
+		customRulesOverrides: { maxAllowedSpellLevel: 9 },
+	});
+
+	assert.equal(result.approved, false);
+	assert.equal(result.maxAvailableLevel, 1);
+	assert.equal(result.modeApplied, 'FULL_DND');
+});

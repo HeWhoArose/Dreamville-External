@@ -60,6 +60,8 @@ export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRu
   const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [selectedTones, setSelectedTones] = useState<string[]>([]);
   const [selectedMediums, setSelectedMediums] = useState<string[]>([]);
+  const [selectedStoryMode, setSelectedStoryMode] = useState<'PROTAGONIST' | 'SIDE_CHARACTER' | 'FREE_ROAM'>('PROTAGONIST');
+  const [selectedRulesMode, setSelectedRulesMode] = useState<'FULL_DND' | 'HYBRID_DND' | 'CUSTOM_HOMEBREW_DND'>('FULL_DND');
 
   // Stage 2 State: Synthesized World Preview & Evaluation
   const [synthesizedWorld, setSynthesizedWorld] = useState<any | null>(null);
@@ -90,6 +92,8 @@ export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRu
         genreTags: selectedGenres,
         toneTags: selectedTones,
         mediumTags: selectedMediums,
+        storyMode: selectedStoryMode,
+        dndRulesMode: selectedRulesMode,
         generationSeed: `seed_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`,
       });
       setSynthesizedWorld(result);
@@ -276,6 +280,62 @@ export const CreateStoryWizard: React.FC<CreateStoryWizardProps> = ({ onSelectRu
                         </button>
                       );
                     })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="md:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-stone-900/50 border border-stone-800/80 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-stone-300 uppercase tracking-wider">Narrative Mode</span>
+                    <span className="text-[10px] text-stone-500">How the story camera treats you</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      ['PROTAGONIST', 'Protagonist'],
+                      ['SIDE_CHARACTER', 'Side Character'],
+                      ['FREE_ROAM', 'Free Roam'],
+                    ].map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setSelectedStoryMode(value as typeof selectedStoryMode)}
+                        className={`px-2.5 py-2 rounded-lg text-xs border transition-all cursor-pointer ${
+                          selectedStoryMode === value
+                            ? 'bg-purple-600/30 text-purple-200 border-purple-500/60 font-medium'
+                            : 'bg-stone-900 text-stone-400 border-stone-800 hover:border-stone-700'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="bg-stone-900/50 border border-stone-800/80 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-stone-300 uppercase tracking-wider">Rules Mode</span>
+                    <span className="text-[10px] text-stone-500">How mechanics are resolved</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      ['FULL_DND', 'Full D&D'],
+                      ['HYBRID_DND', 'Hybrid D&D'],
+                      ['CUSTOM_HOMEBREW_DND', 'Custom Homebrew'],
+                    ].map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setSelectedRulesMode(value as typeof selectedRulesMode)}
+                        className={`px-2.5 py-2 rounded-lg text-xs border transition-all cursor-pointer ${
+                          selectedRulesMode === value
+                            ? 'bg-blue-600/30 text-blue-200 border-blue-500/60 font-medium'
+                            : 'bg-stone-900 text-stone-400 border-stone-800 hover:border-stone-700'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>

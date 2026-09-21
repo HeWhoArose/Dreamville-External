@@ -61,9 +61,29 @@ export function compileProviderNeutralPrompt(meta: ImageAssetMeta): string {
     if (meta.traits?.length) parts.push('Key visual traits: ' + meta.traits.join(', '));
     if (meta.equipment) parts.push('Attire and gear: ' + meta.equipment);
   } else if (meta.slotType === 'world_cover' || meta.slotType === 'story_run_cover') {
-    parts.push('Epic concept art landscape depicting the setting of "' + meta.title + '"');
-    if (meta.setting) parts.push('Setting details: ' + meta.setting);
-    if (meta.environment) parts.push('Atmosphere: ' + meta.environment);
+    const isWorldCover = meta.slotType === 'world_cover';
+    parts.push(
+      (isWorldCover ? 'World identity poster for "' : 'Story adventure poster for "') +
+      meta.title +
+      '"'
+    );
+
+    if (meta.worldSummary) parts.push('World premise: ' + meta.worldSummary);
+    if (meta.setting) parts.push('Setting: ' + meta.setting);
+    if (meta.environment) parts.push('Environment and atmosphere: ' + meta.environment);
+    if (meta.genreTags?.length) parts.push('Genre: ' + meta.genreTags.join(', '));
+    if (meta.toneTags?.length) parts.push('Tone: ' + meta.toneTags.join(', '));
+    if (meta.era) parts.push('Era: ' + meta.era);
+    if (meta.factions?.length) parts.push('Major factions/civilizations: ' + meta.factions.join(', '));
+    if (meta.magicOrTechnology) parts.push('Magic/technology: ' + meta.magicOrTechnology);
+    if (meta.geography) parts.push('Geography: ' + meta.geography);
+    if (meta.visualMotifs?.length) parts.push('Signature visual motifs: ' + meta.visualMotifs.join(', '));
+
+    if (isWorldCover) {
+      parts.push('Visual goal: communicate the identity, scale, civilization, environment, and defining visual language of the world itself; do not depict a generic fantasy realm.');
+    } else {
+      parts.push('Visual goal: communicate the specific adventure context while remaining visually consistent with the established world identity.');
+    }
   } else if (meta.slotType === 'equipment' || meta.slotType === 'item') {
     parts.push('Detailed fantasy equipment illustration of "' + meta.title + '"');
     if (meta.role) parts.push('Category: ' + meta.role);
@@ -80,10 +100,15 @@ export function compileProviderNeutralPrompt(meta: ImageAssetMeta): string {
   }
 
   if (meta.mood) parts.push('Tone & mood: ' + meta.mood);
-  parts.push('Artistic style: ' + (meta.artDirection || 'Painterly fantasy realism, intricate textures, rich atmospheric depth'));
-  parts.push('Lighting: ' + (meta.lightingColor || 'Dramatic chiaroscuro with ambient rim lighting in purple, blue, and gold tones'));
+
+  const inferredStyle = meta.artDirection ||
+    (meta.genreTags?.length
+      ? 'Use visual language appropriate to the stated genres (' + meta.genreTags.join(', ') + '); do not impose fantasy aesthetics when the genres indicate science fiction, cyberpunk, modern, post-apocalyptic, or other non-fantasy settings.'
+      : 'Cohesive cinematic concept art with a clear visual identity appropriate to the subject and setting.'));
+  parts.push('Artistic style: ' + inferredStyle);
+  parts.push('Lighting: ' + (meta.lightingColor || 'Lighting appropriate to the world tone, environment, and era.'));
   parts.push('Framing: ' + (meta.composition || ('Cinematic centered focal framing for ' + spec.aspectRatio)));
-  parts.push('Constraints: No modern artifacts, no digital UI text or watermarks, maintain clean anatomical clarity.');
+  parts.push('Constraints: No UI framing, watermarks, unintended borders, or arbitrary text; preserve the defining visual elements supplied by the world metadata.');
 
   return appendImageOutputSpecification(parts.join('.\n'), meta.slotType);
 }

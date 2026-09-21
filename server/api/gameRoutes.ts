@@ -3395,7 +3395,15 @@ gameRouter.get('/story-runs', async (_req: Request, res: Response) => {
       .filter((run: any) => run && run.storyId)
       .map((run: any) => {
         const world = run.worldId ? worldRepository.getWorldTemplate(run.worldId) : null;
-        const turnCount = Array.isArray(run.actionHistory) ? run.actionHistory.length : 0;
+        let turnCount = Array.isArray(run.actionHistory) ? run.actionHistory.length : 0;
+        try {
+          const authoritativeState = serverMockAuthority.getSanitizedViewState(run.storyId);
+          turnCount = Array.isArray(authoritativeState.actionHistory)
+            ? authoritativeState.actionHistory.length
+            : turnCount;
+        } catch {
+          // A missing dynamic state should not make the library endpoint fail.
+        }
         const currentLocation =
           run.currentLocation?.name ||
           run.currentLocationName ||

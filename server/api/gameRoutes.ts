@@ -557,10 +557,10 @@ gameRouter.post('/inventory/craft', async (req: Request, res: Response) => {
           return { success: false, errorReason: result.errorReason || 'Crafting rejected.' };
         }
 
-        const clock = worldRepository.getWorldClock(storyId);
+        const clock = transactionRepo.getWorldClock(storyId);
         if (result.craftingTimeSeconds) clock.advanceSeconds(result.craftingTimeSeconds);
 
-        const chronicle = worldRepository.getHistoricalChronicleEngine(storyId);
+        const chronicle = transactionRepo.getHistoricalChronicleEngine(storyId);
         const ts = clock.getTimestamp();
         chronicle.recordEvidence({
           id: `ev_craft_${recipeId}_${ts.totalElapsedSeconds}_${chronicle.getChronicleEntries().length}`,
@@ -568,7 +568,7 @@ gameRouter.post('/inventory/craft', async (req: Request, res: Response) => {
           timestamp: ts,
           primarySubjectId: actorId,
           secondarySubjectId: result.producedItem?.id || recipeId,
-          locationId: worldRepository.getPlayerLifecycle(storyId)?.locationId || 'loc_whispering_orrery',
+          locationId: transactionRepo.getPlayerLifecycle(storyId)?.locationId || 'loc_whispering_orrery',
           summary: `Crafted ${result.producedItem?.name || 'an item'}`,
           details: `Forged ${result.producedItem?.name || 'an artifact'} via recipe ${recipeId}.`,
           sourceEventId: `evt_craft_${recipeId}_${ts.totalElapsedSeconds}`,
@@ -649,7 +649,6 @@ gameRouter.post('/inventory/transfer', async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, errorReason: 'Not authorized or too far to transfer to this target.' });
     }
 
-    const invEngine = worldRepository.getInventoryEngine(storyId);
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
@@ -664,15 +663,18 @@ gameRouter.post('/inventory/transfer', async (req: Request, res: Response) => {
         type: 'USE_ITEM',
         payload: { itemId, sourceOwnerId, targetOwnerId, targetContainerType, quantity },
         source: 'PLAYER',
+        transactionMode: 'STAGED',
       },
-      async () => {
+      async (_command, context) => {
+        const transactionRepo = context.repository;
+        const invEngine = transactionRepo.getInventoryEngine(storyId);
         const result = invEngine.transferItem(itemId, sourceOwnerId, targetOwnerId, targetContainerType, quantity);
         if (!result.success) {
           return { success: false, errorReason: result.errorReason || 'Item transfer rejected.' };
         }
 
-        const chronicle = worldRepository.getHistoricalChronicleEngine(storyId);
-        const clock = worldRepository.getWorldClock(storyId);
+        const chronicle = transactionRepo.getHistoricalChronicleEngine(storyId);
+        const clock = transactionRepo.getWorldClock(storyId);
         const ts = clock.getTimestamp();
         chronicle.recordEvidence({
           id: `ev_transfer_${itemId}_${ts.totalElapsedSeconds}_${chronicle.getChronicleEntries().length}`,
@@ -680,7 +682,7 @@ gameRouter.post('/inventory/transfer', async (req: Request, res: Response) => {
           timestamp: ts,
           primarySubjectId: actorId,
           secondarySubjectId: result.transferredItem?.id || itemId,
-          locationId: player?.locationId || 'loc_whispering_orrery',
+          locationId: transactionRepo.getPlayerLifecycle(storyId)?.locationId || 'loc_whispering_orrery',
           summary: `Transferred ${result.transferredItem?.name || 'an item'}`,
           details: `Moved ${result.transferredItem?.name || 'an item'} from ${sourceOwnerId} to ${targetOwnerId}.`,
           sourceEventId: `evt_transfer_${itemId}_${ts.totalElapsedSeconds}`,
@@ -729,7 +731,6 @@ gameRouter.post('/inventory/repair', async (req: Request, res: Response) => {
     const storyId = resolveStoryId(req);
     const player = worldRepository.getPlayerLifecycle(storyId);
     const actorId = player ? player.actorId : `player_actor_${storyId}`;
-    const invEngine = worldRepository.getInventoryEngine(storyId);
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
@@ -744,8 +745,10 @@ gameRouter.post('/inventory/repair', async (req: Request, res: Response) => {
         type: 'USE_ITEM',
         payload: { itemId, repairAmount },
         source: 'PLAYER',
+        transactionMode: 'STAGED',
       },
-      async () => {
+      async (_command, context) => {
+        const invEngine = context.repository.getInventoryEngine(storyId);
         const item = invEngine.getItemInstance(itemId);
         if (!item) return { success: false, errorReason: `Item ${itemId} not found.` };
         if (item.ownerEntityId !== actorId) return { success: false, errorReason: 'Cannot repair an item owned by another actor.' };
@@ -798,7 +801,6 @@ gameRouter.post('/inventory/degrade', async (req: Request, res: Response) => {
     const storyId = resolveStoryId(req);
     const player = worldRepository.getPlayerLifecycle(storyId);
     const actorId = player ? player.actorId : `player_actor_${storyId}`;
-    const invEngine = worldRepository.getInventoryEngine(storyId);
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
@@ -813,8 +815,10 @@ gameRouter.post('/inventory/degrade', async (req: Request, res: Response) => {
         type: 'USE_ITEM',
         payload: { itemId, wearAmount },
         source: 'SYSTEM',
+        transactionMode: 'STAGED',
       },
-      async () => {
+      async (_command, context) => {
+        const invEngine = context.repository.getInventoryEngine(storyId);
         const item = invEngine.getItemInstance(itemId);
         if (!item) return { success: false, errorReason: `Item ${itemId} not found.` };
         const amount = typeof wearAmount === 'number' && wearAmount > 0 ? wearAmount : 20;

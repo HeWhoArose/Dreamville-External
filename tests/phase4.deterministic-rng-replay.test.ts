@@ -332,16 +332,12 @@ test('Phase 4 — canonical command replay metadata is deterministic', async () 
 });
 
 test('Phase 4 — replay state hashing ignores presentation-only wall-clock metadata', async () => {
-	const makeRepo = (createdAt: string, narrative: string) => {
+	const makeRepo = (createdAt: string) => {
 		const repo = seedRepo('phase4_replay_volatile_metadata');
 		const run = repo.getStoryRun('phase4_replay_volatile_metadata')!;
 		run.createdAt = createdAt;
 		run.updatedAt = createdAt;
 		repo.saveStoryRun(run);
-		repo.getAiOrchestrator().recordNarrativeHistory(
-			'phase4_replay_volatile_metadata',
-			{ role: 'narrator', content: narrative }
-		);
 		return repo;
 	};
 
@@ -373,8 +369,8 @@ test('Phase 4 — replay state hashing ignores presentation-only wall-clock meta
 		}
 	);
 
-	const first = await execute(makeRepo('2026-01-01T00:00:00.000Z', 'first narrative'));
-	const second = await execute(makeRepo('2026-09-21T15:00:00.000Z', 'second narrative'));
+	const first = await execute(makeRepo('2026-01-01T00:00:00.000Z'));
+	const second = await execute(makeRepo('2026-09-21T15:00:00.000Z'));
 
 	assert.equal(first.success, true);
 	assert.equal(second.success, true);

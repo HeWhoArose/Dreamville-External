@@ -78,7 +78,7 @@ test('Phase 5: movement validates the traversed path and difficult terrain cost'
 	terrainEngine.addParticipant(actor({ id: 'enemy', x: 20, y: 20, team: 'enemies', initiative: 1 }));
 	terrainEngine.addHazard({ id: 'ice', type: 'ice_patch', x: 1, y: 0, radiusCells: 0, durationTurns: 5, damagePerTurn: 0 });
 	terrainEngine.rollInitiative();
-	assert.equal(terrainEngine.moveActor('hero', 2, 0).success, false);
+	assert.equal(terrainEngine.moveActor('hero', 4, 0).success, false);
 });
 
 test('Phase 5: Grapple and Shove are canonical Action-consuming control effects', () => {

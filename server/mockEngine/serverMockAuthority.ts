@@ -21,6 +21,7 @@ import { PlayerLifecycleState } from '../domain/playerLifecycleState';
 import { storyCheckConsequenceEngine } from '../domain/storyCheckConsequenceEngine';
 import { storyCheckChallengeResolver } from '../domain/storyCheckChallengeResolver';
 import { rulesProfileEngine } from '../domain/rulesProfileEngine';
+import { deterministicId } from '../domain/deterministicRng';
 
 /**
  * ServerMockAuthority
@@ -430,8 +431,8 @@ export class ServerMockAuthority {
    * A separate presentation-only narrator then describes the committed result. The narrator
    * cannot mutate state because MultiModelOrchestrator.generateNarrativeOnly strips state changes.
    */
-  public async processCustomAction(request: ActionRequest): Promise<ActionResult> {
-    const baseResult = this.processAction(request);
+  public async processCustomAction(request: ActionRequest, canonicalCommandId?: string): Promise<ActionResult> {
+    const baseResult = this.processAction(request, canonicalCommandId);
     if (!baseResult || request.type !== 'CUSTOM_ACTION') {
       return baseResult;
     }
@@ -625,11 +626,23 @@ export class ServerMockAuthority {
   /**
    * Server-authoritative resolution of player ActionRequests.
    */
-  public processAction(request: ActionRequest): ActionResult {
+  public processAction(request: ActionRequest, canonicalCommandId?: string): ActionResult {
     const targetStoryId = (request as any).storyId || this.activeStoryId;
     const state = this.getDynamicStoryState(targetStoryId);
-    const now = new Date().toTimeString().split(' ')[0];
-    const actionId = `act_srv_${Date.now()}`;
+    const clock = worldRepository.getWorldClock(targetStoryId);
+    const clockTimestamp = clock.getTimestamp();
+    const now = `canonical:${clockTimestamp.totalElapsedSeconds}`;
+    const actionId = deterministicId(
+      'act_srv',
+      targetStoryId,
+      canonicalCommandId || 'legacy-action',
+      request?.type || 'UNKNOWN',
+      request?.targetLocationId || '',
+      request?.itemId || '',
+      request?.slot || '',
+      state.actionHistory.length,
+      clockTimestamp.totalElapsedSeconds
+    );
     let success = true;
     let message = '';
     let authoritativeFeedback = '';

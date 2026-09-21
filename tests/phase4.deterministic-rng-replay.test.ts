@@ -235,6 +235,7 @@ test('Phase 4 — Chronicle writes through repository authority only become visi
 	assert.equal(result.success, true);
 	assert.equal(repo.getHistoricalChronicleEngine(storyId).getChronicleEntries().length, 1);
 	assert.equal(repo.getHistoricalChronicleEngine(storyId).getEpistemicEvidence()[0].metadata?.canonicalEventId, result.event?.eventId);
+	assert.equal(repo.getHistoricalChronicleEngine(storyId).getEpistemicEvidence()[0].metadata?.canonicalCommandId, result.commandId);
 	assert.ok(result.event?.replay.preStateHash);
 	assert.ok(result.event?.replay.postStateHash);
 });

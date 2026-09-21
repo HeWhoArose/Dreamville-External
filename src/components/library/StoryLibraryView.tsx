@@ -17,6 +17,7 @@ export interface StoryLibraryViewProps {
   onResumeStory: (runId: string) => void;
   onNewStory: () => void;
   onBranchStory?: (runId: string) => void;
+  onStoryAssetChange?: (runId: string, newUrl?: string, provenance?: string) => void | Promise<void>;
 }
 
 export const StoryLibraryView: React.FC<StoryLibraryViewProps> = ({
@@ -27,6 +28,7 @@ export const StoryLibraryView: React.FC<StoryLibraryViewProps> = ({
   onResumeStory,
   onNewStory,
   onBranchStory,
+  onStoryAssetChange,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGenre, setSelectedGenre] = useState<string>('all');
@@ -169,9 +171,34 @@ export const StoryLibraryView: React.FC<StoryLibraryViewProps> = ({
               <div>
                 <WorldArtCover
                   imageUrl={story.imageUrl}
-                  worldName={story.worldName}
+                  worldName={story.title}
                   genre={story.genre || 'Fantasy'}
                   aspectRatio="compact"
+                  assetSlotType="story_run_cover"
+                  assetMeta={{
+                    slotId: `story_run_cover_${story.runId}`,
+                    slotType: 'story_run_cover',
+                    title: story.title,
+                    subject: story.title,
+                    worldSummary: story.visualIdentity?.worldSummary,
+                    setting: story.visualIdentity?.setting,
+                    environment: story.visualIdentity?.environment,
+                    genreTags: story.visualIdentity?.genreTags || (story.genre ? [story.genre] : []),
+                    toneTags: story.visualIdentity?.toneTags || [],
+                    era: story.visualIdentity?.era,
+                    factions: story.visualIdentity?.factions || [],
+                    magicOrTechnology: story.visualIdentity?.magicOrTechnology,
+                    geography: story.visualIdentity?.geography,
+                    visualMotifs: story.visualIdentity?.visualMotifs || [],
+                    mood: (story.visualIdentity?.toneTags || []).join(', '),
+                    adventureContext: story.visualIdentity?.adventureContext,
+                    characterName: story.characterName,
+                    storyMode: story.storyMode,
+                    dndRulesMode: story.dndRulesMode,
+                    currentImageUrl: story.imageUrl,
+                    isEditable: Boolean(onStoryAssetChange),
+                  }}
+                  onAssetChange={(newUrl, provenance) => onStoryAssetChange?.(story.runId, newUrl, provenance)}
                 />
 
                 <div className="p-5">

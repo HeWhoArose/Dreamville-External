@@ -17,10 +17,88 @@ import { WorldTimestamp } from './types';
  * - Rebuildability: Derived dossier and chronicle states can be deterministically reconstructed from raw evidence.
  * - Epistemic Boundary: Filters out confidential or unobserved records from player-facing views.
  */
+export type ChronicleWriteMode = 'DIRECT' | 'TRANSACTIONAL' | 'ISOLATED';
+
 export class HistoricalChronicleEngine {
   private evidenceStore: Map<string, HistoricalEvidence> = new Map();
   private dossiers: Map<string, NpcDossier> = new Map(); // subjectId -> NpcDossier
   private chronicleEntries: Map<string, ChronicleEntry> = new Map(); // evidenceId -> ChronicleEntry
+  private readonly writeMode: ChronicleWriteMode;
+  private transactionOpen = false;
+  private transactionCommandId?: string;
+  private pendingEvidence: Map<string, HistoricalEvidence> = new Map();
+
+  constructor(options: { writeMode?: ChronicleWriteMode } = {}) {
+    this.writeMode = options.writeMode || 'DIRECT';
+  }
+
+  public beginCanonicalTransaction(commandId: string): void {
+    if (this.writeMode !== 'TRANSACTIONAL') return;
+    if (this.transactionOpen) throw new Error('Historical Chronicle transaction is already open.');
+    this.transactionOpen = true;
+    this.transactionCommandId = commandId;
+    this.pendingEvidence.clear();
+  }
+
+  public commitCanonicalTransaction(canonicalEventId: string): void {
+    if (this.writeMode !== 'TRANSACTIONAL') return;
+    if (!this.transactionOpen) throw new Error('No Historical Chronicle transaction is open.');
+    const pending = Array.from(this.pendingEvidence.values());
+    this.pendingEvidence.clear();
+    this.transactionOpen = false;
+    const commandId = this.transactionCommandId;
+    this.transactionCommandId = undefined;
+
+    for (const evidence of pending) {
+      const enriched: HistoricalEvidence = {
+        ...evidence,
+        metadata: {
+          ...(evidence.metadata || {}),
+          canonicalCommandId: commandId,
+          canonicalEventId,
+        },
+        sourceEventId: evidence.sourceEventId || canonicalEventId,
+      };
+      this.commitEvidence(enriched);
+    }
+  }
+
+  public rollbackCanonicalTransaction(): void {
+    if (this.writeMode !== 'TRANSACTIONAL') return;
+    this.pendingEvidence.clear();
+    this.transactionOpen = false;
+    this.transactionCommandId = undefined;
+  }
+
+  private commitEvidence(evidence: HistoricalEvidence): {
+    evidenceId: string;
+    promotedToDossier: boolean;
+    promotedToChronicle: boolean;
+  } {
+    if (this.evidenceStore.has(evidence.id)) {
+      return {
+        evidenceId: evidence.id,
+        promotedToDossier: false,
+        promotedToChronicle: false,
+      };
+    }
+
+    this.evidenceStore.set(evidence.id, JSON.parse(JSON.stringify(evidence)));
+
+    const evaluation = SignificanceEvaluator.evaluate(evidence);
+    if (evaluation.promotedToDossier) {
+      this.promoteToDossier(evidence, evaluation.significance);
+    }
+    if (evaluation.promotedToChronicle) {
+      this.promoteToChronicle(evidence, evaluation.significance);
+    }
+
+    return {
+      evidenceId: evidence.id,
+      promotedToDossier: evaluation.promotedToDossier,
+      promotedToChronicle: evaluation.promotedToChronicle,
+    };
+  }
 
   /**
    * Records a raw historical evidence item, deterministically evaluates its significance,
@@ -31,35 +109,28 @@ export class HistoricalChronicleEngine {
     promotedToDossier: boolean;
     promotedToChronicle: boolean;
   } {
-    if (this.evidenceStore.has(evidence.id)) {
-      // Invariant 6: Deduplication. Do not process twice.
+    if (this.writeMode === 'TRANSACTIONAL') {
+      if (!this.transactionOpen) {
+        throw new Error('Chronicle writes require an active canonical command transaction.');
+      }
+      if (this.evidenceStore.has(evidence.id) || this.pendingEvidence.has(evidence.id)) {
+        return {
+          evidenceId: evidence.id,
+          promotedToDossier: false,
+          promotedToChronicle: false,
+        };
+      }
+
+      this.pendingEvidence.set(evidence.id, JSON.parse(JSON.stringify(evidence)));
+      const evaluation = SignificanceEvaluator.evaluate(evidence);
       return {
         evidenceId: evidence.id,
-        promotedToDossier: false,
-        promotedToChronicle: false,
+        promotedToDossier: evaluation.promotedToDossier,
+        promotedToChronicle: evaluation.promotedToChronicle,
       };
     }
 
-    this.evidenceStore.set(evidence.id, { ...evidence });
-
-    // Step 1: Evaluate Significance deterministically
-    const evaluation = SignificanceEvaluator.evaluate(evidence);
-
-    // Step 2: Promote to Dossier if eligible
-    if (evaluation.promotedToDossier) {
-      this.promoteToDossier(evidence, evaluation.significance);
-    }
-
-    // Step 3: Promote to Chronicle if eligible
-    if (evaluation.promotedToChronicle) {
-      this.promoteToChronicle(evidence, evaluation.significance);
-    }
-
-    return {
-      evidenceId: evidence.id,
-      promotedToDossier: evaluation.promotedToDossier,
-      promotedToChronicle: evaluation.promotedToChronicle,
-    };
+    return this.commitEvidence(evidence);
   }
 
   private promoteToDossier(evidence: HistoricalEvidence, significance: import('./historicalEvidence').SignificanceLevel): void {

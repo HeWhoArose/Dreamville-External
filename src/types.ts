@@ -684,7 +684,7 @@ export type RulesResolutionPolicy =
   | 'DND_WITH_EXPLICIT_OVERRIDES'
   | 'CUSTOM_EXPLICIT_RULES';
 
-export type RuleOverrideOperation = 'ENABLE' | 'DISABLE';
+export type RuleOverrideOperation = 'ENABLE' | 'DISABLE' | 'SET';
 
 export interface RuleOverride {
   ruleId: string;
@@ -708,6 +708,7 @@ export interface RulesProfile {
   allowCapabilityOverrides: boolean;
   enabledMechanics: string[];
   disabledMechanics: string[];
+  parameterOverrides: Record<string, unknown>;
   overrides: RuleOverride[];
 }
 

@@ -182,3 +182,22 @@ test('Phase 1: custom homebrew can explicitly enable the legacy D&D tactical mec
 	assert.equal(rulesProfileEngine.allowsDndTacticalCombat(resolved.profile), true);
 	assert.equal(resolved.profile.overrides.length, 1);
 });
+
+test('Phase 1: mismatched persisted profile overrides cannot leak across selected rules modes', () => {
+	const resolved = rulesProfileEngine.resolve({
+		mode: 'CUSTOM_HOMEBREW_DND',
+		rulesProfile: {
+			mode: 'HYBRID_DND',
+			overrides: [{
+				ruleId: 'standard_dnd_spell_rules',
+				operation: 'ENABLE',
+				reason: 'Hybrid world override must not leak into a custom story.',
+			}],
+		},
+	});
+
+	assert.equal(resolved.profile.mode, 'CUSTOM_HOMEBREW_DND');
+	assert.equal(resolved.profile.allowStandardDndSpellRules, false);
+	assert.equal(resolved.profile.overrides.length, 0);
+	assert.ok(resolved.warnings.some((warning) => warning.includes('mismatched profile overrides were ignored')));
+});

@@ -421,7 +421,7 @@ export class ConditionEngine {
     return { actorId, changed: events.length > 0, events };
   }
 
-  public tickActor(actorId: string, unit: ConditionTickUnit, nowSeconds: number): ConditionTickEvent[] {
+  public tickActor(actorId: string, unit: ConditionTickUnit, nowSeconds: number, options: { decrementDuration?: boolean } = {}): ConditionTickEvent[] {
     const state = this.requireActor(actorId);
     const events: ConditionTickEvent[] = [];
 
@@ -433,9 +433,11 @@ export class ConditionEngine {
       const every = Math.max(1, definition.tickEvery || instance.tickEvery || 1);
       let tickCount = 1;
 
-      if (unit === 'WORLD_TIME' && instance.nextTickAtSeconds !== undefined) {
+      const usesElapsedSchedule = ['MINUTE', 'HOUR', 'DAY', 'WORLD_TIME'].includes(unit);
+      const intervalSeconds = this.conditionTickIntervalSeconds(unit, every);
+      if (usesElapsedSchedule && instance.nextTickAtSeconds !== undefined) {
         if (nowSeconds < instance.nextTickAtSeconds) continue;
-        tickCount = Math.max(1, Math.floor((nowSeconds - instance.nextTickAtSeconds) / every) + 1);
+        tickCount = Math.max(1, Math.floor((nowSeconds - instance.nextTickAtSeconds) / intervalSeconds) + 1);
       }
 
       const beforeIntensity = instance.intensity;
@@ -498,11 +500,12 @@ export class ConditionEngine {
       // durationSeconds is real elapsed world time. Combat turns/actions do not have a
       // canonical seconds length in DreamBook, so they must not silently consume seconds.
       if (
+        options.decrementDuration !== false &&
         instance.remainingDurationSeconds !== undefined &&
         instance.remainingDurationSeconds !== null &&
         (unit === 'MINUTE' || unit === 'HOUR' || unit === 'DAY' || unit === 'WORLD_TIME')
       ) {
-        const durationDelta = this.tickDurationSeconds(unit, every) * tickCount;
+        const durationDelta = intervalSeconds * tickCount;
         instance.remainingDurationSeconds = Math.max(0, instance.remainingDurationSeconds - durationDelta);
       }
 
@@ -510,8 +513,8 @@ export class ConditionEngine {
         instance.intensity = Math.max(0, instance.intensity - definition.decayIntensityPerRestTick * tickCount);
       }
 
-      if (unit === 'WORLD_TIME' && instance.nextTickAtSeconds !== undefined) {
-        instance.nextTickAtSeconds += every * tickCount;
+      if (usesElapsedSchedule && instance.nextTickAtSeconds !== undefined) {
+        instance.nextTickAtSeconds += intervalSeconds * tickCount;
       }
 
       let removed = false;
@@ -540,6 +543,146 @@ export class ConditionEngine {
     }
 
     return events;
+  }
+
+  /**
+   * Advances all elapsed-time condition schedules between two canonical world timestamps.
+   * Duration clocks are decremented exactly once for the elapsed interval while tick
+   * effects are resolved at their configured schedules.
+   */
+  public advanceElapsedTime(actorId: string, fromSeconds: number, toSeconds: number): ConditionTickEvent[] {
+    const from = Math.max(0, Number(fromSeconds));
+    const to = Math.max(0, Number(toSeconds));
+    if (!Number.isFinite(from) || !Number.isFinite(to) || to < from) {
+      throw new Error('Condition elapsed-time advancement requires finite timestamps with toSeconds >= fromSeconds.');
+    }
+    if (to === from) return [];
+
+    const events: ConditionTickEvent[] = [];
+    for (const unit of ['MINUTE', 'HOUR', 'DAY', 'WORLD_TIME'] as ConditionTickUnit[]) {
+      events.push(...this.tickActor(actorId, unit, to, { decrementDuration: false }));
+    }
+
+    const state = this.requireActor(actorId);
+    for (const instance of [...state.instances]) {
+      if (instance.remainingDurationSeconds === undefined || instance.remainingDurationSeconds === null) continue;
+      instance.remainingDurationSeconds = Math.max(0, instance.remainingDurationSeconds - (to - from));
+      if (instance.remainingDurationSeconds === 0) {
+        state.instances = state.instances.filter((candidate) => candidate.id !== instance.id);
+      }
+    }
+    return events;
+  }
+
+  /** Resolves condition triggers explicitly authored for rest lifecycle events. */
+  public processRest(actorId: string, restType: 'SHORT_REST' | 'LONG_REST', nowSeconds = 0): ConditionActionResult {
+    const state = this.requireActor(actorId);
+    const events: ConditionTickEvent[] = [];
+    for (const instance of [...state.instances]) {
+      const definition = this.definitions.get(instance.definitionId);
+      if (!definition?.triggers) continue;
+      for (const trigger of definition.triggers.filter((item) => item.event === 'ON_REST')) {
+        const before = instance.intensity;
+        const keywordMatched = !trigger.actionKeywords || trigger.actionKeywords.length === 0
+          ? true
+          : trigger.actionKeywords.some((keyword) => restType.toLowerCase().includes(keyword.toLowerCase()));
+        if (!keywordMatched) continue;
+
+        if (trigger.intensityDelta) {
+          instance.intensity = Math.max(
+            0,
+            Math.min(instance.maxIntensity ?? definition.maxIntensity ?? Number.MAX_SAFE_INTEGER, instance.intensity + trigger.intensityDelta)
+          );
+          this.applyStageBodyEffects(state, instance, definition);
+        }
+        if (trigger.healingAmount && trigger.healingAmount > 0) {
+          state.healthCurrent = Math.min(state.healthMax, state.healthCurrent + trigger.healingAmount);
+        }
+        for (const conditionId of trigger.addConditionIds || []) {
+          this.applyConditionToState(state, { definitionIdOrName: conditionId, nowSeconds }, this.resolveOrCreateDefinition(conditionId));
+        }
+        for (const conditionId of trigger.removeConditionIds || []) {
+          state.instances = state.instances.filter(
+            (candidate) => candidate.definitionId !== conditionId && candidate.name.toLowerCase() !== conditionId.toLowerCase()
+          );
+        }
+        if (instance.intensity <= 0) {
+          state.instances = state.instances.filter((candidate) => candidate.id !== instance.id);
+        }
+        events.push({
+          actorId,
+          conditionId: instance.id,
+          conditionName: instance.name,
+          unit: 'DAY',
+          intensityBefore: before,
+          intensityAfter: instance.intensity,
+          removed: instance.intensity <= 0,
+          notes: [trigger.description || `${instance.name} responded to ${restType}.`],
+        });
+      }
+    }
+    return { actorId, changed: events.length > 0, events };
+  }
+
+  public getExhaustionLevel(actorId: string): number {
+    const state = this.requireActor(actorId);
+    const instance = state.instances.find((candidate) => candidate.definitionId === 'exhaustion');
+    return Math.max(0, Math.min(6, Math.trunc(instance?.intensity ?? 0)));
+  }
+
+  public setExhaustionLevel(actorId: string, level: number, nowSeconds = 0): number {
+    const targetLevel = Math.max(0, Math.min(6, Math.trunc(Number(level) || 0)));
+    if (targetLevel === 0) {
+      this.removeCondition(actorId, 'exhaustion');
+      return 0;
+    }
+    const state = this.requireActor(actorId);
+    const existing = state.instances.find((candidate) => candidate.definitionId === 'exhaustion');
+    if (existing) {
+      existing.intensity = targetLevel;
+      existing.stackCount = targetLevel;
+      existing.remainingDurationSeconds = null;
+      existing.appliedAtSeconds = Math.max(0, Number(nowSeconds) || 0);
+      this.applyStageBodyEffects(state, existing, this.definitions.get('exhaustion'));
+      return targetLevel;
+    }
+    this.applyConditionToState(state, {
+      definitionIdOrName: 'exhaustion',
+      intensity: targetLevel,
+      nowSeconds,
+    }, this.definitions.get('exhaustion'));
+    return targetLevel;
+  }
+
+  public adjustExhaustion(actorId: string, delta: number, nowSeconds = 0): number {
+    return this.setExhaustionLevel(actorId, this.getExhaustionLevel(actorId) + Math.trunc(Number(delta) || 0), nowSeconds);
+  }
+
+  public getExhaustionModifiers(actorId: string): {
+    level: number;
+    d20Penalty: number;
+    saveDcPenalty: number;
+    speedPenaltyFeet: number;
+  } {
+    const level = this.getExhaustionLevel(actorId);
+    return { level, d20Penalty: -2 * level, saveDcPenalty: -2 * level, speedPenaltyFeet: 5 * level };
+  }
+
+  public setFatigueStress(actorId: string, fatigue: number, stress: number): void {
+    const state = this.requireActor(actorId);
+    state.fatigue = Math.max(0, Math.min(100, Number(fatigue) || 0));
+    state.stress = Math.max(0, Math.min(100, Number(stress) || 0));
+  }
+
+  private conditionTickIntervalSeconds(unit: ConditionTickUnit, every: number): number {
+    const safeEvery = Math.max(1, Number(every) || 1);
+    switch (unit) {
+      case 'MINUTE': return safeEvery * 60;
+      case 'HOUR': return safeEvery * 3600;
+      case 'DAY': return safeEvery * 86400;
+      case 'WORLD_TIME': return safeEvery;
+      default: return safeEvery;
+    }
   }
 
   public resolveDamage(
@@ -715,7 +858,9 @@ export class ConditionEngine {
       remainingDurationSeconds: input.durationSeconds ?? def.defaultDurationSeconds ?? null,
       tickUnit: def.tickUnit,
       tickEvery: def.tickEvery,
-      nextTickAtSeconds: def.tickUnit === 'WORLD_TIME' ? nowSeconds + (def.tickEvery || 1) : undefined,
+      nextTickAtSeconds: ['MINUTE', 'HOUR', 'DAY', 'WORLD_TIME'].includes(def.tickUnit || '')
+        ? nowSeconds + this.conditionTickIntervalSeconds(def.tickUnit as ConditionTickUnit, def.tickEvery || 1)
+        : undefined,
       stackCount: 1,
       stackMode: def.stackMode || 'REFRESH',
       tags: [...(def.tags || [])],
@@ -847,7 +992,8 @@ export class ConditionEngine {
         alignment: 'HARMFUL',
         defaultSeverity: 1,
         defaultIntensity: 1,
-        stackMode: 'REFRESH',
+        maxIntensity: name === 'Exhaustion' ? 6 : undefined,
+        stackMode: name === 'Exhaustion' ? 'MAX' : 'REFRESH',
         tags: ['dnd', 'condition', slugify(name)],
       });
     }

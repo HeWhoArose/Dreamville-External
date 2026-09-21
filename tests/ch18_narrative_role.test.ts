@@ -117,6 +117,25 @@ test('Character Genesis narrative role modes', async (t) => {
   });
 });
 
+test('Character extraction canonicalizes unsupported narrative role input before building the draft', async () => {
+	const mock = installMockOrchestrator();
+	try {
+		const draft = await characterGenesisService.extractCharacterDraft(
+			{
+				naturalLanguageConcept: 'A wandering test character.',
+				worldId: world.worldId,
+				narrativeRole: 'NOT_A_REAL_MODE' as any,
+			},
+			world
+		);
+
+		assert.equal(draft.storyMode, 'PROTAGONIST');
+		assert.equal(draft.narrativeProfile?.mode, 'PROTAGONIST');
+	} finally {
+		mock.restore();
+	}
+});
+
 test('Character confirmation canonicalizes a profile that does not match the selected narrative mode', async () => {
 	const mock = installMockOrchestrator();
 	try {

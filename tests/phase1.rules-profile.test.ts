@@ -231,3 +231,50 @@ test('Phase 1: unknown rule identifiers are not executable overrides', () => {
 
 	assert.equal(resolved.profile.overrides.length, 0);
 });
+
+test('Phase 1: HYBRID_DND supports an explicit spell parameter override', () => {
+	const resolved = rulesProfileEngine.resolve({
+		mode: 'HYBRID_DND',
+		rulesProfile: {
+			overrides: [{
+				ruleId: 'standard_dnd_spell_rules',
+				operation: 'SET',
+				value: { maxAllowedSpellLevel: 5 },
+				reason: 'This hybrid world caps spell levels at five.',
+			}],
+		},
+	});
+
+	assert.deepEqual(
+		resolved.profile.parameterOverrides.standard_dnd_spell_rules,
+		{ maxAllowedSpellLevel: 5 }
+	);
+	assert.equal(resolved.profile.overrides.length, 1);
+
+	const spellResult = dndSpellRulesEvaluator.evaluateSpellProposal({
+		proposal: { spellName: 'Hybrid Burst', spellLevel: 5 },
+		characterLevel: 1,
+		dndMode: 'HYBRID_DND',
+		rulesProfile: resolved.profile,
+	});
+
+	assert.equal(spellResult.approved, true);
+	assert.equal(spellResult.maxAvailableLevel, 5);
+});
+
+test('Phase 1: FULL_DND cannot execute spell parameter overrides', () => {
+	const resolved = rulesProfileEngine.resolve({
+		mode: 'FULL_DND',
+		rulesProfile: {
+			overrides: [{
+				ruleId: 'standard_dnd_spell_rules',
+				operation: 'SET',
+				value: { maxAllowedSpellLevel: 9 },
+				reason: 'This must not alter Full D&D.',
+			}],
+		},
+	});
+
+	assert.equal(resolved.profile.overrides.length, 0);
+	assert.deepEqual(resolved.profile.parameterOverrides, {});
+});

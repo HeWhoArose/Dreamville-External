@@ -5176,9 +5176,16 @@ gameRouter.post('/worlds/runs/:storyId/actions/apply-ability', async (req: Reque
         type: 'APPLY_ABILITY',
         payload: { abilityId, targetId },
         source: 'PLAYER',
+        transactionMode: 'STAGED',
       },
-      async () => {
-        const result = abilityService.resolveAbilityApplication(storyId, abilityId, targetId, req.body);
+      async (_command, context) => {
+        const result = abilityService.resolveAbilityApplication(
+          storyId,
+          abilityId,
+          targetId,
+          req.body,
+          context.repository
+        );
         if (!result.success) {
           return {
             success: false,

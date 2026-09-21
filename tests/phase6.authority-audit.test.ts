@@ -268,8 +268,8 @@ test('Phase 6 audit: area spells resolve multiple authoritative targets', () => 
   const caster = participant('caster', 20, 30);
   const firstTarget = participant('target_a', 10, 20);
   const secondTarget = participant('target_b', 5, 20);
-  firstTarget.x = 3;
-  secondTarget.x = 4;
+  firstTarget.x = 10;
+  secondTarget.x = 11;
   engine.addParticipant(caster);
   engine.addParticipant(firstTarget);
   engine.addParticipant(secondTarget);
@@ -283,7 +283,7 @@ test('Phase 6 audit: area spells resolve multiple authoritative targets', () => 
   const cast = engine.executeSpellCast({
     actorId: caster.id,
     spellId: 'fireball',
-    targetPosition: { x: 3, y: 0 },
+    targetPosition: { x: 10, y: 0 },
     slotLevel: 3,
   });
 

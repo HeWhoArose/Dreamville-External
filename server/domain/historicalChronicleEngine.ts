@@ -20,7 +20,8 @@ import { WorldTimestamp } from './types';
 export type ChronicleWriteMode = 'DIRECT' | 'TRANSACTIONAL' | 'ISOLATED';
 
 export class HistoricalChronicleEngine {
-  public static bypassTransactionCheck = true;
+  // Runtime Chronicle writes are transactional. Bootstrap construction uses recordBootstrapEvidence().
+  public static bypassTransactionCheck = false;
 
   private evidenceStore: Map<string, HistoricalEvidence> = new Map();
   private dossiers: Map<string, NpcDossier> = new Map(); // subjectId -> NpcDossier

@@ -1096,6 +1096,15 @@ export class TacticalCombatEngine {
           triggerType: event.type,
           triggerActorId: ready?.triggerActorId,
           targetId: ready?.targetId,
+          matches: (reactionEvent) => {
+            const currentReady = this.actionEconomy.getReadyAction(participant.id);
+            if (!currentReady || currentReady.triggerType !== reactionEvent.type) return false;
+            if (currentReady.triggerActorId && currentReady.triggerActorId !== reactionEvent.actorId) return false;
+            if (currentReady.targetId && reactionEvent.targetId &&
+              currentReady.targetId !== reactionEvent.targetId &&
+              currentReady.targetId !== reactionEvent.actorId) return false;
+            return true;
+          },
           canResolve: () => {
             const currentReady = this.actionEconomy.getReadyAction(participant.id);
             const currentParticipant = this.participants.get(participant.id);

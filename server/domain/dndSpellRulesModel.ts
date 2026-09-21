@@ -61,8 +61,30 @@ export class DndSpellRulesEvaluator {
     const requestedLevel = proposal.spellLevel;
     const profile = input.rulesProfile || rulesProfileEngine.createDefault(dndMode);
 
-    // CUSTOM_HOMEBREW_DND does not inherit D&D spell-slot legality. A later
-    // custom-rule resolver must explicitly define how this spell is governed.
+    const level = Math.max(1, Math.min(20, characterLevel));
+
+    // Explicit custom spell rules take precedence over the absence of the standard
+    // D&D spell-slot mechanic. They are a declared world rule, not a silent fallback.
+    if (customRulesOverrides?.maxAllowedSpellLevel !== undefined) {
+      const allowed = Math.max(0, Number(customRulesOverrides.maxAllowedSpellLevel));
+      return {
+        approved: requestedLevel >= 0 && requestedLevel <= allowed,
+        spellName: proposal.spellName,
+        requestedLevel,
+        maxAvailableLevel: allowed,
+        modeApplied: dndMode,
+        overrideGranted: false,
+        requiresCustomRule: false,
+        downgradeRequirement: requestedLevel > allowed ? {
+          requiredCasterLevel: level,
+          suggestedDowngradeLevel: allowed,
+          reason: `Spell level ${requestedLevel} exceeds custom maximum of ${allowed}.`,
+        } : undefined,
+      };
+    }
+
+    // When the standard D&D spell mechanic is disabled, the evaluator cannot invent
+    // D&D legality. The caller must supply an explicit custom rule.
     if (!rulesProfileEngine.allowsStandardDndSpellRules(profile)) {
       return {
         approved: false,
@@ -74,7 +96,6 @@ export class DndSpellRulesEvaluator {
         requiresCustomRule: true,
       };
     }
-    const level = Math.max(1, Math.min(20, characterLevel));
 
     // Determine max available slot level based on D&D 5e table
     const maxAvailableLevel = DND_5E_MAX_SPELL_SLOT_BY_LEVEL[level] || 1;

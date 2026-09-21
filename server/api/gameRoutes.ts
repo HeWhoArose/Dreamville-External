@@ -2106,6 +2106,55 @@ gameRouter.post('/combat/ready', async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/game/combat/grapple/escape
+ * Canonically spends an Action to attempt escaping a Grapple.
+ */
+gameRouter.post('/combat/grapple/escape', async (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    if (!requireDndTacticalCombat(res, storyId)) return;
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player?.actorId || \`player_actor_\${storyId}\`;
+    if (req.body?.actorId && req.body.actorId !== actorId) {
+      return res.status(403).json({ success: false, errorReason: 'Unauthorized actor.' });
+    }
+
+    const ability = req.body?.ability === 'DEX' ? 'DEX' : 'STR';
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      deterministicId('cmd_route', storyId, '/combat/grapple/escape', req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'CORE_ACTION',
+        payload: { action: 'ESCAPE_GRAPPLE', ability },
+        source: 'PLAYER',
+        transactionMode: 'STAGED',
+      },
+      async (_command, context) => {
+        const combat = context.repository.getCombatEngine(storyId);
+        const result = combat.escapeGrapple(actorId, ability);
+        if (!result.success) return { success: false, errorReason: result.errorReason };
+        return { success: true, data: { result }, summary: 'Grapple escape resolved.' };
+      }
+    );
+
+    const state = getCombatStateHelper(worldRepository.getCombatEngine(storyId), storyId, actorId);
+    if (!commandResult.success) {
+      return res.status(400).json({ success: false, errorReason: commandResult.errorReason, combatState: state, rolledBack: commandResult.rolledBack });
+    }
+    return res.json({ success: true, result: (commandResult.data as any)?.result, combatState: state, commandId, canonicalEvent: commandResult.event });
+  } catch {
+    return res.status(500).json({ error: 'Failed to resolve Grapple escape.' });
+  }
+});
+
+/**
  * POST /api/game/combat/control
  * Canonically resolves Grapple or Shove.
  */

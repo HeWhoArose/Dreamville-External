@@ -1535,59 +1535,7 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
     if (!requireDndTacticalCombat(res, storyId)) return;
     const player = worldRepository.getPlayerLifecycle(storyId);
     const actorId = player ? player.actorId : `player_actor_${storyId}`;
-    const inv = worldRepository.getInventoryEngine(storyId);
-    const capEngine = worldRepository.getCapabilityEngine(storyId);
-    const conditionEngine = worldRepository.getConditionEngine(storyId);
     const combatEngine = worldRepository.getCombatEngine(storyId);
-
-    const doll = inv.getActorPaperDoll(actorId);
-    const powerState = capEngine.getPowerState(actorId);
-    const conditionState = conditionEngine.getActorState(actorId);
-    const run = worldRepository.getStoryRun(storyId);
-    const coreStats = run?.protagonist?.coreStats;
-    const characterLevel = Math.max(1, Math.min(20, Number(coreStats?.level ?? 1)));
-    const proficiencyBonus = Math.ceil(characterLevel / 4) + 1;
-    const abilityModifier = (score: number) => Math.floor((score - 10) / 2);
-    const strMod = abilityModifier(Number(coreStats?.strength ?? 10));
-    const dexMod = abilityModifier(Number(coreStats?.dexterity ?? 10));
-
-    // Derive AC from the confirmed D&D Dexterity modifier plus equipped armor/shield.
-    let computedAC = 10 + dexMod;
-    if (doll.body) {
-      const def = inv.getItemDefinition(doll.body.defId);
-      const armorBonus = (doll.body.defId === 'def_steel_cuirass' || def?.properties?.armorBonus) ? (Number(def?.properties?.armorBonus) || 4) : 2;
-      computedAC += armorBonus;
-    }
-    if (doll.offHand) {
-      const def = inv.getItemDefinition(doll.offHand.defId);
-      const shieldBonus = Number(def?.properties?.armorBonus) || 2;
-      computedAC += shieldBonus;
-    }
-
-    // Derive weapon damage and attack ability from equipped main-hand.
-    let weaponFormula = '1d4+0';
-    let weaponAttackBonus = strMod + proficiencyBonus;
-    if (doll.mainHand) {
-      const def = inv.getItemDefinition(doll.mainHand.defId);
-      const props = def?.properties || {};
-      const tags = Array.isArray(def?.tags) ? def!.tags.map((t: string) => t.toLowerCase()) : [];
-      const explicitAttackAbility = typeof props.attackAbility === 'string' ? props.attackAbility.toLowerCase() : '';
-      const isRanged = explicitAttackAbility === 'dexterity' || explicitAttackAbility === 'dex' || tags.some((tag: string) => tag.includes('ranged'));
-      const isFinesse = tags.includes('finesse') || Boolean(props.finesse);
-      const attackAbilityMod = (isRanged || isFinesse) ? Math.max(strMod, dexMod) : strMod;
-      weaponAttackBonus = attackAbilityMod + proficiencyBonus;
-
-      if (doll.mainHand.defId === 'def_iron_sword' || doll.mainHand.name.includes('Sword')) {
-        weaponFormula = '1d8+3';
-      } else {
-        weaponFormula = (props.damageFormula as string) || '1d6+0';
-      }
-    }
-
-    // Derive speed from feet item
-    const feetDef = doll.feet ? inv.getItemDefinition(doll.feet.defId) : undefined;
-    const speedBonus = feetDef ? (Number(feetDef.properties?.speedBonus) || 1) : 0;
-    const speedCells = 5 + speedBonus;
 
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
@@ -1613,6 +1561,50 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
     const conditionEngine = transactionRepo.getConditionEngine(storyId);
     const combatEngine = transactionRepo.getCombatEngine(storyId);
     const run = transactionRepo.getStoryRun(storyId);
+    const doll = inv.getActorPaperDoll(actorId);
+    const powerState = capEngine.getPowerState(actorId);
+    const conditionState = conditionEngine.getActorState(actorId);
+    const coreStats = run?.protagonist?.coreStats;
+    const characterLevel = Math.max(1, Math.min(20, Number(coreStats?.level ?? 1)));
+    const proficiencyBonus = Math.ceil(characterLevel / 4) + 1;
+    const abilityModifier = (score: number) => Math.floor((score - 10) / 2);
+    const strMod = abilityModifier(Number(coreStats?.strength ?? 10));
+    const dexMod = abilityModifier(Number(coreStats?.dexterity ?? 10));
+
+    let computedAC = 10 + dexMod;
+    if (doll.body) {
+      const def = inv.getItemDefinition(doll.body.defId);
+      const armorBonus = (doll.body.defId === 'def_steel_cuirass' || def?.properties?.armorBonus) ? (Number(def?.properties?.armorBonus) || 4) : 2;
+      computedAC += armorBonus;
+    }
+    if (doll.offHand) {
+      const def = inv.getItemDefinition(doll.offHand.defId);
+      const shieldBonus = Number(def?.properties?.armorBonus) || 2;
+      computedAC += shieldBonus;
+    }
+
+    let weaponFormula = '1d4+0';
+    let weaponAttackBonus = strMod + proficiencyBonus;
+    if (doll.mainHand) {
+      const def = inv.getItemDefinition(doll.mainHand.defId);
+      const props = def?.properties || {};
+      const tags = Array.isArray(def?.tags) ? def!.tags.map((t: string) => t.toLowerCase()) : [];
+      const explicitAttackAbility = typeof props.attackAbility === 'string' ? props.attackAbility.toLowerCase() : '';
+      const isRanged = explicitAttackAbility === 'dexterity' || explicitAttackAbility === 'dex' || tags.some((tag: string) => tag.includes('ranged'));
+      const isFinesse = tags.includes('finesse') || Boolean(props.finesse);
+      const attackAbilityMod = (isRanged || isFinesse) ? Math.max(strMod, dexMod) : strMod;
+      weaponAttackBonus = attackAbilityMod + proficiencyBonus;
+
+      if (doll.mainHand.defId === 'def_iron_sword' || doll.mainHand.name.includes('Sword')) {
+        weaponFormula = '1d8+3';
+      } else {
+        weaponFormula = (props.damageFormula as string) || '1d6+0';
+      }
+    }
+
+    const feetDef = doll.feet ? inv.getItemDefinition(doll.feet.defId) : undefined;
+    const speedBonus = feetDef ? (Number(feetDef.properties?.speedBonus) || 1) : 0;
+    const speedCells = 5 + speedBonus;
 
     // Preserve corpses before clearing (CH5-004 / CH5-COMBAT-01)
     const deadParticipants = combatEngine.getParticipants().filter(p => p.isDead && p.id !== actorId);

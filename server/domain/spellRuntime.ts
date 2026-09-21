@@ -79,7 +79,7 @@ export interface ActiveConcentration {
   remainingRounds: number;
   casterId: string;
   targetIds: string[];
-  appliedConditions: Array<{ targetId: string; condition: string }>;
+  appliedConditions: Array<{ targetId: string; condition: string; conditionInstanceId?: string }>;
   effects?: Record<string, unknown>;
 }
 
@@ -112,6 +112,11 @@ export type SpellDamageResolver = (
   criticalHit?: boolean
 ) => SpellDamageResolution;
 
+export type SpellHealingResolver = (
+  target: BattlefieldParticipant,
+  amount: number
+) => { healing: number; revived: boolean };
+
 export interface CastSpellRequest {
   storyId?: string;
   casterId: string;
@@ -132,6 +137,8 @@ export interface CastSpellRequest {
   allowSyntheticTarget?: boolean;
   /** Canonical combat authority may provide the damage/death resolver. */
   damageResolver?: SpellDamageResolver;
+  /** Canonical combat authority may provide the healing/revival resolver. */
+  healingResolver?: SpellHealingResolver;
 }
 
 export interface CastSpellExecutionResult {
@@ -695,29 +702,36 @@ export class SpellRuntime {
     }
   }
 
+  private createDefaultActorState(
+    actorId: string,
+    initial?: Partial<ActorSpellcastingState>
+  ): ActorSpellcastingState {
+    const casterLevel = initial?.casterLevel || 5;
+    const ability = initial?.spellcastingAbility || 'INT';
+    const prof = Math.floor((casterLevel - 1) / 4) + 2;
+    const abilityMod = 3;
+    return {
+      actorId,
+      casterLevel,
+      spellcastingAbility: ability,
+      spellAttackBonus: initial?.spellAttackBonus ?? prof + abilityMod,
+      spellSaveDc: initial?.spellSaveDc ?? 8 + prof + abilityMod,
+      spellSlots: initial?.spellSlots ? JSON.parse(JSON.stringify(initial.spellSlots)) : createDefaultSpellSlots(casterLevel),
+      knownSpells: initial?.knownSpells ? [...initial.knownSpells] : ['fire_bolt', 'magic_missile', 'cure_wounds', 'shield', 'hold_person', 'fireball'],
+      preparedSpells: initial?.preparedSpells ? [...initial.preparedSpells] : ['fire_bolt', 'magic_missile', 'cure_wounds', 'shield', 'hold_person', 'fireball'],
+      requiresPreparation: initial?.requiresPreparation ?? true,
+      maxPreparedSpells: initial?.maxPreparedSpells ?? Math.max(1, casterLevel + abilityMod),
+      activeConcentration: initial?.activeConcentration ? JSON.parse(JSON.stringify(initial.activeConcentration)) : null,
+    };
+  }
+
   public getOrCreateActorState(
     actorId: string,
     initial?: Partial<ActorSpellcastingState>
   ): ActorSpellcastingState {
     let state = this.actorStates.get(actorId);
     if (!state) {
-      const casterLevel = initial?.casterLevel || 5;
-      const ability = initial?.spellcastingAbility || 'INT';
-      const prof = Math.floor((casterLevel - 1) / 4) + 2;
-      const abilityMod = 3;
-      state = {
-        actorId,
-        casterLevel,
-        spellcastingAbility: ability,
-        spellAttackBonus: initial?.spellAttackBonus ?? prof + abilityMod,
-        spellSaveDc: initial?.spellSaveDc ?? 8 + prof + abilityMod,
-        spellSlots: initial?.spellSlots ? JSON.parse(JSON.stringify(initial.spellSlots)) : createDefaultSpellSlots(casterLevel),
-        knownSpells: initial?.knownSpells ? [...initial.knownSpells] : ['fire_bolt', 'magic_missile', 'cure_wounds', 'shield', 'hold_person', 'fireball'],
-        preparedSpells: initial?.preparedSpells ? [...initial.preparedSpells] : ['fire_bolt', 'magic_missile', 'cure_wounds', 'shield', 'hold_person', 'fireball'],
-        requiresPreparation: initial?.requiresPreparation ?? true,
-        maxPreparedSpells: initial?.maxPreparedSpells ?? Math.max(1, casterLevel + abilityMod),
-        activeConcentration: initial?.activeConcentration ? JSON.parse(JSON.stringify(initial.activeConcentration)) : null,
-      };
+      state = this.createDefaultActorState(actorId, initial);
       this.actorStates.set(actorId, state);
     }
     return state;
@@ -759,8 +773,36 @@ export class SpellRuntime {
   }
 
   public initializeSlots(actorId: string, slots: Record<number, { current: number; max: number }>): void {
+    if (!slots || typeof slots !== 'object' || Array.isArray(slots)) {
+      throw new Error('Spell slots must be an object keyed by slot level.');
+    }
+
+    const normalized: SpellSlotTracker = {};
+    for (const [rawLevel, rawState] of Object.entries(slots)) {
+      const level = Number(rawLevel);
+      if (!Number.isInteger(level) || level < 1 || level > 9) {
+        throw new Error(`Invalid spell slot level "${rawLevel}". Expected an integer from 1 to 9.`);
+      }
+      if (!rawState || typeof rawState !== 'object') {
+        throw new Error(`Invalid spell slot state for level ${level}.`);
+      }
+
+      const current = Number((rawState as { current?: unknown }).current);
+      const max = Number((rawState as { max?: unknown }).max);
+      if (!Number.isFinite(current) || !Number.isFinite(max)) {
+        throw new Error(`Spell slot level ${level} requires finite current/max values.`);
+      }
+
+      const normalizedCurrent = Math.floor(current);
+      const normalizedMax = Math.floor(max);
+      if (normalizedMax < 0 || normalizedCurrent < 0 || normalizedCurrent > normalizedMax) {
+        throw new Error(`Invalid spell slot state for level ${level}: current must be between 0 and max.`);
+      }
+      normalized[level] = { current: normalizedCurrent, max: normalizedMax };
+    }
+
     const state = this.getOrCreateActorState(actorId);
-    state.spellSlots = JSON.parse(JSON.stringify(slots));
+    state.spellSlots = normalized;
   }
 
   public learnSpell(actorId: string, spellId: string): { success: boolean; errorReason?: string; knownSpells: string[] } {
@@ -959,11 +1001,19 @@ export class SpellRuntime {
     const cleanedUpConditions: Array<{ targetId: string; condition: string }> = [];
     if (Array.isArray(active.appliedConditions)) {
       for (const item of active.appliedConditions) {
-        this.conditionEngine.removeCondition(item.targetId, item.condition);
-        const participant = this.participantRefs.get(item.targetId);
-        if (participant) {
-          participant.conditions = participant.conditions.filter((condition) => condition !== item.condition);
+        if (item.conditionInstanceId) {
+          this.conditionEngine.removeCondition(item.targetId, item.conditionInstanceId);
+        } else {
+          // Backward-compatible cleanup for older persisted concentration state.
+          this.conditionEngine.removeCondition(item.targetId, item.condition);
         }
+
+        const participant = this.participantRefs.get(item.targetId);
+        const conditionState = this.conditionEngine.getActorState(item.targetId);
+        if (participant && conditionState) {
+          participant.conditions = conditionState.instances.map((instance) => instance.name);
+        }
+
         cleanedUpConditions.push(item);
       }
     }
@@ -1088,9 +1138,8 @@ export class SpellRuntime {
       };
     }
 
-    this.setParticipantContext(allParticipants.length > 0 ? allParticipants : [params.casterParticipant].filter(Boolean) as BattlefieldParticipant[]);
-
-    const state = this.getOrCreateActorState(casterId, {
+    const existingState = this.actorStates.get(casterId);
+    const state = existingState || this.createDefaultActorState(casterId, {
       spellAttackBonus: params.casterParticipant?.attackBonus,
       spellSaveDc: params.casterParticipant?.savingThrowModifiers?.INT
         ? 8 + 3 + (params.casterParticipant.savingThrowModifiers.INT || 0)
@@ -1427,6 +1476,16 @@ export class SpellRuntime {
 
 
     // --- ATOMIC AUTHORITATIVE EXECUTION COMMENCES ---
+    // No persistent spell state or participant binding is created until every
+    // validation above has succeeded.
+    if (!existingState) {
+      this.actorStates.set(casterId, state);
+    }
+    this.setParticipantContext(
+      allParticipants.length > 0
+        ? allParticipants
+        : [casterParticipant].filter(Boolean) as BattlefieldParticipant[]
+    );
 
     // 1. Consume Spell Slot (if leveled spell and not ritual)
     if (effectiveSlotLevel > 0 && enforceSlotConsumption) {
@@ -1463,7 +1522,11 @@ export class SpellRuntime {
     let targetVulnerable = false;
     const conditionsApplied: string[] = [];
     const conditionsRemoved: string[] = [];
-    const concentrationAppliedConditions: Array<{ targetId: string; condition: string }> = [];
+    const concentrationAppliedConditions: Array<{
+      targetId: string;
+      condition: string;
+      conditionInstanceId?: string;
+    }> = [];
     const concentrationBuffEffects: Array<{
       targetId: string;
       previousArmorClass: number;
@@ -1515,14 +1578,20 @@ export class SpellRuntime {
 
           if (!succeeds && Array.isArray(spell.appliedConditions)) {
             for (const cond of spell.appliedConditions) {
-              this.conditionEngine.applyCondition(areaTarget.id, {
+              const conditionResult = this.conditionEngine.applyCondition(areaTarget.id, {
                 definitionIdOrName: cond,
                 sourceActorId: casterId,
                 durationSeconds: (spell.durationRounds || 1) * 6,
               });
-              if (!areaTarget.conditions.includes(cond)) areaTarget.conditions.push(cond);
-              conditionsApplied.push(cond);
-              concentrationAppliedConditions.push({ targetId: areaTarget.id, condition: cond });
+              if (conditionResult.applied && !conditionResult.immune) {
+                areaTarget.conditions = this.conditionEngine.getActorState(areaTarget.id)?.instances.map((instance) => instance.name) || areaTarget.conditions;
+                conditionsApplied.push(cond);
+                concentrationAppliedConditions.push({
+                  targetId: areaTarget.id,
+                  condition: cond,
+                  conditionInstanceId: conditionResult.instance?.id,
+                });
+              }
             }
           }
         } else if (spell.defenseModel === 'AUTOMATIC') {
@@ -1548,9 +1617,16 @@ export class SpellRuntime {
           if (upcastLevelDelta > 0 && spell.upcastHealingDicePerLevel) {
             for (let u = 0; u < upcastLevelDelta; u++) healAmt += dice.roll(spell.upcastHealingDicePerLevel).total;
           }
-          const oldHp = areaTarget.hpCurrent;
-          areaTarget.hpCurrent = Math.min(areaTarget.hpMax, areaTarget.hpCurrent + healAmt);
-          healingApplied += areaTarget.hpCurrent - oldHp;
+          const healResult = request.healingResolver
+            ? request.healingResolver(areaTarget, healAmt)
+            : undefined;
+          if (healResult) {
+            healingApplied += healResult.healing;
+          } else {
+            const oldHp = areaTarget.hpCurrent;
+            areaTarget.hpCurrent = Math.min(areaTarget.hpMax, areaTarget.hpCurrent + healAmt);
+            healingApplied += areaTarget.hpCurrent - oldHp;
+          }
           targetHpRemaining = areaTarget.hpCurrent;
         }
       }
@@ -1642,16 +1718,20 @@ export class SpellRuntime {
       // If save failed, apply status conditions
       if (!succeeds && Array.isArray(spell.appliedConditions)) {
         for (const cond of spell.appliedConditions) {
-          this.conditionEngine.applyCondition(targetParticipant.id, {
+          const conditionResult = this.conditionEngine.applyCondition(targetParticipant.id, {
             definitionIdOrName: cond,
             sourceActorId: casterId,
             durationSeconds: (spell.durationRounds || 1) * 6,
           });
-          if (!targetParticipant.conditions.includes(cond)) {
-            targetParticipant.conditions.push(cond);
+          if (conditionResult.applied && !conditionResult.immune) {
+            targetParticipant.conditions = this.conditionEngine.getActorState(targetParticipant.id)?.instances.map((instance) => instance.name) || targetParticipant.conditions;
+            conditionsApplied.push(cond);
+            concentrationAppliedConditions.push({
+              targetId: targetParticipant.id,
+              condition: cond,
+              conditionInstanceId: conditionResult.instance?.id,
+            });
           }
-          conditionsApplied.push(cond);
-          concentrationAppliedConditions.push({ targetId: targetParticipant.id, condition: cond });
         }
       }
     } else if (spell.defenseModel === 'AUTOMATIC' && targetParticipant) {
@@ -1684,38 +1764,52 @@ export class SpellRuntime {
             healAmt += dice.roll(spell.upcastHealingDicePerLevel).total;
           }
         }
-        const oldHp = targetParticipant.hpCurrent;
-        targetParticipant.hpCurrent = Math.min(
-          targetParticipant.hpMax,
-          targetParticipant.hpCurrent + healAmt
-        );
-        healingApplied = targetParticipant.hpCurrent - oldHp;
-        targetHpRemaining = targetParticipant.hpCurrent;
+        const healResult = request.healingResolver
+          ? request.healingResolver(targetParticipant, healAmt)
+          : undefined;
 
-        // Revive from 0 HP if unconscious
-        if (oldHp <= 0 && targetParticipant.hpCurrent > 0) {
-          targetParticipant.isDead = false;
-          targetParticipant.conditions = targetParticipant.conditions.filter(
-            (c) => c !== 'Unconscious' && c !== 'Dead'
+        if (healResult) {
+          healingApplied = healResult.healing;
+          if (healResult.revived) conditionsRemoved.push('Unconscious');
+        } else {
+          const oldHp = targetParticipant.hpCurrent;
+          targetParticipant.hpCurrent = Math.min(
+            targetParticipant.hpMax,
+            targetParticipant.hpCurrent + healAmt
           );
-          this.conditionEngine.recoverFromZero(targetParticipant.id, targetParticipant.hpCurrent);
-          conditionsRemoved.push('Unconscious');
+          healingApplied = targetParticipant.hpCurrent - oldHp;
+          targetHpRemaining = targetParticipant.hpCurrent;
+
+          // Isolated/unit-test fallback: keep the legacy local revive behavior.
+          if (oldHp <= 0 && targetParticipant.hpCurrent > 0) {
+            targetParticipant.isDead = false;
+            targetParticipant.conditions = targetParticipant.conditions.filter(
+              (c) => c !== 'Unconscious' && c !== 'Dead'
+            );
+            this.conditionEngine.recoverFromZero(targetParticipant.id, targetParticipant.hpCurrent);
+            conditionsRemoved.push('Unconscious');
+          }
         }
+        targetHpRemaining = targetParticipant.hpCurrent;
       }
     } else if (spell.defenseModel === 'BUFF') {
       const buffTarget = targetParticipant || casterParticipant;
       if (Array.isArray(spell.appliedConditions)) {
         for (const cond of spell.appliedConditions) {
-          this.conditionEngine.applyCondition(buffTarget.id, {
+          const conditionResult = this.conditionEngine.applyCondition(buffTarget.id, {
             definitionIdOrName: cond,
             sourceActorId: casterId,
             durationSeconds: (spell.durationRounds || 1) * 6,
           });
-          if (!buffTarget.conditions.includes(cond)) {
-            buffTarget.conditions.push(cond);
+          if (conditionResult.applied && !conditionResult.immune) {
+            buffTarget.conditions = this.conditionEngine.getActorState(buffTarget.id)?.instances.map((instance) => instance.name) || buffTarget.conditions;
+            conditionsApplied.push(cond);
+            concentrationAppliedConditions.push({
+              targetId: buffTarget.id,
+              condition: cond,
+              conditionInstanceId: conditionResult.instance?.id,
+            });
           }
-          conditionsApplied.push(cond);
-          concentrationAppliedConditions.push({ targetId: buffTarget.id, condition: cond });
         }
       }
 

@@ -289,7 +289,6 @@ export class CanonicalCommandEngine {
 				mutationPaths,
 				mutationCount: mutationPaths.length,
 				fingerprint,
-				fingerprint,
 			};
 
 			repository.appendCanonicalCommandEvent(command.storyId, event);

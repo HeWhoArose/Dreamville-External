@@ -2063,7 +2063,7 @@ gameRouter.post('/combat/attack', async (req: Request, res: Response) => {
                 revivalPossible: true,
               },
             });
-            worldRepository.updatePlayerLifecycle(storyId, deadPlayer);
+            transactionRepo.updatePlayerLifecycle(storyId, deadPlayer);
 
             const ts = clock.getTimestamp();
             chronicle.recordEvidence({
@@ -2089,7 +2089,7 @@ gameRouter.post('/combat/attack', async (req: Request, res: Response) => {
               acquiredAtTimestamp: clock.getTimestamp(),
               healed: false,
             };
-            worldRepository.updatePlayerLifecycle(
+            transactionRepo.updatePlayerLifecycle(
               storyId,
               player.copyWith({ injuries: [...player.injuries, injury] })
             );

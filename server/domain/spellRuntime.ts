@@ -357,7 +357,7 @@ export class SpellRuntime {
         castingTime: 'ACTION',
         range: 120,
         rangeType: 'RANGED',
-        targetType: 'SINGLE_ENEMY',
+        targetType: 'SINGLE_CREATURE',
         durationRounds: 0,
         requiresConcentration: false,
         isRitual: false,
@@ -1270,7 +1270,8 @@ export class SpellRuntime {
       targetParticipant = casterParticipant;
     }
 
-    if (request.requireAuthoritativeTarget && spell.targetType !== 'SELF' && !targetParticipant) {
+    const isAreaSpell = spell.targetType === 'POINT' || spell.targetType === 'AREA_SPHERE' || spell.targetType === 'AREA_LINE' || spell.targetType === 'AREA_CONE';
+    if (request.requireAuthoritativeTarget && spell.targetType !== 'SELF' && !isAreaSpell && !targetParticipant) {
       return {
         success: false,
         errorCode: 'TARGET_REQUIRED',
@@ -1393,7 +1394,7 @@ export class SpellRuntime {
 
     // Rule 4: Targeting & Range Verification
     const targetTypeRequiresCreature = new Set<SpellTargetType>(['TOUCH', 'SINGLE_CREATURE', 'SINGLE_ENEMY', 'SINGLE_ALLY']);
-    if (targetTypeRequiresCreature.has(spell.targetType) && !targetParticipant) {
+    if (targetTypeRequiresCreature.has(spell.targetType) && !targetParticipant && (!targetId || request.requireAuthoritativeTarget)) {
       return {
         success: false,
         errorCode: 'TARGET_REQUIRED',
@@ -1514,7 +1515,6 @@ export class SpellRuntime {
       }
     }
 
-    const isAreaSpell = spell.targetType === 'AREA_SPHERE' || spell.targetType === 'AREA_LINE' || spell.targetType === 'AREA_CONE';
     const areaTargets = isAreaSpell
       ? this.resolveAreaTargets(spell, casterParticipant, targetParticipant, request.targetPosition, allParticipants)
       : [];
@@ -1728,9 +1728,9 @@ export class SpellRuntime {
         damageInflicted = dmgRes.damage;
         targetDied = dmgRes.targetDied;
         targetHpRemaining = targetParticipant.hpCurrent;
-        targetImmune = dmgRes.immune;
-        targetResisted = dmgRes.resisted;
-        targetVulnerable = dmgRes.vulnerable;
+        targetImmune = Boolean(dmgRes.immune);
+        targetResisted = Boolean(dmgRes.resisted);
+        targetVulnerable = Boolean(dmgRes.vulnerable);
 
         if (damageInflicted > 0 && !request.damageResolver) {
           targetConcCheck = this.resolveDamageConcentrationCheck(targetParticipant, damageInflicted, dice);
@@ -1768,9 +1768,9 @@ export class SpellRuntime {
           damageInflicted = dmgRes.damage;
           targetDied = dmgRes.targetDied;
           targetHpRemaining = targetParticipant.hpCurrent;
-          targetImmune = dmgRes.immune;
-          targetResisted = dmgRes.resisted;
-          targetVulnerable = dmgRes.vulnerable;
+          targetImmune = Boolean(dmgRes.immune);
+          targetResisted = Boolean(dmgRes.resisted);
+          targetVulnerable = Boolean(dmgRes.vulnerable);
 
           if (damageInflicted > 0 && !request.damageResolver) {
             targetConcCheck = this.resolveDamageConcentrationCheck(targetParticipant, damageInflicted, dice);
@@ -1811,9 +1811,9 @@ export class SpellRuntime {
         damageInflicted = dmgRes.damage;
         targetDied = dmgRes.targetDied;
         targetHpRemaining = targetParticipant.hpCurrent;
-        targetImmune = dmgRes.immune;
-        targetResisted = dmgRes.resisted;
-        targetVulnerable = dmgRes.vulnerable;
+        targetImmune = Boolean(dmgRes.immune);
+        targetResisted = Boolean(dmgRes.resisted);
+        targetVulnerable = Boolean(dmgRes.vulnerable);
 
         if (damageInflicted > 0) {
           targetConcCheck = this.resolveDamageConcentrationCheck(targetParticipant, damageInflicted, dice);

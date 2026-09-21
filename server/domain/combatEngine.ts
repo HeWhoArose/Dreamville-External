@@ -456,7 +456,7 @@ export class TacticalCombatEngine {
   constructor(seed = 1337, ruleset?: IRulesetAdapter, conditionEngine?: ConditionEngine) {
     this.initialSeed = seed;
     this.diceEngine = new LocalDiceEngine(seed);
-    this.conditionEngine = conditionEngine;
+    this.conditionEngine = conditionEngine || new ConditionEngine();
     this.spellRuntime = new SpellRuntime({ conditionEngine: this.conditionEngine });
     if (ruleset) {
       this.ruleset = ruleset;
@@ -600,7 +600,7 @@ export class TacticalCombatEngine {
   }
 
   public addParticipant(p: BattlefieldParticipant): void {
-    const participant = { ...p };
+    const participant = p;
     if (participant.usesDeathSaves && !participant.deathSaveState) {
       participant.deathSaveState = deathSaveEngine.createState();
     }
@@ -1264,8 +1264,12 @@ export class TacticalCombatEngine {
     const modifier = actor.saveModifiers?.[ability] ?? actor.savingThrowModifiers?.[ability] ?? 0;
     const check = this.diceEngine.roll('1d20', modifier);    const escaped = check.total >= escapeDc;
 
-    if (escaped) {      actor.conditions = actor.conditions.filter((condition) => condition !== 'Grappled');
+    if (escaped) {
+      actor.conditions = actor.conditions.filter((condition) => condition !== 'Grappled');
       actor.grappledBy = undefined;
+      if (this.conditionEngine) {
+        this.conditionEngine.removeCondition(actorId, 'Grappled');
+      }
     }
 
     this.eventLog.push({
@@ -1288,7 +1292,15 @@ export class TacticalCombatEngine {
     if (!result.success || !result.applied) return result;
     const target = this.participants.get(targetId);
     if (!target) return result;
-    if (prone && !target.conditions.includes('Prone')) target.conditions.push('Prone');
+    if (prone && !target.conditions.includes('Prone')) {
+      target.conditions.push('Prone');
+      if (this.conditionEngine) {
+        this.conditionEngine.applyCondition(target.id, {
+          definitionIdOrName: 'Prone',
+          sourceActorId: attackerId,
+        });
+      }
+    }
     if (!prone) {
       const attacker = this.participants.get(attackerId)!;
       const dx = Math.sign(target.x - attacker.x);
@@ -1328,6 +1340,12 @@ export class TacticalCombatEngine {
       if (action === 'GRAPPLE' && !target.conditions.includes('Grappled')) {
         target.conditions.push('Grappled');
         target.grappledBy = attackerId;
+        if (this.conditionEngine) {
+          this.conditionEngine.applyCondition(target.id, {
+            definitionIdOrName: 'Grappled',
+            sourceActorId: attackerId,
+          });
+        }
       }
     }
     this.eventLog.push({
@@ -1590,7 +1608,7 @@ export class TacticalCombatEngine {
     if (amount <= 0) return { healing: 0, revived: false };
 
     const conditionState = this.conditionEngine?.getActorState(target.id);
-    if (conditionState) {
+    if (conditionState && this.conditionEngine) {
       const previousHp = Math.max(0, conditionState.healthCurrent);
       const maxHp = Math.max(1, conditionState.healthMax, target.hpMax);
       const healed = Math.max(0, Math.min(amount, maxHp - previousHp));
@@ -2134,8 +2152,6 @@ export class TacticalCombatEngine {
   }
 
   public executeSpellCast(params: {
-    const preState = this.exportState();
-    try {
     actorId: string;
     spellId: string;
     targetId?: string;
@@ -2150,9 +2166,11 @@ export class TacticalCombatEngine {
     result?: CastSpellExecutionResult;
     headline?: string;
   } {
-    if (!this.tacticalCombatEnabled()) {
-      return { success: false, errorReason: 'Tactical combat is disabled by the active rules profile.' };
-    }
+    const preState = this.exportState();
+    try {
+      if (!this.tacticalCombatEnabled()) {
+        return { success: false, errorReason: 'Tactical combat is disabled by the active rules profile.' };
+      }
     const actor = this.participants.get(params.actorId);
     if (!actor) {
       return { success: false, errorReason: 'Actor not found.' };
@@ -2196,13 +2214,13 @@ export class TacticalCombatEngine {
 
     // Sync actor's state if configured on participant
     const state = this.spellRuntime.getOrCreateActorState(actor.id);
-    if (actor.spellSlots) {
+    if (actor.spellSlots && Object.keys(state.spellSlots || {}).length === 0) {
       state.spellSlots = actor.spellSlots;
     }
-    if (actor.preparedSpells) {
+    if (actor.preparedSpells && (state.preparedSpells || []).length === 0) {
       state.preparedSpells = actor.preparedSpells;
     }
-    if (actor.knownSpells) {
+    if (actor.knownSpells && (state.knownSpells || []).length === 0) {
       state.knownSpells = actor.knownSpells;
     }
 

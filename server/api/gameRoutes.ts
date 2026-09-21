@@ -6121,7 +6121,12 @@ gameRouter.post('/spells/register-custom', async (req: Request, res: Response) =
           return {
             success: false,
             errorReason: evalResult.adjudicationNotes || 'Custom spell proposal was rejected by rules evaluator.',
-            data: { evaluation: evalResult },
+            data: {
+              success: false,
+              approved: false,
+              spell: undefined as import('../domain/spellRuntime').SpellDefinition | undefined,
+              evaluation: evalResult,
+            },
           };
         }
         runtime.registerSpell(evalResult.sanitizedSpell);

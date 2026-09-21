@@ -528,20 +528,20 @@ gameRouter.post('/inventory/craft', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, errorReason: 'Missing recipeId in request body.' });
     }
     const { worldRepository } = await import('../repositories/worldRepository');
-    const player = worldRepository.getPlayerLifecycle('default_story');
-    const actorId = player ? player.actorId : 'player_actor_default_story';
-    const invEngine = worldRepository.getInventoryEngine('default_story');
-    const actorId = worldRepository.getPlayerLifecycle('default_story')?.actorId || 'player_actor_default_story';
+    const storyId = resolveStoryId(req);
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player ? player.actorId : `player_actor_${storyId}`;
+    const invEngine = worldRepository.getInventoryEngine(storyId);
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      `craft_default_story_${actorId}_${recipeId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      `craft_${storyId}_${actorId}_${recipeId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
       {
         commandId,
-        storyId: 'default_story',
+        storyId,
         actorId,
         type: 'USE_ITEM',
         payload: { recipeId },
@@ -553,10 +553,10 @@ gameRouter.post('/inventory/craft', async (req: Request, res: Response) => {
           return { success: false, errorReason: result.errorReason || 'Crafting rejected.' };
         }
 
-        const clock = worldRepository.getWorldClock('default_story');
+        const clock = worldRepository.getWorldClock(storyId);
         if (result.craftingTimeSeconds) clock.advanceSeconds(result.craftingTimeSeconds);
 
-        const chronicle = worldRepository.getHistoricalChronicleEngine('default_story');
+        const chronicle = worldRepository.getHistoricalChronicleEngine(storyId);
         const ts = clock.getTimestamp();
         chronicle.recordEvidence({
           id: `ev_craft_${recipeId}_${ts.totalElapsedSeconds}_${chronicle.getChronicleEntries().length}`,
@@ -564,7 +564,7 @@ gameRouter.post('/inventory/craft', async (req: Request, res: Response) => {
           timestamp: ts,
           primarySubjectId: actorId,
           secondarySubjectId: result.producedItem?.id || recipeId,
-          locationId: worldRepository.getPlayerLifecycle('default_story')?.locationId || 'loc_whispering_orrery',
+          locationId: worldRepository.getPlayerLifecycle(storyId)?.locationId || 'loc_whispering_orrery',
           summary: `Crafted ${result.producedItem?.name || 'an item'}`,
           details: `Forged ${result.producedItem?.name || 'an artifact'} via recipe ${recipeId}.`,
           sourceEventId: `evt_craft_${recipeId}_${ts.totalElapsedSeconds}`,
@@ -614,8 +614,9 @@ gameRouter.post('/inventory/transfer', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, errorReason: 'Missing required parameters.' });
     }
     const { worldRepository } = await import('../repositories/worldRepository');
-    const player = worldRepository.getPlayerLifecycle('default_story');
-    const actorId = player ? player.actorId : 'player_actor_default_story';
+    const storyId = resolveStoryId(req);
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player ? player.actorId : `player_actor_${storyId}`;
     // Auth validation: Both source and target must be authorized.
     if (!player?.locationId) {
        return res.status(403).json({ success: false, errorReason: 'Player location unknown.' });
@@ -644,7 +645,7 @@ gameRouter.post('/inventory/transfer', async (req: Request, res: Response) => {
       return res.status(403).json({ success: false, errorReason: 'Not authorized or too far to transfer to this target.' });
     }
 
-    const invEngine = worldRepository.getInventoryEngine('default_story');
+    const invEngine = worldRepository.getInventoryEngine(storyId);
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
@@ -654,7 +655,7 @@ gameRouter.post('/inventory/transfer', async (req: Request, res: Response) => {
       worldRepository,
       {
         commandId,
-        storyId: 'default_story',
+        storyId,
         actorId,
         type: 'USE_ITEM',
         payload: { itemId, sourceOwnerId, targetOwnerId, targetContainerType, quantity },
@@ -666,8 +667,8 @@ gameRouter.post('/inventory/transfer', async (req: Request, res: Response) => {
           return { success: false, errorReason: result.errorReason || 'Item transfer rejected.' };
         }
 
-        const chronicle = worldRepository.getHistoricalChronicleEngine('default_story');
-        const clock = worldRepository.getWorldClock('default_story');
+        const chronicle = worldRepository.getHistoricalChronicleEngine(storyId);
+        const clock = worldRepository.getWorldClock(storyId);
         const ts = clock.getTimestamp();
         chronicle.recordEvidence({
           id: `ev_transfer_${itemId}_${ts.totalElapsedSeconds}_${chronicle.getChronicleEntries().length}`,
@@ -721,19 +722,20 @@ gameRouter.post('/inventory/repair', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, errorReason: 'Missing itemId in request body.' });
     }
     const { worldRepository } = await import('../repositories/worldRepository');
-    const player = worldRepository.getPlayerLifecycle('default_story');
-    const actorId = player ? player.actorId : 'player_actor_default_story';
-    const invEngine = worldRepository.getInventoryEngine('default_story');
+    const storyId = resolveStoryId(req);
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player ? player.actorId : `player_actor_${storyId}`;
+    const invEngine = worldRepository.getInventoryEngine(storyId);
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      `repair_default_story_${itemId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      `repair_${storyId}_${itemId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
       {
         commandId,
-        storyId: 'default_story',
+        storyId,
         actorId,
         type: 'USE_ITEM',
         payload: { itemId, repairAmount },

@@ -4750,8 +4750,48 @@ gameRouter.post('/worlds/runs/:storyId/story-director/step', async (req: Request
   try {
     const { storyDirectorService } = await import('../services/storyDirectorService');
     const storyId = req.params.storyId as string;
-    const result = storyDirectorService.stepDirector(storyId);
-    res.json(result);
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player?.actorId || `player_actor_${storyId}`;
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      `story_step_${storyId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'INTERACT',
+        payload: { action: 'STORY_DIRECTOR_STEP' },
+        source: 'SYSTEM',
+      },
+      async () => {
+        const result = storyDirectorService.stepDirector(storyId);
+        return {
+          success: true,
+          data: result,
+          summary: 'Story Director advanced through the canonical command path.',
+        };
+      }
+    );
+
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
+      });
+    }
+
+    res.json({
+      success: true,
+      ...(commandResult.data as any),
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
+    });
   } catch (error) {
     res.status(500).json({ error: 'Failed to step story director.' });
   }

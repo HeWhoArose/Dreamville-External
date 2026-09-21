@@ -540,7 +540,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
         naturalConcept,
         draft || undefined,
         Array.from(userEditedFields),
-        draft?.storyMode || undefined,
+        draft?.storyMode || selectedNarrativeRole || selectedWorld.storyMode || selectedWorld.narrativeProfile?.mode || 'PROTAGONIST',
         allowDeterministicFallback
       );
 

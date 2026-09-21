@@ -1,5 +1,6 @@
 import { captureCanonicalStateSnapshot, compareCanonicalSnapshots, CanonicalStateSnapshot } from './canonicalSnapshot';
 import { InMemoryWorldRepository } from '../repositories/worldRepository';
+import { deterministicId } from './deterministicRng';
 
 export type CanonicalCommandType =
 	| 'MOVE'
@@ -42,6 +43,15 @@ export interface CanonicalCommandEvent {
 	/** Internal deduplication fingerprint; contains command metadata only. */
 	fingerprint?: string;
 	transactionMode: 'STAGED' | 'ROLLBACK';
+	replay: {
+		preStateHash: string;
+		postStateHash: string;
+		canonicalSequence: number;
+		rngState: {
+			combat: { seed: number; rollCounter: number };
+			storyChecks: Record<string, unknown>;
+		};
+	};
 }
 
 export interface CanonicalCommandResult<T = unknown> {
@@ -78,6 +88,16 @@ function stableStringify(value: unknown): string {
 	if (Array.isArray(value)) return '[' + value.map(stableStringify).join(',') + ']';
 	const record = value as Record<string, unknown>;
 	return '{' + Object.keys(record).sort().map((key) => JSON.stringify(key) + ':' + stableStringify(record[key])).join(',') + '}';
+}
+
+function stableHash(value: unknown): string {
+	const serialized = typeof value === 'string' ? value : stableStringify(value);
+	let hash = 2166136261 >>> 0;
+	for (let i = 0; i < serialized.length; i++) {
+		hash ^= serialized.charCodeAt(i);
+		hash = Math.imul(hash, 16777619) >>> 0;
+	}
+	return hash.toString(16).padStart(8, '0');
 }
 
 export class CanonicalCommandEngine {
@@ -276,6 +296,7 @@ export class CanonicalCommandEngine {
 				})()
 				: repository;
 		const transactionalRepository = stagedRepository;
+		transactionalRepository.beginCanonicalCommandTransaction(command.storyId, command.commandId);
 
 		try {
 			const resolved = await handler(command, {
@@ -303,7 +324,10 @@ export class CanonicalCommandEngine {
 
 			if (!resolved.success) {
 				if (command.transactionMode !== 'STAGED') {
+					transactionalRepository.rollbackCanonicalCommandTransaction(command.storyId);
 					repository.restoreCanonicalStateSnapshot(before);
+				} else {
+					transactionalRepository.rollbackCanonicalCommandTransaction(command.storyId);
 				}
 				return {
 					success: false,
@@ -322,27 +346,46 @@ export class CanonicalCommandEngine {
 				return match?.[1] || difference;
 			});
 
-			if (command.transactionMode === 'STAGED') {
-				repository.restoreCanonicalStateSnapshot(after);
-			}
-
+			const canonicalSequence = repository.getCanonicalCommandEvents(command.storyId).length + 1;
 			const event: CanonicalCommandEvent = {
-				eventId: `evt_cmd_${command.storyId}_${command.commandId}`,
+				eventId: deterministicId('evt_cmd', command.storyId, canonicalSequence, fingerprint),
 				commandId: command.commandId,
 				storyId: command.storyId,
 				actorId: command.actorId,
 				commandType: command.type,
 				source: command.source,
-				committedAt: new Date().toISOString(),
+				committedAt: `canonical:${after.worldClock?.timestamp?.totalElapsedSeconds ?? 0}`,
 				success: true,
 				summary: resolved.summary || `${command.type} committed successfully.`,
 				mutationPaths,
 				mutationCount: mutationPaths.length,
 				fingerprint,
 				transactionMode: command.transactionMode || 'ROLLBACK',
+				replay: {
+					preStateHash: stableHash(before),
+					postStateHash: stableHash(after),
+					canonicalSequence,
+					rngState: {
+						combat: {
+							seed: Number(after.combat?.seed ?? 0),
+							rollCounter: Number(after.combat?.rollCounter ?? 0),
+						},
+						storyChecks: clone(after.storyChecks || {}),
+					},
+				},
 			};
 
+			// The canonical event becomes authoritative before staged Chronicle state is
+			// copied into the live repository. This enforces event -> Chronicle ordering.
 			repository.appendCanonicalCommandEvent(command.storyId, event);
+			if (command.transactionMode === 'STAGED') {
+				repository.restoreCanonicalStateSnapshot(after, {
+					preserveCanonicalEvents: true,
+					persist: true,
+				});
+			} else {
+				transactionalRepository.commitCanonicalCommandTransaction(command.storyId, event.eventId);
+			}
 			this.completedResults.set(
 				`${command.storyId}::${command.commandId}`,
 				{ fingerprint, data: clone(resolved.data) }
@@ -357,6 +400,11 @@ export class CanonicalCommandEngine {
 				mutationPaths,
 			};
 		} catch (error: any) {
+			try {
+				transactionalRepository.rollbackCanonicalCommandTransaction(command.storyId);
+			} catch {
+				// Preserve the original resolution error while still attempting to clear transaction state.
+			}
 			repository.restoreCanonicalStateSnapshot(before);
 			return {
 				success: false,

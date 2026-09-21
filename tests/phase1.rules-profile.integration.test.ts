@@ -282,3 +282,26 @@ test('Phase 1 integration: client-supplied spell rule overrides cannot bypass ca
 	assert.equal(result.approved, false);
 	assert.equal(result.maxAvailableLevel, 1);
 });
+
+test('Phase 1 integration: authored challenge keywords normalize without losing whitespace semantics', async () => {
+	const { StoryCheckChallengeResolver } = await import('../server/domain/storyCheckChallengeResolver');
+	const resolver = new StoryCheckChallengeResolver();
+
+	const challenge = resolver.resolve({
+		actionText: 'I inspect the ancient door.',
+		sceneText: '',
+		run: {
+			storyCheckChallenges: [{
+				id: 'challenge_keyword_normalization',
+				label: 'Ancient Door',
+				sourceType: 'EVENT',
+				sourceId: 'evt_keyword',
+				keywords: ['ancient door'],
+				difficultyClass: 10,
+				resolutionMode: 'CUSTOM_D20',
+			}],
+		},
+	});
+
+	assert.equal(challenge?.id, 'challenge_keyword_normalization');
+});

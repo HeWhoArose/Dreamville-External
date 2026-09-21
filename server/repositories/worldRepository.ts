@@ -2214,15 +2214,15 @@ export class InMemoryWorldRepository implements WorldRepository {
 
   public evaluateCustomSpellProposal(storyId: string, spellProposal: any) {
     const run = this.getStoryRun(storyId);
-    const dndMode = run?.dndRulesMode || 'FULL_DND';
+    const profile = this.getRulesProfile(storyId) || rulesProfileEngine.createDefault('FULL_DND');
     const characterLevel = spellProposal.casterLevel || 5;
 
     return dndSpellRulesEvaluator.evaluateSpellProposal({
       proposal: spellProposal,
       characterLevel,
-      dndMode,
+      dndMode: profile.mode,
       overrideCapabilities: run?.canonicalCapabilities || [],
-      rulesProfile: run?.rulesProfile,
+      rulesProfile: profile,
     });
   }
 

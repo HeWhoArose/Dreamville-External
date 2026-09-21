@@ -35,6 +35,10 @@ export interface ImageAssetMeta {
   magicOrTechnology?: string;
   geography?: string;
   visualMotifs?: string[];
+  adventureContext?: string;
+  characterName?: string;
+  storyMode?: string;
+  dndRulesMode?: string;
   aspectRatio?: '16:9' | '4:3' | '1:1' | '3:4' | '21:9' | string;
   width?: number;
   height?: number;
@@ -78,6 +82,10 @@ export function compileProviderNeutralPrompt(meta: ImageAssetMeta): string {
     if (meta.magicOrTechnology) parts.push('Magic/technology: ' + meta.magicOrTechnology);
     if (meta.geography) parts.push('Geography: ' + meta.geography);
     if (meta.visualMotifs?.length) parts.push('Signature visual motifs: ' + meta.visualMotifs.join(', '));
+  if (meta.adventureContext) parts.push('Adventure context: ' + meta.adventureContext);
+  if (meta.characterName) parts.push('Protagonist: ' + meta.characterName);
+  if (meta.storyMode) parts.push('Narrative mode: ' + meta.storyMode);
+  if (meta.dndRulesMode) parts.push('Rules mode: ' + meta.dndRulesMode);
 
     if (isWorldCover) {
       parts.push('Visual goal: communicate the identity, scale, civilization, environment, and defining visual language of the world itself; do not depict a generic fantasy realm.');

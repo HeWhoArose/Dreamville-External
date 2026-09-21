@@ -33,7 +33,7 @@ export function deterministicId(prefix: string, ...parts: unknown[]): string {
  * State is fully serializable so canonical snapshots can restore replay position.
  */
 export class DeterministicRng {
-	private readonly seed: number;
+	private seed: number;
 	private state: number;
 	private cursor = 0;
 
@@ -69,6 +69,7 @@ export class DeterministicRng {
 		if (!snapshot || !Number.isFinite(snapshot.state) || !Number.isInteger(snapshot.cursor)) {
 			throw new Error('Invalid deterministic RNG state.');
 		}
+		this.seed = normalizeSeed(snapshot.seed);
 		this.state = snapshot.state >>> 0;
 		this.cursor = Math.max(0, snapshot.cursor);
 	}

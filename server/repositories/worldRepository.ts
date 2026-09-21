@@ -213,7 +213,11 @@ export class InMemoryWorldRepository implements WorldRepository {
 
     for (const [worldId, world] of Object.entries(persisted.worldTemplates)) {
       const resolvedNarrative = narrativeProfileEngine.resolve({
-        mode: (world as any)?.storyMode,
+        mode: ['PROTAGONIST', 'SIDE_CHARACTER', 'FREE_ROAM'].includes((world as any)?.storyMode)
+          ? (world as any)?.storyMode
+          : ['PROTAGONIST', 'SIDE_CHARACTER', 'FREE_ROAM'].includes((world as any)?.playstyle)
+          ? (world as any)?.playstyle
+          : undefined,
         narrativeProfile: (world as any)?.narrativeProfile,
         fallbackMode: 'PROTAGONIST',
         source: 'WORLD',
@@ -2018,7 +2022,11 @@ export class InMemoryWorldRepository implements WorldRepository {
 
   public saveWorldTemplate(world: any): void {
     const resolvedNarrative = narrativeProfileEngine.resolve({
-      mode: world?.storyMode,
+      mode: ['PROTAGONIST', 'SIDE_CHARACTER', 'FREE_ROAM'].includes(world?.storyMode)
+        ? world?.storyMode
+        : ['PROTAGONIST', 'SIDE_CHARACTER', 'FREE_ROAM'].includes(world?.playstyle)
+        ? world?.playstyle
+        : undefined,
       narrativeProfile: world?.narrativeProfile,
       fallbackMode: 'PROTAGONIST',
       source: 'WORLD',

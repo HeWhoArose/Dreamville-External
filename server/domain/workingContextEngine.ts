@@ -747,6 +747,8 @@ export class WorkingContextEngine {
     const eraName = world?.defaultEra || (run as any)?.worldTime?.era || 'Age of Shadows';
     const periodName = clock.getState().currentDayPhase;
 
+    const resolvedNarrativeMode = narrativeProfile?.mode || run?.storyMode || 'PROTAGONIST';
+
     // 7. Structured context chunks with strict priority bands
     const chunks: ContextChunk[] = [
       // B1_CRITICAL: Core Grounding Truths

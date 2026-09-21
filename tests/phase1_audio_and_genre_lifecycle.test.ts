@@ -51,7 +51,7 @@ test('Phase 1 Genre Decoupling: Discovery Preferences ≠ World Genre ≠ Rulese
   assert.ok(synthesized.genreTags?.includes('Cyberpunk'), 'World genre tags must contain Cyberpunk');
   assert.ok(synthesized.toneTags?.includes('Grimdark'), 'World tone tags must contain Grimdark');
   assert.strictEqual(synthesized.rules, 'FULL_DND', 'Rules mode must be isolated and preserved on template');
-  assert.strictEqual(synthesized.playstyle, 'PROTAGONIST', 'Story mode must be isolated and preserved on template');
+  assert.strictEqual(synthesized.storyMode, 'PROTAGONIST', 'Story mode must be isolated and preserved on template');
 });
 
 test('Phase 1 World Manifest: Genre tags are first-class on world templates', () => {

@@ -1897,6 +1897,66 @@
           "recordedAt": "2026-09-21T12:12:57.385Z",
           "valid": true,
           "trustedProvenance": false
+        },
+        {
+          "evidenceId": "ev_1789994329881_164",
+          "requirementId": "CH16.WORLD.LIBRARY",
+          "evidenceType": "UNIT_TEST",
+          "sourceReference": "tests/ch16_behavioral_verification.test.ts",
+          "description": "Verified world creation and retrieval tests pass",
+          "recordedAt": "2026-09-21T12:38:49.881Z",
+          "valid": true,
+          "trustedProvenance": false
+        },
+        {
+          "evidenceId": "ev_1789994479346_205",
+          "requirementId": "CH16.WORLD.LIBRARY",
+          "evidenceType": "UNIT_TEST",
+          "sourceReference": "tests/ch16_behavioral_verification.test.ts",
+          "description": "Verified world creation and retrieval tests pass",
+          "recordedAt": "2026-09-21T12:41:19.346Z",
+          "valid": true,
+          "trustedProvenance": false
+        },
+        {
+          "evidenceId": "ev_1789994586466_642",
+          "requirementId": "CH16.WORLD.LIBRARY",
+          "evidenceType": "UNIT_TEST",
+          "sourceReference": "tests/ch16_behavioral_verification.test.ts",
+          "description": "Verified world creation and retrieval tests pass",
+          "recordedAt": "2026-09-21T12:43:06.466Z",
+          "valid": true,
+          "trustedProvenance": false
+        },
+        {
+          "evidenceId": "ev_1789994867434_951",
+          "requirementId": "CH16.WORLD.LIBRARY",
+          "evidenceType": "UNIT_TEST",
+          "sourceReference": "tests/ch16_behavioral_verification.test.ts",
+          "description": "Verified world creation and retrieval tests pass",
+          "recordedAt": "2026-09-21T12:47:47.434Z",
+          "valid": true,
+          "trustedProvenance": false
+        },
+        {
+          "evidenceId": "ev_1789994967416_290",
+          "requirementId": "CH16.WORLD.LIBRARY",
+          "evidenceType": "UNIT_TEST",
+          "sourceReference": "tests/ch16_behavioral_verification.test.ts",
+          "description": "Verified world creation and retrieval tests pass",
+          "recordedAt": "2026-09-21T12:49:27.416Z",
+          "valid": true,
+          "trustedProvenance": false
+        },
+        {
+          "evidenceId": "ev_1789995138860_773",
+          "requirementId": "CH16.WORLD.LIBRARY",
+          "evidenceType": "UNIT_TEST",
+          "sourceReference": "tests/ch16_behavioral_verification.test.ts",
+          "description": "Verified world creation and retrieval tests pass",
+          "recordedAt": "2026-09-21T12:52:18.860Z",
+          "valid": true,
+          "trustedProvenance": false
         }
       ]
     },

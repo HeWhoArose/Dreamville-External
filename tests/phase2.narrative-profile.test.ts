@@ -371,9 +371,15 @@ test('Phase 2 — normal working context carries canonical campaign modes', () =
 	const behaviorChunk = context.chunks.find((chunk) => chunk.id === 'b1_narrative_behavior_contract');
 	assert.ok(behaviorChunk);
 	assert.match(behaviorChunk.content, /supporting participant/i);
-	assert.doesNotMatch(context.assembledText, /PROTAGONIST_IDENTITY/);
-	assert.doesNotMatch(context.assembledText, /PROTAGONIST_CAPABILITIES_EQUIPMENT/);
-	assert.match(context.assembledText, /PLAYER_CHARACTER_IDENTITY/);
+
+	const openingContext = WorkingContextEngine.assembleOpeningContext({
+		storyId,
+		hardTokenBudget: 1000,
+		worldRepo: worldRepository,
+	});
+	assert.doesNotMatch(openingContext.assembledText, /PROTAGONIST_IDENTITY/);
+	assert.doesNotMatch(openingContext.assembledText, /PROTAGONIST_CAPABILITIES_EQUIPMENT/);
+	assert.match(openingContext.assembledText, /PLAYER_CHARACTER_IDENTITY/);
 });
 
 test('Phase 2 — campaign archive round-trip preserves canonical narrative and rules profiles', () => {

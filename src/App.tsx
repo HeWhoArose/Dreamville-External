@@ -372,7 +372,6 @@ export const App: React.FC = () => {
   const handleNavigate = (route: AppRoute) => {
     // Intercept routes that trigger legacy workstations/modals
     if (route === 'worlds') {
-      setIsWorldLibraryModalOpen(true);
       setCurrentRoute('worlds');
       return;
     }

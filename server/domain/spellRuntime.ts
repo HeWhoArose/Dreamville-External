@@ -994,6 +994,10 @@ export class SpellRuntime {
     if (!active) return undefined;
 
     active.remainingRounds = Math.max(0, active.remainingRounds - 1);
+    const participant = this.participantRefs.get(actorId);
+    if (participant) {
+      participant.activeConcentration = JSON.parse(JSON.stringify(active));
+    }
     return JSON.parse(JSON.stringify(active));
   }
 
@@ -1058,6 +1062,10 @@ export class SpellRuntime {
       spellName: active.spellName,
     };
     state.activeConcentration = null;
+    const concentratingParticipant = this.participantRefs.get(actorId);
+    if (concentratingParticipant) {
+      concentratingParticipant.activeConcentration = null;
+    }
 
     return {
       broken: true,
@@ -1915,6 +1923,7 @@ export class SpellRuntime {
         effects: concentrationBuffEffects.length > 0 ? { buffs: concentrationBuffEffects } : undefined,
       };
       concentrationEstablished = true;
+      casterParticipant.activeConcentration = JSON.parse(JSON.stringify(state.activeConcentration));
     }
 
     // Headline generation

@@ -2513,8 +2513,10 @@ gameRouter.post('/combat/interrupt', async (req: Request, res: Response) => {
         type: 'CORE_ACTION',
         payload: { action: 'INTERRUPT', targetActorId, reason: reason || 'Interrupted' },
         source: 'SYSTEM',
+        transactionMode: 'STAGED',
       },
-      async () => {
+      async (_command, context) => {
+        const combatEngine = context.repository.getCombatEngine(storyId);
         const result = combatEngine.interruptActivation(targetActorId, reason || 'Interrupted');
         return {
           success: true,
@@ -2554,7 +2556,7 @@ gameRouter.post('/combat/end-turn', async (req: Request, res: Response) => {
   try {
     const storyId = resolveStoryId(req, true);
     if (!requireDndTacticalCombat(res, storyId)) return;
-    const player = worldRepository.getPlayerLifecycle(storyId);
+    const player = transactionRepo.getPlayerLifecycle(storyId);
     const serverPlayerActorId = player?.actorId || `player_actor_${storyId}`;
 
     if (req.body?.actorId && req.body.actorId !== serverPlayerActorId) {
@@ -2564,7 +2566,7 @@ gameRouter.post('/combat/end-turn', async (req: Request, res: Response) => {
       });
     }
 
-    const combatEngine = worldRepository.getCombatEngine(storyId);
+    const combatEngine = transactionRepo.getCombatEngine(storyId);
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
@@ -2579,8 +2581,12 @@ gameRouter.post('/combat/end-turn', async (req: Request, res: Response) => {
         type: 'CORE_ACTION',
         payload: { action: 'END_TURN' },
         source: 'PLAYER',
+        transactionMode: 'STAGED',
       },
-      async () => {
+      async (_command, context) => {
+        const transactionRepo = context.repository;
+        const combatEngine = transactionRepo.getCombatEngine(storyId);
+        const transactionPlayer = transactionRepo.getPlayerLifecycle(storyId);
         const advanceResult = combatEngine.advanceTurn();
 
         const deadParticipants = combatEngine.getParticipants().filter(
@@ -2590,20 +2596,20 @@ gameRouter.post('/combat/end-turn', async (req: Request, res: Response) => {
           syncNpcCombatDeath(storyId, dp, 'environmental hazard', player?.locationId);
         }
 
-        if (player && !player.isDead) {
+        if (transactionPlayer && !transactionPlayer.isDead) {
           const playerPart = combatEngine.getParticipant(serverPlayerActorId);
           if (playerPart?.isDead) {
             const deadPlayer = player.copyWith({
               deathRecord: {
                 isDead: true,
-                diedAtTimestamp: worldRepository.getWorldClock(storyId).getTimestamp(),
+                diedAtTimestamp: transactionRepo.getWorldClock(storyId).getTimestamp(),
                 cause: (playerPart.deathSaveState?.failures ?? 0) >= 3
                   ? 'Failed three death saves in tactical combat.'
                   : 'Defeated in tactical combat by environmental hazard.',
                 revivalPossible: true,
               },
             });
-            worldRepository.updatePlayerLifecycle(storyId, deadPlayer);
+            transactionRepo.updatePlayerLifecycle(storyId, deadPlayer);
           }
         }
 
@@ -2647,10 +2653,10 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
   try {
     const storyId = resolveStoryId(req, true);
     if (!requireDndTacticalCombat(res, storyId)) return;
-    const player = worldRepository.getPlayerLifecycle(storyId);
+    const player = transactionRepo.getPlayerLifecycle(storyId);
     const serverPlayerActorId = player?.actorId || `player_actor_${storyId}`;
-    const combatEngine = worldRepository.getCombatEngine(storyId);
-    const capEngine = worldRepository.getCapabilityEngine(storyId);
+    const combatEngine = transactionRepo.getCombatEngine(storyId);
+    const capEngine = transactionRepo.getCapabilityEngine(storyId);
 
     const currentActor = combatEngine.getCurrentActor();
     if (!currentActor) {
@@ -2673,7 +2679,7 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
       });
     }
 
-    const perceptionOptions = worldRepository.getCombatPerceptionOptions(storyId, currentActor.id);
+    const perceptionOptions = transactionRepo.getCombatPerceptionOptions(storyId, currentActor.id);
     const proposal = NpcTacticalDecisionPolicy.decide({
       actorId: currentActor.id,
       combatEngine,
@@ -2695,13 +2701,18 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
         type: 'ATTACK',
         payload: { npcTurn: true, proposal },
         source: 'AI',
+        transactionMode: 'STAGED',
       },
-      async () => {
+      async (_command, context) => {
+        const transactionRepo = context.repository;
+        const combatEngine = transactionRepo.getCombatEngine(storyId);
+        const capEngine = transactionRepo.getCapabilityEngine(storyId);
+        const transactionPlayer = transactionRepo.getPlayerLifecycle(storyId);
         const executionResult = NpcTacticalDecisionPolicy.executeDecidedAction(
           proposal,
           combatEngine,
           capEngine,
-          worldRepository.getRulesProfile(storyId) || rulesProfileEngine.createDefault('FULL_DND')
+          transactionRepo.getRulesProfile(storyId) || rulesProfileEngine.createDefault('FULL_DND')
         );
 
         const deadParticipants = combatEngine.getParticipants().filter(
@@ -2720,20 +2731,20 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
           syncNpcCombatDeath(storyId, dp, 'environmental hazard', player?.locationId);
         }
 
-        if (player && !player.isDead) {
+        if (transactionPlayer && !transactionPlayer.isDead) {
           const playerPart = combatEngine.getParticipant(serverPlayerActorId);
           if (playerPart?.isDead) {
             const deadPlayer = player.copyWith({
               deathRecord: {
                 isDead: true,
-                diedAtTimestamp: worldRepository.getWorldClock(storyId).getTimestamp(),
+                diedAtTimestamp: transactionRepo.getWorldClock(storyId).getTimestamp(),
                 cause: (playerPart.deathSaveState?.failures ?? 0) >= 3
                   ? 'Failed three death saves in tactical combat.'
                   : 'Defeated in tactical combat by environmental hazard.',
                 revivalPossible: true,
               },
             });
-            worldRepository.updatePlayerLifecycle(storyId, deadPlayer);
+            transactionRepo.updatePlayerLifecycle(storyId, deadPlayer);
           }
         }
 

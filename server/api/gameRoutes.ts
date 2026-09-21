@@ -3467,16 +3467,17 @@ gameRouter.put('/worlds/:worldId/visual-asset', async (req: Request, res: Respon
     }
 
     const { imageAsset, imageMetadata } = req.body || {};
-    if (imageAsset !== undefined && typeof imageAsset !== 'string') {
-      return res.status(400).json({ error: 'imageAsset must be a string when provided.' });
+    if (imageAsset !== undefined && imageAsset !== null && typeof imageAsset !== 'string') {
+      return res.status(400).json({ error: 'imageAsset must be a string or null when provided.' });
     }
 
     const updatedWorld = {
       ...world,
-      ...(imageAsset !== undefined ? { imageAsset } : {}),
+      ...(imageAsset !== undefined && imageAsset !== null ? { imageAsset } : {}),
       ...(imageMetadata !== undefined ? { imageMetadata } : {}),
       updatedAt: new Date().toISOString(),
     };
+    if (imageAsset === null) delete updatedWorld.imageAsset;
 
     worldRepository.saveWorldTemplate(updatedWorld);
     res.json(updatedWorld);
@@ -4032,16 +4033,17 @@ gameRouter.put('/worlds/runs/:storyId/visual-asset', async (req: Request, res: R
     }
 
     const { imageAsset, imageMetadata } = req.body || {};
-    if (imageAsset !== undefined && typeof imageAsset !== 'string') {
-      return res.status(400).json({ error: 'imageAsset must be a string when provided.' });
+    if (imageAsset !== undefined && imageAsset !== null && typeof imageAsset !== 'string') {
+      return res.status(400).json({ error: 'imageAsset must be a string or null when provided.' });
     }
 
     const updatedRun = {
       ...run,
-      ...(imageAsset !== undefined ? { imageAsset } : {}),
+      ...(imageAsset !== undefined && imageAsset !== null ? { imageAsset } : {}),
       ...(imageMetadata !== undefined ? { imageMetadata } : {}),
       updatedAt: new Date().toISOString(),
     };
+    if (imageAsset === null) delete updatedRun.imageAsset;
 
     worldRepository.saveStoryRun(updatedRun);
     const world = worldRepository.getWorldTemplate(updatedRun.worldId);

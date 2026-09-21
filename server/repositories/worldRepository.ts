@@ -924,7 +924,16 @@ export class InMemoryWorldRepository implements WorldRepository {
         },
       });
 
-      // 13. Construct and Persist StoryRun
+      const progressionEngine = new CharacterProgressionEngine();
+       progressionEngine.seedFromCharacter(actorId, char, deterministicId('prg_genesis_cmd', storyId, char.characterId || actorId), {
+         rulesProfile: resolvedRulesProfile,
+         worldModules: Array.isArray(world.characterProgressionModules)
+           ? world.characterProgressionModules as ProgressionModuleDefinition[]
+           : undefined,
+       });
+       this.characterProgressionEngines.set(storyId, progressionEngine);
+
+       // 13. Construct and Persist StoryRun
       const allEquipNames = [
         ...equippedItems.map((e: any) => e.name),
         ...inventoryItems.map((i: any) => i.name),
@@ -2001,7 +2010,12 @@ export class InMemoryWorldRepository implements WorldRepository {
         stagedCapability.importState(restored.capabilities);
       }
 
-      const stagedCombat = new TacticalCombatEngine();
+      const stagedProgression = new CharacterProgressionEngine();
+       if (restored.progression) {
+         stagedProgression.importState(restored.progression);
+       }
+
+       const stagedCombat = new TacticalCombatEngine();
       if (restored.combat) {
         stagedCombat.importState(restored.combat);
       }

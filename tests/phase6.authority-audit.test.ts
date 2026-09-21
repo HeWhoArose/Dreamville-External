@@ -757,3 +757,17 @@ test('Phase 6 audit: breaking concentration preserves independent pre-existing b
   assert.equal(broken.interrupted, true);
   assert.equal(ally.armorClass, 12);
 });
+
+
+test('Phase 6 audit: failed learn/prepare operations do not create spellcasting state', () => {
+  const runtime = new SpellRuntime();
+  assert.equal(runtime.getActorState('new_spell_actor'), undefined);
+
+  const learn = runtime.learnSpell('new_spell_actor', 'does_not_exist');
+  assert.equal(learn.success, false);
+  assert.equal(runtime.getActorState('new_spell_actor'), undefined);
+
+  const prepare = runtime.prepareSpell('new_spell_actor', 'does_not_exist');
+  assert.equal(prepare.success, false);
+  assert.equal(runtime.getActorState('new_spell_actor'), undefined);
+});

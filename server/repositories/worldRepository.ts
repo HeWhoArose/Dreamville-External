@@ -20,6 +20,7 @@ import { ConditionEngine } from '../domain/conditionEngine';
 import { StoryCheckEngine } from '../domain/storyCheckEngine';
 import { CampaignArchiveService, PartitionedArchive } from '../domain/campaignArchive';
 import { dndSpellRulesEvaluator } from '../domain/dndSpellRulesModel';
+import type { RulesProfile } from '../../src/types';
 import { rulesProfileEngine } from '../domain/rulesProfileEngine';
 import { PersistentGameStore } from '../services/persistentGameStore';
 import {
@@ -109,6 +110,7 @@ export interface WorldRepository {
   }): { storyId: string; run: any };
   deleteStoryRun(storyId: string): void;
   getStoryRun(storyId: string): any;
+  getRulesProfile(storyId: string): RulesProfile | null;
   getAllStoryRuns(): any[];
   saveStoryRun(run: any): void;
   registerStoryRun(run: any): void;
@@ -2048,6 +2050,20 @@ export class InMemoryWorldRepository implements WorldRepository {
 
   public getStoryRun(storyId: string): any | null {
     return this.storyRuns.get(storyId) || null;
+  }
+
+  public getRulesProfile(storyId: string): RulesProfile | null {
+    const run = this.getStoryRun(storyId);
+    const world = run?.worldId ? this.getWorldTemplate(run.worldId) : null;
+    if (!run && !world) return null;
+
+    return rulesProfileEngine.resolve({
+      mode: run?.dndRulesMode || world?.dndRulesMode || run?.ruleset || world?.rulesetId || 'FULL_DND',
+      rulesProfile: run?.rulesProfile || world?.rulesProfile,
+      worldRules: world?.worldRules || [],
+      ruleConstraints: world?.ruleConstraints || [],
+      canonicalCapabilities: world?.canonicalCapabilities || [],
+    }).profile;
   }
 
   public getAllStoryRuns(): any[] {

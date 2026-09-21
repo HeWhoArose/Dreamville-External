@@ -193,8 +193,21 @@ export class CombatActionEconomy {
   public setReadyAction(
     actorId: string,
     actionDescription: string,
-    triggerDescription: string
+    triggerDescription: string,
+    options?: {
+      triggerType?: ReadyTriggerType;
+      triggerActorId?: string;
+      targetId?: string;
+      actionType?: 'ATTACK';
+    }
   ): { success: boolean; errorReason?: string } {
+    if (!actionDescription.trim()) {
+      return { success: false, errorReason: 'A Ready Action requires a non-empty action description.' };
+    }
+    if (!triggerDescription.trim()) {
+      return { success: false, errorReason: 'A Ready Action requires a non-empty trigger description.' };
+    }
+
     const result = this.consume(actorId, 'ACTION');
     if (!result.success) return result;
     const current = this.resources.get(actorId)!;
@@ -202,12 +215,33 @@ export class CombatActionEconomy {
       actionDescription: actionDescription.trim(),
       triggerDescription: triggerDescription.trim(),
       expiresOnTurnStart: true,
+      triggerType: options?.triggerType,
+      triggerActorId: options?.triggerActorId,
+      targetId: options?.targetId,
+      actionType: options?.actionType || 'ATTACK',
     };
     return { success: true };
   }
 
+  public getReadyAction(actorId: string): ReadyActionState | undefined {
+    const current = this.resources.get(actorId);
+    return current?.readyAction ? JSON.parse(JSON.stringify(current.readyAction)) : undefined;
+  }
+
+  public clearReadyAction(actorId: string): void {
+    const current = this.resources.get(actorId);
+    if (current) current.readyAction = undefined;
+  }
+
   public consumeReaction(actorId: string): { success: boolean; errorReason?: string } {
     return this.consume(actorId, 'REACTION');
+  }
+
+  public consumeReadyReaction(actorId: string): { success: boolean; errorReason?: string } {
+    const result = this.consumeReaction(actorId);
+    if (!result.success) return result;
+    this.clearReadyAction(actorId);
+    return { success: true };
   }
 
   public exportState(): CombatTurnResourceSnapshot[] {

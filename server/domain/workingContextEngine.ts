@@ -1,6 +1,7 @@
 import { WorldTimestamp } from './types';
 import type { WorldRepository } from '../repositories/worldRepository';
 import type { DndRulesMode, NarrativeProfile } from '../../src/types';
+import { rulesProfileEngine } from './rulesProfileEngine';
 import { worldRepository } from '../repositories/worldRepository';
 
 export interface WorkingContextPacket {
@@ -291,7 +292,8 @@ export class WorkingContextEngine {
     }
     const perceptionOptions = repo.getCombatPerceptionOptions ? repo.getCombatPerceptionOptions(storyId, viewerId) : undefined;
     const projectedCombat = combatEngine.projectCombatForActor(viewerId, perceptionOptions);
-    const combatParticipants = projectedCombat.participants;
+    const tacticalCombatAllowed = rulesProfile ? rulesProfileEngine.allowsDndTacticalCombat(rulesProfile) : true;
+    const combatParticipants = tacticalCombatAllowed ? projectedCombat.participants : [];
     const isInCombat = combatParticipants.length > 0;
     if (isInCombat) {
       const currentActor = projectedCombat.currentActor;

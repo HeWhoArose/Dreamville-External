@@ -8,6 +8,14 @@ import { captureCanonicalStateSnapshot, compareCanonicalSnapshots } from '../ser
 function seedRepo(storyId: string) {
 	const repo = new InMemoryWorldRepository();
 	repo.seedStory(storyId);
+	repo.saveStoryRun({
+		storyId,
+		id: storyId,
+		worldId: 'world_solar_archive',
+		characterName: 'Phase 3 Hero',
+		storyMode: 'PROTAGONIST',
+		dndRulesMode: 'FULL_DND',
+	});
 	return repo;
 }
 
@@ -234,4 +242,29 @@ test('Phase 3 — rollback restores a real combat mutation after downstream reje
 	assert.equal(combat.getParticipant(hero)?.x, 0);
 	assert.equal(combat.getParticipant(hero)?.y, 0);
 	assert.equal(compareCanonicalSnapshots(before, captureCanonicalStateSnapshot(storyId, repo)).identical, true);
+});
+
+test('Phase 3 — AI commands use the same payload validation as player commands', async () => {
+	const storyId = 'phase3_ai_validation';
+	const repo = seedRepo(storyId);
+	const actorId = repo.getPlayerLifecycle(storyId)?.actorId || `player_actor_${storyId}`;
+
+	const result = await canonicalCommandEngine.execute(
+		repo,
+		{
+			commandId: 'cmd_ai_invalid_move_001',
+			storyId,
+			actorId,
+			type: 'MOVE',
+			payload: { targetX: 4, targetY: 'invalid' } as any,
+			source: 'AI',
+		},
+		async () => {
+			throw new Error('AI handler must not execute when command validation fails.');
+		}
+	);
+
+	assert.equal(result.success, false);
+	assert.match(result.errorReason || '', /numeric targetX and targetY/i);
+	assert.equal(repo.getCanonicalCommandEvents(storyId).length, 0);
 });

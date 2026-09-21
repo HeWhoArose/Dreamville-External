@@ -68,6 +68,9 @@ export const App: React.FC = () => {
   const [capabilities, setCapabilities] = useState<CapabilityDefinition[]>([]);
   const [capabilityGraph, setCapabilityGraph] = useState<CapabilityGraphNode[]>([]);
   const [worldTemplates, setWorldTemplates] = useState<WorldTemplate[]>([]);
+  const [storyLibraryStories, setStoryLibraryStories] = useState<StorySummary[]>([]);
+  const [isLoadingStoryLibrary, setIsLoadingStoryLibrary] = useState(false);
+  const [storyLibraryError, setStoryLibraryError] = useState<string | null>(null);
   const [networkError, setNetworkError] = useState<string | null>(null);
   const [isProcessingAction, setIsProcessingAction] = useState<boolean>(false);
   const actionSeqRef = useRef<number>(0);
@@ -87,6 +90,33 @@ export const App: React.FC = () => {
   const [activeOpeningScene, setActiveOpeningScene] = useState<OpeningScene | null>(null);
   const [isLoadingOpening, setIsLoadingOpening] = useState(false);
   const [openingError, setOpeningError] = useState<string | null>(null);
+
+  const fetchStoryLibrary = async () => {
+    setIsLoadingStoryLibrary(true);
+    setStoryLibraryError(null);
+    try {
+      const runs = await apiClient.getStoryRuns();
+      const summaries: StorySummary[] = runs.map((run: any) => ({
+        storyId: run.storyId,
+        runId: run.runId || run.storyId,
+        title: run.title || run.storyTitle || 'Untitled Story',
+        worldName: run.worldName || run.worldTitle || 'Unknown World',
+        genre: run.genre || 'Dynamic Adventure',
+        imageUrl: run.imageAsset,
+        characterName: run.characterName,
+        currentLocation: run.currentLocation,
+        turnCount: run.turnCount || 0,
+        lastPlayed: run.lastPlayed || run.updatedAt || run.createdAt || 'Never',
+        excerpt: run.excerpt || '',
+      }));
+      setStoryLibraryStories(summaries);
+    } catch (err: any) {
+      setStoryLibraryError(err?.message || 'Failed to load persisted Story Runs.');
+    } finally {
+      setIsLoadingStoryLibrary(false);
+    }
+  };
+
 
   const fetchOpeningScene = async (storyId: string) => {
     if (!storyId || storyId === 'default_story') return;
@@ -431,23 +461,8 @@ export const App: React.FC = () => {
       }
     : null;
 
-  const sampleStories: StorySummary[] = activeStorySummary
-    ? [
-        activeStorySummary,
-        {
-          storyId: 'story_valdor',
-          runId: 'run_valdor_01',
-          title: 'The Spires of Valdor',
-          worldName: 'Cyberpunk Neo-Valdor',
-          genre: 'Cyberpunk',
-          characterName: 'Kaelen Vex',
-          currentLocation: 'Sector 4 Neon Underpass',
-          turnCount: 14,
-          lastPlayed: '2 days ago',
-          excerpt: 'Rain drips through the rusted conduit lines as sirens echo in the neon mist.',
-        },
-      ]
-    : [];
+  const sampleStories: StorySummary[] = storyLibraryStories;
+
 
   const isPlayRoute = currentRoute.startsWith('play.');
 
@@ -603,8 +618,17 @@ export const App: React.FC = () => {
           {currentRoute === 'story-library' && (
             <StoryLibraryView
               stories={sampleStories}
-              isLoading={!viewState}
-              onResumeStory={() => setCurrentRoute('play.story')}
+              isLoading={isLoadingStoryLibrary}
+              errorMessage={storyLibraryError || undefined}
+              onRetry={fetchStoryLibrary}
+              onResumeStory={(runId) => {
+                const story = storyLibraryStories.find((entry) => entry.runId === runId);
+                const storyId = story?.storyId || runId;
+                apiClient.setActiveStoryId(storyId);
+                setActiveStoryId(storyId);
+                setCurrentRoute('play.story');
+                initializeApp(storyId);
+              }}
               onNewStory={() => setIsImportModalOpen(true)}
               onBranchStory={() => setIsStoryLibraryModalOpen(true)}
             />
@@ -623,6 +647,7 @@ export const App: React.FC = () => {
                 }
                 setCurrentRoute('play.story');
                 initializeApp(newStoryId);
+                fetchStoryLibrary();
               }}
             />
           )}

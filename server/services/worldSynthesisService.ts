@@ -492,7 +492,7 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
       era: era,
       source: input.sourcePolicy || 'Synthesized Template',
       playstyle: input.storyMode || 'PROTAGONIST',
-      rules: input.dndRulesMode || 'FULL_DND',
+      rules: resolvedRules.profile.mode,
       supportedPlaystyles: ['PROTAGONIST', 'SIDE_CHARACTER', 'FREE_ROAM'],
       imageAsset: input.imageAsset,
       imageMetadata: input.imageMetadata || (input.imageAsset ? {

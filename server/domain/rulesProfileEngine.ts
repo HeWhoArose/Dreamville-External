@@ -388,6 +388,12 @@ export class RulesProfileEngine {
 		return !profile.disabledMechanics.includes(DND_TACTICAL_COMBAT);
 	}
 
+	public allowsCharacterProgression(profile: RulesProfile): boolean {
+		return profile.enabledMechanics.includes(CHARACTER_PROGRESSION)
+			&& !profile.disabledMechanics.includes(CHARACTER_PROGRESSION)
+			&& profile.parameterOverrides?.[CHARACTER_PROGRESSION]?.['allowCharacterProgression'] !== false;
+	}
+
 	public allowsStandardRestRules(profile: RulesProfile): boolean {
 		return profile.enabledMechanics.includes(REST_RECOVERY_RULES)
 			&& !profile.disabledMechanics.includes(REST_RECOVERY_RULES);

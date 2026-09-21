@@ -2206,6 +2206,7 @@ export class InMemoryWorldRepository implements WorldRepository {
       characterLevel,
       dndMode,
       overrideCapabilities: run?.canonicalCapabilities || [],
+      rulesProfile: run?.rulesProfile,
     });
   }
 

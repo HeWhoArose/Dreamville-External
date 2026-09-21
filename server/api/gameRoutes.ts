@@ -2270,11 +2270,48 @@ gameRouter.post('/combat/interrupt', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, errorReason: 'targetActorId is required.' });
     }
     const combatEngine = worldRepository.getCombatEngine(storyId);
-    const result = combatEngine.interruptActivation(targetActorId, reason || 'Interrupted');
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player?.actorId || `player_actor_${storyId}`;
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      `interrupt_${storyId}_${targetActorId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'CORE_ACTION',
+        payload: { action: 'INTERRUPT', targetActorId, reason: reason || 'Interrupted' },
+        source: 'SYSTEM',
+      },
+      async () => {
+        const result = combatEngine.interruptActivation(targetActorId, reason || 'Interrupted');
+        return {
+          success: true,
+          data: result,
+          summary: `Combat activation interrupted for ${targetActorId}.`,
+        };
+      }
+    );
+
     const state = getCombatStateHelper(combatEngine, storyId, targetActorId);
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        combatState: state,
+        rolledBack: commandResult.rolledBack,
+      });
+    }
+
     res.json({
-      ...result,
+      ...(commandResult.data as any),
       combatState: state,
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
     });
   } catch (error: any) {
     res.status(500).json({ error: error?.message || 'Failed to interrupt combat activation.' });
@@ -2301,38 +2338,72 @@ gameRouter.post('/combat/end-turn', async (req: Request, res: Response) => {
     }
 
     const combatEngine = worldRepository.getCombatEngine(storyId);
-    const advanceResult = combatEngine.advanceTurn();
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      `end_turn_${storyId}_${serverPlayerActorId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-    // Synchronize newly deceased NPC participants from hazard ticks during advanceTurn() (CH5 Issue A)
-    const deadParticipants = combatEngine.getParticipants().filter(p => p.isDead && p.id !== serverPlayerActorId);
-    for (const dp of deadParticipants) {
-      syncNpcCombatDeath(storyId, dp, 'environmental hazard', player?.locationId);
-    }
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId: serverPlayerActorId,
+        type: 'CORE_ACTION',
+        payload: { action: 'END_TURN' },
+        source: 'PLAYER',
+      },
+      async () => {
+        const advanceResult = combatEngine.advanceTurn();
 
-    // If player took lethal hazard damage, update player lifecycle mortality
-    if (player && !player.isDead) {
-      const playerPart = combatEngine.getParticipant(serverPlayerActorId);
-      if (playerPart?.isDead) {
-        const deadPlayer = player.copyWith({
-          deathRecord: {
-            isDead: true,
-            diedAtTimestamp: worldRepository.getWorldClock(storyId).getTimestamp(),
-            cause: (playerPart?.deathSaveState?.failures ?? 0) >= 3
-              ? 'Failed three death saves in tactical combat.'
-              : 'Defeated in tactical combat by environmental hazard.',
-            revivalPossible: true,
-          },
-        });
-        worldRepository.updatePlayerLifecycle(storyId, deadPlayer);
+        const deadParticipants = combatEngine.getParticipants().filter(
+          p => p.isDead && p.id !== serverPlayerActorId
+        );
+        for (const dp of deadParticipants) {
+          syncNpcCombatDeath(storyId, dp, 'environmental hazard', player?.locationId);
+        }
+
+        if (player && !player.isDead) {
+          const playerPart = combatEngine.getParticipant(serverPlayerActorId);
+          if (playerPart?.isDead) {
+            const deadPlayer = player.copyWith({
+              deathRecord: {
+                isDead: true,
+                diedAtTimestamp: worldRepository.getWorldClock(storyId).getTimestamp(),
+                cause: (playerPart.deathSaveState?.failures ?? 0) >= 3
+                  ? 'Failed three death saves in tactical combat.'
+                  : 'Defeated in tactical combat by environmental hazard.',
+                revivalPossible: true,
+              },
+            });
+            worldRepository.updatePlayerLifecycle(storyId, deadPlayer);
+          }
+        }
+
+        return {
+          success: true,
+          data: { advanceResult },
+          summary: `Combat turn advanced for ${serverPlayerActorId}.`,
+        };
       }
-    }
+    );
 
     const state = getCombatStateHelper(combatEngine, storyId, serverPlayerActorId);
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        combatState: state,
+        rolledBack: commandResult.rolledBack,
+      });
+    }
 
     res.json({
       success: true,
-      advanceResult,
+      ...(commandResult.data as any),
       combatState: state,
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to advance combat turn.' });
@@ -2383,55 +2454,88 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
       perceptionOptions,
     });
 
-    const executionResult = NpcTacticalDecisionPolicy.executeDecidedAction(
-      proposal,
-      combatEngine,
-      capEngine,
-      worldRepository.getRulesProfile(storyId) || rulesProfileEngine.createDefault('FULL_DND')
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      `npc_turn_${storyId}_${currentActor.id}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId: currentActor.id,
+        type: 'ATTACK',
+        payload: { npcTurn: true, proposal },
+        source: 'AI',
+      },
+      async () => {
+        const executionResult = NpcTacticalDecisionPolicy.executeDecidedAction(
+          proposal,
+          combatEngine,
+          capEngine,
+          worldRepository.getRulesProfile(storyId) || rulesProfileEngine.createDefault('FULL_DND')
+        );
+
+        const deadParticipants = combatEngine.getParticipants().filter(
+          p => p.isDead && p.id !== serverPlayerActorId
+        );
+        for (const dp of deadParticipants) {
+          syncNpcCombatDeath(storyId, dp, currentActor.name, player?.locationId);
+        }
+
+        const advanceResult = combatEngine.advanceTurn();
+
+        const postAdvanceDead = combatEngine.getParticipants().filter(
+          p => p.isDead && p.id !== serverPlayerActorId
+        );
+        for (const dp of postAdvanceDead) {
+          syncNpcCombatDeath(storyId, dp, 'environmental hazard', player?.locationId);
+        }
+
+        if (player && !player.isDead) {
+          const playerPart = combatEngine.getParticipant(serverPlayerActorId);
+          if (playerPart?.isDead) {
+            const deadPlayer = player.copyWith({
+              deathRecord: {
+                isDead: true,
+                diedAtTimestamp: worldRepository.getWorldClock(storyId).getTimestamp(),
+                cause: (playerPart.deathSaveState?.failures ?? 0) >= 3
+                  ? 'Failed three death saves in tactical combat.'
+                  : 'Defeated in tactical combat by environmental hazard.',
+                revivalPossible: true,
+              },
+            });
+            worldRepository.updatePlayerLifecycle(storyId, deadPlayer);
+          }
+        }
+
+        return {
+          success: true,
+          data: { executionResult, advanceResult },
+          summary: `NPC turn for ${currentActor.name} resolved and committed.`,
+        };
+      }
     );
 
-    // Sync any dead NPC participants resulting from NPC turn
-    const deadParticipants = combatEngine.getParticipants().filter(p => p.isDead && p.id !== serverPlayerActorId);
-    for (const dp of deadParticipants) {
-      syncNpcCombatDeath(storyId, dp, currentActor.name, player?.locationId);
-    }
-
-    // If turn didn't advance or ended, advance turn queue
-    const advanceResult = combatEngine.advanceTurn();
-
-    // Synchronize newly deceased NPC participants from hazard ticks during advanceTurn() (CH5 Issue A)
-    const postAdvanceDead = combatEngine.getParticipants().filter(p => p.isDead && p.id !== serverPlayerActorId);
-    for (const dp of postAdvanceDead) {
-      syncNpcCombatDeath(storyId, dp, 'environmental hazard', player?.locationId);
-    }
-
-    // If player took lethal hazard damage, update player lifecycle mortality
-    if (player && !player.isDead) {
-      const playerPart = combatEngine.getParticipant(serverPlayerActorId);
-      if (playerPart?.isDead) {
-        const deadPlayer = player.copyWith({
-          deathRecord: {
-            isDead: true,
-            diedAtTimestamp: worldRepository.getWorldClock(storyId).getTimestamp(),
-            cause: (playerPart?.deathSaveState?.failures ?? 0) >= 3
-              ? 'Failed three death saves in tactical combat.'
-              : 'Defeated in tactical combat by environmental hazard.',
-            revivalPossible: true,
-          },
-        });
-        worldRepository.updatePlayerLifecycle(storyId, deadPlayer);
-      }
-    }
-
     const state = getCombatStateHelper(combatEngine, storyId, serverPlayerActorId);
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        combatState: state,
+        rolledBack: commandResult.rolledBack,
+      });
+    }
 
     res.json({
       success: true,
       npcActorId: currentActor.id,
       proposal,
-      executionResult,
-      advanceResult,
+      ...(commandResult.data as any),
       combatState: state,
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to execute NPC tactical turn.' });

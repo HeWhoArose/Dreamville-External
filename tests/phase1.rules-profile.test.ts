@@ -133,3 +133,36 @@ test('Phase 1: synthesized-world fields preserve the canonical mode and profile 
 	assert.equal(spellResult.modeApplied, 'HYBRID_DND');
 	assert.equal(spellResult.maxAvailableLevel, 0);
 });
+
+test('Phase 1: unsupported rule override operations are ignored rather than reported as executable', () => {
+	const resolved = rulesProfileEngine.resolve({
+		mode: 'HYBRID_DND',
+		rulesProfile: {
+			overrides: [{
+				ruleId: 'implicit_ability_checks',
+				operation: 'REPLACE' as any,
+				value: { strategy: 'narrative' },
+				reason: 'Unsupported operation should not silently execute.',
+			}],
+		},
+	});
+
+	assert.equal(resolved.profile.allowImplicitAbilityChecks, true);
+	assert.equal(resolved.profile.overrides.length, 0);
+});
+
+test('Phase 1: custom homebrew does not silently inherit D&D tactical combat', () => {
+	const profile = rulesProfileEngine.createDefault('CUSTOM_HOMEBREW_DND');
+	assert.equal(rulesProfileEngine.allowsDndTacticalCombat(profile), false);
+});
+
+test('Phase 1: FULL_DND and HYBRID_DND retain D&D tactical combat baseline', () => {
+	assert.equal(
+		rulesProfileEngine.allowsDndTacticalCombat(rulesProfileEngine.createDefault('FULL_DND')),
+		true
+	);
+	assert.equal(
+		rulesProfileEngine.allowsDndTacticalCombat(rulesProfileEngine.createDefault('HYBRID_DND')),
+		true
+	);
+});

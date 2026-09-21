@@ -40,7 +40,9 @@ test('Phase 3 — core authoritative action routes all use the canonical command
 		'/worlds/runs/:storyId/actions/execute',
 		'/worlds/runs/:storyId/actions/apply-ability',
 		'/worlds/runs/:storyId/dice-clash/resolve',
+		'/living-world/advance',
 		'/orchestrator/turn',
+		'/living-world/advance',
 	];
 
 	for (const route of requiredRoutes) {
@@ -96,4 +98,12 @@ test('Phase 3 — legacy action endpoint maps movement/equipment/time intent to 
 	assert.match(block, /transactionMode: 'ROLLBACK'/);
 	assert.match(block, /serverMockAuthority\.exportTransactionalState\(storyId\)/);
 	assert.match(block, /serverMockAuthority\.importTransactionalState\(storyId, mockStateBefore\)/);
+});
+
+test('Phase 3 — authoritative living-world time advancement uses a canonical staged command', () => {
+	const block = routeBlock('/living-world/advance');
+	assert.match(block, /canonicalCommandEngine\.execute/);
+	assert.match(block, /type: 'ADVANCE_TIME'/);
+	assert.match(block, /transactionMode: 'STAGED'/);
+	assert.match(block, /new WorldSimulationService\(context\.repository\)/);
 });

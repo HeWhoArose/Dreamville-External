@@ -2428,10 +2428,10 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
             );
           }
         } else if (updatedTarget && updatedTarget.id !== actorId && updatedTarget.isDead) {
-          syncNpcCombatDeath(storyId, updatedTarget, `${transactionAttackerName}'s ${transactionCapDefForExecution.name}`, player?.locationId);
+          syncNpcCombatDeath(storyId, updatedTarget, `${transactionAttackerName}'s ${transactionCapDefForExecution.name}`, player?.locationId, transactionRepo);
         }
 
-        const state = getCombatStateHelper(combatEngine, storyId, actorId);
+        const state = getCombatStateHelper(combatEngine, storyId, actorId, transactionRepo);
         if (state.victory) {
           const ts = clock.getTimestamp();
           chronicle.recordEvidence({
@@ -2679,7 +2679,7 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
       });
     }
 
-    const perceptionOptions = transactionRepo.getCombatPerceptionOptions(storyId, currentActor.id);
+    const perceptionOptions = worldRepository.getCombatPerceptionOptions(storyId, currentActor.id);
     const proposal = NpcTacticalDecisionPolicy.decide({
       actorId: currentActor.id,
       combatEngine,
@@ -2719,7 +2719,7 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
           p => p.isDead && p.id !== serverPlayerActorId
         );
         for (const dp of deadParticipants) {
-          syncNpcCombatDeath(storyId, dp, currentActor.name, transactionPlayer?.locationId);
+          syncNpcCombatDeath(storyId, dp, currentActor.name, transactionPlayer?.locationId, transactionRepo);
         }
 
         const advanceResult = transactionCombatEngine.advanceTurn();
@@ -2728,7 +2728,7 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
           p => p.isDead && p.id !== serverPlayerActorId
         );
         for (const dp of postAdvanceDead) {
-          syncNpcCombatDeath(storyId, dp, 'environmental hazard', transactionPlayer?.locationId);
+          syncNpcCombatDeath(storyId, dp, 'environmental hazard', transactionPlayer?.locationId, transactionRepo);
         }
 
         if (transactionPlayer && !transactionPlayer.isDead) {

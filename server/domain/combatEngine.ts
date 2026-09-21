@@ -952,6 +952,19 @@ export class TacticalCombatEngine {
       to: { x: targetX, y: targetY },
     });
 
+    for (const readyActor of this.participants.values()) {
+      if (readyActor.id === actorId || readyActor.isDead) continue;
+      const beforeDistance = Math.hypot(path[0].x - readyActor.x, path[0].y - readyActor.y);
+      const afterDistance = Math.hypot(targetX - readyActor.x, targetY - readyActor.y);
+      if (beforeDistance > (readyActor.reachCells ?? 1.5) && afterDistance <= (readyActor.reachCells ?? 1.5)) {
+        this.resolveReadyTriggers({
+          type: 'TARGET_ENTERED_REACH',
+          actorId,
+          targetId: readyActor.id,
+        });
+      }
+    }
+
     return { success: true };
   }
 

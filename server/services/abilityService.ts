@@ -1,4 +1,5 @@
 import { worldRepository } from '../repositories/worldRepository';
+import { deterministicId, formatCanonicalTimestamp } from '../domain/deterministicRng';
 import { ActiveEffect } from '../../src/types';
 
 export interface AbilityDefinition {
@@ -48,6 +49,10 @@ export class AbilityService {
     reqBody: any,
     repository = worldRepository
   ): { success: boolean; activeEffect?: ActiveEffect; errorReason?: string; statusCode?: number } {
+    if (!repository.isCanonicalCommandTransactionActive()) {
+      return { success: false, statusCode: 409, errorReason: 'Ability application must execute inside a canonical command transaction.' };
+    }
+
     // Check for forged payloads
     if (reqBody.forgedEffectPayload || reqBody.modifiers || reqBody.duration || reqBody.customDamageReflection) {
       return {
@@ -82,24 +87,36 @@ export class AbilityService {
             durationTurns: skill.definition.durationTurns || 5,
           };
         } else {
-          // Fallback definition for custom player skills
-          def = {
-            abilityId,
-            name: abilityId,
-            description: 'Custom player capability.',
-            durationTurns: 5,
+          return {
+            success: false,
+            statusCode: 404,
+            errorReason: `Ability '${abilityId}' is not registered or owned by the actor.`,
           };
         }
       }
     }
 
+    const actorId = player?.actorId || `player_actor_${storyId}`;
+    const progression = repository.getCharacterProgressionEngine(storyId);
+    const triggeredAbilities = progression.getTriggeredAbilities(actorId);
     const ownedCapabilities = [
       ...(run?.canonicalCapabilities || []),
       ...(run?.unlockedAbilities || []),
       ...((player as any)?.capabilities || []),
-      ...capEngine.getAllSkillInstances(player?.actorId || `player_actor_${storyId}`).map((s) => s.capabilityId),
-      ...capEngine.getAllCapabilities().map((c) => c.id),
+      ...capEngine.getAllSkillInstances(actorId).map((s) => s.capabilityId),
+      ...triggeredAbilities.map((ability) => ability.id),
+      ...triggeredAbilities.map((ability) => ability.capabilityId).filter((id): id is string => typeof id === 'string'),
     ];
+
+    const progressionAbility = triggeredAbilities.find((ability) => ability.id === abilityId || ability.capabilityId === abilityId);
+    if (progressionAbility?.capabilityDefinition) {
+      def = {
+        abilityId: progressionAbility.capabilityId || progressionAbility.id,
+        name: progressionAbility.name,
+        description: progressionAbility.description,
+        durationTurns: progressionAbility.capabilityDefinition.durationTurns || 5,
+      };
+    }
 
     if (!ownedCapabilities.includes(abilityId) && !ownedCapabilities.includes(def.name)) {
       return {
@@ -117,7 +134,8 @@ export class AbilityService {
       };
     }
 
-    const effectId = `eff_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const commandSequence = repository.getCanonicalCommandEvents(storyId).length + 1;
+    const effectId = deterministicId('eff', storyId, commandSequence, def.abilityId, targetId);
     const activeEffect: ActiveEffect = {
       effectId,
       storyId,
@@ -128,7 +146,7 @@ export class AbilityService {
       turnsRemaining: def.durationTurns,
       damageReflection: def.damageReflection,
       charges: def.charges,
-      createdAt: new Date().toISOString(),
+      createdAt: formatCanonicalTimestamp(repository.getWorldClock(storyId).getTimestamp()),
     };
 
     repository.saveActiveEffect(activeEffect);

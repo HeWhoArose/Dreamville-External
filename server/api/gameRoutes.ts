@@ -387,13 +387,49 @@ gameRouter.post('/inventory/equip', async (req: Request, res: Response) => {
     const player = worldRepository.getPlayerLifecycle(storyId);
     const actorId = player ? player.actorId : `player_actor_${storyId}`;
     const invEngine = worldRepository.getInventoryEngine(storyId);
-    const result = invEngine.equipItem(actorId, itemId, slot);
-    if (!result.success) {
-      return res.status(400).json(result);
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      `equip_${storyId}_${actorId}_${itemId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'EQUIP',
+        payload: { itemId, slot },
+        source: 'PLAYER',
+      },
+      async () => {
+        const result = invEngine.equipItem(actorId, itemId, slot);
+        if (!result.success) {
+          return { success: false, errorReason: result.errorReason || 'Equipment request rejected.' };
+        }
+        const items = invEngine.getActorInventory(actorId);
+        const paperDoll = invEngine.getActorPaperDoll(actorId);
+        return {
+          success: true,
+          data: { result, items, paperDoll },
+          summary: `Equipped item ${itemId} in ${slot}.`,
+        };
+      }
+    );
+
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
+      });
     }
-    const items = invEngine.getActorInventory(actorId);
-    const paperDoll = invEngine.getActorPaperDoll(actorId);
-    res.json({ ...result, items, paperDoll });
+    res.json({
+      ...(commandResult.data as any),
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
+    });
   } catch (error) {
     res.status(500).json({ error: 'Failed to equip item.' });
   }
@@ -414,13 +450,49 @@ gameRouter.post('/inventory/unequip', async (req: Request, res: Response) => {
     const player = worldRepository.getPlayerLifecycle(storyId);
     const actorId = player ? player.actorId : `player_actor_${storyId}`;
     const invEngine = worldRepository.getInventoryEngine(storyId);
-    const result = invEngine.unequipItem(actorId, slot);
-    if (!result.success) {
-      return res.status(400).json(result);
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      `unequip_${storyId}_${actorId}_${slot}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'UNEQUIP',
+        payload: { slot },
+        source: 'PLAYER',
+      },
+      async () => {
+        const result = invEngine.unequipItem(actorId, slot);
+        if (!result.success) {
+          return { success: false, errorReason: result.errorReason || 'Unequip request rejected.' };
+        }
+        const items = invEngine.getActorInventory(actorId);
+        const paperDoll = invEngine.getActorPaperDoll(actorId);
+        return {
+          success: true,
+          data: { result, items, paperDoll },
+          summary: `Unequipped slot ${slot}.`,
+        };
+      }
+    );
+
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
+      });
     }
-    const items = invEngine.getActorInventory(actorId);
-    const paperDoll = invEngine.getActorPaperDoll(actorId);
-    res.json({ ...result, items, paperDoll });
+    res.json({
+      ...(commandResult.data as any),
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
+    });
   } catch (error) {
     res.status(500).json({ error: 'Failed to unequip slot.' });
   }

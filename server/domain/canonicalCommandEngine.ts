@@ -283,21 +283,6 @@ export class CanonicalCommandEngine {
 				repository: transactionalRepository,
 			});
 
-			if (!resolved.success) {
-				if (command.transactionMode !== 'STAGED') {
-					repository.restoreCanonicalStateSnapshot(before);
-				}
-				return {
-					success: false,
-					commandId: command.commandId,
-					errorReason: resolved.errorReason || 'Canonical command rejected.',
-					rolledBack: true,
-					mutationPaths: [],
-				};
-			}
-
-			const after = captureCanonicalStateSnapshot(command.storyId, transactionalRepository);
-
 			// STAGED handlers must mutate only the isolated transaction repository. A hidden dependency
 			// on the live singleton repository would otherwise bypass the staged boundary and could leak
 			// speculative state before validation/commit. Treat that as a transaction violation.
@@ -315,6 +300,21 @@ export class CanonicalCommandEngine {
 					};
 				}
 			}
+
+			if (!resolved.success) {
+				if (command.transactionMode !== 'STAGED') {
+					repository.restoreCanonicalStateSnapshot(before);
+				}
+				return {
+					success: false,
+					commandId: command.commandId,
+					errorReason: resolved.errorReason || 'Canonical command rejected.',
+					rolledBack: true,
+					mutationPaths: [],
+				};
+			}
+
+			const after = captureCanonicalStateSnapshot(command.storyId, transactionalRepository);
 
 			const comparison = compareCanonicalSnapshots(before, after);
 			const mutationPaths = comparison.differences.map((difference) => {

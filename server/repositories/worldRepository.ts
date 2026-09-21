@@ -20,6 +20,7 @@ import { ConditionEngine } from '../domain/conditionEngine';
 import { StoryCheckEngine } from '../domain/storyCheckEngine';
 import { CampaignArchiveService, PartitionedArchive } from '../domain/campaignArchive';
 import { dndSpellRulesEvaluator } from '../domain/dndSpellRulesModel';
+import { PersistentGameStore } from '../services/persistentGameStore';
 import {
   AdaptedStoryBible,
   AdaptationProfile,
@@ -197,8 +198,17 @@ export class InMemoryWorldRepository implements WorldRepository {
   // Slice 2 Storage Maps
   private characterDraftsMap: Map<string, any[]> = new Map();
   private confirmedCharactersMap: Map<string, any[]> = new Map();
+  private readonly persistentStore = new PersistentGameStore();
 
   constructor() {
+    const persisted = this.persistentStore.load();
+    for (const [worldId, world] of Object.entries(persisted.worldTemplates)) {
+      this.worldTemplates.set(worldId, world);
+    }
+    for (const [storyId, run] of Object.entries(persisted.storyRuns)) {
+      this.storyRuns.set(storyId, run);
+    }
+
     this.geographies.set('default_story', new GeographyGraph());
     this.seedDefaultTemplates();
     this.seedDefaultStory('default_story');
@@ -1912,6 +1922,15 @@ export class InMemoryWorldRepository implements WorldRepository {
 
   public saveWorldTemplate(world: any): void {
     this.worldTemplates.set(world.worldId, world);
+    this.persistLibrary();
+  }
+
+  private persistLibrary(): void {
+    this.persistentStore.save({
+      version: 1,
+      worldTemplates: Object.fromEntries(this.worldTemplates),
+      storyRuns: Object.fromEntries(this.storyRuns),
+    });
   }
 
   public searchWorldTemplates(criteria: {
@@ -2020,6 +2039,7 @@ export class InMemoryWorldRepository implements WorldRepository {
         this.playerLifecycles.set(run.storyId, existingPlayer.copyWith({ name: run.characterName }));
       }
     }
+    this.persistLibrary();
   }
 
   public registerStoryRun(run: any): void {

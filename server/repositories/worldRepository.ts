@@ -236,9 +236,9 @@ export class InMemoryWorldRepository implements WorldRepository {
     for (const [storyId, run] of Object.entries(persisted.storyRuns)) {
       const world = run && (run as any).worldId ? this.worldTemplates.get((run as any).worldId) : null;
       const resolvedNarrative = narrativeProfileEngine.resolve({
-        mode: (run as any)?.storyMode || (world as any)?.storyMode,
+        mode: (run as any)?.storyMode,
         narrativeProfile: (run as any)?.narrativeProfile || (world as any)?.narrativeProfile,
-        fallbackMode: 'PROTAGONIST',
+        fallbackMode: (world as any)?.storyMode || 'PROTAGONIST',
         source: 'RUN',
       }).profile;
       const migratedRun = {
@@ -895,9 +895,9 @@ export class InMemoryWorldRepository implements WorldRepository {
       }).profile;
 
       const resolvedNarrativeProfile = narrativeProfileEngine.resolve({
-        mode: params.storyMode || char.storyMode || world.storyMode,
+        mode: params.storyMode || char.storyMode,
         narrativeProfile: params.narrativeProfile || char.narrativeProfile || world.narrativeProfile,
-        fallbackMode: 'PROTAGONIST',
+        fallbackMode: world.storyMode || 'PROTAGONIST',
         source: 'RUN',
       }).profile;
 
@@ -2155,9 +2155,9 @@ export class InMemoryWorldRepository implements WorldRepository {
     if (!run && !world && storyId !== 'default_story') return null;
 
     return narrativeProfileEngine.resolve({
-      mode: run?.storyMode || world?.storyMode,
+      mode: run?.storyMode,
       narrativeProfile: run?.narrativeProfile || world?.narrativeProfile,
-      fallbackMode: 'PROTAGONIST',
+      fallbackMode: world?.storyMode || 'PROTAGONIST',
       source: run ? 'RUN' : world ? 'WORLD' : 'DEFAULT',
     }).profile;
   }
@@ -2169,9 +2169,9 @@ export class InMemoryWorldRepository implements WorldRepository {
   public saveStoryRun(run: any): void {
     const world = run?.worldId ? this.getWorldTemplate(run.worldId) : null;
     const resolvedNarrative = narrativeProfileEngine.resolve({
-      mode: run?.storyMode || world?.storyMode,
+      mode: run?.storyMode,
       narrativeProfile: run?.narrativeProfile || world?.narrativeProfile,
-      fallbackMode: 'PROTAGONIST',
+      fallbackMode: world?.storyMode || 'PROTAGONIST',
       source: 'RUN',
     }).profile;
     const canonicalRun = {

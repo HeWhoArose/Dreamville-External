@@ -240,9 +240,12 @@ export class CanonicalCommandEngine {
 				if (!['SELECT_CLASS', 'SELECT_SUBCLASS', 'SELECT_SPECIES', 'ACQUIRE_FEAT', 'LEVEL_UP', 'ENABLE_MODULE', 'DISABLE_MODULE', 'TRIGGER_ABILITY', 'REGISTER_MODULE', 'ACQUIRE_CAPABILITY', 'AWARD_XP', 'EVOLVE_CAPABILITY', 'DOWNGRADE_CAPABILITY', 'RELEARN_CAPABILITY'].includes(String(operation))) {
 					return 'PROGRESSION command requires a valid operation.';
 				}
-				if (['SELECT_CLASS', 'SELECT_SUBCLASS', 'SELECT_SPECIES', 'ACQUIRE_FEAT', 'ENABLE_MODULE', 'DISABLE_MODULE', 'REGISTER_MODULE', 'EVOLVE_CAPABILITY'].includes(String(operation))
+				if (['SELECT_CLASS', 'SELECT_SUBCLASS', 'SELECT_SPECIES', 'ACQUIRE_FEAT', 'ENABLE_MODULE', 'DISABLE_MODULE', 'EVOLVE_CAPABILITY', 'ACQUIRE_CAPABILITY', 'AWARD_XP', 'DOWNGRADE_CAPABILITY', 'RELEARN_CAPABILITY'].includes(String(operation))
 					&& typeof payload.moduleId !== 'string') {
 					return 'PROGRESSION module operations require moduleId.';
+				}
+				if (operation === 'REGISTER_MODULE' && (!payload.module || typeof payload.module !== 'object')) {
+					return 'REGISTER_MODULE requires a module definition.';
 				}
 				if (operation === 'TRIGGER_ABILITY' && typeof payload.abilityId !== 'string') {
 					return 'PROGRESSION trigger requires abilityId.';

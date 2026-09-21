@@ -21,6 +21,10 @@ export interface StorySummary {
   turnCount?: number;
   lastPlayed?: string;
   excerpt?: string;
+  imageMetadata?: any;
+  visualIdentity?: any;
+  storyMode?: string;
+  dndRulesMode?: string;
 }
 
 export interface DashboardViewProps {

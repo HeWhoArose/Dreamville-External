@@ -242,6 +242,12 @@ export class SpellRuntime {
     this.spells.set(this.normalizeName(spell.name), spell);
   }
 
+  /** Read-only actor spell state lookup. Does not create or mutate state. */
+  public getActorState(actorId: string): ActorSpellcastingState | undefined {
+    const state = this.actorStates.get(actorId);
+    return state ? JSON.parse(JSON.stringify(state)) : undefined;
+  }
+
   public getSpell(idOrName: string): SpellDefinition | undefined {
     if (!idOrName) return undefined;
     return this.spells.get(idOrName.toLowerCase().trim()) || this.spells.get(this.normalizeName(idOrName));

@@ -297,7 +297,6 @@ export class Dnd521RulesetAdapter implements IRulesetAdapter {
       succeeds: chosenRoll.total >= params.difficultyClass,
     };
   }
-
   public resolveDamage(
     damageFormula: string,
     isCritical = false,
@@ -597,8 +596,7 @@ export class TacticalCombatEngine {
         this.conditionEngine.seedActor(participant.id, {
           healthCurrent: participant.hpCurrent,
           healthMax: participant.hpMax,
-          damageProfile,
-          conditionProfile: participant.conditionProfile,
+          damageProfile,          conditionProfile: participant.conditionProfile,
           legacyConditions: participant.conditions,
         });
       } else {
@@ -835,7 +833,7 @@ export class TacticalCombatEngine {
     const actor = this.participants.get(actorId);
     if (!this.tacticalCombatEnabled()) return { success: false, errorReason: 'Tactical combat is disabled by the active rules profile.' };
     if (!actor) return { success: false, errorReason: "Actor not found." };
-    if (actor.isDead) return { success: false, errorReason: "Dead actors cannot move." };
+    if (actor.isDead || actor.hpCurrent <= 0 || actor.conditions.includes('Unconscious')) {\n      return { success: false, errorReason: "Dead, unconscious, or zero-HP actors cannot move." };\n    }
 
     const currentActor = this.getCurrentActor();
     if (!currentActor || currentActor.id !== actorId) {
@@ -878,18 +876,6 @@ export class TacticalCombatEngine {
     }
 
     const distance = Math.hypot(targetX - actor.x, targetY - actor.y);
-    const opportunityThreats = !this.actionEconomy.get(actorId)?.disengaging
-      ? Array.from(this.participants.values())
-          .filter((other) => {
-            if (other.id === actorId || other.isDead || other.team === actor.team || other.team === 'neutral') return false;
-            if (other.hpCurrent <= 0 || other.conditions.includes('Unconscious')) return false;
-            const reach = other.reachCells ?? 1.5;
-            const beforeDistance = Math.hypot(actor.x - other.x, actor.y - other.y);
-            const afterDistance = Math.hypot(targetX - other.x, targetY - other.y);
-            return beforeDistance <= reach && afterDistance > reach && Boolean(this.actionEconomy.get(other.id)?.reactionAvailable);
-          })
-          .sort((a, b) => a.id.localeCompare(b.id))
-      : [];
 
     const path = this.calculateMovementPath(actorId, actor.x, actor.y, targetX, targetY);
     if (!path) {
@@ -898,8 +884,21 @@ export class TacticalCombatEngine {
         errorReason: 'Movement path is blocked or leaves the configured map bounds.',
       };
     }
-
     const movementCost = this.calculateMovementCost(path);
+
+    const opportunityThreats = !this.actionEconomy.get(actorId)?.disengaging
+      ? Array.from(this.participants.values())
+          .filter((other) => {
+            if (other.id === actorId || other.isDead || other.team === actor.team || other.team === 'neutral') return false;
+            if (other.hpCurrent <= 0 || other.conditions.includes('Unconscious')) return false;
+            if (!this.actionEconomy.get(other.id)?.reactionAvailable) return false;
+            const reach = other.reachCells ?? 1.5;
+            const startsWithinReach = Math.hypot(path[0].x - other.x, path[0].y - other.y) <= reach;
+            if (!startsWithinReach) return false;
+            return path.slice(1).some((cell) => Math.hypot(cell.x - other.x, cell.y - other.y) > reach);
+          })
+          .sort((a, b) => a.id.localeCompare(b.id))
+      : [];
     if (movementCost > this.actionEconomy.get(actorId)?.movementRemainingCells! + 1e-9) {
       return {
         success: false,
@@ -1113,19 +1112,28 @@ export class TacticalCombatEngine {
     }
   }
 
-  private resolveReactionAttack(attackerId: string, targetId: string): { hits: boolean; damage: number; targetDied: boolean; roll?: RollRecord; isCritical: boolean } {
-    const attacker = this.participants.get(attackerId);
-    const target = this.participants.get(targetId);
-    if (!attacker || !target || attacker.isDead || target.isDead) {
-      return { hits: false, damage: 0, targetDied: target?.isDead ?? false, isCritical: false };
-    }
-    const targetDodging = Boolean(this.actionEconomy.get(targetId)?.dodging);
-    const attackResult = this.ruleset.resolveAttack({
-      attackBonus: attacker.attackBonus,
-      targetArmorClass: target.armorClass + this.getCoverBonus(target),
-      disadvantage: targetDodging,
-      diceEngine: this.diceEngine,
+  private resolveStandardAttack(
+    attacker: BattlefieldParticipant,
+    target: BattlefieldParticipant,
+    options?: { advantage?: boolean; disadvantage?: boolean }
+  ): { blocked: boolean; roll?: { roll: RollRecord; hits: boolean; isCritical: boolean } } {
+    if (target.cover === 'TOTAL') return { blocked: true };
+
+    const attackResolution = this.resolveStandardAttack(attacker, target, {
+      advantage: options?.advantage,
+      disadvantage: options?.disadvantage,
     });
+    if (attackResolution.blocked || !attackResolution.roll) {
+      return {
+        success: false,
+        errorReason: 'Target cannot be directly targeted because it has Total Cover.',
+        hits: false,
+        damage: 0,
+        targetDied: target.isDead,
+        isCritical: false,
+      };
+    }
+    const attackRes = attackResolution.roll;
     let damage = 0;
     let targetDied = false;
     if (attackResult.hits) {
@@ -1141,7 +1149,7 @@ export class TacticalCombatEngine {
     switch (target.cover) {
       case 'HALF': return 2;
       case 'THREE_QUARTERS': return 5;
-      case 'TOTAL': return 1000;
+      case 'TOTAL': return 0;
       default: return 0;
     }
   }
@@ -1197,8 +1205,7 @@ export class TacticalCombatEngine {
       (grappler.saveModifiers?.STR ?? grappler.savingThrowModifiers?.STR ?? 0) +
       Math.max(0, Math.floor((grappler.attackBonus - (grappler.saveModifiers?.STR ?? 0))));
     const modifier = actor.saveModifiers?.[ability] ?? actor.savingThrowModifiers?.[ability] ?? 0;
-    const check = this.diceEngine.roll('1d20', modifier);
-    const escaped = check.total >= escapeDc;
+    const check = this.diceEngine.roll('1d20', modifier);    const escaped = check.total >= escapeDc;
 
     if (escaped) {
       actor.conditions = actor.conditions.filter((condition) => condition !== 'Grappled');
@@ -1316,13 +1323,11 @@ export class TacticalCombatEngine {
       return { triggered: false, hit: false, damage: 0, targetDied: target.isDead };
     }
 
-    const targetDodging = !!this.actionEconomy.get(targetId)?.dodging;
-    const attackResult = this.ruleset.resolveAttack({
-      attackBonus: attacker.attackBonus,
-      targetArmorClass: target.armorClass + this.getCoverBonus(target),
-      disadvantage: targetDodging,
-      diceEngine: this.diceEngine,
-    });
+    const resolution = this.resolveStandardAttack(attacker, target);
+    if (resolution.blocked || !resolution.roll) {
+      return { triggered: false, hit: false, damage: 0, targetDied: target.isDead };
+    }
+    const attackResult = resolution.roll;
 
     let damage = 0;
     let targetDied = false;
@@ -1375,6 +1380,9 @@ export class TacticalCombatEngine {
     errorReason?: string;
     combatState?: CombatTurnResourceSnapshot;
   } {
+    if (!this.tacticalCombatEnabled()) {
+      return { success: false, action, errorReason: 'Tactical combat is disabled by the active rules profile.', combatState: this.getTurnResources(actorId) };
+    }
     const actor = this.participants.get(actorId);
     if (!actor) {
       return { success: false, action, errorReason: 'Actor not found.' };
@@ -1498,7 +1506,6 @@ export class TacticalCombatEngine {
       target.hpCurrent = resolvedDamage.healthCurrent;
       target.isDead = resolvedDamage.targetDied;
       target.conditions = this.conditionEngine.getActorState(target.id)?.instances.map((instance) => instance.name) || [];
-
       if (
         target.usesDeathSaves &&
         previousHp > 0 &&
@@ -1609,6 +1616,17 @@ export class TacticalCombatEngine {
     roll?: RollRecord;
     isCritical: boolean;
   } {
+    if (!this.tacticalCombatEnabled()) {
+      return {
+        success: false,
+        errorReason: 'Tactical combat is disabled by the active rules profile.',
+        hits: false,
+        damage: 0,
+        targetDied: false,
+        isCritical: false,
+      };
+    }
+
     const attacker = this.participants.get(attackerId);
     const target = this.participants.get(targetId);
     if (!attacker || !target) throw new Error('Invalid combatants.');
@@ -1797,8 +1815,7 @@ export class TacticalCombatEngine {
         damage: 0,
         targetDied: target.isDead,
         headline: "It is not this actor's turn.",
-        targetHpRemaining: target.hpCurrent,
-        interruptedPendingActivation: false,
+        targetHpRemaining: target.hpCurrent,        interruptedPendingActivation: false,
       };
     }
     if (actor.isDead || actor.hpCurrent <= 0 || actor.conditions.includes('Unconscious')) {
@@ -1895,11 +1912,18 @@ export class TacticalCombatEngine {
         saveStatusText = ` (${target.name} failed ${saveType} save vs DC ${dc})`;
       }
     } else if (params.defenseModel === 'attack_vs_ac') {
-      attackResult = this.ruleset.resolveAttack({
-        attackBonus: actor.attackBonus,
-        targetArmorClass: target.armorClass + this.getCoverBonus(target),
-        diceEngine: this.diceEngine,
-      });
+      const resolution = this.resolveStandardAttack(actor, target);
+      if (resolution.blocked || !resolution.roll) {
+        return {
+          success: false,
+          damage: 0,
+          targetDied: target.isDead,
+          headline: 'Target has Total Cover and cannot be targeted directly.',
+          targetHpRemaining: target.hpCurrent,
+          interruptedPendingActivation: false,
+        };
+      }
+      attackResult = resolution.roll;
       if (!attackResult.hits) {
         damage = 0;
         saveStatusText = ` (${actor.name} missed attack vs AC ${target.armorClass})`;
@@ -2097,8 +2121,7 @@ export class TacticalCombatEngine {
 
       if (!currentActor.isDead) {
         for (const hazard of this.hazards) {
-          const dist = Math.hypot(currentActor.x - hazard.x, currentActor.y - hazard.y);
-          if (dist <= hazard.radiusCells) {
+          const dist = Math.hypot(currentActor.x - hazard.x, currentActor.y - hazard.y);          if (dist <= hazard.radiusCells) {
             const hazardType =
               hazard.type === 'fire_zone' ? 'fire' :
               hazard.type === 'ice_patch' ? 'cold' :

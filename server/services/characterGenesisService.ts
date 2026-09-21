@@ -1,3 +1,4 @@
+import { deterministicId } from '../domain/deterministicRng';
 import { worldRepository } from '../repositories/worldRepository';
 import { narrativeProfileEngine } from '../domain/narrativeProfileEngine';
 import {
@@ -1171,7 +1172,7 @@ IMPORTANT: Ensure the capability name, description, power tier, energy costs, st
   ): Promise<CharacterFeat> {
     const featName = input.featName?.trim() || 'Custom Feat';
     const concept = input.featConcept?.trim() || featName;
-    const featId = `feat_custom_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const featId = deterministicId('feat_custom', input.worldId || 'world', featName, concept);
     let proposal: any = null;
 
     const charCtxStr = input.characterContext

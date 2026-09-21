@@ -2556,7 +2556,7 @@ gameRouter.post('/combat/end-turn', async (req: Request, res: Response) => {
   try {
     const storyId = resolveStoryId(req, true);
     if (!requireDndTacticalCombat(res, storyId)) return;
-    const player = transactionRepo.getPlayerLifecycle(storyId);
+    const player = worldRepository.getPlayerLifecycle(storyId);
     const serverPlayerActorId = player?.actorId || `player_actor_${storyId}`;
 
     if (req.body?.actorId && req.body.actorId !== serverPlayerActorId) {
@@ -2566,7 +2566,7 @@ gameRouter.post('/combat/end-turn', async (req: Request, res: Response) => {
       });
     }
 
-    const combatEngine = transactionRepo.getCombatEngine(storyId);
+    const combatEngine = worldRepository.getCombatEngine(storyId);
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
@@ -2593,13 +2593,13 @@ gameRouter.post('/combat/end-turn', async (req: Request, res: Response) => {
           p => p.isDead && p.id !== serverPlayerActorId
         );
         for (const dp of deadParticipants) {
-          syncNpcCombatDeath(storyId, dp, 'environmental hazard', player?.locationId);
+          syncNpcCombatDeath(storyId, dp, 'environmental hazard', transactionPlayer?.locationId, transactionRepo);
         }
 
         if (transactionPlayer && !transactionPlayer.isDead) {
           const playerPart = combatEngine.getParticipant(serverPlayerActorId);
           if (playerPart?.isDead) {
-            const deadPlayer = player.copyWith({
+            const deadPlayer = transactionPlayer.copyWith({
               deathRecord: {
                 isDead: true,
                 diedAtTimestamp: transactionRepo.getWorldClock(storyId).getTimestamp(),
@@ -2653,10 +2653,10 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
   try {
     const storyId = resolveStoryId(req, true);
     if (!requireDndTacticalCombat(res, storyId)) return;
-    const player = transactionRepo.getPlayerLifecycle(storyId);
+    const player = worldRepository.getPlayerLifecycle(storyId);
     const serverPlayerActorId = player?.actorId || `player_actor_${storyId}`;
-    const combatEngine = transactionRepo.getCombatEngine(storyId);
-    const capEngine = transactionRepo.getCapabilityEngine(storyId);
+    const combatEngine = worldRepository.getCombatEngine(storyId);
+    const capEngine = worldRepository.getCapabilityEngine(storyId);
 
     const currentActor = combatEngine.getCurrentActor();
     if (!currentActor) {
@@ -2705,36 +2705,36 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
       },
       async (_command, context) => {
         const transactionRepo = context.repository;
-        const combatEngine = transactionRepo.getCombatEngine(storyId);
-        const capEngine = transactionRepo.getCapabilityEngine(storyId);
         const transactionPlayer = transactionRepo.getPlayerLifecycle(storyId);
+        const transactionCombatEngine = transactionRepo.getCombatEngine(storyId);
+        const transactionCapEngine = transactionRepo.getCapabilityEngine(storyId);
         const executionResult = NpcTacticalDecisionPolicy.executeDecidedAction(
           proposal,
-          combatEngine,
-          capEngine,
+          transactionCombatEngine,
+          transactionCapEngine,
           transactionRepo.getRulesProfile(storyId) || rulesProfileEngine.createDefault('FULL_DND')
         );
 
-        const deadParticipants = combatEngine.getParticipants().filter(
+        const deadParticipants = transactionCombatEngine.getParticipants().filter(
           p => p.isDead && p.id !== serverPlayerActorId
         );
         for (const dp of deadParticipants) {
-          syncNpcCombatDeath(storyId, dp, currentActor.name, player?.locationId);
+          syncNpcCombatDeath(storyId, dp, currentActor.name, transactionPlayer?.locationId);
         }
 
-        const advanceResult = combatEngine.advanceTurn();
+        const advanceResult = transactionCombatEngine.advanceTurn();
 
-        const postAdvanceDead = combatEngine.getParticipants().filter(
+        const postAdvanceDead = transactionCombatEngine.getParticipants().filter(
           p => p.isDead && p.id !== serverPlayerActorId
         );
         for (const dp of postAdvanceDead) {
-          syncNpcCombatDeath(storyId, dp, 'environmental hazard', player?.locationId);
+          syncNpcCombatDeath(storyId, dp, 'environmental hazard', transactionPlayer?.locationId);
         }
 
         if (transactionPlayer && !transactionPlayer.isDead) {
-          const playerPart = combatEngine.getParticipant(serverPlayerActorId);
+          const playerPart = transactionCombatEngine.getParticipant(serverPlayerActorId);
           if (playerPart?.isDead) {
-            const deadPlayer = player.copyWith({
+            const deadPlayer = transactionPlayer.copyWith({
               deathRecord: {
                 isDead: true,
                 diedAtTimestamp: transactionRepo.getWorldClock(storyId).getTimestamp(),

@@ -1,4 +1,5 @@
 import { worldRepository } from '../repositories/worldRepository';
+import { narrativeProfileEngine } from '../domain/narrativeProfileEngine';
 import { WorldFact, StoryThread } from '../../src/types';
 
 export interface NarrativeBeat {
@@ -90,18 +91,20 @@ export class StoryDirectorService {
 
   public recordChoice(storyId: string, beatId: string, optionId: string): { success: boolean; consequences: string[] } {
     const consequences: string[] = [];
+    const profile = worldRepository.getNarrativeProfile(storyId) || narrativeProfileEngine.createDefault('PROTAGONIST');
+    const playerLabel = profile.mode === 'PROTAGONIST' ? 'Protagonist' : 'Player Character';
 
     if (optionId === 'opt_refuse' || optionId === 'refuse_quest') {
       const factId = `fact_refusal_${Date.now()}`;
       const refusalFact: WorldFact = {
         factId,
-        statement: `Protagonist explicitly refused narrative path for beat ${beatId}`,
+        statement: `${playerLabel} explicitly refused narrative path for beat ${beatId}`,
         category: 'world_lore',
-        subjectEntityId: 'protagonist',
+        subjectEntityId: 'player_character',
         predicate: 'refused_path',
         objectValue: beatId,
         provenanceClass: 'DIRECT_RECORD',
-        provenanceSummary: 'Protagonist Refusal Choice',
+        provenanceSummary: 'Player Narrative Choice',
         sourceSegmentIds: [],
         confidence: 1.0,
         acquiredAtTimestamp: { totalElapsedSeconds: 0, cycle: 1, period: 'Dawn' },
@@ -117,11 +120,16 @@ export class StoryDirectorService {
   }
 
   public advanceOffscreenProtagonist(storyId: string): { success: boolean; actionTaken: string; rumorLogged: boolean } {
+    const profile = worldRepository.getNarrativeProfile(storyId) || narrativeProfileEngine.createDefault('PROTAGONIST');
+    if (profile.mode === 'PROTAGONIST') {
+      return { success: true, actionTaken: 'No separate offscreen protagonist advanced because the player character is the canonical narrative focus.', rumorLogged: false };
+    }
+
     let agenda = worldRepository.getProtagonistAgenda(storyId);
     if (!agenda) {
       agenda = {
         protagonistId: 'char_secondary_hero',
-        goal: 'Infiltrate subterranean vault',
+        goal: profile.mode === 'SIDE_CHARACTER' ? 'Advance an independent principal-actor objective' : 'Pursue an independent world objective',
         currentLocation: 'loc_lantern_vault',
         progressState: 0,
       };
@@ -129,7 +137,8 @@ export class StoryDirectorService {
     }
 
     // Advance state
-    const actionTaken = `Offscreen protagonist ${agenda.protagonistId} executed goal '${agenda.goal}' at ${agenda.currentLocation}`;
+    const actorLabel = profile.mode === 'SIDE_CHARACTER' ? 'Offscreen principal actor' : 'Independent world actor';
+    const actionTaken = `${actorLabel} ${agenda.protagonistId} executed goal '${agenda.goal}' at ${agenda.currentLocation}`;
     agenda.progressState = (agenda.progressState || 0) + 1;
     worldRepository.saveProtagonistAgenda(storyId, agenda);
 

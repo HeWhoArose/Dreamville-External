@@ -63,6 +63,23 @@ function resolveStoryId(req: Request, allowDefault = true): string {
   }
   throw new Error('Active story context (X-Story-ID header or storyId) is required for gameplay operations.');
 }
+function resolveProgressionActor(req: Request, res: Response, storyId: string): string | null {
+  const player = worldRepository.getPlayerLifecycle(storyId);
+  const playerActorId = player?.actorId || `player_actor_${storyId}`;
+  const requested = typeof req.body?.actorId === 'string' && req.body.actorId.trim()
+    ? req.body.actorId.trim()
+    : undefined;
+  if (requested && requested !== playerActorId) {
+    res.status(403).json({
+      success: false,
+      errorReason: 'PLAYER progression commands may only mutate the active player actor.',
+      actorId: playerActorId,
+    });
+    return null;
+  }
+  return playerActorId;
+}
+
 
 /**
  * GET /api/game/state

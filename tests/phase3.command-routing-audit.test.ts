@@ -57,3 +57,31 @@ test('Phase 3 — the AI orchestrator turn route uses the canonical command engi
 	assert.match(block, /source: 'AI'/);
 });
 
+
+test('Phase 3 — migrated core action routes use true staged transactions', () => {
+	const stagedRoutes = [
+		'/inventory/equip',
+		'/inventory/unequip',
+		'/inventory/craft',
+		'/inventory/transfer',
+		'/inventory/repair',
+		'/inventory/degrade',
+		'/combat/move',
+		'/combat/action',
+		'/combat/attack',
+		'/combat/cast',
+		'/combat/interrupt',
+		'/combat/end-turn',
+		'/combat/npc-turn',
+		'/capabilities/adjudicate',
+		'/worlds/runs/:storyId/dice-clash/resolve',
+	];
+
+	for (const route of stagedRoutes) {
+		assert.match(
+			routeBlock(route),
+			/transactionMode:\s*'STAGED'/,
+			`Core route ${route} must execute against a staged transaction repository.`
+		);
+	}
+});

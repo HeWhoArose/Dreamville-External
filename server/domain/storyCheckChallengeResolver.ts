@@ -41,6 +41,12 @@ function normalizeChallenge(raw: any, sourceType: StoryCheckChallenge['sourceTyp
     sourceId,
     keywords,
     difficultyClass,
+    resolutionMode: ['DND_STANDARD', 'CUSTOM_D20', 'NARRATIVE'].includes(source.resolutionMode)
+      ? source.resolutionMode
+      : undefined,
+    customModifier: Number.isFinite(Number(source.customModifier))
+      ? Number(source.customModifier)
+      : undefined,
     reason: source.reason ? String(source.reason) : undefined,
     triggerReason: source.triggerReason ? String(source.triggerReason) : undefined,
     provenance: source.provenance ? String(source.provenance) : undefined,

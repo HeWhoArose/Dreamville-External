@@ -4971,9 +4971,10 @@ gameRouter.post('/worlds/runs/:storyId/story-director/step', async (req: Request
         type: 'INTERACT',
         payload: { action: 'STORY_DIRECTOR_STEP' },
         source: 'SYSTEM',
+        transactionMode: 'STAGED',
       },
-      async () => {
-        const result = storyDirectorService.stepDirector(storyId);
+      async (_command, context) => {
+        const result = storyDirectorService.stepDirector(storyId, context.repository);
         return {
           success: true,
           data: result,

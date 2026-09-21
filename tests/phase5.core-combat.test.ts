@@ -32,7 +32,7 @@ test('Phase 5: multiple eligible opportunity attackers resolve deterministically
 	engine.addParticipant(actor({ id: 'enemy_a', name: 'Enemy A', x: 0, y: 1, team: 'enemies', initiative: 9, attackBonus: 20 }));
 	engine.rollInitiative();
 
-	assert.equal(engine.moveActor('hero', 2, 0).success, true);
+	assert.equal(engine.moveActor('hero', 3, 0).success, true);
 	assert.equal(engine.getTurnResources('enemy_a')?.reactionAvailable, false);
 	assert.equal(engine.getTurnResources('enemy_b')?.reactionAvailable, false);
 

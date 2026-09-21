@@ -8,6 +8,7 @@ import { InMemoryWorldRepository } from '../server/repositories/worldRepository'
 import { canonicalCommandEngine } from '../server/domain/canonicalCommandEngine';
 import { captureCanonicalStateSnapshot } from '../server/domain/canonicalSnapshot';
 import { WorldSynthesisService } from '../server/services/worldSynthesisService';
+import { CapabilityEngine } from '../server/domain/capabilityEngine';
 
 function seedRepo(storyId: string) {
 	const repo = new InMemoryWorldRepository();
@@ -58,6 +59,21 @@ test('Phase 4 — seeded RNG produces identical sequences and deterministic ids'
 	assert.equal(hashStringToSeed('same-input'), hashStringToSeed('same-input'));
 });
 
+test('Phase 4 — capability preview identities are deterministic', () => {
+	const firstEngine = new CapabilityEngine();
+	const secondEngine = new CapabilityEngine();
+	const first = firstEngine.interpretFreeformAction({
+		actorId: 'player_phase4_preview',
+		actionText: 'Raise a shimmering defensive ward around myself.',
+		executeIfValid: false,
+	});
+	const second = secondEngine.interpretFreeformAction({
+		actorId: 'player_phase4_preview',
+		actionText: 'Raise a shimmering defensive ward around myself.',
+		executeIfValid: false,
+	});
+	assert.equal(first.proposedCapability?.id, second.proposedCapability?.id);
+});
 test('Phase 4 — deterministic ids are independent of object key order', () => {
 	assert.equal(
 		deterministicId('object', { alpha: 1, beta: 2 }),
@@ -379,6 +395,43 @@ test('Phase 4 — replay state hashing ignores presentation-only wall-clock meta
 	assert.equal(first.event?.replay.resolvedDataHash, second.event?.replay.resolvedDataHash);
 });
 
+test('Phase 4 — replay hashing ignores adaptation session start timestamps', async () => {
+	const makeRepo = (startedAt: string) => {
+		const repo = seedRepo('phase4_replay_adaptation_session');
+		repo.saveAdaptationSession('phase4_replay_adaptation_session', {
+			sessionId: 'session_phase4',
+			storyId: 'phase4_replay_adaptation_session',
+			branchId: 'main_branch',
+			entryPointId: 'ep_default',
+			playerRole: 'PROTAGONIST',
+			adaptationProfile: {},
+			startedAt,
+		} as any);
+		return repo;
+	};
+	const execute = async (repo: InMemoryWorldRepository) => canonicalCommandEngine.execute(
+		repo,
+		{
+			commandId: 'phase4_replay_adaptation_session_001',
+			storyId: 'phase4_replay_adaptation_session',
+			actorId: repo.getPlayerLifecycle('phase4_replay_adaptation_session')?.actorId,
+			type: 'INTERACT',
+			payload: { action: 'ADAPTATION_SESSION_REPLAY_HASH' },
+			source: 'SYSTEM',
+			transactionMode: 'STAGED',
+		},
+		async (_command, context) => {
+			const run = context.repository.getStoryRun('phase4_replay_adaptation_session')!;
+			run.replayStableMarker = 'same';
+			context.repository.saveStoryRun(run);
+			return { success: true, data: { marker: 'same' }, summary: 'Adaptation session replay hash test.' };
+		}
+	);
+	const first = await execute(makeRepo('2026-01-01T00:00:00.000Z'));
+	const second = await execute(makeRepo('2026-09-21T16:00:00.000Z'));
+	assert.equal(first.event?.replay.preStateHash, second.event?.replay.preStateHash);
+	assert.equal(first.event?.replay.postStateHash, second.event?.replay.postStateHash);
+});
 test('Phase 4 — deterministic world synthesis uses identical deterministic candidate output for the same seed', () => {
 	const service = new WorldSynthesisService();
 	const input = {

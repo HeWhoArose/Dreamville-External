@@ -458,7 +458,7 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
       toneTags,
       mediumTags,
       canonMode: input.canonMode || 'Original',
-      rulesetId: input.rulesetId || resolvedRules.profile.mode,
+      rulesetId: resolvedRules.profile.mode,
       dndRulesMode: resolvedRules.profile.mode,
       rulesProfile: resolvedRules.profile,
       visibility: 'public',

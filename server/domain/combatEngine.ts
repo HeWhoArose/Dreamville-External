@@ -1594,7 +1594,7 @@ export class TacticalCombatEngine {
 
     const attackRes = this.ruleset.resolveAttack({
       attackBonus: attacker.attackBonus,
-      targetArmorClass: target.armorClass,
+      targetArmorClass: target.armorClass + this.getCoverBonus(target),
       advantage: Boolean(
         options?.advantage ||
         attackerHasAdvantage ||
@@ -1804,7 +1804,7 @@ export class TacticalCombatEngine {
     } else if (params.defenseModel === 'attack_vs_ac') {
       attackResult = this.ruleset.resolveAttack({
         attackBonus: actor.attackBonus,
-        targetArmorClass: target.armorClass,
+        targetArmorClass: target.armorClass + this.getCoverBonus(target),
         diceEngine: this.diceEngine,
       });
       if (!attackResult.hits) {

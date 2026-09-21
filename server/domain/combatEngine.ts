@@ -297,8 +297,7 @@ export class Dnd521RulesetAdapter implements IRulesetAdapter {
       succeeds: chosenRoll.total >= params.difficultyClass,
     };
   }
-  public resolveDamage(
-    damageFormula: string,
+  public resolveDamage(    damageFormula: string,
     isCritical = false,
     diceEngine?: LocalDiceEngine
   ): { roll: RollRecord; totalDamage: number } {
@@ -597,8 +596,7 @@ export class TacticalCombatEngine {
           healthCurrent: participant.hpCurrent,
           healthMax: participant.hpMax,
           damageProfile,          conditionProfile: participant.conditionProfile,
-          legacyConditions: participant.conditions,
-        });
+          legacyConditions: participant.conditions,        });
       } else {
         participant.hpCurrent = existing.healthCurrent;
         participant.hpMax = existing.healthMax;
@@ -897,8 +895,7 @@ export class TacticalCombatEngine {
             const reach = other.reachCells ?? 1.5;
             if (Math.hypot(path[0].x - other.x, path[0].y - other.y) > reach) return false;
             return path.slice(1).some((cell) => Math.hypot(cell.x - other.x, cell.y - other.y) > reach);
-          })
-          .sort((a, b) => a.id.localeCompare(b.id))
+          })          .sort((a, b) => a.id.localeCompare(b.id))
       : [];
     if (movementCost > this.actionEconomy.get(actorId)?.movementRemainingCells! + 1e-9) {
       return {
@@ -1069,6 +1066,7 @@ export class TacticalCombatEngine {
         priority: 0,
         triggerType: 'ACTOR_MOVED' as const,
         targetId: actorId,
+        canResolve: () => Boolean(this.actionEconomy.get(attacker.id)?.reactionAvailable),
         resolve: () => this.executeOpportunityAttack(attacker.id, actorId),
       }))
     );
@@ -1197,8 +1195,7 @@ export class TacticalCombatEngine {
     const modifier = actor.saveModifiers?.[ability] ?? actor.savingThrowModifiers?.[ability] ?? 0;
     const check = this.diceEngine.roll('1d20', modifier);    const escaped = check.total >= escapeDc;
 
-    if (escaped) {
-      actor.conditions = actor.conditions.filter((condition) => condition !== 'Grappled');
+    if (escaped) {      actor.conditions = actor.conditions.filter((condition) => condition !== 'Grappled');
       actor.grappledBy = undefined;
     }
 
@@ -1497,8 +1494,7 @@ export class TacticalCombatEngine {
     damageType: string,
     criticalHit = false
   ): {
-    damage: number;
-    targetDied: boolean;
+    damage: number;    targetDied: boolean;
     immune?: boolean;
     resisted?: boolean;
     vulnerable?: boolean;
@@ -1706,6 +1702,8 @@ export class TacticalCombatEngine {
       return { success: false, errorReason: 'Target cannot be directly targeted because it has Total Cover.', hits: false, damage: 0, targetDied: target.isDead, isCritical: false };
     }
     const attackRes = attackResolution.roll;
+    const targetConditions = new Set(target.conditions.map((condition) => condition.toLowerCase()));
+    const distanceToTarget = Math.hypot(target.x - attacker.x, target.y - attacker.y);
     let damage = 0;
     let targetDied = false;
 
@@ -1797,8 +1795,7 @@ export class TacticalCombatEngine {
         success: false,
         damage: 0,
         targetDied: target.isDead,
-        headline: "It is not this actor's turn.",
-        targetHpRemaining: target.hpCurrent,        interruptedPendingActivation: false,
+        headline: "It is not this actor's turn.",        targetHpRemaining: target.hpCurrent,        interruptedPendingActivation: false,
       };
     }
     if (actor.isDead || actor.hpCurrent <= 0 || actor.conditions.includes('Unconscious')) {
@@ -2097,8 +2094,7 @@ export class TacticalCombatEngine {
 
       if (!currentActor.isDead) {
         for (const hazard of this.hazards) {
-          const dist = Math.hypot(currentActor.x - hazard.x, currentActor.y - hazard.y);          if (dist <= hazard.radiusCells) {
-            const hazardType =
+          const dist = Math.hypot(currentActor.x - hazard.x, currentActor.y - hazard.y);          if (dist <= hazard.radiusCells) {            const hazardType =
               hazard.type === 'fire_zone' ? 'fire' :
               hazard.type === 'ice_patch' ? 'cold' :
               hazard.type === 'poison_cloud' ? 'poison' : 'custom';

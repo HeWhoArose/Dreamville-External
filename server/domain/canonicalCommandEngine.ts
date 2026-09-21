@@ -1,6 +1,6 @@
 import { captureCanonicalStateSnapshot, compareCanonicalSnapshots, CanonicalStateSnapshot } from './canonicalSnapshot';
 import { InMemoryWorldRepository } from '../repositories/worldRepository';
-import { deterministicId } from './deterministicRng';
+import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
 
 export type CanonicalCommandType =
 	| 'MOVE'
@@ -371,7 +371,7 @@ export class CanonicalCommandEngine {
 				actorId: command.actorId,
 				commandType: command.type,
 				source: command.source,
-				committedAt: `canonical:${after.worldClock?.timestamp?.totalElapsedSeconds ?? 0}`,
+				committedAt: after.worldClock?.timestamp ? formatCanonicalTimestamp(after.worldClock.timestamp) : 'Y0000-M00-D00T00:00:00',
 				success: true,
 				summary: resolved.summary || `${command.type} committed successfully.`,
 				mutationPaths,

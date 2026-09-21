@@ -17,6 +17,11 @@ function routeBlock(route: string): string {
   return gameRoutes.slice(start, next >= 0 ? next : gameRoutes.length);
 }
 
+test('Phase 4 — repository Chronicle engines are transactional, with explicit bootstrap-only writes', () => {
+	assert.doesNotMatch(worldRepository, /new HistoricalChronicleEngine\(\);/, 'Repository-owned Chronicle engines must never fall back to DIRECT write mode.');
+	assert.match(worldRepository, /new HistoricalChronicleEngine\(\{\s*writeMode: 'TRANSACTIONAL',/);
+	assert.match(worldRepository, /recordBootstrapEvidence\(/);
+});
 test('Phase 4 — canonical repository identifiers do not depend on wall-clock or Math.random entropy', () => {
 	assert.doesNotMatch(
 		worldRepository,

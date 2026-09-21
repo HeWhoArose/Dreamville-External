@@ -1,0 +1,59 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+const routeSource = readFileSync(
+	resolve(process.cwd(), 'server/api/gameRoutes.ts'),
+	'utf8'
+);
+
+function routeBlock(route: string): string {
+	const start = routeSource.indexOf(`gameRouter.post('${route}'`);
+	assert.ok(start >= 0, `Route ${route} must exist.`);
+	const next = routeSource.indexOf('gameRouter.', start + 1);
+	return routeSource.slice(start, next >= 0 ? next : routeSource.length);
+}
+
+test('Phase 3 — core authoritative action routes all use the canonical command engine', () => {
+	const requiredRoutes = [
+		'/action',
+		'/inventory/equip',
+		'/inventory/unequip',
+		'/inventory/craft',
+		'/inventory/transfer',
+		'/inventory/repair',
+		'/inventory/degrade',
+		'/capabilities/adjudicate',
+		'/capabilities/interpret',
+		'/combat/encounter/start',
+		'/combat/move',
+		'/combat/action',
+		'/combat/attack',
+		'/combat/cast',
+		'/combat/interrupt',
+		'/combat/end-turn',
+		'/combat/npc-turn',
+		'/worlds/runs/:storyId/story-director/step',
+		'/worlds/runs/:storyId/story-director/choice',
+		'/worlds/runs/:storyId/story-director/offscreen',
+		'/worlds/runs/:storyId/actions/execute',
+		'/worlds/runs/:storyId/actions/apply-ability',
+		'/worlds/runs/:storyId/dice-clash/resolve',
+	];
+
+	for (const route of requiredRoutes) {
+		assert.match(
+			routeBlock(route),
+			/canonicalCommandEngine\.execute/,
+			`Core authoritative route ${route} bypasses the canonical command engine.`
+		);
+	}
+});
+
+test('Phase 3 — the AI orchestrator turn route uses the canonical command engine', () => {
+	const block = routeBlock('/orchestrator/turn');
+	assert.match(block, /canonicalCommandEngine\.execute/);
+	assert.match(block, /source: 'AI'/);
+});
+

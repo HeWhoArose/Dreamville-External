@@ -131,7 +131,7 @@ Event types MUST be chosen from: ["location", "normal", "action", "dialogue", "m
 
         const aiResult = (await Promise.race([responsePromise, timeoutPromise])) as any;
         const parsed = JSON.parse(aiResult.text || '{}');
-        if (parsed.narrativeText && Array.isArray(parsed.structuredEvents) && parsed.structuredEvents.length > 0) {
+        if (parsed.narrativeText && Array.isArray(parsed.structuredEvents) && parsed.structuredEvents.length >= 4) {
           generatedText = parsed.narrativeText.trim();
           generatedEvents = parsed.structuredEvents.map((evt: any, idx: number) => ({
             id: evt.id || `evt_open_${storyId}_${idx}`,

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { characterGenesisService } from '../server/services/characterGenesisService';
 import { worldRepository } from '../server/repositories/worldRepository';
+import { narrativeProfileEngine } from '../server/domain/narrativeProfileEngine';
 import { WorldTemplate } from '../src/types';
 
 const world: WorldTemplate = {
@@ -114,6 +115,34 @@ test('Character Genesis narrative role modes', async (t) => {
       mock.restore();
     }
   });
+});
+
+test('Character confirmation canonicalizes a profile that does not match the selected narrative mode', async () => {
+	const mock = installMockOrchestrator();
+	try {
+		const draft = await characterGenesisService.extractCharacterDraft(
+			{
+				naturalLanguageConcept: 'A wandering test character.',
+				worldId: world.worldId,
+				narrativeRole: 'SIDE_CHARACTER',
+			},
+			world
+		);
+
+		draft.storyMode = 'SIDE_CHARACTER';
+		draft.narrativeProfile = narrativeProfileEngine.createDefault('PROTAGONIST');
+
+		const confirmed = characterGenesisService.confirmCharacter(draft, world);
+
+		assert.equal(confirmed.storyMode, 'SIDE_CHARACTER');
+		assert.equal(confirmed.narrativeProfile?.mode, 'SIDE_CHARACTER');
+		assert.equal(
+			confirmed.narrativeProfile?.profileId,
+			'narrative.side_character.v1'
+		);
+	} finally {
+		mock.restore();
+	}
 });
 
 test('Character Genesis does not silently use deterministic fallback before player consent', async () => {

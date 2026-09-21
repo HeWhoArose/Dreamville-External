@@ -123,7 +123,7 @@ export interface WorldRepository {
   getAllWorldTemplates(): any[];
   appendCanonicalCommandEvent(storyId: string, event: any): void;
   getCanonicalCommandEvents(storyId: string): any[];
-  restoreCanonicalStateSnapshot(snapshot: any): void;
+  restoreCanonicalStateSnapshot(snapshot: any, options?: { persist?: boolean }): void;
 }
 
 const NARRATIVE_MODE_VALUES = new Set(['PROTAGONIST', 'SIDE_CHARACTER', 'FREE_ROAM']);
@@ -2288,7 +2288,7 @@ export class InMemoryWorldRepository implements WorldRepository {
     this.protagonistAgendas.set(storyId, agenda);
   }
 
-  public restoreCanonicalStateSnapshot(snapshot: any): void {
+  public restoreCanonicalStateSnapshot(snapshot: any, options?: { persist?: boolean }): void {
     const storyId = snapshot?.storyId;
     if (!storyId) throw new Error('Canonical snapshot restore requires storyId.');
 
@@ -2347,7 +2347,7 @@ export class InMemoryWorldRepository implements WorldRepository {
       this.getAiOrchestrator().restoreNarrativeHistory(storyId, clone(snapshot.narrativeHistory));
     }
 
-    this.persistLibrary();
+    if (options?.persist !== false) this.persistLibrary();
   }
 
   public resolveDiceClashExchange(

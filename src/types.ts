@@ -1681,6 +1681,7 @@ export interface CharacterGenesisDraft {
   revision: number;
   revisionHistory: CharacterGenesisRevision[];
   storyMode?: CharacterStoryMode;
+  narrativeProfile?: NarrativeProfile;
   dndRulesMode?: 'FULL_DND' | 'HYBRID_DND' | 'CUSTOM_HOMEBREW_DND';
   createdAt?: string;
   updatedAt?: string;
@@ -1723,6 +1724,7 @@ export interface ConfirmedCharacter {
   fieldLocks: string[];
   revision: number;
   storyMode?: CharacterStoryMode;
+  narrativeProfile?: NarrativeProfile;
   dndRulesMode?: 'FULL_DND' | 'HYBRID_DND' | 'CUSTOM_HOMEBREW_DND';
 }
 

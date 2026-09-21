@@ -42,7 +42,7 @@ function requireDndTacticalCombat(res: Response, storyId: string): boolean {
 	return false;
 }
 
-function resolveCanonicalConfirmedCharacter(
+export function resolveCanonicalConfirmedCharacter(
 	worldId: string,
 	submittedCharacter?: any,
 	requestedCharacterId?: unknown

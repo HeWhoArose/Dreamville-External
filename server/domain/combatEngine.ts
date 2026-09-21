@@ -1574,7 +1574,10 @@ export class TacticalCombatEngine {
     resisted?: boolean;
     vulnerable?: boolean;
   } {
+    this.spellRuntime.setParticipantContext(this.getMutableParticipantsForSpellResolution());
     return this.applyCombatDamage(target, requestedAmount, damageType, criticalHit);
+  }
+
   }
 
   private applyCombatDamage(
@@ -2166,7 +2169,7 @@ export class TacticalCombatEngine {
       },
       casterParticipant: actor,
       targetParticipant: target,
-      allParticipants: this.getParticipants(),
+      allParticipants: this.getMutableParticipantsForSpellResolution(),
     });
 
     if (!result.success) {
@@ -2282,8 +2285,8 @@ export class TacticalCombatEngine {
 
       // Decrement concentration duration for concentrating participants
       for (const participant of this.participants.values()) {
-        const actorState = this.spellRuntime.getOrCreateActorState(participant.id);
-        const conc = actorState.activeConcentration;
+        const actorState = this.spellRuntime.getActorState(participant.id);
+        const conc = actorState?.activeConcentration;
         if (conc) {
           conc.remainingRounds = Math.max(0, conc.remainingRounds - 1);
           if (conc.remainingRounds <= 0) {
@@ -2467,6 +2470,11 @@ export class TacticalCombatEngine {
     return Array.from(this.participants.values()).map((p) => ({ ...p }));
   }
 
+  /** Internal authoritative participant references used by spell effect resolution. */
+  public getMutableParticipantsForSpellResolution(): BattlefieldParticipant[] {
+    return Array.from(this.participants.values());
+  }
+
   public getParticipant(id: string): BattlefieldParticipant | undefined {
     const p = this.participants.get(id);
     return p ? { ...p } : undefined;
@@ -2547,6 +2555,7 @@ export class TacticalCombatEngine {
     }
     if (data.spellRuntimeState) {
       this.spellRuntime.importState(data.spellRuntimeState);
+      this.spellRuntime.setParticipantContext(this.getMutableParticipantsForSpellResolution());
     }
   }
 }

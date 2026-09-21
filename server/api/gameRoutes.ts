@@ -5212,9 +5212,10 @@ gameRouter.post('/worlds/runs/:storyId/dice-clash/resolve', async (req: Request,
         type: 'CORE_ACTION',
         payload: { action: 'DICE_CLASH', playerPool, enemyPool, exchangeIndex, attackerStats, defenderStats },
         source: 'PLAYER',
+        transactionMode: 'STAGED',
       },
-      async () => {
-        const result = worldRepository.resolveDiceClashExchange(storyId, playerPool, enemyPool, {
+      async (_command, context) => {
+        const result = context.repository.resolveDiceClashExchange(storyId, playerPool, enemyPool, {
           exchangeIndex,
           attackerStats,
           defenderStats,

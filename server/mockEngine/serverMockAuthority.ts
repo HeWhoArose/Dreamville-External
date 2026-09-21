@@ -20,6 +20,7 @@ import { worldSimulationService } from '../simulation/worldSimulationService';
 import { PlayerLifecycleState } from '../domain/playerLifecycleState';
 import { storyCheckConsequenceEngine } from '../domain/storyCheckConsequenceEngine';
 import { storyCheckChallengeResolver } from '../domain/storyCheckChallengeResolver';
+import { rulesProfileEngine } from '../domain/rulesProfileEngine';
 
 /**
  * ServerMockAuthority
@@ -430,6 +431,8 @@ export class ServerMockAuthority {
     const conditionEngine = worldRepository.getConditionEngine(targetStoryId);
     const player = worldRepository.getPlayerLifecycle(targetStoryId);
     const run = worldRepository.getStoryRun(targetStoryId);
+    const rulesProfile = worldRepository.getRulesProfile(targetStoryId)
+      || rulesProfileEngine.createDefault('FULL_DND');
     const actorId = player?.actorId || `player_actor_${targetStoryId}`;
 
     // Narrative checks and authored challenge consequences are canonical mechanics. The AI may
@@ -463,7 +466,7 @@ export class ServerMockAuthority {
         sceneText,
       },
       authoredChallenge || undefined,
-      run?.rulesProfile
+      rulesProfile
     );
 
     let committedOutcome = baseResult.message;

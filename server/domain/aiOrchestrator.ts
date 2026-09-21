@@ -7,6 +7,7 @@ import type { WorldRepository } from '../repositories/worldRepository';
 import { worldRepository } from '../repositories/worldRepository';
 import { StoryAdaptationPipeline } from './storyAdaptation';
 import { getProviderApiKey } from '../services/providerCredentialService';
+import { deterministicId } from './deterministicRng';
 
 export type TaskId =
   | 'narrative.generate'
@@ -3644,23 +3645,25 @@ export class MultiModelOrchestrator {
 
         if (evalResult.createsDivergence) {
           const session = repo.getAdaptationSession(storyId);
+          const canonicalTimestamp = repo.getWorldClock(storyId).getTimestamp();
+          const divergenceEventId = deterministicId('evt_div', storyId, turnId, params.playerAction, evalResult.reason);
           repo.addAdaptationEvent(storyId, {
-            id: `evt_div_${Date.now()}`,
+            id: divergenceEventId,
             storyId,
             branchId: session?.branchId || 'main_branch',
             type: 'DIVERGENCE',
             involvedEntities: ['player'],
-            timestamp: new Date().toISOString(),
+            timestamp: `canonical:${canonicalTimestamp.totalElapsedSeconds}`,
             reason: evalResult.reason,
             details: { action: params.playerAction },
           });
 
           const chronicle = repo.getHistoricalChronicleEngine(storyId);
           chronicle.recordEvidence({
-            id: `chron_div_${Date.now()}`,
+            id: deterministicId('chron_div', storyId, divergenceEventId),
             category: 'WORLD_ANOMALY',
-            sourceEventId: `evt_div_${Date.now()}`,
-            timestamp: repo.getWorldClock(storyId).getTimestamp(),
+            sourceEventId: divergenceEventId,
+            timestamp: canonicalTimestamp,
             locationId: repo.getPlayerLifecycle(storyId)?.locationId || 'loc_whispering_orrery',
             primarySubjectId: `player_actor_${storyId}`,
             summary: `DIVERGENCE EVENT: ${evalResult.reason}`,

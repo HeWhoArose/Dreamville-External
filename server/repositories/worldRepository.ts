@@ -129,6 +129,7 @@ export interface WorldRepository {
   appendCanonicalCommandEvent(storyId: string, event: any): void;
   getCanonicalCommandEvents(storyId: string): any[];
   restoreCanonicalStateSnapshot(snapshot: any, options?: { persist?: boolean }): void;
+  isCanonicalCommandTransactionActive(): boolean;
 }
 
 const NARRATIVE_MODE_VALUES = new Set(['PROTAGONIST', 'SIDE_CHARACTER', 'FREE_ROAM']);

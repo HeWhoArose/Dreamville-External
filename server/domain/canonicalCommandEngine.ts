@@ -101,6 +101,7 @@ const REPLAY_VOLATILE_KEYS = new Set([
 	'createdAt',
 	'updatedAt',
 	'confirmedAt',
+	'startedAt',
 	'testedAt',
 	'latencyMs',
 	'checkpointId',

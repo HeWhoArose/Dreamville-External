@@ -1956,17 +1956,20 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
     const powerState = capEngine.getPowerState(actorId);
     const conditionState = conditionEngine.getActorState(actorId);
     const coreStats = run?.protagonist?.coreStats;
+    const progressionModifiers = transactionRepo.getCharacterProgressionEngine(storyId).resolveModifiers(actorId).modifiers;
+    const progressionValue = (target: string) => progressionModifiers.find((modifier) => modifier.target === target)?.value || 0;
     const characterLevel = Math.max(1, Math.min(20, Number(coreStats?.level ?? 1)));
     const proficiencyBonus = Math.ceil(characterLevel / 4) + 1;
     const abilityModifier = (score: number) => Math.floor((score - 10) / 2);
-    const strMod = abilityModifier(Number(coreStats?.strength ?? 10));
-    const dexMod = abilityModifier(Number(coreStats?.dexterity ?? 10));
+    const strMod = abilityModifier(Number(coreStats?.strength ?? 10) + progressionValue('coreStats.strength'));
+    const dexMod = abilityModifier(Number(coreStats?.dexterity ?? 10) + progressionValue('coreStats.dexterity'));
 
     let computedAC = 10 + dexMod;
     if (doll.body) {
       const def = inv.getItemDefinition(doll.body.defId);
       const armorBonus = (doll.body.defId === 'def_steel_cuirass' || def?.properties?.armorBonus) ? (Number(def?.properties?.armorBonus) || 4) : 2;
       computedAC += armorBonus;
+    computedAC += progressionValue('coreStats.armorClass');
     }
     if (doll.offHand) {
       const def = inv.getItemDefinition(doll.offHand.defId);
@@ -2022,10 +2025,10 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
       },
       team: 'player_allies',
       hpCurrent: Math.max(0, conditionState?.healthCurrent ?? powerState?.healthCurrent ?? Number(coreStats?.hpCurrent ?? 100)),
-      hpMax: conditionState?.healthMax ?? powerState?.healthMax ?? Number(coreStats?.hpMax ?? 100),
+      hpMax: (conditionState?.healthMax ?? powerState?.healthMax ?? Number(coreStats?.hpMax ?? 100)) + progressionValue('coreStats.hpMax'),
       armorClass: computedAC,
-      speedCells,
-      attackBonus: weaponAttackBonus,
+      speedCells: Math.max(0, speedCells + Math.trunc(progressionValue('coreStats.speed') / 5)),
+      attackBonus: weaponAttackBonus + progressionValue('combat.attackBonus'),
       damageFormula: weaponFormula,
       damageType: doll.mainHand ? 'slashing' : 'bludgeoning',
       damageProfile: conditionState?.damageProfile,
@@ -5988,6 +5991,9 @@ function buildCanonicalSelfParticipant(
   const player = repository.getPlayerLifecycle(storyId);
   const npc = player?.actorId === actorId ? null : repository.getNpcLifecycle(storyId, actorId);
   const state = runtime.getOrCreateActorState(actorId);
+  const progression = repository.getCharacterProgressionEngine(storyId);
+  const progressionModifiers = progression.resolveModifiers(actorId).modifiers;
+  const progressionValue = (target: string) => progressionModifiers.find((modifier) => modifier.target === target)?.value || 0;
   const hpCurrent = Math.max(0, Number(conditionState?.healthCurrent ?? 30));
   const hpMax = Math.max(1, Number(conditionState?.healthMax ?? (hpCurrent || 30)));
   const dead = Boolean(conditionState?.dead || hpCurrent <= 0);
@@ -6001,16 +6007,16 @@ function buildCanonicalSelfParticipant(
     initiative: 0,
     armorClass: 10,
     hpCurrent,
-    hpMax,
-    speedCells: 6,
-    attackBonus: state.spellAttackBonus,
+    hpMax: hpMax + progressionValue('coreStats.hpMax'),
+    speedCells: Math.max(0, 6 + Math.trunc(progressionValue('coreStats.speed') / 5)),
+    attackBonus: state.spellAttackBonus + progressionValue('spell.attackBonus'),
     damageFormula: '1d4',
     conditions: conditionState?.instances.map((instance) => instance.name) || (dead ? ['Dead'] : []),
     isDead: dead,
     saveModifiers: {},
     savingThrowModifiers: {},
-    spellAttackBonus: state.spellAttackBonus,
-    spellSaveDc: state.spellSaveDc,
+    spellAttackBonus: state.spellAttackBonus + progressionValue('spell.attackBonus'),
+    spellSaveDc: state.spellSaveDc + progressionValue('spell.saveDC'),
     spellSlots: state.spellSlots,
     knownSpells: state.knownSpells,
     preparedSpells: state.preparedSpells,

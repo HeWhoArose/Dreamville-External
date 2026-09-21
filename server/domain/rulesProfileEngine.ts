@@ -161,14 +161,21 @@ function applyOverrides(profile: RulesProfile, rawOverrides: unknown): RulesProf
 					shortRestMagicalEnergyRecoveryFraction: { min: 0, max: 1 },
 					longRestMagicalEnergyRecoveryFraction: { min: 0, max: 1 },
 				};
+				let invalidNumericOverride = false;
 				for (const [key, bounds] of Object.entries(numericBounds)) {
 					if (value[key] === undefined) continue;
-					if (typeof value[key] !== 'number' || !Number.isFinite(value[key])) continue;
-					if (value[key] < bounds.min || (bounds.max !== undefined && value[key] > bounds.max)) {
-						continue;
+					if (
+						typeof value[key] !== 'number' ||
+						!Number.isFinite(value[key]) ||
+						value[key] < bounds.min ||
+						(bounds.max !== undefined && value[key] > bounds.max)
+					) {
+						invalidNumericOverride = true;
+						break;
 					}
 					normalized[key] = value[key] as number;
 				}
+				if (invalidNumericOverride) continue;
 
 				const booleanKeys = [
 					'longRestRestoreHp',

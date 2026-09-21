@@ -166,6 +166,16 @@ export class CanonicalCommandEngine {
 			};
 		}
 
+		if (!repository.getStoryRun(command.storyId) && command.storyId !== 'default_story') {
+			return {
+				success: false,
+				commandId: command.commandId,
+				errorReason: `StoryRun "${command.storyId}" was not found.`,
+				rolledBack: false,
+				mutationPaths: [],
+			};
+		}
+
 		const key = `${command.storyId}::${command.commandId}`;
 		const fingerprint = stableStringify({
 			storyId: command.storyId,

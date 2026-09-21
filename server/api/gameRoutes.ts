@@ -1392,9 +1392,11 @@ gameRouter.post('/capabilities/interpret', async (req: Request, res: Response) =
           type: 'CAST',
           payload: { actionText, intendedCapabilityId, requestedScale },
           source: 'PLAYER',
+          transactionMode: 'STAGED',
         },
-        async () => {
-          const result = capEngine.interpretFreeformAction({
+        async (_command, context) => {
+          const transactionCapEngine = context.repository.getCapabilityEngine(storyId);
+          const result = transactionCapEngine.interpretFreeformAction({
             actorId,
             actionText: actionText.trim(),
             tags: Array.isArray(tags) ? tags : undefined,

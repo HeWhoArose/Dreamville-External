@@ -47,9 +47,11 @@ test('Phase 1: CUSTOM_HOMEBREW_DND never silently inherits D&D mechanics', () =>
 		mode: 'CUSTOM_HOMEBREW_DND',
 		rulesProfile: {
 			baseRuleset: 'DND_5E',
-			allowImplicitAbilityChecks: true,
-			allowImplicitSavingThrows: true,
-			allowStandardDndSpellRules: true,
+			allowImplicitAbilityChecks: false,
+			allowImplicitSavingThrows: false,
+			allowStandardDndSpellRules: false,
+			enabledMechanics: [],
+			disabledMechanics: ['implicit_ability_checks', 'implicit_saving_throws'],
 		},
 	});
 

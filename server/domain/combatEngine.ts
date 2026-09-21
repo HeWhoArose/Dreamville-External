@@ -543,6 +543,14 @@ export class TacticalCombatEngine {
           damageResistances: participant.resistances || [],
           damageVulnerabilities: participant.vulnerabilities || [],
         };
+        participant.damageProfile = damageProfile;
+        if (!participant.conditionProfile) {
+          participant.conditionProfile = {
+            conditionImmunities: [],
+            conditionResistances: [],
+            conditionVulnerabilities: [],
+          };
+        }
         this.conditionEngine.seedActor(participant.id, {
           healthCurrent: participant.hpCurrent,
           healthMax: participant.hpMax,

@@ -1446,7 +1446,7 @@ gameRouter.post('/capabilities/interpret', async (req: Request, res: Response) =
           return {
             success: result.validationSuccess,
             data: result,
-            errorReason: result.validationReason || result.rejectionReason,
+            errorReason: result.rejectionReason,
             summary: result.validationSuccess
               ? 'Freeform action interpreted and committed.'
               : 'Freeform action rejected without mutation.',
@@ -2282,7 +2282,7 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
       (req.body?.commandId as string | undefined) ||
       `cast_${storyId}_${actorId}_${capabilityId}_${targetId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-    const commandResult = await canonicalCommandEngine.execute(
+    const commandResult = await canonicalCommandEngine.execute<{ targetId: any; capabilityId: any; requestedScale: any }, any>(
       worldRepository,
       {
         commandId,

@@ -1,4 +1,3 @@
-import { worldRepository } from '../repositories/worldRepository';
 import { narrativeProfileEngine } from '../domain/narrativeProfileEngine';
 import { InMemoryWorldRepository, worldRepository } from '../repositories/worldRepository';
 import { WorldFact } from '../../src/types';

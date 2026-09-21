@@ -245,6 +245,7 @@ test('Phase 3 — rollback restores a real combat mutation after downstream reje
 	assert.equal(result.rolledBack, true);
 	assert.equal(combat.getParticipant(hero)?.x, 0);
 	assert.equal(combat.getParticipant(hero)?.y, 0);
+
 	assert.equal(compareCanonicalSnapshots(before, captureCanonicalStateSnapshot(storyId, repo)).identical, true);
 });
 

@@ -43,6 +43,8 @@ export function captureCanonicalStateSnapshot(
   storyId: string,
   repo: InMemoryWorldRepository
 ): CanonicalStateSnapshot {
+  const safeClone = <T>(value: T): T => value === undefined ? value : JSON.parse(JSON.stringify(value));
+
   const clock = repo.getWorldClock(storyId);
   const geography = repo.getGeographyGraph(storyId);
   const facts = repo.getKnowledgeFacts(storyId);
@@ -69,40 +71,40 @@ export function captureCanonicalStateSnapshot(
 
   return {
     storyId,
-    worldClock: clock.exportState(),
-    geography: geography.exportState(),
-    worldFacts: JSON.parse(JSON.stringify(facts)),
-    player: player ? player.toJSON() : null,
-    inventory: invExport,
-    equipment: JSON.parse(JSON.stringify(equipment)),
-    craftingRecipes: JSON.parse(JSON.stringify(craftingRecipes)),
+    worldClock: safeClone(clock.exportState()),
+    geography: safeClone(geography.exportState()),
+    worldFacts: safeClone(facts),
+    player: player ? safeClone(player.toJSON()) : null,
+    inventory: safeClone(invExport),
+    equipment: safeClone(equipment),
+    craftingRecipes: safeClone(craftingRecipes),
     npcs: {
-      alignment: alignmentEngine.exportState(),
-      lifecycles: npcs.map((n) => n.toJSON()),
+      alignment: safeClone(alignmentEngine.exportState()),
+      lifecycles: npcs.map((n) => safeClone(n.toJSON())),
     },
-    chronicle: chronicle.exportState(),
-    narrativeHistory: orchestrator.exportNarrativeHistory(storyId),
-    capabilities: capEngine.exportState(),
-    conditions: conditionEngine.exportState(),
-    combat: combatEngine.exportState(),
-    memories: memoryEngine.exportState(),
-    livingWorld: livingSim.exportState(),
+    chronicle: safeClone(chronicle.exportState()),
+    narrativeHistory: safeClone(orchestrator.exportNarrativeHistory(storyId)),
+    capabilities: safeClone(capEngine.exportState()),
+    conditions: safeClone(conditionEngine.exportState()),
+    combat: safeClone(combatEngine.exportState()),
+    memories: safeClone(memoryEngine.exportState()),
+    livingWorld: safeClone(livingSim.exportState()),
     sensory: {
-      settings: sensoryEngine.getSettings(storyId),
-      voiceProfiles: sensoryEngine.getAllVoiceProfiles(storyId),
+      settings: safeClone(sensoryEngine.getSettings(storyId)),
+      voiceProfiles: safeClone(sensoryEngine.getAllVoiceProfiles(storyId)),
     },
     adaptation: {
-      bible: repo.getAdaptedStoryBible(storyId),
-      profile: repo.getAdaptationProfile(storyId),
-      pipelineState: repo.getPipelineState(storyId),
-      session: repo.getAdaptationSession(storyId),
-      events: repo.getAdaptationEvents(storyId),
-      ch16Run: run,
-      ch16Threads: repo.getStoryThreads(storyId),
-      ch16ActiveEffects: repo.getActiveEffects(storyId),
-      ch16WorldFacts: repo.getWorldFacts(storyId),
-      ch16Agenda: repo.getProtagonistAgenda(storyId),
-      worldTemplate,
+      bible: safeClone(repo.getAdaptedStoryBible(storyId)),
+      profile: safeClone(repo.getAdaptationProfile(storyId)),
+      pipelineState: safeClone(repo.getPipelineState(storyId)),
+      session: safeClone(repo.getAdaptationSession(storyId)),
+      events: safeClone(repo.getAdaptationEvents(storyId)),
+      ch16Run: safeClone(run),
+      ch16Threads: safeClone(repo.getStoryThreads(storyId)),
+      ch16ActiveEffects: safeClone(repo.getActiveEffects(storyId)),
+      ch16WorldFacts: safeClone(repo.getWorldFacts(storyId)),
+      ch16Agenda: safeClone(repo.getProtagonistAgenda(storyId)),
+      worldTemplate: safeClone(worldTemplate),
     },
   };
 }

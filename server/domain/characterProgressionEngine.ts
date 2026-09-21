@@ -208,6 +208,7 @@ export class CharacterProgressionEngine {
   private readonly modules = new Map<string, ProgressionModuleDefinition>();
   private readonly actorStates = new Map<string, CharacterProgressionState>();
   private config: CharacterProgressionConfig = { ...DEFAULT_CHARACTER_PROGRESSION_CONFIG };
+  private canonicalMutationGuard?: () => boolean;
 
   constructor(initialConfig?: Partial<CharacterProgressionConfig>) {
     this.registerBuiltIns();
@@ -226,12 +227,17 @@ export class CharacterProgressionEngine {
     return clone(this.config);
   }
 
+  public setCanonicalMutationGuard(guard: () => boolean): void {
+    this.canonicalMutationGuard = guard;
+  }
+
   public getEffectiveConfigForRulesProfile(profile?: RulesProfile | null): CharacterProgressionConfig {
     return this.getConfigForProfile(profile);
   }
 
 
   public registerModule(module: ProgressionModuleDefinition): void {
+    this.assertCanonicalMutationAuthority();
     this.validateModule(module);
     this.modules.set(module.id, clone(module));
   }
@@ -241,6 +247,7 @@ export class CharacterProgressionEngine {
   }
 
   public registerFeatModule(feat: CharacterFeat): ProgressionModuleDefinition {
+    this.assertCanonicalMutationAuthority();
     const moduleId = deterministicId('feat_module', feat.worldId || 'world', feat.id, feat.name);
     const featureId = deterministicId('feat_feature', moduleId, feat.id);
     const sourceModifiers = (feat.effects || [])
@@ -384,6 +391,7 @@ export class CharacterProgressionEngine {
     commandId: string,
     rulesProfile?: RulesProfile | null
   ): CharacterProgressionState {
+    this.assertCanonicalMutationAuthority();
     this.assertMutationAllowed(rulesProfile);
     const state = this.requireActor(actorId);
     const config = this.getConfigForProfile(rulesProfile);
@@ -423,6 +431,7 @@ export class CharacterProgressionEngine {
   }
 
   public levelUp(actorId: string, commandId: string, rulesProfile?: RulesProfile | null): CharacterProgressionState {
+    this.assertCanonicalMutationAuthority();
     this.assertMutationAllowed(rulesProfile);
     if (rulesProfile && this.getConfigForProfile(rulesProfile).allowLevelUp === false) {
       throw new Error('Level-up is disabled by the active rules profile.');
@@ -450,6 +459,7 @@ export class CharacterProgressionEngine {
     commandId: string,
     rulesProfile?: RulesProfile | null
   ): CharacterProgressionState {
+    this.assertCanonicalMutationAuthority();
     this.assertMutationAllowed(rulesProfile);
     const state = this.requireActor(actorId);
     const module = this.requireModule(moduleId);
@@ -501,7 +511,8 @@ export class CharacterProgressionEngine {
     actorId: string,
     abilityId: string,
     commandId: string
-  ): { success: boolean; ability: ProgressionAbilityDefinition; state: CharacterProgressionState } {
+  ): {
+    this.assertCanonicalMutationAuthority(); success: boolean; ability: ProgressionAbilityDefinition; state: CharacterProgressionState } {
     const state = this.requireActor(actorId);
     const ability = this.getTriggeredAbilities(actorId).find((entry) => entry.id === abilityId);
     if (!ability) throw new Error(`Triggered progression ability '${abilityId}' is not unlocked.`);
@@ -531,6 +542,7 @@ export class CharacterProgressionEngine {
   }
 
   public advanceAbilityCooldowns(actorId: string, turns = 1): CharacterProgressionState {
+    this.assertCanonicalMutationAuthority();
     const state = this.requireActor(actorId);
     const decrement = Math.max(0, Math.trunc(finiteNumber(turns, 1)));
     for (const usage of Object.values(state.usage)) {
@@ -672,6 +684,10 @@ export class CharacterProgressionEngine {
       };
       this.actorStates.set(state.actorId, state);
     }
+  }
+
+  private assertCanonicalMutationAuthority(): void {
+    if (this.canonicalMutationGuard && !this.canonicalMutationGuard()) throw new Error('Character progression mutation requires an active canonical command transaction.');
   }
 
   private getConfigForProfile(profile?: RulesProfile | null): CharacterProgressionConfig {

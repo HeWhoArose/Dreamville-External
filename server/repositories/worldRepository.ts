@@ -121,6 +121,9 @@ export interface WorldRepository {
   getWorldTemplate(worldId: string): any;
   saveWorldTemplate(template: any): void;
   getAllWorldTemplates(): any[];
+  appendCanonicalCommandEvent(storyId: string, event: any): void;
+  getCanonicalCommandEvents(storyId: string): any[];
+  restoreCanonicalStateSnapshot(snapshot: any): void;
 }
 
 const NARRATIVE_MODE_VALUES = new Set(['PROTAGONIST', 'SIDE_CHARACTER', 'FREE_ROAM']);
@@ -2168,6 +2171,22 @@ export class InMemoryWorldRepository implements WorldRepository {
     return this.storyRuns.get(storyId) || null;
   }
 
+  public appendCanonicalCommandEvent(storyId: string, event: any): void {
+    const run = this.getStoryRun(storyId);
+    if (!run) {
+      throw new Error(`Cannot append a canonical command event: StoryRun "${storyId}" was not found.`);
+    }
+    const existing = Array.isArray(run.canonicalEvents) ? [...run.canonicalEvents] : [];
+    if (existing.some((item: any) => item?.eventId === event?.eventId)) return;
+    run.canonicalEvents = [...existing, event];
+    this.saveStoryRun(run);
+  }
+
+  public getCanonicalCommandEvents(storyId: string): any[] {
+    const run = this.getStoryRun(storyId);
+    return Array.isArray(run?.canonicalEvents) ? JSON.parse(JSON.stringify(run.canonicalEvents)) : [];
+  }
+
   public getRulesProfile(storyId: string): RulesProfile | null {
     const run = this.getStoryRun(storyId);
     const world = run?.worldId ? this.getWorldTemplate(run.worldId) : null;
@@ -2267,6 +2286,68 @@ export class InMemoryWorldRepository implements WorldRepository {
 
   public saveProtagonistAgenda(storyId: string, agenda: any): void {
     this.protagonistAgendas.set(storyId, agenda);
+  }
+
+  public restoreCanonicalStateSnapshot(snapshot: any): void {
+    const storyId = snapshot?.storyId;
+    if (!storyId) throw new Error('Canonical snapshot restore requires storyId.');
+
+    const clone = <T>(value: T): T => value === undefined ? value : JSON.parse(JSON.stringify(value));
+
+    if (snapshot.worldClock) this.getWorldClock(storyId).importState(clone(snapshot.worldClock));
+    if (snapshot.geography) this.getGeographyGraph(storyId).importState(clone(snapshot.geography));
+
+    this.knowledgeBases.set(storyId, clone(snapshot.worldFacts || []));
+    if (snapshot.player) {
+      this.playerLifecycles.set(storyId, PlayerLifecycleState.fromJSON(clone(snapshot.player)));
+    } else {
+      this.playerLifecycles.delete(storyId);
+    }
+
+    const existingNpcs = new Map<string, PlayerLifecycleState>();
+    for (const raw of snapshot.npcs?.lifecycles || []) {
+      const npc = PlayerLifecycleState.fromJSON(clone(raw));
+      existingNpcs.set(npc.actorId, npc);
+    }
+    this.npcLifecycles.set(storyId, existingNpcs);
+
+    if (snapshot.npcs?.alignment) this.getCharacterAlignmentEngine().importState(clone(snapshot.npcs.alignment));
+    if (snapshot.inventory) this.getInventoryEngine(storyId).importState(clone(snapshot.inventory));
+    if (snapshot.capabilities) this.getCapabilityEngine(storyId).importState(clone(snapshot.capabilities));
+    if (snapshot.conditions) this.getConditionEngine(storyId).importState(clone(snapshot.conditions));
+    if (snapshot.combat) this.getCombatEngine(storyId).importState(clone(snapshot.combat));
+    if (snapshot.memories) this.getMemoryEngine(storyId).importState(clone(snapshot.memories));
+    if (snapshot.livingWorld) this.getLivingWorldSimulation(storyId).importState(clone(snapshot.livingWorld));
+    if (snapshot.chronicle) this.getHistoricalChronicleEngine(storyId).importState(clone(snapshot.chronicle));
+
+    const run = snapshot.adaptation?.ch16Run;
+    if (run) this.storyRuns.set(storyId, clone(run));
+    else this.storyRuns.delete(storyId);
+
+    this.storyThreads.set(storyId, clone(snapshot.adaptation?.ch16Threads || []));
+    this.activeEffects.set(storyId, clone(snapshot.adaptation?.ch16ActiveEffects || []));
+    this.worldFactsMap.set(storyId, clone(snapshot.adaptation?.ch16WorldFacts || []));
+    if (snapshot.adaptation?.ch16Agenda) this.protagonistAgendas.set(storyId, clone(snapshot.adaptation.ch16Agenda));
+    else this.protagonistAgendas.delete(storyId);
+
+    const worldTemplate = snapshot.adaptation?.worldTemplate;
+    if (worldTemplate?.worldId) this.worldTemplates.set(worldTemplate.worldId, clone(worldTemplate));
+
+    if (snapshot.adaptation?.bible) this.adaptedStoryBibles.set(storyId, clone(snapshot.adaptation.bible));
+    else this.adaptedStoryBibles.delete(storyId);
+    if (snapshot.adaptation?.profile) this.adaptationProfiles.set(storyId, clone(snapshot.adaptation.profile));
+    else this.adaptationProfiles.delete(storyId);
+    if (snapshot.adaptation?.pipelineState) this.pipelineStates.set(storyId, clone(snapshot.adaptation.pipelineState));
+    else this.pipelineStates.delete(storyId);
+    if (snapshot.adaptation?.session) this.adaptationSessions.set(storyId, clone(snapshot.adaptation.session));
+    else this.adaptationSessions.delete(storyId);
+    this.adaptationEvents.set(storyId, clone(snapshot.adaptation?.events || []));
+
+    if (snapshot.narrativeHistory) {
+      this.getAiOrchestrator().restoreNarrativeHistory(storyId, clone(snapshot.narrativeHistory));
+    }
+
+    this.persistLibrary();
   }
 
   public resolveDiceClashExchange(

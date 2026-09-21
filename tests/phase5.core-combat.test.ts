@@ -112,6 +112,7 @@ test('Phase 5: Grappled creatures can spend an Action to escape using the grappl
 	engine.advanceTurn();
 	assert.equal(engine.getCurrentActor()?.id, 'enemy');
 
+	engine.updateParticipant('enemy', { saveModifiers: { STR: 25 } });
 	const escape = engine.escapeGrapple('enemy', 'STR');
 	assert.equal(escape.success, true);
 	assert.equal(escape.escaped, true);

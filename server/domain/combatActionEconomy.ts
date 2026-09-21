@@ -87,7 +87,6 @@ export class CombatActionEconomy {
     const current = this.resources.get(actorId);
     if (!current) return;
 
-    current.readyAction = undefined;
     current.dodging = false;
     current.disengaging = false;
   }

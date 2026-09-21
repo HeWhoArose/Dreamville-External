@@ -951,6 +951,7 @@ export class TacticalCombatEngine {
     this.resolveReadyTriggers({
       type: 'ACTOR_MOVED',
       actorId,
+      targetId: actorId,
       from: { x: path[0]?.x ?? actor.x, y: path[0]?.y ?? actor.y },
       to: { x: targetX, y: targetY },
     });
@@ -1086,7 +1087,7 @@ export class TacticalCombatEngine {
       if (!ready) continue;
       if (ready.triggerType !== event.type) continue;
       if (ready.triggerActorId && ready.triggerActorId !== event.actorId) continue;
-      if (ready.targetId && ready.targetId !== event.targetId) continue;
+      if (ready.targetId && event.targetId && ready.targetId !== event.targetId && ready.targetId !== event.actorId) continue;
       candidates.push({ actorId: participant.id, ready });
     }
 

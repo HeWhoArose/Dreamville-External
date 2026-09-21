@@ -329,10 +329,10 @@ test('Phase 3 — staged living-world mutations roll back when the command is re
 		async (_command, context) => {
 			context.repository.getLivingWorldSimulation(storyId).scheduleEvent({
 				id: 'phase3_scheduled_event_rollback',
-				kind: 'TEST',
+				kind: 'MARKET_DAY',
 				name: 'Phase 3 rollback event',
 				locationId: 'loc_whispering_orrery',
-				triggerTimestamp: { totalElapsedSeconds: 60, cycle: 1, period: 'Dawn' },
+				triggerTimestamp: { year: 42, month: 10, day: 14, hour: 17, minute: 43, second: 0, totalElapsedSeconds: 60 },
 				isResolved: false,
 				status: 'pending',
 			});

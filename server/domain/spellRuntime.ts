@@ -1405,6 +1405,26 @@ export class SpellRuntime {
       }
     }
 
+    const isAreaSpell = spell.targetType === 'AREA_SPHERE' || spell.targetType === 'AREA_LINE' || spell.targetType === 'AREA_CONE';
+    const areaTargets = isAreaSpell
+      ? this.resolveAreaTargets(spell, casterParticipant, targetParticipant, request.targetPosition, allParticipants)
+      : [];
+
+    if (isAreaSpell && areaTargets.length === 0) {
+      return {
+        success: false,
+        errorCode: 'NO_AREA_TARGETS',
+        errorReason: 'Spell "' + spell.name + '" did not resolve any valid targets at the selected point.',
+        spellId: spell.id,
+        spellName: spell.name,
+        slotLevelUsed: effectiveSlotLevel,
+        isRitual,
+        requiresConcentration: spell.requiresConcentration,
+        headline: 'Cannot cast ' + spell.name + ': no valid creatures were affected.',
+      };
+    }
+
+
     // --- ATOMIC AUTHORITATIVE EXECUTION COMMENCES ---
 
     // 1. Consume Spell Slot (if leveled spell and not ritual)
@@ -1455,25 +1475,6 @@ export class SpellRuntime {
 
     // Upcasting scaling calculations
     const upcastLevelDelta = Math.max(0, effectiveSlotLevel - spell.level);
-
-    const isAreaSpell = spell.targetType === 'AREA_SPHERE' || spell.targetType === 'AREA_LINE' || spell.targetType === 'AREA_CONE';
-    const areaTargets = isAreaSpell
-      ? this.resolveAreaTargets(spell, casterParticipant, targetParticipant, request.targetPosition, allParticipants)
-      : [];
-
-    if (isAreaSpell && areaTargets.length === 0) {
-      return {
-        success: false,
-        errorCode: 'NO_AREA_TARGETS',
-        errorReason: 'Spell "' + spell.name + '" did not resolve any valid targets at the selected point.',
-        spellId: spell.id,
-        spellName: spell.name,
-        slotLevelUsed: 0,
-        isRitual,
-        requiresConcentration: spell.requiresConcentration,
-        headline: 'Cannot cast ' + spell.name + ': no valid creatures were affected.',
-      };
-    }
 
     if (isAreaSpell) {
       for (const areaTarget of areaTargets) {
@@ -1713,6 +1714,37 @@ export class SpellRuntime {
             buffTarget.conditions.push(cond);
           }
           conditionsApplied.push(cond);
+          concentrationAppliedConditions.push({ targetId: buffTarget.id, condition: cond });
+        }
+      }
+
+      if (spell.buffEffect) {
+        const previousSavingThrowModifiers = buffTarget.savingThrowModifiers
+          ? { ...buffTarget.savingThrowModifiers }
+          : undefined;
+        concentrationBuffEffects.push({
+          targetId: buffTarget.id,
+          previousArmorClass: buffTarget.armorClass,
+          previousSpeedCells: buffTarget.speedCells,
+          previousAttackBonus: buffTarget.attackBonus,
+          previousSavingThrowModifiers,
+        });
+
+        if (spell.buffEffect.armorClassBonus) {
+          buffTarget.armorClass += spell.buffEffect.armorClassBonus;
+        }
+        if (spell.buffEffect.speedMultiplier) {
+          buffTarget.speedCells *= spell.buffEffect.speedMultiplier;
+        }
+        if (spell.buffEffect.attackBonusModifier) {
+          buffTarget.attackBonus += spell.buffEffect.attackBonusModifier;
+        }
+        if (spell.buffEffect.saveBonusModifier) {
+          const nextSaves = { ...(buffTarget.savingThrowModifiers || {}) };
+          for (const ability of ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA']) {
+            nextSaves[ability] = (nextSaves[ability] || 0) + spell.buffEffect.saveBonusModifier;
+          }
+          buffTarget.savingThrowModifiers = nextSaves;
         }
       }
     }

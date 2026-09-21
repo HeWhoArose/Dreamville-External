@@ -16,6 +16,7 @@ export interface CanonicalStateSnapshot {
   chronicle: any;
   narrativeHistory: any[];
   capabilities: any;
+  conditions: any;
   combat: any;
   memories: any;
   livingWorld: any;
@@ -53,6 +54,7 @@ export function captureCanonicalStateSnapshot(
   const chronicle = repo.getHistoricalChronicleEngine(storyId);
   const orchestrator = repo.getAiOrchestrator();
   const capEngine = repo.getCapabilityEngine(storyId);
+  const conditionEngine = repo.getConditionEngine(storyId);
   const combatEngine = repo.getCombatEngine(storyId);
   const memoryEngine = repo.getMemoryEngine(storyId);
   const livingSim = repo.getLivingWorldSimulation(storyId);
@@ -81,6 +83,7 @@ export function captureCanonicalStateSnapshot(
     chronicle: chronicle.exportState(),
     narrativeHistory: orchestrator.exportNarrativeHistory(storyId),
     capabilities: capEngine.exportState(),
+    conditions: conditionEngine.exportState(),
     combat: combatEngine.exportState(),
     memories: memoryEngine.exportState(),
     livingWorld: livingSim.exportState(),
@@ -174,6 +177,7 @@ export function compareCanonicalSnapshots(
   deepCheck(a.chronicle, b.chronicle, 'chronicle');
   deepCheck(a.narrativeHistory, b.narrativeHistory, 'narrativeHistory');
   deepCheck(a.capabilities, b.capabilities, 'capabilities');
+  deepCheck(a.conditions, b.conditions, 'conditions');
   deepCheck(a.combat, b.combat, 'combat');
   deepCheck(a.memories, b.memories, 'memories');
   deepCheck(a.livingWorld, b.livingWorld, 'livingWorld');

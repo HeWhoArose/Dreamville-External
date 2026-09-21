@@ -415,3 +415,48 @@ test('Phase 3 — canonical validator accepts location movement and time advance
 	);
 	assert.equal(timeResult.success, true);
 });
+
+test('Phase 3 — commit failure rolls a STAGED transaction back to the pre-command snapshot', async () => {
+	const storyId = 'phase3_commit_failure_rollback';
+	const repo = seedRepo(storyId);
+	const actorId = repo.getPlayerLifecycle(storyId)?.actorId || `player_actor_${storyId}`;
+	const before = captureCanonicalStateSnapshot(storyId, repo);
+	const originalAppend = repo.appendCanonicalCommandEvent.bind(repo);
+
+	(repo as any).appendCanonicalCommandEvent = () => {
+		throw new Error('Simulated canonical event emission failure.');
+	};
+
+	try {
+		const result = await canonicalCommandEngine.execute(
+			repo,
+			{
+				commandId: 'cmd_commit_failure_001',
+				storyId,
+				actorId,
+				type: 'INTERACT',
+				payload: { action: 'FORCE_COMMIT_FAILURE' },
+				source: 'PLAYER',
+				transactionMode: 'STAGED',
+			},
+			async (_command, context) => {
+				const run = context.repository.getStoryRun(storyId)!;
+				run.commitFailureMarker = 'must_rollback';
+				context.repository.saveStoryRun(run);
+				return {
+					success: true,
+					data: { accepted: true },
+					summary: 'Intentional commit-failure test mutation.',
+				};
+			}
+		);
+
+		assert.equal(result.success, false);
+		assert.equal(result.rolledBack, true);
+		assert.match(result.errorReason || '', /event emission failure/i);
+		assert.equal(compareCanonicalSnapshots(before, captureCanonicalStateSnapshot(storyId, repo)).identical, true);
+		assert.equal(repo.getCanonicalCommandEvents(storyId).length, 0);
+	} finally {
+		(repo as any).appendCanonicalCommandEvent = originalAppend;
+	}
+});

@@ -10,7 +10,7 @@ import { WorldSynthesisService } from '../server/services/worldSynthesisService'
 import { InMemoryWorldRepository, worldRepository } from '../server/repositories/worldRepository';
 import { CharacterStoryMode, DndRulesMode } from '../src/types';
 import { WorkingContextEngine } from '../server/domain/workingContextEngine';
-import { resolveCanonicalConfirmedCharacter } from '../server/api/gameRoutes';
+import { resolveCanonicalConfirmedCharacter } from '../server/services/confirmedCharacterAuthority';
 
 const NARRATIVE_MODES: CharacterStoryMode[] = [
 	'PROTAGONIST',

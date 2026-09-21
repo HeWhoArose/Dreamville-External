@@ -629,3 +629,55 @@ test('Phase 6 audit: canonical healing updates the damage authority before later
   assert.equal(laterDamage.damage, 5);
   assert.equal(ally.hpCurrent, hpAfterHealing - 5);
 });
+
+
+test('Phase 6 audit: concentration duration decrements in authoritative state and expires at zero', () => {
+  const engine = new TacticalCombatEngine(1337);
+  const caster = participant('caster', 20, 30);
+  const ally = participant('ally', 10, 30);
+  ally.team = 'player_allies';
+  ally.x = 1;
+
+  engine.addParticipant(caster);
+  engine.addParticipant(ally);
+  engine.rollInitiative();
+
+  const runtime = engine.getSpellRuntime();
+  const durationSpell: SpellDefinition = {
+    id: 'phase6_duration_concentration',
+    name: 'Phase 6 Duration Concentration',
+    level: 1,
+    school: 'abjuration',
+    castingTime: 'ACTION',
+    range: 5,
+    rangeType: 'TOUCH',
+    targetType: 'SINGLE_ALLY',
+    durationRounds: 1,
+    requiresConcentration: true,
+    isRitual: false,
+    defenseModel: 'BUFF',
+    appliedConditions: ['Invisible'],
+    description: 'Test-only one-round concentration effect.',
+  };
+  runtime.registerSpell(durationSpell);
+  runtime.initializeSlots(caster.id, { 1: { current: 1, max: 1 } });
+  runtime.learnSpell(caster.id, durationSpell.id);
+  runtime.prepareSpell(caster.id, durationSpell.id);
+
+  const cast = engine.executeSpellCast({
+    actorId: caster.id,
+    spellId: durationSpell.id,
+    targetId: ally.id,
+    slotLevel: 1,
+  });
+
+  assert.equal(cast.success, true);
+  assert.equal(runtime.getActorState(caster.id)?.activeConcentration?.remainingRounds, 1);
+
+  engine.advanceTurn();
+  assert.equal(runtime.getActorState(caster.id)?.activeConcentration?.remainingRounds, 1);
+
+  engine.advanceTurn();
+  assert.equal(runtime.getActorState(caster.id)?.activeConcentration, null);
+  assert.deepEqual(ally.conditions, []);
+});

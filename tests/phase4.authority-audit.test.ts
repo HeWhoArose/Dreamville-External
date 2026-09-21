@@ -9,6 +9,7 @@ const worldRepository = readFileSync(resolve(process.cwd(), 'server/repositories
 const mockAuthority = readFileSync(resolve(process.cwd(), 'server/mockEngine/serverMockAuthority.ts'), 'utf8');
 const deterministicRng = readFileSync(resolve(process.cwd(), 'server/domain/deterministicRng.ts'), 'utf8');
 const aiOrchestrator = readFileSync(resolve(process.cwd(), 'server/domain/aiOrchestrator.ts'), 'utf8');
+const adaptationRoutes = readFileSync(resolve(process.cwd(), 'server/api/adaptationRoutes.ts'), 'utf8');
 
 function routeBlock(route: string): string {
   const start = gameRoutes.indexOf(`gameRouter.post('${route}'`);
@@ -21,6 +22,14 @@ test('Phase 4 — repository Chronicle engines are transactional, with explicit 
 	assert.doesNotMatch(worldRepository, /new HistoricalChronicleEngine\(\);/, 'Repository-owned Chronicle engines must never fall back to DIRECT write mode.');
 	assert.match(worldRepository, /new HistoricalChronicleEngine\(\{\s*writeMode: 'TRANSACTIONAL',/);
 	assert.match(worldRepository, /recordBootstrapEvidence\(/);
+});
+test('Phase 4 — adaptation session identities do not depend on wall-clock entropy', () => {
+	const blockStart = adaptationRoutes.indexOf("adaptationRouter.post('/:storyId/create-session'");
+	assert.ok(blockStart >= 0, 'Adaptation create-session route must exist.');
+	const next = adaptationRoutes.indexOf('adaptationRouter.', blockStart + 1);
+	const block = adaptationRoutes.slice(blockStart, next >= 0 ? next : adaptationRoutes.length);
+	assert.doesNotMatch(block, /sessionId[^\n]*Date\.now\(\)/);
+	assert.match(block, /deterministicId\(\s*['\"]session['\"]/);
 });
 test('Phase 4 — canonical repository identifiers do not depend on wall-clock or Math.random entropy', () => {
 	assert.doesNotMatch(

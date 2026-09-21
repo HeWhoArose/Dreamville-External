@@ -9,6 +9,12 @@ const IMPLICIT_ABILITY_CHECKS = 'implicit_ability_checks';
 const IMPLICIT_SAVING_THROWS = 'implicit_saving_throws';
 const STANDARD_DND_SPELL_RULES = 'standard_dnd_spell_rules';
 const DND_TACTICAL_COMBAT = 'dnd_tactical_combat';
+const KNOWN_MECHANICS = new Set([
+	IMPLICIT_ABILITY_CHECKS,
+	IMPLICIT_SAVING_THROWS,
+	STANDARD_DND_SPELL_RULES,
+	DND_TACTICAL_COMBAT,
+]);
 
 export interface RulesProfileSource {
 	mode?: DndRulesMode | string;
@@ -110,6 +116,7 @@ function applyOverrides(profile: RulesProfile, rawOverrides: unknown): RulesProf
 		const override = raw as RuleOverride;
 		if (!override.ruleId || !override.operation || !override.reason) continue;
 		if (override.operation !== 'ENABLE' && override.operation !== 'DISABLE') continue;
+		if (!KNOWN_MECHANICS.has(override.ruleId)) continue;
 		if (!next.allowWorldRuleOverrides && next.mode === 'FULL_DND') continue;
 
 		next.overrides.push(override);

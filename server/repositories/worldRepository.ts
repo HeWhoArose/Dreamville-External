@@ -23,6 +23,7 @@ import { dndSpellRulesEvaluator } from '../domain/dndSpellRulesModel';
 import type { RulesProfile } from '../../src/types';
 import { rulesProfileEngine } from '../domain/rulesProfileEngine';
 import { narrativeProfileEngine } from '../domain/narrativeProfileEngine';
+import { hashStringToSeed } from '../domain/deterministicRng';
 import type { NarrativeProfile } from '../../src/types';
 import { PersistentGameStore } from '../services/persistentGameStore';
 import {
@@ -1430,7 +1431,13 @@ export class InMemoryWorldRepository implements WorldRepository {
   public getCombatEngine(storyId: string): TacticalCombatEngine {
     let engine = this.combatEngines.get(storyId);
     if (!engine) {
-      engine = new TacticalCombatEngine(1337, undefined, this.getConditionEngine(storyId));
+      const run = this.getStoryRun(storyId);
+      const canonicalSeedSource =
+        typeof run?.generationSeed === 'string' && run.generationSeed.trim()
+          ? run.generationSeed.trim()
+          : `combat::${storyId}`;
+      const seed = hashStringToSeed(canonicalSeedSource);
+      engine = new TacticalCombatEngine(seed, undefined, this.getConditionEngine(storyId));
       this.combatEngines.set(storyId, engine);
     }
     return engine;

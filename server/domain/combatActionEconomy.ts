@@ -1,9 +1,18 @@
 export type CombatActionResource = 'ACTION' | 'BONUS_ACTION' | 'REACTION';
 
+export type ReadyTriggerType =
+	| 'ACTOR_MOVED'
+	| 'ACTOR_ATTACKED'
+	| 'TARGET_ENTERED_REACH';
+
 export interface ReadyActionState {
   actionDescription: string;
   triggerDescription: string;
   expiresOnTurnStart: boolean;
+  triggerType?: ReadyTriggerType;
+  triggerActorId?: string;
+  targetId?: string;
+  actionType?: 'ATTACK';
 }
 
 export interface CombatTurnResources {

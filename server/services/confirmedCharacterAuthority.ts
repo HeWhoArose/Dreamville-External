@@ -45,7 +45,7 @@ export function resolveCanonicalConfirmedCharacter(
 				message: 'Confirmed character "' + candidateId + '" not found in world "' + worldId + '".',
 			},
 		};
-}
+	}
 
 	return { character: canonicalCharacter };
 }

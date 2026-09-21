@@ -257,3 +257,46 @@ test('Phase 7 invalid rest command is atomic and leaves time/rest state unchange
   assert.deepEqual(after.rest, before.rest);
   assert.equal(after.conditions.actors.find((a: any) => a.actorId === id)?.healthCurrent, 0);
 });
+
+
+test('Phase 7 REST command is staged, committed once, and idempotent on replay', async () => {
+  const repo = seedRepo();
+  const storyId = 'phase7_test';
+  const id = actorId(repo, storyId);
+  const { canonicalCommandEngine } = await import('../server/domain/canonicalCommandEngine');
+
+  const execute = () => canonicalCommandEngine.execute(
+    repo,
+    {
+      commandId: 'phase7-rest-idempotent-001',
+      storyId,
+      actorId: id,
+      type: 'REST',
+      payload: {
+        action: 'PERFORM',
+        restType: 'SHORT_REST',
+      },
+      source: 'PLAYER',
+      idempotencyKey: 'phase7-rest-idem',
+      transactionMode: 'STAGED',
+    },
+    async (command, context) => {
+      const result = context.repository.getRestRecoveryEngine(storyId).execute({
+        storyId,
+        actorId: id,
+        action: command.payload.action as any,
+        restType: command.payload.restType as any,
+      });
+      return { success: result.success, data: result, errorReason: result.errorReason, summary: 'Phase 7 REST command.' };
+    }
+  );
+
+  const first = await execute();
+  assert.equal(first.success, true);
+  const afterFirst = repo.getWorldClock(storyId).getAbsoluteTime();
+
+  const replay = await execute();
+  assert.equal(replay.success, true);
+  assert.equal(repo.getWorldClock(storyId).getAbsoluteTime(), afterFirst);
+  assert.equal(replay.event?.replay.postStateHash, first.event?.replay.postStateHash);
+});

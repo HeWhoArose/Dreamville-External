@@ -177,6 +177,24 @@ export class CanonicalCommandEngine {
 					return 'ADVANCE_TIME command requires a positive numeric seconds value.';
 				}
 				break;
+			case 'REST': {
+				const action = payload.action;
+				if (!['BEGIN', 'ADVANCE', 'COMPLETE', 'INTERRUPT', 'PERFORM'].includes(String(action))) {
+					return 'REST command requires a valid action.';
+				}
+				if (['BEGIN', 'PERFORM'].includes(String(action)) {
+					if (payload.restType !== 'SHORT_REST' && payload.restType !== 'LONG_REST') {
+						return 'REST BEGIN/PERFORM requires SHORT_REST or LONG_REST.';
+					}
+				}
+				if (action === 'ADVANCE' && (typeof payload.seconds !== 'number' || !Number.isFinite(payload.seconds) || payload.seconds <= 0)) {
+					return 'REST ADVANCE requires positive numeric seconds.';
+				}
+				if (action === 'INTERRUPT' && payload.interruptionReason !== undefined && typeof payload.interruptionReason !== 'string') {
+					return 'REST interruptionReason must be a string when provided.';
+				}
+				break;
+			}
 			case 'CORE_ACTION':
 				if (typeof payload.action !== 'string' || !payload.action.trim()) {
 					return 'CORE_ACTION command requires a non-empty action.';

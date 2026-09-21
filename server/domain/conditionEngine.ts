@@ -438,6 +438,11 @@ export class ConditionEngine {
       if (usesElapsedSchedule && instance.nextTickAtSeconds !== undefined) {
         if (nowSeconds < instance.nextTickAtSeconds) continue;
         tickCount = Math.max(1, Math.floor((nowSeconds - instance.nextTickAtSeconds) / intervalSeconds) + 1);
+        if (options.decrementDuration === false && instance.remainingDurationSeconds !== undefined && instance.remainingDurationSeconds !== null) {
+          const maxTicksBeforeExpiry = Math.floor(instance.remainingDurationSeconds / intervalSeconds);
+          if (maxTicksBeforeExpiry <= 0) continue;
+          tickCount = Math.min(tickCount, maxTicksBeforeExpiry);
+        }
       }
 
       const beforeIntensity = instance.intensity;
@@ -557,6 +562,15 @@ export class ConditionEngine {
       throw new Error('Condition elapsed-time advancement requires finite timestamps with toSeconds >= fromSeconds.');
     }
     if (to === from) return [];
+
+    const actorState = this.requireActor(actorId);
+    for (const instance of actorState.instances) {
+      const definition = this.definitions.get(instance.definitionId);
+      const unit = (definition?.tickUnit || instance.tickUnit) as ConditionTickUnit | undefined;
+      if (unit && ['MINUTE', 'HOUR', 'DAY', 'WORLD_TIME'].includes(unit) && instance.nextTickAtSeconds === undefined) {
+        instance.nextTickAtSeconds = Math.max(0, Number(instance.appliedAtSeconds || from)) + this.conditionTickIntervalSeconds(unit, definition?.tickEvery || instance.tickEvery || 1);
+      }
+    }
 
     const events: ConditionTickEvent[] = [];
     for (const unit of ['MINUTE', 'HOUR', 'DAY', 'WORLD_TIME'] as ConditionTickUnit[]) {

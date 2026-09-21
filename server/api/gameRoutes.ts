@@ -225,10 +225,15 @@ gameRouter.post('/rest', async (req: Request, res: Response) => {
       : (player ? player.actorId : `player_actor_${storyId}`);
     const action = req.body?.action as 'BEGIN' | 'ADVANCE' | 'COMPLETE' | 'INTERRUPT' | 'PERFORM';
     const restType = req.body?.restType as 'SHORT_REST' | 'LONG_REST' | undefined;
+    const idempotencyKey = typeof req.body?.idempotencyKey === 'string' && req.body.idempotencyKey.trim()
+      ? req.body.idempotencyKey.trim()
+      : undefined;
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, '/rest', req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      (idempotencyKey
+        ? deterministicId('cmd_rest_idem', storyId, idempotencyKey)
+        : deterministicId('cmd_route', storyId, '/rest', req.body || {}));
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -246,6 +251,7 @@ gameRouter.post('/rest', async (req: Request, res: Response) => {
           interruptAfterSeconds: req.body?.interruptAfterSeconds,
         },
         source: 'PLAYER',
+        idempotencyKey,
         transactionMode: 'STAGED',
       },
       async (command, context) => {

@@ -680,7 +680,7 @@ export type RulesResolutionPolicy =
   | 'DND_WITH_EXPLICIT_OVERRIDES'
   | 'CUSTOM_EXPLICIT_RULES';
 
-export type RuleOverrideOperation = 'ENABLE' | 'DISABLE' | 'REPLACE';
+export type RuleOverrideOperation = 'ENABLE' | 'DISABLE';
 
 export interface RuleOverride {
   ruleId: string;

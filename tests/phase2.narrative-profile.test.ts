@@ -1,0 +1,203 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+
+import { narrativeProfileEngine } from '../server/domain/narrativeProfileEngine';
+import { rulesProfileEngine } from '../server/domain/rulesProfileEngine';
+import { WorldSynthesisService } from '../server/services/worldSynthesisService';
+import { InMemoryWorldRepository, worldRepository } from '../server/repositories/worldRepository';
+import { CharacterStoryMode, DndRulesMode } from '../src/types';
+
+const NARRATIVE_MODES: CharacterStoryMode[] = [
+	'PROTAGONIST',
+	'SIDE_CHARACTER',
+	'FREE_ROAM',
+];
+
+const RULES_MODES: DndRulesMode[] = [
+	'FULL_DND',
+	'HYBRID_DND',
+	'CUSTOM_HOMEBREW_DND',
+];
+
+test('Phase 2 — canonical narrative profile definitions validate for all three modes', () => {
+	for (const mode of NARRATIVE_MODES) {
+		const profile = narrativeProfileEngine.createDefault(mode);
+		assert.equal(profile.mode, mode);
+		assert.equal(narrativeProfileEngine.validate(profile).length, 0);
+	}
+
+	assert.equal(
+		narrativeProfileEngine.createDefault('PROTAGONIST').camera,
+		'PLAYER_CENTRIC'
+	);
+	assert.equal(
+		narrativeProfileEngine.createDefault('SIDE_CHARACTER').camera,
+		'SUPPORTING_CAST'
+	);
+	assert.equal(
+		narrativeProfileEngine.createDefault('FREE_ROAM').camera,
+		'WORLD_SANDBOX'
+	);
+});
+
+test('Phase 2 — explicit narrative mode wins over a mismatched persisted profile', () => {
+	const persisted = narrativeProfileEngine.createDefault('PROTAGONIST');
+	const resolved = narrativeProfileEngine.resolve({
+		mode: 'FREE_ROAM',
+		narrativeProfile: persisted,
+		source: 'RUN',
+	});
+
+	assert.equal(resolved.profile.mode, 'FREE_ROAM');
+	assert.equal(resolved.profile.profileId, 'narrative.free_roam.v1');
+	assert.ok(resolved.warnings.some((warning) => warning.includes('did not match persisted profile mode')));
+});
+
+test('Phase 2 — world synthesis preserves every rules × narrative combination', async () => {
+	const service = new WorldSynthesisService(() => ({
+		executeTaskGeneration: async () => ({
+			source: 'DETERMINISTIC_FALLBACK',
+			providerId: 'provider_test',
+			modelId: 'model_test',
+			fallbackReason: 'Phase 2 test',
+			attempts: 1,
+		}),
+	} as any));
+
+	for (const rulesMode of RULES_MODES) {
+		for (const narrativeMode of NARRATIVE_MODES) {
+			const world = await service.synthesizeWorldFromPremise({
+				naturalLanguagePremise: 'A frontier settlement survives around an ancient observatory.',
+				generationSeed: 'phase2-' + rulesMode + '-' + narrativeMode,
+				storyMode: narrativeMode,
+				dndRulesMode: rulesMode,
+			});
+
+			assert.equal(world.storyMode, narrativeMode);
+			assert.equal(world.narrativeProfile?.mode, narrativeMode);
+			assert.equal(world.dndRulesMode, rulesMode);
+			assert.equal(world.rulesProfile?.mode, rulesMode);
+			assert.notEqual(world.narrativeProfile?.profileId, undefined);
+		}
+	}
+});
+
+test('Phase 2 — repository preserves narrative and rules selections independently across all nine combinations', () => {
+	const repo = new InMemoryWorldRepository();
+
+	for (const rulesMode of RULES_MODES) {
+		for (const narrativeMode of NARRATIVE_MODES) {
+			const worldId = 'phase2_combo_world_' + rulesMode + '_' + narrativeMode;
+			const storyId = 'phase2_combo_story_' + rulesMode + '_' + narrativeMode;
+			repo.saveWorldTemplate({
+				worldId,
+				title: 'Phase 2 Test World',
+				summary: 'Test',
+				description: 'Test',
+				rulesetId: rulesMode,
+				dndRulesMode: rulesMode,
+				rulesProfile: rulesProfileEngine.createDefault(rulesMode),
+				storyMode: narrativeMode,
+				narrativeProfile: narrativeProfileEngine.createDefault(narrativeMode),
+			});
+
+			repo.saveStoryRun({
+				storyId,
+				id: storyId,
+				worldId,
+				characterName: 'Test Character',
+				storyMode: narrativeMode,
+				narrativeProfile: narrativeProfileEngine.createDefault(narrativeMode),
+				dndRulesMode: rulesMode,
+				rulesProfile: rulesProfileEngine.createDefault(rulesMode),
+			});
+
+			assert.equal(repo.getNarrativeProfile(storyId)?.mode, narrativeMode);
+			assert.equal(repo.getRulesProfile(storyId)?.mode, rulesMode);
+		}
+	}
+});
+
+test('Phase 2 — legacy worlds and runs are migrated on persistence reload', () => {
+	const path = join(tmpdir(), 'dreambook-phase2-migration-' + Date.now() + '.json');
+	const oldEnv = process.env.DREAMBOOK_PERSISTENCE_PATH;
+
+	try {
+		mkdirSync(tmpdir(), { recursive: true });
+		writeFileSync(path, JSON.stringify({
+			version: 1,
+			worldTemplates: {
+				legacy_world: {
+					worldId: 'legacy_world',
+					title: 'Legacy World',
+					rulesetId: 'HYBRID_DND',
+					dndRulesMode: 'HYBRID_DND',
+					playstyle: 'legacy-playstyle',
+				},
+			},
+			storyRuns: {
+				legacy_story: {
+					storyId: 'legacy_story',
+					worldId: 'legacy_world',
+					characterName: 'Legacy Character',
+					dndRulesMode: 'HYBRID_DND',
+				},
+			},
+		}, null, 2));
+
+		process.env.DREAMBOOK_PERSISTENCE_PATH = path;
+		const repo = new InMemoryWorldRepository();
+
+		assert.equal(repo.getWorldTemplate('legacy_world')?.storyMode, 'PROTAGONIST');
+		assert.equal(repo.getWorldTemplate('legacy_world')?.narrativeProfile?.mode, 'PROTAGONIST');
+		assert.equal(repo.getStoryRun('legacy_story')?.storyMode, 'PROTAGONIST');
+		assert.equal(repo.getStoryRun('legacy_story')?.narrativeProfile?.mode, 'PROTAGONIST');
+
+		const persistedAfterMigration = JSON.parse(readFileSync(path, 'utf8'));
+		assert.equal(persistedAfterMigration.worldTemplates.legacy_world.narrativeProfile.mode, 'PROTAGONIST');
+		assert.equal(persistedAfterMigration.storyRuns.legacy_story.narrativeProfile.mode, 'PROTAGONIST');
+
+		const reloadedRepo = new InMemoryWorldRepository();
+		assert.equal(reloadedRepo.getNarrativeProfile('legacy_story')?.mode, 'PROTAGONIST');
+		assert.equal(reloadedRepo.getRulesProfile('legacy_story')?.mode, 'HYBRID_DND');
+	} finally {
+		if (oldEnv === undefined) {
+			delete process.env.DREAMBOOK_PERSISTENCE_PATH;
+		} else {
+			process.env.DREAMBOOK_PERSISTENCE_PATH = oldEnv;
+		}
+		rmSync(path, { force: true });
+	}
+});
+
+test('Phase 2 — runtime projection exposes canonical narrative and rules profiles', () => {
+	const worldId = 'phase2_runtime_world';
+	const storyId = 'phase2_runtime_story';
+	worldRepository.saveWorldTemplate({
+		worldId,
+		title: 'Runtime Test World',
+		summary: 'Runtime test',
+		description: 'Runtime test',
+		rulesetId: 'CUSTOM_HOMEBREW_DND',
+		dndRulesMode: 'CUSTOM_HOMEBREW_DND',
+		rulesProfile: rulesProfileEngine.createDefault('CUSTOM_HOMEBREW_DND'),
+		storyMode: 'FREE_ROAM',
+		narrativeProfile: narrativeProfileEngine.createDefault('FREE_ROAM'),
+	});
+	worldRepository.saveStoryRun({
+		storyId,
+		id: storyId,
+		worldId,
+		characterName: 'Runtime Character',
+		storyMode: 'FREE_ROAM',
+		narrativeProfile: narrativeProfileEngine.createDefault('FREE_ROAM'),
+		dndRulesMode: 'CUSTOM_HOMEBREW_DND',
+		rulesProfile: rulesProfileEngine.createDefault('CUSTOM_HOMEBREW_DND'),
+	});
+
+	assert.equal(worldRepository.getNarrativeProfile(storyId)?.mode, 'FREE_ROAM');
+	assert.equal(worldRepository.getRulesProfile(storyId)?.mode, 'CUSTOM_HOMEBREW_DND');
+});

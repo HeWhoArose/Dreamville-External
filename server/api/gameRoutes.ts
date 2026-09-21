@@ -2080,7 +2080,7 @@ gameRouter.post('/combat/ready', async (req: Request, res: Response) => {
       },
       async (_command, context) => {
         const combat = context.repository.getCombatEngine(storyId);
-        const result = combat.getActionEconomy().setReadyAction(
+        const result = combat.armReadyAction(
           actorId,
           typeof req.body?.actionDescription === 'string' ? req.body.actionDescription : 'Prepared attack',
           typeof req.body?.triggerDescription === 'string' ? req.body.triggerDescription : 'Configured trigger.',
@@ -2088,7 +2088,6 @@ gameRouter.post('/combat/ready', async (req: Request, res: Response) => {
             triggerType,
             triggerActorId: typeof req.body?.triggerActorId === 'string' ? req.body.triggerActorId : undefined,
             targetId: typeof req.body?.targetId === 'string' ? req.body.targetId : undefined,
-            actionType: 'ATTACK',
           }
         );
         if (!result.success) return { success: false, errorReason: result.errorReason };

@@ -211,3 +211,40 @@ test('Phase 1 integration: persisted StoryRun profile is re-canonicalized from t
 	assert.equal(resolved?.allowImplicitAbilityChecks, false);
 	assert.equal(resolved?.allowStandardDndSpellRules, false);
 });
+
+test('Phase 1 integration: internal NPC tactical execution honors the active rules profile', async () => {
+	const { NpcTacticalDecisionPolicy } = await import('../server/domain/tacticalDecisionPolicy');
+	const { TacticalCombatEngine } = await import('../server/domain/combatEngine');
+
+	const combatEngine = new TacticalCombatEngine(42);
+	combatEngine.addParticipant({
+		id: 'npc_guard',
+		name: 'Guard',
+		x: 0,
+		y: 0,
+		initiative: 10,
+		team: 'enemies',
+		hpCurrent: 20,
+		hpMax: 20,
+		armorClass: 12,
+		speedCells: 4,
+		attackBonus: 3,
+		damageFormula: '1d4+1',
+		conditions: [],
+		isDead: false,
+	});
+
+	const result = NpcTacticalDecisionPolicy.executeDecidedAction(
+		{
+			actorId: 'npc_guard',
+			actionType: 'END_TURN',
+			reason: 'Rule gate test.',
+			priorityScore: 1,
+		},
+		combatEngine,
+		undefined,
+		rulesProfileEngine.createDefault('CUSTOM_HOMEBREW_DND')
+	);
+
+	assert.equal(result.success, false);
+});

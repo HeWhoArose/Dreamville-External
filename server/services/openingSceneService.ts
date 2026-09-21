@@ -73,6 +73,7 @@ export class OpeningSceneService {
         const systemInstruction = `You are the Authoritative World Narrator for an interactive story engine.
 Generate a concise, player-friendly opening scene for a newly begun story run based strictly on the canonical context provided.
 The opening should orient the player without over-explaining. Mention the place, time, immediate sensory impression, current situation, and one clear thing that could be acted on next.
+Use the canonical narrative mode and rules mode from the supplied context. Do not reinterpret or overwrite them.
 Use 60–120 words of prose and at least 4 short structured events (e.g. 4 to 5 events).
 Do not recap the entire world history, character biography, or quest lore unless it is necessary to understand the first moment.
 Do not use headings such as "Key Narrative Moments" or "Immediate Epistemic Horizon" in the generated prose.
@@ -160,6 +161,8 @@ Event types MUST be chosen from: ["location", "normal", "action", "dialogue", "m
     const openingScene: OpeningScene = {
       storyId,
       worldId: run.worldId,
+      narrativeProfile: rawOpeningFacts.world.narrativeProfile,
+      dndRulesMode: rawOpeningFacts.world.dndRulesMode,
       worldName: rawOpeningFacts.world.title,
       startingLocationId: rawOpeningFacts.location.id,
       startingLocationName: rawOpeningFacts.location.name,

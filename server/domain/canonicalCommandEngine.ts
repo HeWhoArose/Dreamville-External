@@ -270,7 +270,7 @@ export class CanonicalCommandEngine {
 		const stagedRepository =
 			command.transactionMode === 'STAGED'
 				? (() => {
-					const staged = new InMemoryWorldRepository();
+					const staged = new InMemoryWorldRepository({ disablePersistence: true });
 					staged.restoreCanonicalStateSnapshot(before, { persist: false });
 					return staged;
 				})()

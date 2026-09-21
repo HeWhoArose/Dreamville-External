@@ -160,8 +160,8 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
       async () => {
         const actionResult =
           actionRequest.type === 'CUSTOM_ACTION'
-            ? await serverMockAuthority.processCustomAction(actionRequest)
-            : serverMockAuthority.processAction(actionRequest);
+            ? await serverMockAuthority.processCustomAction(actionRequest, requestedCommandId)
+            : serverMockAuthority.processAction(actionRequest, requestedCommandId);
         return {
           success: actionResult.success !== false,
           data: actionResult,

@@ -890,7 +890,7 @@ export class TacticalCombatEngine {
           .sort((a, b) => a.id.localeCompare(b.id))
       : [];
 
-    const path = this.calculateMovementPath(actor.x, actor.y, targetX, targetY);
+    const path = this.calculateMovementPath(actorId, actor.x, actor.y, targetX, targetY);
     if (!path) {
       return {
         success: false,
@@ -974,7 +974,7 @@ export class TacticalCombatEngine {
     return this.hazards.some((hazard) => hazard.type === 'barricade' && hazard.x === x && hazard.y === y);
   }
 
-  private calculateMovementPath(fromX: number, fromY: number, targetX: number, targetY: number): { x: number; y: number }[] | undefined {
+  private calculateMovementPath(actorId: string, fromX: number, fromY: number, targetX: number, targetY: number): { x: number; y: number }[] | undefined {
     const steps = Math.max(Math.abs(targetX - fromX), Math.abs(targetY - fromY));
     if (steps === 0) return [{ x: fromX, y: fromY }];
 
@@ -1005,7 +1005,7 @@ export class TacticalCombatEngine {
       }
 
       if (this.participants.values && Array.from(this.participants.values()).some((participant) =>
-        participant.id !== 'PATH_SELF' &&
+        participant.id !== actorId &&
         !participant.isDead &&
         participant.x === x &&
         participant.y === y

@@ -309,6 +309,73 @@ test('Phase 3 — AI commands use the same payload validation as player commands
 	assert.equal(repo.getCanonicalCommandEvents(storyId).length, 0);
 });
 
+test('Phase 3 — staged living-world mutations roll back when the command is rejected', async () => {
+	const storyId = 'phase3_living_world_rollback';
+	const repo = seedRepo(storyId);
+	const before = captureCanonicalStateSnapshot(storyId, repo);
+	const actorId = repo.getPlayerLifecycle(storyId)?.actorId || 'player_actor_' + storyId;
+
+	const result = await canonicalCommandEngine.execute(
+		repo,
+		{
+			commandId: 'cmd_living_world_rollback_001',
+			storyId,
+			actorId,
+			type: 'INTERACT',
+			payload: { action: 'SCHEDULE_AND_REJECT' },
+			source: 'SYSTEM',
+			transactionMode: 'STAGED',
+		},
+		async (_command, context) => {
+			context.repository.getLivingWorldSimulation(storyId).scheduleEvent({
+				id: 'phase3_scheduled_event_rollback',
+				kind: 'TEST',
+				name: 'Phase 3 rollback event',
+				locationId: 'loc_whispering_orrery',
+				triggerTimestamp: { totalElapsedSeconds: 60, cycle: 1, period: 'Dawn' },
+				isResolved: false,
+				status: 'pending',
+			});
+			return { success: false, errorReason: 'Intentional living-world rejection.' };
+		}
+	);
+
+	assert.equal(result.success, false);
+	assert.equal(result.rolledBack, true);
+	assert.equal(compareCanonicalSnapshots(before, captureCanonicalStateSnapshot(storyId, repo)).identical, true);
+	assert.equal(repo.getCanonicalCommandEvents(storyId).length, 0);
+});
+
+test('Phase 3 — staged world-time simulation rolls back all canonical mutations on rejection', async () => {
+	const storyId = 'phase3_living_world_time_rollback';
+	const repo = seedRepo(storyId);
+	const before = captureCanonicalStateSnapshot(storyId, repo);
+	const actorId = repo.getPlayerLifecycle(storyId)?.actorId || 'player_actor_' + storyId;
+	const { WorldSimulationService } = await import('../server/simulation/worldSimulationService');
+
+	const result = await canonicalCommandEngine.execute(
+		repo,
+		{
+			commandId: 'cmd_living_world_time_rollback_001',
+			storyId,
+			actorId,
+			type: 'ADVANCE_TIME',
+			payload: { seconds: 3600 },
+			source: 'SYSTEM',
+			transactionMode: 'STAGED',
+		},
+		async (_command, context) => {
+			const simulation = new WorldSimulationService(context.repository);
+			simulation.advanceTime(storyId, 3600);
+			return { success: false, errorReason: 'Intentional world-time rejection.' };
+		}
+	);
+
+	assert.equal(result.success, false);
+	assert.equal(result.rolledBack, true);
+	assert.equal(compareCanonicalSnapshots(before, captureCanonicalStateSnapshot(storyId, repo)).identical, true);
+	assert.equal(repo.getCanonicalCommandEvents(storyId).length, 0);
+});
 test('Phase 3 — commands for the same story serialize to prevent snapshot races', async () => {
 	const storyId = 'phase3_story_serialization';
 	const repo = seedRepo(storyId);

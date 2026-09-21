@@ -422,6 +422,16 @@ export class CharacterProgressionEngine {
       throw new Error(`Module '${moduleId}' requires class '${module.parentClassId}'.`);
     }
     this.assertPrerequisites(state, module);
+
+    // Class, subclass, and species are singular selections. Replacing one must
+    // disable the previous module so passive modifiers cannot double-stack across
+    // stale selections. Feats remain additive and may coexist.
+    if (type !== 'FEAT') {
+      state.enabledModuleIds = state.enabledModuleIds.filter((id) => {
+        const enabled = this.modules.get(id);
+        return enabled?.type !== type || id === moduleId;
+      });
+    }
     if (type === 'CLASS') state.classId = moduleId;
     if (type === 'SUBCLASS') state.subclassId = moduleId;
     if (type === 'SPECIES') state.speciesId = moduleId;

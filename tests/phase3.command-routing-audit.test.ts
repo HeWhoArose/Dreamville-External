@@ -40,6 +40,7 @@ test('Phase 3 — core authoritative action routes all use the canonical command
 		'/worlds/runs/:storyId/actions/execute',
 		'/worlds/runs/:storyId/actions/apply-ability',
 		'/worlds/runs/:storyId/dice-clash/resolve',
+		'/orchestrator/turn',
 	];
 
 	for (const route of requiredRoutes) {

@@ -100,6 +100,7 @@ function baseProfile(mode: DndRulesMode): RulesProfile {
 function applyOverrides(profile: RulesProfile, rawOverrides: unknown): RulesProfile {
 	const overrides = Array.isArray(rawOverrides) ? rawOverrides : [];
 	const next = clone(profile);
+	next.overrides = [];
 
 	for (const raw of overrides) {
 		if (!raw || typeof raw !== 'object') continue;

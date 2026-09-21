@@ -199,7 +199,7 @@ export class StoryCheckEngine {
 
     const sceneText = normalize(character.sceneText || '');
     const inferredSaveSelection = this.pickSaveProfile(text, sceneText);
-    const saveSelection = challenge?.savingThrowAbility
+    let saveSelection = challenge?.savingThrowAbility
       ? {
           profile: {
             ability: challenge.savingThrowAbility,

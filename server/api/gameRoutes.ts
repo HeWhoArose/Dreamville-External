@@ -1897,9 +1897,10 @@ gameRouter.post('/combat/action', async (req: Request, res: Response) => {
         type: 'CORE_ACTION',
         payload: { action },
         source: 'PLAYER',
+        transactionMode: 'STAGED',
       },
-      async () => {
-        const combatEngine = worldRepository.getCombatEngine(storyId);
+      async (_command, context) => {
+        const combatEngine = context.repository.getCombatEngine(storyId);
         const result = combatEngine.executeCoreAction(serverPlayerActorId, action);
         if (!result.success) {
           return {

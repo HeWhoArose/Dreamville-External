@@ -106,9 +106,9 @@ export function compileProviderNeutralPrompt(meta: ImageAssetMeta): string {
       ? 'Use visual language appropriate to the stated genres (' + meta.genreTags.join(', ') + '); do not impose fantasy aesthetics when the genres indicate science fiction, cyberpunk, modern, post-apocalyptic, or other non-fantasy settings.'
       : 'Cohesive cinematic concept art with a clear visual identity appropriate to the subject and setting.'));
   parts.push('Artistic style: ' + inferredStyle);
-  parts.push('Lighting: ' + (meta.lightingColor || 'Dramatic chiaroscuro with ambient rim lighting in purple, blue, and gold tones'));
+  parts.push('Lighting: ' + (meta.lightingColor || 'Lighting appropriate to the world tone, environment, and era.'));
   parts.push('Framing: ' + (meta.composition || ('Cinematic centered focal framing for ' + spec.aspectRatio)));
-  parts.push('Constraints: No modern artifacts, no digital UI text or watermarks, maintain clean anatomical clarity.');
+  parts.push('Constraints: No UI framing, watermarks, unintended borders, or arbitrary text; preserve the defining visual elements supplied by the world metadata.');
 
   return appendImageOutputSpecification(parts.join('.\n'), meta.slotType);
 }

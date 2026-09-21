@@ -3,7 +3,6 @@ import { rulesProfileEngine } from './rulesProfileEngine';
 import { LocalDiceEngine, BattlefieldParticipant, RollRecord, CoverLevel } from './combatEngine';
 import { ConditionEngine, conditionEngine as defaultConditionEngine } from './conditionEngine';
 import { HistoricalChronicleEngine } from './historicalChronicleEngine';
-import { deterministicId } from './deterministicRng';
 import { dndSpellRulesEvaluator, SpellEvaluationResult } from './dndSpellRulesModel';
 
 export type SpellSchool =
@@ -98,6 +97,21 @@ export interface ActorSpellcastingState {
   activeConcentration: ActiveConcentration | null;
 }
 
+export interface SpellDamageResolution {
+  damage: number;
+  targetDied: boolean;
+  immune?: boolean;
+  resisted?: boolean;
+  vulnerable?: boolean;
+}
+
+export type SpellDamageResolver = (
+  target: BattlefieldParticipant,
+  amount: number,
+  damageType: string,
+  criticalHit?: boolean
+) => SpellDamageResolution;
+
 export interface CastSpellRequest {
   storyId?: string;
   casterId: string;
@@ -112,6 +126,12 @@ export interface CastSpellRequest {
   disadvantage?: boolean;
   rulesProfile?: RulesProfile;
   diceEngine?: LocalDiceEngine;
+  /** Production callers must resolve targets from canonical state before casting. */
+  requireAuthoritativeTarget?: boolean;
+  /** Explicit opt-in for isolated unit tests/simulations without a canonical battlefield. */
+  allowSyntheticTarget?: boolean;
+  /** Canonical combat authority may provide the damage/death resolver. */
+  damageResolver?: SpellDamageResolver;
 }
 
 export interface CastSpellExecutionResult {
@@ -1021,7 +1041,9 @@ export class SpellRuntime {
     if (!targetParticipant && targetId) {
       if (targetId === casterId) {
         targetParticipant = casterParticipant;
-      } else {
+      } else if (request.allowSyntheticTarget) {
+        // Explicitly isolated/test-only compatibility path. Authoritative API/combat
+        // callers set requireAuthoritativeTarget and never reach this branch.
         const isTouch = spell.rangeType === 'TOUCH' || spell.range <= 5;
         targetParticipant = {
           id: targetId,
@@ -1039,15 +1061,46 @@ export class SpellRuntime {
           hpMax: 25,
           speedCells: 6,
         };
+      } else if (request.requireAuthoritativeTarget) {
+        return {
+          success: false,
+          errorCode: 'TARGET_NOT_FOUND',
+          errorReason: 'Target ' + targetId + ' is not present in authoritative combat state.',
+          spellId: spell.id,
+          spellName: spell.name,
+          slotLevelUsed: 0,
+          isRitual,
+          requiresConcentration: spell.requiresConcentration,
+          headline: 'Cannot cast ' + spell.name + ': target ' + targetId + ' was not found in authoritative state.',
+        };
       }
+    }
+
+    if (request.requireAuthoritativeTarget && spell.targetType !== 'SELF' && !targetParticipant) {
+      return {
+        success: false,
+        errorCode: 'TARGET_REQUIRED',
+        errorReason: 'Spell ' + spell.name + ' requires an authoritative target.',
+        spellId: spell.id,
+        spellName: spell.name,
+        slotLevelUsed: 0,
+        isRitual,
+        requiresConcentration: spell.requiresConcentration,
+        headline: 'Cannot cast ' + spell.name + ': no authoritative target was provided.',
+      };
     }
 
     const profile = rulesProfile || rulesProfileEngine.createDefault('FULL_DND');
     const allowsStandardSpellRules = rulesProfileEngine.allowsStandardDndSpellRules(profile);
-    const overrides = profile.parameterOverrides?.standard_dnd_spell_rules as Record<string, unknown> | undefined;
+    const standardOverrides = profile.parameterOverrides?.standard_dnd_spell_rules as Record<string, unknown> | undefined;
+    const customOverrides = profile.parameterOverrides?.custom_spell_rules as Record<string, unknown> | undefined;
+    const overrides = allowsStandardSpellRules ? standardOverrides : customOverrides;
     const unlimitedSlots = Boolean(overrides?.unlimitedSpellSlots);
     const allowUnprepared = Boolean(overrides?.allowUnpreparedCasting);
     const maxAllowedLevel = overrides?.maxAllowedSpellLevel !== undefined ? Number(overrides.maxAllowedSpellLevel) : undefined;
+    const enforceSlotConsumption = allowsStandardSpellRules
+      ? !unlimitedSlots
+      : Boolean(customOverrides?.enforceSlotConsumption);
 
     // Rule: Mode-specific level caps
     if (maxAllowedLevel !== undefined && spell.level > maxAllowedLevel) {
@@ -1066,10 +1119,10 @@ export class SpellRuntime {
 
     // Rule 1: Prepared / Known Spells Check
     if (
+      allowsStandardSpellRules &&
       spell.level > 0 &&
       state.requiresPreparation &&
-      !allowUnprepared &&
-      profile.mode === 'FULL_DND'
+      !allowUnprepared
     ) {
       const isKnown = state.knownSpells.some((k) => k.toLowerCase() === spell.id.toLowerCase() || this.normalizeName(k) === spell.id);
       const isPrepared = state.preparedSpells.some((p) => p.toLowerCase() === spell.id.toLowerCase() || this.normalizeName(p) === spell.id);
@@ -1088,8 +1141,9 @@ export class SpellRuntime {
       }
     }
 
-    // Rule 2: Ritual Casting Verification
-    if (isRitual) {
+    // Rule 2: Ritual Casting Verification. Standard D&D ritual legality is enforced
+    // only when standard spell rules are enabled; Custom Homebrew owns its own semantics.
+    if (isRitual && allowsStandardSpellRules) {
       if (!spell.isRitual) {
         return {
           success: false,
@@ -1126,7 +1180,7 @@ export class SpellRuntime {
       };
     }
 
-    if (effectiveSlotLevel > 0 && !unlimitedSlots) {
+    if (effectiveSlotLevel > 0 && enforceSlotConsumption) {
       const slot = state.spellSlots[effectiveSlotLevel];
       if (!slot || slot.current <= 0) {
         return {
@@ -1184,7 +1238,7 @@ export class SpellRuntime {
     // --- ATOMIC AUTHORITATIVE EXECUTION COMMENCES ---
 
     // 1. Consume Spell Slot (if leveled spell and not ritual)
-    if (effectiveSlotLevel > 0 && !unlimitedSlots) {
+    if (effectiveSlotLevel > 0 && enforceSlotConsumption) {
       state.spellSlots[effectiveSlotLevel].current = Math.max(
         0,
         state.spellSlots[effectiveSlotLevel].current - 1
@@ -1253,11 +1307,9 @@ export class SpellRuntime {
         }
         if (nat20) dmgTotal *= 2; // Critical damage
 
-        const dmgRes = this.applyAuthoritativeDamage(
-          targetParticipant,
-          dmgTotal,
-          spell.damageType || 'force'
-        );
+        const dmgRes = request.damageResolver
+          ? request.damageResolver(targetParticipant, dmgTotal, spell.damageType || 'force', nat20)
+          : this.applyAuthoritativeDamage(targetParticipant, dmgTotal, spell.damageType || 'force');
         damageInflicted = dmgRes.damage;
         targetDied = dmgRes.targetDied;
         targetHpRemaining = targetParticipant.hpCurrent;
@@ -1265,7 +1317,7 @@ export class SpellRuntime {
         targetResisted = dmgRes.resisted;
         targetVulnerable = dmgRes.vulnerable;
 
-        if (damageInflicted > 0) {
+        if (damageInflicted > 0 && !request.damageResolver) {
           targetConcCheck = this.resolveDamageConcentrationCheck(targetParticipant, damageInflicted, dice);
         }
       }
@@ -1295,11 +1347,9 @@ export class SpellRuntime {
         }
 
         if (baseDmg > 0) {
-          const dmgRes = this.applyAuthoritativeDamage(
-            targetParticipant,
-            baseDmg,
-            spell.damageType || 'force'
-          );
+          const dmgRes = request.damageResolver
+            ? request.damageResolver(targetParticipant, baseDmg, spell.damageType || 'force', false)
+            : this.applyAuthoritativeDamage(targetParticipant, baseDmg, spell.damageType || 'force');
           damageInflicted = dmgRes.damage;
           targetDied = dmgRes.targetDied;
           targetHpRemaining = targetParticipant.hpCurrent;
@@ -1307,7 +1357,7 @@ export class SpellRuntime {
           targetResisted = dmgRes.resisted;
           targetVulnerable = dmgRes.vulnerable;
 
-          if (damageInflicted > 0) {
+          if (damageInflicted > 0 && !request.damageResolver) {
             targetConcCheck = this.resolveDamageConcentrationCheck(targetParticipant, damageInflicted, dice);
           }
         }
@@ -1335,11 +1385,9 @@ export class SpellRuntime {
             baseDmg += dice.roll(spell.upcastDamageDicePerLevel).total;
           }
         }
-        const dmgRes = this.applyAuthoritativeDamage(
-          targetParticipant,
-          baseDmg,
-          spell.damageType || 'force'
-        );
+        const dmgRes = request.damageResolver
+          ? request.damageResolver(targetParticipant, baseDmg, spell.damageType || 'force', false)
+          : this.applyAuthoritativeDamage(targetParticipant, baseDmg, spell.damageType || 'force');
         damageInflicted = dmgRes.damage;
         targetDied = dmgRes.targetDied;
         targetHpRemaining = targetParticipant.hpCurrent;
@@ -1469,32 +1517,6 @@ export class SpellRuntime {
     }
     if (movementApplied) {
       headline += ` Repositioned to (${movementApplied.to.x}, ${movementApplied.to.y}).`;
-    }
-
-    // Chronicle Evidence Recording
-    if (this.chronicleEngine) {
-      const now = Date.now();
-      this.chronicleEngine.recordBootstrapEvidence?.({
-        id: deterministicId('chronicle_spell_cast', casterId, spell.id, now),
-        sourceEventId: deterministicId('evt_cast', casterId, spell.id),
-        timestamp: {
-          year: 1,
-          month: 1,
-          day: 1,
-          hour: 12,
-          minute: 0,
-          second: 0,
-          totalElapsedSeconds: 0,
-        },
-        category: 'SACRED_OR_HISTORIC',
-        primarySubjectId: casterId,
-        secondarySubjectId: targetParticipant?.id,
-        locationId: 'battlefield',
-        summary: headline,
-        details: headline,
-        provenance: 'direct_observation',
-        visibility: 'PUBLIC',
-      });
     }
 
     return {

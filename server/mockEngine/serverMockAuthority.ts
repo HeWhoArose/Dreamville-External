@@ -462,7 +462,8 @@ export class ServerMockAuthority {
         conditionState: conditionEngine.exportActorState(actorId),
         sceneText,
       },
-      authoredChallenge || undefined
+      authoredChallenge || undefined,
+      run?.rulesProfile
     );
 
     let committedOutcome = baseResult.message;

@@ -1173,127 +1173,319 @@ gameRouter.post('/capabilities/adjudicate', async (req: Request, res: Response) 
  * POST /api/game/capabilities/acquire
  * Acquires a new skill for an actor with an isolated, mutable SkillInstance.
  */
-gameRouter.post('/capabilities/acquire', async (req: Request, res: Response) => {
-  try {
-    const { capabilityId, actorId: reqActorId, initialLevel, initialXp, evolutionPoints, lineage, storyId = 'default_story' } = req.body;
-    if (!capabilityId) {
-      return res.status(400).json({ success: false, errorReason: 'capabilityId is required.' });
-    }
-    const { worldRepository } = await import('../repositories/worldRepository');
-    const player = worldRepository.getPlayerLifecycle(storyId);
-    const actorId = reqActorId || (player ? player.actorId : `player_actor_${storyId}`);
-    const capEngine = worldRepository.getCapabilityEngine(storyId);
 
-    const instance = capEngine.acquireSkill(actorId, capabilityId, {
-      initialLevel,
-      initialXp,
-      evolutionPoints,
-      lineage,
-      worldRules: capEngine.getProgressionPolicy(),
+/**
+ * Phase 8 progression state.
+ * Read-only projection; all mutations use the canonical PROGRESSION command below.
+ */
+gameRouter.get('/worlds/runs/:storyId/progression', async (req: Request, res: Response) => {
+  try {
+    const storyId = req.params.storyId;
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = (typeof req.query.actorId === 'string' && req.query.actorId.trim())
+      ? req.query.actorId.trim()
+      : (player ? player.actorId : `player_actor_${storyId}`);
+    const engine = worldRepository.getCharacterProgressionEngine(storyId);
+    const rulesProfile = worldRepository.getRulesProfile(storyId);
+    res.json({
+      success: true,
+      storyId,
+      actorId,
+      state: engine.getState(actorId) || null,
+      modules: engine.getAllModules(),
+      unlockedFeatures: engine.getUnlockedFeatures(actorId),
+      triggeredAbilities: engine.getTriggeredAbilities(actorId),
+      modifiers: engine.resolveModifiers(actorId),
+      rulesProfile,
     });
-    res.json({ success: true, instance });
   } catch (error: any) {
-    res.status(400).json({ success: false, errorReason: error?.message || 'Failed to acquire skill.' });
+    res.status(404).json({ success: false, errorReason: error?.message || 'Progression state unavailable.' });
   }
 });
 
 /**
- * POST /api/game/capabilities/award-xp
- * Deterministically awards XP to an actor's skill instance and processes level-ups.
+ * Phase 8 canonical progression command.
+ * Operations: module selection/enablement, feat acquisition, level-up,
+ * triggered abilities, custom module registration, and legacy capability progression.
  */
+gameRouter.post('/worlds/runs/:storyId/progression', async (req: Request, res: Response) => {
+  try {
+    const storyId = req.params.storyId;
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = (typeof req.body?.actorId === 'string' && req.body.actorId.trim())
+      ? req.body.actorId.trim()
+      : (player ? player.actorId : `player_actor_${storyId}`);
+    const operation = String(req.body?.operation || '');
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      deterministicId('cmd_progression', storyId, actorId, operation, req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'PROGRESSION',
+        payload: {
+          operation,
+          moduleType: req.body?.moduleType,
+          moduleId: req.body?.moduleId,
+          abilityId: req.body?.abilityId,
+          targetId: req.body?.targetId,
+          requestedScale: req.body?.requestedScale,
+          initialLevel: req.body?.initialLevel,
+          initialXp: req.body?.initialXp,
+          evolutionPoints: req.body?.evolutionPoints,
+          lineage: req.body?.lineage,
+          xpAmount: req.body?.xpAmount,
+          reason: req.body?.reason,
+          targetLevel: req.body?.targetLevel,
+          fromCapabilityId: req.body?.fromCapabilityId,
+          toCapabilityId: req.body?.toCapabilityId,
+          targetDefinition: req.body?.targetDefinition,
+          module: req.body?.module,
+        },
+        source: 'PLAYER',
+        idempotencyKey: req.body?.idempotencyKey,
+        transactionMode: 'STAGED',
+      },
+      async (command, context) => {
+        const progression = context.repository.getCharacterProgressionEngine(storyId);
+        const profile = context.repository.getRulesProfile(storyId);
+        const profileConfig = progression.getEffectiveConfigForRulesProfile(profile);
+        const payload = command.payload as any;
+
+        if (operation === 'REGISTER_MODULE') {
+          if (!profileConfig.allowCharacterProgression || !profileConfig.allowCustomModules || profile?.mode === 'FULL_DND') {
+            return { success: false, errorReason: 'Custom progression modules are not enabled by the active rules profile.' };
+          }
+          if (!payload.module || typeof payload.module !== 'object') {
+            return { success: false, errorReason: 'REGISTER_MODULE requires a module definition.' };
+          }
+          const module = JSON.parse(JSON.stringify(payload.module));
+          module.provenance = module.provenance || (profile?.mode === 'CUSTOM_HOMEBREW_DND' ? 'CUSTOM_HOMEBREW' : 'CHARACTER_GENESIS');
+          progression.registerModule(module);
+          return { success: true, data: { module: progression.getModule(module.id) }, summary: `Progression module '${module.id}' registered.` };
+        }
+
+        if (['SELECT_CLASS', 'SELECT_SUBCLASS', 'SELECT_SPECIES'].includes(operation)) {
+          const result = progression.selectModule(actorId, operation === 'SELECT_CLASS' ? 'CLASS' : operation === 'SELECT_SUBCLASS' ? 'SUBCLASS' : 'SPECIES', payload.moduleId, command.commandId, profile);
+          return { success: true, data: { state: result, modifiers: progression.resolveModifiers(actorId) }, summary: `Progression ${operation} committed.` };
+        }
+        if (operation === 'ACQUIRE_FEAT') {
+          const result = progression.acquireFeat(actorId, payload.moduleId, command.commandId, profile);
+          return { success: true, data: { state: result, modifiers: progression.resolveModifiers(actorId) }, summary: 'Feat acquisition committed.' };
+        }
+        if (operation === 'LEVEL_UP') {
+          const result = progression.levelUp(actorId, command.commandId, profile);
+          return { success: true, data: { state: result, modifiers: progression.resolveModifiers(actorId) }, summary: `Actor advanced to level ${result.currentLevel}.` };
+        }
+        if (operation === 'ENABLE_MODULE' || operation === 'DISABLE_MODULE') {
+          const result = progression.setModuleEnabled(actorId, payload.moduleId, operation === 'ENABLE_MODULE', command.commandId, profile);
+          return { success: true, data: { state: result, modifiers: progression.resolveModifiers(actorId) }, summary: `Progression module ${operation === 'ENABLE_MODULE' ? 'enabled' : 'disabled'}.` };
+        }
+        if (operation === 'TRIGGER_ABILITY') {
+          const result = progression.consumeTriggeredAbility(actorId, payload.abilityId, command.commandId);
+          if (result.ability.capabilityId || result.ability.capabilityDefinition) {
+            const { abilityService } = await import('../services/abilityService');
+            const applied = abilityService.resolveAbilityApplication(
+              storyId,
+              result.ability.capabilityId || result.ability.id,
+              String(payload.targetId || actorId),
+              req.body,
+              context.repository
+            );
+            if (!applied.success) return { success: false, errorReason: applied.errorReason || 'Triggered ability effect rejected.' };
+            return { success: true, data: { ...result, activeEffect: applied.activeEffect }, summary: `Triggered progression ability '${result.ability.name}'.` };
+          }
+          return { success: true, data: result, summary: `Triggered progression ability '${result.ability.name}'.` };
+        }
+
+        const capEngine = context.repository.getCapabilityEngine(storyId);
+        const policy = capEngine.getProgressionPolicy();
+        if (operation === 'ACQUIRE_CAPABILITY') {
+          const instance = capEngine.acquireSkill(actorId, payload.moduleId, {
+            initialLevel: payload.initialLevel,
+            initialXp: payload.initialXp,
+            evolutionPoints: payload.evolutionPoints,
+            lineage: payload.lineage,
+            worldRules: policy,
+          });
+          return { success: true, data: { instance }, summary: 'Capability acquisition committed.' };
+        }
+        if (operation === 'AWARD_XP') {
+          if (typeof payload.xpAmount !== 'number' || !Number.isFinite(payload.xpAmount) || payload.xpAmount < 0) return { success: false, errorReason: 'xpAmount must be a non-negative finite number.' };
+          const result = capEngine.awardSkillXp(actorId, payload.moduleId, payload.xpAmount, policy, payload.reason || 'Canonical progression award');
+          return { success: true, data: result, summary: 'Capability XP award committed.' };
+        }
+        if (operation === 'EVOLVE_CAPABILITY') {
+          if (payload.targetDefinition && !capEngine.getCapability(payload.toCapabilityId)) capEngine.registerCapability(payload.targetDefinition);
+          const instance = capEngine.evolveSkill(actorId, payload.fromCapabilityId, payload.toCapabilityId, policy, payload.reason || 'Canonical capability evolution');
+          return { success: true, data: { instance }, summary: 'Capability evolution committed.' };
+        }
+        if (operation === 'DOWNGRADE_CAPABILITY') {
+          const instance = capEngine.downgradeSkill(actorId, payload.moduleId, payload.targetLevel, payload.reason || 'Canonical capability downgrade', policy);
+          return { success: true, data: { instance }, summary: 'Capability downgrade committed.' };
+        }
+        if (operation === 'RELEARN_CAPABILITY') {
+          const instance = capEngine.relearnSkill(actorId, payload.moduleId, payload.reason || 'Canonical capability relearn', policy);
+          return { success: true, data: { instance }, summary: 'Capability relearn committed.' };
+        }
+
+        return { success: false, errorReason: `Unsupported progression operation '${operation}'.` };
+      }
+    );
+
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
+      });
+    }
+    return res.json({
+      success: true,
+      ...(commandResult.data as any),
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
+    });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, errorReason: error?.message || 'Progression command failed.' });
+  }
+});
+
+// Legacy capability mutation routes retain their historical response shapes while delegating
+// all mutations through the canonical Phase 8 PROGRESSION command.
+gameRouter.post('/capabilities/acquire', async (req: Request, res: Response) => {
+  req.body = { ...(req.body || {}), operation: 'ACQUIRE_CAPABILITY', moduleId: req.body?.capabilityId };
+  req.url = `/worlds/runs/${req.body?.storyId || resolveStoryId(req, true)}/progression`;
+  req.params.storyId = req.body?.storyId || resolveStoryId(req, true);
+  const storyId = req.params.storyId;
+  const player = worldRepository.getPlayerLifecycle(storyId);
+  const actorId = req.body?.actorId || (player ? player.actorId : `player_actor_${storyId}`);
+  try {
+    const capEngine = worldRepository.getCapabilityEngine(storyId);
+    const commandId = (req.headers['x-command-id'] as string | undefined) || (req.body?.commandId as string | undefined) || deterministicId('cmd_cap_acquire', storyId, actorId, req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+    const commandResult = await canonicalCommandEngine.execute(worldRepository, {
+      commandId, storyId, actorId, type: 'PROGRESSION',
+      payload: {
+        operation: 'ACQUIRE_CAPABILITY',
+        moduleId: req.body?.capabilityId,
+        initialLevel: req.body?.initialLevel,
+        initialXp: req.body?.initialXp,
+        evolutionPoints: req.body?.evolutionPoints,
+        lineage: req.body?.lineage,
+      },
+      source: 'PLAYER', transactionMode: 'STAGED',
+    }, async (command, context) => {
+      const e = context.repository.getCapabilityEngine(storyId);
+      const instance = e.acquireSkill(actorId, command.payload.moduleId as string, { initialLevel: command.payload.initialLevel as number, initialXp: command.payload.initialXp as number, evolutionPoints: command.payload.evolutionPoints as number, lineage: command.payload.lineage as string[], worldRules: e.getProgressionPolicy() });
+      return { success: true, data: { instance }, summary: 'Capability acquisition committed.' };
+    });
+    if (!commandResult.success) return res.status(400).json({ success: false, errorReason: commandResult.errorReason, rolledBack: commandResult.rolledBack, commandId: commandResult.commandId });
+    return res.json({ success: true, ...(commandResult.data as any), commandId: commandResult.commandId, canonicalEvent: commandResult.event });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, errorReason: error?.message || 'Failed to acquire skill.' });
+  }
+});
+
 gameRouter.post('/capabilities/award-xp', async (req: Request, res: Response) => {
+  const storyId = resolveStoryId(req, true);
+  const player = worldRepository.getPlayerLifecycle(storyId);
+  const actorId = req.body?.actorId || (player ? player.actorId : `player_actor_${storyId}`);
   try {
-    const { capabilityId, xpAmount, reason, actorId: reqActorId, storyId = 'default_story' } = req.body;
-    if (!capabilityId || typeof xpAmount !== 'number') {
-      return res.status(400).json({ success: false, errorReason: 'capabilityId and numeric xpAmount are required.' });
-    }
-    const { worldRepository } = await import('../repositories/worldRepository');
-    const player = worldRepository.getPlayerLifecycle(storyId);
-    const actorId = reqActorId || (player ? player.actorId : `player_actor_${storyId}`);
-    const capEngine = worldRepository.getCapabilityEngine(storyId);
-    const policy = capEngine.getProgressionPolicy();
-
-    const result = capEngine.awardSkillXp(actorId, capabilityId, xpAmount, policy, reason || 'Manual progression award');
-    res.json({ success: true, ...result });
+    const commandId = (req.headers['x-command-id'] as string | undefined) || (req.body?.commandId as string | undefined) || deterministicId('cmd_cap_xp', storyId, actorId, req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+    const result = await canonicalCommandEngine.execute(worldRepository, {
+      commandId, storyId, actorId, type: 'PROGRESSION',
+      payload: { operation: 'AWARD_XP', moduleId: req.body?.capabilityId, xpAmount: req.body?.xpAmount, reason: req.body?.reason },
+      source: 'PLAYER', transactionMode: 'STAGED',
+    }, async (command, context) => {
+      const e = context.repository.getCapabilityEngine(storyId);
+      const policy = e.getProgressionPolicy();
+      const value = command.payload.xpAmount as number;
+      if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return { success: false, errorReason: 'xpAmount must be a non-negative finite number.' };
+      const valueResult = e.awardSkillXp(actorId, command.payload.moduleId as string, value, policy, command.payload.reason as string || 'Canonical progression award');
+      return { success: true, data: valueResult, summary: 'Capability XP award committed.' };
+    });
+    if (!result.success) return res.status(400).json({ success: false, errorReason: result.errorReason, rolledBack: result.rolledBack, commandId: result.commandId });
+    return res.json({ success: true, ...(result.data as any), commandId: result.commandId, canonicalEvent: result.event });
   } catch (error: any) {
-    res.status(400).json({ success: false, errorReason: error?.message || 'Failed to award skill XP.' });
+    return res.status(400).json({ success: false, errorReason: error?.message || 'Failed to award skill XP.' });
   }
 });
 
-/**
- * POST /api/game/capabilities/evolve
- * Evolves a skill into an advanced capability node, consuming evolution points and logging lineage.
- */
 gameRouter.post('/capabilities/evolve', async (req: Request, res: Response) => {
+  const storyId = resolveStoryId(req, true);
+  const player = worldRepository.getPlayerLifecycle(storyId);
+  const actorId = req.body?.actorId || (player ? player.actorId : `player_actor_${storyId}`);
   try {
-    const { fromCapabilityId, toCapabilityId, targetDefinition, actorId: reqActorId, reason, storyId = 'default_story' } = req.body;
-    if (!fromCapabilityId || !toCapabilityId) {
-      return res.status(400).json({ success: false, errorReason: 'fromCapabilityId and toCapabilityId are required.' });
-    }
-    const { worldRepository } = await import('../repositories/worldRepository');
-    const player = worldRepository.getPlayerLifecycle(storyId);
-    const actorId = reqActorId || (player ? player.actorId : `player_actor_${storyId}`);
-    const capEngine = worldRepository.getCapabilityEngine(storyId);
-
-    if (targetDefinition && !capEngine.getCapability(toCapabilityId)) {
-      capEngine.registerCapability(targetDefinition);
-    }
-
-    const newInstance = capEngine.evolveSkill(actorId, fromCapabilityId, toCapabilityId, capEngine.getProgressionPolicy(), reason || 'Skill evolution');
-    res.json({ success: true, instance: newInstance });
+    const commandId = (req.headers['x-command-id'] as string | undefined) || (req.body?.commandId as string | undefined) || deterministicId('cmd_cap_evolve', storyId, actorId, req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+    const result = await canonicalCommandEngine.execute(worldRepository, {
+      commandId, storyId, actorId, type: 'PROGRESSION',
+      payload: { operation: 'EVOLVE_CAPABILITY', moduleId: req.body?.fromCapabilityId, fromCapabilityId: req.body?.fromCapabilityId, toCapabilityId: req.body?.toCapabilityId, targetDefinition: req.body?.targetDefinition, reason: req.body?.reason },
+      source: 'PLAYER', transactionMode: 'STAGED',
+    }, async (command, context) => {
+      const e = context.repository.getCapabilityEngine(storyId);
+      if (command.payload.targetDefinition && !e.getCapability(command.payload.toCapabilityId as string)) e.registerCapability(command.payload.targetDefinition as any);
+      const instance = e.evolveSkill(actorId, command.payload.fromCapabilityId as string, command.payload.toCapabilityId as string, e.getProgressionPolicy(), command.payload.reason as string || 'Canonical capability evolution');
+      return { success: true, data: { instance }, summary: 'Capability evolution committed.' };
+    });
+    if (!result.success) return res.status(400).json({ success: false, errorReason: result.errorReason, rolledBack: result.rolledBack, commandId: result.commandId });
+    return res.json({ success: true, ...(result.data as any), commandId: result.commandId, canonicalEvent: result.event });
   } catch (error: any) {
-    res.status(400).json({ success: false, errorReason: error?.message || 'Failed to evolve skill.' });
+    return res.status(400).json({ success: false, errorReason: error?.message || 'Failed to evolve skill.' });
   }
 });
 
-/**
- * POST /api/game/capabilities/downgrade
- * Downgrades a skill instance deterministically with an audit record (V10.8.12).
- */
 gameRouter.post('/capabilities/downgrade', async (req: Request, res: Response) => {
+  const storyId = resolveStoryId(req, true);
+  const player = worldRepository.getPlayerLifecycle(storyId);
+  const actorId = req.body?.actorId || (player ? player.actorId : `player_actor_${storyId}`);
   try {
-    const { capabilityId, targetLevel, reason, actorId: reqActorId, storyId = 'default_story' } = req.body;
-    if (!capabilityId || typeof targetLevel !== 'number') {
-      return res.status(400).json({ success: false, errorReason: 'capabilityId and numeric targetLevel are required.' });
-    }
-    const { worldRepository } = await import('../repositories/worldRepository');
-    const player = worldRepository.getPlayerLifecycle(storyId);
-    const actorId = reqActorId || (player ? player.actorId : `player_actor_${storyId}`);
-    const capEngine = worldRepository.getCapabilityEngine(storyId);
-
-    const updated = capEngine.downgradeSkill(actorId, capabilityId, targetLevel, reason || 'Manual downgrade', capEngine.getProgressionPolicy());
-    res.json({ success: true, instance: updated });
+    const commandId = (req.headers['x-command-id'] as string | undefined) || (req.body?.commandId as string | undefined) || deterministicId('cmd_cap_down', storyId, actorId, req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+    const result = await canonicalCommandEngine.execute(worldRepository, {
+      commandId, storyId, actorId, type: 'PROGRESSION',
+      payload: { operation: 'DOWNGRADE_CAPABILITY', moduleId: req.body?.capabilityId, targetLevel: req.body?.targetLevel, reason: req.body?.reason },
+      source: 'PLAYER', transactionMode: 'STAGED',
+    }, async (command, context) => {
+      const e = context.repository.getCapabilityEngine(storyId);
+      const targetLevel = Number(command.payload.targetLevel);
+      if (!Number.isFinite(targetLevel)) return { success: false, errorReason: 'targetLevel must be numeric.' };
+      const instance = e.downgradeSkill(actorId, command.payload.moduleId as string, targetLevel, command.payload.reason as string || 'Canonical capability downgrade', e.getProgressionPolicy());
+      return { success: true, data: { instance }, summary: 'Capability downgrade committed.' };
+    });
+    if (!result.success) return res.status(400).json({ success: false, errorReason: result.errorReason, rolledBack: result.rolledBack, commandId: result.commandId });
+    return res.json({ success: true, ...(result.data as any), commandId: result.commandId, canonicalEvent: result.event });
   } catch (error: any) {
-    res.status(400).json({ success: false, errorReason: error?.message || 'Failed to downgrade skill.' });
+    return res.status(400).json({ success: false, errorReason: error?.message || 'Failed to downgrade skill.' });
   }
 });
 
-/**
- * POST /api/game/capabilities/relearn
- * Relearns a previously held or downgraded skill instance deterministically.
- */
 gameRouter.post('/capabilities/relearn', async (req: Request, res: Response) => {
+  const storyId = resolveStoryId(req, true);
+  const player = worldRepository.getPlayerLifecycle(storyId);
+  const actorId = req.body?.actorId || (player ? player.actorId : `player_actor_${storyId}`);
   try {
-    const { capabilityId, reason, actorId: reqActorId, storyId = 'default_story' } = req.body;
-    if (!capabilityId) {
-      return res.status(400).json({ success: false, errorReason: 'capabilityId is required.' });
-    }
-    const { worldRepository } = await import('../repositories/worldRepository');
-    const player = worldRepository.getPlayerLifecycle(storyId);
-    const actorId = reqActorId || (player ? player.actorId : `player_actor_${storyId}`);
-    const capEngine = worldRepository.getCapabilityEngine(storyId);
-
-    const relearned = capEngine.relearnSkill(actorId, capabilityId, reason || 'Relearned skill', capEngine.getProgressionPolicy());
-    res.json({ success: true, instance: relearned });
+    const commandId = (req.headers['x-command-id'] as string | undefined) || (req.body?.commandId as string | undefined) || deterministicId('cmd_cap_relearn', storyId, actorId, req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+    const result = await canonicalCommandEngine.execute(worldRepository, {
+      commandId, storyId, actorId, type: 'PROGRESSION',
+      payload: { operation: 'RELEARN_CAPABILITY', moduleId: req.body?.capabilityId, reason: req.body?.reason },
+      source: 'PLAYER', transactionMode: 'STAGED',
+    }, async (command, context) => {
+      const e = context.repository.getCapabilityEngine(storyId);
+      const instance = e.relearnSkill(actorId, command.payload.moduleId as string, command.payload.reason as string || 'Canonical capability relearn', e.getProgressionPolicy());
+      return { success: true, data: { instance }, summary: 'Capability relearn committed.' };
+    });
+    if (!result.success) return res.status(400).json({ success: false, errorReason: result.errorReason, rolledBack: result.rolledBack, commandId: result.commandId });
+    return res.json({ success: true, ...(result.data as any), commandId: result.commandId, canonicalEvent: result.event });
   } catch (error: any) {
-    res.status(400).json({ success: false, errorReason: error?.message || 'Failed to relearn skill.' });
+    return res.status(400).json({ success: false, errorReason: error?.message || 'Failed to relearn skill.' });
   }
 });
 
-/**
- * POST /api/game/capabilities/evaluate-gate
- * Evaluates capability execution gate requirements without mutating state.
- */
 gameRouter.post('/capabilities/evaluate-gate', async (req: Request, res: Response) => {
   try {
     const { capabilityId, actorId: reqActorId, environment, actorConditions, roleOrBackground, masteryOverride } = req.body;

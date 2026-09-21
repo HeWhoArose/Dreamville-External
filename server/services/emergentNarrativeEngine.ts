@@ -1,5 +1,6 @@
 import { worldRepository } from '../repositories/worldRepository';
 import { StoryThread, CanonicalGameplayEvent } from '../../src/types';
+import { deterministicId } from '../domain/deterministicRng';
 
 export class EmergentNarrativeEngine {
   public processCanonicalEvent(
@@ -18,14 +19,14 @@ export class EmergentNarrativeEngine {
         ...matchingThread,
         stage: newStage,
         status: newStage === 3 ? 'ESCALATED' : 'ACTIVE',
-        updatedAt: new Date().toISOString(),
+        updatedAt: event.timestamp,
         evidenceGathered: [...(matchingThread.evidenceGathered || []), ...(event.evidenceItems || [])],
       };
       repository.saveStoryThread(updatedThread);
       return { updatedThread };
     } else {
       // Create new emergent thread
-      const threadId = `thread_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+      const threadId = deterministicId('thread', event.storyId, event.eventId, event.eventType, event.locationId || 'loc_unknown');
       const createdThread: StoryThread = {
         threadId,
         storyId: event.storyId,
@@ -36,8 +37,8 @@ export class EmergentNarrativeEngine {
         stage: 1,
         locationId: event.locationId || 'loc_unknown',
         evidenceGathered: event.evidenceItems || [],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: event.timestamp,
+        updatedAt: event.timestamp,
       };
       repository.saveStoryThread(createdThread);
       return { createdThread };

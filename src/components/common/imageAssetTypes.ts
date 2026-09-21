@@ -27,6 +27,14 @@ export interface ImageAssetMeta {
   artDirection?: string;
   composition?: string;
   lightingColor?: string;
+  worldSummary?: string;
+  genreTags?: string[];
+  toneTags?: string[];
+  era?: string;
+  factions?: string[];
+  magicOrTechnology?: string;
+  geography?: string;
+  visualMotifs?: string[];
   aspectRatio?: '16:9' | '4:3' | '1:1' | '3:4' | '21:9' | string;
   width?: number;
   height?: number;

@@ -236,6 +236,12 @@ export const App: React.FC = () => {
     initializeApp();
   }, []);
 
+  useEffect(() => {
+    if (bootPhase === 'ready' && currentRoute === 'story-library') {
+      fetchStoryLibrary();
+    }
+  }, [bootPhase, currentRoute]);
+
   const dispatchAction = async (
     action: ActionRequest,
     onComplete?: (result: ActionResult) => void
@@ -629,7 +635,7 @@ export const App: React.FC = () => {
                 setCurrentRoute('play.story');
                 initializeApp(storyId);
               }}
-              onNewStory={() => setIsImportModalOpen(true)}
+              onNewStory={() => setCurrentRoute('create')}
               onBranchStory={() => setIsStoryLibraryModalOpen(true)}
             />
           )}

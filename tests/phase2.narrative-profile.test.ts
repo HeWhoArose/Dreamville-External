@@ -86,6 +86,44 @@ test('Phase 2 — world synthesis preserves every rules × narrative combination
 	}
 });
 
+test('Phase 2 — confirmed character narrative mode is authoritative at StoryRun creation', () => {
+	const repo = new InMemoryWorldRepository();
+	const worldId = 'phase2_confirmed_character_authority_world';
+
+	repo.saveWorldTemplate({
+		worldId,
+		title: 'Confirmed Character Authority World',
+		summary: 'Authority test',
+		description: 'Authority test',
+		rulesetId: 'FULL_DND',
+		dndRulesMode: 'FULL_DND',
+		rulesProfile: rulesProfileEngine.createDefault('FULL_DND'),
+		storyMode: 'PROTAGONIST',
+		narrativeProfile: narrativeProfileEngine.createDefault('PROTAGONIST'),
+	});
+
+	const confirmedCharacter = {
+		characterId: 'phase2_authority_character',
+		worldId,
+		worldVersion: 1,
+		identity: { name: 'Authority Character' },
+		role: { profession: 'Scout', archetype: 'Scout', role: 'Side Character' },
+		storyMode: 'SIDE_CHARACTER' as CharacterStoryMode,
+		narrativeProfile: narrativeProfileEngine.createDefault('SIDE_CHARACTER'),
+	};
+
+	const result = repo.createStoryRunFromConfirmedCharacter({
+		worldId,
+		confirmedCharacter,
+		storyMode: 'FREE_ROAM',
+		narrativeProfile: narrativeProfileEngine.createDefault('FREE_ROAM'),
+	});
+
+	assert.equal(result.run.storyMode, 'SIDE_CHARACTER');
+	assert.equal(result.run.narrativeProfile?.mode, 'SIDE_CHARACTER');
+	assert.equal(repo.getNarrativeProfile(result.storyId)?.mode, 'SIDE_CHARACTER');
+});
+
 test('Phase 2 — repository preserves narrative and rules selections independently across all nine combinations', () => {
 	const repo = new InMemoryWorldRepository();
 

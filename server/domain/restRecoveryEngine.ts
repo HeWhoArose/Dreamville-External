@@ -169,7 +169,11 @@ export class RestRecoveryEngine {
   }
 
   public getHitDiceState(actorId: string): HitDiceRecoveryState {
-    return clone(this.ensureHitDiceState(actorId));
+    const existing = this.hitDice.get(actorId);
+    if (existing) return clone(existing);
+    const core = this.getCoreStatsForRead(actorId);
+    const max = Math.max(1, Math.trunc(core.level));
+    return { current: max, max, sides: diceSides(core.hitDice) };
   }
 
   public getLastRestResult(actorId: string) {
@@ -543,6 +547,18 @@ export class RestRecoveryEngine {
     return {
       level: Math.max(1, Math.min(20, Math.trunc(Number(core.level || 1)))),
       constitution: Number(core.constitution || 10),
+      hitDice: core.hitDice,
+    };
+  }
+
+  private getCoreStatsForRead(actorId: string): { level: number; hitDice?: string } {
+    const storyId = Array.from(this.activeRests.values()).find((state) => state.actorId === actorId)?.actorId
+      ? Array.from(this.activeRests.values()).find((state) => state.actorId === actorId)?.actorId
+      : actorId;
+    const run = this.repository.getStoryRun(storyId);
+    const core = run?.characterCoreStats || run?.protagonist?.coreStats || {};
+    return {
+      level: Math.max(1, Math.min(20, Math.trunc(Number(core.level || 1)))),
       hitDice: core.hitDice,
     };
   }

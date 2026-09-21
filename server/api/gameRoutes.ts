@@ -236,10 +236,8 @@ gameRouter.post('/rest', async (req: Request, res: Response) => {
   try {
     const { worldRepository } = await import('../repositories/worldRepository');
     const storyId = resolveStoryId(req, true);
-    const player = worldRepository.getPlayerLifecycle(storyId);
-    const actorId = (typeof req.body?.actorId === 'string' && req.body.actorId.trim())
-      ? req.body.actorId.trim()
-      : (player ? player.actorId : `player_actor_${storyId}`);
+    const actorId = resolveProgressionActor(req, res, storyId);
+    if (!actorId) return;
     const action = req.body?.action as 'BEGIN' | 'ADVANCE' | 'COMPLETE' | 'INTERRUPT' | 'PERFORM';
     const restType = req.body?.restType as 'SHORT_REST' | 'LONG_REST' | undefined;
     const idempotencyKey = typeof req.body?.idempotencyKey === 'string' && req.body.idempotencyKey.trim()
@@ -1384,8 +1382,8 @@ gameRouter.post('/capabilities/acquire', async (req: Request, res: Response) => 
   req.url = `/worlds/runs/${req.body?.storyId || resolveStoryId(req, true)}/progression`;
   req.params.storyId = req.body?.storyId || resolveStoryId(req, true);
   const storyId = req.params.storyId;
-  const player = worldRepository.getPlayerLifecycle(storyId);
-  const actorId = req.body?.actorId || (player ? player.actorId : `player_actor_${storyId}`);
+  const actorId = resolveProgressionActor(req, res, storyId);
+  if (!actorId) return;
   try {
     const capEngine = worldRepository.getCapabilityEngine(storyId);
     const commandId = (req.headers['x-command-id'] as string | undefined) || (req.body?.commandId as string | undefined) || deterministicId('cmd_cap_acquire', storyId, actorId, req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
@@ -1414,8 +1412,8 @@ gameRouter.post('/capabilities/acquire', async (req: Request, res: Response) => 
 
 gameRouter.post('/capabilities/award-xp', async (req: Request, res: Response) => {
   const storyId = resolveStoryId(req, true);
-  const player = worldRepository.getPlayerLifecycle(storyId);
-  const actorId = req.body?.actorId || (player ? player.actorId : `player_actor_${storyId}`);
+  const actorId = resolveProgressionActor(req, res, storyId);
+  if (!actorId) return;
   try {
     const commandId = (req.headers['x-command-id'] as string | undefined) || (req.body?.commandId as string | undefined) || deterministicId('cmd_cap_xp', storyId, actorId, req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
     const result = await canonicalCommandEngine.execute(worldRepository, {
@@ -1439,8 +1437,8 @@ gameRouter.post('/capabilities/award-xp', async (req: Request, res: Response) =>
 
 gameRouter.post('/capabilities/evolve', async (req: Request, res: Response) => {
   const storyId = resolveStoryId(req, true);
-  const player = worldRepository.getPlayerLifecycle(storyId);
-  const actorId = req.body?.actorId || (player ? player.actorId : `player_actor_${storyId}`);
+  const actorId = resolveProgressionActor(req, res, storyId);
+  if (!actorId) return;
   try {
     const commandId = (req.headers['x-command-id'] as string | undefined) || (req.body?.commandId as string | undefined) || deterministicId('cmd_cap_evolve', storyId, actorId, req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
     const result = await canonicalCommandEngine.execute(worldRepository, {
@@ -1462,8 +1460,8 @@ gameRouter.post('/capabilities/evolve', async (req: Request, res: Response) => {
 
 gameRouter.post('/capabilities/downgrade', async (req: Request, res: Response) => {
   const storyId = resolveStoryId(req, true);
-  const player = worldRepository.getPlayerLifecycle(storyId);
-  const actorId = req.body?.actorId || (player ? player.actorId : `player_actor_${storyId}`);
+  const actorId = resolveProgressionActor(req, res, storyId);
+  if (!actorId) return;
   try {
     const commandId = (req.headers['x-command-id'] as string | undefined) || (req.body?.commandId as string | undefined) || deterministicId('cmd_cap_down', storyId, actorId, req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
     const result = await canonicalCommandEngine.execute(worldRepository, {
@@ -1486,8 +1484,8 @@ gameRouter.post('/capabilities/downgrade', async (req: Request, res: Response) =
 
 gameRouter.post('/capabilities/relearn', async (req: Request, res: Response) => {
   const storyId = resolveStoryId(req, true);
-  const player = worldRepository.getPlayerLifecycle(storyId);
-  const actorId = req.body?.actorId || (player ? player.actorId : `player_actor_${storyId}`);
+  const actorId = resolveProgressionActor(req, res, storyId);
+  if (!actorId) return;
   try {
     const commandId = (req.headers['x-command-id'] as string | undefined) || (req.body?.commandId as string | undefined) || deterministicId('cmd_cap_relearn', storyId, actorId, req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
     const result = await canonicalCommandEngine.execute(worldRepository, {

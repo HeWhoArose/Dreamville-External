@@ -1,1 +1,62 @@
-import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { readFileSync } from 'node:fs';\nimport { resolve } from 'node:path';\n\nconst gameRoutes = readFileSync(resolve(process.cwd(), 'server/api/gameRoutes.ts'), 'utf8');\nconst canonicalEngine = readFileSync(resolve(process.cwd(), 'server/domain/canonicalCommandEngine.ts'), 'utf8');\n\nfunction routeBlock(route: string): string {\n  const start = gameRoutes.indexOf(`gameRouter.post('${route}'`);\n  assert.ok(start >= 0, `Route ${route} must exist.`);\n  const next = gameRoutes.indexOf('gameRouter.', start + 1);\n  return gameRoutes.slice(start, next >= 0 ? next : gameRoutes.length);\n}\n\ntest('Phase 4 — canonical action handlers do not derive canonical evidence ids from wall-clock randomness', () => {\n  const routes = [\n    '/action',\n    '/inventory/craft',\n    '/inventory/transfer',\n    '/capabilities/adjudicate',\n    '/capabilities/interpret',\n    '/combat/action',\n    '/combat/attack',\n    '/combat/cast',\n    '/living-world/advance',\n    '/orchestrator/turn',\n    '/worlds/runs/:storyId/actions/execute',\n  ];\n  for (const route of routes) {\n    const block = routeBlock(route);\n    assert.doesNotMatch(block, /\b(?:eventId|sourceEventId|factId|threadId)\s*:\s*[^\n]*(?:Date\.now|Math\.random)/, `Canonical route ${route} must not derive canonical identifiers from wall-clock/random entropy.`);\n  }\n});\n\ntest('Phase 4 — canonical command events use deterministic identity and canonical time', () => {\n  assert.doesNotMatch(canonicalEngine, /eventId:\s*\`evt_cmd_\$\{command\.storyId\}_\$\{command\.commandId\}/);\n  assert.doesNotMatch(canonicalEngine, /committedAt:\s*new Date\(/);\n  assert.match(canonicalEngine, /deterministicId\('evt_cmd'/);\n  assert.match(canonicalEngine, /committedAt:\s*\`canonical:/);\n});\n\ntest('Phase 4 — Chronicle-producing routes are all behind canonical command resolution', () => {\n  const routes = [\n    '/action',\n    '/inventory/craft',\n    '/inventory/transfer',\n    '/capabilities/adjudicate',\n    '/capabilities/interpret',\n    '/combat/action',\n    '/combat/attack',\n    '/combat/cast',\n    '/living-world/advance',\n    '/living-world/schedule-event',\n    '/orchestrator/turn',\n  ];\n  for (const route of routes) {\n    const block = routeBlock(route);\n    assert.match(block, /canonicalCommandEngine\.execute/, `Route ${route} bypasses canonical transaction resolution.`);\n  }\n});\n
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+const gameRoutes = readFileSync(resolve(process.cwd(), 'server/api/gameRoutes.ts'), 'utf8');
+const canonicalEngine = readFileSync(resolve(process.cwd(), 'server/domain/canonicalCommandEngine.ts'), 'utf8');
+
+function routeBlock(route: string): string {
+  const start = gameRoutes.indexOf(`gameRouter.post('${route}'`);
+  assert.ok(start >= 0, `Route ${route} must exist.`);
+  const next = gameRoutes.indexOf('gameRouter.', start + 1);
+  return gameRoutes.slice(start, next >= 0 ? next : gameRoutes.length);
+}
+
+test('Phase 4 — canonical action handlers do not derive canonical evidence ids from wall-clock randomness', () => {
+  const routes = [
+    '/action',
+    '/inventory/craft',
+    '/inventory/transfer',
+    '/capabilities/adjudicate',
+    '/capabilities/interpret',
+    '/combat/action',
+    '/combat/attack',
+    '/combat/cast',
+    '/living-world/advance',
+    '/orchestrator/turn',
+    '/worlds/runs/:storyId/actions/execute',
+  ];
+  for (const route of routes) {
+    const block = routeBlock(route);
+    assert.doesNotMatch(block, /\b(?:eventId|sourceEventId|factId|threadId)\s*:\s*[^
+]*(?:Date\.now|Math\.random)/, `Canonical route ${route} must not derive canonical identifiers from wall-clock/random entropy.`);
+  }
+});
+
+test('Phase 4 — canonical command events use deterministic identity and canonical time', () => {
+  assert.doesNotMatch(canonicalEngine, /eventId:\s*\`evt_cmd_\$\{command\.storyId\}_\$\{command\.commandId\}/);
+  assert.doesNotMatch(canonicalEngine, /committedAt:\s*new Date\(/);
+  assert.match(canonicalEngine, /deterministicId\('evt_cmd'/);
+  assert.match(canonicalEngine, /committedAt:\s*\`canonical:/);
+});
+
+test('Phase 4 — Chronicle-producing routes are all behind canonical command resolution', () => {
+  const routes = [
+    '/action',
+    '/inventory/craft',
+    '/inventory/transfer',
+    '/capabilities/adjudicate',
+    '/capabilities/interpret',
+    '/combat/action',
+    '/combat/attack',
+    '/combat/cast',
+    '/living-world/advance',
+    '/living-world/schedule-event',
+    '/orchestrator/turn',
+  ];
+  for (const route of routes) {
+    const block = routeBlock(route);
+    assert.match(block, /canonicalCommandEngine\.execute/, `Route ${route} bypasses canonical transaction resolution.`);
+  }
+});

@@ -38,6 +38,8 @@ export interface CanonicalCommandEvent {
 	summary: string;
 	mutationPaths: string[];
 	mutationCount: number;
+	/** Internal deduplication fingerprint; contains command metadata only. */
+	fingerprint?: string;
 }
 
 export interface CanonicalCommandResult<T = unknown> {
@@ -80,6 +82,7 @@ export class CanonicalCommandEngine {
 	private static readonly instance = new CanonicalCommandEngine();
 	private readonly inFlight = new Map<string, Promise<CanonicalCommandResult>>();
 	private readonly storyQueues = new Map<string, Promise<void>>();
+	private readonly completedResults = new Map<string, { fingerprint: string; data?: unknown }>();
 
 	public static getInstance(): CanonicalCommandEngine {
 		return CanonicalCommandEngine.instance;
@@ -197,11 +200,12 @@ export class CanonicalCommandEngine {
 					mutationPaths: [],
 				};
 			}
+			const replay = this.completedResults.get(key);
 			return {
 				success: true,
 				commandId: command.commandId,
 				event: existingEvent,
-				data: existingEvent.resultData,
+				data: replay && replay.fingerprint === fingerprint ? clone(replay.data) as TResult : undefined,
 				rolledBack: false,
 				mutationPaths: existingEvent.mutationPaths || [],
 			};
@@ -272,7 +276,7 @@ export class CanonicalCommandEngine {
 				return match?.[1] || difference;
 			});
 
-			const event: CanonicalCommandEvent & { fingerprint: string; resultData?: unknown } = {
+			const event: CanonicalCommandEvent = {
 				eventId: `evt_cmd_${command.storyId}_${command.commandId}`,
 				commandId: command.commandId,
 				storyId: command.storyId,
@@ -285,10 +289,14 @@ export class CanonicalCommandEngine {
 				mutationPaths,
 				mutationCount: mutationPaths.length,
 				fingerprint,
-				resultData: clone(resolved.data),
+				fingerprint,
 			};
 
 			repository.appendCanonicalCommandEvent(command.storyId, event);
+			this.completedResults.set(
+				`${command.storyId}::${command.commandId}`,
+				{ fingerprint, data: clone(resolved.data) }
+			);
 			return {
 				success: true,
 				commandId: command.commandId,

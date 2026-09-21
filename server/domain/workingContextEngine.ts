@@ -400,6 +400,14 @@ export class WorkingContextEngine {
       committedStateChanges,
     };
 
+    const resolvedNarrativeMode = narrativeProfile?.mode || run?.storyMode || 'PROTAGONIST';
+    const narrativeBehaviorContract =
+      resolvedNarrativeMode === 'SIDE_CHARACTER'
+        ? 'NARRATIVE BEHAVIOR: The player character is a supporting participant, not the automatic central hero. Principal NPCs, factions, conflicts, and other protagonists may advance independently. Frame player actions as meaningful without implying that the entire world revolves around them.'
+        : resolvedNarrativeMode === 'FREE_ROAM'
+          ? "NARRATIVE BEHAVIOR: The player character has open-ended agency in a living sandbox. Do not impose a predetermined hero arc or assume the player is the world's chosen protagonist. World actors, factions, locations, and conflicts may evolve independently of player action."
+          : "NARRATIVE BEHAVIOR: The player character is the primary narrative focus. Major beats and consequences should be framed around the player's choices while preserving canonical world autonomy.";
+
     // Construct Prioritized Candidate Context Chunks
     const candidateChunks: ContextChunk[] = [
       // B1_CRITICAL: Canonical campaign mode boundaries
@@ -407,9 +415,19 @@ export class WorkingContextEngine {
         id: 'b1_campaign_modes',
         band: 'B1_CRITICAL',
         label: 'Canonical Campaign Modes',
-        content: `Rules Mode: ${rulesProfile?.mode || run?.dndRulesMode || 'FULL_DND'} | Narrative Mode: ${narrativeProfile?.mode || run?.storyMode || 'PROTAGONIST'} | Narrative Camera: ${narrativeProfile?.camera || 'PLAYER_CENTRIC'} | Player Agency: ${narrativeProfile?.playerAgency || 'PRIMARY_PLAYER'}`,
-        estimatedTokens: WorkingContextEngine.estimateTokens(`Rules Mode: ${rulesProfile?.mode || run?.dndRulesMode || 'FULL_DND'} | Narrative Mode: ${narrativeProfile?.mode || run?.storyMode || 'PROTAGONIST'} | Narrative Camera: ${narrativeProfile?.camera || 'PLAYER_CENTRIC'} | Player Agency: ${narrativeProfile?.playerAgency || 'PRIMARY_PLAYER'}`),
+        content: `Rules Mode: ${rulesProfile?.mode || run?.dndRulesMode || 'FULL_DND'} | Narrative Mode: ${resolvedNarrativeMode} | Narrative Camera: ${narrativeProfile?.camera || 'PLAYER_CENTRIC'} | Player Agency: ${narrativeProfile?.playerAgency || 'PRIMARY_PLAYER'}`,
+        estimatedTokens: WorkingContextEngine.estimateTokens(`Rules Mode: ${rulesProfile?.mode || run?.dndRulesMode || 'FULL_DND'} | Narrative Mode: ${resolvedNarrativeMode} | Narrative Camera: ${narrativeProfile?.camera || 'PLAYER_CENTRIC'} | Player Agency: ${narrativeProfile?.playerAgency || 'PRIMARY_PLAYER'}`),
         sourceAuthority: 'WorldRepository canonical profiles (Phase 2)',
+        isProtected: true,
+        relevanceScore: 1.0,
+      },
+      {
+        id: 'b1_narrative_behavior_contract',
+        band: 'B1_CRITICAL',
+        label: 'Narrative Behavior Contract',
+        content: narrativeBehaviorContract,
+        estimatedTokens: WorkingContextEngine.estimateTokens(narrativeBehaviorContract),
+        sourceAuthority: 'NarrativeProfile canonical behavior contract (Phase 2)',
         isProtected: true,
         relevanceScore: 1.0,
       },
@@ -744,8 +762,8 @@ export class WorkingContextEngine {
       {
         id: `chunk_${storyId}_b1_protagonist`,
         band: 'B1_CRITICAL',
-        label: 'PROTAGONIST_IDENTITY',
-        content: `Protagonist: ${charName} | Role: ${charRole} | Background: ${charBackground} | Personality: ${charPersonality} | Motivations: ${charMotivations} | Conditions: ${conditionList.length > 0 ? conditionList.join(', ') : 'Nominal'}${conditionDefenseSummary ? ` | ${conditionDefenseSummary}` : ''}.`,
+        label: 'PLAYER_CHARACTER_IDENTITY',
+        content: `Player Character: ${charName} | Narrative Mode: ${resolvedNarrativeMode} | Role: ${charRole} | Background: ${charBackground} | Personality: ${charPersonality} | Motivations: ${charMotivations} | Conditions: ${conditionList.length > 0 ? conditionList.join(', ') : 'Nominal'}${conditionDefenseSummary ? ` | ${conditionDefenseSummary}` : ''}.`,
         estimatedTokens: WorkingContextEngine.estimateTokens(charName + charRole + charBackground),
         isProtected: true,
         relevanceScore: 1.0,
@@ -782,7 +800,7 @@ export class WorkingContextEngine {
       {
         id: `chunk_${storyId}_b2_capabilities`,
         band: 'B2_IMMEDIATE',
-        label: 'PROTAGONIST_CAPABILITIES_EQUIPMENT',
+        label: 'PLAYER_CHARACTER_CAPABILITIES_EQUIPMENT',
         content: `Active Capabilities: ${capDescriptions.length > 0 ? capDescriptions.join('; ') : 'None registered'}. Equipment in hand/pack: ${equipList.length > 0 ? equipList.join(', ') : 'Standard attire'}.`,
         estimatedTokens: WorkingContextEngine.estimateTokens(capDescriptions.join('; ') + equipList.join(', ')),
         isProtected: true,

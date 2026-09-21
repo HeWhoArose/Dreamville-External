@@ -86,3 +86,17 @@ export class DeterministicRng {
 		return this.cursor;
 	}
 }
+
+export interface CanonicalTimestampLike {
+	year: number;
+	month: number;
+	day: number;
+	hour: number;
+	minute: number;
+	second: number;
+}
+
+export function formatCanonicalTimestamp(timestamp: CanonicalTimestampLike): string {
+	const pad = (value: number, width: number) => String(Math.trunc(value)).padStart(width, '0');
+	return 'Y' + pad(timestamp.year, 4) + '-M' + pad(timestamp.month, 2) + '-D' + pad(timestamp.day, 2) + 'T' + pad(timestamp.hour, 2) + ':' + pad(timestamp.minute, 2) + ':' + pad(timestamp.second, 2);
+}

@@ -1185,6 +1185,7 @@ export interface WorldTemplate {
   mediumTags: string[];
   canonMode: string;
   rulesetId: string;
+  dndRulesMode?: DndRulesMode;
   rulesProfile?: RulesProfile;
   visibility: string;
   creatorId: string;

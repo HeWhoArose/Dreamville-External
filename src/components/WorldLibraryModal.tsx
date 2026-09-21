@@ -587,7 +587,7 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
                             onGenesisCharacter(w);
                           }}
                           className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-800/80 hover:bg-emerald-700 text-emerald-100 text-xs font-medium transition"
-                          title="Create Protagonist for this World"
+                          title="Create Character for this World"
                         >
                           <User className="w-3.5 h-3.5" />
                           <span className="hidden sm:inline">Create Character</span>

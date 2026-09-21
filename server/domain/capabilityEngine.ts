@@ -21,6 +21,7 @@ export interface PowerState {
   fatigue: number; // 0 to 100
   stress: number; // 0 to 100
   magicalEnergy: number; // Current mana / qi / aura
+  magicalEnergyMax?: number; // Canonical recovery ceiling when a resource system uses magical energy.
   physicalStrain: number; // Accumulator
   activeConditions: string[];
 }
@@ -453,6 +454,7 @@ export class CapabilityEngine {
       fatigue: 0,
       stress: 0,
       magicalEnergy: 80,
+      magicalEnergyMax: 80,
       physicalStrain: 0,
       activeConditions: [],
     };

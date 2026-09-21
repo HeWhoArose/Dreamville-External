@@ -1578,7 +1578,6 @@ export class TacticalCombatEngine {
     return this.applyCombatDamage(target, requestedAmount, damageType, criticalHit);
   }
 
-  }
 
   private applyCombatDamage(
     target: BattlefieldParticipant,

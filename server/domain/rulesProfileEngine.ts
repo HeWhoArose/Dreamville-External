@@ -9,11 +9,13 @@ const IMPLICIT_ABILITY_CHECKS = 'implicit_ability_checks';
 const IMPLICIT_SAVING_THROWS = 'implicit_saving_throws';
 const STANDARD_DND_SPELL_RULES = 'standard_dnd_spell_rules';
 const DND_TACTICAL_COMBAT = 'dnd_tactical_combat';
+const REST_RECOVERY_RULES = 'rest_recovery_rules';
 const KNOWN_MECHANICS = new Set([
 	IMPLICIT_ABILITY_CHECKS,
 	IMPLICIT_SAVING_THROWS,
 	STANDARD_DND_SPELL_RULES,
 	DND_TACTICAL_COMBAT,
+	REST_RECOVERY_RULES,
 ]);
 
 export interface RulesProfileSource {
@@ -55,6 +57,7 @@ function baseProfile(mode: DndRulesMode): RulesProfile {
 				IMPLICIT_SAVING_THROWS,
 				STANDARD_DND_SPELL_RULES,
 				DND_TACTICAL_COMBAT,
+				REST_RECOVERY_RULES,
 			],
 			parameterOverrides: {},
 			overrides: [],
@@ -79,6 +82,7 @@ function baseProfile(mode: DndRulesMode): RulesProfile {
 				IMPLICIT_SAVING_THROWS,
 				STANDARD_DND_SPELL_RULES,
 				DND_TACTICAL_COMBAT,
+				REST_RECOVERY_RULES,
 			],
 			disabledMechanics: [],
 			parameterOverrides: {},
@@ -125,20 +129,70 @@ function applyOverrides(profile: RulesProfile, rawOverrides: unknown): RulesProf
 		if (!next.allowWorldRuleOverrides && next.mode === 'FULL_DND') continue;
 
 		if (override.operation === 'SET') {
-			if (
-				override.ruleId !== STANDARD_DND_SPELL_RULES ||
-				!override.value ||
-				typeof override.value !== 'object'
-			) continue;
+			if (!override.value || typeof override.value !== 'object') continue;
 
-			const value = override.value as { maxAllowedSpellLevel?: unknown };
-			const rawMax = Number(value.maxAllowedSpellLevel);
-			if (!Number.isFinite(rawMax) || rawMax < 0 || rawMax > 9) continue;
+			if (override.ruleId === STANDARD_DND_SPELL_RULES) {
+				const value = override.value as { maxAllowedSpellLevel?: unknown };
+				const rawMax = Number(value.maxAllowedSpellLevel);
+				if (!Number.isFinite(rawMax) || rawMax < 0 || rawMax > 9) continue;
 
-			next.parameterOverrides[STANDARD_DND_SPELL_RULES] = {
-				maxAllowedSpellLevel: Math.floor(rawMax),
-			};
-			next.overrides.push(override);
+				next.parameterOverrides[STANDARD_DND_SPELL_RULES] = {
+					maxAllowedSpellLevel: Math.floor(rawMax),
+				};
+				next.overrides.push(override);
+				continue;
+			}
+
+			if (override.ruleId === REST_RECOVERY_RULES) {
+				const value = override.value as Record<string, unknown>;
+				const normalized: Record<string, number | boolean | string> = {};
+				const numericKeys = [
+					'shortRestSeconds',
+					'longRestSeconds',
+					'longRestHitDiceRecoveryFraction',
+					'longRestExhaustionRecovery',
+					'shortRestHitDiceSpend',
+					'shortRestFatigueRecovery',
+					'shortRestStressRecovery',
+					'longRestFatigueRecovery',
+					'longRestStressRecovery',
+					'shortRestPhysicalStrainRecoveryFraction',
+					'longRestPhysicalStrainRecoveryFraction',
+					'shortRestMagicalEnergyRecoveryFraction',
+					'longRestMagicalEnergyRecoveryFraction',
+				];
+				for (const key of numericKeys) {
+					if (value[key] === undefined) continue;
+					const n = Number(value[key]);
+					if (!Number.isFinite(n) || n < 0) continue;
+					normalized[key] = n;
+				}
+				for (const key of [
+					'longRestRestoreHp',
+					'longRestRestoreSpellSlots',
+					'longRestBreakConcentration',
+					'allowRestWhileTraveling',
+					'allowRestInCombat',
+					'clearConditionsOnLongRest',
+				]) {
+					if (value[key] === undefined) continue;
+					if (typeof value[key] !== 'boolean') continue;
+					normalized[key] = value[key] as boolean;
+				}
+				if (value['conditionIdsToClearOnLongRest'] !== undefined) {
+					if (!Array.isArray(value['conditionIdsToClearOnLongRest']) || !value['conditionIdsToClearOnLongRest'].every((v) => typeof v === 'string')) continue;
+					normalized['conditionIdsToClearOnLongRest'] = (value['conditionIdsToClearOnLongRest'] as string[]).join('|');
+				}
+				if (value['shortRestRecoveryModel'] !== undefined) {
+					if (value['shortRestRecoveryModel'] !== 'HIT_DICE' && value['shortRestRecoveryModel'] !== 'NONE') continue;
+					normalized['shortRestRecoveryModel'] = value['shortRestRecoveryModel'] as string;
+				}
+				if (Object.keys(normalized).length === 0) continue;
+				next.parameterOverrides[REST_RECOVERY_RULES] = normalized;
+				next.overrides.push(override);
+				continue;
+			}
+
 			continue;
 		}
 
@@ -266,6 +320,11 @@ export class RulesProfileEngine {
 		return !profile.disabledMechanics.includes(DND_TACTICAL_COMBAT);
 	}
 
+	public allowsStandardRestRules(profile: RulesProfile): boolean {
+		return profile.enabledMechanics.includes(REST_RECOVERY_RULES)
+			&& !profile.disabledMechanics.includes(REST_RECOVERY_RULES);
+	}
+
 	public validate(profile: RulesProfile): string[] {
 		const errors: string[] = [];
 		if (!profile.profileId) errors.push('profileId is required.');
@@ -293,4 +352,5 @@ export {
 	IMPLICIT_SAVING_THROWS,
 	STANDARD_DND_SPELL_RULES,
 	DND_TACTICAL_COMBAT,
+	REST_RECOVERY_RULES,
 };

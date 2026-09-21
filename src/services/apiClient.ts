@@ -1429,6 +1429,15 @@ class ApiClient {
   // Challenge 16: Worlds & Campaign Discovery
   // ==========================================
 
+  public async getStoryRuns(): Promise<any[]> {
+    const res = await fetch(`${this.baseUrl}/story-runs`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Failed to fetch Story Runs: HTTP ${res.status}`);
+    return await res.json();
+  }
+
   public async getWorlds(filters?: any): Promise<any[]> {
     const params = new URLSearchParams();
     if (filters) {

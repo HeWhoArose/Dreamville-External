@@ -45,7 +45,8 @@ export class AbilityService {
     storyId: string,
     abilityId: string,
     targetId: string,
-    reqBody: any
+    reqBody: any,
+    repository = worldRepository
   ): { success: boolean; activeEffect?: ActiveEffect; errorReason?: string; statusCode?: number } {
     // Check for forged payloads
     if (reqBody.forgedEffectPayload || reqBody.modifiers || reqBody.duration || reqBody.customDamageReflection) {
@@ -56,9 +57,9 @@ export class AbilityService {
       };
     }
 
-    const run = worldRepository.getStoryRun(storyId);
-    const player = worldRepository.getPlayerLifecycle(storyId);
-    const capEngine = worldRepository.getCapabilityEngine(storyId);
+    const run = repository.getStoryRun(storyId);
+    const player = repository.getPlayerLifecycle(storyId);
+    const capEngine = repository.getCapabilityEngine(storyId);
 
     // Look up static definition or resolve dynamic capability definition
     let def: AbilityDefinition | undefined = KNOWN_ABILITIES[abilityId];
@@ -72,7 +73,7 @@ export class AbilityService {
           durationTurns: cap.durationTurns || 5,
         };
       } else {
-        const skill = worldRepository.getReusableSkillRegistry().getSkill(abilityId);
+        const skill = repository.getReusableSkillRegistry().getSkill(abilityId);
         if (skill) {
           def = {
             abilityId: skill.definition.id,
@@ -130,7 +131,7 @@ export class AbilityService {
       createdAt: new Date().toISOString(),
     };
 
-    worldRepository.saveActiveEffect(activeEffect);
+    repository.saveActiveEffect(activeEffect);
     return { success: true, activeEffect };
   }
 }

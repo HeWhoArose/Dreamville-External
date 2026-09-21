@@ -689,6 +689,7 @@ export const App: React.FC = () => {
                   setActiveStoryId(runStoryId);
                   setCurrentRoute('play.story');
                   initializeApp(runStoryId);
+                  fetchStoryLibrary();
                 }
               }}
               onCancel={() => {

@@ -3484,7 +3484,8 @@ gameRouter.get('/story-runs', async (_req: Request, res: Response) => {
             `Chronicle of ${world?.title || 'Unknown World'}`,
           characterName: run.characterName || run.protagonist?.identity?.name || 'Protagonist',
           characterRole: run.characterRole || run.protagonist?.role?.profession || run.protagonist?.role?.archetype,
-          storyMode: run.storyMode || world?.storyMode || 'PROTAGONIST',
+          storyMode: worldRepository.getNarrativeProfile(run.storyId)?.mode || run.storyMode || world?.storyMode || 'PROTAGONIST',
+          narrativeProfile: worldRepository.getNarrativeProfile(run.storyId),
           dndRulesMode: worldRepository.getRulesProfile(run.storyId)?.mode || 'FULL_DND',
           currentLocation,
           turnCount,
@@ -4316,8 +4317,10 @@ gameRouter.get('/run-canonical-state', (req: Request, res: Response) => {
 
     res.json({
       storyId,
-      storyMode: run?.storyMode || 'PROTAGONIST',
+      storyMode: worldRepository.getNarrativeProfile(storyId)?.mode || run?.storyMode || 'PROTAGONIST',
+      narrativeProfile: worldRepository.getNarrativeProfile(storyId),
       dndRulesMode: worldRepository.getRulesProfile(storyId)?.mode || 'FULL_DND',
+      rulesProfile: worldRepository.getRulesProfile(storyId),
       protagonist: {
         name: playerLifecycle?.identity?.name || playerLifecycle?.name || run?.protagonistName || 'Aelion',
         role: playerLifecycle?.role?.profession || run?.protagonistRole || 'Seeker',

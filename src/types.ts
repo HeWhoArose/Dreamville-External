@@ -168,6 +168,7 @@ export type StoryCheckAbility =
   | 'Charisma';
 
 export type StoryTestType = 'ABILITY_CHECK' | 'SAVING_THROW';
+export type StoryCheckResolutionMode = 'DND_STANDARD' | 'CUSTOM_D20' | 'NARRATIVE';
 export type StoryD20AdvantageState = 'NORMAL' | 'ADVANTAGE' | 'DISADVANTAGE';
 
 export interface StoryCheckModifierSource {
@@ -204,6 +205,8 @@ export interface StoryCheckChallenge {
   savingThrowAbility?: StoryCheckAbility;
   skill?: string;
   difficultyClass: number;
+  resolutionMode?: StoryCheckResolutionMode;
+  customModifier?: number;
   reason?: string;
   triggerReason?: string;
   onFailure?: StoryCheckOutcomeDefinition;

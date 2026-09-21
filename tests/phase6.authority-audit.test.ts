@@ -554,7 +554,7 @@ test('Phase 6 audit: concentration cleanup does not remove a pre-existing condit
     name: 'Phase 6 Prior Invisible',
     level: 0,
     school: 'illusion',
-    castingTime: 'ACTION',
+    castingTime: 'BONUS_ACTION',
     range: 5,
     rangeType: 'TOUCH',
     targetType: 'SINGLE_ALLY',

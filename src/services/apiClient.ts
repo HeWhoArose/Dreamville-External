@@ -1454,6 +1454,22 @@ class ApiClient {
     return await res.json();
   }
 
+  public async saveWorldVisualAsset(worldId: string, asset: {
+    imageAsset?: string;
+    imageMetadata?: any;
+  }): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/worlds/${encodeURIComponent(worldId)}/visual-asset`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(asset),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      throw new Error(err?.error || `Failed to save world visual asset: HTTP ${res.status}`);
+    }
+    return await res.json();
+  }
+
   public async getWorldTemplate(worldId: string): Promise<any> {
     const res = await fetch(`${this.baseUrl}/worlds/${encodeURIComponent(worldId)}`, {
       method: 'GET',

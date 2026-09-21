@@ -36,6 +36,16 @@ test('Phase 4 — canonical repository identifiers do not depend on wall-clock o
 	assert.match(deterministicRng, /export function stableStringify/);
 });
 
+test('Phase 4 — legacy Story Run creation does not use wall-clock or Math.random entropy', () => {
+	const startRoute = "gameRouter.post('/worlds/:worldId/start-run'";
+	const start = gameRoutes.indexOf(startRoute);
+	assert.ok(start >= 0, 'Legacy start-run route must exist.');
+	const next = gameRoutes.indexOf('gameRouter.', start + 1);
+	const startRun = gameRoutes.slice(start, next >= 0 ? next : gameRoutes.length);
+	assert.doesNotMatch(startRun, /storyId\s*=\s*.*Date\.now\(\)/);
+	assert.doesNotMatch(startRun, /Math\.random\(\)/);
+	assert.match(startRun, /deterministicId\(\s*['"]run_legacy['"]/);
+});
 test('Phase 4 — legacy mock action identifiers are deterministic', () => {
 	assert.doesNotMatch(mockAuthority, /const actionId = .*Date\.now|const actionId = .*Math\.random/);
 	assert.match(mockAuthority, /deterministicId\(\s*['"]act_srv['"]/);

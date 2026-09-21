@@ -71,6 +71,7 @@ function baseProfile(mode: DndRulesMode): RulesProfile {
 				IMPLICIT_ABILITY_CHECKS,
 				IMPLICIT_SAVING_THROWS,
 				STANDARD_DND_SPELL_RULES,
+				DND_TACTICAL_COMBAT,
 			],
 			disabledMechanics: [],
 			overrides: [],

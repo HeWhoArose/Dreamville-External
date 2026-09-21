@@ -40,7 +40,8 @@ test('Phase 1 integration: CUSTOM_HOMEBREW_DND accepts an explicitly authored ch
 			testType: 'ABILITY_CHECK',
 			skill: 'Investigation',
 			difficultyClass: 12,
-			reason: 'The world explicitly defines this as a challenge.',
+			resolutionMode: 'DND_STANDARD',
+			reason: 'The world explicitly opts into the D&D check resolver.',
 		},
 		profile
 	);
@@ -100,4 +101,84 @@ test('Phase 1 integration: StoryCheckEngine honors the StoryRun profile passed b
 		),
 		null
 	);
+});
+
+test('Phase 1 integration: CUSTOM_HOMEBREW_DND rejects authored challenges without an explicit resolver', () => {
+	const engine = new StoryCheckEngine();
+	const profile = rulesProfileEngine.createDefault('CUSTOM_HOMEBREW_DND');
+
+	const result = engine.resolve(
+		'phase1_custom_unresolved',
+		'I investigate the ancient door',
+		character,
+		{
+			id: 'challenge_unresolved',
+			label: 'Unresolved Custom Door',
+			sourceType: 'EVENT',
+			sourceId: 'evt_unresolved',
+			keywords: ['investigate'],
+			testType: 'ABILITY_CHECK',
+			skill: 'Investigation',
+			difficultyClass: 12,
+		},
+		profile
+	);
+
+	assert.equal(result, null);
+});
+
+test('Phase 1 integration: CUSTOM_HOMEBREW_DND can explicitly use the D&D resolver', () => {
+	const engine = new StoryCheckEngine();
+	const profile = rulesProfileEngine.createDefault('CUSTOM_HOMEBREW_DND');
+
+	const result = engine.resolve(
+		'phase1_custom_explicit_dnd',
+		'I investigate the ancient door',
+		character,
+		{
+			id: 'challenge_explicit_dnd',
+			label: 'Explicit D&D Door Check',
+			sourceType: 'EVENT',
+			sourceId: 'evt_explicit_dnd',
+			keywords: ['investigate'],
+			testType: 'ABILITY_CHECK',
+			skill: 'Investigation',
+			difficultyClass: 12,
+			resolutionMode: 'DND_STANDARD',
+		},
+		profile
+	);
+
+	assert.notEqual(result, null);
+	assert.equal(result?.challengeId, 'challenge_explicit_dnd');
+});
+
+test('Phase 1 integration: CUSTOM_HOMEBREW_DND custom D20 resolution does not apply D&D proficiency rules', () => {
+	const engine = new StoryCheckEngine();
+	const profile = rulesProfileEngine.createDefault('CUSTOM_HOMEBREW_DND');
+
+	const result = engine.resolve(
+		'phase1_custom_d20',
+		'I inspect the ancient door',
+		character,
+		{
+			id: 'challenge_custom_d20',
+			label: 'Custom Rune Check',
+			sourceType: 'EVENT',
+			sourceId: 'evt_custom_d20',
+			keywords: ['inspect'],
+			difficultyClass: 10,
+			resolutionMode: 'CUSTOM_D20',
+			customModifier: 3,
+		},
+		profile
+	);
+
+	assert.notEqual(result, null);
+	assert.equal(result?.testType, 'CUSTOM_CHECK');
+	assert.equal(result?.ability, 'CUSTOM');
+	assert.equal(result?.skill, 'Custom Rule');
+	assert.equal(result?.proficiencyBonus, 0);
+	assert.equal(result?.abilityModifier, 0);
+	assert.equal(result?.modifierSources[0]?.kind, 'CUSTOM_RULE');
 });

@@ -230,7 +230,7 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
     try {
       const run = await apiClient.startWorldRun(launchingWorld.worldId, {
         storyMode: runStoryMode,
-        narrativeProfile: launchingWorld.narrativeProfile,
+        narrativeProfile: { mode: runStoryMode },
         dndRulesMode: runRulesMode,
         characterName: runCharacterName.trim() || 'Hero Vael',
       });

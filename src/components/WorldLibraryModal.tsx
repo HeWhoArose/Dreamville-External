@@ -959,7 +959,7 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
                     </label>
                     <select
                       value={runRulesMode}
-                      onChange={(e) => setRunRulesMode(e.target.value)}
+                      onChange={(e) => setRunRulesMode(e.target.value as DndRulesMode)}
                       className="w-full px-3 py-2 rounded-lg bg-stone-950/60 border border-stone-800 text-stone-200 focus:outline-none focus:border-indigo-500"
                     >
                       <option value="FULL_DND">Full D&D</option>

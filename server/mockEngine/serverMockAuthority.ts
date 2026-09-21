@@ -151,6 +151,19 @@ export class ServerMockAuthority {
     return this.activeStoryId;
   }
 
+  public exportTransactionalState(storyId: string): EngineState {
+    return JSON.parse(JSON.stringify(this.getDynamicStoryState(storyId)));
+  }
+
+  public importTransactionalState(storyId: string, state: EngineState): void {
+    const cloned = JSON.parse(JSON.stringify(state)) as EngineState;
+    if (storyId === 'default_story') {
+      this.EXPERIMENTAL_SINGLE_INSTANCE_MOCK_STATE = cloned;
+      return;
+    }
+    this.dynamicStoryStates.set(storyId, cloned);
+  }
+
   /**
    * Epistemic Projection Filter
    * Projects server-side canonical EngineState into a client-safe ExternalViewState.

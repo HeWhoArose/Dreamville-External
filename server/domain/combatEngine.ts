@@ -2334,30 +2334,26 @@ export class TacticalCombatEngine {
       }
       this.hazards = this.hazards.filter((h) => h.durationTurns > 0);
 
-      // Decrement concentration duration for concentrating participants
+      // Decrement concentration duration through the authoritative spell runtime.
       for (const participant of this.participants.values()) {
-        const actorState = this.spellRuntime.getActorState(participant.id);
-        const conc = actorState?.activeConcentration;
-        if (conc) {
-          conc.remainingRounds = Math.max(0, conc.remainingRounds - 1);
-          if (conc.remainingRounds <= 0) {
-            const breakRes = this.spellRuntime.breakConcentration(
-              participant.id,
-              `Concentration duration on ${conc.spellName} completed`
-            );
-            participant.activeConcentration = null;
-            this.eventLog.push({
-              turnNumber: this.currentRound,
-              actorId: participant.id,
-              actionType: 'INTERRUPT',
-              headline: `${participant.name}'s concentration on ${conc.spellName} ended (duration expired).`,
-              metadata: {
-                spellId: conc.spellId,
-                spellName: conc.spellName,
-                cleanedUpConditions: breakRes.cleanedUpConditions,
-              },
-            });
-          }
+        const conc = this.spellRuntime.advanceConcentrationRound(participant.id);
+        if (conc && conc.remainingRounds <= 0) {
+          const breakRes = this.spellRuntime.breakConcentration(
+            participant.id,
+            `Concentration duration on ${conc.spellName} completed`
+          );
+          participant.activeConcentration = null;
+          this.eventLog.push({
+            turnNumber: this.currentRound,
+            actorId: participant.id,
+            actionType: 'INTERRUPT',
+            headline: `${participant.name}'s concentration on ${conc.spellName} ended (duration expired).`,
+            metadata: {
+              spellId: conc.spellId,
+              spellName: conc.spellName,
+              cleanedUpConditions: breakRes.cleanedUpConditions,
+            },
+          });
         }
       }
     }

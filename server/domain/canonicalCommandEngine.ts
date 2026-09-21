@@ -384,7 +384,6 @@ export class CanonicalCommandEngine {
 			if (command.transactionMode === 'STAGED') {
 				transactionalRepository.appendCanonicalCommandEvent(command.storyId, event);
 				const committedAfter = captureCanonicalStateSnapshot(command.storyId, transactionalRepository);
-				event.replay.postStateHash = stableHash(committedAfter);
 				repository.restoreCanonicalStateSnapshot(committedAfter, { persist: true });
 			} else {
 				repository.appendCanonicalCommandEvent(command.storyId, event);

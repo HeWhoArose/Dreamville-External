@@ -261,6 +261,44 @@ test('Phase 2 — normal working context carries canonical campaign modes', () =
 	assert.match(modeChunk.content, /SUPPORTING_CAST/);
 });
 
+test('Phase 2 — campaign archive round-trip preserves canonical narrative and rules profiles', () => {
+	const repo = new InMemoryWorldRepository();
+	const worldId = 'phase2_archive_world';
+	const storyId = 'phase2_archive_story';
+
+	repo.saveWorldTemplate({
+		worldId,
+		title: 'Archive Test World',
+		summary: 'Archive test',
+		description: 'Archive test',
+		rulesetId: 'HYBRID_DND',
+		dndRulesMode: 'HYBRID_DND',
+		rulesProfile: rulesProfileEngine.createDefault('HYBRID_DND'),
+		storyMode: 'SIDE_CHARACTER',
+		narrativeProfile: narrativeProfileEngine.createDefault('SIDE_CHARACTER'),
+	});
+
+	repo.saveStoryRun({
+		storyId,
+		id: storyId,
+		worldId,
+		characterName: 'Archive Character',
+		storyMode: 'SIDE_CHARACTER',
+		narrativeProfile: narrativeProfileEngine.createDefault('SIDE_CHARACTER'),
+		dndRulesMode: 'HYBRID_DND',
+		rulesProfile: rulesProfileEngine.createDefault('HYBRID_DND'),
+	});
+
+	const archive = repo.exportCampaignArchive(storyId, 'Phase 2 Archive Test');
+	const restoredRepo = new InMemoryWorldRepository();
+	const restore = restoredRepo.restoreCampaignArchive(archive, 'phase2_archive_restored');
+
+	assert.equal(restore.success, true);
+	assert.equal(restoredRepo.getNarrativeProfile('phase2_archive_restored')?.mode, 'SIDE_CHARACTER');
+	assert.equal(restoredRepo.getRulesProfile('phase2_archive_restored')?.mode, 'HYBRID_DND');
+	assert.equal(restoredRepo.getStoryRun('phase2_archive_restored')?.narrativeProfile?.mode, 'SIDE_CHARACTER');
+});
+
 test('Phase 2 — runtime projection exposes canonical narrative and rules profiles', () => {
 	const worldId = 'phase2_runtime_world';
 	const storyId = 'phase2_runtime_story';

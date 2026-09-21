@@ -97,12 +97,43 @@ function stableStringify(value: unknown): string {
 	return '{' + Object.keys(record).sort().map((key) => JSON.stringify(key) + ':' + stableStringify(record[key])).join(',') + '}';
 }
 
+const REPLAY_VOLATILE_KEYS = new Set([
+	'createdAt',
+	'updatedAt',
+	'confirmedAt',
+	'testedAt',
+	'latencyMs',
+	'checkpointId',
+	'turnId',
+	'rawResponse',
+	'audioResultBase64',
+]);
+
+function normalizeForReplay(value: unknown, key?: string): unknown {
+	if (key === 'narrative' || key === 'narrativeHistory') return undefined;
+	if (REPLAY_VOLATILE_KEYS.has(key || '')) return undefined;
+	if (value === null || typeof value !== 'object') return value;
+	if (Array.isArray(value)) {
+		return value
+			.map((item) => normalizeForReplay(item))
+			.filter((item) => item !== undefined);
+	}
+	const record = value as Record<string, unknown>;
+	const normalized: Record<string, unknown> = {};
+	for (const childKey of Object.keys(record).sort()) {
+		const child = normalizeForReplay(record[childKey], childKey);
+		if (child !== undefined) normalized[childKey] = child;
+	}
+	return normalized;
+}
+
 function stableHash(value: unknown): string {
-	const serialized = value === undefined
+	const normalized = normalizeForReplay(value);
+	const serialized = normalized === undefined
 		? 'undefined'
-		: typeof value === 'string'
-			? value
-			: stableStringify(value);
+		: typeof normalized === 'string'
+			? normalized
+			: stableStringify(normalized);
 	let hash = 2166136261 >>> 0;
 	for (let i = 0; i < serialized.length; i++) {
 		hash ^= serialized.charCodeAt(i);

@@ -984,6 +984,19 @@ export class SpellRuntime {
     });
   }
 
+  /**
+   * Advances an active concentration effect by one canonical combat round.
+   * Mutates authoritative actor state; read-only callers use getActorState().
+   */
+  public advanceConcentrationRound(actorId: string): ActiveConcentration | undefined {
+    const state = this.actorStates.get(actorId);
+    const active = state?.activeConcentration;
+    if (!active) return undefined;
+
+    active.remainingRounds = Math.max(0, active.remainingRounds - 1);
+    return JSON.parse(JSON.stringify(active));
+  }
+
   public breakConcentration(
     actorId: string,
     reason: string

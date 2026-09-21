@@ -2,8 +2,11 @@ import { worldRepository } from '../repositories/worldRepository';
 import { StoryThread, CanonicalGameplayEvent } from '../../src/types';
 
 export class EmergentNarrativeEngine {
-  public processCanonicalEvent(event: CanonicalGameplayEvent): { createdThread?: StoryThread; updatedThread?: StoryThread } {
-    const existingThreads = worldRepository.getStoryThreads(event.storyId);
+  public processCanonicalEvent(
+    event: CanonicalGameplayEvent,
+    repository = worldRepository
+  ): { createdThread?: StoryThread; updatedThread?: StoryThread } {
+    const existingThreads = repository.getStoryThreads(event.storyId);
     
     // Check if an existing thread is relevant
     const matchingThread = existingThreads.find((t) => t.status !== 'RESOLVED' && (t.locationId === event.locationId || t.title.toLowerCase().includes(event.eventType.toLowerCase())));
@@ -18,7 +21,7 @@ export class EmergentNarrativeEngine {
         updatedAt: new Date().toISOString(),
         evidenceGathered: [...(matchingThread.evidenceGathered || []), ...(event.evidenceItems || [])],
       };
-      worldRepository.saveStoryThread(updatedThread);
+      repository.saveStoryThread(updatedThread);
       return { updatedThread };
     } else {
       // Create new emergent thread
@@ -36,7 +39,7 @@ export class EmergentNarrativeEngine {
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
-      worldRepository.saveStoryThread(createdThread);
+      repository.saveStoryThread(createdThread);
       return { createdThread };
     }
   }

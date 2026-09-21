@@ -440,6 +440,12 @@ export class RestRecoveryEngine {
       geography: this.repository.getGeographyGraph(storyId),
     });
     this.syncCanonicalMirrors(storyId, actorId);
+    const run = this.repository.getStoryRun(storyId);
+    const condition = this.repository.getConditionEngine(storyId).getActorState(actorId);
+    if (run && condition) {
+      run.currentHp = condition.healthCurrent;
+      this.repository.saveStoryRun(run);
+    }
     return { success: true, conditionEvents, livingWorldSummary };
   }
 

@@ -307,9 +307,15 @@ export class CharacterProgressionEngine {
     options?: { progression?: Partial<CharacterProgressionState>; rulesProfile?: RulesProfile | null; worldModules?: ProgressionModuleDefinition[] }
   ): CharacterProgressionState {
     if (options?.worldModules) this.registerModules(options.worldModules);
-    for (const feat of (character.feats || []) as CharacterFeat[]) {
-      if (feat?.id && feat?.name) this.registerFeatModule(feat);
-    }
+    const registeredFeatModules = ((character.feats || []) as CharacterFeat[])
+      .filter((feat) => Boolean(feat?.id && feat?.name))
+      .map((feat) => this.registerFeatModule(feat));
+    const featModuleByCharacterId = new Map(
+      ((character.feats || []) as CharacterFeat[])
+        .filter((feat) => Boolean(feat?.id))
+        .map((feat, index) => [feat.id!, registeredFeatModules[index]?.id])
+        .filter((entry): entry is [string, string] => Boolean(entry[0] && entry[1]))
+    );
 
     const explicit = options?.progression || (character as any).progression || {};
     const state: CharacterProgressionState = {
@@ -318,14 +324,16 @@ export class CharacterProgressionEngine {
       classId: normalizeModuleId(explicit.classId) || this.resolveModuleAlias('CLASS', character.role?.profession || character.role?.archetype),
       subclassId: normalizeModuleId(explicit.subclassId),
       speciesId: normalizeModuleId(explicit.speciesId) || this.resolveModuleAlias('SPECIES', character.identity?.species),
-      featIds: Array.isArray(explicit.featIds) ? [...new Set(explicit.featIds.map(normalizeModuleId).filter(Boolean))] : [],
+      featIds: Array.isArray(explicit.featIds)
+        ? [...new Set(explicit.featIds.map(normalizeModuleId).filter(Boolean).map((id) => featModuleByCharacterId.get(id) || id))]
+        : [],
       enabledModuleIds: [],
       unlockedFeatureIds: [],
       usage: {},
       progressionHistory: [],
     };
 
-    const knownFeatModuleIds = ((character.feats || []) as CharacterFeat[]).map((feat) => this.registerFeatModule(feat).id);
+    const knownFeatModuleIds = registeredFeatModules.map((module) => module.id);
     state.featIds = [...new Set([
       ...state.featIds,
       ...knownFeatModuleIds,

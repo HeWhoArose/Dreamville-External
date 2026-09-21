@@ -197,6 +197,21 @@ export class StoryCheckEngine {
       return null;
     }
 
+    if (effectiveRulesProfile.mode === 'CUSTOM_HOMEBREW_DND' && challenge) {
+      const resolutionMode = challenge.resolutionMode;
+      if (resolutionMode === 'CUSTOM_D20') {
+        return this.resolveCustomD20(storyId, challenge);
+      }
+      if (resolutionMode === 'NARRATIVE') {
+        return null;
+      }
+      if (resolutionMode !== 'DND_STANDARD') {
+        // Custom challenges must explicitly opt into a resolution system. The
+        // engine must never silently apply D&D mechanics in a custom world.
+        return null;
+      }
+    }
+
     const sceneText = normalize(character.sceneText || '');
     const inferredSaveSelection = this.pickSaveProfile(text, sceneText);
     let saveSelection = challenge?.savingThrowAbility
@@ -373,6 +388,47 @@ export class StoryCheckEngine {
       triggerReason: challenge?.triggerReason || saveSelection?.profile.triggerReason,
       challengeId: challenge?.id,
       challengeLabel: challenge?.label,
+    };
+  }
+
+  private resolveCustomD20(
+    storyId: string,
+    challenge: StoryCheckChallenge
+  ): StoryCheckResult {
+    const rawModifier = Number((challenge as any).customModifier ?? 0);
+    const customModifier = Number.isFinite(rawModifier) ? rawModifier : 0;
+    const roll = this.dice(storyId).roll('1d20', customModifier);
+    const difficultyClass = challenge.difficultyClass;
+    const success = roll.total >= difficultyClass;
+
+    return {
+      checkId: `custom_check_${storyId}_${roll.rollId}`,
+      testType: 'ABILITY_CHECK',
+      skill: 'Custom Rule',
+      ability: 'Strength',
+      difficultyClass,
+      proficiencyBonus: 0,
+      proficiencyLevel: 'NONE',
+      abilityModifier: 0,
+      totalModifier: customModifier,
+      modifierSources: [
+        { label: 'Custom rule modifier', value: customModifier, kind: 'OTHER' },
+      ],
+      advantageState: 'NORMAL',
+      selectedDieIndex: 0,
+      roll,
+      total: roll.total,
+      success,
+      criticalSuccess: false,
+      criticalFailure: false,
+      reason: challenge.reason || challenge.label,
+      contextNotes: [
+        'CUSTOM_D20 resolution: no D&D ability, proficiency, saving-throw, or spell-slot rules were applied.',
+      ],
+      worldTriggered: true,
+      triggerReason: challenge.triggerReason || `Authored custom challenge: ${challenge.label}.`,
+      challengeId: challenge.id,
+      challengeLabel: challenge.label,
     };
   }
 

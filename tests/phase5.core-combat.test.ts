@@ -102,6 +102,23 @@ test('Phase 5: Grapple and Shove are canonical Action-consuming control effects'
 	assert.ok(engine.getParticipant('enemy')?.conditions.includes('Prone'));
 });
 
+test('Phase 5: Grappled creatures can spend an Action to escape using the grapple escape DC', () => {
+	const engine = new TacticalCombatEngine(1337);
+	engine.addParticipant(actor({ saveModifiers: { STR: 20 } }));
+	engine.addParticipant(actor({ id: 'enemy', name: 'Enemy', x: 1, y: 0, team: 'enemies', initiative: 1, saveModifiers: { STR: -10 } }));
+	engine.rollInitiative();
+
+	assert.equal(engine.executeGrapple('hero', 'enemy').applied, true);
+	engine.advanceTurn();
+	assert.equal(engine.getCurrentActor()?.id, 'enemy');
+
+	const escape = engine.escapeGrapple('enemy', 'STR');
+	assert.equal(escape.success, true);
+	assert.equal(escape.escaped, true);
+	assert.equal(engine.getParticipant('enemy')?.conditions.includes('Grappled'), false);
+	assert.equal(engine.getParticipant('enemy')?.grappledBy, undefined);
+});
+
 test('Phase 5: cover modifies canonical attack defense and persists through export/import', () => {
 	const engine = new TacticalCombatEngine(1337, new Dnd521RulesetAdapter());
 	engine.addParticipant(actor());

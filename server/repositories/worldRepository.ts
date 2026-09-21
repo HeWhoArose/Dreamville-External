@@ -296,6 +296,8 @@ export class InMemoryWorldRepository implements WorldRepository {
     if (run) {
       const world = this.getWorldTemplate(run.worldId);
       if (world) {
+        const persistedRun = JSON.parse(JSON.stringify(run));
+
         if (run.protagonist) {
           this.createStoryRunFromConfirmedCharacter({
             worldId: run.worldId,
@@ -317,7 +319,20 @@ export class InMemoryWorldRepository implements WorldRepository {
             characterPortraitUrl: run.characterPortraitUrl,
             capabilities: run.capabilities,
             initialConditions: run.initialConditions,
+            storyMode: run.storyMode,
+            dndRulesMode: run.dndRulesMode,
           });
+        }
+
+        const rebuiltRun = this.getStoryRun(storyId);
+        if (rebuiltRun) {
+          this.storyRuns.set(storyId, {
+            ...rebuiltRun,
+            ...persistedRun,
+            storyId,
+            id: persistedRun.id || rebuiltRun.id || storyId,
+          });
+          this.persistLibrary();
         }
         return;
       }

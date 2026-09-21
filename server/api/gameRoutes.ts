@@ -1956,7 +1956,8 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
     const powerState = capEngine.getPowerState(actorId);
     const conditionState = conditionEngine.getActorState(actorId);
     const coreStats = run?.protagonist?.coreStats;
-    const progressionModifiers = transactionRepo.getCharacterProgressionEngine(storyId).resolveModifiers(actorId).modifiers;
+    const progressionEngine = transactionRepo.getCharacterProgressionEngine(storyId);
+    const progressionModifiers = progressionEngine.getState(actorId) ? progressionEngine.resolveModifiers(actorId).modifiers : [];
     const progressionValue = (target: string) => progressionModifiers.find((modifier) => modifier.target === target)?.value || 0;
     const characterLevel = Math.max(1, Math.min(20, Number(coreStats?.level ?? 1)));
     const proficiencyBonus = Math.ceil(characterLevel / 4) + 1;
@@ -5992,7 +5993,7 @@ function buildCanonicalSelfParticipant(
   const npc = player?.actorId === actorId ? null : repository.getNpcLifecycle(storyId, actorId);
   const state = runtime.getOrCreateActorState(actorId);
   const progression = repository.getCharacterProgressionEngine(storyId);
-  const progressionModifiers = progression.resolveModifiers(actorId).modifiers;
+  const progressionModifiers = progression.getState(actorId) ? progression.resolveModifiers(actorId).modifiers : [];
   const progressionValue = (target: string) => progressionModifiers.find((modifier) => modifier.target === target)?.value || 0;
   const hpCurrent = Math.max(0, Number(conditionState?.healthCurrent ?? 30));
   const hpMax = Math.max(1, Number(conditionState?.healthMax ?? (hpCurrent || 30)));

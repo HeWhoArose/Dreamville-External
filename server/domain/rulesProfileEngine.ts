@@ -204,7 +204,7 @@ function applyOverrides(profile: RulesProfile, rawOverrides: unknown): RulesProf
 				next.parameterOverrides[REST_RECOVERY_RULES] = normalized;
 				next.overrides.push(override);
 				continue;
-			}}
+			}
 
 			continue;
 		}

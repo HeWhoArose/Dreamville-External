@@ -1447,10 +1447,11 @@ gameRouter.post('/capabilities/interpret', async (req: Request, res: Response) =
 function getCombatStateHelper(
   combatEngine: import('../domain/combatEngine').TacticalCombatEngine,
   storyId = 'default_story',
-  viewerActorId?: string
+  viewerActorId?: string,
+  repository = worldRepository
 ) {
   const actorId = viewerActorId || 'player_actor_default_story';
-  const perceptionOptions = worldRepository.getCombatPerceptionOptions(storyId, actorId);
+  const perceptionOptions = repository.getCombatPerceptionOptions(storyId, actorId);
   return combatEngine.projectCombatForActor(actorId, perceptionOptions);
 }
 
@@ -1463,16 +1464,17 @@ function syncNpcCombatDeath(
   storyId: string,
   participant: import('../domain/combatEngine').BattlefieldParticipant,
   killerName?: string,
-  fallbackLocationId?: string
+  fallbackLocationId?: string,
+  repository = worldRepository
 ): void {
   if (!participant.isDead) return;
-  const player = worldRepository.getPlayerLifecycle(storyId);
+  const player = repository.getPlayerLifecycle(storyId);
   const playerActorId = player?.actorId || 'player_actor_default_story';
   if (participant.id === playerActorId) return;
 
-  const clock = worldRepository.getWorldClock(storyId);
+  const clock = repository.getWorldClock(storyId);
   const ts = clock.getTimestamp();
-  const existing = worldRepository.getNpcLifecycle(storyId, participant.id);
+  const existing = repository.getNpcLifecycle(storyId, participant.id);
 
   if (existing) {
     if (existing.isDead) {
@@ -1489,7 +1491,7 @@ function syncNpcCombatDeath(
         revivalPossible: false,
       },
     });
-    worldRepository.updateNpcLifecycle(storyId, updated);
+    repository.updateNpcLifecycle(storyId, updated);
   } else {
     const created = new PlayerLifecycleState({
       actorId: participant.id,
@@ -1505,7 +1507,7 @@ function syncNpcCombatDeath(
         revivalPossible: false,
       },
     });
-    worldRepository.updateNpcLifecycle(storyId, created);
+    repository.updateNpcLifecycle(storyId, created);
   }
 }
 

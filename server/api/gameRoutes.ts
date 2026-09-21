@@ -3255,15 +3255,11 @@ gameRouter.post('/living-world/advance', async (req: Request, res: Response) => 
  */
 gameRouter.post('/living-world/schedule-event', async (req: Request, res: Response) => {
   try {
-    const { storyId = 'default_story', event } = req.body;
+    const { storyId = 'default_story', event, commandId: bodyCommandId } = req.body;
     if (!event || !event.id || !event.kind || !event.name || !event.triggerTimestamp) {
       res.status(400).json({ error: 'Invalid event payload: id, kind, name, and triggerTimestamp required.' });
       return;
     }
-
-    const { worldRepository } = await import('../repositories/worldRepository');
-    const livingSim = worldRepository.getLivingWorldSimulation(storyId);
-    const sensoryEngine = worldRepository.getSensoryEngine();
 
     const canonicalEvent = {
       id: String(event.id),
@@ -3276,12 +3272,46 @@ gameRouter.post('/living-world/schedule-event', async (req: Request, res: Respon
       status: event.status || 'pending',
       consequenceSummary: event.consequenceSummary,
     };
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.headers['idempotency-key'] as string | undefined) ||
+      bodyCommandId ||
+      `living_world_schedule_${storyId}_${String(event.id)}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-    livingSim.scheduleEvent(canonicalEvent);
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId: String(storyId),
+        type: 'INTERACT',
+        payload: { action: 'SCHEDULE_LIVING_WORLD_EVENT', event: canonicalEvent },
+        source: 'SYSTEM',
+        transactionMode: 'STAGED',
+      },
+      async (_command, context) => {
+        context.repository.getLivingWorldSimulation(storyId).scheduleEvent(canonicalEvent);
+        return {
+          success: true,
+          data: { storyId, event: canonicalEvent },
+          summary: `Scheduled living world event ${canonicalEvent.id} through the canonical command path.`,
+        };
+      }
+    );
+
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        commandId: commandResult.commandId,
+        errorReason: commandResult.errorReason,
+        rolledBack: commandResult.rolledBack,
+      });
+    }
 
     res.json({
       success: true,
-      event: canonicalEvent,
+      ...(commandResult.data as any),
+      commandId: commandResult.commandId,
+      canonicalCommandEvent: commandResult.event,
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to schedule living world event.' });

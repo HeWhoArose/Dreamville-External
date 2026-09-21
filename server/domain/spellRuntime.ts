@@ -1076,7 +1076,6 @@ export class SpellRuntime {
     const spell = this.getSpell(spellId);
     if (!spell) {
       return {
-    this.setParticipantContext(allParticipants.length > 0 ? allParticipants : [params.casterParticipant].filter(Boolean) as BattlefieldParticipant[]);
         success: false,
         errorCode: 'SPELL_NOT_FOUND',
         errorReason: `Spell "${spellId}" does not exist in canonical spell catalog.`,
@@ -1088,6 +1087,8 @@ export class SpellRuntime {
         headline: `Spell casting failed: unknown spell "${spellId}".`,
       };
     }
+
+    this.setParticipantContext(allParticipants.length > 0 ? allParticipants : [params.casterParticipant].filter(Boolean) as BattlefieldParticipant[]);
 
     const state = this.getOrCreateActorState(casterId, {
       spellAttackBonus: params.casterParticipant?.attackBonus,

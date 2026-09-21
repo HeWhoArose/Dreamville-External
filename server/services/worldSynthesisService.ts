@@ -1,3 +1,4 @@
+import { rulesProfileEngine } from '../domain/rulesProfileEngine';
 import { worldRepository } from '../repositories/worldRepository';
 import { WorldTemplate, WorldSynthesisInput } from '../../src/types';
 import { MultiModelOrchestrator } from '../domain/aiOrchestrator';
@@ -441,6 +442,13 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
     const primaryToken = premiseTokens[0] || 'Core';
 
     // Canonical WorldTemplate construction without unrelated legacy fixture lore
+    const resolvedRules = rulesProfileEngine.resolve({
+      mode: input.dndRulesMode,
+      rulesProfile: input.rulesProfile,
+      worldRules,
+      ruleConstraints: worldRules.map((r: any) => r.description),
+      canonicalCapabilities: capabilities,
+    });
     const world: WorldTemplate = {
       worldId,
       title: title || `${primaryToken} Realm`,

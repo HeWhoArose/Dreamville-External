@@ -968,6 +968,12 @@ export class TacticalCombatEngine {
     return { success: true };
   }
 
+  private isPathCellBlocked(x: number, y: number): boolean {
+    if (this.mapBounds && (x < this.mapBounds.minX || x > this.mapBounds.maxX || y < this.mapBounds.minY || y > this.mapBounds.maxY)) return true;
+    if (this.obstacles.some((obs) => obs.x === x && obs.y === y && obs.isImpassable !== false)) return true;
+    return this.hazards.some((hazard) => hazard.type === 'barricade' && hazard.x === x && hazard.y === y);
+  }
+
   private calculateMovementPath(fromX: number, fromY: number, targetX: number, targetY: number): { x: number; y: number }[] | undefined {
     const steps = Math.max(Math.abs(targetX - fromX), Math.abs(targetY - fromY));
     if (steps === 0) return [{ x: fromX, y: fromY }];
@@ -981,6 +987,32 @@ export class TacticalCombatEngine {
       }
       const obstacle = this.obstacles.find((obs) => obs.x === x && obs.y === y && obs.isImpassable !== false);
       if (obstacle) return undefined;
+
+      const barricade = this.hazards.find((hazard) =>
+        hazard.type === 'barricade' &&
+        hazard.x === x &&
+        hazard.y === y
+      );
+      if (barricade) return undefined;
+
+      const previous = path[path.length - 1];
+      const diagonal = previous.x !== x && previous.y !== y;
+      if (diagonal) {
+        const cornerBlocked =
+          this.isPathCellBlocked(previous.x, y) ||
+          this.isPathCellBlocked(x, previous.y);
+        if (cornerBlocked) return undefined;
+      }
+
+      if (this.participants.values && Array.from(this.participants.values()).some((participant) =>
+        participant.id !== 'PATH_SELF' &&
+        !participant.isDead &&
+        participant.x === x &&
+        participant.y === y
+      )) {
+        return undefined;
+      }
+
       path.push({ x, y });
     }
     return path;

@@ -149,15 +149,47 @@ test('Phase 5: Total Cover blocks direct attacks without consuming the Action', 
 });
 
 test('Phase 5: opportunity attacks share normal attack condition modifiers', () => {
-	const engine = new TacticalCombatEngine(1337);
-	engine.addParticipant(actor());
-	engine.addParticipant(actor({ id: 'enemy', name: 'Invisible Enemy', x: 0, y: 1, team: 'enemies', initiative: 10, attackBonus: 8, conditions: ['Invisible'] }));
-	engine.rollInitiative();
+	const invisibleEngine = new TacticalCombatEngine(1337);
+	invisibleEngine.addParticipant(actor({ armorClass: 100 }));
+	invisibleEngine.addParticipant(actor({
+		id: 'enemy',
+		name: 'Invisible Enemy',
+		x: 0,
+		y: 1,
+		team: 'enemies',
+		initiative: 10,
+		attackBonus: 8,
+		conditions: ['Invisible'],
+	}));
+	invisibleEngine.rollInitiative();
 
-	assert.equal(engine.moveActor('hero', 2, 0).success, true);
-	const reaction = engine.getBattleEvents().find((event) => event.actionType === 'ATTACK' && (event.metadata as any)?.reaction === true);
-	assert.ok(reaction);
-	assert.equal(reaction?.rollRecord?.individualDice?.length, 2);
+	assert.equal(invisibleEngine.moveActor('hero', 2, 0).success, true);
+	const invisibleReaction = invisibleEngine.getBattleEvents().find(
+		(event) => event.actionType === 'ATTACK' && (event.metadata as any)?.reaction === true
+	);
+	assert.ok(invisibleReaction);
+	assert.equal(invisibleEngine.getDiceEngine().getRollCounter(), 2);
+
+	const normalEngine = new TacticalCombatEngine(1337);
+	normalEngine.addParticipant(actor({ armorClass: 100 }));
+	normalEngine.addParticipant(actor({
+		id: 'enemy',
+		name: 'Normal Enemy',
+		x: 0,
+		y: 1,
+		team: 'enemies',
+		initiative: 10,
+		attackBonus: 8,
+		conditions: [],
+	}));
+	normalEngine.rollInitiative();
+
+	assert.equal(normalEngine.moveActor('hero', 2, 0).success, true);
+	const normalReaction = normalEngine.getBattleEvents().find(
+		(event) => event.actionType === 'ATTACK' && (event.metadata as any)?.reaction === true
+	);
+	assert.ok(normalReaction);
+	assert.equal(normalEngine.getDiceEngine().getRollCounter(), 1);
 });
 
 test('Phase 5: zero-HP combatants cannot move or provoke opportunity reactions', () => {

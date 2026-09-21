@@ -24,6 +24,7 @@ export interface CanonicalCommand<TPayload = Record<string, unknown>> {
 	source: CanonicalCommandSource;
 	idempotencyKey?: string;
 	issuedAt?: string;
+	transactionMode?: 'STAGED' | 'ROLLBACK';
 }
 
 export interface CanonicalCommandEvent {
@@ -255,11 +256,26 @@ export class CanonicalCommandEngine {
 		fingerprint: string
 	): Promise<CanonicalCommandResult<TResult>> {
 		const before = captureCanonicalStateSnapshot(command.storyId, repository);
+		const stagedRepository =
+			command.transactionMode === 'STAGED'
+				? (() => {
+					const staged = new InMemoryWorldRepository();
+					staged.restoreCanonicalStateSnapshot(before);
+					return staged;
+				})()
+				: repository;
+		const transactionalRepository = stagedRepository;
 
 		try {
-			const resolved = await handler(command, { snapshot: before, repository });
+			const resolved = await handler(command, {
+				snapshot: before,
+				repository: transactionalRepository,
+			});
+
 			if (!resolved.success) {
-				repository.restoreCanonicalStateSnapshot(before);
+				if (command.transactionMode !== 'STAGED') {
+					repository.restoreCanonicalStateSnapshot(before);
+				}
 				return {
 					success: false,
 					commandId: command.commandId,
@@ -269,12 +285,16 @@ export class CanonicalCommandEngine {
 				};
 			}
 
-			const after = captureCanonicalStateSnapshot(command.storyId, repository);
+			const after = captureCanonicalStateSnapshot(command.storyId, transactionalRepository);
 			const comparison = compareCanonicalSnapshots(before, after);
 			const mutationPaths = comparison.differences.map((difference) => {
 				const match = difference.match(/(?:at|in )((?:worldClock|geography|worldFacts|player|inventory|equipment|craftingRecipes|npcs|chronicle|narrativeHistory|capabilities|conditions|combat|memories|livingWorld|sensory|adaptation)[^:]*):?/);
 				return match?.[1] || difference;
 			});
+
+			if (command.transactionMode === 'STAGED') {
+				repository.restoreCanonicalStateSnapshot(after);
+			}
 
 			const event: CanonicalCommandEvent = {
 				eventId: `evt_cmd_${command.storyId}_${command.commandId}`,
@@ -296,6 +316,7 @@ export class CanonicalCommandEngine {
 				`${command.storyId}::${command.commandId}`,
 				{ fingerprint, data: clone(resolved.data) }
 			);
+
 			return {
 				success: true,
 				commandId: command.commandId,
@@ -305,7 +326,9 @@ export class CanonicalCommandEngine {
 				mutationPaths,
 			};
 		} catch (error: any) {
-			repository.restoreCanonicalStateSnapshot(before);
+			if (command.transactionMode !== 'STAGED') {
+				repository.restoreCanonicalStateSnapshot(before);
+			}
 			return {
 				success: false,
 				commandId: command.commandId,

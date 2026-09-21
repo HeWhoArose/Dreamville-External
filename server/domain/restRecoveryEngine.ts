@@ -171,7 +171,7 @@ export class RestRecoveryEngine {
   public getHitDiceState(actorId: string): HitDiceRecoveryState {
     const existing = this.hitDice.get(actorId);
     if (existing) return clone(existing);
-    const core = this.getCoreStatsForRead(actorId);
+    const core = this.getCoreStatsForRead();
     const max = Math.max(1, Math.trunc(core.level));
     return { current: max, max, sides: diceSides(core.hitDice) };
   }
@@ -575,7 +575,7 @@ export class RestRecoveryEngine {
     };
   }
 
-  private getCoreStatsForRead(_actorId: string): { level: number; hitDice?: string } {
+  private getCoreStatsForRead(): { level: number; hitDice?: string } {
     const run = this.repository.getStoryRun(this.storyId);
     const core = run?.characterCoreStats || run?.protagonist?.coreStats || {};
     return {

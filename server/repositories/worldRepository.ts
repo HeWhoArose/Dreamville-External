@@ -20,6 +20,7 @@ import { ConditionEngine } from '../domain/conditionEngine';
 import { StoryCheckEngine } from '../domain/storyCheckEngine';
 import { CampaignArchiveService, PartitionedArchive } from '../domain/campaignArchive';
 import { dndSpellRulesEvaluator } from '../domain/dndSpellRulesModel';
+import { rulesProfileEngine } from '../domain/rulesProfileEngine';
 import { PersistentGameStore } from '../services/persistentGameStore';
 import {
   AdaptedStoryBible,
@@ -834,6 +835,13 @@ export class InMemoryWorldRepository implements WorldRepository {
         storyMode: params.storyMode || world.storyMode || 'PROTAGONIST',
         dndRulesMode: params.dndRulesMode || world.dndRulesMode || world.rulesetId || 'FULL_DND',
         ruleset: params.dndRulesMode || world.rulesetId || 'FULL_DND',
+        rulesProfile: rulesProfileEngine.resolve({
+          mode: params.dndRulesMode || world.dndRulesMode || world.rulesetId || 'FULL_DND',
+          rulesProfile: world.rulesProfile,
+          worldRules: world.worldRules || [],
+          ruleConstraints: world.ruleConstraints || [],
+          canonicalCapabilities: world.canonicalCapabilities || [],
+        }).profile,
         characterName: char.identity.name,
         characterRole: char.role?.profession || char.role?.archetype || 'Adventurer',
         characterBackground: [char.background?.history, ...(char.background?.notableEvents || [])].filter(Boolean).join('. ') || '',

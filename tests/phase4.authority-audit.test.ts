@@ -19,17 +19,17 @@ function routeBlock(route: string): string {
 test('Phase 4 — canonical repository identifiers do not depend on wall-clock or Math.random entropy', () => {
 	assert.doesNotMatch(
 		worldRepository,
-		/const storyId = params\.storyId \\|\\| .*Date\.now|const storyId = params\.storyId \\|\\| .*Math\.random/,
+		/const storyId = params\.storyId \|\| .*Date\.now|const storyId = params\.storyId \|\| .*Math\.random/,
 		'StoryRun identifiers must be deterministic when the caller does not supply one.'
 	);
 	assert.doesNotMatch(
 		worldRepository,
-		/const capId = cap\.id \\|\\| .*Date\.now|const capId = cap\.id \\|\\| .*Math\.random/,
+		/const capId = cap\.id \|\| .*Date\.now|const capId = cap\.id \|\| .*Math\.random/,
 		'Canonical capability identifiers must be deterministic when the source lacks an explicit id.'
 	);
 	assert.doesNotMatch(
 		worldRepository,
-		/sessionId:\s*['`]session_.*Date\.now\(\)/,
+		/sessionId:\s*.*Date\.now\(/,
 		'Canonical adaptation session identifiers must not use wall-clock entropy.'
 	);
 	assert.match(worldRepository, /deterministicId\('cap'/);

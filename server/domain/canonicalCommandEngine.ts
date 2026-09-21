@@ -342,7 +342,7 @@ export class CanonicalCommandEngine {
 
 			const comparison = compareCanonicalSnapshots(before, after);
 			const mutationPaths = comparison.differences.map((difference) => {
-				const match = difference.match(/(?:at|in )((?:worldClock|geography|worldFacts|player|inventory|equipment|craftingRecipes|npcs|chronicle|narrativeHistory|capabilities|conditions|combat|memories|livingWorld|sensory|adaptation)[^:]*):?/);
+				const match = difference.match(/(?:at|in )((?:worldClock|geography|worldFacts|player|inventory|equipment|craftingRecipes|npcs|chronicle|narrativeHistory|capabilities|conditions|combat|storyChecks|memories|livingWorld|sensory|adaptation)[^:]*):?/);
 				return match?.[1] || difference;
 			});
 

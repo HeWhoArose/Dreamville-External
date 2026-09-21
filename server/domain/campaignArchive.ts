@@ -53,6 +53,7 @@ export interface RestoredCampaignData {
   chronicle: any;
   narrative: any;
   capabilities?: any;
+  progression?: any;
   combat?: any;
   memories?: any;
   livingWorld?: any;
@@ -146,7 +147,7 @@ export class CampaignArchiveService {
       'canonical/chronicle.json': this.computeSha256(chronicleJson),
       'canonical/narrative.json': this.computeSha256(narrativeJson),
       'canonical/capabilities.json': this.computeSha256(capabilitiesJson),
-      'canonical/progression.json': this.computeSha256(progressionJson),
+      ...(params.progressionState !== undefined ? { 'canonical/progression.json': this.computeSha256(progressionJson) } : {}),
       'canonical/combat.json': this.computeSha256(combatJson),
       'canonical/memories.json': this.computeSha256(memoriesJson),
       'canonical/living_world.json': this.computeSha256(livingWorldJson),
@@ -180,7 +181,7 @@ export class CampaignArchiveService {
         'canonical/chronicle.json': chronicleJson,
         'canonical/narrative.json': narrativeJson,
         'canonical/capabilities.json': capabilitiesJson,
-        'canonical/progression.json': progressionJson,
+        ...(params.progressionState !== undefined ? { 'canonical/progression.json': progressionJson } : {}),
         'canonical/combat.json': combatJson,
         'canonical/memories.json': memoriesJson,
         'canonical/living_world.json': livingWorldJson,

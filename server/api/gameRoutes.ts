@@ -5171,10 +5171,6 @@ gameRouter.post('/worlds/runs/:storyId/actions/apply-ability', async (req: Reque
       return res.status(400).json({ error: 'abilityId and targetId are required.' });
     }
     const storyId = req.params.storyId as string;
-    const { abilityId, targetId } = req.body;
-    if (!abilityId || !targetId) {
-      return res.status(400).json({ error: 'abilityId and targetId are required.' });
-    }
     const { abilityService } = await import('../services/abilityService');
     const player = worldRepository.getPlayerLifecycle(storyId);
     const actorId = player?.actorId || `player_actor_${storyId}`;

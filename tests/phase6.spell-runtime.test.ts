@@ -470,6 +470,7 @@ test('Phase 6 Requirement 11: Authoritative custom spell evaluation and registra
       spellId: validEval.sanitizedSpell.id,
       targetId: 'target_dummy',
       slotLevel: 2,
+      allowSyntheticTarget: true,
     },
   });
   assert.equal(customCast.success, true);

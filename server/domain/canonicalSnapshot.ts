@@ -17,6 +17,7 @@ export interface CanonicalStateSnapshot {
   narrativeHistory: any[];
   capabilities: any;
   conditions: any;
+  rest: any;
   combat: any;
   storyChecks: any;
   memories: any;
@@ -87,6 +88,7 @@ export function captureCanonicalStateSnapshot(
     narrativeHistory: safeClone(orchestrator.exportNarrativeHistory(storyId)),
     capabilities: safeClone(capEngine.exportState()),
     conditions: safeClone(conditionEngine.exportState()),
+    rest: safeClone(repo.getRestRecoveryEngine(storyId).exportState()),
     combat: safeClone(combatEngine.exportState()),
     storyChecks: safeClone(repo.getStoryCheckEngine(storyId).exportState()),
     memories: safeClone(memoryEngine.exportState()),
@@ -184,6 +186,7 @@ export function compareCanonicalSnapshots(
   }
   deepCheck(a.capabilities, b.capabilities, 'capabilities');
   deepCheck(a.conditions, b.conditions, 'conditions');
+  deepCheck(a.rest, b.rest, 'rest');
   deepCheck(a.combat, b.combat, 'combat');
   deepCheck(a.storyChecks, b.storyChecks, 'storyChecks');
   deepCheck(a.memories, b.memories, 'memories');

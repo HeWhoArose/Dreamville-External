@@ -219,6 +219,7 @@ export class SpellRuntime {
   private actorStates: Map<string, ActorSpellcastingState> = new Map();
   private conditionEngine: ConditionEngine;
   private chronicleEngine?: HistoricalChronicleEngine;
+  private readonly participantRefs: Map<string, BattlefieldParticipant> = new Map();
 
   constructor(options?: {
     conditionEngine?: ConditionEngine;
@@ -870,6 +871,77 @@ export class SpellRuntime {
     }
   }
 
+  /** Bind authoritative mutable participant references for effect application/cleanup. */
+  public setParticipantContext(participants: BattlefieldParticipant[]): void {
+    this.participantRefs.clear();
+    for (const participant of participants) {
+      this.participantRefs.set(participant.id, participant);
+    }
+  }
+
+  private resolveAreaTargets(
+    spell: SpellDefinition,
+    caster: BattlefieldParticipant,
+    target: BattlefieldParticipant | undefined,
+    targetPosition: { x: number; y: number } | undefined,
+    allParticipants: BattlefieldParticipant[]
+  ): BattlefieldParticipant[] {
+    const areaTypes = new Set<SpellTargetType>(['AREA_SPHERE', 'AREA_LINE', 'AREA_CONE']);
+    if (!areaTypes.has(spell.targetType)) return [];
+
+    const participants = new Map<string, BattlefieldParticipant>();
+    for (const participant of allParticipants) participants.set(participant.id, participant);
+    if (target) participants.set(target.id, target);
+
+    const center = targetPosition || (target ? { x: target.x, y: target.y } : undefined);
+    if (!center) return [];
+
+    const candidates = Array.from(participants.values()).filter((p) => {
+      if (p.isDead || p.hpCurrent <= 0) return false;
+      if (spell.defenseModel === 'HEAL' && p.team !== caster.team) return false;
+      return true;
+    });
+
+    const maxRangeCells = Math.max(0, spell.range / 5);
+    const centerDistance = (p: BattlefieldParticipant) => Math.hypot(p.x - caster.x, p.y - caster.y);
+
+    if (spell.targetType === 'AREA_SPHERE') {
+      const radiusCells = Math.max(0, (spell.areaRadiusFeet || 0) / 5);
+      return candidates.filter((p) => Math.hypot(p.x - center.x, p.y - center.y) <= radiusCells + 1e-9);
+    }
+
+    if (spell.targetType === 'AREA_LINE') {
+      const vx = center.x - caster.x;
+      const vy = center.y - caster.y;
+      const lengthSquared = vx * vx + vy * vy;
+      if (lengthSquared <= 1e-9) return [];
+      const widthCells = 0.5;
+      return candidates.filter((p) => {
+        const px = p.x - caster.x;
+        const py = p.y - caster.y;
+        const projection = (px * vx + py * vy) / lengthSquared;
+        if (projection < -1e-9 || projection > 1 + 1e-9) return false;
+        if (centerDistance(p) > maxRangeCells + 1e-9) return false;
+        const closestX = caster.x + vx * projection;
+        const closestY = caster.y + vy * projection;
+        return Math.hypot(p.x - closestX, p.y - closestY) <= widthCells + 1e-9;
+      });
+    }
+
+    const vx = center.x - caster.x;
+    const vy = center.y - caster.y;
+    const directionLength = Math.hypot(vx, vy);
+    if (directionLength <= 1e-9) return [];
+    return candidates.filter((p) => {
+      const dx = p.x - caster.x;
+      const dy = p.y - caster.y;
+      const distance = Math.hypot(dx, dy);
+      if (distance > maxRangeCells + 1e-9 || distance <= 1e-9) return false;
+      const cosine = (dx * vx + dy * vy) / (distance * directionLength);
+      return cosine >= Math.cos(Math.PI / 4) - 1e-9;
+    });
+  }
+
   public breakConcentration(
     actorId: string,
     reason: string
@@ -888,7 +960,31 @@ export class SpellRuntime {
     if (Array.isArray(active.appliedConditions)) {
       for (const item of active.appliedConditions) {
         this.conditionEngine.removeCondition(item.targetId, item.condition);
+        const participant = this.participantRefs.get(item.targetId);
+        if (participant) {
+          participant.conditions = participant.conditions.filter((condition) => condition !== item.condition);
+        }
         cleanedUpConditions.push(item);
+      }
+    }
+
+    const buffEffects = active.effects?.buffs as Array<{
+      targetId: string;
+      previousArmorClass: number;
+      previousSpeedCells: number;
+      previousAttackBonus: number;
+      previousSavingThrowModifiers?: Record<string, number>;
+    }> | undefined;
+    if (Array.isArray(buffEffects)) {
+      for (const effect of buffEffects) {
+        const participant = this.participantRefs.get(effect.targetId);
+        if (!participant) continue;
+        participant.armorClass = effect.previousArmorClass;
+        participant.speedCells = effect.previousSpeedCells;
+        participant.attackBonus = effect.previousAttackBonus;
+        participant.savingThrowModifiers = effect.previousSavingThrowModifiers
+          ? { ...effect.previousSavingThrowModifiers }
+          : participant.savingThrowModifiers;
       }
     }
 

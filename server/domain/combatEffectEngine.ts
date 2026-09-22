@@ -3,7 +3,7 @@ import type {
   CombatEffectResult,
   CombatAttackInstanceResult,
 } from '../../src/types';
-import { resolveCapabilityCheckFormula } from '../../src/data/rulesDice';
+import { isDiceFormula, normalizeDiceFormula, resolveCapabilityCheckFormula } from '../../src/data/rulesDice';
 import { TacticalCombatEngine } from './combatEngine';
 import { combatTargetingEngine } from './combatTargetingEngine';
 
@@ -40,14 +40,29 @@ export class CombatEffectEngine {
     if (normalized.resolutionMode === 'SAVE' || normalized.resolutionMode === 'AREA') {
       normalized.saveFormula = resolveCapabilityCheckFormula(rulesMode as any, normalized.saveFormula);
     }
-    if (normalized.damageFormula !== undefined && !/^(?:\d+)d(?:\d+)(?:[+-]\d+)?$/i.test(normalized.damageFormula.replace(/\s+/g, ''))) {
-      return { success: false, errorReason: `Invalid damage formula '${normalized.damageFormula}'.` };
+    if (normalized.damageFormula !== undefined) {
+      if (!isDiceFormula(normalized.damageFormula)) {
+        return { success: false, errorReason: `Invalid or unsafe damage formula '${normalized.damageFormula}'.` };
+      }
+      normalized.damageFormula = normalizeDiceFormula(normalized.damageFormula);
     }
-    if (normalized.attackFormula !== undefined && !/^(?:\d+)d(?:\d+)(?:[+-]\d+)?$/i.test(normalized.attackFormula.replace(/\s+/g, ''))) {
-      return { success: false, errorReason: `Invalid attack formula '${normalized.attackFormula}'.` };
+    if (normalized.attackFormula !== undefined) {
+      if (!isDiceFormula(normalized.attackFormula)) {
+        return { success: false, errorReason: `Invalid or unsafe attack formula '${normalized.attackFormula}'.` };
+      }
+      normalized.attackFormula = resolveCapabilityCheckFormula(rulesMode as any, normalized.attackFormula);
     }
-    if (normalized.saveFormula !== undefined && !/^(?:\d+)d(?:\d+)(?:[+-]\d+)?$/i.test(normalized.saveFormula.replace(/\s+/g, ''))) {
-      return { success: false, errorReason: `Invalid save formula '${normalized.saveFormula}'.` };
+    if (normalized.saveFormula !== undefined) {
+      if (!isDiceFormula(normalized.saveFormula)) {
+        return { success: false, errorReason: `Invalid or unsafe save formula '${normalized.saveFormula}'.` };
+      }
+      normalized.saveFormula = resolveCapabilityCheckFormula(rulesMode as any, normalized.saveFormula);
+    }
+    if (normalized.executionFormula !== undefined) {
+      if (!isDiceFormula(normalized.executionFormula)) {
+        return { success: false, errorReason: `Invalid or unsafe execution formula '${normalized.executionFormula}'.` };
+      }
+      normalized.executionFormula = resolveCapabilityCheckFormula(rulesMode as any, normalized.executionFormula);
     }
     if ((normalized.resolutionMode === 'OUTCOME' || normalized.resolutionMode === 'WORLD_EFFECT') && !normalized.outcome) {
       return { success: false, errorReason: 'Outcome/world effects require a semantic outcome.' };

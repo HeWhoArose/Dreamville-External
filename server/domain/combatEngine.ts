@@ -2991,12 +2991,55 @@ export class TacticalCombatEngine {
       }
 
       case 'RESOURCE_GRANTED':
-      case 'RESOURCE_REMOVED':
-        metadata.resource = outcomePayload?.resource || null;
-        metadata.amount = outcomePayload?.amount ?? null;
+      case 'RESOURCE_REMOVED': {
+        const resource = String(outcomePayload?.resource || 'generic');
+        const amount = Math.max(0, Number(outcomePayload?.amount ?? 0) || 0);
+        target.combatResources = { ...(target.combatResources || {}) };
+        const current = Math.max(0, Number(target.combatResources[resource] || 0));
+        target.combatResources[resource] = outcome === 'RESOURCE_GRANTED' ? current + amount : Math.max(0, current - amount);
+        metadata.resource = resource;
+        metadata.amount = amount;
+        metadata.previousAmount = current;
+        metadata.newAmount = target.combatResources[resource];
         break;
+      }
 
-      case 'SUMMONED':
+      case 'SUMMONED': {
+        const rawSummon = outcomePayload?.participant;
+        if (!rawSummon || typeof rawSummon !== 'object') {
+          metadata.payload = outcomePayload || {};
+          break;
+        }
+        const summon = rawSummon as Record<string, unknown>;
+        const baseId = String(summon.id || ('summon_' + this.currentRound + '_' + this.combatActionSequence));
+        let summonId = baseId;
+        let suffix = 2;
+        while (this.participants.has(summonId)) {
+          summonId = baseId + '_' + suffix;
+          suffix += 1;
+        }
+        this.addParticipant({
+          id: summonId,
+          name: String(summon.name || 'Summoned Entity'),
+          x: Number(summon.x ?? target.x),
+          y: Number(summon.y ?? target.y),
+          initiative: Number(summon.initiative ?? target.initiative),
+          team: (summon.team === 'player_allies' || summon.team === 'neutral') ? summon.team : target.team,
+          hpCurrent: Math.max(1, Number(summon.hpCurrent ?? summon.hpMax ?? 1)),
+          hpMax: Math.max(1, Number(summon.hpMax ?? summon.hpCurrent ?? 1)),
+          armorClass: Math.max(0, Number(summon.armorClass ?? 10)),
+          speedCells: Math.max(0, Number(summon.speedCells ?? 4)),
+          attackBonus: Number(summon.attackBonus ?? 0),
+          damageFormula: typeof summon.damageFormula === 'string' ? summon.damageFormula : '1d4',
+          damageType: typeof summon.damageType === 'string' ? summon.damageType : undefined,
+          conditions: Array.isArray(summon.conditions) ? summon.conditions.map(String) : [],
+          isDead: false,
+        });
+        metadata.summonedId = summonId;
+        metadata.summon = summon;
+        break;
+      }
+
       case 'WORLD_STATE_CHANGED':
         metadata.payload = outcomePayload || {};
         break;

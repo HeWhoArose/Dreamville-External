@@ -336,10 +336,14 @@ export class CharacterProgressionEngine {
     );
 
     const explicit = explicitProgression;
+    const inferredClassId =
+      normalizeModuleId(explicit.classId) ||
+      this.resolveModuleAlias('CLASS', (character as any).role?.profession) ||
+      this.resolveModuleAlias('CLASS', (character as any).class || (character as any).className);
     const state: CharacterProgressionState = {
       actorId,
       currentLevel: normalizeLevel(character.coreStats?.level, 1),
-      classId: normalizeModuleId(explicit.classId) || undefined,
+      classId: inferredClassId || undefined,
       subclassId: normalizeModuleId(explicit.subclassId) || undefined,
       speciesId: normalizeModuleId(explicit.speciesId) || this.resolveModuleAlias('SPECIES', character.identity?.species) || undefined,
       featIds: Array.isArray(explicit.featIds)

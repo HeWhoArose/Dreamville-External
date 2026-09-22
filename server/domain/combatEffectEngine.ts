@@ -76,6 +76,59 @@ export class CombatEffectEngine {
       resourceConsumed = normalized.actionCost !== 'FREE';
     }
 
+    if (normalized.resolutionMode === 'OUTCOME') {
+      if (!normalized.outcome) return rollback({ success: false, errorReason: 'OUTCOME effects require a semantic outcome.' });
+      const instances: CombatAttackInstanceResult[] = [];
+      const eventIds: string[] = [];
+      const defeatedTargetIds: string[] = [];
+      for (let i = 0; i < targeting.targetIds.length; i += 1) {
+        const targetId = targeting.targetIds[i];
+        const outcome = engine.applySemanticOutcome(targetId, normalized.outcome, normalized.outcomePayload);
+        if (!outcome.success) return rollback({ success: false, errorReason: outcome.errorReason });
+        instances.push({
+          instanceIndex: i,
+          targetId,
+          hits: true,
+          isCritical: false,
+          damage: 0,
+          targetDied: outcome.isDead,
+        });
+        if (outcome.isDead && !defeatedTargetIds.includes(targetId)) defeatedTargetIds.push(targetId);
+        const eventId = (outcome.metadata as any)?.eventId;
+        if (typeof eventId === 'string') eventIds.push(eventId);
+      }
+      return rollback({
+        success: true,
+        actionConsumed: resourceConsumed,
+        effectId: normalized.id,
+        effectName: normalized.name,
+        instances,
+        totalDamage: 0,
+        defeatedTargetIds,
+        outcome: normalized.outcome,
+        canonicalEventIds: eventIds,
+      });
+    }
+
+    if (normalized.resolutionMode === 'WORLD_EFFECT') {
+      const abstraction = ['PERSON', 'GROUP', 'ENCOUNTER'].includes(normalized.scale) ? 'TACTICAL' : 'MACRO';
+      return rollback({
+        success: true,
+        actionConsumed: resourceConsumed,
+        effectId: normalized.id,
+        effectName: normalized.name,
+        totalDamage: 0,
+        outcome: normalized.outcome,
+        worldEffectPreview: {
+          scale: normalized.scale,
+          outcome: normalized.outcome,
+          targetIds: [...targeting.targetIds],
+          abstraction,
+          changedScopes: [normalized.scale + ':' + normalized.id],
+        },
+      });
+    }
+
     if (normalized.resolutionMode === 'SINGLE_ATTACK') {
       const targetId = targeting.targetIds[0];
       if (!targetId) return rollback({ success: false, errorReason: 'SINGLE_ATTACK requires one targetId.' });

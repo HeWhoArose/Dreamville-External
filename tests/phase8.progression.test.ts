@@ -616,3 +616,75 @@ test('Phase 8 regression: Genesis divergence fingerprint maps character feat IDs
   const audit = engine.detectGenesisDivergence('hero', character);
   assert.equal(audit.divergent, false);
 });
+
+
+test('Phase 8 regression: MIN/MAX modifiers behave as floor and ceiling constraints', () => {
+  const engine = new CharacterProgressionEngine();
+  engine.seedFromCharacter('hero', {
+    identity: { name: 'Hero', species: 'Human' },
+    role: { profession: 'Fighter' },
+    coreStats: { level: 1 } as any,
+    feats: [],
+  });
+
+  const module: ProgressionModuleDefinition = {
+    id: 'feat_min_max_audit',
+    type: 'FEAT',
+    name: 'Min Max Audit',
+    version: 1,
+    enabled: true,
+    provenance: 'CHARACTER_GENESIS',
+    features: [{
+      id: 'feat_min_max_feature',
+      name: 'Bounds',
+      description: 'Tests floor and ceiling semantics.',
+      level: 1,
+      enabled: true,
+      passiveModifiers: [
+        {
+          id: 'min-1',
+          target: 'combat.attackBonus',
+          mode: 'MIN',
+          value: 7,
+          precedence: 10,
+          source: { moduleId: 'feat_min_max_audit', moduleType: 'FEAT', featureId: 'feat_min_max_feature', sourceId: 'min-1', sourceName: 'Floor', precedence: 10 },
+        },
+        {
+          id: 'min-2',
+          target: 'combat.attackBonus',
+          mode: 'MIN',
+          value: 9,
+          precedence: 11,
+          source: { moduleId: 'feat_min_max_audit', moduleType: 'FEAT', featureId: 'feat_min_max_feature', sourceId: 'min-2', sourceName: 'Stronger Floor', precedence: 11 },
+        },
+        {
+          id: 'max-1',
+          target: 'combat.attackBonus',
+          mode: 'MAX',
+          value: 12,
+          precedence: 20,
+          source: { moduleId: 'feat_min_max_audit', moduleType: 'FEAT', featureId: 'feat_min_max_feature', sourceId: 'max-1', sourceName: 'Ceiling', precedence: 20 },
+        },
+      ],
+    }],
+  };
+  engine.registerModule(module);
+  engine.acquireFeat('hero', module.id, 'phase8-min-max', rulesProfileEngine.createDefault('FULL_DND'));
+  const attack = engine.resolveModifiers('hero').modifiers.find((entry) => entry.target === 'combat.attackBonus');
+  assert.equal(attack?.value, 9);
+});
+
+test('Phase 8 regression: rules-profile gating is enforced when resolving runtime modifiers', () => {
+  const engine = new CharacterProgressionEngine();
+  engine.seedFromCharacter('hero', {
+    identity: { name: 'Hero', species: 'Human' },
+    role: { profession: 'Fighter' },
+    coreStats: { level: 1 } as any,
+    feats: [],
+  });
+  const full = rulesProfileEngine.createDefault('FULL_DND');
+  assert.equal(engine.resolveModifiers('hero', full).modifiers.some((entry) => entry.target === 'combat.attackBonus'), true);
+
+  const custom = rulesProfileEngine.createDefault('CUSTOM_HOMEBREW_DND');
+  assert.equal(engine.resolveModifiers('hero', custom).modifiers.some((entry) => entry.target === 'combat.attackBonus'), false);
+});

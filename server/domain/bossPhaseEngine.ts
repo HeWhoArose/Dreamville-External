@@ -160,7 +160,6 @@ export class BossPhaseEngine {
       enteredAtRound: round,
       transitions: [...(current?.state?.transitions || []), `${currentPhaseId || 'INITIAL'}->${phase.id}`],
     };
-    const bossCard = params.repository.getEntityCard(params.storyId, params.bossId);
     for (const hazard of resolvedHazards) {
       const hazardResult = combatEnvironmentEngine.createHazard({
         repository: params.repository,

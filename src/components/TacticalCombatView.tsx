@@ -56,6 +56,10 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
   const [effectResult, setEffectResult] = useState<any>(null);
   const [effectSimulation, setEffectSimulation] = useState<any>(null);
   const [presentationMode, setPresentationMode] = useState<'FULL' | 'FAST' | 'TEXT' | 'LOG'>('FULL');
+  const [combatReplays, setCombatReplays] = useState<any[]>([]);
+  const [selectedReplayId, setSelectedReplayId] = useState<string>('');
+  const [replayResult, setReplayResult] = useState<any>(null);
+  const [replayLoading, setReplayLoading] = useState<boolean>(false);
 
   const fetchCombatData = async () => {
     try {
@@ -63,6 +67,14 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
       setErrorMsg(null);
       const state = await apiClient.getCombatState();
       setCombatState(state);
+      if (state.storyId) {
+        try {
+          const replayData = await apiClient.getCombatReplays(state.storyId);
+          setCombatReplays(Array.isArray(replayData?.replays) ? replayData.replays : []);
+        } catch {
+          setCombatReplays([]);
+        }
+      }
 
       // Fetch capabilities for combat casting
       const capData = await apiClient.getCapabilities();
@@ -371,6 +383,20 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
       setErrorMsg(err.message || 'Combat simulation failed.');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleReplay = async () => {
+    if (!combatState?.storyId || !selectedReplayId) return;
+    try {
+      setReplayLoading(true);
+      setErrorMsg(null);
+      const result = await apiClient.replayCombatAction(combatState.storyId, selectedReplayId);
+      setReplayResult(result);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Combat replay failed.');
+    } finally {
+      setReplayLoading(false);
     }
   };
 
@@ -1064,6 +1090,53 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
+          </div>
+
+          {/* Canonical Replay Browser */}
+          <div className="bg-stone-900/90 border border-stone-800 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h4 className="text-xs font-serif font-bold text-stone-200">Canonical Combat Replay</h4>
+                <p className="text-[10px] text-stone-500">
+                  Replays resolve from the stored canonical state and never mutate the live encounter.
+                </p>
+              </div>
+              <span className="text-[9px] font-mono text-stone-600">{combatReplays.length} stored</span>
+            </div>
+            <div className="flex gap-2">
+              <select
+                value={selectedReplayId}
+                onChange={(e) => {
+                  setSelectedReplayId(e.target.value);
+                  setReplayResult(null);
+                }}
+                disabled={!combatReplays.length || replayLoading}
+                className="min-w-0 flex-1 px-2 py-1.5 bg-stone-950 border border-stone-700 rounded-lg text-[10px] text-stone-300 font-mono"
+              >
+                <option value="">-- Select recorded action --</option>
+                {combatReplays.slice().reverse().map((replay) => (
+                  <option key={replay.id} value={replay.id}>
+                    R{replay.turnNumber} • {replay.definition?.name || replay.actionId} • {replay.resultSignature?.instanceCount ?? 0} instance(s)
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={handleReplay}
+                disabled={!selectedReplayId || replayLoading}
+                className="px-3 py-1.5 rounded-lg bg-violet-900/70 hover:bg-violet-800 text-violet-100 border border-violet-700 text-[10px] font-semibold disabled:opacity-50"
+              >
+                {replayLoading ? 'Replaying…' : 'Replay'}
+              </button>
+            </div>
+            {replayResult && (
+              <div className="rounded-lg border border-stone-800 bg-stone-950 p-2 text-[10px] font-mono">
+                <span className={replayResult.identical ? 'text-emerald-300' : 'text-red-300'}>
+                  {replayResult.identical ? '✓ Deterministic match' : '✕ Replay mismatch'}
+                </span>
+                {replayResult.errorReason && <span className="ml-2 text-red-300">{replayResult.errorReason}</span>}
+              </div>
+            )}
           </div>
 
           {/* Battle Event Log */}

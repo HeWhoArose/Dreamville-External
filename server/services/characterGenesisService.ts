@@ -27,7 +27,9 @@ import {
   WorldTemplate,
   CharacterConditionInstance,
   CharacterStartingConditionState,
+  CharacterProgressionCustomModule,
 } from '../../src/types';
+import { CharacterProgressionEngine } from '../domain/characterProgressionEngine';
 
 export class CharacterGenesisAiUnavailableError extends Error {
   public readonly code = 'AI_UNAVAILABLE';
@@ -1177,6 +1179,366 @@ IMPORTANT: Ensure the capability name, description, power tier, energy costs, st
     return {
       ...capability,
       generatedSkills,
+    };
+  }
+
+  /**
+   * Infers a character's class, subclass, and species from the supplied context,
+   * but only from modules that actually exist in the world's progression catalogue.
+   */
+  public async inferCharacterProgression(
+    input: {
+      worldId: string;
+      concept?: string;
+      background?: string;
+      profession?: string;
+      archetype?: string;
+      species?: string;
+      classId?: string;
+      narrativeRole?: string;
+    },
+    worldTemplate: WorldTemplate
+  ): Promise<{
+    classId?: string;
+    subclassId?: string;
+    speciesId?: string;
+    reasoning: string;
+    provenance: CharacterProvenanceSource;
+  }> {
+    const engine = new CharacterProgressionEngine();
+    const worldModules = Array.isArray((worldTemplate as any)?.characterProgressionModules)
+      ? (worldTemplate as any).characterProgressionModules
+      : [];
+    if (worldModules.length) engine.registerModules(worldModules);
+
+    const modules = engine.getAllModules()
+      .filter((module) => ['CLASS', 'SUBCLASS', 'SPECIES'].includes(module.type))
+      .map((module) => ({
+        id: module.id,
+        type: module.type,
+        name: module.name,
+        aliases: module.aliases || [],
+        parentClassId: module.parentClassId,
+        minLevel: module.minLevel,
+      }));
+
+    const context = [
+      input.concept ? `CONCEPT: ${input.concept}` : '',
+      input.background ? `BACKGROUND: ${input.background}` : '',
+      input.profession ? `PROFESSION: ${input.profession}` : '',
+      input.archetype ? `ARCHETYPE: ${input.archetype}` : '',
+      input.species ? `SPECIES: ${input.species}` : '',
+      input.classId ? `CURRENT CLASS: ${input.classId}` : '',
+      input.narrativeRole ? `NARRATIVE ROLE: ${input.narrativeRole}` : '',
+    ].filter(Boolean).join('\n');
+
+    const prompt = `You are a progression-assignment assistant for an RPG character creator.
+
+Select the most coherent EXISTING progression modules for this character from the supplied catalogue.
+Never invent module ids. Prefer no selection over a forced match.
+A profession is not automatically a class.
+Do not force D&D progression onto an ordinary creature, merchant, civilian, or construct unless the supplied rules/canon clearly uses classes for it.
+A subclass must be compatible with the selected class.
+
+CHARACTER CONTEXT:
+${context}
+
+MODULE CATALOGUE:
+${JSON.stringify(modules, null, 2)}
+
+OUTPUT STRICT JSON:
+{
+  "classId": string | null,
+  "subclassId": string | null,
+  "speciesId": string | null,
+  "reasoning": string
+}`;
+
+    let proposal: any = null;
+    let provenance: CharacterProvenanceSource = 'AI_GENERATED';
+
+    try {
+      const response = await worldRepository.getAiOrchestrator().executeTaskGeneration(
+        'narrative.generate',
+        prompt,
+        'Return only the requested progression selection JSON.'
+      );
+      if (response.text) {
+        proposal = this.parseJsonFromAiResponse(response.text);
+        if (response.source === 'DETERMINISTIC_FALLBACK') {
+          provenance = 'DETERMINISTIC_FALLBACK';
+        }
+      }
+    } catch (error) {
+      console.warn('[CharacterGenesisService] Progression inference failed; using deterministic catalogue matching.', error);
+      provenance = 'DETERMINISTIC_FALLBACK';
+    }
+
+    const findModule = (type: 'CLASS' | 'SUBCLASS' | 'SPECIES', value?: string) => {
+      const normalized = String(value || '').trim().toLowerCase();
+      if (!normalized) return undefined;
+      return modules.find((module) =>
+        module.type === type &&
+        (
+          module.id.toLowerCase() === normalized ||
+          module.name.toLowerCase() === normalized ||
+          module.aliases.some((alias: string) => alias.toLowerCase() === normalized)
+        )
+      )?.id;
+    };
+
+    const inferredClass =
+      findModule('CLASS', proposal?.classId) ||
+      findModule('CLASS', input.classId) ||
+      findModule('CLASS', input.profession) ||
+      findModule('CLASS', input.archetype);
+
+    const inferredSpecies =
+      findModule('SPECIES', proposal?.speciesId) ||
+      findModule('SPECIES', input.species);
+
+    const candidateSubclass = findModule('SUBCLASS', proposal?.subclassId);
+    const inferredSubclass =
+      candidateSubclass && inferredClass &&
+      modules.some((module) =>
+        module.id === candidateSubclass &&
+        module.type === 'SUBCLASS' &&
+        (!module.parentClassId || module.parentClassId === inferredClass)
+      )
+        ? candidateSubclass
+        : undefined;
+
+    if (!proposal?.classId && !proposal?.speciesId && !proposal?.subclassId) {
+      provenance = 'DETERMINISTIC_FALLBACK';
+    }
+
+    return {
+      classId: inferredClass,
+      subclassId: inferredSubclass,
+      speciesId: inferredSpecies,
+      reasoning: String(
+        proposal?.reasoning ||
+        'Selected the closest registered progression modules from the character context. Review every selection before confirming.'
+      ),
+      provenance,
+    };
+  }
+
+  /**
+   * Generates one player-authored custom class, subclass, or species module.
+   * The AI supplies structure; the server validates and normalizes the result.
+   */
+  public async proposeCustomProgressionModule(
+    input: {
+      worldId: string;
+      type: 'CLASS' | 'SUBCLASS' | 'SPECIES';
+      name?: string;
+      concept?: string;
+      parentClassId?: string;
+      background?: string;
+      species?: string;
+      profession?: string;
+      archetype?: string;
+    },
+    worldTemplate: WorldTemplate
+  ): Promise<CharacterProgressionCustomModule> {
+    const requestedName = input.name?.trim() || `Custom ${input.type.toLowerCase()}`;
+    const concept = input.concept?.trim() || requestedName;
+    const moduleId = deterministicId(
+      'custom_progression_module',
+      input.worldId || 'world',
+      input.type,
+      requestedName,
+      concept
+    );
+    const prefix = deterministicId('custom_progression_feature', moduleId);
+    const precedence = input.type === 'CLASS' ? 30 : input.type === 'SUBCLASS' ? 40 : 20;
+
+    const prompt = `You are a production RPG progression systems designer.
+
+Create one coherent custom ${input.type.toLowerCase()} module for this character/world.
+Do not create unrelated systems.
+Use explicit numeric passive modifiers only.
+
+NAME: ${requestedName}
+CONCEPT: ${concept}
+BACKGROUND: ${input.background || 'N/A'}
+SPECIES: ${input.species || 'N/A'}
+PROFESSION: ${input.profession || 'N/A'}
+ARCHETYPE: ${input.archetype || 'N/A'}
+PARENT CLASS ID: ${input.parentClassId || 'N/A'}
+RULES MODE: ${worldTemplate?.dndRulesMode || 'FULL_DND'}
+
+SAFE MODIFIER TARGETS:
+combat.attackBonus
+combat.criticalRange
+coreStats.hpMax
+coreStats.speed
+coreStats.strength
+coreStats.dexterity
+coreStats.constitution
+coreStats.intelligence
+coreStats.wisdom
+coreStats.charisma
+spell.attackBonus
+spell.saveDC
+spell.damage
+
+OUTPUT STRICT JSON:
+{
+  "name": string,
+  "aliases": [string],
+  "minLevel": number | null,
+  "features": [
+    {
+      "name": string,
+      "description": string,
+      "level": number,
+      "passiveModifiers": [
+        { "target": string, "value": number, "stackGroup": string }
+      ]
+    }
+  ]
+}
+
+A subclass normally begins at level 3 and must remain compatible with its parent class.
+Provide at least one useful feature.
+`;
+
+    let proposal: any = null;
+    let provenance = 'AI_GENERATED';
+
+    try {
+      const response = await worldRepository.getAiOrchestrator().executeTaskGeneration(
+        'narrative.generate',
+        prompt,
+        'Return only the requested custom progression module JSON.'
+      );
+      if (response.text) {
+        proposal = this.parseJsonFromAiResponse(response.text);
+        if (response.source === 'DETERMINISTIC_FALLBACK') provenance = 'DETERMINISTIC_FALLBACK';
+      }
+    } catch (error) {
+      console.warn('[CharacterGenesisService] Custom progression generation failed; using deterministic fallback.', error);
+      provenance = 'DETERMINISTIC_FALLBACK';
+    }
+
+    const fallbackFeature = {
+      name: `${requestedName} Training`,
+      description: `Core progression benefits granted by ${requestedName}.`,
+      level: input.type === 'SUBCLASS' ? 3 : 1,
+      passiveModifiers: [],
+    };
+    const rawFeatures = Array.isArray(proposal?.features) && proposal.features.length
+      ? proposal.features
+      : [fallbackFeature];
+
+    const safeTargets = new Set([
+      'combat.attackBonus',
+      'combat.criticalRange',
+      'coreStats.hpMax',
+      'coreStats.speed',
+      'coreStats.strength',
+      'coreStats.dexterity',
+      'coreStats.constitution',
+      'coreStats.intelligence',
+      'coreStats.wisdom',
+      'coreStats.charisma',
+      'spell.attackBonus',
+      'spell.saveDC',
+      'spell.damage',
+    ]);
+
+    const features = rawFeatures.slice(0, 8).map((rawFeature: any, index: number) => {
+      const featureId = deterministicId(prefix, index, String(rawFeature?.name || 'feature'));
+      const level = Math.max(
+        input.type === 'SUBCLASS' ? 3 : 1,
+        Math.min(20, Math.trunc(Number(rawFeature?.level) || (input.type === 'SUBCLASS' ? 3 : 1)))
+      );
+      const passiveModifiers = Array.isArray(rawFeature?.passiveModifiers)
+        ? rawFeature.passiveModifiers
+            .filter((modifier: any) => safeTargets.has(String(modifier?.target || '').trim()))
+            .slice(0, 6)
+            .map((modifier: any, modifierIndex: number) => {
+              const target = String(modifier.target).trim();
+              const value = Number(modifier.value);
+              if (!Number.isFinite(value) || value === 0) return null;
+              const safeValue = Math.max(-10, Math.min(10, value));
+              const stackGroup = String(modifier.stackGroup || 'CUSTOM_PROGRESSION');
+              return {
+                id: deterministicId('custom_progression_modifier', moduleId, featureId, modifierIndex, target, safeValue),
+                target,
+                mode: 'ADD' as const,
+                value: safeValue,
+                precedence,
+                stackGroup,
+                source: {
+                  moduleId,
+                  moduleType: input.type,
+                  featureId,
+                  sourceId: deterministicId('custom_progression_source', moduleId, featureId, target),
+                  sourceName: String(rawFeature?.name || requestedName),
+                  precedence,
+                  stackGroup,
+                },
+              };
+            })
+            .filter(Boolean)
+        : [];
+
+      return {
+        id: featureId,
+        name: String(rawFeature?.name || `${requestedName} Feature ${index + 1}`),
+        description: String(rawFeature?.description || `Progression feature for ${requestedName}.`),
+        level,
+        enabled: true,
+        passiveModifiers,
+        triggeredAbilities: [],
+      };
+    });
+
+    if (features.every((feature) => (feature.passiveModifiers || []).length === 0)) {
+      const fallback = features[0];
+      const target = input.type === 'CLASS'
+        ? 'combat.attackBonus'
+        : input.type === 'SPECIES'
+          ? 'coreStats.speed'
+          : 'coreStats.hpMax';
+      fallback.passiveModifiers = [{
+        id: deterministicId('custom_progression_modifier', moduleId, fallback.id, target),
+        target,
+        mode: 'ADD',
+        value: 1,
+        precedence,
+        stackGroup: 'CUSTOM_PROGRESSION',
+        source: {
+          moduleId,
+          moduleType: input.type,
+          featureId: fallback.id,
+          sourceId: deterministicId('custom_progression_source', moduleId, fallback.id, target),
+          sourceName: fallback.name,
+          precedence,
+          stackGroup: 'CUSTOM_PROGRESSION',
+        },
+      }];
+    }
+
+    return {
+      id: moduleId,
+      type: input.type,
+      name: String(proposal?.name || requestedName),
+      version: 1,
+      enabled: true,
+      aliases: Array.isArray(proposal?.aliases)
+        ? proposal.aliases.map(String).slice(0, 8)
+        : [requestedName.toLowerCase()],
+      parentClassId: input.type === 'SUBCLASS' ? (input.parentClassId || undefined) : undefined,
+      minLevel: input.type === 'SUBCLASS'
+        ? Math.max(3, Math.trunc(Number(proposal?.minLevel) || 3))
+        : undefined,
+      prerequisites: Array.isArray(proposal?.prerequisites) ? proposal.prerequisites.map(String).slice(0, 8) : [],
+      features,
+      provenance,
     };
   }
 

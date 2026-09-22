@@ -828,6 +828,19 @@ export interface RollRecord {
   timestamp: number;
 }
 
+export type CombatMoraleStatus = 'STEADFAST' | 'SHAKEN' | 'FLEEING' | 'SURRENDERED';
+
+export interface CombatMoraleState {
+	actorId: string;
+	morale: number;
+	maxMorale: number;
+	fleeThreshold: number;
+	surrenderThreshold: number;
+	status: CombatMoraleStatus;
+	lastChangeReason?: string;
+	revision: number;
+}
+
 export interface BattlefieldParticipant {
   id: string;
   name: string;

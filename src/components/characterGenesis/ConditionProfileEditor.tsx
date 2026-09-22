@@ -17,16 +17,6 @@ const DAMAGE_TYPES = [
   'Radiant', 'Psychic', 'Force'
 ];
 
-const DND_CONDITIONS = [
-  'Blinded', 'Charmed', 'Deafened', 'Exhaustion', 'Frightened',
-  'Grappled', 'Incapacitated', 'Invisible', 'Paralyzed', 'Petrified',
-  'Poisoned', 'Prone', 'Restrained', 'Stunned', 'Unconscious'
-];
-
-const SITUATION_PRESETS = [
-  'Imprisoned', 'Weak', 'Bleeding', 'Burning', 'Regenerating',
-  'Starving', 'Dehydrated'
-];
 
 const BODY_REGIONS: Array<{ id: string; label: string }> = [
   { id: 'HEAD', label: 'Head' },
@@ -51,25 +41,6 @@ function toggleValue(values: string[], val: string): string[] {
   return exists
     ? values.filter((item) => item.toLowerCase() !== val.toLowerCase())
     : [...values, val];
-}
-
-function createInstance(name: string): CharacterConditionInstance {
-  const id = 'condition_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
-  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
-  return {
-    id,
-    definitionId: slug || 'custom_' + id,
-    name,
-    alignment: 'HARMFUL',
-    severity: 1,
-    intensity: 1,
-    stackCount: 1,
-    stackMode: 'REFRESH',
-    appliedAtSeconds: 0,
-    durationSeconds: null,
-    remainingDurationSeconds: null,
-    tags: ['starting_state', 'custom'],
-  };
 }
 
 function ensureBodyRegions(existing: CharacterBodyRegionState[]): CharacterBodyRegionState[] {

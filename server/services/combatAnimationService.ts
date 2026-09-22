@@ -30,6 +30,16 @@ export class CombatAnimationService {
 
   public async generatePlan(params: { repository: WorldRepository; storyId: string; definition: CombatEffectDefinition; events?: CombatEventRecord[] }): Promise<{ plan: CombatAnimationPlan; source: 'AI' | 'SYSTEM'; fallbackReason?: string }> {
     const fallback = this.deterministicPlan(params.definition);
+    const cached = params.repository.getActiveEffects(params.storyId).find(
+      (effect: any) =>
+        effect?.type === 'COMBAT_ANIMATION_PLAN' &&
+        effect?.effectId === params.definition.id &&
+        effect?.presentationOnly === true &&
+        effect?.plan
+    );
+    if (cached?.plan) {
+      return { plan: JSON.parse(JSON.stringify(cached.plan)), source: cached.plan.generatedBy === 'AI' ? 'AI' : 'SYSTEM' };
+    }
     try {
       const prompt = `Create a presentation-only animation plan for this Dreamville combat effect. Never decide combat outcomes.\nEffect: ${JSON.stringify(params.definition)}\nResolved events: ${JSON.stringify(params.events || [])}\nReturn only JSON with composition, sequence, count, origin, impact, criticalImpact, missBehavior, style, assetRefs.`;
       const response = await params.repository.getAiOrchestrator().executeTaskGeneration(
@@ -39,10 +49,30 @@ export class CombatAnimationService {
         { timeoutMs: 30000 }
       );
       if (!response.text || response.source === 'DETERMINISTIC_FALLBACK') {
+        params.repository.saveActiveEffect({
+          id: 'combat_animation_' + params.storyId + '_' + params.definition.id,
+          type: 'COMBAT_ANIMATION_PLAN',
+          storyId: params.storyId,
+          effectId: params.definition.id,
+          plan: JSON.parse(JSON.stringify(fallback)),
+          presentationOnly: true,
+          cacheDisposable: true,
+        });
         return { plan: fallback, source: 'SYSTEM', fallbackReason: response.fallbackReason || 'AI animation planning unavailable.' };
       }
       const parsed = safeJson(response.text);
-      if (!parsed || typeof parsed.composition !== 'string') return { plan: fallback, source: 'SYSTEM', fallbackReason: 'AI returned invalid animation plan JSON.' };
+      if (!parsed || typeof parsed.composition !== 'string') {
+        params.repository.saveActiveEffect({
+          id: 'combat_animation_' + params.storyId + '_' + params.definition.id,
+          type: 'COMBAT_ANIMATION_PLAN',
+          storyId: params.storyId,
+          effectId: params.definition.id,
+          plan: JSON.parse(JSON.stringify(fallback)),
+          presentationOnly: true,
+          cacheDisposable: true,
+        });
+        return { plan: fallback, source: 'SYSTEM', fallbackReason: 'AI returned invalid animation plan JSON.' };
+      }
       const plan: CombatAnimationPlan = {
         ...fallback,
         ...parsed,
@@ -52,8 +82,26 @@ export class CombatAnimationService {
         generatedBy: 'AI',
         provenance: 'AI_COMBAT_ANIMATION_PLAN',
       };
+      params.repository.saveActiveEffect({
+        id: 'combat_animation_' + params.storyId + '_' + params.definition.id,
+        type: 'COMBAT_ANIMATION_PLAN',
+        storyId: params.storyId,
+        effectId: params.definition.id,
+        plan: JSON.parse(JSON.stringify(plan)),
+        presentationOnly: true,
+        cacheDisposable: true,
+      });
       return { plan, source: 'AI' };
     } catch (error: any) {
+      params.repository.saveActiveEffect({
+        id: 'combat_animation_' + params.storyId + '_' + params.definition.id,
+        type: 'COMBAT_ANIMATION_PLAN',
+        storyId: params.storyId,
+        effectId: params.definition.id,
+        plan: JSON.parse(JSON.stringify(fallback)),
+        presentationOnly: true,
+        cacheDisposable: true,
+      });
       return { plan: fallback, source: 'SYSTEM', fallbackReason: error?.message || 'AI animation planning failed.' };
     }
   }

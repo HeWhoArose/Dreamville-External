@@ -2974,6 +2974,15 @@ gameRouter.post('/combat/simulate', async (req: Request, res: Response) => {
     const engine = worldRepository.getCombatEngine(storyId);
     const seed = req.body?.seed === undefined ? undefined : Number(req.body.seed);
     const seeds = Array.isArray(req.body?.seeds) ? req.body.seeds.map((value: any) => Number(value)).filter(Number.isFinite) : [];
+    if (Array.isArray(req.body?.definitions) && req.body.definitions.length) {
+      return res.json(combatSimulationEngine.scenarioMatrix({
+        engine,
+        actorId,
+        targetIds,
+        definitions: req.body.definitions as CombatEffectDefinition[],
+        seeds,
+      }));
+    }
     if (seeds.length) return res.json(combatSimulationEngine.batchSimulate({ engine, actorId, targetIds, definition, seeds }));
     return res.json(combatSimulationEngine.simulate({ engine, actorId, targetIds, definition, seed }));
   } catch (error: any) {

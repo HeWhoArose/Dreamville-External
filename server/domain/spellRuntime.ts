@@ -139,6 +139,9 @@ export interface CastSpellRequest {
   damageResolver?: SpellDamageResolver;
   /** Canonical combat authority may provide the healing/revival resolver. */
   healingResolver?: SpellHealingResolver;
+  /** Optional derived progression bonuses supplied by authoritative combat projection. */
+  spellAttackBonusOverride?: number;
+  spellSaveDcOverride?: number;
 }
 
 export interface CastSpellExecutionResult {
@@ -1198,11 +1201,20 @@ export class SpellRuntime {
     }
 
     const existingState = this.actorStates.get(casterId);
+    const effectiveSpellAttackBonus =
+      typeof request.spellAttackBonusOverride === 'number' && Number.isFinite(request.spellAttackBonusOverride)
+        ? request.spellAttackBonusOverride
+        : params.casterParticipant?.spellAttackBonus ?? params.casterParticipant?.attackBonus;
+    const effectiveSpellSaveDc =
+      typeof request.spellSaveDcOverride === 'number' && Number.isFinite(request.spellSaveDcOverride)
+        ? request.spellSaveDcOverride
+        : (params.casterParticipant?.spellSaveDc ??
+          (params.casterParticipant?.savingThrowModifiers?.INT !== undefined
+            ? 8 + 3 + params.casterParticipant.savingThrowModifiers.INT
+            : undefined));
     const state = existingState || this.createDefaultActorState(casterId, {
-      spellAttackBonus: params.casterParticipant?.attackBonus,
-      spellSaveDc: params.casterParticipant?.savingThrowModifiers?.INT
-        ? 8 + 3 + (params.casterParticipant.savingThrowModifiers.INT || 0)
-        : undefined,
+      spellAttackBonus: effectiveSpellAttackBonus,
+      spellSaveDc: effectiveSpellSaveDc,
     });
 
     const casterParticipant: BattlefieldParticipant = params.casterParticipant || {
@@ -1213,15 +1225,15 @@ export class SpellRuntime {
       y: 0,
       initiative: 10,
       armorClass: 15,
-      attackBonus: state.spellAttackBonus,
+      attackBonus: (effectiveSpellAttackBonus ?? state.spellAttackBonus),
       hpCurrent: 30,
       hpMax: 30,
       speedCells: 6,
       damageFormula: '1d6',
       conditions: [],
       isDead: false,
-      spellAttackBonus: state.spellAttackBonus,
-      spellSaveDc: state.spellSaveDc,
+      spellAttackBonus: (effectiveSpellAttackBonus ?? state.spellAttackBonus),
+      spellSaveDc: (effectiveSpellSaveDc ?? state.spellSaveDc),
       spellSlots: state.spellSlots,
       preparedSpells: state.preparedSpells,
       knownSpells: state.knownSpells,
@@ -1608,7 +1620,7 @@ export class SpellRuntime {
         if (spell.defenseModel === 'SAVING_THROW') {
           const ability = spell.savingThrowAbility || 'DEX';
           const saveMod = (areaTarget.saveModifiers?.[ability] ?? 0) + this.conditionEngine.getExhaustionModifiers(areaTarget.id).d20Penalty;
-          const dc = state.spellSaveDc + this.conditionEngine.getExhaustionModifiers(casterId).saveDcPenalty;
+          const dc = (effectiveSpellSaveDc ?? state.spellSaveDc) + this.conditionEngine.getExhaustionModifiers(casterId).saveDcPenalty;
           const roll = dice.roll('1d20', saveMod);
           const targetConditions = new Set((areaTarget.conditions || []).map((c) => c.toLowerCase()));
           const automaticFailure =
@@ -1694,13 +1706,13 @@ export class SpellRuntime {
         }
       }
     } else if (spell.defenseModel === 'ATTACK_VS_AC' && targetParticipant) {
-      const roll1 = dice.roll('1d20', state.spellAttackBonus);
+      const roll1 = dice.roll('1d20', (effectiveSpellAttackBonus ?? state.spellAttackBonus));
       let chosenRoll = roll1;
       if (advantage && !disadvantage) {
-        const roll2 = dice.roll('1d20', state.spellAttackBonus);
+        const roll2 = dice.roll('1d20', (effectiveSpellAttackBonus ?? state.spellAttackBonus));
         chosenRoll = roll2.total > roll1.total ? roll2 : roll1;
       } else if (disadvantage && !advantage) {
-        const roll2 = dice.roll('1d20', state.spellAttackBonus);
+        const roll2 = dice.roll('1d20', (effectiveSpellAttackBonus ?? state.spellAttackBonus));
         chosenRoll = roll2.total < roll1.total ? roll2 : roll1;
       }
       const nat20 = chosenRoll.individualDice[0] === 20;
@@ -1739,7 +1751,7 @@ export class SpellRuntime {
     } else if (spell.defenseModel === 'SAVING_THROW' && targetParticipant) {
       const ability = spell.savingThrowAbility || 'DEX';
       const saveMod = (targetParticipant.saveModifiers?.[ability] ?? 0) + this.conditionEngine.getExhaustionModifiers(targetParticipant.id).d20Penalty;
-      const dc = state.spellSaveDc + this.conditionEngine.getExhaustionModifiers(casterId).saveDcPenalty;
+      const dc = (effectiveSpellSaveDc ?? state.spellSaveDc) + this.conditionEngine.getExhaustionModifiers(casterId).saveDcPenalty;
 
       const roll = dice.roll('1d20', saveMod);
       const targetConditions = new Set((targetParticipant.conditions || []).map((c) => c.toLowerCase()));

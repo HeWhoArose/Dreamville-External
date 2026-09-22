@@ -15,6 +15,7 @@ import { canonicalCommandEngine } from '../domain/canonicalCommandEngine';
 import { deterministicId, formatCanonicalTimestamp } from '../domain/deterministicRng';
 import type { CombatEffectDefinition } from '../../src/types';
 import { combatEffectEngine } from '../domain/combatEffectEngine';
+import { combatTargetingEngine } from '../domain/combatTargetingEngine';
 import { worldEffectEngine } from '../domain/worldEffectEngine';
 import { combatSimulationEngine } from '../domain/combatSimulationEngine';
 import { combatAnimationService } from '../services/combatAnimationService';
@@ -2920,25 +2921,28 @@ gameRouter.post('/combat/effect', async (req: Request, res: Response) => {
     const validation = combatEffectEngine.validateDefinition(definition, worldRepository.getRulesProfile(storyId)?.mode || 'FULL_DND');
     if (!validation.success || !validation.normalized) return res.status(400).json(validation);
     const normalized = validation.normalized;
+    const targetResolution = combatTargetingEngine.resolve(combat, actorId, targetIds, normalized);
+    if (!targetResolution.success) return res.status(400).json({ success: false, errorReason: targetResolution.errorReason });
+    const resolvedTargetIds = targetResolution.targetIds;
     const capId = typeof req.body?.capabilityId === 'string' ? req.body.capabilityId : normalized.id;
     const inv = worldRepository.getInventoryEngine(storyId);
     const capEngine = worldRepository.getCapabilityEngine(storyId);
     const effectiveCaps = capEngine.getEffectiveActorCapabilities(actorId, inv);
     const capabilityAuthorized = effectiveCaps.some((cap: any) => cap.id === capId || cap.name === normalized.name);
     if (!capabilityAuthorized && req.body?.allowUnboundTest !== true) return res.status(403).json({ success: false, errorReason: 'Actor does not possess the requested capability/effect.' });
-    for (const targetId of targetIds) {
+    for (const targetId of resolvedTargetIds) {
       const target = combat.getParticipant(targetId);
       if (target && !combat.isParticipantKnownToActor(actorId, target, worldRepository.getCombatPerceptionOptions(storyId, actorId))) return res.status(403).json({ success: false, errorReason: 'Target is not legitimately perceived by the actor.' });
     }
     const commandId = (req.headers['x-command-id'] as string | undefined) || (req.body?.commandId as string | undefined) || deterministicId('cmd_route', storyId, '/combat/effect', req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
-      { commandId, storyId, actorId, type: 'COMBAT_EFFECT', payload: { effectId: normalized.id, resolutionMode: normalized.resolutionMode, targetIds, definition: normalized }, source: 'PLAYER', transactionMode: 'STAGED' },
+      { commandId, storyId, actorId, type: 'COMBAT_EFFECT', payload: { effectId: normalized.id, resolutionMode: normalized.resolutionMode, targetIds: resolvedTargetIds, definition: normalized }, source: 'PLAYER', transactionMode: 'STAGED' },
       async (_command, context) => {
         const transactionCombat = context.repository.getCombatEngine(storyId);
         const effectResult = (normalized.resolutionMode === 'WORLD_EFFECT' || normalized.resolutionMode === 'OUTCOME')
-          ? worldEffectEngine.apply({ repository: context.repository, storyId, actorId, definition: normalized, targetIds, authorityVerified: capabilityAuthorized || req.body?.allowUnboundTest === true })
-          : combatEffectEngine.resolve(transactionCombat, actorId, targetIds, normalized);
+          ? worldEffectEngine.apply({ repository: context.repository, storyId, actorId, definition: normalized, targetIds: resolvedTargetIds, authorityVerified: capabilityAuthorized || req.body?.allowUnboundTest === true })
+          : combatEffectEngine.resolve(transactionCombat, actorId, resolvedTargetIds, normalized);
         if (!effectResult.success) return { success: false, errorReason: effectResult.errorReason };
         for (const result of effectResult.instances || []) {
           if (result.targetDied && result.targetId !== actorId) {

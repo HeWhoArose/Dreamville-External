@@ -18,6 +18,7 @@ import { combatEffectEngine } from '../domain/combatEffectEngine';
 import { combatTargetingEngine } from '../domain/combatTargetingEngine';
 import { worldEffectEngine } from '../domain/worldEffectEngine';
 import { combatSimulationEngine } from '../domain/combatSimulationEngine';
+import { combatReplayEngine } from '../domain/combatReplayEngine';
 import { combatAnimationService } from '../services/combatAnimationService';
 import { combatAssetService } from '../services/combatAssetService';
 import { bossPhaseEngine } from '../domain/bossPhaseEngine';
@@ -3226,6 +3227,43 @@ gameRouter.post('/combat/simulate', async (req: Request, res: Response) => {
     return res.json(combatSimulationEngine.simulate({ engine, actorId, targetIds, definition, seed }));
   } catch (error: any) {
     return res.status(400).json({ success: false, errorReason: error?.message || 'Failed to simulate combat effect.' });
+  }
+});
+
+/**
+ * GET /api/game/combat/replays
+ * Returns bounded canonical combat replay records for the active story.
+ */
+gameRouter.get('/combat/replays', (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    if (!requireDndTacticalCombat(res, storyId)) return;
+    const combat = worldRepository.getCombatEngine(storyId);
+    return res.json({
+      success: true,
+      storyId,
+      replays: combat.getCombatReplayRecords(),
+    });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, errorReason: error?.message || 'Failed to fetch combat replays.' });
+  }
+});
+
+/**
+ * POST /api/game/combat/replay
+ * Replays one canonical combat-effect record without mutating live combat.
+ */
+gameRouter.post('/combat/replay', (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    if (!requireDndTacticalCombat(res, storyId)) return;
+    const replayId = String(req.body?.replayId || '').trim();
+    if (!replayId) return res.status(400).json({ success: false, errorReason: 'replayId is required.' });
+    const record = worldRepository.getCombatEngine(storyId).getCombatReplayRecords().find((item) => item.id === replayId);
+    if (!record) return res.status(404).json({ success: false, errorReason: 'Combat replay record not found.' });
+    return res.json(combatReplayEngine.replay(record));
+  } catch (error: any) {
+    return res.status(400).json({ success: false, errorReason: error?.message || 'Failed to replay combat action.' });
   }
 });
 

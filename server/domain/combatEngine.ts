@@ -4,7 +4,7 @@ import { ConditionEngine } from './conditionEngine';
 import { CombatActionEconomy, CombatTurnResourceSnapshot, ReadyTriggerType } from './combatActionEconomy';
 import { CombatReactionEngine } from './combatReactionEngine';
 import { deathSaveEngine } from './deathSaveEngine';
-import type { DeathSaveState, RulesProfile, CombatAttackInstanceResult, CombatEffectDefinition, CombatEffectResult, CombatEventRecord, BodyRegionId } from '../../src/types';
+import type { DeathSaveState, RulesProfile, CombatAttackInstanceResult, CombatEffectDefinition, CombatEffectResult, CombatEventRecord, BodyRegionId, DestructibleEnvironmentObject } from '../../src/types';
 import { resolveCapabilityCheckFormula } from '../../src/data/rulesDice';
 import type { ProgressionResolution } from './characterProgressionEngine';
 import {
@@ -458,6 +458,7 @@ export interface CombatPerceptionOptions {
 export class TacticalCombatEngine {
   private participants: Map<string, BattlefieldParticipant> = new Map();
   private hazards: DynamicHazardZone[] = [];
+  private destructibleObjects = new Map<string, DestructibleEnvironmentObject>();
   private obstacles: { x: number; y: number; isImpassable?: boolean }[] = [];
   private mapBounds?: { minX: number; maxX: number; minY: number; maxY: number };
   private ruleset: IRulesetAdapter = new Dnd521RulesetAdapter();
@@ -800,6 +801,85 @@ export class TacticalCombatEngine {
 
   public getHazards(): DynamicHazardZone[] {
     return this.hazards.map((h) => ({ ...h }));
+  }
+
+  public getDestructibleObjects(): DestructibleEnvironmentObject[] {
+    return Array.from(this.destructibleObjects.values()).map((object) => JSON.parse(JSON.stringify(object)));
+  }
+
+  public upsertDestructibleObject(object: DestructibleEnvironmentObject): { success: boolean; errorReason?: string } {
+    if (!object?.id || !object.name) return { success: false, errorReason: 'Destructible environment object requires an id and name.' };
+    const hpMax = Math.max(1, Math.trunc(Number(object.hpMax) || 0));
+    const hpCurrent = Math.max(0, Math.min(hpMax, Math.trunc(Number(object.hpCurrent ?? hpMax) || 0)));
+    this.destructibleObjects.set(object.id, {
+      ...JSON.parse(JSON.stringify(object)),
+      hpMax,
+      hpCurrent,
+      isDestroyed: Boolean(object.isDestroyed || hpCurrent <= 0),
+      damageTypes: {
+        resistances: [...(object.damageTypes?.resistances || [])],
+        immunities: [...(object.damageTypes?.immunities || [])],
+        vulnerabilities: [...(object.damageTypes?.vulnerabilities || [])],
+      },
+      tags: [...(object.tags || [])],
+    });
+    return { success: true };
+  }
+
+  public damageDestructibleObject(
+    objectId: string,
+    requestedAmount: number,
+    damageType = 'custom',
+  ): { success: boolean; errorReason?: string; damage: number; destroyed: boolean; wasDestroyed: boolean } {
+    const object = this.destructibleObjects.get(objectId);
+    if (!object) return { success: false, errorReason: 'Destructible environment object not found.', damage: 0, destroyed: false, wasDestroyed: false };
+    const wasDestroyed = object.isDestroyed;
+    if (wasDestroyed) return { success: true, damage: 0, destroyed: true, wasDestroyed: true };
+
+    const type = damageType.trim().toLowerCase();
+    const immunities = (object.damageTypes?.immunities || []).map((value) => value.toLowerCase());
+    const resistances = (object.damageTypes?.resistances || []).map((value) => value.toLowerCase());
+    const vulnerabilities = (object.damageTypes?.vulnerabilities || []).map((value) => value.toLowerCase());
+
+    let finalAmount = Math.max(0, Number(requestedAmount) || 0);
+    if (immunities.includes(type)) finalAmount = 0;
+    else if (resistances.includes(type)) finalAmount = Math.floor(finalAmount / 2);
+    else if (vulnerabilities.includes(type)) finalAmount *= 2;
+
+    object.hpCurrent = Math.max(0, object.hpCurrent - finalAmount);
+    object.isDestroyed = object.hpCurrent <= 0;
+
+    this.combatActionSequence += 1;
+    const eventId = `combat_evt_${this.currentRound}_${this.combatActionSequence}`;
+    this.combatEffectEvents.push({
+      eventId,
+      actionId: `environment_${this.currentRound}_${objectId}`,
+      eventType: object.isDestroyed ? 'ENVIRONMENT_DESTROYED' : 'ENVIRONMENT_DAMAGED',
+      turnNumber: this.currentRound,
+      actorId: 'ENVIRONMENT',
+      headline: object.isDestroyed
+        ? `${object.name} was destroyed.`
+        : `${object.name} took ${finalAmount} damage.`,
+      damage: finalAmount,
+      finalDamage: finalAmount,
+      metadata: {
+        destructibleId: objectId,
+        damageType: type,
+        immune: immunities.includes(type),
+        resisted: resistances.includes(type),
+        vulnerable: vulnerabilities.includes(type),
+        hpCurrent: object.hpCurrent,
+        hpMax: object.hpMax,
+        eventId,
+      },
+    });
+
+    return {
+      success: true,
+      damage: finalAmount,
+      destroyed: object.isDestroyed,
+      wasDestroyed,
+    };
   }
 
   /**
@@ -3432,6 +3512,7 @@ export class TacticalCombatEngine {
       spellRuntimeState: this.spellRuntime.exportState(),
       combatEffectEvents: this.getCombatEffectEvents(),
       combatActionSequence: this.combatActionSequence,
+      destructibleObjects: this.getDestructibleObjects(),
       bossPhaseStates: Array.from(this.bossPhaseStates.entries()).map(([bossId, state]) => ({ bossId, ...state })),
       conditionEngineState: this.conditionEngine?.exportState(),
     };
@@ -3448,6 +3529,10 @@ export class TacticalCombatEngine {
       for (const h of data.hazards) {
         this.addHazard(h);
       }
+    }
+    this.destructibleObjects.clear();
+    for (const object of data.destructibleObjects || []) {
+      this.upsertDestructibleObject(object);
     }
     if (data.obstacles) {
       for (const obs of data.obstacles) {

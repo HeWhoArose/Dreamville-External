@@ -40,17 +40,17 @@ export class WorldEffectEngine {
     const changedScopes = [definition.scale];
     const affectedEntityIds: string[] = [];
     for (const targetId of targetIds) {
-      const participant = combat.getParticipant(targetId);
-      if (participant) {
-        participant.hpCurrent = 0;
-        participant.isDead = true;
-        if (!participant.conditions.includes('Dead')) participant.conditions.push('Dead');
-        affectedEntityIds.push(targetId);
+      const combatResult = combat.applySemanticOutcome(targetId, definition.outcome || 'WORLD_STATE_CHANGED');
+      if (combatResult.success) {
+        if (!affectedEntityIds.includes(targetId)) affectedEntityIds.push(targetId);
         continue;
       }
       const card = repository.getEntityCard(storyId, targetId);
       if (card) {
-        repository.setEntityLifecycleStatus(storyId, targetId, 'DESTROYED');
+        const status = definition.outcome === 'ERASE_FROM_WORLD' || definition.outcome === 'INSTANT_DEFEAT'
+          ? 'DEAD'
+          : 'DESTROYED';
+        repository.setEntityLifecycleStatus(storyId, targetId, status);
         affectedEntityIds.push(targetId);
       }
     }

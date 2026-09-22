@@ -2083,6 +2083,26 @@ export interface CombatEventRecord {
 	metadata?: Record<string, unknown>;
 }
 
+export interface CombatReplayRecord {
+	id: string;
+	actionId: string;
+	turnNumber: number;
+	actorId: string;
+	targetIds: string[];
+	definition: CombatEffectDefinition;
+	seedBefore: number;
+	rollCounterBefore: number;
+	beforeState: TacticalCombatStateExport;
+	canonicalEventIds: string[];
+	resultSignature: {
+		success: boolean;
+		totalDamage?: number;
+		defeatedTargetIds?: string[];
+		instanceCount: number;
+	};
+	createdAtSequence: number;
+}
+
 export interface CombatAnimationPlan {
 	id: string;
 	composition: string;

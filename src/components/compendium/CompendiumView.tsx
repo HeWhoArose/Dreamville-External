@@ -94,6 +94,7 @@ export const CompendiumView: React.FC<CompendiumViewProps> = ({
             canonicalEntityId: entity.id,
             sourceRun: activeStoryId,
             discoveredAt: entity.updatedAt,
+            entityCard: entity,
           } as CompendiumItem;
         });
         setItems((prev) => {

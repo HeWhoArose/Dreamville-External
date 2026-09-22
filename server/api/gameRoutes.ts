@@ -1974,6 +1974,7 @@ function getCombatStateHelper(
   const actorId = viewerActorId || 'player_actor_default_story';
   const perceptionOptions = repository.getCombatPerceptionOptions(storyId, actorId);
   return {
+    storyId,
     ...combatEngine.projectCombatForActor(actorId, perceptionOptions),
     combatEffectEvents: combatEngine.getCombatEffectEvents(),
   };

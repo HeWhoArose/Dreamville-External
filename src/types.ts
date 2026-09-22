@@ -196,24 +196,7 @@ export interface StoryCheckOutcomeDefinition {
   summary?: string;
 }
 
-export interface StoryCheckChallenge {
-  id: string;
-  label: string;
-  sourceType: 'HAZARD' | 'EVENT' | 'CAPABILITY' | 'EFFECT';
-  sourceId: string;
-  keywords: string[];
-  testType?: StoryTestType;
-  savingThrowAbility?: StoryCheckAbility;
-  skill?: string;
-  difficultyClass: number;
-  resolutionMode?: StoryCheckResolutionMode;
-  customModifier?: number;
-  reason?: string;
-  triggerReason?: string;
-  onFailure?: StoryCheckOutcomeDefinition;
-  onSuccess?: StoryCheckOutcomeDefinition;
-  provenance?: string;
-}
+e
 
 export interface StoryCheckDamageOutcome {
   requestedAmount: number;
@@ -627,21 +610,7 @@ export interface CharacterStatDefinition {
   provenance: CharacterProvenanceSource;
 }
 
-export interface CharacterSkill {
-  id: string;
-  name: string;
-  governingAbility: 'Strength' | 'Dexterity' | 'Constitution' | 'Intelligence' | 'Wisdom' | 'Charisma' | string;
-  proficiency: 'NONE' | 'PROFICIENT' | 'EXPERTISE';
-  isProficient?: boolean;
-  isExpertise?: boolean;
-  isCustom?: boolean;
-  description: string;
-  mechanicalDescription?: string;
-  tags?: string[];
-  worldCompatibility?: string;
-  provenance: CharacterProvenanceSource;
-  icon?: ItemOrSkillIcon;
-}
+e
 
 export interface CharacterFeat {
   id: string;
@@ -745,31 +714,7 @@ export interface CharacterAiExtractionSummary {
   generationSource?: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK';
 }
 
-export interface CapabilityDefinition {
-  id: string;
-  name: string;
-  category: 'Physical' | 'Magic' | 'Biological' | 'Social' | 'Domain' | 'Movement' | string;
-  activationMode: 'immediate' | 'passive' | 'reaction' | 'charged' | 'channelled' | string;
-  powerTier: 'Minor' | 'Moderate' | 'Major' | 'WorldScale' | string;
-  baseEnergyCost: number;
-  baseStrainCost: number;
-  chargeTurnsRequired?: number;
-  isInterruptible?: boolean;
-  minVesselCapacityRequired: number;
-  description: string;
-  provenance: string;
-  prerequisites?: string[];
-  restrictions?: string[];
-  cooldownTurns?: number;
-  durationTurns?: number;
-  targetType?: 'single_target' | 'self' | 'area_of_effect' | 'all_allies' | 'all_enemies' | string;
-  rangeScope?: 'melee' | 'close' | 'ranged' | 'realm' | 'global' | string;
-  actionType?: 'action' | 'bonus_action' | 'reaction' | 'free' | string;
-  sourceUserPrompt?: string;
-  effects?: CharacterEffect[];
-  generatedSkills?: GeneratedTechnique[];
-  storyCheckChallenges?: StoryCheckChallenge[];
-}
+e
 
 export interface CapabilityGraphNode {
   capabilityId: string;
@@ -1548,18 +1493,7 @@ export interface CharacterStartingConditionState {
 }
 
 
-export interface GeneratedTechnique {
-  id: string;
-  name: string;
-  description: string;
-  parentCapabilityId: string;
-  parentCapabilityName: string;
-  activationType?: string;
-  energyCost?: number;
-  cooldownTurns?: number;
-  range?: string;
-  provenance: CharacterProvenanceSource;
-}
+e
 
 export interface StartingEquipmentItem {
   id: string;
@@ -1643,12 +1577,43 @@ export interface CharacterCoreStats {
   savingThrowProficiencies?: StoryCheckAbility[];
 }
 
+export interface CharacterProgressionCustomModule {
+  id: string;
+  type: 'CLASS' | 'SUBCLASS' | 'SPECIES';
+  name: string;
+  version: number;
+  enabled: boolean;
+  aliases?: string[];
+  parentClassId?: string;
+  minLevel?: number;
+  prerequisites?: string[];
+  features: Array<{
+    id: string;
+    name: string;
+    description: string;
+    level: number;
+    enabled: boolean;
+    passiveModifiers?: Array<{
+      id: string;
+      target: string;
+      mode: 'ADD' | 'MULTIPLY' | 'SET' | 'MIN' | 'MAX';
+      value: number;
+      precedence: number;
+      stackGroup?: string;
+      source?: Record<string, unknown>;
+    }>;
+    triggeredAbilities?: Array<Record<string, unknown>>;
+  }>;
+  provenance: string;
+}
+
 export interface CharacterProgressionSelection {
   classId?: string;
   subclassId?: string;
   speciesId?: string;
   featIds?: string[];
   moduleIds?: string[];
+  customModules?: CharacterProgressionCustomModule[];
 }
 
 export interface EntityCardProjection {

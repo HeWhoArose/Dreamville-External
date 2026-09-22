@@ -253,22 +253,33 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
           : [];
 
         if (assetRefs.length) {
-          await Promise.allSettled(
-            assetRefs.map((assetId: string) =>
-              apiClient.ensureCombatAsset(
-                combatState.storyId!,
-                canonicalDefinition.id,
-                'Dreamville combat visual asset for ' +
-                  canonicalDefinition.name +
-                  '. Visual reference: ' +
-                  assetId +
-                  '. Style: ' +
-                  String(plan.plan.style || canonicalDefinition.damageType || canonicalDefinition.name) +
-                  '.',
-                assetId,
-              ),
-            ),
+          const assetResults = await Promise.all(
+            assetRefs.map(async (assetId: string) => {
+              try {
+                const ensured = await apiClient.ensureCombatAsset(
+                  combatState.storyId!,
+                  canonicalDefinition.id,
+                  'Dreamville combat visual asset for ' +
+                    canonicalDefinition.name +
+                    '. Visual reference: ' +
+                    assetId +
+                    '. Style: ' +
+                    String(plan.plan.style || canonicalDefinition.damageType || canonicalDefinition.name) +
+                    '.',
+                  assetId,
+                );
+                return typeof ensured?.asset?.imageUrl === 'string'
+                  ? ensured.asset.imageUrl
+                  : undefined;
+              } catch {
+                return undefined;
+              }
+            }),
           );
+          const assetUrls = assetResults.filter(
+            (value): value is string => typeof value === 'string' && value.length > 0
+          );
+          plan.plan.assetUrls = assetUrls;
         }
       }
 

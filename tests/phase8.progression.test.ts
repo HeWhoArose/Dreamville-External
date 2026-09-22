@@ -415,3 +415,167 @@ test('Phase 8 ability effects require canonical scope and commit deterministic a
   assert.ok((command.data as any)?.activeEffect?.effectId);
   assert.equal(repo.getActiveEffects(storyId).length, 1);
 });
+
+
+test('Phase 8 regression: canonical snapshot restores progression after a committed level-up', async () => {
+  const storyId = 'phase8_snapshot_mutated';
+  const repo = seedRepo(storyId);
+  const id = actorId(repo, storyId);
+
+  const result = await canonicalCommandEngine.execute(repo, {
+    commandId: 'phase8-snapshot-level-up',
+    storyId,
+    actorId: id,
+    type: 'PROGRESSION',
+    payload: { operation: 'LEVEL_UP' },
+    source: 'PLAYER',
+    transactionMode: 'STAGED',
+  }, async (command, context) => {
+    const progression = context.repository.getCharacterProgressionEngine(storyId);
+    progression.levelUp(id, command.commandId, context.repository.getRulesProfile(storyId));
+    return { success: true, data: { level: progression.getState(id)?.currentLevel }, summary: 'Level up for snapshot regression.' };
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(repo.getCharacterProgressionEngine(storyId).getState(id)?.currentLevel, 2);
+
+  const snapshot = captureCanonicalStateSnapshot(storyId, repo);
+  const restored = new InMemoryWorldRepository({ disablePersistence: true });
+  restored.seedStory(storyId);
+  restored.restoreCanonicalStateSnapshot(snapshot);
+
+  assert.equal(restored.getCharacterProgressionEngine(storyId).getState(id)?.currentLevel, 2);
+  assert.deepEqual(
+    restored.getCharacterProgressionEngine(storyId).resolveModifiers(id),
+    repo.getCharacterProgressionEngine(storyId).resolveModifiers(id)
+  );
+});
+
+test('Phase 8 regression: progression modifiers reach authoritative combat projections and attack resolution', () => {
+  const storyId = 'phase8_combat_projection';
+  const repo = seedRepo(storyId);
+  const id = actorId(repo, storyId);
+  const combat = repo.getCombatEngine(storyId);
+
+  combat.addParticipant({
+    id,
+    name: 'Hero',
+    x: 0,
+    y: 0,
+    initiative: 10,
+    team: 'player_allies',
+    hpCurrent: 20,
+    hpMax: 20,
+    armorClass: 10,
+    speedCells: 6,
+    attackBonus: 0,
+    damageFormula: '1d4',
+    conditions: [],
+    isDead: false,
+  });
+  combat.addParticipant({
+    id: 'enemy',
+    name: 'Enemy',
+    x: 1,
+    y: 0,
+    initiative: 1,
+    team: 'enemies',
+    hpCurrent: 20,
+    hpMax: 20,
+    armorClass: 100,
+    speedCells: 6,
+    attackBonus: 0,
+    damageFormula: '1d4',
+    conditions: [],
+    isDead: false,
+  });
+
+  const projected = combat.getParticipant(id)!;
+  assert.equal(projected.attackBonus, 1);
+  assert.equal(projected.armorClass, 10);
+  assert.equal(projected.hpMax, 24);
+
+  combat.rollInitiative();
+  const result = combat.executeAttack(id, 'enemy');
+  assert.equal(result.success, true);
+});
+
+test('Phase 8 regression: progression spell attack bonus and save DC are authoritative cast inputs', () => {
+  const storyId = 'phase8_spell_projection';
+  const repo = seedRepo(storyId);
+  const id = actorId(repo, storyId);
+  const combat = repo.getCombatEngine(storyId);
+
+  combat.addParticipant({
+    id,
+    name: 'Wizard',
+    x: 0,
+    y: 0,
+    initiative: 10,
+    team: 'player_allies',
+    hpCurrent: 20,
+    hpMax: 20,
+    armorClass: 10,
+    speedCells: 6,
+    attackBonus: 0,
+    damageFormula: '1d4',
+    conditions: [],
+    isDead: false,
+    spellAttackBonus: 0,
+    spellSaveDc: 8,
+  });
+  combat.addParticipant({
+    id: 'enemy',
+    name: 'Enemy',
+    x: 2,
+    y: 0,
+    initiative: 1,
+    team: 'enemies',
+    hpCurrent: 20,
+    hpMax: 20,
+    armorClass: 100,
+    speedCells: 6,
+    attackBonus: 0,
+    damageFormula: '1d4',
+    conditions: [],
+    isDead: false,
+  });
+  combat.rollInitiative();
+
+  const projected = combat.getParticipant(id)!;
+  assert.equal(projected.spellAttackBonus, 0);
+  assert.equal(projected.spellSaveDc, 8);
+
+  const result = combat.executeSpellCast({
+    actorId: id,
+    spellId: 'fire_bolt',
+    targetId: 'enemy',
+  });
+  assert.equal(result.success, true);
+});
+
+test('Phase 8 regression: explicit Custom Homebrew progression enables level progression without silently enabling modules', () => {
+  const engine = new CharacterProgressionEngine();
+  engine.seedFromCharacter('hero', {
+    identity: { name: 'Hero', species: 'Human' },
+    role: { profession: 'Fighter' },
+    coreStats: { level: 1 } as any,
+    feats: [],
+  });
+  const customEnabled = rulesProfileEngine.resolve({
+    mode: 'CUSTOM_HOMEBREW_DND',
+    rulesProfile: {
+      mode: 'CUSTOM_HOMEBREW_DND',
+      overrides: [
+        { ruleId: CHARACTER_PROGRESSION, operation: 'ENABLE', reason: 'Explicit progression enable.' },
+        { ruleId: CHARACTER_PROGRESSION, operation: 'SET', reason: 'Explicit progression policy.', value: { allowLevelUp: true } },
+      ],
+    },
+  }).profile;
+
+  assert.equal(engine.levelUp('hero', 'phase8-custom-explicit', customEnabled).currentLevel, 2);
+  assert.throws(
+    () => engine.selectModule('hero', 'CLASS', 'class_wizard', 'phase8-custom-module', customEnabled),
+    /disabled by the active rules profile/
+  );
+});

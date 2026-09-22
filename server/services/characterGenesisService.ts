@@ -1214,6 +1214,34 @@ IMPORTANT:
       storyCheckChallenges: Array.isArray(proposal.storyCheckChallenges) ? proposal.storyCheckChallenges : undefined,
     };
 
+    const effectDefinition: CombatEffectDefinition = {
+      id: capId + '_effect',
+      name: capability.name,
+      resolutionMode: ['SINGLE_ATTACK', 'MULTI_INSTANCE', 'SAVE', 'AREA', 'CHAIN', 'SEQUENCE', 'OUTCOME', 'WORLD_EFFECT'].includes(rawEffect.resolutionMode)
+        ? rawEffect.resolutionMode
+        : 'SINGLE_ATTACK',
+      scale: ['PERSON', 'GROUP', 'ENCOUNTER', 'STRUCTURE', 'DISTRICT', 'CITY', 'REGION', 'CONTINENT', 'PLANET', 'COSMIC'].includes(rawEffect.scale)
+        ? rawEffect.scale
+        : 'PERSON',
+      actionCost: capability.actionType === 'bonus_action' ? 'BONUS_ACTION' : capability.actionType === 'reaction' ? 'REACTION' : capability.actionType === 'free' ? 'FREE' : 'ACTION',
+      targetingMode: rawEffect.targetingMode || (capability.targetType === 'area_of_effect' ? 'ALL_IN_AREA' : 'ONE_TARGET'),
+      instanceCount: rawEffect.instanceCount == null ? undefined : Math.max(1, Math.min(50, Math.trunc(Number(rawEffect.instanceCount) || 1))),
+      attackFormula: worldTemplate?.dndRulesMode === 'FULL_DND' || !worldTemplate?.dndRulesMode
+        ? '1d20'
+        : normalizeDiceFormula(rawEffect.attackFormula || capability.checkFormula, '1d20'),
+      saveFormula: worldTemplate?.dndRulesMode === 'FULL_DND' || !worldTemplate?.dndRulesMode
+        ? '1d20'
+        : normalizeDiceFormula(rawEffect.saveFormula || capability.checkFormula, '1d20'),
+      savingThrowAbility: typeof rawEffect.savingThrowAbility === 'string' ? rawEffect.savingThrowAbility : undefined,
+      difficultyClass: Number.isFinite(Number(rawEffect.difficultyClass)) ? Math.max(1, Math.trunc(Number(rawEffect.difficultyClass))) : undefined,
+      damageFormula: typeof rawEffect.damageFormula === 'string' ? rawEffect.damageFormula : capability.damageFormula,
+      damageType: typeof rawEffect.damageType === 'string' ? rawEffect.damageType : undefined,
+      outcome: rawEffect.outcome,
+      outcomeReason: typeof rawEffect.outcomeReason === 'string' ? rawEffect.outcomeReason : undefined,
+      provenance: 'CHARACTER_GENESIS',
+      aiGenerated: generatedProvenance !== 'DETERMINISTIC_FALLBACK',
+    };
+
     const generatedSkills: GeneratedTechnique[] = (proposal.techniques || []).map((t: any, idx: number) => ({
       id: `skill_${capId}_${idx + 1}`,
       name: t.name || `${capability.name} Strike`,

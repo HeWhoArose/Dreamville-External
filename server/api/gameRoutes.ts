@@ -2904,64 +2904,279 @@ gameRouter.post('/combat/effect/validate', async (req: Request, res: Response) =
 
 /**
  * POST /api/game/combat/effect
- * Canonical entry point for multi-instance and semantic combat/world effects.
+ * Canonical entry point for structured combat/world effects.
+ *
+ * The client may request an effect, but the server always resolves the
+ * capability definition owned by the actor. Submitted client mechanics
+ * are preview data, never live authority.
  */
 gameRouter.post('/combat/effect', async (req: Request, res: Response) => {
   try {
     const storyId = resolveStoryId(req, true);
-    const definition = req.body?.definition as CombatEffectDefinition;
-    const targetIds = Array.isArray(req.body?.targetIds) ? req.body.targetIds.map(String) : [];
+    const requestedDefinition = req.body?.definition as CombatEffectDefinition | undefined;
+    const requestedTargetIds = Array.isArray(req.body?.targetIds)
+      ? req.body.targetIds.map(String)
+      : [];
     const requestedActorId = req.body?.actorId as string | undefined;
     const player = worldRepository.getPlayerLifecycle(storyId);
-    const serverActorId = player ? player.actorId : 'player_actor_' + storyId;
-    if (requestedActorId && requestedActorId !== serverActorId) return res.status(403).json({ success: false, errorReason: 'Unauthorized combat-effect actor.' });
+    const serverActorId = player?.actorId || 'player_actor_' + storyId;
+
+    if (requestedActorId && requestedActorId !== serverActorId) {
+      return res.status(403).json({ success: false, errorReason: 'Unauthorized combat-effect actor.' });
+    }
+
     const actorId = serverActorId;
     const combat = worldRepository.getCombatEngine(storyId);
     const actor = combat.getParticipant(actorId);
-    if (!actor) return res.status(404).json({ success: false, errorReason: 'Authoritative actor is not present in combat.' });
-    const validation = combatEffectEngine.validateDefinition(definition, worldRepository.getRulesProfile(storyId)?.mode || 'FULL_DND');
-    if (!validation.success || !validation.normalized) return res.status(400).json(validation);
-    const normalized = validation.normalized;
-    const targetResolution =
-      normalized.resolutionMode === 'WORLD_EFFECT' && targetIds.length === 0
-        ? { success: true, targetIds: [] as string[] }
-        : combatTargetingEngine.resolve(combat, actorId, targetIds, normalized);
-    if (!targetResolution.success) return res.status(400).json({ success: false, errorReason: targetResolution.errorReason });
-    const resolvedTargetIds = targetResolution.targetIds;
-    const capId = typeof req.body?.capabilityId === 'string' ? req.body.capabilityId : normalized.id;
-    const inv = worldRepository.getInventoryEngine(storyId);
+    if (!actor) {
+      return res.status(404).json({ success: false, errorReason: 'Authoritative actor is not present in combat.' });
+    }
+
+    if (!requestedDefinition || typeof requestedDefinition !== 'object') {
+      return res.status(400).json({ success: false, errorReason: 'A structured combat effect definition is required.' });
+    }
+
+    const capId =
+      typeof req.body?.capabilityId === 'string' && req.body.capabilityId.trim()
+        ? req.body.capabilityId.trim()
+        : requestedDefinition.id;
+
+    const inventory = worldRepository.getInventoryEngine(storyId);
     const capEngine = worldRepository.getCapabilityEngine(storyId);
-    const effectiveCaps = capEngine.getEffectiveActorCapabilities(actorId, inv);
-    const capabilityAuthorized = effectiveCaps.some((cap: any) => cap.id === capId || cap.name === normalized.name);
-    if (!capabilityAuthorized && req.body?.allowUnboundTest !== true) return res.status(403).json({ success: false, errorReason: 'Actor does not possess the requested capability/effect.' });
+    const effectiveCapabilities = capEngine.getEffectiveActorCapabilities(actorId, inventory);
+    const ownedCapability = effectiveCapabilities.find((cap: any) =>
+      cap.id === capId || cap.name === requestedDefinition.name
+    );
+
+    if (!ownedCapability) {
+      return res.status(403).json({
+        success: false,
+        errorReason: 'Actor does not possess the requested capability/effect.',
+      });
+    }
+
+    const canonicalDefinition: CombatEffectDefinition = ownedCapability.effectDefinition
+      ? JSON.parse(JSON.stringify(ownedCapability.effectDefinition))
+      : {
+          id: ownedCapability.id + '_effect',
+          name: ownedCapability.name,
+          resolutionMode: 'SINGLE_ATTACK',
+          scale: 'PERSON',
+          actionCost:
+            ownedCapability.actionType === 'bonus_action'
+              ? 'BONUS_ACTION'
+              : ownedCapability.actionType === 'reaction'
+                ? 'REACTION'
+                : ownedCapability.actionType === 'free'
+                  ? 'FREE'
+                  : 'ACTION',
+          targetingMode:
+            ownedCapability.targetType === 'area_of_effect'
+              ? 'ALL_IN_AREA'
+              : ownedCapability.targetType === 'self'
+                ? 'SELF'
+                : 'ONE_TARGET',
+          attackFormula: ownedCapability.checkFormula || '1d20',
+          damageFormula: ownedCapability.damageFormula,
+          provenance: ownedCapability.provenance,
+          aiGenerated: ownedCapability.provenance === 'AI_GENERATED',
+        };
+
+    const definitionValidation = combatEffectEngine.validateDefinition(
+      canonicalDefinition,
+      worldRepository.getRulesProfile(storyId)?.mode || 'FULL_DND'
+    );
+
+    if (!definitionValidation.success || !definitionValidation.normalized) {
+      return res.status(409).json({
+        success: false,
+        errorReason: definitionValidation.errorReason || 'Owned capability effect is not valid.',
+      });
+    }
+
+    const normalized = definitionValidation.normalized;
+    const targetResolution =
+      normalized.resolutionMode === 'WORLD_EFFECT' && requestedTargetIds.length === 0
+        ? { success: true, targetIds: [] as string[] }
+        : combatTargetingEngine.resolve(combat, actorId, requestedTargetIds, normalized);
+
+    if (!targetResolution.success) {
+      return res.status(400).json({ success: false, errorReason: targetResolution.errorReason });
+    }
+
+    const resolvedTargetIds = targetResolution.targetIds;
     for (const targetId of resolvedTargetIds) {
       const target = combat.getParticipant(targetId);
-      if (target && !combat.isParticipantKnownToActor(actorId, target, worldRepository.getCombatPerceptionOptions(storyId, actorId))) return res.status(403).json({ success: false, errorReason: 'Target is not legitimately perceived by the actor.' });
+      if (
+        target &&
+        !combat.isParticipantKnownToActor(
+          actorId,
+          target,
+          worldRepository.getCombatPerceptionOptions(storyId, actorId)
+        )
+      ) {
+        return res.status(403).json({
+          success: false,
+          errorReason: 'Target is not legitimately perceived by the actor.',
+        });
+      }
     }
-    const commandId = (req.headers['x-command-id'] as string | undefined) || (req.body?.commandId as string | undefined) || deterministicId('cmd_route', storyId, '/combat/effect', req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      deterministicId(
+        'cmd_route',
+        storyId,
+        '/combat/effect',
+        capId,
+        resolvedTargetIds,
+        worldRepository.getCanonicalCommandEvents(storyId).length + 1
+      );
+
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
-      { commandId, storyId, actorId, type: 'COMBAT_EFFECT', payload: { effectId: normalized.id, resolutionMode: normalized.resolutionMode, targetIds: resolvedTargetIds, definition: normalized }, source: 'PLAYER', transactionMode: 'STAGED' },
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'COMBAT_EFFECT',
+        payload: {
+          effectId: normalized.id,
+          capabilityId: capId,
+          resolutionMode: normalized.resolutionMode,
+          targetIds: resolvedTargetIds,
+          definition: normalized,
+        },
+        source: 'PLAYER',
+        transactionMode: 'STAGED',
+      },
       async (_command, context) => {
+        const transactionCapEngine = context.repository.getCapabilityEngine(storyId);
+        const transactionInventory = context.repository.getInventoryEngine(storyId);
         const transactionCombat = context.repository.getCombatEngine(storyId);
-        const effectResult = (normalized.resolutionMode === 'WORLD_EFFECT' || normalized.resolutionMode === 'OUTCOME')
-          ? worldEffectEngine.apply({ repository: context.repository, storyId, actorId, definition: normalized, targetIds: resolvedTargetIds, authorityVerified: capabilityAuthorized || req.body?.allowUnboundTest === true })
-          : combatEffectEngine.resolve(transactionCombat, actorId, resolvedTargetIds, normalized);
-        if (!effectResult.success) return { success: false, errorReason: effectResult.errorReason };
+        const transactionCapabilities =
+          transactionCapEngine.getEffectiveActorCapabilities(actorId, transactionInventory);
+        const transactionCapability = transactionCapabilities.find((cap: any) => cap.id === capId);
+
+        if (!transactionCapability) {
+          return { success: false, errorReason: 'Capability is no longer possessed at commit time.' };
+        }
+
+        const transactionDefinition: CombatEffectDefinition =
+          transactionCapability.effectDefinition
+            ? JSON.parse(JSON.stringify(transactionCapability.effectDefinition))
+            : JSON.parse(JSON.stringify(normalized));
+
+        const transactionValidation = combatEffectEngine.validateDefinition(
+          transactionDefinition,
+          context.repository.getRulesProfile(storyId)?.mode || 'FULL_DND'
+        );
+
+        if (!transactionValidation.success || !transactionValidation.normalized) {
+          return {
+            success: false,
+            errorReason: transactionValidation.errorReason || 'Capability effect failed commit-time validation.',
+          };
+        }
+
+        const finalTargetResolution =
+          transactionValidation.normalized.resolutionMode === 'WORLD_EFFECT' &&
+          resolvedTargetIds.length === 0
+            ? { success: true, targetIds: [] as string[] }
+            : combatTargetingEngine.resolve(
+                transactionCombat,
+                actorId,
+                resolvedTargetIds,
+                transactionValidation.normalized
+              );
+
+        if (!finalTargetResolution.success) {
+          return {
+            success: false,
+            errorReason: finalTargetResolution.errorReason || 'Target resolution failed at commit time.',
+          };
+        }
+
+        const effectDefinition = transactionValidation.normalized;
+        const effectResult =
+          effectDefinition.resolutionMode === 'WORLD_EFFECT' ||
+          effectDefinition.resolutionMode === 'OUTCOME'
+            ? worldEffectEngine.apply({
+                repository: context.repository,
+                storyId,
+                actorId,
+                definition: effectDefinition,
+                targetIds: finalTargetResolution.targetIds,
+                authorityVerified: true,
+              })
+            : combatEffectEngine.resolve(
+                transactionCombat,
+                actorId,
+                finalTargetResolution.targetIds,
+                effectDefinition
+              );
+
+        if (!effectResult.success) {
+          return {
+            success: false,
+            errorReason: effectResult.errorReason || 'Combat effect was rejected.',
+          };
+        }
+
         for (const result of effectResult.instances || []) {
           if (result.targetDied && result.targetId !== actorId) {
             const target = transactionCombat.getParticipant(result.targetId);
-            if (target) syncNpcCombatDeath(storyId, target, actor.name, player?.locationId, context.repository);
+            if (target) {
+              syncNpcCombatDeath(
+                storyId,
+                target,
+                actor.name,
+                player?.locationId,
+                context.repository
+              );
+            }
           }
         }
-        return { success: true, data: { effectResult, combatState: getCombatStateHelper(transactionCombat, storyId, actorId, context.repository) }, summary: normalized.name + ' resolved for ' + actorId + '.' };
+
+        return {
+          success: true,
+          data: {
+            effectResult,
+            combatState: getCombatStateHelper(
+              transactionCombat,
+              storyId,
+              actorId,
+              context.repository
+            ),
+          },
+          summary: effectDefinition.name + ' resolved for ' + actorId + '.',
+        };
       }
     );
-    if (!commandResult.success) return res.status(400).json({ success: false, errorReason: commandResult.errorReason, rolledBack: commandResult.rolledBack, commandId: commandResult.commandId });
+
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
+      });
+    }
+
     const data = commandResult.data as any;
-    return res.json({ success: true, commandId: commandResult.commandId, canonicalEvent: commandResult.event, effectResult: data?.effectResult, combatState: data?.combatState });
+    return res.json({
+      success: true,
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
+      effectResult: data?.effectResult,
+      combatState: data?.combatState,
+    });
   } catch (error: any) {
-    return res.status(500).json({ success: false, errorReason: error?.message || 'Failed to resolve combat effect.' });
+    return res.status(500).json({
+      success: false,
+      errorReason: error?.message || 'Failed to resolve combat effect.',
+    });
   }
 });
 

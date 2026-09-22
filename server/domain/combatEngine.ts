@@ -2983,8 +2983,6 @@ export class TacticalCombatEngine {
 
       case 'RESOURCE_GRANTED':
       case 'RESOURCE_REMOVED':
-      case 'RESOURCE_GRANTED':
-      case 'RESOURCE_REMOVED':
         metadata.resource = outcomePayload?.resource || null;
         metadata.amount = outcomePayload?.amount ?? null;
         break;

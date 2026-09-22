@@ -1134,6 +1134,9 @@ OUTPUT STRICT JSON with this structure:
   "baseEnergyCost": number,
   "baseStrainCost": number,
   "description": string,
+  "actionType": "action" | "bonus_action" | "reaction" | "free",
+  "targetType": "single_target" | "self" | "area_of_effect" | "all_allies" | "all_enemies",
+  "rangeScope": "melee" | "close" | "ranged" | "realm" | "global",
   "checkFormula": string,
   "damageFormula": string | null,
   "effectDefinition": {
@@ -1146,7 +1149,9 @@ OUTPUT STRICT JSON with this structure:
     "savingThrowAbility": string | null,
     "difficultyClass": number | null,
     "damageFormula": string | null,
-    "damageType": string | null
+    "damageType": string | null,
+    "outcome": "INSTANT_DEFEAT" | "ERASE_FROM_WORLD" | "DOWNED" | "BANISHED" | "TELEPORTED" | "TRANSFORMED" | "SEALED" | "SUMMONED" | "RESOURCE_GRANTED" | "RESOURCE_REMOVED" | "WORLD_STATE_CHANGED" | null,
+    "outcomeReason": string | null
   },
   "techniques": [
     {
@@ -1205,6 +1210,9 @@ IMPORTANT:
       baseStrainCost: Number(proposal.baseStrainCost ?? 10),
       minVesselCapacityRequired: 15,
       description: proposal.description || `Specialized mastery of ${concept}.`,
+      actionType: ['action', 'bonus_action', 'reaction', 'free'].includes(proposal?.actionType) ? proposal.actionType : 'action',
+      targetType: ['single_target', 'self', 'area_of_effect', 'all_allies', 'all_enemies'].includes(proposal?.targetType) ? proposal.targetType : 'single_target',
+      rangeScope: ['melee', 'close', 'ranged', 'realm', 'global'].includes(proposal?.rangeScope) ? proposal.rangeScope : 'close',
       provenance: generatedProvenance,
       sourceUserPrompt: concept,
       checkFormula: worldTemplate?.dndRulesMode === 'FULL_DND' || !worldTemplate?.dndRulesMode
@@ -1238,6 +1246,7 @@ IMPORTANT:
       damageType: typeof rawEffect.damageType === 'string' ? rawEffect.damageType : undefined,
       outcome: rawEffect.outcome,
       outcomeReason: typeof rawEffect.outcomeReason === 'string' ? rawEffect.outcomeReason : undefined,
+      outcomePayload: rawEffect.outcomePayload && typeof rawEffect.outcomePayload === 'object' ? rawEffect.outcomePayload : undefined,
       provenance: 'CHARACTER_GENESIS',
       aiGenerated: generatedProvenance !== 'DETERMINISTIC_FALLBACK',
     };

@@ -1651,6 +1651,38 @@ export interface CharacterProgressionSelection {
   moduleIds?: string[];
 }
 
+export interface EntityCardProjection {
+	id: string;
+	storyId: string;
+	worldId?: string;
+	name: string;
+	kind: string;
+	templateId?: string;
+	isTemplate: boolean;
+	identity: { species?: string; lineage?: string; age?: number | string; gender?: string; aliases: string[] };
+	classification: { role?: string; archetype?: string; profession?: string; threat?: string; rarity?: string; tags: string[] };
+	progression?: CharacterProgressionSelection & { level: number };
+	coreStats?: { level?: number; hpCurrent?: number; hpMax?: number; armorClass?: number; speed?: number; hitDice?: string; abilityScores: Record<string, number> };
+	personality: { traits: string[]; temperament?: string; values: string[]; motivations: string[]; fears: string[]; desires: string[]; dialogueStyle?: string };
+	behavior: { defaultBehavior?: string; combatBehavior?: string; threatResponse?: string; priorities: string[]; routines?: string[] };
+	social: { alignment?: string; factionIds: string[]; role?: string; reputation: Record<string, number>; relationships: Record<string, Record<string, number | undefined>> };
+	economy?: { wealth?: number; currency: Record<string, number>; inventoryItemIds: string[]; inventorySummary: string[]; assets: string[] };
+	background?: { origin?: string; upbringing?: string; history?: string; importantEvents: string[] };
+	worldState: { locationId?: string; currentActivity?: string; destinationLocationId?: string; currentGoal?: string; isAlive: boolean; presence: 'present' | 'absent' | 'unknown' };
+	traits: string[];
+	capabilities: Array<Record<string, unknown>>;
+	feats: Array<Record<string, unknown>>;
+	equipment: string[];
+	memoryRefs: string[];
+	dossierId?: string;
+	lifecycle: { status: string; lastActiveAt?: string; lastSeenAt?: string; archivedAt?: string; deadAt?: string };
+	provenance: { source: string; createdBy: 'PLAYER' | 'AI' | 'SYSTEM' | 'IMPORTED'; confidence?: number };
+	metadata: Record<string, unknown>;
+	createdAt: string;
+	updatedAt: string;
+}
+
+
 export interface CharacterGenesisDraft {
   draftId: string;
   worldId: string;

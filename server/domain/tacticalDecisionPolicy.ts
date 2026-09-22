@@ -1,7 +1,8 @@
-import type { RulesProfile } from '../../src/types';
+import type { RulesProfile, CombatEffectDefinition } from '../../src/types';
 import { BattlefieldParticipant, CombatPerceptionOptions, DynamicHazardZone, TacticalCombatEngine } from './combatEngine';
 import { rulesProfileEngine } from './rulesProfileEngine';
 import { CapabilityEngine } from './capabilityEngine';
+import { combatEffectEngine } from './combatEffectEngine';
 
 export type TacticalActionType = 'MOVE' | 'ATTACK' | 'CAST' | 'RETREAT' | 'DEFEND_ALLY' | 'END_TURN';
 
@@ -31,6 +32,7 @@ export interface TacticalActionProposal {
   reason: string;
   role?: TacticalRole;
   priorityScore: number;
+  effectDefinition?: CombatEffectDefinition;
 }
 
 export interface TacticalExecutionResult {
@@ -229,6 +231,7 @@ export class NpcTacticalDecisionPolicy {
             actionType: 'CAST',
             targetId: selectedTarget.id,
             capabilityId: offensiveCap.id,
+            effectDefinition: (offensiveCap as any).effectDefinition as CombatEffectDefinition | undefined,
             role: assignedRole,
             reason: `Unleashing canonical capability ${offensiveCap.name} against prioritized target ${selectedTarget.name}.`,
             priorityScore: 75,
@@ -348,6 +351,21 @@ export class NpcTacticalDecisionPolicy {
 
         if (adj && !adj.approved) {
           return { success: false, proposal, errorReason: `Capability invocation denied: ${adj.rejectionReason}` };
+        }
+
+        if (proposal.effectDefinition) {
+          const effectRes = combatEffectEngine.resolve(
+            combatEngine,
+            proposal.actorId,
+            [proposal.targetId],
+            proposal.effectDefinition
+          );
+          return {
+            success: effectRes.success,
+            proposal,
+            errorReason: effectRes.errorReason,
+            combatOutcome: effectRes,
+          };
         }
 
         const castRes = combatEngine.executeCapabilityCast({

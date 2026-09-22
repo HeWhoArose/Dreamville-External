@@ -172,7 +172,10 @@ export class CombatEffectEngine {
     }
     const executionResult = execution.result;
 
-    const targeting = combatTargetingEngine.resolve(engine, actorId, targetIds, normalized);
+    const targetingInputIds = normalized.instanceTargetIds?.length
+      ? Array.from(new Set([...targetIds, ...normalized.instanceTargetIds]))
+      : targetIds;
+    const targeting = combatTargetingEngine.resolve(engine, actorId, targetingInputIds, normalized);
     if (!targeting.success) return rollback({ success: false, errorReason: targeting.errorReason });
 
     const shouldConsumeResource = options.consumeAction !== false;
@@ -272,6 +275,7 @@ export class CombatEffectEngine {
           .filter((event) => event.eventType === 'ATTACK_INSTANCE_RESOLVED' && event.actorId === actorId && event.targetId === targetId)
           .slice(-1)
           .map((event) => event.eventId),
+        executionResult,
       };
       singleResult.conditionsApplied = attack.success
         ? this.applyConditionEffects(engine, actorId, normalized, singleResult.instances || [])

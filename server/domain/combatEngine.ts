@@ -259,13 +259,14 @@ export class Dnd521RulesetAdapter implements IRulesetAdapter {
   }): { roll: RollRecord; hits: boolean; isCritical: boolean } {
     const dice = params.diceEngine || LocalDiceEngine;
     const attackFormula = params.attackFormula || '1d20';
+    const appliesD20Advantage = attackFormula.replace(/\s+/g, '').toLowerCase() === '1d20';
     const roll1 = dice.roll(attackFormula, params.attackBonus);
     let chosenRoll = roll1;
 
-    if (params.advantage && !params.disadvantage) {
+    if (appliesD20Advantage && params.advantage && !params.disadvantage) {
       const roll2 = dice.roll(attackFormula, params.attackBonus);
       chosenRoll = roll2.total > roll1.total ? roll2 : roll1;
-    } else if (params.disadvantage && !params.advantage) {
+    } else if (appliesD20Advantage && params.disadvantage && !params.advantage) {
       const roll2 = dice.roll(attackFormula, params.attackBonus);
       chosenRoll = roll2.total < roll1.total ? roll2 : roll1;
     }
@@ -297,13 +298,14 @@ export class Dnd521RulesetAdapter implements IRulesetAdapter {
   }): { roll: RollRecord; succeeds: boolean } {
     const dice = params.diceEngine || LocalDiceEngine;
     const rollFormula = params.rollFormula || '1d20';
+    const appliesD20Advantage = rollFormula.replace(/\s+/g, '').toLowerCase() === '1d20';
     const roll1 = dice.roll(rollFormula, params.saveModifier);
     let chosenRoll = roll1;
 
-    if (params.advantage && !params.disadvantage) {
+    if (appliesD20Advantage && params.advantage && !params.disadvantage) {
       const roll2 = dice.roll(rollFormula, params.saveModifier);
       chosenRoll = roll2.total > roll1.total ? roll2 : roll1;
-    } else if (params.disadvantage && !params.advantage) {
+    } else if (appliesD20Advantage && params.disadvantage && !params.advantage) {
       const roll2 = dice.roll(rollFormula, params.saveModifier);
       chosenRoll = roll2.total < roll1.total ? roll2 : roll1;
     }

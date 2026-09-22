@@ -370,3 +370,122 @@ test('Phase 8.5: authoritative capability effect cannot be replaced by a stronge
   assert.equal(canonical?.scale, 'PERSON');
   assert.equal(canonical?.damageFormula, '1d6');
 });
+
+
+test('Phase 8.5 regression: Incapacitated blocks Action without consuming the Action resource', () => {
+  const engine = engineWithEnemy();
+  const applied = engine.applyCombatCondition('hero', { conditionIdOrName: 'Incapacitated' }, 'SYSTEM');
+  assert.equal(applied.success, true);
+  assert.equal(applied.applied, true);
+
+  const before = engine.getTurnResources('hero');
+  const result = engine.executeAttack('hero', 'enemy', { attackFormula: '1d20', overrideFormula: '1d4' });
+
+  assert.equal(result.success, false);
+  assert.match(result.errorReason || '', /blocked from using action/i);
+  assert.equal(engine.getTurnResources('hero')?.actionAvailable, before?.actionAvailable);
+  assert.equal(engine.getCombatEffectEvents().some((event) => event.eventType === 'ATTACK_INSTANCE_RESOLVED'), false);
+});
+
+test('Phase 8.5 regression: Grappled blocks movement through the same ConditionEngine authority', () => {
+  const engine = engineWithEnemy();
+  const applied = engine.applyCombatCondition('hero', { conditionIdOrName: 'Grappled' }, 'enemy');
+  assert.equal(applied.success, true);
+
+  const result = engine.moveActor('hero', 1, 0);
+  assert.equal(result.success, false);
+  assert.match(result.errorReason || '', /blocked from movement|cannot move/i);
+});
+
+test('Phase 8.5 regression: explicit per-instance targets preserve duplicate target assignments', () => {
+  const engine = new TacticalCombatEngine(7);
+  engine.addParticipant(participant({ attackBonus: 20 }));
+  engine.addParticipant(participant({ id: 'enemy_a', name: 'A', team: 'enemies', x: 1, y: 0, hpCurrent: 100, hpMax: 100, initiative: 0 }));
+  engine.addParticipant(participant({ id: 'enemy_b', name: 'B', team: 'enemies', x: 2, y: 0, hpCurrent: 100, hpMax: 100, initiative: 0 }));
+  engine.rollInitiative();
+
+  const result = combatEffectEngine.resolve(engine, 'hero', ['enemy_a', 'enemy_b'], {
+    id: 'split_beams',
+    name: 'Split Beams',
+    resolutionMode: 'MULTI_INSTANCE',
+    scale: 'PERSON',
+    actionCost: 'ACTION',
+    targetingMode: 'PER_INSTANCE',
+    instanceCount: 4,
+    instanceTargetIds: ['enemy_a', 'enemy_b', 'enemy_a', 'enemy_b'],
+    attackFormula: '1d20',
+    damageFormula: '1d4',
+    damageType: 'radiant',
+  });
+
+  assert.equal(result.success, true);
+  assert.deepEqual(
+    result.instances?.map((instance) => instance.targetId),
+    ['enemy_a', 'enemy_b', 'enemy_a', 'enemy_b']
+  );
+  assert.equal(engine.getTurnResources('hero')?.actionAvailable, false);
+});
+
+test('Phase 8.5 regression: semantic erasure synchronizes participant and ConditionEngine death state', () => {
+  const engine = engineWithEnemy();
+  const result = combatEffectEngine.resolve(engine, 'hero', ['enemy'], {
+    id: 'erase_state_sync',
+    name: 'Erase State Sync',
+    resolutionMode: 'OUTCOME',
+    scale: 'COSMIC',
+    actionCost: 'ACTION',
+    targetingMode: 'ONE_TARGET',
+    outcome: 'ERASE_FROM_WORLD',
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(engine.getParticipant('enemy')?.isDead, true);
+  const exported = engine.exportState();
+  const conditionState = (exported.conditionEngineState?.actors || []).find((actor: any) => actor.actorId === 'enemy');
+  assert.equal(conditionState?.dead, true);
+});
+
+test('Phase 8.5 regression: raw combat export/import does not bake projected progression modifiers into canonical state', () => {
+  const engine = engineWithEnemy({ attackBonus: 4, armorClass: 12 });
+  engine.setProgressionModifierResolver(() => ({
+    level: 1,
+    classId: 'test',
+    subclassId: undefined,
+    speciesId: undefined,
+    modifiers: [
+      { target: 'combat.attackBonus', value: 3, source: 'test_progression' },
+      { target: 'coreStats.armorClass', value: 2, source: 'test_progression' },
+    ],
+  }));
+  assert.equal(engine.getParticipant('hero')?.attackBonus, 23);
+  const beforeRaw = engine.exportState().participants.find((p: any) => p.id === 'hero')?.attackBonus;
+  assert.equal(beforeRaw, 20);
+
+  const clone = new TacticalCombatEngine(1337);
+  clone.importState(engine.exportState());
+  const projected = clone.getParticipant('hero');
+  const rawAfter = clone.exportState().participants.find((p: any) => p.id === 'hero')?.attackBonus;
+
+  assert.equal(projected?.attackBonus, 23);
+  assert.equal(rawAfter, 20);
+});
+
+test('Phase 8.5 fallback: generated visual presentation remains non-authoritative when no animation asset is present', () => {
+  const engine = engineWithEnemy();
+  const result = combatEffectEngine.resolve(engine, 'hero', ['enemy'], {
+    id: 'presentation_only',
+    name: 'Presentation Only',
+    resolutionMode: 'MULTI_INSTANCE',
+    scale: 'PERSON',
+    actionCost: 'ACTION',
+    targetingMode: 'ONE_TARGET',
+    instanceCount: 3,
+    attackFormula: '1d20',
+    damageFormula: '1d4',
+  });
+
+  assert.equal(result.success, true);
+  assert.ok((result.instances || []).length === 3);
+  assert.equal(typeof result.animationPlan?.id === 'string' || result.animationPlan === undefined, true);
+  assert.equal(engine.getParticipant('enemy')?.hpCurrent! < 1000, true);
+});

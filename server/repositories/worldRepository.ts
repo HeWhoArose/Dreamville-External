@@ -2770,6 +2770,9 @@ export class InMemoryWorldRepository implements WorldRepository {
       existing.push(char);
     }
     this.confirmedCharactersMap.set(worldId, [...existing]);
+    const entityRegistry = this.getEntityRegistry(char.storyId || `confirmed_${worldId}`);
+    entityRegistry.upsert(EntityRegistry.fromConfirmedCharacter(char.storyId || `confirmed_${worldId}`, char));
+    this.persistLibrary();
   }
 
   public getConfirmedCharacter(worldId: string, characterId: string): any | null {

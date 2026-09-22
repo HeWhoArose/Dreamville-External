@@ -2482,6 +2482,9 @@ export class InMemoryWorldRepository implements WorldRepository {
     if (snapshot.npcs?.alignment) this.getCharacterAlignmentEngine().importState(clone(snapshot.npcs.alignment));
     if (snapshot.inventory) this.getInventoryEngine(storyId).importState(clone(snapshot.inventory));
     if (snapshot.capabilities) this.getCapabilityEngine(storyId).importState(clone(snapshot.capabilities));
+    if (snapshot.progression) {
+      this.getCharacterProgressionEngine(storyId).importState(clone(snapshot.progression));
+    }
     if (snapshot.conditions) this.getConditionEngine(storyId).importState(clone(snapshot.conditions));
     if (snapshot.combat) this.getCombatEngine(storyId).importState(clone(snapshot.combat));
     if (snapshot.rest) this.getRestRecoveryEngine(storyId).importState(clone(snapshot.rest));

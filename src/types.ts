@@ -2111,6 +2111,7 @@ export interface CombatReplayRecord {
 		success: boolean;
 		totalDamage?: number;
 		defeatedTargetIds?: string[];
+		affectedEntityIds?: string[];
 		instanceCount: number;
 	};
 	consumeAction: boolean;

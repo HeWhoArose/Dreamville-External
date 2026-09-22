@@ -1973,7 +1973,10 @@ function getCombatStateHelper(
 ) {
   const actorId = viewerActorId || 'player_actor_default_story';
   const perceptionOptions = repository.getCombatPerceptionOptions(storyId, actorId);
-  return combatEngine.projectCombatForActor(actorId, perceptionOptions);
+  return {
+    ...combatEngine.projectCombatForActor(actorId, perceptionOptions),
+    combatEffectEvents: combatEngine.getCombatEffectEvents(),
+  };
 }
 
 /**

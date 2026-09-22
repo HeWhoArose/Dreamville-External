@@ -5311,6 +5311,25 @@ gameRouter.post('/worlds/:worldId/characters/extract', async (req: Request, res:
  * POST /api/game/worlds/:worldId/characters/custom-capability
  * Synthesizes a structured custom capability proposal with linked techniques.
  */
+gameRouter.get('/worlds/:worldId/characters/progression-modules', async (req: Request, res: Response) => {
+	try {
+		const worldId = String(req.params.worldId || '');
+		const world = worldRepository.getWorldTemplate(worldId);
+		if (!world) return res.status(404).json({ success: false, errorReason: 'World not found.' });
+		const { CharacterProgressionEngine } = await import('../domain/characterProgressionEngine');
+		const engine = new CharacterProgressionEngine();
+		const worldModules = Array.isArray(world.characterProgressionModules) ? world.characterProgressionModules : [];
+		if (worldModules.length > 0) engine.registerModules(worldModules);
+		res.json({
+			success: true,
+			worldId,
+			modules: engine.getAllModules().filter((module) => module.enabled),
+		});
+	} catch (error: any) {
+		res.status(500).json({ success: false, errorReason: error?.message || 'Failed to load progression modules.' });
+	}
+});
+
 gameRouter.post('/worlds/:worldId/characters/custom-capability', async (req: Request, res: Response) => {
   try {
     const worldId = String(req.params.worldId);

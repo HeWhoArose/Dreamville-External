@@ -33,29 +33,86 @@ export class WorldEffectEngine {
   }): WorldEffectResolution {
     const { repository, storyId, actorId, definition, targetIds = [] } = params;
     const validation = this.validate(definition);
-    if (!validation.success) return { success: false, errorReason: validation.errorReason, effectId: definition.id, affectedEntityIds: [], changedScopes: [] };
-    if (!params.authorityVerified) return { success: false, errorReason: 'World effect authority was not verified by the canonical capability/command layer.', effectId: definition.id, affectedEntityIds: [], changedScopes: [] };
+    if (!validation.success) {
+      return { success: false, errorReason: validation.errorReason, effectId: definition.id, affectedEntityIds: [], changedScopes: [] };
+    }
+    if (!params.authorityVerified) {
+      return {
+        success: false,
+        errorReason: 'World effect authority was not verified by the canonical capability/command layer.',
+        effectId: definition.id,
+        affectedEntityIds: [],
+        changedScopes: [],
+      };
+    }
 
     const combat = repository.getCombatEngine(storyId);
-    const changedScopes = [definition.scale];
     const affectedEntityIds: string[] = [];
-    for (const targetId of targetIds) {
-      const combatResult = combat.applySemanticOutcome(targetId, definition.outcome || 'WORLD_STATE_CHANGED');
+    const semanticMetadata: Record<string, unknown>[] = [];
+    for (const targetId of Array.from(new Set(targetIds.filter(Boolean)))) {
+      const combatResult = combat.applySemanticOutcome(targetId, definition.outcome!, {
+        ...(definition.outcomePayload || {}),
+        sourceActorId: actorId,
+      });
       if (combatResult.success) {
         if (!affectedEntityIds.includes(targetId)) affectedEntityIds.push(targetId);
-        continue;
+        if (combatResult.metadata) semanticMetadata.push({ targetId, ...combatResult.metadata });
       }
+
       const card = repository.getEntityCard(storyId, targetId);
-      if (card) {
-        const status = definition.outcome === 'ERASE_FROM_WORLD' || definition.outcome === 'INSTANT_DEFEAT'
-          ? 'DEAD'
-          : 'DESTROYED';
-        repository.setEntityLifecycleStatus(storyId, targetId, status);
-        affectedEntityIds.push(targetId);
+      if (!card) continue;
+
+      const metadata = { ...(card.metadata || {}) };
+      if (definition.outcome === 'TRANSFORMED') {
+        metadata.transformation = definition.outcomePayload?.transformation ?? definition.outcomePayload?.form ?? true;
+      }
+      if (definition.outcome === 'SEALED') {
+        metadata.sealed = true;
+      }
+      if (definition.outcome === 'RESOURCE_GRANTED' || definition.outcome === 'RESOURCE_REMOVED') {
+        metadata.resources = {
+          ...((metadata.resources || {}) as Record<string, unknown>),
+          [String(definition.outcomePayload?.resource || 'generic')]: {
+            operation: definition.outcome,
+            amount: definition.outcomePayload?.amount ?? 0,
+          },
+        };
+      }
+
+      const nextCard: any = {
+        ...card,
+        metadata,
+      };
+      const position = definition.outcome === 'TELEPORTED' ? definition.outcomePayload?.targetPosition : undefined;
+      if (position && typeof position === 'object') {
+        nextCard.metadata = {
+          ...metadata,
+          lastTeleport: position,
+        };
+      }
+      repository.saveEntityCard(storyId, nextCard);
+
+      if (definition.outcome === 'ERASE_FROM_WORLD' || definition.outcome === 'INSTANT_DEFEAT') {
+        repository.setEntityLifecycleStatus(storyId, targetId, 'DEAD');
+      } else if (definition.outcome === 'BANISHED' || definition.outcome === 'WORLD_STATE_CHANGED') {
+        repository.setEntityLifecycleStatus(storyId, targetId, 'DORMANT');
       }
     }
 
-    const worldEventId = `world_effect_${storyId}_${definition.id}_${repository.getWorldClock(storyId).getTimestamp().totalElapsedSeconds}_${repository.getActiveEffects(storyId).length}`;
+    const scopeKey = definition.scale + ':' + definition.id;
+    const changedScopes = [scopeKey];
+    const sequence = repository.getActiveEffects(storyId).length + 1;
+    const worldEventId = 'world_effect_' + storyId + '_' + definition.id + '_' + sequence;
+    const macroConsequence = {
+      scale: definition.scale,
+      outcome: definition.outcome,
+      targetIds: [...targetIds],
+      affectedEntityIds: [...affectedEntityIds],
+      semanticMetadata,
+      scope: scopeKey,
+      abstraction: ['PERSON', 'GROUP', 'ENCOUNTER'].includes(definition.scale) ? 'TACTICAL' : 'MACRO',
+    };
+
     const effectRecord = {
       id: worldEventId,
       storyId,
@@ -67,10 +124,13 @@ export class WorldEffectEngine {
       targetIds: [...targetIds],
       affectedEntityIds: [...affectedEntityIds],
       changedScopes: [...changedScopes],
-      description: definition.outcomeReason || `${definition.name} resolved at ${definition.scale} scale.`,
+      macroConsequence,
+      description: definition.outcomeReason || definition.name + ' resolved at ' + definition.scale + ' scale.',
       persistent: false,
+      presentationOnly: false,
       resolvedAt: repository.getWorldClock(storyId).getTimestamp(),
     };
+
     repository.saveActiveEffect(effectRecord);
     repository.saveWorldFact(storyId, {
       id: worldEventId,
@@ -80,10 +140,20 @@ export class WorldEffectEngine {
       actorId,
       targetIds: [...targetIds],
       affectedEntityIds: [...affectedEntityIds],
+      macroConsequence,
       canonical: true,
     });
 
-    return { success: true, effectId: definition.id, outcome: definition.outcome, affectedEntityIds, changedScopes, worldEventId, activeEffect: effectRecord };
+    return {
+      success: true,
+      effectId: definition.id,
+      outcome: definition.outcome,
+      affectedEntityIds,
+      changedScopes,
+      worldEventId,
+      activeEffect: effectRecord,
+    };
+  }
   }
 }
 

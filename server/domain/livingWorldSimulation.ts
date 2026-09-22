@@ -132,6 +132,47 @@ export class LivingWorldSimulation {
     return Array.from(this.physiologies.values()).map((p) => JSON.parse(JSON.stringify(p)));
   }
 
+  /**
+   * Canonical world-effect projection hook.
+   * Applies explicit set/delta changes to an already registered physiology record.
+   */
+  public patchEntityPhysiology(params: {
+    entityId: string;
+    set?: Partial<Pick<EntityPhysiology, 'hunger' | 'thirst' | 'fatigue' | 'pain' | 'stress' | 'morale'>>;
+    delta?: Partial<Pick<EntityPhysiology, 'hunger' | 'thirst' | 'fatigue' | 'pain' | 'stress' | 'morale'>>;
+  }): { success: boolean; errorReason?: string; physiology?: EntityPhysiology } {
+    const physiology = this.physiologies.get(params.entityId);
+    if (!physiology) {
+      return { success: false, errorReason: `Living-world physiology '${params.entityId}' is not registered.` };
+    }
+
+    const fields: Array<keyof Pick<EntityPhysiology, 'hunger' | 'thirst' | 'fatigue' | 'pain' | 'stress' | 'morale'>> = [
+      'hunger', 'thirst', 'fatigue', 'pain', 'stress', 'morale',
+    ];
+
+    for (const field of fields) {
+      const setValue = params.set?.[field];
+      const deltaValue = params.delta?.[field];
+      if (setValue !== undefined && (!Number.isFinite(setValue) || setValue < 0)) {
+        return { success: false, errorReason: `Living-world ${field} set value must be a finite non-negative number.` };
+      }
+      if (deltaValue !== undefined && !Number.isFinite(deltaValue)) {
+        return { success: false, errorReason: `Living-world ${field} delta must be finite.` };
+      }
+    }
+
+    for (const field of fields) {
+      if (params.set?.[field] !== undefined) {
+        physiology[field] = Math.max(0, Math.min(100, Number(params.set[field])));
+      }
+      if (params.delta?.[field] !== undefined) {
+        physiology[field] = Math.max(0, Math.min(100, physiology[field] + Number(params.delta[field])));
+      }
+    }
+
+    return { success: true, physiology: this.getEntityPhysiology(params.entityId) };
+  }
+
   public scheduleEvent(ev: ScheduledWorldEvent): void {
     this.scheduledEvents.set(ev.id, { ...ev });
   }

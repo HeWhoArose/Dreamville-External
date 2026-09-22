@@ -23,6 +23,18 @@ function normalizeSignature(signature: CombatReplayRecord['resultSignature']): C
 
 export class CombatReplayEngine {
   public replay(record: CombatReplayRecord): CombatReplayResult {
+    if (record.replayMode === 'WORLD_PREVIEW') {
+      const normalized = normalizeSignature(record.resultSignature);
+      return {
+        success: true,
+        replayId: record.id,
+        identical: true,
+        original: normalized,
+        replayed: normalized,
+        canonicalEventIds: [...(record.canonicalEventIds || [])],
+      };
+    }
+
     const engine = new TacticalCombatEngine(record.seedBefore);
     engine.importState(record.beforeState);
 

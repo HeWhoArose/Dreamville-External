@@ -97,6 +97,71 @@ export class WorldEffectEngine {
         if (combatResult.metadata) semanticMetadata.push({ targetId, ...combatResult.metadata });
       }
 
+      if (
+        combatResult.success &&
+        definition.outcome === 'SUMMONED' &&
+        typeof combatResult.metadata?.summonedId === 'string'
+      ) {
+        const summonedId = String(combatResult.metadata.summonedId);
+        const rawParticipant =
+          definition.outcomePayload?.participant &&
+          typeof definition.outcomePayload.participant === 'object'
+            ? definition.outcomePayload.participant as Record<string, unknown>
+            : {};
+
+        repository.getEntityRegistry(storyId).upsert({
+          id: summonedId,
+          name: String(rawParticipant.name || summonedId),
+          kind: 'CREATURE',
+          isTemplate: false,
+          classification: {
+            role: 'Summoned Entity',
+            tags: ['summoned'],
+          },
+          coreStats: {
+            hpCurrent: typeof rawParticipant.hpCurrent === 'number' ? rawParticipant.hpCurrent : undefined,
+            hpMax: typeof rawParticipant.hpMax === 'number' ? rawParticipant.hpMax : undefined,
+            armorClass: typeof rawParticipant.armorClass === 'number' ? rawParticipant.armorClass : undefined,
+            speed: typeof rawParticipant.speedCells === 'number' ? rawParticipant.speedCells : undefined,
+            abilityScores: {},
+          },
+          behavior: {
+            defaultBehavior: 'Follow summoner intent.',
+            combatBehavior:
+              typeof rawParticipant.combatBehavior === 'string'
+                ? rawParticipant.combatBehavior
+                : 'Act according to canonical summoned-entity rules.',
+            priorities: [],
+            routines: [],
+          },
+          worldState: {
+            isAlive: true,
+            presence: 'present',
+            locationId: typeof rawParticipant.locationId === 'string' ? rawParticipant.locationId : undefined,
+          },
+          capabilities: Array.isArray(rawParticipant.capabilities)
+            ? rawParticipant.capabilities as Array<Record<string, unknown>>
+            : [],
+          feats: [],
+          equipment: [],
+          traits: ['SUMMONED'],
+          memoryRefs: [],
+          provenance: {
+            source: 'COMBAT_SUMMON',
+            createdBy: 'SYSTEM',
+            sourceEventId: String(combatResult.metadata.eventId || definition.id),
+            confidence: 1,
+          },
+          lifecycle: {
+            status: 'ACTIVE',
+          },
+          metadata: {
+            summonedBy: actorId,
+            sourceEffectId: definition.id,
+          },
+        });
+      }
+
       const card = repository.getEntityCard(storyId, targetId);
       if (!card) continue;
 

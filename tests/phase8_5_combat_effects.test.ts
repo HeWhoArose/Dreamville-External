@@ -272,7 +272,7 @@ test('Phase 8.5: summon outcome creates a canonical combat participant without m
     resolutionMode: 'OUTCOME',
     scale: 'GROUP',
     actionCost: 'ACTION',
-    targetingMode: 'ONE_TARGET',
+    targetingMode: 'SELF',
     outcome: 'SUMMONED',
     outcomePayload: {
       participant: {

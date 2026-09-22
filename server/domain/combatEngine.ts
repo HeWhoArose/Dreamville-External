@@ -406,6 +406,8 @@ export interface TacticalCombatStateExport {
   rollCounter?: number;
   rulesProfile?: RulesProfile;
   spellRuntimeState?: ReturnType<SpellRuntime['exportState']>;
+  combatEffectEvents?: CombatEventRecord[];
+  combatActionSequence?: number;
 }
 
 export interface ProjectedCombatState {

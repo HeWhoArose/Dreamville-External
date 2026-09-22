@@ -2949,9 +2949,18 @@ export class TacticalCombatEngine {
     const metadata: Record<string, unknown> = { semanticOutcome: outcome, outcomePayload: outcomePayload || {} };
 
     switch (outcome) {
+      case 'DOWNED':
+        target.hpCurrent = 0;
+        target.isDead = false;
+        if (!target.conditions.includes('Unconscious')) target.conditions.push('Unconscious');
+        if (this.conditionEngine?.getActorState(targetId)) {
+          this.conditionEngine.markUnconsciousAtZero(targetId);
+        }
+        metadata.downed = true;
+        break;
+
       case 'INSTANT_DEFEAT':
       case 'ERASE_FROM_WORLD':
-      case 'DOWNED':
       case 'BANISHED':
         target.hpCurrent = 0;
         target.isDead = true;

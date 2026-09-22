@@ -55,6 +55,40 @@ export class CombatEffectEngine {
     return { success: true, normalized };
   }
 
+  private resolveExecutionGate(
+    engine: TacticalCombatEngine,
+    actorId: string,
+    definition: CombatEffectDefinition
+  ): { success: boolean; errorReason?: string; result?: { success: boolean; mode: import('../../src/types').CombatExecutionMode; roll?: unknown; difficultyClass?: number; reason?: string } } {
+    const mode = definition.executionMode || 'AUTOMATIC';
+    if (mode === 'AUTOMATIC' || mode === 'CONTEXTUAL' || mode === 'CONCENTRATION') {
+      return { success: true, result: { success: true, mode } };
+    }
+
+    const dc = Number(definition.executionDifficultyClass);
+    if (!Number.isFinite(dc) || dc < 1) {
+      return { success: false, errorReason: 'CHECK_REQUIRED execution requires executionDifficultyClass.' };
+    }
+    const formula = definition.executionFormula || '1d20';
+    try {
+      const roll = engine.getDiceEngine().roll(formula, 0);
+      const success = roll.total >= dc;
+      return {
+        success,
+        result: {
+          success,
+          mode,
+          roll,
+          difficultyClass: dc,
+          reason: success ? 'Execution gate passed.' : 'Execution gate failed.',
+        },
+        errorReason: success ? undefined : 'Capability execution gate failed.',
+      };
+    } catch (error: any) {
+      return { success: false, errorReason: error?.message || 'Execution gate could not be resolved.' };
+    }
+  }
+
   private applyConditionEffects(
     engine: TacticalCombatEngine,
     actorId: string,
@@ -125,11 +159,29 @@ export class CombatEffectEngine {
       if (!result.success) engine.importState(beforeState);
       return result;
     };
+
+    const execution = this.resolveExecutionGate(engine, actorId, normalized);
+    if (!execution.success || !execution.result?.success) {
+      return rollback({
+        success: false,
+        errorReason: execution.errorReason || 'Execution gate failed.',
+        effectId: normalized.id,
+        effectName: normalized.name,
+        executionResult: execution.result,
+      });
+    }
+    if (execution.result) {
+      engine['__phase85ExecutionResult'] = execution.result as any;
+    }
+
     const targeting = combatTargetingEngine.resolve(engine, actorId, targetIds, normalized);
     if (!targeting.success) return rollback({ success: false, errorReason: targeting.errorReason });
 
     const shouldConsumeResource = options.consumeAction !== false;
     let resourceConsumed = false;
+    const executionResult = (engine as any).__phase85ExecutionResult as CombatEffectResult['executionResult'] | undefined;
+    delete (engine as any).__phase85ExecutionResult;
+
 
     if (shouldConsumeResource) {
       const resourceResult = engine.consumeCombatAction(actorId, normalized.actionCost || 'ACTION');
@@ -168,6 +220,7 @@ export class CombatEffectEngine {
         defeatedTargetIds,
         outcome: normalized.outcome,
         canonicalEventIds: eventIds,
+        executionResult,
       });
     }
 
@@ -180,6 +233,7 @@ export class CombatEffectEngine {
         effectName: normalized.name,
         totalDamage: 0,
         outcome: normalized.outcome,
+        executionResult,
         worldEffectPreview: {
           scale: normalized.scale,
           outcome: normalized.outcome,
@@ -240,10 +294,12 @@ export class CombatEffectEngine {
         advantage: normalized.advantage,
         disadvantage: normalized.disadvantage,
         retargetPolicy: normalized.retargetPolicy,
+        instanceTargetIds: normalized.instanceTargetIds,
         consumeAction: false,
       });
       const multiResult: CombatEffectResult = {
         ...result,
+        executionResult,
         actionConsumed: result.success && resourceConsumed,
         effectId: normalized.id,
         effectName: normalized.name,
@@ -269,7 +325,7 @@ export class CombatEffectEngine {
         halfDamageOnSave: normalized.halfDamageOnSave,
         consumeAction: false,
       });
-      const saveResult: CombatEffectResult = { ...result, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name };
+      const saveResult: CombatEffectResult = { ...result, executionResult, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name };
       saveResult.conditionsApplied = result.success
         ? this.applyConditionEffects(engine, actorId, normalized, result.instances || [], true)
         : [];
@@ -291,7 +347,7 @@ export class CombatEffectEngine {
           halfDamageOnSave: normalized.halfDamageOnSave,
           consumeAction: false,
         });
-        const areaSaveResult: CombatEffectResult = { ...result, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name };
+        const areaSaveResult: CombatEffectResult = { ...result, executionResult, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name };
         areaSaveResult.conditionsApplied = result.success
           ? this.applyConditionEffects(engine, actorId, normalized, result.instances || [], true)
           : [];
@@ -305,7 +361,7 @@ export class CombatEffectEngine {
         damageType: normalized.damageType,
         consumeAction: false,
       });
-      const areaResult: CombatEffectResult = { ...result, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name };
+      const areaResult: CombatEffectResult = { ...result, executionResult, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name };
       areaResult.conditionsApplied = result.success
         ? this.applyConditionEffects(engine, actorId, normalized, result.instances || [])
         : [];
@@ -331,7 +387,7 @@ export class CombatEffectEngine {
         retargetPolicy: normalized.retargetPolicy,
         consumeAction: false,
       });
-      const chainResult: CombatEffectResult = { ...result, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name };
+      const chainResult: CombatEffectResult = { ...result, executionResult, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name };
       chainResult.conditionsApplied = result.success
         ? this.applyConditionEffects(engine, actorId, normalized, result.instances || [])
         : [];
@@ -363,6 +419,7 @@ export class CombatEffectEngine {
         totalDamage,
         defeatedTargetIds,
         canonicalEventIds: eventIds,
+        executionResult,
       });
     }
 

@@ -171,6 +171,42 @@ export class WorldEffectEngine {
       }
     }
 
+    // Canonical world projection preflight: resolve every referenced authority before
+    // consuming Action/Bonus/Reaction so malformed macro effects are side-effect free.
+    const projection = projectionValidation.projection || {};
+    const preflightGeography = repository.getGeographyGraph(storyId);
+    for (const nodePatch of projection.geography?.nodes || []) {
+      if (!preflightGeography.getNode(nodePatch.id)) {
+        return { success: false, errorReason: "Geography node '" + nodePatch.id + "' does not exist.", effectId: definition.id, affectedEntityIds: [], changedScopes: [] };
+      }
+    }
+    for (const edgePatch of projection.geography?.edges || []) {
+      if (!preflightGeography.getEdge(edgePatch.id)) {
+        return { success: false, errorReason: "Geography edge '" + edgePatch.id + "' does not exist.", effectId: definition.id, affectedEntityIds: [], changedScopes: [] };
+      }
+    }
+    for (const threadPatch of projection.storyThreads || []) {
+      if (!repository.getStoryThreads(storyId).some((thread: any) => thread.threadId === threadPatch.threadId)) {
+        return { success: false, errorReason: "Story thread '" + threadPatch.threadId + "' does not exist.", effectId: definition.id, affectedEntityIds: [], changedScopes: [] };
+      }
+    }
+    if (projection.plannedEvents) {
+      const run = repository.getStoryRun(storyId);
+      if (!run) return { success: false, errorReason: 'Canonical story run is unavailable for planned-event projection.', effectId: definition.id, affectedEntityIds: [], changedScopes: [] };
+      const plannedIds = new Set(Array.isArray(run.plannedEvents) ? run.plannedEvents.map((event: any) => String(event?.id || '')) : []);
+      for (const eventPatch of projection.plannedEvents) {
+        if (!plannedIds.has(eventPatch.eventId)) return { success: false, errorReason: "Planned event '" + eventPatch.eventId + "' does not exist.", effectId: definition.id, affectedEntityIds: [], changedScopes: [] };
+      }
+    }
+    for (const physiologyPatch of projection.livingWorld?.physiologies || []) {
+      if (!repository.getLivingWorldSimulation(storyId).getEntityPhysiology(physiologyPatch.entityId)) {
+        return { success: false, errorReason: "Living-world physiology '" + physiologyPatch.entityId + "' does not exist.", effectId: definition.id, affectedEntityIds: [], changedScopes: [] };
+      }
+    }
+    if (projection.chronicleEvidence && !repository.isCanonicalCommandTransactionActive()) {
+      return { success: false, errorReason: 'Chronicle world-effect evidence requires an active canonical command transaction.', effectId: definition.id, affectedEntityIds: [], changedScopes: [] };
+    }
+
     const actionUse = combat.consumeCombatAction(actorId, definition.actionCost || 'ACTION');
     if (!actionUse.success) {
       return {
@@ -361,7 +397,6 @@ export class WorldEffectEngine {
       }
     }
 
-    const projection = projectionValidation.projection || {};
     const projectionChangedScopes: string[] = [];
 
     if (projection.geography) {
@@ -390,7 +425,6 @@ export class WorldEffectEngine {
           ...(patch.description !== undefined ? { description: patch.description } : {}),
           ...(patch.evidenceItems !== undefined ? { evidenceItems: [...patch.evidenceItems] } : {}),
           ...(patch.evidenceGathered !== undefined ? { evidenceGathered: [...patch.evidenceGathered] } : {}),
-          updatedAt: new Date().toISOString(),
         });
         projectionChangedScopes.push('STORY_THREAD:' + patch.threadId);
       }

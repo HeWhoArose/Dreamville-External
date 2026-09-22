@@ -847,10 +847,21 @@ export interface BattlefieldParticipant {
   speedCells: number;
   attackBonus: number;
   damageFormula: string;
+  damageType?: string;
   conditions: string[];
   isDead: boolean;
   usesDeathSaves?: boolean;
   deathSaveState?: DeathSaveState;
+  combatResources?: Record<string, number>;
+  bossPhaseId?: string;
+  bossPhaseAbilities?: string[];
+  bossTargetPriority?: string;
+  bossPhaseModifiers?: Record<string, number>;
+  bossEnvironmentEffects?: string[];
+  resistances?: string[];
+  immunities?: string[];
+  vulnerabilities?: string[];
+  cover?: 'NONE' | 'HALF' | 'THREE_QUARTERS' | 'TOTAL';
 }
 
 export interface DynamicHazardZone {
@@ -1957,6 +1968,7 @@ export interface CombatEffectDefinition {
 	halfDamageOnSave?: boolean;
 	outcome?: CombatOutcomeType;
 	outcomeReason?: string;
+	outcomePayload?: Record<string, unknown>;
 	chainCount?: number;
 	sequence?: Array<CombatEffectDefinition>;
 	targetIds?: string[];

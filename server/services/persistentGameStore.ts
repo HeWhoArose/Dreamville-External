@@ -53,6 +53,7 @@ export class PersistentGameStore {
 			version: 1,
 			worldTemplates: parsed.worldTemplates && typeof parsed.worldTemplates === 'object' ? parsed.worldTemplates : {},
 			storyRuns: parsed.storyRuns && typeof parsed.storyRuns === 'object' ? parsed.storyRuns : {},
+			confirmedCharacters: parsed.confirmedCharacters && typeof parsed.confirmedCharacters === 'object' ? parsed.confirmedCharacters : {},
 		};
 		} catch (error) {
 			console.warn('[PersistentGameStore] Unable to load persistence file; starting with an empty store.', error);

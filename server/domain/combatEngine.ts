@@ -4,7 +4,7 @@ import { ConditionEngine } from './conditionEngine';
 import { CombatActionEconomy, CombatTurnResourceSnapshot, ReadyTriggerType } from './combatActionEconomy';
 import { CombatReactionEngine } from './combatReactionEngine';
 import { deathSaveEngine } from './deathSaveEngine';
-import type { DeathSaveState, RulesProfile, CombatAttackInstanceResult, CombatEffectDefinition, CombatEffectResult, CombatEventRecord } from '../../src/types';
+import type { DeathSaveState, RulesProfile, CombatAttackInstanceResult, CombatEffectDefinition, CombatEffectResult, CombatEventRecord, BodyRegionId } from '../../src/types';
 import { resolveCapabilityCheckFormula } from '../../src/data/rulesDice';
 import type { ProgressionResolution } from './characterProgressionEngine';
 import {
@@ -1852,7 +1852,8 @@ export class TacticalCombatEngine {
       const resolvedDamage = this.conditionEngine.resolveDamage(
         target.id,
         amount,
-        damageType
+        damageType,
+        { targetBodyRegionId }
       );
       target.hpCurrent = resolvedDamage.healthCurrent;
       target.isDead = resolvedDamage.targetDied;
@@ -1983,6 +1984,29 @@ export class TacticalCombatEngine {
     };
   }
 
+  private resolveHitLocation(
+    target: BattlefieldParticipant,
+    options: {
+      hitLocationMode?: CombatEffectDefinition['hitLocationMode'];
+      targetBodyRegionId?: BodyRegionId;
+      instanceIndex?: number;
+    }
+  ): BodyRegionId | undefined {
+    const mode = options.hitLocationMode || 'NONE';
+    if (mode === 'NONE') return undefined;
+    const state = this.conditionEngine?.getActorState(target.id);
+    const regions = state?.bodyRegions?.filter((region) => !region.destroyed) || [];
+    if (!regions.length) return undefined;
+    if (mode === 'EXPLICIT') {
+      const requested = options.targetBodyRegionId;
+      return requested && regions.some((region) => region.id === requested) ? requested : undefined;
+    }
+    const seedText = [target.id, String(this.currentRound), String(options.instanceIndex ?? 0), String(this.combatActionSequence)].join(':');
+    let hash = 0;
+    for (let i = 0; i < seedText.length; i += 1) hash = (hash * 31 + seedText.charCodeAt(i)) >>> 0;
+    return regions[hash % regions.length].id;
+  }
+
   private resolveAttackInstanceInternal(
     attackerId: string,
     targetId: string,
@@ -1996,6 +2020,8 @@ export class TacticalCombatEngine {
       actionId?: string;
       instanceIndex?: number;
       emitBattleEvent?: boolean;
+      hitLocationMode?: CombatEffectDefinition['hitLocationMode'];
+      targetBodyRegionId?: BodyRegionId;
     } = {}
   ): CombatAttackInstanceResult & { success: boolean; errorReason?: string; roll?: RollRecord; damageRoll?: RollRecord } {
     const attacker = this.participants.get(attackerId);
@@ -2034,6 +2060,8 @@ export class TacticalCombatEngine {
     let targetDied = false;
     let damageRoll: RollRecord | undefined;
     let defense: CombatAttackInstanceResult['defense'];
+    let hitLocation: BodyRegionId | undefined;
+    let destroyedBodyRegions: BodyRegionId[] = [];
 
     if (attackResult.hits) {
       const formula = options.overrideFormula || attacker.damageFormula;
@@ -2041,9 +2069,11 @@ export class TacticalCombatEngine {
       const critical = attackResult.isCritical || unconsciousMeleeCritical;
       const dmgRes = this.ruleset.resolveDamage(formula, critical, this.diceEngine);
       damageRoll = dmgRes.roll;
-      const damageResult = this.applyCombatDamage(target, dmgRes.totalDamage, options.damageType || attacker.damageType || 'slashing', critical);
+      hitLocation = this.resolveHitLocation(target, options);
+      const damageResult = this.applyCombatDamage(target, dmgRes.totalDamage, options.damageType || attacker.damageType || 'slashing', critical, hitLocation);
       damage = damageResult.damage;
       targetDied = damageResult.targetDied;
+      destroyedBodyRegions = damageResult.destroyedBodyRegions || [];
       defense = { immune: damageResult.immune, resisted: damageResult.resisted, vulnerable: damageResult.vulnerable };
 
       if (damage > 0 && this.pendingActivations.has(targetId)) {
@@ -2095,7 +2125,7 @@ export class TacticalCombatEngine {
         headline: event.headline,
         damageInflicted: damage,
         rollRecord: attackResult.roll,
-        metadata: { actionId, instanceIndex, eventId, critical: attackResult.isCritical, defense },
+        metadata: { actionId, instanceIndex, eventId, critical: attackResult.isCritical, defense, hitLocation, destroyedBodyRegions },
       });
     }
 
@@ -2107,6 +2137,8 @@ export class TacticalCombatEngine {
       isCritical: attackResult.isCritical,
       damage,
       targetDied,
+      hitLocation,
+      destroyedBodyRegions,
       roll: attackResult.roll,
       damageRoll,
       attackRollTotal: attackResult.roll.total,

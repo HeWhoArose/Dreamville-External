@@ -4,7 +4,7 @@ import { ConditionEngine } from './conditionEngine';
 import { CombatActionEconomy, CombatTurnResourceSnapshot, ReadyTriggerType } from './combatActionEconomy';
 import { CombatReactionEngine } from './combatReactionEngine';
 import { deathSaveEngine } from './deathSaveEngine';
-import type { DeathSaveState, RulesProfile } from '../../src/types';
+import type { DeathSaveState, RulesProfile, CombatAttackInstanceResult, CombatEffectDefinition, CombatEffectResult, CombatEventRecord } from '../../src/types';
 import type { ProgressionResolution } from './characterProgressionEngine';
 import {
   SpellRuntime,
@@ -453,6 +453,8 @@ export class TacticalCombatEngine {
   private readonly reactionEngine = new CombatReactionEngine();
   private spellRuntime: SpellRuntime;
   private progressionModifierResolver?: (actorId: string) => ProgressionResolution | undefined;
+  private combatEffectEvents: CombatEventRecord[] = [];
+  private combatActionSequence = 0;
   private initialSeed: number;
 
   constructor(seed = 1337, ruleset?: IRulesetAdapter, conditionEngine?: ConditionEngine) {
@@ -554,6 +556,8 @@ export class TacticalCombatEngine {
     this.currentTurnIndex = 0;
     this.currentRound = 1;
     this.eventLog = [];
+    this.combatEffectEvents = [];
+    this.combatActionSequence = 0;
     this.pendingActivations.clear();
     this.actionEconomy.clear();
     this.diceEngine.setSeed(this.initialSeed);
@@ -1844,6 +1848,123 @@ export class TacticalCombatEngine {
     };
   }
 
+  private resolveAttackInstanceInternal(
+    attackerId: string,
+    targetId: string,
+    options: {
+      overrideFormula?: string;
+      advantage?: boolean;
+      disadvantage?: boolean;
+      damageType?: string;
+      attackBonusOverride?: number;
+      actionId?: string;
+      instanceIndex?: number;
+      emitBattleEvent?: boolean;
+    } = {}
+  ): CombatAttackInstanceResult & { success: boolean; errorReason?: string; roll?: RollRecord; damageRoll?: RollRecord } {
+    const attacker = this.participants.get(attackerId);
+    const target = this.participants.get(targetId);
+    if (!attacker || !target) {
+      return { success: false, errorReason: 'Invalid combatants.', instanceIndex: options.instanceIndex ?? 0, targetId, hits: false, isCritical: false, damage: 0, targetDied: false };
+    }
+    if (attacker.isDead || attacker.hpCurrent <= 0 || attacker.conditions.includes('Unconscious')) {
+      return { success: false, errorReason: 'An unconscious or dead actor cannot attack.', instanceIndex: options.instanceIndex ?? 0, targetId, hits: false, isCritical: false, damage: 0, targetDied: target.isDead };
+    }
+    if (target.isDead || target.hpCurrent <= 0) {
+      return { success: false, errorReason: 'Target is already defeated.', instanceIndex: options.instanceIndex ?? 0, targetId, hits: false, isCritical: false, damage: 0, targetDied: true };
+    }
+    if (target.cover === 'TOTAL') {
+      return { success: false, errorReason: 'Target has Total Cover and cannot be targeted directly.', instanceIndex: options.instanceIndex ?? 0, targetId, hits: false, isCritical: false, damage: 0, targetDied: target.isDead };
+    }
+
+    const attackSource = options.attackBonusOverride === undefined
+      ? attacker
+      : { ...attacker, attackBonus: options.attackBonusOverride };
+    const attackResolution = this.resolveStandardAttack(attackSource, target, {
+      advantage: options.advantage,
+      disadvantage: options.disadvantage,
+    });
+    if (attackResolution.blocked || !attackResolution.roll) {
+      return { success: false, errorReason: 'Target cannot be directly targeted because it has Total Cover.', instanceIndex: options.instanceIndex ?? 0, targetId, hits: false, isCritical: false, damage: 0, targetDied: target.isDead };
+    }
+
+    const attackResult = attackResolution.roll;
+    const targetConditions = new Set(target.conditions.map((condition) => condition.toLowerCase()));
+    const distanceToTarget = Math.hypot(target.x - attacker.x, target.y - attacker.y);
+    let damage = 0;
+    let targetDied = false;
+    let damageRoll: RollRecord | undefined;
+    let defense: CombatAttackInstanceResult['defense'];
+
+    if (attackResult.hits) {
+      const formula = options.overrideFormula || attacker.damageFormula;
+      const unconsciousMeleeCritical = targetConditions.has('unconscious') && distanceToTarget <= (attacker.reachCells ?? 1.5);
+      const critical = attackResult.isCritical || unconsciousMeleeCritical;
+      const dmgRes = this.ruleset.resolveDamage(formula, critical, this.diceEngine);
+      damageRoll = dmgRes.roll;
+      const damageResult = this.applyCombatDamage(target, dmgRes.totalDamage, options.damageType || attacker.damageType || 'slashing', critical);
+      damage = damageResult.damage;
+      targetDied = damageResult.targetDied;
+      defense = { immune: damageResult.immune, resisted: damageResult.resisted, vulnerable: damageResult.vulnerable };
+
+      if (damage > 0 && this.pendingActivations.has(targetId)) {
+        this.interruptActivation(targetId, `Damaged for ${damage} points`);
+      }
+    }
+
+    const instanceIndex = options.instanceIndex ?? 0;
+    const actionId = options.actionId || `combat_action_${this.currentRound}_${attackerId}_${this.combatActionSequence + 1}`;
+    this.combatActionSequence += 1;
+    const eventId = `combat_evt_${this.currentRound}_${this.combatActionSequence}`;
+    const event: CombatEventRecord = {
+      eventId,
+      actionId,
+      eventType: 'ATTACK_INSTANCE_RESOLVED',
+      turnNumber: this.currentRound,
+      actorId: attackerId,
+      targetId,
+      instanceIndex,
+      headline: attackResult.hits
+        ? `${attacker.name} hit ${target.name} for ${damage} damage.${targetDied ? ` ${target.name} has fallen!` : ''}`
+        : `${attacker.name} missed ${target.name}.`,
+      attackRoll: attackResult.roll,
+      damageRoll,
+      damage,
+      finalDamage: damage,
+      isCritical: attackResult.isCritical,
+      metadata: { defense },
+    };
+    this.combatEffectEvents.push(event);
+
+    if (options.emitBattleEvent !== false) {
+      this.eventLog.push({
+        turnNumber: this.currentRound,
+        actorId: attackerId,
+        targetId,
+        actionType: 'ATTACK',
+        headline: event.headline,
+        damageInflicted: damage,
+        rollRecord: attackResult.roll,
+        metadata: { actionId, instanceIndex, eventId, critical: attackResult.isCritical, defense },
+      });
+    }
+
+    return {
+      success: true,
+      instanceIndex,
+      targetId,
+      hits: attackResult.hits,
+      isCritical: attackResult.isCritical,
+      damage,
+      targetDied,
+      roll: attackResult.roll,
+      damageRoll,
+      attackRollTotal: attackResult.roll.total,
+      targetArmorClass: target.armorClass,
+      defense,
+    };
+  }
+
   public executeAttack(
     attackerId: string,
     targetId: string,
@@ -1865,120 +1986,104 @@ export class TacticalCombatEngine {
     if (!this.tacticalCombatEnabled()) {
       return { success: false, errorReason: 'Tactical combat is disabled by the active rules profile.', hits: false, damage: 0, targetDied: false, isCritical: false };
     }
-
     const attacker = this.participants.get(attackerId);
     const target = this.participants.get(targetId);
     if (!attacker || !target) throw new Error('Invalid combatants.');
-    if (target.cover === 'TOTAL') {
-      return {
-        success: false,
-        errorReason: 'Target has Total Cover and cannot be targeted directly.',
-        hits: false,
-        damage: 0,
-        targetDied: target.isDead,
-        isCritical: false,
-      };
-    }
-
     const currentActor = this.getCurrentActor();
     if (this.turnQueue.length > 0 && (!currentActor || currentActor.id !== attackerId)) {
-      return {
-        success: false,
-        errorReason: "It is not this attacker's turn.",
-        hits: false,
-        damage: 0,
-        targetDied: target.isDead,
-        isCritical: false,
-      };
+      return { success: false, errorReason: "It is not this attacker's turn.", hits: false, damage: 0, targetDied: target.isDead, isCritical: false };
     }
-    if (attacker.isDead || attacker.hpCurrent <= 0 || attacker.conditions.includes('Unconscious')) {
-      return {
-        success: false,
-        errorReason: 'An unconscious or dead actor cannot attack.',
-        hits: false,
-        damage: 0,
-        targetDied: target.isDead,
-        isCritical: false,
-      };
-    }
-
     const actionResult = this.actionEconomy.consume(attackerId, 'ACTION');
     if (!actionResult.success) {
-      return {
-        success: false,
-        errorReason: actionResult.errorReason,
-        hits: false,
-        damage: 0,
-        targetDied: target.isDead,
-        isCritical: false,
-      };
+      return { success: false, errorReason: actionResult.errorReason, hits: false, damage: 0, targetDied: target.isDead, isCritical: false };
     }
-
-    const attackResolution = this.resolveStandardAttack(attacker, target, {
-      advantage: options?.advantage,
-      disadvantage: options?.disadvantage,
-    });
-    if (attackResolution.blocked || !attackResolution.roll) {
-      return { success: false, errorReason: 'Target cannot be directly targeted because it has Total Cover.', hits: false, damage: 0, targetDied: target.isDead, isCritical: false };
+    const result = this.resolveAttackInstanceInternal(attackerId, targetId, options);
+    if (!result.success) {
+      return { success: false, errorReason: result.errorReason, hits: false, damage: 0, targetDied: result.targetDied, isCritical: result.isCritical };
     }
-    const attackRes = attackResolution.roll;
-    const targetConditions = new Set(target.conditions.map((condition) => condition.toLowerCase()));
-    const distanceToTarget = Math.hypot(target.x - attacker.x, target.y - attacker.y);
-    let damage = 0;
-    let targetDied = false;
+    this.resolveReadyTriggers({ type: 'ACTOR_ATTACKED', actorId: attackerId, targetId });
+    return { success: true, hits: result.hits, damage: result.damage, targetDied: result.targetDied, roll: result.roll, isCritical: result.isCritical };
+  }
 
-    if (attackRes.hits) {
-      const formula = options?.overrideFormula || attacker.damageFormula;
-      const unconsciousMeleeCritical =
-        targetConditions.has('unconscious') &&
-        distanceToTarget <= (attacker.reachCells ?? 1.5);
-      const dmgRes = this.ruleset.resolveDamage(
-        formula,
-        attackRes.isCritical || unconsciousMeleeCritical,
-        this.diceEngine
-      );
-      damage = dmgRes.totalDamage;
-      const damageResult = this.applyCombatDamage(
-        target,
-        damage,
-        options?.damageType || attacker.damageType || 'slashing',
-        attackRes.isCritical || unconsciousMeleeCritical
-      );
-      damage = damageResult.damage;
-      targetDied = damageResult.targetDied;
+  public executeMultiAttack(
+    attackerId: string,
+    targetIds: string[],
+    options: {
+      definition?: CombatEffectDefinition;
+      instanceCount?: number;
+      overrideFormula?: string;
+      damageFormula?: string;
+      damageType?: string;
+      advantage?: boolean;
+      disadvantage?: boolean;
+      retargetPolicy?: 'NONE' | 'RETARGET_ON_DEATH';
+    } = {}
+  ): CombatEffectResult {
+    if (!this.tacticalCombatEnabled()) return { success: false, errorReason: 'Tactical combat is disabled by the active rules profile.' };
+    const attacker = this.participants.get(attackerId);
+    if (!attacker) return { success: false, errorReason: 'Attacker not found.' };
+    const uniqueTargets = Array.from(new Set(targetIds.filter(Boolean)));
+    if (uniqueTargets.length === 0) return { success: false, errorReason: 'At least one targetId is required.' };
+    const requestedCount = Math.trunc(options.instanceCount ?? options.definition?.instanceCount ?? uniqueTargets.length);
+    const count = Math.max(1, Math.min(50, requestedCount));
+    const availableTargets = uniqueTargets.map((id) => this.participants.get(id)).filter(Boolean) as BattlefieldParticipant[];
+    if (availableTargets.length === 0) return { success: false, errorReason: 'No valid targets are available.' };
+    const currentActor = this.getCurrentActor();
+    if (this.turnQueue.length > 0 && (!currentActor || currentActor.id !== attackerId)) return { success: false, errorReason: "It is not this attacker's turn." };
+    if (attacker.isDead || attacker.hpCurrent <= 0 || attacker.conditions.includes('Unconscious')) return { success: false, errorReason: 'An unconscious or dead actor cannot attack.' };
+    const actionResult = this.actionEconomy.consume(attackerId, 'ACTION');
+    if (!actionResult.success) return { success: false, errorReason: actionResult.errorReason };
 
-      // Interrupt pending activation on taking damage
-      if (damage > 0 && this.pendingActivations.has(targetId)) {
-        this.interruptActivation(targetId, `Damaged for ${damage} points`);
+    const actionId = `combat_action_${this.currentRound}_${attackerId}_multi_${this.combatActionSequence + 1}`;
+    const instances: CombatAttackInstanceResult[] = [];
+    let totalDamage = 0;
+    const defeatedTargetIds: string[] = [];
+    for (let i = 0; i < count; i += 1) {
+      let target = availableTargets[i < availableTargets.length ? i : 0];
+      if (target.isDead || target.hpCurrent <= 0) {
+        if (options.retargetPolicy === 'RETARGET_ON_DEATH' || options.definition?.retargetPolicy === 'RETARGET_ON_DEATH') {
+          target = availableTargets.find((candidate) => !candidate.isDead && candidate.hpCurrent > 0) || target;
+        }
       }
+      if (target.isDead || target.hpCurrent <= 0) {
+        this.combatActionSequence += 1;
+        this.combatEffectEvents.push({
+          eventId: `combat_evt_${this.currentRound}_${this.combatActionSequence}`, actionId, eventType: 'ATTACK_INSTANCE_SKIPPED',
+          turnNumber: this.currentRound, actorId: attackerId, targetId: target.id, instanceIndex: i,
+          headline: `Attack instance ${i + 1} was skipped because its target was already defeated.`, metadata: { reason: 'TARGET_DEFEATED' },
+        });
+        continue;
+      }
+      const result = this.resolveAttackInstanceInternal(attackerId, target.id, {
+        overrideFormula: options.damageFormula || options.overrideFormula,
+        damageType: options.damageType || options.definition?.damageType,
+        advantage: options.advantage ?? options.definition?.advantage,
+        disadvantage: options.disadvantage ?? options.definition?.disadvantage,
+        actionId, instanceIndex: i,
+      });
+      if (!result.success) return { success: false, errorReason: result.errorReason, actionConsumed: true, effectId: options.definition?.id, effectName: options.definition?.name };
+      instances.push(result);
+      totalDamage += result.damage;
+      if (result.targetDied && !defeatedTargetIds.includes(result.targetId)) defeatedTargetIds.push(result.targetId);
     }
-
-    this.eventLog.push({
-      turnNumber: this.currentRound,
-      actorId: attackerId,
-      targetId,
-      actionType: 'ATTACK',
-      headline: attackRes.hits
-        ? `${attacker.name} hit ${target.name} for ${damage} damage!${targetDied ? ` ${target.name} has fallen!` : ''}`
-        : `${attacker.name} missed ${target.name}.`,
-      damageInflicted: damage,
-      rollRecord: attackRes.roll,
-    });
-
-    this.resolveReadyTriggers({
-      type: 'ACTOR_ATTACKED',
-      actorId: attackerId,
-      targetId,
-    });
-
+    this.resolveReadyTriggers({ type: 'ACTOR_ATTACKED', actorId: attackerId, targetId: instances[0]?.targetId });
     return {
-      success: true,
-      hits: attackRes.hits,
-      damage,
-      targetDied,
-      roll: attackRes.roll,
-      isCritical: attackRes.isCritical,
+      success: true, actionConsumed: true, effectId: options.definition?.id, effectName: options.definition?.name,
+      instances, totalDamage, defeatedTargetIds,
+      canonicalEventIds: instances.map((instance) => this.combatEffectEvents.find((event) => event.actionId === actionId && event.instanceIndex === instance.instanceIndex)?.eventId).filter(Boolean) as string[],
     };
+  }
+
+  public getCombatEffectEvents(): CombatEventRecord[] {
+    return JSON.parse(JSON.stringify(this.combatEffectEvents));
+  }
+
+  public clearCombatEffectEvents(): void {
+    this.combatEffectEvents = [];
+  }
+
+  public getCombatActionSequence(): number {
+    return this.combatActionSequence;
   }
 
   public executeCapabilityCast(params: {
@@ -2601,6 +2706,8 @@ export class TacticalCombatEngine {
       rollCounter: this.diceEngine.getRollCounter(),
       rulesProfile: this.getRulesProfile(),
       spellRuntimeState: this.spellRuntime.exportState(),
+      combatEffectEvents: this.getCombatEffectEvents(),
+      combatActionSequence: this.combatActionSequence,
     };
   }
 
@@ -2662,5 +2769,7 @@ export class TacticalCombatEngine {
       this.spellRuntime.importState(data.spellRuntimeState);
       this.spellRuntime.setParticipantContext(this.getMutableParticipantsForSpellResolution());
     }
+    this.combatEffectEvents = [...(data.combatEffectEvents || [])];
+    this.combatActionSequence = typeof data.combatActionSequence === 'number' ? Math.max(0, Math.trunc(data.combatActionSequence)) : this.combatEffectEvents.length;
   }
 }

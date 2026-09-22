@@ -3423,7 +3423,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 onClick={() => setActiveStep(7)}
                 className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition-colors"
               >
-                <span>Proceed to Location & Situation</span>
+                <span>Proceed to Condition & Defense</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>

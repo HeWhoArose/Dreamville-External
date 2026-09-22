@@ -2514,7 +2514,12 @@ export class InMemoryWorldRepository implements WorldRepository {
 
   public saveActiveEffect(effect: any): void {
     const list = this.getActiveEffects(effect.storyId);
-    list.push(effect);
+    const existingIndex = list.findIndex((entry) => entry?.id === effect?.id);
+    if (existingIndex >= 0) {
+      list[existingIndex] = effect;
+    } else {
+      list.push(effect);
+    }
     this.activeEffects.set(effect.storyId, list);
   }
 

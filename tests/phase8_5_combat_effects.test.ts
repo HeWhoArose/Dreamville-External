@@ -161,6 +161,180 @@ test('Phase 8.5: semantic OUTCOME erases a target through canonical combat outco
   assert.equal(engine.getTurnResources('hero')?.actionAvailable, false);
 });
 
+test('Phase 8.5: forced movement stops at a wall and applies canonical secondary impact damage', () => {
+  const engine = engineWithEnemy({ x: 1, y: 0, hpCurrent: 1000, hpMax: 1000 });
+  engine.addObstacle({ x: 3, y: 0, isImpassable: true });
+
+  const result = combatEffectEngine.resolve(engine, 'hero', ['enemy'], {
+    id: 'wall_slam',
+    name: 'Wall Slam',
+    resolutionMode: 'SINGLE_ATTACK',
+    scale: 'PERSON',
+    actionCost: 'ACTION',
+    targetingMode: 'ONE_TARGET',
+    attackFormula: '1d20',
+    damageFormula: '1d4',
+    damageType: 'force',
+    forcedMovement: {
+      type: 'PUSH',
+      distanceCells: 5,
+      collision: {
+        damageFormula: '4d4',
+        damageType: 'bludgeoning',
+      },
+    },
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.instances?.[0]?.forcedMovement?.collision?.kind, 'WALL');
+  assert.equal(result.instances?.[0]?.forcedMovement?.actualDistanceCells, 1);
+  assert.equal(engine.getParticipant('enemy')?.x, 2);
+  assert.ok((result.instances?.[0]?.secondaryDamage || 0) > 0);
+  assert.equal(
+    result.totalDamage,
+    (result.instances?.[0]?.damage || 0) + (result.instances?.[0]?.secondaryDamage || 0)
+  );
+  assert.equal(
+    engine.getCombatEffectEvents().some((event) => event.eventType === 'FORCED_MOVEMENT_COLLISION_RESOLVED'),
+    true,
+  );
+});
+
+test('Phase 8.5: forced movement damages and can destroy an existing destructible environment object', () => {
+  const engine = engineWithEnemy({ x: 1, y: 0, hpCurrent: 1000, hpMax: 1000 });
+  engine.upsertDestructibleObject({
+    id: 'stone_wall',
+    name: 'Stone Wall',
+    x: 3,
+    y: 0,
+    hpCurrent: 2,
+    hpMax: 2,
+    isDestroyed: false,
+  });
+
+  const result = combatEffectEngine.resolve(engine, 'hero', ['enemy'], {
+    id: 'breakthrough',
+    name: 'Breakthrough',
+    resolutionMode: 'SINGLE_ATTACK',
+    scale: 'PERSON',
+    actionCost: 'ACTION',
+    targetingMode: 'ONE_TARGET',
+    attackFormula: '1d20',
+    damageFormula: '1d4',
+    forcedMovement: {
+      type: 'PUSH',
+      distanceCells: 4,
+      collision: {
+        damageFormula: '1d4',
+        objectDamageFormula: '4d4',
+        damageType: 'bludgeoning',
+      },
+    },
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.instances?.[0]?.forcedMovement?.collision?.kind, 'DESTRUCTIBLE_OBJECT');
+  assert.equal(result.instances?.[0]?.forcedMovement?.collision?.objectDestroyed, true);
+  assert.equal(engine.getParticipant('enemy')?.x, 2);
+  assert.equal(engine.getDestructibleObjects().find((object) => object.id === 'stone_wall')?.isDestroyed, true);
+  assert.equal(engine.getCombatEffectEvents().some((event) => event.eventType === 'ENVIRONMENT_DESTROYED'), true);
+});
+
+test('Phase 8.5: forced movement can resolve creature-on-creature body collision without creating a second damage authority', () => {
+  const engine = new TacticalCombatEngine(1337);
+  engine.addParticipant(participant());
+  engine.addParticipant(participant({ id: 'enemy_a', name: 'A', team: 'enemies', x: 1, y: 0, hpCurrent: 100, hpMax: 100, initiative: 0 }));
+  engine.addParticipant(participant({ id: 'enemy_b', name: 'B', team: 'enemies', x: 3, y: 0, hpCurrent: 100, hpMax: 100, initiative: 0 }));
+  engine.rollInitiative();
+
+  const result = combatEffectEngine.resolve(engine, 'hero', ['enemy_a'], {
+    id: 'body_check',
+    name: 'Body Check',
+    resolutionMode: 'SINGLE_ATTACK',
+    scale: 'PERSON',
+    actionCost: 'ACTION',
+    targetingMode: 'ONE_TARGET',
+    attackFormula: '1d20',
+    damageFormula: '1d4',
+    forcedMovement: {
+      type: 'PUSH',
+      distanceCells: 4,
+      collision: {
+        damageFormula: '1d4',
+        creatureDamageFormula: '4d4',
+        damageType: 'bludgeoning',
+      },
+    },
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.instances?.[0]?.forcedMovement?.collision?.kind, 'CREATURE');
+  assert.equal(engine.getParticipant('enemy_a')?.x, 2);
+  assert.ok((engine.getParticipant('enemy_b')?.hpCurrent || 100) < 100);
+  assert.ok((result.instances?.[0]?.forcedMovement?.collision?.damageToCreature || 0) > 0);
+});
+
+test('Phase 8.5: spell PUSH movement is routed through the same canonical wall-collision authority', () => {
+  const engine = engineWithEnemy({ x: 1, y: 0, hpCurrent: 1000, hpMax: 1000 });
+  engine.addObstacle({ x: 3, y: 0, isImpassable: true });
+  const spells = engine.getSpellRuntime();
+  spells.registerSpell({
+    id: 'test_force_push',
+    name: 'Test Force Push',
+    level: 0,
+    school: 'evocation',
+    castingTime: 'ACTION',
+    range: 60,
+    rangeType: 'RANGED',
+    targetType: 'SINGLE_ENEMY',
+    durationRounds: 0,
+    requiresConcentration: false,
+    isRitual: false,
+    defenseModel: 'BUFF',
+    movementEffect: {
+      type: 'PUSH',
+      distanceFeet: 20,
+      collision: {
+        damageFormula: '4d4',
+        damageType: 'bludgeoning',
+      },
+    },
+    description: 'Test spell that pushes a target into environmental collision.',
+  });
+
+  const result = engine.executeSpellCast({
+    actorId: 'hero',
+    spellId: 'test_force_push',
+    targetId: 'enemy',
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.result?.movementCollision?.collision?.kind, 'WALL');
+  assert.equal(result.result?.movementCollision?.actualDistanceCells, 1);
+  assert.equal(engine.getParticipant('enemy')?.x, 2);
+  assert.ok((engine.getParticipant('enemy')?.hpCurrent || 1000) < 1000);
+});
+
+test('Phase 8.5 validation: unsafe forced-movement collision formulas are rejected before combat resolution', () => {
+  const validation = combatEffectEngine.validateDefinition({
+    id: 'unsafe_collision',
+    name: 'Unsafe Collision',
+    resolutionMode: 'SINGLE_ATTACK',
+    scale: 'PERSON',
+    targetingMode: 'ONE_TARGET',
+    actionCost: 'ACTION',
+    attackFormula: '1d20',
+    damageFormula: '1d4',
+    forcedMovement: {
+      type: 'PUSH',
+      distanceCells: 5,
+      collision: { damageFormula: '999d9999' },
+    },
+  }, 'CUSTOM_HOMEBREW_DND');
+
+  assert.equal(validation.success, false);
+  assert.match(validation.errorReason || '', /unsafe|invalid/i);
+});
 test('Phase 8.5: chain targeting deterministically expands from the first target within jump range', () => {
   const engine = new TacticalCombatEngine(1337);
   engine.addParticipant(participant());

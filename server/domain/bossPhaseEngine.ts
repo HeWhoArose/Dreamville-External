@@ -42,6 +42,14 @@ export class BossPhaseEngine {
     const current = params.repository.getActiveEffects(params.storyId).find((effect: any) => effect.type === 'BOSS_PHASE_STATE' && effect.bossId === params.bossId);
     const currentPhaseId = current?.currentPhaseId;
     if (currentPhaseId === phase.id) {
+      const sync = combat.setBossPhaseState(params.bossId, {
+        phaseId: phase.id,
+        modifiers: phase.modifiers,
+        abilities: phase.abilities,
+        targetPriority: phase.targetPriority,
+        environmentEffects: phase.environmentEffects,
+      });
+      if (!sync.success) return { success: false, changed: false, errorReason: sync.errorReason };
       return { success: true, changed: false, phase, state: current?.state };
     }
     const round = combat.getCurrentRound();
@@ -51,6 +59,15 @@ export class BossPhaseEngine {
       enteredAtRound: round,
       transitions: [...(current?.state?.transitions || []), `${currentPhaseId || 'INITIAL'}->${phase.id}`],
     };
+    const combatPhase = combat.setBossPhaseState(params.bossId, {
+      phaseId: phase.id,
+      modifiers: phase.modifiers,
+      abilities: phase.abilities,
+      targetPriority: phase.targetPriority,
+      environmentEffects: phase.environmentEffects,
+    });
+    if (!combatPhase.success) return { success: false, changed: false, errorReason: combatPhase.errorReason };
+
     params.repository.saveActiveEffect({
       id: `boss_phase_${params.storyId}_${params.bossId}` ,
       type: 'BOSS_PHASE_STATE',

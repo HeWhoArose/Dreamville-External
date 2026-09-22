@@ -3425,7 +3425,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
         )}
 
         {/* STEP 7: CURRENT CONDITION & DEFENSE */}
-        {draft && activeStep === 10 && (
+        {draft && activeStep === 7 && (
           <div className="space-y-6">
             <CharacterConditionStep
               draft={draft}
@@ -3465,8 +3465,8 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
           </div>
         )}
 
-        {/* STEP 8: STARTING LOCATION & SITUATION */
-        {draft && activeStep === 7 && (
+        {/* STEP 8: STARTING LOCATION & SITUATION */}
+        {draft && activeStep === 8 && (
           <div className="space-y-6">
             <div className="p-6 rounded-xl bg-neutral-950 border border-neutral-800 space-y-6">
               <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
@@ -3612,25 +3612,25 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
             {/* Navigation */}
             <div className="flex items-center justify-between">
               <button
-                onClick={() => setActiveStep(8)}
+                onClick={() => setActiveStep(7)}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 transition-colors"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Back to Equipment</span>
+                <span>Back to Condition & Defense</span>
               </button>
               <button
-                onClick={() => setActiveStep(10)}
+                onClick={() => setActiveStep(9)}
                 className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition-colors"
               >
-                <span>Proceed to Portrait</span>
+                <span>Proceed to Portrait Studio</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
         )}
 
-        {/* STEP 7: PORTRAIT STUDIO */}
-        {draft && activeStep === 8 && (
+        {/* STEP 9: PORTRAIT STUDIO */}
+        {draft && activeStep === 9 && (
           <div className="space-y-6">
             <div className="p-6 rounded-xl bg-neutral-950 border border-neutral-800 space-y-6">
               <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
@@ -3882,14 +3882,14 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
             {/* Navigation */}
             <div className="flex items-center justify-between">
               <button
-                onClick={() => setActiveStep(7)}
+                onClick={() => setActiveStep(8)}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 transition-colors"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Back to Location</span>
               </button>
               <button
-                onClick={() => setActiveStep(9)}
+                onClick={() => setActiveStep(10)}
                 className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition-colors"
               >
                 <span>Proceed to Final Review</span>
@@ -3899,8 +3899,8 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
           </div>
         )}
 
-        {/* STEP 8: REVIEW & EXPLICIT CONFIRMATION */}
-        {draft && activeStep === 9 && (
+        {/* STEP 10: REVIEW & EXPLICIT CONFIRMATION */}
+        {draft && activeStep === 10 && (
           <div className="space-y-6">
             <div className="p-6 rounded-xl bg-neutral-950 border border-neutral-800 space-y-6">
               <div className="flex items-center justify-between border-b border-neutral-800 pb-4">

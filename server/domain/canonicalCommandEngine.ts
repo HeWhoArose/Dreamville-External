@@ -14,6 +14,7 @@ export type CanonicalCommandType =
 	| 'ADVANCE_TIME'
 	| 'REST'
 	| 'APPLY_ABILITY'
+	| 'COMBAT_EFFECT'
 	| 'PROGRESSION';
 
 export type CanonicalCommandSource = 'PLAYER' | 'AI' | 'SYSTEM';
@@ -255,6 +256,14 @@ export class CanonicalCommandEngine {
 			case 'APPLY_ABILITY':
 				if (typeof payload.abilityId !== 'string' || typeof payload.targetId !== 'string') {
 					return 'APPLY_ABILITY command requires abilityId and targetId.';
+				}
+				break;
+			case 'COMBAT_EFFECT':
+				if (typeof payload.effectId !== 'string' || typeof payload.resolutionMode !== 'string') {
+					return 'COMBAT_EFFECT command requires effectId and resolutionMode.';
+				}
+				if (payload.targetIds !== undefined && !Array.isArray(payload.targetIds)) {
+					return 'COMBAT_EFFECT targetIds must be an array when provided.';
 				}
 				break;
 			case 'INTERACT':

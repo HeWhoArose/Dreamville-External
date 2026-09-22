@@ -1653,6 +1653,62 @@ class ApiClient {
     return await res.json();
   }
 
+  public async inferCharacterProgression(worldId: string, params: {
+    concept?: string;
+    background?: string;
+    profession?: string;
+    archetype?: string;
+    species?: string;
+    classId?: string;
+    narrativeRole?: string;
+  }): Promise<any> {
+    const res = await fetch(this.baseUrl + '/worlds/' + encodeURIComponent(worldId) + '/characters/progression-infer', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.errorReason || ('Failed to infer progression: HTTP ' + res.status));
+    return data;
+  }
+
+  public async proposeCustomProgressionModule(worldId: string, params: {
+    type: 'CLASS' | 'SUBCLASS' | 'SPECIES';
+    name?: string;
+    concept?: string;
+    parentClassId?: string;
+    background?: string;
+    species?: string;
+    profession?: string;
+    archetype?: string;
+  }): Promise<any> {
+    const res = await fetch(this.baseUrl + '/worlds/' + encodeURIComponent(worldId) + '/characters/progression-custom', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.errorReason || ('Failed to generate progression module: HTTP ' + res.status));
+    return data;
+  }
+
+  public async suggestStartingCondition(worldId: string, params: {
+    concept?: string;
+    background?: string;
+    identity?: string;
+    startingSituation?: string;
+    currentStateNote?: string;
+  }): Promise<any> {
+    const res = await fetch(this.baseUrl + '/worlds/' + encodeURIComponent(worldId) + '/characters/condition-suggest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.errorReason || ('Failed to suggest starting condition: HTTP ' + res.status));
+    return data;
+  }
+
   public async proposeCustomCapability(
     worldId: string,
     capabilityConcept: string,

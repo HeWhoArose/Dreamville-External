@@ -364,7 +364,7 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
         combatState.storyId,
         definition,
         selectedTargetId ? [selectedTargetId] : [],
-        { seeds: [101, 202, 303, 404, 505] }
+        { seeds: [101, 202, 303, 404, 505], capabilityId: selectedCapabilityId || undefined }
       );
       setEffectSimulation(simulation);
     } catch (err: any) {

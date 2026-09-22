@@ -6676,6 +6676,7 @@ gameRouter.post('/spells/cast', async (req: Request, res: Response) => {
               rulesProfile: profile,
               diceEngine: transactionCombat.getDiceEngine(),
               requireAuthoritativeTarget: true,
+              spellDamageBonusOverride: context.repository.getCharacterProgressionEngine(storyId).resolveModifiers(actorId, profile).modifiers.find((modifier) => modifier.target === 'spell.damage')?.value || 0,
               damageResolver: (damageTarget, amount, damageType, criticalHit = false) =>
                 transactionCombat.resolveAuthoritativeSpellDamage(damageTarget, amount, damageType, criticalHit),
               healingResolver: (healingTarget, amount) =>

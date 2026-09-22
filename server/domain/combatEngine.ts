@@ -791,7 +791,7 @@ export class TacticalCombatEngine {
     };
 
     const projectParticipant = (p: BattlefieldParticipant): BattlefieldParticipant => {
-      const projected = { ...p };
+      const projected = this.projectedParticipant(p);
       if (p.id !== viewerActorId) {
         projected.deathSaveState = undefined;
       }

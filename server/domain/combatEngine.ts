@@ -3376,6 +3376,16 @@ export class TacticalCombatEngine {
           this.applyCombatDamage(damageTarget, amount, damageType, criticalHit),
         healingResolver: (healingTarget, amount) =>
           this.resolveAuthoritativeSpellHealing(healingTarget, amount),
+        movementResolver: (movement) =>
+          this.resolveForcedMovement({
+            targetId: movement.target.id,
+            sourcePosition: { x: movement.source.x, y: movement.source.y },
+            movement: {
+              type: movement.type,
+              distanceCells: movement.distanceCells,
+              collision: movement.collision,
+            },
+          }),
       },
       casterParticipant: actor,
       targetParticipant: target,

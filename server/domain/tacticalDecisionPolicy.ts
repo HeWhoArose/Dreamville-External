@@ -225,7 +225,10 @@ export class NpcTacticalDecisionPolicy {
     // 7. Check Available Capabilities (Canonical Resource Check)
     if (capabilityEngine) {
       const actorCaps = capabilityEngine.getActorCapabilities(actorId);
-      const offensiveCap = actorCaps.find((c) => c.category === 'Combat' || c.category === 'Magic');
+      const phaseAbilityIds = new Set(((actor as any).bossPhaseAbilities || []).map((id: unknown) => String(id)));
+      const offensiveCap =
+        actorCaps.find((candidate) => phaseAbilityIds.has(candidate.id) && (candidate.category === 'Combat' || candidate.category === 'Magic')) ||
+        actorCaps.find((candidate) => candidate.category === 'Combat' || candidate.category === 'Magic');
       const powerState = capabilityEngine.getPowerState(actorId);
 
       if (offensiveCap && powerState && (powerState.magicalEnergy ?? 0) >= 10 && (powerState.physicalStrain ?? 0) < 80) {

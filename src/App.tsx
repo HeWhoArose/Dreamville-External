@@ -720,6 +720,7 @@ export const App: React.FC = () => {
 
           {(currentRoute === 'compendium' || currentRoute.startsWith('compendium.')) && (
             <CompendiumView
+              activeStoryId={activeStoryId}
               initialCategory={compendiumCategory}
               onNavigateCategory={(cat) => setCurrentRoute(`compendium.${cat}` as AppRoute)}
             />

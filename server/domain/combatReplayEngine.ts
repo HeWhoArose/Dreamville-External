@@ -61,6 +61,7 @@ export class CombatReplayEngine {
       original.success === replayed.success &&
       original.totalDamage === replayed.totalDamage &&
       JSON.stringify(original.defeatedTargetIds || []) === JSON.stringify(replayed.defeatedTargetIds || []) &&
+      JSON.stringify(original.affectedEntityIds || []) === JSON.stringify(replayed.affectedEntityIds || []) &&
       original.instanceCount === replayed.instanceCount &&
       JSON.stringify(record.canonicalEventIds || []) === JSON.stringify(result.canonicalEventIds || []);
 

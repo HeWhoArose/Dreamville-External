@@ -425,6 +425,7 @@ export interface TacticalCombatStateExport {
   combatEffectEvents?: CombatEventRecord[];
   combatActionSequence?: number;
   bossPhaseStates?: Array<{ bossId: string; phaseId: string; modifiers: Record<string, number>; abilities: string[]; targetPriority?: string; environmentEffects: string[] }>;
+  conditionEngineState?: ReturnType<ConditionEngine['exportState']>;
 }
 
 export interface ProjectedCombatState {
@@ -588,6 +589,7 @@ export class TacticalCombatEngine {
   }
 
   public clear(): void {
+    const preservedConditionDefinitions = this.conditionEngine?.getDefinitions() || [];
     this.participants.clear();
     this.hazards = [];
     this.obstacles = [];
@@ -603,6 +605,10 @@ export class TacticalCombatEngine {
     this.actionEconomy.clear();
     this.diceEngine.setSeed(this.initialSeed);
     this.diceEngine.setRollCounter(0);
+    if (this.conditionEngine) {
+      this.conditionEngine.importState({ definitions: preservedConditionDefinitions, actors: [] });
+    }
+    this.spellRuntime.setParticipantContext([]);
   }
 
   public startActivation(activation: PendingActivationState): void {
@@ -3139,8 +3145,9 @@ export class TacticalCombatEngine {
   }
 
   public exportState(): TacticalCombatStateExport {
+    const canonicalParticipants = Array.from(this.participants.values()).map((participant) => JSON.parse(JSON.stringify(participant)));
     return {
-      participants: this.getParticipants(),
+      participants: canonicalParticipants,
       hazards: this.getHazards(),
       obstacles: this.getObstacles(),
       mapBounds: this.getMapBounds(),
@@ -3157,6 +3164,7 @@ export class TacticalCombatEngine {
       combatEffectEvents: this.getCombatEffectEvents(),
       combatActionSequence: this.combatActionSequence,
       bossPhaseStates: Array.from(this.bossPhaseStates.entries()).map(([bossId, state]) => ({ bossId, ...state })),
+      conditionEngineState: this.conditionEngine?.exportState(),
     };
   }
 
@@ -3216,6 +3224,20 @@ export class TacticalCombatEngine {
     }
     if (data.spellRuntimeState) {
       this.spellRuntime.importState(data.spellRuntimeState);
+      this.spellRuntime.setParticipantContext(this.getMutableParticipantsForSpellResolution());
+    }
+    if (data.conditionEngineState && this.conditionEngine) {
+      this.conditionEngine.importState(data.conditionEngineState);
+      for (const participant of this.participants.values()) {
+        const conditionState = this.conditionEngine.getActorState(participant.id);
+        if (!conditionState) continue;
+        participant.hpCurrent = conditionState.healthCurrent;
+        participant.hpMax = conditionState.healthMax;
+        participant.isDead = conditionState.dead;
+        participant.conditions = conditionState.instances.map((instance) => instance.name);
+        participant.damageProfile = conditionState.damageProfile;
+        participant.conditionProfile = conditionState.conditionProfile;
+      }
       this.spellRuntime.setParticipantContext(this.getMutableParticipantsForSpellResolution());
     }
     this.combatEffectEvents = [...(data.combatEffectEvents || [])];

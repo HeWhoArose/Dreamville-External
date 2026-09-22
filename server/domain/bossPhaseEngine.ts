@@ -175,7 +175,7 @@ export class BossPhaseEngine {
       modifiers: phase.modifiers,
       abilities: phase.abilities,
       targetPriority: phase.targetPriority,
-      environmentEffects: phase.environmentEffects,
+      environmentEffects: resolvedHazards.map((effect) => effect.id),
     });
     if (!combatPhase.success) return { success: false, changed: false, errorReason: combatPhase.errorReason };
 

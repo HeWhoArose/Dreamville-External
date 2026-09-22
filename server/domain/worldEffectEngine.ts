@@ -490,7 +490,6 @@ export class WorldEffectEngine {
       projectionChangedScopes.push('CHRONICLE:' + definition.id);
     }
 
-    changedScopes.push(...projectionChangedScopes);
     const requestedScopeIds = Array.isArray(definition.outcomePayload?.scopeIds)
       ? definition.outcomePayload.scopeIds.map(String)
       : typeof definition.outcomePayload?.scopeId === 'string'

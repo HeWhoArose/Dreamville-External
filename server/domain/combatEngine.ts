@@ -1816,6 +1816,7 @@ export class TacticalCombatEngine {
           immune,
           resisted,
           vulnerable,
+          destroyedBodyRegions: [],
         };
       }
 
@@ -1845,6 +1846,7 @@ export class TacticalCombatEngine {
         immune,
         resisted,
         vulnerable,
+        destroyedBodyRegions: [],
       };
     }
 
@@ -1914,6 +1916,7 @@ export class TacticalCombatEngine {
         immune: resolvedDamage.immune,
         resisted: resolvedDamage.resisted,
         vulnerable: resolvedDamage.vulnerable,
+        destroyedBodyRegions: resolvedDamage.destroyedBodyRegions,
       };
     }
 
@@ -1981,6 +1984,7 @@ export class TacticalCombatEngine {
       immune: isImmune,
       resisted: isResisted,
       vulnerable: isVulnerable,
+      destroyedBodyRegions: [],
     };
   }
 
@@ -2310,6 +2314,8 @@ export class TacticalCombatEngine {
       damageType?: string;
       attackFormula?: string;
       consumeAction?: boolean;
+      hitLocationMode?: CombatEffectDefinition['hitLocationMode'];
+      targetBodyRegionId?: BodyRegionId;
     }
   ): {
     success: boolean;

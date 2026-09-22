@@ -62,10 +62,7 @@ export class WorldEffectEngine {
     const affectedEntityIds: string[] = [];
     const semanticMetadata: Record<string, unknown>[] = [];
     for (const targetId of Array.from(new Set(targetIds.filter(Boolean)))) {
-      const combatResult = combat.applySemanticOutcome(targetId, definition.outcome!, {
-        ...(definition.outcomePayload || {}),
-        sourceActorId: actorId,
-      });
+      const combatResult = combat.applySemanticOutcome(targetId, definition.outcome!, definition.outcomePayload || {}, actorId);
       if (combatResult.success) {
         if (!affectedEntityIds.includes(targetId)) affectedEntityIds.push(targetId);
         if (combatResult.metadata) semanticMetadata.push({ targetId, ...combatResult.metadata });

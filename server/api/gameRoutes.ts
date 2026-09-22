@@ -517,6 +517,93 @@ gameRouter.get('/dossiers/:subjectId', async (req: Request, res: Response) => {
 });
 
 /**
+ * Canonical Entity Cards.
+ */
+gameRouter.get('/entities', async (req: Request, res: Response) => {
+	try {
+		const storyId = resolveStoryId(req, true);
+		const cards = worldRepository.getEntityCards(storyId, {
+			query: typeof req.query.query === 'string' ? req.query.query : undefined,
+			kind: typeof req.query.kind === 'string' ? req.query.kind as any : undefined,
+			status: typeof req.query.status === 'string' ? req.query.status as any : undefined,
+			includeTemplates: req.query.includeTemplates === 'true',
+		});
+		const registry = worldRepository.getEntityRegistry(storyId);
+		res.json({ success: true, entities: cards.map((card) => registry.projectForViewer(card)) });
+	} catch (error: any) {
+		res.status(500).json({ success: false, errorReason: error?.message || 'Failed to retrieve entities.' });
+	}
+});
+
+gameRouter.get('/entities/:entityId', async (req: Request, res: Response) => {
+	try {
+		const storyId = resolveStoryId(req, true);
+		const card = worldRepository.getEntityCard(storyId, String(req.params.entityId));
+		if (!card) return res.status(404).json({ success: false, errorReason: 'Entity not found.' });
+		res.json({ success: true, entity: worldRepository.getEntityRegistry(storyId).projectForViewer(card) });
+	} catch (error: any) {
+		res.status(500).json({ success: false, errorReason: error?.message || 'Failed to retrieve entity.' });
+	}
+});
+
+gameRouter.post('/entities/generate', async (req: Request, res: Response) => {
+	try {
+		const storyId = resolveStoryId(req, true);
+		const concept = String(req.body?.concept || '').trim();
+		if (!concept) return res.status(400).json({ success: false, errorReason: 'concept is required.' });
+		const proposal = await entityCardService.generate({
+			storyId,
+			concept,
+			name: typeof req.body?.name === 'string' ? req.body.name : undefined,
+			kind: typeof req.body?.kind === 'string' ? req.body.kind : undefined,
+			worldId: typeof req.body?.worldId === 'string' ? req.body.worldId : undefined,
+			allowDeterministicFallback: req.body?.allowDeterministicFallback === true,
+		});
+		const registry = worldRepository.getEntityRegistry(storyId);
+		let entity;
+		let template;
+		if (req.body?.saveAsTemplate === true) {
+			template = registry.createTemplate(proposal.card);
+			entity = req.body?.instantiate === true ? registry.instantiateTemplate(template.id, { name: proposal.card.name }) : undefined;
+		} else if (req.body?.templateId) {
+			entity = registry.instantiateTemplate(String(req.body.templateId), { name: proposal.card.name });
+		} else {
+			entity = registry.upsert(proposal.card);
+		}
+		res.json({
+			success: true,
+			generationSource: proposal.generationSource,
+			template: template ? registry.projectForViewer(template) : undefined,
+			entity: entity ? registry.projectForViewer(entity) : undefined,
+		});
+	} catch (error: any) {
+		res.status(503).json({ success: false, code: 'AI_UNAVAILABLE', errorReason: error?.message || 'Entity generation unavailable.' });
+	}
+});
+
+gameRouter.post('/entities/:entityId/clone', async (req: Request, res: Response) => {
+	try {
+		const storyId = resolveStoryId(req, true);
+		const card = worldRepository.cloneEntityCard(storyId, String(req.params.entityId), req.body?.overrides || {});
+		res.json({ success: true, entity: worldRepository.getEntityRegistry(storyId).projectForViewer(card) });
+	} catch (error: any) {
+		res.status(400).json({ success: false, errorReason: error?.message || 'Failed to clone entity.' });
+	}
+});
+
+gameRouter.post('/entities/:entityId/status', async (req: Request, res: Response) => {
+	try {
+		const storyId = resolveStoryId(req, true);
+		const status = String(req.body?.status || '').toUpperCase();
+		if (!['ACTIVE','DORMANT','ARCHIVED','DEAD','DESTROYED'].includes(status)) return res.status(400).json({ success: false, errorReason: 'Invalid entity status.' });
+		const card = worldRepository.setEntityLifecycleStatus(storyId, String(req.params.entityId), status);
+		res.json({ success: true, entity: worldRepository.getEntityRegistry(storyId).projectForViewer(card) });
+	} catch (error: any) {
+		res.status(400).json({ success: false, errorReason: error?.message || 'Failed to update entity status.' });
+	}
+});
+
+/**
  * GET /api/game/inventory
  * Returns inventory and paper-doll equipment for active player (CH5).
  */

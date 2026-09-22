@@ -2922,7 +2922,10 @@ gameRouter.post('/combat/effect', async (req: Request, res: Response) => {
     const validation = combatEffectEngine.validateDefinition(definition, worldRepository.getRulesProfile(storyId)?.mode || 'FULL_DND');
     if (!validation.success || !validation.normalized) return res.status(400).json(validation);
     const normalized = validation.normalized;
-    const targetResolution = combatTargetingEngine.resolve(combat, actorId, targetIds, normalized);
+    const targetResolution =
+      normalized.resolutionMode === 'WORLD_EFFECT' && targetIds.length === 0
+        ? { success: true, targetIds: [] as string[] }
+        : combatTargetingEngine.resolve(combat, actorId, targetIds, normalized);
     if (!targetResolution.success) return res.status(400).json({ success: false, errorReason: targetResolution.errorReason });
     const resolvedTargetIds = targetResolution.targetIds;
     const capId = typeof req.body?.capabilityId === 'string' ? req.body.capabilityId : normalized.id;

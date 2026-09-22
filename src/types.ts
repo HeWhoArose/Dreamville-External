@@ -2100,6 +2100,7 @@ export interface CombatReplayRecord {
 		defeatedTargetIds?: string[];
 		instanceCount: number;
 	};
+	consumeAction: boolean;
 	createdAtSequence: number;
 }
 

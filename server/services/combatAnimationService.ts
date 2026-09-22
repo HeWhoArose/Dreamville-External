@@ -35,7 +35,7 @@ export class CombatAnimationService {
         effect?.type === 'COMBAT_ANIMATION_PLAN' &&
         effect?.effectId === params.definition.id &&
         effect?.presentationOnly === true &&
-        effect?.plan
+        effect?.plan?.generatedBy === 'AI'
     );
     if (cached?.plan) {
       return { plan: JSON.parse(JSON.stringify(cached.plan)), source: cached.plan.generatedBy === 'AI' ? 'AI' : 'SYSTEM' };

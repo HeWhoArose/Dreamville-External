@@ -978,6 +978,22 @@ Rules:
             : [],
         };
 
+    const progression = userEditedFields.has('progression') && existingDraft?.progression
+      ? {
+          classId: existingDraft.progression.classId,
+          subclassId: existingDraft.progression.subclassId,
+          speciesId: existingDraft.progression.speciesId,
+          featIds: [...(existingDraft.progression.featIds || [])],
+          moduleIds: [...(existingDraft.progression.moduleIds || [])],
+        }
+      : {
+          classId: undefined,
+          subclassId: undefined,
+          speciesId: undefined,
+          featIds: feats.map((feat) => feat.id),
+          moduleIds: [],
+        };
+
     const draft: CharacterGenesisDraft = {
       draftId,
       worldId,
@@ -1027,6 +1043,7 @@ Rules:
       },
       portraitAsset,
       aiExtractionSummary,
+      progression,
       provenance,
       fieldLocks: [...new Set([...(existingDraft?.fieldLocks || []), ...Array.from(userEditedFields)])],
       revision: 1,
@@ -1797,6 +1814,7 @@ IMPORTANT: Select an appropriate category and paper-doll slot. If the item is a 
       storyMode: resolvedNarrativeProfile.mode,
       narrativeProfile: resolvedNarrativeProfile,
       dndRulesMode: draft.dndRulesMode,
+      progression: draft.progression ? { ...draft.progression, featIds: [...(draft.progression.featIds || [])], moduleIds: [...(draft.progression.moduleIds || [])] } : undefined,
     };
 
     return confirmed;

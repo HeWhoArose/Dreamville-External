@@ -19,23 +19,33 @@ export interface CombatAssetRecord {
 }
 
 export class CombatAssetService {
+  private static readonly MAX_MEMORY_CACHE = 256;
   private readonly cache = new Map<string, CombatAssetRecord>();
 
-  public get(assetId: string): CombatAssetRecord | undefined {
-    const record = this.cache.get(assetId);
+  private cacheKey(storyId: string, assetId: string): string {
+    return storyId + '::' + assetId;
+  }
+
+  public get(assetId: string, storyId?: string): CombatAssetRecord | undefined {
+    const record = storyId
+      ? this.cache.get(this.cacheKey(storyId, assetId))
+      : Array.from(this.cache.values()).find((entry) => entry.assetId === assetId);
     return record ? JSON.parse(JSON.stringify(record)) : undefined;
   }
 
   public async ensure(params: { repository: WorldRepository; storyId: string; effectId: string; prompt: string; assetId?: string }): Promise<CombatAssetRecord> {
     const promptIdentity = params.prompt.trim().replace(/\s+/g, ' ').slice(0, 400);
     const assetId = params.assetId || deterministicId('combat_asset', params.storyId, params.effectId, promptIdentity);
-    const cached = this.cache.get(assetId);
+    const cacheKey = this.cacheKey(params.storyId, assetId);
+    const cached = this.cache.get(cacheKey);
     if (cached) return JSON.parse(JSON.stringify(cached));
 
     const persisted = params.repository.getActiveEffects(params.storyId).find(
       (effect: any) =>
         effect?.type === 'COMBAT_ASSET_REFERENCE' &&
         effect?.assetId === assetId &&
+        effect?.storyId === params.storyId &&
+        effect?.effectId === params.effectId &&
         effect?.presentationOnly === true
     );
     if (persisted) {
@@ -54,7 +64,7 @@ export class CombatAssetService {
         aspectRatio: typeof persisted.aspectRatio === 'string' ? persisted.aspectRatio : undefined,
         generatedAt: String(persisted.generatedAt || new Date(0).toISOString()),
       };
-      this.cache.set(assetId, restored);
+      this.cache.set(cacheKey, restored);
       return JSON.parse(JSON.stringify(restored));
     }
 
@@ -80,7 +90,12 @@ export class CombatAssetService {
       aspectRatio: media.mediaAsset?.aspectRatio,
       generatedAt: String(media.assetMetadata?.generatedAt || new Date().toISOString()),
     };
-    this.cache.set(assetId, record);
+    this.cache.set(cacheKey, record);
+    while (this.cache.size > CombatAssetService.MAX_MEMORY_CACHE) {
+      const oldestKey = this.cache.keys().next().value as string | undefined;
+      if (!oldestKey) break;
+      this.cache.delete(oldestKey);
+    }
     params.repository.saveActiveEffect({
       id: `combat_asset_${params.storyId}_${assetId}`,
       type: 'COMBAT_ASSET_REFERENCE',

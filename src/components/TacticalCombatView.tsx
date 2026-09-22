@@ -53,6 +53,11 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
   const [effectDifficultyClass, setEffectDifficultyClass] = useState<number>(15);
   const [effectOutcome, setEffectOutcome] = useState<CombatEffectDefinition['outcome']>('INSTANT_DEFEAT');
   const [effectRangeCells, setEffectRangeCells] = useState<number>(8);
+  const [effectAreaShape, setEffectAreaShape] = useState<CombatEffectDefinition['areaShape']>('CIRCLE');
+  const [effectAreaRadiusCells, setEffectAreaRadiusCells] = useState<number>(3);
+  const [effectAreaInnerRadiusCells, setEffectAreaInnerRadiusCells] = useState<number>(1);
+  const [effectAreaWidthCells, setEffectAreaWidthCells] = useState<number>(1);
+  const [instanceTargetIds, setInstanceTargetIds] = useState<string[]>([]);
   const [effectResult, setEffectResult] = useState<any>(null);
   const [effectSimulation, setEffectSimulation] = useState<any>(null);
   const [simulationDraftMode, setSimulationDraftMode] = useState<boolean>(false);
@@ -359,6 +364,13 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
           halfDamageOnSave: true,
           rangeCells: effectRangeCells,
           requiresLineOfSight: true,
+          areaShape: effectAreaShape,
+          areaRadiusCells: effectAreaRadiusCells,
+          areaInnerRadiusCells: effectAreaInnerRadiusCells,
+          areaWidthCells: effectAreaWidthCells,
+          instanceTargetIds: effectTargetingMode === 'PER_INSTANCE'
+            ? Array.from({ length: effectCount }, (_, index) => instanceTargetIds[index] || selectedTargetId).filter(Boolean)
+            : undefined,
           outcome:
             effectMode === 'OUTCOME' || effectMode === 'WORLD_EFFECT'
               ? effectOutcome
@@ -1053,6 +1065,58 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
                       </label>
                     </div>
                   )}
+                  {effectMode === 'AREA' && (
+                    <div className="space-y-2 rounded-lg border border-stone-800 bg-stone-900/50 p-2">
+                      <div className="text-[10px] uppercase tracking-wider text-violet-300 font-mono">AoE Geometry</div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <label className="text-[10px] text-stone-500">Shape
+                          <select value={effectAreaShape} onChange={(e) => setEffectAreaShape(e.target.value as CombatEffectDefinition['areaShape'])} className="mt-1 w-full px-2 py-1.5 rounded bg-stone-900 border border-stone-700 text-[11px] text-stone-200">
+                            <option value="POINT">Point</option><option value="LINE">Line</option><option value="CONE">Cone</option><option value="CIRCLE">Circle</option><option value="SPHERE">Sphere</option><option value="RING">Ring</option><option value="WALL">Wall</option>
+                          </select>
+                        </label>
+                        <label className="text-[10px] text-stone-500">Radius
+                          <input type="number" min={0} max={50} value={effectAreaRadiusCells} onChange={(e) => setEffectAreaRadiusCells(Math.max(0, Math.min(50, Number(e.target.value) || 0)))} className="mt-1 w-full px-2 py-1.5 rounded bg-stone-900 border border-stone-700 text-[11px] text-stone-200" />
+                        </label>
+                        <label className="text-[10px] text-stone-500">Inner Radius
+                          <input type="number" min={0} max={50} value={effectAreaInnerRadiusCells} onChange={(e) => setEffectAreaInnerRadiusCells(Math.max(0, Math.min(50, Number(e.target.value) || 0)))} className="mt-1 w-full px-2 py-1.5 rounded bg-stone-900 border border-stone-700 text-[11px] text-stone-200" />
+                        </label>
+                        <label className="text-[10px] text-stone-500">Width
+                          <input type="number" min={0.5} max={50} step={0.5} value={effectAreaWidthCells} onChange={(e) => setEffectAreaWidthCells(Math.max(0.5, Math.min(50, Number(e.target.value) || 0.5)))} className="mt-1 w-full px-2 py-1.5 rounded bg-stone-900 border border-stone-700 text-[11px] text-stone-200" />
+                        </label>
+                      </div>
+                    </div>
+                  )}
+
+                  {simulationDraftMode && effectTargetingMode === 'PER_INSTANCE' && (
+                    <div className="space-y-2 rounded-lg border border-stone-800 bg-stone-900/50 p-2">
+                      <div className="text-[10px] uppercase tracking-wider text-violet-300 font-mono">Per-Instance Target Assignment</div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {Array.from({ length: effectCount }, (_, index) => (
+                          <label key={index} className="text-[10px] text-stone-500">
+                            Beam / Instance {index + 1}
+                            <select
+                              value={instanceTargetIds[index] || selectedTargetId}
+                              onChange={(e) => {
+                                const targetId = e.target.value;
+                                setInstanceTargetIds((current) => {
+                                  const next = [...current];
+                                  next[index] = targetId;
+                                  return next;
+                                });
+                              }}
+                              className="mt-1 w-full px-2 py-1.5 rounded bg-stone-900 border border-stone-700 text-[11px] text-stone-200"
+                            >
+                              <option value="">-- Target --</option>
+                              {combatState?.participants.filter((p) => !p.isDead).map((p) => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                              ))}
+                            </select>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {(effectMode === 'OUTCOME' || effectMode === 'WORLD_EFFECT') && (
                     <label className="text-[10px] text-stone-500 block">Semantic Outcome
                       <select value={effectOutcome || 'INSTANT_DEFEAT'} onChange={(e) => setEffectOutcome(e.target.value as CombatEffectDefinition['outcome'])} className="mt-1 w-full px-2 py-1.5 rounded bg-stone-900 border border-stone-700 text-[11px] text-stone-200">

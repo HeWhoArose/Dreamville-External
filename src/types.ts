@@ -2114,6 +2114,7 @@ export interface CombatReplayRecord {
 		instanceCount: number;
 	};
 	consumeAction: boolean;
+	replayMode?: 'COMBAT_EFFECT' | 'WORLD_PREVIEW';
 	createdAtSequence: number;
 }
 

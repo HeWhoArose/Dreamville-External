@@ -138,6 +138,7 @@ export class CombatEffectEngine {
         advantage: normalized.advantage,
         disadvantage: normalized.disadvantage,
         attackFormula: normalized.attackFormula,
+        attackBonusOverride: normalized.attackBonusOverride,
         consumeAction: false,
       });
       return rollback({

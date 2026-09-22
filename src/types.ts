@@ -1940,6 +1940,59 @@ export type CombatActionCost = 'ACTION' | 'BONUS_ACTION' | 'REACTION' | 'FREE';
 
 export type CombatHitLocationMode = 'NONE' | 'EXPLICIT' | 'DETERMINISTIC';
 
+export type CombatForcedMovementType = 'PUSH' | 'PULL';
+
+export type CombatCollisionKind =
+  | 'WALL'
+  | 'BOUNDARY'
+  | 'DESTRUCTIBLE_OBJECT'
+  | 'CREATURE';
+
+export interface CombatCollisionProfile {
+  /** Optional formula for secondary damage dealt to the forced-moving creature. */
+  damageFormula?: string;
+  /** Damage type used for secondary impact damage. Defaults to bludgeoning. */
+  damageType?: string;
+  /** Optional formula for damage dealt to a destructible environment object. Falls back to damageFormula. */
+  objectDamageFormula?: string;
+  /** Optional formula for damage dealt to another creature on body collision. */
+  creatureDamageFormula?: string;
+  /** Stop when the first collision is encountered. Defaults to true. */
+  stopOnCollision?: boolean;
+  /** Maximum number of collision points that one movement may resolve. */
+  maxCollisions?: number;
+}
+
+export interface CombatForcedMovementDefinition {
+  type: CombatForcedMovementType;
+  /** Number of grid cells to attempt to move. Bounded by the combat authority. */
+  distanceCells: number;
+  collision?: CombatCollisionProfile;
+}
+
+export interface CombatMovementCollisionResult {
+  kind: CombatCollisionKind;
+  blockerId?: string;
+  blockerName?: string;
+  position: { x: number; y: number };
+  attemptedPosition: { x: number; y: number };
+  damageToMover: number;
+  damageToObject: number;
+  damageToCreature: number;
+  targetDied: boolean;
+  objectDestroyed: boolean;
+}
+
+export interface CombatForcedMovementResult {
+  moved: boolean;
+  from: { x: number; y: number };
+  to: { x: number; y: number };
+  requestedDistanceCells: number;
+  actualDistanceCells: number;
+  collision?: CombatMovementCollisionResult;
+  collisionsResolved: number;
+}
+
 export type CombatOutcomeType =
 	| 'INSTANT_DEFEAT'
 	| 'ERASE_FROM_WORLD'
@@ -2011,6 +2064,7 @@ export interface CombatEffectDefinition {
 	hitLocationMode?: CombatHitLocationMode;
 	targetBodyRegionId?: BodyRegionId;
 	retargetPolicy?: 'NONE' | 'RETARGET_ON_DEATH';
+	forcedMovement?: CombatForcedMovementDefinition;
 	animationPlanId?: string;
 	conditionEffects?: CombatConditionEffectDefinition[];
 	assetRefs?: string[];
@@ -2048,6 +2102,7 @@ export interface CombatAttackInstanceResult {
 	attackRollTotal?: number;
 	targetArmorClass?: number;
 	damageRoll?: unknown;
+	forcedMovement?: CombatForcedMovementResult;
 	defense?: {
 		immune?: boolean;
 		resisted?: boolean;

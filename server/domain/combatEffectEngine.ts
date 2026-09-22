@@ -27,8 +27,11 @@ export class CombatEffectEngine {
     if (normalized.resolutionMode === 'MULTI_INSTANCE' && normalized.actionCost !== 'ACTION') {
       return { success: false, errorReason: 'MULTI_INSTANCE combat attacks currently require one ACTION as their action cost.' };
     }
-    if (normalized.resolutionMode === 'SINGLE_ATTACK' || normalized.resolutionMode === 'MULTI_INSTANCE') {
+    if (normalized.resolutionMode === 'SINGLE_ATTACK' || normalized.resolutionMode === 'MULTI_INSTANCE' || normalized.resolutionMode === 'CHAIN') {
       normalized.attackFormula = resolveCapabilityCheckFormula(rulesMode as any, normalized.attackFormula);
+    }
+    if (normalized.resolutionMode === 'SAVE' || normalized.resolutionMode === 'AREA') {
+      normalized.saveFormula = resolveCapabilityCheckFormula(rulesMode as any, normalized.saveFormula);
     }
     if (normalized.damageFormula !== undefined && !/^(?:\d+)d(?:\d+)(?:[+-]\d+)?$/i.test(normalized.damageFormula.replace(/\s+/g, ''))) {
       return { success: false, errorReason: `Invalid damage formula '${normalized.damageFormula}'.` };
@@ -36,13 +39,16 @@ export class CombatEffectEngine {
     if (normalized.attackFormula !== undefined && !/^(?:\d+)d(?:\d+)(?:[+-]\d+)?$/i.test(normalized.attackFormula.replace(/\s+/g, ''))) {
       return { success: false, errorReason: `Invalid attack formula '${normalized.attackFormula}'.` };
     }
+    if (normalized.saveFormula !== undefined && !/^(?:\d+)d(?:\d+)(?:[+-]\d+)?$/i.test(normalized.saveFormula.replace(/\s+/g, ''))) {
+      return { success: false, errorReason: `Invalid save formula '${normalized.saveFormula}'.` };
+    }
     if ((normalized.resolutionMode === 'OUTCOME' || normalized.resolutionMode === 'WORLD_EFFECT') && !normalized.outcome) {
       return { success: false, errorReason: 'Outcome/world effects require a semantic outcome.' };
     }
     return { success: true, normalized };
   }
 
-  public resolve(engine: TacticalCombatEngine, actorId: string, targetIds: string[], definition: CombatEffectDefinition): CombatEffectResult {
+  public resolve(engine: TacticalCombatEngine, actorId: string, targetIds: string[], definition: CombatEffectDefinition, options: { consumeAction?: boolean } = {}): CombatEffectResult {
     const profile = engine.getRulesProfile();
     const validation = this.validateDefinition(definition, profile?.mode || 'FULL_DND');
     if (!validation.success || !validation.normalized) return { success: false, errorReason: validation.errorReason };

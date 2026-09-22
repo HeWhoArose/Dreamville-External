@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import {
   CharacterBodyRegionState,
   CharacterConditionInstance,
@@ -92,31 +92,11 @@ export const ConditionProfileEditor: React.FC<ConditionProfileEditorProps> = ({
   onChange,
   compact = false,
 }) => {
-  const [customConditionName, setCustomConditionName] = useState('');
   const [expandedConditionId, setExpandedConditionId] = useState<string | null>(null);
-
-  const conditionNames = useMemo(
-    () => Array.from(new Set([...DND_CONDITIONS, ...SITUATION_PRESETS])),
-    []
-  );
 
   const nextValue = (patch: Partial<CharacterStartingConditionState>) =>
     onChange({ ...clone(value), ...patch });
 
-  const addCondition = (name: string) => {
-    const trimmed = name.trim();
-    if (!trimmed) return;
-    const existing = value.instances.find(
-      (item) => item.name.toLowerCase() === trimmed.toLowerCase()
-    );
-    if (existing) {
-      setExpandedConditionId(existing.id);
-      return;
-    }
-    const instance = createInstance(trimmed);
-    nextValue({ instances: [...value.instances, instance] });
-    setExpandedConditionId(instance.id);
-  };
 
   const removeCondition = (id: string) => {
     nextValue({ instances: value.instances.filter((item) => item.id !== id) });
@@ -164,52 +144,10 @@ export const ConditionProfileEditor: React.FC<ConditionProfileEditorProps> = ({
             Mechanical conditions and the character's immediate state when the story begins.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {conditionNames.map((name) => {
-            const found = value.instances.find(
-              (item) => item.name.toLowerCase() === name.toLowerCase()
-            );
-            const active = Boolean(found);
-            return (
-              <button
-                key={name}
-                type="button"
-                onClick={() => (active ? removeCondition(found!.id) : addCondition(name))}
-                className={
-                  active
-                    ? 'rounded-lg border border-indigo-500/70 bg-indigo-950/60 px-2.5 py-1.5 text-[11px] text-indigo-200'
-                    : 'rounded-lg border border-neutral-800 bg-neutral-950 px-2.5 py-1.5 text-[11px] text-neutral-400 hover:border-neutral-700'
-                }
-              >
-                {name}
-              </button>
-            );
-          })}
-        </div>
-        <div className="flex gap-2">
-          <input
-            value={customConditionName}
-            onChange={(e) => setCustomConditionName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                addCondition(customConditionName);
-                setCustomConditionName('');
-              }
-            }}
-            placeholder="Custom condition, e.g. Prisoner, Weak, Poisoned"
-            className="min-w-0 flex-1 rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-2 text-xs text-white placeholder:text-neutral-600 focus:border-indigo-500 focus:outline-none"
-          />
-          <button
-            type="button"
-            onClick={() => {
-              addCondition(customConditionName);
-              setCustomConditionName('');
-            }}
-            className="rounded-lg bg-neutral-800 px-3 py-2 text-xs text-neutral-200 hover:bg-neutral-700"
-          >
-            Add
-          </button>
+        <div className="rounded-xl border border-indigo-900/50 bg-indigo-950/20 p-3">
+          <p className="text-[11px] leading-relaxed text-neutral-400">
+            Starting conditions are added through the AI proposal flow above this editor so the character's concept, background, and opening situation are interpreted together. You can inspect, tune, or remove the proposed result here.
+          </p>
         </div>
         {value.instances.length > 0 && (
           <div className="space-y-2">

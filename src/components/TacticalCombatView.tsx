@@ -37,6 +37,7 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const [selectedTargetId, setSelectedTargetId] = useState<string>('');
+  const [selectedTargetIds, setSelectedTargetIds] = useState<string[]>([]);
   const [selectedCapabilityId, setSelectedCapabilityId] = useState<string>('');
   const [moveCoord, setMoveCoord] = useState<{ x: number; y: number }>({ x: 1, y: 1 });
   const [advancedEffectOpen, setAdvancedEffectOpen] = useState<boolean>(false);
@@ -79,6 +80,7 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
       const firstEnemy = state.participants.find((p) => p.team === 'enemies' && !p.isDead);
       if (firstEnemy && !selectedTargetId) {
         setSelectedTargetId(firstEnemy.id);
+        setSelectedTargetIds([firstEnemy.id]);
       }
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to load combat encounter.');
@@ -98,7 +100,10 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
       const res = await apiClient.startCombatEncounter();
       setCombatState(res.combatState);
       const firstEnemy = res.combatState.participants.find((p) => p.team === 'enemies' && !p.isDead);
-      if (firstEnemy) setSelectedTargetId(firstEnemy.id);
+      if (firstEnemy) {
+        setSelectedTargetId(firstEnemy.id);
+        setSelectedTargetIds([firstEnemy.id]);
+      }
       onRefreshWorldState?.();
     } catch (err: any) {
       setErrorMsg(err.message || 'Failed to start encounter.');
@@ -217,12 +222,17 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
       return;
     }
 
+    const structuredTargetMode = canonicalDefinition.targetingMode || 'ONE_TARGET';
+    const multiTargetMode = ['MULTI_TARGET', 'PER_INSTANCE', 'CHAIN', 'ALL_IN_AREA'].includes(structuredTargetMode);
+    const resolvedTargetIds = multiTargetMode
+      ? Array.from(new Set([...(selectedTargetIds.length ? selectedTargetIds : selectedTargetId ? [selectedTargetId] : [])]))
+      : (selectedTargetId ? [selectedTargetId] : []);
     const requiresTarget =
       canonicalDefinition.resolutionMode !== 'WORLD_EFFECT' &&
-      canonicalDefinition.targetingMode !== 'SELF';
+      structuredTargetMode !== 'SELF';
 
-    if (requiresTarget && !selectedTargetId) {
-      setErrorMsg('This capability requires a target.');
+    if (requiresTarget && resolvedTargetIds.length === 0) {
+      setErrorMsg('This capability requires at least one target.');
       return;
     }
 
@@ -241,7 +251,7 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
       const result = await apiClient.executeCombatEffect(
         combatState.storyId,
         canonicalDefinition,
-        selectedTargetId ? [selectedTargetId] : [],
+        resolvedTargetIds,
         { capabilityId: selectedCapabilityId }
       );
 
@@ -742,7 +752,11 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
               <select
                 id="combat-target-select"
                 value={selectedTargetId}
-                onChange={(e) => setSelectedTargetId(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setSelectedTargetId(next);
+                  setSelectedTargetIds(next ? [next] : []);
+                }}
                 className="w-full px-3 py-1.5 bg-stone-950 border border-stone-700 rounded-lg text-xs text-stone-200 focus:outline-none focus:border-amber-500 font-mono"
               >
                 <option value="">-- Select Combat Target --</option>
@@ -753,6 +767,50 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
                 ))}
               </select>
             </div>
+
+            {(() => {
+              const selectedCapability = capabilities.find((item) => item.id === selectedCapabilityId);
+              const mode = selectedCapability?.effectDefinition?.targetingMode;
+              const needsMultipleTargets = mode === 'MULTI_TARGET' || mode === 'PER_INSTANCE' || mode === 'CHAIN' || mode === 'ALL_IN_AREA';
+              if (!needsMultipleTargets) return null;
+              return (
+                <div className="space-y-1.5">
+                  <div className="text-[10px] uppercase tracking-wider text-violet-300 font-mono">
+                    Effect Targets
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-32 overflow-y-auto pr-1">
+                    {combatState?.participants.map((participant) => {
+                      const checked = selectedTargetIds.includes(participant.id);
+                      return (
+                        <label key={participant.id} className="flex items-center gap-2 rounded-lg border border-stone-800 bg-stone-950/60 px-2 py-1.5 text-[10px] text-stone-300">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={participant.isDead}
+                            onChange={(event) => {
+                              setSelectedTargetIds((current) => {
+                                const next = event.target.checked
+                                  ? Array.from(new Set([...current, participant.id]))
+                                  : current.filter((id) => id !== participant.id);
+                                if (participant.id === selectedTargetId && !event.target.checked) {
+                                  setSelectedTargetId(next[0] || '');
+                                } else if (!selectedTargetId && next[0]) {
+                                  setSelectedTargetId(next[0]);
+                                }
+                                return next;
+                              });
+                            }}
+                            className="accent-violet-500"
+                          />
+                          <span className="truncate">{participant.name}</span>
+                          <span className="ml-auto text-stone-500 font-mono">{participant.hpCurrent}/{participant.hpMax}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* Core D&D Actions */}
             <div className="grid grid-cols-3 gap-2 pt-1">

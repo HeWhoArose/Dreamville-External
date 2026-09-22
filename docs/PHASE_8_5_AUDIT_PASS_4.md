@@ -1,6 +1,6 @@
 # Phase 8.5 — Audit Pass 4: Current-State Reconciliation Before Further Implementation
 
-Audited commit: fb538e869e68d8d863fc5ef81f2c6b606fedf72f
+Audit began at commit fb538e869e68d8d863fc5ef81f2c6b606fedf72f; targeted fixes landed as subsequent commits.
 
 ## Audit rule
 
@@ -19,12 +19,12 @@ No duplicate subsystem should be created where an existing authoritative system 
 | Requirement | Classification | Current finding |
 |---|---|---|
 | CombatEffect schema | EXISTING_CONNECTED | CombatEffectDefinition/result/event infrastructure exists. |
-| Single attack | EXISTING_NEEDS_REWORK | Shared resolveAttackInstanceInternal exists, but legacy executeCapabilityCast remains a compatibility execution path that can bypass structured effect definitions. |
+| Single attack | EXISTING_CONNECTED | Structured capabilities are explicitly rejected by the legacy /combat/cast endpoint and routed to /combat/effect; the legacy path is retained only for capabilities without CombatEffectDefinition. |
 | Multi-instance attack | EXISTING_CONNECTED | executeMultiAttack resolves independent instances and consumes the outer action once. |
 | Per-instance target assignment | EXISTING_CONNECTED | instanceTargetIds preserve duplicate target assignments through targeting and resolution. |
-| Saving throw resolution | EXISTING_NEEDS_REWORK | Core resolver exists, but automatic-failure condition detection is too dependent on the first condition entry and needs robust condition-set semantics. |
+| Saving throw resolution | EXISTING_NEEDS_REWORK → FIXED | Automatic-failure logic now evaluates the full condition set and follows D&D STR/DEX automatic-failure conditions rather than the first stored condition or Stunned. |
 | Area / geometry | EXISTING_CONNECTED | Area shapes and normalized geometry exist. |
-| Target range | EXISTING_NEEDS_REWORK | Area-origin validation does not fully enforce per-target range semantics when an area origin exists. |
+| Target range | EXISTING_NEEDS_REWORK → FIXED | Range validation now has explicit AUTO/ORIGIN/EACH_TARGET/BOTH semantics; direct targets, area origins, and chain entry targets are validated consistently. |
 | Target LOS | EXISTING_CONNECTED / NEEDS REGRESSION | LOS exists and is canonical, but requires matrix regression coverage across single, area, chain, and per-instance cases. |
 | Damage defense pipeline | EXISTING_CONNECTED | applyCombatDamage + ConditionEngine are authoritative. |
 | Conditions / action blocking | EXISTING_CONNECTED | ConditionEngine contains blocksActions and canonical checks now route through legality. |
@@ -95,3 +95,7 @@ Each implementation cluster must complete:
 Then repeat the cycle for the next cluster.
 
 This is Audit Pass 4. It is not a completion audit.
+
+## Pass 4 correction after connector verification
+
+The legacy `POST /combat/cast` route was re-inspected before any rework. It already returns `STRUCTURED_EFFECT_REQUIRED` when a capability owns a canonical `CombatEffectDefinition`, so no second execution path was created. The legacy capability resolver remains only for capabilities that do not yet have structured effect definitions. This preserves the anti-duplication rule that motivated the audit.

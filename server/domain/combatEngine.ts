@@ -378,6 +378,12 @@ export interface BattlefieldParticipant {
   activeConcentration?: ActiveConcentration | null;
   spellSaveDc?: number;
   spellAttackBonus?: number;
+  combatResources?: Record<string, number>;
+  bossPhaseId?: string;
+  bossPhaseModifiers?: Record<string, number>;
+  bossPhaseAbilities?: string[];
+  bossTargetPriority?: string;
+  bossEnvironmentEffects?: string[];
 }
 
 export interface DynamicHazardZone {
@@ -3141,7 +3147,6 @@ export class TacticalCombatEngine {
       combatEffectEvents: this.getCombatEffectEvents(),
       combatActionSequence: this.combatActionSequence,
       bossPhaseStates: Array.from(this.bossPhaseStates.entries()).map(([bossId, state]) => ({ bossId, ...state })),
-      bossPhaseStates: Array.from(this.bossPhaseStates.entries()).map(([bossId, state]) => ({ bossId, ...state })),
     };
   }
 
@@ -3205,26 +3210,6 @@ export class TacticalCombatEngine {
     }
     this.combatEffectEvents = [...(data.combatEffectEvents || [])];
     this.combatActionSequence = typeof data.combatActionSequence === 'number' ? Math.max(0, Math.trunc(data.combatActionSequence)) : this.combatEffectEvents.length;
-    this.bossPhaseStates.clear();
-    for (const state of (data as any).bossPhaseStates || []) {
-      if (!state?.bossId || !state?.phaseId) continue;
-      const normalizedState = {
-        phaseId: state.phaseId,
-        modifiers: { ...(state.modifiers || {}) },
-        abilities: Array.isArray(state.abilities) ? [...state.abilities] : [],
-        targetPriority: state.targetPriority,
-        environmentEffects: Array.isArray(state.environmentEffects) ? [...state.environmentEffects] : [],
-      };
-      this.bossPhaseStates.set(state.bossId, normalizedState);
-      const participant = this.participants.get(state.bossId);
-      if (participant) {
-        participant.bossPhaseId = normalizedState.phaseId;
-        participant.bossPhaseModifiers = { ...normalizedState.modifiers };
-        participant.bossPhaseAbilities = [...normalizedState.abilities];
-        participant.bossTargetPriority = normalizedState.targetPriority;
-        participant.bossEnvironmentEffects = [...normalizedState.environmentEffects];
-      }
-    }
     this.bossPhaseStates.clear();
     for (const state of (data as any).bossPhaseStates || []) {
       if (!state?.bossId || !state?.phaseId) continue;

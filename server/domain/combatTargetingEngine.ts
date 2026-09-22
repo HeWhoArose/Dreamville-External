@@ -157,17 +157,31 @@ export class CombatTargetingEngine {
 
     if (definition.rangeCells !== undefined) {
       const range = Math.max(0, Number(definition.rangeCells));
+      const rangeMode = definition.rangeValidationMode && definition.rangeValidationMode !== 'AUTO'
+        ? definition.rangeValidationMode
+        : (mode === 'ALL_IN_AREA' ? 'ORIGIN' : mode === 'CHAIN' ? 'ORIGIN' : 'EACH_TARGET');
       const rangeOrigin = origin || { x: actor.x, y: actor.y };
-      const distance = Math.hypot(rangeOrigin.x - actor.x, rangeOrigin.y - actor.y);
-      if (distance > range) {
+      const originDistance = Math.hypot(rangeOrigin.x - actor.x, rangeOrigin.y - actor.y);
+
+      if ((rangeMode === 'ORIGIN' || rangeMode === 'BOTH') && originDistance > range) {
         return { success: false, errorReason: 'Effect origin is outside the actor range.', targetIds: [] };
       }
-      if (!origin) {
+
+      if (rangeMode === 'EACH_TARGET' || rangeMode === 'BOTH') {
         const outOfRange = targetIds.some((targetId) => {
           const target = participants.find((participant) => participant.id === targetId);
-          return target ? Math.hypot(target.x - actor.x, target.y - actor.y) > range : true;
+          if (!target) return true;
+          return Math.hypot(target.x - actor.x, target.y - actor.y) > range;
         });
         if (outOfRange) return { success: false, errorReason: 'At least one target is outside the effect range.', targetIds: [] };
+      }
+
+      // A chain's subsequent hops are governed by chainJumpRangeCells; rangeCells validates the initial effect origin.
+      if (mode === 'CHAIN' && targetIds.length > 0) {
+        const firstTarget = participants.find((participant) => participant.id === targetIds[0]);
+        if (firstTarget && Math.hypot(firstTarget.x - actor.x, firstTarget.y - actor.y) > range) {
+          return { success: false, errorReason: 'The initial chain target is outside the effect range.', targetIds: [] };
+        }
       }
     }
 

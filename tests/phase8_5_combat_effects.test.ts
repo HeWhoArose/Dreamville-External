@@ -759,3 +759,24 @@ test('Phase 8.5 audit pass 5: 50-instance effects stay within the canonical inst
   assert.equal(result.success, true);
   assert.equal(result.instances?.length, 50);
 });
+
+
+test('Phase 8.5 audit pass 5: canonical combat event buffers remain bounded under repeated multi-instance effects', () => {
+  const engine = engineWithEnemy({ attackBonus: 20 });
+  for (let run = 0; run < 25; run += 1) {
+    const result = combatEffectEngine.resolve(engine, 'hero', ['enemy'], {
+      id: 'bounded_event_barrage_' + run,
+      name: 'Bounded Event Barrage',
+      resolutionMode: 'MULTI_INSTANCE',
+      scale: 'PERSON',
+      actionCost: 'FREE',
+      targetingMode: 'ONE_TARGET',
+      instanceCount: 50,
+      attackFormula: '1d20',
+      damageFormula: '1d4',
+    });
+    assert.equal(result.success, true);
+  }
+  assert.ok(engine.getCombatEffectEvents().length <= 1000);
+  assert.ok(engine.getBattleEvents().length <= 500);
+});

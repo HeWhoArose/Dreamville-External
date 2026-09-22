@@ -758,10 +758,48 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
                         <option value="SAVE">Saving Throw</option>
                         <option value="AREA">Area Effect</option>
                         <option value="CHAIN">Chain</option>
+                        <option value="SEQUENCE">Sequence</option>
+                        <option value="OUTCOME">Semantic Outcome</option>
+                        <option value="WORLD_EFFECT">World Effect</option>
                       </select>
                     </label>
                     <label className="text-[10px] text-stone-500">Instances
                       <input type="number" min={1} max={50} value={effectCount} onChange={(e) => setEffectCount(Math.max(1, Math.min(50, Number(e.target.value) || 1)))} className="mt-1 w-full px-2 py-1.5 rounded bg-stone-900 border border-stone-700 text-[11px] text-stone-200" />
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <label className="text-[10px] text-stone-500">Targeting
+                      <select value={effectTargetingMode} onChange={(e) => setEffectTargetingMode(e.target.value as CombatEffectDefinition['targetingMode'])} className="mt-1 w-full px-2 py-1.5 rounded bg-stone-900 border border-stone-700 text-[11px] text-stone-200">
+                        <option value="ONE_TARGET">One Target</option>
+                        <option value="MULTI_TARGET">Multiple Targets</option>
+                        <option value="PER_INSTANCE">Per Instance</option>
+                        <option value="ALL_IN_AREA">Area</option>
+                        <option value="CHAIN">Chain</option>
+                      </select>
+                    </label>
+                    <label className="text-[10px] text-stone-500">Action Cost
+                      <select value={effectActionCost} onChange={(e) => setEffectActionCost(e.target.value as CombatEffectDefinition['actionCost'])} className="mt-1 w-full px-2 py-1.5 rounded bg-stone-900 border border-stone-700 text-[11px] text-stone-200">
+                        <option value="ACTION">Action</option>
+                        <option value="BONUS_ACTION">Bonus Action</option>
+                        <option value="REACTION">Reaction</option>
+                        <option value="FREE">Free</option>
+                      </select>
+                    </label>
+                    <label className="text-[10px] text-stone-500">Scale
+                      <select value={effectScale} onChange={(e) => setEffectScale(e.target.value as CombatEffectDefinition['scale'])} className="mt-1 w-full px-2 py-1.5 rounded bg-stone-900 border border-stone-700 text-[11px] text-stone-200">
+                        <option value="PERSON">Person</option>
+                        <option value="GROUP">Group</option>
+                        <option value="ENCOUNTER">Encounter</option>
+                        <option value="STRUCTURE">Structure</option>
+                        <option value="DISTRICT">District</option>
+                        <option value="CITY">City</option>
+                        <option value="REGION">Region</option>
+                        <option value="PLANET">Planet</option>
+                        <option value="COSMIC">Cosmic</option>
+                      </select>
+                    </label>
+                    <label className="text-[10px] text-stone-500">Range
+                      <input type="number" min={0} max={1000} value={effectRangeCells} onChange={(e) => setEffectRangeCells(Math.max(0, Number(e.target.value) || 0))} className="mt-1 w-full px-2 py-1.5 rounded bg-stone-900 border border-stone-700 text-[11px] text-stone-200" />
                     </label>
                   </div>
                   <div className="grid grid-cols-3 gap-2">
@@ -769,9 +807,38 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
                     <input aria-label="Damage formula" value={effectDamageFormula} onChange={(e) => setEffectDamageFormula(e.target.value)} className="px-2 py-1.5 rounded bg-stone-900 border border-stone-700 text-[11px] text-stone-200 font-mono" placeholder="1d8" />
                     <input aria-label="Damage type" value={effectDamageType} onChange={(e) => setEffectDamageType(e.target.value)} className="px-2 py-1.5 rounded bg-stone-900 border border-stone-700 text-[11px] text-stone-200" placeholder="radiant" />
                   </div>
+                  {(effectMode === 'SAVE' || effectMode === 'AREA') && (
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="text-[10px] text-stone-500">Save
+                        <select value={effectSaveAbility} onChange={(e) => setEffectSaveAbility(e.target.value)} className="mt-1 w-full px-2 py-1.5 rounded bg-stone-900 border border-stone-700 text-[11px] text-stone-200">
+                          <option>STR</option><option>DEX</option><option>CON</option><option>INT</option><option>WIS</option><option>CHA</option>
+                        </select>
+                      </label>
+                      <label className="text-[10px] text-stone-500">DC
+                        <input type="number" min={1} max={60} value={effectDifficultyClass} onChange={(e) => setEffectDifficultyClass(Math.max(1, Math.min(60, Number(e.target.value) || 1)))} className="mt-1 w-full px-2 py-1.5 rounded bg-stone-900 border border-stone-700 text-[11px] text-stone-200" />
+                      </label>
+                    </div>
+                  )}
+                  {(effectMode === 'OUTCOME' || effectMode === 'WORLD_EFFECT') && (
+                    <label className="text-[10px] text-stone-500 block">Semantic Outcome
+                      <select value={effectOutcome || 'INSTANT_DEFEAT'} onChange={(e) => setEffectOutcome(e.target.value as CombatEffectDefinition['outcome'])} className="mt-1 w-full px-2 py-1.5 rounded bg-stone-900 border border-stone-700 text-[11px] text-stone-200">
+                        <option value="INSTANT_DEFEAT">Instant Defeat</option>
+                        <option value="ERASE_FROM_WORLD">Erase From World</option>
+                        <option value="DOWNED">Downed</option>
+                        <option value="BANISHED">Banished</option>
+                        <option value="TELEPORTED">Teleported</option>
+                        <option value="TRANSFORMED">Transformed</option>
+                        <option value="SEALED">Sealed</option>
+                        <option value="SUMMONED">Summoned</option>
+                        <option value="RESOURCE_GRANTED">Resource Granted</option>
+                        <option value="RESOURCE_REMOVED">Resource Removed</option>
+                        <option value="WORLD_STATE_CHANGED">World State Changed</option>
+                      </select>
+                    </label>
+                  )}
                   <div className="grid grid-cols-2 gap-2">
-                    <button type="button" onClick={handleStructuredEffect} disabled={actionLoading || !isPlayerTurn || !actorCanAct || !actionAvailable || !selectedTargetId || !selectedCapabilityId} className="py-2 px-2 rounded bg-violet-900/70 hover:bg-violet-800 text-violet-100 border border-violet-700 text-[11px] font-semibold disabled:opacity-50">Resolve Effect</button>
-                    <button type="button" onClick={handleSimulateStructuredEffect} disabled={actionLoading || !selectedTargetId || !selectedCapabilityId} className="py-2 px-2 rounded bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 text-[11px] font-semibold disabled:opacity-50">Simulate</button>
+                    <button type="button" onClick={handleStructuredEffect} disabled={actionLoading || !isPlayerTurn || !actorCanAct || !actionAvailable || (((effectTargetingMode === 'ONE_TARGET' || effectTargetingMode === 'PER_INSTANCE') && !selectedTargetId)) || !selectedCapabilityId} className="py-2 px-2 rounded bg-violet-900/70 hover:bg-violet-800 text-violet-100 border border-violet-700 text-[11px] font-semibold disabled:opacity-50">Resolve Effect</button>
+                    <button type="button" onClick={handleSimulateStructuredEffect} disabled={actionLoading || (((effectTargetingMode === 'ONE_TARGET' || effectTargetingMode === 'PER_INSTANCE') && !selectedTargetId)) || !selectedCapabilityId} className="py-2 px-2 rounded bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 text-[11px] font-semibold disabled:opacity-50">Simulate</button>
                   </div>
                   {effectResult && (
                     <div className="p-2 rounded bg-stone-900 border border-stone-800 text-[10px] text-stone-300 space-y-1">

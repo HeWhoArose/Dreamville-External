@@ -179,16 +179,45 @@ export class WorldEffectEngine {
       }
 
       if (definition.outcome === 'RESOURCE_GRANTED' || definition.outcome === 'RESOURCE_REMOVED') {
+        const resourceName = String(definition.outcomePayload?.resource || '').trim();
+        const requestedAmount = Number(definition.outcomePayload?.amount ?? 0);
+        if (!resourceName || !Number.isFinite(requestedAmount) || requestedAmount < 0) {
+          return {
+            success: false,
+            errorReason: 'Resource outcomes require a non-empty resource name and non-negative finite amount.',
+            effectId: definition.id,
+            affectedEntityIds,
+            changedScopes,
+          };
+        }
+
+        const targetParticipant = combat.getParticipant(targetId);
+        const combatResources = targetParticipant?.combatResources || {};
+        const previousAmount = Math.max(0, Number(combatResources[resourceName] || 0));
+        const nextAmount =
+          definition.outcome === 'RESOURCE_GRANTED'
+            ? previousAmount + requestedAmount
+            : Math.max(0, previousAmount - requestedAmount);
+
         metadata.resources = {
           ...((metadata.resources || {}) as Record<string, unknown>),
-          [String(definition.outcomePayload?.resource || 'generic')]: {
+          [resourceName]: {
             operation: definition.outcome,
-            amount: definition.outcomePayload?.amount ?? 0,
+            requestedAmount,
+            previousAmount,
+            newAmount: nextAmount,
           },
         };
       }
 
-      const position =
+      if (definition.outcome === 'RESOURCE_GRANTED' || definition.outcome === 'RESOURCE_REMOVED') {
+        const authoritativeParticipant = combat.getParticipant(targetId);
+        metadata.combatResources = {
+          ...(authoritativeParticipant?.combatResources || {}),
+        };
+      }
+
+            const position =
         definition.outcome === 'TELEPORTED'
           ? definition.outcomePayload?.targetPosition
           : undefined;
@@ -229,7 +258,11 @@ export class WorldEffectEngine {
     );
 
     const scopeKey = definition.scale + ':' + definition.id;
-    const changedScopes = [scopeKey];
+    const changedScopes = [
+      scopeKey,
+      ...affectedWorldNodeIds.map((nodeId) => 'WORLD_NODE:' + nodeId),
+      ...affectedEntityIds.map((entityId) => 'ENTITY:' + entityId),
+    ];
     const sequence = repository.getActiveEffects(storyId).length + 1;
     const worldEventId =
       'world_effect_' + storyId + '_' + definition.id + '_' + sequence;

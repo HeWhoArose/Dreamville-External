@@ -2939,7 +2939,8 @@ export class TacticalCombatEngine {
   public applySemanticOutcome(
     targetId: string,
     outcome: import('../../src/types').CombatOutcomeType,
-    outcomePayload?: Record<string, unknown>
+    outcomePayload?: Record<string, unknown>,
+    sourceActorId?: string
   ): { success: boolean; errorReason?: string; targetId: string; wasAlive: boolean; isDead: boolean; metadata?: Record<string, unknown> } {
     const target = this.participants.get(targetId);
     if (!target) return { success: false, errorReason: 'Target participant not found.', targetId, wasAlive: false, isDead: false };
@@ -3011,14 +3012,14 @@ export class TacticalCombatEngine {
       actionId: 'combat_outcome_' + this.currentRound + '_' + this.combatActionSequence,
       eventType: 'SEMANTIC_OUTCOME_RESOLVED',
       turnNumber: this.currentRound,
-      actorId: targetId,
+      actorId: sourceActorId || targetId,
       targetId,
       headline: `Semantic outcome ${outcome} applied to ${target.name}.`,
       metadata,
     });
     this.eventLog.push({
       turnNumber: this.currentRound,
-      actorId: targetId,
+      actorId: sourceActorId || targetId,
       targetId,
       actionType: 'CAST',
       headline: `Semantic outcome ${outcome} applied to ${target.name}.`,

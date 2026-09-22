@@ -2772,6 +2772,19 @@ export class TacticalCombatEngine {
     if (this.turnQueue.length > 0 && (!currentActor || currentActor.id !== attackerId)) {
       return { success: false, errorReason: "It is not this attacker's turn.", hits: false, damage: 0, targetDied: target.isDead, isCritical: false };
     }
+    // Total Cover is a pre-action targeting failure. Validate it before consuming
+    // the Action so a blocked direct attack preserves the actor's Action resource.
+    if (target.cover === 'TOTAL') {
+      return {
+        success: false,
+        errorReason: 'Target has Total Cover and cannot be targeted directly.',
+        hits: false,
+        damage: 0,
+        targetDied: target.isDead,
+        isCritical: false,
+      };
+    }
+
     const actionResult = options?.consumeAction === false
       ? { success: true as const }
       : this.consumeCombatAction(attackerId, 'ACTION');

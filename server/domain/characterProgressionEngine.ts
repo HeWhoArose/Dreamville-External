@@ -243,6 +243,10 @@ export class CharacterProgressionEngine {
 
   public registerModules(modules: ProgressionModuleDefinition[]): void {
     this.assertCanonicalMutationAuthority();
+    this.registerModulesInternal(modules);
+  }
+
+  private registerModulesInternal(modules: ProgressionModuleDefinition[]): void {
     for (const module of modules || []) this.registerModuleInternal(module);
   }
 
@@ -251,8 +255,7 @@ export class CharacterProgressionEngine {
     this.modules.set(module.id, clone(module));
   }
 
-  public registerFeatModule(feat: CharacterFeat): ProgressionModuleDefinition {
-    this.assertCanonicalMutationAuthority();
+  private registerFeatModuleInternal(feat: CharacterFeat): ProgressionModuleDefinition {
     const moduleId = deterministicId('feat_module', feat.worldId || 'world', feat.id, feat.name);
     const featureId = deterministicId('feat_feature', moduleId, feat.id);
     const sourceModifiers = (feat.effects || [])
@@ -296,8 +299,13 @@ export class CharacterProgressionEngine {
       provenance: feat.provenance || 'CHARACTER_GENESIS',
       sourceCharacterFeatId: feat.id,
     };
-    this.registerModule(module);
+    this.registerModuleInternal(module);
     return clone(module);
+  }
+
+  public registerFeatModule(feat: CharacterFeat): ProgressionModuleDefinition {
+    this.assertCanonicalMutationAuthority();
+    return this.registerFeatModuleInternal(feat);
   }
 
   public seedFromCharacter(
@@ -306,10 +314,20 @@ export class CharacterProgressionEngine {
     commandId = 'GENESIS',
     options?: { progression?: Partial<CharacterProgressionState>; rulesProfile?: RulesProfile | null; worldModules?: ProgressionModuleDefinition[] }
   ): CharacterProgressionState {
-    if (options?.worldModules) this.registerModules(options.worldModules);
+    // Genesis seeding is bootstrap state construction, not a player mutation.
+    // It may occur before the repository enters a canonical command transaction.
+    // Public module registration remains guarded; bootstrap uses internal registration.
+    if (options?.worldModules) this.registerModulesInternal(options.worldModules);
+
+    const explicitProgression = options?.progression || (character as any).progression || {};
+    const customModules = Array.isArray((explicitProgression as any).customModules)
+      ? (explicitProgression as any).customModules as unknown as ProgressionModuleDefinition[]
+      : [];
+    if (customModules.length > 0) this.registerModulesInternal(customModules);
+
     const registeredFeatModules = ((character.feats || []) as CharacterFeat[])
       .filter((feat) => Boolean(feat?.id && feat?.name))
-      .map((feat) => this.registerFeatModule(feat));
+      .map((feat) => this.registerFeatModuleInternal(feat));
     const featModuleByCharacterId = new Map(
       ((character.feats || []) as CharacterFeat[])
         .filter((feat) => Boolean(feat?.id))
@@ -317,7 +335,7 @@ export class CharacterProgressionEngine {
         .filter((entry): entry is [string, string] => Boolean(entry[0] && entry[1]))
     );
 
-    const explicit = options?.progression || (character as any).progression || {};
+    const explicit = explicitProgression;
     const state: CharacterProgressionState = {
       actorId,
       currentLevel: normalizeLevel(character.coreStats?.level, 1),

@@ -30,6 +30,7 @@ import {
   CharacterProgressionCustomModule,
 } from '../../src/types';
 import { CharacterProgressionEngine } from '../domain/characterProgressionEngine';
+import { normalizeDiceFormula } from '../../src/data/rulesDice';
 
 export class CharacterGenesisAiUnavailableError extends Error {
   public readonly code = 'AI_UNAVAILABLE';
@@ -1171,7 +1172,7 @@ IMPORTANT:
       sourceUserPrompt: concept,
       checkFormula: worldTemplate?.dndRulesMode === 'FULL_DND' || !worldTemplate?.dndRulesMode
         ? '1d20'
-        : String(proposal?.checkFormula || '1d20'),
+        : normalizeDiceFormula(proposal?.checkFormula, '1d20'),
       damageFormula: typeof proposal?.damageFormula === 'string' ? proposal.damageFormula : undefined,
       storyCheckChallenges: Array.isArray(proposal.storyCheckChallenges) ? proposal.storyCheckChallenges : undefined,
     };
@@ -1188,7 +1189,7 @@ IMPORTANT:
       range: t.range || 'Close',
       checkFormula: worldTemplate?.dndRulesMode === 'FULL_DND' || !worldTemplate?.dndRulesMode
         ? '1d20'
-        : String(t.checkFormula || proposal?.checkFormula || '1d20'),
+        : normalizeDiceFormula(t.checkFormula || proposal?.checkFormula, '1d20'),
       damageFormula: typeof t.damageFormula === 'string' ? t.damageFormula : undefined,
       provenance: generatedProvenance as CharacterProvenanceSource,
     }));
@@ -1840,7 +1841,7 @@ IMPORTANT:
       mechanicalDescription: proposal.mechanicalDescription,
       checkFormula: worldTemplate?.dndRulesMode === 'FULL_DND' || !worldTemplate?.dndRulesMode
         ? '1d20'
-        : String(proposal?.checkFormula || '1d20'),
+        : normalizeDiceFormula(proposal?.checkFormula, '1d20'),
       tags: Array.isArray(proposal.tags) ? proposal.tags.map(String) : ['Custom'],
       worldCompatibility: proposal.worldCompatibility,
       provenance: generatedProvenance,

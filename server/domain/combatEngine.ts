@@ -958,15 +958,7 @@ export class TacticalCombatEngine {
       return { success: false, errorReason: "It is not this actor's turn." };
     }
 
-    // DEF-CH8-04: Enforce movement-restricting conditions
-    const immobilizingConditions = ['Immobilized', 'Grappled', 'Paralyzed', 'Stunned', 'Restrained', 'Petrified', 'Asleep', 'Unconscious'];
-    if (actor.conditions && actor.conditions.some((c) => immobilizingConditions.includes(c))) {
-      const activeCond = actor.conditions.find((c) => immobilizingConditions.includes(c));
-      return {
-        success: false,
-        errorReason: `Actor is ${activeCond} and cannot move.`,
-      };
-    }
+    // Movement legality is centralized in ConditionEngine blocksActions semantics.
 
     // DEF-CH8-03: Enforce canonical map boundaries if configured
     if (this.mapBounds) {
@@ -1628,6 +1620,15 @@ export class TacticalCombatEngine {
         combatState: this.getTurnResources(actorId),
       };
     }
+    const conditionLegality = this.canActorPerformCombatAction(actorId, 'ACTION');
+    if (!conditionLegality.success) {
+      return {
+        success: false,
+        action,
+        errorReason: conditionLegality.errorReason,
+        combatState: this.getTurnResources(actorId),
+      };
+    }
 
     let result: { success: boolean; errorReason?: string };
     switch (action) {
@@ -2276,7 +2277,7 @@ export class TacticalCombatEngine {
     if (attacker.isDead || attacker.hpCurrent <= 0 || attacker.conditions.includes('Unconscious')) return { success: false, errorReason: 'An unconscious or dead actor cannot attack.' };
     const actionResult = options.consumeAction === false
       ? { success: true as const }
-      : this.actionEconomy.consume(attackerId, 'ACTION');
+      : this.consumeCombatAction(attackerId, 'ACTION');
     if (!actionResult.success) return { success: false, errorReason: actionResult.errorReason };
 
     const actionId = `combat_action_${this.currentRound}_${attackerId}_multi_${this.combatActionSequence + 1}`;
@@ -2529,7 +2530,7 @@ export class TacticalCombatEngine {
           : 'ACTION';
 
     if (params.consumeResource !== false && params.actionType !== 'free') {
-      const actionResult = this.actionEconomy.consume(params.actorId, resource);
+      const actionResult = this.consumeCombatAction(params.actorId, resource as import('../../src/types').CombatActionCost);
       if (!actionResult.success) {
         return {
           success: false,
@@ -2776,6 +2777,10 @@ export class TacticalCombatEngine {
     }
 
     // Consume action resource upon successful cast
+    const resourceLegality = this.canActorPerformCombatAction(params.actorId, resourceType === 'BONUS_ACTION' ? 'BONUS_ACTION' : resourceType === 'REACTION' ? 'REACTION' : 'ACTION');
+    if (!resourceLegality.success) {
+      return { success: false, errorReason: resourceLegality.errorReason };
+    }
     this.actionEconomy.consume(params.actorId, resourceType);
 
     // Synchronize state back to participant

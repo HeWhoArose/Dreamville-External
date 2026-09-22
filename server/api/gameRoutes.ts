@@ -2930,7 +2930,8 @@ gameRouter.post('/combat/effect', async (req: Request, res: Response) => {
     const capEngine = worldRepository.getCapabilityEngine(storyId);
     const effectiveCaps = capEngine.getEffectiveActorCapabilities(actorId, inv);
     const capabilityAuthorized = effectiveCaps.some((cap: any) => cap.id === capId || cap.name === normalized.name);
-    if (!capabilityAuthorized && req.body?.allowUnboundTest !== true) return res.status(403).json({ success: false, errorReason: 'Actor does not possess the requested capability/effect.' });
+    const testBypass = process.env.NODE_ENV !== 'production' && req.body?.allowUnboundTest === true;
+    if (!capabilityAuthorized && !testBypass) return res.status(403).json({ success: false, errorReason: 'Actor does not possess the requested capability/effect.' });
     for (const targetId of resolvedTargetIds) {
       const target = combat.getParticipant(targetId);
       if (target && !combat.isParticipantKnownToActor(actorId, target, worldRepository.getCombatPerceptionOptions(storyId, actorId))) return res.status(403).json({ success: false, errorReason: 'Target is not legitimately perceived by the actor.' });
@@ -2942,7 +2943,7 @@ gameRouter.post('/combat/effect', async (req: Request, res: Response) => {
       async (_command, context) => {
         const transactionCombat = context.repository.getCombatEngine(storyId);
         const effectResult = (normalized.resolutionMode === 'WORLD_EFFECT' || normalized.resolutionMode === 'OUTCOME')
-          ? worldEffectEngine.apply({ repository: context.repository, storyId, actorId, definition: normalized, targetIds: resolvedTargetIds, authorityVerified: capabilityAuthorized || req.body?.allowUnboundTest === true })
+          ? worldEffectEngine.apply({ repository: context.repository, storyId, actorId, definition: normalized, targetIds: resolvedTargetIds, authorityVerified: capabilityAuthorized || testBypass })
           : combatEffectEngine.resolve(transactionCombat, actorId, resolvedTargetIds, normalized);
         if (!effectResult.success) return { success: false, errorReason: effectResult.errorReason };
         for (const result of effectResult.instances || []) {

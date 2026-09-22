@@ -32,6 +32,11 @@ export class CombatTargetingEngine {
     }
 
     if (mode === 'ONE_TARGET') targetIds = targetIds.slice(0, 1);
+    if (mode === 'PER_INSTANCE') {
+      const expectedInstances = definition.instanceCount ?? 0;
+      if (expectedInstances < 1) return { success: false, errorReason: 'PER_INSTANCE targeting requires instanceCount.', targetIds: [] };
+      if (targetIds.length !== expectedInstances) return { success: false, errorReason: `PER_INSTANCE targeting requires exactly ${expectedInstances} targetIds.`, targetIds: [] };
+    }
     if (definition.maxTargets !== undefined) targetIds = targetIds.slice(0, Math.max(1, Math.min(100, Math.trunc(definition.maxTargets))));
     if (!targetIds.length) return { success: false, errorReason: 'No legal targets satisfy the requested targeting mode.', targetIds: [] };
 

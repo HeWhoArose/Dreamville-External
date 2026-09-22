@@ -9,6 +9,7 @@ import {
   CombatEffectDefinition,
 } from '../types';
 import { apiClient } from '../services/apiClient';
+import { CombatAnimationLayer } from './combat/CombatAnimationLayer';
 import {
   Swords,
   Shield,
@@ -46,6 +47,8 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
   const [effectDamageType, setEffectDamageType] = useState<string>('radiant');
   const [effectResult, setEffectResult] = useState<any>(null);
   const [effectSimulation, setEffectSimulation] = useState<any>(null);
+  const [presentationMode, setPresentationMode] = useState<'FULL' | 'FAST' | 'TEXT' | 'LOG'>('FULL');
+  const [animationPlan, setAnimationPlan] = useState<any>(null);
 
   const fetchCombatData = async () => {
     try {
@@ -211,7 +214,10 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
       setCombatState(result?.combatState || combatState);
       const events = result?.effectResult?.instances || [];
       const plan = await apiClient.generateCombatAnimationPlan(combatState.storyId, definition, events as any);
-      if (plan?.plan) setEffectResult((previous: any) => ({ ...(typeof previous === 'object' ? previous : {}), animationPlan: plan.plan }));
+      if (plan?.plan) {
+        setAnimationPlan(plan.plan);
+        setEffectResult((previous: any) => ({ ...(typeof previous === 'object' ? previous : {}), animationPlan: plan.plan }));
+      }
       onRefreshWorldState?.();
     } catch (err: any) {
       setErrorMsg(err.message || 'Structured combat effect failed.');
@@ -273,7 +279,8 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+    <div className="relative max-w-7xl mx-auto px-4 py-6 space-y-6">
+      <CombatAnimationLayer plan={animationPlan} events={combatState?.combatEffectEvents || []} mode={presentationMode} />
       {/* Header & Controls Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-stone-900/90 border border-stone-800 p-4 rounded-xl">
         <div className="flex items-center gap-3">
@@ -687,6 +694,9 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
               </div>
               {advancedEffectOpen && (
                 <div className="space-y-2 p-3 bg-stone-950/70 rounded-lg border border-stone-800">
+                  <div className="flex items-center gap-1 mb-1">{(['FULL', 'FAST', 'TEXT', 'LOG'] as const).map((mode) => (
+                    <button key={mode} type="button" onClick={() => setPresentationMode(mode)} className={`px-2 py-1 rounded border text-[9px] ${presentationMode === mode ? 'border-violet-500 bg-violet-900/50 text-violet-100' : 'border-stone-700 bg-stone-900 text-stone-500'}`}>{mode}</button>
+                  ))}</div>
                   <div className="grid grid-cols-2 gap-2">
                     <label className="text-[10px] text-stone-500">Resolution
                       <select value={effectMode} onChange={(e) => setEffectMode(e.target.value as CombatEffectDefinition['resolutionMode'])} className="mt-1 w-full px-2 py-1.5 rounded bg-stone-900 border border-stone-700 text-[11px] text-stone-200">

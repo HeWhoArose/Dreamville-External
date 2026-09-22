@@ -97,7 +97,7 @@ export class CombatEffectEngine {
     }
     if (normalized.resolutionMode === 'SAVE') {
       if (!normalized.savingThrowAbility || normalized.difficultyClass == null) return { success: false, errorReason: 'SAVE effects require savingThrowAbility and difficultyClass.' };
-      return engine.executeSavingThrowEffect({ actorId, targetIds: resolvedTargetIds, savingThrowAbility: normalized.savingThrowAbility, difficultyClass: normalized.difficultyClass, damageFormula: normalized.damageFormula, damageType: normalized.damageType, saveFormula: normalized.saveFormula, halfDamageOnSave: normalized.halfDamageOnSave, consumeAction: options.consumeAction !== false });
+      return engine.executeSavingThrowEffect({ actorId, targetIds: resolvedTargetIds, savingThrowAbility: normalized.savingThrowAbility, difficultyClass: normalized.difficultyClass, damageFormula: normalized.damageFormula, damageType: normalized.damageType, saveFormula: normalized.saveFormula, halfDamageOnSave: normalized.halfDamageOnSave, damageRollMode: normalized.areaDamageRollMode, consumeAction: options.consumeAction !== false });
     }
     if (normalized.resolutionMode === 'AREA') {
       if (!resolvedTargetIds.length) return { success: false, errorReason: 'AREA effects require resolved targetIds.' };
@@ -106,7 +106,7 @@ export class CombatEffectEngine {
         return engine.executeSavingThrowEffect({ actorId, targetIds: resolvedTargetIds, savingThrowAbility: normalized.savingThrowAbility, difficultyClass: normalized.difficultyClass, damageFormula: normalized.damageFormula, damageType: normalized.damageType, saveFormula: normalized.saveFormula, halfDamageOnSave: normalized.halfDamageOnSave, consumeAction: options.consumeAction !== false });
       }
       if (!normalized.damageFormula) return { success: false, errorReason: 'Automatic AREA effects require damageFormula.' };
-      return engine.executeAreaDamageEffect({ actorId, targetIds: resolvedTargetIds, damageFormula: normalized.damageFormula, damageType: normalized.damageType, consumeAction: options.consumeAction !== false });
+      return engine.executeAreaDamageEffect({ actorId, targetIds: resolvedTargetIds, damageFormula: normalized.damageFormula, damageType: normalized.damageType, damageRollMode: normalized.areaDamageRollMode, consumeAction: options.consumeAction !== false });
     }
     if (normalized.resolutionMode === 'CHAIN') {
       const chainCount = Math.max(1, Math.min(normalized.chainCount ?? normalized.instanceCount ?? resolvedTargetIds.length, resolvedTargetIds.length));

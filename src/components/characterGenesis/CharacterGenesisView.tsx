@@ -2421,6 +2421,16 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                       {cap.description}
                     </p>
 
+                    {(cap as any).effectDefinition && (
+                      <div className="rounded-md border border-indigo-900/50 bg-indigo-950/20 px-2.5 py-2 text-[10px] text-indigo-200 space-y-1">
+                        <div className="font-semibold">Combat Resolution</div>
+                        <div className="font-mono text-indigo-300/80">
+                          {(cap as any).effectDefinition.resolutionMode} • {(cap as any).effectDefinition.targetingMode || 'ONE_TARGET'}
+                          {(cap as any).effectDefinition.instanceCount ? ` • ${(cap as any).effectDefinition.instanceCount} instances` : ''}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-neutral-400 border-t border-neutral-800/80 pt-2 font-mono">
                       <span>Cost: {cap.baseEnergyCost ?? 15} Energy</span>
                       {cap.checkFormula && <span>Check: {cap.checkFormula}</span>}

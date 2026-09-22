@@ -2564,6 +2564,9 @@ export class InMemoryWorldRepository implements WorldRepository {
     if (snapshot.progression) {
       this.getCharacterProgressionEngine(storyId).importState(clone(snapshot.progression));
     }
+    if (snapshot.entities) {
+      this.getEntityRegistry(storyId).importState(clone(snapshot.entities));
+    }
     if (snapshot.conditions) this.getConditionEngine(storyId).importState(clone(snapshot.conditions));
     if (snapshot.combat) this.getCombatEngine(storyId).importState(clone(snapshot.combat));
     if (snapshot.rest) this.getRestRecoveryEngine(storyId).importState(clone(snapshot.rest));

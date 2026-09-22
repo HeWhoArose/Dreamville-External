@@ -1986,6 +1986,8 @@ export class TacticalCombatEngine {
       advantage?: boolean;
       disadvantage?: boolean;
       damageType?: string;
+      attackFormula?: string;
+      consumeAction?: boolean;
     }
   ): {
     success: boolean;
@@ -2006,11 +2008,16 @@ export class TacticalCombatEngine {
     if (this.turnQueue.length > 0 && (!currentActor || currentActor.id !== attackerId)) {
       return { success: false, errorReason: "It is not this attacker's turn.", hits: false, damage: 0, targetDied: target.isDead, isCritical: false };
     }
-    const actionResult = this.actionEconomy.consume(attackerId, 'ACTION');
+    const actionResult = options?.consumeAction === false
+      ? { success: true as const }
+      : this.actionEconomy.consume(attackerId, 'ACTION');
     if (!actionResult.success) {
       return { success: false, errorReason: actionResult.errorReason, hits: false, damage: 0, targetDied: target.isDead, isCritical: false };
     }
-    const result = this.resolveAttackInstanceInternal(attackerId, targetId, options);
+    const result = this.resolveAttackInstanceInternal(attackerId, targetId, {
+      ...options,
+      attackFormula: options?.attackFormula,
+    });
     if (!result.success) {
       return { success: false, errorReason: result.errorReason, hits: false, damage: 0, targetDied: result.targetDied, isCritical: result.isCritical };
     }
@@ -2031,6 +2038,7 @@ export class TacticalCombatEngine {
       advantage?: boolean;
       disadvantage?: boolean;
       retargetPolicy?: 'NONE' | 'RETARGET_ON_DEATH';
+      consumeAction?: boolean;
     } = {}
   ): CombatEffectResult {
     if (!this.tacticalCombatEnabled()) return { success: false, errorReason: 'Tactical combat is disabled by the active rules profile.' };
@@ -2045,7 +2053,9 @@ export class TacticalCombatEngine {
     const currentActor = this.getCurrentActor();
     if (this.turnQueue.length > 0 && (!currentActor || currentActor.id !== attackerId)) return { success: false, errorReason: "It is not this attacker's turn." };
     if (attacker.isDead || attacker.hpCurrent <= 0 || attacker.conditions.includes('Unconscious')) return { success: false, errorReason: 'An unconscious or dead actor cannot attack.' };
-    const actionResult = this.actionEconomy.consume(attackerId, 'ACTION');
+    const actionResult = options.consumeAction === false
+      ? { success: true as const }
+      : this.actionEconomy.consume(attackerId, 'ACTION');
     if (!actionResult.success) return { success: false, errorReason: actionResult.errorReason };
 
     const actionId = `combat_action_${this.currentRound}_${attackerId}_multi_${this.combatActionSequence + 1}`;
@@ -2087,6 +2097,70 @@ export class TacticalCombatEngine {
       instances, totalDamage, defeatedTargetIds,
       canonicalEventIds: instances.map((instance) => this.combatEffectEvents.find((event) => event.actionId === actionId && event.instanceIndex === instance.instanceIndex)?.eventId).filter(Boolean) as string[],
     };
+  }
+
+  public executeSavingThrowEffect(params: {
+    actorId: string;
+    targetIds: string[];
+    savingThrowAbility: string;
+    difficultyClass: number;
+    damageFormula?: string;
+    damageType?: string;
+    saveFormula?: string;
+    halfDamageOnSave?: boolean;
+    actionId?: string;
+    consumeAction?: boolean;
+  }): CombatEffectResult {
+    if (!this.tacticalCombatEnabled()) return { success: false, errorReason: 'Tactical combat is disabled by the active rules profile.' };
+    const actor = this.participants.get(params.actorId);
+    if (!actor) return { success: false, errorReason: 'Actor not found.' };
+    const targets = Array.from(new Set(params.targetIds.filter(Boolean))).map((id) => this.participants.get(id)).filter((target): target is BattlefieldParticipant => Boolean(target));
+    if (!targets.length) return { success: false, errorReason: 'At least one valid target is required.' };
+    const currentActor = this.getCurrentActor();
+    if (this.turnQueue.length > 0 && (!currentActor || currentActor.id !== params.actorId)) return { success: false, errorReason: "It is not this actor's turn." };
+    const actionResult = params.consumeAction === false ? { success: true as const } : this.actionEconomy.consume(params.actorId, 'ACTION');
+    if (!actionResult.success) return { success: false, errorReason: actionResult.errorReason };
+    const rollFormula = resolveCapabilityCheckFormula((this.rulesProfile?.mode || 'FULL_DND') as any, params.saveFormula);
+    const actionId = params.actionId || `combat_action_${this.currentRound}_${params.actorId}_save_${this.combatActionSequence + 1}`;
+    const instances: CombatAttackInstanceResult[] = [];
+    const defeatedTargetIds: string[] = [];
+    let totalDamage = 0;
+    for (let i = 0; i < targets.length; i += 1) {
+      const target = targets[i];
+      if (target.isDead || target.hpCurrent <= 0) continue;
+      const modifier = target.saveModifiers?.[params.savingThrowAbility] ?? target.savingThrowModifiers?.[params.savingThrowAbility] ?? 0;
+      const save = this.ruleset.resolveSavingThrow({ saveModifier: modifier, difficultyClass: params.difficultyClass, rollFormula, diceEngine: this.diceEngine });
+      let damage = 0;
+      let targetDied = false;
+      let damageRoll: RollRecord | undefined;
+      if (params.damageFormula) {
+        const raw = this.ruleset.resolveDamage(params.damageFormula, false, this.diceEngine);
+        damageRoll = raw.roll;
+        const amount = save.succeeds ? (params.halfDamageOnSave ? Math.floor(raw.totalDamage / 2) : 0) : raw.totalDamage;
+        if (amount > 0) {
+          const resolved = this.applyCombatDamage(target, amount, params.damageType || 'force', false);
+          damage = resolved.damage;
+          targetDied = resolved.targetDied;
+          if (targetDied && !defeatedTargetIds.includes(target.id)) defeatedTargetIds.push(target.id);
+        }
+      }
+      this.combatActionSequence += 1;
+      const eventId = `combat_evt_${this.currentRound}_${this.combatActionSequence}`;
+      this.combatEffectEvents.push({
+        eventId, actionId, eventType: 'SAVE_RESOLVED', turnNumber: this.currentRound, actorId: params.actorId, targetId: target.id, instanceIndex: i,
+        headline: save.succeeds ? `${target.name} succeeded on the ${params.savingThrowAbility} save.` : `${target.name} failed the ${params.savingThrowAbility} save.`,
+        saveRoll: save.roll, damageRoll, damage, finalDamage: damage, isCritical: false,
+        metadata: { difficultyClass: params.difficultyClass, saveFormula: rollFormula, halfDamageOnSave: Boolean(params.halfDamageOnSave), damageType: params.damageType || 'force' },
+      });
+      this.eventLog.push({
+        turnNumber: this.currentRound, actorId: params.actorId, targetId: target.id, actionType: 'CAST',
+        headline: save.succeeds ? `${target.name} succeeded on the ${params.savingThrowAbility} save${damage ? ` and took ${damage} damage.` : '.'}` : `${target.name} failed the ${params.savingThrowAbility} save${damage ? ` and took ${damage} damage.` : '.'}`,
+        damageInflicted: damage, rollRecord: save.roll, metadata: { actionId, eventId, savingThrowAbility: params.savingThrowAbility, difficultyClass: params.difficultyClass },
+      });
+      instances.push({ instanceIndex: i, targetId: target.id, hits: !save.succeeds, isCritical: false, damage, targetDied, roll: save.roll, damageRoll, targetArmorClass: params.difficultyClass });
+      totalDamage += damage;
+    }
+    return { success: true, actionConsumed: params.consumeAction !== false, instances, totalDamage, defeatedTargetIds, canonicalEventIds: this.combatEffectEvents.filter((event) => event.actionId === actionId).map((event) => event.eventId) };
   }
 
   public getCombatEffectEvents(): CombatEventRecord[] {

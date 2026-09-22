@@ -3671,6 +3671,24 @@ gameRouter.post('/memories/store', async (req: Request, res: Response) => {
 
     memEngine.storeMemory(memRecord);
 
+    const registry = worldRepository.getEntityRegistry(storyId);
+    const subject = registry.get(memRecord.subjectEntityId);
+    if (subject && !subject.memoryRefs.includes(memRecord.id)) {
+      registry.upsert({
+        ...subject,
+        memoryRefs: [...subject.memoryRefs, memRecord.id],
+      });
+    }
+    for (const relatedId of memRecord.relatedEntityIds) {
+      const related = registry.get(relatedId);
+      if (related && !related.memoryRefs.includes(memRecord.id)) {
+        registry.upsert({
+          ...related,
+          memoryRefs: [...related.memoryRefs, memRecord.id],
+        });
+      }
+    }
+
     res.json({
       success: true,
       memory: memRecord,

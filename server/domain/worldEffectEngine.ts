@@ -36,6 +36,18 @@ export class WorldEffectEngine {
     if (!validation.success) {
       return { success: false, errorReason: validation.errorReason, effectId: definition.id, affectedEntityIds: [], changedScopes: [] };
     }
+    const combat = repository.getCombatEngine(storyId);
+    const actionUse = combat.consumeCombatAction(actorId, definition.actionCost || 'ACTION');
+    if (!actionUse.success) {
+      return {
+        success: false,
+        errorReason: actionUse.errorReason,
+        effectId: definition.id,
+        affectedEntityIds: [],
+        changedScopes: [],
+      };
+    }
+
     if (!params.authorityVerified) {
       return {
         success: false,

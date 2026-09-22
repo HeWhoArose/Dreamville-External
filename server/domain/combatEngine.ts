@@ -2494,8 +2494,9 @@ export class TacticalCombatEngine {
       const modifier = target.saveModifiers?.[saveAbility] ?? target.savingThrowModifiers?.[saveAbility] ?? 0;
       const targetConditions = new Set(target.conditions.map((condition) => condition.toLowerCase()));
       const targetDodging = Boolean(this.actionEconomy.get(target.id)?.dodging);
-      const automaticFailure = ['paralyzed', 'petrified', 'stunned', 'unconscious'].includes(targetConditions.values().next().value as string) ||
-        (['DEX', 'STR'].includes(saveAbility) && ['paralyzed', 'petrified', 'stunned', 'unconscious'].some((condition) => targetConditions.has(condition)));
+      const automaticFailure =
+        ['DEX', 'STR'].includes(saveAbility) &&
+        ['paralyzed', 'petrified', 'unconscious'].some((condition) => targetConditions.has(condition));
       const save = this.ruleset.resolveSavingThrow({
         saveModifier: modifier,
         difficultyClass: params.difficultyClass,

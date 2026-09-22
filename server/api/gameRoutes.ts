@@ -13,6 +13,13 @@ import { entityCardService } from '../services/entityCardService';
 import { characterGenesisService } from '../services/characterGenesisService';
 import { canonicalCommandEngine } from '../domain/canonicalCommandEngine';
 import { deterministicId, formatCanonicalTimestamp } from '../domain/deterministicRng';
+import type { CombatEffectDefinition } from '../../src/types';
+import { combatEffectEngine } from '../domain/combatEffectEngine';
+import { worldEffectEngine } from '../domain/worldEffectEngine';
+import { combatSimulationEngine } from '../domain/combatSimulationEngine';
+import { combatAnimationService } from '../services/combatAnimationService';
+import { combatAssetService } from '../services/combatAssetService';
+import { bossPhaseEngine } from '../domain/bossPhaseEngine';
 
 export const gameRouter = Router();
 import { sensoryRouter } from './sensoryRoutes';
@@ -2875,6 +2882,140 @@ gameRouter.post('/combat/attack', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * POST /api/game/combat/effect/validate
+ */
+gameRouter.post('/combat/effect/validate', async (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    const definition = req.body?.definition as CombatEffectDefinition;
+    const validation = combatEffectEngine.validateDefinition(definition, worldRepository.getRulesProfile(storyId)?.mode || 'FULL_DND');
+    return res.status(validation.success ? 200 : 400).json(validation);
+  } catch (error: any) {
+    return res.status(400).json({ success: false, errorReason: error?.message || 'Failed to validate combat effect.' });
+  }
+});
+
+/**
+ * POST /api/game/combat/effect
+ * Canonical entry point for multi-instance and semantic combat/world effects.
+ */
+gameRouter.post('/combat/effect', async (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    const definition = req.body?.definition as CombatEffectDefinition;
+    const targetIds = Array.isArray(req.body?.targetIds) ? req.body.targetIds.map(String) : [];
+    const requestedActorId = req.body?.actorId as string | undefined;
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const serverActorId = player ? player.actorId : 'player_actor_' + storyId;
+    if (requestedActorId && requestedActorId !== serverActorId) return res.status(403).json({ success: false, errorReason: 'Unauthorized combat-effect actor.' });
+    const actorId = serverActorId;
+    const combat = worldRepository.getCombatEngine(storyId);
+    const actor = combat.getParticipant(actorId);
+    if (!actor) return res.status(404).json({ success: false, errorReason: 'Authoritative actor is not present in combat.' });
+    const validation = combatEffectEngine.validateDefinition(definition, worldRepository.getRulesProfile(storyId)?.mode || 'FULL_DND');
+    if (!validation.success || !validation.normalized) return res.status(400).json(validation);
+    const normalized = validation.normalized;
+    const capId = typeof req.body?.capabilityId === 'string' ? req.body.capabilityId : normalized.id;
+    const inv = worldRepository.getInventoryEngine(storyId);
+    const capEngine = worldRepository.getCapabilityEngine(storyId);
+    const effectiveCaps = capEngine.getEffectiveActorCapabilities(actorId, inv);
+    const capabilityAuthorized = effectiveCaps.some((cap: any) => cap.id === capId || cap.name === normalized.name);
+    if (!capabilityAuthorized && req.body?.allowUnboundTest !== true) return res.status(403).json({ success: false, errorReason: 'Actor does not possess the requested capability/effect.' });
+    for (const targetId of targetIds) {
+      const target = combat.getParticipant(targetId);
+      if (target && !combat.isParticipantKnownToActor(actorId, target, worldRepository.getCombatPerceptionOptions(storyId, actorId))) return res.status(403).json({ success: false, errorReason: 'Target is not legitimately perceived by the actor.' });
+    }
+    const commandId = (req.headers['x-command-id'] as string | undefined) || (req.body?.commandId as string | undefined) || deterministicId('cmd_route', storyId, '/combat/effect', req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      { commandId, storyId, actorId, type: 'COMBAT_EFFECT', payload: { effectId: normalized.id, resolutionMode: normalized.resolutionMode, targetIds, definition: normalized }, source: 'PLAYER', transactionMode: 'STAGED' },
+      async (_command, context) => {
+        const transactionCombat = context.repository.getCombatEngine(storyId);
+        const effectResult = (normalized.resolutionMode === 'WORLD_EFFECT' || normalized.resolutionMode === 'OUTCOME')
+          ? worldEffectEngine.apply({ repository: context.repository, storyId, actorId, definition: normalized, targetIds, authorityVerified: capabilityAuthorized || req.body?.allowUnboundTest === true })
+          : combatEffectEngine.resolve(transactionCombat, actorId, targetIds, normalized);
+        if (!effectResult.success) return { success: false, errorReason: effectResult.errorReason };
+        for (const result of effectResult.instances || []) {
+          if (result.targetDied && result.targetId !== actorId) {
+            const target = transactionCombat.getParticipant(result.targetId);
+            if (target) syncNpcCombatDeath(storyId, target, actor.name, player?.locationId, context.repository);
+          }
+        }
+        return { success: true, data: { effectResult, combatState: getCombatStateHelper(transactionCombat, storyId, actorId, context.repository) }, summary: normalized.name + ' resolved for ' + actorId + '.' };
+      }
+    );
+    if (!commandResult.success) return res.status(400).json({ success: false, errorReason: commandResult.errorReason, rolledBack: commandResult.rolledBack, commandId: commandResult.commandId });
+    const data = commandResult.data as any;
+    return res.json({ success: true, commandId: commandResult.commandId, canonicalEvent: commandResult.event, effectResult: data?.effectResult, combatState: data?.combatState });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, errorReason: error?.message || 'Failed to resolve combat effect.' });
+  }
+});
+
+/**
+ * POST /api/game/combat/simulate
+ */
+gameRouter.post('/combat/simulate', async (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    const definition = req.body?.definition as CombatEffectDefinition;
+    const actorId = String(req.body?.actorId || worldRepository.getPlayerLifecycle(storyId)?.actorId || ('player_actor_' + storyId));
+    const targetIds = Array.isArray(req.body?.targetIds) ? req.body.targetIds.map(String) : [];
+    const engine = worldRepository.getCombatEngine(storyId);
+    const seed = req.body?.seed === undefined ? undefined : Number(req.body.seed);
+    const seeds = Array.isArray(req.body?.seeds) ? req.body.seeds.map((value: any) => Number(value)).filter(Number.isFinite) : [];
+    if (seeds.length) return res.json(combatSimulationEngine.batchSimulate({ engine, actorId, targetIds, definition, seeds }));
+    return res.json(combatSimulationEngine.simulate({ engine, actorId, targetIds, definition, seed }));
+  } catch (error: any) {
+    return res.status(400).json({ success: false, errorReason: error?.message || 'Failed to simulate combat effect.' });
+  }
+});
+
+/**
+ * POST /api/game/combat/animation-plan
+ */
+gameRouter.post('/combat/animation-plan', async (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    const definition = req.body?.definition as CombatEffectDefinition;
+    const events = Array.isArray(req.body?.events) ? req.body.events : [];
+    return res.json(await combatAnimationService.generatePlan({ repository: worldRepository, storyId, definition, events }));
+  } catch (error: any) {
+    const definition = req.body?.definition as CombatEffectDefinition;
+    return res.status(200).json({ plan: combatAnimationService.deterministicPlan(definition), source: 'SYSTEM', fallbackReason: error?.message || 'Animation planning fallback.' });
+  }
+});
+
+/**
+ * POST /api/game/combat/asset/ensure
+ */
+gameRouter.post('/combat/asset/ensure', async (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    const effectId = String(req.body?.effectId || 'combat_effect');
+    const prompt = String(req.body?.prompt || ('Dreamville combat visual effect for ' + effectId + '.'));
+    const result = await combatAssetService.ensure({ repository: worldRepository, storyId, effectId, prompt, assetId: req.body?.assetId });
+    return res.json({ success: true, asset: result });
+  } catch (error: any) {
+    return res.status(200).json({ success: false, fallback: true, errorReason: error?.message || 'Combat visual asset unavailable.' });
+  }
+});
+
+/**
+ * POST /api/game/combat/boss/evaluate-phase
+ */
+gameRouter.post('/combat/boss/evaluate-phase', async (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    const bossId = String(req.body?.bossId || '');
+    const phases = Array.isArray(req.body?.phases) ? req.body.phases : [];
+    if (!bossId || !phases.length) return res.status(400).json({ success: false, errorReason: 'bossId and phases are required.' });
+    return res.json(bossPhaseEngine.evaluateAndPersist({ repository: worldRepository, storyId, bossId, phases }));
+  } catch (error: any) {
+    return res.status(400).json({ success: false, errorReason: error?.message || 'Failed to evaluate boss phase.' });
+  }
+});
 /**
  * POST /api/game/combat/cast
  * Adjudicates capability invocations in tactical combat via CapabilityEngine (CH6/CH7/DEF-CH8-04).

@@ -860,6 +860,7 @@ export interface CombatStateResponse {
   defeat: boolean;
   isPlayerTurn: boolean;
   viewerTurnResources?: CombatTurnResourceSnapshot;
+  combatEffectEvents?: CombatEventRecord[];
 }
 
 export interface CombatActionResponse {

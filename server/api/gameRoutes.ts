@@ -21,6 +21,7 @@ import { combatSimulationEngine } from '../domain/combatSimulationEngine';
 import { combatAnimationService } from '../services/combatAnimationService';
 import { combatAssetService } from '../services/combatAssetService';
 import { bossPhaseEngine } from '../domain/bossPhaseEngine';
+import { combatEnvironmentEngine } from '../domain/combatEnvironmentEngine';
 
 export const gameRouter = Router();
 import { sensoryRouter } from './sensoryRoutes';
@@ -3007,6 +3008,33 @@ gameRouter.post('/combat/asset/ensure', async (req: Request, res: Response) => {
     return res.json({ success: true, asset: result });
   } catch (error: any) {
     return res.status(200).json({ success: false, fallback: true, errorReason: error?.message || 'Combat visual asset unavailable.' });
+  }
+});
+
+/**
+ * POST /api/game/combat/environment/hazard
+ * Canonically creates a persistent battlefield hazard using the existing combat map state.
+ */
+gameRouter.post('/combat/environment/hazard', async (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player?.actorId || `player_actor_${storyId}`;
+    const hazard = req.body?.hazard;
+    if (!hazard || typeof hazard.id !== 'string') return res.status(400).json({ success: false, errorReason: 'A valid hazard definition is required.' });
+    const commandId = (req.headers['x-command-id'] as string | undefined) || deterministicId('cmd_hazard', storyId, hazard.id, hazard);
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      { commandId, storyId, actorId, type: 'COMBAT_EFFECT', payload: { effectId: hazard.id, resolutionMode: 'WORLD_EFFECT', targetIds: [], hazard }, source: 'PLAYER', transactionMode: 'STAGED' },
+      async (_command, context) => {
+        const result = combatEnvironmentEngine.createHazard({ repository: context.repository, storyId, actorId, hazard });
+        return { success: result.success, errorReason: result.errorReason, data: result, summary: result.success ? `Hazard ${hazard.id} created.` : result.errorReason || 'Hazard creation failed.' };
+      }
+    );
+    if (!commandResult.success) return res.status(400).json({ success: false, errorReason: commandResult.errorReason, rolledBack: commandResult.rolledBack, commandId: commandResult.commandId });
+    return res.json({ ...(commandResult.data as any), commandId: commandResult.commandId, canonicalEvent: commandResult.event });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, errorReason: error?.message || 'Failed to create combat hazard.' });
   }
 });
 

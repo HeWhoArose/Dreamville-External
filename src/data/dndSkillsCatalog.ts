@@ -5,9 +5,11 @@ export interface StandardDndSkillDef {
   name: string;
   governingAbility: 'Strength' | 'Dexterity' | 'Constitution' | 'Intelligence' | 'Wisdom' | 'Charisma';
   description: string;
+  checkFormula?: string;
 }
 
 export const STANDARD_DND_SKILLS_CATALOG: StandardDndSkillDef[] = [
+
   {
     id: 'acrobatics',
     name: 'Acrobatics',
@@ -134,6 +136,7 @@ export function getInitialDndSkills(existingSkills: CharacterSkill[] = []): Char
         name: def.name,
         governingAbility: def.governingAbility,
         description: def.description,
+        checkFormula: '1d20',
         proficiency: existing.proficiency || (existing.isProficient ? 'PROFICIENT' : 'NONE'),
         isProficient: existing.proficiency === 'PROFICIENT' || existing.isProficient || false,
         isExpertise: existing.proficiency === 'EXPERTISE' || existing.isExpertise || false,
@@ -151,6 +154,7 @@ export function getInitialDndSkills(existingSkills: CharacterSkill[] = []): Char
       isExpertise: false,
       isCustom: false,
       description: def.description,
+      checkFormula: '1d20',
       provenance: 'SYSTEM_DERIVED',
     };
   });

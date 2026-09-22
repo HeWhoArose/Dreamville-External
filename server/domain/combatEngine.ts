@@ -3177,6 +3177,9 @@ export class TacticalCombatEngine {
         target.isDead = true;
         if (!target.conditions.includes('Dead')) target.conditions.push('Dead');
         if (!target.conditions.includes('Unconscious')) target.conditions.push('Unconscious');
+        if (this.conditionEngine?.getActorState(targetId)) {
+          this.conditionEngine.markDead(targetId);
+        }
         if (outcome === 'ERASE_FROM_WORLD') metadata.erase = true;
         break;
 

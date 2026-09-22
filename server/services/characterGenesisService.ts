@@ -987,6 +987,7 @@ Rules:
           speciesId: existingDraft.progression.speciesId,
           featIds: [...(existingDraft.progression.featIds || [])],
           moduleIds: [...(existingDraft.progression.moduleIds || [])],
+          customModules: [...(existingDraft.progression.customModules || [])],
         }
       : {
           classId: undefined,
@@ -994,6 +995,7 @@ Rules:
           speciesId: undefined,
           featIds: feats.map((feat: any) => feat.id),
           moduleIds: [],
+          customModules: [],
         };
 
     const draft: CharacterGenesisDraft = {
@@ -2176,7 +2178,12 @@ IMPORTANT: Select an appropriate category and paper-doll slot. If the item is a 
       storyMode: resolvedNarrativeProfile.mode,
       narrativeProfile: resolvedNarrativeProfile,
       dndRulesMode: draft.dndRulesMode,
-      progression: draft.progression ? { ...draft.progression, featIds: [...(draft.progression.featIds || [])], moduleIds: [...(draft.progression.moduleIds || [])] } : undefined,
+      progression: draft.progression ? {
+        ...draft.progression,
+        featIds: [...(draft.progression.featIds || [])],
+        moduleIds: [...(draft.progression.moduleIds || [])],
+        customModules: [...(draft.progression.customModules || [])],
+      } : undefined,
     };
 
     return confirmed;

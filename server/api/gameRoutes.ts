@@ -3349,20 +3349,32 @@ gameRouter.post('/combat/environment/hazard', async (req: Request, res: Response
 
 /**
  * POST /api/game/combat/boss/evaluate-phase
+ * Re-evaluates a boss using phases authored on its canonical EntityCard.
+ * Client-supplied phase definitions are never authoritative.
  */
 gameRouter.post('/combat/boss/evaluate-phase', async (req: Request, res: Response) => {
   try {
     const storyId = resolveStoryId(req, true);
     const bossId = String(req.body?.bossId || '');
-    const phases = Array.isArray(req.body?.phases) ? req.body.phases : [];
     const player = worldRepository.getPlayerLifecycle(storyId);
-    const actorId = player?.actorId || `player_actor_${storyId}`;
-    if (!bossId || !phases.length) return res.status(400).json({ success: false, errorReason: 'bossId and phases are required.' });
+    const actorId = player?.actorId || 'player_actor_' + storyId;
+
+    if (!bossId) {
+      return res.status(400).json({ success: false, errorReason: 'bossId is required.' });
+    }
+
+    const authoredPhases = bossPhaseEngine.getAuthoredPhases(worldRepository, storyId, bossId);
+    if (!authoredPhases.length) {
+      return res.status(404).json({
+        success: false,
+        errorReason: 'No canonical boss phases are registered on the boss EntityCard.',
+      });
+    }
 
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_boss_phase', storyId, bossId, phases);
+      deterministicId('cmd_boss_phase', storyId, bossId, authoredPhases);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -3371,19 +3383,24 @@ gameRouter.post('/combat/boss/evaluate-phase', async (req: Request, res: Respons
         storyId,
         actorId,
         type: 'BOSS_PHASE',
-        payload: { bossId, phases },
+        payload: { bossId, phases: authoredPhases },
         source: 'SYSTEM',
         transactionMode: 'STAGED',
       },
       async (_command, context) => {
-        const result = bossPhaseEngine.evaluateAndPersist({ repository: context.repository, storyId, bossId, phases });
+        const result = bossPhaseEngine.evaluateAndPersist({
+          repository: context.repository,
+          storyId,
+          bossId,
+          phases: undefined,
+        });
         return {
           success: result.success,
           errorReason: result.errorReason,
           data: result,
           summary: result.success
-            ? `Boss phase evaluation resolved for ${bossId}.`
-            : result.errorReason || `Boss phase evaluation failed for ${bossId}.`,
+            ? 'Canonical boss phase evaluation resolved for ' + bossId + '.'
+            : result.errorReason || 'Boss phase evaluation failed.',
         };
       }
     );
@@ -3396,15 +3413,20 @@ gameRouter.post('/combat/boss/evaluate-phase', async (req: Request, res: Respons
         commandId: commandResult.commandId,
       });
     }
+
     return res.json({
       ...(commandResult.data as any),
       commandId: commandResult.commandId,
       canonicalEvent: commandResult.event,
     });
   } catch (error: any) {
-    return res.status(400).json({ success: false, errorReason: error?.message || 'Failed to evaluate boss phase.' });
+    return res.status(400).json({
+      success: false,
+      errorReason: error?.message || 'Failed to evaluate boss phase.',
+    });
   }
 });
+
 /**
  * POST /api/game/combat/cast
  * Adjudicates capability invocations in tactical combat via CapabilityEngine (CH6/CH7/DEF-CH8-04).

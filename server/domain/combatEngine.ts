@@ -2783,6 +2783,9 @@ export class TacticalCombatEngine {
         sourcePosition: { x: attacker.x, y: attacker.y },
         movement: options.forcedMovement,
       });
+      if (forcedMovement.collision?.targetDied) {
+        result.targetDied = true;
+      }
     }
 
     this.resolveReadyTriggers({ type: 'ACTOR_ATTACKED', actorId: attackerId, targetId });
@@ -2885,10 +2888,14 @@ export class TacticalCombatEngine {
           movement: options.definition.forcedMovement,
           actionId,
         });
+        if (result.forcedMovement.collision?.targetDied) {
+          result.targetDied = true;
+        }
+        result.secondaryDamage = result.forcedMovement.collision?.damageToMover || 0;
       }
 
       instances.push(result);
-      totalDamage += result.damage;
+      totalDamage += result.damage + (result.secondaryDamage || 0);
       if (result.targetDied && !defeatedTargetIds.includes(result.targetId)) defeatedTargetIds.push(result.targetId);
     }
     this.resolveReadyTriggers({ type: 'ACTOR_ATTACKED', actorId: attackerId, targetId: instances[0]?.targetId });

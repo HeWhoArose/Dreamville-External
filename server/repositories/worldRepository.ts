@@ -1522,6 +1522,11 @@ export class InMemoryWorldRepository implements WorldRepository {
       this.combatEngines.set(storyId, engine);
     }
     engine.setRulesProfile(this.getRulesProfile(storyId) || undefined);
+    engine.setProgressionModifierResolver((actorId) => {
+      const progression = this.getCharacterProgressionEngine(storyId);
+      if (!progression.getState(actorId)) return undefined;
+      return progression.resolveModifiers(actorId);
+    });
     return engine;
   }
 

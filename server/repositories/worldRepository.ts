@@ -273,6 +273,10 @@ export class InMemoryWorldRepository implements WorldRepository {
       this.worldTemplates.set(worldId, migratedWorld);
     }
 
+    for (const [worldId, chars] of Object.entries(persisted.confirmedCharacters || {})) {
+      this.confirmedCharactersMap.set(worldId, Array.isArray(chars) ? chars : []);
+    }
+
     for (const [storyId, run] of Object.entries(persisted.storyRuns)) {
       const world = run && (run as any).worldId ? this.worldTemplates.get((run as any).worldId) : null;
       const resolvedNarrative = narrativeProfileEngine.resolve({
@@ -2275,6 +2279,7 @@ export class InMemoryWorldRepository implements WorldRepository {
       version: 1,
       worldTemplates: Object.fromEntries(this.worldTemplates),
       storyRuns: Object.fromEntries(this.storyRuns),
+      confirmedCharacters: Object.fromEntries(this.confirmedCharactersMap),
     });
   }
 

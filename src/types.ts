@@ -2044,7 +2044,7 @@ export interface CombatAttackInstanceResult {
 	targetDied: boolean;
 	hitLocation?: BodyRegionId;
 	destroyedBodyRegions?: BodyRegionId[];
-	rill?: unknown;
+	roll?: unknown;
 	attackRollTotal?: number;
 	targetArmorClass?: number;
 	damageRoll?: unknown;
@@ -2117,6 +2117,16 @@ export interface CombatReplayRecord {
 	createdAtSequence: number;
 }
 
+export interface CombatAnimationTrack {
+	id: string;
+	trigger: 'ACTION_START' | 'INSTANCE' | 'ACTION_COMPLETE' | 'WORLD_EFFECT';
+	visual: string;
+	instanceIndex?: number;
+	delayMs?: number;
+	durationMs?: number;
+	condition?: 'ALWAYS' | 'HIT' | 'MISS' | 'CRITICAL';
+}
+
 export interface CombatAnimationPlan {
 	id: string;
 	composition: string;
@@ -2129,6 +2139,7 @@ export interface CombatAnimationPlan {
 	style?: string;
 	assetRefs?: string[];
 	assetUrls?: string[];
+	tracks?: CombatAnimationTrack[];
 	generatedBy?: 'SYSTEM' | 'AI';
 	provenance?: string;
 }

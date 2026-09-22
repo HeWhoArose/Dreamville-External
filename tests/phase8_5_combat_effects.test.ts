@@ -215,7 +215,7 @@ test('Phase 8.5: boss phase modifiers are persisted and participate in projected
   });
   assert.equal(set.success, true);
   assert.equal(engine.getBossPhaseState('enemy')?.phaseId, 'enrage');
-  assert.equal(engine.getProjectedCombatState('hero').participants.find((p) => p.id === 'enemy')?.bossPhaseId, 'enrage');
+  assert.equal(engine.getParticipants().find((p) => p.id === 'enemy')?.bossPhaseId, 'enrage');
 
   const exported = engine.exportState();
   const clone = new TacticalCombatEngine(1337);

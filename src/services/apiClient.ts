@@ -1747,6 +1747,46 @@ class ApiClient {
     return await res.json();
   }
 
+  public async getEntities(storyId: string, options: { query?: string; kind?: string; status?: string; includeTemplates?: boolean } = {}): Promise<any> {
+    const params = new URLSearchParams();
+    params.set('storyId', storyId);
+    if (options.query) params.set('query', options.query);
+    if (options.kind) params.set('kind', options.kind);
+    if (options.status) params.set('status', options.status);
+    if (options.includeTemplates) params.set('includeTemplates', 'true');
+    const res = await fetch(`${this.baseUrl}/entities?${params.toString()}`);
+    if (!res.ok) throw new Error(`Failed to load entities: HTTP ${res.status}`);
+    return res.json();
+  }
+
+  public async getEntity(storyId: string, entityId: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/entities/${encodeURIComponent(entityId)}?storyId=${encodeURIComponent(storyId)}`);
+    if (!res.ok) throw new Error(`Failed to load entity: HTTP ${res.status}`);
+    return res.json();
+  }
+
+  public async generateEntity(storyId: string, payload: { concept: string; name?: string; kind?: string; worldId?: string; allowDeterministicFallback?: boolean; saveAsTemplate?: boolean; instantiate?: boolean; templateId?: string }): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/entities/generate?storyId=${encodeURIComponent(storyId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.errorReason || `Failed to generate entity: HTTP ${res.status}`);
+    return data;
+  }
+
+  public async cloneEntity(storyId: string, entityId: string, overrides: Record<string, unknown> = {}): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/entities/${encodeURIComponent(entityId)}/clone?storyId=${encodeURIComponent(storyId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ overrides }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.errorReason || `Failed to clone entity: HTTP ${res.status}`);
+    return data;
+  }
+
   public async getCharacterProgressionModules(worldId: string): Promise<any> {
     const res = await fetch(`${this.baseUrl}/worlds/${encodeURIComponent(worldId)}/characters/progression-modules`, { method: 'GET' });
     if (!res.ok) throw new Error(`Failed to load progression modules: HTTP ${res.status}`);

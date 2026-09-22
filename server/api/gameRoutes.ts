@@ -3235,28 +3235,115 @@ gameRouter.post('/combat/asset/ensure', async (req: Request, res: Response) => {
 
 /**
  * POST /api/game/combat/environment/hazard
- * Canonically creates a persistent battlefield hazard using the existing combat map state.
+ * Canonical environment entry point. Public callers may not invent arbitrary hazards.
+ * Player-created hazards must originate from an owned canonical world-effect capability.
  */
 gameRouter.post('/combat/environment/hazard', async (req: Request, res: Response) => {
   try {
     const storyId = resolveStoryId(req, true);
     const player = worldRepository.getPlayerLifecycle(storyId);
-    const actorId = player?.actorId || `player_actor_${storyId}`;
+    const actorId = player?.actorId || 'player_actor_' + storyId;
     const hazard = req.body?.hazard;
-    if (!hazard || typeof hazard.id !== 'string') return res.status(400).json({ success: false, errorReason: 'A valid hazard definition is required.' });
-    const commandId = (req.headers['x-command-id'] as string | undefined) || deterministicId('cmd_hazard', storyId, hazard.id, hazard);
+    const capabilityId = typeof req.body?.capabilityId === 'string' ? req.body.capabilityId.trim() : '';
+
+    if (!hazard || typeof hazard.id !== 'string' || !capabilityId) {
+      return res.status(400).json({
+        success: false,
+        errorReason: 'capabilityId and a valid hazard definition are required.',
+      });
+    }
+
+    const capabilityEngine = worldRepository.getCapabilityEngine(storyId);
+    const inventory = worldRepository.getInventoryEngine(storyId);
+    const effect = capabilityEngine.getAuthoritativeCombatEffect(actorId, capabilityId, inventory);
+
+    if (!effect || effect.resolutionMode !== 'WORLD_EFFECT') {
+      return res.status(403).json({
+        success: false,
+        errorReason: 'Hazards may only be created by an authoritative WORLD_EFFECT capability.',
+      });
+    }
+
+    const allowedHazard = effect.outcomePayload?.hazard;
+    const allowedHazards = Array.isArray(effect.outcomePayload?.hazards)
+      ? effect.outcomePayload.hazards
+      : [];
+
+    const matchesAllowedHazard = (candidate: unknown): boolean => {
+      if (!candidate || typeof candidate !== 'object') return false;
+      const candidateId = String((candidate as any).id || '');
+      const singleId = allowedHazard && typeof allowedHazard === 'object'
+        ? String((allowedHazard as any).id || '')
+        : '';
+      const listIds = allowedHazards
+        .filter((item) => item && typeof item === 'object')
+        .map((item) => String((item as any).id || ''));
+      return candidateId.length > 0 && (candidateId === singleId || listIds.includes(candidateId));
+    };
+
+    if (!matchesAllowedHazard(hazard)) {
+      return res.status(403).json({
+        success: false,
+        errorReason: 'Requested hazard is not present in the capability\'s canonical world-effect payload.',
+      });
+    }
+
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      deterministicId('cmd_hazard', storyId, capabilityId, hazard.id);
+
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
-      { commandId, storyId, actorId, type: 'COMBAT_EFFECT', payload: { effectId: hazard.id, resolutionMode: 'WORLD_EFFECT', targetIds: [], hazard }, source: 'PLAYER', transactionMode: 'STAGED' },
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'COMBAT_EFFECT',
+        payload: {
+          effectId: effect.id,
+          resolutionMode: effect.resolutionMode,
+          targetIds: [],
+          capabilityId,
+          hazard: effect.outcomePayload?.hazard || hazard,
+        },
+        source: 'PLAYER',
+        transactionMode: 'STAGED',
+      },
       async (_command, context) => {
-        const result = combatEnvironmentEngine.createHazard({ repository: context.repository, storyId, actorId, hazard });
-        return { success: result.success, errorReason: result.errorReason, data: result, summary: result.success ? `Hazard ${hazard.id} created.` : result.errorReason || 'Hazard creation failed.' };
+        const result = combatEnvironmentEngine.createHazard({
+          repository: context.repository,
+          storyId,
+          actorId,
+          hazard,
+        });
+        return {
+          success: result.success,
+          errorReason: result.errorReason,
+          data: result,
+          summary: result.success ? 'Canonical combat hazard created.' : result.errorReason || 'Hazard creation failed.',
+        };
       }
     );
-    if (!commandResult.success) return res.status(400).json({ success: false, errorReason: commandResult.errorReason, rolledBack: commandResult.rolledBack, commandId: commandResult.commandId });
-    return res.json({ ...(commandResult.data as any), commandId: commandResult.commandId, canonicalEvent: commandResult.event });
+
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
+      });
+    }
+
+    return res.json({
+      ...(commandResult.data as any),
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
+    });
   } catch (error: any) {
-    return res.status(400).json({ success: false, errorReason: error?.message || 'Failed to create combat hazard.' });
+    return res.status(400).json({
+      success: false,
+      errorReason: error?.message || 'Failed to create combat hazard.',
+    });
   }
 });
 

@@ -600,3 +600,87 @@ test('Phase 8.5 validation: unsafe giant dice formulas are rejected so extreme p
   assert.equal(validation.success, false);
   assert.match(validation.errorReason || '', /unsafe|invalid/i);
 });
+
+
+test('Phase 8.5 audit pass 5: deterministic animation plans expose bounded reusable instance tracks', async () => {
+  const { CombatAnimationService } = await import('../server/services/combatAnimationService');
+  const service = new CombatAnimationService();
+  const plan = service.deterministicPlan({
+    id: 'five_beams',
+    name: 'Five Beams',
+    resolutionMode: 'MULTI_INSTANCE',
+    scale: 'PERSON',
+    actionCost: 'ACTION',
+    targetingMode: 'ONE_TARGET',
+    instanceCount: 5,
+    attackFormula: '1d20',
+    damageFormula: '1d8',
+  });
+  assert.equal(plan.tracks?.length, 5);
+  assert.deepEqual(plan.tracks?.map((track) => track.instanceIndex), [0, 1, 2, 3, 4]);
+  assert.equal(plan.tracks?.every((track) => (track.delayMs || 0) <= 10000), true);
+});
+
+test('Phase 8.5 audit pass 5: simulation request can be bound to canonical capability identity without trusting a forged definition', async () => {
+  const engine = engineWithEnemy();
+  const capabilities = new CapabilityEngine();
+  capabilities.seedStarterPowerStateForActor('hero');
+  capabilities.registerCapability({
+    id: 'canonical_sim_laser',
+    name: 'Canonical Sim Laser',
+    category: 'Magic',
+    activationMode: 'immediate',
+    powerTier: 'Moderate',
+    baseEnergyCost: 1,
+    baseStrainCost: 0,
+    minVesselCapacityRequired: 1,
+    description: 'Canonical simulation capability.',
+    provenance: 'SYSTEM',
+    actionType: 'action',
+    targetType: 'single_target',
+    effectDefinition: {
+      id: 'canonical_sim_laser_effect',
+      name: 'Canonical Sim Laser',
+      resolutionMode: 'MULTI_INSTANCE',
+      scale: 'PERSON',
+      actionCost: 'ACTION',
+      targetingMode: 'ONE_TARGET',
+      instanceCount: 2,
+      attackFormula: '1d20',
+      damageFormula: '1d4',
+      provenance: 'SYSTEM',
+    },
+  });
+  capabilities.acquireSkill('hero', 'canonical_sim_laser');
+  const authoritative = capabilities.getAuthoritativeCombatEffect('hero', 'canonical_sim_laser');
+  assert.ok(authoritative);
+  const forged = {
+    ...authoritative!,
+    instanceCount: 50,
+    scale: 'COSMIC' as const,
+    outcome: 'PLANET_DESTROYED' as any,
+  };
+  assert.notDeepEqual(authoritative, forged);
+  assert.equal(authoritative?.instanceCount, 2);
+  assert.equal(authoritative?.scale, 'PERSON');
+  assert.equal(engine.getParticipant('enemy')?.isDead, false);
+});
+
+test('Phase 8.5 audit pass 5: animation presentation never becomes canonical combat state', async () => {
+  const engine = engineWithEnemy();
+  const before = JSON.stringify(engine.exportState());
+  const { CombatAnimationService } = await import('../server/services/combatAnimationService');
+  const plan = new CombatAnimationService().deterministicPlan({
+    id: 'presentation_only_tracks',
+    name: 'Presentation Only',
+    resolutionMode: 'MULTI_INSTANCE',
+    scale: 'PERSON',
+    actionCost: 'ACTION',
+    targetingMode: 'ONE_TARGET',
+    instanceCount: 3,
+    attackFormula: '1d20',
+    damageFormula: '1d4',
+  });
+  assert.equal(JSON.stringify(engine.exportState()), before);
+  assert.equal(plan.generatedBy, 'SYSTEM');
+});

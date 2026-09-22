@@ -495,8 +495,12 @@ export class CharacterProgressionEngine {
     this.assertCanonicalMutationAuthority();
     this.assertMutationAllowed(rulesProfile);
     const state = this.requireActor(actorId);
+    const config = this.getConfigForProfile(rulesProfile);
     const module = this.requireModule(moduleId);
     if (enabled && !this.isModuleAllowed(moduleId, rulesProfile)) throw new Error(`Module '${moduleId}' is disabled by the active rules profile.`);
+    if (enabled && module.type === 'CLASS' && !config.allowClassSelection) throw new Error('Class selection is disabled by the active rules profile.');
+    if (enabled && module.type === 'SUBCLASS' && !config.allowSubclassSelection) throw new Error('Subclass selection is disabled by the active rules profile.');
+    if (enabled && module.type === 'SPECIES' && !config.allowSpeciesSelection) throw new Error('Species selection is disabled by the active rules profile.');
     if (enabled) {
       if (module.minLevel && state.currentLevel < module.minLevel) {
         throw new Error(`Module '${moduleId}' requires level ${module.minLevel}.`);

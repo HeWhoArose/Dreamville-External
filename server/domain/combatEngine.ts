@@ -2015,6 +2015,46 @@ export class TacticalCombatEngine {
     };
   }
 
+  public applyCombatCondition(
+    targetId: string,
+    condition: {
+      conditionIdOrName: string;
+      intensity?: number;
+      severity?: number;
+      durationSeconds?: number | null;
+      notes?: string;
+    },
+    sourceActorId?: string
+  ): { success: boolean; applied: boolean; immune: boolean; errorReason?: string } {
+    const target = this.participants.get(targetId);
+    if (!target) return { success: false, applied: false, immune: false, errorReason: 'Condition target not found.' };
+    if (!this.conditionEngine) {
+      if (!target.conditions.includes(condition.conditionIdOrName)) target.conditions.push(condition.conditionIdOrName);
+      return { success: true, applied: true, immune: false };
+    }
+
+    const result = this.conditionEngine.applyCondition(targetId, {
+      definitionIdOrName: condition.conditionIdOrName,
+      intensity: condition.intensity,
+      severity: condition.severity,
+      durationSeconds: condition.durationSeconds,
+      sourceActorId,
+      notes: condition.notes,
+      nowSeconds: this.currentRound,
+    });
+
+    const state = this.conditionEngine.getActorState(targetId);
+    if (state) {
+      target.conditions = state.instances.map((instance) => instance.name);
+      target.hpCurrent = state.healthCurrent;
+      target.isDead = state.dead;
+    } else if (result.applied && !target.conditions.includes(condition.conditionIdOrName)) {
+      target.conditions.push(condition.conditionIdOrName);
+    }
+
+    return { success: true, applied: result.applied, immune: result.immune, errorReason: result.reason };
+  }
+
   public consumeCombatAction(actorId: string, actionCost: import('../../src/types').CombatActionCost = 'ACTION'): { success: boolean; errorReason?: string } {
     if (actionCost === 'FREE') return { success: true };
     const resource = actionCost === 'BONUS_ACTION'

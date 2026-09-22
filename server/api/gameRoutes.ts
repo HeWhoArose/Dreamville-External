@@ -3018,8 +3018,52 @@ gameRouter.post('/combat/boss/evaluate-phase', async (req: Request, res: Respons
     const storyId = resolveStoryId(req, true);
     const bossId = String(req.body?.bossId || '');
     const phases = Array.isArray(req.body?.phases) ? req.body.phases : [];
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player?.actorId || `player_actor_${storyId}`;
     if (!bossId || !phases.length) return res.status(400).json({ success: false, errorReason: 'bossId and phases are required.' });
-    return res.json(bossPhaseEngine.evaluateAndPersist({ repository: worldRepository, storyId, bossId, phases }));
+
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      deterministicId('cmd_boss_phase', storyId, bossId, phases);
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'BOSS_PHASE',
+        payload: { bossId, phases },
+        source: 'SYSTEM',
+        transactionMode: 'STAGED',
+      },
+      async (_command, context) => {
+        const result = bossPhaseEngine.evaluateAndPersist({ repository: context.repository, storyId, bossId, phases });
+        return {
+          success: result.success,
+          errorReason: result.errorReason,
+          data: result,
+          summary: result.success
+            ? `Boss phase evaluation resolved for ${bossId}.`
+            : result.errorReason || `Boss phase evaluation failed for ${bossId}.`,
+        };
+      }
+    );
+
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
+      });
+    }
+    return res.json({
+      ...(commandResult.data as any),
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
+    });
   } catch (error: any) {
     return res.status(400).json({ success: false, errorReason: error?.message || 'Failed to evaluate boss phase.' });
   }

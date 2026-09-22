@@ -695,6 +695,17 @@ export class TacticalCombatEngine {
   public addHazard(h: DynamicHazardZone): void {
     this.hazards.push({ ...h });
   }
+  public removeHazard(hazardId: string): { success: boolean; removed: boolean } {
+    const before = this.hazards.length;
+    this.hazards = this.hazards.filter((hazard) => hazard.id !== hazardId);
+    return { success: true, removed: this.hazards.length !== before };
+  }
+
+  public replaceHazard(hazard: DynamicHazardZone): { success: boolean } {
+    this.removeHazard(hazard.id);
+    this.addHazard(hazard);
+    return { success: true };
+  }
 
   public rollInitiative(): void {
     for (const p of Array.from(this.participants.values())) {

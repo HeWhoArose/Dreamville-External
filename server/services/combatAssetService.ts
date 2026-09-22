@@ -1,3 +1,4 @@
+import { deterministicId } from '../domain/deterministicRng';
 import type { WorldRepository } from '../repositories/worldRepository';
 import { mediaAdapterService } from './mediaAdapterService';
 
@@ -26,7 +27,8 @@ export class CombatAssetService {
   }
 
   public async ensure(params: { repository: WorldRepository; storyId: string; effectId: string; prompt: string; assetId?: string }): Promise<CombatAssetRecord> {
-    const assetId = params.assetId || `combat_asset_${params.effectId}`;
+    const promptIdentity = params.prompt.trim().replace(/\s+/g, ' ').slice(0, 400);
+    const assetId = params.assetId || deterministicId('combat_asset', params.storyId, params.effectId, promptIdentity);
     const cached = this.cache.get(assetId);
     if (cached) return JSON.parse(JSON.stringify(cached));
 

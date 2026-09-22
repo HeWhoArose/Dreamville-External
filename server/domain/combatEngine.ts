@@ -473,6 +473,7 @@ export class TacticalCombatEngine {
   private spellRuntime: SpellRuntime;
   private progressionModifierResolver?: (actorId: string) => ProgressionResolution | undefined;
   private bossPhaseStates = new Map<string, { phaseId: string; modifiers: Record<string, number>; abilities: string[]; targetPriority?: string; environmentEffects: string[] }>();
+  private bossPhaseEvaluationResolver?: (bossId: string, engine: TacticalCombatEngine) => void;
   private combatEffectEvents: CombatEventRecord[] = [];
   private combatActionSequence = 0;
   private initialSeed: number;
@@ -503,6 +504,12 @@ export class TacticalCombatEngine {
     resolver?: (actorId: string) => ProgressionResolution | undefined
   ): void {
     this.progressionModifierResolver = resolver;
+  }
+
+  public setBossPhaseEvaluationResolver(
+    resolver?: (bossId: string, engine: TacticalCombatEngine) => void
+  ): void {
+    this.bossPhaseEvaluationResolver = resolver;
   }
 
   private progressionModifier(actorId: string, target: string): number {
@@ -1763,6 +1770,7 @@ export class TacticalCombatEngine {
         target.isDead = false;
       }
 
+      this.bossPhaseEvaluationResolver?.(target.id, this);
       return {
         damage: amount,
         targetDied: damageResult.died,
@@ -1827,6 +1835,7 @@ export class TacticalCombatEngine {
         target.activeConcentration = null;
       }
 
+      this.bossPhaseEvaluationResolver?.(target.id, this);
       return {
         damage: resolvedDamage.finalAmount,
         targetDied: target.isDead,
@@ -1893,6 +1902,7 @@ export class TacticalCombatEngine {
       this.spellRuntime.breakConcentration(target.id, 'Creature dropped to 0 HP');
     }
 
+    this.bossPhaseEvaluationResolver?.(target.id, this);
     return {
       damage: finalAmount,
       targetDied: target.isDead,

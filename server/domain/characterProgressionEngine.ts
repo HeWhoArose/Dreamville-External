@@ -341,7 +341,7 @@ export class CharacterProgressionEngine {
       currentLevel: normalizeLevel(character.coreStats?.level, 1),
       classId: normalizeModuleId(explicit.classId) || undefined,
       subclassId: normalizeModuleId(explicit.subclassId) || undefined,
-      speciesId: normalizeModuleId(explicit.speciesId) || undefined,
+      speciesId: normalizeModuleId(explicit.speciesId) || this.resolveModuleAlias('SPECIES', character.identity?.species) || undefined,
       featIds: Array.isArray(explicit.featIds)
         ? [...new Set((explicit.featIds as unknown[]).map((id) => normalizeModuleId(id)).filter((id): id is string => Boolean(id)).map((id) => featModuleByCharacterId.get(id) || id))]
         : [],
@@ -794,7 +794,10 @@ export class CharacterProgressionEngine {
       : characterFeats.map((feat) => deterministicId('feat_module', feat.worldId || 'world', feat.id, feat.name)).sort();
     const expectedClassId = normalizeModuleId(expected.classId) || '';
     const expectedSubclassId = normalizeModuleId(expected.subclassId) || '';
-    const expectedSpeciesId = normalizeModuleId(expected.speciesId) || '';
+    const expectedSpeciesId =
+      normalizeModuleId(expected.speciesId) ||
+      this.resolveModuleAlias('SPECIES', character.identity?.species) ||
+      '';
     const expectedFingerprint = deterministicId(
       'prg_genesis',
       actorId,

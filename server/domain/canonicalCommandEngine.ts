@@ -184,7 +184,7 @@ export class CanonicalCommandEngine {
 				if (!['BEGIN', 'ADVANCE', 'COMPLETE', 'INTERRUPT', 'PERFORM'].includes(String(action))) {
 					return 'REST command requires a valid action.';
 				}
-				if (['BEGIN', 'PERFORM'].includes(String(action)) {
+				if (['BEGIN', 'PERFORM'].includes(String(action))) {
 					if (payload.restType !== 'SHORT_REST' && payload.restType !== 'LONG_REST') {
 						return 'REST BEGIN/PERFORM requires SHORT_REST or LONG_REST.';
 					}

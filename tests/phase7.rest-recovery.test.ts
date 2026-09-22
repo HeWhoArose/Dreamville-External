@@ -10,6 +10,8 @@ import { captureCanonicalStateSnapshot } from '../server/domain/canonicalSnapsho
 function seedRepo(storyId = 'phase7_test'): InMemoryWorldRepository {
   const repo = new InMemoryWorldRepository({ disablePersistence: true });
   repo.seedStory(storyId);
+  const id = repo.getPlayerLifecycle(storyId)?.actorId || 'player_actor_' + storyId;
+  repo.getConditionEngine(storyId).seedActor(id, { healthCurrent: 12, healthMax: 30 });
   const profile = rulesProfileEngine.createDefault('FULL_DND');
   repo.saveStoryRun({
     storyId,
@@ -146,6 +148,7 @@ test('Phase 7 interrupted rest advances time but does not apply completion recov
   const condition = repo.getConditionEngine(storyId);
   condition.setHealth(id, 5);
 
+  const before = repo.getWorldClock(storyId).getAbsoluteTime();
   const result = repo.getRestRecoveryEngine(storyId).execute({
     storyId,
     actorId: id,
@@ -157,7 +160,7 @@ test('Phase 7 interrupted rest advances time but does not apply completion recov
   assert.equal(result.success, true);
   assert.equal(result.restState?.status, 'INTERRUPTED');
   assert.equal(result.recovery, undefined);
-  assert.equal(repo.getWorldClock(storyId).getAbsoluteTime(), 3600);
+  assert.equal(repo.getWorldClock(storyId).getAbsoluteTime(), before + 3600);
   assert.equal(condition.getActorState(id)?.healthCurrent, 5);
 });
 
@@ -167,7 +170,7 @@ test('Phase 7 custom mode requires explicit rest authority and honors explicit o
   const id = actorId(repo, storyId);
 
   const disabledCustom = rulesProfileEngine.createDefault('CUSTOM_HOMEBREW_DND');
-  repo.saveStoryRun({ ...repo.getStoryRun(storyId), rulesProfile: disabledCustom });
+  repo.saveStoryRun({ ...repo.getStoryRun(storyId), dndRulesMode: 'CUSTOM_HOMEBREW_DND', rulesProfile: disabledCustom });
   const rejected = repo.getRestRecoveryEngine(storyId).execute({
     storyId,
     actorId: id,
@@ -200,7 +203,8 @@ test('Phase 7 custom mode requires explicit rest authority and honors explicit o
       ],
     },
   }).profile;
-  repo.saveStoryRun({ ...repo.getStoryRun(storyId), rulesProfile: customResolution });
+  const before = repo.getWorldClock(storyId).getAbsoluteTime();
+  repo.saveStoryRun({ ...repo.getStoryRun(storyId), dndRulesMode: 'CUSTOM_HOMEBREW_DND', rulesProfile: customResolution });
 
   const accepted = repo.getRestRecoveryEngine(storyId).execute({
     storyId,
@@ -209,7 +213,7 @@ test('Phase 7 custom mode requires explicit rest authority and honors explicit o
     restType: 'SHORT_REST',
   });
   assert.equal(accepted.success, true);
-  assert.equal(repo.getWorldClock(storyId).getAbsoluteTime(), 600);
+  assert.equal(repo.getWorldClock(storyId).getAbsoluteTime(), before + 600);
 });
 
 test('Phase 7 active rest survives canonical snapshot save/load and restores without side effects', () => {

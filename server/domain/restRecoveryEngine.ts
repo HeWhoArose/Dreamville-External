@@ -225,7 +225,7 @@ export class RestRecoveryEngine {
     active.elapsedSeconds += seconds;
 
     const condition = this.repository.getConditionEngine(request.storyId).getActorState(request.actorId);
-    if (condition?.dead || condition?.healthCurrent <= 0) {
+    if (condition?.dead || (condition?.healthCurrent ?? 0) <= 0) {
       const interrupted = this.interrupt({
         ...request,
         action: 'INTERRUPT',
@@ -321,11 +321,10 @@ export class RestRecoveryEngine {
             slot.current = slot.max;
           }
         }
+        spells.setActorState(request.actorId, nextSpellState);
         if (policy.longRestBreakConcentration && nextSpellState.activeConcentration) {
           spells.breakConcentration(request.actorId, 'Long rest completed.');
           recovery.concentrationBroken = true;
-        } else {
-          spells.setActorState(request.actorId, nextSpellState);
         }
       }
 
@@ -584,11 +583,14 @@ export class RestRecoveryEngine {
     };
   }
 
-  private ensureHitDiceState(actorId: string, level = 1, hitDice?: string): HitDiceRecoveryState {
+  private ensureHitDiceState(actorId: string, level?: number, hitDice?: string): HitDiceRecoveryState {
     const existing = this.hitDice.get(actorId);
     if (existing) return existing;
-    const max = Math.max(1, Math.trunc(level));
-    const state = { current: max, max, sides: diceSides(hitDice) };
+    const core = this.getCoreStats(this.storyId);
+    const resolvedLevel = level !== undefined ? level : core.level;
+    const resolvedSides = hitDice !== undefined ? hitDice : core.hitDice;
+    const max = Math.max(1, Math.trunc(resolvedLevel));
+    const state = { current: max, max, sides: diceSides(resolvedSides) };
     this.hitDice.set(actorId, state);
     return state;
   }

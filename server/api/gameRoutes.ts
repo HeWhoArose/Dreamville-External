@@ -2955,32 +2955,18 @@ gameRouter.post('/combat/effect', async (req: Request, res: Response) => {
       });
     }
 
-    const canonicalDefinition: CombatEffectDefinition = ownedCapability.effectDefinition
-      ? JSON.parse(JSON.stringify(ownedCapability.effectDefinition))
-      : {
-          id: ownedCapability.id + '_effect',
-          name: ownedCapability.name,
-          resolutionMode: 'SINGLE_ATTACK',
-          scale: 'PERSON',
-          actionCost:
-            ownedCapability.actionType === 'bonus_action'
-              ? 'BONUS_ACTION'
-              : ownedCapability.actionType === 'reaction'
-                ? 'REACTION'
-                : ownedCapability.actionType === 'free'
-                  ? 'FREE'
-                  : 'ACTION',
-          targetingMode:
-            ownedCapability.targetType === 'area_of_effect'
-              ? 'ALL_IN_AREA'
-              : ownedCapability.targetType === 'self'
-                ? 'SELF'
-                : 'ONE_TARGET',
-          attackFormula: ownedCapability.checkFormula || '1d20',
-          damageFormula: ownedCapability.damageFormula,
-          provenance: ownedCapability.provenance,
-          aiGenerated: ownedCapability.provenance === 'AI_GENERATED',
-        };
+    const canonicalDefinition = capEngine.getAuthoritativeCombatEffect(
+      actorId,
+      ownedCapability.id,
+      inventory
+    );
+
+    if (!canonicalDefinition) {
+      return res.status(409).json({
+        success: false,
+        errorReason: 'Owned capability does not expose an authoritative combat effect.',
+      });
+    }
 
     const definitionValidation = combatEffectEngine.validateDefinition(
       canonicalDefinition,
@@ -3063,10 +3049,19 @@ gameRouter.post('/combat/effect', async (req: Request, res: Response) => {
           return { success: false, errorReason: 'Capability is no longer possessed at commit time.' };
         }
 
-        const transactionDefinition: CombatEffectDefinition =
-          transactionCapability.effectDefinition
-            ? JSON.parse(JSON.stringify(transactionCapability.effectDefinition))
-            : JSON.parse(JSON.stringify(normalized));
+        const transactionDefinition =
+          transactionCapEngine.getAuthoritativeCombatEffect(
+            actorId,
+            transactionCapability.id,
+            transactionInventory
+          );
+
+        if (!transactionDefinition) {
+          return {
+            success: false,
+            errorReason: 'Capability effect is unavailable at commit time.',
+          };
+        }
 
         const transactionValidation = combatEffectEngine.validateDefinition(
           transactionDefinition,

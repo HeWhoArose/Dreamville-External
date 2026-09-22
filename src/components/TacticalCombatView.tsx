@@ -9,6 +9,7 @@ import {
   CombatEffectDefinition,
 } from '../types';
 import { apiClient } from '../services/apiClient';
+import { CombatAnimationLayer } from './combat/CombatAnimationLayer';
 import {
   Swords,
   Shield,
@@ -46,6 +47,7 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
   const [effectDamageType, setEffectDamageType] = useState<string>('radiant');
   const [effectResult, setEffectResult] = useState<any>(null);
   const [effectSimulation, setEffectSimulation] = useState<any>(null);
+  const [presentationMode, setPresentationMode] = useState<'FULL' | 'FAST' | 'TEXT' | 'LOG'>('FULL');
 
   const fetchCombatData = async () => {
     try {
@@ -485,6 +487,37 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
               );
             })}
           </div>
+
+          {effectResult?.animationPlan && (
+            <div className="w-full max-w-[480px]">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="text-[10px] uppercase tracking-wider text-stone-500">Presentation</span>
+                <div className="flex gap-1 overflow-x-auto">
+                  {(['FULL', 'FAST', 'TEXT', 'LOG'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setPresentationMode(mode)}
+                      className={
+                        'shrink-0 rounded border px-2 py-1 text-[9px] font-mono ' +
+                        (presentationMode === mode
+                          ? 'border-violet-500/60 bg-violet-500/10 text-violet-200'
+                          : 'border-stone-800 bg-stone-950 text-stone-500')
+                      }
+                    >
+                      {mode}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <CombatAnimationLayer
+                key={effectResult.animationPlan.id}
+                plan={effectResult.animationPlan}
+                instances={effectResult.instances || []}
+                presentationMode={presentationMode}
+              />
+            </div>
+          )}
 
           {/* Turn Queue Bar */}
           {combatState && (

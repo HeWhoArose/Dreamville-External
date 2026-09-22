@@ -5392,6 +5392,104 @@ gameRouter.get('/worlds/:worldId/characters/progression-modules', async (req: Re
 	}
 });
 
+/**
+ * POST /api/game/worlds/:worldId/characters/progression-infer
+ * AI suggests registered class/subclass/species selections from the character context.
+ */
+gameRouter.post('/worlds/:worldId/characters/progression-infer', async (req: Request, res: Response) => {
+  try {
+    const worldId = String(req.params.worldId || '');
+    const worldTemplate = worldRepository.getWorldTemplate(worldId);
+    if (!worldTemplate) return res.status(404).json({ success: false, errorReason: 'World not found.' });
+
+    const { characterGenesisService } = await import('../services/characterGenesisService');
+    const result = await characterGenesisService.inferCharacterProgression(
+      {
+        worldId,
+        concept: req.body?.concept,
+        background: req.body?.background,
+        profession: req.body?.profession,
+        archetype: req.body?.archetype,
+        species: req.body?.species,
+        classId: req.body?.classId,
+        narrativeRole: req.body?.narrativeRole,
+      },
+      worldTemplate
+    );
+    return res.json({ success: true, ...result });
+  } catch (error: any) {
+    console.error('Error inferring character progression:', error);
+    return res.status(500).json({ success: false, errorReason: error?.message || 'Failed to infer progression.' });
+  }
+});
+
+/**
+ * POST /api/game/worlds/:worldId/characters/progression-custom
+ * AI generates a normalized player-authored class/subclass/species module.
+ */
+gameRouter.post('/worlds/:worldId/characters/progression-custom', async (req: Request, res: Response) => {
+  try {
+    const worldId = String(req.params.worldId || '');
+    const worldTemplate = worldRepository.getWorldTemplate(worldId);
+    if (!worldTemplate) return res.status(404).json({ success: false, errorReason: 'World not found.' });
+
+    const type = String(req.body?.type || '').toUpperCase();
+    if (!['CLASS', 'SUBCLASS', 'SPECIES'].includes(type)) {
+      return res.status(400).json({ success: false, errorReason: 'type must be CLASS, SUBCLASS, or SPECIES.' });
+    }
+
+    const { characterGenesisService } = await import('../services/characterGenesisService');
+    const module = await characterGenesisService.proposeCustomProgressionModule(
+      {
+        worldId,
+        type: type as 'CLASS' | 'SUBCLASS' | 'SPECIES',
+        name: req.body?.name,
+        concept: req.body?.concept,
+        parentClassId: req.body?.parentClassId,
+        background: req.body?.background,
+        species: req.body?.species,
+        profession: req.body?.profession,
+        archetype: req.body?.archetype,
+      },
+      worldTemplate
+    );
+    return res.json({ success: true, module });
+  } catch (error: any) {
+    console.error('Error generating custom progression module:', error);
+    return res.status(500).json({ success: false, errorReason: error?.message || 'Failed to generate custom progression module.' });
+  }
+});
+
+/**
+ * POST /api/game/worlds/:worldId/characters/condition-suggest
+ * AI proposes current condition + defensive profile for player review.
+ */
+gameRouter.post('/worlds/:worldId/characters/condition-suggest', async (req: Request, res: Response) => {
+  try {
+    const worldId = String(req.params.worldId || '');
+    const worldTemplate = worldRepository.getWorldTemplate(worldId);
+    if (!worldTemplate) return res.status(404).json({ success: false, errorReason: 'World not found.' });
+
+    const { characterGenesisService } = await import('../services/characterGenesisService');
+    const conditionState = await characterGenesisService.proposeStartingConditionState(
+      {
+        worldId,
+        concept: req.body?.concept,
+        background: req.body?.background,
+        identity: req.body?.identity,
+        startingSituation: req.body?.startingSituation,
+        currentStateNote: req.body?.currentStateNote,
+      },
+      worldTemplate
+    );
+
+    return res.json({ success: true, conditionState });
+  } catch (error: any) {
+    console.error('Error suggesting starting condition:', error);
+    return res.status(500).json({ success: false, errorReason: error?.message || 'Failed to suggest starting condition.' });
+  }
+});
+
 gameRouter.post('/worlds/:worldId/characters/custom-capability', async (req: Request, res: Response) => {
   try {
     const worldId = String(req.params.worldId);

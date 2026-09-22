@@ -1428,9 +1428,9 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
               Character Genesis binds your player character to the canonical rules, geography, and ontology of a specific world template.
             </p>
             <div className="grid grid-cols-1 gap-2 pt-2">
-              {availableWorlds.map((w) => (
+              {availableWorlds.map((w, idx) => (
                 <button
-                  key={w.worldId}
+                  key={w.worldId || (w as any).id || `world-item-${idx}`}
                   onClick={() => {
                     setSelectedWorld(w);
                     setSelectedNarrativeRole(w.storyMode || w.narrativeProfile?.mode || 'PROTAGONIST');
@@ -3346,17 +3346,18 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                   Canonical Starting Location
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-                  {(selectedWorld?.geography?.nodes || [draft.startingLocation]).map((node: any) => {
-                    const isSelected = draft.startingLocation.locationId === node.id;
+                  {(selectedWorld?.geography?.nodes || [draft.startingLocation]).map((node: any, idx: number) => {
+                    const nodeId = node.id || node.locationId || `start-loc-${idx}`;
+                    const isSelected = (draft.startingLocation.locationId || (draft.startingLocation as any).id) === nodeId;
                     return (
                       <button
-                        key={node.id}
+                        key={nodeId}
                         onClick={() => {
                           setDraft({
                             ...draft,
                             startingLocation: {
-                              locationId: node.id,
-                              name: node.name,
+                              locationId: nodeId,
+                              name: node.name || 'Starting Point',
                               region: node.region || 'Frontier',
                               description: node.description || 'Waypoint',
                               coordinates: node.coordinates,

@@ -22,6 +22,7 @@ import { RestRecoveryEngine } from '../domain/restRecoveryEngine';
 import { StoryCheckEngine } from '../domain/storyCheckEngine';
 import { CampaignArchiveService, PartitionedArchive } from '../domain/campaignArchive';
 import { dndSpellRulesEvaluator } from '../domain/dndSpellRulesModel';
+import { EntityRegistry, EntityCard } from '../domain/entityCard';
 import type { RulesProfile } from '../../src/types';
 import { rulesProfileEngine } from '../domain/rulesProfileEngine';
 import { narrativeProfileEngine } from '../domain/narrativeProfileEngine';
@@ -58,6 +59,13 @@ export interface WorldRepository {
   getInventoryEngine(storyId: string): InventoryItemEngine;
   getCapabilityEngine(storyId: string): CapabilityEngine;
   getCharacterProgressionEngine(storyId: string): CharacterProgressionEngine;
+  getEntityRegistry(storyId: string): EntityRegistry;
+  getEntityCard(storyId: string, entityId: string): EntityCard | null;
+  getEntityCards(storyId: string, options?: Parameters<EntityRegistry['list']>[0]): EntityCard[];
+  saveEntityCard(storyId: string, card: any): EntityCard;
+  instantiateEntityFromTemplate(storyId: string, templateId: string, overrides?: any): EntityCard;
+  cloneEntityCard(storyId: string, entityId: string, overrides?: any): EntityCard;
+  setEntityLifecycleStatus(storyId: string, entityId: string, status: any): EntityCard;
   getEffectiveActorCapabilities(
     storyId: string,
     actorId: string
@@ -200,6 +208,7 @@ export class InMemoryWorldRepository implements WorldRepository {
   private inventoryEngines: Map<string, InventoryItemEngine> = new Map();
   private capabilityEngines: Map<string, CapabilityEngine> = new Map();
   private characterProgressionEngines: Map<string, CharacterProgressionEngine> = new Map();
+  private entityRegistries: Map<string, EntityRegistry> = new Map();
   private combatEngines: Map<string, TacticalCombatEngine> = new Map();
   private conditionEngines: Map<string, ConditionEngine> = new Map();
   private restRecoveryEngines: Map<string, RestRecoveryEngine> = new Map();
@@ -1297,6 +1306,14 @@ export class InMemoryWorldRepository implements WorldRepository {
       this.npcLifecycles.set(storyId, npcs);
     }
     npcs.set(state.actorId, state);
+    this.getEntityRegistry(storyId).upsert(EntityRegistry.fromLifecycle(storyId, {
+      actorId: state.actorId,
+      name: state.name,
+      locationId: state.locationId,
+      currentActivity: state.currentActivity,
+      isDead: state.isDead,
+      isTraveling: state.isTraveling,
+    }, 'NPC'));
   }
 
   public getAllNpcLifecycles(storyId: string): PlayerLifecycleState[] {
@@ -1414,6 +1431,41 @@ export class InMemoryWorldRepository implements WorldRepository {
       this.capabilityEngines.set(storyId, engine);
     }
     return engine;
+  }
+
+  public getEntityRegistry(storyId: string): EntityRegistry {
+    let registry = this.entityRegistries.get(storyId);
+    if (!registry) {
+      registry = new EntityRegistry(storyId);
+      const persisted = this.getStoryRun(storyId)?.runtimeState?.entities;
+      if (persisted) registry.importState(persisted);
+      this.entityRegistries.set(storyId, registry);
+    }
+    return registry;
+  }
+
+  public getEntityCard(storyId: string, entityId: string): EntityCard | null {
+    return this.getEntityRegistry(storyId).get(entityId) || null;
+  }
+
+  public getEntityCards(storyId: string, options: Parameters<EntityRegistry['list']>[0] = {}): EntityCard[] {
+    return this.getEntityRegistry(storyId).list(options);
+  }
+
+  public saveEntityCard(storyId: string, card: any): EntityCard {
+    return this.getEntityRegistry(storyId).upsert({ ...card, storyId });
+  }
+
+  public instantiateEntityFromTemplate(storyId: string, templateId: string, overrides: any = {}): EntityCard {
+    return this.getEntityRegistry(storyId).instantiateTemplate(templateId, overrides);
+  }
+
+  public cloneEntityCard(storyId: string, entityId: string, overrides: any = {}): EntityCard {
+    return this.getEntityRegistry(storyId).cloneEntity(entityId, overrides);
+  }
+
+  public setEntityLifecycleStatus(storyId: string, entityId: string, status: any): EntityCard {
+    return this.getEntityRegistry(storyId).setLifecycleStatus(entityId, status);
   }
 
   public getCharacterProgressionEngine(storyId: string): CharacterProgressionEngine {
@@ -2212,6 +2264,7 @@ export class InMemoryWorldRepository implements WorldRepository {
         ...(this.livingSimulations.has(storyId) ? { livingWorld: this.livingSimulations.get(storyId)!.exportState() } : {}),
         ...(this.restRecoveryEngines.has(storyId) ? { rest: this.restRecoveryEngines.get(storyId)!.exportState() } : {}),
         ...(this.characterProgressionEngines.has(storyId) ? { progression: this.characterProgressionEngines.get(storyId)!.exportState() } : {}),
+        ...(this.entityRegistries.has(storyId) ? { entities: this.entityRegistries.get(storyId)!.exportState() } : {}),
       };
       if (Object.keys(runtimeState).length > 0) {
         run.runtimeState = runtimeState;
@@ -2729,6 +2782,7 @@ export class InMemoryWorldRepository implements WorldRepository {
     this.inventoryEngines.delete(storyId);
     this.capabilityEngines.delete(storyId);
     this.characterProgressionEngines.delete(storyId);
+    this.entityRegistries.delete(storyId);
     this.chronicleEngines.delete(storyId);
     this.knowledgeBases.delete(storyId);
     this.combatEngines.delete(storyId);

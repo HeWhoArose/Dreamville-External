@@ -73,7 +73,6 @@ import {
   getDefaultIconForEquipment,
 } from '../../data/iconSystem';
 import { IconStudioModal } from './IconStudioModal';
-import { ConditionProfileEditor } from './ConditionProfileEditor';
 import { CharacterProgressionStep } from './CharacterProgressionStep';
 import { CharacterConditionStep } from './CharacterConditionStep';
 import { apiClient } from '../../services/apiClient';

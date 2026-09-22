@@ -2014,6 +2014,27 @@ class ApiClient {
     return data;
   }
 
+  public async simulateCombatEffectScenarios(
+    storyId: string,
+    definitions: import('../types').CombatEffectDefinition[],
+    targetIds: string[],
+    options: { actorId?: string; seeds?: number[] } = {}
+  ): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/combat/simulate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Story-ID': storyId },
+      body: JSON.stringify({
+        definitions,
+        targetIds,
+        actorId: options.actorId,
+        seeds: options.seeds,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.errorReason || `Failed to run combat scenario matrix: HTTP ${res.status}`);
+    return data;
+  }
+
   public async generateCombatAnimationPlan(
     storyId: string,
     definition: import('../types').CombatEffectDefinition,

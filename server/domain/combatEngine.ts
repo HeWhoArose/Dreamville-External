@@ -535,10 +535,10 @@ export class TacticalCombatEngine {
         (this.progressionModifier(participant.id, 'coreStats.speed') + this.bossPhaseModifier(participant.id, 'coreStats.speed')) / 5
     );
     projected.hpMax = Math.max(1, projected.hpMax + this.progressionModifier(participant.id, 'coreStats.hpMax') + this.bossPhaseModifier(participant.id, 'coreStats.hpMax'));
-    projected.spellAttackBonus = (projected.spellAttackBonus ?? projected.attackBonus)
+    projected.spellAttackBonus = (participant.spellAttackBonus ?? participant.attackBonus)
       + this.progressionModifier(participant.id, 'spell.attackBonus')
       + this.bossPhaseModifier(participant.id, 'spell.attackBonus');
-    projected.spellSaveDc = (projected.spellSaveDc ?? 8)
+    projected.spellSaveDc = (participant.spellSaveDc ?? 8)
       + this.progressionModifier(participant.id, 'spell.saveDC')
       + this.bossPhaseModifier(participant.id, 'spell.saveDC');
     projected.bossPhaseId = this.bossPhaseStates.get(participant.id)?.phaseId;
@@ -1762,11 +1762,55 @@ export class TacticalCombatEngine {
     const previousHp = Math.max(0, target.hpCurrent);
 
     if (target.usesDeathSaves && previousHp <= 0 && amount > 0) {
-      const currentState = target.deathSaveState || deathSaveEngine.createState();
-      const damageResult = deathSaveEngine.applyDamageAtZero(currentState, criticalHit);
-      target.deathSaveState = damageResult.state;
+      let resolvedFinalAmount = amount;
+      let immune = false;
+      let resisted = false;
+      let vulnerable = false;
 
-      if (damageResult.died) {
+      if (this.conditionEngine?.getActorState(target.id)) {
+        const defenseResolved = this.conditionEngine.resolveDamage(target.id, amount, damageType);
+        resolvedFinalAmount = defenseResolved.finalAmount;
+        immune = defenseResolved.immune;
+        resisted = defenseResolved.resisted;
+        vulnerable = defenseResolved.vulnerable;
+      } else {
+        const type = (damageType || '').trim().toLowerCase();
+        if (type && target.immunities?.some((value) => value.toLowerCase() === type)) {
+          resolvedFinalAmount = 0;
+          immune = true;
+        } else if (type && target.resistances?.some((value) => value.toLowerCase() === type)) {
+          resolvedFinalAmount = Math.floor(resolvedFinalAmount / 2);
+          resisted = true;
+        } else if (type && target.vulnerabilities?.some((value) => value.toLowerCase() === type)) {
+          resolvedFinalAmount *= 2;
+          vulnerable = true;
+        }
+      }
+
+      if (resolvedFinalAmount <= 0) {
+        target.isDead = false;
+        if (this.conditionEngine?.getActorState(target.id)) {
+          this.conditionEngine.markUnconsciousAtZero(target.id);
+          const state = this.conditionEngine.getActorState(target.id);
+          target.conditions = state?.instances.map((instance) => instance.name) || target.conditions;
+        } else if (!target.conditions.includes('Unconscious')) {
+          target.conditions.push('Unconscious');
+        }
+        this.bossPhaseEvaluationResolver?.(target.id, this);
+        return {
+          damage: 0,
+          targetDied: false,
+          immune,
+          resisted,
+          vulnerable,
+        };
+      }
+
+      const currentState = target.deathSaveState || deathSaveEngine.createState();
+      const deathResult = deathSaveEngine.applyDamageAtZero(currentState, criticalHit);
+      target.deathSaveState = deathResult.state;
+
+      if (deathResult.died) {
         target.isDead = true;
         if (this.conditionEngine?.getActorState(target.id)) {
           this.conditionEngine.markDead(target.id);
@@ -1774,12 +1818,20 @@ export class TacticalCombatEngine {
         if (!target.conditions.includes('Dead')) target.conditions.push('Dead');
       } else {
         target.isDead = false;
+        if (this.conditionEngine?.getActorState(target.id)) {
+          this.conditionEngine.markUnconsciousAtZero(target.id);
+        } else if (!target.conditions.includes('Unconscious')) {
+          target.conditions.push('Unconscious');
+        }
       }
 
       this.bossPhaseEvaluationResolver?.(target.id, this);
       return {
-        damage: amount,
-        targetDied: damageResult.died,
+        damage: resolvedFinalAmount,
+        targetDied: deathResult.died,
+        immune,
+        resisted,
+        vulnerable,
       };
     }
 
@@ -2074,6 +2126,28 @@ export class TacticalCombatEngine {
       target.conditions.push(condition.conditionIdOrName);
     }
 
+    this.combatActionSequence += 1;
+    const conditionEventId = `combat_evt_${this.currentRound}_${this.combatActionSequence}`;
+    this.combatEffectEvents.push({
+      eventId: conditionEventId,
+      actionId: `condition_${this.currentRound}_${sourceActorId || 'SYSTEM'}`,
+      eventType: result.applied ? 'CONDITION_APPLIED' : result.immune ? 'CONDITION_BLOCKED' : 'CONDITION_REJECTED',
+      turnNumber: this.currentRound,
+      actorId: sourceActorId || targetId,
+      targetId,
+      headline: result.applied
+        ? `${target.name} gained ${condition.conditionIdOrName}.`
+        : `${target.name} did not gain ${condition.conditionIdOrName}.`,
+      metadata: {
+        conditionIdOrName: condition.conditionIdOrName,
+        intensity: condition.intensity,
+        severity: condition.severity,
+        durationSeconds: condition.durationSeconds,
+        immune: result.immune,
+        applied: result.applied,
+      },
+    });
+
     return { success: true, applied: result.applied, immune: result.immune, errorReason: result.reason };
   }
 
@@ -2147,17 +2221,23 @@ export class TacticalCombatEngine {
       advantage?: boolean;
       disadvantage?: boolean;
       retargetPolicy?: 'NONE' | 'RETARGET_ON_DEATH';
+      instanceTargetIds?: string[];
       consumeAction?: boolean;
     } = {}
   ): CombatEffectResult {
     if (!this.tacticalCombatEnabled()) return { success: false, errorReason: 'Tactical combat is disabled by the active rules profile.' };
     const attacker = this.participants.get(attackerId);
     if (!attacker) return { success: false, errorReason: 'Attacker not found.' };
-    const uniqueTargets = Array.from(new Set(targetIds.filter(Boolean)));
-    if (uniqueTargets.length === 0) return { success: false, errorReason: 'At least one targetId is required.' };
-    const requestedCount = Math.trunc(options.instanceCount ?? options.definition?.instanceCount ?? uniqueTargets.length);
+    const rawTargetIds = targetIds.filter(Boolean);
+    const uniqueTargets = Array.from(new Set(rawTargetIds));
+    const explicitInstanceTargets = (options.instanceTargetIds || options.definition?.instanceTargetIds || []).filter(Boolean);
+    if (uniqueTargets.length === 0 && explicitInstanceTargets.length === 0) return { success: false, errorReason: 'At least one targetId is required.' };
+    const requestedCount = Math.trunc(options.instanceCount ?? options.definition?.instanceCount ?? (explicitInstanceTargets.length || uniqueTargets.length));
     const count = Math.max(1, Math.min(50, requestedCount));
-    const availableTargets = uniqueTargets.map((id) => this.participants.get(id)).filter(Boolean) as BattlefieldParticipant[];
+    const availableTargets = Array.from(new Set([...uniqueTargets, ...explicitInstanceTargets]))
+      .map((id) => this.participants.get(id))
+      .filter(Boolean) as BattlefieldParticipant[];
+    if (availableTargets.length === 0) return { success: false, errorReason: 'No valid targets are available.' };
     if (availableTargets.length === 0) return { success: false, errorReason: 'No valid targets are available.' };
     const currentActor = this.getCurrentActor();
     if (this.turnQueue.length > 0 && (!currentActor || currentActor.id !== attackerId)) return { success: false, errorReason: "It is not this attacker's turn." };
@@ -2172,7 +2252,19 @@ export class TacticalCombatEngine {
     let totalDamage = 0;
     const defeatedTargetIds: string[] = [];
     for (let i = 0; i < count; i += 1) {
-      let target = availableTargets[i < availableTargets.length ? i : 0];
+      const requestedTargetId = explicitInstanceTargets[i];
+      let target = requestedTargetId
+        ? this.participants.get(requestedTargetId)
+        : availableTargets[i < availableTargets.length ? i : 0];
+      if (!target) {
+        return {
+          success: false,
+          errorReason: `Instance ${i + 1} requested an unavailable target.`,
+          actionConsumed: false,
+          effectId: options.definition?.id,
+          effectName: options.definition?.name,
+        };
+      }
       if (target.isDead || target.hpCurrent <= 0) {
         if (options.retargetPolicy === 'RETARGET_ON_DEATH' || options.definition?.retargetPolicy === 'RETARGET_ON_DEATH') {
           target = availableTargets.find((candidate) => !candidate.isDead && candidate.hpCurrent > 0) || target;
@@ -2879,6 +2971,26 @@ export class TacticalCombatEngine {
           };
           this.eventLog.push(event);
           hazardEvents.push(event);
+          this.combatActionSequence += 1;
+          this.combatEffectEvents.push({
+            eventId: `combat_evt_${this.currentRound}_${this.combatActionSequence}`,
+            actionId: `condition_tick_${this.currentRound}_${currentActor.id}`,
+            eventType: 'CONDITION_TICK_RESOLVED',
+            turnNumber: this.currentRound,
+            actorId: currentActor.id,
+            targetId: currentActor.id,
+            headline: event.headline,
+            damage: tick.damage?.finalAmount || 0,
+            finalDamage: tick.damage?.finalAmount || 0,
+            metadata: {
+              conditionId: tick.conditionId,
+              conditionName: tick.conditionName,
+              intensityBefore: tick.intensityBefore,
+              intensityAfter: tick.intensityAfter,
+              removed: tick.removed,
+              notes: tick.notes,
+            },
+          });
         }
       }
 

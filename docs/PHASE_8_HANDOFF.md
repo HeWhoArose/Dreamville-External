@@ -82,6 +82,23 @@ Player progression routes reject attempts to mutate a different actor.
 
 Custom feat IDs are deterministic and no longer use wall-clock/random identity generation.
 
+## Post-audit hardening applied
+
+After the initial Phase 8 implementation pass, the ten-loop audit cycle found and corrected additional issues before full-suite handoff:
+
+- Genesis story-run initialization now resolves the rules profile before seeding progression (eliminating a temporal-dead-zone initialization failure).
+- Progression state is included in persistent runtime storage and canonical snapshot restore.
+- Combat actor-scoped projections now include progression-derived attack, AC, speed, HP-max, spell attack, and spell save DC modifiers.
+- Spell casting accepts authoritative progression-derived spell attack/DC values without fabricating targets or bypassing combat authority.
+- Module enable/disable is actor-scoped; class/subclass relationships are kept valid when selections change or a class is disabled.
+- Genesis divergence fingerprints correctly map character feat IDs to deterministic feat-module IDs.
+- Runtime modifier resolution honors the active rules profile, including Custom Homebrew gating.
+- MIN/MAX modifier semantics now correctly represent floor/ceiling constraints.
+- Genesis and snapshot progression references are validated for class/subclass/species/feat integrity.
+- Player progression API mutation is actor-bound and cannot target another actor.
+
+Additional regression tests were added for persistence after committed level-up, combat/spell projection, actor module isolation, Genesis feat fingerprinting, MIN/MAX bounds, and rules-profile runtime gating.
+
 ## Tests added
 
 New suite:

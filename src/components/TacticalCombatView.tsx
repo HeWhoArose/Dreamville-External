@@ -55,6 +55,7 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
   const [effectRangeCells, setEffectRangeCells] = useState<number>(8);
   const [effectResult, setEffectResult] = useState<any>(null);
   const [effectSimulation, setEffectSimulation] = useState<any>(null);
+  const [simulationDraftMode, setSimulationDraftMode] = useState<boolean>(false);
   const [presentationMode, setPresentationMode] = useState<'FULL' | 'FAST' | 'TEXT' | 'LOG'>('FULL');
   const [combatReplays, setCombatReplays] = useState<any[]>([]);
   const [selectedReplayId, setSelectedReplayId] = useState<string>('');
@@ -327,12 +328,12 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
   };
 
   const handleSimulateStructuredEffect = async () => {
-    if (!selectedCapabilityId || !combatState?.storyId) return;
+    if (!combatState?.storyId) return;
 
     const capability = capabilities.find((item) => item.id === selectedCapabilityId);
     const capabilityEffect = capability?.effectDefinition;
 
-    const definition: CombatEffectDefinition = capabilityEffect
+    const definition: CombatEffectDefinition = capabilityEffect && !simulationDraftMode
       ? {
           ...JSON.parse(JSON.stringify(capabilityEffect)),
           id: selectedCapabilityId + '_simulation',
@@ -376,7 +377,7 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
         combatState.storyId,
         definition,
         selectedTargetId ? [selectedTargetId] : [],
-        { seeds: [101, 202, 303, 404, 505], capabilityId: selectedCapabilityId || undefined }
+        { seeds: [101, 202, 303, 404, 505], capabilityId: simulationDraftMode ? undefined : (selectedCapabilityId || undefined) }
       );
       setEffectSimulation(simulation);
     } catch (err: any) {
@@ -926,13 +927,24 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
                   <div className="text-[11px] font-medium text-violet-300">Combat Effect Sandbox</div>
                   <div className="text-[10px] text-stone-500">Live execution uses the capability's authoritative definition; advanced fields are simulation-only.</div>
                 </div>
-                <button
+                <div className="flex items-center gap-2">
+                  <label className="flex items-center gap-1.5 text-[9px] text-stone-400 font-mono">
+                    <input
+                      type="checkbox"
+                      checked={simulationDraftMode}
+                      onChange={(e) => setSimulationDraftMode(e.target.checked)}
+                      className="accent-violet-500"
+                    />
+                    Draft simulation
+                  </label>
+                  <button
                   type="button"
                   onClick={() => setAdvancedEffectOpen((open) => !open)}
                   className="px-2 py-1 rounded border border-violet-800/60 bg-violet-950/30 text-[10px] text-violet-200"
                 >
                   {advancedEffectOpen ? 'Hide' : 'Open'}
-                </button>
+                  </button>
+                </div>
               </div>
               {effectSimulation && advancedEffectOpen && (
                 <div className="space-y-2 p-3 bg-violet-950/20 rounded-lg border border-violet-900/40">
@@ -1060,7 +1072,7 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
                   )}
                   <div className="grid grid-cols-2 gap-2">
                     <button type="button" onClick={handleStructuredEffect} disabled={actionLoading || !isPlayerTurn || !actorCanAct || !actionAvailable || (((effectTargetingMode === 'ONE_TARGET' || effectTargetingMode === 'PER_INSTANCE') && !selectedTargetId)) || !selectedCapabilityId} className="py-2 px-2 rounded bg-violet-900/70 hover:bg-violet-800 text-violet-100 border border-violet-700 text-[11px] font-semibold disabled:opacity-50">Resolve Effect</button>
-                    <button type="button" onClick={handleSimulateStructuredEffect} disabled={actionLoading || (((effectTargetingMode === 'ONE_TARGET' || effectTargetingMode === 'PER_INSTANCE') && !selectedTargetId)) || !selectedCapabilityId} className="py-2 px-2 rounded bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 text-[11px] font-semibold disabled:opacity-50">Simulate</button>
+                    <button type="button" onClick={handleSimulateStructuredEffect} disabled={actionLoading || (((effectTargetingMode === 'ONE_TARGET' || effectTargetingMode === 'PER_INSTANCE') && !selectedTargetId)) || (!simulationDraftMode && !selectedCapabilityId)} className="py-2 px-2 rounded bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 text-[11px] font-semibold disabled:opacity-50">Simulate</button>
                   </div>
                   {effectResult && (
                     <div className="p-2 rounded bg-stone-900 border border-stone-800 text-[10px] text-stone-300 space-y-1">

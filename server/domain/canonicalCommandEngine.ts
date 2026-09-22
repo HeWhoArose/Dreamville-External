@@ -15,6 +15,7 @@ export type CanonicalCommandType =
 	| 'REST'
 	| 'APPLY_ABILITY'
 	| 'COMBAT_EFFECT'
+	| 'BOSS_PHASE'
 	| 'PROGRESSION';
 
 export type CanonicalCommandSource = 'PLAYER' | 'AI' | 'SYSTEM';
@@ -266,6 +267,12 @@ export class CanonicalCommandEngine {
 					return 'COMBAT_EFFECT targetIds must be an array when provided.';
 				}
 				break;
+			case 'BOSS_PHASE':
+				if (typeof payload.bossId !== 'string' || !Array.isArray(payload.phases)) {
+					return 'BOSS_PHASE command requires bossId and phases.';
+				}
+				break;
+
 			case 'INTERACT':
 				if (typeof payload !== 'object' || payload === null) {
 					return 'INTERACT command requires an object payload.';

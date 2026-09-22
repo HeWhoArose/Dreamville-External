@@ -1747,6 +1747,12 @@ class ApiClient {
     return await res.json();
   }
 
+  public async getCharacterProgressionModules(worldId: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/worlds/${encodeURIComponent(worldId)}/characters/progression-modules`, { method: 'GET' });
+    if (!res.ok) throw new Error(`Failed to load progression modules: HTTP ${res.status}`);
+    return res.json();
+  }
+
   public async confirmCharacter(worldId: string, draft: any): Promise<any> {
     const res = await fetch(`${this.baseUrl}/worlds/${encodeURIComponent(worldId)}/characters/confirm`, {
       method: 'POST',

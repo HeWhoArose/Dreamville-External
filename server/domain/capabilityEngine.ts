@@ -78,6 +78,9 @@ export interface CapabilityDefinition {
   counters?: string[];
   visualIdentityRef?: VisualIdentityRef;
   storyCheckChallenges?: import('../../src/types').StoryCheckChallenge[];
+  checkFormula?: string;
+  damageFormula?: string;
+  effectDefinition?: import('../../src/types').CombatEffectDefinition;
 }
 
 export interface ProgressionHistoryEntry {

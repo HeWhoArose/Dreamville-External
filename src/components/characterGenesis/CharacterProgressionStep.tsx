@@ -1,127 +1,219 @@
-import React from 'react';
-import { Check, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Check, ChevronDown, Sparkles } from 'lucide-react';
 import type { CharacterGenesisDraft, CharacterProgressionSelection } from '../../types';
+
+type ProgressionType = 'CLASS' | 'SUBCLASS' | 'SPECIES';
 
 interface CharacterProgressionStepProps {
 	draft: CharacterGenesisDraft;
 	modules: any[];
 	onChange: (progression: CharacterProgressionSelection) => void;
+	onInfer: (type: ProgressionType) => Promise<void>;
+	onGenerateCustom: (type: ProgressionType, name: string, concept: string, parentClassId?: string) => Promise<void>;
+	busyType?: ProgressionType | null;
+	error?: string | null;
 }
 
-export const CharacterProgressionStep: React.FC<CharacterProgressionStepProps> = ({ draft, modules, onChange }) => {
+export const CharacterProgressionStep: React.FC<CharacterProgressionStepProps> = ({
+	draft,
+	modules,
+	onChange,
+	onInfer,
+	onGenerateCustom,
+	busyType,
+	error,
+}) => {
 	const progression = draft.progression || {};
-	const classes = modules.filter((module) => module.type === 'CLASS');
-	const subclasses = modules.filter((module) => module.type === 'SUBCLASS' && (!progression.classId || module.parentClassId === progression.classId));
-	const species = modules.filter((module) => module.type === 'SPECIES');
-	const feats = modules.filter((module) => module.type === 'FEAT');
+	const [customType, setCustomType] = useState<ProgressionType | null>(null);
+	const [customName, setCustomName] = useState('');
+	const [customConcept, setCustomConcept] = useState('');
+
+	const classes = useMemo(() => modules.filter((module) => module.type === 'CLASS'), [modules]);
+	const subclasses = useMemo(
+		() => modules.filter((module) => module.type === 'SUBCLASS' && progression.classId && module.parentClassId === progression.classId),
+		[modules, progression.classId]
+	);
+	const species = useMemo(() => modules.filter((module) => module.type === 'SPECIES'), [modules]);
+
 	const selectedClass = classes.find((module) => module.id === progression.classId);
 	const selectedSubclass = subclasses.find((module) => module.id === progression.subclassId);
 	const selectedSpecies = species.find((module) => module.id === progression.speciesId);
-	const selectedFeats = new Set(progression.featIds || []);
 
 	const update = (patch: Partial<CharacterProgressionSelection>) => {
 		onChange({
 			...progression,
 			...patch,
-			featIds: patch.featIds ?? progression.featIds ?? [],
-			moduleIds: patch.moduleIds ?? progression.moduleIds ?? [],
+			featIds: progression.featIds || [],
+			moduleIds: progression.moduleIds || [],
+			customModules: progression.customModules || [],
 		});
 	};
 
-	const selectClass = (classId?: string) => {
-		const validSubclass = subclasses.find((module) => module.parentClassId === classId && module.id === progression.subclassId);
-		update({ classId, subclassId: validSubclass ? progression.subclassId : undefined });
+	const selectClass = (classId: string) => {
+		const nextSubclass = subclasses.some((module) => module.id === progression.subclassId && module.parentClassId === classId)
+			? progression.subclassId
+			: undefined;
+		update({ classId: classId || undefined, subclassId: nextSubclass });
 	};
 
-	const toggleFeat = (featId: string) => {
-		const next = new Set(selectedFeats);
-		if (next.has(featId)) next.delete(featId);
-		else next.add(featId);
-		update({ featIds: Array.from(next) });
+	const submitCustom = async () => {
+		if (!customType) return;
+		await onGenerateCustom(customType, customName.trim(), customConcept.trim(), customType === 'SUBCLASS' ? progression.classId : undefined);
+		setCustomType(null);
+		setCustomName('');
+		setCustomConcept('');
 	};
 
-	const Section = ({ title, hint, children }: { title: string; hint: string; children: React.ReactNode }) => (
-		<section className="rounded-2xl border border-neutral-800 bg-neutral-950 p-4 sm:p-5 space-y-4">
-			<div>
-				<h2 className="text-sm font-semibold text-white">{title}</h2>
-				<p className="text-xs text-neutral-400 mt-1 leading-relaxed">{hint}</p>
-			</div>
-			{children}
-		</section>
-	);
-
-	const ModuleButton = ({ module, selected, onClick }: { module: any; selected: boolean; onClick: () => void }) => (
-		<button
-			type="button"
-			onClick={onClick}
-			className={`w-full text-left rounded-xl border p-3 sm:p-4 transition-colors min-h-[72px] ${
-				selected ? 'border-indigo-500/60 bg-indigo-950/40' : 'border-neutral-800 bg-neutral-900/50 hover:border-neutral-700'
-			}`}
-		>
-			<div className="flex items-start gap-3">
-				<div className={`mt-0.5 w-5 h-5 rounded-full border flex items-center justify-center shrink-0 ${
-					selected ? 'border-indigo-400 bg-indigo-500/20 text-indigo-300' : 'border-neutral-700 text-transparent'
-				}`}>
-					<Check className="w-3 h-3" />
-				</div>
+	const Section = ({
+		type,
+		title,
+		hint,
+		value,
+		options,
+		disabled,
+		onSelect,
+		selected,
+	}: {
+		type: ProgressionType;
+		title: string;
+		hint: string;
+		value?: string;
+		options: any[];
+		disabled?: boolean;
+		onSelect: (value: string) => void;
+		selected?: any;
+	}) => (
+		<section className="rounded-2xl border border-neutral-800 bg-neutral-950 p-4 sm:p-5 space-y-3">
+			<div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
 				<div className="min-w-0">
-					<div className="text-sm font-medium text-white break-words">{module.name}</div>
-					<div className="text-[11px] text-neutral-400 mt-1 leading-relaxed">{module.provenance || 'World rules module'}</div>
-					{module.description && <div className="text-xs text-neutral-500 mt-1 leading-relaxed">{module.description}</div>}
+					<h2 className="text-sm font-semibold text-white">{title}</h2>
+					<p className="text-xs text-neutral-400 mt-1 leading-relaxed">{hint}</p>
 				</div>
+				{selected && <span className="shrink-0 text-[10px] uppercase tracking-wide text-indigo-300">{selected.name}</span>}
 			</div>
-		</button>
+
+			<div className="flex flex-col gap-2 sm:flex-row">
+				<div className="relative min-w-0 flex-1">
+					<select
+						value={value || ''}
+						disabled={disabled}
+						onChange={(event) => onSelect(event.target.value)}
+						className="w-full appearance-none rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-3 pr-10 text-sm text-white outline-none focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+					>
+						<option value="">{disabled ? 'Choose a class first' : `Choose ${title}`}</option>
+						{options.map((module) => (
+							<option key={module.id} value={module.id}>{module.name}</option>
+						))}
+					</select>
+					<ChevronDown className="pointer-events-none absolute right-3 top-3.5 h-4 w-4 text-neutral-500" />
+				</div>
+				<button
+					type="button"
+					disabled={Boolean(busyType)}
+					onClick={() => onInfer(type)}
+					className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-indigo-700/60 bg-indigo-950/50 px-3 text-xs font-medium text-indigo-200 hover:bg-indigo-900/50 disabled:opacity-50"
+				>
+					<Sparkles className="h-3.5 w-3.5" />
+					{busyType === type ? 'Inferring…' : 'Infer with AI'}
+				</button>
+				<button
+					type="button"
+					onClick={() => setCustomType(customType === type ? null : type)}
+					className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-neutral-700 bg-neutral-900 px-3 text-xs font-medium text-neutral-200 hover:bg-neutral-800"
+				>
+					+ Custom
+				</button>
+			</div>
+
+			{customType === type && (
+				<div className="rounded-xl border border-neutral-800 bg-neutral-900/70 p-3 space-y-3">
+					<div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+						<input
+							value={customName}
+							onChange={(event) => setCustomName(event.target.value)}
+							placeholder={`Custom ${title.toLowerCase()} name`}
+							className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2.5 text-xs text-white outline-none focus:border-indigo-500"
+						/>
+						<input
+							value={customConcept}
+							onChange={(event) => setCustomConcept(event.target.value)}
+							placeholder="Describe what it should do"
+							className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2.5 text-xs text-white outline-none focus:border-indigo-500"
+						/>
+					</div>
+					<div className="flex justify-end">
+						<button
+							type="button"
+							disabled={!customConcept.trim() && !customName.trim()}
+							onClick={() => void submitCustom()}
+							className="min-h-[40px] rounded-lg bg-indigo-600 px-4 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-40"
+						>
+							Generate & Add
+						</button>
+					</div>
+				</div>
+			)}
+		</section>
 	);
 
 	return (
 		<div className="space-y-5">
 			<div className="rounded-2xl border border-indigo-900/50 bg-indigo-950/20 p-4 sm:p-5">
 				<div className="flex items-start gap-3">
-					<Sparkles className="w-5 h-5 text-indigo-400 shrink-0 mt-0.5" />
-					<div>
-						<h1 className="text-base sm:text-lg font-semibold text-white">Progression & Ancestry</h1>
-						<p className="text-xs sm:text-sm text-neutral-400 mt-1 leading-relaxed">
-							Choose mechanical identity separately from profession and narrative role. A merchant can be a profession without becoming a class.
+					<Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-indigo-400" />
+					<div className="min-w-0">
+						<h1 className="text-base font-semibold text-white sm:text-lg">Progression & Ancestry</h1>
+						<p className="mt-1 text-xs leading-relaxed text-neutral-400 sm:text-sm">
+							Choose the mechanical identity separately from profession and narrative role. AI only selects from registered world modules; custom entries are generated into the same validated structure.
 						</p>
 					</div>
 				</div>
 			</div>
 
-			<Section title="Class" hint="One primary class. This is the mechanical progression identity, not the character's day-to-day profession.">
-				{classes.length ? (
-					<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-						{classes.map((module) => <ModuleButton key={module.id} module={module} selected={progression.classId === module.id} onClick={() => selectClass(progression.classId === module.id ? undefined : module.id)} />)}
-					</div>
-				) : <p className="text-xs text-neutral-500">No standard classes are registered for this world.</p>}
-				{selectedClass && <div className="text-xs text-indigo-300">Selected: {selectedClass.name}</div>}
-			</Section>
+			<Section
+				type="CLASS"
+				title="Class"
+				hint="Primary mechanical progression. A profession such as merchant, scholar, or blacksmith is not automatically a class."
+				value={progression.classId}
+				options={classes}
+				onSelect={selectClass}
+				selected={selectedClass}
+			/>
 
-			<Section title="Subclass" hint={progression.classId ? 'Only subclasses compatible with the selected class are shown. Requirements are enforced again at confirmation/runtime.' : 'Choose a class first to see compatible subclasses.'}>
-				{subclasses.length && progression.classId ? (
-					<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-						{subclasses.map((module) => <ModuleButton key={module.id} module={module} selected={progression.subclassId === module.id} onClick={() => update({ subclassId: progression.subclassId === module.id ? undefined : module.id })} />)}
-					</div>
-				) : <p className="text-xs text-neutral-500">No compatible subclass is currently available.</p>}
-				{selectedSubclass && <div className="text-xs text-indigo-300">Selected: {selectedSubclass.name}</div>}
-			</Section>
+			<Section
+				type="SUBCLASS"
+				title="Subclass"
+				hint="Only subclasses compatible with the selected class are available."
+				value={progression.subclassId}
+				options={subclasses}
+				disabled={!progression.classId}
+				onSelect={(value) => update({ subclassId: value || undefined })}
+				selected={selectedSubclass}
+			/>
 
-			<Section title="Species / Ancestry" hint="Species is mechanical identity. It remains separate from lineage, culture, profession, and narrative archetype.">
-				{species.length ? (
-					<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-						{species.map((module) => <ModuleButton key={module.id} module={module} selected={progression.speciesId === module.id} onClick={() => update({ speciesId: progression.speciesId === module.id ? undefined : module.id })} />)}
-					</div>
-				) : <p className="text-xs text-neutral-500">No structured species modules are registered for this world. Free-text species remains available in Identity.</p>}
-				{selectedSpecies && <div className="text-xs text-indigo-300">Selected: {selectedSpecies.name}</div>}
-			</Section>
+			<Section
+				type="SPECIES"
+				title="Species / Ancestry"
+				hint="Mechanical ancestry stays separate from free-text lineage, culture, profession, and archetype."
+				value={progression.speciesId}
+				options={species}
+				onSelect={(value) => update({ speciesId: value || undefined })}
+				selected={selectedSpecies}
+			/>
 
-			<Section title="Feats" hint="Feats are additive. You can select multiple when the active ruleset permits them. Custom feats created in Genesis remain part of the character too.">
-				{feats.length ? (
-					<div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-						{feats.map((module) => <ModuleButton key={module.id} module={module} selected={selectedFeats.has(module.id)} onClick={() => toggleFeat(module.id)} />)}
+			<div className="rounded-xl border border-neutral-800 bg-neutral-900/60 p-4">
+				<div className="flex items-start gap-3">
+					<Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+					<div>
+						<div className="text-xs font-semibold text-white">Feats, Titles & Special Traits stay in Stats & Attributes</div>
+						<p className="mt-1 text-[11px] leading-relaxed text-neutral-500">
+							They are not duplicated here. Existing feat records are linked into progression automatically during confirmation.
+						</p>
 					</div>
-				) : <p className="text-xs text-neutral-500">No catalogue feats are registered. You can still use custom feats from the Capabilities & Skills workflow.</p>}
-				<div className="text-xs text-neutral-500">{selectedFeats.size} feat{selectedFeats.size === 1 ? '' : 's'} selected.</div>
-			</Section>
+				</div>
+			</div>
+
+			{error && <div className="rounded-lg border border-red-900/60 bg-red-950/30 px-3 py-2 text-xs text-red-300">{error}</div>}
 		</div>
 	);
 };

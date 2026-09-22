@@ -32,6 +32,7 @@ export interface CompendiumItem {
   canonicalEntityId?: string;
   assetId?: string;
   discoveredAt?: string;
+  entityCard?: import('../../types').EntityCardProjection;
 }
 
 export const COMPENDIUM_CATEGORIES: Array<{

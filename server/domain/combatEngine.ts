@@ -418,6 +418,7 @@ export interface TacticalCombatStateExport {
   spellRuntimeState?: ReturnType<SpellRuntime['exportState']>;
   combatEffectEvents?: CombatEventRecord[];
   combatActionSequence?: number;
+  bossPhaseStates?: Array<{ bossId: string; phaseId: string; modifiers: Record<string, number>; abilities: string[]; targetPriority?: string; environmentEffects: string[] }>;
 }
 
 export interface ProjectedCombatState {

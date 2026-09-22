@@ -45,6 +45,13 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
   const [effectAttackFormula, setEffectAttackFormula] = useState<string>('1d20');
   const [effectDamageFormula, setEffectDamageFormula] = useState<string>('1d8');
   const [effectDamageType, setEffectDamageType] = useState<string>('radiant');
+  const [effectTargetingMode, setEffectTargetingMode] = useState<CombatEffectDefinition['targetingMode']>('ONE_TARGET');
+  const [effectActionCost, setEffectActionCost] = useState<CombatEffectDefinition['actionCost']>('ACTION');
+  const [effectScale, setEffectScale] = useState<CombatEffectDefinition['scale']>('PERSON');
+  const [effectSaveAbility, setEffectSaveAbility] = useState<string>('DEX');
+  const [effectDifficultyClass, setEffectDifficultyClass] = useState<number>(15);
+  const [effectOutcome, setEffectOutcome] = useState<CombatEffectDefinition['outcome']>('INSTANT_DEFEAT');
+  const [effectRangeCells, setEffectRangeCells] = useState<number>(8);
   const [effectResult, setEffectResult] = useState<any>(null);
   const [effectSimulation, setEffectSimulation] = useState<any>(null);
   const [presentationMode, setPresentationMode] = useState<'FULL' | 'FAST' | 'TEXT' | 'LOG'>('FULL');
@@ -191,15 +198,24 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
     const capability = capabilities.find((item: any) => item.id === selectedCapabilityId) as any;
     const definition: CombatEffectDefinition = {
       id: selectedCapabilityId + '_combat_effect',
-      name: (capability?.name || 'Custom Combat Effect') + (effectMode === 'MULTI_INSTANCE' ? ' Barrage' : ''),
+      name: (capability?.name || 'Custom Combat Effect') +
+        (effectMode === 'MULTI_INSTANCE' ? ' Barrage' : effectMode === 'WORLD_EFFECT' ? ' World Effect' : ''),
       resolutionMode: effectMode,
-      scale: effectMode === 'WORLD_EFFECT' ? 'CITY' : 'PERSON',
-      actionCost: 'ACTION',
-      targetingMode: effectMode === 'AREA' ? 'ALL_IN_AREA' : 'ONE_TARGET',
-      instanceCount: effectMode === 'MULTI_INSTANCE' ? effectCount : undefined,
+      scale: effectScale,
+      actionCost: effectActionCost,
+      targetingMode: effectTargetingMode,
+      instanceCount: effectMode === 'MULTI_INSTANCE' || effectTargetingMode === 'PER_INSTANCE' ? effectCount : undefined,
       attackFormula: effectAttackFormula,
+      saveFormula: effectAttackFormula,
       damageFormula: effectDamageFormula,
       damageType: effectDamageType,
+      savingThrowAbility: effectSaveAbility,
+      difficultyClass: effectDifficultyClass,
+      halfDamageOnSave: true,
+      rangeCells: effectRangeCells,
+      requiresLineOfSight: true,
+      outcome: (effectMode === 'OUTCOME' || effectMode === 'WORLD_EFFECT') ? effectOutcome : undefined,
+      outcomeReason: (effectMode === 'OUTCOME' || effectMode === 'WORLD_EFFECT') ? 'Resolved by the canonical semantic outcome engine.' : undefined,
       assetRefs: [],
       provenance: 'TACTICAL_COMBAT_UI',
     };
@@ -208,7 +224,7 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
       setErrorMsg(null);
       const validation = await apiClient.validateCombatEffect(combatState.storyId, definition);
       if (!validation.success) throw new Error(validation.errorReason || 'Combat effect failed validation.');
-      const result = await apiClient.executeCombatEffect(combatState.storyId, definition, [selectedTargetId], { capabilityId: selectedCapabilityId });
+      const result = await apiClient.executeCombatEffect(combatState.storyId, definition, selectedTargetId ? [selectedTargetId] : [], { capabilityId: selectedCapabilityId });
       setEffectResult(result?.effectResult || null);
       setCombatState(result?.combatState || combatState);
       const events = result?.effectResult?.instances || [];
@@ -223,15 +239,29 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
   };
 
   const handleSimulateStructuredEffect = async () => {
-    if (!selectedTargetId || !selectedCapabilityId || !combatState?.storyId) return;
+    if (!selectedCapabilityId || !combatState?.storyId) return;
     const definition: CombatEffectDefinition = {
-      id: selectedCapabilityId + '_simulation', name: 'Simulation', resolutionMode: effectMode, scale: 'PERSON',
-      actionCost: 'ACTION', targetingMode: 'ONE_TARGET', instanceCount: effectMode === 'MULTI_INSTANCE' ? effectCount : undefined,
-      attackFormula: effectAttackFormula, damageFormula: effectDamageFormula, damageType: effectDamageType,
+      id: selectedCapabilityId + '_simulation',
+      name: 'Simulation',
+      resolutionMode: effectMode,
+      scale: effectScale,
+      actionCost: effectActionCost,
+      targetingMode: effectTargetingMode,
+      instanceCount: effectMode === 'MULTI_INSTANCE' || effectTargetingMode === 'PER_INSTANCE' ? effectCount : undefined,
+      attackFormula: effectAttackFormula,
+      saveFormula: effectAttackFormula,
+      damageFormula: effectDamageFormula,
+      damageType: effectDamageType,
+      savingThrowAbility: effectSaveAbility,
+      difficultyClass: effectDifficultyClass,
+      halfDamageOnSave: true,
+      rangeCells: effectRangeCells,
+      requiresLineOfSight: true,
+      outcome: (effectMode === 'OUTCOME' || effectMode === 'WORLD_EFFECT') ? effectOutcome : undefined,
     };
     try {
       setActionLoading(true);
-      const simulation = await apiClient.simulateCombatEffect(combatState.storyId, definition, [selectedTargetId], { seeds: [101, 202, 303, 404, 505] });
+      const simulation = await apiClient.simulateCombatEffect(combatState.storyId, definition, selectedTargetId ? [selectedTargetId] : [], { seeds: [101, 202, 303, 404, 505] });
       setEffectSimulation(simulation);
     } catch (err: any) {
       setErrorMsg(err.message || 'Combat simulation failed.');

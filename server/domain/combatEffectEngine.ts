@@ -78,7 +78,7 @@ export class CombatEffectEngine {
 
     if (normalized.resolutionMode === 'SINGLE_ATTACK') {
       const targetId = targeting.targetIds[0];
-      if (!targetId) return { success: false, errorReason: 'SINGLE_ATTACK requires one targetId.' };
+      if (!targetId) return rollback({ success: false, errorReason: 'SINGLE_ATTACK requires one targetId.' });
       const attack = engine.executeAttack(actorId, targetId, {
         overrideFormula: normalized.damageFormula,
         damageType: normalized.damageType,
@@ -133,7 +133,7 @@ export class CombatEffectEngine {
 
     if (normalized.resolutionMode === 'SAVE') {
       if (!normalized.savingThrowAbility || normalized.difficultyClass == null) {
-        return { success: false, errorReason: 'SAVE effects require savingThrowAbility and difficultyClass.' };
+        return rollback({ success: false, errorReason: 'SAVE effects require savingThrowAbility and difficultyClass.' });
       }
       const result = engine.executeSavingThrowEffect({
         actorId,
@@ -150,7 +150,7 @@ export class CombatEffectEngine {
     }
 
     if (normalized.resolutionMode === 'AREA') {
-      if (!targeting.targetIds.length) return { success: false, errorReason: 'AREA effects require resolved targetIds.' };
+      if (!targeting.targetIds.length) return rollback({ success: false, errorReason: 'AREA effects require resolved targetIds.' });
       if (normalized.savingThrowAbility) {
         if (normalized.difficultyClass == null) return rollback({ success: false, errorReason: 'AREA save effects require difficultyClass.' });
         const result = engine.executeSavingThrowEffect({
@@ -174,7 +174,7 @@ export class CombatEffectEngine {
         damageType: normalized.damageType,
         consumeAction: false,
       });
-      return { ...result, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name };
+      return rollback({ ...result, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name });
     }
 
     if (normalized.resolutionMode === 'CHAIN') {
@@ -200,7 +200,7 @@ export class CombatEffectEngine {
     }
 
     if (normalized.resolutionMode === 'SEQUENCE') {
-      if (!normalized.sequence?.length) return { success: false, errorReason: 'SEQUENCE effects require at least one child effect.' };
+      if (!normalized.sequence?.length) return rollback({ success: false, errorReason: 'SEQUENCE effects require at least one child effect.' });
       const instances: CombatAttackInstanceResult[] = [];
       const defeatedTargetIds: string[] = [];
       const eventIds: string[] = [];
@@ -208,14 +208,14 @@ export class CombatEffectEngine {
 
       for (const child of normalized.sequence) {
         const childResult = this.resolve(engine, actorId, targeting.targetIds, child, { consumeAction: false });
-        if (!childResult.success) return childResult;
+        if (!childResult.success) return rollback(childResult);
         instances.push(...(childResult.instances || []));
         totalDamage += childResult.totalDamage || 0;
         for (const id of childResult.defeatedTargetIds || []) if (!defeatedTargetIds.includes(id)) defeatedTargetIds.push(id);
         for (const id of childResult.canonicalEventIds || []) eventIds.push(id);
       }
 
-      return {
+      return rollback({
         success: true,
         actionConsumed: resourceConsumed,
         effectId: normalized.id,
@@ -224,7 +224,7 @@ export class CombatEffectEngine {
         totalDamage,
         defeatedTargetIds,
         canonicalEventIds: eventIds,
-      };
+      });
     }
 
     return rollback({ success: false, errorReason: `Resolution mode '${normalized.resolutionMode}' is handled by a specialized resolver.` });

@@ -59,6 +59,40 @@ export class GeographyGraph {
     }
   }
 
+  /**
+   * Canonical world-effect projection hook.
+   * Patches only explicitly supplied node fields so macro effects can change geography
+   * without creating a second geography authority.
+   */
+  public patchNode(
+    id: string,
+    patch: Partial<Pick<LocationNode, 'accessible' | 'discovered' | 'description' | 'ambientSensory'>>
+  ): { success: boolean; errorReason?: string; node?: LocationNode } {
+    const node = this.nodes.get(id);
+    if (!node) return { success: false, errorReason: `Geography node '${id}' not found.` };
+    if (patch.accessible !== undefined) node.accessible = Boolean(patch.accessible);
+    if (patch.discovered !== undefined) node.discovered = Boolean(patch.discovered);
+    if (patch.description !== undefined) node.description = String(patch.description);
+    if (patch.ambientSensory !== undefined) node.ambientSensory = String(patch.ambientSensory);
+    return { success: true, node: { ...node } };
+  }
+
+  /**
+   * Canonical route mutation hook for world-scale effects.
+   * Block/unblock state remains owned by GeographyGraph.
+   */
+  public patchEdge(
+    id: string,
+    patch: Pick<RouteEdge, 'isBlocked'> & Partial<Pick<RouteEdge, 'blockReason'>>
+  ): { success: boolean; errorReason?: string; edge?: RouteEdge } {
+    const edge = this.edges.get(id);
+    if (!edge) return { success: false, errorReason: `Geography edge '${id}' not found.` };
+    edge.isBlocked = Boolean(patch.isBlocked);
+    if (patch.blockReason !== undefined) edge.blockReason = String(patch.blockReason);
+    if (!edge.isBlocked && patch.blockReason === undefined) delete edge.blockReason;
+    return { success: true, edge: { ...edge } };
+  }
+
   public isDiscovered(id: string): boolean {
     return this.nodes.get(id)?.discovered ?? false;
   }

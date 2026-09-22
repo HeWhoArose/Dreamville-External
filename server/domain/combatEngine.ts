@@ -3004,6 +3004,18 @@ export class TacticalCombatEngine {
         break;
     }
 
+    this.combatActionSequence += 1;
+    const eventId = 'combat_evt_' + this.currentRound + '_' + this.combatActionSequence;
+    this.combatEffectEvents.push({
+      eventId,
+      actionId: 'combat_outcome_' + this.currentRound + '_' + this.combatActionSequence,
+      eventType: 'SEMANTIC_OUTCOME_RESOLVED',
+      turnNumber: this.currentRound,
+      actorId: targetId,
+      targetId,
+      headline: `Semantic outcome ${outcome} applied to ${target.name}.`,
+      metadata,
+    });
     this.eventLog.push({
       turnNumber: this.currentRound,
       actorId: targetId,
@@ -3011,10 +3023,10 @@ export class TacticalCombatEngine {
       actionType: 'CAST',
       headline: `Semantic outcome ${outcome} applied to ${target.name}.`,
       damageInflicted: 0,
-      metadata,
+      metadata: { ...metadata, eventId },
     });
 
-    return { success: true, targetId, wasAlive, isDead: target.isDead, metadata };
+    return { success: true, targetId, wasAlive, isDead: target.isDead, metadata: { ...metadata, eventId } };
   }
 
   public exportState(): TacticalCombatStateExport {

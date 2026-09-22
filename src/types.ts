@@ -2095,6 +2095,7 @@ export interface CombatAttackInstanceResult {
 	hits: boolean;
 	isCritical: boolean;
 	damage: number;
+	secondaryDamage?: number;
 	targetDied: boolean;
 	hitLocation?: BodyRegionId;
 	destroyedBodyRegions?: BodyRegionId[];
@@ -2118,6 +2119,7 @@ export interface CombatEffectResult {
 	effectName?: string;
 	instances?: CombatAttackInstanceResult[];
 	totalDamage?: number;
+	secondaryDamage?: number;
 	defeatedTargetIds?: string[];
 	outcome?: CombatOutcomeType;
 	canonicalEventIds?: string[];

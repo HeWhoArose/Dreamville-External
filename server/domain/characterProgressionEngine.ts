@@ -306,6 +306,7 @@ export class CharacterProgressionEngine {
     commandId = 'GENESIS',
     options?: { progression?: Partial<CharacterProgressionState>; rulesProfile?: RulesProfile | null; worldModules?: ProgressionModuleDefinition[] }
   ): CharacterProgressionState {
+    this.assertCanonicalMutationAuthority();
     if (options?.worldModules) this.registerModules(options.worldModules);
     const registeredFeatModules = ((character.feats || []) as CharacterFeat[])
       .filter((feat) => Boolean(feat?.id && feat?.name))
@@ -432,7 +433,16 @@ export class CharacterProgressionEngine {
         return enabled?.type !== type || id === moduleId;
       });
     }
-    if (type === 'CLASS') state.classId = moduleId;
+    if (type === 'CLASS') {
+      state.classId = moduleId;
+      if (state.subclassId) {
+        const activeSubclass = this.modules.get(state.subclassId);
+        if (activeSubclass?.parentClassId && activeSubclass.parentClassId !== moduleId) {
+          state.subclassId = undefined;
+          state.enabledModuleIds = state.enabledModuleIds.filter((id) => id !== activeSubclass.id);
+        }
+      }
+    }
     if (type === 'SUBCLASS') state.subclassId = moduleId;
     if (type === 'SPECIES') state.speciesId = moduleId;
     if (type === 'FEAT' && !state.featIds.includes(moduleId)) state.featIds.push(moduleId);
@@ -488,12 +498,31 @@ export class CharacterProgressionEngine {
     const module = this.requireModule(moduleId);
     if (enabled && !this.isModuleAllowed(moduleId, rulesProfile)) throw new Error(`Module '${moduleId}' is disabled by the active rules profile.`);
     if (enabled) {
+      if (module.minLevel && state.currentLevel < module.minLevel) {
+        throw new Error(`Module '${moduleId}' requires level ${module.minLevel}.`);
+      }
+      if (module.parentClassId && state.classId !== module.parentClassId) {
+        throw new Error(`Module '${moduleId}' requires class '${module.parentClassId}'.`);
+      }
+      this.assertPrerequisites(state, module);
+      if (module.type === 'FEAT' && !config.allowFeatSelection) {
+        throw new Error('Feat selection is disabled by the active rules profile.');
+      }
       if (module.type !== 'FEAT') {
         state.enabledModuleIds = state.enabledModuleIds.filter((id) => {
           const enabledModule = this.modules.get(id);
           return enabledModule?.type !== module.type || id === moduleId;
         });
-        if (module.type === 'CLASS') state.classId = moduleId;
+        if (module.type === 'CLASS') {
+          state.classId = moduleId;
+          if (state.subclassId) {
+            const activeSubclass = this.modules.get(state.subclassId);
+            if (activeSubclass?.parentClassId && activeSubclass.parentClassId !== moduleId) {
+              state.subclassId = undefined;
+              state.enabledModuleIds = state.enabledModuleIds.filter((id) => id !== activeSubclass.id);
+            }
+          }
+        }
         if (module.type === 'SUBCLASS') state.subclassId = moduleId;
         if (module.type === 'SPECIES') state.speciesId = moduleId;
       }
@@ -502,7 +531,16 @@ export class CharacterProgressionEngine {
       // so one actor cannot disable the module for every other actor.
     } else {
       state.enabledModuleIds = state.enabledModuleIds.filter((id) => id !== moduleId);
-      if (module.type === 'CLASS' && state.classId === moduleId) state.classId = undefined;
+      if (module.type === 'CLASS' && state.classId === moduleId) {
+        state.classId = undefined;
+        if (state.subclassId) {
+          const activeSubclass = this.modules.get(state.subclassId);
+          if (activeSubclass?.parentClassId === moduleId) {
+            state.subclassId = undefined;
+            state.enabledModuleIds = state.enabledModuleIds.filter((id) => id !== activeSubclass.id);
+          }
+        }
+      }
       if (module.type === 'SUBCLASS' && state.subclassId === moduleId) state.subclassId = undefined;
       if (module.type === 'SPECIES' && state.speciesId === moduleId) state.speciesId = undefined;
     }

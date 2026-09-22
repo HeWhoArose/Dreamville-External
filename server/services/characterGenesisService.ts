@@ -279,6 +279,32 @@ Return ONLY one JSON object matching this contract:
           "description": string
         }
       ],
+      "effectDefinition": {
+        "resolutionMode": "SINGLE_ATTACK" | "MULTI_INSTANCE" | "SAVE" | "AREA" | "CHAIN" | "SEQUENCE" | "OUTCOME" | "WORLD_EFFECT",
+        "scale": "PERSON" | "GROUP" | "ENCOUNTER" | "STRUCTURE" | "DISTRICT" | "CITY" | "REGION" | "CONTINENT" | "PLANET" | "COSMIC",
+        "actionCost": "ACTION" | "BONUS_ACTION" | "REACTION" | "FREE",
+        "executionMode": "AUTOMATIC" | "CHECK_REQUIRED" | "CONTEXTUAL" | "CONCENTRATION",
+        "executionDifficultyClass": number | null,
+        "executionFormula": string | null,
+        "targetingMode": "SELF" | "ALLY" | "ENEMY" | "ONE_TARGET" | "MULTI_TARGET" | "PER_INSTANCE" | "ALL_IN_AREA" | "CHAIN" | "RANDOM_LEGAL_TARGET",
+        "instanceCount": number | null,
+        "instanceTargetIds": [string],
+        "attackFormula": string | null,
+        "saveFormula": string | null,
+        "savingThrowAbility": string | null,
+        "difficultyClass": number | null,
+        "damageFormula": string | null,
+        "damageType": string | null,
+        "rangeCells": number | null,
+        "requiresLineOfSight": boolean | null,
+        "chainJumpRangeCells": number | null,
+        "chainCount": number | null,
+        "retargetPolicy": "NONE" | "RETARGET_ON_DEATH" | null,
+        "outcome": string | null,
+        "outcomeReason": string | null,
+        "outcomePayload": object | null,
+        "visualStyle": string | null
+      },
       "storyCheckChallenges": [
         {
           "id": string,
@@ -517,6 +543,49 @@ Rules:
             description: c.description || 'Special capability.',
             effects: this.mapCharacterEffects(c.effects, c.id || `cap_${draftId}_${idx + 1}`, generatedProvenance),
             storyCheckChallenges: Array.isArray(c.storyCheckChallenges) ? c.storyCheckChallenges : undefined,
+            checkFormula: worldTemplate?.dndRulesMode === 'FULL_DND' || !worldTemplate?.dndRulesMode
+              ? '1d20'
+              : normalizeDiceFormula(c.checkFormula, '1d20'),
+            damageFormula: typeof c.damageFormula === 'string' ? c.damageFormula : undefined,
+            effectDefinition: (() => {
+              const raw = c.effectDefinition && typeof c.effectDefinition === 'object' ? c.effectDefinition : {};
+              const capId = c.id || `cap_${draftId}_${idx + 1}`;
+              return {
+                id: capId + '_effect',
+                name: c.name || `Ability ${idx + 1}`,
+                resolutionMode: ['SINGLE_ATTACK', 'MULTI_INSTANCE', 'SAVE', 'AREA', 'CHAIN', 'SEQUENCE', 'OUTCOME', 'WORLD_EFFECT'].includes(raw.resolutionMode) ? raw.resolutionMode : 'SINGLE_ATTACK',
+                scale: ['PERSON', 'GROUP', 'ENCOUNTER', 'STRUCTURE', 'DISTRICT', 'CITY', 'REGION', 'CONTINENT', 'PLANET', 'COSMIC'].includes(raw.scale) ? raw.scale : (c.powerTier === 'WorldScale' ? 'CITY' : 'PERSON'),
+                actionCost: ['ACTION', 'BONUS_ACTION', 'REACTION', 'FREE'].includes(raw.actionCost)
+                  ? raw.actionCost
+                  : (c.actionType === 'bonus_action' ? 'BONUS_ACTION' : c.actionType === 'reaction' ? 'REACTION' : c.actionType === 'free' ? 'FREE' : 'ACTION'),
+                executionMode: ['AUTOMATIC', 'CHECK_REQUIRED', 'CONTEXTUAL', 'CONCENTRATION'].includes(raw.executionMode) ? raw.executionMode : 'AUTOMATIC',
+                executionDifficultyClass: Number.isFinite(Number(raw.executionDifficultyClass)) ? Math.max(1, Math.trunc(Number(raw.executionDifficultyClass))) : undefined,
+                executionFormula: worldTemplate?.dndRulesMode === 'FULL_DND' || !worldTemplate?.dndRulesMode ? '1d20' : normalizeDiceFormula(raw.executionFormula || c.checkFormula, '1d20'),
+                executionFailureOutcome: raw.executionFailureOutcome,
+                targetingMode: ['SELF', 'ALLY', 'ENEMY', 'ONE_TARGET', 'MULTI_TARGET', 'PER_INSTANCE', 'ALL_IN_AREA', 'CHAIN', 'RANDOM_LEGAL_TARGET'].includes(raw.targetingMode)
+                  ? raw.targetingMode
+                  : (c.targetType === 'self' ? 'SELF' : c.targetType === 'area_of_effect' ? 'ALL_IN_AREA' : c.targetType === 'all_enemies' ? 'ALL_IN_AREA' : 'ONE_TARGET'),
+                instanceCount: raw.instanceCount == null ? undefined : Math.max(1, Math.min(50, Math.trunc(Number(raw.instanceCount) || 1))),
+                instanceTargetIds: Array.isArray(raw.instanceTargetIds) ? raw.instanceTargetIds.map(String) : undefined,
+                attackFormula: worldTemplate?.dndRulesMode === 'FULL_DND' || !worldTemplate?.dndRulesMode ? '1d20' : normalizeDiceFormula(raw.attackFormula || c.checkFormula, '1d20'),
+                saveFormula: worldTemplate?.dndRulesMode === 'FULL_DND' || !worldTemplate?.dndRulesMode ? '1d20' : normalizeDiceFormula(raw.saveFormula || c.checkFormula, '1d20'),
+                savingThrowAbility: typeof raw.savingThrowAbility === 'string' ? raw.savingThrowAbility : undefined,
+                difficultyClass: Number.isFinite(Number(raw.difficultyClass)) ? Math.max(1, Math.trunc(Number(raw.difficultyClass))) : undefined,
+                damageFormula: typeof raw.damageFormula === 'string' ? raw.damageFormula : (typeof c.damageFormula === 'string' ? c.damageFormula : undefined),
+                damageType: typeof raw.damageType === 'string' ? raw.damageType : undefined,
+                rangeCells: Number.isFinite(Number(raw.rangeCells)) ? Math.max(0, Number(raw.rangeCells)) : undefined,
+                requiresLineOfSight: Boolean(raw.requiresLineOfSight),
+                chainJumpRangeCells: Number.isFinite(Number(raw.chainJumpRangeCells)) ? Math.max(0, Number(raw.chainJumpRangeCells)) : undefined,
+                chainCount: Number.isFinite(Number(raw.chainCount)) ? Math.max(1, Math.min(50, Math.trunc(Number(raw.chainCount)))) : undefined,
+                retargetPolicy: raw.retargetPolicy === 'RETARGET_ON_DEATH' ? 'RETARGET_ON_DEATH' : 'NONE',
+                outcome: raw.outcome,
+                outcomeReason: typeof raw.outcomeReason === 'string' ? raw.outcomeReason : undefined,
+                outcomePayload: raw.outcomePayload && typeof raw.outcomePayload === 'object' ? raw.outcomePayload : undefined,
+                visualStyle: typeof raw.visualStyle === 'string' ? raw.visualStyle : undefined,
+                provenance: generatedProvenance,
+                aiGenerated: generatedProvenance !== 'DETERMINISTIC_FALLBACK',
+              };
+            })(),
             provenance: generatedProvenance,
           }))
     );
@@ -535,30 +604,27 @@ Rules:
           minVesselCapacityRequired: 15,
           description: `Primary signature capability derived from ${extracted.identity?.name || concept}.`,
           effects: [],
+          checkFormula: '1d20',
+          damageFormula: '1d4',
+          effectDefinition: {
+            id: `cap_${draftId}_1_effect`,
+            name: defaultCapName,
+            resolutionMode: 'SINGLE_ATTACK',
+            scale: 'PERSON',
+            actionCost: 'ACTION',
+            targetingMode: 'ONE_TARGET',
+            attackFormula: '1d20',
+            damageFormula: '1d4',
+            damageType: 'force',
+            provenance: generatedProvenance,
+            aiGenerated: generatedProvenance !== 'DETERMINISTIC_FALLBACK',
+          },
           provenance: generatedProvenance,
         },
       ];
     }
 
     // Link skills/techniques to their parent capabilities
-    const effectDefinition: CombatEffectDefinition = {
-      id: capId + '_effect',
-      name: proposal.name || concept,
-      resolutionMode: ['SINGLE_ATTACK', 'MULTI_INSTANCE', 'SAVE', 'AREA', 'CHAIN', 'SEQUENCE', 'OUTCOME', 'WORLD_EFFECT'].includes(rawEffect.resolutionMode) ? rawEffect.resolutionMode : 'SINGLE_ATTACK',
-      scale: ['PERSON', 'GROUP', 'ENCOUNTER', 'STRUCTURE', 'DISTRICT', 'CITY', 'REGION', 'CONTINENT', 'PLANET', 'COSMIC'].includes(rawEffect.scale) ? rawEffect.scale : 'PERSON',
-      actionCost: 'ACTION',
-      targetingMode: rawEffect.targetingMode || 'ONE_TARGET',
-      instanceCount: rawEffect.instanceCount == null ? undefined : Math.max(1, Math.min(50, Math.trunc(Number(rawEffect.instanceCount) || 1))),
-      attackFormula: worldTemplate?.dndRulesMode === 'FULL_DND' || !worldTemplate?.dndRulesMode ? '1d20' : normalizeDiceFormula(rawEffect.attackFormula || capability.checkFormula, '1d20'),
-      saveFormula: worldTemplate?.dndRulesMode === 'FULL_DND' || !worldTemplate?.dndRulesMode ? '1d20' : normalizeDiceFormula(rawEffect.saveFormula || capability.checkFormula, '1d20'),
-      savingThrowAbility: typeof rawEffect.savingThrowAbility === 'string' ? rawEffect.savingThrowAbility : undefined,
-      difficultyClass: Number.isFinite(Number(rawEffect.difficultyClass)) ? Math.max(1, Math.trunc(Number(rawEffect.difficultyClass))) : undefined,
-      damageFormula: typeof rawEffect.damageFormula === 'string' ? rawEffect.damageFormula : capability.damageFormula,
-      damageType: typeof rawEffect.damageType === 'string' ? rawEffect.damageType : undefined,
-      provenance: 'CHARACTER_GENESIS',
-      aiGenerated: generatedProvenance !== 'DETERMINISTIC_FALLBACK',
-    };
-
     const generatedSkills: GeneratedTechnique[] = (
       userEditedFields.has('generatedSkills') && existingDraft?.generatedSkills
         ? existingDraft.generatedSkills

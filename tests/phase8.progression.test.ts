@@ -579,3 +579,40 @@ test('Phase 8 regression: explicit Custom Homebrew progression enables level pro
     /disabled by the active rules profile/
   );
 });
+
+
+test('Phase 8 regression: disabling a module for one actor does not disable it globally', () => {
+  const engine = new CharacterProgressionEngine();
+  const full = rulesProfileEngine.createDefault('FULL_DND');
+  engine.seedFromCharacter('hero_a', { identity: { name: 'A', species: 'Human' }, role: { profession: 'Fighter' }, coreStats: { level: 1 } as any, feats: [] });
+  engine.seedFromCharacter('hero_b', { identity: { name: 'B', species: 'Human' }, role: { profession: 'Fighter' }, coreStats: { level: 1 } as any, feats: [] });
+
+  engine.setModuleEnabled('hero_a', 'class_fighter', false, 'phase8-disable-a', full);
+  assert.equal(engine.resolveModifiers('hero_a').modifiers.some((entry) => entry.target === 'combat.attackBonus'), false);
+  assert.equal(engine.resolveModifiers('hero_b').modifiers.find((entry) => entry.target === 'combat.attackBonus')?.value, 1);
+  assert.equal(engine.getModule('class_fighter')?.enabled, true);
+});
+
+test('Phase 8 regression: Genesis divergence fingerprint maps character feat IDs to canonical feat module IDs', () => {
+  const engine = new CharacterProgressionEngine();
+  const feat = {
+    id: 'feat-genesis-alert',
+    name: 'Alert',
+    description: 'Genesis feat',
+    effects: [],
+    prerequisites: [],
+    provenance: 'CHARACTER_GENESIS',
+    worldId: 'world_solar_archive',
+  } as any;
+  const character = {
+    identity: { name: 'Hero', species: 'Human' },
+    role: { profession: 'Fighter' },
+    coreStats: { level: 1 },
+    feats: [feat],
+    progression: { classId: 'class_fighter', speciesId: 'species_human', featIds: [feat.id] },
+  } as any;
+
+  engine.seedFromCharacter('hero', character);
+  const audit = engine.detectGenesisDivergence('hero', character);
+  assert.equal(audit.divergent, false);
+});

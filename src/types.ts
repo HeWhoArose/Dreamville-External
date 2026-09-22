@@ -1937,6 +1937,8 @@ export interface CombatEffectDefinition {
 	areaInnerRadiusCells?: number;
 	areaWidthCells?: number;
 	rangeCells?: number;
+	requiresLineOfSight?: boolean;
+	chainJumpRangeCells?: number;
 	damageType?: string;
 	attackBonusOverride?: number;
 	advantage?: boolean;
@@ -1985,6 +1987,13 @@ export interface CombatEffectResult {
 	defeatedTargetIds?: string[];
 	outcome?: CombatOutcomeType;
 	canonicalEventIds?: string[];
+	worldEffectPreview?: {
+		scale: CombatEffectScale;
+		outcome?: CombatOutcomeType;
+		targetIds: string[];
+		abstraction: 'TACTICAL' | 'MACRO';
+		changedScopes: string[];
+	};
 }
 
 export interface CombatEventRecord {

@@ -170,18 +170,13 @@ export class CombatEffectEngine {
         executionResult: execution.result,
       });
     }
-    if (execution.result) {
-      engine['__phase85ExecutionResult'] = execution.result as any;
-    }
+    const executionResult = execution.result;
 
     const targeting = combatTargetingEngine.resolve(engine, actorId, targetIds, normalized);
     if (!targeting.success) return rollback({ success: false, errorReason: targeting.errorReason });
 
     const shouldConsumeResource = options.consumeAction !== false;
     let resourceConsumed = false;
-    const executionResult = (engine as any).__phase85ExecutionResult as CombatEffectResult['executionResult'] | undefined;
-    delete (engine as any).__phase85ExecutionResult;
-
 
     if (shouldConsumeResource) {
       const resourceResult = engine.consumeCombatAction(actorId, normalized.actionCost || 'ACTION');

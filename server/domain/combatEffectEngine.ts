@@ -59,15 +59,20 @@ export class CombatEffectEngine {
     if (!validation.success || !validation.normalized) return { success: false, errorReason: validation.errorReason };
 
     const normalized = validation.normalized;
+    const beforeState = engine.exportState();
+    const rollback = <T extends CombatEffectResult>(result: T): T => {
+      if (!result.success) engine.importState(beforeState);
+      return result;
+    };
     const targeting = combatTargetingEngine.resolve(engine, actorId, targetIds, normalized);
-    if (!targeting.success) return { success: false, errorReason: targeting.errorReason };
+    if (!targeting.success) return rollback({ success: false, errorReason: targeting.errorReason });
 
     const shouldConsumeResource = options.consumeAction !== false;
     let resourceConsumed = false;
 
     if (shouldConsumeResource) {
       const resourceResult = engine.consumeCombatAction(actorId, normalized.actionCost || 'ACTION');
-      if (!resourceResult.success) return { success: false, errorReason: resourceResult.errorReason };
+      if (!resourceResult.success) return rollback({ success: false, errorReason: resourceResult.errorReason });
       resourceConsumed = normalized.actionCost !== 'FREE';
     }
 
@@ -82,7 +87,7 @@ export class CombatEffectEngine {
         attackFormula: normalized.attackFormula,
         consumeAction: false,
       });
-      return {
+      return rollback({
         success: attack.success,
         errorReason: attack.errorReason,
         actionConsumed: attack.success && resourceConsumed,
@@ -103,7 +108,7 @@ export class CombatEffectEngine {
           .filter((event) => event.eventType === 'ATTACK_INSTANCE_RESOLVED' && event.actorId === actorId && event.targetId === targetId)
           .slice(-1)
           .map((event) => event.eventId),
-      };
+      });
     }
 
     if (normalized.resolutionMode === 'MULTI_INSTANCE') {
@@ -118,12 +123,12 @@ export class CombatEffectEngine {
         retargetPolicy: normalized.retargetPolicy,
         consumeAction: false,
       });
-      return {
+      return rollback({
         ...result,
         actionConsumed: result.success && resourceConsumed,
         effectId: normalized.id,
         effectName: normalized.name,
-      };
+      });
     }
 
     if (normalized.resolutionMode === 'SAVE') {
@@ -141,13 +146,13 @@ export class CombatEffectEngine {
         halfDamageOnSave: normalized.halfDamageOnSave,
         consumeAction: false,
       });
-      return { ...result, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name };
+      return rollback({ ...result, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name });
     }
 
     if (normalized.resolutionMode === 'AREA') {
       if (!targeting.targetIds.length) return { success: false, errorReason: 'AREA effects require resolved targetIds.' };
       if (normalized.savingThrowAbility) {
-        if (normalized.difficultyClass == null) return { success: false, errorReason: 'AREA save effects require difficultyClass.' };
+        if (normalized.difficultyClass == null) return rollback({ success: false, errorReason: 'AREA save effects require difficultyClass.' });
         const result = engine.executeSavingThrowEffect({
           actorId,
           targetIds: targeting.targetIds,
@@ -159,9 +164,9 @@ export class CombatEffectEngine {
           halfDamageOnSave: normalized.halfDamageOnSave,
           consumeAction: false,
         });
-        return { ...result, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name };
+        return rollback({ ...result, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name });
       }
-      if (!normalized.damageFormula) return { success: false, errorReason: 'Automatic AREA effects require damageFormula.' };
+      if (!normalized.damageFormula) return rollback({ success: false, errorReason: 'Automatic AREA effects require damageFormula.' });
       const result = engine.executeAreaDamageEffect({
         actorId,
         targetIds: targeting.targetIds,
@@ -222,7 +227,7 @@ export class CombatEffectEngine {
       };
     }
 
-    return { success: false, errorReason: `Resolution mode '${normalized.resolutionMode}' is handled by a specialized resolver.` };
+    return rollback({ success: false, errorReason: `Resolution mode '${normalized.resolutionMode}' is handled by a specialized resolver.` });
   }
 }
 

@@ -82,6 +82,40 @@ export class NpcTacticalDecisionPolicy {
       };
     }
 
+    const morale = combatEngine.getMoraleState(actorId) || actor.moraleState;
+    if (morale?.status === 'SURRENDERED') {
+      return {
+        actorId,
+        actionType: 'END_TURN',
+        role: undefined,
+        reason: 'Actor has surrendered according to canonical morale state.',
+        priorityScore: 100,
+      };
+    }
+    if (morale?.status === 'FLEEING') {
+      const retreatTarget = combatEngine.getParticipants()
+        .filter((candidate) => candidate.id !== actorId && candidate.team !== actor.team && !candidate.isDead)
+        .sort((a, b) => Math.hypot(b.x - actor.x, b.y - actor.y) - Math.hypot(a.x - actor.x, a.y - actor.y) || a.id.localeCompare(b.id))[0];
+      if (retreatTarget) {
+        const retreatPos = this.calculateRetreatPosition(actor, retreatTarget, combatEngine.getParticipants(), combatEngine.getHazards());
+        if (retreatPos && (retreatPos.x !== actor.x || retreatPos.y !== actor.y)) {
+          return {
+            actorId,
+            actionType: 'RETREAT',
+            targetPosition: retreatPos,
+            reason: `Canonical morale state is FLEEING (${morale.morale}/${morale.maxMorale}).`,
+            priorityScore: 98,
+          };
+        }
+      }
+      return {
+        actorId,
+        actionType: 'END_TURN',
+        reason: `Canonical morale state is FLEEING (${morale.morale}/${morale.maxMorale}) but no safe retreat was available.`,
+        priorityScore: 97,
+      };
+    }
+
     // 1. Epistemic Target Acquisition: only consider living participants known to the actor
     const allParticipants = combatEngine.getParticipants();
     const isKnown = (p: BattlefieldParticipant) =>
@@ -135,6 +169,19 @@ export class NpcTacticalDecisionPolicy {
         assignedRole = 'SKIRMISHER';
       } else {
         assignedRole = 'REARGUARD';
+      }
+    }
+
+    if (morale?.status === 'SHAKEN' && hpRatio <= 0.45) {
+      const retreatPos = this.calculateRetreatPosition(actor, closestThreat.enemy, allParticipants, combatEngine.getHazards());
+      if (retreatPos && (retreatPos.x !== actor.x || retreatPos.y !== actor.y)) {
+        return {
+          actorId,
+          actionType: 'RETREAT',
+          targetPosition: retreatPos,
+          reason: `Actor is SHAKEN (${morale.morale}/${morale.maxMorale}) and is prioritizing survival.`,
+          priorityScore: 88,
+        };
       }
     }
 

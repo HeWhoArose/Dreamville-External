@@ -96,6 +96,8 @@ export const CombatAnimationLayer: React.FC<CombatAnimationLayerProps> = ({
         </div>
     );
 
+    const assetUrl = plan.assetUrls?.[0];
+
     return (
         <div className="mt-3 overflow-hidden rounded-xl border border-violet-800/50 bg-gradient-to-r from-violet-950/20 via-stone-950 to-cyan-950/20 p-3">
             <div className="mb-2 flex items-center justify-between">
@@ -106,6 +108,15 @@ export const CombatAnimationLayer: React.FC<CombatAnimationLayerProps> = ({
                 <div className="text-[10px] font-mono text-stone-500">{Math.min(activeIndex + 1, visibleInstances.length) + ' / ' + visibleInstances.length}</div>
             </div>
             <div className="relative h-16 overflow-hidden rounded-lg border border-stone-800 bg-black/40">
+                {assetUrl && (
+                    <img
+                        src={assetUrl}
+                        alt=""
+                        aria-hidden="true"
+                        className="absolute inset-0 h-full w-full object-cover opacity-30"
+                        loading="lazy"
+                    />
+                )}
                 <div className="absolute left-4 top-1/2 h-2 w-14 -translate-y-1/2 rounded-full bg-cyan-300 shadow-[0_0_18px_rgba(103,232,249,0.85)] animate-pulse" />
                 <div className={
                     'absolute left-20 top-1/2 h-px -translate-y-1/2 transition-all duration-300 ' +

@@ -35,6 +35,12 @@ export class WorldEffectEngine {
     if (!SCALE_ORDER.includes(definition.scale)) {
       return { success: false, errorReason: 'World effect has an unsupported scale.' };
     }
+    if (definition.outcome === 'RESOURCE_GRANTED' || definition.outcome === 'RESOURCE_REMOVED') {
+      const resource = String(definition.outcomePayload?.resource || '').trim();
+      const amount = Number(definition.outcomePayload?.amount ?? 0);
+      if (!resource) return { success: false, errorReason: 'Resource outcomes require a non-empty resource name.' };
+      if (!Number.isFinite(amount) || amount < 0) return { success: false, errorReason: 'Resource outcomes require a non-negative finite amount.' };
+    }
     return { success: true };
   }
 
@@ -70,6 +76,20 @@ export class WorldEffectEngine {
     }
 
     const combat = repository.getCombatEngine(storyId);
+    const normalizedTargetIds = Array.from(new Set(targetIds.filter(Boolean)));
+
+    for (const targetId of normalizedTargetIds) {
+      if (!combat.getParticipant(targetId)) {
+        return {
+          success: false,
+          errorReason: `Target '${targetId}' is not present in the canonical combat state.`,
+          effectId: definition.id,
+          affectedEntityIds: [],
+          changedScopes: [],
+        };
+      }
+    }
+
     const actionUse = combat.consumeCombatAction(actorId, definition.actionCost || 'ACTION');
     if (!actionUse.success) {
       return {
@@ -84,7 +104,7 @@ export class WorldEffectEngine {
     const affectedEntityIds: string[] = [];
     const semanticMetadata: Record<string, unknown>[] = [];
 
-    for (const targetId of Array.from(new Set(targetIds.filter(Boolean)))) {
+    for (const targetId of normalizedTargetIds) {
       const combatResult = combat.applySemanticOutcome(
         targetId,
         definition.outcome!,
@@ -181,16 +201,6 @@ export class WorldEffectEngine {
       if (definition.outcome === 'RESOURCE_GRANTED' || definition.outcome === 'RESOURCE_REMOVED') {
         const resourceName = String(definition.outcomePayload?.resource || '').trim();
         const requestedAmount = Number(definition.outcomePayload?.amount ?? 0);
-        if (!resourceName || !Number.isFinite(requestedAmount) || requestedAmount < 0) {
-          return {
-            success: false,
-            errorReason: 'Resource outcomes require a non-empty resource name and non-negative finite amount.',
-            effectId: definition.id,
-            affectedEntityIds,
-            changedScopes,
-          };
-        }
-
         const targetParticipant = combat.getParticipant(targetId);
         const combatResources = targetParticipant?.combatResources || {};
         const previousAmount = Math.max(0, Number(combatResources[resourceName] || 0));
@@ -270,7 +280,7 @@ export class WorldEffectEngine {
     const macroConsequence = {
       scale: definition.scale,
       outcome: definition.outcome,
-      targetIds: [...targetIds],
+      targetIds: [...normalizedTargetIds],
       affectedEntityIds: [...affectedEntityIds],
       semanticMetadata,
       affectedWorldNodeIds,

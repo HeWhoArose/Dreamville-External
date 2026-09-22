@@ -541,6 +541,24 @@ Rules:
     }
 
     // Link skills/techniques to their parent capabilities
+    const effectDefinition: CombatEffectDefinition = {
+      id: capId + '_effect',
+      name: proposal.name || concept,
+      resolutionMode: ['SINGLE_ATTACK', 'MULTI_INSTANCE', 'SAVE', 'AREA', 'CHAIN', 'SEQUENCE', 'OUTCOME', 'WORLD_EFFECT'].includes(rawEffect.resolutionMode) ? rawEffect.resolutionMode : 'SINGLE_ATTACK',
+      scale: ['PERSON', 'GROUP', 'ENCOUNTER', 'STRUCTURE', 'DISTRICT', 'CITY', 'REGION', 'CONTINENT', 'PLANET', 'COSMIC'].includes(rawEffect.scale) ? rawEffect.scale : 'PERSON',
+      actionCost: 'ACTION',
+      targetingMode: rawEffect.targetingMode || 'ONE_TARGET',
+      instanceCount: rawEffect.instanceCount == null ? undefined : Math.max(1, Math.min(50, Math.trunc(Number(rawEffect.instanceCount) || 1))),
+      attackFormula: worldTemplate?.dndRulesMode === 'FULL_DND' || !worldTemplate?.dndRulesMode ? '1d20' : normalizeDiceFormula(rawEffect.attackFormula || capability.checkFormula, '1d20'),
+      saveFormula: worldTemplate?.dndRulesMode === 'FULL_DND' || !worldTemplate?.dndRulesMode ? '1d20' : normalizeDiceFormula(rawEffect.saveFormula || capability.checkFormula, '1d20'),
+      savingThrowAbility: typeof rawEffect.savingThrowAbility === 'string' ? rawEffect.savingThrowAbility : undefined,
+      difficultyClass: Number.isFinite(Number(rawEffect.difficultyClass)) ? Math.max(1, Math.trunc(Number(rawEffect.difficultyClass))) : undefined,
+      damageFormula: typeof rawEffect.damageFormula === 'string' ? rawEffect.damageFormula : capability.damageFormula,
+      damageType: typeof rawEffect.damageType === 'string' ? rawEffect.damageType : undefined,
+      provenance: 'CHARACTER_GENESIS',
+      aiGenerated: generatedProvenance !== 'DETERMINISTIC_FALLBACK',
+    };
+
     const generatedSkills: GeneratedTechnique[] = (
       userEditedFields.has('generatedSkills') && existingDraft?.generatedSkills
         ? existingDraft.generatedSkills
@@ -1118,6 +1136,18 @@ OUTPUT STRICT JSON with this structure:
   "description": string,
   "checkFormula": string,
   "damageFormula": string | null,
+  "effectDefinition": {
+    "resolutionMode": "SINGLE_ATTACK" | "MULTI_INSTANCE" | "SAVE" | "AREA" | "CHAIN" | "SEQUENCE" | "OUTCOME" | "WORLD_EFFECT",
+    "scale": "PERSON" | "GROUP" | "ENCOUNTER" | "STRUCTURE" | "DISTRICT" | "CITY" | "REGION" | "CONTINENT" | "PLANET" | "COSMIC",
+    "targetingMode": "ONE_TARGET" | "MULTI_TARGET" | "PER_INSTANCE" | "ALL_IN_AREA" | "CHAIN",
+    "instanceCount": number | null,
+    "attackFormula": string | null,
+    "saveFormula": string | null,
+    "savingThrowAbility": string | null,
+    "difficultyClass": number | null,
+    "damageFormula": string | null,
+    "damageType": string | null
+  },
   "techniques": [
     {
       "name": string,
@@ -1135,7 +1165,11 @@ IMPORTANT:
 - FULL_DND: any capability check MUST use "1d20".
 - HYBRID_DND: default to "1d20"; an explicitly authored capability may use a simple alternative such as "2d6" or "1d8".
 - CUSTOM_HOMEBREW_DND: never silently apply D&D dice rules.
-- damageFormula is optional and must be a simple dice formula when present.`;
+- damageFormula is optional and must be a simple dice formula when present.
+- Use MULTI_INSTANCE when the concept explicitly contains multiple independent hits/projectiles/beams. Set instanceCount to the actual intended number and keep one action semantics.
+- Use AREA for area effects; use SAVE when each target receives a saving throw.
+- Use OUTCOME or WORLD_EFFECT for semantic extreme outcomes such as erasure or city-scale destruction instead of inventing absurdly large HP damage.
+- Never use an animation or visual property to decide a mechanical result.`;
 
     let generatedProvenance: CharacterProvenanceSource = 'AI_GENERATED';
     try {
@@ -1160,7 +1194,8 @@ IMPORTANT:
       generatedProvenance = 'DETERMINISTIC_FALLBACK';
     }
 
-    const capability: CapabilityDefinition = {
+    const rawEffect = proposal?.effectDefinition && typeof proposal.effectDefinition === 'object' ? proposal.effectDefinition : {};
+    const capability = {
       id: capId,
       name: proposal.name || concept,
       category: proposal.category || 'Magic',
@@ -1198,6 +1233,7 @@ IMPORTANT:
 
     return {
       ...capability,
+      effectDefinition,
       generatedSkills,
     };
   }

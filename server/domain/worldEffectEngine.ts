@@ -476,6 +476,7 @@ export class WorldEffectEngine {
     const scopeKey = definition.scale + ':' + definition.id;
     const changedScopes = [
       scopeKey,
+      ...projectionChangedScopes,
       ...affectedWorldNodeIds.map((nodeId) => 'WORLD_NODE:' + nodeId),
       ...affectedEntityIds.map((entityId) => 'ENTITY:' + entityId),
     ];

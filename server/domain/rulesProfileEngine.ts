@@ -398,9 +398,10 @@ export class RulesProfileEngine {
 	}
 
 	public allowsCharacterProgression(profile: RulesProfile): boolean {
+		const overrides = profile.parameterOverrides?.[CHARACTER_PROGRESSION] as Record<string, unknown> | undefined;
 		return profile.enabledMechanics.includes(CHARACTER_PROGRESSION)
 			&& !profile.disabledMechanics.includes(CHARACTER_PROGRESSION)
-			&& profile.parameterOverrides?.[CHARACTER_PROGRESSION]?.['allowCharacterProgression'] !== false;
+			&& overrides?.['allowCharacterProgression'] !== false;
 	}
 
 	public allowsStandardRestRules(profile: RulesProfile): boolean {
@@ -436,4 +437,5 @@ export {
 	STANDARD_DND_SPELL_RULES,
 	DND_TACTICAL_COMBAT,
 	REST_RECOVERY_RULES,
+	CHARACTER_PROGRESSION,
 };

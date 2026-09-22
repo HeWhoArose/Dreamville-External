@@ -2402,6 +2402,20 @@ export class InMemoryWorldRepository implements WorldRepository {
       narrativeProfile: resolvedNarrative,
     };
     this.storyRuns.set(canonicalRun.storyId, canonicalRun);
+    if (canonicalRun?.protagonist) {
+      const actorId = this.getPlayerLifecycle(canonicalRun.storyId)?.actorId || canonicalRun.protagonist.characterId || `player_actor_${canonicalRun.storyId}`;
+      const progressionEngine = this.getCharacterProgressionEngine(canonicalRun.storyId);
+      const existingState = progressionEngine.getState(actorId);
+      const hasPostGenesisHistory = existingState && existingState.progressionHistory.some((h) => h.sequence > 0 || h.fromLevel !== h.toLevel);
+      if (!hasPostGenesisHistory) {
+        progressionEngine.seedFromCharacter(actorId, canonicalRun.protagonist, deterministicId('prg_genesis_cmd', canonicalRun.storyId, canonicalRun.protagonist.characterId || actorId), {
+          rulesProfile: this.getRulesProfile(canonicalRun.storyId),
+          worldModules: Array.isArray(world?.characterProgressionModules)
+            ? world.characterProgressionModules as ProgressionModuleDefinition[]
+            : undefined,
+        });
+      }
+    }
     if (canonicalRun && canonicalRun.storyId && canonicalRun.characterName) {
       const existingPlayer = this.playerLifecycles.get(run.storyId);
       if (existingPlayer && existingPlayer.name === 'Scribe Vael' && run.characterName !== 'Scribe Vael') {

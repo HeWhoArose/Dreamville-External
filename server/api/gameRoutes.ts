@@ -1195,7 +1195,7 @@ gameRouter.post('/capabilities/adjudicate', async (req: Request, res: Response) 
  */
 gameRouter.get('/worlds/runs/:storyId/progression', async (req: Request, res: Response) => {
   try {
-    const storyId = req.params.storyId;
+    const storyId = String(req.params.storyId || '');
     const player = worldRepository.getPlayerLifecycle(storyId);
     const actorId = (typeof req.query.actorId === 'string' && req.query.actorId.trim())
       ? req.query.actorId.trim()
@@ -1228,7 +1228,7 @@ gameRouter.get('/worlds/runs/:storyId/progression', async (req: Request, res: Re
  */
 gameRouter.post('/worlds/runs/:storyId/progression', async (req: Request, res: Response) => {
   try {
-    const storyId = req.params.storyId;
+    const storyId = String(req.params.storyId || '');
     const player = worldRepository.getPlayerLifecycle(storyId);
     const serverPlayerActorId = player?.actorId || `player_actor_${storyId}`;
     if (req.body?.actorId && req.body.actorId !== serverPlayerActorId) {
@@ -1244,7 +1244,7 @@ gameRouter.post('/worlds/runs/:storyId/progression', async (req: Request, res: R
       (req.body?.commandId as string | undefined) ||
       deterministicId('cmd_progression', storyId, actorId, operation, req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
 
-    const commandResult = await canonicalCommandEngine.execute(
+    const commandResult = await canonicalCommandEngine.execute<any, any>(
       worldRepository,
       {
         commandId,
@@ -1384,9 +1384,9 @@ gameRouter.post('/worlds/runs/:storyId/progression', async (req: Request, res: R
 // all mutations through the canonical Phase 8 PROGRESSION command.
 gameRouter.post('/capabilities/acquire', async (req: Request, res: Response) => {
   req.body = { ...(req.body || {}), operation: 'ACQUIRE_CAPABILITY', moduleId: req.body?.capabilityId };
-  req.url = `/worlds/runs/${req.body?.storyId || resolveStoryId(req, true)}/progression`;
-  req.params.storyId = req.body?.storyId || resolveStoryId(req, true);
-  const storyId = req.params.storyId;
+  const storyId = String(req.body?.storyId || resolveStoryId(req, true) || '');
+  req.url = `/worlds/runs/${storyId}/progression`;
+  req.params.storyId = storyId;
   const actorId = resolveProgressionActor(req, res, storyId);
   if (!actorId) return;
   try {
@@ -6013,7 +6013,8 @@ function buildCanonicalSelfParticipant(
   const npc = player?.actorId === actorId ? null : repository.getNpcLifecycle(storyId, actorId);
   const state = runtime.getOrCreateActorState(actorId);
   const progression = repository.getCharacterProgressionEngine(storyId);
-  const progressionModifiers = progression.getState(actorId) ? progression.resolveModifiers(actorId, profile).modifiers : [];
+  const rulesProfile = repository.getRulesProfile(storyId);
+  const progressionModifiers = progression.getState(actorId) ? progression.resolveModifiers(actorId, rulesProfile).modifiers : [];
   const progressionValue = (target: string) => progressionModifiers.find((modifier) => modifier.target === target)?.value || 0;
   const hpCurrent = Math.max(0, Number(conditionState?.healthCurrent ?? 30));
   const hpMax = Math.max(1, Number(conditionState?.healthMax ?? (hpCurrent || 30)));

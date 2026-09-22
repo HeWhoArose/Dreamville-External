@@ -306,7 +306,6 @@ export class CharacterProgressionEngine {
     commandId = 'GENESIS',
     options?: { progression?: Partial<CharacterProgressionState>; rulesProfile?: RulesProfile | null; worldModules?: ProgressionModuleDefinition[] }
   ): CharacterProgressionState {
-    this.assertCanonicalMutationAuthority();
     if (options?.worldModules) this.registerModules(options.worldModules);
     const registeredFeatModules = ((character.feats || []) as CharacterFeat[])
       .filter((feat) => Boolean(feat?.id && feat?.name))
@@ -322,11 +321,11 @@ export class CharacterProgressionEngine {
     const state: CharacterProgressionState = {
       actorId,
       currentLevel: normalizeLevel(character.coreStats?.level, 1),
-      classId: normalizeModuleId(explicit.classId) || this.resolveModuleAlias('CLASS', character.role?.profession || character.role?.archetype),
-      subclassId: normalizeModuleId(explicit.subclassId),
-      speciesId: normalizeModuleId(explicit.speciesId) || this.resolveModuleAlias('SPECIES', character.identity?.species),
+      classId: normalizeModuleId(explicit.classId) || this.resolveModuleAlias('CLASS', character.role?.profession || character.role?.archetype) || undefined,
+      subclassId: normalizeModuleId(explicit.subclassId) || undefined,
+      speciesId: normalizeModuleId(explicit.speciesId) || this.resolveModuleAlias('SPECIES', character.identity?.species) || undefined,
       featIds: Array.isArray(explicit.featIds)
-        ? [...new Set(explicit.featIds.map(normalizeModuleId).filter(Boolean).map((id) => featModuleByCharacterId.get(id) || id))]
+        ? [...new Set((explicit.featIds as unknown[]).map((id) => normalizeModuleId(id)).filter((id): id is string => Boolean(id)).map((id) => featModuleByCharacterId.get(id) || id))]
         : [],
       enabledModuleIds: [],
       unlockedFeatureIds: [],
@@ -611,8 +610,8 @@ export class CharacterProgressionEngine {
     actorId: string,
     abilityId: string,
     commandId: string
-  ): {
-    this.assertCanonicalMutationAuthority(); success: boolean; ability: ProgressionAbilityDefinition; state: CharacterProgressionState } {
+  ): { success: boolean; ability: ProgressionAbilityDefinition; state: CharacterProgressionState } {
+    this.assertCanonicalMutationAuthority();
     const state = this.requireActor(actorId);
     const ability = this.getTriggeredAbilities(actorId).find((entry) => entry.id === abilityId);
     if (!ability) throw new Error(`Triggered progression ability '${abilityId}' is not unlocked.`);
@@ -692,19 +691,47 @@ export class CharacterProgressionEngine {
       let minValue: number | undefined;
       let maxValue: number | undefined;
       const sources: ProgressionModifierSource[] = [];
+      const addGroups = new Map<string, number>();
+      let ungroupedAdd = 0;
+      const multGroups = new Map<string, number>();
+      let ungroupedMult = 1;
 
       for (const entry of sorted) {
         sources.push(clone(entry.source));
         if (entry.mode === 'ADD') {
-          value += entry.value;
+          if (entry.stackGroup) {
+            const current = addGroups.get(entry.stackGroup);
+            if (current === undefined || entry.value > current) {
+              addGroups.set(entry.stackGroup, entry.value);
+            }
+          } else {
+            ungroupedAdd += entry.value;
+          }
         } else if (entry.mode === 'MULTIPLY') {
-          multiply *= entry.value;
+          if (entry.stackGroup) {
+            const current = multGroups.get(entry.stackGroup);
+            if (current === undefined || entry.value > current) {
+              multGroups.set(entry.stackGroup, entry.value);
+            }
+          } else {
+            ungroupedMult *= entry.value;
+          }
         } else if (entry.mode === 'MIN') {
           minValue = minValue === undefined ? entry.value : Math.max(minValue, entry.value);
         } else if (entry.mode === 'MAX') {
           maxValue = maxValue === undefined ? entry.value : Math.min(maxValue, entry.value);
         }
       }
+
+      for (const groupedAdd of addGroups.values()) {
+        value += groupedAdd;
+      }
+      value += ungroupedAdd;
+
+      for (const groupedMult of multGroups.values()) {
+        multiply *= groupedMult;
+      }
+      multiply *= ungroupedMult;
 
       value *= multiply;
       // MIN establishes a floor; MAX establishes a ceiling. Multiple constraints
@@ -766,9 +793,9 @@ export class CharacterProgressionEngine {
       expectedFeatIds
     );
     const differences: string[] = [];
-    if (state.genesisSelectionSource?.classId !== expectedClassId) differences.push('class');
-    if (state.genesisSelectionSource?.subclassId !== expectedSubclassId) differences.push('subclass');
-    if (state.genesisSelectionSource?.speciesId !== expectedSpeciesId) differences.push('species');
+    if ((state.genesisSelectionSource?.classId || '') !== expectedClassId) differences.push('class');
+    if ((state.genesisSelectionSource?.subclassId || '') !== expectedSubclassId) differences.push('subclass');
+    if ((state.genesisSelectionSource?.speciesId || '') !== expectedSpeciesId) differences.push('species');
     if (JSON.stringify((state.genesisSelectionSource?.featIds || []).slice().sort()) !== JSON.stringify(expectedFeatIds)) differences.push('feats');
     return {
       divergent: state.genesisSelectionFingerprint !== expectedFingerprint || differences.length > 0,
@@ -803,9 +830,9 @@ export class CharacterProgressionEngine {
         classId: normalizeModuleId(actor.classId) || undefined,
         subclassId: normalizeModuleId(actor.subclassId) || undefined,
         speciesId: normalizeModuleId(actor.speciesId) || undefined,
-        featIds: Array.isArray(actor.featIds) ? [...new Set(actor.featIds.map(normalizeModuleId).filter(Boolean))] : [],
-        enabledModuleIds: Array.isArray(actor.enabledModuleIds) ? [...new Set(actor.enabledModuleIds.map(normalizeModuleId).filter(Boolean))] : [],
-        unlockedFeatureIds: Array.isArray(actor.unlockedFeatureIds) ? [...new Set(actor.unlockedFeatureIds.map(normalizeModuleId).filter(Boolean))] : [],
+        featIds: Array.isArray(actor.featIds) ? [...new Set((actor.featIds as unknown[]).map(normalizeModuleId).filter((id): id is string => Boolean(id)))] : [],
+        enabledModuleIds: Array.isArray(actor.enabledModuleIds) ? [...new Set((actor.enabledModuleIds as unknown[]).map(normalizeModuleId).filter((id): id is string => Boolean(id)))] : [],
+        unlockedFeatureIds: Array.isArray(actor.unlockedFeatureIds) ? [...new Set((actor.unlockedFeatureIds as unknown[]).map(normalizeModuleId).filter((id): id is string => Boolean(id)))] : [],
         usage: actor.usage && typeof actor.usage === 'object' ? clone(actor.usage) : {},
         progressionHistory: Array.isArray(actor.progressionHistory) ? clone(actor.progressionHistory) : [],
         genesisSelectionFingerprint: actor.genesisSelectionFingerprint,

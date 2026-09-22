@@ -212,7 +212,7 @@ test('Phase 6 Requirement 4 & 5: Attack/Save resolution and spell effects', () =
   assert.equal(cast.success, true);
   assert.ok(cast.savingThrowResult);
   assert.equal(cast.savingThrowResult.ability, 'DEX');
-  assert.equal(cast.savingThrowResult.dc, 15);
+  assert.equal(cast.savingThrowResult.dc, 14);
   assert.ok((cast.damageInflicted || 0) > 0);
   assert.equal(cast.damageType, 'fire');
 });

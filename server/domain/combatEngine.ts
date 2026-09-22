@@ -635,34 +635,32 @@ export class TacticalCombatEngine {
       participant.deathSaveState = deathSaveEngine.createState();
     }
     if (this.conditionEngine) {
-      const existing = this.conditionEngine.getActorState(participant.id);
-      if (!existing) {
-        const damageProfile = participant.damageProfile || {
-          damageImmunities: participant.immunities || [],
-          damageResistances: participant.resistances || [],
-          damageVulnerabilities: participant.vulnerabilities || [],
+      const damageProfile = participant.damageProfile || {
+        damageImmunities: participant.immunities || [],
+        damageResistances: participant.resistances || [],
+        damageVulnerabilities: participant.vulnerabilities || [],
+      };
+      participant.damageProfile = damageProfile;
+      if (!participant.conditionProfile) {
+        participant.conditionProfile = {
+          conditionImmunities: [],
+          conditionResistances: [],
+          conditionVulnerabilities: [],
         };
-        participant.damageProfile = damageProfile;
-        if (!participant.conditionProfile) {
-          participant.conditionProfile = {
-            conditionImmunities: [],
-            conditionResistances: [],
-            conditionVulnerabilities: [],
-          };
-        }
-        this.conditionEngine.seedActor(participant.id, {
-          healthCurrent: participant.hpCurrent,
-          healthMax: participant.hpMax,
-          damageProfile,          conditionProfile: participant.conditionProfile,
-          legacyConditions: participant.conditions,        });
-      } else {
-        participant.hpCurrent = existing.healthCurrent;
-        participant.hpMax = existing.healthMax;
-        participant.isDead = existing.dead;
-        participant.damageProfile = existing.damageProfile;
-        participant.conditionProfile = existing.conditionProfile;
-        participant.conditions = existing.instances.map((instance) => instance.name);
       }
+      const seeded = this.conditionEngine.seedActor(participant.id, {
+        healthCurrent: participant.hpCurrent,
+        healthMax: participant.hpMax,
+        damageProfile,
+        conditionProfile: participant.conditionProfile,
+        legacyConditions: participant.conditions,
+      });
+      participant.hpCurrent = seeded.healthCurrent;
+      participant.hpMax = seeded.healthMax;
+      participant.isDead = seeded.dead;
+      participant.damageProfile = seeded.damageProfile;
+      participant.conditionProfile = seeded.conditionProfile;
+      participant.conditions = seeded.instances.map((instance) => instance.name);
     }
     this.participants.set(participant.id, participant);
     this.actionEconomy.registerActor(participant.id, participant.speedCells, this.currentRound);

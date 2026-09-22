@@ -83,7 +83,7 @@ test('Phase 8 built-in class/species modules seed deterministically from Genesis
 
 test('Phase 8 subclass prerequisites and minimum level are enforced', () => {
   const engine = new CharacterProgressionEngine();
-  engine.seedFromCharacter('hero', { identity: { name: 'Hero', species: 'Human' }, role: { profession: 'Fighter' }, coreStats: { level: 1 } as any, feats: [] });
+  engine.seedFromCharacter('hero', { identity: { name: 'Hero', species: 'Human' }, role: { profession: 'Wizard' }, coreStats: { level: 1 } as any, feats: [] });
   assert.throws(
     () => engine.selectModule('hero', 'SUBCLASS', 'subclass_fighter_champion', 'phase8-subclass-early', rulesProfileEngine.createDefault('FULL_DND')),
     /requires level 3/

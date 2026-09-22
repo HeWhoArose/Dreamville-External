@@ -352,15 +352,18 @@ export class CombatEffectEngine {
           hits: attack.hits,
           isCritical: attack.isCritical,
           damage: attack.damage,
-          secondaryDamage: attack.forcedMovement?.collision?.damageToMover || 0,
+          secondaryDamage: (attack.forcedMovement?.collisions || [])
+            .reduce((sum, collision) => sum + collision.damageToMover, 0),
           targetDied: attack.targetDied,
           forcedMovement: attack.forcedMovement,
           roll: attack.roll,
         }] : undefined,
         totalDamage: attack.success
-          ? attack.damage + (attack.forcedMovement?.collision?.damageToMover || 0)
+          ? attack.damage + (attack.forcedMovement?.collisions || []).reduce((sum, collision) => sum + collision.damageToMover, 0)
           : 0,
-        secondaryDamage: attack.success ? (attack.forcedMovement?.collision?.damageToMover || 0) : 0,
+        secondaryDamage: attack.success
+          ? (attack.forcedMovement?.collisions || []).reduce((sum, collision) => sum + collision.damageToMover, 0)
+          : 0,
         defeatedTargetIds: attack.success && attack.targetDied ? [targetId] : [],
         canonicalEventIds: engine.getCombatEffectEvents()
           .filter((event) => event.eventType === 'ATTACK_INSTANCE_RESOLVED' && event.actorId === actorId && event.targetId === targetId)

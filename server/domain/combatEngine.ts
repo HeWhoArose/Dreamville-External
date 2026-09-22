@@ -2830,6 +2830,35 @@ export class TacticalCombatEngine {
     const p = this.participants.get(id);
     return p ? this.projectedParticipant(p) : undefined;
   }
+  public applySemanticOutcome(targetId: string, outcome: import('../../src/types').CombatOutcomeType): { success: boolean; errorReason?: string; targetId: string; wasAlive: boolean; isDead: boolean } {
+    const target = this.participants.get(targetId);
+    if (!target) return { success: false, errorReason: 'Target participant not found.', targetId, wasAlive: false, isDead: false };
+    const wasAlive = !target.isDead && target.hpCurrent > 0;
+    switch (outcome) {
+      case 'INSTANT_DEFEAT':
+      case 'ERASE_FROM_WORLD':
+      case 'DOWNED':
+      case 'BANISHED':
+        target.hpCurrent = 0;
+        target.isDead = true;
+        if (!target.conditions.includes('Dead')) target.conditions.push('Dead');
+        if (!target.conditions.includes('Unconscious')) target.conditions.push('Unconscious');
+        break;
+      default:
+        return { success: true, targetId, wasAlive, isDead: target.isDead };
+    }
+    this.eventLog.push({
+      turnNumber: this.currentRound,
+      actorId: targetId,
+      targetId,
+      actionType: 'CAST',
+      headline: `Semantic outcome ${outcome} applied to ${target.name}.`,
+      damageInflicted: 0,
+      metadata: { semanticOutcome: outcome },
+    });
+    return { success: true, targetId, wasAlive, isDead: target.isDead };
+  }
+
 
   public exportState(): TacticalCombatStateExport {
     return {

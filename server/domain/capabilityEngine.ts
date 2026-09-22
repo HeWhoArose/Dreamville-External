@@ -1,6 +1,7 @@
 import { deterministicId } from './deterministicRng';
 import { WorldTimestamp } from './types';
 import { ConditionEngine } from './conditionEngine';
+import type { InventoryItemEngine } from './inventoryItem';
 
 export type VesselType = 'mortal_human' | 'ascended_avatar' | 'primordial_form' | 'ethereal_spirit';
 export type SealState = 'absolute' | 'partial' | 'dormant' | 'broken';

@@ -5,6 +5,7 @@ import { CombatActionEconomy, CombatTurnResourceSnapshot, ReadyTriggerType } fro
 import { CombatReactionEngine } from './combatReactionEngine';
 import { deathSaveEngine } from './deathSaveEngine';
 import type { DeathSaveState, RulesProfile, CombatAttackInstanceResult, CombatEffectDefinition, CombatEffectResult, CombatEventRecord } from '../../src/types';
+import { resolveCapabilityCheckFormula } from '../../src/data/rulesDice';
 import type { ProgressionResolution } from './characterProgressionEngine';
 import {
   SpellRuntime,
@@ -55,6 +56,7 @@ export interface IRulesetAdapter {
   resolveAttack(params: {
     attackBonus: number;
     targetArmorClass: number;
+    attackFormula?: string;
     advantage?: boolean;
     disadvantage?: boolean;
     diceEngine?: LocalDiceEngine;
@@ -62,6 +64,7 @@ export interface IRulesetAdapter {
   resolveSavingThrow(params: {
     saveModifier: number;
     difficultyClass: number;
+    rollFormula?: string;
     advantage?: boolean;
     disadvantage?: boolean;
     diceEngine?: LocalDiceEngine;
@@ -249,25 +252,28 @@ export class Dnd521RulesetAdapter implements IRulesetAdapter {
   public resolveAttack(params: {
     attackBonus: number;
     targetArmorClass: number;
+    attackFormula?: string;
     advantage?: boolean;
     disadvantage?: boolean;
     diceEngine?: LocalDiceEngine;
   }): { roll: RollRecord; hits: boolean; isCritical: boolean } {
     const dice = params.diceEngine || LocalDiceEngine;
-    const roll1 = dice.roll('1d20', params.attackBonus);
+    const attackFormula = params.attackFormula || '1d20';
+    const roll1 = dice.roll(attackFormula, params.attackBonus);
     let chosenRoll = roll1;
 
     if (params.advantage && !params.disadvantage) {
-      const roll2 = dice.roll('1d20', params.attackBonus);
+      const roll2 = dice.roll(attackFormula, params.attackBonus);
       chosenRoll = roll2.total > roll1.total ? roll2 : roll1;
     } else if (params.disadvantage && !params.advantage) {
-      const roll2 = dice.roll('1d20', params.attackBonus);
+      const roll2 = dice.roll(attackFormula, params.attackBonus);
       chosenRoll = roll2.total < roll1.total ? roll2 : roll1;
     }
 
+    const isD20Check = attackFormula.replace(/\s+/g, '').toLowerCase() === '1d20';
     const naturalD20 = chosenRoll.individualDice[0];
-    const isCritical = naturalD20 === 20;
-    const isCritFail = naturalD20 === 1;
+    const isCritical = isD20Check && naturalD20 === 20;
+    const isCritFail = isD20Check && naturalD20 === 1;
 
     let hits = false;
     if (isCritical) {
@@ -284,19 +290,21 @@ export class Dnd521RulesetAdapter implements IRulesetAdapter {
   public resolveSavingThrow(params: {
     saveModifier: number;
     difficultyClass: number;
+    rollFormula?: string;
     advantage?: boolean;
     disadvantage?: boolean;
     diceEngine?: LocalDiceEngine;
   }): { roll: RollRecord; succeeds: boolean } {
     const dice = params.diceEngine || LocalDiceEngine;
-    const roll1 = dice.roll('1d20', params.saveModifier);
+    const rollFormula = params.rollFormula || '1d20';
+    const roll1 = dice.roll(rollFormula, params.saveModifier);
     let chosenRoll = roll1;
 
     if (params.advantage && !params.disadvantage) {
-      const roll2 = dice.roll('1d20', params.saveModifier);
+      const roll2 = dice.roll(rollFormula, params.saveModifier);
       chosenRoll = roll2.total > roll1.total ? roll2 : roll1;
     } else if (params.disadvantage && !params.advantage) {
-      const roll2 = dice.roll('1d20', params.saveModifier);
+      const roll2 = dice.roll(rollFormula, params.saveModifier);
       chosenRoll = roll2.total < roll1.total ? roll2 : roll1;
     }
 
@@ -1405,7 +1413,7 @@ export class TacticalCombatEngine {
   private resolveStandardAttack(
     attacker: BattlefieldParticipant,
     target: BattlefieldParticipant,
-    options?: { advantage?: boolean; disadvantage?: boolean }
+    options?: { advantage?: boolean; disadvantage?: boolean; attackFormula?: string }
   ): { blocked: boolean; roll?: { roll: RollRecord; hits: boolean; isCritical: boolean } } {
     if (target.cover === 'TOTAL') return { blocked: true };
 
@@ -1438,6 +1446,7 @@ export class TacticalCombatEngine {
       roll: this.ruleset.resolveAttack({
         attackBonus: attacker.attackBonus + this.progressionModifier(attacker.id, 'combat.attackBonus') + exhaustionPenalty,
         targetArmorClass: target.armorClass + this.progressionModifier(target.id, 'coreStats.armorClass') + this.getCoverBonus(target),
+        attackFormula: resolveCapabilityCheckFormula((this.rulesProfile?.mode || 'FULL_DND') as any, options?.attackFormula),
         advantage: Boolean(options?.advantage || attackerHasAdvantage || targetHasAdvantageAgainst || targetProneAdvantage || targetConditions.has('unconscious')),
         disadvantage: Boolean(options?.disadvantage || targetDodging || attackerHasDisadvantage || targetProneDisadvantage || targetConditions.has('invisible')),
         diceEngine: this.diceEngine,
@@ -1859,6 +1868,7 @@ export class TacticalCombatEngine {
       disadvantage?: boolean;
       damageType?: string;
       attackBonusOverride?: number;
+      attackFormula?: string;
       actionId?: string;
       instanceIndex?: number;
       emitBattleEvent?: boolean;
@@ -1885,6 +1895,7 @@ export class TacticalCombatEngine {
     const attackResolution = this.resolveStandardAttack(attackSource, target, {
       advantage: options.advantage,
       disadvantage: options.disadvantage,
+      attackFormula: options.attackFormula,
     });
     if (attackResolution.blocked || !attackResolution.roll) {
       return { success: false, errorReason: 'Target cannot be directly targeted because it has Total Cover.', instanceIndex: options.instanceIndex ?? 0, targetId, hits: false, isCritical: false, damage: 0, targetDied: target.isDead };
@@ -2015,6 +2026,7 @@ export class TacticalCombatEngine {
       instanceCount?: number;
       overrideFormula?: string;
       damageFormula?: string;
+      attackFormula?: string;
       damageType?: string;
       advantage?: boolean;
       disadvantage?: boolean;
@@ -2059,6 +2071,7 @@ export class TacticalCombatEngine {
       const result = this.resolveAttackInstanceInternal(attackerId, target.id, {
         overrideFormula: options.damageFormula || options.overrideFormula,
         damageType: options.damageType || options.definition?.damageType,
+        attackFormula: options.attackFormula || options.definition?.attackFormula,
         advantage: options.advantage ?? options.definition?.advantage,
         disadvantage: options.disadvantage ?? options.definition?.disadvantage,
         actionId, instanceIndex: i,

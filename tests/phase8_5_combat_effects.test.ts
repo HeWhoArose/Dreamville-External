@@ -684,3 +684,78 @@ test('Phase 8.5 audit pass 5: animation presentation never becomes canonical com
   assert.equal(JSON.stringify(engine.exportState()), before);
   assert.equal(plan.generatedBy, 'SYSTEM');
 });
+
+
+test('Phase 8.5 audit pass 5: canonical combat replay reproduces a five-instance resolution signature', async () => {
+  const engine = engineWithEnemy({ attackBonus: 20 });
+  const result = combatEffectEngine.resolve(engine, 'hero', ['enemy'], {
+    id: 'replay_five_beams',
+    name: 'Replay Five Beams',
+    resolutionMode: 'MULTI_INSTANCE',
+    scale: 'PERSON',
+    actionCost: 'ACTION',
+    targetingMode: 'ONE_TARGET',
+    instanceCount: 5,
+    attackFormula: '1d20',
+    damageFormula: '1d4',
+  });
+  assert.equal(result.success, true);
+  const record = engine.getCombatReplayRecords().at(-1);
+  assert.ok(record);
+  const { combatReplayEngine } = await import('../server/domain/combatReplayEngine');
+  const replay = combatReplayEngine.replay(record!);
+  assert.equal(replay.success, true);
+  assert.equal(replay.identical, true);
+  assert.equal(replay.replayed?.instanceCount, 5);
+});
+
+test('Phase 8.5 audit pass 5: world-preview replay is explicitly non-mutating', async () => {
+  const engine = engineWithEnemy();
+  const before = engine.exportState();
+  const record: any = {
+    id: 'world_preview_replay',
+    actionId: 'citybreaker_1',
+    turnNumber: 1,
+    actorId: 'hero',
+    targetIds: [],
+    definition: {
+      id: 'citybreaker',
+      name: 'Citybreaker',
+      resolutionMode: 'WORLD_EFFECT',
+      scale: 'CITY',
+      actionCost: 'ACTION',
+      targetingMode: 'ALL_IN_AREA',
+      outcome: 'WORLD_STATE_CHANGED',
+    },
+    seedBefore: before.seed,
+    rollCounterBefore: before.rollCounter,
+    beforeState: before,
+    canonicalEventIds: ['world_evt_1'],
+    resultSignature: { success: true, totalDamage: 0, defeatedTargetIds: [], instanceCount: 0 },
+    consumeAction: true,
+    replayMode: 'WORLD_PREVIEW',
+    createdAtSequence: 1,
+  };
+  const { combatReplayEngine } = await import('../server/domain/combatReplayEngine');
+  const replay = combatReplayEngine.replay(record);
+  assert.equal(replay.success, true);
+  assert.equal(replay.identical, true);
+  assert.deepEqual(engine.exportState(), before);
+});
+
+test('Phase 8.5 audit pass 5: 50-instance effects stay within the canonical instance bound', () => {
+  const engine = engineWithEnemy({ attackBonus: 20 });
+  const result = combatEffectEngine.resolve(engine, 'hero', ['enemy'], {
+    id: 'bounded_barrage',
+    name: 'Bounded Barrage',
+    resolutionMode: 'MULTI_INSTANCE',
+    scale: 'PERSON',
+    actionCost: 'ACTION',
+    targetingMode: 'ONE_TARGET',
+    instanceCount: 50,
+    attackFormula: '1d20',
+    damageFormula: '1d4',
+  });
+  assert.equal(result.success, true);
+  assert.equal(result.instances?.length, 50);
+});

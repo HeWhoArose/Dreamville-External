@@ -2710,7 +2710,19 @@ export class TacticalCombatEngine {
     return { success: true, actionConsumed: params.consumeAction !== false, instances, totalDamage, defeatedTargetIds, canonicalEventIds: this.combatEffectEvents.filter((event) => event.actionId === actionId).map((event) => event.eventId) };
   }
 
+  private trimEventBuffers(): void {
+    const MAX_BATTLE_EVENTS = 500;
+    const MAX_COMBAT_EFFECT_EVENTS = 1000;
+    if (this.eventLog.length > MAX_BATTLE_EVENTS) {
+      this.eventLog = this.eventLog.slice(-MAX_BATTLE_EVENTS);
+    }
+    if (this.combatEffectEvents.length > MAX_COMBAT_EFFECT_EVENTS) {
+      this.combatEffectEvents = this.combatEffectEvents.slice(-MAX_COMBAT_EFFECT_EVENTS);
+    }
+  }
+
   public getCombatEffectEvents(): CombatEventRecord[] {
+    this.trimEventBuffers();
     return JSON.parse(JSON.stringify(this.combatEffectEvents));
   }
 
@@ -3352,6 +3364,7 @@ export class TacticalCombatEngine {
   }
 
   public getBattleEvents(): BattleEvent[] {
+    this.trimEventBuffers();
     return [...this.eventLog];
   }
 

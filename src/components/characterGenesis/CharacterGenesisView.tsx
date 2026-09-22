@@ -2360,6 +2360,21 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                       {pendingCapProposal.generatedSkills.map((s) => s.name).join(', ')}
                     </div>
                   ) : null}
+                  {pendingCapProposal.effectDefinition && (
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-indigo-900 text-[10px] font-mono text-neutral-300">
+                      <span>Resolution: {pendingCapProposal.effectDefinition.resolutionMode}</span>
+                      <span>Scale: {pendingCapProposal.effectDefinition.scale}</span>
+                      <span>Targets: {pendingCapProposal.effectDefinition.targetingMode}</span>
+                      <span>
+                        {pendingCapProposal.effectDefinition.instanceCount
+                          ? 'Instances: ' + pendingCapProposal.effectDefinition.instanceCount
+                          : pendingCapProposal.effectDefinition.outcome
+                            ? 'Outcome: ' + pendingCapProposal.effectDefinition.outcome
+                            : 'Instances: 1'}
+                      </span>
+                    </div>
+                  )}
+
                   <div className="flex items-center justify-end gap-2 pt-2 border-t border-indigo-900">
                     <button
                       onClick={handleRejectCapProposal}

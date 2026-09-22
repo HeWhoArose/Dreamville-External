@@ -10,6 +10,7 @@ import { worldVisualIdentityService } from '../services/worldVisualIdentityServi
 import { rulesProfileEngine } from '../domain/rulesProfileEngine';
 import { resolveCanonicalConfirmedCharacter } from '../services/confirmedCharacterAuthority';
 import { entityCardService } from '../services/entityCardService';
+import { characterGenesisService } from '../services/characterGenesisService';
 import { canonicalCommandEngine } from '../domain/canonicalCommandEngine';
 import { deterministicId, formatCanonicalTimestamp } from '../domain/deterministicRng';
 
@@ -5340,7 +5341,6 @@ gameRouter.post('/worlds/:worldId/characters/extract', async (req: Request, res:
       return res.status(404).json({ error: `World ${worldId} not found.` });
     }
 
-    const { characterGenesisService } = await import('../services/characterGenesisService');
     const draft = await characterGenesisService.extractCharacterDraft(
       {
         naturalLanguageConcept: naturalLanguageConcept || '',
@@ -5402,7 +5402,6 @@ gameRouter.post('/worlds/:worldId/characters/progression-infer', async (req: Req
     const worldTemplate = worldRepository.getWorldTemplate(worldId);
     if (!worldTemplate) return res.status(404).json({ success: false, errorReason: 'World not found.' });
 
-    const { characterGenesisService } = await import('../services/characterGenesisService');
     const result = await characterGenesisService.inferCharacterProgression(
       {
         worldId,
@@ -5438,7 +5437,6 @@ gameRouter.post('/worlds/:worldId/characters/progression-custom', async (req: Re
       return res.status(400).json({ success: false, errorReason: 'type must be CLASS, SUBCLASS, or SPECIES.' });
     }
 
-    const { characterGenesisService } = await import('../services/characterGenesisService');
     const module = await characterGenesisService.proposeCustomProgressionModule(
       {
         worldId,
@@ -5470,7 +5468,6 @@ gameRouter.post('/worlds/:worldId/characters/condition-suggest', async (req: Req
     const worldTemplate = worldRepository.getWorldTemplate(worldId);
     if (!worldTemplate) return res.status(404).json({ success: false, errorReason: 'World not found.' });
 
-    const { characterGenesisService } = await import('../services/characterGenesisService');
     const conditionState = await characterGenesisService.proposeStartingConditionState(
       {
         worldId,
@@ -5499,7 +5496,6 @@ gameRouter.post('/worlds/:worldId/characters/custom-capability', async (req: Req
       return res.status(404).json({ error: `World ${worldId} not found.` });
     }
 
-    const { characterGenesisService } = await import('../services/characterGenesisService');
     const capability = await characterGenesisService.proposeCustomCapability(
       {
         worldId,
@@ -5529,7 +5525,6 @@ gameRouter.post('/worlds/:worldId/characters/custom-feat', async (req: Request, 
       return res.status(404).json({ error: `World ${worldId} not found.` });
     }
 
-    const { characterGenesisService } = await import('../services/characterGenesisService');
     const feat = await characterGenesisService.proposeCustomFeat(
       {
         worldId,
@@ -5560,7 +5555,6 @@ gameRouter.post('/worlds/:worldId/characters/custom-attribute', async (req: Requ
       return res.status(404).json({ error: `World ${worldId} not found.` });
     }
 
-    const { characterGenesisService } = await import('../services/characterGenesisService');
     const attribute = await characterGenesisService.proposeCustomAttribute(
       {
         worldId,
@@ -5592,7 +5586,6 @@ gameRouter.post('/worlds/:worldId/characters/custom-skill', async (req: Request,
       return res.status(404).json({ error: `World ${worldId} not found.` });
     }
 
-    const { characterGenesisService } = await import('../services/characterGenesisService');
     const skill = await characterGenesisService.proposeCustomSkill(
       {
         worldId,
@@ -5623,7 +5616,6 @@ gameRouter.post('/worlds/:worldId/characters/custom-equipment', async (req: Requ
       return res.status(404).json({ error: `World ${worldId} not found.` });
     }
 
-    const { characterGenesisService } = await import('../services/characterGenesisService');
     const item = await characterGenesisService.proposeCustomEquipment(
       {
         worldId,
@@ -5690,7 +5682,6 @@ gameRouter.post('/worlds/:worldId/characters/confirm', async (req: Request, res:
       return res.status(400).json({ error: 'Draft object is required.' });
     }
 
-    const { characterGenesisService } = await import('../services/characterGenesisService');
     const confirmedCharacter = characterGenesisService.confirmCharacter(draft, worldTemplate);
     worldRepository.saveConfirmedCharacter(worldId, confirmedCharacter);
 

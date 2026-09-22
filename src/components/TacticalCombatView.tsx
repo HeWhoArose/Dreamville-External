@@ -162,14 +162,27 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
   };
 
   const handleCastCapability = async () => {
-    if (!selectedTargetId) {
-      setErrorMsg('Please select a target for capability invocation.');
-      return;
-    }
     if (!selectedCapabilityId) {
       setErrorMsg('Please select a capability to cast.');
       return;
     }
+
+    const selectedCapability = capabilities.find((item) => item.id === selectedCapabilityId);
+    const canonicalEffect = selectedCapability?.effectDefinition;
+
+    // Phase 8.5: all structured capabilities use the canonical effect pipeline.
+    // The legacy cast endpoint remains available only for pre-8.5 capabilities
+    // that have not yet been authored with a CombatEffectDefinition.
+    if (canonicalEffect) {
+      await handleStructuredEffect();
+      return;
+    }
+
+    if (!selectedTargetId) {
+      setErrorMsg('Please select a target for legacy capability invocation.');
+      return;
+    }
+
     try {
       setActionLoading(true);
       setErrorMsg(null);
@@ -807,7 +820,15 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
               <button
                 id="combat-cast-btn"
                 onClick={handleCastCapability}
-                disabled={actionLoading || !isPlayerTurn || !actorCanAct || !actionAvailable || combatState?.victory || combatState?.defeat}
+                disabled={actionLoading || !isPlayerTurn || !actorCanAct || (
+                  (selectedCapability?.effectDefinition?.actionCost === 'BONUS_ACTION'
+                    ? !turnResources?.bonusActionAvailable
+                    : selectedCapability?.effectDefinition?.actionCost === 'REACTION'
+                      ? !turnResources?.reactionAvailable
+                      : selectedCapability?.effectDefinition?.actionCost === 'FREE'
+                        ? false
+                        : !actionAvailable)
+                ) || combatState?.victory || combatState?.defeat}
                 className="w-full py-2 px-3 rounded-lg bg-cyan-950/80 hover:bg-cyan-900 text-cyan-100 text-xs font-semibold flex items-center justify-center gap-2 border border-cyan-700/60 transition disabled:opacity-50"
               >
                 <Zap className="w-3.5 h-3.5 text-cyan-400" />

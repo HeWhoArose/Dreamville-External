@@ -11,6 +11,7 @@ import type {
 } from '../../src/types';
 import { LocalDiceEngine } from './combatEngine';
 import { rulesProfileEngine } from './rulesProfileEngine';
+import { resolveSkillCheckFormula, normalizeDiceFormula } from '../../src/data/rulesDice';
 import type { RulesProfile } from '../../src/types';
 
 interface StoryCheckCharacter {
@@ -271,6 +272,15 @@ export class StoryCheckEngine {
     const testType: StoryTestType = challenge?.testType || (saveSelection ? 'SAVING_THROW' : 'ABILITY_CHECK');
     const ability = saveSelection ? saveSelection.profile.ability : profile!.ability;
     const skillName = challenge?.skill || (saveSelection ? 'Saving Throw' : profile!.skill);
+    const authoredSkill = !saveSelection
+      ? (character.skills || []).find((skill) => skill.name.toLowerCase() === String(skillName).toLowerCase())
+      : undefined;
+    const rollFormula = challenge?.rollFormula
+      ? normalizeDiceFormula(challenge.rollFormula, '1d20')
+      : resolveSkillCheckFormula(
+          effectiveRulesProfile.mode,
+          authoredSkill?.checkFormula
+        );
 
     const characterLevel = Math.max(1, Number(character.coreStats?.level ?? 1));
     const abilityMod = modifier(abilityScore(character.coreStats, ability));
@@ -347,11 +357,14 @@ export class StoryCheckEngine {
       ? 'DISADVANTAGE'
       : 'NORMAL';
 
-    const firstRoll = this.dice(storyId).roll('1d20', totalModifier);
+    const firstRoll = this.dice(storyId).roll(rollFormula, totalModifier);
     let roll = firstRoll;
     let selectedDieIndex = 0;
 
-    if (advantageState !== 'NORMAL') {
+    // D&D advantage/disadvantage is defined for d20 tests. Hybrid authored
+    // formulas such as 2d6 or 1d8 are still authoritative, but do not inherit
+    // an invented d20 advantage mechanic.
+    if (advantageState !== 'NORMAL' && rollFormula === '1d20') {
       const secondRoll = this.dice(storyId).roll('1d20', totalModifier);
       const firstValue = firstRoll.individualDice[0];
       const secondValue = secondRoll.individualDice[0];
@@ -371,8 +384,8 @@ export class StoryCheckEngine {
         isCriticalSuccess: false,
         isCriticalFailure: false,
       };
-    } else {
-      roll = firstRoll;
+    } else if (advantageState !== 'NORMAL' && rollFormula !== '1d20') {
+      contextNotes.push(`${advantageState === 'ADVANTAGE' ? 'Advantage' : 'Disadvantage'} is not applied to authored ${rollFormula} resolution.`);
     }
 
     const success = forcedFailure ? false : roll.total >= dc;

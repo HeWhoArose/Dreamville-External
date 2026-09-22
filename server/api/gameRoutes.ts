@@ -2165,7 +2165,50 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
       : 'Astral Void Sentry';
 
     const existingCandidate = transactionRepo.getNpcLifecycle(storyId, enemyId);
+    const entityCard = transactionRepo.getEntityCard(storyId, enemyId);
+    const entityStats = entityCard?.coreStats;
     const shouldSkipIfDead = Boolean(req.body?.skipIfDead);
+
+    const enemyHp = Math.max(1, Number(entityStats?.hpMax ?? 28));
+    const enemyAc = Math.max(1, Number(entityStats?.armorClass ?? 13));
+    const enemySpeed = Math.max(0, Math.round(Number(entityStats?.speed ?? 20) / 5));
+    const enemyAttackBonus = Number(entityCard?.metadata?.attackBonus ?? 4);
+    const enemyDamageFormula = typeof entityCard?.metadata?.damageFormula === 'string'
+      ? entityCard.metadata.damageFormula
+      : '1d6+2';
+
+    if (!entityCard) {
+      transactionRepo.saveEntityCard(storyId, {
+        id: enemyId,
+        name: enemyName,
+        kind: 'CREATURE',
+        classification: { role: 'Combat Creature', threat: 'Unrated', tags: ['combat_spawn'] },
+        coreStats: {
+          level: 1,
+          hpCurrent: enemyHp,
+          hpMax: enemyHp,
+          armorClass: enemyAc,
+          speed: Number(entityStats?.speed ?? 20),
+          abilityScores: {},
+        },
+        worldState: {
+          locationId: player?.locationId,
+          currentActivity: 'combat',
+          isAlive: true,
+          presence: 'present',
+        },
+        personality: { traits: [], values: [], motivations: ['Survival'], fears: [], desires: [] },
+        behavior: { defaultBehavior: 'Combat survival', priorities: ['Survive'], routines: [] },
+        social: { factionIds: [], reputation: {}, relationships: {} },
+        traits: [],
+        capabilities: [],
+        feats: [],
+        equipment: [],
+        memoryRefs: [],
+        metadata: { attackBonus: enemyAttackBonus, damageFormula: enemyDamageFormula },
+        provenance: { source: 'COMBAT_ENCOUNTER', createdBy: 'SYSTEM' },
+      });
+    }
 
     if (existingCandidate?.isDead) {
       if (!shouldSkipIfDead) {
@@ -2183,12 +2226,12 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
           y: 3,
           initiative: 11,
           team: 'enemies',
-          hpCurrent: 28,
-          hpMax: 28,
-          armorClass: 13,
-          speedCells: 4,
-          attackBonus: 4,
-          damageFormula: '1d6+2',
+          hpCurrent: enemyHp,
+          hpMax: enemyHp,
+          armorClass: enemyAc,
+          speedCells: enemySpeed,
+          attackBonus: enemyAttackBonus,
+          damageFormula: enemyDamageFormula,
           conditions: [],
           isDead: false,
         };
@@ -2202,12 +2245,12 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
         y: 3,
         initiative: 11,
         team: 'enemies',
-        hpCurrent: 28,
-        hpMax: 28,
-        armorClass: 13,
-        speedCells: 4,
-        attackBonus: 4,
-        damageFormula: '1d6+2',
+        hpCurrent: enemyHp,
+        hpMax: enemyHp,
+        armorClass: enemyAc,
+        speedCells: enemySpeed,
+        attackBonus: enemyAttackBonus,
+        damageFormula: enemyDamageFormula,
         conditions: [],
         isDead: false,
       };

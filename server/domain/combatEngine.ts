@@ -4,7 +4,8 @@ import { ConditionEngine } from './conditionEngine';
 import { CombatActionEconomy, CombatTurnResourceSnapshot, ReadyTriggerType } from './combatActionEconomy';
 import { CombatReactionEngine } from './combatReactionEngine';
 import { deathSaveEngine } from './deathSaveEngine';
-import type { DeathSaveState, RulesProfile, CombatAttackInstanceResult, CombatEffectDefinition, CombatEffectResult, CombatEventRecord, CombatReplayRecord, BodyRegionId, DestructibleEnvironmentObject } from '../../src/types';
+import type { DeathSaveState, RulesProfile, CombatAttackInstanceResult, CombatEffectDefinition, CombatEffectResult, CombatEventRecord, CombatReplayRecord, BodyRegionId, DestructibleEnvironmentObject, CombatMoraleState } from '../../src/types';
+import { CombatMoraleEngine } from './combatMoraleEngine';
 import { resolveCapabilityCheckFormula } from '../../src/data/rulesDice';
 import type { ProgressionResolution } from './characterProgressionEngine';
 import {
@@ -478,6 +479,7 @@ export class TacticalCombatEngine {
   private bossPhaseEvaluationResolver?: (bossId: string, engine: TacticalCombatEngine) => void;
   private combatEffectEvents: CombatEventRecord[] = [];
   private combatReplayRecords: CombatReplayRecord[] = [];
+  private readonly moraleEngine = new CombatMoraleEngine();
   private combatActionSequence = 0;
   private initialSeed: number;
 
@@ -601,6 +603,9 @@ export class TacticalCombatEngine {
     this.currentRound = 1;
     this.eventLog = [];
     this.combatEffectEvents = [];
+    this.combatReplayRecords = [];
+    this.destructibleObjects.clear();
+    this.moraleEngine.importState([]);
     this.combatActionSequence = 0;
     this.pendingActivations.clear();
     this.bossPhaseStates.clear();
@@ -715,6 +720,8 @@ export class TacticalCombatEngine {
       participant.conditionProfile = seeded.conditionProfile;
       participant.conditions = seeded.instances.map((instance) => instance.name);
     }
+    const morale = this.moraleEngine.ensure(participant.id, participant.moraleState);
+    participant.moraleState = morale;
     this.participants.set(participant.id, participant);
     this.actionEconomy.registerActor(participant.id, participant.speedCells, this.currentRound);
     if (!this.turnQueue.includes(participant.id)) {
@@ -806,6 +813,40 @@ export class TacticalCombatEngine {
 
   public getDestructibleObjects(): DestructibleEnvironmentObject[] {
     return Array.from(this.destructibleObjects.values()).map((object) => JSON.parse(JSON.stringify(object)));
+  }
+
+  public getMoraleState(actorId: string): CombatMoraleState | undefined {
+    return this.moraleEngine.get(actorId);
+  }
+
+  public setMoraleState(
+    actorId: string,
+    patch: Partial<CombatMoraleState>,
+    reason = 'Canonical morale update.'
+  ): { success: boolean; state?: CombatMoraleState; errorReason?: string } {
+    const participant = this.participants.get(actorId);
+    if (!participant) return { success: false, errorReason: 'Morale actor not found.' };
+    const state = this.moraleEngine.set(actorId, patch, reason);
+    participant.moraleState = state;
+    this.combatActionSequence += 1;
+    const eventId = `combat_evt_${this.currentRound}_${this.combatActionSequence}`;
+    this.combatEffectEvents.push({
+      eventId,
+      actionId: `morale_${this.currentRound}_${actorId}`,
+      eventType: 'MORALE_STATE_CHANGED',
+      turnNumber: this.currentRound,
+      actorId,
+      targetId: actorId,
+      headline: `${participant.name} morale became ${state.status}.`,
+      metadata: {
+        morale: state.morale,
+        maxMorale: state.maxMorale,
+        status: state.status,
+        reason: state.lastChangeReason,
+        revision: state.revision,
+      },
+    });
+    return { success: true, state };
   }
 
   public upsertDestructibleObject(object: DestructibleEnvironmentObject): { success: boolean; errorReason?: string } {
@@ -1990,6 +2031,8 @@ export class TacticalCombatEngine {
         target.activeConcentration = null;
       }
 
+      const moraleAfterDamage = this.moraleEngine.observeDamage(target.id, resolvedDamage.finalAmount);
+      target.moraleState = moraleAfterDamage;
       this.bossPhaseEvaluationResolver?.(target.id, this);
       return {
         damage: resolvedDamage.finalAmount,
@@ -2058,6 +2101,8 @@ export class TacticalCombatEngine {
       this.spellRuntime.breakConcentration(target.id, 'Creature dropped to 0 HP');
     }
 
+    const moraleAfterDamage = this.moraleEngine.observeDamage(target.id, finalAmount);
+    target.moraleState = moraleAfterDamage;
     this.bossPhaseEvaluationResolver?.(target.id, this);
     return {
       damage: finalAmount,
@@ -2197,6 +2242,13 @@ export class TacticalCombatEngine {
       this.processConditionCombatEvent(attackerId, 'ON_MISS', 'miss');
     }
     if (targetDied) {
+      const killerMorale = this.moraleEngine.observeKill(attackerId);
+      const killer = this.participants.get(attackerId);
+      if (killer) killer.moraleState = killerMorale;
+      for (const ally of this.participants.values()) {
+        if (ally.id === attackerId || ally.team !== target.team || ally.isDead) continue;
+        ally.moraleState = this.moraleEngine.observeAllyDeath(ally.id);
+      }
       this.processConditionCombatEvent(attackerId, 'ON_KILL', 'kill');
       this.processConditionCombatEvent(targetId, 'ON_DEATH', 'death');
     }
@@ -3532,6 +3584,7 @@ export class TacticalCombatEngine {
       combatActionSequence: this.combatActionSequence,
       destructibleObjects: this.getDestructibleObjects(),
       combatReplayRecords: this.getCombatReplayRecords(),
+      moraleStates: this.moraleEngine.exportState(),
       bossPhaseStates: Array.from(this.bossPhaseStates.entries()).map(([bossId, state]) => ({ bossId, ...state })),
       conditionEngineState: this.conditionEngine?.exportState(),
     };
@@ -3615,6 +3668,10 @@ export class TacticalCombatEngine {
     }
     this.combatEffectEvents = [...(data.combatEffectEvents || [])];
     this.combatReplayRecords = [...(data.combatReplayRecords || [])].slice(-100);
+    this.moraleEngine.importState(data.moraleStates || []);
+    for (const participant of this.participants.values()) {
+      participant.moraleState = this.moraleEngine.get(participant.id);
+    }
     this.combatActionSequence = typeof data.combatActionSequence === 'number' ? Math.max(0, Math.trunc(data.combatActionSequence)) : this.combatEffectEvents.length;
     this.bossPhaseStates.clear();
     for (const state of (data as any).bossPhaseStates || []) {

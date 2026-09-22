@@ -4,7 +4,7 @@ import { ConditionEngine } from './conditionEngine';
 import { CombatActionEconomy, CombatTurnResourceSnapshot, ReadyTriggerType } from './combatActionEconomy';
 import { CombatReactionEngine } from './combatReactionEngine';
 import { deathSaveEngine } from './deathSaveEngine';
-import type { DeathSaveState, RulesProfile, CombatAttackInstanceResult, CombatEffectDefinition, CombatEffectResult, CombatEventRecord, CombatReplayRecord, BodyRegionId, DestructibleEnvironmentObject, CombatMoraleState } from '../../src/types';
+import type { DeathSaveState, RulesProfile, CombatAttackInstanceResult, CombatEffectDefinition, CombatEffectResult, CombatEventRecord, CombatReplayRecord, BodyRegionId, DestructibleEnvironmentObject, CombatMoraleState, CombatForcedMovementDefinition, CombatForcedMovementResult, CombatMovementCollisionResult } from '../../src/types';
 import { CombatMoraleEngine } from './combatMoraleEngine';
 import { resolveCapabilityCheckFormula } from '../../src/data/rulesDice';
 import type { ProgressionResolution } from './characterProgressionEngine';
@@ -1065,6 +1065,297 @@ export class TacticalCombatEngine {
     };
   }
 
+  /**
+   * Authoritative forced-movement resolver shared by combat effects and spells.
+   * Movement is resolved cell-by-cell so walls, boundaries, destructible objects,
+   * and creatures can produce canonical collision consequences.
+   */
+  public resolveForcedMovement(params: {
+    targetId: string;
+    sourcePosition?: { x: number; y: number };
+    movement: CombatForcedMovementDefinition;
+    actionId?: string;
+  }): CombatForcedMovementResult {
+    const target = this.participants.get(params.targetId);
+    const requestedDistanceCells = Math.max(
+      0,
+      Math.min(50, Math.trunc(Number(params.movement?.distanceCells) || 0))
+    );
+    const from = target ? { x: target.x, y: target.y } : { x: 0, y: 0 };
+
+    if (!target || requestedDistanceCells <= 0) {
+      return {
+        moved: false,
+        from,
+        to: from,
+        requestedDistanceCells,
+        actualDistanceCells: 0,
+        collisionsResolved: 0,
+      };
+    }
+
+    if (target.isDead && target.hpCurrent <= 0) {
+      return {
+        moved: false,
+        from,
+        to: from,
+        requestedDistanceCells,
+        actualDistanceCells: 0,
+        collisionsResolved: 0,
+      };
+    }
+
+    const movementType = params.movement.type;
+    if (movementType !== 'PUSH' && movementType !== 'PULL') {
+      return {
+        moved: false,
+        from,
+        to: from,
+        requestedDistanceCells,
+        actualDistanceCells: 0,
+        collisionsResolved: 0,
+      };
+    }
+
+    const source = params.sourcePosition || from;
+    let stepX = Math.sign(target.x - source.x);
+    let stepY = Math.sign(target.y - source.y);
+
+    if (stepX === 0 && stepY === 0) {
+      stepX = movementType === 'PUSH' ? 1 : -1;
+      stepY = 0;
+    } else if (movementType === 'PULL') {
+      stepX *= -1;
+      stepY *= -1;
+    }
+
+    const collisionProfile = params.movement.collision;
+    const maxCollisions = Math.max(
+      1,
+      Math.min(3, Math.trunc(Number(collisionProfile?.maxCollisions ?? 1) || 1))
+    );
+    const stopOnCollision = collisionProfile?.stopOnCollision !== false;
+    let actualDistanceCells = 0;
+    let collisionsResolved = 0;
+    let lastCollision: CombatMovementCollisionResult | undefined;
+
+    const resolveFormula = (formula: string | undefined): number => {
+      if (!formula) return 0;
+      try {
+        const roll = this.ruleset.resolveDamage(formula, false, this.diceEngine);
+        return Math.max(0, roll.totalDamage);
+      } catch {
+        return 0;
+      }
+    };
+
+    for (let step = 1; step <= requestedDistanceCells; step += 1) {
+      const attemptedPosition = {
+        x: target.x + stepX,
+        y: target.y + stepY,
+      };
+
+      let collision:
+        | {
+            kind: 'BOUNDARY' | 'WALL' | 'DESTRUCTIBLE_OBJECT' | 'CREATURE';
+            blockerId?: string;
+            blockerName?: string;
+            object?: DestructibleEnvironmentObject;
+            creature?: BattlefieldParticipant;
+          }
+        | undefined;
+
+      if (
+        this.mapBounds &&
+        (attemptedPosition.x < this.mapBounds.minX ||
+          attemptedPosition.x > this.mapBounds.maxX ||
+          attemptedPosition.y < this.mapBounds.minY ||
+          attemptedPosition.y > this.mapBounds.maxY)
+      ) {
+        collision = { kind: 'BOUNDARY', blockerName: 'Battlefield boundary' };
+      }
+
+      if (!collision) {
+        const obstacle = this.obstacles
+          .filter((entry) =>
+            entry.x === attemptedPosition.x &&
+            entry.y === attemptedPosition.y &&
+            entry.isImpassable !== false
+          )
+          .sort((a, b) => `${a.x}:${a.y}`.localeCompare(`${b.x}:${b.y}`))[0];
+        if (obstacle) {
+          collision = {
+            kind: 'WALL',
+            blockerName: 'Impassable obstacle',
+          };
+        }
+      }
+
+      if (!collision) {
+        const object = Array.from(this.destructibleObjects.values())
+          .filter((entry) =>
+            !entry.isDestroyed &&
+            entry.x === attemptedPosition.x &&
+            entry.y === attemptedPosition.y
+          )
+          .sort((a, b) => a.id.localeCompare(b.id))[0];
+
+        if (object) {
+          collision = {
+            kind: 'DESTRUCTIBLE_OBJECT',
+            blockerId: object.id,
+            blockerName: object.name,
+            object,
+          };
+        }
+      }
+
+      if (!collision) {
+        const creature = Array.from(this.participants.values())
+          .filter((entry) =>
+            entry.id !== target.id &&
+            !entry.isDead &&
+            entry.hpCurrent > 0 &&
+            entry.x === attemptedPosition.x &&
+            entry.y === attemptedPosition.y
+          )
+          .sort((a, b) => a.id.localeCompare(b.id))[0];
+
+        if (creature) {
+          collision = {
+            kind: 'CREATURE',
+            blockerId: creature.id,
+            blockerName: creature.name,
+            creature,
+          };
+        }
+      }
+
+      if (!collision) {
+        target.x = attemptedPosition.x;
+        target.y = attemptedPosition.y;
+        actualDistanceCells += 1;
+        continue;
+      }
+
+      collisionsResolved += 1;
+      const damageToMover = resolveFormula(collisionProfile?.damageFormula);
+      const damageToCreature = collision.kind === 'CREATURE'
+        ? resolveFormula(collisionProfile?.creatureDamageFormula)
+        : 0;
+      const objectDamageFormula =
+        collisionProfile?.objectDamageFormula || collisionProfile?.damageFormula;
+      const damageToObject = collision.kind === 'DESTRUCTIBLE_OBJECT'
+        ? resolveFormula(objectDamageFormula)
+        : 0;
+
+      let resolvedMoverDamage = 0;
+      let moverDied = false;
+      if (damageToMover > 0) {
+        const damageResult = this.applyCombatDamage(
+          target,
+          damageToMover,
+          collisionProfile?.damageType || 'bludgeoning',
+          false
+        );
+        resolvedMoverDamage = damageResult.damage;
+        moverDied = damageResult.targetDied;
+        if (resolvedMoverDamage > 0 && this.pendingActivations.has(target.id)) {
+          this.interruptActivation(target.id, `Collision impact dealt ${resolvedMoverDamage} damage`);
+        }
+      }
+
+      let resolvedCreatureDamage = 0;
+      if (collision.creature && damageToCreature > 0 && !collision.creature.isDead) {
+        const creatureDamage = this.applyCombatDamage(
+          collision.creature,
+          damageToCreature,
+          collisionProfile?.damageType || 'bludgeoning',
+          false
+        );
+        resolvedCreatureDamage = creatureDamage.damage;
+      }
+
+      let objectDestroyed = false;
+      let resolvedObjectDamage = 0;
+      if (collision.object && damageToObject > 0) {
+        const objectDamage = this.damageDestructibleObject(
+          collision.object.id,
+          damageToObject,
+          collisionProfile?.damageType || 'bludgeoning'
+        );
+        resolvedObjectDamage = objectDamage.damage;
+        objectDestroyed = objectDamage.destroyed;
+      }
+
+      lastCollision = {
+        kind: collision.kind,
+        blockerId: collision.blockerId,
+        blockerName: collision.blockerName,
+        position: { x: target.x, y: target.y },
+        attemptedPosition,
+        damageToMover: resolvedMoverDamage,
+        damageToObject: resolvedObjectDamage,
+        damageToCreature: resolvedCreatureDamage,
+        targetDied: moverDied,
+        objectDestroyed,
+      };
+
+      if (
+        stopOnCollision ||
+        collision.kind !== 'DESTRUCTIBLE_OBJECT' ||
+        !objectDestroyed ||
+        collisionsResolved >= maxCollisions ||
+        moverDied
+      ) {
+        break;
+      }
+
+      // A destroyed destructible object can be passed through when explicitly
+      // authored with stopOnCollision=false.
+      target.x = attemptedPosition.x;
+      target.y = attemptedPosition.y;
+      actualDistanceCells += 1;
+    }
+
+    const to = { x: target.x, y: target.y };
+    this.combatActionSequence += 1;
+    const eventId = 'combat_evt_' + this.currentRound + '_' + this.combatActionSequence;
+    const actionId = params.actionId || 'forced_movement_' + this.currentRound + '_' + target.id;
+
+    this.combatEffectEvents.push({
+      eventId,
+      actionId,
+      eventType: lastCollision ? 'FORCED_MOVEMENT_COLLISION_RESOLVED' : 'FORCED_MOVEMENT_RESOLVED',
+      turnNumber: this.currentRound,
+      actorId: target.id,
+      targetId: target.id,
+      headline: lastCollision
+        ? target.name + ' was forced from (' + from.x + ', ' + from.y + ') to (' + to.x + ', ' + to.y + ') and collided with ' + (lastCollision.blockerName || lastCollision.kind.toLowerCase()) + '.'
+        : target.name + ' was forced from (' + from.x + ', ' + from.y + ') to (' + to.x + ', ' + to.y + ').',
+      damage: lastCollision?.damageToMover || 0,
+      finalDamage: lastCollision?.damageToMover || 0,
+      metadata: {
+        movementType,
+        requestedDistanceCells,
+        actualDistanceCells,
+        from,
+        to,
+        collision: lastCollision,
+        collisionsResolved,
+      },
+    });
+
+    return {
+      moved: actualDistanceCells > 0,
+      from,
+      to,
+      requestedDistanceCells,
+      actualDistanceCells,
+      collision: lastCollision,
+      collisionsResolved,
+    };
+  }
   public moveActor(actorId: string, targetX: number, targetY: number): {
     success: boolean;
     errorReason?: string;
@@ -2152,6 +2443,7 @@ export class TacticalCombatEngine {
       emitBattleEvent?: boolean;
       hitLocationMode?: CombatEffectDefinition['hitLocationMode'];
       targetBodyRegionId?: BodyRegionId;
+      forcedMovement?: CombatForcedMovementDefinition;
     } = {}
   ): CombatAttackInstanceResult & { success: boolean; errorReason?: string; roll?: RollRecord; damageRoll?: RollRecord } {
     const attacker = this.participants.get(attackerId);
@@ -2458,6 +2750,7 @@ export class TacticalCombatEngine {
     targetDied: boolean;
     roll?: RollRecord;
     isCritical: boolean;
+    forcedMovement?: CombatForcedMovementResult;
   } {
     if (!this.tacticalCombatEnabled()) {
       return { success: false, errorReason: 'Tactical combat is disabled by the active rules profile.', hits: false, damage: 0, targetDied: false, isCritical: false };
@@ -2482,8 +2775,26 @@ export class TacticalCombatEngine {
     if (!result.success) {
       return { success: false, errorReason: result.errorReason, hits: false, damage: 0, targetDied: result.targetDied, isCritical: result.isCritical };
     }
+
+    let forcedMovement: CombatForcedMovementResult | undefined;
+    if (result.hits && !result.targetDied && options?.forcedMovement) {
+      forcedMovement = this.resolveForcedMovement({
+        targetId,
+        sourcePosition: { x: attacker.x, y: attacker.y },
+        movement: options.forcedMovement,
+      });
+    }
+
     this.resolveReadyTriggers({ type: 'ACTOR_ATTACKED', actorId: attackerId, targetId });
-    return { success: true, hits: result.hits, damage: result.damage, targetDied: result.targetDied, roll: result.roll, isCritical: result.isCritical };
+    return {
+      success: true,
+      hits: result.hits,
+      damage: result.damage,
+      targetDied: result.targetDied,
+      roll: result.roll,
+      isCritical: result.isCritical,
+      forcedMovement,
+    };
   }
 
   public executeMultiAttack(
@@ -2566,6 +2877,16 @@ export class TacticalCombatEngine {
         actionId, instanceIndex: i,
       });
       if (!result.success) return { success: false, errorReason: result.errorReason, actionConsumed: true, effectId: options.definition?.id, effectName: options.definition?.name };
+
+      if (result.hits && !result.targetDied && options.definition?.forcedMovement) {
+        result.forcedMovement = this.resolveForcedMovement({
+          targetId: result.targetId,
+          sourcePosition: { x: attacker.x, y: attacker.y },
+          movement: options.definition.forcedMovement,
+          actionId,
+        });
+      }
+
       instances.push(result);
       totalDamage += result.damage;
       if (result.targetDied && !defeatedTargetIds.includes(result.targetId)) defeatedTargetIds.push(result.targetId);

@@ -1997,6 +1997,7 @@ export interface CombatEffectResult {
 	defeatedTargetIds?: string[];
 	outcome?: CombatOutcomeType;
 	canonicalEventIds?: string[];
+	conditionsApplied?: Array<{ targetId: string; conditionIdOrName: string; trigger: CombatConditionEffectDefinition['trigger']; applied: boolean; immune: boolean }>;
 	worldEffectPreview?: {
 		scale: CombatEffectScale;
 		outcome?: CombatOutcomeType;

@@ -2264,6 +2264,12 @@ export class TacticalCombatEngine {
         rulesProfile: this.rulesProfile,
         diceEngine: this.diceEngine,
         requireAuthoritativeTarget: true,
+        spellAttackBonusOverride:
+          actor.spellAttackBonus !== undefined
+            ? actor.spellAttackBonus + this.progressionModifier(actor.id, 'spell.attackBonus')
+            : actor.attackBonus + this.progressionModifier(actor.id, 'spell.attackBonus'),
+        spellSaveDcOverride:
+          (actor.spellSaveDc ?? 8) + this.progressionModifier(actor.id, 'spell.saveDC'),
         damageResolver: (damageTarget, amount, damageType, criticalHit = false) =>
           this.applyCombatDamage(damageTarget, amount, damageType, criticalHit),
         healingResolver: (healingTarget, amount) =>

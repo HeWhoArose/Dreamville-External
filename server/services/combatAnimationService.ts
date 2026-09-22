@@ -73,12 +73,41 @@ export class CombatAnimationService {
         });
         return { plan: fallback, source: 'SYSTEM', fallbackReason: 'AI returned invalid animation plan JSON.' };
       }
+      const compositions = new Set([
+        'SINGLE_EFFECT',
+        'MULTI_BEAM',
+        'CHAIN',
+        'AREA_BURST',
+        'WORLD_CINEMATIC',
+      ]);
+      const composition = compositions.has(String(parsed.composition)) ? String(parsed.composition) : fallback.composition;
+      const sequence =
+        parsed.sequence === 'PARALLEL' || parsed.sequence === 'SEQUENTIAL' || parsed.sequence === 'INSTANT'
+          ? parsed.sequence
+          : fallback.sequence;
+      const rawCount = Number(parsed.count ?? fallback.count ?? 1);
+      const count = Number.isFinite(rawCount)
+        ? Math.max(1, Math.min(50, Math.trunc(rawCount)))
+        : Math.max(1, Math.min(50, fallback.count ?? 1));
+      const assetRefs = Array.isArray(parsed.assetRefs)
+        ? parsed.assetRefs.map(String).filter(Boolean).slice(0, 12)
+        : fallback.assetRefs || [];
+      const safeStyle = typeof parsed.style === 'string'
+        ? parsed.style.trim().slice(0, 160)
+        : fallback.style;
+
       const plan: CombatAnimationPlan = {
         ...fallback,
-        ...parsed,
+        composition,
+        sequence,
+        count,
+        origin: typeof parsed.origin === 'string' ? parsed.origin.trim().slice(0, 80) : fallback.origin,
+        impact: typeof parsed.impact === 'string' ? parsed.impact.trim().slice(0, 80) : fallback.impact,
+        criticalImpact: typeof parsed.criticalImpact === 'string' ? parsed.criticalImpact.trim().slice(0, 80) : fallback.criticalImpact,
+        missBehavior: typeof parsed.missBehavior === 'string' ? parsed.missBehavior.trim().slice(0, 80) : fallback.missBehavior,
+        style: safeStyle,
+        assetRefs,
         id: fallback.id,
-        sequence: parsed.sequence === 'PARALLEL' || parsed.sequence === 'SEQUENTIAL' ? parsed.sequence : fallback.sequence,
-        count: Math.max(1, Math.min(50, Number(parsed.count ?? fallback.count ?? 1))),
         generatedBy: 'AI',
         provenance: 'AI_COMBAT_ANIMATION_PLAN',
       };

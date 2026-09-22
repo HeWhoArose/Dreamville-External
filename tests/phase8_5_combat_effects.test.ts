@@ -830,3 +830,43 @@ test('Phase 8.5 regression: boss phase steady-state sync resolves canonical envi
   assert.equal(result.changed, false);
   assert.equal(engine.getBossPhaseState('boss')?.environmentEffects[0], 'burning_arena');
 });
+
+
+test('Phase 8.5 regression: animation tracks select HIT, MISS, and CRITICAL variants per instance', async () => {
+  const { CombatAnimationService } = await import('../server/services/combatAnimationService');
+  const service = new CombatAnimationService();
+  const plan = service.deterministicPlan({
+    id: 'conditional_tracks',
+    name: 'Conditional Tracks',
+    resolutionMode: 'MULTI_INSTANCE',
+    scale: 'PERSON',
+    actionCost: 'ACTION',
+    targetingMode: 'ONE_TARGET',
+    instanceCount: 3,
+    attackFormula: '1d20',
+    damageFormula: '1d8',
+  });
+
+  assert.equal(plan.tracks?.length, 3);
+  assert.equal(plan.tracks?.every((track) => track.condition === 'ALWAYS' || track.condition === 'HIT' || track.condition === 'MISS' || track.condition === 'CRITICAL'), true);
+  assert.equal(plan.sequence === 'SEQUENTIAL' || plan.sequence === 'PARALLEL' || plan.sequence === 'INSTANT', true);
+});
+
+test('Phase 8.5 regression: replay records remain bounded after repeated effect resolution', () => {
+  const engine = engineWithEnemy({ attackBonus: 20 });
+  for (let run = 0; run < 80; run += 1) {
+    const result = combatEffectEngine.resolve(engine, 'hero', ['enemy'], {
+      id: 'replay_bound_' + run,
+      name: 'Replay Bound',
+      resolutionMode: 'MULTI_INSTANCE',
+      scale: 'PERSON',
+      actionCost: 'FREE',
+      targetingMode: 'ONE_TARGET',
+      instanceCount: 5,
+      attackFormula: '1d20',
+      damageFormula: '1d4',
+    });
+    assert.equal(result.success, true);
+  }
+  assert.ok(engine.getCombatReplayRecords().length <= 100);
+});

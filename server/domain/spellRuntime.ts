@@ -1,4 +1,4 @@
-import type { RulesProfile } from '../../src/types';
+import type { CombatCollisionProfile, CombatForcedMovementResult, RulesProfile } from '../../src/types';
 import { rulesProfileEngine } from './rulesProfileEngine';
 import { LocalDiceEngine, BattlefieldParticipant, RollRecord, CoverLevel } from './combatEngine';
 import { ConditionEngine, conditionEngine as defaultConditionEngine } from './conditionEngine';
@@ -52,6 +52,7 @@ export interface SpellDefinition {
   movementEffect?: {
     type: 'TELEPORT' | 'PUSH' | 'PULL';
     distanceFeet: number;
+    collision?: CombatCollisionProfile;
   };
   buffEffect?: {
     armorClassBonus?: number;
@@ -117,6 +118,14 @@ export type SpellHealingResolver = (
   amount: number
 ) => { healing: number; revived: boolean };
 
+export type SpellMovementResolver = (params: {
+  target: BattlefieldParticipant;
+  source: BattlefieldParticipant;
+  type: 'PUSH' | 'PULL';
+  distanceCells: number;
+  collision?: CombatCollisionProfile;
+}) => CombatForcedMovementResult;
+
 export interface CastSpellRequest {
   storyId?: string;
   casterId: string;
@@ -139,6 +148,8 @@ export interface CastSpellRequest {
   damageResolver?: SpellDamageResolver;
   /** Canonical combat authority may provide the healing/revival resolver. */
   healingResolver?: SpellHealingResolver;
+  /** Canonical combat authority may provide the forced-movement/collision resolver. */
+  movementResolver?: SpellMovementResolver;
   /** Optional derived progression bonuses supplied by authoritative combat projection. */
   spellAttackBonusOverride?: number;
   spellSaveDcOverride?: number;
@@ -169,6 +180,7 @@ export interface CastSpellExecutionResult {
   conditionsApplied?: string[];
   conditionsRemoved?: string[];
   movementApplied?: { from: { x: number; y: number }; to: { x: number; y: number } };
+  movementCollision?: CombatForcedMovementResult;
   concentrationEstablished?: boolean;
   targetConcentrationCheck?: ConcentrationCheckResult;
   headline: string;
@@ -1612,6 +1624,7 @@ export class SpellRuntime {
       appliedSaveBonusModifier?: number;
     }> = [];
     let movementApplied: { from: { x: number; y: number }; to: { x: number; y: number } } | undefined;
+    let movementCollision: CombatForcedMovementResult | undefined;
     let targetConcCheck: ConcentrationCheckResult | undefined;
 
     // Upcasting scaling calculations
@@ -1932,12 +1945,13 @@ export class SpellRuntime {
       }
     }
 
-    // Movement / Teleportation
+    // Movement / Teleportation. PUSH/PULL uses the canonical combat authority
+    // when supplied, so collision damage and environment interaction remain
+    // consistent with ordinary combat effects.
     if (spell.movementEffect) {
       const moveTarget = targetParticipant || casterParticipant;
       const initialPos = { x: moveTarget.x, y: moveTarget.y };
       if (spell.movementEffect.type === 'TELEPORT') {
-        // Teleport to requested position or offset
         const targetPos = request.targetPosition || {
           x: moveTarget.x + Math.min(6, Math.floor(spell.movementEffect.distanceFeet / 5)),
           y: moveTarget.y,
@@ -1945,18 +1959,33 @@ export class SpellRuntime {
         moveTarget.x = targetPos.x;
         moveTarget.y = targetPos.y;
         movementApplied = { from: initialPos, to: targetPos };
-      } else if (spell.movementEffect.type === 'PUSH' && targetParticipant) {
-        // Push target away from caster
-        const dx = Math.sign(targetParticipant.x - casterParticipant.x) || 1;
-        const dy = Math.sign(targetParticipant.y - casterParticipant.y) || 0;
-        const pushCells = Math.floor(spell.movementEffect.distanceFeet / 5);
-        const targetPos = {
-          x: targetParticipant.x + dx * pushCells,
-          y: targetParticipant.y + dy * pushCells,
-        };
-        targetParticipant.x = targetPos.x;
-        targetParticipant.y = targetPos.y;
-        movementApplied = { from: initialPos, to: targetPos };
+      } else if (targetParticipant) {
+        const pushCells = Math.max(0, Math.min(50, Math.floor(spell.movementEffect.distanceFeet / 5)));
+
+        if (request.movementResolver) {
+          movementCollision = request.movementResolver({
+            target: targetParticipant,
+            source: casterParticipant,
+            type: spell.movementEffect.type,
+            distanceCells: pushCells,
+            collision: spell.movementEffect.collision,
+          });
+          movementApplied = {
+            from: movementCollision.from,
+            to: movementCollision.to,
+          };
+        } else {
+          const dx = Math.sign(targetParticipant.x - casterParticipant.x) || (spell.movementEffect.type === 'PUSH' ? 1 : -1);
+          const dy = Math.sign(targetParticipant.y - casterParticipant.y) || 0;
+          const direction = spell.movementEffect.type === 'PULL' ? -1 : 1;
+          const targetPos = {
+            x: targetParticipant.x + dx * pushCells * direction,
+            y: targetParticipant.y + dy * pushCells * direction,
+          };
+          targetParticipant.x = targetPos.x;
+          targetParticipant.y = targetPos.y;
+          movementApplied = { from: initialPos, to: targetPos };
+        }
       }
     }
 
@@ -2018,6 +2047,9 @@ export class SpellRuntime {
     if (movementApplied) {
       headline += ` Repositioned to (${movementApplied.to.x}, ${movementApplied.to.y}).`;
     }
+    if (movementCollision?.collision) {
+      headline += ` Collided with ${movementCollision.collision.blockerName || movementCollision.collision.kind.toLowerCase()}, taking ${movementCollision.collision.damageToMover} additional damage.`;
+    }
 
     return {
       success: true,
@@ -2041,6 +2073,7 @@ export class SpellRuntime {
       conditionsApplied,
       conditionsRemoved,
       movementApplied,
+      movementCollision,
       concentrationEstablished,
       targetConcentrationCheck: targetConcCheck,
       headline,

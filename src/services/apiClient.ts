@@ -27,6 +27,25 @@ import {
 const originalFetch = typeof window !== 'undefined' ? window.fetch : globalThis.fetch;
 let globalActiveStoryId = 'default_story';
 
+const readJsonSafely = async <T = any>(res: Response): Promise<T> => {
+  const contentType = res.headers.get('content-type') || '';
+  const text = await res.text();
+  if (contentType.toLowerCase().includes('application/json')) {
+    try {
+      return (text ? JSON.parse(text) : {}) as T;
+    } catch {
+      throw new Error('Server returned malformed JSON.');
+    }
+  }
+
+  const preview = text.replace(/\s+/g, ' ').slice(0, 160);
+  throw new Error(
+    'Server returned a non-JSON response' +
+    (res.status ? ' (HTTP ' + res.status + ')' : '') +
+    (preview ? ': ' + preview : '.')
+  );
+};
+
 const fetch = (url: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const finalInit = init || {};
   const headers = finalInit.headers ? { ...finalInit.headers } as Record<string, string> : {};
@@ -1960,7 +1979,7 @@ class ApiClient {
       headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Story-ID': storyId },
       body: JSON.stringify({ definition }),
     });
-    const data = await res.json().catch(() => ({}));
+    const data = await readJsonSafely<any>(res);
     if (!res.ok) throw new Error(data?.errorReason || `Failed to validate combat effect: HTTP ${res.status}`);
     return data;
   }
@@ -1987,7 +2006,7 @@ class ApiClient {
         allowUnboundTest: options.allowUnboundTest,
       }),
     });
-    const data = await res.json().catch(() => ({}));
+    const data = await readJsonSafely<any>(res);
     if (!res.ok) throw new Error(data?.errorReason || `Failed to execute combat effect: HTTP ${res.status}`);
     return data;
   }
@@ -2009,7 +2028,7 @@ class ApiClient {
         seeds: options.seeds,
       }),
     });
-    const data = await res.json().catch(() => ({}));
+    const data = await readJsonSafely<any>(res);
     if (!res.ok) throw new Error(data?.errorReason || `Failed to simulate combat effect: HTTP ${res.status}`);
     return data;
   }
@@ -2030,7 +2049,7 @@ class ApiClient {
         seeds: options.seeds,
       }),
     });
-    const data = await res.json().catch(() => ({}));
+    const data = await readJsonSafely<any>(res);
     if (!res.ok) throw new Error(data?.errorReason || `Failed to run combat scenario matrix: HTTP ${res.status}`);
     return data;
   }
@@ -2045,7 +2064,7 @@ class ApiClient {
       headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Story-ID': storyId },
       body: JSON.stringify({ definition, events }),
     });
-    const data = await res.json().catch(() => ({}));
+    const data = await readJsonSafely<any>(res);
     if (!res.ok) throw new Error(data?.errorReason || `Failed to generate combat animation plan: HTTP ${res.status}`);
     return data;
   }
@@ -2061,7 +2080,7 @@ class ApiClient {
       headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Story-ID': storyId },
       body: JSON.stringify({ effectId, prompt, assetId }),
     });
-    const data = await res.json().catch(() => ({}));
+    const data = await readJsonSafely<any>(res);
     if (!res.ok) throw new Error(data?.errorReason || `Failed to ensure combat asset: HTTP ${res.status}`);
     return data;
   }
@@ -2076,7 +2095,7 @@ class ApiClient {
       headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Story-ID': storyId },
       body: JSON.stringify({ bossId, phases }),
     });
-    const data = await res.json().catch(() => ({}));
+    const data = await readJsonSafely<any>(res);
     if (!res.ok) throw new Error(data?.errorReason || `Failed to evaluate boss phase: HTTP ${res.status}`);
     return data;
   }

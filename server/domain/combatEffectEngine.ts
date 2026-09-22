@@ -11,6 +11,14 @@ export class CombatEffectEngine {
   public validateDefinition(definition: CombatEffectDefinition, rulesMode: string = 'FULL_DND'): { success: boolean; errorReason?: string; normalized?: CombatEffectDefinition } {
     if (!definition?.id?.trim() || !definition?.name?.trim()) return { success: false, errorReason: 'Combat effect requires id and name.' };
     if (!definition.resolutionMode) return { success: false, errorReason: 'Combat effect requires resolutionMode.' };
+    const validModes = new Set(['SINGLE_ATTACK', 'MULTI_INSTANCE', 'SAVE', 'AREA', 'CHAIN', 'SEQUENCE', 'OUTCOME', 'WORLD_EFFECT']);
+    const validScales = new Set(['PERSON', 'GROUP', 'ENCOUNTER', 'STRUCTURE', 'DISTRICT', 'CITY', 'REGION', 'CONTINENT', 'PLANET', 'COSMIC']);
+    const validCosts = new Set(['ACTION', 'BONUS_ACTION', 'REACTION', 'FREE']);
+    const validTargeting = new Set(['SELF', 'ALLY', 'ENEMY', 'ONE_TARGET', 'MULTI_TARGET', 'PER_INSTANCE', 'ALL_IN_AREA', 'CHAIN', 'RANDOM_LEGAL_TARGET']);
+    if (!validModes.has(definition.resolutionMode)) return { success: false, errorReason: `Unsupported resolutionMode '${definition.resolutionMode}'.` };
+    if (definition.scale !== undefined && !validScales.has(definition.scale)) return { success: false, errorReason: `Unsupported effect scale '${String(definition.scale)}'.` };
+    if (definition.actionCost !== undefined && !validCosts.has(definition.actionCost)) return { success: false, errorReason: `Unsupported actionCost '${String(definition.actionCost)}'.` };
+    if (definition.targetingMode !== undefined && !validTargeting.has(definition.targetingMode)) return { success: false, errorReason: `Unsupported targetingMode '${String(definition.targetingMode)}'.` };
     const scale = definition.scale || 'PERSON';
     const normalized: CombatEffectDefinition = {
       ...definition,
@@ -250,7 +258,7 @@ export class CombatEffectEngine {
         retargetPolicy: normalized.retargetPolicy,
         consumeAction: false,
       });
-      return { ...result, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name };
+      return rollback({ ...result, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name });
     }
 
     if (normalized.resolutionMode === 'SEQUENCE') {

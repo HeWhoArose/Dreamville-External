@@ -990,7 +990,7 @@ Rules:
           classId: undefined,
           subclassId: undefined,
           speciesId: undefined,
-          featIds: feats.map((feat) => feat.id),
+          featIds: feats.map((feat: any) => feat.id),
           moduleIds: [],
         };
 

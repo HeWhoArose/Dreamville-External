@@ -144,6 +144,8 @@ export interface EntityCardInput extends Partial<Omit<EntityCard, 'id' | 'storyI
 	storyId?: string;
 	worldId?: string;
 	name: string;
+	createdAt?: string;
+	updatedAt?: string;
 }
 
 export interface EntityQuery {

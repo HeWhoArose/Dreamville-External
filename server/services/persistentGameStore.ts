@@ -5,12 +5,14 @@ export interface PersistentGameStoreData {
 	version: 1;
 	worldTemplates: Record<string, any>;
 	storyRuns: Record<string, any>;
+	confirmedCharacters?: Record<string, any>;
 }
 
 const EMPTY_STORE: PersistentGameStoreData = {
 	version: 1,
 	worldTemplates: {},
 	storyRuns: {},
+	confirmedCharacters: {},
 };
 
 function isRunningUnderTests(): boolean {

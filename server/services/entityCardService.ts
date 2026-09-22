@@ -30,7 +30,7 @@ function fallback(request: { storyId: string; concept: string; name?: string; ki
 		classification: { role: merchant ? 'Merchant' : creature ? 'Creature' : 'NPC', profession: merchant ? 'Merchant' : undefined, threat: creature ? 'Unrated' : 'Unknown', tags: [kind.toLowerCase()] },
 		coreStats: { level: 1, hpCurrent: creature ? 1 : 10, hpMax: creature ? 1 : 10, armorClass: 10, speed: creature ? 5 : 30, abilityScores: creature ? { strength: 1, dexterity: 4, constitution: 1, intelligence: 0, wisdom: 1, charisma: 0 } : { strength: 10, dexterity: 10, constitution: 10, intelligence: 10, wisdom: 10, charisma: 10 } },
 		personality: { traits: creature ? [] : ['Undetermined'], values: [], motivations: creature ? ['Survival'] : [], fears: [], desires: [] },
-		behavior: { defaultBehavior: creature ? 'Survival-driven' : 'Context-dependent', threatResponse: creature ? 'Flee unless cornered.' : 'Undetermined', priorities: creature ? ['Survive','Seek food'] : [] },
+		behavior: { defaultBehavior: creature ? 'Survival-driven' : 'Context-dependent', threatResponse: creature ? 'Flee unless cornered.' : 'Undetermined', priorities: creature ? ['Survive','Seek food'] : [], routines: [] },
 		social: { factionIds: [], reputation: {}, relationships: {} },
 		economy: creature ? undefined : { wealth: 0, currency: {}, inventoryItemIds: [], inventorySummary: [], assets: [] },
 		background: creature ? { importantEvents: [] } : { history: request.concept, importantEvents: [] },

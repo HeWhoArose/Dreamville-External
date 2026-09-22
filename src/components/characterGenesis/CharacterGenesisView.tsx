@@ -73,6 +73,7 @@ import {
 } from '../../data/iconSystem';
 import { IconStudioModal } from './IconStudioModal';
 import { ConditionProfileEditor } from './ConditionProfileEditor';
+import { CharacterProgressionStep } from './CharacterProgressionStep';
 import { apiClient } from '../../services/apiClient';
 import { getImageAssetSpec, appendImageOutputSpecification } from '../../data/imageAssetSpecs';
 import { normalizeImageFile, normalizeImageUrl } from '../../utils/imageAssetNormalizer';

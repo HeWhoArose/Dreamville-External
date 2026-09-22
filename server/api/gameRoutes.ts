@@ -3489,6 +3489,14 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, errorReason: `Capability '${capabilityId}' not found.` });
     }
 
+    if (capDef.effectDefinition) {
+      return res.status(409).json({
+        success: false,
+        code: 'STRUCTURED_EFFECT_REQUIRED',
+        errorReason: 'This capability is backed by a canonical CombatEffectDefinition and must use POST /api/game/combat/effect.',
+      });
+    }
+
     // CH3.2 Server-authoritative capability grant check
     const inv = worldRepository.getInventoryEngine(storyId);
     const effectiveCaps = capEngine.getEffectiveActorCapabilities(actorId, inv);

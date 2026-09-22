@@ -1137,6 +1137,7 @@ export class TacticalCombatEngine {
     const stopOnCollision = collisionProfile?.stopOnCollision !== false;
     let actualDistanceCells = 0;
     let collisionsResolved = 0;
+    const resolvedCollisions: CombatMovementCollisionResult[] = [];
     let lastCollision: CombatMovementCollisionResult | undefined;
 
     const resolveFormula = (formula: string | undefined): number => {
@@ -1300,6 +1301,7 @@ export class TacticalCombatEngine {
         targetDied: moverDied,
         objectDestroyed,
       };
+      resolvedCollisions.push(lastCollision);
 
       if (
         stopOnCollision ||
@@ -1341,7 +1343,8 @@ export class TacticalCombatEngine {
         actualDistanceCells,
         from,
         to,
-        collision: lastCollision,
+        collision: resolvedCollisions[0],
+        collisions: resolvedCollisions,
         collisionsResolved,
       },
     });
@@ -1352,7 +1355,8 @@ export class TacticalCombatEngine {
       to,
       requestedDistanceCells,
       actualDistanceCells,
-      collision: lastCollision,
+      collision: resolvedCollisions[0],
+      collisions: resolvedCollisions,
       collisionsResolved,
     };
   }

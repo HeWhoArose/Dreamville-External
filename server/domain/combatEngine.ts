@@ -767,6 +767,7 @@ export class TacticalCombatEngine {
 
     const currentActor = this.getCurrentActor();
     if (currentActor) {
+      this.processConditionCombatEvent(currentActor.id, 'ON_ROUND_START', 'round_start');
       this.actionEconomy.beginTurn(currentActor.id, currentActor.speedCells, this.currentRound);
     }
   }
@@ -2951,6 +2952,7 @@ export class TacticalCombatEngine {
 
     const endingActor = this.getCurrentActor();
     if (endingActor) {
+      this.processConditionCombatEvent(endingActor.id, 'ON_ROUND_END', 'round_end');
       this.actionEconomy.endTurn(endingActor.id);
     }
 

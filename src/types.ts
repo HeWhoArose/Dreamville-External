@@ -1867,7 +1867,11 @@ export interface CombatEffectDefinition {
 	instanceCount?: number;
 	maxTargets?: number;
 	attackFormula?: string;
+	saveFormula?: string;
 	damageFormula?: string;
+	areaShape?: 'POINT' | 'LINE' | 'CONE' | 'CIRCLE' | 'SPHERE' | 'RING' | 'WALL';
+	areaRadiusCells?: number;
+	rangeCells?: number;
 	damageType?: string;
 	attackBonusOverride?: number;
 	advantage?: boolean;

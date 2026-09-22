@@ -1038,6 +1038,9 @@ export class TacticalCombatEngine {
       return { success: false, errorReason: 'Movement was interrupted before the actor could leave reach.' };
     }
 
+    if (this.conditionEngine?.isActionBlocked(actorId, 'MOVEMENT')) {
+      return { success: false, errorReason: 'Actor is blocked from movement by an active condition.' };
+    }
     const movementResult = this.actionEconomy.consumeMovement(actorId, movementCost);
     if (!movementResult.success) {
       return movementResult;
@@ -1328,6 +1331,8 @@ export class TacticalCombatEngine {
     if (this.turnQueue.length > 0 && this.getCurrentActor()?.id !== actorId) {
       return { success: false, errorReason: "It is not this actor's turn." };
     }
+    const legality = this.canActorPerformCombatAction(actorId, 'ACTION');
+    if (!legality.success) return legality;
     return this.actionEconomy.setReadyAction(actorId, actionDescription, triggerDescription, {
       ...options,
       actionType: 'ATTACK',
@@ -1345,7 +1350,7 @@ export class TacticalCombatEngine {
     const grappler = actor.grappledBy ? this.participants.get(actor.grappledBy) : undefined;
     if (!grappler) return { success: false, errorReason: 'The source of the Grapple is no longer present.' };
 
-    const action = this.actionEconomy.consume(actorId, 'ACTION');
+    const action = this.consumeCombatAction(actorId, 'ACTION');
     if (!action.success) return { success: false, errorReason: action.errorReason };
 
     const escapeDc = 8 +
@@ -1418,7 +1423,7 @@ export class TacticalCombatEngine {
     if (Math.hypot(target.x - attacker.x, target.y - attacker.y) > reach) {
       return { success: false, errorReason: 'Target is outside melee reach.' };
     }
-    const resource = this.actionEconomy.consume(attackerId, 'ACTION');
+    const resource = this.consumeCombatAction(attackerId, 'ACTION');
     if (!resource.success) return { success: false, errorReason: resource.errorReason };
     const strMod = attacker.saveModifiers?.STR ?? attacker.savingThrowModifiers?.STR ?? 0;
     const proficiency = Math.max(0, Math.floor((attacker.attackBonus - strMod)));
@@ -1533,6 +1538,10 @@ export class TacticalCombatEngine {
       return { triggered: false, hit: false, damage: 0, targetDied: target?.isDead ?? false };
     }
 
+    const reactionLegality = this.canActorPerformCombatAction(attackerId, 'REACTION');
+    if (!reactionLegality.success) {
+      return { triggered: false, hit: false, damage: 0, targetDied: target.isDead };
+    }
     const reactionUse = this.actionEconomy.consumeReaction(attackerId);
     if (!reactionUse.success) {
       return { triggered: false, hit: false, damage: 0, targetDied: target.isDead };
@@ -2151,7 +2160,30 @@ export class TacticalCombatEngine {
     return { success: true, applied: result.applied, immune: result.immune, errorReason: result.reason };
   }
 
+  public canActorPerformCombatAction(
+    actorId: string,
+    actionCost: import('../../src/types').CombatActionCost = 'ACTION'
+  ): { success: boolean; errorReason?: string } {
+    const actionBlock =
+      actionCost === 'BONUS_ACTION'
+        ? 'BONUS_ACTION'
+        : actionCost === 'REACTION'
+          ? 'REACTION'
+          : actionCost === 'FREE'
+            ? undefined
+            : 'ACTION';
+    if (actionBlock && this.conditionEngine?.isActionBlocked(actorId, actionBlock)) {
+      return {
+        success: false,
+        errorReason: `Actor is blocked from using ${actionBlock.replace('_', ' ').toLowerCase()} by an active condition.`,
+      };
+    }
+    return { success: true };
+  }
+
   public consumeCombatAction(actorId: string, actionCost: import('../../src/types').CombatActionCost = 'ACTION'): { success: boolean; errorReason?: string } {
+    const legality = this.canActorPerformCombatAction(actorId, actionCost);
+    if (!legality.success) return legality;
     if (actionCost === 'FREE') return { success: true };
     const resource = actionCost === 'BONUS_ACTION'
       ? 'BONUS_ACTION'
@@ -2193,7 +2225,7 @@ export class TacticalCombatEngine {
     }
     const actionResult = options?.consumeAction === false
       ? { success: true as const }
-      : this.actionEconomy.consume(attackerId, 'ACTION');
+      : this.consumeCombatAction(attackerId, 'ACTION');
     if (!actionResult.success) {
       return { success: false, errorReason: actionResult.errorReason, hits: false, damage: 0, targetDied: target.isDead, isCritical: false };
     }
@@ -2315,7 +2347,7 @@ export class TacticalCombatEngine {
     if (!targets.length) return { success: false, errorReason: 'At least one valid target is required.' };
     const currentActor = this.getCurrentActor();
     if (this.turnQueue.length > 0 && (!currentActor || currentActor.id !== params.actorId)) return { success: false, errorReason: "It is not this actor's turn." };
-    const actionResult = params.consumeAction === false ? { success: true as const } : this.actionEconomy.consume(params.actorId, 'ACTION');
+    const actionResult = params.consumeAction === false ? { success: true as const } : this.consumeCombatAction(params.actorId, 'ACTION');
     if (!actionResult.success) return { success: false, errorReason: actionResult.errorReason };
     const actionId = params.actionId || `combat_action_${this.currentRound}_${params.actorId}_area_${this.combatActionSequence + 1}`;
     const instances: CombatAttackInstanceResult[] = [];
@@ -2371,7 +2403,7 @@ export class TacticalCombatEngine {
     if (!targets.length) return { success: false, errorReason: 'At least one valid target is required.' };
     const currentActor = this.getCurrentActor();
     if (this.turnQueue.length > 0 && (!currentActor || currentActor.id !== params.actorId)) return { success: false, errorReason: "It is not this actor's turn." };
-    const actionResult = params.consumeAction === false ? { success: true as const } : this.actionEconomy.consume(params.actorId, 'ACTION');
+    const actionResult = params.consumeAction === false ? { success: true as const } : this.consumeCombatAction(params.actorId, 'ACTION');
     if (!actionResult.success) return { success: false, errorReason: actionResult.errorReason };
     const rollFormula = resolveCapabilityCheckFormula((this.rulesProfile?.mode || 'FULL_DND') as any, params.saveFormula);
     const actionId = params.actionId || `combat_action_${this.currentRound}_${params.actorId}_save_${this.combatActionSequence + 1}`;

@@ -1021,6 +1021,46 @@ export class CapabilityEngine {
     return this.capabilities.get(id);
   }
 
+  public getAuthoritativeCombatEffect(
+    actorId: string,
+    capabilityId: string,
+    inventoryEngine?: InventoryItemEngine
+  ): import('../../src/types').CombatEffectDefinition | undefined {
+    const capability = this.getEffectiveActorCapabilities(actorId, inventoryEngine).find(
+      (entry) => entry.id === capabilityId
+    );
+    if (!capability) return undefined;
+
+    if (capability.effectDefinition) {
+      return JSON.parse(JSON.stringify(capability.effectDefinition));
+    }
+
+    return {
+      id: capability.id + '_effect',
+      name: capability.name,
+      resolutionMode: 'SINGLE_ATTACK',
+      scale: 'PERSON',
+      actionCost:
+        capability.actionType === 'bonus_action'
+          ? 'BONUS_ACTION'
+          : capability.actionType === 'reaction'
+            ? 'REACTION'
+            : capability.actionType === 'free'
+              ? 'FREE'
+              : 'ACTION',
+      targetingMode:
+        capability.targetType === 'area_of_effect'
+          ? 'ALL_IN_AREA'
+          : capability.targetType === 'self'
+            ? 'SELF'
+            : 'ONE_TARGET',
+      attackFormula: capability.checkFormula || '1d20',
+      damageFormula: capability.damageFormula,
+      provenance: capability.provenance,
+      aiGenerated: capability.provenance === 'AI_GENERATED',
+    };
+  }
+
   public getAllCapabilities(): CapabilityDefinition[] {
     return Array.from(this.capabilities.values());
   }

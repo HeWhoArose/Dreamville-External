@@ -465,6 +465,7 @@ export class TacticalCombatEngine {
   private readonly reactionEngine = new CombatReactionEngine();
   private spellRuntime: SpellRuntime;
   private progressionModifierResolver?: (actorId: string) => ProgressionResolution | undefined;
+  private bossPhaseStates = new Map<string, { phaseId: string; modifiers: Record<string, number>; abilities: string[]; targetPriority?: string; environmentEffects: string[] }>();
   private combatEffectEvents: CombatEventRecord[] = [];
   private combatActionSequence = 0;
   private initialSeed: number;
@@ -503,19 +504,32 @@ export class TacticalCombatEngine {
     return typeof modifier?.value === 'number' && Number.isFinite(modifier.value) ? modifier.value : 0;
   }
 
+  private bossPhaseModifier(actorId: string, target: string): number {
+    const state = this.bossPhaseStates.get(actorId);
+    const value = state?.modifiers?.[target];
+    return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  }
+
   private projectedParticipant(participant: BattlefieldParticipant): BattlefieldParticipant {
     const projected = { ...participant };
-    projected.attackBonus += this.progressionModifier(participant.id, 'combat.attackBonus');
-    projected.armorClass += this.progressionModifier(participant.id, 'coreStats.armorClass');
+    projected.attackBonus += this.progressionModifier(participant.id, 'combat.attackBonus') + this.bossPhaseModifier(participant.id, 'combat.attackBonus');
+    projected.armorClass += this.progressionModifier(participant.id, 'coreStats.armorClass') + this.bossPhaseModifier(participant.id, 'coreStats.armorClass');
     projected.speedCells = Math.max(
       0,
-      projected.speedCells + this.progressionModifier(participant.id, 'coreStats.speed') / 5
+      projected.speedCells +
+        (this.progressionModifier(participant.id, 'coreStats.speed') + this.bossPhaseModifier(participant.id, 'coreStats.speed')) / 5
     );
-    projected.hpMax = Math.max(1, projected.hpMax + this.progressionModifier(participant.id, 'coreStats.hpMax'));
+    projected.hpMax = Math.max(1, projected.hpMax + this.progressionModifier(participant.id, 'coreStats.hpMax') + this.bossPhaseModifier(participant.id, 'coreStats.hpMax'));
     projected.spellAttackBonus = (projected.spellAttackBonus ?? projected.attackBonus)
-      + this.progressionModifier(participant.id, 'spell.attackBonus');
+      + this.progressionModifier(participant.id, 'spell.attackBonus')
+      + this.bossPhaseModifier(participant.id, 'spell.attackBonus');
     projected.spellSaveDc = (projected.spellSaveDc ?? 8)
-      + this.progressionModifier(participant.id, 'spell.saveDC');
+      + this.progressionModifier(participant.id, 'spell.saveDC')
+      + this.bossPhaseModifier(participant.id, 'spell.saveDC');
+    projected.bossPhaseId = this.bossPhaseStates.get(participant.id)?.phaseId;
+    projected.bossPhaseAbilities = [...(this.bossPhaseStates.get(participant.id)?.abilities || [])];
+    projected.bossTargetPriority = this.bossPhaseStates.get(participant.id)?.targetPriority;
+    projected.bossEnvironmentEffects = [...(this.bossPhaseStates.get(participant.id)?.environmentEffects || [])];
     return projected;
   }
 
@@ -571,6 +585,7 @@ export class TacticalCombatEngine {
     this.combatEffectEvents = [];
     this.combatActionSequence = 0;
     this.pendingActivations.clear();
+    this.bossPhaseStates.clear();
     this.actionEconomy.clear();
     this.diceEngine.setSeed(this.initialSeed);
     this.diceEngine.setRollCounter(0);
@@ -2862,6 +2877,52 @@ export class TacticalCombatEngine {
     return Array.from(this.participants.values());
   }
 
+  public setBossPhaseState(
+    bossId: string,
+    state: {
+      phaseId: string;
+      modifiers?: Record<string, number>;
+      abilities?: string[];
+      targetPriority?: string;
+      environmentEffects?: string[];
+    }
+  ): { success: boolean; errorReason?: string } {
+    const boss = this.participants.get(bossId);
+    if (!boss) return { success: false, errorReason: 'Boss participant not found.' };
+    const normalized = {
+      phaseId: state.phaseId,
+      modifiers: Object.fromEntries(Object.entries(state.modifiers || {}).filter(([, value]) => typeof value === 'number' && Number.isFinite(value))),
+      abilities: Array.isArray(state.abilities) ? state.abilities.map(String) : [],
+      targetPriority: state.targetPriority,
+      environmentEffects: Array.isArray(state.environmentEffects) ? state.environmentEffects.map(String) : [],
+    };
+    this.bossPhaseStates.set(bossId, normalized);
+    boss.bossPhaseId = normalized.phaseId;
+    boss.bossPhaseModifiers = { ...normalized.modifiers };
+    boss.bossPhaseAbilities = [...normalized.abilities];
+    boss.bossTargetPriority = normalized.targetPriority;
+    boss.bossEnvironmentEffects = [...normalized.environmentEffects];
+    this.eventLog.push({
+      turnNumber: this.currentRound,
+      actorId: bossId,
+      actionType: 'ACTION',
+      headline: `${boss.name} entered boss phase ${normalized.phaseId}.`,
+      metadata: { bossPhase: normalized },
+    });
+    return { success: true };
+  }
+
+  public getBossPhaseState(bossId: string): {
+    phaseId: string;
+    modifiers: Record<string, number>;
+    abilities: string[];
+    targetPriority?: string;
+    environmentEffects: string[];
+  } | undefined {
+    const state = this.bossPhaseStates.get(bossId);
+    return state ? JSON.parse(JSON.stringify(state)) : undefined;
+  }
+
   public getParticipant(id: string): BattlefieldParticipant | undefined {
     const p = this.participants.get(id);
     return p ? this.projectedParticipant(p) : undefined;
@@ -2914,6 +2975,7 @@ export class TacticalCombatEngine {
       spellRuntimeState: this.spellRuntime.exportState(),
       combatEffectEvents: this.getCombatEffectEvents(),
       combatActionSequence: this.combatActionSequence,
+      bossPhaseStates: Array.from(this.bossPhaseStates.entries()).map(([bossId, state]) => ({ bossId, ...state })),
     };
   }
 
@@ -2977,5 +3039,24 @@ export class TacticalCombatEngine {
     }
     this.combatEffectEvents = [...(data.combatEffectEvents || [])];
     this.combatActionSequence = typeof data.combatActionSequence === 'number' ? Math.max(0, Math.trunc(data.combatActionSequence)) : this.combatEffectEvents.length;
+    this.bossPhaseStates.clear();
+    for (const state of (data as any).bossPhaseStates || []) {
+      if (!state?.bossId || !state?.phaseId) continue;
+      this.bossPhaseStates.set(state.bossId, {
+        phaseId: state.phaseId,
+        modifiers: { ...(state.modifiers || {}) },
+        abilities: Array.isArray(state.abilities) ? [...state.abilities] : [],
+        targetPriority: state.targetPriority,
+        environmentEffects: Array.isArray(state.environmentEffects) ? [...state.environmentEffects] : [],
+      });
+      const participant = this.participants.get(state.bossId);
+      if (participant) {
+        participant.bossPhaseId = state.phaseId;
+        participant.bossPhaseModifiers = { ...(state.modifiers || {}) };
+        participant.bossPhaseAbilities = Array.isArray(state.abilities) ? [...state.abilities] : [];
+        participant.bossTargetPriority = state.targetPriority;
+        participant.bossEnvironmentEffects = Array.isArray(state.environmentEffects) ? [...state.environmentEffects] : [];
+      }
+    }
   }
 }

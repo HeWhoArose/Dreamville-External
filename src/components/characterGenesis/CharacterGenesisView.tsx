@@ -204,6 +204,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
 
   // Draft persistence & history
   const [savedDrafts, setSavedDrafts] = useState<CharacterGenesisDraft[]>([]);
+  const [progressionModules, setProgressionModules] = useState<any[]>([]);
   const [confirmedCharacters, setConfirmedCharacters] = useState<ConfirmedCharacter[]>([]);
   const [showDraftsModal, setShowDraftsModal] = useState<boolean>(false);
   const [saveDraftStatus, setSaveDraftStatus] = useState<string | null>(null);
@@ -272,6 +273,13 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
       setSelectedNarrativeRole(initialWorld.storyMode || initialWorld.narrativeProfile?.mode || 'PROTAGONIST');
     }
   }, [initialWorld]);
+
+  useEffect(() => {
+    if (!selectedWorld) return;
+    apiClient.getCharacterProgressionModules(selectedWorld.worldId)
+      .then((res) => setProgressionModules(Array.isArray(res?.modules) ? res.modules : []))
+      .catch(() => setProgressionModules([]));
+  }, [selectedWorld]);
 
   // Load drafts and confirmed characters for selected world
   useEffect(() => {
@@ -1374,12 +1382,13 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
           {[
             { step: 1, label: '1. Concept & Extraction', icon: Sparkles },
             { step: 2, label: '2. Identity & Bio', icon: User },
-            { step: 3, label: '3. Capabilities & Skills', icon: Zap },
-            { step: 4, label: '4. Stats & Attributes', icon: BarChart2 },
-            { step: 5, label: '5. Starting Equipment', icon: Shield },
-            { step: 6, label: '6. Location & Situation', icon: MapPin },
-            { step: 7, label: '7. Portrait Studio', icon: ImageIcon },
-            { step: 8, label: '8. Review & Confirm', icon: CheckCircle2 },
+            { step: 3, label: '3. Progression', icon: Sparkles },
+            { step: 4, label: '4. Capabilities & Skills', icon: Zap },
+            { step: 5, label: '5. Stats & Attributes', icon: BarChart2 },
+            { step: 6, label: '6. Starting Equipment', icon: Shield },
+            { step: 7, label: '7. Location & Situation', icon: MapPin },
+            { step: 8, label: '8. Portrait Studio', icon: ImageIcon },
+            { step: 9, label: '9. Review & Confirm', icon: CheckCircle2 },
           ].map((item) => {
             const Icon = item.icon;
             const isCompleted = activeStep > item.step || (item.step === 1 && draft !== null);
@@ -2104,7 +2113,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 <span>Back to Concept</span>
               </button>
               <button
-                onClick={() => setActiveStep(3)}
+                onClick={() => setActiveStep(4)}
                 className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition-colors"
               >
                 <span>Proceed to Capabilities</span>
@@ -2114,8 +2123,30 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
           </div>
         )}
 
-        {/* STEP 3: CAPABILITIES & SKILLS / TECHNIQUES */}
-        {draft && activeStep === 3 && (
+        {/* STEP 3: PROGRESSION */}
+        {draft && activeStep === 4 && (
+          <div className="space-y-6">
+            <CharacterProgressionStep
+              draft={draft}
+              modules={progressionModules}
+              onChange={(progression) => {
+                setDraft({ ...draft, progression });
+                markFieldEdited('progression');
+              }}
+            />
+            <div className="flex items-center justify-between pt-2">
+              <button onClick={() => setActiveStep(2)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200">
+                <ArrowLeft className="w-3.5 h-3.5" /> Back to Identity
+              </button>
+              <button onClick={() => setActiveStep(5)} className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white">
+                Continue to Capabilities <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 4: CAPABILITIES & SKILLS / TECHNIQUES */}
+        {draft && activeStep === 4 && (
           <div className="space-y-6">
             {/* Custom Capability Proposal Bar */}
             <div className="p-5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-3">
@@ -2295,7 +2326,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 <span>Back to Dossier</span>
               </button>
               <button
-                onClick={() => setActiveStep(4)}
+                onClick={() => setActiveStep(5)}
                 className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition-colors"
               >
                 <span>Proceed to Stats & Attributes</span>
@@ -2306,7 +2337,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
         )}
 
         {/* STEP 4: DEDICATED STATS & ATTRIBUTES TAB */}
-        {draft && activeStep === 4 && (
+        {draft && activeStep === 5 && (
           <div className="space-y-6">
             {/* Core D&D Stats Card */}
             <div className="p-6 rounded-xl bg-neutral-950 border border-neutral-800 space-y-6">
@@ -2844,14 +2875,14 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
             {/* Navigation */}
             <div className="flex items-center justify-between pt-4">
               <button
-                onClick={() => setActiveStep(3)}
+                onClick={() => setActiveStep(4)}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 transition-colors"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Back to Capabilities</span>
               </button>
               <button
-                onClick={() => setActiveStep(5)}
+                onClick={() => setActiveStep(6)}
                 className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition-colors"
               >
                 <span>Proceed to Equipment</span>
@@ -2862,7 +2893,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
         )}
 
         {/* STEP 5: STARTING EQUIPMENT & PAPER DOLL */}
-        {draft && activeStep === 5 && (
+        {draft && activeStep === 6 && (
           <div className="space-y-6">
             <div className="p-6 rounded-xl bg-neutral-950 border border-neutral-800 space-y-6">
               <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
@@ -3265,14 +3296,14 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
             {/* Navigation */}
             <div className="flex items-center justify-between">
               <button
-                onClick={() => setActiveStep(4)}
+                onClick={() => setActiveStep(5)}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 transition-colors"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Back to Stats & Attributes</span>
               </button>
               <button
-                onClick={() => setActiveStep(6)}
+                onClick={() => setActiveStep(7)}
                 className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition-colors"
               >
                 <span>Proceed to Location & Situation</span>
@@ -3283,7 +3314,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
         )}
 
         {/* STEP 6: STARTING LOCATION & SITUATION */}
-        {draft && activeStep === 6 && (
+        {draft && activeStep === 7 && (
           <div className="space-y-6">
             <div className="p-6 rounded-xl bg-neutral-950 border border-neutral-800 space-y-6">
               <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
@@ -3428,14 +3459,14 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
             {/* Navigation */}
             <div className="flex items-center justify-between">
               <button
-                onClick={() => setActiveStep(5)}
+                onClick={() => setActiveStep(6)}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 transition-colors"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Back to Equipment</span>
               </button>
               <button
-                onClick={() => setActiveStep(7)}
+                onClick={() => setActiveStep(8)}
                 className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition-colors"
               >
                 <span>Proceed to Portrait</span>
@@ -3446,7 +3477,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
         )}
 
         {/* STEP 7: PORTRAIT STUDIO */}
-        {draft && activeStep === 7 && (
+        {draft && activeStep === 8 && (
           <div className="space-y-6">
             <div className="p-6 rounded-xl bg-neutral-950 border border-neutral-800 space-y-6">
               <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
@@ -3698,14 +3729,14 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
             {/* Navigation */}
             <div className="flex items-center justify-between">
               <button
-                onClick={() => setActiveStep(6)}
+                onClick={() => setActiveStep(7)}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 transition-colors"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Back to Location</span>
               </button>
               <button
-                onClick={() => setActiveStep(8)}
+                onClick={() => setActiveStep(9)}
                 className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition-colors"
               >
                 <span>Proceed to Final Review</span>
@@ -3716,7 +3747,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
         )}
 
         {/* STEP 8: REVIEW & EXPLICIT CONFIRMATION */}
-        {draft && activeStep === 8 && (
+        {draft && activeStep === 9 && (
           <div className="space-y-6">
             <div className="p-6 rounded-xl bg-neutral-950 border border-neutral-800 space-y-6">
               <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
@@ -3888,7 +3919,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
               {/* Action Buttons */}
               <div className="flex items-center justify-between pt-2">
                 <button
-                  onClick={() => setActiveStep(7)}
+                  onClick={() => setActiveStep(8)}
                   className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 transition-colors"
                 >
                   <ArrowLeft className="w-3.5 h-3.5" />

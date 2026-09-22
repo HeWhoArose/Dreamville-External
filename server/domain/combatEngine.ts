@@ -2787,7 +2787,7 @@ export class TacticalCombatEngine {
         sourcePosition: { x: attacker.x, y: attacker.y },
         movement: options.forcedMovement,
       });
-      if (forcedMovement.collision?.targetDied) {
+      if ((forcedMovement.collisions || []).some((collision) => collision.targetDied)) {
         result.targetDied = true;
       }
     }
@@ -2892,10 +2892,11 @@ export class TacticalCombatEngine {
           movement: options.definition.forcedMovement,
           actionId,
         });
-        if (result.forcedMovement.collision?.targetDied) {
+        if ((result.forcedMovement.collisions || []).some((collision) => collision.targetDied)) {
           result.targetDied = true;
         }
-        result.secondaryDamage = result.forcedMovement.collision?.damageToMover || 0;
+        result.secondaryDamage = (result.forcedMovement.collisions || [])
+          .reduce((sum, collision) => sum + collision.damageToMover, 0);
       }
 
       instances.push(result);

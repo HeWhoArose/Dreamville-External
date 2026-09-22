@@ -1874,6 +1874,7 @@ export interface CombatEffectDefinition {
 	areaShape?: 'POINT' | 'LINE' | 'CONE' | 'CIRCLE' | 'SPHERE' | 'RING' | 'WALL';
 	areaRadiusCells?: number;
 	rangeCells?: number;
+	areaDamageRollMode?: 'SHARED' | 'PER_TARGET';
 	damageType?: string;
 	attackBonusOverride?: number;
 	advantage?: boolean;

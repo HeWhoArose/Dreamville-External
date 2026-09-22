@@ -117,7 +117,6 @@ export class CombatTargetingEngine {
 
     return { success: true, targetIds, origin };
   }
-  }
 }
 
 export const combatTargetingEngine = new CombatTargetingEngine();

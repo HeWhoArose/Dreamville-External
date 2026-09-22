@@ -2048,6 +2048,7 @@ export interface CombatAnimationPlan {
 	missBehavior?: string;
 	style?: string;
 	assetRefs?: string[];
+	assetUrls?: string[];
 	generatedBy?: 'SYSTEM' | 'AI';
 	provenance?: string;
 }

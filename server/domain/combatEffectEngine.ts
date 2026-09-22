@@ -72,38 +72,38 @@ export class CombatEffectEngine {
       if (!['PUSH', 'PULL'].includes(normalized.forcedMovement.type)) {
         return { success: false, errorReason: `Unsupported forced movement type '${String(normalized.forcedMovement.type)}'.` };
       }
-      normalized.forcedMovement = {
-        ...normalized.forcedMovement,
-        distanceCells: Math.max(0, Math.min(50, Math.trunc(Number(normalized.forcedMovement.distanceCells) || 0))),
-        collision: normalized.forcedMovement.collision
-          ? {
-              ...normalized.forcedMovement.collision,
-              damageFormula: normalized.forcedMovement.collision.damageFormula
-                ? normalizeDiceFormula(normalized.forcedMovement.collision.damageFormula)
-                : undefined,
-              objectDamageFormula: normalized.forcedMovement.collision.objectDamageFormula
-                ? normalizeDiceFormula(normalized.forcedMovement.collision.objectDamageFormula)
-                : undefined,
-              creatureDamageFormula: normalized.forcedMovement.collision.creatureDamageFormula
-                ? normalizeDiceFormula(normalized.forcedMovement.collision.creatureDamageFormula)
-                : undefined,
-              damageType: normalized.forcedMovement.collision.damageType?.trim() || undefined,
-              stopOnCollision: normalized.forcedMovement.collision.stopOnCollision !== false,
-              maxCollisions: Math.max(1, Math.min(3, Math.trunc(Number(normalized.forcedMovement.collision.maxCollisions ?? 1) || 1))),
-            }
-          : undefined,
-      };
-
-      const collision = normalized.forcedMovement.collision;
+      const authoredCollision = normalized.forcedMovement.collision;
       for (const [label, formula] of [
-        ['collision damage', collision?.damageFormula],
-        ['collision object damage', collision?.objectDamageFormula],
-        ['collision creature damage', collision?.creatureDamageFormula],
+        ['collision damage', authoredCollision?.damageFormula],
+        ['collision object damage', authoredCollision?.objectDamageFormula],
+        ['collision creature damage', authoredCollision?.creatureDamageFormula],
       ] as const) {
         if (formula !== undefined && !isDiceFormula(formula)) {
           return { success: false, errorReason: `Invalid or unsafe ${label} formula '${formula}'.` };
         }
       }
+
+      normalized.forcedMovement = {
+        ...normalized.forcedMovement,
+        distanceCells: Math.max(0, Math.min(50, Math.trunc(Number(normalized.forcedMovement.distanceCells) || 0))),
+        collision: authoredCollision
+          ? {
+              ...authoredCollision,
+              damageFormula: authoredCollision.damageFormula
+                ? normalizeDiceFormula(authoredCollision.damageFormula)
+                : undefined,
+              objectDamageFormula: authoredCollision.objectDamageFormula
+                ? normalizeDiceFormula(authoredCollision.objectDamageFormula)
+                : undefined,
+              creatureDamageFormula: authoredCollision.creatureDamageFormula
+                ? normalizeDiceFormula(authoredCollision.creatureDamageFormula)
+                : undefined,
+              damageType: authoredCollision.damageType?.trim() || undefined,
+              stopOnCollision: authoredCollision.stopOnCollision !== false,
+              maxCollisions: Math.max(1, Math.min(3, Math.trunc(Number(authoredCollision.maxCollisions ?? 1) || 1))),
+            }
+          : undefined,
+      };
     }
 
     if ((normalized.resolutionMode === 'OUTCOME' || normalized.resolutionMode === 'WORLD_EFFECT') && !normalized.outcome) {

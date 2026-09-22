@@ -2292,7 +2292,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
               error={progressionError}
             />
             <div className="flex items-center justify-between pt-2">
-              <button onClick={() => setActiveStep(3)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200">
+              <button onClick={() => setActiveStep(2)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200">
                 <ArrowLeft className="w-3.5 h-3.5" /> Back to Identity
               </button>
               <button onClick={() => setActiveStep(4)} className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white">

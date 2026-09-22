@@ -22,6 +22,7 @@ import { RestRecoveryEngine } from '../domain/restRecoveryEngine';
 import { StoryCheckEngine } from '../domain/storyCheckEngine';
 import { CampaignArchiveService, PartitionedArchive } from '../domain/campaignArchive';
 import { dndSpellRulesEvaluator } from '../domain/dndSpellRulesModel';
+import { bossPhaseEngine } from '../domain/bossPhaseEngine';
 import { EntityRegistry, EntityCard } from '../domain/entityCard';
 import type { RulesProfile } from '../../src/types';
 import { rulesProfileEngine } from '../domain/rulesProfileEngine';
@@ -1588,6 +1589,19 @@ export class InMemoryWorldRepository implements WorldRepository {
       const progression = this.getCharacterProgressionEngine(storyId);
       if (!progression.getState(actorId)) return undefined;
       return progression.resolveModifiers(actorId, this.getRulesProfile(storyId));
+    });
+    engine.setBossPhaseEvaluationResolver((bossId) => {
+      const phases = bossPhaseEngine.getAuthoredPhases(this, storyId, bossId);
+      if (!phases.length) return;
+      const result = bossPhaseEngine.evaluateAndPersist({
+        repository: this,
+        storyId,
+        bossId,
+        phases,
+      });
+      if (!result.success) {
+        console.warn('[WorldRepository] Boss phase evaluation skipped:', result.errorReason);
+      }
     });
     return engine;
   }

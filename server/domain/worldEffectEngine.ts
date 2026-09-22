@@ -154,7 +154,6 @@ export class WorldEffectEngine {
       activeEffect: effectRecord,
     };
   }
-  }
 }
 
 export const worldEffectEngine = new WorldEffectEngine();

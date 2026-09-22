@@ -1473,8 +1473,16 @@ export class TacticalCombatEngine {
     return {
       blocked: false,
       roll: this.ruleset.resolveAttack({
-        attackBonus: attacker.attackBonus + this.progressionModifier(attacker.id, 'combat.attackBonus') + exhaustionPenalty,
-        targetArmorClass: target.armorClass + this.progressionModifier(target.id, 'coreStats.armorClass') + this.getCoverBonus(target),
+        attackBonus:
+          attacker.attackBonus +
+          this.progressionModifier(attacker.id, 'combat.attackBonus') +
+          this.bossPhaseModifier(attacker.id, 'combat.attackBonus') +
+          exhaustionPenalty,
+        targetArmorClass:
+          target.armorClass +
+          this.progressionModifier(target.id, 'coreStats.armorClass') +
+          this.bossPhaseModifier(target.id, 'coreStats.armorClass') +
+          this.getCoverBonus(target),
         attackFormula: resolveCapabilityCheckFormula((this.rulesProfile?.mode || 'FULL_DND') as any, options?.attackFormula),
         advantage: Boolean(options?.advantage || attackerHasAdvantage || targetHasAdvantageAgainst || targetProneAdvantage || targetConditions.has('unconscious')),
         disadvantage: Boolean(options?.disadvantage || targetDodging || attackerHasDisadvantage || targetProneDisadvantage || targetConditions.has('invisible')),
@@ -2002,7 +2010,7 @@ export class TacticalCombatEngine {
       roll: attackResult.roll,
       damageRoll,
       attackRollTotal: attackResult.roll.total,
-      targetArmorClass: target.armorClass,
+      targetArmorClass: target.armorClass + this.progressionModifier(target.id, 'coreStats.armorClass') + this.bossPhaseModifier(target.id, 'coreStats.armorClass') + this.getCoverBonus(target),
       defense,
     };
   }

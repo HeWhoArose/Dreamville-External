@@ -2113,7 +2113,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 <span>Back to Concept</span>
               </button>
               <button
-                onClick={() => setActiveStep(4)}
+                onClick={() => setActiveStep(3)}
                 className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition-colors"
               >
                 <span>Proceed to Capabilities</span>
@@ -2124,7 +2124,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
         )}
 
         {/* STEP 3: PROGRESSION */}
-        {draft && activeStep === 4 && (
+        {draft && activeStep === 3 && (
           <div className="space-y-6">
             <CharacterProgressionStep
               draft={draft}
@@ -2138,7 +2138,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
               <button onClick={() => setActiveStep(2)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200">
                 <ArrowLeft className="w-3.5 h-3.5" /> Back to Identity
               </button>
-              <button onClick={() => setActiveStep(5)} className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white">
+              <button onClick={() => setActiveStep(4)} className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white">
                 Continue to Capabilities <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>

@@ -83,7 +83,7 @@ export class CombatAnimationService {
       };
     }
     try {
-      const prompt = `Create a presentation-only animation plan for this Dreamville combat effect. Never decide combat outcomes.\nEffect: ${JSON.stringify(params.definition)}\nResolved events: ${JSON.stringify(params.events || [])}\nReturn only JSON with composition, sequence, count, origin, impact, criticalImpact, missBehavior, style, assetRefs.`;
+      const prompt = `Create a presentation-only animation plan for this Dreamville combat effect. Never decide combat outcomes.\nEffect: ${JSON.stringify(params.definition)}\nResolved events: ${JSON.stringify(params.events || [])}\nReturn only JSON with composition, sequence, count, origin, impact, criticalImpact, missBehavior, style, assetRefs, tracks. Tracks are presentation-only and may contain trigger, visual, instanceIndex, delayMs, durationMs, condition.`;
       const response = await params.repository.getAiOrchestrator().executeTaskGeneration(
         'combat.animation.plan',
         prompt,

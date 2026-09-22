@@ -1990,6 +1990,7 @@ export interface CombatEffectDefinition {
 	chainCount?: number;
 	sequence?: Array<CombatEffectDefinition>;
 	targetIds?: string[];
+	rangeValidationMode?: 'AUTO' | 'ORIGIN' | 'EACH_TARGET' | 'BOTH';
 	retargetPolicy?: 'NONE' | 'RETARGET_ON_DEATH';
 	animationPlanId?: string;
 	conditionEffects?: CombatConditionEffectDefinition[];

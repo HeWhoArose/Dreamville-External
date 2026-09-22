@@ -1073,6 +1073,7 @@ export class TacticalCombatEngine {
   public resolveForcedMovement(params: {
     targetId: string;
     sourcePosition?: { x: number; y: number };
+    sourceActorId?: string;
     movement: CombatForcedMovementDefinition;
     actionId?: string;
   }): CombatForcedMovementResult {
@@ -1330,7 +1331,7 @@ export class TacticalCombatEngine {
       actionId,
       eventType: lastCollision ? 'FORCED_MOVEMENT_COLLISION_RESOLVED' : 'FORCED_MOVEMENT_RESOLVED',
       turnNumber: this.currentRound,
-      actorId: target.id,
+      actorId: params.sourceActorId || target.id,
       targetId: target.id,
       headline: lastCollision
         ? target.name + ' was forced from (' + from.x + ', ' + from.y + ') to (' + to.x + ', ' + to.y + ') and collided with ' + (lastCollision.blockerName || lastCollision.kind.toLowerCase()) + '.'
@@ -1338,6 +1339,7 @@ export class TacticalCombatEngine {
       damage: lastCollision?.damageToMover || 0,
       finalDamage: lastCollision?.damageToMover || 0,
       metadata: {
+        sourceActorId: params.sourceActorId || target.id,
         movementType,
         requestedDistanceCells,
         actualDistanceCells,
@@ -2786,6 +2788,7 @@ export class TacticalCombatEngine {
       forcedMovement = this.resolveForcedMovement({
         targetId,
         sourcePosition: { x: attacker.x, y: attacker.y },
+        sourceActorId: attackerId,
         movement: options.forcedMovement,
       });
       if ((forcedMovement.collisions || []).some((collision) => collision.targetDied)) {
@@ -2890,6 +2893,7 @@ export class TacticalCombatEngine {
         result.forcedMovement = this.resolveForcedMovement({
           targetId: result.targetId,
           sourcePosition: { x: attacker.x, y: attacker.y },
+          sourceActorId: attackerId,
           movement: options.definition.forcedMovement,
           actionId,
         });
@@ -3387,6 +3391,7 @@ export class TacticalCombatEngine {
           this.resolveForcedMovement({
             targetId: movement.target.id,
             sourcePosition: { x: movement.source.x, y: movement.source.y },
+            sourceActorId: movement.source.id,
             movement: {
               type: movement.type,
               distanceCells: movement.distanceCells,

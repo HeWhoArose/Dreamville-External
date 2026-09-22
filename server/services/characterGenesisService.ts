@@ -300,6 +300,18 @@ Return ONLY one JSON object matching this contract:
         "chainJumpRangeCells": number | null,
         "chainCount": number | null,
         "retargetPolicy": "NONE" | "RETARGET_ON_DEATH" | null,
+        "forcedMovement": {
+          "type": "PUSH" | "PULL",
+          "distanceCells": number,
+          "collision": {
+            "damageFormula": string | null,
+            "damageType": string | null,
+            "objectDamageFormula": string | null,
+            "creatureDamageFormula": string | null,
+            "stopOnCollision": boolean | null,
+            "maxCollisions": number | null
+          } | null
+        } | null,
         "outcome": string | null,
         "outcomeReason": string | null,
         "outcomePayload": object | null,
@@ -578,6 +590,29 @@ Rules:
                 chainJumpRangeCells: Number.isFinite(Number(raw.chainJumpRangeCells)) ? Math.max(0, Number(raw.chainJumpRangeCells)) : undefined,
                 chainCount: Number.isFinite(Number(raw.chainCount)) ? Math.max(1, Math.min(50, Math.trunc(Number(raw.chainCount)))) : undefined,
                 retargetPolicy: raw.retargetPolicy === 'RETARGET_ON_DEATH' ? 'RETARGET_ON_DEATH' : 'NONE',
+                forcedMovement: (() => {
+                  const movement = raw.forcedMovement && typeof raw.forcedMovement === 'object'
+                    ? raw.forcedMovement
+                    : undefined;
+                  if (!movement || !['PUSH', 'PULL'].includes(String(movement.type))) return undefined;
+                  const collision = movement.collision && typeof movement.collision === 'object'
+                    ? movement.collision
+                    : undefined;
+                  return {
+                    type: String(movement.type) as 'PUSH' | 'PULL',
+                    distanceCells: Math.max(0, Math.min(50, Math.trunc(Number(movement.distanceCells) || 0))),
+                    collision: collision
+                      ? {
+                          damageFormula: typeof collision.damageFormula === 'string' ? collision.damageFormula : undefined,
+                          damageType: typeof collision.damageType === 'string' ? collision.damageType : undefined,
+                          objectDamageFormula: typeof collision.objectDamageFormula === 'string' ? collision.objectDamageFormula : undefined,
+                          creatureDamageFormula: typeof collision.creatureDamageFormula === 'string' ? collision.creatureDamageFormula : undefined,
+                          stopOnCollision: collision.stopOnCollision !== false,
+                          maxCollisions: Math.max(1, Math.min(3, Math.trunc(Number(collision.maxCollisions ?? 1) || 1))),
+                        }
+                      : undefined,
+                  };
+                })(),
                 outcome: raw.outcome,
                 outcomeReason: typeof raw.outcomeReason === 'string' ? raw.outcomeReason : undefined,
                 outcomePayload: raw.outcomePayload && typeof raw.outcomePayload === 'object' ? raw.outcomePayload : undefined,

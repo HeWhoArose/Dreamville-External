@@ -142,6 +142,7 @@ export interface CastSpellRequest {
   /** Optional derived progression bonuses supplied by authoritative combat projection. */
   spellAttackBonusOverride?: number;
   spellSaveDcOverride?: number;
+  spellDamageBonusOverride?: number;
 }
 
 export interface CastSpellExecutionResult {
@@ -1585,6 +1586,7 @@ export class SpellRuntime {
     let attackResult: { roll: RollRecord; hits: boolean; isCritical: boolean } | undefined;
     let savingThrowResult: { roll: RollRecord; succeeds: boolean; ability: string; dc: number } | undefined;
     let damageInflicted = 0;
+    const spellDamageBonus = Number(request.spellDamageBonusOverride || 0);
     let healingApplied = 0;
     let targetDied = false;
     let targetHpRemaining = targetParticipant?.hpCurrent ?? 0;
@@ -1630,7 +1632,7 @@ export class SpellRuntime {
           savingThrowResult = { roll, succeeds, ability, dc };
 
           if (spell.damageFormula) {
-            let baseDmg = dice.roll(spell.damageFormula).total;
+            let baseDmg = dice.roll(spell.damageFormula).total + spellDamageBonus;
             if (upcastLevelDelta > 0 && spell.upcastDamageDicePerLevel) {
               for (let u = 0; u < upcastLevelDelta; u++) baseDmg += dice.roll(spell.upcastDamageDicePerLevel).total;
             }
@@ -1671,7 +1673,7 @@ export class SpellRuntime {
           }
         } else if (spell.defenseModel === 'AUTOMATIC') {
           if (!spell.damageFormula) continue;
-          let baseDmg = dice.roll(spell.damageFormula).total;
+          let baseDmg = dice.roll(spell.damageFormula).total + spellDamageBonus;
           if (upcastLevelDelta > 0 && spell.upcastDamageDicePerLevel) {
             for (let u = 0; u < upcastLevelDelta; u++) baseDmg += dice.roll(spell.upcastDamageDicePerLevel).total;
           }
@@ -1763,7 +1765,7 @@ export class SpellRuntime {
       savingThrowResult = { roll, succeeds, ability, dc };
 
       if (spell.damageFormula) {
-        let baseDmg = dice.roll(spell.damageFormula).total;
+        let baseDmg = dice.roll(spell.damageFormula).total + spellDamageBonus;
         if (upcastLevelDelta > 0 && spell.upcastDamageDicePerLevel) {
           for (let u = 0; u < upcastLevelDelta; u++) {
             baseDmg += dice.roll(spell.upcastDamageDicePerLevel).total;
@@ -1811,7 +1813,7 @@ export class SpellRuntime {
       }
     } else if (spell.defenseModel === 'AUTOMATIC' && targetParticipant) {
       if (spell.damageFormula) {
-        let baseDmg = dice.roll(spell.damageFormula).total;
+        let baseDmg = dice.roll(spell.damageFormula).total + spellDamageBonus;
         if (upcastLevelDelta > 0 && spell.upcastDamageDicePerLevel) {
           for (let u = 0; u < upcastLevelDelta; u++) {
             baseDmg += dice.roll(spell.upcastDamageDicePerLevel).total;

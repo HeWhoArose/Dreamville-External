@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from '../common/Button';
 import { Badge } from '../common/Badge';
 import { ImageAssetControl } from '../common/ImageAssetControl';
@@ -15,6 +15,8 @@ export const CompendiumDetail: React.FC<CompendiumDetailProps> = ({
   onClose,
   onAssetChange,
 }) => {
+  const [entitySection, setEntitySection] = useState<'overview' | 'stats' | 'behavior' | 'social' | 'history'>('overview');
+
   if (!item) return null;
 
   return (
@@ -165,6 +167,76 @@ export const CompendiumDetail: React.FC<CompendiumDetailProps> = ({
                         <span className="font-mono font-medium text-[var(--db-gold-400)]">{v}</span>
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {item.entityCard && (
+                <div className="rounded-xl border border-[var(--db-border-purple)]/30 bg-[var(--db-bg-card)] overflow-hidden">
+                  <div className="p-3 border-b border-[var(--db-border-subtle)]">
+                    <h4 className="text-xs uppercase font-semibold tracking-wider text-[var(--db-text-muted)]">Canonical Entity Card</h4>
+                    <p className="text-[11px] text-[var(--db-text-muted)] mt-1">Detailed state is separated into focused sections so the card stays readable on phones.</p>
+                  </div>
+                  <div className="flex gap-1 overflow-x-auto p-2 border-b border-[var(--db-border-subtle)]">
+                    {([
+                      ['overview', 'Overview'],
+                      ['stats', 'Stats'],
+                      ['behavior', 'Behavior'],
+                      ['social', 'Social'],
+                      ['history', 'History'],
+                    ] as const).map(([key, label]) => (
+                      <button key={key} type="button" onClick={() => setEntitySection(key)} className={`px-3 py-1.5 rounded-lg text-[11px] whitespace-nowrap ${entitySection === key ? 'bg-[var(--db-surface-purple)] text-[var(--db-purple-200)]' : 'text-[var(--db-text-muted)] hover:bg-[var(--db-bg-raised)]'}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="p-4 text-xs text-[var(--db-text-secondary)] space-y-3">
+                    {entitySection === 'overview' && (
+                      <>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div><span className="text-[var(--db-text-muted)]">Species:</span> {item.entityCard.identity.species || '—'}</div>
+                          <div><span className="text-[var(--db-text-muted)]">Kind:</span> {item.entityCard.kind}</div>
+                          <div><span className="text-[var(--db-text-muted)]">Profession:</span> {item.entityCard.classification.profession || '—'}</div>
+                          <div><span className="text-[var(--db-text-muted)]">Lifecycle:</span> {item.entityCard.lifecycle.status}</div>
+                          <div><span className="text-[var(--db-text-muted)]">Activity:</span> {item.entityCard.worldState.currentActivity || '—'}</div>
+                          <div><span className="text-[var(--db-text-muted)]">Goal:</span> {item.entityCard.worldState.currentGoal || '—'}</div>
+                        </div>
+                      </>
+                    )}
+                    {entitySection === 'stats' && (
+                      <div className="grid grid-cols-2 gap-2">
+                        {Object.entries(item.entityCard.coreStats?.abilityScores || {}).map(([key, value]) => (
+                          <div key={key} className="rounded-lg border border-[var(--db-border-default)] p-2 flex justify-between"><span>{key}</span><strong>{value}</strong></div>
+                        ))}
+                        <div className="rounded-lg border border-[var(--db-border-default)] p-2">HP {item.entityCard.coreStats?.hpCurrent ?? '—'} / {item.entityCard.coreStats?.hpMax ?? '—'}</div>
+                        <div className="rounded-lg border border-[var(--db-border-default)] p-2">AC {item.entityCard.coreStats?.armorClass ?? '—'}</div>
+                        <div className="rounded-lg border border-[var(--db-border-default)] p-2">Level {item.entityCard.progression?.level ?? item.entityCard.coreStats?.level ?? '—'}</div>
+                        <div className="rounded-lg border border-[var(--db-border-default)] p-2">Speed {item.entityCard.coreStats?.speed ?? '—'}</div>
+                      </div>
+                    )}
+                    {entitySection === 'behavior' && (
+                      <div className="space-y-2">
+                        <div><span className="text-[var(--db-text-muted)]">Default:</span> {item.entityCard.behavior.defaultBehavior || '—'}</div>
+                        <div><span className="text-[var(--db-text-muted)]">Threat response:</span> {item.entityCard.behavior.threatResponse || '—'}</div>
+                        <div><span className="text-[var(--db-text-muted)]">Combat:</span> {item.entityCard.behavior.combatBehavior || '—'}</div>
+                        <div><span className="text-[var(--db-text-muted)]">Priorities:</span> {item.entityCard.behavior.priorities.join(', ') || '—'}</div>
+                      </div>
+                    )}
+                    {entitySection === 'social' && (
+                      <div className="space-y-2">
+                        <div><span className="text-[var(--db-text-muted)]">Alignment:</span> {item.entityCard.social.alignment || '—'}</div>
+                        <div><span className="text-[var(--db-text-muted)]">Factions:</span> {item.entityCard.social.factionIds.join(', ') || '—'}</div>
+                        {item.entityCard.economy && <div><span className="text-[var(--db-text-muted)]">Wealth:</span> {item.entityCard.economy.wealth ?? '—'}</div>}
+                        {item.entityCard.economy && <div><span className="text-[var(--db-text-muted)]">Inventory:</span> {item.entityCard.economy.inventorySummary.join(', ') || '—'}</div>}
+                      </div>
+                    )}
+                    {entitySection === 'history' && (
+                      <div className="space-y-2">
+                        <div><span className="text-[var(--db-text-muted)]">Origin:</span> {item.entityCard.background?.origin || '—'}</div>
+                        <div><span className="text-[var(--db-text-muted)]">Background:</span> {item.entityCard.background?.history || 'Not applicable.'}</div>
+                        <div><span className="text-[var(--db-text-muted)]">Important events:</span> {item.entityCard.background?.importantEvents.join(' • ') || 'None recorded.'}</div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

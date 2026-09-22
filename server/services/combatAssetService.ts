@@ -8,6 +8,12 @@ export interface CombatAssetRecord {
   prompt: string;
   imageUrl?: string;
   fallback: boolean;
+  provider?: string;
+  model?: string;
+  format?: string;
+  width?: number;
+  height?: number;
+  aspectRatio?: string;
   generatedAt: string;
 }
 
@@ -38,6 +44,12 @@ export class CombatAssetService {
         prompt: String(persisted.prompt || params.prompt),
         imageUrl: persisted.imageUrl,
         fallback: Boolean(persisted.fallback),
+        provider: typeof persisted.provider === 'string' ? persisted.provider : undefined,
+        model: typeof persisted.model === 'string' ? persisted.model : undefined,
+        format: typeof persisted.format === 'string' ? persisted.format : undefined,
+        width: typeof persisted.width === 'number' ? persisted.width : undefined,
+        height: typeof persisted.height === 'number' ? persisted.height : undefined,
+        aspectRatio: typeof persisted.aspectRatio === 'string' ? persisted.aspectRatio : undefined,
         generatedAt: String(persisted.generatedAt || new Date(0).toISOString()),
       };
       this.cache.set(assetId, restored);
@@ -58,7 +70,13 @@ export class CombatAssetService {
       prompt: media.promptFallback || params.prompt,
       imageUrl: media.imageUrl,
       fallback: Boolean(media.isFallback),
-      generatedAt: new Date().toISOString(),
+      provider: typeof media.assetMetadata?.provider === 'string' ? media.assetMetadata.provider : undefined,
+      model: typeof media.assetMetadata?.model === 'string' ? media.assetMetadata.model : undefined,
+      format: media.mediaAsset?.format,
+      width: media.mediaAsset?.width,
+      height: media.mediaAsset?.height,
+      aspectRatio: media.mediaAsset?.aspectRatio,
+      generatedAt: String(media.assetMetadata?.generatedAt || new Date().toISOString()),
     };
     this.cache.set(assetId, record);
     params.repository.saveActiveEffect({
@@ -70,6 +88,12 @@ export class CombatAssetService {
       imageUrl: record.imageUrl,
       prompt: record.prompt,
       fallback: record.fallback,
+      provider: record.provider,
+      model: record.model,
+      format: record.format,
+      width: record.width,
+      height: record.height,
+      aspectRatio: record.aspectRatio,
       generatedAt: record.generatedAt,
       presentationOnly: true,
       cacheDisposable: true,

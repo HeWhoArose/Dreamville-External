@@ -31,6 +31,8 @@ export const CombatAnimationLayer: React.FC<CombatAnimationLayerProps> = ({
             onComplete?.();
             return;
         }
+        const currentInstance = visibleInstances[Math.min(activeIndex, visibleInstances.length - 1)];
+        const currentTrack = plan.tracks?.find((track) => track.instanceIndex === currentInstance?.instanceIndex) || plan.tracks?.[0];
         const timer = window.setTimeout(() => {
             if (activeIndex + 1 >= visibleInstances.length) {
                 setRunning(false);
@@ -38,7 +40,7 @@ export const CombatAnimationLayer: React.FC<CombatAnimationLayerProps> = ({
                 return;
             }
             setActiveIndex((index) => index + 1);
-        }, Math.max(80, Math.min(3000, activeTrack?.delayMs || 320)));
+        }, Math.max(80, Math.min(3000, currentTrack?.delayMs || 320)));
         return () => window.clearTimeout(timer);
     }, [activeIndex, running, plan, visibleInstances.length, presentationMode, onComplete]);
 

@@ -196,8 +196,6 @@ export interface StoryCheckOutcomeDefinition {
   summary?: string;
 }
 
-e
-
 export interface StoryCheckDamageOutcome {
   requestedAmount: number;
   rolledAmount: number;
@@ -610,8 +608,6 @@ export interface CharacterStatDefinition {
   provenance: CharacterProvenanceSource;
 }
 
-e
-
 export interface CharacterSkill {
   id: string;
   name: string;
@@ -730,8 +726,6 @@ export interface CharacterAiExtractionSummary {
   uncertainties?: string[];
   generationSource?: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK';
 }
-
-e
 
 export interface CapabilityDefinition {
   id: string;
@@ -1551,9 +1545,6 @@ export interface CharacterStartingConditionState {
   bodyRegions: CharacterBodyRegionState[];
 }
 
-
-e
-
 export interface GeneratedTechnique {
   id: string;
   name: string;
@@ -1940,14 +1931,25 @@ export interface CombatConditionEffectDefinition {
 	notes?: string;
 }
 
+export type CombatExecutionMode =
+  | 'AUTOMATIC'
+  | 'CHECK_REQUIRED'
+  | 'CONTEXTUAL'
+  | 'CONCENTRATION';
+
 export interface CombatEffectDefinition {
 	id: string;
 	name: string;
 	resolutionMode: CombatResolutionMode;
 	scale: CombatEffectScale;
 	actionCost?: CombatActionCost;
+	executionMode?: CombatExecutionMode;
+	executionDifficultyClass?: number;
+	executionFormula?: string;
+	executionFailureOutcome?: CombatOutcomeType;
 	targetingMode?: CombatTargetingMode;
 	instanceCount?: number;
+	instanceTargetIds?: string[];
 	maxTargets?: number;
 	attackFormula?: string;
 	saveFormula?: string;
@@ -1976,6 +1978,7 @@ export interface CombatEffectDefinition {
 	animationPlanId?: string;
 	conditionEffects?: CombatConditionEffectDefinition[];
 	assetRefs?: string[];
+	visualStyle?: string;
 	aiGenerated?: boolean;
 	provenance?: string;
 }
@@ -2009,6 +2012,7 @@ export interface CombatEffectResult {
 	defeatedTargetIds?: string[];
 	outcome?: CombatOutcomeType;
 	canonicalEventIds?: string[];
+	animationPlan?: CombatAnimationPlan;
 	conditionsApplied?: Array<{ targetId: string; conditionIdOrName: string; trigger: CombatConditionEffectDefinition['trigger']; applied: boolean; immune: boolean }>;
 	worldEffectPreview?: {
 		scale: CombatEffectScale;

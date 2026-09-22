@@ -6,6 +6,7 @@ import {
   BattleEvent,
   CapabilityDefinition,
   PowerState,
+  CombatEffectDefinition,
 } from '../types';
 import { apiClient } from '../services/apiClient';
 import {
@@ -37,6 +38,14 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
   const [selectedTargetId, setSelectedTargetId] = useState<string>('');
   const [selectedCapabilityId, setSelectedCapabilityId] = useState<string>('');
   const [moveCoord, setMoveCoord] = useState<{ x: number; y: number }>({ x: 1, y: 1 });
+  const [advancedEffectOpen, setAdvancedEffectOpen] = useState<boolean>(false);
+  const [effectMode, setEffectMode] = useState<CombatEffectDefinition['resolutionMode']>('MULTI_INSTANCE');
+  const [effectCount, setEffectCount] = useState<number>(5);
+  const [effectAttackFormula, setEffectAttackFormula] = useState<string>('1d20');
+  const [effectDamageFormula, setEffectDamageFormula] = useState<string>('1d8');
+  const [effectDamageType, setEffectDamageType] = useState<string>('radiant');
+  const [effectResult, setEffectResult] = useState<any>(null);
+  const [effectSimulation, setEffectSimulation] = useState<any>(null);
 
   const fetchCombatData = async () => {
     try {
@@ -167,6 +176,63 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
       onRefreshWorldState?.();
     } catch (err: any) {
       setErrorMsg(err.message || 'Capability cast rejected.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleStructuredEffect = async () => {
+    if (!selectedTargetId || !selectedCapabilityId || !combatState?.storyId) {
+      setErrorMsg('Select a target, capability, and active combat state first.');
+      return;
+    }
+    const capability = capabilities.find((item: any) => item.id === selectedCapabilityId) as any;
+    const definition: CombatEffectDefinition = {
+      id: selectedCapabilityId + '_combat_effect',
+      name: (capability?.name || 'Custom Combat Effect') + (effectMode === 'MULTI_INSTANCE' ? ' Barrage' : ''),
+      resolutionMode: effectMode,
+      scale: effectMode === 'WORLD_EFFECT' ? 'CITY' : 'PERSON',
+      actionCost: 'ACTION',
+      targetingMode: effectMode === 'AREA' ? 'ALL_IN_AREA' : 'ONE_TARGET',
+      instanceCount: effectMode === 'MULTI_INSTANCE' ? effectCount : undefined,
+      attackFormula: effectAttackFormula,
+      damageFormula: effectDamageFormula,
+      damageType: effectDamageType,
+      assetRefs: [],
+      provenance: 'TACTICAL_COMBAT_UI',
+    };
+    try {
+      setActionLoading(true);
+      setErrorMsg(null);
+      const validation = await apiClient.validateCombatEffect(combatState.storyId, definition);
+      if (!validation.success) throw new Error(validation.errorReason || 'Combat effect failed validation.');
+      const result = await apiClient.executeCombatEffect(combatState.storyId, definition, [selectedTargetId], { capabilityId: selectedCapabilityId });
+      setEffectResult(result?.effectResult || null);
+      setCombatState(result?.combatState || combatState);
+      const events = result?.effectResult?.instances || [];
+      const plan = await apiClient.generateCombatAnimationPlan(combatState.storyId, definition, events as any);
+      if (plan?.plan) setEffectResult((previous: any) => ({ ...(typeof previous === 'object' ? previous : {}), animationPlan: plan.plan }));
+      onRefreshWorldState?.();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Structured combat effect failed.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSimulateStructuredEffect = async () => {
+    if (!selectedTargetId || !selectedCapabilityId || !combatState?.storyId) return;
+    const definition: CombatEffectDefinition = {
+      id: selectedCapabilityId + '_simulation', name: 'Simulation', resolutionMode: effectMode, scale: 'PERSON',
+      actionCost: 'ACTION', targetingMode: 'ONE_TARGET', instanceCount: effectMode === 'MULTI_INSTANCE' ? effectCount : undefined,
+      attackFormula: effectAttackFormula, damageFormula: effectDamageFormula, damageType: effectDamageType,
+    };
+    try {
+      setActionLoading(true);
+      const simulation = await apiClient.simulateCombatEffect(combatState.storyId, definition, [selectedTargetId], { seeds: [101, 202, 303, 404, 505] });
+      setEffectSimulation(simulation);
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Combat simulation failed.');
     } finally {
       setActionLoading(false);
     }
@@ -603,6 +669,61 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
                 <Zap className="w-3.5 h-3.5 text-cyan-400" />
                 <span>Cast Power In Combat</span>
               </button>
+            </div>
+
+            <div className="space-y-3 pt-2 border-t border-stone-800">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <div className="text-[11px] font-medium text-violet-300">Advanced Effect Resolution</div>
+                  <div className="text-[10px] text-stone-500">One Action → independent effect instances</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAdvancedEffectOpen((open) => !open)}
+                  className="px-2 py-1 rounded border border-violet-800/60 bg-violet-950/30 text-[10px] text-violet-200"
+                >
+                  {advancedEffectOpen ? 'Hide' : 'Open'}
+                </button>
+              </div>
+              {advancedEffectOpen && (
+                <div className="space-y-2 p-3 bg-stone-950/70 rounded-lg border border-stone-800">
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="text-[10px] text-stone-500">Resolution
+                      <select value={effectMode} onChange={(e) => setEffectMode(e.target.value as CombatEffectDefinition['resolutionMode'])} className="mt-1 w-full px-2 py-1.5 rounded bg-stone-900 border border-stone-700 text-[11px] text-stone-200">
+                        <option value="SINGLE_ATTACK">Single Attack</option>
+                        <option value="MULTI_INSTANCE">Multi-Instance</option>
+                        <option value="SAVE">Saving Throw</option>
+                        <option value="AREA">Area Effect</option>
+                        <option value="CHAIN">Chain</option>
+                      </select>
+                    </label>
+                    <label className="text-[10px] text-stone-500">Instances
+                      <input type="number" min={1} max={50} value={effectCount} onChange={(e) => setEffectCount(Math.max(1, Math.min(50, Number(e.target.value) || 1)))} className="mt-1 w-full px-2 py-1.5 rounded bg-stone-900 border border-stone-700 text-[11px] text-stone-200" />
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <input aria-label="Attack formula" value={effectAttackFormula} onChange={(e) => setEffectAttackFormula(e.target.value)} className="px-2 py-1.5 rounded bg-stone-900 border border-stone-700 text-[11px] text-stone-200 font-mono" placeholder="1d20" />
+                    <input aria-label="Damage formula" value={effectDamageFormula} onChange={(e) => setEffectDamageFormula(e.target.value)} className="px-2 py-1.5 rounded bg-stone-900 border border-stone-700 text-[11px] text-stone-200 font-mono" placeholder="1d8" />
+                    <input aria-label="Damage type" value={effectDamageType} onChange={(e) => setEffectDamageType(e.target.value)} className="px-2 py-1.5 rounded bg-stone-900 border border-stone-700 text-[11px] text-stone-200" placeholder="radiant" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button type="button" onClick={handleStructuredEffect} disabled={actionLoading || !isPlayerTurn || !actorCanAct || !actionAvailable || !selectedTargetId || !selectedCapabilityId} className="py-2 px-2 rounded bg-violet-900/70 hover:bg-violet-800 text-violet-100 border border-violet-700 text-[11px] font-semibold disabled:opacity-50">Resolve Effect</button>
+                    <button type="button" onClick={handleSimulateStructuredEffect} disabled={actionLoading || !selectedTargetId || !selectedCapabilityId} className="py-2 px-2 rounded bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 text-[11px] font-semibold disabled:opacity-50">Simulate</button>
+                  </div>
+                  {effectResult && (
+                    <div className="p-2 rounded bg-stone-900 border border-stone-800 text-[10px] text-stone-300 space-y-1">
+                      <div className="text-violet-300 font-semibold">Last Effect</div>
+                      <div>Instances: {effectResult.instances?.length ?? 0} • Damage: {effectResult.totalDamage ?? 0}</div>
+                      {effectResult.animationPlan && <div>Animation: <span className="text-stone-400">{effectResult.animationPlan.composition}</span></div>}
+                    </div>
+                  )}
+                  {effectSimulation?.summary && (
+                    <div className="p-2 rounded bg-stone-900 border border-stone-800 text-[10px] text-stone-400">
+                      Simulation — avg {Number(effectSimulation.summary.averageDamage || 0).toFixed(1)} • min {effectSimulation.summary.minDamage} • max {effectSimulation.summary.maxDamage}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* End Turn Button */}

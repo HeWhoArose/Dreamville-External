@@ -58,6 +58,7 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
   const [effectAreaInnerRadiusCells, setEffectAreaInnerRadiusCells] = useState<number>(1);
   const [effectAreaWidthCells, setEffectAreaWidthCells] = useState<number>(1);
   const [instanceTargetIds, setInstanceTargetIds] = useState<string[]>([]);
+  const [sequenceChildCount, setSequenceChildCount] = useState<number>(2);
   const [effectResult, setEffectResult] = useState<any>(null);
   const [effectSimulation, setEffectSimulation] = useState<any>(null);
   const [simulationDraftMode, setSimulationDraftMode] = useState<boolean>(false);
@@ -370,6 +371,19 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
           areaWidthCells: effectAreaWidthCells,
           instanceTargetIds: effectTargetingMode === 'PER_INSTANCE'
             ? Array.from({ length: effectCount }, (_, index) => instanceTargetIds[index] || selectedTargetId).filter(Boolean)
+            : undefined,
+          sequence: effectMode === 'SEQUENCE'
+            ? Array.from({ length: sequenceChildCount }, (_, index) => ({
+                id: selectedCapabilityId + '_draft_step_' + index,
+                name: (capability?.name || 'Draft Effect') + ' Step ' + (index + 1),
+                resolutionMode: 'SINGLE_ATTACK' as const,
+                scale: effectScale,
+                actionCost: 'FREE' as const,
+                targetingMode: 'ONE_TARGET' as const,
+                attackFormula: effectAttackFormula,
+                damageFormula: effectDamageFormula,
+                damageType: effectDamageType,
+              }))
             : undefined,
           outcome:
             effectMode === 'OUTCOME' || effectMode === 'WORLD_EFFECT'
@@ -1084,6 +1098,16 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
                           <input type="number" min={0.5} max={50} step={0.5} value={effectAreaWidthCells} onChange={(e) => setEffectAreaWidthCells(Math.max(0.5, Math.min(50, Number(e.target.value) || 0.5)))} className="mt-1 w-full px-2 py-1.5 rounded bg-stone-900 border border-stone-700 text-[11px] text-stone-200" />
                         </label>
                       </div>
+                    </div>
+                  )}
+
+                  {simulationDraftMode && effectMode === 'SEQUENCE' && (
+                    <div className="space-y-2 rounded-lg border border-stone-800 bg-stone-900/50 p-2">
+                      <div className="text-[10px] uppercase tracking-wider text-violet-300 font-mono">Sequence Child Effects</div>
+                      <label className="text-[10px] text-stone-500 block">Child Effect Count
+                        <input type="number" min={1} max={10} value={sequenceChildCount} onChange={(e) => setSequenceChildCount(Math.max(1, Math.min(10, Number(e.target.value) || 1)))} className="mt-1 w-full px-2 py-1.5 rounded bg-stone-900 border border-stone-700 text-[11px] text-stone-200" />
+                      </label>
+                      <p className="text-[9px] text-stone-600">Draft simulation creates deterministic child attack steps. Live execution still requires an authored canonical capability sequence.</p>
                     </div>
                   )}
 

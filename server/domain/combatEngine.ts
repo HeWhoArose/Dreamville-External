@@ -2183,12 +2183,15 @@ export class TacticalCombatEngine {
     target: BattlefieldParticipant,
     requestedAmount: number,
     damageType: string,
-    criticalHit = false
+    criticalHit = false,
+    targetBodyRegionId?: BodyRegionId
   ): {
-    damage: number;    targetDied: boolean;
+    damage: number;
+    targetDied: boolean;
     immune?: boolean;
     resisted?: boolean;
     vulnerable?: boolean;
+    destroyedBodyRegions: BodyRegionId[];
   } {
     const amount = Math.max(0, requestedAmount);
     const previousHp = Math.max(0, target.hpCurrent);

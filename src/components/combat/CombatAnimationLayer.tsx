@@ -1,7 +1,25 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import type { CombatAnimationPlan, CombatAttackInstanceResult } from '../../types';
+import type { CombatAnimationPlan, CombatAnimationTrack, CombatAttackInstanceResult } from '../../types';
 
+
+function matchesTrack(track: CombatAnimationTrack, instance: CombatAttackInstanceResult): boolean {
+    if (track.instanceIndex != null && track.instanceIndex !== instance.instanceIndex) return false;
+    if (!track.condition || track.condition === 'ALWAYS') return true;
+    if (track.condition === 'CRITICAL') return instance.isCritical;
+    if (track.condition === 'HIT') return instance.hits;
+    if (track.condition === 'MISS') return !instance.hits;
+    return true;
+}
+
+function getTrackForInstance(plan: CombatAnimationPlan, instance: CombatAttackInstanceResult): CombatAnimationTrack | undefined {
+    const tracks = plan.tracks || [];
+    return tracks.find((track) => matchesTrack(track, instance) && track.instanceIndex === instance.instanceIndex)
+        || tracks.find((track) => matchesTrack(track, instance) && track.instanceIndex == null)
+        || tracks.find((track) => track.instanceIndex === instance.instanceIndex)
+        || tracks.find((track) => track.instanceIndex == null);
+}
 interface CombatAnimationLayerProps {
+
     plan?: CombatAnimationPlan | null;
     instances?: CombatAttackInstanceResult[];
     presentationMode?: 'FULL' | 'FAST' | 'TEXT' | 'LOG';
@@ -26,13 +44,34 @@ export const CombatAnimationLayer: React.FC<CombatAnimationLayerProps> = ({
 
     useEffect(() => {
         if (!running || !plan || !visibleInstances.length) return;
-        if (plan.sequence !== 'SEQUENTIAL' || presentationMode !== 'FULL') {
+        if (presentationMode !== 'FULL') {
             setRunning(false);
             onComplete?.();
             return;
         }
+        if (plan.sequence === 'INSTANT') {
+            setRunning(false);
+            onComplete?.();
+            return;
+        }
+        if (plan.sequence === 'PARALLEL') {
+            const duration = Math.max(
+                80,
+                Math.min(
+                    5000,
+                    Math.max(
+                        ...visibleInstances.map((instance) => getTrackForInstance(plan, instance)?.durationMs || 320),
+                    ),
+                ),
+            );
+            const timer = window.setTimeout(() => {
+                setRunning(false);
+                onComplete?.();
+            }, duration);
+            return () => window.clearTimeout(timer);
+        }
         const currentInstance = visibleInstances[Math.min(activeIndex, visibleInstances.length - 1)];
-        const currentTrack = plan.tracks?.find((track) => track.instanceIndex === currentInstance?.instanceIndex) || plan.tracks?.[0];
+        const currentTrack = currentInstance ? getTrackForInstance(plan, currentInstance) : undefined;
         const timer = window.setTimeout(() => {
             if (activeIndex + 1 >= visibleInstances.length) {
                 setRunning(false);
@@ -40,14 +79,14 @@ export const CombatAnimationLayer: React.FC<CombatAnimationLayerProps> = ({
                 return;
             }
             setActiveIndex((index) => index + 1);
-        }, Math.max(80, Math.min(3000, currentTrack?.delayMs || 320)));
+        }, Math.max(80, Math.min(3000, currentTrack?.durationMs || currentTrack?.delayMs || 320)));
         return () => window.clearTimeout(timer);
     }, [activeIndex, running, plan, visibleInstances.length, presentationMode, onComplete]);
 
     if (!plan || !visibleInstances.length) return null;
 
     const active = visibleInstances[Math.min(activeIndex, visibleInstances.length - 1)];
-    const activeTrack = plan.tracks?.find((track) => track.instanceIndex === active.instanceIndex) || plan.tracks?.[0];
+    const activeTrack = getTrackForInstance(plan, active);
     const hitCount = visibleInstances.filter((item) => item.hits).length;
     const missCount = visibleInstances.length - hitCount;
 

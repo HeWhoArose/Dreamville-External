@@ -1938,6 +1938,8 @@ export type CombatOutcomeType =
 	| 'SUMMONED'
 	| 'RESOURCE_GRANTED'
 	| 'RESOURCE_REMOVED'
+	| 'ENVIRONMENT_DAMAGED'
+	| 'ENVIRONMENT_DESTROYED'
 	| 'WORLD_STATE_CHANGED';
 
 export interface CombatConditionEffectDefinition {
@@ -2002,6 +2004,22 @@ export interface CombatEffectDefinition {
 	visualStyle?: string;
 	aiGenerated?: boolean;
 	provenance?: string;
+}
+
+export interface DestructibleEnvironmentObject {
+	id: string;
+	name: string;
+	x: number;
+	y: number;
+	hpCurrent: number;
+	hpMax: number;
+	isDestroyed: boolean;
+	damageTypes?: {
+		resistances?: string[];
+		immunities?: string[];
+		vulnerabilities?: string[];
+	};
+	tags?: string[];
 }
 
 export interface CombatAttackInstanceResult {

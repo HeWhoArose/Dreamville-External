@@ -2117,6 +2117,7 @@ export class TacticalCombatEngine {
     targetIds: string[];
     damageFormula: string;
     damageType?: string;
+    damageRollMode?: 'SHARED' | 'PER_TARGET';
     actionId?: string;
     consumeAction?: boolean;
   }): CombatEffectResult {
@@ -2133,10 +2134,15 @@ export class TacticalCombatEngine {
     const instances: CombatAttackInstanceResult[] = [];
     const defeatedTargetIds: string[] = [];
     let totalDamage = 0;
+    const sharedDamage = params.damageFormula && (params.damageRollMode || 'SHARED') === 'SHARED'
+      ? this.ruleset.resolveDamage(params.damageFormula, false, this.diceEngine)
+      : undefined;
+    const saveAdvantage = params.advantage;
+    const saveDisadvantage = params.disadvantage;
     for (let i = 0; i < targets.length; i += 1) {
       const target = targets[i];
       if (target.isDead || target.hpCurrent <= 0) continue;
-      const damageRoll = this.ruleset.resolveDamage(params.damageFormula, false, this.diceEngine);
+      const damageRoll = sharedDamage || this.ruleset.resolveDamage(params.damageFormula, false, this.diceEngine);
       const resolved = this.applyCombatDamage(target, damageRoll.totalDamage, params.damageType || 'force', false);
       if (resolved.targetDied && !defeatedTargetIds.includes(target.id)) defeatedTargetIds.push(target.id);
       totalDamage += resolved.damage;
@@ -2173,6 +2179,9 @@ export class TacticalCombatEngine {
     damageType?: string;
     saveFormula?: string;
     halfDamageOnSave?: boolean;
+    advantage?: boolean;
+    disadvantage?: boolean;
+    damageRollMode?: 'SHARED' | 'PER_TARGET';
     actionId?: string;
     consumeAction?: boolean;
   }): CombatEffectResult {
@@ -2190,6 +2199,9 @@ export class TacticalCombatEngine {
     const instances: CombatAttackInstanceResult[] = [];
     const defeatedTargetIds: string[] = [];
     let totalDamage = 0;
+    const sharedDamage = (params.damageRollMode || 'SHARED') === 'SHARED'
+      ? this.ruleset.resolveDamage(params.damageFormula, false, this.diceEngine)
+      : undefined;
     for (let i = 0; i < targets.length; i += 1) {
       const target = targets[i];
       if (target.isDead || target.hpCurrent <= 0) continue;
@@ -2203,8 +2215,8 @@ export class TacticalCombatEngine {
         saveModifier: modifier,
         difficultyClass: params.difficultyClass,
         rollFormula,
-        advantage: targetDodging && saveAbility === 'DEX',
-        disadvantage: targetConditions.has('restrained') && saveAbility === 'DEX',
+        advantage: saveAdvantage ?? (targetDodging && saveAbility === 'DEX'),
+        disadvantage: saveDisadvantage ?? (targetConditions.has('restrained') && saveAbility === 'DEX'),
         diceEngine: this.diceEngine,
       });
       if (automaticFailure) save.succeeds = false;
@@ -2212,7 +2224,7 @@ export class TacticalCombatEngine {
       let targetDied = false;
       let damageRoll: RollRecord | undefined;
       if (params.damageFormula) {
-        const raw = this.ruleset.resolveDamage(params.damageFormula, false, this.diceEngine);
+        const raw = sharedDamage || this.ruleset.resolveDamage(params.damageFormula, false, this.diceEngine);
         damageRoll = raw.roll;
         const amount = save.succeeds ? (params.halfDamageOnSave ? Math.floor(raw.totalDamage / 2) : 0) : raw.totalDamage;
         if (amount > 0) {

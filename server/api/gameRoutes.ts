@@ -3094,6 +3094,31 @@ gameRouter.post('/combat/effect', async (req: Request, res: Response) => {
         }
 
         const effectDefinition = transactionValidation.normalized;
+
+        // CapabilityEngine remains the authority for capability ownership,
+        // execution eligibility, energy/strain costs, and contextual power gates.
+        // CombatEffectEngine remains the authority for the mechanical combat/world
+        // resolution itself. Both operate inside the same staged command.
+        const requestedScaleForAdjudication =
+          ['CITY', 'REGION', 'CONTINENT', 'PLANET', 'COSMIC'].includes(effectDefinition.scale)
+            ? 'WorldScale'
+            : effectDefinition.scale === 'ENCOUNTER' || effectDefinition.scale === 'STRUCTURE' || effectDefinition.scale === 'DISTRICT'
+              ? 'Moderate'
+              : 'Local';
+        const adjudication = transactionCapEngine.adjudicate({
+          actorId,
+          intendedCapabilityId: transactionCapability.id,
+          requestedScale: requestedScaleForAdjudication,
+          actionDescription: `Canonical combat effect: ${effectDefinition.name}`,
+          actorConditions: transactionCombat.getParticipant(actorId)?.conditions,
+        });
+        if (!adjudication.approved) {
+          return {
+            success: false,
+            errorReason: adjudication.rejectionReason || 'Capability execution gate rejected the effect.',
+          };
+        }
+
         const effectResult =
           effectDefinition.resolutionMode === 'WORLD_EFFECT' ||
           effectDefinition.resolutionMode === 'OUTCOME'
@@ -3138,6 +3163,7 @@ gameRouter.post('/combat/effect', async (req: Request, res: Response) => {
           success: true,
           data: {
             effectResult,
+            adjudication,
             combatState: getCombatStateHelper(
               transactionCombat,
               storyId,

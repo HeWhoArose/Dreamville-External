@@ -1,6 +1,7 @@
 import type {
   CombatEffectDefinition,
   CombatEffectResult,
+  CombatAttackInstanceResult,
 } from '../../src/types';
 import { resolveCapabilityCheckFormula } from '../../src/data/rulesDice';
 import { TacticalCombatEngine } from './combatEngine';

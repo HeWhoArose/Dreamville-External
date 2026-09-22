@@ -4,7 +4,7 @@ import { ConditionEngine } from './conditionEngine';
 import { CombatActionEconomy, CombatTurnResourceSnapshot, ReadyTriggerType } from './combatActionEconomy';
 import { CombatReactionEngine } from './combatReactionEngine';
 import { deathSaveEngine } from './deathSaveEngine';
-import type { DeathSaveState, RulesProfile, CombatAttackInstanceResult, CombatEffectDefinition, CombatEffectResult, CombatEventRecord, BodyRegionId, DestructibleEnvironmentObject } from '../../src/types';
+import type { DeathSaveState, RulesProfile, CombatAttackInstanceResult, CombatEffectDefinition, CombatEffectResult, CombatEventRecord, CombatReplayRecord, BodyRegionId, DestructibleEnvironmentObject } from '../../src/types';
 import { resolveCapabilityCheckFormula } from '../../src/data/rulesDice';
 import type { ProgressionResolution } from './characterProgressionEngine';
 import {
@@ -477,6 +477,7 @@ export class TacticalCombatEngine {
   private bossPhaseStates = new Map<string, { phaseId: string; modifiers: Record<string, number>; abilities: string[]; targetPriority?: string; environmentEffects: string[] }>();
   private bossPhaseEvaluationResolver?: (bossId: string, engine: TacticalCombatEngine) => void;
   private combatEffectEvents: CombatEventRecord[] = [];
+  private combatReplayRecords: CombatReplayRecord[] = [];
   private combatActionSequence = 0;
   private initialSeed: number;
 
@@ -2665,6 +2666,23 @@ export class TacticalCombatEngine {
     this.combatEffectEvents = [];
   }
 
+  public getCombatReplayRecords(): CombatReplayRecord[] {
+    return JSON.parse(JSON.stringify(this.combatReplayRecords));
+  }
+
+  public recordCombatReplay(record: Omit<CombatReplayRecord, 'id'>): CombatReplayRecord {
+    const id = `combat_replay_${this.currentRound}_${this.combatActionSequence + 1}_${record.actorId}`;
+    const stored: CombatReplayRecord = {
+      id,
+      ...JSON.parse(JSON.stringify(record)),
+    };
+    this.combatReplayRecords.push(stored);
+    if (this.combatReplayRecords.length > 100) {
+      this.combatReplayRecords.splice(0, this.combatReplayRecords.length - 100);
+    }
+    return JSON.parse(JSON.stringify(stored));
+  }
+
   public getCombatActionSequence(): number {
     return this.combatActionSequence;
   }
@@ -3513,6 +3531,7 @@ export class TacticalCombatEngine {
       combatEffectEvents: this.getCombatEffectEvents(),
       combatActionSequence: this.combatActionSequence,
       destructibleObjects: this.getDestructibleObjects(),
+      combatReplayRecords: this.getCombatReplayRecords(),
       bossPhaseStates: Array.from(this.bossPhaseStates.entries()).map(([bossId, state]) => ({ bossId, ...state })),
       conditionEngineState: this.conditionEngine?.exportState(),
     };
@@ -3595,6 +3614,7 @@ export class TacticalCombatEngine {
       this.spellRuntime.setParticipantContext(this.getMutableParticipantsForSpellResolution());
     }
     this.combatEffectEvents = [...(data.combatEffectEvents || [])];
+    this.combatReplayRecords = [...(data.combatReplayRecords || [])].slice(-100);
     this.combatActionSequence = typeof data.combatActionSequence === 'number' ? Math.max(0, Math.trunc(data.combatActionSequence)) : this.combatEffectEvents.length;
     this.bossPhaseStates.clear();
     for (const state of (data as any).bossPhaseStates || []) {

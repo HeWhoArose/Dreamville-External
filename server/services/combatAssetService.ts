@@ -23,6 +23,27 @@ export class CombatAssetService {
     const assetId = params.assetId || `combat_asset_${params.effectId}`;
     const cached = this.cache.get(assetId);
     if (cached) return JSON.parse(JSON.stringify(cached));
+
+    const persisted = params.repository.getActiveEffects(params.storyId).find(
+      (effect: any) =>
+        effect?.type === 'COMBAT_ASSET_REFERENCE' &&
+        effect?.assetId === assetId &&
+        effect?.presentationOnly === true
+    );
+    if (persisted) {
+      const restored: CombatAssetRecord = {
+        assetId,
+        storyId: params.storyId,
+        effectId: params.effectId,
+        prompt: String(persisted.prompt || params.prompt),
+        imageUrl: persisted.imageUrl,
+        fallback: Boolean(persisted.fallback),
+        generatedAt: String(persisted.generatedAt || new Date(0).toISOString()),
+      };
+      this.cache.set(assetId, restored);
+      return JSON.parse(JSON.stringify(restored));
+    }
+
     const media = await mediaAdapterService.generateImage({
       storyId: params.storyId,
       prompt: params.prompt,
@@ -47,7 +68,9 @@ export class CombatAssetService {
       assetId,
       effectId: params.effectId,
       imageUrl: record.imageUrl,
+      prompt: record.prompt,
       fallback: record.fallback,
+      generatedAt: record.generatedAt,
       presentationOnly: true,
       cacheDisposable: true,
     });

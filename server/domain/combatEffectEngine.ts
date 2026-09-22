@@ -83,7 +83,7 @@ export class CombatEffectEngine {
       const defeatedTargetIds: string[] = [];
       for (let i = 0; i < targeting.targetIds.length; i += 1) {
         const targetId = targeting.targetIds[i];
-        const outcome = engine.applySemanticOutcome(targetId, normalized.outcome, normalized.outcomePayload);
+        const outcome = engine.applySemanticOutcome(targetId, normalized.outcome, normalized.outcomePayload, actorId);
         if (!outcome.success) return rollback({ success: false, errorReason: outcome.errorReason });
         instances.push({
           instanceIndex: i,

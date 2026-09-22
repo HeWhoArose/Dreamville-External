@@ -3095,6 +3095,7 @@ gameRouter.post('/combat/effect', async (req: Request, res: Response) => {
         }
 
         const effectDefinition = transactionValidation.normalized;
+        const replayBeforeState = transactionCombat.exportState();
 
         // CapabilityEngine remains the authority for capability ownership,
         // execution eligibility, energy/strain costs, and contextual power gates.
@@ -3143,6 +3144,30 @@ gameRouter.post('/combat/effect', async (req: Request, res: Response) => {
             success: false,
             errorReason: effectResult.errorReason || 'Combat effect was rejected.',
           };
+        }
+
+        if (effectDefinition.resolutionMode === 'WORLD_EFFECT' || effectDefinition.resolutionMode === 'OUTCOME') {
+          const worldEventId = (effectResult as any).worldEventId || (effectResult as any).canonicalEventIds?.[0];
+          transactionCombat.recordCombatReplay({
+            actionId: 'world_effect_' + effectDefinition.id + '_' + transactionCombat.getCombatActionSequence(),
+            turnNumber: transactionCombat.getCurrentRound(),
+            actorId,
+            targetIds: [...finalTargetResolution.targetIds],
+            definition: JSON.parse(JSON.stringify(effectDefinition)),
+            seedBefore: Number(replayBeforeState.seed || 0),
+            rollCounterBefore: Number(replayBeforeState.rollCounter || 0),
+            beforeState: JSON.parse(JSON.stringify(replayBeforeState)),
+            canonicalEventIds: worldEventId ? [String(worldEventId)] : [],
+            resultSignature: {
+              success: true,
+              totalDamage: 0,
+              defeatedTargetIds: [...((effectResult as any).affectedEntityIds || [])],
+              instanceCount: effectResult.instances?.length || 0,
+            },
+            consumeAction: effectDefinition.actionCost !== 'FREE',
+            replayMode: 'WORLD_PREVIEW',
+            createdAtSequence: transactionCombat.getCombatActionSequence(),
+          });
         }
 
         for (const result of effectResult.instances || []) {

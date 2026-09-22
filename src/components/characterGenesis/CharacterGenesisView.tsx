@@ -2292,7 +2292,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
               error={progressionError}
             />
             <div className="flex items-center justify-between pt-2">
-              <button onClick={() => setActiveStep(2)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200">
+              <button onClick={() => setActiveStep(3)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200">
                 <ArrowLeft className="w-3.5 h-3.5" /> Back to Identity
               </button>
               <button onClick={() => setActiveStep(4)} className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white">
@@ -2422,8 +2422,10 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                       {cap.description}
                     </p>
 
-                    <div className="flex items-center gap-4 text-[11px] text-neutral-400 border-t border-neutral-800/80 pt-2 font-mono">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-neutral-400 border-t border-neutral-800/80 pt-2 font-mono">
                       <span>Cost: {cap.baseEnergyCost ?? 15} Energy</span>
+                      {cap.checkFormula && <span>Check: {cap.checkFormula}</span>}
+                      {cap.damageFormula && <span>Damage: {cap.damageFormula}</span>}
                       <span>Strain: {cap.baseStrainCost ?? 5}</span>
                       <span className="ml-auto text-[10px] text-indigo-400 uppercase">
                         {cap.provenance || 'AI_GENERATED'}
@@ -2480,7 +2482,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 transition-colors"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Back to Dossier</span>
+                <span>Back to Progression</span>
               </button>
               <button
                 onClick={() => setActiveStep(5)}
@@ -2695,8 +2697,9 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                               </span>
                             )}
                           </div>
-                          <div className="text-[10px] text-neutral-400 font-mono">
-                            {skill.governingAbility.slice(0, 3)}
+                          <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-neutral-400 font-mono">
+                            <span>{skill.governingAbility.slice(0, 3)}</span>
+                            <span className="text-indigo-300/70">Check {skill.checkFormula || '1d20'}</span>
                           </div>
                         </div>
                       </div>
@@ -2776,6 +2779,9 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                         <span className="text-neutral-400">Mechanics:</span> {pendingSkillProposal.mechanicalDescription}
                       </div>
                     )}
+                    <div className="text-xs text-indigo-200 font-mono">
+                      <span className="text-neutral-400">Resolution:</span> {pendingSkillProposal.checkFormula || '1d20'}
+                    </div>
                     <div className="flex items-center justify-end gap-2 pt-2 border-t border-indigo-900">
                       <button
                         onClick={handleRejectSkillProposal}

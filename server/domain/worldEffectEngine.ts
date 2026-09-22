@@ -35,6 +35,12 @@ export class WorldEffectEngine {
     if (!SCALE_ORDER.includes(definition.scale)) {
       return { success: false, errorReason: 'World effect has an unsupported scale.' };
     }
+    if (definition.outcome === 'ENVIRONMENT_DAMAGED' || definition.outcome === 'ENVIRONMENT_DESTROYED') {
+      const destructibleId = String(definition.outcomePayload?.destructibleId || '').trim();
+      const amount = Number(definition.outcomePayload?.amount ?? definition.outcomePayload?.damage ?? 0);
+      if (!destructibleId) return { success: false, errorReason: 'Environment outcomes require destructibleId.' };
+      if (!Number.isFinite(amount) || amount < 0) return { success: false, errorReason: 'Environment outcomes require a finite non-negative amount.' };
+    }
     if (definition.outcome === 'RESOURCE_GRANTED' || definition.outcome === 'RESOURCE_REMOVED') {
       const resource = String(definition.outcomePayload?.resource || '').trim();
       const amount = Number(definition.outcomePayload?.amount ?? 0);
@@ -99,6 +105,35 @@ export class WorldEffectEngine {
         affectedEntityIds: [],
         changedScopes: [],
       };
+    }
+
+    if (definition.outcome === 'ENVIRONMENT_DAMAGED' || definition.outcome === 'ENVIRONMENT_DESTROYED') {
+      const destructibleId = String(definition.outcomePayload?.destructibleId || '').trim();
+      const amount = Math.max(0, Number(definition.outcomePayload?.amount ?? definition.outcomePayload?.damage ?? 0) || 0);
+      const damageType = String(definition.outcomePayload?.damageType || definition.damageType || 'custom');
+      const environmentResult = combat.damageDestructibleObject(destructibleId, amount, damageType);
+      if (!environmentResult.success) {
+        return {
+          success: false,
+          errorReason: environmentResult.errorReason,
+          effectId: definition.id,
+          affectedEntityIds: [],
+          changedScopes: [],
+        };
+      }
+      if (
+        definition.outcome === 'ENVIRONMENT_DESTROYED' &&
+        !environmentResult.destroyed &&
+        !environmentResult.wasDestroyed
+      ) {
+        return {
+          success: false,
+          errorReason: 'Environment destruction outcome did not destroy the targeted object.',
+          effectId: definition.id,
+          affectedEntityIds: [],
+          changedScopes: [],
+        };
+      }
     }
 
     const affectedEntityIds: string[] = [];
@@ -281,6 +316,10 @@ export class WorldEffectEngine {
       scale: definition.scale,
       outcome: definition.outcome,
       targetIds: [...normalizedTargetIds],
+      destructibleId:
+        definition.outcome === 'ENVIRONMENT_DAMAGED' || definition.outcome === 'ENVIRONMENT_DESTROYED'
+          ? String(definition.outcomePayload?.destructibleId || '')
+          : undefined,
       affectedEntityIds: [...affectedEntityIds],
       semanticMetadata,
       affectedWorldNodeIds,

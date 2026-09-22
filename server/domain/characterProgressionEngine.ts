@@ -631,12 +631,12 @@ export class CharacterProgressionEngine {
     return clone(state);
   }
 
-  public resolveModifiers(actorId: string): ProgressionResolution {
+  public resolveModifiers(actorId: string, rulesProfile?: RulesProfile | null): ProgressionResolution {
     const state = this.requireActor(actorId);
     const collected: ProgressionModifier[] = [];
     for (const moduleId of state.enabledModuleIds) {
       const module = this.modules.get(moduleId);
-      if (!module || !module.enabled) continue;
+      if (!module || !module.enabled || !this.isModuleAllowed(moduleId, rulesProfile)) continue;
       for (const feature of module.features) {
         if (!feature.enabled || feature.level > state.currentLevel || !state.unlockedFeatureIds.includes(feature.id)) continue;
         for (const modifier of feature.passiveModifiers || []) collected.push(clone(modifier));

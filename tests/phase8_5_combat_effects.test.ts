@@ -870,3 +870,110 @@ test('Phase 8.5 regression: replay records remain bounded after repeated effect 
   }
   assert.ok(engine.getCombatReplayRecords().length <= 100);
 });
+
+test('Phase 8.5 macro connector: world effects project into canonical geography, story threads, timeline, and living world', async () => {
+  const { InMemoryWorldRepository } = await import('../server/repositories/worldRepository');
+  const { worldEffectEngine } = await import('../server/domain/worldEffectEngine');
+  const repository = new InMemoryWorldRepository({ disablePersistence: true });
+  const storyId = 'default_story';
+  repository.seedStory(storyId);
+  const player = repository.getPlayerLifecycle(storyId);
+  assert.ok(player);
+  const actorId = player!.actorId;
+  const combat = repository.getCombatEngine(storyId);
+  combat.addParticipant({
+    id: actorId, name: 'Hero', x: 0, y: 0, initiative: 100, team: 'player_allies',
+    hpCurrent: 30, hpMax: 30, armorClass: 12, speedCells: 6, attackBonus: 5, damageFormula: '1d6',
+    conditions: [], isDead: false,
+  });
+  combat.rollInitiative();
+
+  const geography = repository.getGeographyGraph(storyId);
+  const node = geography.getAllNodes()[0];
+  const edge = geography.getAllEdges()[0];
+  assert.ok(node);
+  assert.ok(edge);
+
+  repository.saveStoryThread({
+    storyId, threadId: 'thread_macro_1', title: 'Keep the Gate', status: 'OPEN', stage: 1,
+    locationId: node!.id, description: 'Protect the pass.', createdAt: '0',
+  });
+  const run = repository.getStoryRun(storyId)!;
+  repository.saveStoryRun({
+    ...run,
+    plannedEvents: [{ id: 'planned_macro_1', title: 'Festival', description: 'A city festival.', status: 'PLANNED', locationId: node!.id, participatingActors: [], plannedConsequences: [] }],
+    eventStates: { planned_macro_1: { id: 'planned_macro_1', status: 'PLANNED' } },
+  });
+
+  const living = repository.getLivingWorldSimulation(storyId);
+  living.registerEntityPhysiology({
+    entityId: 'npc_macro_1', hunger: 20, thirst: 20, fatigue: 10, pain: 0, stress: 10, morale: 80,
+    hungerRatePerHour: 1, thirstRatePerHour: 1, fatigueRatePerHour: 1,
+    lastFedTimestamp: repository.getWorldClock(storyId).getTimestamp(),
+    lastRestedTimestamp: repository.getWorldClock(storyId).getTimestamp(), personalityModulation: 'stoic',
+  });
+
+  repository.beginCanonicalCommandTransaction(storyId, 'cmd_macro_projection');
+  const result = worldEffectEngine.apply({
+    repository, storyId, actorId, authorityVerified: true, targetIds: [],
+    definition: {
+      id: 'macro_projection', name: 'Macro Projection', resolutionMode: 'WORLD_EFFECT', scale: 'CITY',
+      actionCost: 'ACTION', targetingMode: 'SELF', outcome: 'WORLD_STATE_CHANGED',
+      outcomePayload: {
+        worldProjection: {
+          geography: {
+            nodes: [{ id: node!.id, accessible: false, discovered: true }],
+            edges: [{ id: edge!.id, isBlocked: true, blockReason: 'Citywide collapse.' }],
+          },
+          storyThreads: [{ threadId: 'thread_macro_1', status: 'ESCALATED', stage: 2 }],
+          plannedEvents: [{ eventId: 'planned_macro_1', status: 'RESOLVED', plannedConsequences: ['Festival cancelled by catastrophe.'] }],
+          livingWorld: {
+            physiologies: [{ entityId: 'npc_macro_1', delta: { stress: 25, morale: -20 } }],
+            scheduledEvents: [{ id: 'world_evt_macro_1', kind: 'WAR_PROGRESSION', name: 'Emergency Mobilization', locationId: node!.id, triggerTimestamp: repository.getWorldClock(storyId).getTimestamp(), isResolved: false, status: 'pending' }],
+          },
+          chronicleEvidence: { summary: 'A city-scale catastrophe reshaped the region.', details: 'The gate failed and emergency measures were enacted.', category: 'WORLD_ANOMALY' },
+        },
+      },
+    },
+  });
+  assert.equal(result.success, true);
+  repository.commitCanonicalCommandTransaction(storyId, 'evt_macro_projection');
+
+  assert.equal(geography.getNode(node!.id)?.accessible, false);
+  assert.equal(geography.getEdge(edge!.id)?.isBlocked, true);
+  assert.equal(repository.getStoryThreads(storyId).find((t) => t.threadId === 'thread_macro_1')?.status, 'ESCALATED');
+  assert.equal(repository.getStoryRun(storyId)?.plannedEvents?.[0]?.status, 'RESOLVED');
+  assert.equal(living.getEntityPhysiology('npc_macro_1')?.stress, 35);
+  assert.equal(living.getEntityPhysiology('npc_macro_1')?.morale, 60);
+  assert.ok(living.getScheduledEvents().some((event) => event.id === 'world_evt_macro_1'));
+  assert.ok(repository.getHistoricalChronicleEngine(storyId).getChronicleEntries().some((entry) => entry.headline.includes('city-scale catastrophe')));
+});
+
+test('Phase 8.5 macro connector regression: projected mutations reject unknown canonical references before mutation', async () => {
+  const { InMemoryWorldRepository } = await import('../server/repositories/worldRepository');
+  const { worldEffectEngine } = await import('../server/domain/worldEffectEngine');
+  const repository = new InMemoryWorldRepository({ disablePersistence: true });
+  const storyId = 'default_story';
+  repository.seedStory(storyId);
+  const actorId = repository.getPlayerLifecycle(storyId)!.actorId;
+  const combat = repository.getCombatEngine(storyId);
+  combat.addParticipant({
+    id: actorId, name: 'Hero', x: 0, y: 0, initiative: 100, team: 'player_allies',
+    hpCurrent: 30, hpMax: 30, armorClass: 12, speedCells: 6, attackBonus: 5, damageFormula: '1d6',
+    conditions: [], isDead: false,
+  });
+  combat.rollInitiative();
+  const node = repository.getGeographyGraph(storyId).getAllNodes()[0]!;
+  const before = repository.getGeographyGraph(storyId).getNode(node.id);
+  const result = worldEffectEngine.apply({
+    repository, storyId, actorId, authorityVerified: true, targetIds: [],
+    definition: {
+      id: 'bad_macro_projection', name: 'Bad Macro Projection', resolutionMode: 'WORLD_EFFECT', scale: 'CITY',
+      actionCost: 'ACTION', targetingMode: 'SELF', outcome: 'WORLD_STATE_CHANGED',
+      outcomePayload: { worldProjection: { geography: { nodes: [{ id: 'missing_node', accessible: false }] } } },
+    },
+  });
+  assert.equal(result.success, false);
+  assert.deepEqual(repository.getGeographyGraph(storyId).getNode(node.id), before);
+  assert.equal(combat.getTurnResources(actorId)?.actionAvailable, true);
+});

@@ -196,6 +196,7 @@ export class CombatEffectEngine {
             defeatedTargetIds: [...(result.defeatedTargetIds || [])],
             instanceCount: result.instances?.length || 0,
           },
+          consumeAction: options.consumeAction !== false,
           createdAtSequence: engine.getCombatActionSequence(),
         });
       }

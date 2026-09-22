@@ -34,6 +34,7 @@ import {
   Briefcase,
   Award,
   BookOpen,
+  HeartPulse,
 } from 'lucide-react';
 import {
   CharacterGenesisDraft,
@@ -74,6 +75,7 @@ import {
 import { IconStudioModal } from './IconStudioModal';
 import { ConditionProfileEditor } from './ConditionProfileEditor';
 import { CharacterProgressionStep } from './CharacterProgressionStep';
+import { CharacterConditionStep } from './CharacterConditionStep';
 import { apiClient } from '../../services/apiClient';
 import { getImageAssetSpec, appendImageOutputSpecification } from '../../data/imageAssetSpecs';
 import { normalizeImageFile, normalizeImageUrl } from '../../utils/imageAssetNormalizer';
@@ -206,6 +208,10 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
   // Draft persistence & history
   const [savedDrafts, setSavedDrafts] = useState<CharacterGenesisDraft[]>([]);
   const [progressionModules, setProgressionModules] = useState<any[]>([]);
+  const [progressionBusyType, setProgressionBusyType] = useState<'CLASS' | 'SUBCLASS' | 'SPECIES' | null>(null);
+  const [progressionError, setProgressionError] = useState<string | null>(null);
+  const [isSuggestingCondition, setIsSuggestingCondition] = useState(false);
+  const [conditionSuggestionError, setConditionSuggestionError] = useState<string | null>(null);
   const [confirmedCharacters, setConfirmedCharacters] = useState<ConfirmedCharacter[]>([]);
   const [showDraftsModal, setShowDraftsModal] = useState<boolean>(false);
   const [saveDraftStatus, setSaveDraftStatus] = useState<string | null>(null);
@@ -363,8 +369,18 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
       provenance: 'PLAYER_INPUT' as CharacterProvenanceSource,
       worldId: selectedWorld?.worldId,
     };
-    setDraft({ ...draft, feats: [...(draft.feats || []), feat] });
+    setDraft({
+      ...draft,
+      feats: [...(draft.feats || []), feat],
+      progression: {
+        ...(draft.progression || {}),
+        featIds: Array.from(new Set([...(draft.progression?.featIds || []), feat.id])),
+        moduleIds: draft.progression?.moduleIds || [],
+        customModules: draft.progression?.customModules || [],
+      },
+    });
     markFieldEdited('feats');
+    markFieldEdited('progression');
     setCustomFeatName('');
     setCustomFeatDescription('');
   };
@@ -604,6 +620,134 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
     setPendingAiDraft(null);
   };
 
+  // Progression AI inference and custom-module authoring.
+  const handleInferProgression = async (type: 'CLASS' | 'SUBCLASS' | 'SPECIES') => {
+    if (!selectedWorld || !draft) return;
+    if (type === 'SUBCLASS' && !draft.progression?.classId) {
+      setProgressionError('Choose a class before inferring a subclass.');
+      return;
+    }
+    setProgressionError(null);
+    setProgressionBusyType(type);
+    try {
+      const result = await apiClient.inferCharacterProgression(selectedWorld.worldId, {
+        concept: draft.sourceDescription || naturalConcept,
+        background: draft.background?.history,
+        profession: draft.role?.profession,
+        archetype: draft.role?.archetype,
+        species: draft.identity?.species,
+        classId: draft.progression?.classId,
+        narrativeRole: draft.storyMode,
+      });
+      if (!result.success) throw new Error(result.errorReason || 'Progression inference failed.');
+      const progression = draft.progression || {};
+      const next = {
+        ...progression,
+        classId: type === 'CLASS' ? result.classId : progression.classId,
+        subclassId: type === 'SUBCLASS' ? result.subclassId : progression.subclassId,
+        speciesId: type === 'SPECIES' ? result.speciesId : progression.speciesId,
+        featIds: progression.featIds || (draft.feats || []).map((feat) => feat.id),
+        moduleIds: progression.moduleIds || [],
+        customModules: progression.customModules || [],
+      };
+      setDraft({ ...draft, progression: next });
+      markFieldEdited('progression');
+    } catch (error: any) {
+      setProgressionError(error?.message || 'Could not infer progression.');
+    } finally {
+      setProgressionBusyType(null);
+    }
+  };
+
+  const handleGenerateCustomProgression = async (
+    type: 'CLASS' | 'SUBCLASS' | 'SPECIES',
+    name: string,
+    concept: string,
+    parentClassId?: string
+  ) => {
+    if (!selectedWorld || !draft) return;
+    if (type === 'SUBCLASS' && !parentClassId) {
+      setProgressionError('A custom subclass needs a parent class.');
+      return;
+    }
+    setProgressionError(null);
+    setProgressionBusyType(type);
+    try {
+      const result = await apiClient.proposeCustomProgressionModule(selectedWorld.worldId, {
+        type,
+        name,
+        concept,
+        parentClassId,
+        background: draft.background?.history,
+        species: draft.identity?.species,
+        profession: draft.role?.profession,
+        archetype: draft.role?.archetype,
+      });
+      const module = result?.module;
+      if (!module?.id) throw new Error(result?.errorReason || 'AI did not return a valid progression module.');
+
+      setProgressionModules((prev) => [...prev.filter((entry) => entry.id !== module.id), module]);
+      setDraft((prev) => {
+        if (!prev) return prev;
+        const progression = prev.progression || {};
+        return {
+          ...prev,
+          progression: {
+            ...progression,
+            classId: type === 'CLASS' ? module.id : progression.classId,
+            subclassId: type === 'SUBCLASS' ? module.id : progression.subclassId,
+            speciesId: type === 'SPECIES' ? module.id : progression.speciesId,
+            featIds: progression.featIds || (prev.feats || []).map((feat) => feat.id),
+            moduleIds: Array.from(new Set([...(progression.moduleIds || []), module.id])),
+            customModules: [...(progression.customModules || []).filter((entry: any) => entry.id !== module.id), module],
+          },
+        };
+      });
+      markFieldEdited('progression');
+    } catch (error: any) {
+      setProgressionError(error?.message || 'Could not generate the custom progression.');
+    } finally {
+      setProgressionBusyType(null);
+    }
+  };
+
+  const handleSuggestStartingCondition = async (note: string) => {
+    if (!selectedWorld || !draft) return;
+    setConditionSuggestionError(null);
+    setIsSuggestingCondition(true);
+    try {
+      const result = await apiClient.suggestStartingCondition(selectedWorld.worldId, {
+        concept: draft.sourceDescription || naturalConcept,
+        background: draft.background?.history,
+        identity: `${draft.identity?.name || 'Character'} — ${draft.identity?.species || 'Unknown species'}`,
+        startingSituation: draft.startingSituation?.summary || draft.startingSituation?.hook,
+        currentStateNote: note,
+      });
+      if (!result?.conditionState) throw new Error(result?.errorReason || 'AI did not return a condition proposal.');
+      const conditionState = result.conditionState;
+      setDraft((prev) => {
+        if (!prev) return prev;
+        const conditions = Array.from(new Set(conditionState.instances.map((instance: any) => String(instance.name))));
+        return {
+          ...prev,
+          conditionState,
+          startingState: {
+            ...prev.startingState,
+            conditionState,
+            conditions,
+            healthCurrent: prev.coreStats?.hpCurrent ?? prev.startingState.healthCurrent,
+            healthMax: prev.coreStats?.hpMax ?? prev.startingState.healthMax,
+          },
+        };
+      });
+      markFieldEdited('conditionState');
+    } catch (error: any) {
+      setConditionSuggestionError(error?.message || 'Could not infer the current condition.');
+    } finally {
+      setIsSuggestingCondition(false);
+    }
+  };
+
   // 2. Propose Custom Capability (AI Proposal Review Gate)
   const handleProposeCustomCapability = async () => {
     if (!selectedWorld) return;
@@ -700,10 +844,17 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
       return {
         ...prev,
         feats: [...prev.feats, pendingFeatProposal],
+        progression: {
+          ...(prev.progression || {}),
+          featIds: Array.from(new Set([...(prev.progression?.featIds || []), pendingFeatProposal.id])),
+          moduleIds: prev.progression?.moduleIds || [],
+          customModules: prev.progression?.customModules || [],
+        },
       };
     });
 
     markFieldEdited('feats');
+    markFieldEdited('progression');
     setPendingFeatProposal(null);
     setCustomFeatName('');
     setCustomFeatDescription('');
@@ -1387,9 +1538,10 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
             { step: 4, label: '4. Capabilities & Skills', icon: Zap },
             { step: 5, label: '5. Stats & Attributes', icon: BarChart2 },
             { step: 6, label: '6. Starting Equipment', icon: Shield },
-            { step: 7, label: '7. Location & Situation', icon: MapPin },
-            { step: 8, label: '8. Portrait Studio', icon: ImageIcon },
-            { step: 9, label: '9. Review & Confirm', icon: CheckCircle2 },
+            { step: 7, label: '7. Condition & Defense', icon: HeartPulse },
+            { step: 8, label: '8. Location & Situation', icon: MapPin },
+            { step: 9, label: '9. Portrait Studio', icon: ImageIcon },
+            { step: 10, label: '10. Review & Confirm', icon: CheckCircle2 },
           ].map((item) => {
             const Icon = item.icon;
             const isCompleted = activeStep > item.step || (item.step === 1 && draft !== null);
@@ -2134,6 +2286,10 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 setDraft({ ...draft, progression });
                 markFieldEdited('progression');
               }}
+              onInfer={handleInferProgression}
+              onGenerateCustom={handleGenerateCustomProgression}
+              busyType={progressionBusyType}
+              error={progressionError}
             />
             <div className="flex items-center justify-between pt-2">
               <button onClick={() => setActiveStep(2)} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200">
@@ -2893,7 +3049,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
           </div>
         )}
 
-        {/* STEP 5: STARTING EQUIPMENT & PAPER DOLL */}
+        {/* STEP 6: STARTING EQUIPMENT & PAPER DOLL */}
         {draft && activeStep === 6 && (
           <div className="space-y-6">
             <div className="p-6 rounded-xl bg-neutral-950 border border-neutral-800 space-y-6">
@@ -3248,52 +3404,6 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
             </div>
 
 
-            {/* Canonical condition / defensive profile */}
-            <div className="p-6 rounded-xl bg-neutral-950 border border-neutral-800 space-y-5">
-              <div className="flex items-start justify-between gap-3 border-b border-neutral-800 pb-4">
-                <div>
-                  <h3 className="text-sm font-semibold text-white">Current Condition & Defensive Profile</h3>
-                  <p className="mt-1 text-[11px] text-neutral-500">
-                    Define the character's actual starting state, including afflictions, current situations, immunities, vulnerabilities, and body integrity.
-                  </p>
-                </div>
-                <span className="text-[10px] px-2 py-1 rounded bg-neutral-900 text-neutral-500 border border-neutral-800 font-mono uppercase">
-                  Canonical
-                </span>
-              </div>
-              <ConditionProfileEditor
-                value={draft.conditionState || {
-                  instances: [],
-                  damageProfile: {
-                    damageImmunities: [],
-                    damageResistances: [],
-                    damageVulnerabilities: [],
-                  },
-                  conditionProfile: {
-                    conditionImmunities: [],
-                    conditionResistances: [],
-                    conditionVulnerabilities: [],
-                  },
-                  bodyRegions: [],
-                }}
-                onChange={(conditionState) => {
-                  setDraft({
-                    ...draft,
-                    conditionState,
-                    startingState: {
-                      ...draft.startingState,
-                      conditionState,
-                      conditions: Array.from(new Set([
-                        ...(draft.startingState.conditions || []),
-                        ...conditionState.instances.map((instance) => instance.name),
-                      ])),
-                    },
-                  });
-                  markFieldEdited('conditionState');
-                }}
-              />
-            </div>
-
             {/* Navigation */}
             <div className="flex items-center justify-between">
               <button
@@ -3314,7 +3424,48 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
           </div>
         )}
 
-        {/* STEP 6: STARTING LOCATION & SITUATION */}
+        {/* STEP 7: CURRENT CONDITION & DEFENSE */}
+        {draft && activeStep === 10 && (
+          <div className="space-y-6">
+            <CharacterConditionStep
+              draft={draft}
+              isAiSuggesting={isSuggestingCondition}
+              error={conditionSuggestionError}
+              onAiSuggest={handleSuggestStartingCondition}
+              onChange={(conditionState) => {
+                setDraft((prev) => {
+                  if (!prev) return prev;
+                  return {
+                    ...prev,
+                    conditionState,
+                    startingState: {
+                      ...prev.startingState,
+                      conditionState,
+                      conditions: conditionState.instances.map((instance) => instance.name),
+                    },
+                  };
+                });
+                markFieldEdited('conditionState');
+              }}
+            />
+            <div className="flex items-center justify-between">
+              <button
+                onClick={() => setActiveStep(6)}
+                className="flex items-center gap-1.5 rounded-lg bg-neutral-800 px-4 py-2 text-xs text-neutral-200 hover:bg-neutral-700"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" /> Back to Equipment
+              </button>
+              <button
+                onClick={() => setActiveStep(8)}
+                className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-5 py-2.5 text-xs font-medium text-white hover:bg-indigo-500"
+              >
+                Continue to Location <ArrowRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 8: STARTING LOCATION & SITUATION */
         {draft && activeStep === 7 && (
           <div className="space-y-6">
             <div className="p-6 rounded-xl bg-neutral-950 border border-neutral-800 space-y-6">
@@ -3461,14 +3612,14 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
             {/* Navigation */}
             <div className="flex items-center justify-between">
               <button
-                onClick={() => setActiveStep(6)}
+                onClick={() => setActiveStep(8)}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 transition-colors"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Back to Equipment</span>
               </button>
               <button
-                onClick={() => setActiveStep(8)}
+                onClick={() => setActiveStep(10)}
                 className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition-colors"
               >
                 <span>Proceed to Portrait</span>

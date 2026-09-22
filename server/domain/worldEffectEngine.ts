@@ -36,6 +36,16 @@ export class WorldEffectEngine {
     if (!validation.success) {
       return { success: false, errorReason: validation.errorReason, effectId: definition.id, affectedEntityIds: [], changedScopes: [] };
     }
+    if (!params.authorityVerified) {
+      return {
+        success: false,
+        errorReason: 'World effect authority was not verified by the canonical capability/command layer.',
+        effectId: definition.id,
+        affectedEntityIds: [],
+        changedScopes: [],
+      };
+    }
+
     const combat = repository.getCombatEngine(storyId);
     const actionUse = combat.consumeCombatAction(actorId, definition.actionCost || 'ACTION');
     if (!actionUse.success) {
@@ -47,8 +57,6 @@ export class WorldEffectEngine {
         changedScopes: [],
       };
     }
-
-    if (!params.authorityVerified) {
       return {
         success: false,
         errorReason: 'World effect authority was not verified by the canonical capability/command layer.',

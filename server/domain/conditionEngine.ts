@@ -271,6 +271,31 @@ export class ConditionEngine {
     return state ? clone(state) : undefined;
   }
 
+  public getBlockedActions(actorId: string): string[] {
+    const state = this.actors.get(actorId);
+    if (!state) return [];
+    const blocked = new Set<string>();
+    for (const instance of state.instances) {
+      const definition = this.definitions.get(instance.definitionId);
+      for (const action of definition?.blocksActions || []) blocked.add(action);
+    }
+    return Array.from(blocked);
+  }
+
+  public isActionBlocked(
+    actorId: string,
+    action: 'ACTION' | 'BONUS_ACTION' | 'REACTION' | 'MOVEMENT'
+  ): boolean {
+    const aliases: Record<typeof action, string[]> = {
+      ACTION: ['action', 'actions'],
+      BONUS_ACTION: ['bonus_action', 'bonusAction', 'bonus actions'],
+      REACTION: ['reaction', 'reactions'],
+      MOVEMENT: ['movement', 'move'],
+    };
+    const blocked = this.getBlockedActions(actorId).map((value) => value.toLowerCase());
+    return blocked.some((value) => aliases[action].includes(value));
+  }
+
   public setHealth(actorId: string, healthCurrent: number, healthMax?: number): void {
     const state = this.requireActor(actorId);
     state.healthMax = Math.max(1, Math.floor(healthMax ?? state.healthMax));
@@ -997,6 +1022,15 @@ export class ConditionEngine {
       'Unconscious',
     ];
 
+    const dndActionBlocks: Record<string, string[]> = {
+      Incapacitated: ['action', 'bonus_action', 'reaction'],
+      Paralyzed: ['action', 'bonus_action', 'reaction', 'movement'],
+      Petrified: ['action', 'bonus_action', 'reaction', 'movement'],
+      Stunned: ['action', 'bonus_action', 'reaction', 'movement'],
+      Unconscious: ['action', 'bonus_action', 'reaction', 'movement'],
+      Grappled: ['movement'],
+    };
+
     for (const name of dndConditions) {
       this.registerDefinition({
         id: slugify(name),
@@ -1009,6 +1043,7 @@ export class ConditionEngine {
         maxIntensity: name === 'Exhaustion' ? 6 : undefined,
         stackMode: name === 'Exhaustion' ? 'MAX' : 'REFRESH',
         tags: ['dnd', 'condition', slugify(name)],
+        blocksActions: dndActionBlocks[name] || [],
       });
     }
 

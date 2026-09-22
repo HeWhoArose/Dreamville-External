@@ -162,7 +162,7 @@ export class CombatEffectEngine {
     actorId: string,
     targetIds: string[],
     definition: CombatEffectDefinition,
-    options: { consumeAction?: boolean } = {}
+    options: { consumeAction?: boolean; recordReplay?: boolean } = {}
   ): CombatEffectResult {
     const profile = engine.getRulesProfile();
     const validation = this.validateDefinition(definition, profile?.mode || 'FULL_DND');
@@ -170,8 +170,35 @@ export class CombatEffectEngine {
 
     const normalized = validation.normalized;
     const beforeState = engine.exportState();
+    const replayBeforeState = JSON.parse(JSON.stringify({
+      ...beforeState,
+      combatReplayRecords: [],
+    }));
     const rollback = <T extends CombatEffectResult>(result: T): T => {
-      if (!result.success) engine.importState(beforeState);
+      if (!result.success) {
+        engine.importState(beforeState);
+        return result;
+      }
+      if (options.recordReplay !== false) {
+        engine.recordCombatReplay({
+          actionId: `combat_effect_${normalized.id}_${engine.getCurrentRound()}_${engine.getCombatActionSequence()}`,
+          turnNumber: engine.getCurrentRound(),
+          actorId,
+          targetIds: [...targetIds],
+          definition: JSON.parse(JSON.stringify(normalized)),
+          seedBefore: Number(beforeState.seed || 0),
+          rollCounterBefore: Number(beforeState.rollCounter || 0),
+          beforeState: replayBeforeState,
+          canonicalEventIds: [...(result.canonicalEventIds || [])],
+          resultSignature: {
+            success: result.success,
+            totalDamage: result.totalDamage,
+            defeatedTargetIds: [...(result.defeatedTargetIds || [])],
+            instanceCount: result.instances?.length || 0,
+          },
+          createdAtSequence: engine.getCombatActionSequence(),
+        });
+      }
       return result;
     };
 
@@ -416,7 +443,7 @@ export class CombatEffectEngine {
       let totalDamage = 0;
 
       for (const child of normalized.sequence) {
-        const childResult = this.resolve(engine, actorId, targeting.targetIds, child, { consumeAction: false });
+        const childResult = this.resolve(engine, actorId, targeting.targetIds, child, { consumeAction: false, recordReplay: false });
         if (!childResult.success) return rollback(childResult);
         instances.push(...(childResult.instances || []));
         totalDamage += childResult.totalDamage || 0;

@@ -1990,6 +1990,7 @@ export interface CombatForcedMovementResult {
   requestedDistanceCells: number;
   actualDistanceCells: number;
   collision?: CombatMovementCollisionResult;
+  collisions?: CombatMovementCollisionResult[];
   collisionsResolved: number;
 }
 

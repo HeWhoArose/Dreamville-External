@@ -1040,6 +1040,7 @@ export class TacticalCombatEngine {
 
     actor.x = targetX;
     actor.y = targetY;
+    this.processConditionCombatEvent(actorId, 'ON_MOVE', 'move');
 
     this.eventLog.push({
       turnNumber: this.currentRound,
@@ -1271,6 +1272,7 @@ export class TacticalCombatEngine {
     if (!attacker || !target || attacker.isDead || target.isDead) {
       return { hits: false, damage: 0, targetDied: target?.isDead ?? false, isCritical: false };
     }
+    this.processConditionCombatEvent(attackerId, 'ON_REACTION', 'reaction');
     const resolution = this.resolveStandardAttack(attacker, target);
     if (resolution.blocked || !resolution.roll) {
       return { hits: false, damage: 0, targetDied: target.isDead, isCritical: false };
@@ -2010,9 +2012,11 @@ export class TacticalCombatEngine {
       return { success: false, errorReason: 'Target has Total Cover and cannot be targeted directly.', instanceIndex: options.instanceIndex ?? 0, targetId, hits: false, isCritical: false, damage: 0, targetDied: target.isDead };
     }
 
+    this.processConditionCombatEvent(attackerId, 'ON_ATTACK', 'attack');
+
     const attackSource = options.attackBonusOverride === undefined
-      ? attacker
-      : { ...attacker, attackBonus: options.attackBonusOverride };
+      ? this.participants.get(attackerId) || attacker
+      : { ...(this.participants.get(attackerId) || attacker), attackBonus: options.attackBonusOverride };
     const attackResolution = this.resolveStandardAttack(attackSource, target, {
       advantage: options.advantage,
       disadvantage: options.disadvantage,
@@ -2070,6 +2074,17 @@ export class TacticalCombatEngine {
     };
     this.combatEffectEvents.push(event);
 
+    if (attackResult.hits) {
+      this.processConditionCombatEvent(attackerId, 'ON_HIT', 'hit');
+      if (damage > 0) this.processConditionCombatEvent(targetId, 'ON_DAMAGE', 'damage');
+    } else {
+      this.processConditionCombatEvent(attackerId, 'ON_MISS', 'miss');
+    }
+    if (targetDied) {
+      this.processConditionCombatEvent(attackerId, 'ON_KILL', 'kill');
+      this.processConditionCombatEvent(targetId, 'ON_DEATH', 'death');
+    }
+
     if (options.emitBattleEvent !== false) {
       this.eventLog.push({
         turnNumber: this.currentRound,
@@ -2097,6 +2112,64 @@ export class TacticalCombatEngine {
       targetArmorClass: target.armorClass + this.progressionModifier(target.id, 'coreStats.armorClass') + this.bossPhaseModifier(target.id, 'coreStats.armorClass') + this.getCoverBonus(target),
       defense,
     };
+  }
+
+  private processConditionCombatEvent(
+    actorId: string,
+    event:
+      | 'ON_ACTION'
+      | 'ON_ATTACK'
+      | 'ON_HIT'
+      | 'ON_MISS'
+      | 'ON_DAMAGE'
+      | 'ON_SAVE'
+      | 'ON_MOVE'
+      | 'ON_KILL'
+      | 'ON_DEATH'
+      | 'ON_REACTION'
+      | 'ON_ROUND_START'
+      | 'ON_ROUND_END',
+    actionText?: string,
+  ): void {
+    if (!this.conditionEngine?.getActorState(actorId)) return;
+    const result = this.conditionEngine.processCombatEvent(actorId, event, {
+      actionText,
+      nowSeconds: this.currentRound,
+    });
+    const participant = this.participants.get(actorId);
+    const state = this.conditionEngine.getActorState(actorId);
+    if (participant && state) {
+      participant.hpCurrent = state.healthCurrent;
+      participant.hpMax = state.healthMax;
+      participant.isDead = state.dead;
+      participant.conditions = state.instances.map((instance) => instance.name);
+      participant.damageProfile = state.damageProfile;
+      participant.conditionProfile = state.conditionProfile;
+    }
+    if (!result.changed) return;
+
+    for (const triggerEvent of result.events) {
+      this.combatActionSequence += 1;
+      this.combatEffectEvents.push({
+        eventId: `combat_evt_${this.currentRound}_${this.combatActionSequence}`,
+        actionId: `condition_trigger_${this.currentRound}_${actorId}`,
+        eventType: 'CONDITION_TRIGGER_RESOLVED',
+        turnNumber: this.currentRound,
+        actorId,
+        targetId: actorId,
+        headline: triggerEvent.notes.join(' ') || `${triggerEvent.conditionName} reacted to ${event}.`,
+        damage: triggerEvent.damage?.finalAmount || 0,
+        finalDamage: triggerEvent.damage?.finalAmount || 0,
+        metadata: {
+          conditionEvent: event,
+          conditionId: triggerEvent.conditionId,
+          conditionName: triggerEvent.conditionName,
+          intensityBefore: triggerEvent.intensityBefore,
+          intensityAfter: triggerEvent.intensityAfter,
+          removed: triggerEvent.removed,
+        },
+      });
+    }
   }
 
   public applyCombatCondition(
@@ -2369,6 +2442,8 @@ export class TacticalCombatEngine {
         damageRoll: damageRoll.roll, damage: resolved.damage, finalDamage: resolved.damage,
         metadata: { damageType: params.damageType || 'force', defense: { immune: resolved.immune, resisted: resolved.resisted, vulnerable: resolved.vulnerable } },
       });
+      this.processConditionCombatEvent(target.id, 'ON_SAVE', save.succeeds ? 'save_success' : 'save_failure');
+
       this.eventLog.push({
         turnNumber: this.currentRound, actorId: params.actorId, targetId: target.id, actionType: 'CAST',
         headline: `${actor.name} affected ${target.name} for ${resolved.damage} damage.`,

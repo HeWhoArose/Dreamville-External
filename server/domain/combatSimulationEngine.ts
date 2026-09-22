@@ -78,7 +78,6 @@ export class CombatSimulationEngine {
     if (!result.success) return { success: false, errorReason: result.errorReason, seed, before, result, authority, presentation };
     return { success: true, seed, before, after: clone.exportState(), result, authority, presentation };
 
-    return { success: true, seed, before, after: clone.exportState(), result };
   }
 
   public scenarioMatrix(params: {

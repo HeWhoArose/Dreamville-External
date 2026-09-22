@@ -339,9 +339,9 @@ export class CharacterProgressionEngine {
     const state: CharacterProgressionState = {
       actorId,
       currentLevel: normalizeLevel(character.coreStats?.level, 1),
-      classId: normalizeModuleId(explicit.classId) || this.resolveModuleAlias('CLASS', character.role?.profession || character.role?.archetype) || undefined,
+      classId: normalizeModuleId(explicit.classId) || undefined,
       subclassId: normalizeModuleId(explicit.subclassId) || undefined,
-      speciesId: normalizeModuleId(explicit.speciesId) || this.resolveModuleAlias('SPECIES', character.identity?.species) || undefined,
+      speciesId: normalizeModuleId(explicit.speciesId) || undefined,
       featIds: Array.isArray(explicit.featIds)
         ? [...new Set((explicit.featIds as unknown[]).map((id) => normalizeModuleId(id)).filter((id): id is string => Boolean(id)).map((id) => featModuleByCharacterId.get(id) || id))]
         : [],
@@ -792,15 +792,9 @@ export class CharacterProgressionEngine {
           .map((id: string) => featModuleIds.get(id) || id)
           .sort()
       : characterFeats.map((feat) => deterministicId('feat_module', feat.worldId || 'world', feat.id, feat.name)).sort();
-    const expectedClassId =
-      normalizeModuleId(expected.classId) ||
-      this.resolveModuleAlias('CLASS', character.role?.profession || character.role?.archetype) ||
-      '';
+    const expectedClassId = normalizeModuleId(expected.classId) || '';
     const expectedSubclassId = normalizeModuleId(expected.subclassId) || '';
-    const expectedSpeciesId =
-      normalizeModuleId(expected.speciesId) ||
-      this.resolveModuleAlias('SPECIES', character.identity?.species) ||
-      '';
+    const expectedSpeciesId = normalizeModuleId(expected.speciesId) || '';
     const expectedFingerprint = deterministicId(
       'prg_genesis',
       actorId,

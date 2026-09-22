@@ -2715,6 +2715,11 @@ export class TacticalCombatEngine {
         ? 'BONUS_ACTION'
         : 'ACTION';
 
+    const conditionLegality = this.canActorPerformCombatAction(params.actorId, resourceType);
+    if (!conditionLegality.success) {
+      return { success: false, errorReason: conditionLegality.errorReason };
+    }
+
     if (isReaction) {
       if (!this.actionEconomy.canConsume(params.actorId, 'REACTION')) {
         return { success: false, errorReason: 'Reaction already spent this round.' };
@@ -2776,11 +2781,7 @@ export class TacticalCombatEngine {
       return { success: false, errorReason: result.errorReason, result };
     }
 
-    // Consume action resource upon successful cast
-    const resourceLegality = this.canActorPerformCombatAction(params.actorId, resourceType === 'BONUS_ACTION' ? 'BONUS_ACTION' : resourceType === 'REACTION' ? 'REACTION' : 'ACTION');
-    if (!resourceLegality.success) {
-      return { success: false, errorReason: resourceLegality.errorReason };
-    }
+    // Consume action resource only after the spell has resolved successfully.
     this.actionEconomy.consume(params.actorId, resourceType);
 
     // Synchronize state back to participant

@@ -4,6 +4,7 @@ import { INITIAL_COMPENDIUM_ITEMS } from './compendiumData';
 import { CompendiumGallery } from './CompendiumGallery';
 import { CompendiumDetail } from './CompendiumDetail';
 import { Badge } from '../common/Badge';
+import { apiClient } from '../../services/apiClient';
 
 export const COMPENDIUM_STORAGE_KEY = 'dreambook_compendium_collection_v1';
 
@@ -36,12 +37,14 @@ export interface CompendiumViewProps {
   initialCategory?: CompendiumCategory;
   onNavigateCategory?: (category: CompendiumCategory) => void;
   className?: string;
+  activeStoryId?: string;
 }
 
 export const CompendiumView: React.FC<CompendiumViewProps> = ({
   initialCategory = 'characters',
   onNavigateCategory,
   className = '',
+  activeStoryId,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<CompendiumCategory>(initialCategory);
   const [selectedItem, setSelectedItem] = useState<CompendiumItem | null>(null);
@@ -50,6 +53,58 @@ export const CompendiumView: React.FC<CompendiumViewProps> = ({
   useEffect(() => {
     saveCompendiumItems(items);
   }, [items]);
+
+  useEffect(() => {
+    if (!activeStoryId) return;
+    apiClient.getEntities(activeStoryId, { includeTemplates: false })
+      .then((res) => {
+        const entities = Array.isArray(res?.entities) ? res.entities : [];
+        if (!entities.length) return;
+        const generated: CompendiumItem[] = entities.map((entity: any) => {
+          const category = entity.kind === 'CREATURE' || entity.kind === 'ANIMAL' || entity.kind === 'MONSTER' || entity.kind === 'BOSS'
+            ? 'creatures'
+            : entity.kind === 'PLAYER' || entity.kind === 'CHARACTER'
+              ? 'characters'
+              : 'npcs';
+          const stats = entity.coreStats
+            ? {
+                Level: entity.coreStats.level ?? entity.progression?.level ?? 1,
+                HP: `${entity.coreStats.hpCurrent ?? 0}/${entity.coreStats.hpMax ?? 0}`,
+                AC: entity.coreStats.armorClass ?? 0,
+                Speed: entity.coreStats.speed ?? 0,
+              }
+            : {};
+          return {
+            id: `entity_${entity.id}`,
+            category,
+            title: entity.name,
+            subtitle: entity.classification?.profession || entity.classification?.role || entity.identity?.species,
+            description: entity.background?.history || entity.behavior?.defaultBehavior || `${entity.kind} entity`,
+            tags: [...(entity.classification?.tags || []), entity.identity?.species].filter(Boolean),
+            worldOrigin: entity.worldId,
+            imageUrl: undefined,
+            stats,
+            classification: entity.classification?.role || entity.kind,
+            rarityOrThreat: entity.classification?.threat,
+            traits: entity.traits || entity.personality?.traits || [],
+            equipment: (entity.equipment || []).join(', '),
+            loreSnippet: entity.background?.history,
+            provenance: entity.provenance?.source || 'Canonical Entity Registry',
+            originType: 'encountered',
+            canonicalEntityId: entity.id,
+            sourceRun: activeStoryId,
+            discoveredAt: entity.updatedAt,
+          } as CompendiumItem;
+        });
+        setItems((prev) => {
+          const withoutOldEntities = prev.filter((item) => !item.canonicalEntityId);
+          return [...withoutOldEntities, ...generated];
+        });
+      })
+      .catch(() => {
+        // The local compendium remains usable if the story registry is unavailable.
+      });
+  }, [activeStoryId]);
 
   const handleCategoryChange = (category: CompendiumCategory) => {
     setSelectedCategory(category);

@@ -2013,6 +2013,7 @@ export interface CombatEffectResult {
 	outcome?: CombatOutcomeType;
 	canonicalEventIds?: string[];
 	animationPlan?: CombatAnimationPlan;
+	executionResult?: { success: boolean; mode: CombatExecutionMode; roll?: unknown; difficultyClass?: number; reason?: string };
 	conditionsApplied?: Array<{ targetId: string; conditionIdOrName: string; trigger: CombatConditionEffectDefinition['trigger']; applied: boolean; immune: boolean }>;
 	worldEffectPreview?: {
 		scale: CombatEffectScale;

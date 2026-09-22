@@ -2928,10 +2928,17 @@ export class TacticalCombatEngine {
     const p = this.participants.get(id);
     return p ? this.projectedParticipant(p) : undefined;
   }
-  public applySemanticOutcome(targetId: string, outcome: import('../../src/types').CombatOutcomeType): { success: boolean; errorReason?: string; targetId: string; wasAlive: boolean; isDead: boolean } {
+  public applySemanticOutcome(
+    targetId: string,
+    outcome: import('../../src/types').CombatOutcomeType,
+    outcomePayload?: Record<string, unknown>
+  ): { success: boolean; errorReason?: string; targetId: string; wasAlive: boolean; isDead: boolean; metadata?: Record<string, unknown> } {
     const target = this.participants.get(targetId);
     if (!target) return { success: false, errorReason: 'Target participant not found.', targetId, wasAlive: false, isDead: false };
+
     const wasAlive = !target.isDead && target.hpCurrent > 0;
+    const metadata: Record<string, unknown> = { semanticOutcome: outcome, outcomePayload: outcomePayload || {} };
+
     switch (outcome) {
       case 'INSTANT_DEFEAT':
       case 'ERASE_FROM_WORLD':
@@ -2941,10 +2948,56 @@ export class TacticalCombatEngine {
         target.isDead = true;
         if (!target.conditions.includes('Dead')) target.conditions.push('Dead');
         if (!target.conditions.includes('Unconscious')) target.conditions.push('Unconscious');
+        if (outcome === 'ERASE_FROM_WORLD') metadata.erase = true;
         break;
+
+      case 'SEALED':
+        if (!target.conditions.includes('Sealed')) target.conditions.push('Sealed');
+        if (this.conditionEngine) {
+          this.conditionEngine.applyCondition(targetId, {
+            definitionIdOrName: 'Sealed',
+            sourceActorId: typeof outcomePayload?.sourceActorId === 'string' ? outcomePayload.sourceActorId : targetId,
+          });
+        }
+        break;
+
+      case 'TRANSFORMED':
+        if (!target.conditions.includes('Transformed')) target.conditions.push('Transformed');
+        metadata.transformation = outcomePayload?.transformation || outcomePayload?.form || null;
+        break;
+
+      case 'TELEPORTED': {
+        const position = outcomePayload?.targetPosition;
+        if (position && typeof position === 'object') {
+          const next = position as Record<string, unknown>;
+          const x = Number(next.x);
+          const y = Number(next.y);
+          if (Number.isFinite(x) && Number.isFinite(y)) {
+            target.x = x;
+            target.y = y;
+            metadata.targetPosition = { x, y };
+          }
+        }
+        break;
+      }
+
+      case 'RESOURCE_GRANTED':
+      case 'RESOURCE_REMOVED':
+      case 'RESOURCE_GRANTED':
+      case 'RESOURCE_REMOVED':
+        metadata.resource = outcomePayload?.resource || null;
+        metadata.amount = outcomePayload?.amount ?? null;
+        break;
+
+      case 'SUMMONED':
+      case 'WORLD_STATE_CHANGED':
+        metadata.payload = outcomePayload || {};
+        break;
+
       default:
-        return { success: true, targetId, wasAlive, isDead: target.isDead };
+        break;
     }
+
     this.eventLog.push({
       turnNumber: this.currentRound,
       actorId: targetId,
@@ -2952,11 +3005,11 @@ export class TacticalCombatEngine {
       actionType: 'CAST',
       headline: `Semantic outcome ${outcome} applied to ${target.name}.`,
       damageInflicted: 0,
-      metadata: { semanticOutcome: outcome },
+      metadata,
     });
-    return { success: true, targetId, wasAlive, isDead: target.isDead };
-  }
 
+    return { success: true, targetId, wasAlive, isDead: target.isDead, metadata };
+  }
 
   public exportState(): TacticalCombatStateExport {
     return {

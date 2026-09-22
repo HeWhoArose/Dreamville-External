@@ -389,62 +389,99 @@ export class ConditionEngine {
     return clone({ ...instance, notes: `Intensity ${previous} → ${instance.intensity}` });
   }
 
-  public processAction(actorId: string, actionText: string, nowSeconds = 0): ConditionActionResult {
+  public processCombatEvent(
+    actorId: string,
+    event:
+      | 'ON_ATTACK'
+      | 'ON_HIT'
+      | 'ON_MISS'
+      | 'ON_DAMAGE'
+      | 'ON_SAVE'
+      | 'ON_MOVE'
+      | 'ON_KILL'
+      | 'ON_DEATH'
+      | 'ON_REACTION'
+      | 'ON_ROUND_START'
+      | 'ON_ROUND_END',
+    options: { actionText?: string; nowSeconds?: number } = {},
+  ): ConditionActionResult {
     const state = this.requireActor(actorId);
-    const normalized = actionText.toLowerCase();
+    const normalizedText = String(options.actionText || '').toLowerCase();
+    const nowSeconds = Math.max(0, Number(options.nowSeconds || 0));
     const events: ConditionTickEvent[] = [];
 
     for (const instance of [...state.instances]) {
       const definition = this.definitions.get(instance.definitionId);
       if (!definition?.triggers) continue;
 
-      for (const trigger of definition.triggers.filter((item) => item.event === 'ON_ACTION')) {
+      for (const trigger of definition.triggers.filter((item) => item.event === event)) {
         const keywords = trigger.actionKeywords || [];
-        if (keywords.length === 0 || keywords.some((keyword) => normalized.includes(keyword.toLowerCase()))) {
-          const before = instance.intensity;
-          if (trigger.intensityDelta) {
-            instance.intensity = Math.max(
-              0,
-              Math.min(instance.maxIntensity ?? definition.maxIntensity ?? Number.MAX_SAFE_INTEGER, instance.intensity + trigger.intensityDelta)
-            );
-            this.applyStageBodyEffects(state, instance, definition);
-          }
-          if (trigger.healingAmount && trigger.healingAmount > 0) {
-            const healed = Math.min(trigger.healingAmount, state.healthMax - state.healthCurrent);
-            state.healthCurrent += healed;
-          }
-          for (const conditionId of trigger.addConditionIds || []) {
-            this.applyConditionToState(state, { definitionIdOrName: conditionId, nowSeconds }, this.resolveOrCreateDefinition(conditionId));
-          }
-          for (const conditionId of trigger.removeConditionIds || []) {
-            state.instances = state.instances.filter(
-              (candidate) =>
-                candidate.definitionId !== conditionId &&
-                candidate.name.toLowerCase() !== conditionId.toLowerCase()
-            );
-          }
-          if (instance.intensity <= 0) {
-            state.instances = state.instances.filter((item) => item.id !== instance.id);
-          }
-          events.push({
-            actorId,
-            conditionId: instance.id,
-            conditionName: instance.name,
-            unit: 'ACTION',
-            intensityBefore: before,
-            intensityAfter: instance.intensity,
-            removed: instance.intensity <= 0,
-            notes: [
-              ...(trigger.description ? [trigger.description] : []),
-              trigger.healingAmount ? `Recovered up to ${trigger.healingAmount} HP.` : '',
-            ].filter(Boolean),
-          });
+        if (keywords.length > 0 && !keywords.some((keyword) => normalizedText.includes(keyword.toLowerCase()))) {
+          continue;
         }
+
+        const before = instance.intensity;
+        if (trigger.intensityDelta) {
+          instance.intensity = Math.max(
+            0,
+            Math.min(
+              instance.maxIntensity ?? definition.maxIntensity ?? Number.MAX_SAFE_INTEGER,
+              instance.intensity + trigger.intensityDelta,
+            ),
+          );
+          this.applyStageBodyEffects(state, instance, definition);
+        }
+
+        if (trigger.healingAmount && trigger.healingAmount > 0) {
+          const healed = Math.min(trigger.healingAmount, state.healthMax - state.healthCurrent);
+          state.healthCurrent += healed;
+        }
+
+        for (const conditionId of trigger.addConditionIds || []) {
+          this.applyConditionToState(
+            state,
+            { definitionIdOrName: conditionId, nowSeconds },
+            this.resolveOrCreateDefinition(conditionId),
+          );
+        }
+
+        for (const conditionId of trigger.removeConditionIds || []) {
+          state.instances = state.instances.filter(
+            (candidate) =>
+              candidate.definitionId !== conditionId &&
+              candidate.name.toLowerCase() !== conditionId.toLowerCase(),
+          );
+        }
+
+        if (instance.intensity <= 0) {
+          state.instances = state.instances.filter((candidate) => candidate.id !== instance.id);
+        }
+
+        events.push({
+          actorId,
+          conditionId: instance.id,
+          conditionName: instance.name,
+          unit: 'ACTION',
+          intensityBefore: before,
+          intensityAfter: instance.intensity,
+          removed: instance.intensity <= 0,
+          notes: [
+            ...(trigger.description ? [trigger.description] : []),
+            trigger.healingAmount ? `Recovered up to ${trigger.healingAmount} HP.` : '',
+          ].filter(Boolean),
+        });
       }
     }
 
     return { actorId, changed: events.length > 0, events };
   }
+
+  public processAction(actorId: string, actionText: string, nowSeconds = 0): ConditionActionResult {
+    return this.processCombatEvent(actorId, 'ON_ATTACK', { actionText, nowSeconds }).changed
+      ? this.processCombatEvent(actorId, 'ON_ACTION' as any, { actionText, nowSeconds })
+      : this.processCombatEvent(actorId, 'ON_ACTION' as any, { actionText, nowSeconds });
+  }
+
 
   public tickActor(actorId: string, unit: ConditionTickUnit, nowSeconds: number, options: { decrementDuration?: boolean } = {}): ConditionTickEvent[] {
     const state = this.requireActor(actorId);

@@ -678,15 +678,17 @@ export class CharacterProgressionEngine {
         } else if (entry.mode === 'MULTIPLY') {
           multiply *= entry.value;
         } else if (entry.mode === 'MIN') {
-          minValue = minValue === undefined ? entry.value : Math.min(minValue, entry.value);
+          minValue = minValue === undefined ? entry.value : Math.max(minValue, entry.value);
         } else if (entry.mode === 'MAX') {
-          maxValue = maxValue === undefined ? entry.value : Math.max(maxValue, entry.value);
+          maxValue = maxValue === undefined ? entry.value : Math.min(maxValue, entry.value);
         }
       }
 
       value *= multiply;
-      if (minValue !== undefined) value = Math.min(value, minValue);
-      if (maxValue !== undefined) value = Math.max(value, maxValue);
+      // MIN establishes a floor; MAX establishes a ceiling. Multiple constraints
+      // compose deterministically by choosing the strongest floor / tightest ceiling.
+      if (minValue !== undefined) value = Math.max(value, minValue);
+      if (maxValue !== undefined) value = Math.min(value, maxValue);
 
       modifiers.push({
         target,

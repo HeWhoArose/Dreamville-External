@@ -1954,6 +1954,112 @@ class ApiClient {
 
     return await res.json();
   }
+  public async validateCombatEffect(storyId: string, definition: import('../types').CombatEffectDefinition): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/combat/effect/validate?storyId=${encodeURIComponent(storyId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Story-ID': storyId },
+      body: JSON.stringify({ definition }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.errorReason || `Failed to validate combat effect: HTTP ${res.status}`);
+    return data;
+  }
+
+  public async executeCombatEffect(
+    storyId: string,
+    definition: import('../types').CombatEffectDefinition,
+    targetIds: string[],
+    options: { capabilityId?: string; commandId?: string; allowUnboundTest?: boolean } = {}
+  ): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/combat/effect`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'X-Story-ID': storyId,
+        ...(options.commandId ? { 'X-Command-ID': options.commandId } : {}),
+      },
+      body: JSON.stringify({
+        definition,
+        targetIds,
+        capabilityId: options.capabilityId,
+        commandId: options.commandId,
+        allowUnboundTest: options.allowUnboundTest,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.errorReason || `Failed to execute combat effect: HTTP ${res.status}`);
+    return data;
+  }
+
+  public async simulateCombatEffect(
+    storyId: string,
+    definition: import('../types').CombatEffectDefinition,
+    targetIds: string[],
+    options: { actorId?: string; seed?: number; seeds?: number[] } = {}
+  ): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/combat/simulate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Story-ID': storyId },
+      body: JSON.stringify({
+        definition,
+        targetIds,
+        actorId: options.actorId,
+        seed: options.seed,
+        seeds: options.seeds,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.errorReason || `Failed to simulate combat effect: HTTP ${res.status}`);
+    return data;
+  }
+
+  public async generateCombatAnimationPlan(
+    storyId: string,
+    definition: import('../types').CombatEffectDefinition,
+    events: import('../types').CombatEventRecord[] = []
+  ): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/combat/animation-plan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Story-ID': storyId },
+      body: JSON.stringify({ definition, events }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.errorReason || `Failed to generate combat animation plan: HTTP ${res.status}`);
+    return data;
+  }
+
+  public async ensureCombatAsset(
+    storyId: string,
+    effectId: string,
+    prompt: string,
+    assetId?: string
+  ): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/combat/asset/ensure`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Story-ID': storyId },
+      body: JSON.stringify({ effectId, prompt, assetId }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.errorReason || `Failed to ensure combat asset: HTTP ${res.status}`);
+    return data;
+  }
+
+  public async evaluateBossPhase(
+    storyId: string,
+    bossId: string,
+    phases: unknown[]
+  ): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/combat/boss/evaluate-phase`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Story-ID': storyId },
+      body: JSON.stringify({ bossId, phases }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.errorReason || `Failed to evaluate boss phase: HTTP ${res.status}`);
+    return data;
+  }
+
 }
 
 export const apiClient = new ApiClient();

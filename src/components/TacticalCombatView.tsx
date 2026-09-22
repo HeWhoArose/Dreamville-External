@@ -191,60 +191,87 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
   };
 
   const handleStructuredEffect = async () => {
-    if (!selectedTargetId || !selectedCapabilityId || !combatState?.storyId) {
-      setErrorMsg('Select a target, capability, and active combat state first.');
+    if (!selectedCapabilityId || !combatState?.storyId) {
+      setErrorMsg('Select an authoritative capability and active combat state first.');
       return;
     }
-    const capability = capabilities.find((item: any) => item.id === selectedCapabilityId) as any;
-    const definition: CombatEffectDefinition = {
-      id: selectedCapabilityId + '_combat_effect',
-      name: (capability?.name || 'Custom Combat Effect') +
-        (effectMode === 'MULTI_INSTANCE' ? ' Barrage' : effectMode === 'WORLD_EFFECT' ? ' World Effect' : ''),
-      resolutionMode: effectMode,
-      scale: effectScale,
-      actionCost: effectActionCost,
-      targetingMode: effectTargetingMode,
-      instanceCount: effectMode === 'MULTI_INSTANCE' || effectTargetingMode === 'PER_INSTANCE' ? effectCount : undefined,
-      attackFormula: effectAttackFormula,
-      saveFormula: effectAttackFormula,
-      damageFormula: effectDamageFormula,
-      damageType: effectDamageType,
-      savingThrowAbility: effectSaveAbility,
-      difficultyClass: effectDifficultyClass,
-      halfDamageOnSave: true,
-      rangeCells: effectRangeCells,
-      requiresLineOfSight: true,
-      outcome: (effectMode === 'OUTCOME' || effectMode === 'WORLD_EFFECT') ? effectOutcome : undefined,
-      outcomeReason: (effectMode === 'OUTCOME' || effectMode === 'WORLD_EFFECT') ? 'Resolved by the canonical semantic outcome engine.' : undefined,
-      assetRefs: [],
-      provenance: 'TACTICAL_COMBAT_UI',
-    };
+
+    const capability = capabilities.find((item) => item.id === selectedCapabilityId);
+    const canonicalDefinition = capability?.effectDefinition;
+
+    if (!canonicalDefinition) {
+      setErrorMsg('This capability has no structured combat definition yet. Use the capability authoring flow to create one before live execution.');
+      return;
+    }
+
+    const requiresTarget =
+      canonicalDefinition.resolutionMode !== 'WORLD_EFFECT' &&
+      canonicalDefinition.targetingMode !== 'SELF';
+
+    if (requiresTarget && !selectedTargetId) {
+      setErrorMsg('This capability requires a target.');
+      return;
+    }
+
     try {
       setActionLoading(true);
       setErrorMsg(null);
-      const validation = await apiClient.validateCombatEffect(combatState.storyId, definition);
-      if (!validation.success) throw new Error(validation.errorReason || 'Combat effect failed validation.');
-      const result = await apiClient.executeCombatEffect(combatState.storyId, definition, selectedTargetId ? [selectedTargetId] : [], { capabilityId: selectedCapabilityId });
+
+      const validation = await apiClient.validateCombatEffect(
+        combatState.storyId,
+        canonicalDefinition
+      );
+      if (!validation.success) {
+        throw new Error(validation.errorReason || 'Authoritative combat effect failed validation.');
+      }
+
+      const result = await apiClient.executeCombatEffect(
+        combatState.storyId,
+        canonicalDefinition,
+        selectedTargetId ? [selectedTargetId] : [],
+        { capabilityId: selectedCapabilityId }
+      );
+
       setEffectResult(result?.effectResult || null);
       setCombatState(result?.combatState || combatState);
+
       const events = result?.effectResult?.instances || [];
-      const plan = await apiClient.generateCombatAnimationPlan(combatState.storyId, definition, events as any);
+      const plan = await apiClient.generateCombatAnimationPlan(
+        combatState.storyId,
+        canonicalDefinition,
+        events as any
+      );
+
       if (plan?.plan) {
-        setEffectResult((previous: any) => ({ ...(typeof previous === 'object' ? previous : {}), animationPlan: plan.plan }));
-        const assetRefs = Array.isArray(plan.plan.assetRefs) ? plan.plan.assetRefs.map(String).filter(Boolean) : [];
+        setEffectResult((previous: any) => ({
+          ...(typeof previous === 'object' ? previous : {}),
+          animationPlan: plan.plan,
+        }));
+
+        const assetRefs = Array.isArray(plan.plan.assetRefs)
+          ? plan.plan.assetRefs.map(String).filter(Boolean)
+          : [];
+
         if (assetRefs.length) {
           await Promise.allSettled(
             assetRefs.map((assetId: string) =>
               apiClient.ensureCombatAsset(
-                combatState.storyId,
-                definition.id,
-                'Dreamville combat visual asset for ' + definition.name + ' using visual reference ' + assetId + '. Style: ' + String(plan.plan.style || definition.damageType || definition.name) + '.',
+                combatState.storyId!,
+                canonicalDefinition.id,
+                'Dreamville combat visual asset for ' +
+                  canonicalDefinition.name +
+                  '. Visual reference: ' +
+                  assetId +
+                  '. Style: ' +
+                  String(plan.plan.style || canonicalDefinition.damageType || canonicalDefinition.name) +
+                  '.',
                 assetId,
               ),
             ),
           );
         }
       }
+
       onRefreshWorldState?.();
     } catch (err: any) {
       setErrorMsg(err.message || 'Structured combat effect failed.');
@@ -255,28 +282,56 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
 
   const handleSimulateStructuredEffect = async () => {
     if (!selectedCapabilityId || !combatState?.storyId) return;
-    const definition: CombatEffectDefinition = {
-      id: selectedCapabilityId + '_simulation',
-      name: 'Simulation',
-      resolutionMode: effectMode,
-      scale: effectScale,
-      actionCost: effectActionCost,
-      targetingMode: effectTargetingMode,
-      instanceCount: effectMode === 'MULTI_INSTANCE' || effectTargetingMode === 'PER_INSTANCE' ? effectCount : undefined,
-      attackFormula: effectAttackFormula,
-      saveFormula: effectAttackFormula,
-      damageFormula: effectDamageFormula,
-      damageType: effectDamageType,
-      savingThrowAbility: effectSaveAbility,
-      difficultyClass: effectDifficultyClass,
-      halfDamageOnSave: true,
-      rangeCells: effectRangeCells,
-      requiresLineOfSight: true,
-      outcome: (effectMode === 'OUTCOME' || effectMode === 'WORLD_EFFECT') ? effectOutcome : undefined,
-    };
+
+    const capability = capabilities.find((item) => item.id === selectedCapabilityId);
+    const capabilityEffect = capability?.effectDefinition;
+
+    const definition: CombatEffectDefinition = capabilityEffect
+      ? {
+          ...JSON.parse(JSON.stringify(capabilityEffect)),
+          id: selectedCapabilityId + '_simulation',
+          provenance: 'TACTICAL_COMBAT_SANDBOX',
+        }
+      : {
+          id: selectedCapabilityId + '_simulation',
+          name: capability?.name || 'Simulation',
+          resolutionMode: effectMode,
+          scale: effectScale,
+          actionCost: effectActionCost,
+          targetingMode: effectTargetingMode,
+          instanceCount:
+            effectMode === 'MULTI_INSTANCE' || effectTargetingMode === 'PER_INSTANCE'
+              ? effectCount
+              : undefined,
+          attackFormula: effectAttackFormula,
+          saveFormula: effectAttackFormula,
+          damageFormula: effectDamageFormula,
+          damageType: effectDamageType,
+          savingThrowAbility: effectSaveAbility,
+          difficultyClass: effectDifficultyClass,
+          halfDamageOnSave: true,
+          rangeCells: effectRangeCells,
+          requiresLineOfSight: true,
+          outcome:
+            effectMode === 'OUTCOME' || effectMode === 'WORLD_EFFECT'
+              ? effectOutcome
+              : undefined,
+          outcomePayload:
+            effectMode === 'WORLD_EFFECT'
+              ? { scopeId: combatState.storyId }
+              : undefined,
+          provenance: 'TACTICAL_COMBAT_SANDBOX',
+        };
+
     try {
       setActionLoading(true);
-      const simulation = await apiClient.simulateCombatEffect(combatState.storyId, definition, selectedTargetId ? [selectedTargetId] : [], { seeds: [101, 202, 303, 404, 505] });
+      setErrorMsg(null);
+      const simulation = await apiClient.simulateCombatEffect(
+        combatState.storyId,
+        definition,
+        selectedTargetId ? [selectedTargetId] : [],
+        { seeds: [101, 202, 303, 404, 505] }
+      );
       setEffectSimulation(simulation);
     } catch (err: any) {
       setErrorMsg(err.message || 'Combat simulation failed.');
@@ -752,8 +807,8 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
             <div className="space-y-3 pt-2 border-t border-stone-800">
               <div className="flex items-center justify-between gap-2">
                 <div>
-                  <div className="text-[11px] font-medium text-violet-300">Advanced Effect Resolution</div>
-                  <div className="text-[10px] text-stone-500">One Action → independent effect instances</div>
+                  <div className="text-[11px] font-medium text-violet-300">Combat Effect Sandbox</div>
+                  <div className="text-[10px] text-stone-500">Live execution uses the capability's authoritative definition; advanced fields are simulation-only.</div>
                 </div>
                 <button
                   type="button"
@@ -763,6 +818,42 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
                   {advancedEffectOpen ? 'Hide' : 'Open'}
                 </button>
               </div>
+              {effectSimulation && advancedEffectOpen && (
+                <div className="space-y-2 p-3 bg-violet-950/20 rounded-lg border border-violet-900/40">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] uppercase tracking-wider text-violet-300">Sandbox Result</span>
+                    <span className={
+                      'text-[10px] font-mono ' +
+                      (effectSimulation.success ? 'text-emerald-300' : 'text-red-300')
+                    }>
+                      {effectSimulation.success ? 'SIMULATED' : 'REJECTED'}
+                    </span>
+                  </div>
+                  {effectSimulation.authority && (
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 text-[9px] font-mono">
+                      {[
+                        ['Schema', effectSimulation.authority.structurallyValid],
+                        ['Rules', effectSimulation.authority.rulesLegal],
+                        ['Source', effectSimulation.authority.sourceAuthorized],
+                        ['World', effectSimulation.authority.worldAuthorized],
+                        ['Safe', effectSimulation.authority.simulatable],
+                      ].map(([label, ok]) => (
+                        <div key={String(label)} className="px-2 py-1 rounded bg-stone-950 border border-stone-800 text-stone-400">
+                          <span className={ok ? 'text-emerald-300' : 'text-red-300'}>{String(label)}</span>
+                          <span className="ml-1">{ok ? '✓' : '✕'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {effectSimulation.presentation?.summary && (
+                    <p className="text-[10px] text-stone-400">{effectSimulation.presentation.summary}</p>
+                  )}
+                  {effectSimulation.errorReason && (
+                    <p className="text-[10px] text-red-300">{effectSimulation.errorReason}</p>
+                  )}
+                </div>
+              )}
+
               {advancedEffectOpen && (
                 <div className="space-y-2 p-3 bg-stone-950/70 rounded-lg border border-stone-800">
                   <div className="grid grid-cols-2 gap-2">

@@ -1925,6 +1925,8 @@ export type CombatTargetingMode =
 
 export type CombatActionCost = 'ACTION' | 'BONUS_ACTION' | 'REACTION' | 'FREE';
 
+export type CombatHitLocationMode = 'NONE' | 'EXPLICIT' | 'DETERMINISTIC';
+
 export type CombatOutcomeType =
 	| 'INSTANT_DEFEAT'
 	| 'ERASE_FROM_WORLD'
@@ -1991,6 +1993,8 @@ export interface CombatEffectDefinition {
 	sequence?: Array<CombatEffectDefinition>;
 	targetIds?: string[];
 	rangeValidationMode?: 'AUTO' | 'ORIGIN' | 'EACH_TARGET' | 'BOTH';
+	hitLocationMode?: CombatHitLocationMode;
+	targetBodyRegionId?: BodyRegionId;
 	retargetPolicy?: 'NONE' | 'RETARGET_ON_DEATH';
 	animationPlanId?: string;
 	conditionEffects?: CombatConditionEffectDefinition[];
@@ -2007,7 +2011,9 @@ export interface CombatAttackInstanceResult {
 	isCritical: boolean;
 	damage: number;
 	targetDied: boolean;
-	roll?: unknown;
+	hitLocation?: BodyRegionId;
+	destroyedBodyRegions?: BodyRegionId[];
+	rill?: unknown;
 	attackRollTotal?: number;
 	targetArmorClass?: number;
 	damageRoll?: unknown;

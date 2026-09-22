@@ -304,7 +304,9 @@ Return ONLY one JSON object matching this contract:
       "activationType": string,
       "energyCost": number,
       "cooldownTurns": number,
-      "range": string
+      "range": string,
+      "checkFormula": string,
+      "damageFormula": string | null
     }
   ],
   "feats": [

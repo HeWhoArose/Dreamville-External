@@ -2054,6 +2054,27 @@ class ApiClient {
     return data;
   }
 
+  public async getCombatReplays(storyId: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/combat/replays`, {
+      method: 'GET',
+      headers: { Accept: 'application/json', 'X-Story-ID': storyId },
+    });
+    const data = await readJsonSafely<any>(res);
+    if (!res.ok) throw new Error(data?.errorReason || `Failed to fetch combat replays: HTTP ${res.status}`);
+    return data;
+  }
+
+  public async replayCombatAction(storyId: string, replayId: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/combat/replay`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-Story-ID': storyId },
+      body: JSON.stringify({ replayId }),
+    });
+    const data = await readJsonSafely<any>(res);
+    if (!res.ok) throw new Error(data?.errorReason || `Failed to replay combat action: HTTP ${res.status}`);
+    return data;
+  }
+
   public async generateCombatAnimationPlan(
     storyId: string,
     definition: import('../types').CombatEffectDefinition,

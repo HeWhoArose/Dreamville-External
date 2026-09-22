@@ -848,6 +848,7 @@ export interface CombatTurnResourceSnapshot {
 }
 
 export interface CombatStateResponse {
+  storyId?: string;
   participants: BattlefieldParticipant[];
   currentActor?: BattlefieldParticipant;
   hazards: DynamicHazardZone[];

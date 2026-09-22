@@ -340,6 +340,28 @@ export class CharacterProgressionEngine {
       ...knownFeatModuleIds,
     ])];
 
+    if (state.classId) {
+      const classModule = this.modules.get(state.classId);
+      if (!classModule || classModule.type !== 'CLASS') throw new Error(`Genesis progression references invalid class '${state.classId}'.`);
+    }
+    if (state.speciesId) {
+      const speciesModule = this.modules.get(state.speciesId);
+      if (!speciesModule || speciesModule.type !== 'SPECIES') throw new Error(`Genesis progression references invalid species '${state.speciesId}'.`);
+    }
+    if (state.subclassId) {
+      const subclassModule = this.modules.get(state.subclassId);
+      if (!subclassModule || subclassModule.type !== 'SUBCLASS') throw new Error(`Genesis progression references invalid subclass '${state.subclassId}'.`);
+      if (subclassModule.minLevel && state.currentLevel < subclassModule.minLevel) {
+        throw new Error(`Genesis subclass '${state.subclassId}' requires level ${subclassModule.minLevel}.`);
+      }
+      if (subclassModule.parentClassId && state.classId !== subclassModule.parentClassId) {
+        throw new Error(`Genesis subclass '${state.subclassId}' requires class '${subclassModule.parentClassId}'.`);
+      }
+    }
+    for (const featId of state.featIds) {
+      const featModule = this.modules.get(featId);
+      if (!featModule || featModule.type !== 'FEAT') throw new Error(`Genesis progression references invalid feat '${featId}'.`);
+    }
     if (state.classId) state.enabledModuleIds.push(state.classId);
     if (state.subclassId) state.enabledModuleIds.push(state.subclassId);
     if (state.speciesId) state.enabledModuleIds.push(state.speciesId);
@@ -795,6 +817,15 @@ export class CharacterProgressionEngine {
       }
       if (state.subclassId && this.modules.get(state.subclassId)?.type !== 'SUBCLASS') {
         throw new Error(`Progression snapshot references invalid subclass module '${state.subclassId}'.`);
+      }
+      if (state.subclassId) {
+        const subclass = this.modules.get(state.subclassId)!;
+        if (subclass.minLevel && state.currentLevel < subclass.minLevel) {
+          throw new Error(`Progression snapshot subclass '${state.subclassId}' requires level ${subclass.minLevel}.`);
+        }
+        if (subclass.parentClassId && state.classId !== subclass.parentClassId) {
+          throw new Error(`Progression snapshot subclass '${state.subclassId}' requires class '${subclass.parentClassId}'.`);
+        }
       }
       if (state.speciesId && this.modules.get(state.speciesId)?.type !== 'SPECIES') {
         throw new Error(`Progression snapshot references invalid species module '${state.speciesId}'.`);

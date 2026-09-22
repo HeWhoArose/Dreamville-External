@@ -6,6 +6,7 @@ import { combatEffectEngine } from '../server/domain/combatEffectEngine';
 import { combatSimulationEngine } from '../server/domain/combatSimulationEngine';
 import { rulesProfileEngine } from '../server/domain/rulesProfileEngine';
 import { CapabilityEngine } from '../server/domain/capabilityEngine';
+import { BossPhaseEngine } from '../server/domain/bossPhaseEngine';
 
 function participant(overrides: Partial<Parameters<TacticalCombatEngine['addParticipant']>[0]> = {}) {
   return {
@@ -779,4 +780,53 @@ test('Phase 8.5 audit pass 5: canonical combat event buffers remain bounded unde
   }
   assert.ok(engine.getCombatEffectEvents().length <= 1000);
   assert.ok(engine.getBattleEvents().length <= 500);
+});
+
+
+test('Phase 8.5 regression: boss phase steady-state sync resolves canonical environment ids without undeclared state', () => {
+  const engine = engineWithEnemy({ id: 'boss', name: 'Boss', hpCurrent: 50, hpMax: 100 });
+  const repository: any = {
+    getCombatEngine: () => engine,
+    getEntityCard: () => ({
+      metadata: {
+        combat: {
+          environmentEffects: {
+            burning_arena: {
+              id: 'burning_arena',
+              type: 'fire_zone',
+              x: 2,
+              y: 2,
+              radiusCells: 3,
+              durationTurns: 2,
+              damagePerTurn: 4,
+            },
+          },
+        },
+      },
+    }),
+    getActiveEffects: () => [{
+      type: 'BOSS_PHASE_STATE',
+      bossId: 'boss',
+      currentPhaseId: 'enrage',
+      state: { bossId: 'boss', currentPhaseId: 'enrage', enteredAtRound: 1, transitions: ['INITIAL->enrage'] },
+    }],
+  };
+
+  const result = new BossPhaseEngine().evaluateAndPersist({
+    repository,
+    storyId: 'story',
+    bossId: 'boss',
+    phases: [{
+      id: 'enrage',
+      name: 'Enrage',
+      minHpPercent: 0,
+      maxHpPercent: 1,
+      abilities: ['boss_barrage'],
+      environmentEffects: ['burning_arena'],
+    }],
+  });
+
+  assert.equal(result.success, true);
+  assert.equal(result.changed, false);
+  assert.equal(engine.getBossPhaseState('boss')?.environmentEffects[0], 'burning_arena');
 });

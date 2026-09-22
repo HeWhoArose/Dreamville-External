@@ -23,6 +23,7 @@ export class CombatAnimationService {
       missBehavior: 'PASS_TARGET',
       style: definition.damageType || definition.name,
       assetRefs: [...(definition.assetRefs || [])],
+      assetUrls: [],
       generatedBy: 'SYSTEM',
       provenance: 'PHASE_8_5_DETERMINISTIC_ANIMATION_FALLBACK',
     };
@@ -38,7 +39,13 @@ export class CombatAnimationService {
         effect?.plan?.generatedBy === 'AI'
     );
     if (cached?.plan) {
-      return { plan: JSON.parse(JSON.stringify(cached.plan)), source: cached.plan.generatedBy === 'AI' ? 'AI' : 'SYSTEM' };
+      return {
+        plan: {
+          ...JSON.parse(JSON.stringify(cached.plan)),
+          assetUrls: Array.isArray(cached.plan.assetUrls) ? [...cached.plan.assetUrls] : [],
+        },
+        source: cached.plan.generatedBy === 'AI' ? 'AI' : 'SYSTEM',
+      };
     }
     try {
       const prompt = `Create a presentation-only animation plan for this Dreamville combat effect. Never decide combat outcomes.\nEffect: ${JSON.stringify(params.definition)}\nResolved events: ${JSON.stringify(params.events || [])}\nReturn only JSON with composition, sequence, count, origin, impact, criticalImpact, missBehavior, style, assetRefs.`;
@@ -107,6 +114,7 @@ export class CombatAnimationService {
         missBehavior: typeof parsed.missBehavior === 'string' ? parsed.missBehavior.trim().slice(0, 80) : fallback.missBehavior,
         style: safeStyle,
         assetRefs,
+        assetUrls: [],
         id: fallback.id,
         generatedBy: 'AI',
         provenance: 'AI_COMBAT_ANIMATION_PLAN',

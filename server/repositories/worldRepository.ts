@@ -925,22 +925,6 @@ export class InMemoryWorldRepository implements WorldRepository {
         },
       });
 
-      const progressionEngine = new CharacterProgressionEngine();
-       progressionEngine.seedFromCharacter(actorId, char, deterministicId('prg_genesis_cmd', storyId, char.characterId || actorId), {
-         rulesProfile: resolvedRulesProfile,
-         worldModules: Array.isArray(world.characterProgressionModules)
-           ? world.characterProgressionModules as ProgressionModuleDefinition[]
-           : undefined,
-       });
-       progressionEngine.setCanonicalMutationGuard(() => this.isCanonicalCommandTransactionActive());
-       this.characterProgressionEngines.set(storyId, progressionEngine);
-
-       // 13. Construct and Persist StoryRun
-      const allEquipNames = [
-        ...equippedItems.map((e: any) => e.name),
-        ...inventoryItems.map((i: any) => i.name),
-      ];
-
       const resolvedRulesProfile = rulesProfileEngine.resolve({
         mode: params.dndRulesMode || world.dndRulesMode || world.rulesetId || 'FULL_DND',
         rulesProfile: world.rulesProfile,
@@ -948,6 +932,22 @@ export class InMemoryWorldRepository implements WorldRepository {
         ruleConstraints: world.ruleConstraints || [],
         canonicalCapabilities: world.canonicalCapabilities || [],
       }).profile;
+
+      const progressionEngine = new CharacterProgressionEngine();
+      progressionEngine.seedFromCharacter(actorId, char, deterministicId('prg_genesis_cmd', storyId, char.characterId || actorId), {
+        rulesProfile: resolvedRulesProfile,
+        worldModules: Array.isArray(world.characterProgressionModules)
+          ? world.characterProgressionModules as ProgressionModuleDefinition[]
+          : undefined,
+      });
+      progressionEngine.setCanonicalMutationGuard(() => this.isCanonicalCommandTransactionActive());
+      this.characterProgressionEngines.set(storyId, progressionEngine);
+
+      // 13. Construct and Persist StoryRun
+      const allEquipNames = [
+        ...equippedItems.map((e: any) => e.name),
+        ...inventoryItems.map((i: any) => i.name),
+      ];
 
       const resolvedNarrativeProfile = narrativeProfileEngine.resolve({
         mode: char.storyMode || params.storyMode,
@@ -2206,6 +2206,7 @@ export class InMemoryWorldRepository implements WorldRepository {
         ...(this.combatEngines.has(storyId) ? { combat: this.combatEngines.get(storyId)!.exportState() } : {}),
         ...(this.livingSimulations.has(storyId) ? { livingWorld: this.livingSimulations.get(storyId)!.exportState() } : {}),
         ...(this.restRecoveryEngines.has(storyId) ? { rest: this.restRecoveryEngines.get(storyId)!.exportState() } : {}),
+        ...(this.characterProgressionEngines.has(storyId) ? { progression: this.characterProgressionEngines.get(storyId)!.exportState() } : {}),
       };
       if (Object.keys(runtimeState).length > 0) {
         run.runtimeState = runtimeState;

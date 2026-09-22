@@ -1210,7 +1210,7 @@ gameRouter.get('/worlds/runs/:storyId/progression', async (req: Request, res: Re
       modules: engine.getAllModules(),
       unlockedFeatures: engine.getUnlockedFeatures(actorId),
       triggeredAbilities: engine.getTriggeredAbilities(actorId),
-      modifiers: engine.resolveModifiers(actorId),
+      modifiers: engine.resolveModifiers(actorId, rulesProfile),
       genesisDivergence: worldRepository.getStoryRun(storyId)?.protagonist
         ? engine.detectGenesisDivergence(actorId, worldRepository.getStoryRun(storyId).protagonist)
         : null,
@@ -1230,9 +1230,14 @@ gameRouter.post('/worlds/runs/:storyId/progression', async (req: Request, res: R
   try {
     const storyId = req.params.storyId;
     const player = worldRepository.getPlayerLifecycle(storyId);
-    const actorId = (typeof req.body?.actorId === 'string' && req.body.actorId.trim())
-      ? req.body.actorId.trim()
-      : (player ? player.actorId : `player_actor_${storyId}`);
+    const serverPlayerActorId = player?.actorId || `player_actor_${storyId}`;
+    if (req.body?.actorId && req.body.actorId !== serverPlayerActorId) {
+      return res.status(403).json({
+        success: false,
+        errorReason: `Unauthorized: progression commands are bound to player actor '${serverPlayerActorId}'.`,
+      });
+    }
+    const actorId = serverPlayerActorId;
     const operation = String(req.body?.operation || '');
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
@@ -1290,19 +1295,19 @@ gameRouter.post('/worlds/runs/:storyId/progression', async (req: Request, res: R
 
         if (['SELECT_CLASS', 'SELECT_SUBCLASS', 'SELECT_SPECIES'].includes(operation)) {
           const result = progression.selectModule(actorId, operation === 'SELECT_CLASS' ? 'CLASS' : operation === 'SELECT_SUBCLASS' ? 'SUBCLASS' : 'SPECIES', payload.moduleId, command.commandId, profile);
-          return { success: true, data: { state: result, modifiers: progression.resolveModifiers(actorId) }, summary: `Progression ${operation} committed.` };
+          return { success: true, data: { state: result, modifiers: progression.resolveModifiers(actorId, profile) }, summary: `Progression ${operation} committed.` };
         }
         if (operation === 'ACQUIRE_FEAT') {
           const result = progression.acquireFeat(actorId, payload.moduleId, command.commandId, profile);
-          return { success: true, data: { state: result, modifiers: progression.resolveModifiers(actorId) }, summary: 'Feat acquisition committed.' };
+          return { success: true, data: { state: result, modifiers: progression.resolveModifiers(actorId, profile) }, summary: 'Feat acquisition committed.' };
         }
         if (operation === 'LEVEL_UP') {
           const result = progression.levelUp(actorId, command.commandId, profile);
-          return { success: true, data: { state: result, modifiers: progression.resolveModifiers(actorId) }, summary: `Actor advanced to level ${result.currentLevel}.` };
+          return { success: true, data: { state: result, modifiers: progression.resolveModifiers(actorId, profile) }, summary: `Actor advanced to level ${result.currentLevel}.` };
         }
         if (operation === 'ENABLE_MODULE' || operation === 'DISABLE_MODULE') {
           const result = progression.setModuleEnabled(actorId, payload.moduleId, operation === 'ENABLE_MODULE', command.commandId, profile);
-          return { success: true, data: { state: result, modifiers: progression.resolveModifiers(actorId) }, summary: `Progression module ${operation === 'ENABLE_MODULE' ? 'enabled' : 'disabled'}.` };
+          return { success: true, data: { state: result, modifiers: progression.resolveModifiers(actorId, profile) }, summary: `Progression module ${operation === 'ENABLE_MODULE' ? 'enabled' : 'disabled'}.` };
         }
         if (operation === 'TRIGGER_ABILITY') {
           const result = progression.consumeTriggeredAbility(actorId, payload.abilityId, command.commandId);
@@ -6008,7 +6013,7 @@ function buildCanonicalSelfParticipant(
   const npc = player?.actorId === actorId ? null : repository.getNpcLifecycle(storyId, actorId);
   const state = runtime.getOrCreateActorState(actorId);
   const progression = repository.getCharacterProgressionEngine(storyId);
-  const progressionModifiers = progression.getState(actorId) ? progression.resolveModifiers(actorId).modifiers : [];
+  const progressionModifiers = progression.getState(actorId) ? progression.resolveModifiers(actorId, profile).modifiers : [];
   const progressionValue = (target: string) => progressionModifiers.find((modifier) => modifier.target === target)?.value || 0;
   const hpCurrent = Math.max(0, Number(conditionState?.healthCurrent ?? 30));
   const hpMax = Math.max(1, Number(conditionState?.healthMax ?? (hpCurrent || 30)));

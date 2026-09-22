@@ -38,13 +38,14 @@ export const CombatAnimationLayer: React.FC<CombatAnimationLayerProps> = ({
                 return;
             }
             setActiveIndex((index) => index + 1);
-        }, 320);
+        }, Math.max(80, Math.min(3000, activeTrack?.delayMs || 320)));
         return () => window.clearTimeout(timer);
     }, [activeIndex, running, plan, visibleInstances.length, presentationMode, onComplete]);
 
     if (!plan || !visibleInstances.length) return null;
 
     const active = visibleInstances[Math.min(activeIndex, visibleInstances.length - 1)];
+    const activeTrack = plan.tracks?.find((track) => track.instanceIndex === active.instanceIndex) || plan.tracks?.[0];
     const hitCount = visibleInstances.filter((item) => item.hits).length;
     const missCount = visibleInstances.length - hitCount;
 
@@ -69,7 +70,7 @@ export const CombatAnimationLayer: React.FC<CombatAnimationLayerProps> = ({
 
     if (presentationMode === 'TEXT') return (
         <div className="mt-3 rounded-lg border border-violet-900/50 bg-violet-950/20 p-3 text-xs text-stone-300">
-            {plan.composition.replace(/_/g, ' ')} resolved {visibleInstances.length} effect instance(s). {hitCount} hit, {missCount} missed.
+            {(activeTrack?.visual || plan.composition).replace(/_/g, ' ')} resolved {visibleInstances.length} effect instance(s). {hitCount} hit, {missCount} missed.
         </div>
     );
 

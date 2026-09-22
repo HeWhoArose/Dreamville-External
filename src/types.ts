@@ -1478,7 +1478,23 @@ export interface CharacterConditionStage {
 
 export interface CharacterConditionTrigger {
   id: string;
-  event: 'ON_APPLY' | 'ON_ACTION' | 'ON_TICK' | 'ON_REMOVE' | 'ON_REST';
+  event:
+    | 'ON_APPLY'
+    | 'ON_ACTION'
+    | 'ON_TICK'
+    | 'ON_REMOVE'
+    | 'ON_REST'
+    | 'ON_ATTACK'
+    | 'ON_HIT'
+    | 'ON_MISS'
+    | 'ON_DAMAGE'
+    | 'ON_SAVE'
+    | 'ON_MOVE'
+    | 'ON_KILL'
+    | 'ON_DEATH'
+    | 'ON_REACTION'
+    | 'ON_ROUND_START'
+    | 'ON_ROUND_END';
   actionKeywords?: string[];
   intensityDelta?: number;
   healingAmount?: number;

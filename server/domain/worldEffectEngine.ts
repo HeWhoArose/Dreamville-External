@@ -108,6 +108,16 @@ export class WorldEffectEngine {
       }
     }
 
+    const requestedScopeIds = Array.isArray(definition.outcomePayload?.scopeIds)
+      ? definition.outcomePayload!.scopeIds!.map(String)
+      : typeof definition.outcomePayload?.scopeId === 'string'
+        ? [String(definition.outcomePayload.scopeId)]
+        : [];
+    const knownWorldNodeIds = new Set(
+      params.repository.getGeographyGraph(storyId).getAllNodes().map((node: any) => String(node.id))
+    );
+    const affectedWorldNodeIds = requestedScopeIds.filter((scopeId) => knownWorldNodeIds.has(scopeId));
+
     const scopeKey = definition.scale + ':' + definition.id;
     const changedScopes = [scopeKey];
     const sequence = repository.getActiveEffects(storyId).length + 1;
@@ -118,6 +128,7 @@ export class WorldEffectEngine {
       targetIds: [...targetIds],
       affectedEntityIds: [...affectedEntityIds],
       semanticMetadata,
+      affectedWorldNodeIds,
       scope: scopeKey,
       abstraction: ['PERSON', 'GROUP', 'ENCOUNTER'].includes(definition.scale) ? 'TACTICAL' : 'MACRO',
     };
@@ -134,6 +145,7 @@ export class WorldEffectEngine {
       affectedEntityIds: [...affectedEntityIds],
       changedScopes: [...changedScopes],
       macroConsequence,
+      affectedWorldNodeIds,
       description: definition.outcomeReason || definition.name + ' resolved at ' + definition.scale + ' scale.',
       persistent: false,
       presentationOnly: false,

@@ -1,5 +1,6 @@
 import type { DynamicHazardZone } from '../../src/types';
 import type { WorldRepository } from '../repositories/worldRepository';
+import { deterministicId } from './deterministicRng';
 
 export class CombatEnvironmentEngine {
   public createHazard(params: { repository: WorldRepository; storyId: string; actorId: string; hazard: DynamicHazardZone }): { success: boolean; hazard?: DynamicHazardZone; errorReason?: string } {
@@ -13,7 +14,7 @@ export class CombatEnvironmentEngine {
   public removeHazard(params: { repository: WorldRepository; storyId: string; actorId: string; hazardId: string }): { success: boolean; removed: boolean } {
     const combat = params.repository.getCombatEngine(params.storyId);
     const result = combat.removeHazard(params.hazardId);
-    if (result.removed) params.repository.saveWorldFact(params.storyId, { id: `hazard_remove_${params.storyId}_${params.hazardId}_${Date.now()}`, category: 'COMBAT_ENVIRONMENT', type: 'HAZARD_REMOVED', actorId: params.actorId, hazardId: params.hazardId, canonical: true });
+    if (result.removed) params.repository.saveWorldFact(params.storyId, { id: deterministicId('hazard_remove', params.storyId, params.hazardId, combat.getCurrentRound()), category: 'COMBAT_ENVIRONMENT', type: 'HAZARD_REMOVED', actorId: params.actorId, hazardId: params.hazardId, canonical: true });
     return result;
   }
 }

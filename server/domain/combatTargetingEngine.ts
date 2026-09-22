@@ -2,6 +2,24 @@ import type { CombatEffectDefinition, CombatTargetingMode } from '../../src/type
 import { TacticalCombatEngine } from './combatEngine';
 
 export class CombatTargetingEngine {
+  private hasLineOfSight(engine: TacticalCombatEngine, from: { x: number; y: number }, to: { x: number; y: number }): boolean {
+    const obstacles = engine.getObstacles();
+    if (!obstacles.length) return true;
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const steps = Math.max(1, Math.ceil(Math.hypot(dx, dy) * 2));
+    for (let step = 1; step < steps; step += 1) {
+      const ratio = step / steps;
+      const x = from.x + dx * ratio;
+      const y = from.y + dy * ratio;
+      if (obstacles.some((obstacle) =>
+        obstacle.isImpassable !== false &&
+        Math.hypot(obstacle.x - x, obstacle.y - y) < 0.45
+      )) return false;
+    }
+    return true;
+  }
+
   public resolve(
     engine: TacticalCombatEngine,
     actorId: string,
@@ -91,12 +109,50 @@ export class CombatTargetingEngine {
 
     if (mode === 'ONE_TARGET') targetIds = targetIds.slice(0, 1);
     if (mode === 'PER_INSTANCE' && definition.instanceCount) targetIds = targetIds.slice(0, Math.max(1, definition.instanceCount));
+
+    if (mode === 'CHAIN') {
+      const startId = targetIds[0];
+      const start = participants.find((participant) => participant.id === startId);
+      if (start) {
+        const desiredCount = Math.max(1, Math.min(50, definition.chainCount ?? definition.instanceCount ?? targetIds.length));
+        const jumpRange = Math.max(0.5, Number(definition.chainJumpRangeCells ?? 4));
+        const chainTargets = [start.id];
+        const remaining = participants
+          .filter(allowedByMode)
+          .filter((participant) => participant.id !== start.id)
+          .sort((a, b) => a.id.localeCompare(b.id));
+
+        while (chainTargets.length < desiredCount) {
+          const previousId = chainTargets[chainTargets.length - 1];
+          const previous = participants.find((participant) => participant.id === previousId);
+          if (!previous) break;
+          const next = remaining.find((candidate) =>
+            !chainTargets.includes(candidate.id) &&
+            Math.hypot(candidate.x - previous.x, candidate.y - previous.y) <= jumpRange
+          );
+          if (!next) break;
+          chainTargets.push(next.id);
+        }
+        targetIds = chainTargets;
+      }
+    }
     if (definition.maxTargets !== undefined) {
       targetIds = targetIds.slice(0, Math.max(1, Math.min(100, Math.trunc(definition.maxTargets))));
     }
 
     if (!targetIds.length) {
       return { success: false, errorReason: 'No legal targets satisfy the requested targeting mode.', targetIds: [] };
+    }
+
+    if (definition.requiresLineOfSight) {
+      const originPoint = origin || { x: actor.x, y: actor.y };
+      const blockedTarget = targetIds.find((targetId) => {
+        const target = participants.find((participant) => participant.id === targetId);
+        return target ? !this.hasLineOfSight(engine, originPoint, { x: target.x, y: target.y }) : true;
+      });
+      if (blockedTarget) {
+        return { success: false, errorReason: 'Line of sight is blocked for at least one selected target.', targetIds: [] };
+      }
     }
 
     if (definition.rangeCells !== undefined) {

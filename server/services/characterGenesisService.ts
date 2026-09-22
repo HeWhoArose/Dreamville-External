@@ -1113,6 +1113,8 @@ OUTPUT STRICT JSON with this structure:
   "baseEnergyCost": number,
   "baseStrainCost": number,
   "description": string,
+  "checkFormula": string,
+  "damageFormula": string | null,
   "techniques": [
     {
       "name": string,
@@ -1125,7 +1127,12 @@ OUTPUT STRICT JSON with this structure:
   ]
 }
 
-IMPORTANT: Ensure the capability name, description, power tier, energy costs, strain costs, and techniques are uniquely tailored to this exact concept: "${concept}". Do NOT return generic placeholder text. Produce distinct mechanics and evocative technique names specifically matching this capability concept.`;
+IMPORTANT:
+- Tailor the capability to the exact concept.
+- FULL_DND: any capability check MUST use "1d20".
+- HYBRID_DND: default to "1d20"; an explicitly authored capability may use a simple alternative such as "2d6" or "1d8".
+- CUSTOM_HOMEBREW_DND: never silently apply D&D dice rules.
+- damageFormula is optional and must be a simple dice formula when present.`;
 
     let generatedProvenance: CharacterProvenanceSource = 'AI_GENERATED';
     try {
@@ -1162,6 +1169,10 @@ IMPORTANT: Ensure the capability name, description, power tier, energy costs, st
       description: proposal.description || `Specialized mastery of ${concept}.`,
       provenance: generatedProvenance,
       sourceUserPrompt: concept,
+      checkFormula: worldTemplate?.dndRulesMode === 'FULL_DND' || !worldTemplate?.dndRulesMode
+        ? '1d20'
+        : String(proposal?.checkFormula || '1d20'),
+      damageFormula: typeof proposal?.damageFormula === 'string' ? proposal.damageFormula : undefined,
       storyCheckChallenges: Array.isArray(proposal.storyCheckChallenges) ? proposal.storyCheckChallenges : undefined,
     };
 
@@ -1175,6 +1186,10 @@ IMPORTANT: Ensure the capability name, description, power tier, energy costs, st
       energyCost: Number(t.energyCost ?? 15),
       cooldownTurns: Number(t.cooldownTurns ?? 1),
       range: t.range || 'Close',
+      checkFormula: worldTemplate?.dndRulesMode === 'FULL_DND' || !worldTemplate?.dndRulesMode
+        ? '1d20'
+        : String(t.checkFormula || proposal?.checkFormula || '1d20'),
+      damageFormula: typeof t.damageFormula === 'string' ? t.damageFormula : undefined,
       provenance: generatedProvenance as CharacterProvenanceSource,
     }));
 
@@ -1771,11 +1786,17 @@ OUTPUT STRICT JSON with this structure:
   "governingAbility": "Strength" | "Dexterity" | "Constitution" | "Intelligence" | "Wisdom" | "Charisma",
   "description": string,
   "mechanicalDescription": string,
+  "checkFormula": string,
   "tags": [string],
   "worldCompatibility": string
 }
 
-IMPORTANT: Select the most appropriate governing D&D ability score. Provide a clear description and special mechanical behavior.`;
+IMPORTANT:
+- Select the most appropriate governing D&D ability score.
+- FULL_DND MUST use "1d20".
+- HYBRID_DND defaults to "1d20" but may use an authored simple formula such as "2d6" or "1d8".
+- CUSTOM_HOMEBREW_DND must not receive an implicit D&D formula.
+- Provide a clear description and special mechanical behavior.`;
 
     let generatedProvenance: CharacterProvenanceSource = 'AI_GENERATED';
     try {
@@ -1817,9 +1838,115 @@ IMPORTANT: Select the most appropriate governing D&D ability score. Provide a cl
       isCustom: true,
       description: proposal.description || concept,
       mechanicalDescription: proposal.mechanicalDescription,
+      checkFormula: worldTemplate?.dndRulesMode === 'FULL_DND' || !worldTemplate?.dndRulesMode
+        ? '1d20'
+        : String(proposal?.checkFormula || '1d20'),
       tags: Array.isArray(proposal.tags) ? proposal.tags.map(String) : ['Custom'],
       worldCompatibility: proposal.worldCompatibility,
       provenance: generatedProvenance,
+    };
+  }
+
+  /**
+   * AI proposal for the character's current starting condition and defensive profile.
+   * The player reviews this proposal before it becomes the draft's canonical starting state.
+   */
+  public async proposeStartingConditionState(
+    input: {
+      worldId: string;
+      concept?: string;
+      background?: string;
+      identity?: string;
+      startingSituation?: string;
+      currentStateNote?: string;
+    },
+    worldTemplate: WorldTemplate
+  ): Promise<CharacterStartingConditionState> {
+    const prompt = `You are a game-state adjudicator for a narrative RPG.
+
+Infer only the character's CURRENT STARTING CONDITION from the supplied context.
+Do not invent unrelated injuries, curses, conditions, immunities, resistances, or vulnerabilities.
+A healthy character should normally have no harmful conditions.
+
+WORLD: ${worldTemplate?.title || 'Unknown'}
+RULES MODE: ${worldTemplate?.dndRulesMode || 'FULL_DND'}
+CONCEPT: ${input.concept || ''}
+IDENTITY: ${input.identity || ''}
+BACKGROUND: ${input.background || ''}
+STARTING SITUATION: ${input.startingSituation || ''}
+PLAYER STATE NOTE: ${input.currentStateNote || ''}
+
+OUTPUT STRICT JSON:
+{
+  "instances": [
+    {
+      "name": string,
+      "alignment": "HARMFUL" | "BENEFICIAL" | "NEUTRAL" | "MIXED",
+      "severity": number,
+      "intensity": number,
+      "durationSeconds": number | null,
+      "stackMode": "REPLACE" | "ADD" | "MAX" | "REFRESH",
+      "affectedBodyRegions": [string]
+    }
+  ],
+  "damageProfile": {
+    "damageImmunities": [string],
+    "damageResistances": [string],
+    "damageVulnerabilities": [string]
+  },
+  "conditionProfile": {
+    "conditionImmunities": [string],
+    "conditionResistances": [string],
+    "conditionVulnerabilities": [string]
+  }
+}`;
+
+    let raw: any = null;
+    try {
+      const response = await worldRepository.getAiOrchestrator().executeTaskGeneration(
+        'narrative.generate',
+        prompt,
+        'Return only the requested current condition state JSON.'
+      );
+      if (response.text) raw = this.parseJsonFromAiResponse(response.text);
+    } catch (error) {
+      console.warn('[CharacterGenesisService] Starting condition inference failed; using safe baseline.', error);
+    }
+
+    const strings = (value: unknown): string[] =>
+      Array.isArray(value) ? value.map(String).filter(Boolean).slice(0, 20) : [];
+
+    const rawInstances = Array.isArray(raw?.instances) ? raw.instances : [];
+    const instances: CharacterConditionInstance[] = rawInstances.slice(0, 12).map((instance: any, index: number) => ({
+      id: deterministicId('condition_ai', input.worldId, String(instance?.name || 'condition'), index),
+      definitionId: String(instance?.definitionId || String(instance?.name || 'custom_condition').toLowerCase().replace(/[^a-z0-9]+/g, '_')),
+      name: String(instance?.name || 'Starting Condition'),
+      alignment: ['HARMFUL', 'BENEFICIAL', 'NEUTRAL', 'MIXED'].includes(instance?.alignment) ? instance.alignment : 'NEUTRAL',
+      severity: Math.max(0, Math.min(10, Number(instance?.severity ?? 1))),
+      intensity: Math.max(0, Math.min(100, Number(instance?.intensity ?? 1))),
+      stackCount: 1,
+      stackMode: ['REPLACE', 'ADD', 'MAX', 'REFRESH'].includes(instance?.stackMode) ? instance.stackMode : 'REFRESH',
+      appliedAtSeconds: 0,
+      durationSeconds: instance?.durationSeconds == null ? null : Math.max(0, Number(instance.durationSeconds)),
+      remainingDurationSeconds: instance?.durationSeconds == null ? null : Math.max(0, Number(instance.durationSeconds)),
+      tags: ['AI_INFERRED_STARTING_STATE'],
+      affectedBodyRegions: strings(instance?.affectedBodyRegions),
+    }));
+
+    return {
+      instances,
+      customDefinitions: [],
+      damageProfile: {
+        damageImmunities: strings(raw?.damageProfile?.damageImmunities),
+        damageResistances: strings(raw?.damageProfile?.damageResistances),
+        damageVulnerabilities: strings(raw?.damageProfile?.damageVulnerabilities),
+      },
+      conditionProfile: {
+        conditionImmunities: strings(raw?.conditionProfile?.conditionImmunities),
+        conditionResistances: strings(raw?.conditionProfile?.conditionResistances),
+        conditionVulnerabilities: strings(raw?.conditionProfile?.conditionVulnerabilities),
+      },
+      bodyRegions: [],
     };
   }
 

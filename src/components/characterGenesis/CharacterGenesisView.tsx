@@ -3829,6 +3829,16 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 </div>
               )}
 
+              {/* Progression Summary */}
+              <div className="p-4 rounded-lg bg-indigo-950/20 border border-indigo-900/60 text-xs">
+                <div className="font-semibold text-indigo-300 uppercase tracking-wider">Progression Identity</div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-2">
+                  <div><span className="text-neutral-500">Class</span><div className="text-white mt-0.5">{draft.progression?.classId || 'Not selected'}</div></div>
+                  <div><span className="text-neutral-500">Subclass</span><div className="text-white mt-0.5">{draft.progression?.subclassId || 'Not selected'}</div></div>
+                  <div><span className="text-neutral-500">Species module</span><div className="text-white mt-0.5">{draft.progression?.speciesId || 'Using identity / custom species'}</div></div>
+                </div>
+              </div>
+
               {/* Comprehensive Summary Cards */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 {/* 1. Identity & Origin */}

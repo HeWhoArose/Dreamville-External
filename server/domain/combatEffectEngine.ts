@@ -46,23 +46,32 @@ export class CombatEffectEngine {
     return { success: true, normalized };
   }
 
-  public resolve(engine: TacticalCombatEngine, actorId: string, targetIds: string[], definition: CombatEffectDefinition, options: { consumeAction?: boolean } = {}): CombatEffectResult {
+  public resolve(
+    engine: TacticalCombatEngine,
+    actorId: string,
+    targetIds: string[],
+    definition: CombatEffectDefinition,
+    options: { consumeAction?: boolean } = {}
+  ): CombatEffectResult {
     const profile = engine.getRulesProfile();
     const validation = this.validateDefinition(definition, profile?.mode || 'FULL_DND');
     if (!validation.success || !validation.normalized) return { success: false, errorReason: validation.errorReason };
+
     const normalized = validation.normalized;
     const targeting = combatTargetingEngine.resolve(engine, actorId, targetIds, normalized);
     if (!targeting.success) return { success: false, errorReason: targeting.errorReason };
-    const resolvedTargetIds = targeting.targetIds;
-    const shouldConsumeAction = options.consumeAction !== false;
-    let actionConsumed = false;
-    if (shouldConsumeAction) {
+
+    const shouldConsumeResource = options.consumeAction !== false;
+    let resourceConsumed = false;
+
+    if (shouldConsumeResource) {
       const resourceResult = engine.consumeCombatAction(actorId, normalized.actionCost || 'ACTION');
       if (!resourceResult.success) return { success: false, errorReason: resourceResult.errorReason };
-      actionConsumed = normalized.actionCost !== 'FREE';
+      resourceConsumed = normalized.actionCost !== 'FREE';
     }
+
     if (normalized.resolutionMode === 'SINGLE_ATTACK') {
-      const targetId = resolvedTargetIds[0];
+      const targetId = targeting.targetIds[0];
       if (!targetId) return { success: false, errorReason: 'SINGLE_ATTACK requires one targetId.' };
       const attack = engine.executeAttack(actorId, targetId, {
         overrideFormula: normalized.damageFormula,
@@ -75,19 +84,29 @@ export class CombatEffectEngine {
       return {
         success: attack.success,
         errorReason: attack.errorReason,
-        actionConsumed: attack.success && actionConsumed,
+        actionConsumed: attack.success && resourceConsumed,
         effectId: normalized.id,
         effectName: normalized.name,
         instances: attack.success ? [{
-          instanceIndex: 0, targetId, hits: attack.hits, isCritical: attack.isCritical, damage: attack.damage, targetDied: attack.targetDied, roll: attack.roll,
+          instanceIndex: 0,
+          targetId,
+          hits: attack.hits,
+          isCritical: attack.isCritical,
+          damage: attack.damage,
+          targetDied: attack.targetDied,
+          roll: attack.roll,
         }] : undefined,
         totalDamage: attack.success ? attack.damage : 0,
         defeatedTargetIds: attack.success && attack.targetDied ? [targetId] : [],
-        canonicalEventIds: engine.getCombatEffectEvents().filter((event) => event.eventType === 'ATTACK_INSTANCE_RESOLVED' && event.actorId === actorId && event.targetId === targetId).slice(-1).map((event) => event.eventId),
+        canonicalEventIds: engine.getCombatEffectEvents()
+          .filter((event) => event.eventType === 'ATTACK_INSTANCE_RESOLVED' && event.actorId === actorId && event.targetId === targetId)
+          .slice(-1)
+          .map((event) => event.eventId),
       };
     }
+
     if (normalized.resolutionMode === 'MULTI_INSTANCE') {
-      return engine.executeMultiAttack(actorId, resolvedTargetIds, {
+      const result = engine.executeMultiAttack(actorId, targeting.targetIds, {
         definition: normalized,
         instanceCount: normalized.instanceCount,
         damageFormula: normalized.damageFormula,
@@ -98,42 +117,110 @@ export class CombatEffectEngine {
         retargetPolicy: normalized.retargetPolicy,
         consumeAction: false,
       });
+      return {
+        ...result,
+        actionConsumed: result.success && resourceConsumed,
+        effectId: normalized.id,
+        effectName: normalized.name,
+      };
     }
+
     if (normalized.resolutionMode === 'SAVE') {
-      if (!normalized.savingThrowAbility || normalized.difficultyClass == null) return { success: false, errorReason: 'SAVE effects require savingThrowAbility and difficultyClass.' };
-      return engine.executeSavingThrowEffect({ actorId, targetIds: resolvedTargetIds, savingThrowAbility: normalized.savingThrowAbility, difficultyClass: normalized.difficultyClass, damageFormula: normalized.damageFormula, damageType: normalized.damageType, saveFormula: normalized.saveFormula, halfDamageOnSave: normalized.halfDamageOnSave, consumeAction: options.consumeAction !== false });
+      if (!normalized.savingThrowAbility || normalized.difficultyClass == null) {
+        return { success: false, errorReason: 'SAVE effects require savingThrowAbility and difficultyClass.' };
+      }
+      const result = engine.executeSavingThrowEffect({
+        actorId,
+        targetIds: targeting.targetIds,
+        savingThrowAbility: normalized.savingThrowAbility,
+        difficultyClass: normalized.difficultyClass,
+        damageFormula: normalized.damageFormula,
+        damageType: normalized.damageType,
+        saveFormula: normalized.saveFormula,
+        halfDamageOnSave: normalized.halfDamageOnSave,
+        consumeAction: false,
+      });
+      return { ...result, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name };
     }
+
     if (normalized.resolutionMode === 'AREA') {
-      if (!resolvedTargetIds.length) return { success: false, errorReason: 'AREA effects require resolved targetIds.' };
+      if (!targeting.targetIds.length) return { success: false, errorReason: 'AREA effects require resolved targetIds.' };
       if (normalized.savingThrowAbility) {
         if (normalized.difficultyClass == null) return { success: false, errorReason: 'AREA save effects require difficultyClass.' };
-        return engine.executeSavingThrowEffect({ actorId, targetIds: resolvedTargetIds, savingThrowAbility: normalized.savingThrowAbility, difficultyClass: normalized.difficultyClass, damageFormula: normalized.damageFormula, damageType: normalized.damageType, saveFormula: normalized.saveFormula, halfDamageOnSave: normalized.halfDamageOnSave, consumeAction: options.consumeAction !== false });
+        const result = engine.executeSavingThrowEffect({
+          actorId,
+          targetIds: targeting.targetIds,
+          savingThrowAbility: normalized.savingThrowAbility,
+          difficultyClass: normalized.difficultyClass,
+          damageFormula: normalized.damageFormula,
+          damageType: normalized.damageType,
+          saveFormula: normalized.saveFormula,
+          halfDamageOnSave: normalized.halfDamageOnSave,
+          consumeAction: false,
+        });
+        return { ...result, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name };
       }
       if (!normalized.damageFormula) return { success: false, errorReason: 'Automatic AREA effects require damageFormula.' };
-      return engine.executeAreaDamageEffect({ actorId, targetIds: resolvedTargetIds, damageFormula: normalized.damageFormula, damageType: normalized.damageType, consumeAction: false });
+      const result = engine.executeAreaDamageEffect({
+        actorId,
+        targetIds: targeting.targetIds,
+        damageFormula: normalized.damageFormula,
+        damageType: normalized.damageType,
+        consumeAction: false,
+      });
+      return { ...result, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name };
     }
+
     if (normalized.resolutionMode === 'CHAIN') {
-      const chainCount = Math.max(1, Math.min(normalized.chainCount ?? normalized.instanceCount ?? resolvedTargetIds.length, resolvedTargetIds.length));
-      return engine.executeMultiAttack(actorId, resolvedTargetIds.slice(0, chainCount), { definition: { ...normalized, resolutionMode: 'MULTI_INSTANCE', instanceCount: chainCount }, instanceCount: chainCount, damageFormula: normalized.damageFormula, attackFormula: normalized.attackFormula, damageType: normalized.damageType, advantage: normalized.advantage, disadvantage: normalized.disadvantage, retargetPolicy: normalized.retargetPolicy, consumeAction: false });
+      const chainCount = Math.max(
+        1,
+        Math.min(
+          normalized.chainCount ?? normalized.instanceCount ?? targeting.targetIds.length,
+          targeting.targetIds.length
+        )
+      );
+      const result = engine.executeMultiAttack(actorId, targeting.targetIds.slice(0, chainCount), {
+        definition: { ...normalized, resolutionMode: 'MULTI_INSTANCE', instanceCount: chainCount },
+        instanceCount: chainCount,
+        damageFormula: normalized.damageFormula,
+        attackFormula: normalized.attackFormula,
+        damageType: normalized.damageType,
+        advantage: normalized.advantage,
+        disadvantage: normalized.disadvantage,
+        retargetPolicy: normalized.retargetPolicy,
+        consumeAction: false,
+      });
+      return { ...result, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name };
     }
+
     if (normalized.resolutionMode === 'SEQUENCE') {
       if (!normalized.sequence?.length) return { success: false, errorReason: 'SEQUENCE effects require at least one child effect.' };
-      const instances: any[] = [];
+      const instances: CombatAttackInstanceResult[] = [];
       const defeatedTargetIds: string[] = [];
       const eventIds: string[] = [];
       let totalDamage = 0;
-      let first = true;
+
       for (const child of normalized.sequence) {
-        const childResult = this.resolve(engine, actorId, resolvedTargetIds, child, { consumeAction: false });
-        first = false;
+        const childResult = this.resolve(engine, actorId, targeting.targetIds, child, { consumeAction: false });
         if (!childResult.success) return childResult;
         instances.push(...(childResult.instances || []));
         totalDamage += childResult.totalDamage || 0;
         for (const id of childResult.defeatedTargetIds || []) if (!defeatedTargetIds.includes(id)) defeatedTargetIds.push(id);
         for (const id of childResult.canonicalEventIds || []) eventIds.push(id);
       }
-      return { success: true, actionConsumed, effectId: normalized.id, effectName: normalized.name, instances, totalDamage, defeatedTargetIds, canonicalEventIds: eventIds };
+
+      return {
+        success: true,
+        actionConsumed: resourceConsumed,
+        effectId: normalized.id,
+        effectName: normalized.name,
+        instances,
+        totalDamage,
+        defeatedTargetIds,
+        canonicalEventIds: eventIds,
+      };
     }
+
     return { success: false, errorReason: `Resolution mode '${normalized.resolutionMode}' is handled by a specialized resolver.` };
   }
 }

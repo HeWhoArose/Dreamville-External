@@ -1,6 +1,7 @@
-import type { CombatEffectDefinition } from '../../src/types';
+import type { CombatEffectDefinition, DynamicHazardZone } from '../../src/types';
 import { TacticalCombatEngine } from './combatEngine';
 import type { WorldRepository } from '../repositories/worldRepository';
+import { combatEnvironmentEngine } from './combatEnvironmentEngine';
 
 export interface BossPhaseDefinition {
   id: string;
@@ -9,7 +10,7 @@ export interface BossPhaseDefinition {
   maxHpPercent?: number;
   abilities?: string[];
   targetPriority?: string;
-  environmentEffects?: string[];
+  environmentEffects?: Array<string | DynamicHazardZone>;
   modifiers?: Record<string, number>;
 }
 
@@ -47,7 +48,7 @@ export class BossPhaseEngine {
         modifiers: phase.modifiers,
         abilities: phase.abilities,
         targetPriority: phase.targetPriority,
-        environmentEffects: phase.environmentEffects,
+        environmentEffects: (phase.environmentEffects || []).map((effect) => typeof effect === 'string' ? effect : effect.id),
       });
       if (!sync.success) return { success: false, changed: false, errorReason: sync.errorReason };
       return { success: true, changed: false, phase, state: current?.state };
@@ -59,6 +60,19 @@ export class BossPhaseEngine {
       enteredAtRound: round,
       transitions: [...(current?.state?.transitions || []), `${currentPhaseId || 'INITIAL'}->${phase.id}`],
     };
+    const authoredHazards = (phase.environmentEffects || []).filter((effect): effect is DynamicHazardZone => typeof effect !== 'string');
+    for (const hazard of authoredHazards) {
+      const hazardResult = combatEnvironmentEngine.createHazard({
+        repository: params.repository,
+        storyId: params.storyId,
+        actorId: params.bossId,
+        hazard,
+      });
+      if (!hazardResult.success) {
+        return { success: false, changed: false, errorReason: hazardResult.errorReason };
+      }
+    }
+
     const combatPhase = combat.setBossPhaseState(params.bossId, {
       phaseId: phase.id,
       modifiers: phase.modifiers,
@@ -76,7 +90,7 @@ export class BossPhaseEngine {
       currentPhaseId: phase.id,
       state,
       abilities: [...(phase.abilities || [])],
-      environmentEffects: [...(phase.environmentEffects || [])],
+      environmentEffects: (phase.environmentEffects || []).map((effect) => typeof effect === 'string' ? effect : effect.id),
       canonical: true,
     });
     params.repository.saveWorldFact(params.storyId, {

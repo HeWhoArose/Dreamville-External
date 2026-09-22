@@ -1,6 +1,7 @@
 import type { CombatEffectDefinition, CombatEffectResult } from '../../src/types';
 import { TacticalCombatEngine } from './combatEngine';
 import { combatEffectEngine } from './combatEffectEngine';
+import { combatTargetingEngine } from './combatTargetingEngine';
 
 export interface CombatSimulationAuthorityDiagnostics {
   structurallyValid: boolean;
@@ -34,25 +35,49 @@ export class CombatSimulationEngine {
     const structurallyValid = validation.success;
     if (!structurallyValid) reasons.push(validation.errorReason || 'Effect schema is invalid.');
 
+    const normalized = validation.normalized;
     const actor = params.engine.getParticipant(params.actorId);
     const sourceAuthorized = Boolean(actor && !actor.isDead && actor.hpCurrent > 0);
     if (!sourceAuthorized) reasons.push('Source actor is unavailable or defeated.');
 
     const targetIds = Array.from(new Set(params.targetIds.filter(Boolean)));
-    const legalTargetCount = targetIds.filter((id) => {
-      const target = params.engine.getParticipant(id);
-      return Boolean(target && !target.isDead && target.hpCurrent > 0);
-    }).length;
-    const rulesLegal = structurallyValid && sourceAuthorized && (
-      params.definition.resolutionMode === 'WORLD_EFFECT'
-        ? true
-        : legalTargetCount > 0
-    );
+    let targetResolution = { success: true, targetIds: [] as string[], errorReason: undefined as string | undefined };
+    if (normalized) {
+      const resolved =
+        normalized.resolutionMode === 'WORLD_EFFECT' && targetIds.length === 0
+          ? { success: true, targetIds: [] as string[] }
+          : combatTargetingEngine.resolve(params.engine, params.actorId, targetIds, normalized);
+      targetResolution = {
+        success: resolved.success,
+        targetIds: resolved.targetIds || [],
+        errorReason: resolved.errorReason,
+      };
+      if (!resolved.success) reasons.push(resolved.errorReason || 'Target resolution failed.');
+    }
+
+    const actionCost = normalized?.actionCost || 'ACTION';
+    const actionLegal =
+      sourceAuthorized &&
+      (actionCost === 'FREE' || params.engine.getActionEconomy().canConsume(
+        params.actorId,
+        actionCost === 'BONUS_ACTION'
+          ? 'BONUS_ACTION'
+          : actionCost === 'REACTION'
+            ? 'REACTION'
+            : 'ACTION'
+      ));
+    if (!actionLegal) reasons.push('Action or resource cost is currently unavailable.');
+
+    const rulesLegal =
+      structurallyValid &&
+      sourceAuthorized &&
+      targetResolution.success &&
+      actionLegal;
     if (!rulesLegal) reasons.push('Effect cannot currently resolve against the requested combat context.');
 
-    const worldAuthorized = structurallyValid && (
-      params.definition.resolutionMode !== 'WORLD_EFFECT' ||
-      ['PERSON', 'GROUP', 'ENCOUNTER', 'STRUCTURE', 'DISTRICT', 'CITY', 'REGION', 'CONTINENT', 'PLANET', 'COSMIC'].includes(params.definition.scale)
+    const worldAuthorized = Boolean(
+      normalized &&
+      ['PERSON', 'GROUP', 'ENCOUNTER', 'STRUCTURE', 'DISTRICT', 'CITY', 'REGION', 'CONTINENT', 'PLANET', 'COSMIC'].includes(normalized.scale)
     );
     if (!worldAuthorized) reasons.push('World-effect scale is not recognized.');
 
@@ -71,7 +96,8 @@ export class CombatSimulationEngine {
     clone.importState(params.engine.exportState());
     clone.setSeed(seed);
     const before = clone.exportState();
-    const result = combatEffectEngine.resolve(clone, params.actorId, params.targetIds, params.definition);
+    const targetIds = Array.from(new Set(params.targetIds.filter(Boolean)));
+    const result = combatEffectEngine.resolve(clone, params.actorId, targetIds, params.definition);
     const presentation = result.worldEffectPreview
       ? { abstraction: result.worldEffectPreview.abstraction, summary: params.definition.name + ' would resolve at ' + result.worldEffectPreview.scale + ' scale without mutating the live world.' }
       : undefined;

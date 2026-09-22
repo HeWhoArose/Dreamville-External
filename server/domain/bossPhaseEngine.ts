@@ -105,7 +105,7 @@ export class BossPhaseEngine {
         modifiers: phase.modifiers,
         abilities: phase.abilities,
         targetPriority: phase.targetPriority,
-        environmentEffects: (phase.environmentEffects || []).map((effect) => typeof effect === 'string' ? effect : effect.id),
+        environmentEffects: resolvedHazards.map((effect) => effect.id),
       });
       if (!sync.success) return { success: false, changed: false, errorReason: sync.errorReason };
       return { success: true, changed: false, phase, state: current?.state };
@@ -117,16 +117,56 @@ export class BossPhaseEngine {
       enteredAtRound: round,
       transitions: [...(current?.state?.transitions || []), `${currentPhaseId || 'INITIAL'}->${phase.id}`],
     };
-    const authoredHazards = (phase.environmentEffects || []).filter((effect): effect is DynamicHazardZone => typeof effect !== 'string');
-    for (const hazard of authoredHazards) {
-      const hazardResult = combatEnvironmentEngine.createHazard({
-        repository: params.repository,
-        storyId: params.storyId,
-        actorId: params.bossId,
-        hazard,
-      });
-      if (!hazardResult.success) {
-        return { success: false, changed: false, errorReason: hazardResult.errorReason };
+    const bossCard = params.repository.getEntityCard(params.storyId, params.bossId);
+    const combatMetadata =
+      bossCard?.metadata &&
+      typeof bossCard.metadata.combat === 'object' &&
+      bossCard.metadata.combat !== null
+        ? bossCard.metadata.combat as Record<string, unknown>
+        : undefined;
+    const hazardCatalog =
+      combatMetadata?.environmentEffects &&
+      typeof combatMetadata.environmentEffects === 'object'
+        ? combatMetadata.environmentEffects as Record<string, unknown>
+        : {};
+
+    const resolvedHazards: DynamicHazardZone[] = [];
+    for (const effect of phase.environmentEffects || []) {
+      let hazard: DynamicHazardZone | undefined;
+      if (typeof effect === 'string') {
+        const raw = hazardCatalog[effect];
+        if (!raw || typeof raw !== 'object') {
+          return {
+            success: false,
+            changed: false,
+            errorReason: `Boss phase environment effect '${effect}' is not registered in the entity's canonical combat environment catalog.`,
+          };
+        }
+        const candidate = raw as Record<string, unknown>;
+        hazard = {
+          id: String(candidate.id || effect),
+          type: String(candidate.type || 'custom'),
+          x: Number(candidate.x || 0),
+          y: Number(candidate.y || 0),
+          radiusCells: Math.max(0, Number(candidate.radiusCells || 0)),
+          durationTurns: Math.max(1, Math.trunc(Number(candidate.durationTurns || 1))),
+          damagePerTurn: Math.max(0, Number(candidate.damagePerTurn || 0)),
+        } as DynamicHazardZone;
+      } else {
+        hazard = effect;
+      }
+
+      if (hazard) {
+        resolvedHazards.push(hazard);
+        const hazardResult = combatEnvironmentEngine.createHazard({
+          repository: params.repository,
+          storyId: params.storyId,
+          actorId: params.bossId,
+          hazard,
+        });
+        if (!hazardResult.success) {
+          return { success: false, changed: false, errorReason: hazardResult.errorReason };
+        }
       }
     }
 

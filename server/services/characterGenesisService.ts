@@ -1914,6 +1914,10 @@ OUTPUT STRICT JSON:
       console.warn('[CharacterGenesisService] Starting condition inference failed; using safe baseline.', error);
     }
 
+    if (!raw || typeof raw !== 'object') {
+      throw new CharacterGenesisAiUnavailableError('AI did not return a usable current-condition proposal. Existing condition state was not changed.');
+    }
+
     const strings = (value: unknown): string[] =>
       Array.isArray(value) ? value.map(String).filter(Boolean).slice(0, 20) : [];
 

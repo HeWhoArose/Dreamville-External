@@ -2745,6 +2745,7 @@ export class TacticalCombatEngine {
       consumeAction?: boolean;
       hitLocationMode?: CombatEffectDefinition['hitLocationMode'];
       targetBodyRegionId?: BodyRegionId;
+      forcedMovement?: CombatForcedMovementDefinition;
     }
   ): {
     success: boolean;

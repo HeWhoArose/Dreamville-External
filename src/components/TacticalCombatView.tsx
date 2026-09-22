@@ -229,7 +229,22 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
       setCombatState(result?.combatState || combatState);
       const events = result?.effectResult?.instances || [];
       const plan = await apiClient.generateCombatAnimationPlan(combatState.storyId, definition, events as any);
-      if (plan?.plan) setEffectResult((previous: any) => ({ ...(typeof previous === 'object' ? previous : {}), animationPlan: plan.plan }));
+      if (plan?.plan) {
+        setEffectResult((previous: any) => ({ ...(typeof previous === 'object' ? previous : {}), animationPlan: plan.plan }));
+        const assetRefs = Array.isArray(plan.plan.assetRefs) ? plan.plan.assetRefs.map(String).filter(Boolean) : [];
+        if (assetRefs.length) {
+          await Promise.allSettled(
+            assetRefs.map((assetId: string) =>
+              apiClient.ensureCombatAsset(
+                combatState.storyId,
+                definition.id,
+                'Dreamville combat visual asset for ' + definition.name + ' using visual reference ' + assetId + '. Style: ' + String(plan.plan.style || definition.damageType || definition.name) + '.',
+                assetId,
+              ),
+            ),
+          );
+        }
+      }
       onRefreshWorldState?.();
     } catch (err: any) {
       setErrorMsg(err.message || 'Structured combat effect failed.');

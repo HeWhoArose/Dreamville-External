@@ -1052,9 +1052,13 @@ export class CapabilityEngine {
       targetingMode:
         capability.targetType === 'area_of_effect'
           ? 'ALL_IN_AREA'
-          : capability.targetType === 'self'
-            ? 'SELF'
-            : 'ONE_TARGET',
+          : capability.targetType === 'all_enemies'
+            ? 'ALL_IN_AREA'
+            : capability.targetType === 'all_allies'
+              ? 'ALL_IN_AREA'
+              : capability.targetType === 'self'
+                ? 'SELF'
+                : 'ONE_TARGET',
       attackFormula: capability.checkFormula || '1d20',
       damageFormula: capability.damageFormula,
       provenance: capability.provenance,

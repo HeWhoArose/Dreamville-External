@@ -245,3 +245,71 @@ test('Phase 8.5: sandbox diagnoses an extreme world effect as simulatable withou
   assert.equal(simulation.result?.worldEffectPreview?.abstraction, 'MACRO');
   assert.equal(JSON.stringify(engine.exportState()), JSON.stringify(simulation.before));
 });
+
+
+test('Phase 8.5: semantic resource outcome mutates only the target combat resource ledger', () => {
+  const engine = engineWithEnemy();
+  const result = combatEffectEngine.resolve(engine, 'hero', ['enemy'], {
+    id: 'mana_siphon',
+    name: 'Mana Siphon',
+    resolutionMode: 'OUTCOME',
+    scale: 'PERSON',
+    actionCost: 'ACTION',
+    targetingMode: 'ONE_TARGET',
+    outcome: 'RESOURCE_GRANTED',
+    outcomePayload: { resource: 'mana', amount: 12 },
+  });
+  assert.equal(result.success, true);
+  assert.equal(engine.getParticipant('enemy')?.combatResources?.mana, 12);
+  assert.equal(engine.getParticipant('hero')?.combatResources?.mana, undefined);
+});
+
+test('Phase 8.5: summon outcome creates a canonical combat participant without mutating existing targets', () => {
+  const engine = engineWithEnemy();
+  const result = combatEffectEngine.resolve(engine, 'hero', ['hero'], {
+    id: 'summon_sprite',
+    name: 'Summon Sprite',
+    resolutionMode: 'OUTCOME',
+    scale: 'GROUP',
+    actionCost: 'ACTION',
+    targetingMode: 'ONE_TARGET',
+    outcome: 'SUMMONED',
+    outcomePayload: {
+      participant: {
+        id: 'sprite_1',
+        name: 'Sprite',
+        team: 'player_allies',
+        x: 1,
+        y: 1,
+        hpMax: 8,
+        hpCurrent: 8,
+        armorClass: 13,
+        speedCells: 5,
+        attackBonus: 3,
+        damageFormula: '1d4',
+      },
+    },
+  });
+  assert.equal(result.success, true);
+  assert.equal(engine.getParticipant('sprite_1')?.name, 'Sprite');
+  assert.equal(engine.getParticipant('enemy')?.isDead, false);
+});
+
+test('Phase 8.5: fallback animation generation never blocks combat semantics', () => {
+  const engine = engineWithEnemy();
+  const before = JSON.stringify(engine.exportState());
+  const result = combatEffectEngine.resolve(engine, 'hero', ['enemy'], {
+    id: 'fallback_beam',
+    name: 'Fallback Beam',
+    resolutionMode: 'MULTI_INSTANCE',
+    scale: 'PERSON',
+    actionCost: 'ACTION',
+    targetingMode: 'ONE_TARGET',
+    instanceCount: 2,
+    attackFormula: '1d20',
+    damageFormula: '1d4',
+  });
+  assert.equal(result.success, true);
+  assert.notEqual(JSON.stringify(engine.exportState()), before);
+  assert.equal(result.instances?.length, 2);
+});

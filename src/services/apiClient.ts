@@ -2015,7 +2015,7 @@ class ApiClient {
     storyId: string,
     definition: import('../types').CombatEffectDefinition,
     targetIds: string[],
-    options: { actorId?: string; seed?: number; seeds?: number[] } = {}
+    options: { actorId?: string; seed?: number; seeds?: number[]; capabilityId?: string } = {}
   ): Promise<any> {
     const res = await fetch(`${this.baseUrl}/combat/simulate`, {
       method: 'POST',
@@ -2024,6 +2024,7 @@ class ApiClient {
         definition,
         targetIds,
         actorId: options.actorId,
+        capabilityId: options.capabilityId,
         seed: options.seed,
         seeds: options.seeds,
       }),
@@ -2037,7 +2038,7 @@ class ApiClient {
     storyId: string,
     definitions: import('../types').CombatEffectDefinition[],
     targetIds: string[],
-    options: { actorId?: string; seeds?: number[] } = {}
+    options: { actorId?: string; seeds?: number[]; capabilityId?: string } = {}
   ): Promise<any> {
     const res = await fetch(`${this.baseUrl}/combat/simulate`, {
       method: 'POST',
@@ -2046,6 +2047,7 @@ class ApiClient {
         definitions,
         targetIds,
         actorId: options.actorId,
+        capabilityId: options.capabilityId,
         seeds: options.seeds,
       }),
     });

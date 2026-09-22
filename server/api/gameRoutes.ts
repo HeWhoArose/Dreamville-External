@@ -3208,23 +3208,44 @@ gameRouter.post('/combat/effect', async (req: Request, res: Response) => {
 gameRouter.post('/combat/simulate', async (req: Request, res: Response) => {
   try {
     const storyId = resolveStoryId(req, true);
-    const definition = req.body?.definition as CombatEffectDefinition;
+    const requestedDefinition = req.body?.definition as CombatEffectDefinition;
     const actorId = String(req.body?.actorId || worldRepository.getPlayerLifecycle(storyId)?.actorId || ('player_actor_' + storyId));
+    const capabilityId = typeof req.body?.capabilityId === 'string' ? req.body.capabilityId.trim() : '';
     const targetIds = Array.isArray(req.body?.targetIds) ? req.body.targetIds.map(String) : [];
     const engine = worldRepository.getCombatEngine(storyId);
+
+    let definition = requestedDefinition;
+    let definitionAuthority: 'CANONICAL_CAPABILITY' | 'DRAFT_SIMULATION' = 'DRAFT_SIMULATION';
+    if (capabilityId) {
+      const inventory = worldRepository.getInventoryEngine(storyId);
+      const capabilityEngine = worldRepository.getCapabilityEngine(storyId);
+      const possessed = capabilityEngine.getEffectiveActorCapabilities(actorId, inventory).find((capability: any) => capability.id === capabilityId);
+      if (!possessed) {
+        return res.status(403).json({ success: false, errorReason: 'Simulation capability is not currently possessed by the actor.' });
+      }
+      const canonicalDefinition = capabilityEngine.getAuthoritativeCombatEffect(actorId, capabilityId, inventory);
+      if (!canonicalDefinition) {
+        return res.status(400).json({ success: false, errorReason: 'The selected capability has no canonical combat effect.' });
+      }
+      definition = canonicalDefinition;
+      definitionAuthority = 'CANONICAL_CAPABILITY';
+    }
     const seed = req.body?.seed === undefined ? undefined : Number(req.body.seed);
     const seeds = Array.isArray(req.body?.seeds) ? req.body.seeds.map((value: any) => Number(value)).filter(Number.isFinite) : [];
     if (Array.isArray(req.body?.definitions) && req.body.definitions.length) {
-      return res.json(combatSimulationEngine.scenarioMatrix({
-        engine,
-        actorId,
-        targetIds,
-        definitions: req.body.definitions as CombatEffectDefinition[],
-        seeds,
-      }));
+      return res.json({
+        definitionAuthority,
+        results: combatSimulationEngine.scenarioMatrix({
+          engine,
+          actorId,
+          targetIds,
+          definitions: req.body.definitions as CombatEffectDefinition[],
+          seeds,
+        }),
+      });
     }
-    if (seeds.length) return res.json(combatSimulationEngine.batchSimulate({ engine, actorId, targetIds, definition, seeds }));
-    return res.json(combatSimulationEngine.simulate({ engine, actorId, targetIds, definition, seed }));
+    if (seeds.length) return res.json({ definitionAuthority, result: combatSimulationEngine.batchSimulate({ engine, actorId, targetIds, definition, seeds }) });
+    return res.json({ definitionAuthority, result: combatSimulationEngine.simulate({ engine, actorId, targetIds, definition, seed }) });
   } catch (error: any) {
     return res.status(400).json({ success: false, errorReason: error?.message || 'Failed to simulate combat effect.' });
   }

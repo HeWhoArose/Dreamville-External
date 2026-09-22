@@ -99,24 +99,8 @@ export class BossPhaseEngine {
     if (!phase) return { success: false, changed: false, errorReason: 'No boss phase matches current HP state.' };
     const current = params.repository.getActiveEffects(params.storyId).find((effect: any) => effect.type === 'BOSS_PHASE_STATE' && effect.bossId === params.bossId);
     const currentPhaseId = current?.currentPhaseId;
-    if (currentPhaseId === phase.id) {
-      const sync = combat.setBossPhaseState(params.bossId, {
-        phaseId: phase.id,
-        modifiers: phase.modifiers,
-        abilities: phase.abilities,
-        targetPriority: phase.targetPriority,
-        environmentEffects: resolvedHazards.map((effect) => effect.id),
-      });
-      if (!sync.success) return { success: false, changed: false, errorReason: sync.errorReason };
-      return { success: true, changed: false, phase, state: current?.state };
-    }
     const round = combat.getCurrentRound();
-    const state: BossPhaseState = {
-      bossId: params.bossId,
-      currentPhaseId: phase.id,
-      enteredAtRound: round,
-      transitions: [...(current?.state?.transitions || []), `${currentPhaseId || 'INITIAL'}->${phase.id}`],
-    };
+
     const bossCard = params.repository.getEntityCard(params.storyId, params.bossId);
     const combatMetadata =
       bossCard?.metadata &&
@@ -145,28 +129,47 @@ export class BossPhaseEngine {
         const candidate = raw as Record<string, unknown>;
         hazard = {
           id: String(candidate.id || effect),
-          type: String(candidate.type || 'custom'),
+          type: String(candidate.type || 'custom') as DynamicHazardZone['type'],
           x: Number(candidate.x || 0),
           y: Number(candidate.y || 0),
           radiusCells: Math.max(0, Number(candidate.radiusCells || 0)),
           durationTurns: Math.max(1, Math.trunc(Number(candidate.durationTurns || 1))),
           damagePerTurn: Math.max(0, Number(candidate.damagePerTurn || 0)),
-        } as DynamicHazardZone;
+        };
       } else {
         hazard = effect;
       }
+      if (hazard) resolvedHazards.push(hazard);
+    }
 
-      if (hazard) {
-        resolvedHazards.push(hazard);
-        const hazardResult = combatEnvironmentEngine.createHazard({
-          repository: params.repository,
-          storyId: params.storyId,
-          actorId: params.bossId,
-          hazard,
-        });
-        if (!hazardResult.success) {
-          return { success: false, changed: false, errorReason: hazardResult.errorReason };
-        }
+    if (currentPhaseId === phase.id) {
+      const sync = combat.setBossPhaseState(params.bossId, {
+        phaseId: phase.id,
+        modifiers: phase.modifiers,
+        abilities: phase.abilities,
+        targetPriority: phase.targetPriority,
+        environmentEffects: resolvedHazards.map((effect) => effect.id),
+      });
+      if (!sync.success) return { success: false, changed: false, errorReason: sync.errorReason };
+      return { success: true, changed: false, phase, state: current?.state };
+    }
+
+    const state: BossPhaseState = {
+      bossId: params.bossId,
+      currentPhaseId: phase.id,
+      enteredAtRound: round,
+      transitions: [...(current?.state?.transitions || []), `${currentPhaseId || 'INITIAL'}->${phase.id}`],
+    };
+    const bossCard = params.repository.getEntityCard(params.storyId, params.bossId);
+    for (const hazard of resolvedHazards) {
+      const hazardResult = combatEnvironmentEngine.createHazard({
+        repository: params.repository,
+        storyId: params.storyId,
+        actorId: params.bossId,
+        hazard,
+      });
+      if (!hazardResult.success) {
+        return { success: false, changed: false, errorReason: hazardResult.errorReason };
       }
     }
 

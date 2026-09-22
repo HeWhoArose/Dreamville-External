@@ -498,7 +498,8 @@ export class CharacterProgressionEngine {
         if (module.type === 'SPECIES') state.speciesId = moduleId;
       }
       if (!state.enabledModuleIds.includes(moduleId)) state.enabledModuleIds.push(moduleId);
-      module.enabled = true;
+      // Module enablement is actor-scoped. Keep the shared definition enabled
+      // so one actor cannot disable the module for every other actor.
     } else {
       state.enabledModuleIds = state.enabledModuleIds.filter((id) => id !== moduleId);
       if (module.type === 'CLASS' && state.classId === moduleId) state.classId = undefined;
@@ -666,18 +667,43 @@ export class CharacterProgressionEngine {
   } {
     const state = this.requireActor(actorId);
     const expected = (character as any).progression || {};
+    const characterFeats = ((character.feats || []) as CharacterFeat[]).filter((feat) => Boolean(feat?.id && feat?.name));
+    const featModuleIds = new Map(
+      characterFeats.map((feat) => [
+        feat.id!,
+        deterministicId('feat_module', feat.worldId || 'world', feat.id, feat.name),
+      ])
+    );
+    const expectedFeatIds = Array.isArray(expected.featIds)
+      ? expected.featIds
+          .map((id: unknown) => normalizeModuleId(id))
+          .filter(Boolean)
+          .map((id: string) => featModuleIds.get(id) || id)
+          .sort()
+      : characterFeats.map((feat) => deterministicId('feat_module', feat.worldId || 'world', feat.id, feat.name)).sort();
+    const expectedClassId =
+      normalizeModuleId(expected.classId) ||
+      this.resolveModuleAlias('CLASS', character.role?.profession || character.role?.archetype) ||
+      '';
+    const expectedSubclassId = normalizeModuleId(expected.subclassId) || '';
+    const expectedSpeciesId =
+      normalizeModuleId(expected.speciesId) ||
+      this.resolveModuleAlias('SPECIES', character.identity?.species) ||
+      '';
     const expectedFingerprint = deterministicId(
       'prg_genesis',
       actorId,
       normalizeLevel(character.coreStats?.level, 1),
-      normalizeModuleId(expected.classId) || this.resolveModuleAlias('CLASS', character.role?.profession || character.role?.archetype) || '',
-      normalizeModuleId(expected.subclassId) || '',
-      normalizeModuleId(expected.speciesId) || this.resolveModuleAlias('SPECIES', character.identity?.species) || '',
-      Array.isArray(expected.featIds) ? expected.featIds.slice().sort() : ((character.feats || []) as CharacterFeat[]).map((feat) => deterministicId('feat_module', feat.worldId || 'world', feat.id, feat.name)).sort()
+      expectedClassId,
+      expectedSubclassId,
+      expectedSpeciesId,
+      expectedFeatIds
     );
     const differences: string[] = [];
-    if (state.genesisSelectionSource?.classId !== this.resolveModuleAlias('CLASS', character.role?.profession || character.role?.archetype)) differences.push('class');
-    if (state.genesisSelectionSource?.speciesId !== this.resolveModuleAlias('SPECIES', character.identity?.species)) differences.push('species');
+    if (state.genesisSelectionSource?.classId !== expectedClassId) differences.push('class');
+    if (state.genesisSelectionSource?.subclassId !== expectedSubclassId) differences.push('subclass');
+    if (state.genesisSelectionSource?.speciesId !== expectedSpeciesId) differences.push('species');
+    if (JSON.stringify((state.genesisSelectionSource?.featIds || []).slice().sort()) !== JSON.stringify(expectedFeatIds)) differences.push('feats');
     return {
       divergent: state.genesisSelectionFingerprint !== expectedFingerprint || differences.length > 0,
       expectedFingerprint,

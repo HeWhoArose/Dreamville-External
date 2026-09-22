@@ -392,6 +392,7 @@ export class ConditionEngine {
   public processCombatEvent(
     actorId: string,
     event:
+      | 'ON_ACTION'
       | 'ON_ATTACK'
       | 'ON_HIT'
       | 'ON_MISS'
@@ -477,9 +478,7 @@ export class ConditionEngine {
   }
 
   public processAction(actorId: string, actionText: string, nowSeconds = 0): ConditionActionResult {
-    return this.processCombatEvent(actorId, 'ON_ATTACK', { actionText, nowSeconds }).changed
-      ? this.processCombatEvent(actorId, 'ON_ACTION' as any, { actionText, nowSeconds })
-      : this.processCombatEvent(actorId, 'ON_ACTION' as any, { actionText, nowSeconds });
+    return this.processCombatEvent(actorId, 'ON_ACTION', { actionText, nowSeconds });
   }
 
 

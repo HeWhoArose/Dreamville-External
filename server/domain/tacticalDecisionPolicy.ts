@@ -202,17 +202,22 @@ export class NpcTacticalDecisionPolicy {
 
     // 6. Target Selection (Group Focus Target or Priority Target)
     let selectedTarget = closestThreat.enemy;
-    if (groupContext?.focusTargetId) {
+    const bossPriority = String((actor as any).bossTargetPriority || '').toUpperCase();
+    if (bossPriority === 'LOWEST_HP') {
+      selectedTarget = [...knownEnemies].sort((a, b) => a.hpCurrent - b.hpCurrent || a.id.localeCompare(b.id))[0] || selectedTarget;
+    } else if (bossPriority === 'HIGHEST_HP') {
+      selectedTarget = [...knownEnemies].sort((a, b) => b.hpCurrent - a.hpCurrent || a.id.localeCompare(b.id))[0] || selectedTarget;
+    } else if (bossPriority === 'NEAREST') {
+      selectedTarget = closestThreat.enemy;
+    } else if (bossPriority === 'PLAYER') {
+      selectedTarget = knownEnemies.find((enemy) => enemy.team === 'player_allies') || selectedTarget;
+    } else if (groupContext?.focusTargetId) {
       const focusEnemy = knownEnemies.find((e) => e.id === groupContext.focusTargetId);
-      if (focusEnemy) {
-        selectedTarget = focusEnemy;
-      }
+      if (focusEnemy) selectedTarget = focusEnemy;
     } else if (assignedRole === 'SKIRMISHER') {
       // Skirmishers prioritize lowest current HP enemy in range
       const lowestHpEnemy = [...knownEnemies].sort((a, b) => a.hpCurrent - b.hpCurrent || a.id.localeCompare(b.id))[0];
-      if (lowestHpEnemy) {
-        selectedTarget = lowestHpEnemy;
-      }
+      if (lowestHpEnemy) selectedTarget = lowestHpEnemy;
     }
 
     const distToTarget = Math.hypot(selectedTarget.x - actor.x, selectedTarget.y - actor.y);

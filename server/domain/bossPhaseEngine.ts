@@ -22,6 +22,51 @@ export interface BossPhaseState {
 }
 
 export class BossPhaseEngine {
+  public getAuthoredPhases(repository: WorldRepository, storyId: string, bossId: string): BossPhaseDefinition[] {
+    const card = repository.getEntityCard(storyId, bossId);
+    const combatMetadata =
+      card?.metadata &&
+      typeof card.metadata.combat === 'object' &&
+      card.metadata.combat !== null
+        ? card.metadata.combat as Record<string, unknown>
+        : undefined;
+    const rawPhases = combatMetadata?.bossPhases;
+    if (!Array.isArray(rawPhases)) return [];
+
+    return rawPhases
+      .filter((phase: any) => phase && typeof phase.id === 'string' && typeof phase.name === 'string')
+      .slice(0, 20)
+      .map((phase: any) => ({
+        id: String(phase.id),
+        name: String(phase.name),
+        minHpPercent: phase.minHpPercent == null ? undefined : Math.max(0, Math.min(1, Number(phase.minHpPercent))),
+        maxHpPercent: phase.maxHpPercent == null ? undefined : Math.max(0, Math.min(1, Number(phase.maxHpPercent))),
+        abilities: Array.isArray(phase.abilities) ? phase.abilities.map(String).slice(0, 50) : [],
+        targetPriority: typeof phase.targetPriority === 'string' ? phase.targetPriority : undefined,
+        environmentEffects: Array.isArray(phase.environmentEffects)
+          ? phase.environmentEffects.slice(0, 20).map((effect: any) => {
+              if (typeof effect === 'string') return effect;
+              if (!effect || typeof effect !== 'object') return null;
+              return {
+                id: String(effect.id || 'boss_hazard'),
+                type: effect.type,
+                x: Number(effect.x || 0),
+                y: Number(effect.y || 0),
+                radiusCells: Math.max(0, Number(effect.radiusCells || 0)),
+                durationTurns: Math.max(1, Math.trunc(Number(effect.durationTurns || 1))),
+                damagePerTurn: Math.max(0, Number(effect.damagePerTurn || 0)),
+              } as DynamicHazardZone;
+            }).filter(Boolean)
+          : [],
+        modifiers:
+          phase.modifiers && typeof phase.modifiers === 'object'
+            ? Object.fromEntries(
+                Object.entries(phase.modifiers).filter(([, value]) => typeof value === 'number' && Number.isFinite(value))
+              )
+            : {},
+      }));
+  }
+
   public resolvePhase(phases: BossPhaseDefinition[], hpCurrent: number, hpMax: number): BossPhaseDefinition | undefined {
     const percent = hpMax > 0 ? hpCurrent / hpMax : 0;
     return [...phases]
@@ -33,12 +78,24 @@ export class BossPhaseEngine {
     repository: WorldRepository;
     storyId: string;
     bossId: string;
-    phases: BossPhaseDefinition[];
+    phases?: BossPhaseDefinition[];
   }): { success: boolean; changed: boolean; state?: BossPhaseState; phase?: BossPhaseDefinition; errorReason?: string } {
     const combat = params.repository.getCombatEngine(params.storyId);
     const boss = combat.getParticipant(params.bossId);
     if (!boss) return { success: false, changed: false, errorReason: 'Boss participant not found.' };
-    const phase = this.resolvePhase(params.phases, boss.hpCurrent, boss.hpMax);
+
+    const authoredPhases = params.phases?.length
+      ? params.phases
+      : this.getAuthoredPhases(params.repository, params.storyId, params.bossId);
+    if (!authoredPhases.length) {
+      return {
+        success: false,
+        changed: false,
+        errorReason: 'No canonical boss phase definitions are registered for this entity.',
+      };
+    }
+
+    const phase = this.resolvePhase(authoredPhases, boss.hpCurrent, boss.hpMax);
     if (!phase) return { success: false, changed: false, errorReason: 'No boss phase matches current HP state.' };
     const current = params.repository.getActiveEffects(params.storyId).find((effect: any) => effect.type === 'BOSS_PHASE_STATE' && effect.bossId === params.bossId);
     const currentPhaseId = current?.currentPhaseId;

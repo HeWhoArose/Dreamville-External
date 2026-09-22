@@ -2899,9 +2899,10 @@ export class TacticalCombatEngine {
       if (result.targetDied && !defeatedTargetIds.includes(result.targetId)) defeatedTargetIds.push(result.targetId);
     }
     this.resolveReadyTriggers({ type: 'ACTOR_ATTACKED', actorId: attackerId, targetId: instances[0]?.targetId });
+    const secondaryDamage = instances.reduce((sum, instance) => sum + (instance.secondaryDamage || 0), 0);
     return {
       success: true, actionConsumed: options.consumeAction !== false, effectId: options.definition?.id, effectName: options.definition?.name,
-      instances, totalDamage, defeatedTargetIds,
+      instances, totalDamage, secondaryDamage, defeatedTargetIds,
       canonicalEventIds: instances.map((instance) => this.combatEffectEvents.find((event) => event.actionId === actionId && event.instanceIndex === instance.instanceIndex)?.eventId).filter(Boolean) as string[],
     };
   }

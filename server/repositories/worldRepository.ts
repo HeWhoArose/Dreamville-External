@@ -126,6 +126,10 @@ export interface WorldRepository {
   }): { storyId: string; run: any };
   deleteStoryRun(storyId: string): void;
   getStoryRun(storyId: string): any;
+  getActiveEffects(storyId: string): any[];
+  saveActiveEffect(effect: any): void;
+  getWorldFacts(storyId: string): any[];
+  saveWorldFact(storyId: string, fact: any): void;
   getRulesProfile(storyId: string): RulesProfile | null;
   getNarrativeProfile(storyId: string): NarrativeProfile | null;
   getAllStoryRuns(): any[];

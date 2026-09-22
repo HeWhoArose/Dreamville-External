@@ -2182,8 +2182,21 @@ export class TacticalCombatEngine {
     for (let i = 0; i < targets.length; i += 1) {
       const target = targets[i];
       if (target.isDead || target.hpCurrent <= 0) continue;
-      const modifier = target.saveModifiers?.[params.savingThrowAbility] ?? target.savingThrowModifiers?.[params.savingThrowAbility] ?? 0;
-      const save = this.ruleset.resolveSavingThrow({ saveModifier: modifier, difficultyClass: params.difficultyClass, rollFormula, diceEngine: this.diceEngine });
+      const saveAbility = params.savingThrowAbility.toUpperCase();
+      const modifier = target.saveModifiers?.[saveAbility] ?? target.savingThrowModifiers?.[saveAbility] ?? 0;
+      const targetConditions = new Set(target.conditions.map((condition) => condition.toLowerCase()));
+      const targetDodging = Boolean(this.actionEconomy.get(target.id)?.dodging);
+      const automaticFailure = ['paralyzed', 'petrified', 'stunned', 'unconscious'].includes(targetConditions.values().next().value as string) ||
+        (['DEX', 'STR'].includes(saveAbility) && ['paralyzed', 'petrified', 'stunned', 'unconscious'].some((condition) => targetConditions.has(condition)));
+      const save = this.ruleset.resolveSavingThrow({
+        saveModifier: modifier,
+        difficultyClass: params.difficultyClass,
+        rollFormula,
+        advantage: targetDodging && saveAbility === 'DEX',
+        disadvantage: targetConditions.has('restrained') && saveAbility === 'DEX',
+        diceEngine: this.diceEngine,
+      });
+      if (automaticFailure) save.succeeds = false;
       let damage = 0;
       let targetDied = false;
       let damageRoll: RollRecord | undefined;

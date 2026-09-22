@@ -61,6 +61,8 @@ export class CombatEffectEngine {
         damageType: normalized.damageType,
         advantage: normalized.advantage,
         disadvantage: normalized.disadvantage,
+        attackFormula: normalized.attackFormula,
+        consumeAction: options.consumeAction !== false,
       });
       return {
         success: attack.success,
@@ -86,7 +88,43 @@ export class CombatEffectEngine {
         advantage: normalized.advantage,
         disadvantage: normalized.disadvantage,
         retargetPolicy: normalized.retargetPolicy,
+        consumeAction: options.consumeAction !== false,
       });
+    }
+    if (normalized.resolutionMode === 'SAVE') {
+      if (!normalized.savingThrowAbility || normalized.difficultyClass == null) return { success: false, errorReason: 'SAVE effects require savingThrowAbility and difficultyClass.' };
+      return engine.executeSavingThrowEffect({ actorId, targetIds, savingThrowAbility: normalized.savingThrowAbility, difficultyClass: normalized.difficultyClass, damageFormula: normalized.damageFormula, damageType: normalized.damageType, saveFormula: normalized.saveFormula, halfDamageOnSave: normalized.halfDamageOnSave, consumeAction: options.consumeAction !== false });
+    }
+    if (normalized.resolutionMode === 'AREA') {
+      if (!targetIds.length) return { success: false, errorReason: 'AREA effects require resolved targetIds.' };
+      if (normalized.savingThrowAbility) {
+        if (normalized.difficultyClass == null) return { success: false, errorReason: 'AREA save effects require difficultyClass.' };
+        return engine.executeSavingThrowEffect({ actorId, targetIds, savingThrowAbility: normalized.savingThrowAbility, difficultyClass: normalized.difficultyClass, damageFormula: normalized.damageFormula, damageType: normalized.damageType, saveFormula: normalized.saveFormula, halfDamageOnSave: normalized.halfDamageOnSave, consumeAction: options.consumeAction !== false });
+      }
+      if (!normalized.damageFormula) return { success: false, errorReason: 'Automatic AREA effects require damageFormula.' };
+      return engine.executeAreaDamageEffect({ actorId, targetIds, damageFormula: normalized.damageFormula, damageType: normalized.damageType, consumeAction: options.consumeAction !== false });
+    }
+    if (normalized.resolutionMode === 'CHAIN') {
+      const chainCount = Math.max(1, Math.min(normalized.chainCount ?? normalized.instanceCount ?? targetIds.length, targetIds.length));
+      return engine.executeMultiAttack(actorId, targetIds.slice(0, chainCount), { definition: { ...normalized, resolutionMode: 'MULTI_INSTANCE', instanceCount: chainCount }, instanceCount: chainCount, damageFormula: normalized.damageFormula, attackFormula: normalized.attackFormula, damageType: normalized.damageType, advantage: normalized.advantage, disadvantage: normalized.disadvantage, retargetPolicy: normalized.retargetPolicy, consumeAction: options.consumeAction !== false });
+    }
+    if (normalized.resolutionMode === 'SEQUENCE') {
+      if (!normalized.sequence?.length) return { success: false, errorReason: 'SEQUENCE effects require at least one child effect.' };
+      const instances: any[] = [];
+      const defeatedTargetIds: string[] = [];
+      const eventIds: string[] = [];
+      let totalDamage = 0;
+      let first = true;
+      for (const child of normalized.sequence) {
+        const childResult = this.resolve(engine, actorId, targetIds, child, { consumeAction: options.consumeAction !== false && first });
+        first = false;
+        if (!childResult.success) return childResult;
+        instances.push(...(childResult.instances || []));
+        totalDamage += childResult.totalDamage || 0;
+        for (const id of childResult.defeatedTargetIds || []) if (!defeatedTargetIds.includes(id)) defeatedTargetIds.push(id);
+        for (const id of childResult.canonicalEventIds || []) eventIds.push(id);
+      }
+      return { success: true, actionConsumed: options.consumeAction !== false, effectId: normalized.id, effectName: normalized.name, instances, totalDamage, defeatedTargetIds, canonicalEventIds: eventIds };
     }
     return { success: false, errorReason: `Resolution mode '${normalized.resolutionMode}' is handled by a specialized resolver.` };
   }

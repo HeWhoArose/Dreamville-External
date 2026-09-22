@@ -612,6 +612,23 @@ export interface CharacterStatDefinition {
 
 e
 
+export interface CharacterSkill {
+  id: string;
+  name: string;
+  governingAbility: 'Strength' | 'Dexterity' | 'Constitution' | 'Intelligence' | 'Wisdom' | 'Charisma' | string;
+  proficiency: 'NONE' | 'PROFICIENT' | 'EXPERTISE';
+  isProficient?: boolean;
+  isExpertise?: boolean;
+  isCustom?: boolean;
+  description: string;
+  mechanicalDescription?: string;
+  tags?: string[];
+  worldCompatibility?: string;
+  provenance: CharacterProvenanceSource;
+  icon?: ItemOrSkillIcon;
+  checkFormula?: string;
+}
+
 export interface CharacterFeat {
   id: string;
   name: string;
@@ -715,6 +732,35 @@ export interface CharacterAiExtractionSummary {
 }
 
 e
+
+export interface CapabilityDefinition {
+  id: string;
+  name: string;
+  category: 'Physical' | 'Magic' | 'Biological' | 'Social' | 'Domain' | 'Movement' | string;
+  activationMode: 'immediate' | 'passive' | 'reaction' | 'charged' | 'channelled' | string;
+  powerTier: 'Minor' | 'Moderate' | 'Major' | 'WorldScale' | string;
+  baseEnergyCost: number;
+  baseStrainCost: number;
+  chargeTurnsRequired?: number;
+  isInterruptible?: boolean;
+  minVesselCapacityRequired: number;
+  description: string;
+  provenance: string;
+  prerequisites?: string[];
+  restrictions?: string[];
+  cooldownTurns?: number;
+  durationTurns?: number;
+  targetType?: 'single_target' | 'self' | 'area_of_effect' | 'all_allies' | 'all_enemies' | string;
+  rangeScope?: 'melee' | 'close' | 'ranged' | 'realm' | 'global' | string;
+  actionType?: 'action' | 'bonus_action' | 'reaction' | 'free' | string;
+  sourceUserPrompt?: string;
+  effects?: CharacterEffect[];
+  generatedSkills?: GeneratedTechnique[];
+  storyCheckChallenges?: StoryCheckChallenge[];
+  checkFormula?: string;
+  damageFormula?: string;
+  effectDefinition?: CombatEffectDefinition;
+}
 
 export interface CapabilityGraphNode {
   capabilityId: string;
@@ -1496,6 +1542,21 @@ export interface CharacterStartingConditionState {
 
 
 e
+
+export interface GeneratedTechnique {
+  id: string;
+  name: string;
+  description: string;
+  parentCapabilityId: string;
+  parentCapabilityName: string;
+  activationType?: string;
+  energyCost?: number;
+  cooldownTurns?: number;
+  range?: string;
+  checkFormula?: string;
+  damageFormula?: string;
+  provenance: CharacterProvenanceSource;
+}
 
 export interface StartingEquipmentItem {
   id: string;

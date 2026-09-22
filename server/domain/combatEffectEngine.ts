@@ -55,6 +55,59 @@ export class CombatEffectEngine {
     return { success: true, normalized };
   }
 
+  private applyConditionEffects(
+    engine: TacticalCombatEngine,
+    actorId: string,
+    definition: CombatEffectDefinition,
+    instances: CombatAttackInstanceResult[],
+    saveSemantics = false
+  ): Array<{ targetId: string; conditionIdOrName: string; trigger: import('../../src/types').CombatConditionEffectDefinition['trigger']; applied: boolean; immune: boolean }> {
+    const definitions = definition.conditionEffects || [];
+    if (!definitions.length) return [];
+
+    const applied: Array<{ targetId: string; conditionIdOrName: string; trigger: import('../../src/types').CombatConditionEffectDefinition['trigger']; applied: boolean; immune: boolean }> = [];
+
+    for (const instance of instances) {
+      for (const effect of definitions) {
+        let shouldApply = effect.trigger === 'ALWAYS';
+        if (saveSemantics) {
+          shouldApply =
+            shouldApply ||
+            (effect.trigger === 'ON_SAVE_FAILURE' && instance.hits) ||
+            (effect.trigger === 'ON_SAVE_SUCCESS' && !instance.hits);
+        } else {
+          shouldApply =
+            shouldApply ||
+            (effect.trigger === 'ON_HIT' && instance.hits) ||
+            (effect.trigger === 'ON_MISS' && !instance.hits) ||
+            (effect.trigger === 'ON_CRITICAL' && instance.isCritical);
+        }
+        if (!shouldApply) continue;
+
+        const result = engine.applyCombatCondition(
+          instance.targetId,
+          {
+            conditionIdOrName: effect.conditionIdOrName,
+            intensity: effect.intensity,
+            severity: effect.severity,
+            durationSeconds: effect.durationSeconds,
+            notes: effect.notes,
+          },
+          actorId,
+        );
+
+        applied.push({
+          targetId: instance.targetId,
+          conditionIdOrName: effect.conditionIdOrName,
+          trigger: effect.trigger,
+          applied: result.applied,
+          immune: result.immune,
+        });
+      }
+    }
+    return applied;
+  }
+
   public resolve(
     engine: TacticalCombatEngine,
     actorId: string,
@@ -149,7 +202,7 @@ export class CombatEffectEngine {
         attackBonusOverride: normalized.attackBonusOverride,
         consumeAction: false,
       });
-      return rollback({
+      const singleResult: CombatEffectResult = {
         success: attack.success,
         errorReason: attack.errorReason,
         actionConsumed: attack.success && resourceConsumed,
@@ -170,7 +223,11 @@ export class CombatEffectEngine {
           .filter((event) => event.eventType === 'ATTACK_INSTANCE_RESOLVED' && event.actorId === actorId && event.targetId === targetId)
           .slice(-1)
           .map((event) => event.eventId),
-      });
+      };
+      singleResult.conditionsApplied = attack.success
+        ? this.applyConditionEffects(engine, actorId, normalized, singleResult.instances || [])
+        : [];
+      return rollback(singleResult);
     }
 
     if (normalized.resolutionMode === 'MULTI_INSTANCE') {
@@ -185,12 +242,16 @@ export class CombatEffectEngine {
         retargetPolicy: normalized.retargetPolicy,
         consumeAction: false,
       });
-      return rollback({
+      const multiResult: CombatEffectResult = {
         ...result,
         actionConsumed: result.success && resourceConsumed,
         effectId: normalized.id,
         effectName: normalized.name,
-      });
+      };
+      multiResult.conditionsApplied = result.success
+        ? this.applyConditionEffects(engine, actorId, normalized, result.instances || [])
+        : [];
+      return rollback(multiResult);
     }
 
     if (normalized.resolutionMode === 'SAVE') {
@@ -208,7 +269,11 @@ export class CombatEffectEngine {
         halfDamageOnSave: normalized.halfDamageOnSave,
         consumeAction: false,
       });
-      return rollback({ ...result, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name });
+      const saveResult: CombatEffectResult = { ...result, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name };
+      saveResult.conditionsApplied = result.success
+        ? this.applyConditionEffects(engine, actorId, normalized, result.instances || [], true)
+        : [];
+      return rollback(saveResult);
     }
 
     if (normalized.resolutionMode === 'AREA') {
@@ -226,7 +291,11 @@ export class CombatEffectEngine {
           halfDamageOnSave: normalized.halfDamageOnSave,
           consumeAction: false,
         });
-        return rollback({ ...result, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name });
+        const areaSaveResult: CombatEffectResult = { ...result, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name };
+        areaSaveResult.conditionsApplied = result.success
+          ? this.applyConditionEffects(engine, actorId, normalized, result.instances || [], true)
+          : [];
+        return rollback(areaSaveResult);
       }
       if (!normalized.damageFormula) return rollback({ success: false, errorReason: 'Automatic AREA effects require damageFormula.' });
       const result = engine.executeAreaDamageEffect({
@@ -236,7 +305,11 @@ export class CombatEffectEngine {
         damageType: normalized.damageType,
         consumeAction: false,
       });
-      return rollback({ ...result, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name });
+      const areaResult: CombatEffectResult = { ...result, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name };
+      areaResult.conditionsApplied = result.success
+        ? this.applyConditionEffects(engine, actorId, normalized, result.instances || [])
+        : [];
+      return rollback(areaResult);
     }
 
     if (normalized.resolutionMode === 'CHAIN') {
@@ -258,7 +331,11 @@ export class CombatEffectEngine {
         retargetPolicy: normalized.retargetPolicy,
         consumeAction: false,
       });
-      return rollback({ ...result, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name });
+      const chainResult: CombatEffectResult = { ...result, actionConsumed: result.success && resourceConsumed, effectId: normalized.id, effectName: normalized.name };
+      chainResult.conditionsApplied = result.success
+        ? this.applyConditionEffects(engine, actorId, normalized, result.instances || [])
+        : [];
+      return rollback(chainResult);
     }
 
     if (normalized.resolutionMode === 'SEQUENCE') {

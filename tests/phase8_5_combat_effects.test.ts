@@ -489,3 +489,47 @@ test('Phase 8.5 fallback: generated visual presentation remains non-authoritativ
   assert.equal(typeof result.animationPlan?.id === 'string' || result.animationPlan === undefined, true);
   assert.equal(engine.getParticipant('enemy')?.hpCurrent! < 1000, true);
 });
+
+
+test('Phase 8.5 regression: condition triggers execute from canonical combat events without creating a second condition authority', async () => {
+  const { ConditionEngine } = await import('../server/domain/conditionEngine');
+  const conditions = new ConditionEngine();
+  conditions.seedActor('hero', { healthCurrent: 20, healthMax: 20 });
+  conditions.registerDefinition({
+    id: 'battle_rage',
+    name: 'Battle Rage',
+    description: 'Test condition that gains intensity on attack.',
+    category: 'TEST',
+    alignment: 'BENEFICIAL',
+    defaultSeverity: 1,
+    defaultIntensity: 1,
+    maxIntensity: 5,
+    stackMode: 'ADD',
+    triggers: [{
+      id: 'rage_on_attack',
+      event: 'ON_ATTACK',
+      intensityDelta: 1,
+      description: 'Rage intensifies when the bearer attacks.',
+    }],
+  });
+  conditions.applyCondition('hero', { definitionIdOrName: 'battle_rage' });
+  const first = conditions.processCombatEvent('hero', 'ON_ATTACK', { actionText: 'attack', nowSeconds: 1 });
+  const state = conditions.getActorState('hero');
+
+  assert.equal(first.changed, true);
+  assert.equal(state?.instances.find((instance) => instance.definitionId === 'battle_rage')?.intensity, 2);
+});
+
+test('Phase 8.5 validation: unsafe giant dice formulas are rejected so extreme powers use semantic outcomes', () => {
+  const validation = combatEffectEngine.validateDefinition({
+    id: 'unsafe_damage',
+    name: 'Unsafe Damage',
+    resolutionMode: 'SINGLE_ATTACK',
+    scale: 'PERSON',
+    damageFormula: '999d9999',
+    attackFormula: '1d20',
+  }, 'CUSTOM_HOMEBREW_DND');
+
+  assert.equal(validation.success, false);
+  assert.match(validation.errorReason || '', /unsafe|invalid/i);
+});

@@ -5,6 +5,7 @@ import { TacticalCombatEngine } from '../server/domain/combatEngine';
 import { combatEffectEngine } from '../server/domain/combatEffectEngine';
 import { combatSimulationEngine } from '../server/domain/combatSimulationEngine';
 import { rulesProfileEngine } from '../server/domain/rulesProfileEngine';
+import { CapabilityEngine } from '../server/domain/capabilityEngine';
 
 function participant(overrides: Partial<Parameters<TacticalCombatEngine['addParticipant']>[0]> = {}) {
   return {
@@ -312,4 +313,60 @@ test('Phase 8.5: fallback animation generation never blocks combat semantics', (
   assert.equal(result.success, true);
   assert.notEqual(JSON.stringify(engine.exportState()), before);
   assert.equal(result.instances?.length, 2);
+});
+
+
+test('Phase 8.5: authoritative capability effect cannot be replaced by a stronger client draft', () => {
+  const capabilities = new CapabilityEngine();
+  capabilities.seedStarterPowerStateForActor('hero');
+
+  capabilities.registerCapability({
+    id: 'cap_authoritative_laser',
+    name: 'Authoritative Laser',
+    category: 'Magic',
+    activationMode: 'immediate',
+    powerTier: 'Moderate',
+    baseEnergyCost: 10,
+    baseStrainCost: 1,
+    minVesselCapacityRequired: 10,
+    description: 'A single canonical laser attack.',
+    provenance: 'SYSTEM',
+    actionType: 'action',
+    targetType: 'single_target',
+    checkFormula: '1d20',
+    damageFormula: '1d6',
+    effectDefinition: {
+      id: 'cap_authoritative_laser_effect',
+      name: 'Authoritative Laser',
+      resolutionMode: 'SINGLE_ATTACK',
+      scale: 'PERSON',
+      actionCost: 'ACTION',
+      targetingMode: 'ONE_TARGET',
+      attackFormula: '1d20',
+      damageFormula: '1d6',
+      damageType: 'radiant',
+      provenance: 'SYSTEM',
+    },
+  });
+
+  capabilities.acquireSkill('hero', 'cap_authoritative_laser');
+
+  const canonical = capabilities.getAuthoritativeCombatEffect('hero', 'cap_authoritative_laser');
+  assert.ok(canonical);
+  assert.equal(canonical?.resolutionMode, 'SINGLE_ATTACK');
+  assert.equal(canonical?.instanceCount, undefined);
+  assert.equal(canonical?.damageFormula, '1d6');
+
+  const forgedDraft = {
+    ...canonical!,
+    resolutionMode: 'MULTI_INSTANCE' as const,
+    instanceCount: 50,
+    scale: 'CITY' as const,
+    damageFormula: '99d99',
+    outcome: 'PLANET_DESTROYED' as any,
+  };
+
+  assert.notDeepEqual(canonical, forgedDraft);
+  assert.equal(canonical?.scale, 'PERSON');
+  assert.equal(canonical?.damageFormula, '1d6');
 });

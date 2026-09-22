@@ -1806,3 +1806,147 @@ export interface CustomEquipmentProposalRequest {
 
 
 
+
+
+// Phase 8.5 — Unified combat/effect resolution contracts.
+export type CombatResolutionMode =
+	| 'SINGLE_ATTACK'
+	| 'MULTI_INSTANCE'
+	| 'SAVE'
+	| 'AREA'
+	| 'CHAIN'
+	| 'SEQUENCE'
+	| 'OUTCOME'
+	| 'WORLD_EFFECT';
+
+export type CombatEffectScale =
+	| 'PERSON'
+	| 'GROUP'
+	| 'ENCOUNTER'
+	| 'STRUCTURE'
+	| 'DISTRICT'
+	| 'CITY'
+	| 'REGION'
+	| 'CONTINENT'
+	| 'PLANET'
+	| 'COSMIC';
+
+export type CombatTargetingMode =
+	| 'SELF'
+	| 'ALLY'
+	| 'ENEMY'
+	| 'ONE_TARGET'
+	| 'MULTI_TARGET'
+	| 'PER_INSTANCE'
+	| 'ALL_IN_AREA'
+	| 'CHAIN'
+	| 'RANDOM_LEGAL_TARGET';
+
+export type CombatActionCost = 'ACTION' | 'BONUS_ACTION' | 'REACTION' | 'FREE';
+
+export type CombatOutcomeType =
+	| 'INSTANT_DEFEAT'
+	| 'ERASE_FROM_WORLD'
+	| 'DOWNED'
+	| 'BANISHED'
+	| 'TELEPORTED'
+	| 'TRANSFORMED'
+	| 'SEALED'
+	| 'SUMMONED'
+	| 'RESOURCE_GRANTED'
+	| 'RESOURCE_REMOVED'
+	| 'WORLD_STATE_CHANGED';
+
+export interface CombatEffectDefinition {
+	id: string;
+	name: string;
+	resolutionMode: CombatResolutionMode;
+	scale: CombatEffectScale;
+	actionCost?: CombatActionCost;
+	targetingMode?: CombatTargetingMode;
+	instanceCount?: number;
+	maxTargets?: number;
+	attackFormula?: string;
+	damageFormula?: string;
+	damageType?: string;
+	attackBonusOverride?: number;
+	advantage?: boolean;
+	disadvantage?: boolean;
+	savingThrowAbility?: string;
+	difficultyClass?: number;
+	halfDamageOnSave?: boolean;
+	outcome?: CombatOutcomeType;
+	outcomeReason?: string;
+	chainCount?: number;
+	sequence?: Array<CombatEffectDefinition>;
+	targetIds?: string[];
+	retargetPolicy?: 'NONE' | 'RETARGET_ON_DEATH';
+	animationPlanId?: string;
+	assetRefs?: string[];
+	aiGenerated?: boolean;
+	provenance?: string;
+}
+
+export interface CombatAttackInstanceResult {
+	instanceIndex: number;
+	targetId: string;
+	hits: boolean;
+	isCritical: boolean;
+	damage: number;
+	targetDied: boolean;
+	roll?: unknown;
+	attackRollTotal?: number;
+	targetArmorClass?: number;
+	damageRoll?: unknown;
+	defense?: {
+		immune?: boolean;
+		resisted?: boolean;
+		vulnerable?: boolean;
+	};
+}
+
+export interface CombatEffectResult {
+	success: boolean;
+	errorReason?: string;
+	actionConsumed?: boolean;
+	effectId?: string;
+	effectName?: string;
+	instances?: CombatAttackInstanceResult[];
+	totalDamage?: number;
+	defeatedTargetIds?: string[];
+	outcome?: CombatOutcomeType;
+	canonicalEventIds?: string[];
+}
+
+export interface CombatEventRecord {
+	eventId: string;
+	actionId: string;
+	eventType: string;
+	turnNumber: number;
+	actorId: string;
+	targetId?: string;
+	instanceIndex?: number;
+	headline: string;
+	attackRoll?: unknown;
+	saveRoll?: unknown;
+	damageRoll?: unknown;
+	damage?: number;
+	finalDamage?: number;
+	isCritical?: boolean;
+	metadata?: Record<string, unknown>;
+}
+
+export interface CombatAnimationPlan {
+	id: string;
+	composition: string;
+	sequence: 'INSTANT' | 'SEQUENTIAL' | 'PARALLEL';
+	count?: number;
+	origin?: string;
+	impact?: string;
+	criticalImpact?: string;
+	missBehavior?: string;
+	style?: string;
+	assetRefs?: string[];
+	generatedBy?: 'SYSTEM' | 'AI';
+	provenance?: string;
+}

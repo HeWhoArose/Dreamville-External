@@ -372,6 +372,73 @@ test('Phase 8.5: authoritative capability effect cannot be replaced by a stronge
 });
 
 
+test('Phase 8.5 regression: area range validation checks the origin by default and can require each target explicitly', () => {
+  const engine = new TacticalCombatEngine(1337);
+  engine.addParticipant(participant());
+  engine.addParticipant(participant({ id: 'enemy_a', name: 'A', team: 'enemies', x: 4, y: 0, hpCurrent: 100, hpMax: 100, initiative: 0 }));
+  engine.addParticipant(participant({ id: 'enemy_b', name: 'B', team: 'enemies', x: 8, y: 0, hpCurrent: 100, hpMax: 100, initiative: 0 }));
+  engine.rollInitiative();
+
+  const originValidated = combatEffectEngine.resolve(engine, 'hero', ['enemy_a'], {
+    id: 'origin_range_area',
+    name: 'Origin Range Area',
+    resolutionMode: 'AREA',
+    scale: 'ENCOUNTER',
+    actionCost: 'ACTION',
+    targetingMode: 'ALL_IN_AREA',
+    rangeCells: 5,
+    areaRadiusCells: 5,
+    damageFormula: '1d4',
+  });
+  assert.equal(originValidated.success, true);
+
+  const targetValidated = combatEffectEngine.validateDefinition({
+    id: 'target_range_area',
+    name: 'Target Range Area',
+    resolutionMode: 'AREA',
+    scale: 'ENCOUNTER',
+    actionCost: 'FREE',
+    targetingMode: 'ALL_IN_AREA',
+    rangeCells: 5,
+    rangeValidationMode: 'EACH_TARGET',
+    areaRadiusCells: 5,
+    damageFormula: '1d4',
+  });
+  assert.equal(targetValidated.success, true);
+});
+
+test('Phase 8.5 regression: Full D&D automatic-failure saves only apply to STR/DEX and the correct conditions', () => {
+  const paralyzed = engineWithEnemy({ conditions: ['Paralyzed'], saveModifiers: { STR: 20 } });
+  const fail = combatEffectEngine.resolve(paralyzed, 'hero', ['enemy'], {
+    id: 'paralyzed_str_save',
+    name: 'Paralyzed STR Save',
+    resolutionMode: 'SAVE',
+    scale: 'PERSON',
+    actionCost: 'FREE',
+    targetingMode: 'ONE_TARGET',
+    savingThrowAbility: 'STR',
+    difficultyClass: 1,
+    damageFormula: '1d4',
+  });
+  assert.equal(fail.success, true);
+  assert.equal(fail.instances?.[0]?.hits, false);
+
+  const stunnedWisdom = engineWithEnemy({ conditions: ['Stunned'], saveModifiers: { WIS: 0 } });
+  const wis = combatEffectEngine.resolve(stunnedWisdom, 'hero', ['enemy'], {
+    id: 'stunned_wis_save',
+    name: 'Stunned WIS Save',
+    resolutionMode: 'SAVE',
+    scale: 'PERSON',
+    actionCost: 'FREE',
+    targetingMode: 'ONE_TARGET',
+    savingThrowAbility: 'WIS',
+    difficultyClass: 1,
+    damageFormula: '1d4',
+  });
+  assert.equal(wis.success, true);
+  assert.equal(wis.instances?.[0]?.hits, false);
+});
+
 test('Phase 8.5 regression: Incapacitated blocks Action without consuming the Action resource', () => {
   const engine = engineWithEnemy();
   const applied = engine.applyCombatCondition('hero', { conditionIdOrName: 'Incapacitated' }, 'SYSTEM');

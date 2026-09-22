@@ -1920,6 +1920,15 @@ export type CombatOutcomeType =
 	| 'RESOURCE_REMOVED'
 	| 'WORLD_STATE_CHANGED';
 
+export interface CombatConditionEffectDefinition {
+	trigger: 'ON_HIT' | 'ON_MISS' | 'ON_CRITICAL' | 'ON_SAVE_SUCCESS' | 'ON_SAVE_FAILURE' | 'ALWAYS';
+	conditionIdOrName: string;
+	intensity?: number;
+	severity?: number;
+	durationSeconds?: number | null;
+	notes?: string;
+}
+
 export interface CombatEffectDefinition {
 	id: string;
 	name: string;
@@ -1953,6 +1962,7 @@ export interface CombatEffectDefinition {
 	targetIds?: string[];
 	retargetPolicy?: 'NONE' | 'RETARGET_ON_DEATH';
 	animationPlanId?: string;
+	conditionEffects?: CombatConditionEffectDefinition[];
 	assetRefs?: string[];
 	aiGenerated?: boolean;
 	provenance?: string;

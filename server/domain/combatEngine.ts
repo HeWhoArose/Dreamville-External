@@ -1991,6 +1991,16 @@ export class TacticalCombatEngine {
     };
   }
 
+  public consumeCombatAction(actorId: string, actionCost: import('../../src/types').CombatActionCost = 'ACTION'): { success: boolean; errorReason?: string } {
+    if (actionCost === 'FREE') return { success: true };
+    const resource = actionCost === 'BONUS_ACTION'
+      ? 'BONUS_ACTION'
+      : actionCost === 'REACTION'
+        ? 'REACTION'
+        : 'ACTION';
+    return this.actionEconomy.consume(actorId, resource);
+  }
+
   public executeAttack(
     attackerId: string,
     targetId: string,

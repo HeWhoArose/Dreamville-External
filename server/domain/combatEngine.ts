@@ -5,6 +5,7 @@ import { CombatActionEconomy, CombatTurnResourceSnapshot, ReadyTriggerType } fro
 import { CombatReactionEngine } from './combatReactionEngine';
 import { deathSaveEngine } from './deathSaveEngine';
 import type { DeathSaveState, RulesProfile } from '../../src/types';
+import type { ProgressionResolution } from './characterProgressionEngine';
 import {
   SpellRuntime,
   spellRuntime as defaultSpellRuntime,
@@ -451,6 +452,7 @@ export class TacticalCombatEngine {
   private rulesProfile?: RulesProfile;
   private readonly reactionEngine = new CombatReactionEngine();
   private spellRuntime: SpellRuntime;
+  private progressionModifierResolver?: (actorId: string) => ProgressionResolution | undefined;
   private initialSeed: number;
 
   constructor(seed = 1337, ruleset?: IRulesetAdapter, conditionEngine?: ConditionEngine) {
@@ -473,6 +475,34 @@ export class TacticalCombatEngine {
 
   public getDiceEngine(): LocalDiceEngine {
     return this.diceEngine;
+  }
+
+  public setProgressionModifierResolver(
+    resolver?: (actorId: string) => ProgressionResolution | undefined
+  ): void {
+    this.progressionModifierResolver = resolver;
+  }
+
+  private progressionModifier(actorId: string, target: string): number {
+    const resolution = this.progressionModifierResolver?.(actorId);
+    const modifier = resolution?.modifiers.find((entry) => entry.target === target);
+    return typeof modifier?.value === 'number' && Number.isFinite(modifier.value) ? modifier.value : 0;
+  }
+
+  private projectedParticipant(participant: BattlefieldParticipant): BattlefieldParticipant {
+    const projected = { ...participant };
+    projected.attackBonus += this.progressionModifier(participant.id, 'combat.attackBonus');
+    projected.armorClass += this.progressionModifier(participant.id, 'coreStats.armorClass');
+    projected.speedCells = Math.max(
+      0,
+      projected.speedCells + this.progressionModifier(participant.id, 'coreStats.speed') / 5
+    );
+    projected.hpMax = Math.max(1, projected.hpMax + this.progressionModifier(participant.id, 'coreStats.hpMax'));
+    projected.spellAttackBonus = (projected.spellAttackBonus ?? projected.attackBonus)
+      + this.progressionModifier(participant.id, 'spell.attackBonus');
+    projected.spellSaveDc = (projected.spellSaveDc ?? 8)
+      + this.progressionModifier(participant.id, 'spell.saveDC');
+    return projected;
   }
 
   public setSeed(seed: number): void {
@@ -1402,8 +1432,8 @@ export class TacticalCombatEngine {
     return {
       blocked: false,
       roll: this.ruleset.resolveAttack({
-        attackBonus: attacker.attackBonus + exhaustionPenalty,
-        targetArmorClass: target.armorClass + this.getCoverBonus(target),
+        attackBonus: attacker.attackBonus + this.progressionModifier(attacker.id, 'combat.attackBonus') + exhaustionPenalty,
+        targetArmorClass: target.armorClass + this.progressionModifier(target.id, 'coreStats.armorClass') + this.getCoverBonus(target),
         advantage: Boolean(options?.advantage || attackerHasAdvantage || targetHasAdvantageAgainst || targetProneAdvantage || targetConditions.has('unconscious')),
         disadvantage: Boolean(options?.disadvantage || targetDodging || attackerHasDisadvantage || targetProneDisadvantage || targetConditions.has('invisible')),
         diceEngine: this.diceEngine,
@@ -2537,7 +2567,7 @@ export class TacticalCombatEngine {
   }
 
   public getParticipants(): BattlefieldParticipant[] {
-    return Array.from(this.participants.values()).map((p) => ({ ...p }));
+    return Array.from(this.participants.values()).map((p) => this.projectedParticipant(p));
   }
 
   /** Internal authoritative participant references used by spell effect resolution. */
@@ -2547,7 +2577,7 @@ export class TacticalCombatEngine {
 
   public getParticipant(id: string): BattlefieldParticipant | undefined {
     const p = this.participants.get(id);
-    return p ? { ...p } : undefined;
+    return p ? this.projectedParticipant(p) : undefined;
   }
 
   public exportState(): TacticalCombatStateExport {

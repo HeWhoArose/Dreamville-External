@@ -1027,6 +1027,8 @@ export class InMemoryWorldRepository implements WorldRepository {
              };
 
       this.saveStoryRun(run);
+      this.getEntityRegistry(storyId).upsert(EntityRegistry.fromConfirmedCharacter(storyId, char));
+      this.persistLibrary();
 
       return { storyId, run };
     } catch (err) {

@@ -2093,9 +2093,61 @@ export class TacticalCombatEngine {
     }
     this.resolveReadyTriggers({ type: 'ACTOR_ATTACKED', actorId: attackerId, targetId: instances[0]?.targetId });
     return {
-      success: true, actionConsumed: true, effectId: options.definition?.id, effectName: options.definition?.name,
+      success: true, actionConsumed: options.consumeAction !== false, effectId: options.definition?.id, effectName: options.definition?.name,
       instances, totalDamage, defeatedTargetIds,
       canonicalEventIds: instances.map((instance) => this.combatEffectEvents.find((event) => event.actionId === actionId && event.instanceIndex === instance.instanceIndex)?.eventId).filter(Boolean) as string[],
+    };
+  }
+
+  public executeAreaDamageEffect(params: {
+    actorId: string;
+    targetIds: string[];
+    damageFormula: string;
+    damageType?: string;
+    actionId?: string;
+    consumeAction?: boolean;
+  }): CombatEffectResult {
+    if (!this.tacticalCombatEnabled()) return { success: false, errorReason: 'Tactical combat is disabled by the active rules profile.' };
+    const actor = this.participants.get(params.actorId);
+    if (!actor) return { success: false, errorReason: 'Actor not found.' };
+    const targets = Array.from(new Set(params.targetIds.filter(Boolean))).map((id) => this.participants.get(id)).filter((target): target is BattlefieldParticipant => Boolean(target));
+    if (!targets.length) return { success: false, errorReason: 'At least one valid target is required.' };
+    const currentActor = this.getCurrentActor();
+    if (this.turnQueue.length > 0 && (!currentActor || currentActor.id !== params.actorId)) return { success: false, errorReason: "It is not this actor's turn." };
+    const actionResult = params.consumeAction === false ? { success: true as const } : this.actionEconomy.consume(params.actorId, 'ACTION');
+    if (!actionResult.success) return { success: false, errorReason: actionResult.errorReason };
+    const actionId = params.actionId || `combat_action_${this.currentRound}_${params.actorId}_area_${this.combatActionSequence + 1}`;
+    const instances: CombatAttackInstanceResult[] = [];
+    const defeatedTargetIds: string[] = [];
+    let totalDamage = 0;
+    for (let i = 0; i < targets.length; i += 1) {
+      const target = targets[i];
+      if (target.isDead || target.hpCurrent <= 0) continue;
+      const damageRoll = this.ruleset.resolveDamage(params.damageFormula, false, this.diceEngine);
+      const resolved = this.applyCombatDamage(target, damageRoll.totalDamage, params.damageType || 'force', false);
+      if (resolved.targetDied && !defeatedTargetIds.includes(target.id)) defeatedTargetIds.push(target.id);
+      totalDamage += resolved.damage;
+      this.combatActionSequence += 1;
+      const eventId = `combat_evt_${this.currentRound}_${this.combatActionSequence}`;
+      this.combatEffectEvents.push({
+        eventId, actionId, eventType: 'AREA_DAMAGE_RESOLVED', turnNumber: this.currentRound, actorId: params.actorId, targetId: target.id, instanceIndex: i,
+        headline: `${actor.name} affected ${target.name} for ${resolved.damage} damage.`,
+        damageRoll: damageRoll.roll, damage: resolved.damage, finalDamage: resolved.damage,
+        metadata: { damageType: params.damageType || 'force', defense: { immune: resolved.immune, resisted: resolved.resisted, vulnerable: resolved.vulnerable } },
+      });
+      this.eventLog.push({
+        turnNumber: this.currentRound, actorId: params.actorId, targetId: target.id, actionType: 'CAST',
+        headline: `${actor.name} affected ${target.name} for ${resolved.damage} damage.`,
+        damageInflicted: resolved.damage, rollRecord: damageRoll.roll, metadata: { actionId, eventId, area: true, damageType: params.damageType || 'force' },
+      });
+      instances.push({
+        instanceIndex: i, targetId: target.id, hits: true, isCritical: false, damage: resolved.damage, targetDied: resolved.targetDied,
+        damageRoll: damageRoll.roll, defense: { immune: resolved.immune, resisted: resolved.resisted, vulnerable: resolved.vulnerable },
+      });
+    }
+    return {
+      success: true, actionConsumed: params.consumeAction !== false, instances, totalDamage, defeatedTargetIds,
+      canonicalEventIds: this.combatEffectEvents.filter((event) => event.actionId === actionId).map((event) => event.eventId),
     };
   }
 

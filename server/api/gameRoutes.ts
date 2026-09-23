@@ -8,6 +8,7 @@ import { OpeningSceneService } from '../services/openingSceneService';
 import { WorkingContextEngine } from '../domain/workingContextEngine';
 import { worldVisualIdentityService } from '../services/worldVisualIdentityService';
 import { rulesProfileEngine } from '../domain/rulesProfileEngine';
+import { CustomRuleEngine } from '../domain/customRuleEngine';
 import { resolveCanonicalConfirmedCharacter } from '../services/confirmedCharacterAuthority';
 import { entityCardService } from '../services/entityCardService';
 import { characterGenesisService } from '../services/characterGenesisService';
@@ -320,6 +321,114 @@ gameRouter.post('/rest', async (req: Request, res: Response) => {
   } catch (error: any) {
     res.status(500).json({ success: false, errorReason: error?.message || 'Failed to resolve rest command.' });
   }
+});
+
+/**
+ * GET /api/game/phase8/projection
+ * Player-safe projection for the connected Phase 8.6–8.12 simulation stack.
+ */
+gameRouter.get('/phase8/projection', (req: Request, res: Response) => {
+	try {
+		const storyId = resolveStoryId(req, true);
+		const actorId = typeof req.query.actorId === 'string' ? req.query.actorId : undefined;
+		res.json({
+			success: true,
+			...(worldRepository.getPhase8Projection(storyId, actorId) as any),
+		});
+	} catch (error: any) {
+		res.status(500).json({
+			success: false,
+			errorReason: error?.message || 'Failed to project Phase 8 state.',
+		});
+	}
+});
+
+/**
+ * GET /api/game/worlds/:worldId/custom-rules
+ * Returns authored world laws for the active story's world.
+ */
+gameRouter.get('/worlds/:worldId/custom-rules', (req: Request, res: Response) => {
+	try {
+		const storyId = resolveStoryId(req, true);
+		const worldId = String(req.params.worldId || '');
+		const run = worldRepository.getStoryRun(storyId);
+		if (!run || run.worldId !== worldId) {
+			return res.status(403).json({
+				success: false,
+				errorReason: 'The requested world is not the active story world.',
+			});
+		}
+		const engine = new CustomRuleEngine();
+		res.json({
+			success: true,
+			worldId,
+			rules: engine.getRules(worldRepository, storyId),
+		});
+	} catch (error: any) {
+		res.status(500).json({ success: false, errorReason: error?.message || 'Failed to load world laws.' });
+	}
+});
+
+/**
+ * POST /api/game/worlds/:worldId/custom-rules/validate
+ * Server-side validation only; never persists an invalid rule.
+ */
+gameRouter.post('/worlds/:worldId/custom-rules/validate', (req: Request, res: Response) => {
+	try {
+		const storyId = resolveStoryId(req, true);
+		const worldId = String(req.params.worldId || '');
+		const run = worldRepository.getStoryRun(storyId);
+		if (!run || run.worldId !== worldId) {
+			return res.status(403).json({ success: false, errorReason: 'The requested world is not the active story world.' });
+		}
+		const engine = new CustomRuleEngine();
+		const validation = engine.validateSingleRule(req.body);
+		const existing = engine.getRules(worldRepository, storyId);
+		const setValidation = engine.validateRuleSet([...existing.filter((rule: any) => rule.id !== req.body?.id), req.body]);
+		res.json({
+			success: validation.success && setValidation.success,
+			errors: [...validation.errors, ...setValidation.errors.filter((error: string) => !validation.errors.includes(error))],
+			warnings: [...validation.warnings, ...setValidation.warnings],
+		});
+	} catch (error: any) {
+		res.status(400).json({ success: false, errorReason: error?.message || 'Rule validation failed.' });
+	}
+});
+
+/**
+ * PUT /api/game/worlds/:worldId/custom-rules/:ruleId
+ * Replaces one authored world law atomically after full rule-set validation.
+ */
+gameRouter.put('/worlds/:worldId/custom-rules/:ruleId', (req: Request, res: Response) => {
+	try {
+		const storyId = resolveStoryId(req, true);
+		const worldId = String(req.params.worldId || '');
+		const ruleId = String(req.params.ruleId || '');
+		const run = worldRepository.getStoryRun(storyId);
+		if (!run || run.worldId !== worldId) {
+			return res.status(403).json({ success: false, errorReason: 'The requested world is not the active story world.' });
+		}
+		if (!req.body || req.body.id !== ruleId) {
+			return res.status(400).json({ success: false, errorReason: 'Route ruleId must match rule.id.' });
+		}
+		const world = worldRepository.getWorldTemplate(worldId);
+		if (!world) {
+			return res.status(404).json({ success: false, errorReason: 'World template not found.' });
+		}
+		const engine = new CustomRuleEngine();
+		const previousRules = Array.isArray(world.customRules) ? world.customRules : [];
+		const nextRules = [...previousRules.filter((rule: any) => rule.id !== ruleId), req.body];
+		const validation = engine.validateRuleSet(nextRules);
+		if (!validation.success) {
+			return res.status(400).json({ success: false, errors: validation.errors, warnings: validation.warnings });
+		}
+		world.customRules = JSON.parse(JSON.stringify(nextRules));
+		world.updatedAt = new Date().toISOString();
+		worldRepository.saveWorldTemplate(world);
+		res.json({ success: true, rule: req.body, warnings: validation.warnings });
+	} catch (error: any) {
+		res.status(400).json({ success: false, errorReason: error?.message || 'Failed to save world law.' });
+	}
 });
 
 /**

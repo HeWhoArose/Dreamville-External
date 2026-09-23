@@ -150,7 +150,7 @@ export class InventoryItemEngine {
       maxDurability: 150,
       tags: ['heavy_armor', 'steel'],
       properties: { armorBonus: 5 },
-      modifiers: [{ id: 'steel_cuirass_ac', target: 'coreStats.armorClass', mode: 'ADD', value: 5, precedence: 60, stackGroup: 'ARMOR_AC' }],
+      modifiers: [{ id: 'steel_cuirass_ac', target: 'coreStats.armorClass', mode: 'ADD', value: 5, precedence: 60, stackGroup: 'ARMOR_AC', source: { moduleId: 'def_steel_cuirass', moduleType: 'ITEM', featureId: 'steel_cuirass_ac', sourceId: 'def_steel_cuirass', sourceName: 'Steel Cuirass', precedence: 60, stackGroup: 'ARMOR_AC' } }],
     });
 
     this.registerDefinition({
@@ -220,7 +220,7 @@ export class InventoryItemEngine {
       maxDurability: 120,
       tags: ['footwear', 'leather'],
       properties: { speedBonus: 1 },
-      modifiers: [{ id: 'trail_boots_speed', target: 'coreStats.speed', mode: 'ADD', value: 1, precedence: 60, stackGroup: 'ARMOR_SPEED' }],
+      modifiers: [{ id: 'trail_boots_speed', target: 'coreStats.speed', mode: 'ADD', value: 1, precedence: 60, stackGroup: 'ARMOR_SPEED', source: { moduleId: 'def_leather_boots', moduleType: 'ITEM', featureId: 'trail_boots_speed', sourceId: 'def_leather_boots', sourceName: 'Sturdy Trail Boots', precedence: 60, stackGroup: 'ARMOR_SPEED' } }],
     });
 
     this.registerDefinition({
@@ -235,7 +235,7 @@ export class InventoryItemEngine {
       maxDurability: 120,
       tags: ['shield', 'iron'],
       properties: { armorBonus: 2 },
-      modifiers: [{ id: 'iron_shield_ac', target: 'coreStats.armorClass', mode: 'ADD', value: 2, precedence: 60, stackGroup: 'SHIELD_AC' }],
+      modifiers: [{ id: 'iron_shield_ac', target: 'coreStats.armorClass', mode: 'ADD', value: 2, precedence: 60, stackGroup: 'SHIELD_AC', source: { moduleId: 'def_iron_shield', moduleType: 'ITEM', featureId: 'iron_shield_ac', sourceId: 'def_iron_shield', sourceName: 'Reinforced Iron Buckler', precedence: 60, stackGroup: 'SHIELD_AC' } }],
     });
 
     // CH3.2 Benchmark Item Definitions
@@ -251,7 +251,7 @@ export class InventoryItemEngine {
       maxDurability: 80,
       tags: ['footwear', 'enchanted', 'flight'],
       properties: { speedBonus: 2 },
-      modifiers: [{ id: 'flying_shoes_speed', target: 'coreStats.speed', mode: 'ADD', value: 2, precedence: 60, stackGroup: 'ARMOR_SPEED' }],
+      modifiers: [{ id: 'flying_shoes_speed', target: 'coreStats.speed', mode: 'ADD', value: 2, precedence: 60, stackGroup: 'ARMOR_SPEED', source: { moduleId: 'def_flying_shoes', moduleType: 'ITEM', featureId: 'flying_shoes_speed', sourceId: 'def_flying_shoes', sourceName: 'Winged Hermes Greaves', precedence: 60, stackGroup: 'ARMOR_SPEED' } }],
       grantedCapabilities: ['cap_flight'],
     });
 

@@ -2,7 +2,7 @@ import { deterministicId } from './deterministicRng';
 import type { CharacterFeat, CharacterEffect, CharacterGenesisDraft, ConfirmedCharacter, RulesProfile } from '../../src/types';
 import type { CapabilityDefinition } from './capabilityEngine';
 
-export type ProgressionModuleType = 'CLASS' | 'SUBCLASS' | 'SPECIES' | 'FEAT';
+export type ProgressionModuleType = 'CLASS' | 'SUBCLASS' | 'SPECIES' | 'FEAT' | 'ITEM';
 export type ProgressionModifierMode = 'ADD' | 'MULTIPLY' | 'SET' | 'MIN' | 'MAX';
 export type ProgressionAbilityTrigger =
   | 'PASSIVE'
@@ -674,7 +674,11 @@ export class CharacterProgressionEngine {
     return clone(state);
   }
 
-  public resolveModifiers(actorId: string, rulesProfile?: RulesProfile | null): ProgressionResolution {
+  public resolveModifiers(
+    actorId: string,
+    rulesProfile?: RulesProfile | null,
+    additionalModifiers: ProgressionModifier[] = []
+  ): ProgressionResolution {
     const state = this.requireActor(actorId);
     const collected: ProgressionModifier[] = [];
     for (const moduleId of state.enabledModuleIds) {
@@ -684,6 +688,11 @@ export class CharacterProgressionEngine {
         if (!feature.enabled || feature.level > state.currentLevel || !state.unlockedFeatureIds.includes(feature.id)) continue;
         for (const modifier of feature.passiveModifiers || []) collected.push(clone(modifier));
       }
+    }
+
+    for (const modifier of additionalModifiers) {
+      if (!modifier || !modifier.target || !Number.isFinite(modifier.value)) continue;
+      collected.push(clone(modifier));
     }
 
     const grouped = new Map<string, ProgressionModifier[]>();

@@ -48,6 +48,28 @@ test('Phase 9: invalid slots are rejected without mutating inventory state', () 
 	assert.equal(JSON.stringify(engine.exportState()), before);
 });
 
+test('Phase 9: unrelated custom-rule evaluation does not lazily seed inventory state', async () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'default_story';
+	const actor = repository.getPlayerLifecycle(storyId)!.actorId;
+	assert.equal(repository.hasInventoryEngine(storyId), false);
+
+	const result = await new (await import('../server/domain/customRuleEngine')).CustomRuleEngine().evaluate({
+		repository,
+		event: {
+			eventId: 'phase9_no_inventory_seed',
+			storyId,
+			type: 'CANONICAL_COMMAND',
+			actorId: actor,
+			payload: { commandType: 'CORE_ACTION' },
+			timestampSeconds: repository.getWorldClock(storyId).getTimestamp().totalElapsedSeconds,
+		},
+	});
+
+	assert.equal(result.success, true);
+	assert.equal(repository.hasInventoryEngine(storyId), false);
+});
+
 test('Phase 9: Genesis equipment migrates to canonical definitions and preserves legal slot aliases', () => {
 	const engine = makeEngine();
 	engine.seedFromGenesisEquipment(actorId, {

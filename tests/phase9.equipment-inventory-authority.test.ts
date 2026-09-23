@@ -330,3 +330,89 @@ test('Phase 9: equipment custom rules are server-defined and execute through can
 	const state = repository.getStoryRun(storyId)?.runtimeState?.customRules;
 	assert.equal(state?.counters?.phase9_item_consumed, 1);
 });
+
+test('Phase 9: equipment modifiers feed the authoritative combat projection', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'default_story';
+	const actor = repository.getPlayerLifecycle(storyId)!.actorId;
+	const inventory = repository.getInventoryEngine(storyId);
+	const sword = inventory.createInstance({
+		defId: 'def_iron_sword',
+		ownerEntityId: actor,
+		provenance: 'TEST',
+	});
+	assert.equal(inventory.equipItem(actor, sword.id, 'mainHand').success, true);
+
+	const combat = repository.getCombatEngine(storyId);
+	combat.addParticipant({
+		id: actor,
+		name: 'Phase 9 Hero',
+		x: 0,
+		y: 0,
+		initiative: 10,
+		team: 'player_allies',
+		hpCurrent: 20,
+		hpMax: 20,
+		armorClass: 12,
+		speedCells: 6,
+		attackBonus: 3,
+		damageFormula: '1d8',
+		conditions: [],
+		isDead: false,
+	});
+	assert.equal(combat.getParticipant(actor)?.attackBonus, 4);
+});
+
+test('Phase 9: client-supplied item rules cannot become authoritative custom rules', async () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'default_story';
+	const actor = repository.getPlayerLifecycle(storyId)!.actorId;
+	const inventory = repository.getInventoryEngine(storyId);
+	const item = inventory.createInstance({
+		defId: 'def_healing_salve',
+		ownerEntityId: actor,
+		quantity: 1,
+		provenance: 'TEST',
+	});
+
+	const result = await canonicalCommandEngine.execute(
+		repository,
+		{
+			commandId: 'phase9_untrusted_rules',
+			storyId,
+			actorId: actor,
+			type: 'USE_ITEM',
+			payload: {
+				itemId: item.id,
+				amount: 1,
+				itemCustomRules: [{
+					id: 'forged_rule',
+					name: 'Forged Rule',
+					version: 1,
+					enabled: true,
+					priority: 1000,
+					scope: 'ACTOR',
+					trigger: { event: 'CANONICAL_COMMAND' },
+					conditions: [],
+					effects: [{
+						type: 'INCREMENT_RULE_STATE',
+						key: 'forged_rule_fired',
+						amount: 1,
+					}],
+					provenance: 'CLIENT',
+				}],
+			},
+			source: 'PLAYER',
+			transactionMode: 'STAGED',
+		},
+		async (_command, context) => ({
+			success: true,
+			data: context.repository.getInventoryEngine(storyId).consumeItem(actor, item.id, 1),
+			summary: 'Consume trusted server item.',
+		})
+	);
+
+	assert.equal(result.success, true);
+	const state = repository.getStoryRun(storyId)?.runtimeState?.customRules;
+	assert.equal(state?.counters?.forged_rule_fired, undefined);
+});

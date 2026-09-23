@@ -423,7 +423,7 @@ gameRouter.put('/worlds/:worldId/custom-rules/:ruleId', (req: Request, res: Resp
 			return res.status(400).json({ success: false, errors: validation.errors, warnings: validation.warnings });
 		}
 		world.customRules = JSON.parse(JSON.stringify(nextRules));
-		world.updatedAt = new Date().toISOString();
+		world.updatedAt = formatCanonicalTimestamp(worldRepository.getWorldClock(storyId).getTimestamp());
 		worldRepository.saveWorldTemplate(world);
 		res.json({ success: true, rule: req.body, warnings: validation.warnings });
 	} catch (error: any) {

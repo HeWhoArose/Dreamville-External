@@ -48,6 +48,63 @@ test('Phase 9: invalid slots are rejected without mutating inventory state', () 
 	assert.equal(JSON.stringify(engine.exportState()), before);
 });
 
+test('Phase 9: Genesis equipment migrates to canonical definitions and preserves legal slot aliases', () => {
+	const engine = makeEngine();
+	engine.seedFromGenesisEquipment(actorId, {
+		equipped: [{
+			id: 'genesis_ring',
+			name: 'Genesis Ring',
+			category: 'Accessory',
+			isEquipped: true,
+			slot: 'ring',
+			quantity: 1,
+			rarity: 'Rare',
+			properties: {},
+			provenance: 'CHARACTER_GENESIS',
+		}],
+		inventory: [{
+			id: 'genesis_sword',
+			name: 'Genesis Longsword',
+			category: 'Weapon',
+			isEquipped: false,
+			quantity: 1,
+			rarity: 'Common',
+			properties: {},
+			provenance: 'CHARACTER_GENESIS',
+		}],
+	});
+	const inventory = engine.getActorInventory(actorId);
+	assert.equal(inventory.length, 2);
+	const ring = inventory.find((item) => item.name === 'Genesis Ring');
+	const sword = inventory.find((item) => item.name === 'Genesis Longsword');
+	assert.ok(ring);
+	assert.ok(sword);
+	assert.equal(ring?.equippedSlot, 'ring1');
+	assert.equal(engine.getItemDefinition(ring!.defId)?.equipmentClass, 'ACCESSORY');
+	assert.equal(engine.getItemDefinition(sword!.defId)?.equipmentClass, 'WEAPON');
+});
+
+test('Phase 9: invalid legacy equipment slots are safely retained in inventory during Genesis migration', () => {
+	const engine = makeEngine();
+	engine.seedFromGenesisEquipment(actorId, {
+		equipped: [{
+			id: 'legacy_bad_slot',
+			name: 'Legacy Device',
+			category: 'Tool',
+			isEquipped: true,
+			slot: 'ammunition',
+			quantity: 1,
+			rarity: 'Common',
+			properties: {},
+			provenance: 'LEGACY_IMPORT',
+		}],
+		inventory: [],
+	});
+	const item = engine.getActorInventory(actorId)[0];
+	assert.ok(item);
+	assert.equal(item?.equippedSlot, null);
+});
+
 test('Phase 9: duplicate ring instances occupy independent canonical slots', () => {
 	const engine = makeEngine();
 	engine.registerDefinition({

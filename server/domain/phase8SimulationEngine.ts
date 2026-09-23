@@ -326,14 +326,19 @@ export class Phase8SimulationEngine {
 			updatedAtSeconds: npc.updatedAtSeconds,
 		}));
 
-		const causalVisibleNodeIds = new Set<string>([actorId, playerLocationId, ...Object.values(playerKnowledge.facts).map((fact) => fact.subjectEntityId), ...Array.from(evidenceIds)]);
+		const causalVisibleNodeIds = new Set<string>([
+			actorId,
+			playerLocationId,
+			...Object.values(playerKnowledge.facts).map((fact) => fact.subjectEntityId),
+			...Array.from(evidenceIds),
+		]);
 		const causalEdges = Object.values(state.causal.edges)
-			.filter((edge) => causalVisibleNodeIds.has(edge.fromId) || causalVisibleNodeIds.has(edge.toId) || evidenceIds.has(edge.id))
+			.filter((edge) => (
+				(causalVisibleNodeIds.has(edge.fromId) && causalVisibleNodeIds.has(edge.toId))
+				|| evidenceIds.has(edge.id)
+				|| evidenceIds.has(edge.eventId)
+			))
 			.map((edge) => ({ ...edge, metadata: { ...edge.metadata } }));
-		for (const edge of causalEdges) {
-			causalVisibleNodeIds.add(edge.fromId);
-			causalVisibleNodeIds.add(edge.toId);
-		}
 		const causalNodes = Object.values(state.causal.nodes)
 			.filter((node) => causalVisibleNodeIds.has(node.id))
 			.map((node) => ({ ...node, metadata: { ...node.metadata } }));

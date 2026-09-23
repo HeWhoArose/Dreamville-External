@@ -372,6 +372,108 @@ export class InventoryItemEngine {
     return Array.from(this.itemDefinitions.values()).map((d) => JSON.parse(JSON.stringify(d)));
   }
 
+  public seedFromGenesisEquipment(actorId: string, equipment: {
+    equipped?: Array<Record<string, unknown>>;
+    inventory?: Array<Record<string, unknown>>;
+  }): void {
+    const existing = this.getActorInventory(actorId);
+    if (existing.length > 0) return;
+
+    const allItems = [
+      ...(Array.isArray(equipment?.inventory) ? equipment.inventory : []),
+      ...(Array.isArray(equipment?.equipped) ? equipment.equipped : []),
+    ];
+
+    for (const raw of allItems) {
+      const name = String(raw.name || 'Unnamed Item').trim();
+      if (!name) continue;
+      const rawCategory = String(raw.category || 'Miscellaneous');
+      const category = this.toCanonicalCategory(rawCategory);
+      const defId = this.ensureGenesisDefinition(raw, category);
+      const created = this.createInstance({
+        defId,
+        ownerEntityId: actorId,
+        quantity: Math.max(1, Math.trunc(Number(raw.quantity ?? 1) || 1)),
+        provenance: String(raw.provenance || 'CHARACTER_GENESIS'),
+        customName: name,
+      });
+
+      if (raw.isEquipped || raw.slot) {
+        const requestedSlot = normalizeEquipmentSlot(String(raw.slot || ''));
+        if (requestedSlot) {
+          const equipped = this.equipItem(actorId, created.id, requestedSlot);
+          if (!equipped.success) {
+            // Preserve the item in inventory rather than silently losing Genesis state.
+            const stored = this.itemInstances.get(created.id);
+            if (stored) stored.equippedSlot = null;
+          }
+        }
+      }
+    }
+  }
+
+  private toCanonicalCategory(category: string): ItemCategory {
+    const value = category.toLowerCase();
+    if (value.includes('weapon') || value.includes('sword') || value.includes('bow') || value.includes('dagger') || value.includes('staff') || value.includes('axe') || value.includes('mace')) return 'Weapon';
+    if (value.includes('shield')) return 'Shield';
+    if (value.includes('armor') || value.includes('cuirass') || value.includes('robe') || value.includes('helm') || value.includes('boot')) return 'Armor';
+    if (value.includes('potion') || value.includes('salve') || value.includes('elixir')) return 'Potion';
+    if (value.includes('scroll') || value.includes('tome') || value.includes('book')) return 'Scroll';
+    if (value.includes('tool') || value.includes('kit') || value.includes('lockpick')) return 'Tool';
+    if (value.includes('food') || value.includes('ration')) return 'Food';
+    if (value.includes('ring') || value.includes('amulet') || value.includes('neck') || value.includes('accessory')) return 'Accessory';
+    if (value.includes('document') || value.includes('map') || value.includes('letter')) return 'Document';
+    if (value.includes('material') || value.includes('ore') || value.includes('ingot') || value.includes('herb')) return 'Material';
+    if (value.includes('quest')) return 'Quest';
+    return 'Miscellaneous';
+  }
+
+  private ensureGenesisDefinition(raw: Record<string, unknown>, category: ItemCategory): string {
+    const explicit = String(raw.defId || '').trim();
+    const defId = explicit || deterministicId('item_def_genesis', String(raw.id || ''), String(raw.name || ''), category);
+    if (this.itemDefinitions.has(defId)) return defId;
+
+    const properties = raw.properties && typeof raw.properties === 'object' && !Array.isArray(raw.properties)
+      ? JSON.parse(JSON.stringify(raw.properties))
+      : {};
+
+    const maxDurability = Math.max(1, Math.trunc(Number(raw.maxDurability ?? raw.durability ?? 100) || 100));
+    const maxChargesValue = Number((raw as any).maxCharges ?? properties.maxCharges);
+    const maxCharges = Number.isFinite(maxChargesValue) && maxChargesValue > 0 ? Math.trunc(maxChargesValue) : undefined;
+    const consumptionMode = typeof (raw as any).consumptionMode === 'string'
+      ? String((raw as any).consumptionMode).toUpperCase()
+      : undefined;
+
+    this.registerDefinition({
+      id: defId,
+      name: String(raw.name || 'Unnamed Item'),
+      category,
+      rarity: String(raw.rarity || 'Common') as ItemRarity,
+      description: String(raw.description || ''),
+      allowedSlots: Array.isArray(raw.allowedSlots)
+        ? raw.allowedSlots.map((slot) => normalizeEquipmentSlot(String(slot))).filter((slot): slot is EquipmentSlot => Boolean(slot))
+        : undefined,
+      equipmentClass: typeof raw.equipmentClass === 'string' ? raw.equipmentClass as EquipmentClass : undefined,
+      equipable: typeof raw.equipable === 'boolean' ? raw.equipable : undefined,
+      handUsage: typeof raw.handUsage === 'string' ? raw.handUsage as HandUsage : undefined,
+      weightKg: Math.max(0, Number(raw.weightKg ?? 0) || 0),
+      baseValueGold: Math.max(0, Number(raw.baseValueGold ?? 0) || 0),
+      maxDurability,
+      tags: Array.isArray(raw.tags) ? raw.tags.map(String) : [],
+      properties,
+      customRules: Array.isArray((raw as any).customRules) ? JSON.parse(JSON.stringify((raw as any).customRules)) : undefined,
+      consumption: ['QUANTITY', 'CHARGE', 'DESTROY'].includes(consumptionMode || '')
+        ? { mode: consumptionMode as 'QUANTITY' | 'CHARGE' | 'DESTROY' }
+        : undefined,
+      maxCharges,
+      grantedCapabilities: Array.isArray((raw as any).grantedCapabilities)
+        ? (raw as any).grantedCapabilities.map(String)
+        : undefined,
+    });
+
+    return defId;
+  }
+
   public seedStarterInventoryForActor(actorId: string): void {
     const existing = this.getActorInventory(actorId);
     if (existing.length === 0) {

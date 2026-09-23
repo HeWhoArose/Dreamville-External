@@ -6,8 +6,8 @@ import {
 } from '../types';
 
 /**
-  * Central Equipment Rules Engine
-  * Authoritative classification, slot validation, hand usage, and conflict resolution.
+  * Client-side equipment metadata mirror.
+  * Server-side InventoryItemEngine is authoritative; these functions are for UI preflight, display, and parity checks.
   */
 
 /**

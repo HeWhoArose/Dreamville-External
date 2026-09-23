@@ -1,4 +1,18 @@
 import { WorldTimestamp } from './types';
+import { deterministicId } from './deterministicRng';
+import type { CustomRuleDefinition } from '../../src/types';
+import type { ProgressionModifier } from './characterProgressionEngine';
+import {
+	EquipmentClass,
+	EquipmentSlot,
+	HandUsage,
+	canEquipItemToSlot,
+	getOccupiedSlots,
+	normalizeEquipmentMetadata,
+	normalizeEquipmentSlot,
+} from './equipmentRulesEngine';
+
+export type { EquipmentSlot } from './equipmentRulesEngine';
 
 export type ItemRarity = 'Common' | 'Uncommon' | 'Rare' | 'Epic' | 'Legendary' | 'Relic';
 
@@ -16,21 +30,6 @@ export type ItemCategory =
   | 'Tool'
   | 'Miscellaneous';
 
-export type EquipmentSlot =
-  | 'head'
-  | 'cloak'
-  | 'body'
-  | 'hands'
-  | 'waist'
-  | 'legs'
-  | 'feet'
-  | 'mainHand'
-  | 'offHand'
-  | 'relic'
-  | 'ring1'
-  | 'ring2'
-  | 'neck';
-
 export interface ItemDefinition {
   id: string;
   name: string;
@@ -38,13 +37,23 @@ export interface ItemDefinition {
   rarity: ItemRarity;
   description: string;
   allowedSlots?: EquipmentSlot[];
+  equipmentClass?: EquipmentClass;
+  equipable?: boolean;
+  handUsage?: HandUsage;
   weightKg: number;
   baseValueGold: number;
   maxDurability: number;
   tags: string[];
   properties: Record<string, unknown>;
-  defaultAssetId?: string;
+  modifiers?: ProgressionModifier[];
+  customRules?: CustomRuleDefinition[];
   grantedCapabilities?: string[];
+  consumption?: {
+    mode: 'QUANTITY' | 'CHARGE' | 'DESTROY';
+    amount?: number;
+  };
+  maxCharges?: number;
+  defaultAssetId?: string;
 }
 
 export interface ItemInstance {
@@ -65,6 +74,9 @@ export interface ItemInstance {
   provenance: string; // 'starter_grant' | 'crafted' | 'looted' | 'merchant'
   isBroken: boolean;
   identified: boolean;
+  charges?: number;
+  maxCharges?: number;
+  destroyedAtSeconds?: number;
   notes?: string;
 }
 
@@ -325,7 +337,17 @@ export class InventoryItemEngine {
   }
 
   public registerDefinition(def: ItemDefinition): void {
-    this.itemDefinitions.set(def.id, def);
+    const normalized = normalizeEquipmentMetadata(def);
+    const canonical: ItemDefinition = {
+      ...JSON.parse(JSON.stringify(def)),
+      equipmentClass: normalized.equipmentClass,
+      equipable: normalized.equipable,
+      handUsage: normalized.handUsage,
+      allowedSlots: normalized.allowedSlots.length > 0 ? normalized.allowedSlots : undefined,
+      modifiers: Array.isArray(def.modifiers) ? JSON.parse(JSON.stringify(def.modifiers)) : undefined,
+      customRules: Array.isArray(def.customRules) ? JSON.parse(JSON.stringify(def.customRules)) : undefined,
+    };
+    this.itemDefinitions.set(def.id, canonical);
   }
 
   public registerRecipe(recipe: CraftingRecipe): void {
@@ -407,13 +429,14 @@ export class InventoryItemEngine {
 
     this.globalInstanceCounter++;
     const instanceId = `item_${def.id}_${this.globalInstanceCounter}`;
+    const initialCharges = typeof def.maxCharges === 'number' ? Math.max(0, Math.trunc(def.maxCharges)) : undefined;
     const instance: ItemInstance = {
       id: instanceId,
       defId: def.id,
       name: params.customName || def.name,
       category: def.category,
       rarity: def.rarity,
-      quantity: params.quantity ?? 1,
+      quantity: Math.max(1, Math.trunc(params.quantity ?? 1)),
       durability: def.maxDurability,
       maxDurability: def.maxDurability,
       qualityModifier: 1.0,
@@ -425,6 +448,8 @@ export class InventoryItemEngine {
       provenance: params.provenance,
       isBroken: false,
       identified: true,
+      charges: initialCharges,
+      maxCharges: initialCharges,
     };
 
     this.itemInstances.set(instanceId, instance);
@@ -522,8 +547,11 @@ export class InventoryItemEngine {
     };
 
     for (const item of this.itemInstances.values()) {
-      if (item.ownerEntityId === actorId && item.equippedSlot) {
-        doll[item.equippedSlot] = JSON.parse(JSON.stringify(item));
+      if (item.ownerEntityId !== actorId || !item.equippedSlot) continue;
+      const def = this.itemDefinitions.get(item.defId);
+      const occupiedSlots = def ? getOccupiedSlots(def, item.equippedSlot) : [item.equippedSlot];
+      for (const slot of occupiedSlots) {
+        doll[slot] = JSON.parse(JSON.stringify(item));
       }
     }
     return doll;
@@ -537,38 +565,42 @@ export class InventoryItemEngine {
     errorReason?: string;
     equippedItem?: ItemInstance;
     displacedItem?: ItemInstance;
+    displacedItems?: ItemInstance[];
   } {
     const item = this.itemInstances.get(itemId);
-    if (!item) {
-      return { success: false, errorReason: `Item ${itemId} not found.` };
-    }
-    if (item.ownerEntityId !== actorId) {
-      return { success: false, errorReason: 'Item is not owned by this actor.' };
-    }
-    if (item.isBroken) {
-      return { success: false, errorReason: 'Cannot equip a broken item.' };
-    }
+    if (!item) return { success: false, errorReason: "Item " + itemId + " not found." };
+    if (item.ownerEntityId !== actorId) return { success: false, errorReason: "Item is not owned by this actor." };
+    if (item.containerType !== "actor") return { success: false, errorReason: "Only items in the actor inventory can be equipped." };
+    if (item.isBroken) return { success: false, errorReason: "Cannot equip a broken item." };
+
+    const normalizedSlot = normalizeEquipmentSlot(targetSlot);
+    if (!normalizedSlot) return { success: false, errorReason: "Invalid equipment slot '" + String(targetSlot) + "'." };
 
     const def = this.itemDefinitions.get(item.defId);
-    if (!def?.allowedSlots?.includes(targetSlot)) {
-      return { success: false, errorReason: `Item cannot be equipped in slot ${targetSlot}.` };
+    if (!def) return { success: false, errorReason: "Item definition '" + item.defId + "' not found." };
+    if (!canEquipItemToSlot(def, normalizedSlot)) {
+      return { success: false, errorReason: "Item cannot be equipped in slot " + normalizedSlot + "." };
     }
 
-    // Unequip currently equipped item in targetSlot if any
-    let displaced: ItemInstance | undefined;
-    for (const existing of this.itemInstances.values()) {
-      if (existing.ownerEntityId === actorId && existing.equippedSlot === targetSlot) {
+    const occupiedSlots = getOccupiedSlots(def, normalizedSlot);
+    const displacedItems: ItemInstance[] = [];
+
+    for (const existing of Array.from(this.itemInstances.values())) {
+      if (existing.ownerEntityId !== actorId || !existing.equippedSlot || existing.id === item.id) continue;
+      const existingDef = this.itemDefinitions.get(existing.defId);
+      const existingOccupied = existingDef ? getOccupiedSlots(existingDef, existing.equippedSlot) : [existing.equippedSlot];
+      if (occupiedSlots.some((slot) => existingOccupied.includes(slot))) {
         existing.equippedSlot = null;
-        displaced = JSON.parse(JSON.stringify(existing));
-        break;
+        displacedItems.push(JSON.parse(JSON.stringify(existing)));
       }
     }
 
-    item.equippedSlot = targetSlot;
+    item.equippedSlot = occupiedSlots[0];
     return {
       success: true,
       equippedItem: JSON.parse(JSON.stringify(item)),
-      displacedItem: displaced,
+      displacedItem: displacedItems[0],
+      displacedItems,
     };
   }
 
@@ -576,45 +608,144 @@ export class InventoryItemEngine {
     actorId: string,
     target: string
   ): { success: boolean; errorReason?: string; unequippedItem?: ItemInstance } {
-    // 1. Check if target matches an item id directly
     const directItem = this.itemInstances.get(target);
     if (directItem && directItem.ownerEntityId === actorId) {
-      if (!directItem.equippedSlot) {
-        return { success: false, errorReason: 'Item is not equipped in any slot.' };
-      }
+      if (!directItem.equippedSlot) return { success: false, errorReason: "Item is not equipped in any slot." };
       const unequipped = JSON.parse(JSON.stringify(directItem));
       directItem.equippedSlot = null;
       return { success: true, unequippedItem: unequipped };
     }
 
-    // 2. Check if target matches a slot name (case-insensitive or camelCase)
-    const slotMapping: Record<string, EquipmentSlot> = {
-      head: 'head',
-      cloak: 'cloak',
-      hands: 'hands',
-      relic: 'relic',
-      footwear: 'feet',
-      feet: 'feet',
-      body: 'body',
-      waist: 'waist',
-      legs: 'legs',
-      mainhand: 'mainHand',
-      offhand: 'offHand',
-      ring1: 'ring1',
-      ring2: 'ring2',
-      neck: 'neck',
-    };
-    const mappedSlot = slotMapping[target.toLowerCase()] || (target as EquipmentSlot);
+    const mappedSlot = normalizeEquipmentSlot(target);
+    if (!mappedSlot) return { success: false, errorReason: "Invalid equipment slot '" + target + "'." };
 
     for (const inst of this.itemInstances.values()) {
-      if (inst.ownerEntityId === actorId && inst.equippedSlot === mappedSlot) {
+      if (inst.ownerEntityId !== actorId || !inst.equippedSlot) continue;
+      const def = this.itemDefinitions.get(inst.defId);
+      const occupied = def ? getOccupiedSlots(def, inst.equippedSlot) : [inst.equippedSlot];
+      if (occupied.includes(mappedSlot)) {
         const unequipped = JSON.parse(JSON.stringify(inst));
         inst.equippedSlot = null;
         return { success: true, unequippedItem: unequipped };
       }
     }
 
-    return { success: false, errorReason: `No equipped item found in slot '${target}'.` };
+    return { success: false, errorReason: "No equipped item found in slot '" + target + "'." };
+  }
+
+  public getEquipmentModifiers(actorId: string): ProgressionModifier[] {
+    const modifiers: ProgressionModifier[] = [];
+    for (const item of this.getEquippedItems(actorId)) {
+      if (item.isBroken || (item.durability !== undefined && item.durability <= 0)) continue;
+      const def = this.itemDefinitions.get(item.defId);
+      for (const modifier of def?.modifiers || []) {
+        if (!Number.isFinite(modifier.value)) continue;
+        const precedence = Number.isFinite(modifier.precedence) ? modifier.precedence : 60;
+        modifiers.push({
+          ...JSON.parse(JSON.stringify(modifier)),
+          id: deterministicId("item_mod", item.id, modifier.id),
+          precedence,
+          source: {
+            ...JSON.parse(JSON.stringify(modifier.source)),
+            moduleId: "item:" + (def?.id || item.defId),
+            moduleType: "ITEM",
+            featureId: modifier.source?.featureId || modifier.id,
+            sourceId: deterministicId("item_source", item.id, modifier.id),
+            sourceName: item.name,
+            precedence,
+            stackGroup: modifier.stackGroup,
+          },
+        });
+      }
+    }
+    return modifiers;
+  }
+
+  public getCustomRulesForItem(itemId: string): CustomRuleDefinition[] {
+    const item = this.itemInstances.get(itemId);
+    if (!item) return [];
+    const def = this.itemDefinitions.get(item.defId);
+    return (def?.customRules || []).map((rule) => JSON.parse(JSON.stringify(rule)));
+  }
+
+  public consumeItem(actorId: string, itemId: string, amount = 1): {
+    success: boolean;
+    errorReason?: string;
+    consumedItemId?: string;
+    consumedAmount?: number;
+    remainingQuantity?: number;
+    remainingCharges?: number;
+    destroyed?: boolean;
+    definition?: ItemDefinition;
+  } {
+    const item = this.itemInstances.get(itemId);
+    if (!item) return { success: false, errorReason: "Item " + itemId + " not found." };
+    if (item.ownerEntityId !== actorId) return { success: false, errorReason: "Item is not owned by this actor." };
+    if (item.containerType !== "actor") return { success: false, errorReason: "Only items in the actor inventory can be consumed." };
+    if (item.isBroken) return { success: false, errorReason: "Cannot consume a broken item." };
+    if (!Number.isInteger(amount) || amount <= 0) return { success: false, errorReason: "Consumption amount must be a positive integer." };
+
+    const def = this.itemDefinitions.get(item.defId);
+    if (!def) return { success: false, errorReason: "Item definition '" + item.defId + "' not found." };
+
+    const mode = def.consumption?.mode || (def.maxCharges !== undefined ? "CHARGE" : "QUANTITY");
+    const configuredAmount = Math.max(1, Math.trunc(def.consumption?.amount || 1));
+    const consumeAmount = Math.max(1, Math.trunc(amount * configuredAmount));
+
+    if (mode === "DESTROY") {
+      const snapshot = JSON.parse(JSON.stringify(item));
+      this.itemInstances.delete(item.id);
+      return {
+        success: true,
+        consumedItemId: snapshot.id,
+        consumedAmount: snapshot.quantity,
+        remainingQuantity: 0,
+        destroyed: true,
+        definition: JSON.parse(JSON.stringify(def)),
+      };
+    }
+
+    if (mode === "CHARGE") {
+      const currentCharges = item.charges ?? item.maxCharges ?? def.maxCharges ?? 0;
+      if (currentCharges < consumeAmount) {
+        return { success: false, errorReason: "Item has insufficient charges: need " + consumeAmount + ", have " + currentCharges + "." };
+      }
+      const remainingCharges = currentCharges - consumeAmount;
+      if (remainingCharges <= 0) this.itemInstances.delete(item.id);
+      else item.charges = remainingCharges;
+      return {
+        success: true,
+        consumedItemId: item.id,
+        consumedAmount: consumeAmount,
+        remainingCharges: Math.max(0, remainingCharges),
+        remainingQuantity: remainingCharges <= 0 ? 0 : item.quantity,
+        destroyed: remainingCharges <= 0,
+        definition: JSON.parse(JSON.stringify(def)),
+      };
+    }
+
+    if (item.quantity < consumeAmount) {
+      return { success: false, errorReason: "Insufficient item quantity: need " + consumeAmount + ", have " + item.quantity + "." };
+    }
+    const remainingQuantity = item.quantity - consumeAmount;
+    if (remainingQuantity <= 0) this.itemInstances.delete(item.id);
+    else item.quantity = remainingQuantity;
+    return {
+      success: true,
+      consumedItemId: item.id,
+      consumedAmount: consumeAmount,
+      remainingQuantity: Math.max(0, remainingQuantity),
+      destroyed: remainingQuantity <= 0,
+      definition: JSON.parse(JSON.stringify(def)),
+    };
+  }
+
+  public destroyItem(itemId: string): { success: boolean; errorReason?: string; destroyedItem?: ItemInstance } {
+    const item = this.itemInstances.get(itemId);
+    if (!item) return { success: false, errorReason: "Item " + itemId + " not found." };
+    const destroyedItem = JSON.parse(JSON.stringify(item));
+    this.itemInstances.delete(itemId);
+    return { success: true, destroyedItem };
   }
 
   /**
@@ -791,9 +922,9 @@ export class InventoryItemEngine {
     globalInstanceCounter: number;
   } {
     return {
-      itemDefinitions: Array.from(this.itemDefinitions.values()).map((d) => ({ ...d })),
-      itemInstances: Array.from(this.itemInstances.values()).map((i) => ({ ...i })),
-      recipes: Array.from(this.recipes.values()).map((r) => ({ ...r })),
+      itemDefinitions: Array.from(this.itemDefinitions.values()).map((d) => JSON.parse(JSON.stringify(d))),
+      itemInstances: Array.from(this.itemInstances.values()).map((i) => JSON.parse(JSON.stringify(i))),
+      recipes: Array.from(this.recipes.values()).map((r) => JSON.parse(JSON.stringify(r))),
       globalInstanceCounter: this.globalInstanceCounter,
     };
   }
@@ -823,7 +954,7 @@ export class InventoryItemEngine {
     }
     if (Array.isArray(state.itemInstances)) {
       for (const inst of state.itemInstances) {
-        this.itemInstances.set(inst.id, { ...inst });
+        this.itemInstances.set(inst.id, JSON.parse(JSON.stringify(inst)));
       }
     }
     if (Array.isArray(state.recipes)) {

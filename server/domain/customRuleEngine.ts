@@ -7,6 +7,7 @@ import type {
 	CustomRuleState,
 } from '../../src/types';
 import type { InMemoryWorldRepository } from '../repositories/worldRepository';
+import { captureCanonicalStateSnapshot } from './canonicalSnapshot';
 
 const MAX_RULES_PER_EVENT = 128;
 const MAX_EFFECTS_PER_RULE = 32;
@@ -347,19 +348,32 @@ export class CustomRuleEngine {
 		const matchedRuleIds: string[] = [];
 		const appliedRuleIds: string[] = [];
 		const warnings = [...validation.warnings];
-		for (const rule of candidates) {
-			if (!this.conditionsMatch(rule, event, state, repository)) continue;
-			matchedRuleIds.push(rule.id);
-			for (const effect of rule.effects) {
-				await this.applyEffect(effect, context, state);
+		const before = captureCanonicalStateSnapshot(event.storyId, repository);
+		try {
+			for (const rule of candidates) {
+				if (!this.conditionsMatch(rule, event, state, repository)) continue;
+				matchedRuleIds.push(rule.id);
+				for (const effect of rule.effects) {
+					await this.applyEffect(effect, context, state);
+				}
+				appliedRuleIds.push(rule.id);
 			}
-			appliedRuleIds.push(rule.id);
-		}
 
-		state.firedEventIds = [...state.firedEventIds, event.eventId].slice(-MAX_FIRED_EVENT_HISTORY);
-		state.updatedAtSeconds = event.timestampSeconds;
-		this.saveState(repository, event.storyId, state);
-		return { success: true, eventId: event.eventId, matchedRuleIds, appliedRuleIds, emittedWarnings: warnings };
+			state.firedEventIds = [...state.firedEventIds, event.eventId].slice(-MAX_FIRED_EVENT_HISTORY);
+			state.updatedAtSeconds = event.timestampSeconds;
+			this.saveState(repository, event.storyId, state);
+			return { success: true, eventId: event.eventId, matchedRuleIds, appliedRuleIds, emittedWarnings: warnings };
+		} catch (error) {
+			repository.restoreCanonicalStateSnapshot(before, { persist: false, preserveCanonicalEvents: true });
+			return {
+				success: false,
+				eventId: event.eventId,
+				matchedRuleIds: [],
+				appliedRuleIds: [],
+				emittedWarnings: warnings,
+				errorReason: error instanceof Error ? error.message : String(error),
+			};
+		}
 	}
 
 	public getState(repository: InMemoryWorldRepository, storyId: string): CustomRuleState {

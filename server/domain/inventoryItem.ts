@@ -3,13 +3,15 @@ import { deterministicId } from './deterministicRng';
 import type { CustomRuleDefinition } from '../../src/types';
 import type { ProgressionModifier } from './characterProgressionEngine';
 import {
-	EquipmentClass,
-	EquipmentSlot,
-	HandUsage,
 	canEquipItemToSlot,
 	getOccupiedSlots,
 	normalizeEquipmentMetadata,
 	normalizeEquipmentSlot,
+} from './equipmentRulesEngine';
+import type {
+	EquipmentClass,
+	EquipmentSlot,
+	HandUsage,
 } from './equipmentRulesEngine';
 
 export type { EquipmentSlot } from './equipmentRulesEngine';

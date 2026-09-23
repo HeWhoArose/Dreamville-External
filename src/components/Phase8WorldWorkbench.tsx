@@ -13,10 +13,11 @@ import {
 	Search,
 	ShieldCheck,
 	Target,
+	Users,
 } from 'lucide-react';
 import { apiClient } from '../services/apiClient';
 
-type Phase8Tab = 'situations' | 'facility' | 'knowledge' | 'causality' | 'relationships' | 'laws';
+type Phase8Tab = 'situations' | 'facility' | 'npcs' | 'knowledge' | 'causality' | 'relationships' | 'laws';
 
 interface Phase8WorldWorkbenchProps {
 	storyId: string;
@@ -124,6 +125,7 @@ export const Phase8WorldWorkbench: React.FC<Phase8WorldWorkbenchProps> = ({ stor
 				{([
 					['situations', 'Situations', Target],
 					['facility', 'Facility', Building2],
+					['npcs', 'NPCs', Users],
 					['knowledge', 'Knowledge', Brain],
 					['causality', 'Causality', GitBranch],
 					['relationships', 'Relations', HeartHandshake],
@@ -214,6 +216,36 @@ export const Phase8WorldWorkbench: React.FC<Phase8WorldWorkbenchProps> = ({ stor
 											<span className={device.active ? 'text-[10px] font-mono text-emerald-400' : 'text-[10px] font-mono text-stone-500'}>
 												{device.active ? 'ACTIVE' : 'OFFLINE'}
 											</span>
+										</div>
+									))}
+								</div>
+							</div>
+						))}
+					</div>
+				)}
+
+				{activeTab === 'npcs' && (
+					<div className="space-y-4">
+						<div className="rounded-xl border border-blue-900/40 bg-blue-950/10 p-3 text-xs text-blue-200">
+							Only public NPC goals are shown. Private goals, secrets, beliefs, plans, and deception state remain server-authoritative.
+						</div>
+						{(projection?.npcs || []).length === 0 ? (
+							<Empty text="No player-visible NPC autonomy state is currently available." />
+						) : projection.npcs.map((npc: any) => (
+							<div key={npc.actorId} className="rounded-xl border border-stone-800 bg-stone-900/60 p-4">
+								<div className="flex items-center gap-2">
+									<Users className="h-4 w-4 text-blue-400" />
+									<h3 className="font-serif font-semibold">{npc.actorId}</h3>
+								</div>
+								<div className="mt-3 space-y-2">
+									{(npc.goals || []).length === 0 ? (
+										<p className="text-xs text-stone-500">No public goals have been disclosed.</p>
+									) : npc.goals.map((goal: any) => (
+										<div key={goal.id} className="rounded-lg border border-stone-800 bg-stone-950/70 p-3">
+											<div className="flex items-center justify-between gap-3">
+												<span className="text-xs text-stone-200">{goal.description}</span>
+												<span className="text-[10px] font-mono text-stone-500">priority {goal.priority}</span>
+											</div>
 										</div>
 									))}
 								</div>

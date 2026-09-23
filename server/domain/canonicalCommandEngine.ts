@@ -401,6 +401,16 @@ export class CanonicalCommandEngine {
 		transactionalRepository.beginCanonicalCommandTransaction(command.storyId, command.commandId);
 
 		try {
+			let authoritativeItemRules: unknown[] = [];
+			if (command.type === 'USE_ITEM' && typeof (command.payload as any)?.itemId === 'string') {
+				const inventory = transactionalRepository.getInventoryEngine(command.storyId);
+				const item = inventory.getItemInstance(String((command.payload as any).itemId));
+				const definition = item ? inventory.getItemDefinition(item.defId) : undefined;
+				if (Array.isArray(definition?.customRules)) {
+					authoritativeItemRules = clone(definition.customRules);
+				}
+			}
+
 			const resolved = await handler(command, {
 				snapshot: before,
 				repository: transactionalRepository,
@@ -451,12 +461,8 @@ export class CanonicalCommandEngine {
 			// the command payload and, for USE_ITEM, re-hydrated only from the authoritative
 			// server-side item definition returned by the handler.
 			delete ruleCommandPayload.itemCustomRules;
-			if (command.type === 'USE_ITEM') {
-				const resolvedData = resolved.data as any;
-				const serverRules = resolvedData?.definition?.customRules;
-				if (Array.isArray(serverRules)) {
-					ruleCommandPayload.itemCustomRules = clone(serverRules);
-				}
+			if (command.type === 'USE_ITEM' && authoritativeItemRules.length > 0) {
+				ruleCommandPayload.itemCustomRules = clone(authoritativeItemRules);
 			}
 
 			const customRuleResult = await new CustomRuleEngine().evaluate({

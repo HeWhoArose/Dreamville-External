@@ -36,6 +36,7 @@ export type AppRoute =
   | 'play.codex'
   | 'play.evidence'
   | 'play.relationships'
+  | 'play.world-systems'
   // Engine & Operations
   | 'settings'
   | 'engine.settings'
@@ -80,6 +81,7 @@ export const ROUTE_REGISTRY: Record<AppRoute, RouteMeta> = {
   'play.codex': { route: 'play.codex', title: 'World Codex', category: 'PLAY', requiresActiveStory: true },
   'play.evidence': { route: 'play.evidence', title: 'Evidence & Clues', category: 'PLAY', requiresActiveStory: true },
   'play.relationships': { route: 'play.relationships', title: 'Relationships & Factions', category: 'PLAY', requiresActiveStory: true },
+  'play.world-systems': { route: 'play.world-systems', title: 'World Systems', category: 'PLAY', requiresActiveStory: true },
   settings: { route: 'settings', title: 'Settings', category: 'ENGINE' },
   'engine.settings': { route: 'engine.settings', title: 'Settings', category: 'ENGINE' },
   'engine.routing': { route: 'engine.routing', title: 'Model Routing', category: 'ENGINE' },

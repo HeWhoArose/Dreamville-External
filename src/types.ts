@@ -1215,7 +1215,7 @@ export type CustomRulePredicateOperator =
 
 export interface CustomRuleCondition {
   id?: string;
-  source: 'EVENT' | 'RULE_STATE' | 'WORLD_FACT' | 'ACTOR' | 'TARGET';
+  source: 'EVENT' | 'RULE_STATE' | 'WORLD_FACT' | 'ACTOR' | 'TARGET' | 'RELATIONSHIP' | 'KNOWLEDGE' | 'ITEM' | 'LOCATION_STATE' | 'TIME' | 'DOMAIN';
   path: string;
   operator: CustomRulePredicateOperator;
   value?: unknown;
@@ -1223,6 +1223,94 @@ export interface CustomRuleCondition {
 }
 
 export type CustomRuleEffect =
+  | {
+      type: 'APPLY_DAMAGE';
+      target: 'EVENT_ACTOR' | 'EVENT_TARGET' | 'ACTOR' | 'TARGET' | 'EXPLICIT';
+      actorId?: string;
+      amount: number;
+      damageType?: string;
+    }
+  | {
+      type: 'MODIFY_RESOURCE';
+      actorId?: string;
+      resourceId: string;
+      amount: number;
+    }
+  | {
+      type: 'CREATE_ENTITY';
+      entityId: string;
+      entityKind: string;
+      metadata?: Record<string, unknown>;
+    }
+  | {
+      type: 'DESTROY_ENTITY';
+      entityId: string;
+    }
+  | {
+      type: 'MOVE_ENTITY';
+      entityId: string;
+      locationId: string;
+    }
+  | {
+      type: 'TELEPORT';
+      entityId: string;
+      locationId: string;
+    }
+  | {
+      type: 'ALTER_WORLD_FACT';
+      subjectEntityId: string;
+      predicate: string;
+      objectValue: string;
+      truthState?: 'TRUE' | 'FALSE' | 'UNKNOWN';
+      confidence?: number;
+    }
+  | {
+      type: 'CREATE_MISSION';
+      situationId: string;
+      title: string;
+    }
+  | {
+      type: 'MODIFY_MISSION';
+      situationId: string;
+      objectiveId?: string;
+      status?: 'OPEN' | 'ACTIVE' | 'SUCCEEDED' | 'PARTIAL' | 'FAILED' | 'ABANDONED' | 'TRANSFORMED';
+    }
+  | {
+      type: 'CREATE_EVIDENCE';
+      evidenceId: string;
+      subjectEntityId: string;
+      summary: string;
+      provenance: string;
+    }
+  | {
+      type: 'CHANGE_RELATIONSHIP';
+      actorId: string;
+      targetId: string;
+      trustDelta?: number;
+      affinityDelta?: number;
+      fearDelta?: number;
+      respectDelta?: number;
+      hostilityDelta?: number;
+      evidenceIds?: string[];
+    }
+  | {
+      type: 'ADD_KNOWLEDGE';
+      actorId: string;
+      factId: string;
+      evidenceId: string;
+      confidence?: number;
+    }
+  | {
+      type: 'REMOVE_KNOWLEDGE';
+      actorId: string;
+      factId: string;
+    }
+  | {
+      type: 'SCHEDULE_EVENT';
+      eventType: string;
+      executeAtSeconds: number;
+      payload?: Record<string, unknown>;
+    }
   | {
       type: 'SET_RULE_STATE';
       key: string;

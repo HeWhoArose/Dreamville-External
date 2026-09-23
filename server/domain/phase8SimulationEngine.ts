@@ -52,7 +52,7 @@ export class Phase8SimulationEngine {
 	}
 
 
-	public applyRuleEffect(repository: InMemoryWorldRepository, storyId: string, eventId: string, timestampSeconds: number, effect: CustomRuleEffect): void {
+	public applyRuleEffect(repository: InMemoryWorldRepository, storyId: string, eventId: string, timestampSeconds: number, effect: CustomRuleEffect, eventActorId?: string, eventTargetId?: string): void {
 		const state = this.load(repository, storyId);
 		switch (effect.type) {
 			case 'CREATE_ENTITY':
@@ -114,9 +114,7 @@ export class Phase8SimulationEngine {
 				break;
 			}
 			case 'APPLY_DAMAGE': {
-				const actorId = effect.target === 'EVENT_TARGET' ? undefined : effect.actorId;
-				const targetId = actorId || effect.target === 'EVENT_ACTOR' ? (effect.target === 'EVENT_TARGET' ? undefined : actorId) : undefined;
-				const participantId = effect.target === 'EVENT_TARGET' ? undefined : targetId;
+				const participantId = effect.target === 'EVENT_TARGET' ? eventTargetId : effect.target === 'EVENT_ACTOR' ? eventActorId : effect.actorId;
 				const combat = repository.getCombatEngine(storyId);
 				const participant = participantId ? combat.getParticipant(participantId) : undefined;
 				if (!participant) throw new Error('APPLY_DAMAGE requires an active combat participant target.');

@@ -191,4 +191,77 @@ describe('Phase 8.6 - Custom Rule Engine', () => {
 		const restoredEngine = new CustomRuleEngine();
 		assert.equal(restoredEngine.getState(repository, 'default_story').counters.count, 1);
 	});
+	it('routes relationship and knowledge conditions through Phase 8 state', async () => {
+		const repository = createRepository();
+		const engine = new CustomRuleEngine();
+		const phase8 = new (await import('../server/domain/phase8SimulationEngine')).Phase8SimulationEngine();
+		const state = phase8.load(repository, 'default_story');
+		state.knowledge.player = phase8.knowledge.createState('player');
+		state.knowledge.player.facts.secret = {
+			id: 'secret',
+			subjectEntityId: 'warden',
+			predicate: 'knows_secret',
+			objectValue: 'true',
+			status: 'KNOWN',
+			confidence: 1,
+			sourceEvidenceIds: ['evidence'],
+			acquiredAtSeconds: 1,
+		};
+		state.consequences.relationships['player::warden'] = {
+			sourceId: 'player', targetId: 'warden', trust: 80, affinity: 0, fear: 0, respect: 0, hostility: 0, history: [],
+		};
+		phase8.save(repository, 'default_story', state);
+		const world = repository.getWorldTemplate('world_solar_archive');
+		repository.saveWorldTemplate({
+			...world,
+			customRules: [makeRule({
+				conditions: [
+					{ source: 'KNOWLEDGE', path: 'secret', operator: 'TRUTHY' },
+					{ source: 'RELATIONSHIP', path: 'trust', operator: 'GTE', value: 75 },
+				],
+				effects: [{ type: 'SET_RULE_STATE', key: 'validated', value: true }],
+			})],
+		});
+		const run = repository.getStoryRun('default_story');
+		if (!run) throw new Error('Default story run missing.');
+		run.worldId = 'world_solar_archive';
+		repository.saveStoryRun(run);
+		const result = await engine.evaluate({
+			repository,
+			event: { eventId: 'evt_phase8_conditions', storyId: 'default_story', type: 'TECHNIQUE_EXPLAINED', actorId: 'player', targetId: 'warden', timestampSeconds: 2 },
+		});
+		assert.deepEqual(result.appliedRuleIds, ['rule_test']);
+		assert.equal(engine.getState(repository, 'default_story').values.validated, true);
+	});
+
+	it('routes mission, evidence, relationship and knowledge rule effects', async () => {
+		const repository = createRepository();
+		const world = repository.getWorldTemplate('world_solar_archive');
+		repository.saveWorldTemplate({
+			...world,
+			customRules: [makeRule({
+				effects: [
+					{ type: 'CREATE_MISSION', situationId: 'mission_rule', title: 'Rule Mission' },
+					{ type: 'CREATE_EVIDENCE', evidenceId: 'evidence_rule', subjectEntityId: 'player', summary: 'Rule evidence', provenance: 'rule' },
+					{ type: 'CHANGE_RELATIONSHIP', actorId: 'player', targetId: 'warden', trustDelta: 10, evidenceIds: ['evidence_rule'] },
+					{ type: 'ADD_KNOWLEDGE', actorId: 'player', factId: 'secret_rule', evidenceId: 'evidence_rule' },
+				],
+			})],
+		});
+		const run = repository.getStoryRun('default_story');
+		if (!run) throw new Error('Default story run missing.');
+		run.worldId = 'world_solar_archive';
+		repository.saveStoryRun(run);
+		const result = await new CustomRuleEngine().evaluate({
+			repository,
+			event: { eventId: 'evt_phase8_effects', storyId: 'default_story', type: 'TECHNIQUE_EXPLAINED', actorId: 'player', timestampSeconds: 3 },
+		});
+		assert.equal(result.success, true);
+		const state = new (await import('../server/domain/phase8SimulationEngine')).Phase8SimulationEngine().load(repository, 'default_story');
+		assert.equal(state.situations.mission_rule.title, 'Rule Mission');
+		assert.equal(state.evidence.evidence_rule.summary, 'Rule evidence');
+		assert.equal(state.consequences.relationships['player::warden'].trust, 10);
+		assert.equal(state.knowledge.player.facts.secret_rule.status, 'KNOWN');
+	});
+
 });

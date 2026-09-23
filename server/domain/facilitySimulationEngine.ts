@@ -42,6 +42,8 @@ export interface FacilityState {
 	securityZones: Record<string, FacilitySecurityZone>;
 	power: Record<string, { enabled: boolean; load: number; capacity: number }>;
 	communications: Record<string, boolean>;
+	discoveredNodeIds: string[];
+	discoveredDeviceIds: string[];
 	updatedAtSeconds: number;
 }
 
@@ -54,7 +56,18 @@ export interface FacilityDiscoveryResult {
 
 export class FacilitySimulationEngine {
 	public createState(facilityId: string, now = 0): FacilityState {
-		return { schemaVersion: 1, facilityId, nodes: {}, devices: {}, securityZones: {}, power: {}, communications: {}, updatedAtSeconds: now };
+		return {
+			schemaVersion: 1,
+			facilityId,
+			nodes: {},
+			devices: {},
+			securityZones: {},
+			power: {},
+			communications: {},
+			discoveredNodeIds: [],
+			discoveredDeviceIds: [],
+			updatedAtSeconds: now,
+		};
 	}
 
 	public addNode(state: FacilityState, node: Omit<FacilityNode, 'connectedNodeIds'> & { connectedNodeIds?: string[] }): void {
@@ -81,6 +94,10 @@ export class FacilitySimulationEngine {
 		if (!node) return { success: false, foundDeviceIds: [], checkedDeviceIds: [], reason: 'Unknown facility node.' };
 		const checked = Object.values(state.devices).filter((d) => d.nodeId === nodeId);
 		const found = checked.filter((device) => !device.hidden || searchScore >= device.difficulty).map((d) => d.id);
+		if (!state.discoveredNodeIds.includes(nodeId)) state.discoveredNodeIds.push(nodeId);
+		for (const deviceId of found) {
+			if (!state.discoveredDeviceIds.includes(deviceId)) state.discoveredDeviceIds.push(deviceId);
+		}
 		state.updatedAtSeconds = now;
 		return {
 			success: true,

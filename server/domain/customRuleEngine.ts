@@ -403,4 +403,16 @@ export class CustomRuleEngine {
 	public getState(repository: InMemoryWorldRepository, storyId: string): CustomRuleState {
 		return this.loadState(repository, storyId, repository.getWorldClock(storyId).getTimestamp().totalElapsedSeconds);
 	}
+
+	public getRules(repository: InMemoryWorldRepository, storyId: string): CustomRuleDefinition[] {
+		return this.loadRules(repository, storyId).map((rule) => clone(rule));
+	}
+
+	public validateSingleRule(rule: CustomRuleDefinition): CustomRuleValidationResult {
+		return this.validateRule(rule);
+	}
+
+	public validateRuleSet(rules: CustomRuleDefinition[]): CustomRuleValidationResult {
+		return this.validateRules(rules);
+	}
 }

@@ -997,10 +997,10 @@ gameRouter.post('/inventory/transfer', async (req: Request, res: Response) => {
       if (ownerId === actorId) return true;
       if (ownerId === player.locationId) return true;
 
-      const npcLife = worldRepository.getNpcLifecycle('default_story', ownerId);
+      const npcLife = worldRepository.getNpcLifecycle(storyId, ownerId);
       if (npcLife && npcLife.isDead && npcLife.locationId === player.locationId) return true;
 
-      const combatEngine = worldRepository.getCombatEngine('default_story');
+      const combatEngine = worldRepository.getCombatEngine(storyId);
       const parts = combatEngine.getParticipants();
       const deadParticipant = parts.find(p => p.id === ownerId && p.isDead);
       if (deadParticipant) return true;
@@ -1219,6 +1219,172 @@ gameRouter.post('/inventory/degrade', async (req: Request, res: Response) => {
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to degrade item durability.' });
+  }
+});
+
+/**
+ * GET /api/game/inventory/modifiers
+ * Returns deterministic resolved equipment modifiers for the active player.
+ */
+gameRouter.get('/inventory/modifiers', async (req: Request, res: Response) => {
+  try {
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const storyId = resolveStoryId(req);
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player ? player.actorId : `player_actor_${storyId}`;
+    const inventory = worldRepository.getInventoryEngine(storyId);
+    const progression = worldRepository.getCharacterProgressionEngine(storyId);
+    const resolution = progression.resolveModifiers(
+      actorId,
+      worldRepository.getRulesProfile(storyId),
+      inventory.getEquipmentModifiers(actorId)
+    );
+    res.json({ actorId, modifiers: resolution.modifiers, sourceTrace: resolution.sourceTrace });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to resolve equipment modifiers.' });
+  }
+});
+
+/**
+ * POST /api/game/inventory/consume
+ * Consumes an item using only server-authored quantity/charge/destruction rules.
+ */
+gameRouter.post('/inventory/consume', async (req: Request, res: Response) => {
+  try {
+    const { itemId, amount } = req.body;
+    if (!itemId || typeof itemId !== 'string') {
+      return res.status(400).json({ success: false, errorReason: 'Missing itemId in request body.' });
+    }
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const storyId = resolveStoryId(req);
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player ? player.actorId : `player_actor_${storyId}`;
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      deterministicId('cmd_route', storyId, "/inventory/consume", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'USE_ITEM',
+        payload: { itemId, amount },
+        source: 'PLAYER',
+        transactionMode: 'STAGED',
+      },
+      async (command, context) => {
+        const transactionRepo = context.repository;
+        const invEngine = transactionRepo.getInventoryEngine(storyId);
+        const before = invEngine.getItemInstance(itemId);
+        if (!before || before.ownerEntityId !== actorId) {
+          return { success: false, errorReason: 'Item is not owned by the active player.' };
+        }
+
+        const result = invEngine.consumeItem(actorId, itemId, typeof amount === 'number' ? amount : 1);
+        if (!result.success) {
+          return { success: false, errorReason: result.errorReason || 'Item consumption rejected.' };
+        }
+
+        return {
+          success: true,
+          data: {
+            ...result,
+            itemBefore: before,
+            items: invEngine.getActorInventory(actorId),
+            paperDoll: invEngine.getActorPaperDoll(actorId),
+          },
+          summary: `Consumed item ${itemId}.`,
+        };
+      }
+    );
+
+    if (!commandResult.success) {
+      return res.status(commandResult.statusCode || 400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
+      });
+    }
+    res.json({
+      ...(commandResult.data as any),
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Failed to consume item.' });
+  }
+});
+
+/**
+ * POST /api/game/inventory/destroy
+ * Permanently destroys an owned item through the canonical transaction boundary.
+ */
+gameRouter.post('/inventory/destroy', async (req: Request, res: Response) => {
+  try {
+    const { itemId } = req.body;
+    if (!itemId || typeof itemId !== 'string') {
+      return res.status(400).json({ success: false, errorReason: 'Missing itemId in request body.' });
+    }
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const storyId = resolveStoryId(req);
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player ? player.actorId : `player_actor_${storyId}`;
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      deterministicId('cmd_route', storyId, "/inventory/destroy", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'USE_ITEM',
+        payload: { itemId, destroy: true },
+        source: 'PLAYER',
+        transactionMode: 'STAGED',
+      },
+      async (_command, context) => {
+        const transactionRepo = context.repository;
+        const invEngine = transactionRepo.getInventoryEngine(storyId);
+        const item = invEngine.getItemInstance(itemId);
+        if (!item || item.ownerEntityId !== actorId) {
+          return { success: false, errorReason: 'Item is not owned by the active player.' };
+        }
+        const result = invEngine.destroyItem(itemId);
+        if (!result.success) return { success: false, errorReason: result.errorReason || 'Item destruction rejected.' };
+        return {
+          success: true,
+          data: {
+            ...result,
+            items: invEngine.getActorInventory(actorId),
+            paperDoll: invEngine.getActorPaperDoll(actorId),
+          },
+          summary: `Destroyed item ${itemId}.`,
+        };
+      }
+    );
+
+    if (!commandResult.success) {
+      return res.status(commandResult.statusCode || 400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
+      });
+    }
+    res.json({
+      ...(commandResult.data as any),
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Failed to destroy item.' });
   }
 });
 

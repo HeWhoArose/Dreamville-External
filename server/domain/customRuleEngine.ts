@@ -136,8 +136,21 @@ export class CustomRuleEngine {
 		const worldRules = Array.isArray(world?.customRules) ? world.customRules : [];
 		const protagonistRules = Array.isArray(run?.protagonist?.customRules) ? run.protagonist.customRules : [];
 		const characterRules = Array.isArray(run?.customRules) ? run.customRules : [];
+		const itemRules: CustomRuleDefinition[] = [];
+		if (event.actorId) {
+			const inventory = repository.getInventoryEngine(storyId);
+			for (const item of [
+				...inventory.getInventoryItems(event.actorId),
+				...inventory.getEquippedItems(event.actorId),
+			]) {
+				itemRules.push(...inventory.getCustomRulesForItem(item.id));
+			}
+		}
+		const commandItemRules = Array.isArray(event.payload?.command?.itemCustomRules)
+			? event.payload.command.itemCustomRules
+			: [];
 		const byId = new Map<string, CustomRuleDefinition>();
-		for (const rule of [...worldRules, ...protagonistRules, ...characterRules]) {
+		for (const rule of [...worldRules, ...protagonistRules, ...characterRules, ...itemRules, ...commandItemRules]) {
 			if (rule?.id) byId.set(rule.id, clone(rule));
 		}
 		return Array.from(byId.values());
@@ -200,7 +213,14 @@ export class CustomRuleEngine {
 				const key = event.actorId && event.targetId ? `${event.actorId}::${event.targetId}` : '';
 				return key ? readPath(state.consequences.relationships[key], condition.path) : undefined;
 			}
-			case 'ITEM': return readPath(event.payload?.items, condition.path);
+			case 'ITEM':
+				return readPath(
+					event.payload?.items ??
+					event.payload?.command?.item ??
+					event.payload?.result?.itemBefore ??
+					event.payload?.result?.definition,
+					condition.path
+				);
 			case 'LOCATION_STATE': {
 				const state = phase8SimulationEngine.load(repository, event.storyId);
 				const facility = event.locationId ? state.facilities[event.locationId] : undefined;

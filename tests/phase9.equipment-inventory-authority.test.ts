@@ -82,6 +82,14 @@ test('Phase 9: Genesis equipment migrates to canonical definitions and preserves
 			quantity: 1,
 			rarity: 'Rare',
 			properties: {},
+			modifiers: [{
+				id: 'genesis_ring_modifier',
+				target: 'combat.attackBonus',
+				mode: 'ADD',
+				value: 2,
+				precedence: 60,
+				stackGroup: 'GENESIS_RING',
+			}],
 			provenance: 'CHARACTER_GENESIS',
 		}],
 		inventory: [{
@@ -104,6 +112,10 @@ test('Phase 9: Genesis equipment migrates to canonical definitions and preserves
 	assert.equal(ring?.equippedSlot, 'ring1');
 	assert.equal(engine.getItemDefinition(ring!.defId)?.equipmentClass, 'ACCESSORY');
 	assert.equal(engine.getItemDefinition(sword!.defId)?.equipmentClass, 'WEAPON');
+	const modifiers = engine.getEquipmentModifiers(actorId);
+	assert.equal(modifiers.length, 1);
+	assert.equal(modifiers[0].value, 2);
+	assert.equal(modifiers[0].target, 'combat.attackBonus');
 });
 
 test('Phase 9: invalid legacy equipment slots are safely retained in inventory during Genesis migration', () => {

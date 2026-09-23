@@ -108,6 +108,57 @@ class ApiClient {
   }
 
   /**
+   * Phase 8.6–8.12 player-safe projection.
+   * GET /api/game/phase8/projection
+   */
+  public async getPhase8Projection(storyId?: string): Promise<any> {
+    const url = storyId
+      ? `${this.baseUrl}/phase8/projection?storyId=${encodeURIComponent(storyId)}`
+      : `${this.baseUrl}/phase8/projection`;
+    const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error(`Failed to fetch Phase 8 projection: HTTP ${res.status}`);
+    const data = await res.json();
+    if (data?.success === false) throw new Error(data?.errorReason || 'Phase 8 projection failed.');
+    return data;
+  }
+
+  /**
+   * Phase 8.6 world-law listing.
+   * GET /api/game/worlds/:worldId/custom-rules
+   */
+  public async getWorldCustomRules(worldId: string, storyId?: string): Promise<any[]> {
+    const url = `${this.baseUrl}/worlds/${encodeURIComponent(worldId)}/custom-rules${storyId ? `?storyId=${encodeURIComponent(storyId)}` : ''}`;
+    const res = await fetch(url, { method: 'GET', headers: { Accept: 'application/json' } });
+    if (!res.ok) throw new Error(`Failed to fetch world laws: HTTP ${res.status}`);
+    const data = await res.json();
+    return data.rules || [];
+  }
+
+  public async validateWorldCustomRule(worldId: string, rule: any, storyId?: string): Promise<any> {
+    const url = `${this.baseUrl}/worlds/${encodeURIComponent(worldId)}/custom-rules/validate${storyId ? `?storyId=${encodeURIComponent(storyId)}` : ''}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(rule),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return data;
+    return data;
+  }
+
+  public async saveWorldCustomRule(worldId: string, rule: any, storyId?: string): Promise<any> {
+    const url = `${this.baseUrl}/worlds/${encodeURIComponent(worldId)}/custom-rules/${encodeURIComponent(rule.id)}${storyId ? `?storyId=${encodeURIComponent(storyId)}` : ''}`;
+    const res = await fetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(rule),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.errorReason || data?.errors?.join(' ') || `Failed to save world law: HTTP ${res.status}`);
+    return data;
+  }
+
+  /**
    * Fetches non-sensitive boundary diagnostics from the server.
    * GET /api/game/epistemic-status
    */

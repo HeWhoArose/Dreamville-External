@@ -80,6 +80,12 @@ export interface Item {
   materials?: string[];
   provenance?: string;
   equippedSlot?: string | null;
+  charges?: number;
+  maxCharges?: number;
+  equipmentClass?: EquipmentClass;
+  handUsage?: HandUsage;
+  allowedSlots?: EquipmentSlotId[];
+  properties?: Record<string, unknown>;
 }
 
 export type PaperDollSlotKey =
@@ -136,6 +142,17 @@ export interface ItemDefinition {
   maxDurability: number;
   tags: string[];
   properties: Record<string, any>;
+  equipmentClass?: EquipmentClass;
+  equipable?: boolean;
+  handUsage?: HandUsage;
+  modifiers?: Array<Record<string, unknown>>;
+  customRules?: CustomRuleDefinition[];
+  consumption?: {
+    mode: 'QUANTITY' | 'CHARGE' | 'DESTROY';
+    amount?: number;
+  };
+  maxCharges?: number;
+  grantedCapabilities?: string[];
 }
 
 export interface InventoryStateResponse {
@@ -1941,6 +1958,10 @@ export interface StartingEquipmentItem {
   sourceUserPrompt?: string;
   provenance: CharacterProvenanceSource;
   icon?: ItemOrSkillIcon;
+  modifiers?: Array<Record<string, unknown>>;
+  customRules?: CustomRuleDefinition[];
+  maxCharges?: number;
+  consumptionMode?: 'QUANTITY' | 'CHARGE' | 'DESTROY';
 }
 
 export interface StartingEquipmentConfig {

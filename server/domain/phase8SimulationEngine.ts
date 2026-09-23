@@ -229,5 +229,97 @@ export class Phase8SimulationEngine {
 		return state;
 	}
 
+	public getPlayerProjection(repository: InMemoryWorldRepository, storyId: string, actorId: string): Record<string, unknown> {
+		const state = this.load(repository, storyId);
+		const run = repository.getStoryRun(storyId);
+		const playerLocationId = repository.getPlayerLifecycle(storyId)?.locationId || run?.startingLocationId || 'loc_whispering_orrery';
+		const playerKnowledge = state.knowledge[actorId] || this.knowledge.createState(actorId);
+		const knownFactIds = new Set(Object.values(playerKnowledge.facts).filter((fact) => fact.status === 'KNOWN' || fact.status === 'SUSPECTED').map((fact) => fact.id));
+		const evidenceIds = new Set(Object.values(playerKnowledge.facts).flatMap((fact) => fact.sourceEvidenceIds || []));
+
+		const facilities = Object.values(state.facilities).map((facility) => {
+			const discoveredNodes = new Set(facility.discoveredNodeIds || []);
+			const discoveredDevices = new Set(facility.discoveredDeviceIds || []);
+			const nodes = Object.values(facility.nodes)
+				.filter((node) => !node.hidden || discoveredNodes.has(node.id))
+				.map((node) => ({
+					...node,
+					connectedNodeIds: node.connectedNodeIds.filter((id) => {
+						const linked = facility.nodes[id];
+						return !!linked && (!linked.hidden || discoveredNodes.has(id));
+					}),
+				}));
+			const devices = Object.values(facility.devices)
+				.filter((device) => !device.hidden || discoveredDevices.has(device.id))
+				.map((device) => ({ ...device }));
+			return {
+				facilityId: facility.facilityId,
+				nodes,
+				devices,
+				securityZones: Object.values(facility.securityZones)
+					.filter((zone) => nodes.some((node) => node.securityZoneId === zone.id))
+					.map((zone) => ({ ...zone, guardEntityIds: [...zone.guardEntityIds] })),
+				power: { ...facility.power },
+				communications: { ...facility.communications },
+				updatedAtSeconds: facility.updatedAtSeconds,
+			};
+		});
+
+		const situations = Object.values(state.situations).map((situation) => ({
+			id: situation.id,
+			storyId: situation.storyId,
+			title: situation.title,
+			status: situation.status,
+			objectives: situation.publicObjectives.map((objective) => ({ ...objective })),
+			participants: situation.participants.map((participant) => ({ ...participant })),
+			consequenceTags: [...situation.consequenceTags],
+			history: situation.history.map((entry) => ({ ...entry })),
+		}));
+
+		const npcs = Object.values(state.npcs).map((npc) => ({
+			actorId: npc.actorId,
+			goals: npc.goals.filter((goal) => goal.visibility === 'PUBLIC').map((goal) => ({ ...goal })),
+			updatedAtSeconds: npc.updatedAtSeconds,
+		}));
+
+		const causalVisibleNodeIds = new Set<string>([actorId, playerLocationId, ...Object.values(playerKnowledge.facts).map((fact) => fact.subjectEntityId), ...Array.from(evidenceIds)]);
+		const causalEdges = Object.values(state.causal.edges)
+			.filter((edge) => causalVisibleNodeIds.has(edge.fromId) || causalVisibleNodeIds.has(edge.toId) || evidenceIds.has(edge.id))
+			.map((edge) => ({ ...edge, metadata: { ...edge.metadata } }));
+		for (const edge of causalEdges) {
+			causalVisibleNodeIds.add(edge.fromId);
+			causalVisibleNodeIds.add(edge.toId);
+		}
+		const causalNodes = Object.values(state.causal.nodes)
+			.filter((node) => causalVisibleNodeIds.has(node.id))
+			.map((node) => ({ ...node, metadata: { ...node.metadata } }));
+
+		const relationships = Object.values(state.consequences.relationships)
+			.filter((relationship) => relationship.sourceId === actorId || relationship.targetId === actorId)
+			.map((relationship) => ({ ...relationship, history: [...relationship.history] }));
+
+		const knownFacts = Object.values(playerKnowledge.facts)
+			.filter((fact) => fact.status !== 'UNKNOWN')
+			.map((fact) => ({ ...fact, sourceEvidenceIds: [...fact.sourceEvidenceIds] }));
+
+		return {
+			storyId,
+			worldId: run?.worldId || null,
+			playerLocationId,
+			npcs,
+			facilities,
+			situations,
+			knowledge: { actorId, facts: knownFacts },
+			causality: { nodes: causalNodes, edges: causalEdges },
+			relationships,
+			summary: {
+				activeSituations: situations.filter((s) => ['OPEN', 'ACTIVE'].includes(s.status)).length,
+				transformedSituations: situations.filter((s) => s.status === 'TRANSFORMED').length,
+				knownFacts: knownFacts.length,
+				knownRelationships: relationships.length,
+			},
+		};
+	}
+
 	public serialize(state: Phase8RuntimeState): Phase8RuntimeState { return JSON.parse(JSON.stringify(state)); }
 }

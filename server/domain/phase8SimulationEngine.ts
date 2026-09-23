@@ -146,6 +146,33 @@ export class Phase8SimulationEngine {
 		this.save(repository, storyId, state);
 	}
 
+	public resolveNpcDecision(
+		repository: InMemoryWorldRepository,
+		storyId: string,
+		npcId: string,
+		availableActions: Array<{ id: string; description: string; targetEntityId?: string; targetLocationId?: string; baseUtility?: number; risk?: number; requiredKnowledgeIds?: string[]; enablesDeception?: boolean }>,
+		nowSeconds: number,
+		opportunityScore = 0
+	): ReturnType<NpcAutonomyEngine['decide']> {
+		const state = this.load(repository, storyId);
+		const npcState = state.npcs[npcId];
+		if (!npcState) return undefined;
+		const knowledgeState = state.knowledge[npcId] || this.knowledge.createState(npcId);
+		state.knowledge[npcId] = knowledgeState;
+		const knownFactIds = Object.values(knowledgeState.facts)
+			.filter((fact) => fact.status === 'KNOWN' || fact.status === 'SUSPECTED')
+			.map((fact) => fact.id);
+		const decision = this.npc.decide(npcState, {
+			actorId: npcId,
+			availableActions,
+			knownFactIds,
+			opportunityScore,
+			nowSeconds,
+		});
+		this.save(repository, storyId, state);
+		return decision;
+	}
+
 	public processCanonicalEvent(repository: InMemoryWorldRepository, storyId: string, event: { eventId: string; type: string; actorId?: string; targetId?: string; locationId?: string; timestampSeconds: number; payload?: Record<string, unknown> }): Phase8RuntimeState {
 		const state = this.load(repository, storyId);
 		const payload = event.payload || {};
@@ -166,6 +193,16 @@ export class Phase8SimulationEngine {
 					if (detection.alarmRaised && detection.zoneId) facility.securityZones[detection.zoneId].alarmState = 'ALERT';
 				}
 			}
+		}
+		if (event.type === 'NPC_DECISION_REQUESTED' && event.actorId && Array.isArray(payload.availableActions)) {
+			this.resolveNpcDecision(
+				repository,
+				storyId,
+				event.actorId,
+				payload.availableActions as Array<{ id: string; description: string; targetEntityId?: string; targetLocationId?: string; baseUtility?: number; risk?: number; requiredKnowledgeIds?: string[]; enablesDeception?: boolean }>,
+				event.timestampSeconds,
+				Number(payload.opportunityScore || 0)
+			);
 		}
 		if (event.type === 'MISSION_STATE_CHANGED') {
 			const situationId = String(payload.situationId || '');

@@ -1384,8 +1384,10 @@ export class TacticalCombatEngine {
     }
 
     // Movement legality is centralized in ConditionEngine blocksActions semantics.
-    if (this.conditionEngine?.isActionBlocked(actorId, 'MOVEMENT') || actor.conditions.includes('Grappled') || actor.conditions.includes('Restrained') || actor.conditions.includes('Paralyzed') || actor.conditions.includes('Petrified') || actor.conditions.includes('Stunned') || Boolean(actor.grappledBy)) {
-      return { success: false, errorReason: 'Actor is blocked from movement by an active condition.' };
+    const immobilizingConditions = ['Grappled', 'Restrained', 'Paralyzed', 'Petrified', 'Stunned', 'Incapacitated'].filter(c => actor.conditions.map(ac => ac.toLowerCase()).includes(c.toLowerCase()));
+    if (this.conditionEngine?.isActionBlocked(actorId, 'MOVEMENT') || immobilizingConditions.length > 0 || Boolean(actor.grappledBy)) {
+      const activeReason = immobilizingConditions.length > 0 ? immobilizingConditions.join(', ') : 'Condition';
+      return { success: false, errorReason: `Actor is blocked from movement by an active condition (${activeReason}).` };
     }
 
     // DEF-CH8-03: Enforce canonical map boundaries if configured
@@ -1413,7 +1415,21 @@ export class TacticalCombatEngine {
       }
     }
 
+    // Check occupied cells
+    for (const other of this.participants.values()) {
+      if (other.id !== actorId && !other.isDead && other.x === targetX && other.y === targetY) {
+        return { success: false, errorReason: 'Target cell is occupied by another participant.' };
+      }
+    }
+
     const distance = Math.hypot(targetX - actor.x, targetY - actor.y);
+    const remainingSpeed = this.actionEconomy.get(actorId)?.movementRemainingCells ?? 0;
+    if (distance > remainingSpeed + 1e-9) {
+      return {
+        success: false,
+        errorReason: `Movement exceeds speed allowance: distance is ${distance.toFixed(1)} cells but only ${remainingSpeed} remain (insufficient remaining movement).`,
+      };
+    }
 
     const path = this.calculateMovementPath(actorId, actor.x, actor.y, targetX, targetY);
     if (!path) {
@@ -1433,20 +1449,14 @@ export class TacticalCombatEngine {
             const reach = other.reachCells ?? 1.5;
             if (Math.hypot(path[0].x - other.x, path[0].y - other.y) > reach) return false;
             return path.slice(1).some((cell) => Math.hypot(cell.x - other.x, cell.y - other.y) > reach);
-          })          .sort((a, b) => a.id.localeCompare(b.id))
+          })
+          .sort((a, b) => a.id.localeCompare(b.id))
       : [];
     if (movementCost > this.actionEconomy.get(actorId)?.movementRemainingCells! + 1e-9) {
       return {
         success: false,
-        errorReason: `Movement requires ${movementCost.toFixed(1)} cells but only ${this.actionEconomy.get(actorId)?.movementRemainingCells ?? 0} remain.`,
+        errorReason: `Movement exceeds speed allowance: movement requires ${movementCost.toFixed(1)} cells but only ${this.actionEconomy.get(actorId)?.movementRemainingCells ?? 0} remain (insufficient remaining movement).`,
       };
-    }
-
-    // Check occupied cells
-    for (const other of this.participants.values()) {
-      if (other.id !== actorId && !other.isDead && other.x === targetX && other.y === targetY) {
-        return { success: false, errorReason: 'Target cell is occupied by another participant.' };
-      }
     }
 
     // Opportunity attacks resolve before the mover leaves the attacker's reach.

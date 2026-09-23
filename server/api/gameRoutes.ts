@@ -5156,6 +5156,9 @@ gameRouter.post('/orchestrator/turn', async (req: Request, res: Response) => {
     const idempotencyKey = rawKey ? String(rawKey).trim() : undefined;
 
     const { worldRepository } = await import('../repositories/worldRepository');
+    if (storyId && !worldRepository.getStoryRun(storyId)) {
+      worldRepository.seedStory(storyId);
+    }
     const orchestrator = worldRepository.getAiOrchestrator();
 
     const commandId = idempotencyKey || deterministicId('cmd_route', storyId, "/orchestrator/turn", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
@@ -6915,6 +6918,7 @@ gameRouter.post('/worlds/runs/:storyId/actions/apply-ability', async (req: Reque
           return {
             success: false,
             errorReason: result.errorReason || 'Ability application rejected.',
+            statusCode: result.statusCode,
           };
         }
         return {
@@ -6926,7 +6930,7 @@ gameRouter.post('/worlds/runs/:storyId/actions/apply-ability', async (req: Reque
     );
 
     if (!commandResult.success) {
-      return res.status(400).json({
+      return res.status(commandResult.statusCode || 400).json({
         error: commandResult.errorReason,
         rolledBack: commandResult.rolledBack,
         commandId: commandResult.commandId,

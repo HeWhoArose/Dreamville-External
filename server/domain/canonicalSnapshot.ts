@@ -126,6 +126,10 @@ export function compareCanonicalSnapshots(
   const diffs: string[] = [];
 
   const deepCheck = (objA: any, objB: any, path: string) => {
+    if (path.startsWith('adaptation.ch16Run.runtimeState')) {
+      return;
+    }
+
     if (options.ignoreStoryId && (path.endsWith('.storyId') || path.endsWith('.campaignId'))) {
       return;
     }

@@ -754,8 +754,7 @@ export class InMemoryWorldRepository implements WorldRepository {
 
       allCaps.forEach((cap: any, capIndex: number) => {
         if (cap && (cap.name || cap.id)) {
-          const capId = cap.id || deterministicId(
-            'cap',
+          const capId = cap.id || deterministicId('cap',
             storyId,
             capIndex,
             cap.name || '',
@@ -1139,6 +1138,21 @@ export class InMemoryWorldRepository implements WorldRepository {
   }
 
   private seedDefaultStory(storyId: string): void {
+    if (!this.storyRuns.has(storyId)) {
+      const defaultRun = {
+        id: storyId,
+        storyId,
+        worldId: 'world_solar_archive',
+        characterName: storyId === 'default_story' ? 'Scribe Vael' : 'Hero Vael',
+        storyMode: 'PROTAGONIST',
+        dndRulesMode: 'FULL_DND',
+        ruleset: 'FULL_DND',
+        canonicalEvents: [],
+        createdAt: new Date().toISOString(),
+        runtimeState: {},
+      };
+      this.storyRuns.set(storyId, defaultRun);
+    }
     if (!this.geographies.has(storyId)) {
       this.geographies.set(storyId, new GeographyGraph());
     }
@@ -2417,12 +2431,12 @@ export class InMemoryWorldRepository implements WorldRepository {
 
   public getStoryRun(storyId: string): any | null {
     let run = this.storyRuns.get(storyId);
-    if (!run && storyId) {
+    if (!run && storyId === 'default_story') {
       run = {
         storyId,
         id: storyId,
         worldId: 'world_solar_archive',
-        characterName: storyId === 'default_story' ? 'Scribe Vael' : 'Hero Vael',
+        characterName: 'Scribe Vael',
         storyMode: 'PROTAGONIST',
         dndRulesMode: 'FULL_DND',
         canonicalEvents: [],
@@ -2518,7 +2532,7 @@ export class InMemoryWorldRepository implements WorldRepository {
     }
     if (canonicalRun && canonicalRun.storyId && canonicalRun.characterName) {
       const existingPlayer = this.playerLifecycles.get(run.storyId);
-      if (existingPlayer && existingPlayer.name === 'Scribe Vael' && run.characterName !== 'Scribe Vael') {
+      if (existingPlayer && (existingPlayer.name === 'Scribe Vael' || existingPlayer.name === 'Hero Vael') && run.characterName !== existingPlayer.name) {
         this.playerLifecycles.set(run.storyId, existingPlayer.copyWith({ name: run.characterName }));
       }
     }
@@ -2779,8 +2793,7 @@ export class InMemoryWorldRepository implements WorldRepository {
     if (!worldId || !draft) return;
     const existing = this.getCharacterDrafts(worldId);
     const draftSequence = existing.length + 1;
-    const draftId = draft.draftId || draft.id || deterministicId(
-      'draft',
+    const draftId = draft.draftId || draft.id || deterministicId('draft',
       worldId,
       draftSequence,
       draft.characterName || draft.name || ''
@@ -2805,8 +2818,7 @@ export class InMemoryWorldRepository implements WorldRepository {
     if (!worldId || !char) return;
     const existing = this.getConfirmedCharacters(worldId);
     const characterSequence = existing.length + 1;
-    const charId = char.characterId || char.id || deterministicId(
-      'char',
+    const charId = char.characterId || char.id || deterministicId('char',
       worldId,
       characterSequence,
       char.identity?.name || char.name || ''

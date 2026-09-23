@@ -73,6 +73,7 @@ export interface CanonicalCommandResult<T = unknown> {
 	event?: CanonicalCommandEvent;
 	data?: T;
 	errorReason?: string;
+	statusCode?: number;
 	rolledBack: boolean;
 	mutationPaths: string[];
 }
@@ -81,6 +82,7 @@ export interface CanonicalCommandHandlerResult<T = unknown> {
 	success: boolean;
 	data?: T;
 	errorReason?: string;
+	statusCode?: number;
 	summary?: string;
 }
 
@@ -304,14 +306,8 @@ export class CanonicalCommandEngine {
 			};
 		}
 
-		if (!repository.getStoryRun(command.storyId) && command.storyId !== 'default_story') {
-			return {
-				success: false,
-				commandId: command.commandId,
-				errorReason: `StoryRun "${command.storyId}" was not found.`,
-				rolledBack: false,
-				mutationPaths: [],
-			};
+		if (!repository.getStoryRun(command.storyId)) {
+			repository.seedStory(command.storyId);
 		}
 
 		const key = `${command.storyId}::${command.commandId}`;
@@ -439,6 +435,7 @@ export class CanonicalCommandEngine {
 					success: false,
 					commandId: command.commandId,
 					errorReason: resolved.errorReason || 'Canonical command rejected.',
+					statusCode: resolved.statusCode,
 					rolledBack: true,
 					mutationPaths: [],
 				};

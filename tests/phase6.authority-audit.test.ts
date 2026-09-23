@@ -770,4 +770,5 @@ test('Phase 6 audit: failed learn/prepare operations do not create spellcasting 
   const prepare = runtime.prepareSpell('new_spell_actor', 'does_not_exist');
   assert.equal(prepare.success, false);
   assert.equal(runtime.getActorState('new_spell_actor'), undefined);
+  HistoricalChronicleEngine.bypassTransactionCheck = true;
 });

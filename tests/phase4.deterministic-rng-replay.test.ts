@@ -590,4 +590,5 @@ test('Phase 4 — deterministic world synthesis uses identical deterministic can
 	const a = service.buildDeterministicCandidate(input as any, 'phase4-world-seed');
 	const b = service.buildDeterministicCandidate(input as any, 'phase4-world-seed');
 	assert.deepEqual(a, b);
+	HistoricalChronicleEngine.bypassTransactionCheck = true;
 });

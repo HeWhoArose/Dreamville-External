@@ -6,6 +6,7 @@ import { SituationEngine } from '../server/domain/situationEngine';
 import { KnowledgeEngine } from '../server/domain/knowledgeEngine';
 import { CausalProvenanceGraph } from '../server/domain/causalProvenanceGraph';
 import { ConsequenceEngine } from '../server/domain/consequenceEngine';
+import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
 
 describe('Phase 8.6-8.12 regression and fallback contracts', () => {
 	it('preserves hidden facility state after a failed search', () => {
@@ -39,7 +40,7 @@ describe('Phase 8.6-8.12 regression and fallback contracts', () => {
 
 
 	it('projects Phase 8 state without leaking hidden facility devices or private NPC motives', () => {
-		const repository = new (require('../server/repositories/worldRepository').InMemoryWorldRepository)({ disablePersistence: true });
+		const repository = new InMemoryWorldRepository({ disablePersistence: true });
 		repository.seedStory('phase8_ui_projection');
 		const phase8 = repository.getPhase8SimulationEngine('phase8_ui_projection');
 		const state = phase8.load(repository, 'phase8_ui_projection');
@@ -63,7 +64,6 @@ describe('Phase 8.6-8.12 regression and fallback contracts', () => {
 	});
 
 	it('records facility discovery so a discovered hidden device becomes player-visible without changing reality', () => {
-		const { InMemoryWorldRepository } = require('../server/repositories/worldRepository');
 		const repository = new InMemoryWorldRepository({ disablePersistence: true });
 		repository.seedStory('phase8_facility_projection');
 		const phase8 = repository.getPhase8SimulationEngine('phase8_facility_projection');
@@ -88,7 +88,6 @@ describe('Phase 8.6-8.12 regression and fallback contracts', () => {
 	});
 
 	it('does not expose private knowledge or causal edges outside the player-visible projection', () => {
-		const { InMemoryWorldRepository } = require('../server/repositories/worldRepository');
 		const repository = new InMemoryWorldRepository({ disablePersistence: true });
 		repository.seedStory('phase8_epistemic_projection');
 		const phase8 = repository.getPhase8SimulationEngine('phase8_epistemic_projection');

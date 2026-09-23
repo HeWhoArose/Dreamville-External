@@ -495,7 +495,7 @@ test('Phase 9: client-supplied item rules cannot become authoritative custom rul
 						key: 'forged_rule_fired',
 						amount: 1,
 					}],
-					provenance: 'CLIENT',
+					provenance: 'SYSTEM_DERIVED',
 				}],
 			},
 			source: 'PLAYER',

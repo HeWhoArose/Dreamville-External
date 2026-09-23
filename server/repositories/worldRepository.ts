@@ -1441,6 +1441,10 @@ export class InMemoryWorldRepository implements WorldRepository {
     return this.canonicalCommandScopeDepth > 0;
   }
 
+  public hasInventoryEngine(storyId: string): boolean {
+    return this.inventoryEngines.has(storyId);
+  }
+
   public getInventoryEngine(storyId: string): InventoryItemEngine {
     let engine = this.inventoryEngines.get(storyId);
     if (!engine) {

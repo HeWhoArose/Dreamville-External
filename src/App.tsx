@@ -20,6 +20,7 @@ import { PowerWorkstation } from './components/PowerWorkstation';
 import { TacticalCombatView } from './components/TacticalCombatView';
 import { WorldMapView } from './components/WorldMapView';
 import { ChronicleView } from './components/ChronicleView';
+import { Phase8WorldWorkbench } from './components/Phase8WorldWorkbench';
 
 // Modals & Workstations
 import { AudioSettingsModal } from './components/AudioSettingsModal';
@@ -576,6 +577,10 @@ export const App: React.FC = () => {
           isProcessingAction={isProcessingAction}
           routeEdges={viewState.routeEdges}
         />
+      )}
+
+      {currentRoute === 'play.world-systems' && (
+        <Phase8WorldWorkbench storyId={activeStoryId} />
       )}
 
       {currentRoute === 'play.chronicle' && viewState && (

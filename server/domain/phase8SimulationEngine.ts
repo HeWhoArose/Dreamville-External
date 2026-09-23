@@ -30,17 +30,24 @@ export class Phase8SimulationEngine {
 	public load(repository: InMemoryWorldRepository, storyId: string): Phase8RuntimeState {
 		const run = repository.getStoryRun(storyId) as any;
 		const existing = run?.runtimeState?.phase8;
-		if (existing) return {
-			schemaVersion: 1,
-			facilities: existing.facilities || {},
-			npcs: existing.npcs || {},
-			situations: existing.situations || {},
-			knowledge: existing.knowledge || {},
-			causal: existing.causal || this.causal.create(),
-			consequences: existing.consequences || this.consequence.create(),
-			scheduledEvents: existing.scheduledEvents || [],
-			evidence: existing.evidence || {},
-		};
+		if (existing) {
+			const facilities = existing.facilities || {};
+			for (const facility of Object.values(facilities) as any[]) {
+				facility.discoveredNodeIds = Array.isArray(facility.discoveredNodeIds) ? facility.discoveredNodeIds : [];
+				facility.discoveredDeviceIds = Array.isArray(facility.discoveredDeviceIds) ? facility.discoveredDeviceIds : [];
+			}
+			return {
+				schemaVersion: 1,
+				facilities,
+				npcs: existing.npcs || {},
+				situations: existing.situations || {},
+				knowledge: existing.knowledge || {},
+				causal: existing.causal || this.causal.create(),
+				consequences: existing.consequences || this.consequence.create(),
+				scheduledEvents: existing.scheduledEvents || [],
+				evidence: existing.evidence || {},
+			};
+		}
 		return { schemaVersion: 1, facilities: {}, npcs: {}, situations: {}, knowledge: {}, causal: this.causal.create(), consequences: this.consequence.create(), scheduledEvents: [], evidence: {} };
 	}
 

@@ -516,6 +516,76 @@ test('Phase 9: item custom rules survive authoritative destruction resolution', 
 	assert.equal(repository.getStoryRun(storyId)?.runtimeState?.customRules?.counters?.phase9_item_destroyed, 1);
 });
 
+test('Phase 9: custom-rule rejection rolls back live inventory mutations', async () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'default_story';
+	const actor = repository.getPlayerLifecycle(storyId)!.actorId;
+	const inventory = repository.getInventoryEngine(storyId);
+	inventory.registerDefinition({
+		id: 'phase9_reject_rule_item',
+		name: 'Rejection Token',
+		category: 'Miscellaneous',
+		rarity: 'Common',
+		description: 'A rule fixture that rejects after mutation.',
+		weightKg: 0.1,
+		baseValueGold: 1,
+		maxDurability: 1,
+		tags: ['rule-test'],
+		properties: {},
+		customRules: [{
+			id: 'phase9_reject',
+			name: 'Reject Every Use',
+			version: 1,
+			enabled: true,
+			priority: 100,
+			scope: 'ACTOR',
+			trigger: { event: 'CANONICAL_COMMAND' },
+			conditions: [{
+				source: 'EVENT',
+				path: 'payload.commandType',
+				operator: 'EQ',
+				value: 'USE_ITEM',
+			}],
+			effects: [{
+				type: 'INCREMENT_RULE_STATE',
+				key: 'should_not_persist',
+				amount: 1,
+			}],
+			provenance: 'SYSTEM_DERIVED',
+		}],
+	});
+	const item = inventory.createInstance({
+		defId: 'phase9_reject_rule_item',
+		ownerEntityId: actor,
+		provenance: 'TEST',
+		quantity: 1,
+	});
+	const original = JSON.stringify(inventory.exportState());
+
+	const result = await canonicalCommandEngine.execute(
+		repository,
+		{
+			commandId: 'phase9_rule_reject',
+			storyId,
+			actorId: actor,
+			type: 'USE_ITEM',
+			payload: { itemId: item.id, amount: 1 },
+			source: 'PLAYER',
+			transactionMode: 'ROLLBACK',
+		},
+		async (_command, context) => ({
+			success: true,
+			data: context.repository.getInventoryEngine(storyId).consumeItem(actor, item.id, 1),
+			summary: 'Consume and then reject.',
+		})
+	);
+
+	assert.equal(result.success, false);
+	assert.equal(result.rolledBack, true);
+	assert.equal(JSON.stringify(inventory.exportState()), original);
+	assert.ok(inventory.getItemInstance(item.id));
+});
+
 test('Phase 9: client-supplied item rules cannot become authoritative custom rules', async () => {
 	const repository = new InMemoryWorldRepository({ disablePersistence: true });
 	const storyId = 'default_story';

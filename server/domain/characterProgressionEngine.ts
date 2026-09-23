@@ -945,9 +945,36 @@ export class CharacterProgressionEngine {
     return true;
   }
 
+  public getOrCreateState(actorId: string, level = 1): CharacterProgressionState {
+    let state = this.actorStates.get(actorId);
+    if (!state) {
+      state = {
+        actorId,
+        currentLevel: Math.max(1, Math.min(20, Math.trunc(level))),
+        enabledModuleIds: [],
+        unlockedFeatureIds: [],
+        featIds: [],
+        usage: {},
+        progressionHistory: [{
+          sequence: 0,
+          commandId: 'INITIALIZE',
+          operation: 'LEVEL_UP',
+          fromLevel: level,
+          toLevel: level,
+        }],
+        genesisSelectionFingerprint: deterministicId('prg_genesis', actorId, level),
+      };
+      this.actorStates.set(actorId, state);
+    }
+    return clone(state);
+  }
+
   private requireActor(actorId: string): CharacterProgressionState {
-    const state = this.actorStates.get(actorId);
-    if (!state) throw new Error(`Character progression state for actor '${actorId}' was not found.`);
+    let state = this.actorStates.get(actorId);
+    if (!state) {
+      this.getOrCreateState(actorId);
+      state = this.actorStates.get(actorId)!;
+    }
     return state;
   }
 

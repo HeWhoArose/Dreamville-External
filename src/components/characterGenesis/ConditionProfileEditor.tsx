@@ -17,6 +17,12 @@ const DAMAGE_TYPES = [
   'Radiant', 'Psychic', 'Force'
 ];
 
+const DND_CONDITIONS: string[] = [
+  'Blinded', 'Charmed', 'Deafened', 'Frightened', 'Grappled',
+  'Incapacitated', 'Invisible', 'Paralyzed', 'Petrified', 'Poisoned',
+  'Prone', 'Restrained', 'Stunned', 'Unconscious', 'Exhaustion'
+];
+
 
 const BODY_REGIONS: Array<{ id: string; label: string }> = [
   { id: 'HEAD', label: 'Head' },

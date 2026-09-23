@@ -106,11 +106,11 @@ export class StoryCheckChallengeResolver {
     const scene = normalize(context.sceneText || '');
     const ranked = candidates
       .map((challenge) => {
-        const matches = challenge.keywords.filter((keyword) => {
+        const matches = challenge.keywords.filter((keyword: string) => {
           const needle = normalize(keyword);
           return needle && (action.includes(needle) || scene.includes(needle));
         });
-        return { challenge, score: matches.reduce((sum, keyword) => sum + normalize(keyword).length + 1, 0), matchCount: matches.length };
+        return { challenge, score: matches.reduce((sum: number, keyword: string) => sum + normalize(keyword).length + 1, 0), matchCount: matches.length };
       })
       .filter((entry) => entry.matchCount > 0)
       .sort((a, b) => b.score - a.score);

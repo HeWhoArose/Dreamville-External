@@ -461,7 +461,7 @@ export class WorldEffectEngine {
         projectionChangedScopes.push('LIVING_PHYSIOLOGY:' + change.entityId);
       }
       for (const event of projection.livingWorld.scheduledEvents || []) {
-        if (!event || typeof event.id !== 'string' || !event.id.trim() || typeof event.kind !== 'string' || typeof event.name !== 'string' || typeof event.locationId !== 'string' || !event.triggerTimestamp || typeof event.triggerTimestamp.totalElapsedSeconds !== 'number') {
+        if (!event || typeof event.id !== 'string' || !event.id.trim() || typeof event.kind !== 'string' || typeof event.name !== 'string' || typeof event.locationId !== 'string' || !event.triggerTimestamp || typeof (event.triggerTimestamp as any).totalElapsedSeconds !== 'number') {
           return { success: false, errorReason: 'Scheduled living-world event has invalid canonical fields.', effectId: definition.id, affectedEntityIds, changedScopes: projectionChangedScopes };
         }
         livingWorld.scheduleEvent(event as any);

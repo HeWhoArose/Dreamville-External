@@ -91,11 +91,11 @@ export class CombatSimulationEngine {
     if (!authority.simulatable) {
       return { success: false, errorReason: authority.reasons.join(' '), seed: Number.isFinite(params.seed) ? Math.trunc(params.seed as number) : 0, before: params.engine.exportState(), authority };
     }
+    const before = params.engine.exportState();
     const seed = Number.isFinite(params.seed) ? Math.trunc(params.seed as number) : params.engine.getDiceEngine().getSeed();
     const clone = new TacticalCombatEngine(seed);
-    clone.importState(params.engine.exportState());
+    clone.importState(before);
     clone.setSeed(seed);
-    const before = clone.exportState();
     const targetIds = Array.from(new Set(params.targetIds.filter(Boolean)));
     const result = combatEffectEngine.resolve(clone, params.actorId, targetIds, params.definition);
     const presentation = result.worldEffectPreview

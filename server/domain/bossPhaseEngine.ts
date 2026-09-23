@@ -60,9 +60,9 @@ export class BossPhaseEngine {
           : [],
         modifiers:
           phase.modifiers && typeof phase.modifiers === 'object'
-            ? Object.fromEntries(
+            ? (Object.fromEntries(
                 Object.entries(phase.modifiers).filter(([, value]) => typeof value === 'number' && Number.isFinite(value))
-              )
+              ) as Record<string, number>)
             : {},
       }));
   }

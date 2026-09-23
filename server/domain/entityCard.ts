@@ -58,6 +58,8 @@ export interface EntityCard {
 		subclassId?: string;
 		speciesId?: string;
 		featIds: string[];
+		moduleIds?: string[];
+		customModules?: any[];
 	};
 	coreStats?: {
 		level?: number;

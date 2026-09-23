@@ -441,6 +441,7 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
   };
 
   const currentActor = combatState?.currentActor;
+  const selectedCapability = capabilities.find((item) => item.id === selectedCapabilityId);
   const isPlayerTurn = combatState?.isPlayerTurn ?? false;
   const turnResources = combatState?.viewerTurnResources;
   const actionAvailable = turnResources?.actionAvailable ?? true;

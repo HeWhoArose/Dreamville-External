@@ -35,7 +35,7 @@ export interface RollRecord {
   rollId: string;
   rulesetVersion: string;
   formula: string;
-  diceTerms: DiceTerm[];
+  diceTerms?: DiceTerm[];
   individualDice: number[];
   modifier: number;
   total: number;
@@ -385,6 +385,7 @@ export interface BattlefieldParticipant {
   bossPhaseAbilities?: string[];
   bossTargetPriority?: string;
   bossEnvironmentEffects?: string[];
+  moraleState?: any;
 }
 
 export interface DynamicHazardZone {
@@ -425,8 +426,12 @@ export interface TacticalCombatStateExport {
   spellRuntimeState?: ReturnType<SpellRuntime['exportState']>;
   combatEffectEvents?: CombatEventRecord[];
   combatActionSequence?: number;
+  destructibleObjects?: DestructibleEnvironmentObject[];
+  combatReplayRecords?: CombatReplayRecord[];
+  moraleStates?: unknown;
   bossPhaseStates?: Array<{ bossId: string; phaseId: string; modifiers: Record<string, number>; abilities: string[]; targetPriority?: string; environmentEffects: string[] }>;
   conditionEngineState?: ReturnType<ConditionEngine['exportState']>;
+  progressionResolutions?: Record<string, any>;
 }
 
 export interface ProjectedCombatState {
@@ -1379,6 +1384,9 @@ export class TacticalCombatEngine {
     }
 
     // Movement legality is centralized in ConditionEngine blocksActions semantics.
+    if (this.conditionEngine?.isActionBlocked(actorId, 'MOVEMENT') || actor.conditions.includes('Grappled') || actor.conditions.includes('Restrained') || actor.conditions.includes('Paralyzed') || actor.conditions.includes('Petrified') || actor.conditions.includes('Stunned') || Boolean(actor.grappledBy)) {
+      return { success: false, errorReason: 'Actor is blocked from movement by an active condition.' };
+    }
 
     // DEF-CH8-03: Enforce canonical map boundaries if configured
     if (this.mapBounds) {
@@ -2751,6 +2759,7 @@ export class TacticalCombatEngine {
       hitLocationMode?: CombatEffectDefinition['hitLocationMode'];
       targetBodyRegionId?: BodyRegionId;
       forcedMovement?: CombatForcedMovementDefinition;
+      attackBonusOverride?: number;
     }
   ): {
     success: boolean;
@@ -2981,7 +2990,9 @@ export class TacticalCombatEngine {
         damageRoll: damageRoll.roll, damage: resolved.damage, finalDamage: resolved.damage,
         metadata: { damageType: params.damageType || 'force', defense: { immune: resolved.immune, resisted: resolved.resisted, vulnerable: resolved.vulnerable } },
       });
-      this.processConditionCombatEvent(target.id, 'ON_SAVE', save.succeeds ? 'save_success' : 'save_failure');
+      if (resolved.damage > 0) {
+        this.processConditionCombatEvent(target.id, 'ON_DAMAGE', 'area_damage');
+      }
 
       this.eventLog.push({
         turnNumber: this.currentRound, actorId: params.actorId, targetId: target.id, actionType: 'CAST',
@@ -3956,6 +3967,13 @@ export class TacticalCombatEngine {
 
   public exportState(): TacticalCombatStateExport {
     const canonicalParticipants = Array.from(this.participants.values()).map((participant) => JSON.parse(JSON.stringify(participant)));
+    const progressionResolutions: Record<string, any> = {};
+    if (this.progressionModifierResolver) {
+      for (const p of this.participants.values()) {
+        const resolution = this.progressionModifierResolver(p.id);
+        if (resolution) progressionResolutions[p.id] = JSON.parse(JSON.stringify(resolution));
+      }
+    }
     return {
       participants: canonicalParticipants,
       hazards: this.getHazards(),
@@ -3978,6 +3996,7 @@ export class TacticalCombatEngine {
       moraleStates: this.moraleEngine.exportState(),
       bossPhaseStates: Array.from(this.bossPhaseStates.entries()).map(([bossId, state]) => ({ bossId, ...state })),
       conditionEngineState: this.conditionEngine?.exportState(),
+      progressionResolutions: Object.keys(progressionResolutions).length > 0 ? progressionResolutions : undefined,
     };
   }
 
@@ -4059,7 +4078,7 @@ export class TacticalCombatEngine {
     }
     this.combatEffectEvents = [...(data.combatEffectEvents || [])];
     this.combatReplayRecords = [...(data.combatReplayRecords || [])].slice(-100);
-    this.moraleEngine.importState(data.moraleStates || []);
+    this.moraleEngine.importState((data.moraleStates as any) || []);
     for (const participant of this.participants.values()) {
       participant.moraleState = this.moraleEngine.get(participant.id);
     }
@@ -4082,6 +4101,10 @@ export class TacticalCombatEngine {
         participant.bossTargetPriority = state.targetPriority;
         participant.bossEnvironmentEffects = Array.isArray(state.environmentEffects) ? [...state.environmentEffects] : [];
       }
+    }
+    if (data.progressionResolutions) {
+      const resolutions = { ...data.progressionResolutions };
+      this.setProgressionModifierResolver((actorId) => resolutions[actorId]);
     }
   }
 }

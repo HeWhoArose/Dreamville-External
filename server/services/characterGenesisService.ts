@@ -28,6 +28,7 @@ import {
   CharacterConditionInstance,
   CharacterStartingConditionState,
   CharacterProgressionCustomModule,
+  CombatEffectDefinition,
 } from '../../src/types';
 import { CharacterProgressionEngine } from '../domain/characterProgressionEngine';
 import { normalizeDiceFormula } from '../../src/data/rulesDice';
@@ -1691,7 +1692,7 @@ Provide at least one useful feature.
       };
     });
 
-    if (features.every((feature) => (feature.passiveModifiers || []).length === 0)) {
+    if (features.every((feature: any) => (feature.passiveModifiers || []).length === 0)) {
       const fallback = features[0];
       const target = input.type === 'CLASS'
         ? 'combat.attackBonus'

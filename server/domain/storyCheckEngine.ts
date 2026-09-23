@@ -270,7 +270,7 @@ export class StoryCheckEngine {
     if (!saveSelection && !profile) return null;
 
     const testType: StoryTestType = challenge?.testType || (saveSelection ? 'SAVING_THROW' : 'ABILITY_CHECK');
-    const ability = saveSelection ? saveSelection.profile.ability : profile!.ability;
+    const ability: StoryCheckAbility = ((challenge?.ability as StoryCheckAbility | undefined) || (saveSelection ? saveSelection.profile.ability : profile?.ability) || 'STR') as StoryCheckAbility;
     const skillName = challenge?.skill || (saveSelection ? 'Saving Throw' : profile!.skill);
     const authoredSkill = !saveSelection
       ? (character.skills || []).find((skill) => skill.name.toLowerCase() === String(skillName).toLowerCase())

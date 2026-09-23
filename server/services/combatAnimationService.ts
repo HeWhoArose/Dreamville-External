@@ -139,7 +139,7 @@ export class CombatAnimationService {
       const allowedConditions = new Set(['ALWAYS', 'HIT', 'MISS', 'CRITICAL']);
       const tracks = rawTracks
         .map((track: any, index: number) => ({
-          id: typeof track?.id === 'string' && track.id.trim() ? track.id.trim().slice(0, 80) : `track_${definition.id}_${index}`,
+          id: typeof track?.id === 'string' && track.id.trim() ? track.id.trim().slice(0, 80) : `track_${params.definition.id}_${index}`,
           trigger: allowedTriggers.has(String(track?.trigger)) ? String(track.trigger) as any : 'INSTANCE',
           visual: typeof track?.visual === 'string' && track.visual.trim() ? track.visual.trim().slice(0, 120) : composition,
           instanceIndex: Number.isFinite(Number(track?.instanceIndex)) ? Math.max(0, Math.min(49, Math.trunc(Number(track.instanceIndex)))) : undefined,

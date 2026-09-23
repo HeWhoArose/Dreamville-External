@@ -3271,7 +3271,7 @@ gameRouter.post('/combat/effect', async (req: Request, res: Response) => {
               success: true,
               totalDamage: 0,
               defeatedTargetIds: [...((effectResult as any).affectedEntityIds || [])],
-              instanceCount: effectResult.instances?.length || 0,
+              instanceCount: 'instances' in effectResult ? (effectResult.instances?.length || 0) : 0,
             },
             consumeAction: effectDefinition.actionCost !== 'FREE',
             replayMode: 'WORLD_PREVIEW',
@@ -3279,7 +3279,8 @@ gameRouter.post('/combat/effect', async (req: Request, res: Response) => {
           });
         }
 
-        for (const result of effectResult.instances || []) {
+        const effectInstances = 'instances' in effectResult ? (effectResult.instances || []) : [];
+        for (const result of effectInstances) {
           if (result.targetDied && result.targetId !== actorId) {
             const target = transactionCombat.getParticipant(result.targetId);
             if (target) {

@@ -726,7 +726,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
       const conditionState = result.conditionState;
       setDraft((prev) => {
         if (!prev) return prev;
-        const conditions = Array.from(new Set(conditionState.instances.map((instance: any) => String(instance.name))));
+        const conditions = Array.from(new Set<string>(conditionState.instances.map((instance: any) => String(instance.name))));
         return {
           ...prev,
           conditionState,

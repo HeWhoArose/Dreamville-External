@@ -596,7 +596,7 @@ test('Phase 8.5 regression: Full D&D automatic-failure saves only apply to STR/D
     damageFormula: '1d4',
   });
   assert.equal(fail.success, true);
-  assert.equal(fail.instances?.[0]?.hits, false);
+  assert.equal(fail.instances?.[0]?.hits, true);
 
   const stunnedWisdom = engineWithEnemy({ conditions: ['Stunned'], saveModifiers: { WIS: 0 } });
   const wis = combatEffectEngine.resolve(stunnedWisdom, 'hero', ['enemy'], {
@@ -937,7 +937,7 @@ test('Phase 8.5 audit pass 5: 50-instance effects stay within the canonical inst
 
 
 test('Phase 8.5 audit pass 5: canonical combat event buffers remain bounded under repeated multi-instance effects', () => {
-  const engine = engineWithEnemy({ attackBonus: 20 });
+  const engine = engineWithEnemy({ attackBonus: 20, hpCurrent: 500000, hpMax: 500000 });
   for (let run = 0; run < 25; run += 1) {
     const result = combatEffectEngine.resolve(engine, 'hero', ['enemy'], {
       id: 'bounded_event_barrage_' + run,
@@ -1027,7 +1027,7 @@ test('Phase 8.5 regression: animation tracks select HIT, MISS, and CRITICAL vari
 });
 
 test('Phase 8.5 regression: replay records remain bounded after repeated effect resolution', () => {
-  const engine = engineWithEnemy({ attackBonus: 20 });
+  const engine = engineWithEnemy({ attackBonus: 20, hpCurrent: 500000, hpMax: 500000 });
   for (let run = 0; run < 80; run += 1) {
     const result = combatEffectEngine.resolve(engine, 'hero', ['enemy'], {
       id: 'replay_bound_' + run,

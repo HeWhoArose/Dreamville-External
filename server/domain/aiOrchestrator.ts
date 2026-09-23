@@ -18,6 +18,7 @@ export type TaskId =
   | 'speech.generate'
   | 'speech.transcribe'
   | 'combat.tactics'
+  | 'combat.animation.plan'
   | 'narrative.review'
   | 'utility.inspect'
   | 'image.generate';

@@ -178,6 +178,28 @@ export interface StoryCheckModifierSource {
   kind: 'ABILITY' | 'PROFICIENCY' | 'EXPERTISE' | 'CONTEXT' | 'CUSTOM_RULE' | 'OTHER';
 }
 
+export interface StoryCheckChallenge {
+  id: string;
+  label: string;
+  sourceType?: 'CAPABILITY' | 'HAZARD' | 'EVENT' | 'SCENE' | 'RULE' | string;
+  sourceId?: string;
+  keywords: string[];
+  difficultyClass: number;
+  testType?: StoryTestType;
+  rollFormula?: string;
+  ability?: StoryCheckAbility;
+  savingThrowAbility?: StoryCheckAbility;
+  skill?: string;
+  resolutionMode?: 'DND_STANDARD' | 'CUSTOM_D20' | 'NARRATIVE';
+  customModifier?: number;
+  reason?: string;
+  triggerReason?: string;
+  provenance?: string;
+  onSuccess?: StoryCheckOutcomeDefinition;
+  onFailure?: StoryCheckOutcomeDefinition;
+  [key: string]: unknown;
+}
+
 export interface StoryCheckChallengeCondition {
   definitionIdOrName: string;
   intensity?: number;
@@ -869,7 +891,52 @@ export interface BattlefieldParticipant {
   immunities?: string[];
   vulnerabilities?: string[];
   cover?: 'NONE' | 'HALF' | 'THREE_QUARTERS' | 'TOTAL';
+  initiativeModifier?: number;
+  saveModifiers?: Record<string, number>;
+  savingThrowModifiers?: Record<string, number>;
+  reachCells?: number;
+  spellAttackBonus?: number;
+  spellSaveDc?: number;
+  grappledBy?: string;
+  damageProfile?: CharacterDamageProfile;
+  conditionProfile?: CharacterConditionProfile;
+  moraleState?: CombatMoraleState;
+  spellSlots?: Record<number, { current: number; max: number }>;
+  knownSpells?: string[];
+  preparedSpells?: string[];
+  activeConcentration?: ActiveConcentration | null;
 }
+
+export interface ActiveConcentration {
+  spellId: string;
+  spellName: string;
+  slotLevel: number;
+  castAtRound: number;
+  castAtTurn: number;
+  durationRounds: number;
+  remainingRounds: number;
+  casterId: string;
+  targetIds: string[];
+  appliedConditions: Array<{ targetId: string; condition: string; conditionInstanceId?: string }>;
+  effects?: Record<string, unknown>;
+}
+
+export interface PendingActivationState {
+  activationId: string;
+  actorId: string;
+  capabilityId: string;
+  activationMode: 'charged' | 'channelled';
+  targetId?: string;
+  requestedScale?: 'Local' | 'Moderate' | 'WorldScale';
+  remainingTurns: number;
+  totalTurnsRequired: number;
+  isInterruptible: boolean;
+  channelSustainedTurns: number;
+  startedAtRound: number;
+  context?: Record<string, unknown>;
+}
+
+export type DestructibleCombatObject = DestructibleEnvironmentObject;
 
 export interface DynamicHazardZone {
   id: string;
@@ -2417,6 +2484,31 @@ export interface CombatEventRecord {
 	finalDamage?: number;
 	isCritical?: boolean;
 	metadata?: Record<string, unknown>;
+}
+
+export interface TacticalCombatStateExport {
+	participants: BattlefieldParticipant[];
+	hazards: DynamicHazardZone[];
+	obstacles?: { x: number; y: number; isImpassable?: boolean }[];
+	mapBounds?: { minX: number; maxX: number; minY: number; maxY: number };
+	turnQueue: string[];
+	currentTurnIndex: number;
+	currentRound: number;
+	eventLog: BattleEvent[];
+	pendingActivations?: PendingActivationState[];
+	turnResources?: CombatTurnResourceSnapshot[];
+	seed?: number;
+	rollCounter?: number;
+	rulesProfile?: RulesProfile;
+	spellRuntimeState?: any;
+	combatEffectEvents?: CombatEventRecord[];
+	combatActionSequence?: number;
+	destructibleObjects?: DestructibleCombatObject[];
+	combatReplayRecords?: CombatReplayRecord[];
+	moraleStates?: any;
+	bossPhaseStates?: Array<{ bossId: string; phaseId: string; modifiers: Record<string, number>; abilities: string[]; targetPriority?: string; environmentEffects: string[] }>;
+	conditionEngineState?: any;
+	progressionResolutions?: Record<string, any>;
 }
 
 export interface CombatReplayRecord {

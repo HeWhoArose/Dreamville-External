@@ -3,6 +3,7 @@ import type {
   CombatEffectResult,
   CombatAttackInstanceResult,
 } from '../../src/types';
+export type { CombatEffectResult, CombatAttackInstanceResult };
 import { isDiceFormula, normalizeDiceFormula, resolveCapabilityCheckFormula } from '../../src/data/rulesDice';
 import { TacticalCombatEngine } from './combatEngine';
 import { combatTargetingEngine } from './combatTargetingEngine';
@@ -34,12 +35,6 @@ export class CombatEffectEngine {
     if (normalized.resolutionMode === 'MULTI_INSTANCE' && !normalized.instanceCount) {
       return { success: false, errorReason: 'MULTI_INSTANCE effects require instanceCount between 1 and 50.' };
     }
-    if (normalized.resolutionMode === 'SINGLE_ATTACK' || normalized.resolutionMode === 'MULTI_INSTANCE' || normalized.resolutionMode === 'CHAIN') {
-      normalized.attackFormula = resolveCapabilityCheckFormula(rulesMode as any, normalized.attackFormula);
-    }
-    if (normalized.resolutionMode === 'SAVE' || normalized.resolutionMode === 'AREA') {
-      normalized.saveFormula = resolveCapabilityCheckFormula(rulesMode as any, normalized.saveFormula);
-    }
     if (normalized.damageFormula !== undefined) {
       if (!isDiceFormula(normalized.damageFormula)) {
         return { success: false, errorReason: `Invalid or unsafe damage formula '${normalized.damageFormula}'.` };
@@ -51,12 +46,16 @@ export class CombatEffectEngine {
         return { success: false, errorReason: `Invalid or unsafe attack formula '${normalized.attackFormula}'.` };
       }
       normalized.attackFormula = resolveCapabilityCheckFormula(rulesMode as any, normalized.attackFormula);
+    } else if (normalized.resolutionMode === 'SINGLE_ATTACK' || normalized.resolutionMode === 'MULTI_INSTANCE' || normalized.resolutionMode === 'CHAIN') {
+      normalized.attackFormula = resolveCapabilityCheckFormula(rulesMode as any, undefined);
     }
     if (normalized.saveFormula !== undefined) {
       if (!isDiceFormula(normalized.saveFormula)) {
         return { success: false, errorReason: `Invalid or unsafe save formula '${normalized.saveFormula}'.` };
       }
       normalized.saveFormula = resolveCapabilityCheckFormula(rulesMode as any, normalized.saveFormula);
+    } else if (normalized.resolutionMode === 'SAVE' || normalized.resolutionMode === 'AREA') {
+      normalized.saveFormula = resolveCapabilityCheckFormula(rulesMode as any, undefined);
     }
     if (normalized.executionFormula !== undefined) {
       if (!isDiceFormula(normalized.executionFormula)) {

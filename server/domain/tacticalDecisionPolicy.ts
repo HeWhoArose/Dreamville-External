@@ -2,7 +2,7 @@ import type { RulesProfile, CombatEffectDefinition } from '../../src/types';
 import { BattlefieldParticipant, CombatPerceptionOptions, DynamicHazardZone, TacticalCombatEngine } from './combatEngine';
 import { rulesProfileEngine } from './rulesProfileEngine';
 import { CapabilityEngine } from './capabilityEngine';
-import { combatEffectEngine } from './combatEffectEngine';
+import { combatEffectEngine, type CombatEffectResult } from './combatEffectEngine';
 
 export type TacticalActionType = 'MOVE' | 'ATTACK' | 'CAST' | 'RETREAT' | 'DEFEND_ALLY' | 'END_TURN';
 
@@ -39,7 +39,7 @@ export interface TacticalExecutionResult {
   success: boolean;
   proposal: TacticalActionProposal;
   errorReason?: string;
-  combatOutcome?: Record<string, unknown>;
+  combatOutcome?: Record<string, unknown> | CombatEffectResult;
 }
 
 /**

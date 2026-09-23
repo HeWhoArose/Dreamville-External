@@ -55,6 +55,8 @@ export interface WorldRepository {
   getWorldClock(storyId: string): WorldClock;
   getGeographyGraph(storyId?: string): GeographyGraph;
   seedStory(storyId: string): void;
+  getStoryThreads(storyId: string): any[];
+  saveStoryThread(thread: any): void;
   getKnowledgeFacts(storyId: string): KnowledgeFact[];
   addKnowledgeFact(storyId: string, fact: KnowledgeFact): void;
   getHistoricalChronicleEngine(storyId: string): HistoricalChronicleEngine;

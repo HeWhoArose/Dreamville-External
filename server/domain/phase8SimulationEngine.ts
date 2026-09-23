@@ -30,7 +30,17 @@ export class Phase8SimulationEngine {
 	public load(repository: InMemoryWorldRepository, storyId: string): Phase8RuntimeState {
 		const run = repository.getStoryRun(storyId) as any;
 		const existing = run?.runtimeState?.phase8;
-		if (existing) return JSON.parse(JSON.stringify(existing));
+		if (existing) return {
+			schemaVersion: 1,
+			facilities: existing.facilities || {},
+			npcs: existing.npcs || {},
+			situations: existing.situations || {},
+			knowledge: existing.knowledge || {},
+			causal: existing.causal || this.causal.create(),
+			consequences: existing.consequences || this.consequence.create(),
+			scheduledEvents: existing.scheduledEvents || [],
+			evidence: existing.evidence || {},
+		};
 		return { schemaVersion: 1, facilities: {}, npcs: {}, situations: {}, knowledge: {}, causal: this.causal.create(), consequences: this.consequence.create(), scheduledEvents: [], evidence: {} };
 	}
 
@@ -112,12 +122,60 @@ export class Phase8SimulationEngine {
 				const activeDevices = Object.values(facility.devices).filter((d) => d.active);
 				for (const device of activeDevices) {
 					const detection = this.facility.detectDevice(facility, device.id, event.timestampSeconds);
-					if (detection.alarmRaised && detection.zoneId) {
-						const zone = facility.securityZones[detection.zoneId];
-						zone.alarmState = 'ALERT';
-					}
+					if (detection.alarmRaised && detection.zoneId) facility.securityZones[detection.zoneId].alarmState = 'ALERT';
 				}
 			}
+		}
+		if (event.type === 'MISSION_STATE_CHANGED') {
+			const situationId = String(payload.situationId || '');
+			const situation = state.situations[situationId];
+			if (situation && payload.objectiveId) this.situation.completeObjective(situation, String(payload.objectiveId));
+			if (situation && payload.outcomeId) this.situation.resolve(situation, String(payload.outcomeId), event.eventId, event.timestampSeconds);
+		}
+		if (event.type === 'FACT_CHANGED' && event.actorId && payload.factId && payload.evidenceId && payload.knowledgeAcquisitionSuccess === true) {
+			const knowledge = state.knowledge[event.actorId] || this.knowledge.createState(event.actorId);
+			state.knowledge[event.actorId] = knowledge;
+			this.knowledge.acquire(knowledge, {
+				id: String(payload.factId),
+				subjectEntityId: String(payload.subjectEntityId || event.actorId),
+				predicate: String(payload.predicate || 'fact'),
+				objectValue: String(payload.objectValue || 'true'),
+				status: 'KNOWN',
+				confidence: Number(payload.confidence ?? 1),
+				sourceEvidenceIds: [String(payload.evidenceId)],
+				acquiredAtSeconds: event.timestampSeconds,
+			}, {
+				actorId: event.actorId,
+				factId: String(payload.factId),
+				evidenceId: String(payload.evidenceId),
+				method: (payload.method as any) || 'SYSTEM',
+				success: true,
+				confidence: Number(payload.confidence ?? 1),
+				nowSeconds: event.timestampSeconds,
+			});
+		}
+		if (payload.causalFromId && payload.causalToId && payload.causalRelation) {
+			this.causal.upsertNode(state.causal, { id: String(payload.causalFromId), kind: String(payload.causalFromKind || 'ENTITY'), label: String(payload.causalFromId), metadata: {} });
+			this.causal.upsertNode(state.causal, { id: String(payload.causalToId), kind: String(payload.causalToKind || 'ENTITY'), label: String(payload.causalToId), metadata: {} });
+			this.causal.addEdge(state.causal, {
+				id: event.eventId + ':causal',
+				fromId: String(payload.causalFromId),
+				toId: String(payload.causalToId),
+				relation: String(payload.causalRelation) as any,
+				eventId: event.eventId,
+				timestampSeconds: event.timestampSeconds,
+				confidence: Number(payload.causalConfidence ?? 1),
+				metadata: {},
+			});
+		}
+		if (payload.relationshipActorId && payload.relationshipTargetId) {
+			this.consequence.applyDelta(state.consequences, event.eventId, String(payload.relationshipActorId), String(payload.relationshipTargetId), {
+				trust: Number(payload.trustDelta || 0),
+				affinity: Number(payload.affinityDelta || 0),
+				fear: Number(payload.fearDelta || 0),
+				respect: Number(payload.respectDelta || 0),
+				hostility: Number(payload.hostilityDelta || 0),
+			}, Array.isArray(payload.evidenceIds) ? payload.evidenceIds.map(String) : [], String(payload.relationshipDescription || 'Canonical event changed relationship.'), event.timestampSeconds);
 		}
 		this.save(repository, storyId, state);
 		return state;

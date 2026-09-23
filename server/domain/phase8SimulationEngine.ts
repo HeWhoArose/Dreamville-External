@@ -113,9 +113,28 @@ export class Phase8SimulationEngine {
 				});
 				break;
 			}
-			case 'APPLY_DAMAGE':
-			case 'MODIFY_RESOURCE':
-				throw new Error('Rule effect ' + effect.type + ' requires an authoritative combat/resource adapter.');
+			case 'APPLY_DAMAGE': {
+				const actorId = effect.target === 'EVENT_TARGET' ? undefined : effect.actorId;
+				const targetId = actorId || effect.target === 'EVENT_ACTOR' ? (effect.target === 'EVENT_TARGET' ? undefined : actorId) : undefined;
+				const participantId = effect.target === 'EVENT_TARGET' ? undefined : targetId;
+				const combat = repository.getCombatEngine(storyId);
+				const participant = participantId ? combat.getParticipant(participantId) : undefined;
+				if (!participant) throw new Error('APPLY_DAMAGE requires an active combat participant target.');
+				const hpCurrent = Math.max(0, participant.hpCurrent - Math.max(0, effect.amount));
+				combat.updateParticipant(participant.id, { hpCurrent, isDead: hpCurrent <= 0 });
+				break;
+			}
+			case 'MODIFY_RESOURCE': {
+				const actorId = effect.actorId;
+				if (!actorId) throw new Error('MODIFY_RESOURCE requires actorId.');
+				const combat = repository.getCombatEngine(storyId);
+				const participant = combat.getParticipant(actorId);
+				if (!participant) throw new Error('MODIFY_RESOURCE requires an active combat participant.');
+				const resources = { ...(participant.combatResources || {}) };
+				resources[effect.resourceId] = Math.max(0, (resources[effect.resourceId] || 0) + effect.amount);
+				combat.updateParticipant(actorId, { combatResources: resources });
+				break;
+			}
 			default:
 				break;
 		}

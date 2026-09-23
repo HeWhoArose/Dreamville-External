@@ -478,6 +478,12 @@ export class CanonicalCommandEngine {
 				},
 			});
 			if (!customRuleResult.success) {
+				if (command.transactionMode !== 'STAGED') {
+					transactionalRepository.rollbackCanonicalCommandTransaction(command.storyId);
+					repository.restoreCanonicalStateSnapshot(before);
+				} else {
+					transactionalRepository.rollbackCanonicalCommandTransaction(command.storyId);
+				}
 				return {
 					success: false,
 					commandId: command.commandId,

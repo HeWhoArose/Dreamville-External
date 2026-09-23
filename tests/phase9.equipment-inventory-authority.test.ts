@@ -571,7 +571,7 @@ test('Phase 9: custom-rule rejection rolls back live inventory mutations', async
 			name: 'Reject Every Use',
 			version: 1,
 			enabled: true,
-			priority: 100,
+			priority: Number.NaN,
 			scope: 'ACTOR',
 			trigger: { event: 'CANONICAL_COMMAND' },
 			conditions: [{

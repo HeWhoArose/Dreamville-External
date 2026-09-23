@@ -796,7 +796,20 @@ export class InventoryItemEngine {
     const def = this.itemDefinitions.get(item.defId);
     if (!def) return { success: false, errorReason: "Item definition '" + item.defId + "' not found." };
 
+    const isConsumable = Boolean(
+      def.consumption ||
+      def.maxCharges !== undefined ||
+      def.tags.some((tag) => tag.toLowerCase() === 'consumable') ||
+      ['Potion', 'Food', 'Scroll'].includes(def.category)
+    );
+    if (!isConsumable) {
+      return { success: false, errorReason: "Item is not consumable under its server-authored definition." };
+    }
+
     const mode = def.consumption?.mode || (def.maxCharges !== undefined ? "CHARGE" : "QUANTITY");
+    if (item.equippedSlot && mode !== 'CHARGE') {
+      return { success: false, errorReason: "Unequip the item before consuming it." };
+    }
     const configuredAmount = Math.max(1, Math.trunc(def.consumption?.amount || 1));
     const consumeAmount = Math.max(1, Math.trunc(amount * configuredAmount));
 
@@ -1061,8 +1074,27 @@ export class InventoryItemEngine {
       }
     }
     if (Array.isArray(state.itemInstances)) {
-      for (const inst of state.itemInstances) {
-        this.itemInstances.set(inst.id, JSON.parse(JSON.stringify(inst)));
+      for (const raw of state.itemInstances) {
+        if (!raw?.id || !raw?.defId) continue;
+        const def = this.itemDefinitions.get(raw.defId);
+        const inst: ItemInstance = {
+          ...JSON.parse(JSON.stringify(raw)),
+          quantity: Math.max(1, Math.trunc(Number(raw.quantity ?? 1) || 1)),
+          equippedSlot: raw.equippedSlot ? normalizeEquipmentSlot(String(raw.equippedSlot)) || null : null,
+          charges:
+            raw.charges !== undefined
+              ? Math.max(0, Math.trunc(Number(raw.charges) || 0))
+              : typeof def?.maxCharges === 'number'
+                ? Math.max(0, Math.trunc(def.maxCharges))
+                : undefined,
+          maxCharges:
+            raw.maxCharges !== undefined
+              ? Math.max(0, Math.trunc(Number(raw.maxCharges) || 0))
+              : typeof def?.maxCharges === 'number'
+                ? Math.max(0, Math.trunc(def.maxCharges))
+                : undefined,
+        };
+        this.itemInstances.set(inst.id, inst);
       }
     }
     if (Array.isArray(state.recipes)) {

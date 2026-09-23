@@ -146,8 +146,11 @@ export class CustomRuleEngine {
 				itemRules.push(...inventory.getCustomRulesForItem(item.id));
 			}
 		}
-		const commandItemRules = Array.isArray(event.payload?.command?.itemCustomRules)
-			? event.payload.command.itemCustomRules
+		const commandPayload = event.payload?.command && typeof event.payload.command === 'object'
+			? event.payload.command as Record<string, unknown>
+			: {};
+		const commandItemRules = Array.isArray(commandPayload.itemCustomRules)
+			? commandPayload.itemCustomRules as CustomRuleDefinition[]
 			: [];
 		const byId = new Map<string, CustomRuleDefinition>();
 		for (const rule of [...worldRules, ...protagonistRules, ...characterRules, ...itemRules, ...commandItemRules]) {
@@ -213,14 +216,21 @@ export class CustomRuleEngine {
 				const key = event.actorId && event.targetId ? `${event.actorId}::${event.targetId}` : '';
 				return key ? readPath(state.consequences.relationships[key], condition.path) : undefined;
 			}
-			case 'ITEM':
+			case 'ITEM': {
+				const commandPayload = event.payload?.command && typeof event.payload.command === 'object'
+					? event.payload.command as Record<string, unknown>
+					: {};
+				const resultPayload = event.payload?.result && typeof event.payload.result === 'object'
+					? event.payload.result as Record<string, unknown>
+					: {};
 				return readPath(
 					event.payload?.items ??
-					event.payload?.command?.item ??
-					event.payload?.result?.itemBefore ??
-					event.payload?.result?.definition,
+					commandPayload.item ??
+					resultPayload.itemBefore ??
+					resultPayload.definition,
 					condition.path
 				);
+			}
 			case 'LOCATION_STATE': {
 				const state = phase8SimulationEngine.load(repository, event.storyId);
 				const facility = event.locationId ? state.facilities[event.locationId] : undefined;

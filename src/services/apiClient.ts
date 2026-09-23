@@ -302,6 +302,73 @@ class ApiClient {
   }
 
   /**
+   * Consumes a server-authoritative item quantity or charge.
+   * POST /api/game/inventory/consume
+   */
+  public async consumeItem(itemId: string, amount = 1): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/inventory/consume`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({ itemId, amount }),
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => null);
+      throw new Error(errorData?.errorReason || errorData?.error || `Consume failed with HTTP ${res.status}`);
+    }
+
+    return await res.json();
+  }
+
+  /**
+   * Permanently destroys an item through canonical server authority.
+   * POST /api/game/inventory/destroy
+   */
+  public async destroyItem(itemId: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/inventory/destroy`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({ itemId }),
+    });
+
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => null);
+      throw new Error(errorData?.errorReason || errorData?.error || `Destroy failed with HTTP ${res.status}`);
+    }
+
+    return await res.json();
+  }
+
+  /**
+   * Resolves deterministic modifiers contributed by currently equipped items.
+   * GET /api/game/inventory/modifiers
+   */
+  public async getEquipmentModifiers(): Promise<{
+    actorId: string;
+    modifiers: any[];
+    sourceTrace: Record<string, any[]>;
+  }> {
+    const res = await fetch(`${this.baseUrl}/inventory/modifiers`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+      },
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to fetch equipment modifiers: HTTP ${res.status}`);
+    }
+
+    return await res.json();
+  }
+
+  /**
    * Fetches available crafting recipes (CH5).
    * GET /api/game/inventory/recipes
    */

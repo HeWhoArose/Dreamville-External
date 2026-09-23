@@ -111,15 +111,15 @@ export function getEquipmentClass(item: EquipmentMetadataSource): EquipmentClass
 	) return 'WEAPON';
 	if (category === 'SHIELD' || name.includes('shield')) return 'SHIELD';
 	if (
-		category === 'ARMOR' ||
-		['cuirass', 'plate', 'robes', 'helmet', 'armor', 'boots', 'gloves', 'gauntlet', 'belt'].some((word) => name.includes(word))
-	) return 'ARMOR';
-	if (
 		category === 'ACCESSORY' ||
 		category === 'RING' ||
 		category === 'AMULET' ||
 		['ring', 'amulet', 'cloak', 'necklace', 'pendant', 'cape'].some((word) => name.includes(word))
 	) return 'ACCESSORY';
+	if (
+		category === 'ARMOR' ||
+		['cuirass', 'plate', 'robes', 'helmet', 'armor', 'boots', 'gloves', 'gauntlet', 'belt'].some((word) => name.includes(word))
+	) return 'ARMOR';
 	if (category === 'POTION' || ['potion', 'vial', 'elixir'].some((word) => name.includes(word))) return 'POTION';
 	if (category === 'FOOD' || ['apple', 'ration', 'food', 'bread', 'fruit'].some((word) => name.includes(word))) return 'FOOD';
 	if (category === 'CONSUMABLE' || ['candy', 'salve', 'pill', 'scroll'].some((word) => name.includes(word))) return 'CONSUMABLE';

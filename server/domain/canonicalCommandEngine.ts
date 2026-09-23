@@ -446,6 +446,19 @@ export class CanonicalCommandEngine {
 
 			// Custom rules are evaluated inside the same authoritative transaction as the command.
 			// Their mutations therefore become part of the command's canonical post-state hash.
+			const ruleCommandPayload = clone(command.payload) as Record<string, unknown>;
+			// Never trust item rule definitions supplied by the caller. They are discarded from
+			// the command payload and, for USE_ITEM, re-hydrated only from the authoritative
+			// server-side item definition returned by the handler.
+			delete ruleCommandPayload.itemCustomRules;
+			if (command.type === 'USE_ITEM') {
+				const resolvedData = resolved.data as any;
+				const serverRules = resolvedData?.definition?.customRules;
+				if (Array.isArray(serverRules)) {
+					ruleCommandPayload.itemCustomRules = clone(serverRules);
+				}
+			}
+
 			const customRuleResult = await new CustomRuleEngine().evaluate({
 				repository: transactionalRepository,
 				event: {
@@ -458,7 +471,7 @@ export class CanonicalCommandEngine {
 						: resolved.summary,
 					payload: {
 						commandType: command.type,
-						command: clone(command.payload),
+						command: ruleCommandPayload,
 						result: clone(resolved.data),
 					},
 					timestampSeconds: transactionalRepository.getWorldClock(command.storyId).getTimestamp().totalElapsedSeconds,

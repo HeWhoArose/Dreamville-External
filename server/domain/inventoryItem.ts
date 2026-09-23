@@ -861,12 +861,22 @@ export class InventoryItemEngine {
     };
   }
 
-  public destroyItem(itemId: string): { success: boolean; errorReason?: string; destroyedItem?: ItemInstance } {
+  public destroyItem(itemId: string): {
+    success: boolean;
+    errorReason?: string;
+    destroyedItem?: ItemInstance;
+    definition?: ItemDefinition;
+  } {
     const item = this.itemInstances.get(itemId);
     if (!item) return { success: false, errorReason: "Item " + itemId + " not found." };
     const destroyedItem = JSON.parse(JSON.stringify(item));
+    const definition = this.itemDefinitions.get(item.defId);
     this.itemInstances.delete(itemId);
-    return { success: true, destroyedItem };
+    return {
+      success: true,
+      destroyedItem,
+      definition: definition ? JSON.parse(JSON.stringify(definition)) : undefined,
+    };
   }
 
   /**

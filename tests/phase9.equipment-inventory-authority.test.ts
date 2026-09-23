@@ -227,6 +227,40 @@ test('Phase 9: inventory runtime state reloads from Story Run persistence', () =
 	assert.equal(imported.getItemInstance(item.id)?.equippedSlot, 'mainHand');
 });
 
+test('Phase 9: successful canonical equip persists inventory runtime state', async () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'default_story';
+	const actor = repository.getPlayerLifecycle(storyId)!.actorId;
+	const inventory = repository.getInventoryEngine(storyId);
+	const item = inventory.createInstance({
+		defId: 'def_iron_sword',
+		ownerEntityId: actor,
+		provenance: 'TEST',
+	});
+
+	const result = await canonicalCommandEngine.execute(
+		repository,
+		{
+			commandId: 'phase9_persist_equip',
+			storyId,
+			actorId: actor,
+			type: 'EQUIP',
+			payload: { itemId: item.id, slot: 'mainHand' },
+			source: 'PLAYER',
+			transactionMode: 'STAGED',
+		},
+		async (_command, context) => {
+			const result = context.repository.getInventoryEngine(storyId).equipItem(actor, item.id, 'mainHand');
+			return result.success
+				? { success: true, data: result, summary: 'Equipped Phase 9 persistence fixture.' }
+				: { success: false, errorReason: result.errorReason };
+		}
+	);
+
+	assert.equal(result.success, true);
+	assert.equal(repository.getStoryRun(storyId)?.runtimeState?.inventory?.itemInstances?.find((entry: any) => entry.id === item.id)?.equippedSlot, 'mainHand');
+});
+
 test('Phase 9: staged inventory mutations roll back without leaking to live state', async () => {
 	const repository = new InMemoryWorldRepository({ disablePersistence: true });
 	const storyId = 'default_story';
@@ -298,7 +332,7 @@ test('Phase 9: equipment custom rules are server-defined and execute through can
 				key: 'phase9_item_consumed',
 				amount: 1,
 			}],
-			provenance: 'ITEM_DEFINITION',
+			provenance: 'SYSTEM_DERIVED',
 		}],
 	});
 
@@ -361,6 +395,68 @@ test('Phase 9: equipment modifiers feed the authoritative combat projection', ()
 		isDead: false,
 	});
 	assert.equal(combat.getParticipant(actor)?.attackBonus, 4);
+});
+
+test('Phase 9: item custom rules survive authoritative destruction resolution', async () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'default_story';
+	const actor = repository.getPlayerLifecycle(storyId)!.actorId;
+	const inventory = repository.getInventoryEngine(storyId);
+	inventory.registerDefinition({
+		id: 'phase9_rule_destroy',
+		name: 'Rulebound Token',
+		category: 'Miscellaneous',
+		rarity: 'Rare',
+		description: 'A destruction-rule fixture.',
+		weightKg: 0.1,
+		baseValueGold: 5,
+		maxDurability: 1,
+		tags: ['quest'],
+		properties: {},
+		customRules: [{
+			id: 'phase9_item_destroyed',
+			name: 'Track Destruction',
+			version: 1,
+			enabled: true,
+			priority: 90,
+			scope: 'ACTOR',
+			trigger: { event: 'CANONICAL_COMMAND' },
+			conditions: [{
+				source: 'EVENT',
+				path: 'payload.commandType',
+				operator: 'EQ',
+				value: 'USE_ITEM',
+			}],
+			effects: [{ type: 'INCREMENT_RULE_STATE', key: 'phase9_item_destroyed', amount: 1 }],
+			provenance: 'SYSTEM_DERIVED',
+		}],
+	});
+	const item = inventory.createInstance({
+		defId: 'phase9_rule_destroy',
+		ownerEntityId: actor,
+		provenance: 'TEST',
+	});
+
+	const result = await canonicalCommandEngine.execute(
+		repository,
+		{
+			commandId: 'phase9_destroy_rule',
+			storyId,
+			actorId: actor,
+			type: 'USE_ITEM',
+			payload: { itemId: item.id, destroy: true },
+			source: 'PLAYER',
+			transactionMode: 'STAGED',
+		},
+		async (_command, context) => ({
+			success: true,
+			data: context.repository.getInventoryEngine(storyId).destroyItem(item.id),
+			summary: 'Destroyed Phase 9 test item.',
+		})
+	);
+
+	assert.equal(result.success, true);
+	assert.equal(repository.getStoryRun(storyId)?.runtimeState?.customRules?.counters?.phase9_item_destroyed, 1);
 });
 
 test('Phase 9: client-supplied item rules cannot become authoritative custom rules', async () => {

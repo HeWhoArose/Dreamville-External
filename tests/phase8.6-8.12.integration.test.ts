@@ -36,3 +36,81 @@ describe('Phase 8.6-8.12 regression and fallback contracts', () => {
 		const e=new ConsequenceEngine(); const s=e.create(); const r=e.applyDelta(s,'evt','npc','player',{trust:-150},['evidence'],'Discovery changed trust',1); assert.equal(r.trust,-100); assert.deepEqual(s.records.evt.evidenceIds,['evidence']);
 	});
 });
+
+
+	it('projects Phase 8 state without leaking hidden facility devices or private NPC motives', () => {
+		const repository = new (require('../server/repositories/worldRepository').InMemoryWorldRepository)({ disablePersistence: true });
+		repository.seedStory('phase8_ui_projection');
+		const phase8 = repository.getPhase8SimulationEngine('phase8_ui_projection');
+		const state = phase8.load(repository, 'phase8_ui_projection');
+		const facility = phase8.facility.createState('facility_alpha');
+		phase8.facility.addNode(facility, { id: 'visible_room', kind: 'ROOM', name: 'Visible Room', hidden: false, state: {} });
+		phase8.facility.addDevice(facility, { id: 'hidden_camera', kind: 'CAMERA', nodeId: 'visible_room', hidden: true, active: true, difficulty: 80, state: {} });
+		state.facilities.facility_alpha = facility;
+
+		const npc = phase8.npc.createState('npc_alpha');
+		npc.goals.push({ id: 'public_goal', description: 'Help the traveler', priority: 50, visibility: 'PUBLIC', active: true });
+		npc.goals.push({ id: 'private_goal', description: 'Steal the artifact', priority: 90, visibility: 'PRIVATE', active: true });
+		npc.secrets = ['private-secret'];
+		state.npcs.npc_alpha = npc;
+		phase8.save(repository, 'phase8_ui_projection', state);
+
+		const player = repository.getPlayerLifecycle('phase8_ui_projection');
+		const projection = phase8.getPlayerProjection(repository, 'phase8_ui_projection', player?.actorId || 'player_actor_phase8_ui_projection') as any;
+		assert.equal(projection.facilities[0].devices.length, 0);
+		assert.equal(projection.npcs[0].goals.some((goal: any) => goal.id === 'private_goal'), false);
+		assert.equal(projection.npcs[0].goals.some((goal: any) => goal.id === 'public_goal'), true);
+	});
+
+	it('records facility discovery so a discovered hidden device becomes player-visible without changing reality', () => {
+		const { InMemoryWorldRepository } = require('../server/repositories/worldRepository');
+		const repository = new InMemoryWorldRepository({ disablePersistence: true });
+		repository.seedStory('phase8_facility_projection');
+		const phase8 = repository.getPhase8SimulationEngine('phase8_facility_projection');
+		const state = phase8.load(repository, 'phase8_facility_projection');
+		const facility = phase8.facility.createState('facility_beta');
+		phase8.facility.addNode(facility, { id: 'room', kind: 'ROOM', name: 'Room', hidden: false, state: {} });
+		phase8.facility.addDevice(facility, { id: 'camera_17', kind: 'CAMERA', nodeId: 'room', hidden: true, active: true, difficulty: 80, state: {} });
+		state.facilities.facility_beta = facility;
+		phase8.save(repository, 'phase8_facility_projection', state);
+
+		const failed = phase8.facility.searchNode(facility, 'room', 20, 10);
+		assert.deepEqual(failed.foundDeviceIds, []);
+		const player = repository.getPlayerLifecycle('phase8_facility_projection');
+		const before = phase8.getPlayerProjection(repository, 'phase8_facility_projection', player?.actorId || 'player_actor_phase8_facility_projection') as any;
+		assert.equal(before.facilities[0].devices.length, 0);
+
+		const found = phase8.facility.searchNode(facility, 'room', 100, 20);
+		assert.deepEqual(found.foundDeviceIds, ['camera_17']);
+		phase8.save(repository, 'phase8_facility_projection', state);
+		const after = phase8.getPlayerProjection(repository, 'phase8_facility_projection', player?.actorId || 'player_actor_phase8_facility_projection') as any;
+		assert.deepEqual(after.facilities[0].devices.map((device: any) => device.id), ['camera_17']);
+	});
+
+	it('does not expose private knowledge or causal edges outside the player-visible projection', () => {
+		const { InMemoryWorldRepository } = require('../server/repositories/worldRepository');
+		const repository = new InMemoryWorldRepository({ disablePersistence: true });
+		repository.seedStory('phase8_epistemic_projection');
+		const phase8 = repository.getPhase8SimulationEngine('phase8_epistemic_projection');
+		const state = phase8.load(repository, 'phase8_epistemic_projection');
+		const player = repository.getPlayerLifecycle('phase8_epistemic_projection');
+		const actorId = player?.actorId || 'player_actor_phase8_epistemic_projection';
+		const knowledge = phase8.knowledge.createState(actorId);
+		state.knowledge[actorId] = knowledge;
+		phase8.knowledge.acquire(
+			knowledge,
+			{ id: 'fact_known', subjectEntityId: 'artifact', predicate: 'exists', objectValue: 'true', status: 'KNOWN', confidence: 1, sourceEvidenceIds: ['evidence_known'], acquiredAtSeconds: 10 },
+			{ actorId, factId: 'fact_known', evidenceId: 'evidence_known', method: 'SEARCH', success: true, confidence: 1, nowSeconds: 10 }
+		);
+		phase8.causal.upsertNode(state.causal, { id: 'artifact', kind: 'ITEM', label: 'Artifact', metadata: {} });
+		phase8.causal.upsertNode(state.causal, { id: 'known_cause', kind: 'EVENT', label: 'Known cause', metadata: {} });
+		phase8.causal.upsertNode(state.causal, { id: 'secret_node', kind: 'EVENT', label: 'Secret', metadata: {} });
+		phase8.causal.addEdge(state.causal, { id: 'known_edge', fromId: 'known_cause', toId: 'artifact', relation: 'DISCOVERED', eventId: 'e1', timestampSeconds: 10, confidence: 1, metadata: {} });
+		phase8.causal.addEdge(state.causal, { id: 'secret_edge', fromId: 'secret_node', toId: 'artifact', relation: 'CAUSED', eventId: 'e2', timestampSeconds: 20, confidence: 1, metadata: {} });
+		phase8.save(repository, 'phase8_epistemic_projection', state);
+
+		const projection = phase8.getPlayerProjection(repository, 'phase8_epistemic_projection', actorId) as any;
+		assert.equal(projection.knowledge.facts.some((fact: any) => fact.id === 'fact_known'), true);
+		assert.equal(projection.causality.edges.some((edge: any) => edge.id === 'secret_edge'), false);
+		assert.equal(projection.causality.edges.some((edge: any) => edge.id === 'known_edge'), true);
+	});

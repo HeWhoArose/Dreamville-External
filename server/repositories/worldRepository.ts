@@ -1037,6 +1037,9 @@ export class InMemoryWorldRepository implements WorldRepository {
              };
 
       this.saveStoryRun(run);
+      // Phase 9: materialize Genesis starting equipment into the canonical inventory
+      // before the Story Run is persisted again. The server owns the resulting instances.
+      this.getInventoryEngine(storyId);
       this.getEntityRegistry(storyId).upsert(EntityRegistry.fromConfirmedCharacter(storyId, char));
       this.persistLibrary();
 
@@ -1444,7 +1447,17 @@ export class InMemoryWorldRepository implements WorldRepository {
       engine = new InventoryItemEngine();
       const player = this.getPlayerLifecycle(storyId);
       const actorId = player ? player.actorId : `player_actor_${storyId}`;
-      engine.seedStarterInventoryForActor(actorId);
+      const run = this.getStoryRun(storyId);
+      const persisted = run?.runtimeState?.inventory;
+
+      if (persisted) {
+        engine.importState(persisted);
+      } else if (run?.protagonist?.startingEquipment) {
+        engine.seedFromGenesisEquipment(actorId, run.protagonist.startingEquipment);
+      } else {
+        engine.seedStarterInventoryForActor(actorId);
+      }
+
       this.inventoryEngines.set(storyId, engine);
     }
     return engine;
@@ -1624,7 +1637,12 @@ export class InMemoryWorldRepository implements WorldRepository {
     engine.setProgressionModifierResolver((actorId) => {
       const progression = this.getCharacterProgressionEngine(storyId);
       if (!progression.getState(actorId)) return undefined;
-      return progression.resolveModifiers(actorId, this.getRulesProfile(storyId));
+      const inventory = this.getInventoryEngine(storyId);
+      return progression.resolveModifiers(
+        actorId,
+        this.getRulesProfile(storyId),
+        inventory.getEquipmentModifiers(actorId)
+      );
     });
     engine.setBossPhaseEvaluationResolver((bossId) => {
       const phases = bossPhaseEngine.getAuthoredPhases(this, storyId, bossId);
@@ -2324,6 +2342,7 @@ export class InMemoryWorldRepository implements WorldRepository {
         ...(this.livingSimulations.has(storyId) ? { livingWorld: this.livingSimulations.get(storyId)!.exportState() } : {}),
         ...(this.restRecoveryEngines.has(storyId) ? { rest: this.restRecoveryEngines.get(storyId)!.exportState() } : {}),
         ...(this.characterProgressionEngines.has(storyId) ? { progression: this.characterProgressionEngines.get(storyId)!.exportState() } : {}),
+        ...(this.inventoryEngines.has(storyId) ? { inventory: this.inventoryEngines.get(storyId)!.exportState() } : {}),
         ...(this.entityRegistries.has(storyId) ? { entities: this.entityRegistries.get(storyId)!.exportState() } : {}),
       };
       if (Object.keys(runtimeState).length > 0) {

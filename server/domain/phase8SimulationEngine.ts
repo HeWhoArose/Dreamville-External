@@ -282,11 +282,17 @@ export class Phase8SimulationEngine {
 		const evidenceIds = new Set(Object.values(playerKnowledge.facts).flatMap((fact) => fact.sourceEvidenceIds || []));
 
 		const facilities = Object.values(state.facilities)
-			.filter((facility) => (
-				facility.facilityId === playerLocationId
-				|| facility.facilityId === run?.worldId
-				|| knownFactIds.has(facility.facilityId)
-			))
+			.filter((facility) => {
+				const discoveredNodes = new Set(facility.discoveredNodeIds || []);
+				const hasVisibleOrDiscoveredNodes = Object.values(facility.nodes).some((node) => !node.hidden || discoveredNodes.has(node.id));
+				return (
+					facility.facilityId === playerLocationId
+					|| facility.facilityId === run?.currentLocationId
+					|| facility.facilityId === run?.worldId
+					|| knownFactIds.has(facility.facilityId)
+					|| hasVisibleOrDiscoveredNodes
+				);
+			})
 			.map((facility) => {
 			const discoveredNodes = new Set(facility.discoveredNodeIds || []);
 			const discoveredDevices = new Set(facility.discoveredDeviceIds || []);

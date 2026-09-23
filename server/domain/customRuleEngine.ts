@@ -292,7 +292,12 @@ export class CustomRuleEngine {
 			case 'APPLY_CONDITION': {
 				const actorId = this.resolveActorId(effect.target, effect.actorId, event);
 				if (!actorId) throw new Error('APPLY_CONDITION could not resolve a target actor.');
-				const result = repository.getConditionEngine(event.storyId).applyCondition(actorId, {
+				const condEngine = repository.getConditionEngine(event.storyId);
+				const def = condEngine.getDefinition(effect.conditionDefinitionId);
+				if (!def) {
+					throw new Error(`Condition definition '${effect.conditionDefinitionId}' not found.`);
+				}
+				const result = condEngine.applyCondition(actorId, {
 					definitionIdOrName: effect.conditionDefinitionId,
 					durationSeconds: effect.durationSeconds,
 					intensity: effect.intensity,

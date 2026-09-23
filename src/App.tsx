@@ -69,6 +69,7 @@ export const App: React.FC = () => {
   const [capabilities, setCapabilities] = useState<CapabilityDefinition[]>([]);
   const [capabilityGraph, setCapabilityGraph] = useState<CapabilityGraphNode[]>([]);
   const [worldTemplates, setWorldTemplates] = useState<WorldTemplate[]>([]);
+  const [phase8Projection, setPhase8Projection] = useState<any | null>(null);
   const [storyLibraryStories, setStoryLibraryStories] = useState<StorySummary[]>([]);
   const [isLoadingStoryLibrary, setIsLoadingStoryLibrary] = useState(false);
   const [storyLibraryError, setStoryLibraryError] = useState<string | null>(null);
@@ -161,12 +162,13 @@ export const App: React.FC = () => {
 
   const fetchAuxiliaryData = async () => {
     try {
-      const [chronicleData, dossierData, recipeData, capData, worldsData] = await Promise.all([
+      const [chronicleData, dossierData, recipeData, capData, worldsData, phase8Data] = await Promise.all([
         apiClient.getChronicle().catch(() => []),
         apiClient.getDossiers().catch(() => []),
         apiClient.getRecipes().catch(() => []),
         apiClient.getCapabilities().catch(() => null),
         apiClient.getWorlds().catch(() => []),
+        apiClient.getPhase8Projection(activeStoryId).catch(() => null),
       ]);
       setChronicleEntries(chronicleData);
       setDossiers(dossierData);
@@ -179,6 +181,7 @@ export const App: React.FC = () => {
       if (worldsData) {
         setWorldTemplates(worldsData);
       }
+      setPhase8Projection(phase8Data);
     } catch (e) {
       console.error('Failed to fetch auxiliary chronicle/dossier/capabilities data:', e);
     }
@@ -189,13 +192,14 @@ export const App: React.FC = () => {
     setSplashStatus('loading');
     setNetworkError(null);
     try {
-      const [state, chronicleData, dossierData, recipeData, capData, worldsData] = await Promise.all([
+      const [state, chronicleData, dossierData, recipeData, capData, worldsData, phase8Data] = await Promise.all([
         apiClient.getGameState(storyIdToUse),
         apiClient.getChronicle().catch(() => []),
         apiClient.getDossiers().catch(() => []),
         apiClient.getRecipes().catch(() => []),
         apiClient.getCapabilities().catch(() => null),
         apiClient.getWorlds().catch(() => []),
+        apiClient.getPhase8Projection(storyIdToUse).catch(() => null),
       ]);
       setViewState(state);
       if (state.openingScene) {
@@ -216,6 +220,7 @@ export const App: React.FC = () => {
       if (worldsData) {
         setWorldTemplates(worldsData);
       }
+      setPhase8Projection(phase8Data);
 
       setSplashStatus('ready');
 
@@ -536,6 +541,7 @@ export const App: React.FC = () => {
           locations={viewState.locations}
           onEngageDialogue={handleEngageDialogue}
           dossiers={dossiers}
+          phase8Relationships={phase8Projection?.relationships || []}
         />
       )}
 

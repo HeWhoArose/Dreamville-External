@@ -436,6 +436,53 @@ export class InventoryItemEngine {
     return 'Miscellaneous';
   }
 
+  private normalizeGenesisModifiers(
+    rawModifiers: unknown,
+    defId: string,
+    itemName: string
+  ): ProgressionModifier[] | undefined {
+    if (!Array.isArray(rawModifiers)) return undefined;
+
+    const modifiers: ProgressionModifier[] = [];
+    for (const [index, raw] of rawModifiers.entries()) {
+      if (!raw || typeof raw !== 'object') continue;
+      const record = raw as Record<string, unknown>;
+      const target = typeof record.target === 'string' ? record.target.trim() : '';
+      const value = typeof record.value === 'number' ? record.value : Number(record.value);
+      if (!target || !Number.isFinite(value)) continue;
+
+      const mode = ['ADD', 'MULTIPLY', 'SET', 'MIN', 'MAX'].includes(String(record.mode))
+        ? String(record.mode) as ProgressionModifier['mode']
+        : 'ADD';
+      const precedence = Number.isFinite(Number(record.precedence))
+        ? Number(record.precedence)
+        : 60;
+      const stackGroup = typeof record.stackGroup === 'string' && record.stackGroup.trim()
+        ? record.stackGroup.trim()
+        : 'ITEM_EFFECT';
+
+      modifiers.push({
+        id: deterministicId('genesis_item_mod', defId, index, target, mode, value),
+        target,
+        mode,
+        value,
+        precedence,
+        stackGroup,
+        source: {
+          moduleId: `item:${defId}`,
+          moduleType: 'ITEM',
+          featureId: String(record.id || `item_modifier_${index}`),
+          sourceId: String(record.id || `item_source_${index}`),
+          sourceName: itemName,
+          precedence,
+          stackGroup,
+        },
+      });
+    }
+
+    return modifiers.length ? modifiers : undefined;
+  }
+
   private ensureGenesisDefinition(raw: Record<string, unknown>, category: ItemCategory): string {
     const explicit = String(raw.defId || '').trim();
     const defId = explicit || deterministicId('item_def_genesis', String(raw.id || ''), String(raw.name || ''), category);
@@ -469,6 +516,7 @@ export class InventoryItemEngine {
       maxDurability,
       tags: Array.isArray(raw.tags) ? raw.tags.map(String) : [],
       properties,
+      modifiers: this.normalizeGenesisModifiers(raw.modifiers, defId, String(raw.name || 'Unnamed Item')),
       customRules: Array.isArray((raw as any).customRules) ? JSON.parse(JSON.stringify((raw as any).customRules)) : undefined,
       consumption: ['QUANTITY', 'CHARGE', 'DESTROY'].includes(consumptionMode || '')
         ? { mode: consumptionMode as 'QUANTITY' | 'CHARGE' | 'DESTROY' }

@@ -210,6 +210,20 @@ export class Phase8SimulationEngine {
 				respect: Number(payload.respectDelta || 0),
 				hostility: Number(payload.hostilityDelta || 0),
 			}, Array.isArray(payload.evidenceIds) ? payload.evidenceIds.map(String) : [], String(payload.relationshipDescription || 'Canonical event changed relationship.'), event.timestampSeconds);
+			const chronicle = repository.getHistoricalChronicleEngine(storyId);
+			chronicle.recordEvidence({
+				id: 'relationship_' + event.eventId,
+				category: 'RELATIONSHIP_MUTATION',
+				timestamp: repository.getWorldClock(storyId).getTimestamp(),
+				primarySubjectId: String(payload.relationshipActorId),
+				secondarySubjectId: String(payload.relationshipTargetId),
+				locationId: event.locationId || 'unknown',
+				summary: String(payload.relationshipDescription || 'Relationship changed.'),
+				details: String(payload.relationshipDescription || 'Canonical relationship mutation.'),
+				sourceEventId: event.eventId,
+				provenance: 'canonical_relationship_engine',
+				visibility: 'PUBLIC',
+			});
 		}
 		this.save(repository, storyId, state);
 		return state;

@@ -8,6 +8,7 @@ interface CharacterDossierProps {
   locations: Record<string, Location>;
   onEngageDialogue: (characterId: string) => void;
   dossiers?: NpcDossier[];
+  phase8Relationships?: any[];
 }
 
 export const CharacterDossier: React.FC<CharacterDossierProps> = ({
@@ -16,6 +17,7 @@ export const CharacterDossier: React.FC<CharacterDossierProps> = ({
   locations,
   onEngageDialogue,
   dossiers = [],
+  phase8Relationships = [],
 }) => {
   const [expandedDossierIds, setExpandedDossierIds] = useState<Record<string, boolean>>({});
 
@@ -29,6 +31,10 @@ export const CharacterDossier: React.FC<CharacterDossierProps> = ({
   const characterList = Object.values(characters);
   const presentCharacters = characterList.filter((c) => c.locationId === activeLocationId);
   const otherCharacters = characterList.filter((c) => c.locationId !== activeLocationId);
+
+  const getRelationshipForCharacter = (charId: string): any | undefined => phase8Relationships.find((relationship: any) =>
+    relationship.sourceId === charId || relationship.targetId === charId
+  );
 
   const getDossierForCharacter = (charId: string): NpcDossier | undefined => {
     return dossiers.find(
@@ -97,6 +103,19 @@ export const CharacterDossier: React.FC<CharacterDossierProps> = ({
                         {char.disposition}
                       </span>
                     </div>
+
+                    {(() => {
+                      const relationship = getRelationshipForCharacter(char.id);
+                      if (!relationship) return null;
+                      return (
+                        <div className="mb-3 grid grid-cols-2 gap-2 rounded-lg border border-purple-900/40 bg-purple-950/10 p-2.5 text-[10px] font-mono">
+                          <span className="text-purple-300">Trust {relationship.trust}</span>
+                          <span className="text-purple-300">Affinity {relationship.affinity}</span>
+                          <span className="text-purple-300">Fear {relationship.fear}</span>
+                          <span className="text-purple-300">Hostility {relationship.hostility}</span>
+                        </div>
+                      );
+                    })()}
 
                     {dossier && (
                       <div className="mb-3 p-2.5 rounded-lg bg-stone-950/80 border border-stone-850 space-y-1">

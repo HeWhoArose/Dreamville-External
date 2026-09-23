@@ -1168,6 +1168,179 @@ export interface CanonicalGameplayEvent {
   timestamp: string;
 }
 
+
+
+/**
+ * Phase 8.6 — Universal Custom Rule & World Law contracts.
+ * Rules are declarative data. They are never executable AI prose or arbitrary code.
+ */
+export type CustomRuleEventType =
+  | 'CANONICAL_COMMAND'
+  | 'TECHNIQUE_EXPLAINED'
+  | 'ABILITY_USED'
+  | 'ABILITY_HIT'
+  | 'ABILITY_MISSED'
+  | 'DAMAGE_RECEIVED'
+  | 'CONDITION_APPLIED'
+  | 'CONDITION_REMOVED'
+  | 'ENTITY_CREATED'
+  | 'ENTITY_DESTROYED'
+  | 'ENTITY_MOVED'
+  | 'LOCATION_ENTERED'
+  | 'LOCATION_EXITED'
+  | 'FACT_CHANGED'
+  | 'DIALOGUE_COMPLETED'
+  | 'ITEM_TRANSFERRED'
+  | 'ITEM_USED'
+  | 'MISSION_STATE_CHANGED'
+  | 'ALARM_RAISED'
+  | 'WORLD_TIME_ADVANCED'
+  | 'CUSTOM';
+
+export type CustomRuleScope = 'WORLD' | 'ACTOR' | 'TARGET' | 'LOCATION' | 'EVENT';
+
+export type CustomRulePredicateOperator =
+  | 'EQ'
+  | 'NEQ'
+  | 'GT'
+  | 'GTE'
+  | 'LT'
+  | 'LTE'
+  | 'CONTAINS'
+  | 'NOT_CONTAINS'
+  | 'TRUTHY'
+  | 'FALSY'
+  | 'IN'
+  | 'NOT_IN';
+
+export interface CustomRuleCondition {
+  id?: string;
+  source: 'EVENT' | 'RULE_STATE' | 'WORLD_FACT' | 'ACTOR' | 'TARGET';
+  path: string;
+  operator: CustomRulePredicateOperator;
+  value?: unknown;
+  negate?: boolean;
+}
+
+export type CustomRuleEffect =
+  | {
+      type: 'SET_RULE_STATE';
+      key: string;
+      value: unknown;
+    }
+  | {
+      type: 'INCREMENT_RULE_STATE';
+      key: string;
+      amount: number;
+      min?: number;
+      max?: number;
+    }
+  | {
+      type: 'SET_WORLD_FACT';
+      subjectEntityId: string;
+      predicate: string;
+      objectValue: string;
+      truthState?: 'TRUE' | 'FALSE' | 'UNKNOWN';
+      confidence?: number;
+      provenanceSummary?: string;
+    }
+  | {
+      type: 'INVERT_WORLD_FACT';
+      subjectEntityId: string;
+      predicate: string;
+    }
+  | {
+      type: 'APPLY_CONDITION';
+      target: 'EVENT_ACTOR' | 'EVENT_TARGET' | 'ACTOR' | 'TARGET' | 'EXPLICIT';
+      actorId?: string;
+      conditionDefinitionId: string;
+      durationSeconds?: number | null;
+      intensity?: number;
+    }
+  | {
+      type: 'REMOVE_CONDITION';
+      target: 'EVENT_ACTOR' | 'EVENT_TARGET' | 'ACTOR' | 'TARGET' | 'EXPLICIT';
+      actorId?: string;
+      conditionDefinitionId: string;
+    }
+  | {
+      type: 'SET_CAPABILITY_MODIFIER';
+      actorId?: string;
+      capabilityId: string;
+      modifier: 'DAMAGE_MULTIPLIER' | 'ENERGY_MULTIPLIER' | 'STRAIN_MULTIPLIER' | 'SCALE_MULTIPLIER';
+      value: number;
+    }
+  | {
+      type: 'CLEAR_CAPABILITY_MODIFIER';
+      actorId?: string;
+      capabilityId: string;
+      modifier: 'DAMAGE_MULTIPLIER' | 'ENERGY_MULTIPLIER' | 'STRAIN_MULTIPLIER' | 'SCALE_MULTIPLIER';
+    }
+  | {
+      type: 'ENABLE_RULE';
+      ruleId: string;
+    }
+  | {
+      type: 'DISABLE_RULE';
+      ruleId: string;
+    };
+
+export interface CustomRuleDefinition {
+  id: string;
+  name: string;
+  version: number;
+  enabled: boolean;
+  priority: number;
+  scope: CustomRuleScope;
+  trigger: {
+    event: CustomRuleEventType | string;
+    eventType?: CustomRuleEventType | string;
+    actionKeywords?: string[];
+    capabilityId?: string;
+    subjectEntityId?: string;
+  };
+  conditions: CustomRuleCondition[];
+  effects: CustomRuleEffect[];
+  durationSeconds?: number | null;
+  tags?: string[];
+  description?: string;
+  provenance: CharacterProvenanceSource | 'WORLD_CANON' | 'SYSTEM_DERIVED';
+}
+
+export interface CustomRuleState {
+  schemaVersion: number;
+  flags: Record<string, boolean>;
+  counters: Record<string, number>;
+  values: Record<string, unknown>;
+  activeRuleIds: string[];
+  capabilityModifiers: Record<string, Record<string, Record<string, number>>>;
+  firedEventIds: string[];
+  updatedAtSeconds: number;
+}
+
+export interface CustomRuleEvent {
+  eventId: string;
+  storyId: string;
+  type: CustomRuleEventType | string;
+  actorId?: string;
+  targetId?: string;
+  locationId?: string;
+  capabilityId?: string;
+  actionText?: string;
+  payload?: Record<string, unknown>;
+  timestampSeconds: number;
+  sourceEventId?: string;
+}
+
+export interface CustomRuleEvaluationResult {
+  success: boolean;
+  eventId: string;
+  matchedRuleIds: string[];
+  appliedRuleIds: string[];
+  emittedWarnings: string[];
+  errorReason?: string;
+}
+
 export interface WorldFact {
   factId: string;
   statement: string;
@@ -1180,6 +1353,7 @@ export interface WorldFact {
   sourceSegmentIds: string[];
   confidence: number;
   acquiredAtTimestamp: any;
+  truthState?: 'TRUE' | 'FALSE' | 'UNKNOWN';
 }
 
 export interface WorldVisualIdentity {
@@ -1230,6 +1404,7 @@ export interface WorldTemplate {
   canonicalCapabilities: any[];
   capabilities: any[];
   worldRules: any[];
+  customRules?: CustomRuleDefinition[];
   ruleConstraints: string[];
   worldFacts: WorldFact[];
   createdAt: string;
@@ -1761,6 +1936,7 @@ export interface CharacterGenesisDraft {
   stats: CharacterStatDefinition[];
   traits: string[];
   capabilities: CapabilityDefinition[];
+  customRules?: CustomRuleDefinition[];
   generatedSkills: GeneratedTechnique[];
   skills?: CharacterSkill[];
   feats: CharacterFeat[];
@@ -1811,6 +1987,7 @@ export interface ConfirmedCharacter {
   stats: CharacterStatDefinition[];
   traits: string[];
   capabilities: CapabilityDefinition[];
+  customRules?: CustomRuleDefinition[];
   generatedSkills: GeneratedTechnique[];
   skills?: CharacterSkill[];
   feats: CharacterFeat[];

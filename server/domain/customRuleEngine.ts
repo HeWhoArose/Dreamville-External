@@ -208,7 +208,6 @@ export class CustomRuleEngine {
 			}
 			case 'TIME': return readPath({ timestampSeconds: event.timestampSeconds, hour: Math.floor(event.timestampSeconds / 3600) % 24 }, condition.path);
 			case 'DOMAIN': return readPath(event.payload?.domains, condition.path);
-			}
 			default: return undefined;
 		}
 	}

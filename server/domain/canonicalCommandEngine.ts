@@ -1,6 +1,7 @@
 import { captureCanonicalStateSnapshot, compareCanonicalSnapshots, CanonicalStateSnapshot } from './canonicalSnapshot';
 import { InMemoryWorldRepository } from '../repositories/worldRepository';
 import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
+import { CustomRuleEngine } from './customRuleEngine';
 
 export type CanonicalCommandType =
 	| 'MOVE'
@@ -442,6 +443,36 @@ export class CanonicalCommandEngine {
 
 			const canonicalSequence = repository.getCanonicalCommandEvents(command.storyId).length + 1;
 			const eventId = deterministicId('evt_cmd', command.storyId, canonicalSequence, fingerprint);
+
+			// Custom rules are evaluated inside the same authoritative transaction as the command.
+			// Their mutations therefore become part of the command's canonical post-state hash.
+			const customRuleResult = await new CustomRuleEngine().evaluate({
+				repository: transactionalRepository,
+				event: {
+					eventId,
+					storyId: command.storyId,
+					type: 'CANONICAL_COMMAND',
+					actorId: command.actorId,
+					actionText: typeof (command.payload as any)?.actionText === 'string'
+						? String((command.payload as any).actionText)
+						: resolved.summary,
+					payload: {
+						commandType: command.type,
+						command: clone(command.payload),
+						result: clone(resolved.data),
+					},
+					timestampSeconds: transactionalRepository.getWorldClock(command.storyId).getTimestamp().totalElapsedSeconds,
+				},
+			});
+			if (!customRuleResult.success) {
+				return {
+					success: false,
+					commandId: command.commandId,
+					rolledBack: true,
+					mutationPaths: [],
+					errorReason: customRuleResult.errorReason || 'Custom rule evaluation rejected the command.',
+				};
+			}
 
 			// Finalize staged Chronicle evidence against the deterministic canonical event identity
 			// before constructing the committed snapshot. The event itself is appended to the staged

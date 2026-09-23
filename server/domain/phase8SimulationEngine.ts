@@ -95,10 +95,27 @@ export class Phase8SimulationEngine {
 			case 'SCHEDULE_EVENT':
 				state.scheduledEvents.push({ id: eventId + ':' + state.scheduledEvents.length, eventType: effect.eventType, executeAtSeconds: effect.executeAtSeconds, payload: effect.payload });
 				break;
+			case 'ALTER_WORLD_FACT': {
+				const timestamp = repository.getWorldClock(storyId).getTimestamp();
+				repository.saveWorldFact(storyId, {
+					factId: 'rule_' + eventId + '_' + effect.subjectEntityId + '_' + effect.predicate,
+					statement: effect.subjectEntityId + ' ' + effect.predicate + ' ' + effect.objectValue,
+					category: 'custom_rule',
+					subjectEntityId: effect.subjectEntityId,
+					predicate: effect.predicate,
+					objectValue: effect.objectValue,
+					provenanceClass: 'SYSTEM_DERIVED',
+					provenanceSummary: 'custom_rule',
+					sourceSegmentIds: [eventId],
+					confidence: effect.confidence ?? 1,
+					acquiredAtTimestamp: timestamp,
+					truthState: effect.truthState || 'TRUE',
+				});
+				break;
+			}
 			case 'APPLY_DAMAGE':
 			case 'MODIFY_RESOURCE':
-			case 'ALTER_WORLD_FACT':
-				throw new Error('Rule effect ' + effect.type + ' requires an authoritative resolution adapter.');
+				throw new Error('Rule effect ' + effect.type + ' requires an authoritative combat/resource adapter.');
 			default:
 				break;
 		}

@@ -137,7 +137,7 @@ export class CustomRuleEngine {
 		const protagonistRules = Array.isArray(run?.protagonist?.customRules) ? run.protagonist.customRules : [];
 		const characterRules = Array.isArray(run?.customRules) ? run.customRules : [];
 		const itemRules: CustomRuleDefinition[] = [];
-		if (event.actorId) {
+		if (event.actorId && repository.hasInventoryEngine(storyId)) {
 			const inventory = repository.getInventoryEngine(storyId);
 			for (const item of [
 				...inventory.getInventoryItems(event.actorId),

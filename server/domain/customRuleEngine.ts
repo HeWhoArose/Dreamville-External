@@ -8,8 +8,10 @@ import type {
 } from '../../src/types';
 import type { InMemoryWorldRepository } from '../repositories/worldRepository';
 import { captureCanonicalStateSnapshot } from './canonicalSnapshot';
+import { Phase8SimulationEngine } from './phase8SimulationEngine';
 
 const MAX_RULES_PER_EVENT = 128;
+const phase8SimulationEngine = new Phase8SimulationEngine();
 const MAX_EFFECTS_PER_RULE = 32;
 const MAX_EVENT_CHAIN_DEPTH = 8;
 const MAX_FIRED_EVENT_HISTORY = 2048;
@@ -188,6 +190,25 @@ export class CustomRuleEngine {
 				);
 				return match;
 			}
+			case 'KNOWLEDGE': {
+				const state = phase8SimulationEngine.load(repository, event.storyId);
+				const knowledge = event.actorId ? state.knowledge[event.actorId] : undefined;
+				return condition.path ? knowledge?.facts[condition.path] : knowledge;
+			}
+			case 'RELATIONSHIP': {
+				const state = phase8SimulationEngine.load(repository, event.storyId);
+				const key = event.actorId && event.targetId ? `${event.actorId}::${event.targetId}` : '';
+				return key ? readPath(state.consequences.relationships[key], condition.path) : undefined;
+			}
+			case 'ITEM': return readPath(event.payload?.items, condition.path);
+			case 'LOCATION_STATE': {
+				const state = phase8SimulationEngine.load(repository, event.storyId);
+				const facility = event.locationId ? state.facilities[event.locationId] : undefined;
+				return readPath(facility, condition.path);
+			}
+			case 'TIME': return readPath({ timestampSeconds: event.timestampSeconds, hour: Math.floor(event.timestampSeconds / 3600) % 24 }, condition.path);
+			case 'DOMAIN': return readPath(event.payload?.domains, condition.path);
+			}
 			default: return undefined;
 		}
 	}
@@ -224,6 +245,10 @@ export class CustomRuleEngine {
 		state: CustomRuleState,
 	): Promise<void> {
 		const { repository, event } = context;
+		if (['APPLY_DAMAGE','MODIFY_RESOURCE','CREATE_ENTITY','DESTROY_ENTITY','MOVE_ENTITY','TELEPORT','ALTER_WORLD_FACT','CREATE_MISSION','MODIFY_MISSION','CREATE_EVIDENCE','CHANGE_RELATIONSHIP','ADD_KNOWLEDGE','REMOVE_KNOWLEDGE','SCHEDULE_EVENT'].includes(effect.type)) {
+			phase8SimulationEngine.applyRuleEffect(repository, event.storyId, event.eventId, event.timestampSeconds, effect);
+			return;
+		}
 		switch (effect.type) {
 			case 'SET_RULE_STATE':
 				state.values[effect.key] = clone(effect.value);

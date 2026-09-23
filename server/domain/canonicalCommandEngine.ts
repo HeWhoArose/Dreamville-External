@@ -2,6 +2,7 @@ import { captureCanonicalStateSnapshot, compareCanonicalSnapshots, CanonicalStat
 import { InMemoryWorldRepository } from '../repositories/worldRepository';
 import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
 import { CustomRuleEngine } from './customRuleEngine';
+import { Phase8SimulationEngine } from './phase8SimulationEngine';
 
 export type CanonicalCommandType =
 	| 'MOVE'
@@ -147,6 +148,8 @@ function stableHash(value: unknown): string {
 	}
 	return hash.toString(16).padStart(8, '0');
 }
+
+const phase8SimulationEngine = new Phase8SimulationEngine();
 
 export class CanonicalCommandEngine {
 	private static readonly instance = new CanonicalCommandEngine();
@@ -473,6 +476,22 @@ export class CanonicalCommandEngine {
 					errorReason: customRuleResult.errorReason || 'Custom rule evaluation rejected the command.',
 				};
 			}
+
+			// Phase 8.7-8.12 simulation domains consume the same canonical event identity.
+			// Their state is persisted inside the transactional Story Run runtime state,
+			// so rollback/replay remains under canonical authority.
+			phase8SimulationEngine.processCanonicalEvent(transactionalRepository, command.storyId, {
+				eventId,
+				type: 'CANONICAL_COMMAND',
+				actorId: command.actorId,
+				locationId: transactionalRepository.getStoryRun(command.storyId)?.currentLocationId,
+				timestampSeconds: transactionalRepository.getWorldClock(command.storyId).getTimestamp().totalElapsedSeconds,
+				payload: {
+					commandType: command.type,
+					command: clone(command.payload),
+					result: clone(resolved.data),
+				},
+			});
 
 			// Finalize staged Chronicle evidence against the deterministic canonical event identity
 			// before constructing the committed snapshot. The event itself is appended to the staged

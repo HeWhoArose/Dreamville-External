@@ -19,6 +19,7 @@ import { MultiModelOrchestrator } from '../domain/aiOrchestrator';
 import { CharacterAlignmentEngine } from '../domain/characterAlignment';
 import { ConditionEngine } from '../domain/conditionEngine';
 import { RestRecoveryEngine } from '../domain/restRecoveryEngine';
+import { Phase8SimulationEngine, Phase8RuntimeState } from '../domain/phase8SimulationEngine';
 import { StoryCheckEngine } from '../domain/storyCheckEngine';
 import { CampaignArchiveService, PartitionedArchive } from '../domain/campaignArchive';
 import { dndSpellRulesEvaluator } from '../domain/dndSpellRulesModel';
@@ -74,6 +75,8 @@ export interface WorldRepository {
   getCombatEngine(storyId: string): TacticalCombatEngine;
   getConditionEngine(storyId: string): ConditionEngine;
   getRestRecoveryEngine(storyId: string): RestRecoveryEngine;
+  getPhase8SimulationEngine(storyId: string): Phase8SimulationEngine;
+  getPhase8Projection(storyId: string, actorId?: string): Record<string, unknown>;
   getStoryCheckEngine(storyId: string): StoryCheckEngine;
   getCombatPerceptionOptions(storyId: string, viewerActorId: string): CombatPerceptionOptions;
   isEntityEpistemicallyKnown(storyId: string, viewerActorId: string, targetId: string): boolean;
@@ -217,6 +220,7 @@ export class InMemoryWorldRepository implements WorldRepository {
   private combatEngines: Map<string, TacticalCombatEngine> = new Map();
   private conditionEngines: Map<string, ConditionEngine> = new Map();
   private restRecoveryEngines: Map<string, RestRecoveryEngine> = new Map();
+  private phase8SimulationEngines: Map<string, Phase8SimulationEngine> = new Map();
   private storyCheckEngines: Map<string, StoryCheckEngine> = new Map();
   private canonicalCommandScopeDepth = 0;
   private memoryEngines: Map<string, MemoryOpportunityEngine> = new Map();
@@ -1559,6 +1563,22 @@ export class InMemoryWorldRepository implements WorldRepository {
       this.restRecoveryEngines.set(storyId, engine);
     }
     return engine;
+  }
+
+  public getPhase8SimulationEngine(storyId: string): Phase8SimulationEngine {
+    let engine = this.phase8SimulationEngines.get(storyId);
+    if (!engine) {
+      engine = new Phase8SimulationEngine();
+      engine.load(this, storyId);
+      this.phase8SimulationEngines.set(storyId, engine);
+    }
+    return engine;
+  }
+
+  public getPhase8Projection(storyId: string, actorId?: string): Record<string, unknown> {
+    const player = this.getPlayerLifecycle(storyId);
+    const effectiveActorId = actorId || player?.actorId || `player_actor_${storyId}`;
+    return this.getPhase8SimulationEngine(storyId).getPlayerProjection(this, storyId, effectiveActorId);
   }
 
   public getStoryCheckEngine(storyId: string): StoryCheckEngine {

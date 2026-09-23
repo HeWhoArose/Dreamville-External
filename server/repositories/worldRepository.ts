@@ -19,7 +19,7 @@ import { MultiModelOrchestrator } from '../domain/aiOrchestrator';
 import { CharacterAlignmentEngine } from '../domain/characterAlignment';
 import { ConditionEngine } from '../domain/conditionEngine';
 import { RestRecoveryEngine } from '../domain/restRecoveryEngine';
-import { Phase8SimulationEngine, Phase8RuntimeState } from '../domain/phase8SimulationEngine';
+import { Phase8SimulationEngine } from '../domain/phase8SimulationEngine';
 import { StoryCheckEngine } from '../domain/storyCheckEngine';
 import { CampaignArchiveService, PartitionedArchive } from '../domain/campaignArchive';
 import { dndSpellRulesEvaluator } from '../domain/dndSpellRulesModel';

@@ -101,6 +101,11 @@ describe('Phase 8.6-8.12 regression and fallback contracts', () => {
 			{ id: 'fact_known', subjectEntityId: 'artifact', predicate: 'exists', objectValue: 'true', status: 'KNOWN', confidence: 1, sourceEvidenceIds: ['evidence_known'], acquiredAtSeconds: 10 },
 			{ actorId, factId: 'fact_known', evidenceId: 'evidence_known', method: 'SEARCH', success: true, confidence: 1, nowSeconds: 10 }
 		);
+		phase8.knowledge.acquire(
+			knowledge,
+			{ id: 'fact_cause_known', subjectEntityId: 'known_cause', predicate: 'visible', objectValue: 'true', status: 'KNOWN', confidence: 1, sourceEvidenceIds: ['evidence_known'], acquiredAtSeconds: 10 },
+			{ actorId, factId: 'fact_cause_known', evidenceId: 'evidence_known', method: 'SEARCH', success: true, confidence: 1, nowSeconds: 10 }
+		);
 		phase8.causal.upsertNode(state.causal, { id: 'artifact', kind: 'ITEM', label: 'Artifact', metadata: {} });
 		phase8.causal.upsertNode(state.causal, { id: 'known_cause', kind: 'EVENT', label: 'Known cause', metadata: {} });
 		phase8.causal.upsertNode(state.causal, { id: 'secret_node', kind: 'EVENT', label: 'Secret', metadata: {} });

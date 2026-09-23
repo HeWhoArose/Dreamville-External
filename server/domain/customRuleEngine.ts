@@ -245,7 +245,7 @@ export class CustomRuleEngine {
 	): Promise<void> {
 		const { repository, event } = context;
 		if (['APPLY_DAMAGE','MODIFY_RESOURCE','CREATE_ENTITY','DESTROY_ENTITY','MOVE_ENTITY','TELEPORT','ALTER_WORLD_FACT','CREATE_MISSION','MODIFY_MISSION','CREATE_EVIDENCE','CHANGE_RELATIONSHIP','ADD_KNOWLEDGE','REMOVE_KNOWLEDGE','SCHEDULE_EVENT'].includes(effect.type)) {
-			phase8SimulationEngine.applyRuleEffect(repository, event.storyId, event.eventId, event.timestampSeconds, effect);
+			phase8SimulationEngine.applyRuleEffect(repository, event.storyId, event.eventId, event.timestampSeconds, effect, event.actorId, event.targetId);
 			return;
 		}
 		switch (effect.type) {

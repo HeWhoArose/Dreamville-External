@@ -4276,10 +4276,12 @@ export class MultiModelOrchestrator {
       if (emergencyModel) {
         const emergencyAdapter = this.getAdapter(emergencyModel.providerId);
         if (emergencyAdapter) {
+          const emergencyStartedAt = Date.now();
           const res = await emergencyAdapter.generate(task, assembledContext.assembledText, {
             audioInputBase64: params.audioInputBase64,
             voiceProfile: params.voiceProfile,
           });
+          this.recordProviderSuccess(emergencyModel, res, task, emergencyStartedAt);
           const validation = this.validateTurnPackage(res.text);
           if (validation.valid && validation.turnPackage) {
             const adjudication = DomainAdjudicationBridge.adjudicate(
@@ -4302,9 +4304,9 @@ export class MultiModelOrchestrator {
               uncommittedOutput: '',
               canonicalInvariants: {},
               styleContract: {
-              tone: 'deterministic_emergency',
-              promptVersion: MultiModelOrchestrator.PROMPT_VERSION,
-            },
+                tone: 'deterministic_emergency',
+                promptVersion: MultiModelOrchestrator.PROMPT_VERSION,
+              },
               openThreads: validation.turnPackage.memoryCandidates || [],
               presentationEvents: [
                 ...(validation.turnPackage.audioCues || []).map((c: any) =>
@@ -4338,6 +4340,7 @@ export class MultiModelOrchestrator {
             const telemetry: OrchestratedTurnTelemetry = {
               turnId,
               storyId,
+              promptVersion: MultiModelOrchestrator.PROMPT_VERSION,
               taskId: task,
               selectedModelId: emergencyModel.modelId,
               selectedProviderId: emergencyModel.providerId,

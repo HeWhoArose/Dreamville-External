@@ -58,6 +58,7 @@ export interface WorldRepository {
   getStoryThreads(storyId: string): any[];
   saveStoryThread(thread: any): void;
   getKnowledgeFacts(storyId: string): KnowledgeFact[];
+  getAuthorizedKnowledgeFacts(storyId: string, viewerActorId?: string): KnowledgeFact[];
   addKnowledgeFact(storyId: string, fact: KnowledgeFact): void;
   getHistoricalChronicleEngine(storyId: string): HistoricalChronicleEngine;
   getInventoryEngine(storyId: string): InventoryItemEngine;
@@ -1402,6 +1403,32 @@ export class InMemoryWorldRepository implements WorldRepository {
     return facts ? [...facts] : [];
   }
 
+  /**
+   * Phase 11 epistemic boundary: returns only world facts the viewer is
+   * authorized to receive. Public facts are globally visible; non-public
+   * facts require an explicit actor-scoped acquisition in Phase 8 knowledge.
+   */
+  public getAuthorizedKnowledgeFacts(storyId: string, viewerActorId?: string): KnowledgeFact[] {
+    const facts = this.getKnowledgeFacts(storyId);
+    if (!viewerActorId) {
+      return facts.filter((fact) => fact.secretLevel === 'public');
+    }
+
+    const phase8State = this.getPhase8SimulationEngine(storyId).load(this, storyId);
+    const actorKnowledge = phase8State.knowledge[viewerActorId];
+    const authorizedFactIds = new Set(
+      actorKnowledge
+        ? Object.values(actorKnowledge.facts)
+            .filter((fact) => fact.status === 'KNOWN' || fact.status === 'SUSPECTED')
+            .map((fact) => fact.id)
+        : []
+    );
+
+    return facts.filter(
+      (fact) => fact.secretLevel === 'public' || authorizedFactIds.has(fact.id)
+    );
+  }
+
   public addKnowledgeFact(storyId: string, fact: KnowledgeFact): void {
     const existing = this.getKnowledgeFacts(storyId);
     if (!existing.some((f) => f.id === fact.id)) {
@@ -1683,13 +1710,11 @@ export class InMemoryWorldRepository implements WorldRepository {
     }
 
     // 3. Durable Knowledge Facts (KnowledgeBase)
-    const facts = this.getKnowledgeFacts(storyId);
-    const hasFact = facts.some(
-      (f) =>
-        (f.subjectEntityId === targetId || f.objectValue === targetId) &&
-        (f.secretLevel === 'public' || f.secretLevel === 'faction' || f.subjectEntityId === viewerActorId)
+    // Phase 11: non-public facts require explicit actor-scoped acquisition.
+    const hasAuthorizedFact = this.getAuthorizedKnowledgeFacts(storyId, viewerActorId).some(
+      (fact) => fact.subjectEntityId === targetId || fact.objectValue === targetId
     );
-    if (hasFact) return true;
+    if (hasAuthorizedFact) return true;
 
     // 4. Chronicle Historical Evidence (Observed records)
     const chronicle = this.getHistoricalChronicleEngine(storyId);

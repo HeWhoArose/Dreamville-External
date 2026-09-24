@@ -311,9 +311,7 @@ test('Phase 12: fallback exhaustion reaches the deterministic emergency floor', 
 
 
 test('Phase 12: Phase 9 equipment and Phase 10 living-world state reach authorized AI context', () => {
-	const repository = createTestOrchestrator(
-		new InMemoryWorldRepository({ disablePersistence: true })
-	).getWorldRepository() as InMemoryWorldRepository;
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
 	const storyId = 'phase12_cross_phase_context';
 	repository.seedStory(storyId);
 	const player = repository.getPlayerLifecycle(storyId)!;

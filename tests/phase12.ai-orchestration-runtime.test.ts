@@ -7,6 +7,7 @@ import {
 	type ModelRegistryRecord,
 } from '../server/domain/aiOrchestrator';
 import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
+import { WorkingContextEngine } from '../server/domain/workingContextEngine';
 import type { KnowledgeFact } from '../server/domain/types';
 
 function createTestOrchestrator(repository?: InMemoryWorldRepository): MultiModelOrchestrator {
@@ -306,4 +307,75 @@ test('Phase 12: fallback exhaustion reaches the deterministic emergency floor', 
 	assert.equal(result.source, 'DETERMINISTIC_FALLBACK');
 	assert.equal(result.providerId, 'provider_deterministic_emergency');
 	assert.equal(result.modelId, 'emergency-fallback-local');
+});
+
+
+test('Phase 12: Phase 9 equipment and Phase 10 living-world state reach authorized AI context', () => {
+	const repository = createTestOrchestrator(
+		new InMemoryWorldRepository({ disablePersistence: true })
+	).getWorldRepository() as InMemoryWorldRepository;
+	const storyId = 'phase12_cross_phase_context';
+	repository.seedStory(storyId);
+	const player = repository.getPlayerLifecycle(storyId)!;
+	const inventory = repository.getInventoryEngine(storyId);
+	const capabilities = repository.getCapabilityEngine(storyId);
+	const capabilityId = 'phase12_equipment_capability';
+
+	capabilities.registerCapability({
+		id: capabilityId,
+		name: 'Phase 12 Context Sight',
+		description: 'A capability granted by canonical equipment.',
+		category: 'TECHNIQUE',
+		provenance: 'phase12_test',
+		minVesselCapacityRequired: 0,
+	});
+
+	inventory.registerDefinition({
+		id: 'def_phase12_context_relic',
+		name: 'Context Relic',
+		category: 'Tool',
+		rarity: 'Rare',
+		description: 'Test equipment for cross-phase context wiring.',
+		allowedSlots: ['relic'],
+		weightKg: 1,
+		baseValueGold: 10,
+		maxDurability: 100,
+		tags: ['phase12'],
+		properties: {},
+		grantedCapabilities: [capabilityId],
+	});
+
+	const instance = inventory.createInstance({
+		defId: 'def_phase12_context_relic',
+		ownerEntityId: player.actorId,
+		provenance: 'TEST',
+	});
+	assert.equal(inventory.equipItem(player.actorId, instance.id, 'relic').success, true);
+
+	const livingWorld = repository.getLivingWorldSimulation(storyId);
+	livingWorld.registerNpcSchedule({
+		npcId: 'npc_phase12_visible',
+		name: 'Visible Phase 12 NPC',
+		currentLocationId: player.locationId,
+		currentActivity: 'patrolling',
+		entries: [],
+		fallbackActivity: 'idle',
+		fallbackLocationId: player.locationId,
+	});
+
+	const context = WorkingContextEngine.assembleTurnContext({
+		storyId,
+		playerAction: 'Observe your surroundings.',
+		hardTokenBudget: 1400,
+		worldRepo: repository,
+	});
+
+	assert.equal(
+		context.packet.relevantCapabilities.some((capability) => capability.includes('Phase 12 Context Sight')),
+		true
+	);
+	assert.equal(
+		context.packet.visibleEntities.some((entity) => entity.includes('Visible Phase 12 NPC')),
+		true
+	);
 });

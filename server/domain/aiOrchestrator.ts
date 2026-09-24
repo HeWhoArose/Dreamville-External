@@ -1663,6 +1663,155 @@ export class MultiModelOrchestrator {
     }
   }
 
+  private getTaskCategory(task: TaskId): AiTaskCategory {
+    if (task === 'narrative.generate' || task === 'character.dialogue') return 'narration';
+    if (task === 'summary.scene' || task === 'memory.extract') return 'world_generation';
+    if (task === 'utility.inspect') return 'research';
+    if (task === 'rules.adjudicate' || task === 'combat.tactics' || task === 'narrative.review') return 'rules';
+    if (task === 'speech.generate' || task === 'speech.transcribe') return 'speech';
+    if (task === 'image.generate') return 'image';
+    return 'character_genesis';
+  }
+
+  public getTaskCategory(task: TaskId): AiTaskCategory {
+    return this.getTaskCategory(task);
+  }
+
+  private getCategoryTasks(category: AiTaskCategory): TaskId[] {
+    const mapping: Record<AiTaskCategory, TaskId[]> = {
+      narration: ['narrative.generate', 'character.dialogue'],
+      world_generation: ['summary.scene', 'memory.extract'],
+      character_genesis: ['utility.inspect', 'memory.extract'],
+      research: ['utility.inspect'],
+      rules: ['rules.adjudicate', 'combat.tactics', 'narrative.review'],
+      speech: ['speech.generate', 'speech.transcribe'],
+      image: ['image.generate'],
+    };
+    return mapping[category];
+  }
+
+  private modelKey(model: ModelRegistryRecord): string {
+    return model.providerId + '::' + model.modelId;
+  }
+
+  private ensureRuntimeStatus(model: ModelRegistryRecord): ModelRuntimeStatus {
+    const key = this.modelKey(model);
+    let status = this.runtimeStatus.get(key);
+    if (!status) {
+      status = {
+        providerId: model.providerId,
+        modelId: model.modelId,
+        status: model.health,
+        requests: 0,
+        successCount: 0,
+        failureCount: 0,
+        consecutiveFailures: 0,
+        rateLimit429Count: 0,
+        serverError5xxCount: 0,
+        timeoutCount: 0,
+        lastLatencyMs: 0,
+        averageLatencyMs: 0,
+        observedTokens: { input: 0, output: 0, reasoning: 0, cached: 0, tool: 0, total: 0 },
+        headroom: { exact: false, source: 'UNKNOWN' },
+      };
+      this.runtimeStatus.set(key, status);
+    }
+    return status;
+  }
+
+  private isModelCoolingDown(model: ModelRegistryRecord): boolean {
+    const cooldownUntil = this.ensureRuntimeStatus(model).cooldownUntil;
+    return typeof cooldownUntil === 'number' && cooldownUntil > Date.now();
+  }
+
+  private recordProviderSuccess(model: ModelRegistryRecord, result: ProviderGenerateResult, task: TaskId, startedAt: number): void {
+    const status = this.ensureRuntimeStatus(model);
+    const latencyMs = Math.max(1, result.latencyMs || Date.now() - startedAt);
+    status.requests += 1;
+    status.successCount += 1;
+    status.consecutiveFailures = 0;
+    status.lastLatencyMs = latencyMs;
+    status.averageLatencyMs = status.successCount === 1
+      ? latencyMs
+      : Math.round(((status.averageLatencyMs * (status.successCount - 1)) + latencyMs) / status.successCount);
+    status.lastSuccessAt = Date.now();
+    status.cooldownUntil = undefined;
+    status.status = 'Healthy';
+    status.observedTokens.input += Number(result.inputTokens || 0);
+    status.observedTokens.output += Number(result.outputTokens || 0);
+    status.observedTokens.total += Number(result.inputTokens || 0) + Number(result.outputTokens || 0);
+    model.health = 'Healthy';
+    model.latencyMs = latencyMs;
+
+    this.usageLedger.push({
+      timestamp: Date.now(),
+      providerId: model.providerId,
+      modelId: model.modelId,
+      task,
+      category: this.getTaskCategory(task),
+      success: true,
+      latencyMs,
+      inputTokens: Number(result.inputTokens || 0),
+      outputTokens: Number(result.outputTokens || 0),
+      reasoningTokens: 0,
+      cachedTokens: 0,
+      toolTokens: 0,
+      totalTokens: Number(result.inputTokens || 0) + Number(result.outputTokens || 0),
+    });
+    if (this.usageLedger.length > 500) this.usageLedger.splice(0, this.usageLedger.length - 500);
+  }
+
+  private classifyFailure(error: unknown): UsageLedgerEntry['failureType'] {
+    const message = String((error as any)?.message || error).toLowerCase();
+    if (message.includes('timeout') || message.includes('aborted')) return 'TIMEOUT';
+    if (message.includes('429') || message.includes('rate limit') || message.includes('quota') || message.includes('resource exhausted')) return '429';
+    if (message.includes('500') || message.includes('502') || message.includes('503') || message.includes('504') || message.includes('server error')) return '5XX';
+    if (message.includes('401') || message.includes('403') || message.includes('api key') || message.includes('authentication')) return 'AUTH';
+    if (message.includes('404') || message.includes('not found') || message.includes('unavailable')) return 'UNAVAILABLE';
+    if (message.includes('json') || message.includes('schema')) return 'MALFORMED';
+    return 'OTHER';
+  }
+
+  private recordProviderFailure(model: ModelRegistryRecord, task: TaskId, error: unknown, startedAt: number): void {
+    const status = this.ensureRuntimeStatus(model);
+    const latencyMs = Math.max(1, Date.now() - startedAt);
+    const failureType = this.classifyFailure(error);
+    status.requests += 1;
+    status.failureCount += 1;
+    status.consecutiveFailures += 1;
+    status.lastLatencyMs = latencyMs;
+    status.lastFailureAt = Date.now();
+    status.lastFailureReason = String((error as any)?.message || error).slice(0, 300);
+    if (failureType === '429') status.rateLimit429Count += 1;
+    if (failureType === '5XX') status.serverError5xxCount += 1;
+    if (failureType === 'TIMEOUT') status.timeoutCount += 1;
+    if (failureType === '429' || failureType === '5XX' || failureType === 'TIMEOUT') {
+      const cooldownMs = Math.min(60000, 5000 * Math.pow(2, Math.max(0, status.consecutiveFailures - 1)));
+      status.cooldownUntil = Date.now() + cooldownMs;
+    }
+    status.status = failureType === '429' ? 'Throttled' : failureType === 'AUTH' ? 'InvalidAuth' : 'Degraded';
+    model.health = status.status;
+    if (failureType === '429') model.quota = 'Exhausted';
+
+    this.usageLedger.push({
+      timestamp: Date.now(),
+      providerId: model.providerId,
+      modelId: model.modelId,
+      task,
+      category: this.getTaskCategory(task),
+      success: false,
+      latencyMs,
+      inputTokens: 0,
+      outputTokens: 0,
+      reasoningTokens: 0,
+      cachedTokens: 0,
+      toolTokens: 0,
+      totalTokens: 0,
+      failureType,
+    });
+    if (this.usageLedger.length > 500) this.usageLedger.splice(0, this.usageLedger.length - 500);
+  }
+
   private seedDefaultPins(): void {
     this.taskPinnedModels.set('narrative.generate', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('character.dialogue', 'google_gemini::gemini-3.5-flash');

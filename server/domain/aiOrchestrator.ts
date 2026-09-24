@@ -4501,7 +4501,7 @@ export class MultiModelOrchestrator {
       const currentCandidate = candidateChain[cIdx];
       const modelKey = `${currentCandidate.providerId}::${currentCandidate.modelId}`;
 
-      if (this.isCircuitBreakerTripped(currentCandidate.providerId, currentCandidate.modelId)) {
+      if (this.isCircuitBreakerTripped(currentCandidate.providerId, currentCandidate.modelId) || this.isModelCoolingDown(currentCandidate)) {
         continue;
       }
 
@@ -4512,6 +4512,7 @@ export class MultiModelOrchestrator {
 
       try {
         totalAttempts++;
+        const attemptStartedAt = Date.now();
         const abortController = new AbortController();
         const timer = setTimeout(() => abortController.abort(), timeoutMs);
 
@@ -4527,9 +4528,14 @@ export class MultiModelOrchestrator {
           clearTimeout(timer);
         }
 
+        if (!providerRes || !providerRes.text) {
+          throw new Error('Provider returned empty response.');
+        }
+
+        this.recordProviderSuccess(currentCandidate, providerRes, task, attemptStartedAt);
         this.consecutiveFailures.set(modelKey, 0);
 
-        if (!providerRes || !providerRes.text) {
+        if (!providerRes.text) {
           throw new Error('Provider returned empty response.');
         }
 
@@ -4549,6 +4555,7 @@ export class MultiModelOrchestrator {
         };
       } catch (err: any) {
         lastError = err?.message || String(err);
+        this.recordProviderFailure(currentCandidate, task, err, attemptStartedAt);
         const failures = (this.consecutiveFailures.get(modelKey) || 0) + 1;
         this.consecutiveFailures.set(modelKey, failures);
         if (failures >= 2) {

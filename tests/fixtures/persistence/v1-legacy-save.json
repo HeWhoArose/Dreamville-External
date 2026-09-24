@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "worldTemplates": {
+    "world_legacy": {
+      "worldId": "world_legacy",
+      "title": "Legacy World",
+      "rulesetId": "FULL_DND"
+    }
+  },
+  "storyRuns": {
+    "story_legacy": {
+      "storyId": "story_legacy",
+      "worldId": "world_legacy",
+      "characterName": "Legacy Hero"
+    }
+  },
+  "confirmedCharacters": {
+    "world_legacy": [
+      {
+        "characterId": "char_legacy",
+        "name": "Legacy Hero"
+      }
+    ]
+  }
+}

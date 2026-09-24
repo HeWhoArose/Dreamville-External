@@ -531,6 +531,71 @@ gameRouter.post('/living-bible/promote', async (req: Request, res: Response) => 
 });
 
 /**
+ * GET /api/game/persistence/status
+ * Phase 13: inspect persistence version/schema state without mutating the save.
+ */
+gameRouter.get('/persistence/status', (_req: Request, res: Response) => {
+  try {
+    res.json({
+      success: true,
+      persistence: worldRepository.inspectPersistence(),
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error?.message || 'Failed to inspect persistence state.',
+    });
+  }
+});
+
+/**
+ * POST /api/game/persistence/migrate
+ * Phase 13: transactionally migrate the on-disk save. Source data is backed up first.
+ */
+gameRouter.post('/persistence/migrate', (_req: Request, res: Response) => {
+  try {
+    const result = worldRepository.migratePersistence();
+    if (!result.valid) {
+      return res.status(409).json({ success: false, persistence: result });
+    }
+    res.json({
+      success: true,
+      persistence: result,
+      restartRequired: Boolean(result.backupPath),
+    });
+  } catch (error: any) {
+    res.status(409).json({
+      success: false,
+      error: error?.message || 'Persistence migration failed; source data was preserved.',
+      persistence: worldRepository.inspectPersistence(),
+    });
+  }
+});
+
+/**
+ * POST /api/game/persistence/repair
+ * Phase 13: validate and repair persistence with a pre-repair backup.
+ */
+gameRouter.post('/persistence/repair', (_req: Request, res: Response) => {
+  try {
+    const result = worldRepository.repairPersistence();
+    if (!result.success) {
+      return res.status(409).json(result);
+    }
+    res.json({
+      success: true,
+      ...result,
+      restartRequired: Boolean(result.changed),
+    });
+  } catch (error: any) {
+    res.status(409).json({
+      success: false,
+      errorReason: error?.message || 'Persistence repair failed; source data was preserved.',
+    });
+  }
+});
+
+/**
  * GET /api/game/workstation
  * Returns the active development workstation status and iteration audit ledger (DreamBook §408).
  */

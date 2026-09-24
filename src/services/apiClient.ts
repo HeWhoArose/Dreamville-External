@@ -1227,6 +1227,36 @@ class ApiClient {
   }
 
   /**
+   * Phase 12A: Safe model/provider operations telemetry.
+   * GET /api/game/orchestrator/operations
+   */
+  public async getOrchestratorOperations(): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/operations`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) throw new Error(`Failed to get AI operations telemetry: HTTP ${res.status}`);
+    return await res.json();
+  }
+
+  /**
+   * Phase 12A: Category-scoped manual model override.
+   */
+  public async setOrchestratorCategoryModel(params: {
+    category: string;
+    modelKey?: string | null;
+  }): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/category`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `Failed to set AI category model: HTTP ${res.status}`);
+    return data;
+  }
+
+  /**
    * Challenge 12: Update model health / reset circuit breaker.
    * POST /api/game/orchestrator/health
    */

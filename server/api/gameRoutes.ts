@@ -94,6 +94,21 @@ function resolveProgressionActor(req: Request, res: Response, storyId: string): 
 }
 
 
+function getPlayerStoryRunProjection(storyId: string): Record<string, unknown> | null {
+  const run = worldRepository.getStoryRun(storyId);
+  if (!run) return null;
+
+  const { runtimeState: _runtimeState, canonicalEvents: _canonicalEvents, ...publicRun } = run;
+  const actorId = worldRepository.getPlayerLifecycle(storyId)?.actorId || `player_actor_${storyId}`;
+
+  return {
+    ...publicRun,
+    knowledge: worldRepository.getAuthorizedKnowledgeFacts(storyId, actorId),
+    phase8Projection: worldRepository.getPhase8Projection(storyId, actorId),
+  };
+}
+
+
 /**
  * GET /api/game/state
  * Returns the sanitized ExternalViewState.
@@ -1571,9 +1586,7 @@ gameRouter.get('/worlds/runs/:storyId/progression', async (req: Request, res: Re
   try {
     const storyId = String(req.params.storyId || '');
     const player = worldRepository.getPlayerLifecycle(storyId);
-    const actorId = (typeof req.query.actorId === 'string' && req.query.actorId.trim())
-      ? req.query.actorId.trim()
-      : (player ? player.actorId : `player_actor_${storyId}`);
+    const actorId = player?.actorId || `player_actor_${storyId}`;
     const engine = worldRepository.getCharacterProgressionEngine(storyId);
     const rulesProfile = worldRepository.getRulesProfile(storyId);
     res.json({
@@ -6764,8 +6777,9 @@ gameRouter.put('/worlds/runs/:storyId/visual-asset', async (req: Request, res: R
 
     worldRepository.saveStoryRun(updatedRun);
     const world = worldRepository.getWorldTemplate(updatedRun.worldId);
+    const projectedRun = getPlayerStoryRunProjection(storyId);
     res.json({
-      ...updatedRun,
+      ...(projectedRun || {}),
       visualIdentity: world
         ? worldVisualIdentityService.buildStoryRunIdentity(updatedRun, world)
         : undefined,
@@ -6778,13 +6792,12 @@ gameRouter.put('/worlds/runs/:storyId/visual-asset', async (req: Request, res: R
 
 gameRouter.get('/worlds/runs/:storyId', async (req: Request, res: Response) => {
   try {
-    const { worldRepository } = await import('../repositories/worldRepository');
     const storyId = req.params.storyId as string;
-    const run = worldRepository.getStoryRun(storyId);
-    if (!run) {
+    const projectedRun = getPlayerStoryRunProjection(storyId);
+    if (!projectedRun) {
       return res.status(404).json({ error: 'Story run not found.' });
     }
-    res.json(run);
+    res.json(projectedRun);
   } catch (error) {
     res.status(500).json({ error: 'Failed to retrieve story run.' });
   }

@@ -2585,10 +2585,23 @@ export class MultiModelOrchestrator {
   }
 
   public getModelRuntimeStatus(): ModelRuntimeStatus[] {
+    const now = Date.now();
     return Array.from(this.models.values()).map((model) => {
       const status = this.ensureRuntimeStatus(model);
+      let operationalStatus = status.operationalStatus;
+      if (status.cooldownUntil && status.cooldownUntil <= now && operationalStatus === 'COOLDOWN') {
+        operationalStatus =
+          model.health === 'DisabledByUser'
+            ? 'DISABLED'
+            : model.health === 'Unavailable' || model.health === 'InvalidAuth'
+              ? 'UNAVAILABLE'
+              : model.health === 'Throttled'
+                ? 'THROTTLED'
+                : 'AVAILABLE';
+      }
       return {
         ...status,
+        operationalStatus,
         observedTokens: { ...status.observedTokens },
         configuredLimits: status.configuredLimits ? { ...status.configuredLimits } : undefined,
         headroom: status.headroom ? { ...status.headroom } : undefined,

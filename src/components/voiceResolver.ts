@@ -77,7 +77,10 @@ const CHARACTER_ACCENT_PALETTE: CharacterSpeakerTheme[] = [
  * Deterministic character speaker theme assignment for dialogue text rendering.
  * Ensures stable accent styling per speaker across all turns.
  */
-export function getCharacterSpeakerTheme(speakerName: string): CharacterSpeakerTheme {
+export function getCharacterSpeakerTheme(
+  speakerName: string,
+  worldId?: string,
+): CharacterSpeakerTheme {
   if (!speakerName || speakerName.toLowerCase() === 'narrator' || speakerName.toLowerCase() === 'system') {
     return {
       nameColor: 'text-stone-300',
@@ -88,11 +91,15 @@ export function getCharacterSpeakerTheme(speakerName: string): CharacterSpeakerT
       accentHex: '#78716c',
     };
   }
+
+  const worldScope = worldId?.trim() || 'global';
+  const seed = `${worldScope}::${speakerName.trim().toLowerCase()}`;
   let hash = 0;
-  for (let i = 0; i < speakerName.length; i++) {
-    hash = (hash << 5) - hash + speakerName.charCodeAt(i);
+  for (let i = 0; i < seed.length; i++) {
+    hash = (hash << 5) - hash + seed.charCodeAt(i);
     hash |= 0;
   }
+
   const index = Math.abs(hash) % CHARACTER_ACCENT_PALETTE.length;
   return CHARACTER_ACCENT_PALETTE[index];
 }

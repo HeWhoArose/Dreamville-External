@@ -217,9 +217,6 @@ export const StoryView: React.FC<StoryViewProps> = ({
   const { playSpeech, isPlayingSpeech, triggerHaptic, playSfx } = useAudioHaptic();
 
   const [typedAction, setTypedAction] = useState('');
-  const [narrationModels, setNarrationModels] = useState<any[]>([]);
-  const [activeNarrationModelKey, setActiveNarrationModelKey] = useState('');
-  const [narrationModelSaving, setNarrationModelSaving] = useState(false);
   const [aiRoutingStatus, setAiRoutingStatus] = useState<string>('Auto');
   const [aiRoutingUsage, setAiRoutingUsage] = useState<{ requests: number; totalTokens: number } | null>(null);
   const [lastAiTelemetry, setLastAiTelemetry] = useState<any | null>(null);
@@ -232,36 +229,13 @@ export const StoryView: React.FC<StoryViewProps> = ({
 
   const refreshAiRouting = async () => {
     try {
-      const [operations, telemetry, modelCatalog] = await Promise.all([
+      const [operations, telemetry] = await Promise.all([
         apiClient.getOrchestratorOperations(),
         apiClient.getOrchestratorTelemetry(),
-        apiClient.getOrchestratorModels(),
       ]);
-      const runtimeEntries = Array.isArray(operations?.operations?.models)
-        ? operations.operations.models
-        : [];
-      const runtimeByKey = new Map(
-        runtimeEntries.map((runtime: any) => [
-          `${runtime.providerId}::${runtime.modelId}`,
-          runtime,
-        ])
-      );
-      const models = (Array.isArray(modelCatalog?.models) ? modelCatalog.models : []).map((model: any) => ({
-        ...model,
-        runtime: runtimeByKey.get(`${model.providerId}::${model.modelId}`) || null,
-      }));
-      const narrationCandidates = models.filter((model: any) =>
-        Array.isArray(model.roleEligibility)
-          ? model.roleEligibility.includes('narrative.generate')
-          : false
-      );
-      setNarrationModels(narrationCandidates);
-
       const narrationCategory = operations?.operations?.categories?.find(
         (category: any) => category.category === 'narration'
       );
-      const selectedKey = narrationCategory?.activeModelKey || '';
-      setActiveNarrationModelKey(selectedKey);
       setAiRoutingStatus(narrationCategory?.mode === 'MANUAL' ? 'Manual' : 'Auto');
 
       const safeTelemetry = operations?.operations?.safeTelemetry;
@@ -280,23 +254,6 @@ export const StoryView: React.FC<StoryViewProps> = ({
   useEffect(() => {
     refreshAiRouting();
   }, [storyId, isProcessingAction]);
-
-  const handleNarrationModelChange = async (modelKey: string) => {
-    setNarrationModelSaving(true);
-    try {
-      await apiClient.setOrchestratorCategoryModel({
-        category: 'narration',
-        modelKey: modelKey || null,
-      });
-      setActiveNarrationModelKey(modelKey);
-      setAiRoutingStatus(modelKey ? 'Manual' : 'Auto');
-      await refreshAiRouting();
-    } catch {
-      // Keep the current selection if the server rejects the change.
-    } finally {
-      setNarrationModelSaving(false);
-    }
-  };
 
   const startRecording = async () => {
     setTranscriptionError(null);
@@ -610,28 +567,12 @@ export const StoryView: React.FC<StoryViewProps> = ({
                   >
                     {lastModel ? `Last: ${lastModel} · ${lastAiTelemetry?.latencyMs || 0}ms` : tokenText}
                   </span>
-                  <select
-                    value={activeNarrationModelKey}
-                    onChange={(event) => handleNarrationModelChange(event.target.value)}
-                    disabled={narrationModelSaving || isProcessingAction}
-                    aria-label="Narration model"
-                    className="h-8 max-w-[190px] rounded-lg border border-stone-800 bg-stone-900 px-2 text-[10px] text-stone-300 outline-none disabled:opacity-50"
+                  <span
+                    className="rounded-lg border border-stone-800 bg-stone-900 px-2 py-1 text-[10px] text-stone-400"
+                    title="Model routing is controlled from the Model Routing Workstation; this story view is read-only."
                   >
-                    <option value="">Auto · Healthy primary</option>
-                    {narrationModels.map((model) => {
-                      const key = `${model.providerId}::${model.modelId}`;
-                      const modelRuntime = model.runtime;
-                      const cooldown = modelRuntime?.cooldownUntil && modelRuntime.cooldownUntil > Date.now();
-                      const unavailable =
-                        modelRuntime?.operationalStatus === 'UNAVAILABLE'
-                        || modelRuntime?.operationalStatus === 'DISABLED';
-                      return (
-                        <option key={key} value={key} disabled={unavailable}>
-                          {model.displayName || model.modelId}{cooldown ? ' · Cooldown' : unavailable ? ' · Unavailable' : ''}
-                        </option>
-                      );
-                    })}
-                  </select>
+                    Narration: {aiRoutingStatus}
+                  </span>
                   <span className="text-[10px] text-stone-700">
                     {aiRoutingStatus} · {tokenText}
                   </span>

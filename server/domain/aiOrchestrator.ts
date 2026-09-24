@@ -3319,6 +3319,9 @@ export class MultiModelOrchestrator {
     };
 
     // Category-scoped manual override has precedence over task auto-selection.
+    // IMPORTANT: once a category is manually selected, its fallback scope is closed
+    // to the task's configured chain. Never inject unrelated automatically-ranked
+    // models into a user-selected category.
     if (categoryOverrideKey) {
       const overridden = findConfiguredModel(categoryOverrideKey);
       if (overridden && isUsableCandidate(overridden)) {
@@ -3326,29 +3329,30 @@ export class MultiModelOrchestrator {
           .map(findConfiguredModel)
           .filter((m): m is ModelRegistryRecord => Boolean(m))
           .filter((m) => m.modelId !== overridden.modelId && isUsableCandidate(m));
-        const automaticFallbacks = Array.from(this.models.values())
-          .filter((m) => m.modelId !== overridden.modelId && isUsableCandidate(m))
-          .sort((a, b) => {
-            const scoreA = a.userPriority + (a.health === 'Healthy' ? 50 : 0) - (this.consecutiveFailures.get(this.modelKey(a)) || 0) * 25;
-            const scoreB = b.userPriority + (b.health === 'Healthy' ? 50 : 0) - (this.consecutiveFailures.get(this.modelKey(b)) || 0) * 25;
-            if (scoreB !== scoreA) return scoreB - scoreA;
-            const modelDiff = a.modelId.localeCompare(b.modelId);
-            return modelDiff !== 0 ? modelDiff : a.providerId.localeCompare(b.providerId);
-          });
+
         const fallbackSet = new Set<string>();
         const fallbackModels: ModelRegistryRecord[] = [];
-        for (const candidate of [...configuredFallbacks, ...automaticFallbacks]) {
+        for (const candidate of configuredFallbacks) {
           const candidateKey = this.modelKey(candidate);
           if (!fallbackSet.has(candidateKey)) {
             fallbackSet.add(candidateKey);
             fallbackModels.push(candidate);
           }
         }
-        const emergency = Array.from(this.models.values()).find((m) => m.isEmergencyFloor && m.roleEligibility.includes(task));
-        if (emergency && !fallbackModels.some((m) => m.modelId === emergency.modelId)) fallbackModels.push(emergency);
+
+        const emergency = Array.from(this.models.values()).find(
+          (m) => m.isEmergencyFloor && m.roleEligibility.includes(task)
+        );
+        if (emergency && !fallbackModels.some((m) => this.modelKey(m) === this.modelKey(emergency))) {
+          fallbackModels.push(emergency);
+        }
+
         return {
           selectedModel: overridden,
-          selectionReason: 'Category-scoped manual override for ' + category + '.',
+          selectionReason:
+            'Category-scoped manual override for ' +
+            category +
+            '; fallback candidates are restricted to the configured task chain.',
           selectionScore: overridden.userPriority + 1000,
           fallbacks: fallbackModels,
         };
@@ -3371,22 +3375,19 @@ export class MultiModelOrchestrator {
         if (contextTokens === 0 || contextTokens <= pinnedModel.contextWindow) {
           let fallbacks: ModelRegistryRecord[];
           if (customChainKeys) {
+            // A configured task chain is authoritative. Do not grant a model new
+            // task eligibility merely because it appears in the chain.
             fallbacks = customChainKeys
               .map(findConfiguredModel)
               .filter((m): m is ModelRegistryRecord => Boolean(m))
-              .map((m) => {
-                if (task && !m.roleEligibility.includes(task)) {
-                  m.roleEligibility.push(task);
-                }
-                return m;
-              })
-              .filter((m) => m.modelId !== pinnedModel.modelId && m.health !== 'DisabledByUser');
+              .filter((m) => m.modelId !== pinnedModel.modelId && isUsableCandidate(m));
 
-            const emergency = Array.from(this.models.values()).find((m) => m.isEmergencyFloor);
+            const emergency = Array.from(this.models.values()).find(
+              (m) => m.isEmergencyFloor && m.roleEligibility.includes(task)
+            );
             if (
               emergency &&
-              emergency.roleEligibility.includes(task) &&
-              !fallbacks.some((m) => m.modelId === emergency.modelId)
+              !fallbacks.some((m) => this.modelKey(m) === this.modelKey(emergency))
             ) {
               fallbacks.push(emergency);
             }
@@ -3475,33 +3476,32 @@ export class MultiModelOrchestrator {
     });
 
     if (customChainKeys && customChainKeys.length > 0 && !hasActiveManualOverrideForTask) {
+      // Configured chains are strict allow-lists. A model appearing in a chain
+      // must already be eligible for this exact task; the router must never
+      // mutate the model registry to make the chain executable.
       const configuredModels = customChainKeys
         .map(findConfiguredModel)
         .filter((m): m is ModelRegistryRecord => Boolean(m))
-        .map((m) => {
-          if (task && !m.roleEligibility.includes(task)) {
-            m.roleEligibility.push(task);
-          }
-          return m;
-        })
-        .filter((m) => m.health !== 'DisabledByUser');
+        .filter((m) => isUsableCandidate(m));
 
       if (configuredModels.length > 0) {
         const selectedFromChain = configuredModels[0];
         const fallbackModels = configuredModels.slice(1);
 
-        const emergency = Array.from(this.models.values()).find((m) => m.isEmergencyFloor);
+        const emergency = Array.from(this.models.values()).find(
+          (m) => m.isEmergencyFloor && m.roleEligibility.includes(task)
+        );
         if (
           emergency &&
-          emergency.roleEligibility.includes(task) &&
-          !fallbackModels.some((m) => m.modelId === emergency.modelId)
+          !fallbackModels.some((m) => this.modelKey(m) === this.modelKey(emergency))
         ) {
           fallbackModels.push(emergency);
         }
 
         return {
           selectedModel: selectedFromChain,
-          selectionReason: `Using the configured AI fallback order for '${task}'.`,
+          selectionReason:
+            `Using the configured AI fallback order for '${task}' with task-eligible models only.`,
           selectionScore: selectedFromChain.userPriority + 500,
           fallbacks: fallbackModels,
         };
@@ -4783,7 +4783,12 @@ export class MultiModelOrchestrator {
     // one-model chain strand the task. Recover additional currently-usable
     // candidates from the live registry while preserving the configured order.
     const nonEmergencyCount = selectedCandidates.filter((model) => !model.isEmergencyFloor).length;
-    if (nonEmergencyCount < 2) {
+    const categoryOverrideActive = this.getCategoryModelOverride(this.getTaskCategory(task)) !== undefined;
+
+    // Once the user explicitly selects a category model, recovery must not
+    // silently introduce arbitrary models from the global registry. The only
+    // permitted extra candidate is the deterministic emergency floor.
+    if (nonEmergencyCount < 2 && !categoryOverrideActive) {
       const recoveryCandidates = Array.from(this.models.values())
         .filter((model) => !candidateKeys.has(this.modelKey(model)))
         .filter((model) => this.isCandidateUsable(model, task, contextTokens))

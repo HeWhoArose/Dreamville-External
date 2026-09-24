@@ -476,7 +476,19 @@ Rules:
           'narrative.generate',
           prompt,
           'Return only the requested Character Genesis JSON. Treat the player concept as authoritative input; do not overwrite preserved user fields.',
-          { timeoutMs: 45000 }
+          {
+            timeoutMs: 20000,
+            validateResponse: (text) => {
+              const parsed = this.parseJsonFromAiResponse(text);
+              if (!parsed || !this.isValidCharacterExtractionShape(parsed)) {
+                return {
+                  valid: false,
+                  errorReason: 'Character Genesis response does not satisfy the required structured extraction schema.',
+                };
+              }
+              return { valid: true };
+            },
+          }
         );
 
         generationAttemptsTrail = response.attemptsTrail || [];

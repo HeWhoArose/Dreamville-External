@@ -289,13 +289,22 @@ export class HistoricalChronicleEngine {
    */
   public getEpistemicEvidence(viewerActorId?: string): HistoricalEvidence[] {
     return Array.from(this.evidenceStore.values()).filter((ev) => {
-      if (!viewerActorId) return true;
+      if (!viewerActorId) return false;
       if (ev.visibility === 'PUBLIC') return true;
-      if (ev.primarySubjectId === viewerActorId || ev.secondarySubjectId === viewerActorId) return true;
-      if (ev.visibility === 'OBSERVERS_ONLY' || ev.visibility === 'SECRET') {
-        return ev.confidentialToEntityIds?.includes(viewerActorId) ?? false;
+
+      if (
+        (ev.visibility === 'OBSERVERS_ONLY' || ev.visibility === 'SECRET')
+        && ev.confidentialToEntityIds?.includes(viewerActorId)
+      ) {
+        return true;
       }
-      return true;
+
+      if (ev.visibility === 'FACTION') {
+        return ev.primarySubjectId === viewerActorId
+          || ev.secondarySubjectId === viewerActorId;
+      }
+
+      return ev.primarySubjectId === viewerActorId || ev.secondarySubjectId === viewerActorId;
     });
   }
 

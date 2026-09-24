@@ -87,12 +87,26 @@ async function startServer() {
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
-        // AI Studio's embedded preview reverse proxy does not reliably expose
-        // the Vite HMR websocket. The websocket failure can leave the preview
-        // boot screen hanging even though the HTTP module pipeline is healthy.
+        // AI Studio's embedded preview does not reliably expose Vite's HMR
+        // websocket. Disable HMR and remove the client bootstrap explicitly;
+        // otherwise the injected /@vite/client can still attempt a websocket
+        // connection before the React entry module executes.
         hmr: false,
+        ws: false,
       },
       appType: 'spa',
+      plugins: [
+        {
+          name: 'dreambook-preview-no-hmr-client',
+          enforce: 'post',
+          transformIndexHtml(html: string) {
+            return html
+              .replace(/<script[^>]+src=["']\/\@vite\/client["'][^>]*><\/script>\s*/g, '')
+              .replace(/<script[^>]+src=["']\/\@react-refresh["'][^>]*><\/script>\s*/g, '')
+              .replace(/<script[^>]*>\s*import RefreshRuntime from ["']\/\@react-refresh["'][\s\S]*?<\/script>\s*/g, '');
+          },
+        },
+      ],
     });
     app.use(vite.middlewares);
   } else {

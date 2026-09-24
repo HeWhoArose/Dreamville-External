@@ -87,27 +87,44 @@ async function startServer() {
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
-        // AI Studio's embedded preview does not reliably expose Vite's HMR
-        // websocket. Disable HMR and remove the client bootstrap explicitly;
-        // otherwise the injected /@vite/client can still attempt a websocket
-        // connection before the React entry module executes.
         hmr: false,
         ws: false,
       },
       appType: 'spa',
-      plugins: [
-        {
-          name: 'dreambook-preview-no-hmr-client',
-          enforce: 'post',
-          transformIndexHtml(html: string) {
-            return html
-              .replace(/<script[^>]+src=["']\/\@vite\/client["'][^>]*><\/script>\s*/g, '')
-              .replace(/<script[^>]+src=["']\/\@react-refresh["'][^>]*><\/script>\s*/g, '')
-              .replace(/<script[^>]*>\s*import RefreshRuntime from ["']\/\@react-refresh["'][\s\S]*?<\/script>\s*/g, '');
-          },
-        },
-      ],
     });
+
+    // Do not let Vite own HTML delivery in the embedded preview. Vite injects
+    // /@vite/client into HTML, and that client attempts a websocket connection
+    // even when the preview cannot expose the HMR websocket. Serve the HTML
+    // ourselves, use Vite only for module/CSS transformation, and strip any
+    // dev-client/React-refresh bootstrap that transformIndexHtml may add.
+    app.use(async (req, res, next) => {
+      if (req.method !== 'GET') {
+        next();
+        return;
+      }
+
+      const accept = String(req.headers.accept || '');
+      if (!accept.includes('text/html')) {
+        next();
+        return;
+      }
+
+      try {
+        const templatePath = path.resolve(process.cwd(), 'index.html');
+        const template = fs.readFileSync(templatePath, 'utf-8');
+        const transformed = await vite.transformIndexHtml(req.originalUrl || '/', template);
+        const html = transformed
+          .replace(/<script[^>]+src=["']\/@vite\/client(?:\?[^"']*)?["'][^>]*><\/script>\s*/g, '')
+          .replace(/<script[^>]+src=["']\/@react-refresh(?:\?[^"']*)?["'][^>]*><\/script>\s*/g, '')
+          .replace(/<script[^>]*>\s*import RefreshRuntime from ["']\/@react-refresh(?:\?[^"']*)?["'][\s\S]*?<\/script>\s*/g, '');
+
+        res.status(200).type('html').send(html);
+      } catch (error) {
+        next(error);
+      }
+    });
+
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');

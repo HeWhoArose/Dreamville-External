@@ -2758,6 +2758,10 @@ export class InMemoryWorldRepository implements WorldRepository {
         };
       }
       this.storyRuns.set(storyId, restoredRun);
+      const existingAgencyEngine = this.dynamicCharacterAgencyEngines.get(storyId);
+      if (existingAgencyEngine) {
+        existingAgencyEngine.importState(restoredRun.runtimeState?.characterAgency);
+      }
     } else {
       this.storyRuns.delete(storyId);
     }
@@ -2973,6 +2977,7 @@ export class InMemoryWorldRepository implements WorldRepository {
     this.combatEngines.delete(storyId);
     this.memoryEngines.delete(storyId);
     this.livingSimulations.delete(storyId);
+    this.dynamicCharacterAgencyEngines.delete(storyId);
     this.npcLifecycles.delete(storyId);
   }
 }

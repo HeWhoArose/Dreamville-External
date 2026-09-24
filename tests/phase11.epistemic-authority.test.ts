@@ -179,3 +179,72 @@ test('Phase 11: public facts remain visible without actor-scoped acquisition', (
 		true
 	);
 });
+
+
+test('Phase 11: NPCs cannot select actions that require facts they have not acquired', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'phase11_npc_hidden_action';
+	repository.seedStory(storyId);
+	const phase8 = repository.getPhase8SimulationEngine(storyId);
+	const state = phase8.load(repository, storyId);
+	const npcId = 'npc_secret_actor';
+	state.npcs[npcId] = phase8.npc.createState(npcId);
+	phase8.save(repository, storyId, state);
+
+	const hiddenAction = {
+		id: 'inspect_secret_vault',
+		description: 'Inspect the hidden vault',
+		baseUtility: 100,
+		requiredKnowledgeIds: ['fact_hidden_vault'],
+	};
+	const ordinaryAction = {
+		id: 'wait',
+		description: 'Wait and observe',
+		baseUtility: 1,
+	};
+
+	const denied = phase8.resolveNpcDecision(
+		repository,
+		storyId,
+		npcId,
+		[hiddenAction, ordinaryAction],
+		10
+	);
+	assert.equal(denied?.actionId, ordinaryAction.id);
+
+	const latest = phase8.load(repository, storyId);
+	const npcKnowledge = latest.knowledge[npcId] || phase8.knowledge.createState(npcId);
+	latest.knowledge[npcId] = npcKnowledge;
+	phase8.knowledge.acquire(
+		npcKnowledge,
+		{
+			id: 'fact_hidden_vault',
+			subjectEntityId: 'loc_hidden_vault',
+			predicate: 'exists',
+			objectValue: 'true',
+			status: 'KNOWN',
+			confidence: 1,
+			sourceEvidenceIds: ['evidence_hidden_vault'],
+			acquiredAtSeconds: 10,
+		},
+		{
+			actorId: npcId,
+			factId: 'fact_hidden_vault',
+			evidenceId: 'evidence_hidden_vault',
+			method: 'SYSTEM',
+			success: true,
+			confidence: 1,
+			nowSeconds: 10,
+		}
+	);
+	phase8.save(repository, storyId, latest);
+
+	const allowed = phase8.resolveNpcDecision(
+		repository,
+		storyId,
+		npcId,
+		[hiddenAction, ordinaryAction],
+		20
+	);
+	assert.equal(allowed?.actionId, hiddenAction.id);
+});

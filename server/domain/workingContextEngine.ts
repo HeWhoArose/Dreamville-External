@@ -672,8 +672,7 @@ export class WorkingContextEngine {
     const livingSchedule = repo.getLivingWorldSimulation(storyId).getNpcSchedule(npcId);
 
     const canonicalNpcName =
-      params.npcName?.trim()
-      || npcLifecycle?.name
+      npcLifecycle?.name
       || livingSchedule?.name
       || npcId;
 

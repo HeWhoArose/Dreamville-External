@@ -85,7 +85,13 @@ async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        // AI Studio's embedded preview reverse proxy does not reliably expose
+        // the Vite HMR websocket. The websocket failure can leave the preview
+        // boot screen hanging even though the HTTP module pipeline is healthy.
+        hmr: false,
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);

@@ -10,7 +10,15 @@
     <meta property="og:description" content="DreamBook: Personal AI Story Engine — An immersive, persistent world simulation and interactive storytelling experience." />
   </head>
   <body class="bg-[#090807] text-[#f5f0e8] antialiased selection:bg-amber-500/20 selection:text-amber-200 overflow-x-hidden min-h-screen">
-    <div id="root"></div>
+    <div id="root">
+      <div id="boot-fallback" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#090807;color:#f5f0e8;font-family:system-ui,sans-serif">
+        <div style="text-align:center;padding:32px;max-width:520px">
+          <div style="font-size:12px;letter-spacing:.12em;text-transform:uppercase;opacity:.55">DreamBook</div>
+          <div style="font-size:22px;margin-top:10px">Starting the story engine…</div>
+          <div style="font-size:14px;line-height:1.6;opacity:.65;margin-top:10px">If this screen remains, the frontend did not finish loading.</div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

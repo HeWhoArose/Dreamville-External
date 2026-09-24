@@ -524,6 +524,7 @@ export const App: React.FC = () => {
           isProcessingAction={isProcessingAction}
           openingScene={activeOpeningScene || viewState.openingScene || null}
           worldTitle={activeStorySummary?.worldName}
+          worldId={(activeRunFromLibrary as any)?.worldId || (activeStorySummary as any)?.worldId}
           storyId={activeStoryId}
           protagonistName={viewState.protagonist?.name}
           protagonistRole={viewState.protagonist?.title}

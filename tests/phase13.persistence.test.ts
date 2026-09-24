@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import {
 	CURRENT_PERSISTENCE_VERSION,
@@ -27,7 +28,7 @@ function makeDir(): string {
 
 describe('Phase 13: Persistence Versioning, Migration & Repair', () => {
 	it('migrates the historical v1 save fixture to the current schema without changing gameplay maps', () => {
-		const fixturePath = resolve(dirname(new URL(import.meta.url).pathname), 'fixtures/persistence/v1-legacy-save.json');
+		const fixturePath = resolve(dirname(fileURLToPath(import.meta.url)), 'fixtures/persistence/v1-legacy-save.json');
 		const historicalFixture = JSON.parse(readFileSync(fixturePath, 'utf8'));
 		const migrated = migratePersistenceData(historicalFixture);
 

@@ -36,14 +36,18 @@ export class NpcAutonomyEngine {
 
 	public decide(state: NpcAgentState, context: NpcDecisionContext): NpcDecision | undefined {
 		const activeGoals = state.goals.filter((g) => g.active);
-		const ranked = context.availableActions.map((action) => {
-			const compatibleGoal = activeGoals.find((goal) => !goal.requiredKnowledgeIds?.some((id) => !context.knownFactIds.includes(id)) && !goal.blockedByKnowledgeIds?.some((id) => context.knownFactIds.includes(id)));
-			const goalUtility = compatibleGoal ? compatibleGoal.priority : 0;
-			const opportunity = context.opportunityScore ?? 0;
-			const riskPenalty = Math.max(0, (action.risk ?? 0) - state.riskTolerance) * 0.5;
-			const utility = (action.baseUtility ?? 0) + goalUtility + opportunity - riskPenalty;
-			return { action, utility, goal: compatibleGoal };
-		}).sort((a, b) => b.utility - a.utility || a.action.id.localeCompare(b.action.id));
+		const knownFactIds = new Set(context.knownFactIds);
+		const ranked = context.availableActions
+			.filter((action) => !action.requiredKnowledgeIds?.some((id) => !knownFactIds.has(id)))
+			.map((action) => {
+				const compatibleGoal = activeGoals.find((goal) => !goal.requiredKnowledgeIds?.some((id) => !knownFactIds.has(id)) && !goal.blockedByKnowledgeIds?.some((id) => knownFactIds.has(id)));
+				const goalUtility = compatibleGoal ? compatibleGoal.priority : 0;
+				const opportunity = context.opportunityScore ?? 0;
+				const riskPenalty = Math.max(0, (action.risk ?? 0) - state.riskTolerance) * 0.5;
+				const utility = (action.baseUtility ?? 0) + goalUtility + opportunity - riskPenalty;
+				return { action, utility, goal: compatibleGoal };
+			})
+			.sort((a, b) => b.utility - a.utility || a.action.id.localeCompare(b.action.id));
 		const winner = ranked[0];
 		if (!winner) return undefined;
 		const deception = !!winner.action.enablesDeception && state.deception >= 50;

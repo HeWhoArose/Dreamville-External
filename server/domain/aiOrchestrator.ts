@@ -285,6 +285,9 @@ export interface ProviderGenerateResult {
   latencyMs: number;
   inputTokens?: number;
   outputTokens?: number;
+  reasoningTokens?: number;
+  cachedTokens?: number;
+  toolTokens?: number;
   modelId: string;
   providerId: string;
 }
@@ -1037,6 +1040,9 @@ export class OpenRouterAdapter implements IProviderAdapter {
         latencyMs: Math.max(1, Date.now() - start),
         inputTokens: Number(payload?.usage?.prompt_tokens || 0) || undefined,
         outputTokens: Number(payload?.usage?.completion_tokens || 0) || undefined,
+        reasoningTokens: Number(payload?.usage?.completion_tokens_details?.reasoning_tokens || payload?.usage?.reasoning_tokens || 0) || undefined,
+        cachedTokens: Number(payload?.usage?.prompt_tokens_details?.cached_tokens || 0) || undefined,
+        toolTokens: Number(payload?.usage?.tool_tokens || 0) || undefined,
         modelId: String(payload?.model || options?.modelId || 'openrouter/free'),
         providerId: this.providerId,
       };
@@ -1268,6 +1274,9 @@ Do not enclose in markdown ticks, output pure JSON.`;
             latencyMs,
             inputTokens: res.usageMetadata?.promptTokenCount || 0,
             outputTokens: res.usageMetadata?.candidatesTokenCount || 0,
+            reasoningTokens: res.usageMetadata?.thoughtsTokenCount || 0,
+            cachedTokens: res.usageMetadata?.cachedContentTokenCount || 0,
+            toolTokens: res.usageMetadata?.toolUsePromptTokenCount || 0,
             modelId: targetModel,
             providerId: this.providerId,
             rawResponse: res,

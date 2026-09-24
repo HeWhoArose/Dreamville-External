@@ -600,6 +600,23 @@ gameRouter.get('/diagnostics/why', async (req: Request, res: Response) => {
   }
 });
 
+gameRouter.get('/diagnostics/acceptance', async (_req: Request, res: Response) => {
+  try {
+    const { PHASE15_ACCEPTANCE_GATES, PHASE15_SCENARIO_MATRIX, getPhase15CoverageSummary } = await import('../domain/phase15AcceptanceMatrix');
+    res.json({
+      success: true,
+      phase: 15,
+      status: 'PRE_FINAL_RUNTIME_GATE',
+      coverage: getPhase15CoverageSummary(),
+      scenarios: PHASE15_SCENARIO_MATRIX,
+      gates: PHASE15_ACCEPTANCE_GATES,
+      runtimeVerification: 'Deferred until the final full npm test / lint / build gate.',
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, errorReason: error?.message || 'Failed to load Phase 15 acceptance matrix.' });
+  }
+});
+
 gameRouter.get('/diagnostics/persistence', async (_req: Request, res: Response) => {
   try {
     const { worldRepository } = await import('../repositories/worldRepository');

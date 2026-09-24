@@ -523,6 +523,58 @@ test('Phase 16 — narrative guidance keeps hidden causes out of player-facing g
 	assert.ok(narrativeGuidance.hiddenRelationshipSignals.some((signal) => signal.includes('significant')));
 });
 
+test('Phase 16 — working context includes canonical NPC relationship and agency guidance for narrative generation', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'phase16_context_story';
+	repository.saveStoryRun({
+		storyId,
+		id: storyId,
+		worldId: 'world_alpha',
+		characterName: 'Hero',
+		storyMode: 'PROTAGONIST',
+		dndRulesMode: 'FULL_DND',
+		runtimeState: {},
+	});
+
+	const agency = repository.getDynamicCharacterAgencyEngine(storyId);
+	agency.registerCharacter(storyId, {
+		...characterProfile(),
+		characterId: 'npc_mira',
+		worldId: 'world_alpha',
+	});
+	agency.setRelationship(storyId, {
+		id: 'rel_context',
+		worldId: 'world_alpha',
+		sourceId: 'npc_mira',
+		targetId: 'player',
+		trust: 75,
+		affection: 70,
+		respect: 65,
+		fear: 0,
+		hostility: 10,
+		activeCause: 'INITIAL_BOND',
+		history: [],
+		lastChangedAtSeconds: 0,
+		stance: 'FRIEND',
+	});
+
+	const { WorkingContextEngine } = require('../server/domain/workingContextEngine') as typeof import('../server/domain/workingContextEngine');
+	const context = WorkingContextEngine.assembleTurnContext({
+		storyId,
+		viewerActorId: 'player',
+		npcTargetId: 'npc_mira',
+		worldRepo: repository,
+		hardTokenBudget: 1200,
+		playerAction: 'Talk to Mira',
+	});
+
+	const chunk = context.chunks.find((candidate) => candidate.id === 'b2_dynamic_npc_agency');
+	assert.ok(chunk);
+	assert.match(chunk!.content, /Relationship stance: FRIEND/);
+	assert.match(chunk!.content, /Surface disposition: Warm but cautious\./);
+	assert.match(chunk!.content, /hidden relationship causes are canonical context/i);
+});
+
 test('Phase 16 — export/import is lossless for canonical agency state', () => {
 	const engine = new DynamicCharacterAgencyEngine();
 	seedStoryRelationship(engine);

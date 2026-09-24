@@ -3043,6 +3043,8 @@ export class MultiModelOrchestrator {
   } {
     const contextTokens = options?.contextTokens ?? 0;
     const customChainKeys = this.taskFallbackChains.get(task);
+    const category = this.getTaskCategory(task);
+    const categoryOverrideKey = this.categoryOverrides.get(category);
 
     const findConfiguredModel = (key: string): ModelRegistryRecord | undefined => {
       return Array.from(this.models.values()).find(
@@ -3057,8 +3059,28 @@ export class MultiModelOrchestrator {
       if (model.health === 'Unavailable' || model.health === 'DisabledByUser' || model.health === 'InvalidAuth') return false;
       if (this.isCircuitBreakerTripped(model.providerId, model.modelId)) return false;
       if (contextTokens > 0 && contextTokens > model.contextWindow) return false;
+      if (this.isModelCoolingDown(model)) return false;
       return true;
     };
+
+    // Category-scoped manual override has precedence over task auto-selection.
+    if (categoryOverrideKey) {
+      const overridden = findConfiguredModel(categoryOverrideKey);
+      if (overridden && isUsableCandidate(overridden)) {
+        const configuredFallbacks = (customChainKeys || [])
+          .map(findConfiguredModel)
+          .filter((m): m is ModelRegistryRecord => Boolean(m))
+          .filter((m) => m.modelId !== overridden.modelId && isUsableCandidate(m));
+        const emergency = Array.from(this.models.values()).find((m) => m.isEmergencyFloor && m.roleEligibility.includes(task));
+        if (emergency && !configuredFallbacks.some((m) => m.modelId === emergency.modelId)) configuredFallbacks.push(emergency);
+        return {
+          selectedModel: overridden,
+          selectionReason: 'Category-scoped manual override for ' + category + '.',
+          selectionScore: overridden.userPriority + 1000,
+          fallbacks: configuredFallbacks,
+        };
+      }
+    }
 
     // Check if a model is manually pinned for this task
     const pinnedKey = this.taskPinnedModels.get(task);
@@ -3092,7 +3114,7 @@ export class MultiModelOrchestrator {
             const rawFallbacks = Array.from(this.models.values()).filter(
               (m) => m.modelId !== pinnedModel.modelId && m.roleEligibility.includes(task)
             );
-            fallbacks = rawFallbacks.sort((a, b) => {
+            fallbacks = rawFallbacks.filter((model) => isUsableCandidate(model)).sort((a, b) => {
               const scoreA = a.userPriority + (a.health === 'Healthy' ? 50 : 0) - (this.consecutiveFailures.get(`${a.providerId}::${a.modelId}`) || 0) * 25;
               const scoreB = b.userPriority + (b.health === 'Healthy' ? 50 : 0) - (this.consecutiveFailures.get(`${b.providerId}::${b.modelId}`) || 0) * 25;
               if (scoreB !== scoreA) return scoreB - scoreA;
@@ -4041,9 +4063,18 @@ export class MultiModelOrchestrator {
         if (!forced.roleEligibility.includes(task)) {
           throw new Error(`Model '${params.forceModelId}' is not eligible for role/task '${task}'.`);
         }
+        if (!isUsableCandidate(forced) && !forced.isEmergencyFloor) {
+          throw new Error('Forced model "' + params.forceModelId + '" is unavailable, cooling down, or not context-eligible.');
+        }
         selectedModel = forced;
-        selectionReason = `Explicitly forced model '${params.forceModelId}'.`;
-        fallbacks = Array.from(this.models.values()).filter((m) => m.modelId !== params.forceModelId);
+        selectionReason = 'Explicitly forced model "' + params.forceModelId + '".';
+        const configuredFallbacks = this.getFallbackChain(task)
+          .map((key) => this.models.get(key) || Array.from(this.models.values()).find((m) => m.modelId === key))
+          .filter((m): m is ModelRegistryRecord => Boolean(m))
+          .filter((m) => m.modelId !== forced.modelId);
+        fallbacks = configuredFallbacks.length > 0
+          ? configuredFallbacks.filter((m) => isUsableCandidate(m) || m.isEmergencyFloor)
+          : Array.from(this.models.values()).filter((m) => m.modelId !== forced.modelId && isUsableCandidate(m));
       } else {
         const selection = this.selectBestModel(task, { contextTokens: assembledContext.totalTokens });
         selectedModel = selection.selectedModel;

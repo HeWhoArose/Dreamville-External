@@ -218,6 +218,9 @@ export const StoryView: React.FC<StoryViewProps> = ({
 
   const [typedAction, setTypedAction] = useState('');
   const [aiRoutingStatus, setAiRoutingStatus] = useState<string>('Auto');
+  const [narrationModels, setNarrationModels] = useState<any[]>([]);
+  const [selectedNarrationModelKey, setSelectedNarrationModelKey] = useState<string>('');
+  const [narrationModelBusy, setNarrationModelBusy] = useState(false);
   const [aiRoutingUsage, setAiRoutingUsage] = useState<{ requests: number; totalTokens: number } | null>(null);
   const [lastAiTelemetry, setLastAiTelemetry] = useState<any | null>(null);
   const [revealedCheckIds, setRevealedCheckIds] = useState<Record<string, boolean>>({});
@@ -229,14 +232,23 @@ export const StoryView: React.FC<StoryViewProps> = ({
 
   const refreshAiRouting = async () => {
     try {
-      const [operations, telemetry] = await Promise.all([
+      const [operations, telemetry, modelCatalog] = await Promise.all([
         apiClient.getOrchestratorOperations(),
         apiClient.getOrchestratorTelemetry(),
+        apiClient.getOrchestratorModels(),
       ]);
       const narrationCategory = operations?.operations?.categories?.find(
         (category: any) => category.category === 'narration'
       );
       setAiRoutingStatus(narrationCategory?.mode === 'MANUAL' ? 'Manual' : 'Auto');
+      setSelectedNarrationModelKey(narrationCategory?.activeModelKey || '');
+      const narrationTask = 'narrative.generate';
+      const eligibleModels = (modelCatalog?.models || []).filter((model: any) => {
+        const roles = Array.isArray(model.roleEligibility) ? model.roleEligibility : Array.isArray(model.roles) ? model.roles : [];
+        const health = model?.runtime?.operationalStatus || model.health;
+        return roles.includes(narrationTask) && health !== 'UNAVAILABLE' && health !== 'DISABLED';
+      });
+      setNarrationModels(eligibleModels);
 
       const safeTelemetry = operations?.operations?.safeTelemetry;
       if (safeTelemetry) {
@@ -254,6 +266,21 @@ export const StoryView: React.FC<StoryViewProps> = ({
   useEffect(() => {
     refreshAiRouting();
   }, [storyId, isProcessingAction]);
+
+  const handleNarrationModelChange = async (modelKey: string) => {
+    setNarrationModelBusy(true);
+    try {
+      await apiClient.setOrchestratorCategoryModel({
+        category: 'narration',
+        modelKey: modelKey || null,
+      });
+      await refreshAiRouting();
+    } catch {
+      setTranscriptionError('Unable to update the narration model. Auto mode remains available.');
+    } finally {
+      setNarrationModelBusy(false);
+    }
+  };
 
   const startRecording = async () => {
     setTranscriptionError(null);
@@ -567,12 +594,29 @@ export const StoryView: React.FC<StoryViewProps> = ({
                   >
                     {lastModel ? `Last: ${lastModel} · ${lastAiTelemetry?.latencyMs || 0}ms` : tokenText}
                   </span>
-                  <span
-                    className="rounded-lg border border-stone-800 bg-stone-900 px-2 py-1 text-[10px] text-stone-400"
-                    title="Model routing is controlled from the Model Routing Workstation; this story view is read-only."
+                  <label
+                    className="flex items-center gap-1.5 rounded-lg border border-stone-800 bg-stone-900 px-2 py-1 text-[10px] text-stone-400"
+                    title="Narration model selection is scoped to the narration category only."
                   >
-                    Narration: {aiRoutingStatus}
-                  </span>
+                    <span>Narration</span>
+                    <select
+                      aria-label="Narration model"
+                      value={selectedNarrationModelKey}
+                      disabled={narrationModelBusy || narrationModels.length === 0}
+                      onChange={(event) => void handleNarrationModelChange(event.target.value)}
+                      className="max-w-[180px] bg-transparent text-[10px] text-stone-300 outline-none"
+                    >
+                      <option value="">Auto</option>
+                      {narrationModels.map((model: any) => (
+                        <option
+                          key={model.providerId + '::' + model.modelId}
+                          value={model.providerId + '::' + model.modelId}
+                        >
+                          {model.displayName || model.modelId}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <span className="text-[10px] text-stone-700">
                     {aiRoutingStatus} · {tokenText}
                   </span>

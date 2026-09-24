@@ -3816,7 +3816,9 @@ export class MultiModelOrchestrator {
       const adapter = this.getAdapter(candidate.providerId);
       if (!adapter) continue;
 
+      if (this.isModelCoolingDown(candidate)) continue;
       for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        const attemptStartedAt = Date.now();
         try {
           const abortController = new AbortController();
           const timer = setTimeout(() => abortController.abort(), timeoutMs);
@@ -3839,6 +3841,7 @@ export class MultiModelOrchestrator {
             throw new Error(validation.errorReason || 'Narrative response failed structured validation.');
           }
 
+          this.recordProviderSuccess(candidate, providerRes, 'narrative.generate', attemptStartedAt);
           this.consecutiveFailures.set(modelKey, 0);
 
           // Presentation-only contract: never propagate provider state changes from this path.
@@ -3855,6 +3858,7 @@ export class MultiModelOrchestrator {
           };
         } catch (err: any) {
           lastError = err?.message || String(err);
+          this.recordProviderFailure(candidate, 'narrative.generate', err, attemptStartedAt);
           const failures = (this.consecutiveFailures.get(modelKey) || 0) + 1;
           this.consecutiveFailures.set(modelKey, failures);
 

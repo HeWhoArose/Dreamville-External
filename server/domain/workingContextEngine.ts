@@ -560,12 +560,11 @@ export class WorkingContextEngine {
       });
     }
 
-    // B5_SEMANTIC_LORE: Background knowledge facts (PUBLIC only)
-    const publicFacts = repo.getKnowledgeFacts(storyId)
-      .filter((f) => f.secretLevel === 'public')
+    // B5_SEMANTIC_LORE: Viewer-authorized world knowledge
+    const authorizedFacts = repo.getAuthorizedKnowledgeFacts(storyId, viewerId)
       .slice(0, 3);
-    if (publicFacts.length > 0) {
-      const loreContent = publicFacts
+    if (authorizedFacts.length > 0) {
+      const loreContent = authorizedFacts
         .map((f) => `Fact: ${f.subjectEntityId} ${f.predicate} -> ${f.objectValue} (${f.provenanceSummary})`)
         .join('\n');
       candidateChunks.push({
@@ -676,7 +675,10 @@ export class WorkingContextEngine {
     const geography = repo.getGeographyGraph(storyId);
     const invEngine = repo.getInventoryEngine(storyId);
     const capEngine = repo.getCapabilityEngine(storyId);
-    const knowledgeFacts = repo.getKnowledgeFacts(storyId);
+    const knowledgeFacts = repo.getAuthorizedKnowledgeFacts(
+      storyId,
+      player?.actorId || `player_actor_${storyId}`
+    );
 
     // 1. Canonical starting location
     const startingLocId = run.startingLocationId || run.currentLocationId || (player ? player.locationId : 'loc_unknown');
@@ -736,9 +738,8 @@ export class WorkingContextEngine {
     const capDescriptions = actorCaps.map((c) => `${c.name} [${c.powerTier}]: ${c.description}`);
     const equipList = run.characterEquipment || [];
 
-    // 5. Epistemic filter: only public and player-witnessed knowledge facts
+    // 5. Epistemic filter: only public or explicitly actor-acquired knowledge
     const safeKnowledge = knowledgeFacts
-      .filter((f) => f.secretLevel === 'public' || f.subjectEntityId === actorId || f.subjectEntityId === startingLocId)
       .map((f) => `[${f.predicate}]: ${f.objectValue}`);
 
     // 6. Chronology

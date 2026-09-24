@@ -32,6 +32,7 @@ import { RoutingWorkstationModal } from './components/RoutingWorkstationModal';
 import { LivingBibleWorkstationModal } from './components/LivingBibleWorkstationModal';
 import { EpistemicInspectorModal } from './components/EpistemicInspectorModal';
 import { ContextInspectorModal } from './components/ContextInspectorModal';
+import { DeveloperDiagnosticsModal } from './components/DeveloperDiagnosticsModal';
 import { ArchiveModal } from './components/ArchiveModal';
 import { CreateStoryWizard } from './components/CreateStoryWizard';
 import { CharacterGenesisView } from './components/characterGenesis/CharacterGenesisView';
@@ -87,6 +88,7 @@ export const App: React.FC = () => {
   const [isLivingBibleModalOpen, setIsLivingBibleModalOpen] = useState(false);
   const [isEpistemicModalOpen, setIsEpistemicModalOpen] = useState(false);
   const [isContextModalOpen, setIsContextModalOpen] = useState(false);
+  const [isDeveloperDiagnosticsOpen, setIsDeveloperDiagnosticsOpen] = useState(false);
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
   const [genesisWorld, setGenesisWorld] = useState<WorldTemplate | null>(null);
   const [activeOpeningScene, setActiveOpeningScene] = useState<OpeningScene | null>(null);
@@ -410,7 +412,7 @@ export const App: React.FC = () => {
       return;
     }
     if (route === 'ops.debug') {
-      setIsEpistemicModalOpen(true);
+      setIsDeveloperDiagnosticsOpen(true);
       return;
     }
 
@@ -754,6 +756,7 @@ export const App: React.FC = () => {
               onOpenLivingBible={() => setIsLivingBibleModalOpen(true)}
               onOpenEpistemicInspector={() => setIsEpistemicModalOpen(true)}
               onOpenContextInspector={() => setIsContextModalOpen(true)}
+              onOpenDeveloperDiagnostics={() => setIsDeveloperDiagnosticsOpen(true)}
             />
           )}
         </AppShell>
@@ -817,6 +820,11 @@ export const App: React.FC = () => {
       <ContextInspectorModal
         isOpen={isContextModalOpen}
         onClose={() => setIsContextModalOpen(false)}
+      />
+      <DeveloperDiagnosticsModal
+        isOpen={isDeveloperDiagnosticsOpen}
+        onClose={() => setIsDeveloperDiagnosticsOpen(false)}
+        storyId={activeStoryId}
       />
       <ArchiveModal
         isOpen={isArchiveModalOpen}

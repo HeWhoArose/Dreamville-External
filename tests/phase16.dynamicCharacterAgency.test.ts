@@ -8,6 +8,7 @@ import {
 } from '../server/domain/dynamicCharacterAgency';
 import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
 import { getCharacterSpeakerTheme } from '../src/components/voiceResolver';
+import { WorkingContextEngine } from '../server/domain/workingContextEngine';
 
 function characterProfile(overrides: Partial<CharacterAgencyProfile> = {}): CharacterAgencyProfile {
 	return {
@@ -558,7 +559,6 @@ test('Phase 16 — working context includes canonical NPC relationship and agenc
 		stance: 'FRIEND',
 	});
 
-	const { WorkingContextEngine } = require('../server/domain/workingContextEngine') as typeof import('../server/domain/workingContextEngine');
 	const context = WorkingContextEngine.assembleTurnContext({
 		storyId,
 		viewerActorId: 'player',

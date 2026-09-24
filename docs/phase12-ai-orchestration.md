@@ -96,7 +96,8 @@ Added a compact narration model selector beside the player action composer.
 It supports:
 - Auto / healthy primary routing
 - category-scoped manual narration model selection
-- model status/cooldown awareness
+- model operational status/cooldown awareness per option
+- unavailable/disabled models are not selectable
 - last-used model/latency display
 - compact observed usage display
 
@@ -110,6 +111,8 @@ The existing Routing Workstation now exposes:
 - successes/failures
 - category runtime state
 - active category model
+- category-scoped model selection for eligible registered models
+- automatic fallback candidates remain available behind manual category overrides
 - model operational status
 - latency
 - 429/5xx counts
@@ -121,6 +124,8 @@ The existing Routing Workstation now exposes:
 Added `tests/phase12.ai-orchestration-runtime.test.ts` covering:
 
 - category isolation
+- category override → automatic fallback retention
+- cooldown exclusion from normal selection
 - 429 fallback/cooldown
 - timeout fallback
 - 5xx fallback
@@ -132,6 +137,7 @@ Added `tests/phase12.ai-orchestration-runtime.test.ts` covering:
 - illegal state-change validation
 - provider token telemetry
 - runtime/configuration separation
+- Phase 9 + Phase 10 canonical state flowing into AI working context
 
 The test fixture disables persisted routing writes so the Phase 12 tests do not alter the repository's shared test configuration.
 
@@ -149,6 +155,8 @@ The implementation was repeatedly audited for:
 8. model selector/UI wiring
 9. operations telemetry
 10. repository diff scope
+11. category-control UI behavior
+12. regression-fixture isolation
 
 Issues found during the loop were fixed before the current checkpoint, including:
 - recursive task-category resolver

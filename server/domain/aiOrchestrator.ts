@@ -2817,21 +2817,6 @@ export class MultiModelOrchestrator {
 
     // 2. Google Gemini Provider
     if (providerId === 'google_gemini' || providerId === 'provider_google_gemini') {
-      // A model already known to be unavailable (for example, deprecated or
-      // confirmed 404) is unavailable regardless of whether the provider key
-      // is currently configured.
-      if (model?.health === 'Unavailable' || model?.lifecycleState === 'deprecated' || model?.lifecycleState === 'discontinued') {
-        return {
-          success: false,
-          status: 'UNAVAILABLE',
-          health: 'Unavailable',
-          quota: model.quota,
-          latencyMs: 0,
-          message: 'Model is already classified as unavailable by the registry.',
-          testedAt: Date.now(),
-        };
-      }
-
       const apiKey = typeof process !== 'undefined' ? process.env?.GEMINI_API_KEY : undefined;
       if (!apiKey) {
         if (model) {
@@ -3242,12 +3227,10 @@ export class MultiModelOrchestrator {
 
   public isCandidateUsable(model: ModelRegistryRecord, task?: TaskId, contextTokens: number = 0): boolean {
     if (task && !model.roleEligibility.includes(task)) return false;
-    if (model.health === 'DisabledByUser' || model.health === 'Unavailable') return false;
-    if (model.health === 'InvalidAuth' && !getProviderApiKey(model.providerId)) return false;
-    if (model.quota === 'Exhausted' && !model.isEmergencyFloor) return false;
+    if (model.health === 'DisabledByUser') return false;
     if (this.isCircuitBreakerTripped(model.providerId, model.modelId)) return false;
-    if (this.isModelCoolingDown(model)) return false;
     if (contextTokens > 0 && contextTokens > model.contextWindow) return false;
+    if (model.health === 'InvalidAuth' && !getProviderApiKey(model.providerId)) return false;
     return true;
   }
 

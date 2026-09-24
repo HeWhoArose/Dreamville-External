@@ -51,6 +51,7 @@ describe('Model Routing Slice 1G - Fallback Chain Management & Real Model Connec
     const orchestrator = new MultiModelOrchestrator();
     orchestrator.pinModelForTask('narrative.generate', null);
     const customChain = [
+      'google_gemini::gemini-3.5-flash',
       'google_gemini::gemini-3.6-flash',
       'google_gemini::gemini-2.5-flash',
     ];
@@ -58,7 +59,7 @@ describe('Model Routing Slice 1G - Fallback Chain Management & Real Model Connec
 
     const selection = orchestrator.selectBestModel('narrative.generate', { contextTokens: 1000 });
     assert.ok(selection.selectedModel);
-    assert.equal(selection.selectedModel.modelId, 'gemini-3.6-flash');
+    assert.equal(selection.selectedModel.modelId, 'gemini-3.5-flash');
     // Emergency floor should be automatically appended if missing and eligible
     assert.ok(selection.fallbacks.some(f => f.isEmergencyFloor));
   });

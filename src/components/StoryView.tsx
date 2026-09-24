@@ -598,9 +598,6 @@ export const StoryView: React.FC<StoryViewProps> = ({
           </div>
           <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
             {(() => {
-              const activeModel = narrationModels.find(
-                (model) => `${model.providerId}::${model.modelId}` === activeNarrationModelKey
-              );
               const tokenText = aiRoutingUsage
                 ? `${aiRoutingUsage.totalTokens.toLocaleString()} tok`
                 : 'usage n/a';

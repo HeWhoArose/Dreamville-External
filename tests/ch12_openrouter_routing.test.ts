@@ -257,3 +257,130 @@ test('a stale one-model fallback chain recovers an additional usable model befor
   assert.equal(result.attemptsTrail[0].status, 'FAILED');
   assert.equal(result.attemptsTrail[1].status, 'SUCCESS');
 });
+
+
+test('manual category routing never promotes an ineligible fallback model into the narrative task', () => {
+  const orchestrator = new MultiModelOrchestrator();
+
+  const selected = new DeterministicMockAdapter('provider_category_selected');
+  orchestrator.registerAdapter(selected);
+  orchestrator.registerModel({
+    providerId: 'provider_category_selected',
+    modelId: 'narrative-selected',
+    displayName: 'Narrative Selected',
+    pool: 'creative',
+    capabilities: ['text_generation', 'structured_output'],
+    contextWindow: 64000,
+    health: 'Healthy',
+    quota: 'Healthy',
+    latencyMs: 20,
+    userPriority: 100,
+    roleEligibility: ['narrative.generate', 'character.dialogue'],
+    fallbackEligibility: true,
+  });
+
+  orchestrator.registerModel({
+    providerId: 'provider_category_other',
+    modelId: 'combat-only',
+    displayName: 'Combat Only',
+    pool: 'reasoning',
+    capabilities: ['reasoning'],
+    contextWindow: 64000,
+    health: 'Healthy',
+    quota: 'Healthy',
+    latencyMs: 10,
+    userPriority: 999,
+    roleEligibility: ['combat.tactics'],
+    fallbackEligibility: true,
+  });
+
+  orchestrator.setCategoryModelOverride(
+    'narration',
+    'provider_category_selected::narrative-selected'
+  );
+  orchestrator.pinModelForTask('narrative.generate', null);
+  orchestrator.setFallbackChain('narrative.generate', [
+    'provider_category_selected::narrative-selected',
+    'provider_category_other::combat-only',
+    'provider_deterministic_emergency::emergency-fallback-local',
+  ]);
+
+  const selection = orchestrator.selectBestModel('narrative.generate');
+  assert.equal(selection.selectedModel.modelId, 'narrative-selected');
+  assert.equal(selection.fallbacks.some((model) => model.modelId === 'combat-only'), false);
+
+  const unrelated = orchestrator.getAllModels().find(
+    (model) => model.modelId === 'combat-only'
+  );
+  assert.deepEqual(unrelated?.roleEligibility, ['combat.tactics']);
+});
+
+test('manual category routing does not inject global recovery candidates after the selected model fails', async () => {
+  const orchestrator = new MultiModelOrchestrator();
+
+  const selected = new DeterministicMockAdapter('provider_category_selected_runtime');
+  selected.failureMode = '500';
+  selected.maxFailuresBeforeSuccess = 1;
+  orchestrator.registerAdapter(selected);
+  orchestrator.registerModel({
+    providerId: 'provider_category_selected_runtime',
+    modelId: 'narrative-selected-runtime',
+    displayName: 'Narrative Selected Runtime',
+    pool: 'creative',
+    capabilities: ['text_generation', 'structured_output'],
+    contextWindow: 64000,
+    health: 'Healthy',
+    quota: 'Healthy',
+    latencyMs: 20,
+    userPriority: 100,
+    roleEligibility: ['narrative.generate'],
+    fallbackEligibility: true,
+  });
+
+  const unrelated = new DeterministicMockAdapter('provider_unrelated_runtime');
+  unrelated.cannedResponses.set(
+    'narrative.generate',
+    JSON.stringify({ narrative: ['UNRELATED'] })
+  );
+  orchestrator.registerAdapter(unrelated);
+  orchestrator.registerModel({
+    providerId: 'provider_unrelated_runtime',
+    modelId: 'combat-only-runtime',
+    displayName: 'Combat Only Runtime',
+    pool: 'reasoning',
+    capabilities: ['reasoning'],
+    contextWindow: 64000,
+    health: 'Healthy',
+    quota: 'Healthy',
+    latencyMs: 5,
+    userPriority: 999,
+    roleEligibility: ['combat.tactics'],
+    fallbackEligibility: true,
+  });
+
+  orchestrator.setCategoryModelOverride(
+    'narration',
+    'provider_category_selected_runtime::narrative-selected-runtime'
+  );
+  orchestrator.pinModelForTask('narrative.generate', null);
+  orchestrator.setFallbackChain('narrative.generate', [
+    'provider_category_selected_runtime::narrative-selected-runtime',
+    'provider_deterministic_emergency::emergency-fallback-local',
+  ]);
+
+  const result = await orchestrator.executeTaskGeneration(
+    'narrative.generate',
+    'Return a valid narrative turn.',
+    undefined,
+    {
+      timeoutMs: 1000,
+    }
+  );
+
+  assert.equal(result.modelId, 'emergency-fallback-local');
+  assert.equal(result.source, 'DETERMINISTIC_FALLBACK');
+  assert.equal(
+    result.attemptsTrail.some((attempt) => attempt.modelId === 'combat-only-runtime'),
+    false
+  );
+});

@@ -81,8 +81,15 @@ async function startServer() {
     next();
   });
 
-  // Vite middleware for development vs static files for production
-  if (process.env.NODE_ENV !== 'production') {
+  // AI Studio disables HMR in its embedded sandbox. In that environment,
+  // serving Vite's development HTML can still cause the platform to inject or
+  // execute a Vite client that expects a websocket which the preview does not
+  // expose. Build the frontend once at server startup and serve the generated
+  // static bundle instead. Local development keeps normal Vite middleware.
+  const isProduction = process.env.NODE_ENV === 'production';
+  const isEmbeddedPreview = process.env.DISABLE_HMR === 'true';
+
+  if (!isProduction && !isEmbeddedPreview) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: {
@@ -92,44 +99,30 @@ async function startServer() {
       },
       appType: 'spa',
     });
-
-    // Do not let Vite own HTML delivery in the embedded preview. Vite injects
-    // /@vite/client into HTML, and that client attempts a websocket connection
-    // even when the preview cannot expose the HMR websocket. Serve the HTML
-    // ourselves, use Vite only for module/CSS transformation, and strip any
-    // dev-client/React-refresh bootstrap that transformIndexHtml may add.
-    app.use(async (req, res, next) => {
-      if (req.method !== 'GET') {
-        next();
-        return;
-      }
-
-      const accept = String(req.headers.accept || '');
-      if (!accept.includes('text/html')) {
-        next();
-        return;
-      }
-
-      try {
-        const templatePath = path.resolve(process.cwd(), 'index.html');
-        const template = fs.readFileSync(templatePath, 'utf-8');
-        const transformed = await vite.transformIndexHtml(req.originalUrl || '/', template);
-        const html = transformed
-          .replace(/<script[^>]+src=["']\/@vite\/client(?:\?[^"']*)?["'][^>]*><\/script>\s*/g, '')
-          .replace(/<script[^>]+src=["']\/@react-refresh(?:\?[^"']*)?["'][^>]*><\/script>\s*/g, '')
-          .replace(/<script[^>]*>\s*import RefreshRuntime from ["']\/@react-refresh(?:\?[^"']*)?["'][\s\S]*?<\/script>\s*/g, '');
-
-        res.status(200).type('html').send(html);
-      } catch (error) {
-        next(error);
-      }
-    });
-
     app.use(vite.middlewares);
   } else {
+    if (!isProduction) {
+      const { build } = await import('vite');
+      console.log('[Dreamville Preview] DISABLE_HMR=true detected; building static frontend bundle.');
+      await build({
+        clearScreen: false,
+        logLevel: 'warn',
+      });
+      console.log('[Dreamville Preview] Static frontend bundle ready.');
+    }
+
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+    app.use(
+      express.static(distPath, {
+        setHeaders: (res, filePath) => {
+          if (path.basename(filePath) === 'index.html') {
+            res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+          }
+        },
+      }),
+    );
     app.get('*all', (req, res) => {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }

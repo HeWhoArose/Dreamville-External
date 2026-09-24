@@ -295,6 +295,11 @@ export interface ProviderGenerateResult {
   providerId: string;
 }
 
+export interface TaskResponseValidationResult {
+  valid: boolean;
+  errorReason?: string;
+}
+
 export interface IProviderAdapter {
   providerId: string;
   generate(task: TaskId, prompt: string, options?: ProviderGenerateOptions): Promise<ProviderGenerateResult>;
@@ -3223,9 +3228,11 @@ export class MultiModelOrchestrator {
   public isCandidateUsable(model: ModelRegistryRecord, task?: TaskId, contextTokens: number = 0): boolean {
     if (task && !model.roleEligibility.includes(task)) return false;
     if (model.health === 'DisabledByUser') return false;
-    if (this.isCircuitBreakerTripped(model.providerId, model.modelId)) return false;
-    if (contextTokens > 0 && contextTokens > model.contextWindow) return false;
     if (model.health === 'InvalidAuth' && !getProviderApiKey(model.providerId)) return false;
+    if (model.quota === 'Exhausted' && !model.isEmergencyFloor) return false;
+    if (this.isCircuitBreakerTripped(model.providerId, model.modelId)) return false;
+    if (this.isModelCoolingDown(model)) return false;
+    if (contextTokens > 0 && contextTokens > model.contextWindow) return false;
     return true;
   }
 
@@ -4712,7 +4719,11 @@ export class MultiModelOrchestrator {
     task: TaskId,
     prompt: string,
     systemInstruction?: string,
-    options?: { timeoutMs?: number }
+    options?: {
+      timeoutMs?: number;
+      contextTokens?: number;
+      validateResponse?: (text: string) => TaskResponseValidationResult;
+    }
   ): Promise<{
     text: string;
     source: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK';
@@ -4731,8 +4742,55 @@ export class MultiModelOrchestrator {
   }> {
     this.refreshAllProviderModelStatuses();
     const timeoutMs = options?.timeoutMs || 35000;
-    const selection = this.selectBestModel(task);
-    const candidateChain: ModelRegistryRecord[] = [selection.selectedModel, ...selection.fallbacks];
+    const contextTokens = options?.contextTokens ?? 0;
+    const selection = this.selectBestModel(task, { contextTokens });
+
+    const selectedCandidates: ModelRegistryRecord[] = [selection.selectedModel, ...selection.fallbacks];
+    const candidateKeys = new Set(selectedCandidates.map((model) => this.modelKey(model)));
+
+    // A persisted/manual fallback chain can become stale when models disappear,
+    // quotas change, or discovery replaces the model catalog. Do not let a
+    // one-model chain strand the task. Recover additional currently-usable
+    // candidates from the live registry while preserving the configured order.
+    const nonEmergencyCount = selectedCandidates.filter((model) => !model.isEmergencyFloor).length;
+    if (nonEmergencyCount < 2) {
+      const recoveryCandidates = Array.from(this.models.values())
+        .filter((model) => !candidateKeys.has(this.modelKey(model)))
+        .filter((model) => this.isCandidateUsable(model, task, contextTokens))
+        .filter((model) => !model.isEmergencyFloor)
+        .sort((a, b) => {
+          const runtimeA = this.ensureRuntimeStatus(a);
+          const runtimeB = this.ensureRuntimeStatus(b);
+          const scoreA =
+            a.userPriority +
+            (a.health === 'Healthy' ? 50 : a.health === 'Degraded' ? 10 : 0) +
+            (a.quota === 'Healthy' ? 30 : a.quota === 'Low' ? 10 : 0) -
+            runtimeA.consecutiveFailures * 25 -
+            Math.min(20, (a.latencyMs || 500) / 100);
+          const scoreB =
+            b.userPriority +
+            (b.health === 'Healthy' ? 50 : b.health === 'Degraded' ? 10 : 0) +
+            (b.quota === 'Healthy' ? 30 : b.quota === 'Low' ? 10 : 0) -
+            runtimeB.consecutiveFailures * 25 -
+            Math.min(20, (b.latencyMs || 500) / 100);
+          if (scoreB !== scoreA) return scoreB - scoreA;
+          const modelDiff = a.modelId.localeCompare(b.modelId);
+          return modelDiff !== 0 ? modelDiff : a.providerId.localeCompare(b.providerId);
+        });
+
+      for (const model of recoveryCandidates) {
+        if (candidateKeys.has(this.modelKey(model))) continue;
+        selectedCandidates.push(model);
+        candidateKeys.add(this.modelKey(model));
+      }
+    }
+
+    const candidateChain: ModelRegistryRecord[] = selectedCandidates
+      .filter((model, index) =>
+        index === 0 ||
+        model.isEmergencyFloor ||
+        this.isCandidateUsable(model, task, contextTokens)
+      );
     let totalAttempts = 0;
     let lastError = '';
     const attemptsTrail: Array<{
@@ -4781,6 +4839,16 @@ export class MultiModelOrchestrator {
 
         if (!providerRes || !providerRes.text) {
           throw new Error('Provider returned empty response.');
+        }
+
+        if (options?.validateResponse) {
+          const validation = options.validateResponse(providerRes.text);
+          if (!validation.valid) {
+            throw new Error(
+              'Task response schema validation failed' +
+              (validation.errorReason ? `: ${validation.errorReason}` : '.')
+            );
+          }
         }
 
         const latencyMs = Math.max(1, Date.now() - attemptStartedAt);
@@ -4857,9 +4925,11 @@ export class MultiModelOrchestrator {
   }
 
   /**
-   * Automated Fallback Configuration Engine
-   * Pings all available models across providers, verifies health and latency,
-   * groups by capability/speed, and automatically selects the optimal primary and up to 4 fallbacks.
+   * Automated Fallback Configuration Engine.
+   *
+   * This remains the legacy auto-arrangement path for now; the formal
+   * task-specific preflight model intelligence layer will replace the
+   * generic provider probe in the next orchestration specification pass.
    */
   public async autoConfigureFallbacks(options?: {
     maxFallbacksPerCategory?: number;

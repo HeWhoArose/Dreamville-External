@@ -1,4 +1,5 @@
 import { deterministicId } from './deterministicRng';
+import type { EntityCard } from './entityCard';
 import type { WorldTimestamp } from './types';
 
 export type RelationshipStance =
@@ -78,6 +79,11 @@ export interface CharacterAgencyProfile {
 	name: string;
 	factionId?: string;
 	personality: CharacterPersonalityProfile;
+	traits?: string[];
+	values?: string[];
+	fears?: string[];
+	desires?: string[];
+	dialogueStyle?: string;
 	motivations: string[];
 	goals: CharacterAgencyGoal[];
 	currentGoalId?: string;
@@ -284,6 +290,77 @@ export class DynamicCharacterAgencyEngine {
 		return normalizePersonality(overrides);
 	}
 
+	public hydrateFromEntityCards(storyId: string, worldId: string, cards: EntityCard[]): void {
+		const supportedKinds = new Set<EntityCard['kind']>([
+			'PLAYER',
+			'CHARACTER',
+			'NPC',
+			'CREATURE',
+			'BOSS',
+			'COMPANION',
+			'MERCHANT',
+			'FACTION_MEMBER',
+		]);
+
+		for (const card of cards) {
+			if (!card || !card.id || !card.name || !supportedKinds.has(card.kind)) continue;
+			if (!this.getCharacter(storyId, card.id)) {
+				const goals = [
+					...(card.worldState?.currentGoal ? [{ goalId: deterministicId('npc_goal', storyId, card.id, card.worldState.currentGoal), title: card.worldState.currentGoal, description: card.worldState.currentGoal, priority: 100, active: true }] : []),
+					...(card.behavior?.priorities || []).map((priority) => ({
+						goalId: deterministicId('npc_priority', storyId, card.id, priority),
+						title: priority,
+						description: priority,
+						priority: 70,
+						active: true,
+					})),
+				];
+				const motivations = Array.from(new Set([
+					...(card.personality?.motivations || []),
+					...(card.personality?.desires || []),
+					...(card.personality?.fears || []),
+				]));
+				this.registerCharacter(storyId, {
+					characterId: card.id,
+					worldId: card.worldId || worldId,
+					name: card.name,
+					factionId: card.social?.factionIds?.[0],
+					personality: {},
+					traits: [...(card.personality?.traits || []), ...(card.traits || [])],
+					values: [...(card.personality?.values || [])],
+					fears: [...(card.personality?.fears || [])],
+					desires: [...(card.personality?.desires || [])],
+					dialogueStyle: card.personality?.dialogueStyle,
+					motivations,
+					goals,
+					currentGoalId: goals[0]?.goalId,
+					canonicalGoal: card.worldState?.currentGoal || goals[0]?.description,
+					role: card.social?.role || card.classification?.role || card.kind.toLowerCase(),
+					surfaceDisposition: card.personality?.temperament || card.personality?.dialogueStyle || 'Measured and observant.',
+				});
+			}
+
+			for (const [targetId, relation] of Object.entries(card.social?.relationships || {})) {
+				if (!this.getRelationship(storyId, card.id, targetId)) {
+					this.setRelationship(storyId, {
+						id: deterministicId('entity_relationship', storyId, card.id, targetId),
+						worldId: card.worldId || worldId,
+						sourceId: card.id,
+						targetId,
+						trust: relation?.trust ?? 50,
+						affection: relation?.affection ?? 50,
+						respect: relation?.respect ?? 50,
+						fear: relation?.fear ?? 0,
+						hostility: 0,
+						activeCause: 'INITIAL_BOND',
+						history: [],
+						lastChangedAtSeconds: 0,
+					});
+				}
+			}
+		}
+	}
+
 	public registerCharacter(
 		storyId: string,
 		profile: Omit<CharacterAgencyProfile, 'personality' | 'controlState' | 'controlEvidenceIds'> & {
@@ -300,6 +377,11 @@ export class DynamicCharacterAgencyEngine {
 			name: profile.name,
 			factionId: profile.factionId,
 			personality: normalizePersonality(profile.personality),
+			traits: [...(profile.traits || [])],
+			values: [...(profile.values || [])],
+			fears: [...(profile.fears || [])],
+			desires: [...(profile.desires || [])],
+			dialogueStyle: profile.dialogueStyle,
 			motivations: Array.isArray(profile.motivations) ? [...profile.motivations] : [],
 			goals: Array.isArray(profile.goals)
 				? profile.goals.map((goal) => ({
@@ -739,6 +821,11 @@ export class DynamicCharacterAgencyEngine {
 				name: String(profile.name || profile.characterId || 'Unknown'),
 				factionId: profile.factionId ? String(profile.factionId) : undefined,
 				personality: normalizePersonality(profile.personality || {}),
+				traits: Array.isArray(profile.traits) ? profile.traits.map(String) : [],
+				values: Array.isArray(profile.values) ? profile.values.map(String) : [],
+				fears: Array.isArray(profile.fears) ? profile.fears.map(String) : [],
+				desires: Array.isArray(profile.desires) ? profile.desires.map(String) : [],
+				dialogueStyle: profile.dialogueStyle ? String(profile.dialogueStyle) : undefined,
 				motivations: Array.isArray(profile.motivations) ? profile.motivations.map(String) : [],
 				goals: Array.isArray(profile.goals)
 					? profile.goals.map((goal) => ({

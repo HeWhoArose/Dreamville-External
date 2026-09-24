@@ -1210,6 +1210,45 @@ class ApiClient {
   }
 
   /**
+   * Phase 13: inspect persistence versioning and migration state.
+   */
+  public async getPersistenceStatus(): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/persistence/status`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `Failed to inspect persistence: HTTP ${res.status}`);
+    return data;
+  }
+
+  /**
+   * Phase 13: migrate legacy persistence transactionally.
+   */
+  public async migratePersistence(): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/persistence/migrate`, {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || data?.persistence?.errors?.join(' ') || `Persistence migration failed: HTTP ${res.status}`);
+    return data;
+  }
+
+  /**
+   * Phase 13: validate/repair persistence with source backup protection.
+   */
+  public async repairPersistence(): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/persistence/repair`, {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || data?.errorReason || `Persistence repair failed: HTTP ${res.status}`);
+    return data;
+  }
+
+  /**
    * Challenge 12: Get last turn telemetry and orchestration stats.
    * GET /api/game/orchestrator/telemetry
    */

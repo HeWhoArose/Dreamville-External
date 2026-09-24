@@ -742,6 +742,11 @@ export class DynamicCharacterAgencyEngine {
 		controlState: AgencyControlState;
 		activeCause: RelationshipCause;
 		motivations: string[];
+		personalityTraits: string[];
+		values: string[];
+		fears: string[];
+		desires: string[];
+		dialogueStyle?: string;
 		currentGoal?: string;
 		surfaceDisposition: string;
 		hiddenRelationshipSignals: string[];
@@ -754,6 +759,11 @@ export class DynamicCharacterAgencyEngine {
 				controlState: 'FREE',
 				activeCause: 'OTHER',
 				motivations: [],
+				personalityTraits: [],
+				values: [],
+				fears: [],
+				desires: [],
+				dialogueStyle: undefined,
 				currentGoal: undefined,
 				surfaceDisposition: 'Measured and observant.',
 				hiddenRelationshipSignals: [],
@@ -771,6 +781,11 @@ export class DynamicCharacterAgencyEngine {
 			controlState: character.controlState,
 			activeCause: relationship.activeCause,
 			motivations: [...character.motivations],
+			personalityTraits: [...(character.traits || [])],
+			values: [...(character.values || [])],
+			fears: [...(character.fears || [])],
+			desires: [...(character.desires || [])],
+			dialogueStyle: character.dialogueStyle,
 			currentGoal,
 			surfaceDisposition: character.surfaceDisposition,
 			hiddenRelationshipSignals,

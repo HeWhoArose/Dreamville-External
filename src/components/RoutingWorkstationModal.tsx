@@ -92,6 +92,18 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
     }
   }, [isOpen, loadData]);
 
+  const handleCategoryModelChange = async (category: string, modelKey: string) => {
+    try {
+      await apiClient.setOrchestratorCategoryModel({
+        category,
+        modelKey: modelKey || null,
+      });
+      await loadData();
+    } catch (err: any) {
+      setError(err?.message || 'Failed to update AI category model.');
+    }
+  };
+
   // Execute Routing Decision Test
   const handleTestRouting = async () => {
     setRoutingLoading(true);
@@ -681,8 +693,35 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
                             {category.mode}
                           </span>
                         </div>
-                        <div className="mt-2 text-[10px] font-mono text-stone-500 break-all">
-                          {category.activeModelKey || 'Auto'}
+                        <div className="mt-2 flex flex-col gap-2">
+                          <select
+                            value={category.activeModelKey || ''}
+                            onChange={(event) => handleCategoryModelChange(category.category, event.target.value)}
+                            className="h-8 rounded-md border border-stone-800 bg-stone-950 px-2 text-[10px] text-stone-300 outline-none"
+                            aria-label={`${category.category} AI model`}
+                          >
+                            <option value="">Auto / configured fallback</option>
+                            {(models || [])
+                              .filter((candidate: any) =>
+                                Array.isArray(candidate.roleEligibility) &&
+                                (category.tasks || []).some((task: string) => candidate.roleEligibility.includes(task))
+                              )
+                              .map((candidate: any) => {
+                                const key = `${candidate.providerId}::${candidate.modelId}`;
+                                const runtime = phase12Operations?.models?.find(
+                                  (entry: any) => entry.providerId === candidate.providerId && entry.modelId === candidate.modelId
+                                );
+                                const unavailable = runtime?.operationalStatus === 'UNAVAILABLE' || runtime?.operationalStatus === 'DISABLED';
+                                return (
+                                  <option key={key} value={key} disabled={unavailable}>
+                                    {candidate.displayName || candidate.modelId} · {runtime?.operationalStatus || runtime?.status || candidate.health}
+                                  </option>
+                                );
+                              })}
+                          </select>
+                          <div className="text-[10px] font-mono text-stone-500 break-all">
+                            {category.activeModelKey || 'Auto'}
+                          </div>
                         </div>
                         <div className="mt-1 text-[10px] text-stone-600">
                           Fallbacks: {Array.isArray(category.fallbackChain) ? category.fallbackChain.length : 0}

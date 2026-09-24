@@ -276,8 +276,26 @@ test('Character Genesis extraction hardening', async (t) => {
     );
     try {
       const concept = 'a soul reaper from bleach world got isekai to an apocalyptic one';
+      await assert.rejects(
+        () => characterGenesisService.extractCharacterDraft(
+          { naturalLanguageConcept: concept, worldId: testWorld.worldId },
+          testWorld
+        ),
+        (error: any) => {
+          assert.equal(error?.code, 'AI_UNAVAILABLE');
+          assert.equal(error?.requiresDeterministicConfirmation, true);
+          return true;
+        }
+      );
+
+      // Deterministic extraction is an explicit player-consent path, not an
+      // automatic substitute for failed/invalid AI output.
       const draft = await characterGenesisService.extractCharacterDraft(
-        { naturalLanguageConcept: concept, worldId: testWorld.worldId },
+        {
+          naturalLanguageConcept: concept,
+          worldId: testWorld.worldId,
+          allowDeterministicFallback: true,
+        },
         testWorld
       );
 
@@ -345,6 +363,7 @@ test('Character Genesis extraction hardening', async (t) => {
           naturalLanguageConcept: concept,
           worldId: testWorld.worldId,
           existingDraft,
+          allowDeterministicFallback: true,
         },
         testWorld
       );

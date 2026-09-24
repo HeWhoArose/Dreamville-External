@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { OpenRouterAdapter, MultiModelOrchestrator } from '../server/domain/aiOrchestrator';
+import {
+  OpenRouterAdapter,
+  MultiModelOrchestrator,
+  DeterministicMockAdapter,
+} from '../server/domain/aiOrchestrator';
 
 test('OpenRouter adapter discovers models and executes chat completions with the server key', async () => {
   const originalKey = process.env.OPENROUTER_API_KEY;
@@ -83,4 +87,167 @@ test('configured fallback chain controls the actual fallback candidate set', () 
   assert.equal(selection.fallbacks.every((m) =>
     m.modelId === 'mock-reasoning-pro' || m.isEmergencyFloor
   ), true);
+});
+
+
+test('task response validation failure advances to the next AI model instead of stopping at the first response', async () => {
+  const orchestrator = new MultiModelOrchestrator();
+
+  for (const model of orchestrator.getAllModels()) {
+    if (!model.isEmergencyFloor) {
+      orchestrator.updateModelHealth(model.providerId, model.modelId, 'DisabledByUser');
+    }
+  }
+
+  const first = new DeterministicMockAdapter('provider_test_first');
+  first.cannedResponses.set('narrative.generate', JSON.stringify({ ok: false, reason: 'schema-invalid' }));
+
+  const second = new DeterministicMockAdapter('provider_test_second');
+  second.cannedResponses.set('narrative.generate', JSON.stringify({ ok: true, value: 'usable' }));
+
+  orchestrator.registerAdapter(first);
+  orchestrator.registerAdapter(second);
+
+  orchestrator.registerModel({
+    providerId: 'provider_test_first',
+    modelId: 'first-model',
+    displayName: 'First Test Model',
+    pool: 'fast',
+    capabilities: ['text_generation', 'structured_output'],
+    contextWindow: 64000,
+    health: 'Healthy',
+    quota: 'Healthy',
+    latencyMs: 20,
+    userPriority: 100,
+    roleEligibility: ['narrative.generate'],
+    fallbackEligibility: true,
+  });
+
+  orchestrator.registerModel({
+    providerId: 'provider_test_second',
+    modelId: 'second-model',
+    displayName: 'Second Test Model',
+    pool: 'fast',
+    capabilities: ['text_generation', 'structured_output'],
+    contextWindow: 64000,
+    health: 'Healthy',
+    quota: 'Healthy',
+    latencyMs: 30,
+    userPriority: 90,
+    roleEligibility: ['narrative.generate'],
+    fallbackEligibility: true,
+  });
+
+  orchestrator.pinModelForTask('narrative.generate', 'provider_test_first::first-model');
+  orchestrator.setFallbackChain('narrative.generate', [
+    'provider_test_first::first-model',
+    'provider_test_second::second-model',
+    'provider_deterministic_emergency::emergency-fallback-local',
+  ]);
+
+  const result = await orchestrator.executeTaskGeneration(
+    'narrative.generate',
+    'Return the test response.',
+    undefined,
+    {
+      timeoutMs: 1000,
+      validateResponse: (text) => {
+        try {
+          const parsed = JSON.parse(text);
+          return parsed?.ok === true
+            ? { valid: true }
+            : { valid: false, errorReason: 'Expected { ok: true }.' };
+        } catch {
+          return { valid: false, errorReason: 'Response was not valid JSON.' };
+        }
+      },
+    }
+  );
+
+  assert.equal(result.source, 'AI_FALLBACK');
+  assert.equal(result.modelId, 'second-model');
+  assert.equal(result.attempts, 2);
+  assert.equal(result.attemptsTrail.length, 2);
+  assert.equal(result.attemptsTrail[0].status, 'FAILED');
+  assert.match(result.attemptsTrail[0].error || '', /schema validation/i);
+  assert.equal(result.attemptsTrail[1].status, 'SUCCESS');
+});
+
+test('a stale one-model fallback chain recovers an additional usable model before the deterministic floor', async () => {
+  const orchestrator = new MultiModelOrchestrator();
+
+  for (const model of orchestrator.getAllModels()) {
+    if (!model.isEmergencyFloor) {
+      orchestrator.updateModelHealth(model.providerId, model.modelId, 'DisabledByUser');
+    }
+  }
+
+  const first = new DeterministicMockAdapter('provider_recovery_first');
+  first.cannedResponses.set('narrative.generate', JSON.stringify({ ok: false }));
+
+  const recovery = new DeterministicMockAdapter('provider_recovery_second');
+  recovery.cannedResponses.set('narrative.generate', JSON.stringify({ ok: true }));
+
+  orchestrator.registerAdapter(first);
+  orchestrator.registerAdapter(recovery);
+
+  orchestrator.registerModel({
+    providerId: 'provider_recovery_first',
+    modelId: 'first-model',
+    displayName: 'Recovery Primary',
+    pool: 'fast',
+    capabilities: ['text_generation', 'structured_output'],
+    contextWindow: 64000,
+    health: 'Healthy',
+    quota: 'Healthy',
+    latencyMs: 20,
+    userPriority: 100,
+    roleEligibility: ['narrative.generate'],
+    fallbackEligibility: true,
+  });
+
+  orchestrator.registerModel({
+    providerId: 'provider_recovery_second',
+    modelId: 'recovery-model',
+    displayName: 'Recovered Fallback',
+    pool: 'fast',
+    capabilities: ['text_generation', 'structured_output'],
+    contextWindow: 64000,
+    health: 'Healthy',
+    quota: 'Healthy',
+    latencyMs: 25,
+    userPriority: 95,
+    roleEligibility: ['narrative.generate'],
+    fallbackEligibility: true,
+  });
+
+  orchestrator.pinModelForTask('narrative.generate', 'provider_recovery_first::first-model');
+  orchestrator.setFallbackChain('narrative.generate', [
+    'provider_recovery_first::first-model',
+    'provider_deterministic_emergency::emergency-fallback-local',
+  ]);
+
+  const result = await orchestrator.executeTaskGeneration(
+    'narrative.generate',
+    'Return the test response.',
+    undefined,
+    {
+      timeoutMs: 1000,
+      validateResponse: (text) => {
+        try {
+          return JSON.parse(text)?.ok === true
+            ? { valid: true }
+            : { valid: false, errorReason: 'Expected ok=true.' };
+        } catch {
+          return { valid: false, errorReason: 'Invalid JSON.' };
+        }
+      },
+    }
+  );
+
+  assert.equal(result.modelId, 'recovery-model');
+  assert.equal(result.source, 'AI_FALLBACK');
+  assert.equal(result.attempts, 2);
+  assert.equal(result.attemptsTrail[0].status, 'FAILED');
+  assert.equal(result.attemptsTrail[1].status, 'SUCCESS');
 });

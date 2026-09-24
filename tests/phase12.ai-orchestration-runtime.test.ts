@@ -246,7 +246,7 @@ test('Phase 12: timeout failure enters cooldown and falls through without a retr
 	]);
 	orchestrator.pinModelForTask('narrative.generate', 'phase12_timeout_provider::timeout-model');
 
-	const result = await orchestrator.executeTaskGeneration('narrative.generate', 'Timeout test.', { timeoutMs: 10 } as any);
+	const result = await orchestrator.executeTaskGeneration('narrative.generate', 'Timeout test.', undefined, { timeoutMs: 10 });
 	assert.equal(result.source, 'AI_FALLBACK');
 	assert.equal(result.modelId, 'timeout-success-model');
 

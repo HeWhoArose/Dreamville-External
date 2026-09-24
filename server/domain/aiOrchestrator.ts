@@ -3591,71 +3591,65 @@ export class MultiModelOrchestrator {
     const sensoryEngine = this.getWorldRepository().getSensoryEngine();
     const cache = sensoryEngine?.getSpeechCache();
 
-    // Check pinned or best model for speech.generate
-    const pinned = this.getPinnedModelForTask('speech.generate');
-    const targetModelId = pinned || 'mock-speech-v1';
-    const providerId = 'provider_mock_speech';
+    const selection = this.selectBestModel('speech.generate', {
+      contextTokens: Math.ceil(text.length / 4),
+    });
+    const candidates = [selection.selectedModel, ...selection.fallbacks];
+    const timeoutMs = params.timeoutMs || 5000;
 
-    // R12: Check derived speech cache
-    if (cache) {
-      const cacheKey = cache.computeKey(text, params.voiceProfile, providerId, targetModelId);
-      const cached = cache.get(cacheKey);
-      if (cached) {
+    for (const candidate of candidates) {
+      if (this.isModelCoolingDown(candidate) || this.isCircuitBreakerTripped(candidate.providerId, candidate.modelId)) continue;
+      const adapter = this.getAdapter(candidate.providerId);
+      if (!adapter) continue;
+
+      if (cache) {
+        const cacheKey = cache.computeKey(text, params.voiceProfile, candidate.providerId, candidate.modelId);
+        const cached = cache.get(cacheKey);
+        if (cached) {
+          return {
+            success: true,
+            audioResultBase64: cached,
+            fallbackText: text,
+            fromCache: true,
+            modelId: candidate.modelId,
+          };
+        }
+      }
+
+      const attemptStartedAt = Date.now();
+      try {
+        const res = await adapter.generate('speech.generate', text, {
+          timeoutMs,
+          modelId: candidate.modelId,
+          voiceProfile: params.voiceProfile,
+        });
+        const audioBase64 = res.audioBase64 || null;
+        if (!audioBase64) throw new Error('Speech provider returned no audio payload.');
+
+        this.recordProviderSuccess(candidate, res, 'speech.generate', attemptStartedAt);
+
+        if (cache) {
+          const cacheKey = cache.computeKey(text, params.voiceProfile, candidate.providerId, candidate.modelId);
+          cache.set(cacheKey, audioBase64);
+        }
+
         return {
           success: true,
-          audioResultBase64: cached,
-          fallbackText: text,
-          fromCache: true,
-          modelId: targetModelId,
+          audioResultBase64: audioBase64,
+          fallbackText: text || 'Speech synthesized.',
+          fromCache: false,
+          modelId: candidate.modelId,
         };
+      } catch (err: any) {
+        this.recordProviderFailure(candidate, 'speech.generate', err, attemptStartedAt);
       }
     }
 
-    try {
-      let adapter = this.getAdapter(providerId);
-      let selectedModelId = targetModelId;
-
-      if (!adapter) {
-        adapter = this.getAdapter('google_gemini');
-        selectedModelId = 'gemini-2.5-flash';
-      }
-
-      if (!adapter) {
-        return {
-          success: false,
-          audioResultBase64: null,
-          fallbackText: text,
-        };
-      }
-
-      const timeoutMs = params.timeoutMs || 5000;
-      const res = await adapter.generate('speech.generate', text, {
-        timeoutMs,
-        modelId: selectedModelId,
-        voiceProfile: params.voiceProfile,
-      });
-
-      const audioBase64 = res.audioBase64 || null;
-
-      if (audioBase64 && cache) {
-        const cacheKey = cache.computeKey(text, params.voiceProfile, providerId, selectedModelId);
-        cache.set(cacheKey, audioBase64);
-      }
-
-      return {
-        success: !!audioBase64,
-        audioResultBase64: audioBase64,
-        fallbackText: text || 'Speech synthesized.',
-        fromCache: false,
-        modelId: selectedModelId,
-      };
-    } catch (err: any) {
-      return {
-        success: false,
-        audioResultBase64: null,
-        fallbackText: text,
-      };
-    }
+    return {
+      success: false,
+      audioResultBase64: null,
+      fallbackText: text,
+    };
   }
 
   /**
@@ -3676,52 +3670,48 @@ export class MultiModelOrchestrator {
     modelId?: string;
   }> {
     const audioBase64 = params.audioBase64 || '';
-    const pinned = this.getPinnedModelForTask('speech.transcribe');
-    const targetModelId = pinned || 'mock-stt-v1';
-    const providerId = 'provider_mock_stt';
+    const selection = this.selectBestModel('speech.transcribe', { contextTokens: 256 });
+    const candidates = [selection.selectedModel, ...selection.fallbacks];
+    const timeoutMs = params.timeoutMs || 5000;
 
-    try {
-      let adapter = this.getAdapter(providerId);
-      let selectedModelId = targetModelId;
+    for (const candidate of candidates) {
+      if (this.isModelCoolingDown(candidate) || this.isCircuitBreakerTripped(candidate.providerId, candidate.modelId)) continue;
+      const adapter = this.getAdapter(candidate.providerId);
+      if (!adapter) continue;
 
-      if (!adapter) {
-        adapter = this.getAdapter('google_gemini');
-        selectedModelId = 'gemini-2.5-flash';
-      }
-
-      if (!adapter) {
-        return {
-          success: false,
-          text: '',
-        };
-      }
-
-      const timeoutMs = params.timeoutMs || 5000;
-      const res = await adapter.generate('speech.transcribe', 'Transcribe user audio input', {
-        timeoutMs,
-        modelId: selectedModelId,
-        audioInputBase64: audioBase64,
-      });
-
-      let transcribedText = '';
+      const attemptStartedAt = Date.now();
       try {
-        const parsed = JSON.parse(res.text);
-        transcribedText = parsed.narrative?.[0] || res.text;
-      } catch {
-        transcribedText = res.text;
-      }
+        const res = await adapter.generate('speech.transcribe', 'Transcribe user audio input', {
+          timeoutMs,
+          modelId: candidate.modelId,
+          audioInputBase64: audioBase64,
+        });
 
-      return {
-        success: true,
-        text: transcribedText || 'Transcribed text',
-        modelId: selectedModelId,
-      };
-    } catch (err: any) {
-      return {
-        success: false,
-        text: '',
-      };
+        let transcribedText = '';
+        try {
+          const parsed = JSON.parse(res.text);
+          transcribedText = parsed.narrative?.[0] || res.text;
+        } catch {
+          transcribedText = res.text;
+        }
+
+        if (!transcribedText) throw new Error('Transcription provider returned empty text.');
+        this.recordProviderSuccess(candidate, res, 'speech.transcribe', attemptStartedAt);
+
+        return {
+          success: true,
+          text: transcribedText,
+          modelId: candidate.modelId,
+        };
+      } catch (err: any) {
+        this.recordProviderFailure(candidate, 'speech.transcribe', err, attemptStartedAt);
+      }
     }
+
+    return {
+      success: false,
+      text: '',
+    };
   }
 
   /**

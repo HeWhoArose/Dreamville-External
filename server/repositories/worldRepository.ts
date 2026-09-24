@@ -17,6 +17,7 @@ import { SensoryEngine } from '../domain/sensoryEngine';
 import { LivingWorldSimulation } from '../domain/livingWorldSimulation';
 import { MultiModelOrchestrator } from '../domain/aiOrchestrator';
 import { CharacterAlignmentEngine } from '../domain/characterAlignment';
+import { DynamicCharacterAgencyEngine } from '../domain/dynamicCharacterAgency';
 import { ConditionEngine } from '../domain/conditionEngine';
 import { RestRecoveryEngine } from '../domain/restRecoveryEngine';
 import { Phase8SimulationEngine } from '../domain/phase8SimulationEngine';
@@ -87,6 +88,7 @@ export interface WorldRepository {
   getLivingWorldSimulation(storyId: string): LivingWorldSimulation;
   getAiOrchestrator(): MultiModelOrchestrator;
   getCharacterAlignmentEngine(): CharacterAlignmentEngine;
+  getDynamicCharacterAgencyEngine(storyId: string): DynamicCharacterAgencyEngine;
   getSensoryEngine(): SensoryEngine;
   getReusableSkillRegistry(): ReusableSkillRegistry;
   getAdaptedStoryBible(storyId: string): AdaptedStoryBible | null;
@@ -233,6 +235,7 @@ export class InMemoryWorldRepository implements WorldRepository {
   private livingSimulations: Map<string, LivingWorldSimulation> = new Map();
   private aiOrchestrator: MultiModelOrchestrator | null = null;
   private characterAlignmentEngine: CharacterAlignmentEngine = new CharacterAlignmentEngine();
+  private dynamicCharacterAgencyEngines: Map<string, DynamicCharacterAgencyEngine> = new Map();
   private sensoryEngine: SensoryEngine = new SensoryEngine();
   private reusableSkillRegistry: ReusableSkillRegistry = new ReusableSkillRegistry();
   private geographies: Map<string, GeographyGraph> = new Map();
@@ -1876,6 +1879,33 @@ export class InMemoryWorldRepository implements WorldRepository {
     return this.characterAlignmentEngine;
   }
 
+  public getDynamicCharacterAgencyEngine(storyId: string): DynamicCharacterAgencyEngine {
+    let engine = this.dynamicCharacterAgencyEngines.get(storyId);
+    if (!engine) {
+      engine = new DynamicCharacterAgencyEngine();
+      const persisted = this.getStoryRun(storyId)?.runtimeState?.characterAgency;
+      if (persisted) {
+        engine.importState(persisted);
+      }
+      engine.setMutationListener(() => this.persistDynamicCharacterAgencyState(storyId));
+      this.dynamicCharacterAgencyEngines.set(storyId, engine);
+    }
+    return engine;
+  }
+
+  private persistDynamicCharacterAgencyState(storyId: string): void {
+    const engine = this.dynamicCharacterAgencyEngines.get(storyId);
+    const run = this.getStoryRun(storyId);
+    if (!engine || !run) return;
+
+    run.runtimeState = {
+      ...(run.runtimeState || {}),
+      characterAgency: engine.exportState(),
+    };
+    this.storyRuns.set(storyId, run);
+    this.persistLibrary();
+  }
+
   public getReusableSkillRegistry(): ReusableSkillRegistry {
     return this.reusableSkillRegistry;
   }
@@ -2589,6 +2619,13 @@ export class InMemoryWorldRepository implements WorldRepository {
       storyMode: resolvedNarrative.mode,
       narrativeProfile: resolvedNarrative,
     };
+    const dynamicAgencyEngine = this.dynamicCharacterAgencyEngines.get(canonicalRun.storyId);
+    if (dynamicAgencyEngine) {
+      canonicalRun.runtimeState = {
+        ...(canonicalRun.runtimeState || {}),
+        characterAgency: dynamicAgencyEngine.exportState(),
+      };
+    }
     this.storyRuns.set(canonicalRun.storyId, canonicalRun);
     if (canonicalRun?.protagonist) {
       const actorId = this.getPlayerLifecycle(canonicalRun.storyId)?.actorId || canonicalRun.protagonist.characterId || `player_actor_${canonicalRun.storyId}`;

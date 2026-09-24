@@ -1210,6 +1210,53 @@ class ApiClient {
   }
 
   /**
+   * Phase 14: read-only canonical developer diagnostics.
+   */
+  public async getDiagnosticsTimeline(storyId?: string, limit = 50, offset = 0): Promise<any> {
+    const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
+    if (storyId) query.set('storyId', storyId);
+    const res = await fetch(`${this.baseUrl}/diagnostics/timeline?${query.toString()}`, { method: 'GET', headers: { Accept: 'application/json' } });
+    const data = await readJsonSafely<any>(res);
+    if (!res.ok) throw new Error(data?.errorReason || `Failed to fetch diagnostic timeline: HTTP ${res.status}`);
+    return data;
+  }
+
+  public async getDiagnosticsRules(storyId?: string): Promise<any> {
+    const query = storyId ? `?storyId=${encodeURIComponent(storyId)}` : '';
+    const res = await fetch(`${this.baseUrl}/diagnostics/rules${query}`, { method: 'GET', headers: { Accept: 'application/json' } });
+    const data = await readJsonSafely<any>(res);
+    if (!res.ok) throw new Error(data?.errorReason || `Failed to inspect rules: HTTP ${res.status}`);
+    return data;
+  }
+
+  public async getDiagnosticsRuntime(storyId?: string): Promise<any> {
+    const query = storyId ? `?storyId=${encodeURIComponent(storyId)}` : '';
+    const res = await fetch(`${this.baseUrl}/diagnostics/runtime${query}`, { method: 'GET', headers: { Accept: 'application/json' } });
+    const data = await readJsonSafely<any>(res);
+    if (!res.ok) throw new Error(data?.errorReason || `Failed to inspect runtime: HTTP ${res.status}`);
+    return data;
+  }
+
+  public async getDiagnosticsValidation(storyId?: string): Promise<any> {
+    const query = storyId ? `?storyId=${encodeURIComponent(storyId)}` : '';
+    const res = await fetch(`${this.baseUrl}/diagnostics/validation${query}`, { method: 'GET', headers: { Accept: 'application/json' } });
+    const data = await readJsonSafely<any>(res);
+    if (!res.ok) throw new Error(data?.errorReason || `Failed to validate canonical state: HTTP ${res.status}`);
+    return data;
+  }
+
+  public async explainDiagnosticEvent(storyId: string, eventId?: string, commandId?: string): Promise<any> {
+    const query = new URLSearchParams();
+    query.set('storyId', storyId);
+    if (eventId) query.set('eventId', eventId);
+    if (commandId) query.set('commandId', commandId);
+    const res = await fetch(`${this.baseUrl}/diagnostics/why?${query.toString()}`, { method: 'GET', headers: { Accept: 'application/json' } });
+    const data = await readJsonSafely<any>(res);
+    if (!res.ok) throw new Error(data?.errorReason || `Failed to explain canonical event: HTTP ${res.status}`);
+    return data;
+  }
+
+  /**
    * Phase 13: inspect persistence versioning and migration state.
    */
   public async getPersistenceStatus(): Promise<any> {

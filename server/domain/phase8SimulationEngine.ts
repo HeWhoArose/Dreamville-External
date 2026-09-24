@@ -282,42 +282,45 @@ export class Phase8SimulationEngine {
 		const evidenceIds = new Set(Object.values(playerKnowledge.facts).flatMap((fact) => fact.sourceEvidenceIds || []));
 
 		const facilities = Object.values(state.facilities)
-			.filter((facility) => {
+			.map((facility) => {
 				const discoveredNodes = new Set(facility.discoveredNodeIds || []);
 				const discoveredDevices = new Set(facility.discoveredDeviceIds || []);
+				const nodes = Object.values(facility.nodes)
+					.filter((node) => !node.hidden || discoveredNodes.has(node.id))
+					.map((node) => ({
+						...node,
+						connectedNodeIds: node.connectedNodeIds.filter((id) => {
+							const linked = facility.nodes[id];
+							return !!linked && (!linked.hidden || discoveredNodes.has(id));
+						}),
+					}));
+				const devices = Object.values(facility.devices)
+					.filter((device) => !device.hidden || discoveredDevices.has(device.id))
+					.map((device) => ({ ...device }));
+
 				const isCurrentLocation = facility.facilityId === playerLocationId
 					|| facility.facilityId === run?.currentLocationId;
 				const isKnownByEvidence = knownFactIds.has(facility.facilityId);
 				const hasPlayerDiscovery = discoveredNodes.size > 0 || discoveredDevices.size > 0;
-				return isCurrentLocation || isKnownByEvidence || hasPlayerDiscovery;
+				const isVisible = nodes.length > 0 || devices.length > 0 || isCurrentLocation || isKnownByEvidence || hasPlayerDiscovery;
+
+				if (!isVisible) {
+					return null;
+				}
+
+				return {
+					facilityId: facility.facilityId,
+					nodes,
+					devices,
+					securityZones: Object.values(facility.securityZones)
+						.filter((zone) => nodes.some((node) => node.securityZoneId === zone.id))
+						.map((zone) => ({ ...zone, guardEntityIds: [...zone.guardEntityIds] })),
+					power: { ...facility.power },
+					communications: { ...facility.communications },
+					updatedAtSeconds: facility.updatedAtSeconds,
+				};
 			})
-			.map((facility) => {
-			const discoveredNodes = new Set(facility.discoveredNodeIds || []);
-			const discoveredDevices = new Set(facility.discoveredDeviceIds || []);
-			const nodes = Object.values(facility.nodes)
-				.filter((node) => !node.hidden || discoveredNodes.has(node.id))
-				.map((node) => ({
-					...node,
-					connectedNodeIds: node.connectedNodeIds.filter((id) => {
-						const linked = facility.nodes[id];
-						return !!linked && (!linked.hidden || discoveredNodes.has(id));
-					}),
-				}));
-			const devices = Object.values(facility.devices)
-				.filter((device) => !device.hidden || discoveredDevices.has(device.id))
-				.map((device) => ({ ...device }));
-			return {
-				facilityId: facility.facilityId,
-				nodes,
-				devices,
-				securityZones: Object.values(facility.securityZones)
-					.filter((zone) => nodes.some((node) => node.securityZoneId === zone.id))
-					.map((zone) => ({ ...zone, guardEntityIds: [...zone.guardEntityIds] })),
-				power: { ...facility.power },
-				communications: { ...facility.communications },
-				updatedAtSeconds: facility.updatedAtSeconds,
-			};
-		});
+			.filter((facility): facility is NonNullable<typeof facility> => facility !== null);
 
 		const situations = Object.values(state.situations).map((situation) => ({
 			id: situation.id,

@@ -372,8 +372,7 @@ export class InventoryItemEngine {
   }
 
   public getItemDefinition(defId: string): ItemDefinition | undefined {
-    const def = this.itemDefinitions.get(defId);
-    return def ? JSON.parse(JSON.stringify(def)) : undefined;
+    return this.itemDefinitions.get(defId);
   }
 
   public getAllDefinitions(): ItemDefinition[] {

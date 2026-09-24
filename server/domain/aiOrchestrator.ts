@@ -1298,20 +1298,11 @@ Do not enclose in markdown ticks, output pure JSON.`;
         try {
           parsed = JSON.parse(rawText);
         } catch {
-          parsed = {
-            narrative: [rawText || 'The world advances under celestial geometry.'],
-            dialogue: [],
-            events: ['REAL_GEMINI_OUTPUT'],
-            stateChanges: [],
-            memoryCandidates: [],
-            audioCues: [],
-          };
-          rawText = JSON.stringify(parsed);
+          throw new Error('Provider returned malformed JSON; response rejected for fallback.');
         }
 
         if (!Array.isArray(parsed.narrative) || parsed.narrative.length === 0) {
-          parsed.narrative = ['The celestial armatures turn steadily in the chamber.'];
-          rawText = JSON.stringify(parsed);
+          throw new Error('Provider returned an invalid turn package: narrative is missing or empty.');
         }
 
         return {

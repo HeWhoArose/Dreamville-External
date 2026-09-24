@@ -196,7 +196,14 @@ export class PersistenceMigrationService {
 			try { copyFileSync(backupPath, inspection.path); } catch {}
 			throw error;
 		}
-		return { ...this.inspectFile(inspection.path), backupPath };
+
+		const postWriteInspection = this.inspectFile(inspection.path);
+		if (!postWriteInspection.valid || postWriteInspection.needsMigration) {
+			try { copyFileSync(backupPath, inspection.path); } catch {}
+			throw new Error('Post-migration validation failed; the original persistence file was restored from backup.');
+		}
+
+		return { ...postWriteInspection, backupPath };
 	}
 
 	public static repairFile(filePath?: string): PersistenceRepairResult {

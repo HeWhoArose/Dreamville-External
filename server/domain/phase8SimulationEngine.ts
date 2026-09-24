@@ -302,7 +302,7 @@ export class Phase8SimulationEngine {
 					|| facility.facilityId === run?.currentLocationId;
 				const isKnownByEvidence = knownFactIds.has(facility.facilityId);
 				const hasPlayerDiscovery = discoveredNodes.size > 0 || discoveredDevices.size > 0;
-				const isVisible = nodes.length > 0 || devices.length > 0 || isCurrentLocation || isKnownByEvidence || hasPlayerDiscovery;
+				const isVisible = isCurrentLocation || isKnownByEvidence || hasPlayerDiscovery;
 
 				if (!isVisible) {
 					return null;

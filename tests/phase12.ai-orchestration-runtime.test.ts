@@ -226,3 +226,78 @@ test('Phase 12: category runtime state is presentation/configuration state, not 
 		JSON.stringify(orchestrator.getCategoryRuntimeStates().find((category) => category.category === 'rules'))
 	);
 });
+
+
+test('Phase 12: timeout failure enters cooldown and falls through without a retry loop leak', async () => {
+	const orchestrator = new MultiModelOrchestrator();
+	const timeoutAdapter = new DeterministicMockAdapter('phase12_timeout_provider');
+	timeoutAdapter.failureMode = 'timeout';
+	timeoutAdapter.maxFailuresBeforeSuccess = 1;
+	const healthy = new DeterministicMockAdapter('phase12_timeout_success');
+
+	orchestrator.registerAdapter(timeoutAdapter);
+	orchestrator.registerAdapter(healthy);
+	orchestrator.registerModel(model('phase12_timeout_provider', 'timeout-model', ['narrative.generate']));
+	orchestrator.registerModel(model('phase12_timeout_success', 'timeout-success-model', ['narrative.generate']));
+	orchestrator.setFallbackChain('narrative.generate', [
+		'phase12_timeout_provider::timeout-model',
+		'phase12_timeout_success::timeout-success-model',
+		'provider_deterministic_emergency::emergency-fallback-local',
+	]);
+	orchestrator.pinModelForTask('narrative.generate', 'phase12_timeout_provider::timeout-model');
+
+	const result = await orchestrator.executeTaskGeneration('narrative.generate', 'Timeout test.', { timeoutMs: 10 } as any);
+	assert.equal(result.source, 'AI_FALLBACK');
+	assert.equal(result.modelId, 'timeout-success-model');
+
+	const runtime = orchestrator.getModelRuntimeStatus().find((entry) => entry.modelId === 'timeout-model');
+	assert.ok(runtime);
+	assert.equal(runtime?.timeoutCount, 1);
+	assert.equal((runtime?.cooldownUntil || 0) > Date.now(), true);
+});
+
+test('Phase 12: HTTP 5xx provider failure falls through to the next eligible provider', async () => {
+	const orchestrator = new MultiModelOrchestrator();
+	const failing = new DeterministicMockAdapter('phase12_5xx_provider');
+	failing.failureMode = '500';
+	failing.maxFailuresBeforeSuccess = 1;
+	const healthy = new DeterministicMockAdapter('phase12_5xx_success');
+
+	orchestrator.registerAdapter(failing);
+	orchestrator.registerAdapter(healthy);
+	orchestrator.registerModel(model('phase12_5xx_provider', 'fivexx-model', ['narrative.generate']));
+	orchestrator.registerModel(model('phase12_5xx_success', 'fivexx-success-model', ['narrative.generate']));
+	orchestrator.setFallbackChain('narrative.generate', [
+		'phase12_5xx_provider::fivexx-model',
+		'phase12_5xx_success::fivexx-success-model',
+		'provider_deterministic_emergency::emergency-fallback-local',
+	]);
+	orchestrator.pinModelForTask('narrative.generate', 'phase12_5xx_provider::fivexx-model');
+
+	const result = await orchestrator.executeTaskGeneration('narrative.generate', '5xx test.');
+	assert.equal(result.source, 'AI_FALLBACK');
+	assert.equal(result.modelId, 'fivexx-success-model');
+
+	const runtime = orchestrator.getModelRuntimeStatus().find((entry) => entry.modelId === 'fivexx-model');
+	assert.ok(runtime);
+	assert.equal(runtime?.serverError5xxCount, 1);
+});
+
+test('Phase 12: fallback exhaustion reaches the deterministic emergency floor', async () => {
+	const orchestrator = new MultiModelOrchestrator();
+	const failing = new DeterministicMockAdapter('phase12_exhausted_provider');
+	failing.failureMode = '429';
+
+	orchestrator.registerAdapter(failing);
+	orchestrator.registerModel(model('phase12_exhausted_provider', 'exhausted-model', ['narrative.generate']));
+	orchestrator.setFallbackChain('narrative.generate', [
+		'phase12_exhausted_provider::exhausted-model',
+		'provider_deterministic_emergency::emergency-fallback-local',
+	]);
+	orchestrator.pinModelForTask('narrative.generate', 'phase12_exhausted_provider::exhausted-model');
+
+	const result = await orchestrator.executeTaskGeneration('narrative.generate', 'Emergency fallback test.');
+	assert.equal(result.source, 'DETERMINISTIC_FALLBACK');
+	assert.equal(result.providerId, 'provider_deterministic_emergency');
+	assert.equal(result.modelId, 'emergency-fallback-local');
+});

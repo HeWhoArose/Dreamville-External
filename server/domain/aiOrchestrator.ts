@@ -4786,11 +4786,19 @@ export class MultiModelOrchestrator {
     }
 
     const candidateChain: ModelRegistryRecord[] = selectedCandidates
-      .filter((model, index) =>
-        index === 0 ||
+      .filter((model) =>
         model.isEmergencyFloor ||
         this.isCandidateUsable(model, task, contextTokens)
       );
+
+    if (candidateChain.length === 0) {
+      const emergency = Array.from(this.models.values()).find(
+        (model) => model.isEmergencyFloor && model.roleEligibility.includes(task)
+      );
+      if (emergency) {
+        candidateChain.push(emergency);
+      }
+    }
     let totalAttempts = 0;
     let lastError = '';
     const attemptsTrail: Array<{

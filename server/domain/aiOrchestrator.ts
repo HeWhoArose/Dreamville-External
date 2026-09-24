@@ -3158,6 +3158,7 @@ export class MultiModelOrchestrator {
         pinnedModel.health !== 'Unavailable' &&
         pinnedModel.health !== 'DisabledByUser' &&
         !this.isCircuitBreakerTripped(pinnedModel.providerId, pinnedModel.modelId)
+        && !this.isModelCoolingDown(pinnedModel)
       ) {
         if (contextTokens === 0 || contextTokens <= pinnedModel.contextWindow) {
           let fallbacks: ModelRegistryRecord[];
@@ -3210,6 +3211,9 @@ export class MultiModelOrchestrator {
       if (this.isCircuitBreakerTripped(m.providerId, m.modelId)) {
         return false;
       }
+      if (this.isModelCoolingDown(m)) {
+        return false;
+      }
 
       // 3. DEF-CH12-02: Hard context window check
       if (contextTokens > 0 && contextTokens > m.contextWindow) {
@@ -3229,7 +3233,9 @@ export class MultiModelOrchestrator {
       const emergency = Array.from(this.models.values()).find((m) => m.isEmergencyFloor);
       if (!emergency || !emergency.roleEligibility.includes(task)) {
         // Find if any model exists for this task
-        const anyModel = Array.from(this.models.values()).find((m) => m.roleEligibility.includes(task));
+        const anyModel = Array.from(this.models.values()).find(
+          (m) => m.roleEligibility.includes(task) && !this.isModelCoolingDown(m) && m.health !== 'DisabledByUser'
+        );
         if (anyModel) {
           return {
             selectedModel: anyModel,

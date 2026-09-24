@@ -7845,10 +7845,11 @@ gameRouter.get('/run-canonical-state', (req: Request, res: Response) => {
     const invEngine = worldRepository.getInventoryEngine(storyId);
     const capEngine = worldRepository.getCapabilityEngine(storyId);
     const chronicle = worldRepository.getHistoricalChronicleEngine(storyId);
-    const facts = worldRepository.getKnowledgeFacts(storyId);
     const geography = worldRepository.getGeographyGraph(storyId);
 
-    const actorId = playerLifecycle?.characterId || playerLifecycle?.actorId || 'protagonist';
+    const actorId = playerLifecycle?.actorId || `player_actor_${storyId}`;
+    const facts = worldRepository.getAuthorizedKnowledgeFacts(storyId, actorId);
+    const evidence = chronicle.getEpistemicEvidence(actorId);
     const equippedItems = invEngine.getEquippedItems(actorId);
     const inventoryItems = invEngine.getInventoryItems(actorId);
     const paperDoll = invEngine.getActorPaperDoll(actorId);
@@ -7921,7 +7922,7 @@ gameRouter.get('/run-canonical-state', (req: Request, res: Response) => {
       relationships: playerLifecycle?.relationships || [],
       memory: {
         facts,
-        evidence: chronicle.exportState().evidenceStore,
+        evidence,
       },
       worldCodex: {
         currentLocation,

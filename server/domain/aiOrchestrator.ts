@@ -4510,9 +4510,9 @@ export class MultiModelOrchestrator {
         continue;
       }
 
+      const attemptStartedAt = Date.now();
       try {
         totalAttempts++;
-        const attemptStartedAt = Date.now();
         const abortController = new AbortController();
         const timer = setTimeout(() => abortController.abort(), timeoutMs);
 
@@ -4534,10 +4534,6 @@ export class MultiModelOrchestrator {
 
         this.recordProviderSuccess(currentCandidate, providerRes, task, attemptStartedAt);
         this.consecutiveFailures.set(modelKey, 0);
-
-        if (!providerRes.text) {
-          throw new Error('Provider returned empty response.');
-        }
 
         const isEmergency = Boolean(currentCandidate.isEmergencyFloor) ||
                             currentCandidate.providerId.includes('emergency') ||

@@ -16,35 +16,36 @@
       "provider_tertiary_success::tertiary-success-m3"
     ],
     "character.dialogue": [
-      "google_gemini::gemini-3.6-flash",
-      "google_gemini::gemini-2.5-flash",
       "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "memory.extract": [
-      "google_gemini::gemini-3.6-flash",
-      "google_gemini::gemini-2.5-flash",
       "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "summary.scene": [
-      "google_gemini::gemini-3.6-flash",
-      "google_gemini::gemini-2.5-flash",
       "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "rules.adjudicate": [
-      "google_gemini::gemini-3.6-flash",
-      "google_gemini::gemini-2.5-flash",
       "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "utility.inspect": [
-      "google_gemini::gemini-3.6-flash",
-      "google_gemini::gemini-2.5-flash",
       "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
       "provider_deterministic_emergency::emergency-fallback-local"
     ]
   },
+  "categoryOverrides": {},
   "overrides": []
 }

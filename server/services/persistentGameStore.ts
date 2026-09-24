@@ -61,7 +61,7 @@ export class PersistentGameStore {
 				? migratePersistenceData(PersistenceMigrationService.migrateFile(this.filePath).path ? JSON.parse(readFileSync(this.filePath, 'utf8')) : parsed)
 				: migratePersistenceData(parsed);
 			return {
-				version: migrated.version,
+				version: CURRENT_PERSISTENCE_VERSION,
 				schemaVersions: migrated.schemaVersions,
 				worldTemplates: migrated.worldTemplates,
 				storyRuns: migrated.storyRuns,

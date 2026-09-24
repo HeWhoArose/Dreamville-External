@@ -663,7 +663,7 @@ export class WorkingContextEngine {
     }
 
     const repo = params.worldRepo || worldRepository;
-    const phase8 = repo.getPhase8SimulationEngine(storyId).load(repo, storyId);
+    const phase8 = repo.getPhase8SimulationEngine(storyId).load(repo as any, storyId);
     const npcKnowledge = phase8.knowledge[npcId];
     const authorizedFacts = repo.getAuthorizedKnowledgeFacts(storyId, npcId);
     const npcState = phase8.npcs[npcId];

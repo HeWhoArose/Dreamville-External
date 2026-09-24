@@ -1591,6 +1591,9 @@ export class MultiModelOrchestrator {
   private inFlightTurnPromises: Map<string, Promise<OrchestratedTurnResult>> = new Map();
 
   private manualOverrides: Map<string, ManualModelOverride> = new Map();
+  private categoryOverrides: Map<AiTaskCategory, string> = new Map();
+  private runtimeStatus: Map<string, ModelRuntimeStatus> = new Map();
+  private usageLedger: UsageLedgerEntry[] = [];
   private taskPinnedModels: Map<TaskId, string> = new Map();
   private taskFallbackChains: Map<TaskId, string[]> = new Map();
   private discoveredCatalog: DiscoveredModelMetadata[] = [];
@@ -3089,6 +3092,15 @@ export class MultiModelOrchestrator {
     }
   }
 
+  public isCandidateUsable(model: ModelRegistryRecord, task?: TaskId, contextTokens: number = 0): boolean {
+    if (task && !model.roleEligibility.includes(task)) return false;
+    if (model.health === 'Unavailable' || model.health === 'DisabledByUser' || model.health === 'InvalidAuth') return false;
+    if (this.isCircuitBreakerTripped(model.providerId, model.modelId)) return false;
+    if (contextTokens > 0 && contextTokens > model.contextWindow) return false;
+    if (this.isModelCoolingDown(model)) return false;
+    return true;
+  }
+
   /**
    * Intelligent Selection Score (DreamBook V6.8 & DEF-CH12-02 context capacity & DEF-CH12-03 deterministic tie-breaking)
    * candidate_score = eligibility + role_fit + health_score + quota_score + preference_score - failure_penalty
@@ -3120,12 +3132,7 @@ export class MultiModelOrchestrator {
     };
 
     const isUsableCandidate = (model: ModelRegistryRecord): boolean => {
-      if (!model.roleEligibility.includes(task)) return false;
-      if (model.health === 'Unavailable' || model.health === 'DisabledByUser' || model.health === 'InvalidAuth') return false;
-      if (this.isCircuitBreakerTripped(model.providerId, model.modelId)) return false;
-      if (contextTokens > 0 && contextTokens > model.contextWindow) return false;
-      if (this.isModelCoolingDown(model)) return false;
-      return true;
+      return this.isCandidateUsable(model, task, contextTokens);
     };
 
     // Category-scoped manual override has precedence over task auto-selection.
@@ -3145,9 +3152,15 @@ export class MultiModelOrchestrator {
             const modelDiff = a.modelId.localeCompare(b.modelId);
             return modelDiff !== 0 ? modelDiff : a.providerId.localeCompare(b.providerId);
           });
-        const fallbackModels = customChainKeys && configuredFallbacks.length > 0
-          ? configuredFallbacks
-          : automaticFallbacks;
+        const fallbackSet = new Set<string>();
+        const fallbackModels: ModelRegistryRecord[] = [];
+        for (const candidate of [...configuredFallbacks, ...automaticFallbacks]) {
+          const candidateKey = this.modelKey(candidate);
+          if (!fallbackSet.has(candidateKey)) {
+            fallbackSet.add(candidateKey);
+            fallbackModels.push(candidate);
+          }
+        }
         const emergency = Array.from(this.models.values()).find((m) => m.isEmergencyFloor && m.roleEligibility.includes(task));
         if (emergency && !fallbackModels.some((m) => m.modelId === emergency.modelId)) fallbackModels.push(emergency);
         return {
@@ -4141,7 +4154,7 @@ export class MultiModelOrchestrator {
         if (!forced.roleEligibility.includes(task)) {
           throw new Error(`Model '${params.forceModelId}' is not eligible for role/task '${task}'.`);
         }
-        if (!isUsableCandidate(forced) && !forced.isEmergencyFloor) {
+        if (!this.isCandidateUsable(forced, task) && !forced.isEmergencyFloor) {
           throw new Error('Forced model "' + params.forceModelId + '" is unavailable, cooling down, or not context-eligible.');
         }
         selectedModel = forced;
@@ -4151,8 +4164,8 @@ export class MultiModelOrchestrator {
           .filter((m): m is ModelRegistryRecord => Boolean(m))
           .filter((m) => m.modelId !== forced.modelId);
         fallbacks = configuredFallbacks.length > 0
-          ? configuredFallbacks.filter((m) => isUsableCandidate(m) || m.isEmergencyFloor)
-          : Array.from(this.models.values()).filter((m) => m.modelId !== forced.modelId && isUsableCandidate(m));
+          ? configuredFallbacks.filter((m) => this.isCandidateUsable(m, task) || m.isEmergencyFloor)
+          : Array.from(this.models.values()).filter((m) => m.modelId !== forced.modelId && this.isCandidateUsable(m, task));
       } else {
         const selection = this.selectBestModel(task, { contextTokens: assembledContext.totalTokens });
         selectedModel = selection.selectedModel;

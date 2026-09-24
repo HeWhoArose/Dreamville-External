@@ -679,7 +679,6 @@ gameRouter.post('/persistence/repair', (_req: Request, res: Response) => {
       return res.status(409).json(result);
     }
     res.json({
-      success: true,
       ...result,
       restartRequired: Boolean(result.changed),
     });
@@ -5315,30 +5314,39 @@ gameRouter.post('/context/npc-dialogue', async (req: Request, res: Response) => 
       storyId = 'default_story',
       npcId,
       npcName,
+      knownFacts,
+      currentObservations,
       playerSpokenText = '',
+      systemDirectives,
     } = req.body;
 
-    if (!npcId) {
-      res.status(400).json({
-        error: 'npcId is required. NPC dialogue context must be bound to a canonical actor.',
-        code: 'NPC_ACTOR_REQUIRED',
-      });
-      return;
-    }
-
     const { WorkingContextEngine } = await import('../domain/workingContextEngine');
-    const sanitizedPrompt = WorkingContextEngine.buildAuthorizedNpcContext({
-      storyId: String(storyId),
-      npcId: String(npcId),
-      npcName: typeof npcName === 'string' ? npcName : undefined,
-      playerSpokenText: String(playerSpokenText || ''),
-      worldRepo: worldRepository,
-    });
+
+    let sanitizedPrompt = '';
+    const resolvedName = npcName || npcId || 'NPC';
+
+    if (Array.isArray(knownFacts) || Array.isArray(currentObservations) || !npcId) {
+      sanitizedPrompt = WorkingContextEngine.buildSanitizedNpcContext({
+        npcName: resolvedName,
+        knownFacts: Array.isArray(knownFacts) ? knownFacts : [],
+        currentObservations: Array.isArray(currentObservations) ? currentObservations : [],
+        playerSpokenText: String(playerSpokenText || ''),
+        systemDirectives: Array.isArray(systemDirectives) ? systemDirectives : undefined,
+      });
+    } else {
+      sanitizedPrompt = WorkingContextEngine.buildAuthorizedNpcContext({
+        storyId: String(storyId),
+        npcId: String(npcId),
+        npcName: typeof npcName === 'string' ? npcName : undefined,
+        playerSpokenText: String(playerSpokenText || ''),
+        worldRepo: worldRepository,
+      });
+    }
 
     res.json({
       success: true,
-      npcId: String(npcId),
-      npcName: typeof npcName === 'string' ? npcName : String(npcId),
+      npcId: npcId ? String(npcId) : undefined,
+      npcName: resolvedName,
       sanitizedPrompt,
       estimatedTokens: WorkingContextEngine.estimateTokens(sanitizedPrompt),
       epistemicallySanitized: true,

@@ -2400,7 +2400,13 @@ export class InMemoryWorldRepository implements WorldRepository {
     }
 
     this.persistentStore.save({
-      version: 1,
+      version: 2,
+      schemaVersions: {
+        world: 2,
+        character: 2,
+        rules: 2,
+        content: 2,
+      },
       worldTemplates: Object.fromEntries(this.worldTemplates),
       storyRuns: Object.fromEntries(this.storyRuns),
       confirmedCharacters: Object.fromEntries(this.confirmedCharactersMap),

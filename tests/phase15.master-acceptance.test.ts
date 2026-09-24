@@ -13,7 +13,7 @@ import { captureCanonicalStateSnapshot } from '../server/domain/canonicalSnapsho
 import { TacticalCombatEngine } from '../server/domain/combatEngine';
 import { ConditionEngine } from '../server/domain/conditionEngine';
 import { DeathSaveEngine } from '../server/domain/deathSaveEngine';
-import { SpellRuntimeEngine } from '../server/domain/spellRuntime';
+import { SpellRuntime } from '../server/domain/spellRuntime';
 import { PersistenceMigrationService } from '../server/services/persistenceMigrationService';
 import { MultiModelOrchestrator, DeterministicMockAdapter } from '../server/domain/aiOrchestrator';
 import { DeveloperDiagnosticsService } from '../server/domain/developerDiagnosticsService';
@@ -131,7 +131,7 @@ test('Phase 15 canonical command, combat, conditions and death integrate without
 		conditions: [],
 		isDead: false,
 	});
-	combat.startCombat();
+	combat.rollInitiative();
 	const attack = combat.executeAttack(playerId, 'phase15_enemy', { consumeAction: false });
 	assert.equal(attack.success, true);
 
@@ -178,7 +178,7 @@ test('Phase 15 canonical command, combat, conditions and death integrate without
 });
 
 test('Phase 15 spell runtime remains authoritative and rejects unknown spell state without mutation', () => {
-	const spellRuntime = new SpellRuntimeEngine();
+	const spellRuntime = new SpellRuntime();
 	const result = spellRuntime.castSpellAuthoritative({
 		request: {
 			casterId: 'phase15_caster',

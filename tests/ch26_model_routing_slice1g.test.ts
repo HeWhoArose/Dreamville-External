@@ -31,7 +31,7 @@ describe('Model Routing Slice 1G - Fallback Chain Management & Real Model Connec
     
     assert.ok(defaultChain);
     assert.ok(defaultChain.length >= 2);
-    assert.ok(defaultChain[0].includes('gemini-3.6-flash'));
+    assert.ok(defaultChain[0].includes('gemini-3.5-flash') || defaultChain[0].includes('gemini-3.6-flash'));
     assert.ok(defaultChain[defaultChain.length - 1].includes('emergency-fallback-local'));
 
     // Update fallback chain

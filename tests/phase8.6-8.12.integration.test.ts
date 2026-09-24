@@ -81,6 +81,7 @@ describe('Phase 8.6-8.12 regression and fallback contracts', () => {
 
 		const failed = phase8.facility.searchNode(facility, 'room', 20, 10);
 		assert.deepEqual(failed.foundDeviceIds, []);
+		phase8.save(repository, 'phase8_facility_projection', state);
 		const player = repository.getPlayerLifecycle('phase8_facility_projection');
 		const before = phase8.getPlayerProjection(repository, 'phase8_facility_projection', player?.actorId || 'player_actor_phase8_facility_projection') as any;
 		assert.equal(before.facilities[0].devices.length, 0);

@@ -21,7 +21,7 @@ export type ChronicleWriteMode = 'DIRECT' | 'TRANSACTIONAL' | 'ISOLATED';
 
 export class HistoricalChronicleEngine {
   // Runtime Chronicle writes are transactional. Bootstrap construction uses recordBootstrapEvidence().
-  public static bypassTransactionCheck = true;
+  public static bypassTransactionCheck = false;
 
   private evidenceStore: Map<string, HistoricalEvidence> = new Map();
   private dossiers: Map<string, NpcDossier> = new Map(); // subjectId -> NpcDossier

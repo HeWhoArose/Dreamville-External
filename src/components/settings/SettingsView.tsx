@@ -23,6 +23,7 @@ export interface SettingsViewProps {
   onOpenLivingBible?: () => void;
   onOpenEpistemicInspector?: () => void;
   onOpenContextInspector?: () => void;
+  onOpenDeveloperDiagnostics?: () => void;
   className?: string;
 }
 
@@ -120,6 +121,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onOpenLivingBible,
   onOpenEpistemicInspector,
   onOpenContextInspector,
+  onOpenDeveloperDiagnostics,
   className = '',
 }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
@@ -1542,6 +1544,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <p className="text-[11px] text-[var(--db-text-muted)]">Inspect knowledge boundaries and NPC awareness states.</p>
                 <Button variant="subtle" size="sm" onClick={() => onOpenEpistemicInspector?.()}>
                   Launch Epistemic Inspector
+                </Button>
+              </div>
+
+              <div className="p-4 rounded-[var(--db-radius-md)] bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] space-y-2">
+                <h4 className="text-xs font-bold text-[var(--db-text-primary)]">Developer Diagnostics</h4>
+                <p className="text-[11px] text-[var(--db-text-muted)]">Read-only Chronicle timeline, rule authority, runtime state, validation, persistence diagnostics, and canonical evidence explanations.</p>
+                <Button variant="subtle" size="sm" onClick={() => onOpenDeveloperDiagnostics?.()}>
+                  Launch Developer Diagnostics
                 </Button>
               </div>
 

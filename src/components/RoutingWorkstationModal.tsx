@@ -708,7 +708,9 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
                             <div className="text-xs font-semibold text-stone-200">{runtime.modelId}</div>
                             <div className="mt-0.5 text-[10px] font-mono text-stone-600">{runtime.providerId}</div>
                           </div>
-                          <span className="text-[10px] rounded px-2 py-0.5 bg-stone-800 text-stone-300">{runtime.status}</span>
+                          <span className="text-[10px] rounded px-2 py-0.5 bg-stone-800 text-stone-300">
+                            {runtime.operationalStatus || runtime.status}
+                          </span>
                         </div>
                         <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-stone-500 md:grid-cols-4">
                           <span>Req {runtime.requests || 0}</span>

@@ -1617,6 +1617,13 @@ export class MultiModelOrchestrator {
               }
             }
           }
+          if (data.categoryOverrides && typeof data.categoryOverrides === 'object') {
+            for (const [category, key] of Object.entries(data.categoryOverrides)) {
+              if (typeof key === 'string') {
+                this.categoryOverrides.set(category as AiTaskCategory, key);
+              }
+            }
+          }
           if (data.fallbackChains && typeof data.fallbackChains === 'object') {
             for (const [task, chain] of Object.entries(data.fallbackChains)) {
               if (Array.isArray(chain)) {
@@ -1657,7 +1664,11 @@ export class MultiModelOrchestrator {
         fallbackChains[task] = chain;
       }
       const overrides = this.getManualOverrides();
-      fs.writeFileSync(this.configFilePath, JSON.stringify({ pins, fallbackChains, overrides }, null, 2), 'utf-8');
+      const categoryOverrides: Record<string, string> = {};
+      for (const [category, key] of this.categoryOverrides.entries()) {
+        categoryOverrides[category] = key;
+      }
+      fs.writeFileSync(this.configFilePath, JSON.stringify({ pins, fallbackChains, categoryOverrides, overrides }, null, 2), 'utf-8');
     } catch (e) {
       // Ignore save errors
     }

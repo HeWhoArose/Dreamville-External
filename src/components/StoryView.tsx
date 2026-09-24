@@ -39,6 +39,7 @@ interface StoryViewProps {
   isProcessingAction: boolean;
   openingScene?: OpeningScene | null;
   worldTitle?: string;
+  worldId?: string;
   storyId?: string;
   protagonistName?: string;
   protagonistRole?: string;
@@ -204,6 +205,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
   isProcessingAction,
   openingScene,
   worldTitle,
+  worldId,
   storyId,
   protagonistName,
   protagonistRole,
@@ -526,7 +528,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
       </div>
 
       {activeDialogue && (() => {
-        const theme = getCharacterSpeakerTheme(activeDialogue.speakerName);
+        const theme = getCharacterSpeakerTheme(activeDialogue.speakerName, worldId);
         return (
           <section className={`rounded-2xl border ${theme.bubbleBorder} bg-stone-950/80 px-5 py-5`}>
             <div className="mb-3 flex items-center justify-between gap-3">

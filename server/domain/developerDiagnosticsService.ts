@@ -12,7 +12,7 @@ export interface DiagnosticTimelineEntry {
 	summary: string;
 	mutationPaths: string[];
 	mutationCount: number;
-	replay: CanonicalStateSnapshot extends never ? never : {
+	replay: {
 		preStateHash: string;
 		postStateHash: string;
 		canonicalSequence: number;

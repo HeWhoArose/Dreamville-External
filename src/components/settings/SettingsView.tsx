@@ -150,6 +150,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [fallbackChains, setFallbackChains] = useState<Record<string, string[]>>({});
   const [fallbackEditorTask, setFallbackEditorTask] = useState<string | null>(null);
   const [fallbackEditorSearch, setFallbackEditorSearch] = useState('');
+  const [customFallbackModelInput, setCustomFallbackModelInput] = useState('');
+
+  // Custom Model Registration State
+  const [showAddCustomModal, setShowAddCustomModal] = useState(false);
+  const [customModelProvider, setCustomModelProvider] = useState('openrouter');
+  const [customModelId, setCustomModelId] = useState('');
+  const [customModelName, setCustomModelName] = useState('');
+  const [customModelPool, setCustomModelPool] = useState<'fast' | 'creative' | 'analytical' | 'grounded'>('creative');
+  const [isAddingCustomModel, setIsAddingCustomModel] = useState(false);
+  const [addCustomModelFeedback, setAddCustomModelFeedback] = useState<string | null>(null);
+
+  // Auto Fallback Configuration State
+  const [isAutoConfiguringFallbacks, setIsAutoConfiguringFallbacks] = useState(false);
+  const [autoConfigResult, setAutoConfigResult] = useState<any | null>(null);
+  const [autoConfigError, setAutoConfigError] = useState<string | null>(null);
+
   // Phase 13 persistence state
   const [persistenceStatus, setPersistenceStatus] = useState<any>(null);
   const [persistenceBusy, setPersistenceBusy] = useState(false);
@@ -414,8 +430,64 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }
   };
 
+  const handleRegisterCustomModel = async () => {
+    if (!customModelId.trim()) {
+      setAddCustomModelFeedback('Please enter a model ID (e.g. meta-llama/llama-3.3-70b-instruct).');
+      return;
+    }
+    setIsAddingCustomModel(true);
+    setAddCustomModelFeedback(null);
+    try {
+      await apiClient.registerCustomModel({
+        providerId: customModelProvider,
+        modelId: customModelId.trim(),
+        displayName: customModelName.trim() || customModelId.trim(),
+        pool: customModelPool,
+      });
+      await loadOrchestratorData(true);
+      setAddCustomModelFeedback(`Model '${customModelId.trim()}' registered successfully!`);
+      setTimeout(() => {
+        setShowAddCustomModal(false);
+        setCustomModelId('');
+        setCustomModelName('');
+        setAddCustomModelFeedback(null);
+      }, 1400);
+    } catch (err: any) {
+      setAddCustomModelFeedback(err?.message || 'Failed to register model.');
+    } finally {
+      setIsAddingCustomModel(false);
+    }
+  };
+
+  const handleAutoConfigureFallbacks = async () => {
+    setIsAutoConfiguringFallbacks(true);
+    setAutoConfigError(null);
+    try {
+      const result = await apiClient.autoConfigureFallbacks({ maxFallbacksPerCategory: 4 });
+      if (result.success) {
+        setAutoConfigResult(result);
+        if (result.configuredChains) {
+          setFallbackChains(result.configuredChains);
+        }
+        await loadOrchestratorData();
+      } else {
+        throw new Error(result.summaryMessage || 'Auto-configuration failed.');
+      }
+    } catch (err: any) {
+      setAutoConfigError(err?.message || 'Failed to ping and auto-configure fallback models.');
+    } finally {
+      setIsAutoConfiguringFallbacks(false);
+    }
+  };
+
   const getModelStatusInfo = (model: any) => {
-    if (model.health === 'Healthy' && model.accessStatus === 'accessible') {
+    const providerConfigured = providers.find((p) => p.id === model.providerId)?.hasKeySaved ||
+      (model.providerId === 'google_gemini' && model.accessStatus === 'accessible') ||
+      (model.providerId === 'openrouter' && providers.find((p) => p.id === 'openrouter')?.status === 'CONNECTED') ||
+      model.providerId === 'dreambook-native' ||
+      model.providerId === 'provider_deterministic_emergency';
+
+    if (model.health === 'Healthy' && (model.accessStatus === 'accessible' || providerConfigured)) {
       return { emoji: '🟢', label: 'READY', color: 'text-emerald-400', variant: 'emerald' as const };
     }
     if (model.health === 'Throttled' || model.quota === 'Exhausted' || model.accessStatus === 'quota_limited') {
@@ -866,16 +938,128 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   Browse every registered model, grouped by provider. Click a model for its full capability profile.
                 </p>
               </div>
-              <div className="relative w-full lg:w-96">
-                <input
-                  type="search"
-                  value={modelSearch}
-                  onChange={(e) => setModelSearch(e.target.value)}
-                  placeholder="Search by model, provider, capability..."
-                  className="w-full px-3 py-2 rounded-lg bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] text-xs text-[var(--db-text-primary)] focus:outline-none focus:border-[var(--db-purple-500)]"
-                />
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => {
+                    setShowAddCustomModal(true);
+                    setAddCustomModelFeedback(null);
+                  }}
+                >
+                  + Add Model / OpenRouter
+                </Button>
+                <div className="relative w-full lg:w-72">
+                  <input
+                    type="search"
+                    value={modelSearch}
+                    onChange={(e) => setModelSearch(e.target.value)}
+                    placeholder="Search by model, provider..."
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] text-xs text-[var(--db-text-primary)] focus:outline-none focus:border-[var(--db-purple-500)]"
+                  />
+                </div>
               </div>
             </div>
+
+            {/* ADD CUSTOM MODEL MODAL */}
+            {showAddCustomModal && (
+              <div className="p-4 rounded-lg bg-[var(--db-bg-canvas)] border border-[var(--db-purple-500)]/40 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-[var(--db-text-primary)] uppercase tracking-wider">
+                    Register Custom Model / OpenRouter Model
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddCustomModal(false)}
+                    className="text-xs text-[var(--db-text-muted)] hover:text-white cursor-pointer"
+                  >
+                    ✕ Close
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-medium text-[var(--db-text-secondary)] mb-1">
+                      Provider
+                    </label>
+                    <select
+                      value={customModelProvider}
+                      onChange={(e) => setCustomModelProvider(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg bg-[var(--db-bg-card)] border border-[var(--db-border-default)] text-xs text-[var(--db-text-primary)] focus:outline-none focus:border-[var(--db-purple-500)]"
+                    >
+                      <option value="openrouter">OpenRouter</option>
+                      <option value="google_gemini">Google Gemini</option>
+                      <option value="openai">OpenAI</option>
+                      <option value="anthropic">Anthropic</option>
+                      <option value="mistral">Mistral AI</option>
+                      <option value="groq">Groq</option>
+                      <option value="deepseek">DeepSeek</option>
+                      <option value="local">Local (Ollama/LM Studio)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-[var(--db-text-secondary)] mb-1">
+                      Model ID (exact identifier)
+                    </label>
+                    <input
+                      type="text"
+                      value={customModelId}
+                      onChange={(e) => setCustomModelId(e.target.value)}
+                      placeholder={customModelProvider === 'openrouter' ? 'e.g. meta-llama/llama-3.3-70b-instruct' : 'e.g. gpt-4o-mini'}
+                      className="w-full px-3 py-2 rounded-lg bg-[var(--db-bg-card)] border border-[var(--db-border-default)] text-xs text-[var(--db-text-primary)] focus:outline-none focus:border-[var(--db-purple-500)]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-[var(--db-text-secondary)] mb-1">
+                      Display Name (optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={customModelName}
+                      onChange={(e) => setCustomModelName(e.target.value)}
+                      placeholder="e.g. Llama 3.3 70B Instruct"
+                      className="w-full px-3 py-2 rounded-lg bg-[var(--db-bg-card)] border border-[var(--db-border-default)] text-xs text-[var(--db-text-primary)] focus:outline-none focus:border-[var(--db-purple-500)]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-medium text-[var(--db-text-secondary)] mb-1">
+                      Model Pool / Role
+                    </label>
+                    <select
+                      value={customModelPool}
+                      onChange={(e) => setCustomModelPool(e.target.value as any)}
+                      className="w-full px-3 py-2 rounded-lg bg-[var(--db-bg-card)] border border-[var(--db-border-default)] text-xs text-[var(--db-text-primary)] focus:outline-none focus:border-[var(--db-purple-500)]"
+                    >
+                      <option value="creative">Creative (Narrative, Dialogue, Character Genesis)</option>
+                      <option value="fast">Fast (Quick Extraction, Parsing, Summarization)</option>
+                      <option value="analytical">Analytical (Consistency, Canon Rules)</option>
+                      <option value="grounded">Grounded (Codex, Fact Inspection)</option>
+                    </select>
+                  </div>
+                </div>
+                {addCustomModelFeedback && (
+                  <div className={`p-2.5 rounded-lg text-xs ${addCustomModelFeedback.includes('successfully') ? 'bg-emerald-950/40 border border-emerald-800 text-emerald-300' : 'bg-rose-950/40 border border-rose-800 text-rose-300'}`}>
+                    {addCustomModelFeedback}
+                  </div>
+                )}
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <Button
+                    variant="subtle"
+                    size="sm"
+                    onClick={() => setShowAddCustomModal(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    disabled={isAddingCustomModel || !customModelId.trim()}
+                    onClick={handleRegisterCustomModel}
+                  >
+                    {isAddingCustomModel ? 'Registering...' : 'Register Model'}
+                  </Button>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-6">
               {(() => {
@@ -944,15 +1128,84 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       {activeTab === 'FALLBACKS' && (
         <div className="space-y-6 max-w-6xl">
           <div className="p-5 rounded-[var(--db-radius-lg)] bg-[var(--db-bg-card)] border border-[var(--db-border-default)]">
-            <div className="pb-4 border-b border-[var(--db-border-subtle)]">
-              <h3 className="text-base font-serif font-bold text-[var(--db-text-primary)]">
-                Task Fallback Routing
-              </h3>
-              <p className="text-xs text-[var(--db-text-muted)] mt-0.5">
-                Choose a task, then manage its exact ordered model route. The first model is primary;
-                the models below it are tried in order when the previous model fails.
-              </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[var(--db-border-subtle)]">
+              <div>
+                <h3 className="text-base font-serif font-bold text-[var(--db-text-primary)]">
+                  Task Fallback Routing
+                </h3>
+                <p className="text-xs text-[var(--db-text-muted)] mt-0.5">
+                  Choose a task, then manage its exact ordered model route. The first model is primary;
+                  the models below it are tried in order when the previous model fails.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  disabled={isAutoConfiguringFallbacks}
+                  onClick={handleAutoConfigureFallbacks}
+                >
+                  {isAutoConfiguringFallbacks ? '⚡ Pinging Models...' : '✨ Auto-Detect Best Fallbacks'}
+                </Button>
+              </div>
             </div>
+
+            {autoConfigError && (
+              <div className="mt-4 p-3 rounded-lg bg-rose-950/40 border border-rose-800 text-xs text-rose-300">
+                {autoConfigError}
+              </div>
+            )}
+
+            {autoConfigResult && (
+              <div className="mt-4 p-4 rounded-xl bg-[var(--db-surface-purple)] border border-[var(--db-purple-500)]/50 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">⚡</span>
+                    <h4 className="text-xs font-bold text-[var(--db-purple-200)] uppercase tracking-wider">
+                      Auto-Configuration Benchmark Results
+                    </h4>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAutoConfigResult(null)}
+                    className="text-xs text-[var(--db-text-muted)] hover:text-white cursor-pointer"
+                  >
+                    ✕ Dismiss
+                  </button>
+                </div>
+                <p className="text-xs text-[var(--db-text-secondary)]">
+                  {autoConfigResult.summaryMessage}
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 pt-1 max-h-48 overflow-y-auto">
+                  {autoConfigResult.results?.map((res: any, idx: number) => (
+                    <div
+                      key={idx}
+                      className="p-2.5 rounded-lg bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] text-xs flex items-center justify-between gap-2"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-bold text-[var(--db-text-primary)] truncate text-[11px]">
+                          {res.displayName || res.modelId}
+                        </div>
+                        <div className="text-[10px] text-[var(--db-text-muted)] font-mono truncate">
+                          {res.providerId}
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <span
+                          className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-bold ${
+                            res.status === 'READY'
+                              ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/60'
+                              : 'bg-rose-950/60 text-rose-300 border border-rose-800/60'
+                          }`}
+                        >
+                          {res.status === 'READY' ? `${res.latencyMs || 0}ms` : res.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="pt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
               {[

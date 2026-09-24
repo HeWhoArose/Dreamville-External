@@ -457,6 +457,9 @@ Rules:
 
     let generationSource: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK' = 'DETERMINISTIC_FALLBACK';
     let generationFailureReason = '';
+    let generationAttemptsTrail: any[] = [];
+    let generationActiveModel = '';
+    let generationActiveProvider = '';
 
     if (input.allowDeterministicFallback) {
       // This path is reached only after the player explicitly accepted the fallback prompt.
@@ -476,6 +479,10 @@ Rules:
           { timeoutMs: 45000 }
         );
 
+        generationAttemptsTrail = response.attemptsTrail || [];
+        generationActiveModel = response.modelId;
+        generationActiveProvider = response.providerId;
+
         // The orchestrator may report a deterministic emergency source. Treat that as
         // AI unavailability here so the player can explicitly consent before we use it.
         if (response.source === 'DETERMINISTIC_FALLBACK') {
@@ -485,6 +492,7 @@ Rules:
           const error: any = new Error(generationFailureReason);
           error.code = 'AI_UNAVAILABLE';
           error.requiresDeterministicConfirmation = true;
+          error.attemptsTrail = generationAttemptsTrail;
           throw error;
         } else if (response.text) {
           const parsed = this.parseJsonFromAiResponse(response.text);
@@ -494,27 +502,32 @@ Rules:
             generationFailureReason = response.fallbackReason || '';
           } else {
             generationFailureReason = 'AI returned invalid or incomplete Character Genesis structure.';
+            const error: any = new Error(generationFailureReason);
+            error.code = 'AI_UNAVAILABLE';
+            error.requiresDeterministicConfirmation = true;
+            error.attemptsTrail = generationAttemptsTrail;
+            throw error;
           }
         } else {
           generationFailureReason =
             response.fallbackReason ||
             'AI providers returned no usable Character Genesis text.';
+          const error: any = new Error(generationFailureReason);
+          error.code = 'AI_UNAVAILABLE';
+          error.requiresDeterministicConfirmation = true;
+          error.attemptsTrail = generationAttemptsTrail;
+          throw error;
         }
       } catch (err: any) {
         if (err?.code === 'AI_UNAVAILABLE') {
           throw err;
         }
         generationFailureReason = err?.message || String(err);
-        console.warn('[CharacterGenesisService] Orchestrated extraction failed:', err);
-      }
-
-      // If AI extraction failed or returned invalid structure, fall back to procedural extraction
-      if (!extracted) {
-        extracted = this.proceduralExtraction(concept, worldTemplate);
-        generationSource = 'DETERMINISTIC_FALLBACK';
-        if (!generationFailureReason) {
-          generationFailureReason = 'AI character extraction was unavailable or incomplete.';
-        }
+        const error: any = new Error(generationFailureReason);
+        error.code = 'AI_UNAVAILABLE';
+        error.requiresDeterministicConfirmation = true;
+        error.attemptsTrail = generationAttemptsTrail;
+        throw error;
       }
     }
 
@@ -1061,6 +1074,10 @@ Rules:
           proposedHighlights: [...existingDraft.aiExtractionSummary.proposedHighlights],
           uncertainties: [...(existingDraft.aiExtractionSummary.uncertainties || [])],
           generationSource: existingDraft.aiExtractionSummary.generationSource,
+          activeModel: generationActiveModel || (existingDraft.aiExtractionSummary as any)?.activeModel,
+          activeProvider: generationActiveProvider || (existingDraft.aiExtractionSummary as any)?.activeProvider,
+          fallbackReason: generationFailureReason || (existingDraft.aiExtractionSummary as any)?.fallbackReason,
+          attemptsTrail: generationAttemptsTrail.length > 0 ? generationAttemptsTrail : (existingDraft.aiExtractionSummary as any)?.attemptsTrail,
         }
       : {
           interpretation:
@@ -1077,6 +1094,10 @@ Rules:
             ? extracted.aiExtractionSummary.uncertainties.map(String)
             : [],
           generationSource,
+          activeModel: generationActiveModel,
+          activeProvider: generationActiveProvider,
+          fallbackReason: generationFailureReason,
+          attemptsTrail: generationAttemptsTrail,
         };
 
     const rawCore = extracted.coreStats || {};
@@ -1397,6 +1418,7 @@ IMPORTANT:
     classId?: string;
     subclassId?: string;
     speciesId?: string;
+    createdCustomModules?: CharacterProgressionCustomModule[];
     reasoning: string;
     provenance: CharacterProvenanceSource;
   }> {
@@ -1427,13 +1449,11 @@ IMPORTANT:
       input.narrativeRole ? `NARRATIVE ROLE: ${input.narrativeRole}` : '',
     ].filter(Boolean).join('\n');
 
-    const prompt = `You are a progression-assignment assistant for an RPG character creator.
+    const prompt = `You are a progression-assignment and character systems assistant for an RPG story engine.
 
-Select the most coherent EXISTING progression modules for this character from the supplied catalogue.
-Never invent module ids. Prefer no selection over a forced match.
-A profession is not automatically a class.
-Do not force D&D progression onto an ordinary creature, merchant, civilian, or construct unless the supplied rules/canon clearly uses classes for it.
-A subclass must be compatible with the selected class.
+Analyze this character's concept, backstory, profession, archetype, and species:
+1. If an existing module in the catalogue is a suitable match, return its ID in classId, subclassId, or speciesId.
+2. If the character's bio/concept represents a custom or distinct class (e.g. "Knight", "Blood Hunter", "Death Knight", "Witch", "Gunslinger"), specialized subclass (e.g. "Dark Knight", "Shadowblade", "Pyromancer"), or distinct ancestry (e.g. "Undead", "Revenant", "Dhampir", "Celestial"), propose custom progression modules in customClass, customSubclass, and/or customSpecies with name and concept.
 
 CHARACTER CONTEXT:
 ${context}
@@ -1446,6 +1466,9 @@ OUTPUT STRICT JSON:
   "classId": string | null,
   "subclassId": string | null,
   "speciesId": string | null,
+  "customClass": { "name": string, "concept": string } | null,
+  "customSubclass": { "name": string, "concept": string } | null,
+  "customSpecies": { "name": string, "concept": string } | null,
   "reasoning": string
 }`;
 
@@ -1482,18 +1505,18 @@ OUTPUT STRICT JSON:
       )?.id;
     };
 
-    const inferredClass =
+    let inferredClass =
       findModule('CLASS', proposal?.classId) ||
       findModule('CLASS', input.classId) ||
       findModule('CLASS', input.profession) ||
       findModule('CLASS', input.archetype);
 
-    const inferredSpecies =
+    let inferredSpecies =
       findModule('SPECIES', proposal?.speciesId) ||
       findModule('SPECIES', input.species);
 
     const candidateSubclass = findModule('SUBCLASS', proposal?.subclassId);
-    const inferredSubclass =
+    let inferredSubclass =
       candidateSubclass && inferredClass &&
       modules.some((module) =>
         module.id === candidateSubclass &&
@@ -1503,7 +1526,88 @@ OUTPUT STRICT JSON:
         ? candidateSubclass
         : undefined;
 
-    if (!proposal?.classId && !proposal?.speciesId && !proposal?.subclassId) {
+    const createdCustomModules: CharacterProgressionCustomModule[] = [];
+
+    // Check if custom class is proposed or if proposal.classId is a novel custom class name
+    const proposedCustomClass = proposal?.customClass || (proposal?.classId && !inferredClass ? { name: proposal.classId, concept: `${proposal.classId} specialized combat progression` } : null);
+    if (proposedCustomClass && proposedCustomClass.name) {
+      try {
+        const customClassModule = await this.proposeCustomProgressionModule(
+          {
+            worldId: input.worldId,
+            type: 'CLASS',
+            name: proposedCustomClass.name,
+            concept: proposedCustomClass.concept || proposedCustomClass.name,
+            background: input.background,
+            species: input.species,
+            profession: input.profession,
+            archetype: input.archetype,
+          },
+          worldTemplate
+        );
+        if (customClassModule?.id) {
+          inferredClass = customClassModule.id;
+          createdCustomModules.push(customClassModule);
+        }
+      } catch (err) {
+        console.warn('[CharacterGenesisService] Failed to create custom class module during inference:', err);
+      }
+    }
+
+    // Check if custom subclass is proposed or if proposal.subclassId is a novel custom subclass name
+    const proposedCustomSubclass = proposal?.customSubclass || (proposal?.subclassId && !inferredSubclass ? { name: proposal.subclassId, concept: `${proposal.subclassId} specialized archetype progression` } : null);
+    if (proposedCustomSubclass && proposedCustomSubclass.name) {
+      try {
+        const customSubclassModule = await this.proposeCustomProgressionModule(
+          {
+            worldId: input.worldId,
+            type: 'SUBCLASS',
+            name: proposedCustomSubclass.name,
+            concept: proposedCustomSubclass.concept || proposedCustomSubclass.name,
+            parentClassId: inferredClass || input.classId || 'class_fighter',
+            background: input.background,
+            species: input.species,
+            profession: input.profession,
+            archetype: input.archetype,
+          },
+          worldTemplate
+        );
+        if (customSubclassModule?.id) {
+          inferredSubclass = customSubclassModule.id;
+          createdCustomModules.push(customSubclassModule);
+        }
+      } catch (err) {
+        console.warn('[CharacterGenesisService] Failed to create custom subclass module during inference:', err);
+      }
+    }
+
+    // Check if custom species is proposed or if proposal.speciesId is a novel custom species name
+    const proposedCustomSpecies = proposal?.customSpecies || (proposal?.speciesId && !inferredSpecies ? { name: proposal.speciesId, concept: `${proposal.speciesId} lineage and ancestry traits` } : null);
+    if (proposedCustomSpecies && proposedCustomSpecies.name) {
+      try {
+        const customSpeciesModule = await this.proposeCustomProgressionModule(
+          {
+            worldId: input.worldId,
+            type: 'SPECIES',
+            name: proposedCustomSpecies.name,
+            concept: proposedCustomSpecies.concept || proposedCustomSpecies.name,
+            background: input.background,
+            species: input.species,
+            profession: input.profession,
+            archetype: input.archetype,
+          },
+          worldTemplate
+        );
+        if (customSpeciesModule?.id) {
+          inferredSpecies = customSpeciesModule.id;
+          createdCustomModules.push(customSpeciesModule);
+        }
+      } catch (err) {
+        console.warn('[CharacterGenesisService] Failed to create custom species module during inference:', err);
+      }
+    }
+
+    if (!proposal?.classId && !proposal?.speciesId && !proposal?.subclassId && createdCustomModules.length === 0) {
       provenance = 'DETERMINISTIC_FALLBACK';
     }
 
@@ -1511,9 +1615,10 @@ OUTPUT STRICT JSON:
       classId: inferredClass,
       subclassId: inferredSubclass,
       speciesId: inferredSpecies,
+      createdCustomModules,
       reasoning: String(
         proposal?.reasoning ||
-        'Selected the closest registered progression modules from the character context. Review every selection before confirming.'
+        'Inferred progression modules tailored to the character concept and backstory.'
       ),
       provenance,
     };

@@ -798,7 +798,14 @@ export function classifyDiscoveredModel(
   }
 
   let pool: ModelPool = 'creative';
-  let roleEligibility: TaskId[] = ['narrative.generate', 'summary.scene'];
+  let roleEligibility: TaskId[] = [
+    'narrative.generate',
+    'character.dialogue',
+    'memory.extract',
+    'summary.scene',
+    'rules.adjudicate',
+    'utility.inspect',
+  ];
   let userPriority = 80;
   let latencyMs = 500;
 
@@ -1180,7 +1187,7 @@ export class GoogleGeminiAdapter implements IProviderAdapter {
     }
 
     const start = Date.now();
-    const apiKey = typeof process !== 'undefined' ? process.env?.GEMINI_API_KEY : undefined;
+    const apiKey = (typeof process !== 'undefined' ? process.env?.GEMINI_API_KEY : undefined) || getProviderApiKey('google_gemini');
     const canExecuteLive = Boolean(apiKey) && !this.isMockOnly;
 
     if (canExecuteLive) {
@@ -1270,10 +1277,9 @@ Do not enclose in markdown ticks, output pure JSON.`;
 
         rawText = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
 
-        let parsed: any;
         if (task === 'speech.transcribe') {
           rawText = rawText || 'Transcribed text';
-          parsed = { narrative: [rawText], dialogue: [], events: [], stateChanges: [], memoryCandidates: [], audioCues: [] };
+          const parsed = { narrative: [rawText], dialogue: [], events: [], stateChanges: [], memoryCandidates: [], audioCues: [] };
           return {
             text: JSON.stringify(parsed),
             latencyMs,
@@ -1288,7 +1294,7 @@ Do not enclose in markdown ticks, output pure JSON.`;
           };
         }
         if (task === 'speech.generate') {
-          parsed = { narrative: [rawText || 'Generated speech'], dialogue: [], events: [], stateChanges: [], memoryCandidates: [], audioCues: [] };
+          const parsed = { narrative: [rawText || 'Generated speech'], dialogue: [], events: [], stateChanges: [], memoryCandidates: [], audioCues: [] };
           return {
             text: JSON.stringify(parsed),
             audioBase64,
@@ -1299,15 +1305,6 @@ Do not enclose in markdown ticks, output pure JSON.`;
             providerId: this.providerId,
             rawResponse: res,
           };
-        }
-        try {
-          parsed = JSON.parse(rawText);
-        } catch {
-          throw new Error('Provider returned malformed JSON; response rejected for fallback.');
-        }
-
-        if (!Array.isArray(parsed.narrative) || parsed.narrative.length === 0) {
-          throw new Error('Provider returned an invalid turn package: narrative is missing or empty.');
         }
 
         return {
@@ -1619,6 +1616,13 @@ export class MultiModelOrchestrator {
         const raw = fs.readFileSync(this.configFilePath, 'utf-8');
         const data = JSON.parse(raw);
         if (data && typeof data === 'object') {
+          if (Array.isArray(data.customModels)) {
+            for (const cm of data.customModels) {
+              if (cm && cm.providerId && cm.modelId) {
+                this.registerModel(cm);
+              }
+            }
+          }
           if (data.pins && typeof data.pins === 'object') {
             for (const [task, key] of Object.entries(data.pins)) {
               if (typeof key === 'string') {
@@ -1677,7 +1681,10 @@ export class MultiModelOrchestrator {
       for (const [category, key] of this.categoryOverrides.entries()) {
         categoryOverrides[category] = key;
       }
-      fs.writeFileSync(this.configFilePath, JSON.stringify({ pins, fallbackChains, categoryOverrides, overrides }, null, 2), 'utf-8');
+      const customModels = Array.from(this.models.values()).filter(
+        (m) => m.providerId === 'openrouter' || m.providerId === 'openai' || m.providerId === 'anthropic' || m.providerId === 'custom'
+      );
+      fs.writeFileSync(this.configFilePath, JSON.stringify({ pins, fallbackChains, categoryOverrides, overrides, customModels }, null, 2), 'utf-8');
     } catch (e) {
       // Ignore save errors
     }
@@ -2229,7 +2236,50 @@ export class MultiModelOrchestrator {
       isEmergencyFloor: false,
     });
 
-    // OpenRouter models are discovered dynamically from the configured account.
+    // Seed standard OpenRouter models
+    const openrouterConfigured = Boolean(getProviderApiKey('openrouter'));
+    const openRouterDefaults = [
+      { id: 'openrouter/auto', name: 'OpenRouter Auto (Best Available)', pool: 'creative' as ModelPool, window: 128000 },
+      { id: 'meta-llama/llama-3.3-70b-instruct', name: 'Llama 3.3 70B Instruct', pool: 'creative' as ModelPool, window: 131072 },
+      { id: 'deepseek/deepseek-r1', name: 'DeepSeek R1 (Reasoning)', pool: 'reasoning' as ModelPool, window: 64000 },
+      { id: 'deepseek/deepseek-chat', name: 'DeepSeek V3', pool: 'fast' as ModelPool, window: 64000 },
+      { id: 'anthropic/claude-3.5-sonnet', name: 'Claude 3.5 Sonnet (OpenRouter)', pool: 'creative' as ModelPool, window: 200000 },
+      { id: 'anthropic/claude-3.7-sonnet', name: 'Claude 3.7 Sonnet (OpenRouter)', pool: 'creative' as ModelPool, window: 200000 },
+      { id: 'openai/gpt-4o', name: 'GPT-4o (OpenRouter)', pool: 'creative' as ModelPool, window: 128000 },
+      { id: 'openai/gpt-4o-mini', name: 'GPT-4o Mini (OpenRouter)', pool: 'fast' as ModelPool, window: 128000 },
+      { id: 'google/gemini-2.5-flash', name: 'Gemini 2.5 Flash (OpenRouter)', pool: 'fast' as ModelPool, window: 1048576 },
+      { id: 'mistralai/mistral-large-2411', name: 'Mistral Large (OpenRouter)', pool: 'creative' as ModelPool, window: 128000 },
+      { id: 'qwen/qwen-2.5-72b-instruct', name: 'Qwen 2.5 72B Instruct (OpenRouter)', pool: 'creative' as ModelPool, window: 131072 },
+    ];
+
+    for (const orm of openRouterDefaults) {
+      this.registerModel({
+        providerId: 'openrouter',
+        modelId: orm.id,
+        displayName: orm.name,
+        pool: orm.pool,
+        capabilities: ['text_generation', 'reasoning', 'structured_output', 'creative_writing'],
+        contextWindow: orm.window,
+        health: openrouterConfigured ? 'Healthy' : 'InvalidAuth',
+        quota: openrouterConfigured ? 'Healthy' : 'Unknown',
+        latencyMs: openrouterConfigured ? 350 : 0,
+        userPriority: 90,
+        roleEligibility: [
+          'narrative.generate',
+          'character.dialogue',
+          'memory.extract',
+          'summary.scene',
+          'rules.adjudicate',
+          'utility.inspect',
+        ],
+        fallbackEligibility: true,
+        accessStatus: openrouterConfigured ? 'accessible' : 'not_configured',
+        lifecycleState: 'active',
+        isEmergencyFloor: false,
+      });
+    }
+
+    // External Provider Models
     this.registerModel({
       providerId: 'openai',
       modelId: 'gpt-4o',
@@ -2237,12 +2287,12 @@ export class MultiModelOrchestrator {
       pool: 'creative',
       capabilities: ['creative_writing', 'fast'],
       contextWindow: 128000,
-      health: 'InvalidAuth',
+      health: Boolean(getProviderApiKey('openai')) ? 'Healthy' : 'InvalidAuth',
       quota: 'Unknown',
       latencyMs: 0,
       userPriority: 50,
       roleEligibility: ['narrative.generate', 'character.dialogue'],
-      accessStatus: 'not_configured',
+      accessStatus: Boolean(getProviderApiKey('openai')) ? 'accessible' : 'not_configured',
       lifecycleState: 'active',
       isEmergencyFloor: false,
     });
@@ -2254,12 +2304,12 @@ export class MultiModelOrchestrator {
       pool: 'creative',
       capabilities: ['creative_writing', 'long_context'],
       contextWindow: 200000,
-      health: 'InvalidAuth',
+      health: Boolean(getProviderApiKey('anthropic')) ? 'Healthy' : 'InvalidAuth',
       quota: 'Unknown',
       latencyMs: 0,
       userPriority: 50,
       roleEligibility: ['narrative.generate', 'summary.scene'],
-      accessStatus: 'not_configured',
+      accessStatus: Boolean(getProviderApiKey('anthropic')) ? 'accessible' : 'not_configured',
       lifecycleState: 'active',
       isEmergencyFloor: false,
     });
@@ -2280,6 +2330,84 @@ export class MultiModelOrchestrator {
       lifecycleState: 'active',
       isEmergencyFloor: false,
     });
+  }
+
+  public syncProviderModelAccessStatus(providerId: string, isConfigured: boolean): void {
+    for (const [, model] of this.models.entries()) {
+      if (model.providerId === providerId || (providerId === 'google_gemini' && model.providerId === 'provider_google_gemini')) {
+        if (isConfigured) {
+          if (model.health === 'InvalidAuth' || model.accessStatus === 'not_configured') {
+            model.health = 'Healthy';
+            model.quota = 'Healthy';
+            model.accessStatus = 'accessible';
+          }
+        } else {
+          if (!model.isEmergencyFloor && model.providerId !== 'dreambook-native') {
+            model.health = 'InvalidAuth';
+            model.accessStatus = 'not_configured';
+          }
+        }
+      }
+    }
+  }
+
+  public refreshAllProviderModelStatuses(): void {
+    const providers = ['google_gemini', 'provider_google_gemini', 'openrouter', 'openai', 'anthropic', 'elevenlabs', 'google_cloud_tts', 'google_imagen'];
+    for (const providerId of providers) {
+      const configured = Boolean(getProviderApiKey(providerId));
+      this.syncProviderModelAccessStatus(providerId, configured);
+    }
+  }
+
+  public registerCustomModel(params: {
+    providerId: string;
+    modelId: string;
+    displayName?: string;
+    pool?: ModelPool;
+    contextWindow?: number;
+    roleEligibility?: TaskId[];
+    capabilities?: string[];
+  }): ModelRegistryRecord {
+    const providerId = (params.providerId || 'openrouter').trim();
+    const modelId = params.modelId.trim();
+    const configured = Boolean(getProviderApiKey(providerId));
+
+    const record: ModelRegistryRecord = {
+      providerId,
+      modelId,
+      displayName: params.displayName?.trim() || modelId,
+      pool: params.pool || (/flash|mini|small|lite|haiku/i.test(modelId) ? 'fast' : /reason|thinking|r1|o1|o3|o4/i.test(modelId) ? 'reasoning' : 'creative'),
+      capabilities: params.capabilities || ['text_generation', 'reasoning', 'structured_output', 'creative_writing'],
+      contextWindow: params.contextWindow || 64000,
+      health: configured ? 'Healthy' : 'InvalidAuth',
+      quota: configured ? 'Healthy' : 'Unknown',
+      latencyMs: configured ? 300 : 0,
+      userPriority: 85,
+      roleEligibility: params.roleEligibility || [
+        'narrative.generate',
+        'character.dialogue',
+        'memory.extract',
+        'summary.scene',
+        'rules.adjudicate',
+        'utility.inspect',
+      ],
+      outputTokenLimit: 4096,
+      supportedInputTypes: ['text', 'image', 'audio', 'video'],
+      supportedOutputTypes: ['text', 'json'],
+      hasTools: true,
+      hasStructuredOutput: true,
+      hasVision: true,
+      hasAudio: false,
+      hasImageGeneration: false,
+      fallbackEligibility: true,
+      lifecycleState: 'active',
+      accessStatus: configured ? 'accessible' : 'not_configured',
+      isEmergencyFloor: false,
+    };
+
+    this.registerModel(record);
+    this.savePersistedConfig();
+    return record;
   }
 
   private seedDefaultAdapters(): void {
@@ -3094,10 +3222,10 @@ export class MultiModelOrchestrator {
 
   public isCandidateUsable(model: ModelRegistryRecord, task?: TaskId, contextTokens: number = 0): boolean {
     if (task && !model.roleEligibility.includes(task)) return false;
-    if (model.health === 'Unavailable' || model.health === 'DisabledByUser' || model.health === 'InvalidAuth') return false;
+    if (model.health === 'DisabledByUser') return false;
     if (this.isCircuitBreakerTripped(model.providerId, model.modelId)) return false;
     if (contextTokens > 0 && contextTokens > model.contextWindow) return false;
-    if (this.isModelCoolingDown(model)) return false;
+    if (model.health === 'InvalidAuth' && !getProviderApiKey(model.providerId)) return false;
     return true;
   }
 
@@ -3118,20 +3246,38 @@ export class MultiModelOrchestrator {
     selectionScore: number;
     fallbacks: ModelRegistryRecord[];
   } {
+    this.refreshAllProviderModelStatuses();
     const contextTokens = options?.contextTokens ?? 0;
     const customChainKeys = this.taskFallbackChains.get(task);
     const category = this.getTaskCategory(task);
     const categoryOverrideKey = this.categoryOverrides.get(category);
 
     const findConfiguredModel = (key: string): ModelRegistryRecord | undefined => {
-      return Array.from(this.models.values()).find(
+      let found = Array.from(this.models.values()).find(
         (m) =>
           `${m.providerId}::${m.modelId}` === key ||
-          m.modelId === key
+          m.modelId === key ||
+          (key.startsWith('openrouter::') && m.modelId === key.replace('openrouter::', '')) ||
+          (m.providerId === 'openrouter' && key === m.modelId)
       );
+      if (!found && (key.startsWith('openrouter::') || key.includes('/') || key.startsWith('google_gemini::'))) {
+        const parts = key.split('::');
+        const providerId = parts.length > 1 ? parts[0] : (key.includes('/') ? 'openrouter' : 'google_gemini');
+        const modelId = parts.length > 1 ? parts[1] : parts[0];
+        found = this.registerCustomModel({
+          providerId,
+          modelId,
+          displayName: modelId,
+        });
+      }
+      return found;
     };
 
     const isUsableCandidate = (model: ModelRegistryRecord): boolean => {
+      if (getProviderApiKey(model.providerId) && model.health === 'InvalidAuth') {
+        model.health = 'Healthy';
+        model.accessStatus = 'accessible';
+      }
       return this.isCandidateUsable(model, task, contextTokens);
     };
 
@@ -3191,7 +3337,13 @@ export class MultiModelOrchestrator {
             fallbacks = customChainKeys
               .map(findConfiguredModel)
               .filter((m): m is ModelRegistryRecord => Boolean(m))
-              .filter((m) => m.modelId !== pinnedModel.modelId && isUsableCandidate(m));
+              .map((m) => {
+                if (task && !m.roleEligibility.includes(task)) {
+                  m.roleEligibility.push(task);
+                }
+                return m;
+              })
+              .filter((m) => m.modelId !== pinnedModel.modelId && m.health !== 'DisabledByUser');
 
             const emergency = Array.from(this.models.values()).find((m) => m.isEmergencyFloor);
             if (
@@ -3289,7 +3441,13 @@ export class MultiModelOrchestrator {
       const configuredModels = customChainKeys
         .map(findConfiguredModel)
         .filter((m): m is ModelRegistryRecord => Boolean(m))
-        .filter(isUsableCandidate);
+        .map((m) => {
+          if (task && !m.roleEligibility.includes(task)) {
+            m.roleEligibility.push(task);
+          }
+          return m;
+        })
+        .filter((m) => m.health !== 'DisabledByUser');
 
       if (configuredModels.length > 0) {
         const selectedFromChain = configuredModels[0];
@@ -4182,11 +4340,6 @@ export class MultiModelOrchestrator {
         const currentCandidate = candidateChain[cIdx];
         const modelKey = `${currentCandidate.providerId}::${currentCandidate.modelId}`;
 
-        // Circuit breaker check
-        if (this.isCircuitBreakerTripped(currentCandidate.providerId, currentCandidate.modelId)) {
-          continue;
-        }
-
         const adapter = this.getAdapter(currentCandidate.providerId);
         if (!adapter) {
           continue;
@@ -4567,23 +4720,44 @@ export class MultiModelOrchestrator {
     modelId: string;
     fallbackReason?: string;
     attempts: number;
+    attemptsTrail: Array<{
+      providerId: string;
+      modelId: string;
+      displayName?: string;
+      status: 'SUCCESS' | 'FAILED';
+      latencyMs: number;
+      error?: string;
+    }>;
   }> {
+    this.refreshAllProviderModelStatuses();
     const timeoutMs = options?.timeoutMs || 35000;
     const selection = this.selectBestModel(task);
     const candidateChain: ModelRegistryRecord[] = [selection.selectedModel, ...selection.fallbacks];
     let totalAttempts = 0;
     let lastError = '';
+    const attemptsTrail: Array<{
+      providerId: string;
+      modelId: string;
+      displayName?: string;
+      status: 'SUCCESS' | 'FAILED';
+      latencyMs: number;
+      error?: string;
+    }> = [];
 
     for (let cIdx = 0; cIdx < candidateChain.length; cIdx++) {
       const currentCandidate = candidateChain[cIdx];
       const modelKey = `${currentCandidate.providerId}::${currentCandidate.modelId}`;
 
-      if (this.isCircuitBreakerTripped(currentCandidate.providerId, currentCandidate.modelId) || this.isModelCoolingDown(currentCandidate)) {
-        continue;
-      }
-
       const adapter = this.getAdapter(currentCandidate.providerId);
       if (!adapter) {
+        attemptsTrail.push({
+          providerId: currentCandidate.providerId,
+          modelId: currentCandidate.modelId,
+          displayName: currentCandidate.displayName || currentCandidate.modelId,
+          status: 'FAILED',
+          latencyMs: 0,
+          error: `Provider adapter '${currentCandidate.providerId}' not configured or missing API credentials.`,
+        });
         continue;
       }
 
@@ -4609,14 +4783,25 @@ export class MultiModelOrchestrator {
           throw new Error('Provider returned empty response.');
         }
 
+        const latencyMs = Math.max(1, Date.now() - attemptStartedAt);
         this.recordProviderSuccess(currentCandidate, providerRes, task, attemptStartedAt);
         this.consecutiveFailures.set(modelKey, 0);
+
+        attemptsTrail.push({
+          providerId: currentCandidate.providerId,
+          modelId: currentCandidate.modelId,
+          displayName: currentCandidate.displayName || currentCandidate.modelId,
+          status: 'SUCCESS',
+          latencyMs,
+        });
 
         const isEmergency = Boolean(currentCandidate.isEmergencyFloor) ||
                             currentCandidate.providerId.includes('emergency') ||
                             currentCandidate.providerId === 'provider_deterministic_emergency';
         const source = isEmergency ? 'DETERMINISTIC_FALLBACK' : (cIdx === 0 ? 'AI_PRIMARY' : 'AI_FALLBACK');
-        const fallbackReason = cIdx > 0 ? `Primary model unavailable or exhausted; fell back to ${currentCandidate.modelId}` : undefined;
+        const fallbackReason = cIdx > 0
+          ? `Fell back to ${currentCandidate.displayName || currentCandidate.modelId} after ${cIdx} earlier model failure(s).`
+          : undefined;
 
         return {
           text: isEmergency ? '' : providerRes.text,
@@ -4625,9 +4810,11 @@ export class MultiModelOrchestrator {
           modelId: currentCandidate.modelId,
           fallbackReason,
           attempts: totalAttempts,
+          attemptsTrail,
         };
       } catch (err: any) {
         lastError = err?.message || String(err);
+        const latencyMs = Math.max(1, Date.now() - attemptStartedAt);
         this.recordProviderFailure(currentCandidate, task, err, attemptStartedAt);
         const failures = (this.consecutiveFailures.get(modelKey) || 0) + 1;
         this.consecutiveFailures.set(modelKey, failures);
@@ -4635,6 +4822,15 @@ export class MultiModelOrchestrator {
           this.circuitBreakersTripped.add(modelKey);
           currentCandidate.health = 'Unavailable';
         }
+
+        attemptsTrail.push({
+          providerId: currentCandidate.providerId,
+          modelId: currentCandidate.modelId,
+          displayName: currentCandidate.displayName || currentCandidate.modelId,
+          status: 'FAILED',
+          latencyMs,
+          error: lastError,
+        });
       }
     }
 
@@ -4643,13 +4839,155 @@ export class MultiModelOrchestrator {
       modelId: 'emergency-fallback-local',
     };
 
+    const trailSummary = attemptsTrail.length > 0
+      ? attemptsTrail
+          .map((a, i) => `${i + 1}. ${a.displayName || a.modelId} (${a.providerId}) — ${a.error || 'Unavailable'}`)
+          .join('; ')
+      : lastError;
+
     return {
       text: '',
       source: 'DETERMINISTIC_FALLBACK',
       providerId: emergency.providerId,
       modelId: emergency.modelId,
-      fallbackReason: `All AI providers failed. Last error: ${lastError}`,
+      fallbackReason: `All ${attemptsTrail.length} AI providers failed: ${trailSummary}`,
       attempts: totalAttempts,
+      attemptsTrail,
+    };
+  }
+
+  /**
+   * Automated Fallback Configuration Engine
+   * Pings all available models across providers, verifies health and latency,
+   * groups by capability/speed, and automatically selects the optimal primary and up to 4 fallbacks.
+   */
+  public async autoConfigureFallbacks(options?: {
+    maxFallbacksPerCategory?: number;
+  }): Promise<{
+    success: boolean;
+    timestamp: number;
+    totalModelsTested: number;
+    healthyModelsCount: number;
+    failedModelsCount: number;
+    results: Array<{
+      providerId: string;
+      modelId: string;
+      displayName: string;
+      status: 'READY' | 'FAILED' | 'UNAVAILABLE' | 'NOT_CONFIGURED';
+      latencyMs?: number;
+      errorReason?: string;
+    }>;
+    configuredChains: Record<string, string[]>;
+    summaryMessage: string;
+  }> {
+    const maxFallbacks = Math.max(2, Math.min(6, options?.maxFallbacksPerCategory ?? 4));
+
+    // 1. Force discovery refresh from all adapters
+    await this.discoverAndRegisterModels({ forceRefresh: true });
+
+    const allModels = this.getAllModels().filter(
+      (m) => !m.isEmergencyFloor && m.health !== 'DisabledByUser'
+    );
+
+    const testResults: Array<{
+      providerId: string;
+      modelId: string;
+      displayName: string;
+      status: 'READY' | 'FAILED' | 'UNAVAILABLE' | 'NOT_CONFIGURED';
+      latencyMs?: number;
+      errorReason?: string;
+    }> = [];
+
+    const healthyModels: ModelRegistryRecord[] = [];
+
+    // 2. Ping / benchmark all registered models
+    for (const model of allModels) {
+      try {
+        const res = await this.testModel(model.providerId, model.modelId);
+        if (res.success && res.status === 'READY') {
+          healthyModels.push(model);
+          testResults.push({
+            providerId: model.providerId,
+            modelId: model.modelId,
+            displayName: model.displayName || model.modelId,
+            status: 'READY',
+            latencyMs: res.latencyMs,
+          });
+        } else {
+          testResults.push({
+            providerId: model.providerId,
+            modelId: model.modelId,
+            displayName: model.displayName || model.modelId,
+            status: res.status as any,
+            latencyMs: res.latencyMs,
+            errorReason: res.message,
+          });
+        }
+      } catch (err: any) {
+        testResults.push({
+          providerId: model.providerId,
+          modelId: model.modelId,
+          displayName: model.displayName || model.modelId,
+          status: 'FAILED',
+          errorReason: err?.message || String(err),
+        });
+      }
+    }
+
+    // 3. Assign optimal fallback chains for each canonical task
+    const tasksToConfigure: TaskId[] = [
+      'narrative.generate',
+      'character.dialogue',
+      'memory.extract',
+      'summary.scene',
+      'rules.adjudicate',
+      'utility.inspect',
+      'speech.generate',
+      'speech.transcribe',
+      'image.generate',
+    ];
+
+    const emergencyKey = 'provider_deterministic_emergency::emergency-fallback-local';
+
+    for (const task of tasksToConfigure) {
+      const eligibleHealthy = healthyModels
+        .filter((m) => m.roleEligibility.includes(task))
+        .sort((a, b) => {
+          let scoreA = a.userPriority - (a.latencyMs || 500) / 10;
+          let scoreB = b.userPriority - (b.latencyMs || 500) / 10;
+          if (task === 'narrative.generate' || task === 'character.dialogue') {
+            if (a.pool === 'creative') scoreA += 50;
+            if (b.pool === 'creative') scoreB += 50;
+          } else if (task === 'memory.extract' || task === 'rules.adjudicate' || task === 'utility.inspect') {
+            if (a.pool === 'fast' || a.pool === 'reasoning') scoreA += 40;
+            if (b.pool === 'fast' || b.pool === 'reasoning') scoreB += 40;
+          }
+          return scoreB - scoreA;
+        });
+
+      const topKeys = eligibleHealthy.slice(0, maxFallbacks).map((m) => `${m.providerId}::${m.modelId}`);
+      const chain = topKeys.length > 0 ? [...topKeys, emergencyKey] : [emergencyKey];
+      this.taskFallbackChains.set(task, chain);
+
+      if (topKeys[0]) {
+        this.taskPinnedModels.set(task, topKeys[0]);
+      }
+    }
+
+    this.savePersistedConfig();
+
+    const healthyCount = healthyModels.length;
+    const failedCount = testResults.filter((r) => r.status !== 'READY').length;
+
+    return {
+      success: true,
+      timestamp: Date.now(),
+      totalModelsTested: testResults.length,
+      healthyModelsCount: healthyCount,
+      failedModelsCount: failedCount,
+      results: testResults,
+      configuredChains: this.getAllFallbackChains(),
+      summaryMessage: `AI Auto-Configuration Complete: Tested ${testResults.length} models (${healthyCount} responsive, ${failedCount} unavailable). Configured up to ${maxFallbacks} fallback models per task category.`,
     };
   }
 

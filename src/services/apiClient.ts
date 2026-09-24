@@ -1454,6 +1454,29 @@ class ApiClient {
   }
 
   /**
+   * Registers a custom model with the orchestrator.
+   * POST /api/game/orchestrator/custom-model
+   */
+  public async registerCustomModel(params: {
+    providerId: string;
+    modelId: string;
+    displayName?: string;
+    pool?: string;
+    contextWindow?: number;
+    roleEligibility?: string[];
+    capabilities?: string[];
+  }): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/custom-model`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `Failed to register custom model: HTTP ${res.status}`);
+    return data;
+  }
+
+  /**
    * Get all orchestrator fallback chains.
    * GET /api/game/orchestrator/fallbacks
    */
@@ -1478,6 +1501,38 @@ class ApiClient {
     });
     if (!res.ok) throw new Error(`Failed to set orchestrator fallback chain: HTTP ${res.status}`);
     return await res.json();
+  }
+
+  /**
+   * Pings all available models across providers, benchmarks response health/latency,
+   * and automatically configures up to 4 fallback models per task category.
+   * POST /api/game/orchestrator/auto-configure-fallbacks
+   */
+  public async autoConfigureFallbacks(params?: { maxFallbacksPerCategory?: number }): Promise<{
+    success: boolean;
+    timestamp: number;
+    totalModelsTested: number;
+    healthyModelsCount: number;
+    failedModelsCount: number;
+    results: Array<{
+      providerId: string;
+      modelId: string;
+      displayName: string;
+      status: 'READY' | 'FAILED' | 'UNAVAILABLE' | 'NOT_CONFIGURED';
+      latencyMs?: number;
+      errorReason?: string;
+    }>;
+    configuredChains: Record<string, string[]>;
+    summaryMessage: string;
+  }> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/auto-configure-fallbacks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(params || {}),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `Failed to auto-configure fallbacks: HTTP ${res.status}`);
+    return data;
   }
 
   /**
@@ -1901,6 +1956,7 @@ class ApiClient {
       error.code = payload?.code;
       error.requiresDeterministicConfirmation = payload?.requiresDeterministicConfirmation === true;
       error.reason = payload?.reason;
+      error.attemptsTrail = Array.isArray(payload?.attemptsTrail) ? payload.attemptsTrail : [];
       throw error;
     }
 

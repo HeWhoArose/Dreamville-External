@@ -764,6 +764,17 @@ export interface CharacterAiExtractionSummary {
   proposedHighlights: string[];
   uncertainties?: string[];
   generationSource?: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK';
+  activeModel?: string;
+  activeProvider?: string;
+  fallbackReason?: string;
+  attemptsTrail?: Array<{
+    providerId: string;
+    modelId: string;
+    displayName?: string;
+    status: 'SUCCESS' | 'FAILED';
+    latencyMs?: number;
+    error?: string;
+  }>;
 }
 
 export interface CapabilityDefinition {

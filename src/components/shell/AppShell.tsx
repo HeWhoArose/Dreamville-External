@@ -22,14 +22,28 @@ export const AppShell: React.FC<AppShellProps> = ({
   isEngineReady = true,
 }) => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const handleToggleSidebar = () => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setIsMobileMenuOpen((prev) => !prev);
+    } else {
+      setIsSidebarCollapsed((prev) => !prev);
+    }
+  };
+
+  const handleNavigate = (route: AppRoute) => {
+    setIsMobileMenuOpen(false);
+    onNavigate(route);
+  };
 
   return (
     <div className="min-h-screen bg-[var(--db-bg-canvas)] text-[var(--db-text-primary)] flex flex-col selection:bg-amber-500/20 selection:text-amber-200">
       {/* Top Application Header */}
       <TopBar
         currentRoute={currentRoute}
-        onNavigate={onNavigate}
-        onToggleSidebar={() => setIsSidebarCollapsed((prev) => !prev)}
+        onNavigate={handleNavigate}
+        onToggleSidebar={handleToggleSidebar}
         isSidebarCollapsed={isSidebarCollapsed}
         activeStoryTitle={activeStoryTitle}
         worldClockTime={worldClockTime}
@@ -41,7 +55,7 @@ export const AppShell: React.FC<AppShellProps> = ({
         {/* Persistent Collapsible Sidebar (Desktop & Tablet) */}
         <SidebarNav
           currentRoute={currentRoute}
-          onNavigate={onNavigate}
+          onNavigate={handleNavigate}
           isCollapsed={isSidebarCollapsed}
           hasActiveStory={Boolean(activeStoryTitle)}
         />
@@ -59,11 +73,14 @@ export const AppShell: React.FC<AppShellProps> = ({
         </main>
       </div>
 
-      {/* Mobile Bottom Navigation Bar */}
+      {/* Mobile Bottom Navigation Bar & Responsive Slide-Out Drawer */}
       <MobileNav
         currentRoute={currentRoute}
-        onNavigate={onNavigate}
+        onNavigate={handleNavigate}
         hasActiveStory={Boolean(activeStoryTitle)}
+        isDrawerOpen={isMobileMenuOpen}
+        onToggleDrawer={() => setIsMobileMenuOpen((prev) => !prev)}
+        onCloseDrawer={() => setIsMobileMenuOpen(false)}
       />
     </div>
   );

@@ -14,6 +14,118 @@ interface CharacterProgressionStepProps {
 	error?: string | null;
 }
 
+interface ProgressionSectionProps {
+	type: ProgressionType;
+	title: string;
+	hint: string;
+	value?: string;
+	options: any[];
+	disabled?: boolean;
+	onSelect: (value: string) => void;
+	selected?: any;
+	onInfer: (type: ProgressionType) => void;
+	busyType?: ProgressionType | null;
+	isCustomOpen: boolean;
+	onToggleCustom: () => void;
+	customName: string;
+	customConcept: string;
+	onChangeCustomName: (val: string) => void;
+	onChangeCustomConcept: (val: string) => void;
+	onSubmitCustom: () => void;
+}
+
+const ProgressionSection: React.FC<ProgressionSectionProps> = ({
+	type,
+	title,
+	hint,
+	value,
+	options,
+	disabled,
+	onSelect,
+	selected,
+	onInfer,
+	busyType,
+	isCustomOpen,
+	onToggleCustom,
+	customName,
+	customConcept,
+	onChangeCustomName,
+	onChangeCustomConcept,
+	onSubmitCustom,
+}) => (
+	<section className="rounded-2xl border border-neutral-800 bg-neutral-950 p-4 sm:p-5 space-y-3">
+		<div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+			<div className="min-w-0">
+				<h2 className="text-sm font-semibold text-white">{title}</h2>
+				<p className="text-xs text-neutral-400 mt-1 leading-relaxed">{hint}</p>
+			</div>
+			{selected && <span className="shrink-0 text-[10px] uppercase tracking-wide text-indigo-300">{selected.name}</span>}
+		</div>
+
+		<div className="flex flex-col gap-2 sm:flex-row">
+			<div className="relative min-w-0 flex-1">
+				<select
+					value={value || ''}
+					disabled={disabled}
+					onChange={(event) => onSelect(event.target.value)}
+					className="w-full appearance-none rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-3 pr-10 text-sm text-white outline-none focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					<option value="">{disabled ? 'Choose a class first' : `Choose ${title}`}</option>
+					{options.map((module) => (
+						<option key={module.id} value={module.id}>{module.name}</option>
+					))}
+				</select>
+				<ChevronDown className="pointer-events-none absolute right-3 top-3.5 h-4 w-4 text-neutral-500" />
+			</div>
+			<button
+				type="button"
+				disabled={Boolean(busyType)}
+				onClick={() => onInfer(type)}
+				className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-indigo-700/60 bg-indigo-950/50 px-3 text-xs font-medium text-indigo-200 hover:bg-indigo-900/50 disabled:opacity-50 cursor-pointer"
+			>
+				<Sparkles className="h-3.5 w-3.5" />
+				{busyType === type ? 'Inferring…' : 'Infer with AI'}
+			</button>
+			<button
+				type="button"
+				onClick={onToggleCustom}
+				className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-neutral-700 bg-neutral-900 px-3 text-xs font-medium text-neutral-200 hover:bg-neutral-800 cursor-pointer"
+			>
+				+ Custom
+			</button>
+		</div>
+
+		{isCustomOpen && (
+			<div className="rounded-xl border border-neutral-800 bg-neutral-900/70 p-3 space-y-3 animate-in fade-in duration-150">
+				<div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+					<input
+						value={customName}
+						onChange={(event) => onChangeCustomName(event.target.value)}
+						placeholder={`Custom ${title.toLowerCase()} name`}
+						className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2.5 text-xs text-white outline-none focus:border-indigo-500"
+					/>
+					<input
+						value={customConcept}
+						onChange={(event) => onChangeCustomConcept(event.target.value)}
+						placeholder="Describe what it should do"
+						className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2.5 text-xs text-white outline-none focus:border-indigo-500"
+					/>
+				</div>
+				<div className="flex justify-end">
+					<button
+						type="button"
+						disabled={!customConcept.trim() && !customName.trim()}
+						onClick={onSubmitCustom}
+						className="min-h-[40px] rounded-lg bg-indigo-600 px-4 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-40 cursor-pointer"
+					>
+						Generate & Add
+					</button>
+				</div>
+			</div>
+		)}
+	</section>
+);
+
 export const CharacterProgressionStep: React.FC<CharacterProgressionStepProps> = ({
 	draft,
 	modules,
@@ -64,97 +176,15 @@ export const CharacterProgressionStep: React.FC<CharacterProgressionStepProps> =
 		setCustomConcept('');
 	};
 
-	const Section = ({
-		type,
-		title,
-		hint,
-		value,
-		options,
-		disabled,
-		onSelect,
-		selected,
-	}: {
-		type: ProgressionType;
-		title: string;
-		hint: string;
-		value?: string;
-		options: any[];
-		disabled?: boolean;
-		onSelect: (value: string) => void;
-		selected?: any;
-	}) => (
-		<section className="rounded-2xl border border-neutral-800 bg-neutral-950 p-4 sm:p-5 space-y-3">
-			<div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-				<div className="min-w-0">
-					<h2 className="text-sm font-semibold text-white">{title}</h2>
-					<p className="text-xs text-neutral-400 mt-1 leading-relaxed">{hint}</p>
-				</div>
-				{selected && <span className="shrink-0 text-[10px] uppercase tracking-wide text-indigo-300">{selected.name}</span>}
-			</div>
-
-			<div className="flex flex-col gap-2 sm:flex-row">
-				<div className="relative min-w-0 flex-1">
-					<select
-						value={value || ''}
-						disabled={disabled}
-						onChange={(event) => onSelect(event.target.value)}
-						className="w-full appearance-none rounded-xl border border-neutral-700 bg-neutral-900 px-3 py-3 pr-10 text-sm text-white outline-none focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
-					>
-						<option value="">{disabled ? 'Choose a class first' : `Choose ${title}`}</option>
-						{options.map((module) => (
-							<option key={module.id} value={module.id}>{module.name}</option>
-						))}
-					</select>
-					<ChevronDown className="pointer-events-none absolute right-3 top-3.5 h-4 w-4 text-neutral-500" />
-				</div>
-				<button
-					type="button"
-					disabled={Boolean(busyType)}
-					onClick={() => onInfer(type)}
-					className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-indigo-700/60 bg-indigo-950/50 px-3 text-xs font-medium text-indigo-200 hover:bg-indigo-900/50 disabled:opacity-50"
-				>
-					<Sparkles className="h-3.5 w-3.5" />
-					{busyType === type ? 'Inferring…' : 'Infer with AI'}
-				</button>
-				<button
-					type="button"
-					onClick={() => setCustomType(customType === type ? null : type)}
-					className="inline-flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border border-neutral-700 bg-neutral-900 px-3 text-xs font-medium text-neutral-200 hover:bg-neutral-800"
-				>
-					+ Custom
-				</button>
-			</div>
-
-			{customType === type && (
-				<div className="rounded-xl border border-neutral-800 bg-neutral-900/70 p-3 space-y-3">
-					<div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-						<input
-							value={customName}
-							onChange={(event) => setCustomName(event.target.value)}
-							placeholder={`Custom ${title.toLowerCase()} name`}
-							className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2.5 text-xs text-white outline-none focus:border-indigo-500"
-						/>
-						<input
-							value={customConcept}
-							onChange={(event) => setCustomConcept(event.target.value)}
-							placeholder="Describe what it should do"
-							className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2.5 text-xs text-white outline-none focus:border-indigo-500"
-						/>
-					</div>
-					<div className="flex justify-end">
-						<button
-							type="button"
-							disabled={!customConcept.trim() && !customName.trim()}
-							onClick={() => void submitCustom()}
-							className="min-h-[40px] rounded-lg bg-indigo-600 px-4 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-40"
-						>
-							Generate & Add
-						</button>
-					</div>
-				</div>
-			)}
-		</section>
-	);
+	const toggleCustom = (type: ProgressionType) => {
+		if (customType === type) {
+			setCustomType(null);
+		} else {
+			setCustomType(type);
+			setCustomName('');
+			setCustomConcept('');
+		}
+	};
 
 	return (
 		<div className="space-y-5">
@@ -164,13 +194,13 @@ export const CharacterProgressionStep: React.FC<CharacterProgressionStepProps> =
 					<div className="min-w-0">
 						<h1 className="text-base font-semibold text-white sm:text-lg">Progression & Ancestry</h1>
 						<p className="mt-1 text-xs leading-relaxed text-neutral-400 sm:text-sm">
-							Choose the mechanical identity separately from profession and narrative role. AI only selects from registered world modules; custom entries are generated into the same validated structure.
+							Choose the mechanical identity separately from profession and narrative role. AI can select matching registered world modules or create tailored custom classes, subclasses, and species based on your character concept.
 						</p>
 					</div>
 				</div>
 			</div>
 
-			<Section
+			<ProgressionSection
 				type="CLASS"
 				title="Class"
 				hint="Primary mechanical progression. A profession such as merchant, scholar, or blacksmith is not automatically a class."
@@ -178,9 +208,18 @@ export const CharacterProgressionStep: React.FC<CharacterProgressionStepProps> =
 				options={classes}
 				onSelect={selectClass}
 				selected={selectedClass}
+				onInfer={onInfer}
+				busyType={busyType}
+				isCustomOpen={customType === 'CLASS'}
+				onToggleCustom={() => toggleCustom('CLASS')}
+				customName={customType === 'CLASS' ? customName : ''}
+				customConcept={customType === 'CLASS' ? customConcept : ''}
+				onChangeCustomName={setCustomName}
+				onChangeCustomConcept={setCustomConcept}
+				onSubmitCustom={() => void submitCustom()}
 			/>
 
-			<Section
+			<ProgressionSection
 				type="SUBCLASS"
 				title="Subclass"
 				hint="Only subclasses compatible with the selected class are available."
@@ -189,9 +228,18 @@ export const CharacterProgressionStep: React.FC<CharacterProgressionStepProps> =
 				disabled={!progression.classId}
 				onSelect={(value) => update({ subclassId: value || undefined })}
 				selected={selectedSubclass}
+				onInfer={onInfer}
+				busyType={busyType}
+				isCustomOpen={customType === 'SUBCLASS'}
+				onToggleCustom={() => toggleCustom('SUBCLASS')}
+				customName={customType === 'SUBCLASS' ? customName : ''}
+				customConcept={customType === 'SUBCLASS' ? customConcept : ''}
+				onChangeCustomName={setCustomName}
+				onChangeCustomConcept={setCustomConcept}
+				onSubmitCustom={() => void submitCustom()}
 			/>
 
-			<Section
+			<ProgressionSection
 				type="SPECIES"
 				title="Species / Ancestry"
 				hint="Mechanical ancestry stays separate from free-text lineage, culture, profession, and archetype."
@@ -199,6 +247,15 @@ export const CharacterProgressionStep: React.FC<CharacterProgressionStepProps> =
 				options={species}
 				onSelect={(value) => update({ speciesId: value || undefined })}
 				selected={selectedSpecies}
+				onInfer={onInfer}
+				busyType={busyType}
+				isCustomOpen={customType === 'SPECIES'}
+				onToggleCustom={() => toggleCustom('SPECIES')}
+				customName={customType === 'SPECIES' ? customName : ''}
+				customConcept={customType === 'SPECIES' ? customConcept : ''}
+				onChangeCustomName={setCustomName}
+				onChangeCustomConcept={setCustomConcept}
+				onSubmitCustom={() => void submitCustom()}
 			/>
 
 			<div className="rounded-xl border border-neutral-800 bg-neutral-900/60 p-4">

@@ -5411,6 +5411,7 @@ gameRouter.post('/orchestrator/providers/:providerId/key', async (req: Request, 
     const orchestrator = worldRepository.getAiOrchestrator();
 
     setProviderApiKey(providerId, apiKey);
+    orchestrator.syncProviderModelAccessStatus(providerId, true);
 
     const adapter = orchestrator.getAdapter(providerId);
     const configured = adapter?.validateCredentials ? await adapter.validateCredentials() : true;
@@ -5425,6 +5426,8 @@ gameRouter.post('/orchestrator/providers/:providerId/key', async (req: Request, 
       await orchestrator.refreshDiscovery({ force: true });
     }
 
+    orchestrator.syncProviderModelAccessStatus(providerId, true);
+
     res.json({
       success: true,
       providerId,
@@ -5433,6 +5436,37 @@ gameRouter.post('/orchestrator/providers/:providerId/key', async (req: Request, 
     });
   } catch (error: any) {
     res.status(500).json({ error: error?.message || 'Failed to save provider API key.' });
+  }
+});
+
+/**
+ * POST /api/game/orchestrator/custom-model
+ * Registers a custom model into the orchestrator registry.
+ */
+gameRouter.post('/orchestrator/custom-model', async (req: Request, res: Response) => {
+  try {
+    const { providerId = 'openrouter', modelId, displayName, pool, contextWindow, roleEligibility, capabilities } = req.body;
+    if (!modelId || !String(modelId).trim()) {
+      return res.status(400).json({ success: false, error: 'Model ID is required.' });
+    }
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const orchestrator = worldRepository.getAiOrchestrator();
+    const record = orchestrator.registerCustomModel({
+      providerId: String(providerId).trim(),
+      modelId: String(modelId).trim(),
+      displayName: displayName ? String(displayName).trim() : undefined,
+      pool,
+      contextWindow: Number(contextWindow) || undefined,
+      roleEligibility,
+      capabilities,
+    });
+    res.json({
+      success: true,
+      model: record,
+      totalModels: orchestrator.getAllModels().length,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to register custom model.' });
   }
 });
 
@@ -5991,6 +6025,26 @@ gameRouter.post('/orchestrator/fallback', async (req: Request, res: Response) =>
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to update fallback chain.' });
+  }
+});
+
+/**
+ * POST /api/game/orchestrator/auto-configure-fallbacks
+ * Pings all available models across providers, benchmarks response health/latency,
+ * and automatically assigns optimal fallback chains (up to 4 models) for all categories.
+ */
+gameRouter.post('/orchestrator/auto-configure-fallbacks', async (req: Request, res: Response) => {
+  try {
+    const { maxFallbacksPerCategory } = req.body || {};
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const orchestrator = worldRepository.getAiOrchestrator();
+    const result = await orchestrator.autoConfigureFallbacks({
+      maxFallbacksPerCategory: typeof maxFallbacksPerCategory === 'number' ? maxFallbacksPerCategory : undefined,
+    });
+    res.json(result);
+  } catch (error: any) {
+    console.error('Failed to auto-configure fallbacks:', error);
+    res.status(500).json({ success: false, error: error?.message || 'Failed to auto-configure fallbacks.' });
   }
 });
 
@@ -6559,6 +6613,7 @@ gameRouter.post('/worlds/:worldId/characters/extract', async (req: Request, res:
         code: 'AI_UNAVAILABLE',
         requiresDeterministicConfirmation: true,
         reason: error?.message || 'AI providers did not return a usable character extraction.',
+        attemptsTrail: Array.isArray(error?.attemptsTrail) ? error.attemptsTrail : [],
       });
     }
     console.error('Error extracting character draft:', error);

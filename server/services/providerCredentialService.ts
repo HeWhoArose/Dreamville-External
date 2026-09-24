@@ -71,6 +71,13 @@ export function setProviderApiKey(providerId: string, apiKey: string): void {
   if (envName && typeof process !== 'undefined') {
     process.env[envName] = normalized;
   }
+
+  try {
+    const { worldRepository } = require('../repositories/worldRepository');
+    worldRepository.getAiOrchestrator().syncProviderModelAccessStatus(providerId, true);
+  } catch {
+    // Best effort if repo not initialized yet
+  }
 }
 
 export function clearProviderApiKey(providerId: string): void {
@@ -89,6 +96,13 @@ export function clearProviderApiKey(providerId: string): void {
   const envName = envNames[providerId];
   if (envName && typeof process !== 'undefined') {
     delete process.env[envName];
+  }
+
+  try {
+    const { worldRepository } = require('../repositories/worldRepository');
+    worldRepository.getAiOrchestrator().syncProviderModelAccessStatus(providerId, false);
+  } catch {
+    // Best effort if repo not initialized yet
   }
 }
 

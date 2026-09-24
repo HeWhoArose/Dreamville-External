@@ -147,7 +147,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
   const [selectedNarrativeRole, setSelectedNarrativeRole] = useState<CharacterStoryMode>('PROTAGONIST');
   const [isExtracting, setIsExtracting] = useState<boolean>(false);
   const [extractionError, setExtractionError] = useState<string | null>(null);
-  const [deterministicFallbackPrompt, setDeterministicFallbackPrompt] = useState<{ reason: string } | null>(null);
+  const [deterministicFallbackPrompt, setDeterministicFallbackPrompt] = useState<{ reason: string; attemptsTrail?: any[] } | null>(null);
   const [extractionActivity, setExtractionActivity] = useState<string | null>(null);
   const [extractionModel, setExtractionModel] = useState<string | null>(null);
   const [extractionElapsedSeconds, setExtractionElapsedSeconds] = useState(0);
@@ -589,6 +589,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
             err?.reason ||
             err?.message ||
             'AI providers did not return a usable character extraction.',
+          attemptsTrail: Array.isArray(err?.attemptsTrail) ? err.attemptsTrail : [],
         });
       } else {
         setExtractionActivity(null);
@@ -639,15 +640,39 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
         narrativeRole: draft.storyMode,
       });
       if (!result.success) throw new Error(result.errorReason || 'Progression inference failed.');
+      
+      const created = Array.isArray(result.createdCustomModules) ? result.createdCustomModules : [];
+      if (created.length > 0) {
+        setProgressionModules((prev) => {
+          const map = new Map(prev.map((m) => [m.id, m]));
+          for (const m of created) {
+            map.set(m.id, m);
+          }
+          return Array.from(map.values());
+        });
+      }
+
       const progression = draft.progression || {};
+      const existingCustom = progression.customModules || [];
+      const mergedCustom = [
+        ...existingCustom,
+        ...created.filter((m: any) => !existingCustom.some((ext: any) => ext.id === m.id)),
+      ];
+      const mergedModuleIds = Array.from(
+        new Set([
+          ...(progression.moduleIds || []),
+          ...created.map((m: any) => m.id),
+        ])
+      );
+
       const next = {
         ...progression,
-        classId: type === 'CLASS' ? result.classId : progression.classId,
-        subclassId: type === 'SUBCLASS' ? result.subclassId : progression.subclassId,
-        speciesId: type === 'SPECIES' ? result.speciesId : progression.speciesId,
+        classId: (type === 'CLASS' || (!progression.classId && result.classId)) ? (result.classId ?? progression.classId) : progression.classId,
+        subclassId: (type === 'SUBCLASS' || result.subclassId) ? (result.subclassId ?? progression.subclassId) : progression.subclassId,
+        speciesId: (type === 'SPECIES' || (!progression.speciesId && result.speciesId)) ? (result.speciesId ?? progression.speciesId) : progression.speciesId,
         featIds: progression.featIds || (draft.feats || []).map((feat) => feat.id),
-        moduleIds: progression.moduleIds || [],
-        customModules: progression.customModules || [],
+        moduleIds: mergedModuleIds,
+        customModules: mergedCustom,
       };
       setDraft({ ...draft, progression: next });
       markFieldEdited('progression');
@@ -1687,7 +1712,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 <div className="rounded-lg border border-amber-700/70 bg-amber-950/30 p-4 space-y-3">
                   <div className="flex items-start gap-3">
                     <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                    <div className="space-y-1">
+                    <div className="space-y-1 flex-1">
                       <div className="text-sm font-semibold text-amber-200">AI character extraction is unavailable</div>
                       <p className="text-xs text-amber-100/80">
                         DreamBook could not get a usable AI result, so no character draft has been generated yet.
@@ -1698,6 +1723,28 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                       </p>
                       {deterministicFallbackPrompt.reason && (
                         <p className="text-[11px] text-amber-300/70">Reason: {deterministicFallbackPrompt.reason}</p>
+                      )}
+
+                      {deterministicFallbackPrompt.attemptsTrail && deterministicFallbackPrompt.attemptsTrail.length > 0 && (
+                        <div className="mt-3 space-y-1.5 rounded-lg border border-amber-800/60 bg-neutral-950/70 p-3">
+                          <div className="font-semibold text-amber-300 text-[11px] uppercase tracking-wider flex items-center justify-between">
+                            <span>Fallback Sequence Attempted</span>
+                            <span className="text-[10px] text-amber-400/70 font-mono">{deterministicFallbackPrompt.attemptsTrail.length} model(s) contacted</span>
+                          </div>
+                          <div className="space-y-1.5 pt-1">
+                            {deterministicFallbackPrompt.attemptsTrail.map((attempt: any, idx: number) => (
+                              <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] font-mono bg-neutral-900/90 px-2.5 py-1.5 rounded border border-neutral-800">
+                                <div>
+                                  <span className="text-amber-400 font-bold">{idx + 1}. {attempt.displayName || attempt.modelId}</span>
+                                  <span className="text-neutral-500 text-[10px] ml-1.5">[{attempt.providerId}]</span>
+                                </div>
+                                <span className="text-rose-400 text-[10px]">
+                                  {attempt.error ? (attempt.error.length > 70 ? attempt.error.slice(0, 70) + '…' : attempt.error) : 'Failed'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -1786,7 +1833,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
               <div className="p-6 rounded-xl bg-neutral-950 border-2 border-indigo-500/80 space-y-5 shadow-xl">
                 <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <Sparkles className="w-5 h-5 text-indigo-400" />
                       <h3 className="text-base font-bold text-white">AI Character Extraction Proposal</h3>
                       <span
@@ -1801,10 +1848,38 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                         {pendingAiDraft.aiExtractionSummary?.generationSource === 'DETERMINISTIC_FALLBACK'
                           ? 'Deterministic Extraction'
                           : pendingAiDraft.aiExtractionSummary?.generationSource === 'AI_FALLBACK'
-                          ? 'Fallback AI Model'
-                          : 'Primary AI Model'}
+                          ? `Fell back to ${pendingAiDraft.aiExtractionSummary?.activeModel || 'Fallback Model'}`
+                          : `Synthesized by ${pendingAiDraft.aiExtractionSummary?.activeModel || 'Primary AI'}`}
                       </span>
                     </div>
+                    {pendingAiDraft.aiExtractionSummary?.fallbackReason && (
+                      <div className="text-[11px] text-yellow-300/80 font-mono mt-1">
+                        ↳ {pendingAiDraft.aiExtractionSummary.fallbackReason}
+                      </div>
+                    )}
+                    {pendingAiDraft.aiExtractionSummary?.attemptsTrail && pendingAiDraft.aiExtractionSummary.attemptsTrail.length > 0 && (
+                      <div className="mt-2.5 p-3 rounded-lg border border-indigo-900/60 bg-neutral-900/90 space-y-1.5 text-xs">
+                        <div className="text-[10px] font-bold text-indigo-300 uppercase tracking-wider flex items-center justify-between">
+                          <span>AI Model Fallback Trace</span>
+                          <span className="text-[10px] text-neutral-400 font-mono">{pendingAiDraft.aiExtractionSummary.attemptsTrail.length} model(s) evaluated</span>
+                        </div>
+                        <div className="space-y-1 pt-0.5">
+                          {pendingAiDraft.aiExtractionSummary.attemptsTrail.map((att: any, idx: number) => (
+                            <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] font-mono px-2.5 py-1 rounded bg-neutral-950 border border-neutral-800">
+                              <div>
+                                <span className={att.status === 'SUCCESS' ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                                  {idx + 1}. {att.displayName || att.modelId}
+                                </span>
+                                <span className="text-neutral-500 text-[10px] ml-1.5">[{att.providerId}]</span>
+                              </div>
+                              <span className={att.status === 'SUCCESS' ? 'text-emerald-300 text-[10px] font-bold' : 'text-rose-400 text-[10px]'}>
+                                {att.status === 'SUCCESS' ? `Success (${att.latencyMs || 0}ms)` : (att.error ? (att.error.length > 65 ? att.error.slice(0, 65) + '…' : att.error) : 'Failed')}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <p className="text-xs text-neutral-400 mt-1">
                       Review the AI's interpretation and proposed character before committing them to your active dossier.
                     </p>

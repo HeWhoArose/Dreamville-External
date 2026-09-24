@@ -2268,7 +2268,7 @@ export class MultiModelOrchestrator {
         health: openrouterConfigured ? 'Healthy' : 'InvalidAuth',
         quota: openrouterConfigured ? 'Healthy' : 'Unknown',
         latencyMs: openrouterConfigured ? 350 : 0,
-        userPriority: 90,
+        userPriority: 70,
         roleEligibility: [
           'narrative.generate',
           'character.dialogue',
@@ -4880,7 +4880,7 @@ export class MultiModelOrchestrator {
           : undefined;
 
         return {
-          text: isEmergency ? '' : providerRes.text,
+          text: providerRes.text,
           source,
           providerId: currentCandidate.providerId,
           modelId: currentCandidate.modelId,

@@ -47,5 +47,370 @@
     ]
   },
   "categoryOverrides": {},
-  "overrides": []
+  "overrides": [],
+  "customModels": [
+    {
+      "providerId": "openrouter",
+      "modelId": "openrouter/auto",
+      "displayName": "OpenRouter Auto (Best Available)",
+      "pool": "creative",
+      "capabilities": [
+        "text_generation",
+        "reasoning",
+        "structured_output",
+        "creative_writing"
+      ],
+      "contextWindow": 128000,
+      "health": "Healthy",
+      "quota": "Healthy",
+      "latencyMs": 350,
+      "userPriority": 70,
+      "roleEligibility": [
+        "narrative.generate",
+        "character.dialogue",
+        "memory.extract",
+        "summary.scene",
+        "rules.adjudicate",
+        "utility.inspect"
+      ],
+      "fallbackEligibility": true,
+      "accessStatus": "accessible",
+      "lifecycleState": "active",
+      "isEmergencyFloor": false
+    },
+    {
+      "providerId": "openrouter",
+      "modelId": "meta-llama/llama-3.3-70b-instruct",
+      "displayName": "Llama 3.3 70B Instruct",
+      "pool": "creative",
+      "capabilities": [
+        "text_generation",
+        "reasoning",
+        "structured_output",
+        "creative_writing"
+      ],
+      "contextWindow": 131072,
+      "health": "Healthy",
+      "quota": "Healthy",
+      "latencyMs": 350,
+      "userPriority": 70,
+      "roleEligibility": [
+        "narrative.generate",
+        "character.dialogue",
+        "memory.extract",
+        "summary.scene",
+        "rules.adjudicate",
+        "utility.inspect"
+      ],
+      "fallbackEligibility": true,
+      "accessStatus": "accessible",
+      "lifecycleState": "active",
+      "isEmergencyFloor": false
+    },
+    {
+      "providerId": "openrouter",
+      "modelId": "deepseek/deepseek-r1",
+      "displayName": "DeepSeek R1 (Reasoning)",
+      "pool": "reasoning",
+      "capabilities": [
+        "text_generation",
+        "reasoning",
+        "structured_output",
+        "creative_writing"
+      ],
+      "contextWindow": 64000,
+      "health": "Healthy",
+      "quota": "Healthy",
+      "latencyMs": 350,
+      "userPriority": 70,
+      "roleEligibility": [
+        "narrative.generate",
+        "character.dialogue",
+        "memory.extract",
+        "summary.scene",
+        "rules.adjudicate",
+        "utility.inspect"
+      ],
+      "fallbackEligibility": true,
+      "accessStatus": "accessible",
+      "lifecycleState": "active",
+      "isEmergencyFloor": false
+    },
+    {
+      "providerId": "openrouter",
+      "modelId": "deepseek/deepseek-chat",
+      "displayName": "DeepSeek V3",
+      "pool": "fast",
+      "capabilities": [
+        "text_generation",
+        "reasoning",
+        "structured_output",
+        "creative_writing"
+      ],
+      "contextWindow": 64000,
+      "health": "Healthy",
+      "quota": "Healthy",
+      "latencyMs": 350,
+      "userPriority": 70,
+      "roleEligibility": [
+        "narrative.generate",
+        "character.dialogue",
+        "memory.extract",
+        "summary.scene",
+        "rules.adjudicate",
+        "utility.inspect"
+      ],
+      "fallbackEligibility": true,
+      "accessStatus": "accessible",
+      "lifecycleState": "active",
+      "isEmergencyFloor": false
+    },
+    {
+      "providerId": "openrouter",
+      "modelId": "anthropic/claude-3.5-sonnet",
+      "displayName": "Claude 3.5 Sonnet (OpenRouter)",
+      "pool": "creative",
+      "capabilities": [
+        "text_generation",
+        "reasoning",
+        "structured_output",
+        "creative_writing"
+      ],
+      "contextWindow": 200000,
+      "health": "Healthy",
+      "quota": "Healthy",
+      "latencyMs": 350,
+      "userPriority": 70,
+      "roleEligibility": [
+        "narrative.generate",
+        "character.dialogue",
+        "memory.extract",
+        "summary.scene",
+        "rules.adjudicate",
+        "utility.inspect"
+      ],
+      "fallbackEligibility": true,
+      "accessStatus": "accessible",
+      "lifecycleState": "active",
+      "isEmergencyFloor": false
+    },
+    {
+      "providerId": "openrouter",
+      "modelId": "anthropic/claude-3.7-sonnet",
+      "displayName": "Claude 3.7 Sonnet (OpenRouter)",
+      "pool": "creative",
+      "capabilities": [
+        "text_generation",
+        "reasoning",
+        "structured_output",
+        "creative_writing"
+      ],
+      "contextWindow": 200000,
+      "health": "Healthy",
+      "quota": "Healthy",
+      "latencyMs": 350,
+      "userPriority": 70,
+      "roleEligibility": [
+        "narrative.generate",
+        "character.dialogue",
+        "memory.extract",
+        "summary.scene",
+        "rules.adjudicate",
+        "utility.inspect"
+      ],
+      "fallbackEligibility": true,
+      "accessStatus": "accessible",
+      "lifecycleState": "active",
+      "isEmergencyFloor": false
+    },
+    {
+      "providerId": "openrouter",
+      "modelId": "openai/gpt-4o",
+      "displayName": "GPT-4o (OpenRouter)",
+      "pool": "creative",
+      "capabilities": [
+        "text_generation",
+        "reasoning",
+        "structured_output",
+        "creative_writing"
+      ],
+      "contextWindow": 128000,
+      "health": "Healthy",
+      "quota": "Healthy",
+      "latencyMs": 350,
+      "userPriority": 70,
+      "roleEligibility": [
+        "narrative.generate",
+        "character.dialogue",
+        "memory.extract",
+        "summary.scene",
+        "rules.adjudicate",
+        "utility.inspect"
+      ],
+      "fallbackEligibility": true,
+      "accessStatus": "accessible",
+      "lifecycleState": "active",
+      "isEmergencyFloor": false
+    },
+    {
+      "providerId": "openrouter",
+      "modelId": "openai/gpt-4o-mini",
+      "displayName": "GPT-4o Mini (OpenRouter)",
+      "pool": "fast",
+      "capabilities": [
+        "text_generation",
+        "reasoning",
+        "structured_output",
+        "creative_writing"
+      ],
+      "contextWindow": 128000,
+      "health": "Healthy",
+      "quota": "Healthy",
+      "latencyMs": 350,
+      "userPriority": 70,
+      "roleEligibility": [
+        "narrative.generate",
+        "character.dialogue",
+        "memory.extract",
+        "summary.scene",
+        "rules.adjudicate",
+        "utility.inspect"
+      ],
+      "fallbackEligibility": true,
+      "accessStatus": "accessible",
+      "lifecycleState": "active",
+      "isEmergencyFloor": false
+    },
+    {
+      "providerId": "openrouter",
+      "modelId": "google/gemini-2.5-flash",
+      "displayName": "Gemini 2.5 Flash (OpenRouter)",
+      "pool": "fast",
+      "capabilities": [
+        "text_generation",
+        "reasoning",
+        "structured_output",
+        "creative_writing"
+      ],
+      "contextWindow": 1048576,
+      "health": "Healthy",
+      "quota": "Healthy",
+      "latencyMs": 350,
+      "userPriority": 70,
+      "roleEligibility": [
+        "narrative.generate",
+        "character.dialogue",
+        "memory.extract",
+        "summary.scene",
+        "rules.adjudicate",
+        "utility.inspect"
+      ],
+      "fallbackEligibility": true,
+      "accessStatus": "accessible",
+      "lifecycleState": "active",
+      "isEmergencyFloor": false
+    },
+    {
+      "providerId": "openrouter",
+      "modelId": "mistralai/mistral-large-2411",
+      "displayName": "Mistral Large (OpenRouter)",
+      "pool": "creative",
+      "capabilities": [
+        "text_generation",
+        "reasoning",
+        "structured_output",
+        "creative_writing"
+      ],
+      "contextWindow": 128000,
+      "health": "Healthy",
+      "quota": "Healthy",
+      "latencyMs": 350,
+      "userPriority": 70,
+      "roleEligibility": [
+        "narrative.generate",
+        "character.dialogue",
+        "memory.extract",
+        "summary.scene",
+        "rules.adjudicate",
+        "utility.inspect"
+      ],
+      "fallbackEligibility": true,
+      "accessStatus": "accessible",
+      "lifecycleState": "active",
+      "isEmergencyFloor": false
+    },
+    {
+      "providerId": "openrouter",
+      "modelId": "qwen/qwen-2.5-72b-instruct",
+      "displayName": "Qwen 2.5 72B Instruct (OpenRouter)",
+      "pool": "creative",
+      "capabilities": [
+        "text_generation",
+        "reasoning",
+        "structured_output",
+        "creative_writing"
+      ],
+      "contextWindow": 131072,
+      "health": "Healthy",
+      "quota": "Healthy",
+      "latencyMs": 350,
+      "userPriority": 70,
+      "roleEligibility": [
+        "narrative.generate",
+        "character.dialogue",
+        "memory.extract",
+        "summary.scene",
+        "rules.adjudicate",
+        "utility.inspect"
+      ],
+      "fallbackEligibility": true,
+      "accessStatus": "accessible",
+      "lifecycleState": "active",
+      "isEmergencyFloor": false
+    },
+    {
+      "providerId": "openai",
+      "modelId": "gpt-4o",
+      "displayName": "OpenAI GPT-4o",
+      "pool": "creative",
+      "capabilities": [
+        "creative_writing",
+        "fast"
+      ],
+      "contextWindow": 128000,
+      "health": "InvalidAuth",
+      "quota": "Unknown",
+      "latencyMs": 0,
+      "userPriority": 50,
+      "roleEligibility": [
+        "narrative.generate",
+        "character.dialogue"
+      ],
+      "accessStatus": "not_configured",
+      "lifecycleState": "active",
+      "isEmergencyFloor": false
+    },
+    {
+      "providerId": "anthropic",
+      "modelId": "claude-3-5-sonnet",
+      "displayName": "Anthropic Claude 3.5 Sonnet",
+      "pool": "creative",
+      "capabilities": [
+        "creative_writing",
+        "long_context"
+      ],
+      "contextWindow": 200000,
+      "health": "InvalidAuth",
+      "quota": "Unknown",
+      "latencyMs": 0,
+      "userPriority": 50,
+      "roleEligibility": [
+        "narrative.generate",
+        "summary.scene"
+      ],
+      "accessStatus": "not_configured",
+      "lifecycleState": "active",
+      "isEmergencyFloor": false
+    }
+  ]
 }

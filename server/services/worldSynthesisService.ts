@@ -343,14 +343,17 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
             fallbackReason = 'AI response did not contain world candidate structure; fell back to deterministic candidate';
           } else {
             parsedAiPayload = parsed;
-            title = parsed.title || title;
+            title = input.title || parsed.title || title;
             summary = parsed.summary || summary;
             description = parsed.description || description;
-            if (Array.isArray(parsed.genreTags) && parsed.genreTags.length > 0) genreTags = parsed.genreTags;
-            if (Array.isArray(parsed.toneTags) && parsed.toneTags.length > 0) toneTags = parsed.toneTags;
-            if (Array.isArray(parsed.mediumTags) && parsed.mediumTags.length > 0) mediumTags = parsed.mediumTags;
-            era = parsed.era || era;
-            setting = parsed.setting || setting;
+            if (input.genreTags && input.genreTags.length > 0) genreTags = input.genreTags;
+            else if (Array.isArray(parsed.genreTags) && parsed.genreTags.length > 0) genreTags = parsed.genreTags;
+            if (input.toneTags && input.toneTags.length > 0) toneTags = input.toneTags;
+            else if (Array.isArray(parsed.toneTags) && parsed.toneTags.length > 0) toneTags = parsed.toneTags;
+            if (input.mediumTags && input.mediumTags.length > 0) mediumTags = input.mediumTags;
+            else if (Array.isArray(parsed.mediumTags) && parsed.mediumTags.length > 0) mediumTags = parsed.mediumTags;
+            era = input.defaultEra || parsed.era || era;
+            setting = input.setting || parsed.setting || setting;
 
             locations = parsed.geography?.locations || parsed.locations || [];
             factions = parsed.factions || [];

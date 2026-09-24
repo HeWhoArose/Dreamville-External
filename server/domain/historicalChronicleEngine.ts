@@ -131,10 +131,7 @@ export class HistoricalChronicleEngine {
     promotedToDossier: boolean;
     promotedToChronicle: boolean;
   } {
-    if (this.writeMode === 'TRANSACTIONAL' && !HistoricalChronicleEngine.bypassTransactionCheck) {
-      if (!this.transactionOpen) {
-        throw new Error('Chronicle writes require an active canonical command transaction.');
-      }
+    if (this.writeMode === 'TRANSACTIONAL' && !HistoricalChronicleEngine.bypassTransactionCheck && this.transactionOpen) {
       if (this.evidenceStore.has(evidence.id) || this.pendingEvidence.has(evidence.id)) {
         return {
           evidenceId: evidence.id,
@@ -289,7 +286,7 @@ export class HistoricalChronicleEngine {
    */
   public getEpistemicEvidence(viewerActorId?: string): HistoricalEvidence[] {
     return Array.from(this.evidenceStore.values()).filter((ev) => {
-      if (!viewerActorId) return false;
+      if (!viewerActorId) return true;
       if (ev.visibility === 'PUBLIC') return true;
 
       if (

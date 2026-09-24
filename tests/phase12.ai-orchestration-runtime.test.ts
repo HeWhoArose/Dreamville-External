@@ -377,3 +377,40 @@ test('Phase 12: Phase 9 equipment and Phase 10 living-world state reach authoriz
 		true
 	);
 });
+
+
+test('Phase 12: category override retains automatic failover candidates', async () => {
+	const orchestrator = createTestOrchestrator();
+	const failing = new DeterministicMockAdapter('phase12_category_failing');
+	failing.failureMode = '429';
+	failing.maxFailuresBeforeSuccess = 1;
+	const healthy = new DeterministicMockAdapter('phase12_category_healthy');
+
+	orchestrator.registerAdapter(failing);
+	orchestrator.registerAdapter(healthy);
+	orchestrator.registerModel(model('phase12_category_failing', 'category-failing', ['narrative.generate']));
+	orchestrator.registerModel(model('phase12_category_healthy', 'category-healthy', ['narrative.generate']));
+	orchestrator.setCategoryModelOverride('narration', 'phase12_category_failing::category-failing');
+
+	const selection = orchestrator.selectBestModel('narrative.generate', { contextTokens: 100 });
+	assert.equal(selection.selectedModel.modelId, 'category-failing');
+	assert.equal(selection.fallbacks.some((candidate) => candidate.modelId === 'category-healthy'), true);
+});
+
+test('Phase 12: a cooling model is excluded from normal selection', () => {
+	const orchestrator = createTestOrchestrator();
+	const cooling = new DeterministicMockAdapter('phase12_cooling_provider');
+	const healthy = new DeterministicMockAdapter('phase12_cooling_healthy');
+
+	orchestrator.registerAdapter(cooling);
+	orchestrator.registerAdapter(healthy);
+	orchestrator.registerModel(model('phase12_cooling_provider', 'cooling-model', ['narrative.generate']));
+	orchestrator.registerModel(model('phase12_cooling_healthy', 'healthy-model', ['narrative.generate']));
+
+	const runtime = orchestrator.getModelRuntimeStatus().find((entry) => entry.modelId === 'cooling-model');
+	assert.ok(runtime);
+	runtime!.cooldownUntil = Date.now() + 60000;
+
+	const selection = orchestrator.selectBestModel('narrative.generate', { contextTokens: 100 });
+	assert.notEqual(selection.selectedModel.modelId, 'cooling-model');
+});

@@ -655,6 +655,7 @@ test('Phase 16 — working context includes canonical NPC relationship and agenc
 	const chunk = context.chunks.find((candidate) => candidate.id === 'b2_dynamic_npc_agency');
 	assert.ok(chunk);
 	assert.match(chunk!.content, /Relationship stance: FRIEND/);
+	assert.match(chunk!.content, /Personality traits: protective/);
 	assert.match(chunk!.content, /Surface disposition: Warm but cautious\./);
 	assert.match(chunk!.content, /hidden relationship causes are canonical context/i);
 });

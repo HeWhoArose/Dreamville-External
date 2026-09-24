@@ -1212,6 +1212,16 @@ class ApiClient {
   /**
    * Phase 14: read-only canonical developer diagnostics.
    */
+  public async getPhase15AcceptanceMatrix(): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/diagnostics/acceptance`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    const data = await readJsonSafely<any>(res);
+    if (!res.ok) throw new Error(data?.errorReason || `Failed to load Phase 15 acceptance matrix: HTTP ${res.status}`);
+    return data;
+  }
+
   public async getDiagnosticsTimeline(storyId?: string, limit = 50, offset = 0): Promise<any> {
     const query = new URLSearchParams({ limit: String(limit), offset: String(offset) });
     if (storyId) query.set('storyId', storyId);

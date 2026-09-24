@@ -9,6 +9,12 @@ import {
 import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
 import type { KnowledgeFact } from '../server/domain/types';
 
+function createTestOrchestrator(repository?: InMemoryWorldRepository): MultiModelOrchestrator {
+	const orchestrator = createTestOrchestrator(repository);
+	(orchestrator as any).savePersistedConfig = () => {};
+	return orchestrator;
+}
+
 function model(
 	providerId: string,
 	modelId: string,
@@ -34,7 +40,7 @@ function model(
 }
 
 test('Phase 12: narration category override does not change world-generation routing', () => {
-	const orchestrator = new MultiModelOrchestrator();
+	const orchestrator = createTestOrchestrator();
 	const narration = new DeterministicMockAdapter('phase12_narration_provider');
 	const world = new DeterministicMockAdapter('phase12_world_provider');
 	orchestrator.registerAdapter(narration);
@@ -58,7 +64,7 @@ test('Phase 12: narration category override does not change world-generation rou
 });
 
 test('Phase 12: retryable 429 failure records cooldown telemetry and falls through to a healthy model', async () => {
-	const orchestrator = new MultiModelOrchestrator();
+	const orchestrator = createTestOrchestrator();
 	const failing = new DeterministicMockAdapter('phase12_429_provider');
 	failing.failureMode = '429';
 	failing.maxFailuresBeforeSuccess = 1;
@@ -94,7 +100,7 @@ test('Phase 12: retryable 429 failure records cooldown telemetry and falls throu
 test('Phase 12: malformed narration output is rejected and does not mutate canonical state', async () => {
 	const repository = new InMemoryWorldRepository({ disablePersistence: true });
 	repository.seedStory('phase12_malformed');
-	const orchestrator = new MultiModelOrchestrator(repository);
+	const orchestrator = createTestOrchestrator(repository);
 	const malformed = new DeterministicMockAdapter('phase12_malformed_provider');
 	malformed.failureMode = 'malformed_json';
 	malformed.maxFailuresBeforeSuccess = 1;
@@ -153,7 +159,7 @@ test('Phase 12: AI context uses Phase 11 authorized knowledge boundaries', async
 	};
 	repository.addKnowledgeFact('phase12_epistemic_context', secret);
 
-	const orchestrator = new MultiModelOrchestrator(repository);
+	const orchestrator = createTestOrchestrator(repository);
 	const observer = new DeterministicMockAdapter('phase12_context_observer');
 	orchestrator.registerAdapter(observer);
 	orchestrator.registerModel(model('phase12_context_observer', 'context-observer', ['narrative.generate']));
@@ -177,7 +183,7 @@ test('Phase 12: AI context uses Phase 11 authorized knowledge boundaries', async
 });
 
 test('Phase 12: illegal model state-change kinds remain rejected by structured validation', () => {
-	const orchestrator = new MultiModelOrchestrator();
+	const orchestrator = createTestOrchestrator();
 	const result = orchestrator.validateTurnPackage(JSON.stringify({
 		narrative: ['Attempted illegal mutation.'],
 		dialogue: [],
@@ -194,7 +200,7 @@ test('Phase 12: illegal model state-change kinds remain rejected by structured v
 });
 
 test('Phase 12: runtime usage ledger preserves token dimensions reported by providers', () => {
-	const orchestrator = new MultiModelOrchestrator();
+	const orchestrator = createTestOrchestrator();
 	const adapter = new DeterministicMockAdapter('phase12_usage_provider');
 	orchestrator.registerAdapter(adapter);
 	orchestrator.registerModel(model('phase12_usage_provider', 'usage-model', ['narrative.generate']));
@@ -215,7 +221,7 @@ test('Phase 12: runtime usage ledger preserves token dimensions reported by prov
 });
 
 test('Phase 12: category runtime state is presentation/configuration state, not story state', () => {
-	const orchestrator = new MultiModelOrchestrator();
+	const orchestrator = createTestOrchestrator();
 	const before = JSON.stringify(orchestrator.getCategoryRuntimeStates());
 	orchestrator.setCategoryModelOverride('narration', 'google_gemini::gemini-3.5-flash');
 	const after = JSON.stringify(orchestrator.getCategoryRuntimeStates());
@@ -229,7 +235,7 @@ test('Phase 12: category runtime state is presentation/configuration state, not 
 
 
 test('Phase 12: timeout failure enters cooldown and falls through without a retry loop leak', async () => {
-	const orchestrator = new MultiModelOrchestrator();
+	const orchestrator = createTestOrchestrator();
 	const timeoutAdapter = new DeterministicMockAdapter('phase12_timeout_provider');
 	timeoutAdapter.failureMode = 'timeout';
 	timeoutAdapter.maxFailuresBeforeSuccess = 1;
@@ -257,7 +263,7 @@ test('Phase 12: timeout failure enters cooldown and falls through without a retr
 });
 
 test('Phase 12: HTTP 5xx provider failure falls through to the next eligible provider', async () => {
-	const orchestrator = new MultiModelOrchestrator();
+	const orchestrator = createTestOrchestrator();
 	const failing = new DeterministicMockAdapter('phase12_5xx_provider');
 	failing.failureMode = '500';
 	failing.maxFailuresBeforeSuccess = 1;
@@ -284,7 +290,7 @@ test('Phase 12: HTTP 5xx provider failure falls through to the next eligible pro
 });
 
 test('Phase 12: fallback exhaustion reaches the deterministic emergency floor', async () => {
-	const orchestrator = new MultiModelOrchestrator();
+	const orchestrator = createTestOrchestrator();
 	const failing = new DeterministicMockAdapter('phase12_exhausted_provider');
 	failing.failureMode = '429';
 

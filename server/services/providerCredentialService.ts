@@ -45,8 +45,13 @@ export function getProviderApiKey(providerId: string): string | undefined {
   };
 
   const envName = envKeys[providerId];
-  if (envName && typeof process !== 'undefined' && process.env?.[envName]) {
-    return process.env[envName];
+  if (envName && typeof process !== 'undefined') {
+    if (process.env?.[envName]) {
+      return process.env[envName];
+    }
+    if (process.env.NODE_ENV === 'test' || process.env.NODE_TEST_CONTEXT) {
+      return undefined;
+    }
   }
 
   return loadCredentials()[providerId];

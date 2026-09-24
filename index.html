@@ -8,6 +8,34 @@
     <meta name="description" content="DreamBook: Personal AI Story Engine — An immersive, persistent world simulation and interactive storytelling experience." />
     <meta property="og:title" content="DreamBook — Personal AI Story Engine" />
     <meta property="og:description" content="DreamBook: Personal AI Story Engine — An immersive, persistent world simulation and interactive storytelling experience." />
+    <script>
+      (function() {
+        var NativeWebSocket = window.WebSocket;
+        if (!NativeWebSocket) return;
+        window.WebSocket = function(url, protocols) {
+          try {
+            var ws = protocols ? new NativeWebSocket(url, protocols) : new NativeWebSocket(url);
+            ws.addEventListener('error', function(e) {
+              if (e && typeof e.preventDefault === 'function') e.preventDefault();
+            });
+            return ws;
+          } catch (err) {
+            return {
+              addEventListener: function() {},
+              removeEventListener: function() {},
+              send: function() {},
+              close: function() {},
+            };
+          }
+        };
+        window.WebSocket.prototype = NativeWebSocket.prototype;
+        window.addEventListener('unhandledrejection', function(e) {
+          if (e && e.reason && (String(e.reason).includes('WebSocket') || String(e.reason.message).includes('WebSocket'))) {
+            if (typeof e.preventDefault === 'function') e.preventDefault();
+          }
+        });
+      })();
+    </script>
   </head>
   <body class="bg-[#090807] text-[#f5f0e8] antialiased selection:bg-amber-500/20 selection:text-amber-200 overflow-x-hidden min-h-screen">
     <div id="root">

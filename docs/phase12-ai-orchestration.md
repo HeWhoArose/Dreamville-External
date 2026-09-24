@@ -154,6 +154,7 @@ The implementation was repeatedly audited for:
 10. repository diff scope
 11. category-control UI behavior
 12. regression-fixture isolation
+13. player-facing global-routing mutation
 
 Issues found during the loop were fixed before the current checkpoint, including:
 - recursive task-category resolver
@@ -165,6 +166,7 @@ Issues found during the loop were fixed before the current checkpoint, including
 - emergency fallback telemetry
 - stale operational cooldown state
 - persisted-test configuration contamination
+- player story view could mutate server-wide category routing; the player view was changed to read-only and category control remains in the operations workbench
 
 ## Runtime verification
 

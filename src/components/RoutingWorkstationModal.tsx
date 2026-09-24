@@ -44,6 +44,7 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
   const [lastTelemetry, setLastTelemetry] = useState<any>(null);
   const [checkpoints, setCheckpoints] = useState<any[]>([]);
   const [overrides, setOverrides] = useState<any[]>([]);
+  const [phase12Operations, setPhase12Operations] = useState<any>(null);
 
   // Test Routing state
   const [testTask, setTestTask] = useState('narrative.generate');
@@ -64,11 +65,12 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
     try {
       await apiClient.discoverOrchestratorModels(false);
 
-      const [modelsRes, telemetryRes, cpRes, overridesRes] = await Promise.all([
+      const [modelsRes, telemetryRes, cpRes, overridesRes, operationsRes] = await Promise.all([
         apiClient.getOrchestratorModels().catch(() => ({ models: [] })),
         apiClient.getOrchestratorTelemetry().catch(() => ({ stats: null, lastTurnTelemetry: null })),
         apiClient.getOrchestratorCheckpoints(storyId).catch(() => ({ checkpoints: [] })),
         apiClient.getManualOverrides().catch(() => ({ overrides: [] })),
+        apiClient.getOrchestratorOperations().catch(() => ({ operations: null })),
       ]);
 
       setModels(modelsRes.models || []);
@@ -76,6 +78,7 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
       setLastTelemetry(telemetryRes.lastTurnTelemetry || null);
       setCheckpoints(cpRes.checkpoints || []);
       setOverrides(overridesRes.overrides || []);
+      setPhase12Operations(operationsRes.operations || null);
     } catch (err: any) {
       setError(err?.message || 'Failed to load orchestrator data');
     } finally {
@@ -634,6 +637,99 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
             {/* TAB 4: LIVE TELEMETRY & CHECKPOINTS */}
             {activeTab === 'telemetry' && (
               <div id="tab-content-telemetry" className="space-y-4">
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  <div className="rounded-lg border border-stone-800 bg-stone-950/50 p-3">
+                    <div className="text-[10px] uppercase tracking-wider text-stone-500">Requests</div>
+                    <div className="mt-1 font-mono text-sm text-stone-200">
+                      {Number(phase12Operations?.safeTelemetry?.totalRequests || 0).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-stone-800 bg-stone-950/50 p-3">
+                    <div className="text-[10px] uppercase tracking-wider text-stone-500">Observed Tokens</div>
+                    <div className="mt-1 font-mono text-sm text-stone-200">
+                      {Number(phase12Operations?.safeTelemetry?.totalTokens || 0).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-stone-800 bg-stone-950/50 p-3">
+                    <div className="text-[10px] uppercase tracking-wider text-stone-500">Successes</div>
+                    <div className="mt-1 font-mono text-sm text-emerald-300">
+                      {Number(phase12Operations?.safeTelemetry?.successCount || 0).toLocaleString()}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-stone-800 bg-stone-950/50 p-3">
+                    <div className="text-[10px] uppercase tracking-wider text-stone-500">Failures</div>
+                    <div className="mt-1 font-mono text-sm text-rose-300">
+                      {Number(phase12Operations?.safeTelemetry?.failureCount || 0).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-stone-800 bg-stone-950/40 p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-stone-200">Category Runtime</h3>
+                      <p className="mt-1 text-[11px] text-stone-500">Manual selection is isolated to one AI category and never becomes gameplay state.</p>
+                    </div>
+                    <span className="text-[10px] font-mono text-stone-600">Phase 12A</span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                    {(phase12Operations?.categories || []).map((category: any) => (
+                      <div key={category.category} className="rounded-lg border border-stone-800 bg-stone-900/60 p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-semibold text-stone-200">{category.category}</span>
+                          <span className={`rounded px-2 py-0.5 text-[10px] ${category.mode === 'MANUAL' ? 'bg-purple-950 text-purple-300' : 'bg-stone-800 text-stone-400'}`}>
+                            {category.mode}
+                          </span>
+                        </div>
+                        <div className="mt-2 text-[10px] font-mono text-stone-500 break-all">
+                          {category.activeModelKey || 'Auto'}
+                        </div>
+                        <div className="mt-1 text-[10px] text-stone-600">
+                          Fallbacks: {Array.isArray(category.fallbackChain) ? category.fallbackChain.length : 0}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-stone-800 bg-stone-950/40 p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-stone-200">Model Operations</h3>
+                      <p className="mt-1 text-[11px] text-stone-500">Requests, latency, token usage, cooldowns, and observed failure evidence.</p>
+                    </div>
+                    <span className="text-[10px] text-stone-600">Provider credentials remain server-side</span>
+                  </div>
+                  <div className="space-y-2">
+                    {(phase12Operations?.models || []).map((runtime: any) => (
+                      <div key={runtime.providerId + '::' + runtime.modelId} className="rounded-lg border border-stone-800 bg-stone-900/50 p-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold text-stone-200">{runtime.modelId}</div>
+                            <div className="mt-0.5 text-[10px] font-mono text-stone-600">{runtime.providerId}</div>
+                          </div>
+                          <span className="text-[10px] rounded px-2 py-0.5 bg-stone-800 text-stone-300">{runtime.status}</span>
+                        </div>
+                        <div className="mt-2 grid grid-cols-2 gap-2 text-[10px] text-stone-500 md:grid-cols-4">
+                          <span>Req {runtime.requests || 0}</span>
+                          <span>Latency {runtime.lastLatencyMs || 0}ms</span>
+                          <span>429 {runtime.rateLimit429Count || 0}</span>
+                          <span>5xx {runtime.serverError5xxCount || 0}</span>
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-stone-600">
+                          <span>Tokens {Number(runtime.observedTokens?.total || 0).toLocaleString()}</span>
+                          <span>
+                            {runtime.cooldownUntil && runtime.cooldownUntil > Date.now()
+                              ? `Cooldown until ${new Date(runtime.cooldownUntil).toLocaleTimeString()}`
+                              : 'No cooldown'}
+                          </span>
+                          <span>Headroom: {runtime.headroom?.exact ? 'Exact' : runtime.headroom?.source === 'ESTIMATE' ? 'Estimated' : 'Unknown'}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Last Turn Telemetry */}
                 <div className="p-4 bg-stone-950/80 border border-stone-800 rounded-lg space-y-3">
                   <h3 className="text-sm font-semibold text-stone-200 flex items-center space-x-2">

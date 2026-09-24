@@ -456,6 +456,88 @@ test('Phase 16 — repository persists and rehydrates dynamic agency through the
 	assert.equal(freshEngine.getRelationship(storyId, 'npc_persisted', 'player')?.stance, 'FRIEND');
 });
 
+test('Phase 16 — repository bootstraps agency from canonical entity personality, goals, faction, and relationships', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'phase16_entity_bootstrap_story';
+	const worldId = 'world_bootstrap';
+	repository.saveStoryRun({
+		storyId,
+		id: storyId,
+		worldId,
+		characterName: 'Hero',
+		storyMode: 'PROTAGONIST',
+		dndRulesMode: 'FULL_DND',
+		runtimeState: {},
+	});
+
+	repository.saveEntityCard(storyId, {
+		id: 'npc_bootstrap',
+		storyId,
+		worldId,
+		name: 'Mira',
+		kind: 'NPC',
+		isTemplate: false,
+		identity: { aliases: [] },
+		classification: { tags: [], role: 'Companion' },
+		personality: {
+			traits: ['protective'],
+			temperament: 'Warm but suspicious',
+			values: ['family'],
+			motivations: ['Protect her brother'],
+			fears: ['Losing her family'],
+			desires: ['Peace'],
+			dialogueStyle: 'Quiet and deliberate',
+		},
+		behavior: {
+			priorities: ['Protect her brother', 'Avoid faction conflict'],
+			routines: [],
+		},
+		social: {
+			factionIds: ['faction_guard'],
+			role: 'Companion',
+			reputation: {},
+			relationships: {
+				player: {
+					trust: 82,
+					affection: 88,
+					respect: 72,
+					fear: 4,
+				},
+			},
+		},
+		worldState: {
+			currentGoal: 'Protect her brother',
+			isAlive: true,
+			presence: 'present',
+		},
+		traits: ['protective'],
+		capabilities: [],
+		feats: [],
+		equipment: [],
+		memoryRefs: [],
+		provenance: { source: 'TEST', createdBy: 'SYSTEM' },
+		lifecycle: { status: 'ACTIVE' },
+	});
+
+	const engine = repository.getDynamicCharacterAgencyEngine(storyId);
+	const npc = engine.getCharacter(storyId, 'npc_bootstrap');
+	const relationship = engine.getRelationship(storyId, 'npc_bootstrap', 'player');
+
+	assert.ok(npc);
+	assert.deepEqual(npc?.traits, ['protective']);
+	assert.deepEqual(npc?.values, ['family']);
+	assert.deepEqual(npc?.motivations, ['Protect her brother', 'Peace', 'Losing her family']);
+	assert.equal(npc?.factionId, 'faction_guard');
+	assert.equal(npc?.canonicalGoal, 'Protect her brother');
+	assert.equal(npc?.dialogueStyle, 'Quiet and deliberate');
+
+	assert.ok(relationship);
+	assert.equal(relationship?.trust, 82);
+	assert.equal(relationship?.affection, 88);
+	assert.equal(relationship?.respect, 72);
+	assert.equal(relationship?.fear, 4);
+});
+
 test('Phase 16 — relationship authority is story-scoped and does not leak between stories', () => {
 	const engine = new DynamicCharacterAgencyEngine();
 	engine.registerCharacter('story_a', characterProfile({ worldId: 'world_a' }));
@@ -480,13 +562,15 @@ test('Phase 16 — relationship authority is story-scoped and does not leak betw
 	assert.equal(engine.getRelationship('story_b', 'npc_mira', 'player'), null);
 });
 
-test('Phase 16 — speaker colors remain stable within a world and are world-specific', () => {
-	const worldA1 = getCharacterSpeakerTheme('Mira', 'world-a');
-	const worldA2 = getCharacterSpeakerTheme('Mira', 'world-a');
-	const worldB = getCharacterSpeakerTheme('Mira', 'world-b');
+test('Phase 16 — speaker colors remain stable for a speaker identity within a world and may differ across worlds', () => {
+	const worldA1 = getCharacterSpeakerTheme('Mira', 'world-a', 'npc-mira');
+	const worldA2 = getCharacterSpeakerTheme('Different Label', 'world-a', 'npc-mira');
+	const worldB = getCharacterSpeakerTheme('Mira', 'world-b', 'npc-mira');
+	const otherSpeaker = getCharacterSpeakerTheme('Mira', 'world-a', 'npc-other');
 
 	assert.equal(worldA1.accentHex, worldA2.accentHex);
 	assert.notEqual(worldA1.accentHex, worldB.accentHex);
+	assert.notEqual(worldA1.accentHex, otherSpeaker.accentHex);
 });
 
 test('Phase 16 — speaker colors fall back deterministically when no world is supplied', () => {

@@ -149,6 +149,9 @@ export interface WorldRepository {
   getCanonicalCommandEvents(storyId: string): any[];
   restoreCanonicalStateSnapshot(snapshot: any, options?: { persist?: boolean }): void;
   isCanonicalCommandTransactionActive(): boolean;
+  inspectPersistence(): import('../services/persistenceMigrationService').PersistenceInspection;
+  migratePersistence(): import('../services/persistenceMigrationService').PersistenceInspection;
+  repairPersistence(): import('../services/persistenceMigrationService').PersistenceRepairResult;
 }
 
 const NARRATIVE_MODE_VALUES = new Set(['PROTAGONIST', 'SIDE_CHARACTER', 'FREE_ROAM']);
@@ -1838,6 +1841,23 @@ export class InMemoryWorldRepository implements WorldRepository {
       this.livingSimulations.set(storyId, sim);
     }
     return sim;
+  }
+
+  public inspectPersistence(): import('../services/persistenceMigrationService').PersistenceInspection {
+    return this.persistentStore.inspectPersistence();
+  }
+
+  public migratePersistence(): import('../services/persistenceMigrationService').PersistenceInspection {
+    const result = this.persistentStore.migratePersistence();
+    if (result.valid && result.exists && !result.needsMigration) {
+      // Reloading is intentionally deferred to the next process start so migration cannot
+      // partially replace live canonical state.
+    }
+    return result;
+  }
+
+  public repairPersistence(): import('../services/persistenceMigrationService').PersistenceRepairResult {
+    return this.persistentStore.repairPersistence();
   }
 
   public getAiOrchestrator(): MultiModelOrchestrator {

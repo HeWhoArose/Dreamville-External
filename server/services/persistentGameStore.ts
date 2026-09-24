@@ -7,7 +7,6 @@ import {
 	type PersistenceInspection,
 	type PersistenceRepairResult,
 	migratePersistenceData,
-	type VersionedPersistenceData,
 } from './persistenceMigrationService';
 
 export interface PersistentGameStoreData {
@@ -58,7 +57,9 @@ export class PersistentGameStore {
 
 		try {
 			const parsed = JSON.parse(readFileSync(this.filePath, 'utf8'));
-			const migrated = migratePersistenceData(parsed);
+			const migrated = Number(parsed?.version ?? 1) < CURRENT_PERSISTENCE_VERSION
+				? migratePersistenceData(PersistenceMigrationService.migrateFile(this.filePath).path ? JSON.parse(readFileSync(this.filePath, 'utf8')) : parsed)
+				: migratePersistenceData(parsed);
 			return {
 				version: migrated.version,
 				schemaVersions: migrated.schemaVersions,

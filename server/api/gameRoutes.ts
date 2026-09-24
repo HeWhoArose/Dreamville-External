@@ -5276,11 +5276,20 @@ gameRouter.get('/orchestrator/models', async (req: Request, res: Response) => {
     const { worldRepository } = await import('../repositories/worldRepository');
     const orchestrator = worldRepository.getAiOrchestrator();
     const models = orchestrator.getAllModels();
+    const runtimeByKey = new Map(
+      orchestrator.getModelRuntimeStatus().map((runtime) => [
+        runtime.providerId + '::' + runtime.modelId,
+        runtime,
+      ])
+    );
 
     res.json({
       success: true,
       count: models.length,
-      models,
+      models: models.map((model) => ({
+        ...model,
+        runtime: runtimeByKey.get(model.providerId + '::' + model.modelId) || null,
+      })),
     });
   } catch (error) {
     console.error('Failed to list orchestrator models:', error);
@@ -5547,14 +5556,65 @@ gameRouter.get('/orchestrator/telemetry', async (req: Request, res: Response) =>
 
     const lastTurnTelemetry = orchestrator.getLastTurnTelemetry();
     const stats = orchestrator.getOrchestrationStats();
+    const phase12 = orchestrator.getPhase12OperationsSnapshot();
 
     res.json({
       success: true,
       lastTurnTelemetry,
       stats,
+      phase12,
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to retrieve telemetry.' });
+  }
+});
+
+/**
+ * GET /api/game/orchestrator/operations
+ * Returns safe Phase 12 provider/model/category telemetry. Credentials and raw provider responses are never returned.
+ */
+gameRouter.get('/orchestrator/operations', async (_req: Request, res: Response) => {
+  try {
+    const orchestrator = worldRepository.getAiOrchestrator();
+    res.json({
+      success: true,
+      operations: orchestrator.getPhase12OperationsSnapshot(),
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error?.message || 'Failed to retrieve AI operations telemetry.',
+    });
+  }
+});
+
+/**
+ * POST /api/game/orchestrator/category
+ * Sets or clears a manual model override for one AI task category only.
+ */
+gameRouter.post('/orchestrator/category', async (req: Request, res: Response) => {
+  try {
+    const category = String(req.body?.category || '') as import('../domain/aiOrchestrator').AiTaskCategory;
+    const modelKey = req.body?.modelKey ? String(req.body.modelKey) : null;
+    const allowedCategories = ['narration', 'world_generation', 'character_genesis', 'research', 'rules', 'speech', 'image'];
+
+    if (!allowedCategories.includes(category)) {
+      return res.status(400).json({ success: false, error: 'Invalid AI model category.' });
+    }
+
+    const orchestrator = worldRepository.getAiOrchestrator();
+    orchestrator.setCategoryModelOverride(category, modelKey);
+    res.json({
+      success: true,
+      category,
+      modelKey: orchestrator.getCategoryModelOverride(category) || null,
+      categories: orchestrator.getCategoryRuntimeStates(),
+    });
+  } catch (error: any) {
+    res.status(400).json({
+      success: false,
+      error: error?.message || 'Failed to update AI category model.',
+    });
   }
 });
 

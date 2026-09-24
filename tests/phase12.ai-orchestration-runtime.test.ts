@@ -10,7 +10,7 @@ import { InMemoryWorldRepository } from '../server/repositories/worldRepository'
 import type { KnowledgeFact } from '../server/domain/types';
 
 function createTestOrchestrator(repository?: InMemoryWorldRepository): MultiModelOrchestrator {
-	const orchestrator = createTestOrchestrator(repository);
+	const orchestrator = new MultiModelOrchestrator(repository);
 	(orchestrator as any).savePersistedConfig = () => {};
 	return orchestrator;
 }

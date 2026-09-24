@@ -91,17 +91,14 @@ The Phase 12 regression suite verifies that a private fact is absent from the AI
 
 ### Story composer
 
-Added a compact narration model selector beside the player action composer.
+Added a compact narration routing status beside the player action composer.
 
 It supports:
-- Auto / healthy primary routing
-- category-scoped manual narration model selection
-- model operational status/cooldown awareness per option
-- unavailable/disabled models are not selectable
+- Auto / Manual status visibility
 - last-used model/latency display
 - compact observed usage display
 
-Selection is configuration state only; it is not stored as gameplay/world state.
+The player-facing story view is intentionally read-only for global routing configuration. This prevents one player's category selection from mutating the server-wide routing configuration. Category model selection remains in the Model Routing Workstation.
 
 ### Model Operations inspector
 

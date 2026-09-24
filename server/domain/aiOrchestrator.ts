@@ -320,6 +320,7 @@ export interface AdjudicationResult {
 export interface OrchestratedTurnTelemetry {
   turnId: string;
   storyId: string;
+  promptVersion?: string;
   taskId: TaskId;
   selectedModelId: string;
   selectedProviderId: string;
@@ -1571,6 +1572,7 @@ export class DomainAdjudicationBridge {
  * Strict Turn Package Validation, and Domain Adjudication.
  */
 export class MultiModelOrchestrator {
+  public static readonly PROMPT_VERSION = 'phase12-v1';
   private models: Map<string, ModelRegistryRecord> = new Map();
   private adapters: Map<string, IProviderAdapter> = new Map();
   private checkpoints: Map<string, ContinuationCheckpoint> = new Map();
@@ -4007,6 +4009,7 @@ export class MultiModelOrchestrator {
               styleContract: {
                 tone: 'evocative_canonical_archival',
                 epistemicSanitized: 'true',
+                promptVersion: MultiModelOrchestrator.PROMPT_VERSION,
               },
               openThreads: [],
               presentationEvents: [],
@@ -4209,6 +4212,7 @@ export class MultiModelOrchestrator {
             const telemetry: OrchestratedTurnTelemetry = {
               turnId,
               storyId,
+              promptVersion: MultiModelOrchestrator.PROMPT_VERSION,
               taskId: task,
               selectedModelId: currentCandidate.modelId,
               selectedProviderId: currentCandidate.providerId,
@@ -4299,7 +4303,10 @@ export class MultiModelOrchestrator {
               recentOutput: validation.turnPackage.narrative.join(' '),
               uncommittedOutput: '',
               canonicalInvariants: {},
-              styleContract: { tone: 'deterministic_emergency' },
+              styleContract: {
+              tone: 'deterministic_emergency',
+              promptVersion: MultiModelOrchestrator.PROMPT_VERSION,
+            },
               openThreads: validation.turnPackage.memoryCandidates || [],
               presentationEvents: [
                 ...(validation.turnPackage.audioCues || []).map((c: any) =>

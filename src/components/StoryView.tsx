@@ -232,13 +232,24 @@ export const StoryView: React.FC<StoryViewProps> = ({
 
   const refreshAiRouting = async () => {
     try {
-      const [operations, telemetry] = await Promise.all([
+      const [operations, telemetry, modelCatalog] = await Promise.all([
         apiClient.getOrchestratorOperations(),
         apiClient.getOrchestratorTelemetry(),
+        apiClient.getOrchestratorModels(),
       ]);
-      const models = Array.isArray(operations?.operations?.models)
+      const runtimeEntries = Array.isArray(operations?.operations?.models)
         ? operations.operations.models
         : [];
+      const runtimeByKey = new Map(
+        runtimeEntries.map((runtime: any) => [
+          `${runtime.providerId}::${runtime.modelId}`,
+          runtime,
+        ])
+      );
+      const models = (Array.isArray(modelCatalog?.models) ? modelCatalog.models : []).map((model: any) => ({
+        ...model,
+        runtime: runtimeByKey.get(`${model.providerId}::${model.modelId}`) || null,
+      }));
       const narrationCandidates = models.filter((model: any) =>
         Array.isArray(model.roleEligibility)
           ? model.roleEligibility.includes('narrative.generate')

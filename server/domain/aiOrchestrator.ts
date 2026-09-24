@@ -3029,6 +3029,18 @@ export class MultiModelOrchestrator {
     if (m) {
       m.health = health;
       if (quota) m.quota = quota;
+      const runtime = this.ensureRuntimeStatus(m);
+      runtime.status = health;
+      runtime.operationalStatus =
+        health === 'DisabledByUser'
+          ? 'DISABLED'
+          : health === 'Unavailable' || health === 'InvalidAuth'
+            ? 'UNAVAILABLE'
+            : health === 'Throttled'
+              ? 'THROTTLED'
+              : runtime.cooldownUntil && runtime.cooldownUntil > Date.now()
+                ? 'COOLDOWN'
+                : 'AVAILABLE';
       if (health === 'Healthy') {
         this.consecutiveFailures.set(key, 0);
         this.circuitBreakersTripped.delete(key);
@@ -3056,6 +3068,11 @@ export class MultiModelOrchestrator {
     const m = this.models.get(key1) || this.models.get(key2);
     if (m && m.health === 'Unavailable') {
       m.health = 'Healthy';
+      const runtime = this.ensureRuntimeStatus(m);
+      runtime.status = 'Healthy';
+      runtime.operationalStatus = runtime.cooldownUntil && runtime.cooldownUntil > Date.now()
+        ? 'COOLDOWN'
+        : 'AVAILABLE';
     }
   }
 

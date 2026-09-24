@@ -1,15 +1,26 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import {
+	CURRENT_PERSISTENCE_VERSION,
+	CURRENT_SCHEMA_VERSIONS,
+	PersistenceMigrationService,
+	type PersistenceInspection,
+	type PersistenceRepairResult,
+	migratePersistenceData,
+	type VersionedPersistenceData,
+} from './persistenceMigrationService';
 
 export interface PersistentGameStoreData {
-	version: 1;
+	version: typeof CURRENT_PERSISTENCE_VERSION;
+	schemaVersions: typeof CURRENT_SCHEMA_VERSIONS;
 	worldTemplates: Record<string, any>;
 	storyRuns: Record<string, any>;
 	confirmedCharacters?: Record<string, any>;
 }
 
 const EMPTY_STORE: PersistentGameStoreData = {
-	version: 1,
+	version: CURRENT_PERSISTENCE_VERSION,
+	schemaVersions: { ...CURRENT_SCHEMA_VERSIONS },
 	worldTemplates: {},
 	storyRuns: {},
 	confirmedCharacters: {},
@@ -47,19 +58,17 @@ export class PersistentGameStore {
 
 		try {
 			const parsed = JSON.parse(readFileSync(this.filePath, 'utf8'));
-			if (!parsed || typeof parsed !== 'object') {
-				return structuredClone(EMPTY_STORE);
-			}
-
+			const migrated = migratePersistenceData(parsed);
 			return {
-			version: 1,
-			worldTemplates: parsed.worldTemplates && typeof parsed.worldTemplates === 'object' ? parsed.worldTemplates : {},
-			storyRuns: parsed.storyRuns && typeof parsed.storyRuns === 'object' ? parsed.storyRuns : {},
-			confirmedCharacters: parsed.confirmedCharacters && typeof parsed.confirmedCharacters === 'object' ? parsed.confirmedCharacters : {},
-		};
+				version: migrated.version,
+				schemaVersions: migrated.schemaVersions,
+				worldTemplates: migrated.worldTemplates,
+				storyRuns: migrated.storyRuns,
+				confirmedCharacters: migrated.confirmedCharacters,
+			};
 		} catch (error) {
-			console.warn('[PersistentGameStore] Unable to load persistence file; starting with an empty store.', error);
-			return structuredClone(EMPTY_STORE);
+			console.error('[PersistentGameStore] Persistence load/migration failed; source file was not modified.', error);
+			throw error;
 		}
 	}
 
@@ -79,5 +88,17 @@ export class PersistentGameStore {
 
 	getPath(): string | undefined {
 		return this.filePath;
+	}
+
+	inspectPersistence(): PersistenceInspection {
+		return PersistenceMigrationService.inspectFile(this.filePath);
+	}
+
+	migratePersistence(): PersistenceInspection {
+		return PersistenceMigrationService.migrateFile(this.filePath);
+	}
+
+	repairPersistence(): PersistenceRepairResult {
+		return PersistenceMigrationService.repairFile(this.filePath);
 	}
 }

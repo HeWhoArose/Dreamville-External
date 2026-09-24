@@ -1883,10 +1883,16 @@ export class InMemoryWorldRepository implements WorldRepository {
     let engine = this.dynamicCharacterAgencyEngines.get(storyId);
     if (!engine) {
       engine = new DynamicCharacterAgencyEngine();
-      const persisted = this.getStoryRun(storyId)?.runtimeState?.characterAgency;
+      const run = this.getStoryRun(storyId);
+      const persisted = run?.runtimeState?.characterAgency;
       if (persisted) {
         engine.importState(persisted);
       }
+
+      const worldId = run?.worldId || storyId;
+      const canonicalCards = this.getEntityCards(storyId);
+      engine.hydrateFromEntityCards(storyId, worldId, canonicalCards);
+
       engine.setMutationListener(() => this.persistDynamicCharacterAgencyState(storyId));
       this.dynamicCharacterAgencyEngines.set(storyId, engine);
     }

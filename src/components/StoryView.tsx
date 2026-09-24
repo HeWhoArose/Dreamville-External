@@ -601,7 +601,6 @@ export const StoryView: React.FC<StoryViewProps> = ({
               const activeModel = narrationModels.find(
                 (model) => `${model.providerId}::${model.modelId}` === activeNarrationModelKey
               );
-              const runtime = activeModel?.runtime;
               const tokenText = aiRoutingUsage
                 ? `${aiRoutingUsage.totalTokens.toLocaleString()} tok`
                 : 'usage n/a';
@@ -624,10 +623,14 @@ export const StoryView: React.FC<StoryViewProps> = ({
                     <option value="">Auto · Healthy primary</option>
                     {narrationModels.map((model) => {
                       const key = `${model.providerId}::${model.modelId}`;
-                      const cooldown = runtime?.cooldownUntil && runtime.cooldownUntil > Date.now();
+                      const modelRuntime = model.runtime;
+                      const cooldown = modelRuntime?.cooldownUntil && modelRuntime.cooldownUntil > Date.now();
+                      const unavailable =
+                        modelRuntime?.operationalStatus === 'UNAVAILABLE'
+                        || modelRuntime?.operationalStatus === 'DISABLED';
                       return (
-                        <option key={key} value={key}>
-                          {model.displayName || model.modelId}{cooldown ? ' · Cooldown' : ''}
+                        <option key={key} value={key} disabled={unavailable}>
+                          {model.displayName || model.modelId}{cooldown ? ' · Cooldown' : unavailable ? ' · Unavailable' : ''}
                         </option>
                       );
                     })}

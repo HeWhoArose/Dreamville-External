@@ -646,6 +646,73 @@ export class WorkingContextEngine {
   }
 
   /**
+   * Builds NPC dialogue context from canonical actor-scoped knowledge.
+   * Client-supplied facts/observations are deliberately not accepted here.
+   */
+  public static buildAuthorizedNpcContext(params: {
+    storyId: string;
+    npcId: string;
+    npcName?: string;
+    playerSpokenText?: string;
+    worldRepo?: WorldRepository;
+  }): string {
+    const storyId = String(params.storyId || '').trim();
+    const npcId = String(params.npcId || '').trim();
+    if (!storyId || !npcId) {
+      throw new Error('storyId and npcId are required for authorized NPC context.');
+    }
+
+    const repo = params.worldRepo || worldRepository;
+    const phase8 = repo.getPhase8SimulationEngine(storyId).load(repo, storyId);
+    const npcKnowledge = phase8.knowledge[npcId];
+    const authorizedFacts = repo.getAuthorizedKnowledgeFacts(storyId, npcId);
+    const npcState = phase8.npcs[npcId];
+    const npcLifecycle = repo.getNpcLifecycle(storyId, npcId);
+    const player = repo.getPlayerLifecycle(storyId);
+    const livingSchedule = repo.getLivingWorldSimulation(storyId).getNpcSchedule(npcId);
+
+    const canonicalNpcName =
+      params.npcName?.trim()
+      || npcLifecycle?.name
+      || livingSchedule?.name
+      || npcId;
+
+    const knownFacts = authorizedFacts.map(
+      (fact) => `[${fact.predicate}] ${fact.objectValue}`
+    );
+
+    if (npcKnowledge) {
+      for (const fact of Object.values(npcKnowledge.facts)) {
+        if ((fact.status === 'KNOWN' || fact.status === 'SUSPECTED') && !knownFacts.some((entry) => entry.includes(fact.objectValue))) {
+          knownFacts.push(`[belief:${fact.status.toLowerCase()}] ${fact.id}`);
+        }
+      }
+    }
+
+    const observations: string[] = [];
+    const npcLocationId = npcLifecycle?.locationId || livingSchedule?.currentLocationId;
+    if (npcLocationId) {
+      observations.push(`You are at location ${npcLocationId}.`);
+    }
+    if (npcLifecycle?.currentActivity) {
+      observations.push(`Your current activity is ${npcLifecycle.currentActivity}.`);
+    }
+    if (player && npcLocationId && player.locationId === npcLocationId) {
+      observations.push(`The player character ${player.name} is physically present here.`);
+    }
+    if (npcState?.updatedAtSeconds !== undefined) {
+      observations.push(`Your canonical state was updated at world second ${npcState.updatedAtSeconds}.`);
+    }
+
+    return WorkingContextEngine.buildSanitizedNpcContext({
+      npcName: canonicalNpcName,
+      knownFacts,
+      currentObservations: observations,
+      playerSpokenText: params.playerSpokenText || '',
+    });
+  }
+
+  /**
    * Dedicated initial-turn context assembly for Slice 4 (Dynamic Opening Scene).
    * Constructs a bounded, deterministic, epistemically safe context strictly bound to the canonical StoryRun.
    * Never falls back to default fixtures or leaked demo locations.

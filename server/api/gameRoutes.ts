@@ -531,6 +531,85 @@ gameRouter.post('/living-bible/promote', async (req: Request, res: Response) => 
 });
 
 /**
+ * Phase 14 Developer Diagnostics
+ * Read-only projections over canonical authority. These endpoints never mutate production state.
+ */
+gameRouter.get('/diagnostics/timeline', async (req: Request, res: Response) => {
+  try {
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const { DeveloperDiagnosticsService } = await import('../domain/developerDiagnosticsService');
+    const storyId = resolveStoryId(req, true);
+    const limit = Number(req.query.limit ?? 50);
+    const offset = Number(req.query.offset ?? 0);
+    res.json({ success: true, ...DeveloperDiagnosticsService.getTimeline(worldRepository, storyId, limit, offset) });
+  } catch (error: any) {
+    res.status(500).json({ success: false, errorReason: error?.message || 'Failed to load canonical timeline.' });
+  }
+});
+
+gameRouter.get('/diagnostics/rules', async (req: Request, res: Response) => {
+  try {
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const { DeveloperDiagnosticsService } = await import('../domain/developerDiagnosticsService');
+    const storyId = resolveStoryId(req, true);
+    res.json({ success: true, diagnostics: DeveloperDiagnosticsService.getRuleInspector(worldRepository, storyId) });
+  } catch (error: any) {
+    res.status(500).json({ success: false, errorReason: error?.message || 'Failed to inspect rules.' });
+  }
+});
+
+gameRouter.get('/diagnostics/runtime', async (req: Request, res: Response) => {
+  try {
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const { DeveloperDiagnosticsService } = await import('../domain/developerDiagnosticsService');
+    const storyId = resolveStoryId(req, true);
+    res.json({ success: true, diagnostics: DeveloperDiagnosticsService.getRuntimeInspector(worldRepository, storyId) });
+  } catch (error: any) {
+    res.status(500).json({ success: false, errorReason: error?.message || 'Failed to inspect runtime state.' });
+  }
+});
+
+gameRouter.get('/diagnostics/validation', async (req: Request, res: Response) => {
+  try {
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const { DeveloperDiagnosticsService } = await import('../domain/developerDiagnosticsService');
+    const storyId = resolveStoryId(req, true);
+    const [world, character] = [
+      DeveloperDiagnosticsService.validateWorld(worldRepository, storyId),
+      DeveloperDiagnosticsService.validateCharacter(worldRepository, storyId),
+    ];
+    res.json({ success: true, world, character });
+  } catch (error: any) {
+    res.status(500).json({ success: false, errorReason: error?.message || 'Failed to validate canonical state.' });
+  }
+});
+
+gameRouter.get('/diagnostics/why', async (req: Request, res: Response) => {
+  try {
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const { DeveloperDiagnosticsService } = await import('../domain/developerDiagnosticsService');
+    const storyId = resolveStoryId(req, true);
+    const eventId = typeof req.query.eventId === 'string' ? req.query.eventId : undefined;
+    const commandId = typeof req.query.commandId === 'string' ? req.query.commandId : undefined;
+    if (!eventId && !commandId) return res.status(400).json({ success: false, errorReason: 'eventId or commandId is required.' });
+    const explanation = DeveloperDiagnosticsService.explainEvent(worldRepository, storyId, eventId, commandId);
+    if (!explanation) return res.status(404).json({ success: false, errorReason: 'Canonical event not found.' });
+    res.json({ success: true, explanation });
+  } catch (error: any) {
+    res.status(500).json({ success: false, errorReason: error?.message || 'Failed to explain canonical event.' });
+  }
+});
+
+gameRouter.get('/diagnostics/persistence', async (_req: Request, res: Response) => {
+  try {
+    const { worldRepository } = await import('../repositories/worldRepository');
+    res.json({ success: true, persistence: worldRepository.inspectPersistence() });
+  } catch (error: any) {
+    res.status(500).json({ success: false, errorReason: error?.message || 'Failed to inspect persistence diagnostics.' });
+  }
+});
+
+/**
  * GET /api/game/persistence/status
  * Phase 13: inspect persistence version/schema state without mutating the save.
  */

@@ -57,8 +57,13 @@ describe('Phase 8.6-8.12 regression and fallback contracts', () => {
 		phase8.save(repository, 'phase8_ui_projection', state);
 
 		const player = repository.getPlayerLifecycle('phase8_ui_projection');
-		const projection = phase8.getPlayerProjection(repository, 'phase8_ui_projection', player?.actorId || 'player_actor_phase8_ui_projection') as any;
-		assert.equal(projection.facilities[0].devices.length, 0);
+		const actorId = player?.actorId || 'player_actor_phase8_ui_projection';
+		state.facilities.facility_alpha.facilityId = player?.locationId || 'loc_whispering_orrery';
+		phase8.save(repository, 'phase8_ui_projection', state);
+		const projection = phase8.getPlayerProjection(repository, 'phase8_ui_projection', actorId) as any;
+		const visibleFacility = projection.facilities.find((facility: any) => facility.facilityId === (player?.locationId || 'loc_whispering_orrery'));
+		assert.ok(visibleFacility);
+		assert.equal(visibleFacility.devices.length, 0);
 		assert.equal(projection.npcs[0].goals.some((goal: any) => goal.id === 'private_goal'), false);
 		assert.equal(projection.npcs[0].goals.some((goal: any) => goal.id === 'public_goal'), true);
 	});
@@ -117,4 +122,28 @@ describe('Phase 8.6-8.12 regression and fallback contracts', () => {
 		assert.equal(projection.knowledge.facts.some((fact: any) => fact.id === 'fact_known'), true);
 		assert.equal(projection.causality.edges.some((edge: any) => edge.id === 'secret_edge'), false);
 		assert.equal(projection.causality.edges.some((edge: any) => edge.id === 'known_edge'), true);
+	});
+
+
+	it('omits an undiscovered remote facility even when it contains visible non-hidden nodes', () => {
+		const repository = new InMemoryWorldRepository({ disablePersistence: true });
+		repository.seedStory('phase8_remote_facility_projection');
+		const phase8 = repository.getPhase8SimulationEngine('phase8_remote_facility_projection');
+		const state = phase8.load(repository, 'phase8_remote_facility_projection');
+		const facility = phase8.facility.createState('loc_remote_hidden_facility');
+		phase8.facility.addNode(facility, { id: 'public_room', kind: 'ROOM', name: 'Public Room', hidden: false, state: {} });
+		state.facilities.loc_remote_hidden_facility = facility;
+		phase8.save(repository, 'phase8_remote_facility_projection', state);
+
+		const player = repository.getPlayerLifecycle('phase8_remote_facility_projection');
+		const projection = phase8.getPlayerProjection(
+			repository,
+			'phase8_remote_facility_projection',
+			player?.actorId || 'player_actor_phase8_remote_facility_projection'
+		) as any;
+
+		assert.equal(
+			projection.facilities.some((visible: any) => visible.facilityId === 'loc_remote_hidden_facility'),
+			false
+		);
 	});

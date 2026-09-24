@@ -9,6 +9,8 @@ import { StoryAdaptationPipeline } from './storyAdaptation';
 import { getProviderApiKey } from '../services/providerCredentialService';
 import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
 
+export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
+
 export type TaskId =
   | 'narrative.generate'
   | 'character.dialogue'
@@ -1188,7 +1190,8 @@ export class GoogleGeminiAdapter implements IProviderAdapter {
         });
 
         const targetModel = options?.modelId || 'gemini-2.5-flash';
-        const defaultSystemPrompt = `You are the Dreamville canonical narrator. Produce ONLY a valid JSON turn package matching this exact schema:
+        const defaultSystemPrompt = `PROMPT_VERSION: ${DREAMBOOK_PROMPT_VERSION}
+You are the Dreamville canonical narrator. Produce ONLY a valid JSON turn package matching this exact schema:
 {
   "narrative": ["text describing world events"],
   "dialogue": [{"speaker": "string", "text": "string"}],
@@ -1572,7 +1575,7 @@ export class DomainAdjudicationBridge {
  * Strict Turn Package Validation, and Domain Adjudication.
  */
 export class MultiModelOrchestrator {
-  public static readonly PROMPT_VERSION = 'phase12-v1';
+  public static readonly PROMPT_VERSION = DREAMBOOK_PROMPT_VERSION;
   private models: Map<string, ModelRegistryRecord> = new Map();
   private adapters: Map<string, IProviderAdapter> = new Map();
   private checkpoints: Map<string, ContinuationCheckpoint> = new Map();

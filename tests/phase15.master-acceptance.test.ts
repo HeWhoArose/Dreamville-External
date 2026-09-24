@@ -10,11 +10,11 @@ import { narrativeProfileEngine } from '../server/domain/narrativeProfileEngine'
 import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
 import { canonicalCommandEngine } from '../server/domain/canonicalCommandEngine';
 import { captureCanonicalStateSnapshot } from '../server/domain/canonicalSnapshot';
-import { TacticalCombatEngine, Dnd521RulesetAdapter, LocalDiceEngine } from '../server/domain/combatEngine';
+import { TacticalCombatEngine } from '../server/domain/combatEngine';
 import { ConditionEngine } from '../server/domain/conditionEngine';
 import { DeathSaveEngine } from '../server/domain/deathSaveEngine';
 import { SpellRuntimeEngine } from '../server/domain/spellRuntime';
-import { PersistenceMigrationService, CURRENT_PERSISTENCE_VERSION, CURRENT_SCHEMA_VERSIONS } from '../server/services/persistenceMigrationService';
+import { PersistenceMigrationService } from '../server/services/persistenceMigrationService';
 import { MultiModelOrchestrator, DeterministicMockAdapter } from '../server/domain/aiOrchestrator';
 import { DeveloperDiagnosticsService } from '../server/domain/developerDiagnosticsService';
 

@@ -41,6 +41,7 @@ function characterProfile(overrides: Partial<CharacterAgencyProfile> = {}): Char
 		controlState: 'FREE',
 		controlEvidenceIds: [],
 		role: 'companion',
+		traits: ['protective'],
 		surfaceDisposition: 'Warm but cautious.',
 		...overrides,
 	};

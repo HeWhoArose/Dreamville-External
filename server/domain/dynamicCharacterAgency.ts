@@ -471,7 +471,7 @@ export class DynamicCharacterAgencyEngine {
 			hostility: clampScore(relationship.hostility),
 			stance: normalizeStance(relationship.stance) || this.deriveStance(relationship),
 			activeCause: relationship.activeCause || 'OTHER',
-			lastChangedAtSeconds: Number.isFinite(relationship.lastChangedAtSeconds) ? relationship.lastChangedAtSeconds : 0,
+			lastChangedAtSeconds: typeof relationship.lastChangedAtSeconds === 'number' && Number.isFinite(relationship.lastChangedAtSeconds) ? relationship.lastChangedAtSeconds : 0,
 			history: Array.isArray(relationship.history) ? clone(relationship.history) : [],
 		};
 		this.state.relationships[key] = base;

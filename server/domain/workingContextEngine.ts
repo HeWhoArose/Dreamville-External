@@ -520,12 +520,12 @@ export class WorkingContextEngine {
           `Surface disposition: ${guidance.surfaceDisposition}`,
           `Hidden relationship signals: ${guidance.hiddenRelationshipSignals.length > 0 ? guidance.hiddenRelationshipSignals.join(' ') : 'None'}`,
           'Narrative rule: hidden relationship causes are canonical context and must not be presented as player-known facts unless the player has acquired authorized evidence.',
-        ].join('\\n');
+        ].join('\n');
         candidateChunks.push({
           id: 'b2_dynamic_npc_agency',
           band: 'B2_IMMEDIATE',
           label: 'Canonical NPC Relationship & Agency',
-          content: `<hidden_npc_agency>\\n${agencyContent}\\n</hidden_npc_agency>`,
+          content: `<hidden_npc_agency>\n${agencyContent}\n</hidden_npc_agency>`,
           estimatedTokens: WorkingContextEngine.estimateTokens(agencyContent),
           sourceAuthority: 'DynamicCharacterAgencyEngine (CH16+)',
           isProtected: true,

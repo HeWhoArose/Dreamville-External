@@ -4780,7 +4780,9 @@ export class MultiModelOrchestrator {
 
       for (const model of recoveryCandidates) {
         if (candidateKeys.has(this.modelKey(model))) continue;
-        selectedCandidates.push(model);
+        const emergencyIndex = selectedCandidates.findIndex((candidate) => candidate.isEmergencyFloor);
+        const insertAt = emergencyIndex >= 0 ? emergencyIndex : selectedCandidates.length;
+        selectedCandidates.splice(insertAt, 0, model);
         candidateKeys.add(this.modelKey(model));
       }
     }

@@ -680,6 +680,9 @@ export class CharacterProgressionEngine {
     additionalModifiers: ProgressionModifier[] = []
   ): ProgressionResolution {
     const state = this.actorStates.get(actorId);
+    if (!state && additionalModifiers.length === 0) {
+      return { actorId, modifiers: [], sourceTrace: {} };
+    }
     const collected: ProgressionModifier[] = [];
     if (state) {
       for (const moduleId of state.enabledModuleIds) {

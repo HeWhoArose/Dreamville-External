@@ -64,6 +64,78 @@ export interface ModelRegistryRecord {
   description?: string;
 }
 
+export type AiTaskCategory =
+  | 'narration'
+  | 'world_generation'
+  | 'character_genesis'
+  | 'research'
+  | 'rules'
+  | 'speech'
+  | 'image';
+
+export interface ModelRuntimeStatus {
+  providerId: string;
+  modelId: string;
+  status: HealthState;
+  requests: number;
+  successCount: number;
+  failureCount: number;
+  consecutiveFailures: number;
+  rateLimit429Count: number;
+  serverError5xxCount: number;
+  timeoutCount: number;
+  lastLatencyMs: number;
+  averageLatencyMs: number;
+  lastSuccessAt?: number;
+  lastFailureAt?: number;
+  lastFailureReason?: string;
+  cooldownUntil?: number;
+  observedTokens: {
+    input: number;
+    output: number;
+    reasoning: number;
+    cached: number;
+    tool: number;
+    total: number;
+  };
+  configuredLimits?: {
+    requestsPerMinute?: number;
+    tokensPerMinute?: number;
+    requestsPerDay?: number;
+    tokensPerDay?: number;
+  };
+  headroom?: {
+    value?: number;
+    exact: boolean;
+    source: 'PROVIDER' | 'ESTIMATE' | 'UNKNOWN';
+  };
+}
+
+export interface UsageLedgerEntry {
+  timestamp: number;
+  providerId: string;
+  modelId: string;
+  task: TaskId;
+  category: AiTaskCategory;
+  success: boolean;
+  latencyMs: number;
+  inputTokens: number;
+  outputTokens: number;
+  reasoningTokens: number;
+  cachedTokens: number;
+  toolTokens: number;
+  totalTokens: number;
+  failureType?: 'TIMEOUT' | '429' | '5XX' | 'AUTH' | 'UNAVAILABLE' | 'MALFORMED' | 'OTHER';
+}
+
+export interface CategoryRuntimeState {
+  category: AiTaskCategory;
+  tasks: TaskId[];
+  activeModelKey?: string;
+  mode: 'AUTO' | 'MANUAL';
+  fallbackChain: string[];
+}
+
 export interface DiscoveredModelMetadata {
   id: string;
   rawName: string;

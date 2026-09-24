@@ -148,6 +148,57 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [fallbackChains, setFallbackChains] = useState<Record<string, string[]>>({});
   const [fallbackEditorTask, setFallbackEditorTask] = useState<string | null>(null);
   const [fallbackEditorSearch, setFallbackEditorSearch] = useState('');
+  // Phase 13 persistence state
+  const [persistenceStatus, setPersistenceStatus] = useState<any>(null);
+  const [persistenceBusy, setPersistenceBusy] = useState(false);
+  const [persistenceMessage, setPersistenceMessage] = useState<string | null>(null);
+
+  const loadPersistenceStatus = async () => {
+    try {
+      const result = await apiClient.getPersistenceStatus();
+      setPersistenceStatus(result.persistence || null);
+    } catch (err: any) {
+      setPersistenceMessage(err?.message || 'Failed to inspect persistence state.');
+    }
+  };
+
+  const handlePersistenceMigration = async () => {
+    setPersistenceBusy(true);
+    setPersistenceMessage(null);
+    try {
+      const result = await apiClient.migratePersistence();
+      setPersistenceStatus(result.persistence || null);
+      setPersistenceMessage(
+        result.restartRequired
+          ? 'Migration completed safely. The original save was backed up. Restart the server to load the migrated state.'
+          : 'Persistence is already current.'
+      );
+    } catch (err: any) {
+      setPersistenceMessage(err?.message || 'Migration failed. Source data was preserved.');
+      await loadPersistenceStatus();
+    } finally {
+      setPersistenceBusy(false);
+    }
+  };
+
+  const handlePersistenceRepair = async () => {
+    setPersistenceBusy(true);
+    setPersistenceMessage(null);
+    try {
+      const result = await apiClient.repairPersistence();
+      setPersistenceStatus(result.inspection || null);
+      setPersistenceMessage(
+        result.changed
+          ? 'Repair completed and the original save was backed up. Restart the server before continuing.'
+          : 'No repair was required.'
+      );
+    } catch (err: any) {
+      setPersistenceMessage(err?.message || 'Repair failed. Source data was preserved.');
+      await loadPersistenceStatus();
+    } finally {
+      setPersistenceBusy(false);
+    }
+  };
 
   const loadOrchestratorData = async (forceRefresh = false) => {
     if (forceRefresh) setIsRefreshingRegistry(true);
@@ -191,6 +242,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   useEffect(() => {
     loadOrchestratorData(false);
   }, []);
+  useEffect(() => {
+    if (activeTab === 'DATA') {
+      loadPersistenceStatus();
+    }
+  }, [activeTab]);
 
   const toggleTooltip = (id: string) => {
     setActiveTooltip(activeTooltip === id ? null : id);
@@ -1375,21 +1431,83 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       {activeTab === 'DATA' && (
         <div className="space-y-6 max-w-4xl">
           <div className="p-5 rounded-[var(--db-radius-lg)] bg-[var(--db-bg-card)] border border-[var(--db-border-default)] space-y-4">
-            <h3 className="text-sm font-serif font-bold text-[var(--db-text-primary)] flex items-center gap-2">
-              <span>💾</span> Data Backup & Export
-            </h3>
-            <p className="text-xs text-[var(--db-text-muted)]">
-              Export story runs, worlds, and personal compendium collection entries.
-            </p>
-
-            <div className="flex items-center gap-3 pt-2">
-              <Button variant="subtle" size="sm">
-                Export Local Cache JSON
-              </Button>
-              <Button variant="subtle" size="sm">
-                Clear Asset Cache
-              </Button>
+            <div>
+              <h3 className="text-sm font-serif font-bold text-[var(--db-text-primary)] flex items-center gap-2">
+                <span>💾</span> Persistence, Migration & Repair
+              </h3>
+              <p className="text-xs text-[var(--db-text-muted)] mt-1">
+                Phase 13 protects long-lived worlds when the engine schema evolves. Migration and repair always validate before replacing the live save.
+              </p>
             </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {(['world', 'character', 'rules', 'content'] as const).map((key) => (
+                <div key={key} className="rounded-[var(--db-radius-md)] bg-[var(--db-bg-canvas)] border border-[var(--db-border-subtle)] p-3">
+                  <p className="text-[10px] uppercase tracking-wide text-[var(--db-text-muted)]">{key} schema</p>
+                  <p className="mt-1 text-lg font-mono text-[var(--db-text-primary)]">
+                    {persistenceStatus?.schemaVersions?.[key] ?? '—'}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-[var(--db-radius-md)] bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] p-4 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold text-[var(--db-text-primary)]">
+                    Save version {persistenceStatus?.currentVersion ?? '—'} → target {persistenceStatus?.targetVersion ?? '—'}
+                  </p>
+                  <p className="text-[11px] text-[var(--db-text-muted)]">
+                    {persistenceStatus?.exists ? (persistenceStatus?.needsMigration ? 'Migration required' : 'Current and validated') : 'No on-disk save found'}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="subtle" size="sm" onClick={() => void loadPersistenceStatus()} disabled={persistenceBusy}>
+                    Refresh
+                  </Button>
+                  <Button variant="subtle" size="sm" onClick={() => void handlePersistenceMigration()} disabled={persistenceBusy || !persistenceStatus?.needsMigration}>
+                    {persistenceBusy ? 'Working…' : 'Migrate Save'}
+                  </Button>
+                  <Button variant="subtle" size="sm" onClick={() => void handlePersistenceRepair()} disabled={persistenceBusy || !persistenceStatus?.exists}>
+                    Repair & Validate
+                  </Button>
+                </div>
+              </div>
+
+              {persistenceStatus?.path && (
+                <p className="text-[10px] text-[var(--db-text-muted)] font-mono break-all">
+                  {persistenceStatus.path}
+                </p>
+              )}
+              {persistenceStatus?.errors?.length > 0 && (
+                <div className="rounded-md border border-red-900/50 bg-red-950/20 p-2 text-[11px] text-red-300">
+                  {persistenceStatus.errors.join(' ')}
+                </div>
+              )}
+              {persistenceStatus?.warnings?.length > 0 && (
+                <div className="rounded-md border border-amber-900/50 bg-amber-950/20 p-2 text-[11px] text-amber-300">
+                  {persistenceStatus.warnings.join(' ')}
+                </div>
+              )}
+              {persistenceMessage && (
+                <div className="rounded-md border border-stone-800 bg-stone-900/60 p-2 text-[11px] text-stone-300">
+                  {persistenceMessage}
+                </div>
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-[var(--db-border-subtle)]">
+              <p className="text-[11px] text-[var(--db-text-muted)]">
+                Failed migration or repair never overwrites the original without a pre-operation backup. Restart after a successful disk migration so the in-memory canonical repository reloads the migrated state.
+              </p>
+            </div>
+          </div>
+
+          <div className="p-5 rounded-[var(--db-radius-lg)] bg-[var(--db-bg-card)] border border-[var(--db-border-default)] space-y-4">
+            <h3 className="text-sm font-serif font-bold text-[var(--db-text-primary)]">Campaign Archive</h3>
+            <p className="text-xs text-[var(--db-text-muted)]">
+              Existing lossless campaign archive export/restore remains available separately from schema migration.
+            </p>
           </div>
         </div>
       )}

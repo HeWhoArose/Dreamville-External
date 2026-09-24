@@ -1841,17 +1841,33 @@ export class MultiModelOrchestrator {
       const cooldownMs = Math.min(60000, 5000 * Math.pow(2, Math.max(0, status.consecutiveFailures - 1)));
       status.cooldownUntil = Date.now() + cooldownMs;
     }
-    status.status = failureType === '429' ? 'Throttled' : failureType === 'AUTH' ? 'InvalidAuth' : 'Degraded';
-    status.operationalStatus =
-      failureType === 'AUTH'
-        ? 'UNAVAILABLE'
-        : failureType === '429'
-          ? 'THROTTLED'
-          : status.cooldownUntil && status.cooldownUntil > Date.now()
-            ? 'COOLDOWN'
-            : 'UNAVAILABLE';
-    model.health = status.status;
-    if (failureType === '429') model.quota = 'Exhausted';
+    // A malformed/schema-invalid task response is a task-compatibility failure,
+    // not evidence that the provider/model is globally unavailable. Keep the model
+    // operational so another task (or a later canary) can still use it.
+    if (failureType === 'MALFORMED' || failureType === 'OTHER') {
+      status.status = model.health;
+      status.operationalStatus =
+        status.cooldownUntil && status.cooldownUntil > Date.now()
+          ? 'COOLDOWN'
+          : 'AVAILABLE';
+    } else {
+      status.status =
+        failureType === '429'
+          ? 'Throttled'
+          : failureType === 'AUTH'
+            ? 'InvalidAuth'
+            : 'Degraded';
+      status.operationalStatus =
+        failureType === 'AUTH'
+          ? 'UNAVAILABLE'
+          : failureType === '429'
+            ? 'THROTTLED'
+            : status.cooldownUntil && status.cooldownUntil > Date.now()
+              ? 'COOLDOWN'
+              : 'UNAVAILABLE';
+      model.health = status.status;
+      if (failureType === '429') model.quota = 'Exhausted';
+    }
 
     this.usageLedger.push({
       timestamp: Date.now(),
@@ -4929,11 +4945,24 @@ export class MultiModelOrchestrator {
         lastError = err?.message || String(err);
         const latencyMs = Math.max(1, Date.now() - attemptStartedAt);
         this.recordProviderFailure(currentCandidate, task, err, attemptStartedAt);
-        const failures = (this.consecutiveFailures.get(modelKey) || 0) + 1;
-        this.consecutiveFailures.set(modelKey, failures);
-        if (failures >= 2) {
-          this.circuitBreakersTripped.add(modelKey);
-          currentCandidate.health = 'Unavailable';
+        const failureType = this.classifyFailure(err);
+        if (
+          failureType === '429' ||
+          failureType === '5XX' ||
+          failureType === 'TIMEOUT' ||
+          failureType === 'AUTH' ||
+          failureType === 'UNAVAILABLE'
+        ) {
+          const failures = (this.consecutiveFailures.get(modelKey) || 0) + 1;
+          this.consecutiveFailures.set(modelKey, failures);
+          if (failures >= 2) {
+            this.circuitBreakersTripped.add(modelKey);
+            currentCandidate.health = 'Unavailable';
+          }
+        } else {
+          // Schema/task-validation failures must advance this request's fallback
+          // chain without globally circuit-breaking the model.
+          this.consecutiveFailures.set(modelKey, 0);
         }
 
         attemptsTrail.push({

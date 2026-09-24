@@ -1674,9 +1674,10 @@ export class MultiModelOrchestrator {
     }
   }
 
-  private getTaskCategory(task: TaskId): AiTaskCategory {
+  private resolveTaskCategory(task: TaskId): AiTaskCategory {
     if (task === 'narrative.generate' || task === 'character.dialogue') return 'narration';
-    if (task === 'summary.scene' || task === 'memory.extract') return 'world_generation';
+    if (task === 'summary.scene') return 'world_generation';
+    if (task === 'memory.extract') return 'character_genesis';
     if (task === 'utility.inspect') return 'research';
     if (task === 'rules.adjudicate' || task === 'combat.tactics' || task === 'narrative.review') return 'rules';
     if (task === 'speech.generate' || task === 'speech.transcribe') return 'speech';
@@ -1685,14 +1686,14 @@ export class MultiModelOrchestrator {
   }
 
   public getTaskCategory(task: TaskId): AiTaskCategory {
-    return this.getTaskCategory(task);
+    return this.resolveTaskCategory(task);
   }
 
   private getCategoryTasks(category: AiTaskCategory): TaskId[] {
     const mapping: Record<AiTaskCategory, TaskId[]> = {
       narration: ['narrative.generate', 'character.dialogue'],
-      world_generation: ['summary.scene', 'memory.extract'],
-      character_genesis: ['utility.inspect', 'memory.extract'],
+      world_generation: ['summary.scene'],
+      character_genesis: ['memory.extract'],
       research: ['utility.inspect'],
       rules: ['rules.adjudicate', 'combat.tactics', 'narrative.review'],
       speech: ['speech.generate', 'speech.transcribe'],
@@ -1748,9 +1749,18 @@ export class MultiModelOrchestrator {
     status.lastSuccessAt = Date.now();
     status.cooldownUntil = undefined;
     status.status = 'Healthy';
-    status.observedTokens.input += Number(result.inputTokens || 0);
-    status.observedTokens.output += Number(result.outputTokens || 0);
-    status.observedTokens.total += Number(result.inputTokens || 0) + Number(result.outputTokens || 0);
+    const inputTokens = Number(result.inputTokens || 0);
+    const outputTokens = Number(result.outputTokens || 0);
+    const reasoningTokens = Number(result.reasoningTokens || 0);
+    const cachedTokens = Number(result.cachedTokens || 0);
+    const toolTokens = Number(result.toolTokens || 0);
+    const totalTokens = inputTokens + outputTokens + reasoningTokens + cachedTokens + toolTokens;
+    status.observedTokens.input += inputTokens;
+    status.observedTokens.output += outputTokens;
+    status.observedTokens.reasoning += reasoningTokens;
+    status.observedTokens.cached += cachedTokens;
+    status.observedTokens.tool += toolTokens;
+    status.observedTokens.total += totalTokens;
     model.health = 'Healthy';
     model.latencyMs = latencyMs;
 
@@ -1762,12 +1772,12 @@ export class MultiModelOrchestrator {
       category: this.getTaskCategory(task),
       success: true,
       latencyMs,
-      inputTokens: Number(result.inputTokens || 0),
-      outputTokens: Number(result.outputTokens || 0),
-      reasoningTokens: 0,
-      cachedTokens: 0,
-      toolTokens: 0,
-      totalTokens: Number(result.inputTokens || 0) + Number(result.outputTokens || 0),
+      inputTokens,
+      outputTokens,
+      reasoningTokens,
+      cachedTokens,
+      toolTokens,
+      totalTokens,
     });
     if (this.usageLedger.length > 500) this.usageLedger.splice(0, this.usageLedger.length - 500);
   }

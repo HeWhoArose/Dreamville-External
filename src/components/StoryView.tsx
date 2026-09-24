@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Location,
   DialogueNode,
@@ -11,6 +11,7 @@ import { useAudioHaptic } from './AudioHapticManager';
 import { getCharacterSpeakerTheme } from './voiceResolver';
 import { DiceRollAnimation } from './common/DiceRollAnimation';
 import { StoryHUDDrawer } from './StoryHUDDrawer';
+import { apiClient } from '../services/apiClient';
 import {
   AlertCircle,
   ArrowRight,
@@ -216,12 +217,75 @@ export const StoryView: React.FC<StoryViewProps> = ({
   const { playSpeech, isPlayingSpeech, triggerHaptic, playSfx } = useAudioHaptic();
 
   const [typedAction, setTypedAction] = useState('');
+  const [narrationModels, setNarrationModels] = useState<any[]>([]);
+  const [activeNarrationModelKey, setActiveNarrationModelKey] = useState('');
+  const [narrationModelSaving, setNarrationModelSaving] = useState(false);
+  const [aiRoutingStatus, setAiRoutingStatus] = useState<string>('Auto');
+  const [aiRoutingUsage, setAiRoutingUsage] = useState<{ requests: number; totalTokens: number } | null>(null);
+  const [lastAiTelemetry, setLastAiTelemetry] = useState<any | null>(null);
   const [revealedCheckIds, setRevealedCheckIds] = useState<Record<string, boolean>>({});
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+
+  const refreshAiRouting = async () => {
+    try {
+      const [operations, telemetry] = await Promise.all([
+        apiClient.getOrchestratorOperations(),
+        apiClient.getOrchestratorTelemetry(),
+      ]);
+      const models = Array.isArray(operations?.operations?.models)
+        ? operations.operations.models
+        : [];
+      const narrationCandidates = models.filter((model: any) =>
+        Array.isArray(model.roleEligibility)
+          ? model.roleEligibility.includes('narrative.generate')
+          : false
+      );
+      setNarrationModels(narrationCandidates);
+
+      const narrationCategory = operations?.operations?.categories?.find(
+        (category: any) => category.category === 'narration'
+      );
+      const selectedKey = narrationCategory?.activeModelKey || '';
+      setActiveNarrationModelKey(selectedKey);
+      setAiRoutingStatus(narrationCategory?.mode === 'MANUAL' ? 'Manual' : 'Auto');
+
+      const safeTelemetry = operations?.operations?.safeTelemetry;
+      if (safeTelemetry) {
+        setAiRoutingUsage({
+          requests: Number(safeTelemetry.totalRequests || 0),
+          totalTokens: Number(safeTelemetry.totalTokens || 0),
+        });
+      }
+      setLastAiTelemetry(telemetry?.lastTurnTelemetry || null);
+    } catch {
+      // AI routing UI is advisory; gameplay remains functional when telemetry is unavailable.
+    }
+  };
+
+  useEffect(() => {
+    refreshAiRouting();
+  }, [storyId, isProcessingAction]);
+
+  const handleNarrationModelChange = async (modelKey: string) => {
+    setNarrationModelSaving(true);
+    try {
+      await apiClient.setOrchestratorCategoryModel({
+        category: 'narration',
+        modelKey: modelKey || null,
+      });
+      setActiveNarrationModelKey(modelKey);
+      setAiRoutingStatus(modelKey ? 'Manual' : 'Auto');
+      await refreshAiRouting();
+    } catch {
+      // Keep the current selection if the server rejects the change.
+    } finally {
+      setNarrationModelSaving(false);
+    }
+  };
 
   const startRecording = async () => {
     setTranscriptionError(null);
@@ -521,7 +585,49 @@ export const StoryView: React.FC<StoryViewProps> = ({
             <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-stone-500">Your turn</p>
             <p className="mt-1 text-sm text-stone-300">What do you do?</p>
           </div>
-          <span className="text-[10px] text-stone-700">Actions are resolved by the world.</span>
+          <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
+            {(() => {
+              const activeModel = narrationModels.find(
+                (model) => `${model.providerId}::${model.modelId}` === activeNarrationModelKey
+              );
+              const runtime = activeModel?.runtime;
+              const tokenText = aiRoutingUsage
+                ? `${aiRoutingUsage.totalTokens.toLocaleString()} tok`
+                : 'usage n/a';
+              const lastModel = lastAiTelemetry?.selectedModelId;
+              return (
+                <>
+                  <span
+                    className="hidden text-[10px] text-stone-600 sm:inline"
+                    title="DreamBook AI stays outside canonical world state."
+                  >
+                    {lastModel ? `Last: ${lastModel} · ${lastAiTelemetry?.latencyMs || 0}ms` : tokenText}
+                  </span>
+                  <select
+                    value={activeNarrationModelKey}
+                    onChange={(event) => handleNarrationModelChange(event.target.value)}
+                    disabled={narrationModelSaving || isProcessingAction}
+                    aria-label="Narration model"
+                    className="h-8 max-w-[190px] rounded-lg border border-stone-800 bg-stone-900 px-2 text-[10px] text-stone-300 outline-none disabled:opacity-50"
+                  >
+                    <option value="">Auto · Healthy primary</option>
+                    {narrationModels.map((model) => {
+                      const key = `${model.providerId}::${model.modelId}`;
+                      const cooldown = runtime?.cooldownUntil && runtime.cooldownUntil > Date.now();
+                      return (
+                        <option key={key} value={key}>
+                          {model.displayName || model.modelId}{cooldown ? ' · Cooldown' : ''}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <span className="text-[10px] text-stone-700">
+                    {aiRoutingStatus} · {tokenText}
+                  </span>
+                </>
+              );
+            })()}
+          </div>
         </div>
 
         <form onSubmit={handleSubmitAction} className="flex items-center gap-2">

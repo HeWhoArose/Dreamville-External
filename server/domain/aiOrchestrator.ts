@@ -2484,6 +2484,106 @@ export class MultiModelOrchestrator {
     this.savePersistedConfig();
   }
 
+  public setCategoryModelOverride(category: AiTaskCategory, modelKey: string | null): void {
+    const tasks = this.getCategoryTasks(category);
+    if (!modelKey) {
+      this.categoryOverrides.delete(category);
+      this.savePersistedConfig();
+      return;
+    }
+
+    const model = this.models.get(modelKey) || Array.from(this.models.values()).find((candidate) => candidate.modelId === modelKey);
+    if (!model) throw new Error('Unknown model "' + modelKey + '".');
+
+    const eligible = tasks.some((task) => model.roleEligibility.includes(task));
+    if (!eligible) {
+      throw new Error('Model "' + modelKey + '" is not eligible for category "' + category + '".');
+    }
+
+    if (model.isEmergencyFloor) {
+      throw new Error('Emergency floor cannot be selected as a manual category override.');
+    }
+
+    this.categoryOverrides.set(category, this.modelKey(model));
+    this.savePersistedConfig();
+  }
+
+  public getCategoryModelOverride(category: AiTaskCategory): string | undefined {
+    return this.categoryOverrides.get(category);
+  }
+
+  public getCategoryRuntimeStates(): CategoryRuntimeState[] {
+    const categories: AiTaskCategory[] = [
+      'narration',
+      'world_generation',
+      'character_genesis',
+      'research',
+      'rules',
+      'speech',
+      'image',
+    ];
+    return categories.map((category) => {
+      const tasks = this.getCategoryTasks(category);
+      const activeModelKey =
+        this.categoryOverrides.get(category)
+        || this.taskPinnedModels.get(tasks[0])
+        || this.getFallbackChain(tasks[0])[0];
+      return {
+        category,
+        tasks,
+        activeModelKey,
+        mode: this.categoryOverrides.has(category) ? 'MANUAL' : 'AUTO',
+        fallbackChain: this.getFallbackChain(tasks[0]),
+      };
+    });
+  }
+
+  public getModelRuntimeStatus(): ModelRuntimeStatus[] {
+    return Array.from(this.models.values()).map((model) => {
+      const status = this.ensureRuntimeStatus(model);
+      return {
+        ...status,
+        observedTokens: { ...status.observedTokens },
+        configuredLimits: status.configuredLimits ? { ...status.configuredLimits } : undefined,
+        headroom: status.headroom ? { ...status.headroom } : undefined,
+      };
+    });
+  }
+
+  public getUsageLedger(options?: { category?: AiTaskCategory; limit?: number }): UsageLedgerEntry[] {
+    const limit = Math.max(1, Math.min(200, options?.limit ?? 50));
+    const filtered = options?.category
+      ? this.usageLedger.filter((entry) => entry.category === options.category)
+      : this.usageLedger;
+    return filtered.slice(-limit).map((entry) => ({ ...entry }));
+  }
+
+  public getPhase12OperationsSnapshot(): {
+    categories: CategoryRuntimeState[];
+    models: ModelRuntimeStatus[];
+    usage: UsageLedgerEntry[];
+    safeTelemetry: {
+      totalRequests: number;
+      totalTokens: number;
+      successCount: number;
+      failureCount: number;
+    };
+  } {
+    const models = this.getModelRuntimeStatus();
+    const usage = this.getUsageLedger({ limit: 50 });
+    return {
+      categories: this.getCategoryRuntimeStates(),
+      models,
+      usage,
+      safeTelemetry: {
+        totalRequests: models.reduce((sum, model) => sum + model.requests, 0),
+        totalTokens: models.reduce((sum, model) => sum + model.observedTokens.total, 0),
+        successCount: models.reduce((sum, model) => sum + model.successCount, 0),
+        failureCount: models.reduce((sum, model) => sum + model.failureCount, 0),
+      },
+    };
+  }
+
   public async testModel(providerId: string, modelId: string): Promise<{
     success: boolean;
     status: 'READY' | 'CONFIGURED_NOT_TESTED' | 'QUOTA_LIMIT' | 'UNAVAILABLE' | 'NOT_CONFIGURED';

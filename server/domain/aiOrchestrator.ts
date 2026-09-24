@@ -2840,7 +2840,7 @@ export class MultiModelOrchestrator {
           health: 'Unavailable',
           quota: 'Unknown',
           latencyMs: 0,
-          message: `Model unavailable or discontinued: ${modelId} is not available.`,
+          message: `Model unavailable or discontinued (404): ${modelId} is not available.`,
           testedAt: Date.now(),
         };
       }

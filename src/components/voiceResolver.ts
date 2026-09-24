@@ -80,6 +80,7 @@ const CHARACTER_ACCENT_PALETTE: CharacterSpeakerTheme[] = [
 export function getCharacterSpeakerTheme(
   speakerName: string,
   worldId?: string,
+  speakerId?: string,
 ): CharacterSpeakerTheme {
   if (!speakerName || speakerName.toLowerCase() === 'narrator' || speakerName.toLowerCase() === 'system') {
     return {
@@ -93,7 +94,8 @@ export function getCharacterSpeakerTheme(
   }
 
   const worldScope = worldId?.trim() || 'global';
-  const seed = `${worldScope}::${speakerName.trim().toLowerCase()}`;
+  const speakerScope = speakerId?.trim() || speakerName.trim().toLowerCase();
+  const seed = `${worldScope}::${speakerScope}`;
   let hash = 0;
   for (let i = 0; i < seed.length; i++) {
     hash = (hash << 5) - hash + seed.charCodeAt(i);

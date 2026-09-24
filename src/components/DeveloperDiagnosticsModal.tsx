@@ -8,7 +8,7 @@ interface DeveloperDiagnosticsModalProps {
 	storyId: string;
 }
 
-type Tab = 'timeline' | 'rules' | 'runtime' | 'validation' | 'persistence';
+type Tab = 'timeline' | 'rules' | 'runtime' | 'validation' | 'persistence' | 'acceptance';
 
 export const DeveloperDiagnosticsModal: React.FC<DeveloperDiagnosticsModalProps> = ({
 	isOpen,
@@ -22,6 +22,7 @@ export const DeveloperDiagnosticsModal: React.FC<DeveloperDiagnosticsModalProps>
 	const [validation, setValidation] = useState<any>(null);
 	const [persistence, setPersistence] = useState<any>(null);
 	const [why, setWhy] = useState<any>(null);
+	const [acceptance, setAcceptance] = useState<any>(null);
 	const [offset, setOffset] = useState(0);
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -35,6 +36,7 @@ export const DeveloperDiagnosticsModal: React.FC<DeveloperDiagnosticsModalProps>
 			if (tab === 'runtime') setRuntime(await apiClient.getDiagnosticsRuntime(storyId));
 			if (tab === 'validation') setValidation(await apiClient.getDiagnosticsValidation(storyId));
 			if (tab === 'persistence') setPersistence(await apiClient.getPersistenceStatus());
+			if (tab === 'acceptance') setAcceptance(await apiClient.getPhase15AcceptanceMatrix());
 		} catch (err: any) {
 			setError(err?.message || 'Developer diagnostics request failed.');
 		} finally {
@@ -85,6 +87,7 @@ export const DeveloperDiagnosticsModal: React.FC<DeveloperDiagnosticsModalProps>
 						['runtime', 'Runtime State', Database],
 						['validation', 'Validation', CheckCircle2],
 						['persistence', 'Save Diagnostics', AlertTriangle],
+						['acceptance', 'Final Acceptance', CheckCircle2],
 					] as const).map(([id, label, Icon]) => (
 						<button
 							key={id}
@@ -145,6 +148,62 @@ export const DeveloperDiagnosticsModal: React.FC<DeveloperDiagnosticsModalProps>
 						})}
 					</div>}
 					{tab === 'persistence' && <pre className="text-[10px] leading-relaxed font-mono text-stone-300 whitespace-pre-wrap">{pretty(persistence?.persistence || {})}</pre>}
+
+					{tab === 'acceptance' && (
+						<div className="space-y-4">
+							<div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+								<div className="flex items-center justify-between gap-3">
+									<div>
+										<h3 className="text-sm font-serif font-bold text-amber-300">Phase 15 — Final Acceptance Matrix</h3>
+										<p className="text-[10px] font-mono text-stone-500 mt-1">
+											{acceptance?.coverage?.totalScenarios || 0} scenarios • {acceptance?.coverage?.totalGates || 0} gates
+										</p>
+									</div>
+									<span className="text-[9px] font-mono uppercase rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-amber-300">
+										{acceptance?.status || 'LOADING'}
+									</span>
+								</div>
+								<p className="text-xs text-stone-400 mt-3">
+									This screen is a read-only coverage matrix. Runtime completion remains pending until the final full repository npm test, lint, and build gate is executed.
+								</p>
+							</div>
+
+							<div className="overflow-x-auto rounded-xl border border-stone-800">
+								<table className="w-full text-left text-[10px] font-mono">
+									<thead className="bg-stone-950/80 text-stone-500 uppercase">
+										<tr>
+											<th className="px-3 py-2">Scenario</th>
+											<th className="px-3 py-2">Rules</th>
+											<th className="px-3 py-2">Narrative</th>
+											<th className="px-3 py-2">Boundaries</th>
+										</tr>
+									</thead>
+									<tbody>
+										{(acceptance?.scenarios || []).map((scenario: any) => (
+											<tr key={scenario.id} className="border-t border-stone-800">
+												<td className="px-3 py-2 text-stone-200">{scenario.id}</td>
+												<td className="px-3 py-2 text-amber-300">{scenario.rulesMode}</td>
+												<td className="px-3 py-2 text-purple-300">{scenario.narrativeMode}</td>
+												<td className="px-3 py-2 text-stone-500">{scenario.criticalBoundaries.join(', ')}</td>
+											</tr>
+										))}
+									</tbody>
+								</table>
+							</div>
+
+							<div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+								{(acceptance?.gates || []).map((gate: any) => (
+									<div key={gate.id} className="rounded-xl border border-stone-800 bg-stone-950/40 p-3">
+										<div className="flex items-center gap-2">
+											<CheckCircle2 className="w-3.5 h-3.5 text-stone-500" />
+											<span className="text-xs text-stone-200">{gate.title}</span>
+										</div>
+										<p className="mt-1 text-[9px] font-mono text-stone-600">{gate.source}</p>
+									</div>
+								))}
+							</div>
+						</div>
+					)}
 
 					{why && (
 						<div className="mt-5 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">

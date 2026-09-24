@@ -3136,13 +3136,25 @@ export class MultiModelOrchestrator {
           .map(findConfiguredModel)
           .filter((m): m is ModelRegistryRecord => Boolean(m))
           .filter((m) => m.modelId !== overridden.modelId && isUsableCandidate(m));
+        const automaticFallbacks = Array.from(this.models.values())
+          .filter((m) => m.modelId !== overridden.modelId && isUsableCandidate(m))
+          .sort((a, b) => {
+            const scoreA = a.userPriority + (a.health === 'Healthy' ? 50 : 0) - (this.consecutiveFailures.get(this.modelKey(a)) || 0) * 25;
+            const scoreB = b.userPriority + (b.health === 'Healthy' ? 50 : 0) - (this.consecutiveFailures.get(this.modelKey(b)) || 0) * 25;
+            if (scoreB !== scoreA) return scoreB - scoreA;
+            const modelDiff = a.modelId.localeCompare(b.modelId);
+            return modelDiff !== 0 ? modelDiff : a.providerId.localeCompare(b.providerId);
+          });
+        const fallbackModels = customChainKeys && configuredFallbacks.length > 0
+          ? configuredFallbacks
+          : automaticFallbacks;
         const emergency = Array.from(this.models.values()).find((m) => m.isEmergencyFloor && m.roleEligibility.includes(task));
-        if (emergency && !configuredFallbacks.some((m) => m.modelId === emergency.modelId)) configuredFallbacks.push(emergency);
+        if (emergency && !fallbackModels.some((m) => m.modelId === emergency.modelId)) fallbackModels.push(emergency);
         return {
           selectedModel: overridden,
           selectionReason: 'Category-scoped manual override for ' + category + '.',
           selectionScore: overridden.userPriority + 1000,
-          fallbacks: configuredFallbacks,
+          fallbacks: fallbackModels,
         };
       }
     }

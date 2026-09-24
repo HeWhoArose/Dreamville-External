@@ -528,7 +528,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
       </div>
 
       {activeDialogue && (() => {
-        const theme = getCharacterSpeakerTheme(activeDialogue.speakerName, worldId);
+        const theme = getCharacterSpeakerTheme(activeDialogue.speakerName, worldId, activeDialogue.speakerId);
         return (
           <section className={`rounded-2xl border ${theme.bubbleBorder} bg-stone-950/80 px-5 py-5`}>
             <div className="mb-3 flex items-center justify-between gap-3">

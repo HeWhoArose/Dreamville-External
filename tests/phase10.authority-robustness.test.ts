@@ -70,10 +70,16 @@ test('Phase 10: duplicate equipped capability sources collapse to one capability
 		ownerEntityId: actor,
 		provenance: 'TEST',
 	});
-	const swordDef = inventory.getItemDefinition(a.defId)!;
-	const shieldDef = inventory.getItemDefinition(b.defId)!;
-	swordDef.grantedCapabilities = ['phase10_shared_cap'];
-	shieldDef.grantedCapabilities = ['phase10_shared_cap'];
+	const swordDef = inventory.getAllDefinitions().find((definition) => definition.id === a.defId)!;
+	const shieldDef = inventory.getAllDefinitions().find((definition) => definition.id === b.defId)!;
+	inventory.registerDefinition({
+		...swordDef,
+		grantedCapabilities: ['phase10_shared_cap'],
+	});
+	inventory.registerDefinition({
+		...shieldDef,
+		grantedCapabilities: ['phase10_shared_cap'],
+	});
 	inventory.equipItem(actor, a.id, 'mainHand');
 	inventory.equipItem(actor, b.id, 'offHand');
 
@@ -103,9 +109,12 @@ test('Phase 10: equipment capability resolution deduplicates the same two-hand i
 		ownerEntityId: actor,
 		provenance: 'TEST',
 	});
-	const def = inventory.getItemDefinition(item.defId)!;
-	def.grantedCapabilities = ['phase10_two_hand_cap'];
-	def.handUsage = 'TWO_HAND';
+	const def = inventory.getAllDefinitions().find((definition) => definition.id === item.defId)!;
+	inventory.registerDefinition({
+		...def,
+		handUsage: 'TWO_HAND',
+		grantedCapabilities: ['phase10_two_hand_cap'],
+	});
 	inventory.equipItem(actor, item.id, 'mainHand');
 
 	const effective = capabilities.getEffectiveActorCapabilities(actor, inventory);

@@ -138,8 +138,11 @@ test('task response validation failure advances to the next AI model instead of 
     fallbackEligibility: true,
   });
 
-  orchestrator.pinModelForTask('narrative.generate', 'provider_test_first::first-model');
-  orchestrator.setFallbackChain('narrative.generate', [
+  (orchestrator as any).taskPinnedModels.set(
+    'narrative.generate',
+    'provider_test_first::first-model'
+  );
+  (orchestrator as any).taskFallbackChains.set('narrative.generate', [
     'provider_test_first::first-model',
     'provider_test_second::second-model',
     'provider_deterministic_emergency::emergency-fallback-local',
@@ -221,8 +224,11 @@ test('a stale one-model fallback chain recovers an additional usable model befor
     fallbackEligibility: true,
   });
 
-  orchestrator.pinModelForTask('narrative.generate', 'provider_recovery_first::first-model');
-  orchestrator.setFallbackChain('narrative.generate', [
+  (orchestrator as any).taskPinnedModels.set(
+    'narrative.generate',
+    'provider_recovery_first::first-model'
+  );
+  (orchestrator as any).taskFallbackChains.set('narrative.generate', [
     'provider_recovery_first::first-model',
     'provider_deterministic_emergency::emergency-fallback-local',
   ]);

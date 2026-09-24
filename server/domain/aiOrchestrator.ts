@@ -79,6 +79,7 @@ export interface ModelRuntimeStatus {
   providerId: string;
   modelId: string;
   status: HealthState;
+  operationalStatus: 'AVAILABLE' | 'THROTTLED' | 'COOLDOWN' | 'UNAVAILABLE' | 'DISABLED';
   requests: number;
   successCount: number;
   failureCount: number;
@@ -1719,6 +1720,15 @@ export class MultiModelOrchestrator {
         providerId: model.providerId,
         modelId: model.modelId,
         status: model.health,
+        operationalStatus: model.isEmergencyFloor
+          ? 'AVAILABLE'
+          : model.health === 'DisabledByUser'
+            ? 'DISABLED'
+            : model.health === 'Unavailable' || model.health === 'InvalidAuth'
+              ? 'UNAVAILABLE'
+              : model.health === 'Throttled'
+                ? 'THROTTLED'
+                : 'AVAILABLE',
         requests: 0,
         successCount: 0,
         failureCount: 0,
@@ -1754,6 +1764,7 @@ export class MultiModelOrchestrator {
     status.lastSuccessAt = Date.now();
     status.cooldownUntil = undefined;
     status.status = 'Healthy';
+    status.operationalStatus = 'AVAILABLE';
     const inputTokens = Number(result.inputTokens || 0);
     const outputTokens = Number(result.outputTokens || 0);
     const reasoningTokens = Number(result.reasoningTokens || 0);
@@ -1816,6 +1827,14 @@ export class MultiModelOrchestrator {
       status.cooldownUntil = Date.now() + cooldownMs;
     }
     status.status = failureType === '429' ? 'Throttled' : failureType === 'AUTH' ? 'InvalidAuth' : 'Degraded';
+    status.operationalStatus =
+      failureType === 'AUTH'
+        ? 'UNAVAILABLE'
+        : failureType === '429'
+          ? 'THROTTLED'
+          : status.cooldownUntil && status.cooldownUntil > Date.now()
+            ? 'COOLDOWN'
+            : 'UNAVAILABLE';
     model.health = status.status;
     if (failureType === '429') model.quota = 'Exhausted';
 

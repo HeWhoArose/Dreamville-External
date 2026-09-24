@@ -4112,6 +4112,7 @@ export class MultiModelOrchestrator {
 
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
           totalAttempts++;
+          const attemptStartedAt = Date.now();
           try {
             // Wrap provider call with AbortController for strict timeout enforcement
             const abortController = new AbortController();
@@ -4141,6 +4142,8 @@ export class MultiModelOrchestrator {
             }
 
             // 5. Adjudicate State Changes through Domain Authority Bridge (DEF-CH12-05)
+            this.recordProviderSuccess(currentCandidate, providerRes, task, attemptStartedAt);
+
             const adjudication = DomainAdjudicationBridge.adjudicate(
               validation.turnPackage,
               repo,
@@ -4233,6 +4236,7 @@ export class MultiModelOrchestrator {
             };
           } catch (err: any) {
             lastError = err?.message || String(err);
+            this.recordProviderFailure(currentCandidate, task, err, attemptStartedAt);
 
             // Track consecutive failures & circuit breaker
             const failures = (this.consecutiveFailures.get(modelKey) || 0) + 1;
@@ -4257,7 +4261,7 @@ export class MultiModelOrchestrator {
 
             // Exponential backoff between retries
             if (attempt < maxRetries) {
-              const backoffMs = Math.min(100, 20 * Math.pow(2, attempt));
+              const backoffMs = Math.min(1000, 100 * Math.pow(2, attempt));
               await new Promise((res) => setTimeout(res, backoffMs));
             }
           }

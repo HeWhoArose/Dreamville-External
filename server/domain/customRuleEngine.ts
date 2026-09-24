@@ -130,14 +130,14 @@ export class CustomRuleEngine {
 		return { success: errors.length === 0, errors, warnings };
 	}
 
-	private loadRules(repository: InMemoryWorldRepository, storyId: string): CustomRuleDefinition[] {
+	private loadRules(repository: InMemoryWorldRepository, storyId: string, event?: CustomRuleEvent): CustomRuleDefinition[] {
 		const run = repository.getStoryRun(storyId);
 		const world = run?.worldId ? repository.getWorldTemplate(run.worldId) : null;
 		const worldRules = Array.isArray(world?.customRules) ? world.customRules : [];
 		const protagonistRules = Array.isArray(run?.protagonist?.customRules) ? run.protagonist.customRules : [];
 		const characterRules = Array.isArray(run?.customRules) ? run.customRules : [];
 		const itemRules: CustomRuleDefinition[] = [];
-		if (event.actorId && repository.hasInventoryEngine(storyId)) {
+		if (event?.actorId && repository.hasInventoryEngine(storyId)) {
 			const inventory = repository.getInventoryEngine(storyId);
 			for (const item of [
 				...inventory.getInventoryItems(event.actorId),
@@ -146,7 +146,7 @@ export class CustomRuleEngine {
 				itemRules.push(...inventory.getCustomRulesForItem(item.id));
 			}
 		}
-		const commandPayload = event.payload?.command && typeof event.payload.command === 'object'
+		const commandPayload = event?.payload?.command && typeof event.payload.command === 'object'
 			? event.payload.command as Record<string, unknown>
 			: {};
 		const commandItemRules = Array.isArray(commandPayload.itemCustomRules)
@@ -391,7 +391,7 @@ export class CustomRuleEngine {
 			return { success: true, eventId: event.eventId, matchedRuleIds: [], appliedRuleIds: [], emittedWarnings: ['Event was already evaluated by custom rules.'] };
 		}
 
-		const rules = this.loadRules(repository, event.storyId)
+		const rules = this.loadRules(repository, event.storyId, event)
 			.filter((rule) => rule.enabled || state.activeRuleIds.includes(rule.id))
 			.sort((a, b) => b.priority - a.priority || a.id.localeCompare(b.id));
 		const validation = this.validateRules(rules);
@@ -407,10 +407,24 @@ export class CustomRuleEngine {
 		const matchedRuleIds: string[] = [];
 		const appliedRuleIds: string[] = [];
 		const warnings = [...validation.warnings];
+
+		const matchingRules: CustomRuleDefinition[] = [];
+		for (const rule of candidates) {
+			if (this.conditionsMatch(rule, event, state, repository)) {
+				matchingRules.push(rule);
+			}
+		}
+
+		if (matchingRules.length === 0) {
+			state.firedEventIds = [...state.firedEventIds, event.eventId].slice(-MAX_FIRED_EVENT_HISTORY);
+			state.updatedAtSeconds = event.timestampSeconds;
+			this.saveState(repository, event.storyId, state);
+			return { success: true, eventId: event.eventId, matchedRuleIds: [], appliedRuleIds: [], emittedWarnings: warnings };
+		}
+
 		const before = captureCanonicalStateSnapshot(event.storyId, repository);
 		try {
-			for (const rule of candidates) {
-				if (!this.conditionsMatch(rule, event, state, repository)) continue;
+			for (const rule of matchingRules) {
 				matchedRuleIds.push(rule.id);
 				for (const effect of rule.effects) {
 					await this.applyEffect(effect, context, state);

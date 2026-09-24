@@ -132,6 +132,7 @@ export function getEquipmentClass(item: EquipmentMetadataSource): EquipmentClass
 
 export function isEquipable(item: EquipmentMetadataSource): boolean {
 	if (typeof item.equipable === 'boolean') return item.equipable;
+	if (Array.isArray(item.allowedSlots) && item.allowedSlots.length > 0) return true;
 	switch (getEquipmentClass(item)) {
 		case 'WEAPON':
 		case 'ARMOR':

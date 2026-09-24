@@ -976,10 +976,11 @@ export class CapabilityEngine {
     // 2. Resolve Equipment-Granted Capabilities
     if (inventoryEngine) {
       const paperDoll = inventoryEngine.getActorPaperDoll(actorId);
-      const equippedItems: import('./inventoryItem').ItemInstance[] = Object.values(paperDoll).filter(
+      const rawEquipped: import('./inventoryItem').ItemInstance[] = Object.values(paperDoll).filter(
         (item): item is import('./inventoryItem').ItemInstance =>
           Boolean(item && !item.isBroken && (item.durability === undefined || item.durability > 0))
       );
+      const equippedItems = Array.from(new Map(rawEquipped.map((item) => [item.id, item])).values());
 
       for (const item of equippedItems) {
         const def = inventoryEngine.getItemDefinition(item.defId);

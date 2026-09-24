@@ -1640,12 +1640,12 @@ export class InMemoryWorldRepository implements WorldRepository {
     engine.setRulesProfile(this.getRulesProfile(storyId) || undefined);
     engine.setProgressionModifierResolver((actorId) => {
       const progression = this.getCharacterProgressionEngine(storyId);
-      if (!progression.getState(actorId)) return undefined;
-      const inventory = this.getInventoryEngine(storyId);
+      const inventory = this.hasInventoryEngine(storyId) ? this.getInventoryEngine(storyId) : null;
+      const equipmentMods = inventory ? inventory.getEquipmentModifiers(actorId) : [];
       return progression.resolveModifiers(
         actorId,
         this.getRulesProfile(storyId),
-        inventory.getEquipmentModifiers(actorId)
+        equipmentMods
       );
     });
     engine.setBossPhaseEvaluationResolver((bossId) => {
@@ -2657,11 +2657,17 @@ export class InMemoryWorldRepository implements WorldRepository {
     if (snapshot.livingWorld) this.getLivingWorldSimulation(storyId).importState(clone(snapshot.livingWorld));
     if (snapshot.chronicle) this.getHistoricalChronicleEngine(storyId).importState(clone(snapshot.chronicle));
 
-    const run = snapshot.adaptation?.ch16Run;
+    const run = snapshot.adaptation?.ch16Run || this.getStoryRun(storyId);
     if (run) {
       const restoredRun = clone(run);
       if (preservedCanonicalEvents) {
         restoredRun.canonicalEvents = preservedCanonicalEvents;
+      }
+      if (snapshot.inventory) {
+        restoredRun.runtimeState = {
+          ...(restoredRun.runtimeState || {}),
+          inventory: clone(snapshot.inventory),
+        };
       }
       this.storyRuns.set(storyId, restoredRun);
     } else {

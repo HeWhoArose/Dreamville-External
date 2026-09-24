@@ -5138,36 +5138,42 @@ gameRouter.get('/context/inspect', async (req: Request, res: Response) => {
 gameRouter.post('/context/npc-dialogue', async (req: Request, res: Response) => {
   try {
     const {
+      storyId = 'default_story',
+      npcId,
       npcName,
-      knownFacts = [],
-      currentObservations = [],
       playerSpokenText = '',
-      systemDirectives = [],
     } = req.body;
 
-    if (!npcName) {
-      res.status(400).json({ error: 'npcName is required.' });
+    if (!npcId) {
+      res.status(400).json({
+        error: 'npcId is required. NPC dialogue context must be bound to a canonical actor.',
+        code: 'NPC_ACTOR_REQUIRED',
+      });
       return;
     }
 
     const { WorkingContextEngine } = await import('../domain/workingContextEngine');
-    const sanitizedPrompt = WorkingContextEngine.buildSanitizedNpcContext({
-      npcName,
-      knownFacts,
-      currentObservations,
-      playerSpokenText,
-      systemDirectives,
+    const sanitizedPrompt = WorkingContextEngine.buildAuthorizedNpcContext({
+      storyId: String(storyId),
+      npcId: String(npcId),
+      npcName: typeof npcName === 'string' ? npcName : undefined,
+      playerSpokenText: String(playerSpokenText || ''),
+      worldRepo: worldRepository,
     });
 
     res.json({
       success: true,
-      npcName,
+      npcId: String(npcId),
+      npcName: typeof npcName === 'string' ? npcName : String(npcId),
       sanitizedPrompt,
       estimatedTokens: WorkingContextEngine.estimateTokens(sanitizedPrompt),
       epistemicallySanitized: true,
     });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to build sanitized NPC dialogue context.' });
+  } catch (error: any) {
+    res.status(400).json({
+      error: error?.message || 'Failed to build authorized NPC dialogue context.',
+      code: 'NPC_CONTEXT_AUTHORIZATION_FAILED',
+    });
   }
 });
 

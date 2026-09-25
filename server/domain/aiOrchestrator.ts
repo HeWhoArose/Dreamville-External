@@ -14,6 +14,7 @@ export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
 export type TaskId =
   | 'narrative.generate'
   | 'character.dialogue'
+  | 'character.extract'
   | 'memory.extract'
   | 'rules.adjudicate'
   | 'summary.scene'
@@ -1780,7 +1781,7 @@ export class MultiModelOrchestrator {
   private resolveTaskCategory(task: TaskId): AiTaskCategory {
     if (task === 'narrative.generate' || task === 'character.dialogue') return 'narration';
     if (task === 'summary.scene') return 'world_generation';
-    if (task === 'memory.extract') return 'character_genesis';
+    if (task === 'character.extract' || task === 'memory.extract') return 'character_genesis';
     if (task === 'utility.inspect') return 'research';
     if (task === 'rules.adjudicate' || task === 'combat.tactics' || task === 'narrative.review') return 'rules';
     if (task === 'speech.generate' || task === 'speech.transcribe') return 'speech';
@@ -1796,7 +1797,7 @@ export class MultiModelOrchestrator {
     const mapping: Record<AiTaskCategory, TaskId[]> = {
       narration: ['narrative.generate', 'character.dialogue'],
       world_generation: ['summary.scene'],
-      character_genesis: ['memory.extract'],
+      character_genesis: ['character.extract', 'memory.extract'],
       research: ['utility.inspect'],
       rules: ['rules.adjudicate', 'combat.tactics', 'narrative.review'],
       speech: ['speech.generate', 'speech.transcribe'],
@@ -1973,6 +1974,7 @@ export class MultiModelOrchestrator {
   private seedDefaultPins(): void {
     this.taskPinnedModels.set('narrative.generate', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('character.dialogue', 'google_gemini::gemini-3.5-flash');
+    this.taskPinnedModels.set('character.extract', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('memory.extract', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('summary.scene', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('rules.adjudicate', 'google_gemini::gemini-3.5-flash');
@@ -1989,6 +1991,7 @@ export class MultiModelOrchestrator {
     ];
     this.taskFallbackChains.set('narrative.generate', defaultChain);
     this.taskFallbackChains.set('character.dialogue', defaultChain);
+    this.taskFallbackChains.set('character.extract', defaultChain);
     this.taskFallbackChains.set('memory.extract', defaultChain);
     this.taskFallbackChains.set('summary.scene', defaultChain);
     this.taskFallbackChains.set('rules.adjudicate', defaultChain);
@@ -3230,6 +3233,16 @@ export class MultiModelOrchestrator {
   public registerModel(record: ModelRegistryRecord): void {
     const effective = this.applyManualOverridesToRecord(record);
     if (!effective) return;
+
+    // Character Genesis has its own task contract. Any model that is already
+    // eligible for memory extraction is compatible with the structured
+    // character-extraction contract unless the provider explicitly opts out.
+    if (
+      effective.roleEligibility.includes('memory.extract') &&
+      !effective.roleEligibility.includes('character.extract')
+    ) {
+      effective.roleEligibility = [...effective.roleEligibility, 'character.extract'];
+    }
     const key = `${effective.providerId}::${effective.modelId}`;
     this.models.set(key, effective);
     // Ensure alias registration for google_gemini <-> provider_google_gemini

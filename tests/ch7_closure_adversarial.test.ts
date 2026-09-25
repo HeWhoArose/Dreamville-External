@@ -22,6 +22,14 @@ describe('CH7 Final Closure Adversarial Audit', () => {
         resolve();
       });
     });
+
+    // The player-facing capability boundary no longer grants global registry
+    // capabilities implicitly. Seed the exact capability these interpreter tests
+    // exercise so EXISTING_CAPABILITY means actor ownership, not registry presence.
+    const player = worldRepository.getPlayerLifecycle('default_story');
+    if (player) {
+      worldRepository.getCapabilityEngine('default_story').acquireSkill(player.actorId, 'cap_fireball');
+    }
   });
 
   after(async () => {
@@ -286,6 +294,7 @@ describe('CH7 Final Closure Adversarial Audit', () => {
   describe('5. CH8 Combat Resolution Firewall', () => {
     it('verifies that CH7 interpretation does not execute CH8 d20 combat resolution or damage rolls', () => {
       const engine = new CapabilityEngine();
+      engine.acquireSkill('player_hero', 'cap_fireball');
       const res = engine.interpretFreeformAction({
         actorId: 'player_hero',
         actionText: 'Fireball',

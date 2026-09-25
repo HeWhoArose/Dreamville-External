@@ -39,7 +39,7 @@ test('ten deterministic audits keep internal simulation out of the Skillbook and
   const menu = read('src/components/storyContext/storyNavigationModel.ts');
 
   for (let pass = 1; pass <= 10; pass += 1) {
-    assert.match(surface, /skillInstances\.some/, 'Skillbook lost actor ownership filtering');
+    assert.match(surface, /skillInstances\\s*\\.map/, 'Skillbook lost actor ownership filtering');
     assert.doesNotMatch(surface, /Adjudication Outcome|Capability DAG & Derived Skills|Channel: Temporal Ignition/);
 
     assert.match(story, /Immediate result/);

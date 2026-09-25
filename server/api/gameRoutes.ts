@@ -243,10 +243,10 @@ gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => 
           approvedAlternativeId: approvedAlternative?.id,
         },
         source: 'PLAYER',
-        transactionMode: 'STAGED',
+        transactionMode: 'ROLLBACK',
       },
       async (_command, context) => {
-        const capabilityEngine = context.repository.getCapabilityEngine(storyId);
+        const capabilityEngine = worldRepository.getCapabilityEngine(storyId);
         let intendedCapabilityId = recognizedCapabilityId;
 
         if (shouldCreateAlternative) {

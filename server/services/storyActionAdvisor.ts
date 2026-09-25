@@ -14,7 +14,6 @@ import { worldRepository } from '../repositories/worldRepository';
 
 export type ActionAdviceMode =
 	| 'EXECUTE_EXISTING'
-	| 'AUTO_LEARN_AND_EXECUTE'
 	| 'CAPABILITY_SIMULATION'
 	| 'SUGGEST_ALTERNATIVE'
 	| 'NORMAL_ACTION';

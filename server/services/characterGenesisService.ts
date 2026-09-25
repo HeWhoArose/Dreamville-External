@@ -496,17 +496,15 @@ Rules:
         generationActiveModel = response.modelId;
         generationActiveProvider = response.providerId;
 
-        // The orchestrator may report a deterministic emergency source. Treat that as
-        // AI unavailability here so the player can explicitly consent before we use it.
+        // The emergency floor is not a semantic Character Genesis model. When
+        // the AI chain reaches it, preserve the player's concept through the
+        // deterministic concept extractor and mark the result for user review.
         if (response.source === 'DETERMINISTIC_FALLBACK') {
           generationFailureReason =
             response.fallbackReason ||
             'AI providers did not return usable Character Genesis output.';
-          const error: any = new Error(generationFailureReason);
-          error.code = 'AI_UNAVAILABLE';
-          error.requiresDeterministicConfirmation = true;
-          error.attemptsTrail = generationAttemptsTrail;
-          throw error;
+          extracted = this.proceduralExtraction(concept, worldTemplate);
+          generationSource = 'DETERMINISTIC_FALLBACK';
         } else if (response.text) {
           const parsed = this.parseJsonFromAiResponse(response.text);
           if (parsed && this.isValidCharacterExtractionShape(parsed)) {
@@ -514,33 +512,24 @@ Rules:
             generationSource = response.source;
             generationFailureReason = response.fallbackReason || '';
           } else {
-            generationFailureReason = 'AI returned invalid or incomplete Character Genesis structure.';
-            const error: any = new Error(generationFailureReason);
-            error.code = 'AI_UNAVAILABLE';
-            error.requiresDeterministicConfirmation = true;
-            error.attemptsTrail = generationAttemptsTrail;
-            throw error;
+            generationFailureReason =
+              'AI returned invalid or incomplete Character Genesis structure. Deterministic concept extraction was used.';
+            extracted = this.proceduralExtraction(concept, worldTemplate);
+            generationSource = 'DETERMINISTIC_FALLBACK';
           }
         } else {
           generationFailureReason =
             response.fallbackReason ||
-            'AI providers returned no usable Character Genesis text.';
-          const error: any = new Error(generationFailureReason);
-          error.code = 'AI_UNAVAILABLE';
-          error.requiresDeterministicConfirmation = true;
-          error.attemptsTrail = generationAttemptsTrail;
-          throw error;
+            'AI providers returned no usable Character Genesis text. Deterministic concept extraction was used.';
+          extracted = this.proceduralExtraction(concept, worldTemplate);
+          generationSource = 'DETERMINISTIC_FALLBACK';
         }
       } catch (err: any) {
-        if (err?.code === 'AI_UNAVAILABLE') {
-          throw err;
-        }
-        generationFailureReason = err?.message || String(err);
-        const error: any = new Error(generationFailureReason);
-        error.code = 'AI_UNAVAILABLE';
-        error.requiresDeterministicConfirmation = true;
-        error.attemptsTrail = generationAttemptsTrail;
-        throw error;
+        generationFailureReason =
+          err?.message ||
+          'AI providers did not return usable Character Genesis output. Deterministic concept extraction was used.';
+        extracted = this.proceduralExtraction(concept, worldTemplate);
+        generationSource = 'DETERMINISTIC_FALLBACK';
       }
     }
 
@@ -1111,6 +1100,7 @@ Rules:
           activeProvider: generationActiveProvider,
           fallbackReason: generationFailureReason,
           attemptsTrail: generationAttemptsTrail,
+          requiresDeterministicConfirmation: generationSource === 'DETERMINISTIC_FALLBACK',
         };
 
     const rawCore = extracted.coreStats || {};

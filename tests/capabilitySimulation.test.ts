@@ -264,3 +264,67 @@ test('an incompatible character cannot synthesize a new supernatural mechanism j
   assert.equal(result.characterCompatible, false);
   assert.equal(result.creationAllowed, false);
 });
+
+
+test('candidate metadata alone cannot establish an unowned supernatural mechanism', () => {
+  const candidate = makeCapability({
+    id: 'cap_fireball',
+    name: 'Fireball',
+    category: 'Magic',
+    description: 'A fire spell that launches a sphere of flame.',
+  });
+
+  const result = simulator.simulate(
+    'I cast Fireball',
+    {
+      actorId: 'fighter',
+      character: { name: 'Plain Knight', role: 'Knight', background: { summary: 'A mundane swordsman with no magic or elemental affinity.' } },
+      world: {
+        title: 'Arcane Realm',
+        description: 'A world with established magic.',
+        magicSystems: ['Arcane spellcasting'],
+        worldRules: ['Characters need an established mechanism to learn supernatural techniques.'],
+      },
+      ownedCapabilities: [],
+      skillInstances: [],
+      allWorldCapabilities: [candidate],
+      powerState: basePower,
+    },
+    candidate
+  );
+
+  assert.equal(result.characterCompatible, false);
+  assert.equal(result.creationAllowed, false);
+});
+
+test('ten deterministic capability audit passes preserve the owned-vs-proposal boundary', () => {
+  const owned = makeCapability({
+    id: 'cap_shadow',
+    name: 'Shadow Step',
+    category: 'Movement',
+    description: 'Travel through established shadow pathways.',
+  });
+
+  for (let audit = 1; audit <= 10; audit += 1) {
+    const result = simulator.simulate(
+      'I teleport across the city',
+      {
+        actorId: 'player',
+        character: { name: 'Unknown Dark Knight', role: 'Dark Knight' },
+        world: {
+          title: 'Bending World',
+          description: 'An Avatar-style world governed only by elemental bending.',
+          worldRules: ['Teleportation does not exist.'],
+        },
+        ownedCapabilities: [owned],
+        skillInstances: [{ capabilityId: owned.id, currentLevel: 1 }],
+        allWorldCapabilities: [owned],
+        powerState: basePower,
+      }
+    );
+
+    assert.equal(result.status, 'WORLD_FORBIDDEN', `Audit ${audit}: teleport leaked through the world boundary`);
+    assert.equal(result.creationAllowed, false, `Audit ${audit}: forbidden skill became creatable`);
+    assert.equal(result.currentlyExecutable, false, `Audit ${audit}: unowned action became executable`);
+  }
+});

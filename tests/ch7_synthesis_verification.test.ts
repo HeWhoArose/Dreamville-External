@@ -298,6 +298,13 @@ describe('CH7 Comprehensive Verification: Concept-to-Mechanics / Custom Capabili
     });
 
     it('POST /api/game/capabilities/interpret processes freeform action over HTTP', async () => {
+      const player = worldRepository.getPlayerLifecycle('default_story');
+      assert.ok(player);
+      const capabilityEngine = worldRepository.getCapabilityEngine('default_story');
+      if (!capabilityEngine.hasLearnedCapability(player.actorId, 'cap_fireball')) {
+        capabilityEngine.acquireSkill(player.actorId, 'cap_fireball');
+      }
+
       const res = await fetch(`${baseUrl}/capabilities/interpret`, {
         method: 'POST',
         headers: {

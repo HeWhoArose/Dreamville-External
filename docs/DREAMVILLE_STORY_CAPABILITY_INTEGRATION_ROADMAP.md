@@ -354,10 +354,20 @@ No phase is reported as passing unless the available verification evidence suppo
 
 # 5. Current checkpoint
 
-**Roadmap status:** written.
+**Roadmap status:** written and active.
 
-**Current implementation phase:** A1 — Canonical player capability boundary.
+**Phase A1 status:** implemented and source-audited.
 
-**Next implementation phase after A1 verification:** A2 — World-law and capability simulation hardening.
+A1 delivered:
+- shared `server/api/playerCapabilityProjection.ts`
+- both player capability endpoints now consume the shared projection
+- learned skills are backed by actor SkillInstances
+- effective capabilities are restricted to actor-learned or active equipment grants
+- frontend SkillInstance typing
+- player-boundary regression coverage, including the global `cap_venomous_bite` leak case
+
+**A1 verification status:** the deterministic source audit completed **10/10 passes with all 13 checks passing**. GitHub Actions was not yet reporting a workflow run/status for the latest commit at this checkpoint, so runtime `npm test`, lint, and build are not being claimed as verified here.
+
+**Current implementation phase:** A2 — World-law and capability simulation hardening.
 
 Do not skip phases merely because a later feature is visually easier to implement. The canonical capability/world boundary must remain the foundation for the UI and story flow.

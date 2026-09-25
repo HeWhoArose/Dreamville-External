@@ -285,6 +285,29 @@ function characterAllows(domain: string | undefined, characterText: string, worl
     return { allowed: false, reason: 'The character has no established mechanism for magical fire manipulation.' };
   }
 
+  const capabilityText = candidateText + ' ' + flattenText(candidate);
+  const mechanismText = actorText + ' ' + ownedText;
+
+  if (domain === 'BIOLOGICAL' || normalize(candidate?.category) === 'biological') {
+    if (!/(venom|toxin|poison|fang|bite|claw|predator|serpent|draconic|insect|beast|mutant|biological)/.test(mechanismText)) {
+      return { allowed: false, reason: 'The character has no established biological mechanism for this technique.' };
+    }
+  }
+
+  if (
+    normalize(candidate?.name).includes('flight') ||
+    normalize(candidate?.name).includes('aerial')
+  ) {
+    if (!/(wing|flight|flying|levitat|aerial|airbender|flying shoes|winged|feather)/.test(mechanismText)) {
+      return { allowed: false, reason: 'The character has no established flight mechanism, equipment, or compatible progression basis.' };
+    }
+  }
+
+  if (domain === 'MAGIC' && normalize(candidate?.category) === 'magic' &&
+      !/(magic|spell|sorcer|wizard|mage|mana|arcane|caster|warlock|cleric|ritual|bending)/.test(mechanismText)) {
+    return { allowed: false, reason: 'The character has no established magic or spellcasting mechanism for this technique.' };
+  }
+
   if (domain === 'SPATIAL_TRANSIT' && candidate && normalize(candidate.category) !== 'movement' && !/(teleport|blink|spatial|dimensional)/.test(actorText + ' ' + ownedText)) {
     return { allowed: false, reason: 'The character has no established spatial-transit mechanism.' };
   }

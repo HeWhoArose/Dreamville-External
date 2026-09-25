@@ -283,8 +283,14 @@ export class StoryActionAdvisor {
 		sceneContext?: StoryActionSceneContext,
 	): Promise<ActionAdvice> {
 		const player = this.repository.getPlayerLifecycle(storyId);
-		const actorId = player?.actorId || 'player_actor_' + storyId;
 		const run = this.repository.getStoryRun(storyId);
+		// Prefer the canonical lifecycle actor, then the confirmed protagonist identity.
+		// This keeps progression/skill state aligned for story runs whose lifecycle is
+		// not materialized yet (tests, previews, and import-time simulations).
+		const actorId =
+			player?.actorId ||
+			run?.protagonist?.characterId ||
+			'player_actor_' + storyId;
 		const capabilityEngine = this.repository.getCapabilityEngine(storyId);
 		const actorCapabilities = capabilityEngine.getEffectiveActorCapabilities(
 			actorId,
@@ -557,8 +563,11 @@ export class StoryActionAdvisor {
 		if (!pending) return null;
 
 		const player = this.repository.getPlayerLifecycle(storyId);
-		const actorId = player?.actorId || 'player_actor_' + storyId;
 		const run = this.repository.getStoryRun(storyId);
+		const actorId =
+			player?.actorId ||
+			run?.protagonist?.characterId ||
+			'player_actor_' + storyId;
 		const capabilityEngine = this.repository.getCapabilityEngine(storyId);
 		const actorCapabilities = capabilityEngine.getEffectiveActorCapabilities(
 			actorId,
@@ -766,7 +775,11 @@ export class StoryActionAdvisor {
 		sceneContext?: StoryActionSceneContext,
 	): Promise<ActionTip[]> {
 		const player = this.repository.getPlayerLifecycle(storyId);
-		const actorId = player?.actorId || 'player_actor_' + storyId;
+		const run = this.repository.getStoryRun(storyId);
+		const actorId =
+			player?.actorId ||
+			run?.protagonist?.characterId ||
+			'player_actor_' + storyId;
 		const actorCapabilities = this.repository.getCapabilityEngine(storyId).getEffectiveActorCapabilities(
 			actorId,
 			this.repository.getInventoryEngine(storyId)

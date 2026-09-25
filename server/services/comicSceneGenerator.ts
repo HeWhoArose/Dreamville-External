@@ -101,7 +101,7 @@ export function buildComicScenePrompt(context: ComicSceneContext): ComicScenePro
     '• Do NOT use previous dialogue, previous actions, opening-scene events, or old consequences.',
     '• No flashbacks, no time skips, no alternate outcomes, no future events, and no invented characters.',
     '• Do NOT add powers, equipment, injuries, locations, or events that are absent from the supplied immediate turn.',
-    '• Do not reinterpret a failed action as successful.',
+    '• Do not depict failed actions as successful.',
     '• Do not turn internal engine mechanics into visible UI text.',
     '• Do not add captions, speech balloons, title cards, watermarks, interface chrome, or arbitrary text unless it is naturally present in the scene.',
   ].filter(Boolean).join('\n');

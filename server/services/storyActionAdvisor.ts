@@ -53,6 +53,7 @@ export interface ActionAdvice {
 	tips: ActionTip[];
 	proposal?: ActionCapabilityProposal;
 	recognizedCapability?: CapabilityDefinition;
+	simulation?: CapabilitySimulationResult;
 	canExecuteNow: boolean;
 }
 

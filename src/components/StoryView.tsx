@@ -839,9 +839,6 @@ export const StoryView: React.FC<StoryViewProps> = ({
       </section>
 
       {/* Past dialogue is intentionally omitted here; active dialogue remains above. */}
-          </div>
-        </section>
-      )}
     </div>
   );
 };

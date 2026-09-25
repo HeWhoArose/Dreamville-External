@@ -12,6 +12,7 @@ import { CustomRuleEngine } from '../domain/customRuleEngine';
 import { resolveCanonicalConfirmedCharacter } from '../services/confirmedCharacterAuthority';
 import { entityCardService } from '../services/entityCardService';
 import { characterGenesisService } from '../services/characterGenesisService';
+import { storyActionAdvisor } from '../services/storyActionAdvisor';
 import { canonicalCommandEngine } from '../domain/canonicalCommandEngine';
 import { deterministicId, formatCanonicalTimestamp } from '../domain/deterministicRng';
 import type { CombatEffectDefinition } from '../../src/types';
@@ -123,6 +124,183 @@ gameRouter.get('/state', (req: Request, res: Response) => {
     console.error('Error projecting external view state:', error);
     res.status(500).json({
       error: 'Failed to retrieve authoritative game state.',
+    });
+  }
+});
+
+/**
+ * POST /api/game/action/advice
+ * Preflight advice for a freeform story action.
+ * Never mutates canonical state.
+ */
+gameRouter.post('/action/advice', async (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    const actionText = typeof req.body?.actionText === 'string' ? req.body.actionText.trim() : '';
+    if (!actionText) {
+      return res.status(400).json({
+        success: false,
+        errorReason: 'actionText is required.',
+      });
+    }
+
+    const advice = await storyActionAdvisor.advise(storyId, actionText);
+    return res.json({
+      success: true,
+      storyId,
+      advice,
+    });
+  } catch (error: any) {
+    console.error('[Story Action Advisor] Advice generation failed:', error);
+    return res.status(500).json({
+      success: false,
+      errorReason: error?.message || 'Failed to evaluate story action advice.',
+    });
+  }
+});
+
+/**
+ * POST /api/game/action/accept-advice
+ * Canonically commits a previously proposed capability or a directly compatible
+ * capability, then executes the original story action through the normal action path.
+ */
+gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    const actionText = typeof req.body?.actionText === 'string' ? req.body.actionText.trim() : '';
+    if (!actionText) {
+      return res.status(400).json({
+        success: false,
+        errorReason: 'actionText is required.',
+      });
+    }
+
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player?.actorId || 'player_actor_' + storyId;
+    const proposalId = typeof req.body?.proposalId === 'string' ? req.body.proposalId : undefined;
+    const pendingProposal = proposalId ? storyActionAdvisor.consumePendingProposal(proposalId) : null;
+
+    const freshAdvice = await storyActionAdvisor.advise(storyId, actionText);
+    if (pendingProposal && freshAdvice.proposal?.proposalId !== pendingProposal.proposalId) {
+      return res.status(409).json({
+        success: false,
+        code: 'ACTION_ADVICE_STALE',
+        errorReason: 'The suggested capability is no longer valid for the current character state. Please submit the action again.',
+      });
+    }
+
+    if (freshAdvice.mode === 'SUGGEST_ALTERNATIVE' && !pendingProposal) {
+      return res.status(409).json({
+        success: false,
+        code: 'ACTION_ADVICE_CONFIRMATION_REQUIRED',
+        advice: freshAdvice,
+      });
+    }
+
+    const recognizedCapabilityId =
+      freshAdvice.recognizedCapability?.id ||
+      pendingProposal?.requestedCapabilityId;
+
+    const approvedAlternative = pendingProposal?.alternative || freshAdvice.proposal?.alternative;
+    const shouldCreateAlternative = Boolean(pendingProposal && approvedAlternative);
+
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      deterministicId(
+        'cmd_action_advice',
+        storyId,
+        actorId,
+        actionText,
+        proposalId || recognizedCapabilityId || 'auto'
+      );
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'INTERACT',
+        payload: {
+          action: actionText,
+          proposalId,
+          recognizedCapabilityId,
+          approvedAlternativeId: approvedAlternative?.id,
+        },
+        source: 'PLAYER',
+        transactionMode: 'STAGED',
+      },
+      async (_command, context) => {
+        const capabilityEngine = context.repository.getCapabilityEngine(storyId);
+        let intendedCapabilityId = recognizedCapabilityId;
+
+        if (shouldCreateAlternative) {
+          const alternative = approvedAlternative;
+          if (!alternative?.id || !alternative?.name) {
+            return {
+              success: false,
+              data: null,
+              errorReason: 'Approved capability proposal is malformed.',
+              summary: 'Rejected malformed capability proposal.',
+            };
+          }
+
+          capabilityEngine.registerCapability({
+            ...alternative,
+            id: alternative.id,
+            provenance: alternative.provenance || 'ACTION_ADVISOR_APPROVED',
+          });
+
+          capabilityEngine.acquireSkill(actorId, alternative.id, {
+            libraryStatus: 'APPROVED',
+            librarySourceStoryIds: [storyId],
+          });
+
+          intendedCapabilityId = alternative.id;
+        } else if (intendedCapabilityId) {
+          capabilityEngine.acquireSkill(actorId, intendedCapabilityId, {
+            libraryStatus: 'APPROVED',
+            librarySourceStoryIds: [storyId],
+          });
+        }
+
+        const result = await serverMockAuthority.processCustomAction(
+          {
+            type: 'CUSTOM_ACTION',
+            storyId,
+            actionText,
+            intendedCapabilityId,
+          } as any,
+          commandId
+        );
+
+        return {
+          success: Boolean(result.success),
+          data: result,
+          errorReason: result.success ? undefined : result.message,
+          summary: result.success
+            ? 'Approved story capability action executed.'
+            : 'Approved capability action was rejected by canonical authority.',
+        };
+      }
+    );
+
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
+      });
+    }
+
+    return res.json(commandResult.data);
+  } catch (error: any) {
+    console.error('[Story Action Advisor] Approval failed:', error);
+    return res.status(500).json({
+      success: false,
+      errorReason: error?.message || 'Failed to accept action advice.',
     });
   }
 });

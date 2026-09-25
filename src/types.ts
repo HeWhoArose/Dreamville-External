@@ -390,6 +390,7 @@ export interface ProtagonistProfile {
  */
 export interface ExternalViewState {
 	storyId?: string;
+	worldId?: string;
 	narrativeProfile?: NarrativeProfile;
 	rulesProfile?: RulesProfile;
   worldTime: WorldTime;

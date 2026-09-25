@@ -39,6 +39,8 @@ test('ten deterministic audits keep internal simulation out of the Skillbook and
   const menu = read('src/components/storyContext/storyNavigationModel.ts');
   const world = read('src/components/WorldView.tsx');
   const recent = read('src/components/RecentActionsView.tsx');
+  const routes = read('server/api/gameRoutes.ts');
+  const dice = read('src/components/common/DiceRollAnimation.tsx');
 
   for (let pass = 1; pass <= 10; pass += 1) {
     assert.match(surface, /skillInstances\\s*\\.map/, 'Skillbook lost actor ownership filtering');
@@ -58,5 +60,11 @@ test('ten deterministic audits keep internal simulation out of the Skillbook and
     assert.match(menu, /route: 'play\.recent-actions'/);
     assert.match(world, /character\.worldId === worldId/);
     assert.doesNotMatch(world, /!worldId \|\| character\.worldId/);
+    assert.match(routes, /AI_INTERNAL_INTERPRETATION_ONLY/);
+    assert.match(routes, /Internal capability DAG\/simulation metadata never crosses the player-facing API boundary/i);
+    assert.doesNotMatch(routes, /res\.json\(\{ actorId, powerState, capabilities, learnedCapabilities, skillInstances, graph \}\)/);
+    assert.match(dice, /HTMLCanvasElement/);
+    assert.match(dice, /ICOSAHEDRON_FACES/);
+    assert.match(dice, /requestAnimationFrame/);
   }
 });

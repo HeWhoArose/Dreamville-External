@@ -62,3 +62,26 @@ test('comic generation context contract does not require dialogue history', () =
   assert.match(result.prompt, /Immediate player action: I open the gate/i);
   assert.doesNotMatch(result.prompt, /dialogueHistory/i);
 });
+
+
+test('stale active dialogue is excluded from non-dialogue current-scene art', () => {
+  const result = buildComicScenePrompt({
+    worldTitle: 'Current World',
+    location: { name: 'Current Hall' },
+    protagonist: { name: 'Hero' },
+    visibleCharacters: [{ name: 'Guard' }],
+    latestAction: {
+      actionType: 'CUSTOM_ACTION',
+      description: 'I strike the guard.',
+      narrativeResponse: 'The guard staggers backward.',
+    },
+    activeDialogue: {
+      speakerName: 'Guard',
+      text: 'This was said on the previous turn.',
+    },
+  });
+
+  assert.match(result.prompt, /Immediate player action: I strike the guard/i);
+  assert.match(result.prompt, /Immediate narration from the latest turn: The guard staggers backward/i);
+  assert.doesNotMatch(result.prompt, /This was said on the previous turn/i);
+});

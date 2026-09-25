@@ -911,7 +911,6 @@ export interface CapabilitiesResponse {
   /** Actor-owned learned capabilities, including those temporarily blocked by requirements. */
   learnedCapabilities: CapabilityDefinition[];
   skillInstances: any[];
-  graph: CapabilityGraphNode[];
 }
 
 export interface AdjudicationResponse extends ApprovedConsequence {

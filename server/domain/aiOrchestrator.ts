@@ -8,6 +8,7 @@ import { worldRepository } from '../repositories/worldRepository';
 import { StoryAdaptationPipeline } from './storyAdaptation';
 import { getProviderApiKey } from '../services/providerCredentialService';
 import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
+import { getAiTaskContract } from './aiTaskContracts';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
 
@@ -18,11 +19,19 @@ export type TaskId =
   | 'memory.extract'
   | 'character.capability.propose'
   | 'story.advice'
+  | 'intent.interpret'
+  | 'capability.synthesize'
+  | 'capability.explain'
+  | 'research.query'
+  | 'research.world-brief'
   | 'rules.adjudicate'
+  | 'rules.analyze'
   | 'summary.scene'
+  | 'world.generate'
   | 'speech.generate'
   | 'speech.transcribe'
   | 'combat.tactics'
+  | 'tactical.reason'
   | 'combat.animation.plan'
   | 'narrative.review'
   | 'utility.inspect'
@@ -71,11 +80,17 @@ export interface ModelRegistryRecord {
 
 export type AiTaskCategory =
   | 'narration'
+  | 'summarization'
   | 'world_generation'
   | 'character_genesis'
   | 'research'
+  | 'intent_interpretation'
+  | 'capability_synthesis'
+  | 'capability_explanation'
+  | 'tactical_reasoning'
   | 'gameplay_advice'
   | 'rules'
+  | 'rule_analysis'
   | 'speech'
   | 'image';
 
@@ -1882,15 +1897,7 @@ export class MultiModelOrchestrator {
   }
 
   private resolveTaskCategory(task: TaskId): AiTaskCategory {
-    if (task === 'narrative.generate' || task === 'character.dialogue') return 'narration';
-    if (task === 'summary.scene') return 'world_generation';
-    if (task === 'character.extract' || task === 'memory.extract' || task === 'character.capability.propose') return 'character_genesis';
-    if (task === 'story.advice') return 'gameplay_advice';
-    if (task === 'utility.inspect') return 'research';
-    if (task === 'rules.adjudicate' || task === 'combat.tactics' || task === 'narrative.review') return 'rules';
-    if (task === 'speech.generate' || task === 'speech.transcribe') return 'speech';
-    if (task === 'image.generate') return 'image';
-    return 'character_genesis';
+    return getAiTaskContract(task).category;
   }
 
   public getTaskCategory(task: TaskId): AiTaskCategory {
@@ -1899,16 +1906,22 @@ export class MultiModelOrchestrator {
 
   private getCategoryTasks(category: AiTaskCategory): TaskId[] {
     const mapping: Record<AiTaskCategory, TaskId[]> = {
-      narration: ['narrative.generate', 'character.dialogue'],
-      world_generation: ['summary.scene'],
-      character_genesis: ['character.extract', 'memory.extract', 'character.capability.propose'],
-      research: ['utility.inspect'],
+      narration: ['narrative.generate', 'character.dialogue', 'narrative.review'],
+      summarization: ['summary.scene'],
+      world_generation: ['world.generate'],
+      character_genesis: ['character.extract', 'memory.extract'],
+      research: ['research.query', 'research.world-brief', 'utility.inspect'],
+      intent_interpretation: ['intent.interpret'],
+      capability_synthesis: ['character.capability.propose', 'capability.synthesize'],
+      capability_explanation: ['capability.explain'],
+      tactical_reasoning: ['combat.tactics', 'tactical.reason', 'combat.animation.plan'],
       gameplay_advice: ['story.advice'],
-      rules: ['rules.adjudicate', 'combat.tactics', 'narrative.review'],
+      rules: ['rules.adjudicate'],
+      rule_analysis: ['rules.analyze'],
       speech: ['speech.generate', 'speech.transcribe'],
       image: ['image.generate'],
     };
-    return mapping[category];
+    return mapping[category] || [];
   }
 
   private modelKey(model: ModelRegistryRecord): string {
@@ -2082,6 +2095,13 @@ export class MultiModelOrchestrator {
     this.taskPinnedModels.set('story.advice', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('memory.extract', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('character.capability.propose', 'google_gemini::gemini-3.5-flash');
+    this.taskPinnedModels.set('intent.interpret', 'google_gemini::gemini-3.5-flash-lite');
+    this.taskPinnedModels.set('capability.synthesize', 'google_gemini::gemini-3.5-flash');
+    this.taskPinnedModels.set('capability.explain', 'google_gemini::gemini-3.5-flash-lite');
+    this.taskPinnedModels.set('research.query', 'google_gemini::gemini-3.5-flash');
+    this.taskPinnedModels.set('research.world-brief', 'google_gemini::gemini-3.5-flash');
+    this.taskPinnedModels.set('rules.analyze', 'google_gemini::gemini-3.5-flash');
+    this.taskPinnedModels.set('tactical.reason', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('summary.scene', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('rules.adjudicate', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('utility.inspect', 'google_gemini::gemini-3.5-flash');
@@ -2095,14 +2115,30 @@ export class MultiModelOrchestrator {
       'google_gemini::gemini-3.5-flash-lite',
       'provider_deterministic_emergency::emergency-fallback-local',
     ];
-    this.taskFallbackChains.set('narrative.generate', defaultChain);
-    this.taskFallbackChains.set('story.advice', defaultChain);
-    this.taskFallbackChains.set('character.dialogue', defaultChain);
-    this.taskFallbackChains.set('memory.extract', defaultChain);
-    this.taskFallbackChains.set('character.capability.propose', defaultChain);
-    this.taskFallbackChains.set('summary.scene', defaultChain);
-    this.taskFallbackChains.set('rules.adjudicate', defaultChain);
-    this.taskFallbackChains.set('utility.inspect', defaultChain);
+    for (const task of [
+      'narrative.generate',
+      'character.dialogue',
+      'character.extract',
+      'memory.extract',
+      'character.capability.propose',
+      'story.advice',
+      'intent.interpret',
+      'capability.synthesize',
+      'capability.explain',
+      'research.query',
+      'research.world-brief',
+      'rules.adjudicate',
+      'rules.analyze',
+      'summary.scene',
+      'combat.tactics',
+      'tactical.reason',
+      'combat.animation.plan',
+      'narrative.review',
+      'utility.inspect',
+    ] as TaskId[]) {
+      this.taskFallbackChains.set(task, defaultChain);
+    }
+
   }
 
   public setFallbackChain(task: TaskId, chain: string[]): void {
@@ -2917,10 +2953,17 @@ export class MultiModelOrchestrator {
   public getCategoryRuntimeStates(): CategoryRuntimeState[] {
     const categories: AiTaskCategory[] = [
       'narration',
+      'summarization',
       'world_generation',
       'character_genesis',
       'research',
+      'intent_interpretation',
+      'capability_synthesis',
+      'capability_explanation',
+      'tactical_reasoning',
+      'gameplay_advice',
       'rules',
+      'rule_analysis',
       'speech',
       'image',
     ];
@@ -3489,6 +3532,22 @@ export class MultiModelOrchestrator {
 
   public isCandidateUsable(model: ModelRegistryRecord, task?: TaskId, contextTokens: number = 0): boolean {
     if (task && !model.roleEligibility.includes(task)) return false;
+    if (task) {
+      const contract = getAiTaskContract(task);
+      const capabilitySet = new Set(model.capabilities || []);
+      for (const required of contract.requiredCapabilities) {
+        const satisfied =
+          capabilitySet.has(required) ||
+          (required === 'structured_output' && model.hasStructuredOutput === true) ||
+          (required === 'text_generation' && capabilitySet.has('creative_writing'));
+        if (!satisfied) return false;
+      }
+      const inputTypes = new Set(model.supportedInputTypes || ['text']);
+      const outputTypes = new Set(model.supportedOutputTypes || ['text']);
+      if (contract.requiredInputTypes.some((type) => !inputTypes.has(type))) return false;
+      if (contract.requiredOutputTypes.some((type) => !outputTypes.has(type))) return false;
+      if (contract.requiresStructuredOutput && !model.hasStructuredOutput && !capabilitySet.has('structured_output')) return false;
+    }
     if (
       model.health === 'DisabledByUser' ||
       model.health === 'Unavailable' ||
@@ -3524,7 +3583,7 @@ export class MultiModelOrchestrator {
     // Its route therefore aliases the user-configured Memory & Extraction route.
     // This prevents Character Genesis from silently inheriting narration or
     // auto-ranked provider models that the user never selected.
-    const routeTask: TaskId = task === 'character.extract' ? 'memory.extract' : task;
+    const routeTask: TaskId = task;
     const customChainKeys = this.taskFallbackChains.get(routeTask);
     const category = this.getTaskCategory(task);
     const categoryOverrideKey = this.categoryOverrides.get(category);

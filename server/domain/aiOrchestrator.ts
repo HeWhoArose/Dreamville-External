@@ -3421,10 +3421,22 @@ export class MultiModelOrchestrator {
     if (categoryOverrideKey) {
       const overridden = findConfiguredModel(categoryOverrideKey);
       if (overridden && isUsableCandidate(overridden)) {
-        const configuredFallbacks = (customChainKeys || [])
-          .map(findConfiguredModel)
-          .filter((m): m is ModelRegistryRecord => Boolean(m))
-          .filter((m) => m.modelId !== overridden.modelId && isUsableCandidate(m));
+        const configuredFallbacks = customChainKeys
+          ? customChainKeys
+              .map(findConfiguredModel)
+              .filter((m): m is ModelRegistryRecord => Boolean(m))
+              .filter((m) => m.modelId !== overridden.modelId && isUsableCandidate(m))
+          : Array.from(this.models.values())
+              .filter((m) => m.modelId !== overridden.modelId)
+              .filter((m) => m.roleEligibility.includes(task))
+              .filter((m) => !m.isEmergencyFloor)
+              .filter((m) => isUsableCandidate(m))
+              .sort((a, b) => {
+                const scoreA = a.userPriority + (a.health === 'Healthy' ? 50 : 0);
+                const scoreB = b.userPriority + (b.health === 'Healthy' ? 50 : 0);
+                if (scoreB !== scoreA) return scoreB - scoreA;
+                return a.modelId.localeCompare(b.modelId);
+              });
 
         const fallbackSet = new Set<string>();
         const fallbackModels: ModelRegistryRecord[] = [];
@@ -4875,50 +4887,6 @@ export class MultiModelOrchestrator {
     const selectedCandidates: ModelRegistryRecord[] = [selection.selectedModel, ...selection.fallbacks];
     const candidateKeys = new Set(selectedCandidates.map((model) => this.modelKey(model)));
 
-    // A persisted/manual fallback chain can become stale when models disappear,
-    // quotas change, or discovery replaces the model catalog. Do not let a
-    // one-model chain strand the task. Recover additional currently-usable
-    // candidates from the live registry while preserving the configured order.
-    const nonEmergencyCount = selectedCandidates.filter((model) => !model.isEmergencyFloor).length;
-    const categoryOverrideActive = this.getCategoryModelOverride(this.getTaskCategory(task)) !== undefined;
-
-    // Once the user explicitly selects a category model, recovery must not
-    // silently introduce arbitrary models from the global registry. The only
-    // permitted extra candidate is the deterministic emergency floor.
-    if (nonEmergencyCount < 2 && !categoryOverrideActive) {
-      const recoveryCandidates = Array.from(this.models.values())
-        .filter((model) => !candidateKeys.has(this.modelKey(model)))
-        .filter((model) => this.isCandidateUsable(model, task, contextTokens))
-        .filter((model) => !model.isEmergencyFloor)
-        .sort((a, b) => {
-          const runtimeA = this.ensureRuntimeStatus(a);
-          const runtimeB = this.ensureRuntimeStatus(b);
-          const scoreA =
-            a.userPriority +
-            (a.health === 'Healthy' ? 50 : a.health === 'Degraded' ? 10 : 0) +
-            (a.quota === 'Healthy' ? 30 : a.quota === 'Low' ? 10 : 0) -
-            runtimeA.consecutiveFailures * 25 -
-            Math.min(20, (a.latencyMs || 500) / 100);
-          const scoreB =
-            b.userPriority +
-            (b.health === 'Healthy' ? 50 : b.health === 'Degraded' ? 10 : 0) +
-            (b.quota === 'Healthy' ? 30 : b.quota === 'Low' ? 10 : 0) -
-            runtimeB.consecutiveFailures * 25 -
-            Math.min(20, (b.latencyMs || 500) / 100);
-          if (scoreB !== scoreA) return scoreB - scoreA;
-          const modelDiff = a.modelId.localeCompare(b.modelId);
-          return modelDiff !== 0 ? modelDiff : a.providerId.localeCompare(b.providerId);
-        });
-
-      for (const model of recoveryCandidates) {
-        if (candidateKeys.has(this.modelKey(model))) continue;
-        const emergencyIndex = selectedCandidates.findIndex((candidate) => candidate.isEmergencyFloor);
-        const insertAt = emergencyIndex >= 0 ? emergencyIndex : selectedCandidates.length;
-        selectedCandidates.splice(insertAt, 0, model);
-        candidateKeys.add(this.modelKey(model));
-      }
-    }
-
     const candidateChain: ModelRegistryRecord[] = selectedCandidates
       .filter((model) =>
         model.isEmergencyFloor ||
@@ -5055,6 +5023,38 @@ export class MultiModelOrchestrator {
           latencyMs,
           error: lastError,
         });
+
+        // Recover a live candidate only when the configured chain has actually
+        // failed and is about to fall through to the emergency floor. This preserves
+        // explicit emergency-only chains while still repairing stale one-model chains.
+        const nextCandidate = candidateChain[cIdx + 1];
+        if (nextCandidate?.isEmergencyFloor) {
+          const existingKeys = new Set(candidateChain.map((model) => this.modelKey(model)));
+          const recoveryCandidates = Array.from(this.models.values())
+            .filter((model) => !existingKeys.has(this.modelKey(model)))
+            .filter((model) => !model.isEmergencyFloor)
+            .filter((model) => this.isCandidateUsable(model, task, contextTokens))
+            .sort((a, b) => {
+              const scoreA =
+                a.userPriority +
+                (a.health === 'Healthy' ? 50 : a.health === 'Degraded' ? 10 : 0) +
+                (a.quota === 'Healthy' ? 30 : a.quota === 'Low' ? 10 : 0);
+              const scoreB =
+                b.userPriority +
+                (b.health === 'Healthy' ? 50 : b.health === 'Degraded' ? 10 : 0) +
+                (b.quota === 'Healthy' ? 30 : b.quota === 'Low' ? 10 : 0);
+              if (scoreB !== scoreA) return scoreB - scoreA;
+              return a.modelId.localeCompare(b.modelId);
+            });
+
+          // Only repair a chain that has no remaining AI candidate before the floor.
+          const hasRemainingAiCandidate = candidateChain
+            .slice(cIdx + 1)
+            .some((model) => !model.isEmergencyFloor);
+          if (!hasRemainingAiCandidate && recoveryCandidates.length > 0) {
+            candidateChain.splice(cIdx + 1, 0, recoveryCandidates[0]);
+          }
+        }
       }
     }
 

@@ -43,7 +43,7 @@ test('ten deterministic audits keep internal simulation out of the Skillbook and
   const dice = read('src/components/common/DiceRollAnimation.tsx');
 
   for (let pass = 1; pass <= 10; pass += 1) {
-    assert.match(surface, /skillInstances\\s*\\.map/, 'Skillbook lost actor ownership filtering');
+    assert.match(surface, /skillInstances\s*\.map/, 'Skillbook lost actor ownership filtering');
     assert.doesNotMatch(surface, /Adjudication Outcome|Capability DAG & Derived Skills|Channel: Temporal Ignition/);
 
     assert.match(story, /Immediate result/);
@@ -65,10 +65,11 @@ test('ten deterministic audits keep internal simulation out of the Skillbook and
     const interpretStart = routes.indexOf("gameRouter.post('/capabilities/interpret'");
     const adjudicateStart = routes.indexOf("gameRouter.post('/capabilities/adjudicate'");
     const capabilitiesGetStart = routes.indexOf("gameRouter.get('/capabilities'");
+    assert.ok(interpretStart >= 0 && adjudicateStart >= 0 && capabilitiesGetStart >= 0);
     assert.match(routes, /AI_INTERNAL_INTERPRETATION_ONLY/);
     assert.match(routes, /Internal capability DAG\/simulation metadata never crosses the player-facing API boundary/i);
     assert.equal(routes.slice(capabilitiesGetStart, adjudicateStart).includes('graph'), false);
-    assert.equal(routes.slice(interpretStart, adjudicateStart).includes("x-dreamville-internal-ai"), true);
+    assert.equal(routes.slice(interpretStart, interpretStart + 1200).includes("x-dreamville-internal-ai"), true);
     assert.match(dice, /HTMLCanvasElement/);
     assert.match(dice, /ICOSAHEDRON_FACES/);
     assert.match(dice, /requestAnimationFrame/);

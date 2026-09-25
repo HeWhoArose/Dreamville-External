@@ -35,6 +35,15 @@ describe('CH1 Live Runtime Proof — Canonical Domain & HTTP API Path', () => {
     });
   });
 
+  function ensureDefaultStoryCapability(capabilityId: string): void {
+    const player = worldRepository.getPlayerLifecycle('default_story');
+    assert.ok(player, 'default_story player lifecycle must exist');
+    const engine = worldRepository.getCapabilityEngine('default_story');
+    if (!engine.hasLearnedCapability(player.actorId, capabilityId)) {
+      engine.acquireSkill(player.actorId, capabilityId);
+    }
+  }
+
   it('Verification Question Checks: live architectural binding confirmation', () => {
     // 1. Verify exact function handling POST /api/game/action is serverMockAuthority.processAction
     assert.strictEqual(typeof serverMockAuthority.processAction, 'function');
@@ -512,6 +521,8 @@ describe('CH1 Live Runtime Proof — Canonical Domain & HTTP API Path', () => {
   });
 
   it('CH6 Live API: GET /api/game/capabilities returns anchored player-safe skill state without internal DAG metadata', async () => {
+    ensureDefaultStoryCapability('cap_shadow_step');
+    ensureDefaultStoryCapability('cap_fireball');
     const res = await fetch(`${baseUrl}/capabilities`);
     assert.strictEqual(res.status, 200);
     const data = (await res.json()) as any;
@@ -537,6 +548,7 @@ describe('CH1 Live Runtime Proof — Canonical Domain & HTTP API Path', () => {
   });
 
   it('CH6 Live API: POST /api/game/capabilities/adjudicate deterministically resolves consequences and updates state', async () => {
+    ensureDefaultStoryCapability('cap_shadow_step');
     // 1. Adjudicate an allowed capability (Shadow Step)
     const adjRes = await fetch(`${baseUrl}/capabilities/adjudicate`, {
       method: 'POST',
@@ -705,6 +717,7 @@ describe('CH1 Live Runtime Proof — Canonical Domain & HTTP API Path', () => {
   });
 
   it('CH8 Live API: POST /api/game/combat/cast adjudicates capability via CapabilityEngine and inflicts combat damage', async () => {
+    ensureDefaultStoryCapability('cap_fireball');
     // Start a fresh encounter so this test has an unused Action resource regardless
     // of what the preceding attack test consumed.
     const encounterRes = await fetch(`${baseUrl}/combat/encounter/start`, {
@@ -717,7 +730,7 @@ describe('CH1 Live Runtime Proof — Canonical Domain & HTTP API Path', () => {
     const capRes = await fetch(`${baseUrl}/capabilities`);
     const capData = (await capRes.json()) as any;
     assert.ok(capData.capabilities.length > 0);
-    const chosenCap = capData.capabilities[0];
+    const chosenCap = capData.capabilities.find((cap: any) => cap.id === 'cap_fireball') || capData.capabilities[0];
 
     let stateRes = await fetch(`${baseUrl}/combat/state`);
     let stateData = (await stateRes.json()) as any;

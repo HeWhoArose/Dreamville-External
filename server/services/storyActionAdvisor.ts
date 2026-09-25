@@ -88,6 +88,10 @@ function inferDirectCompatibility(
 ): boolean {
 	const actorText = actorNarrativeText(run);
 	const role = normalize(run?.protagonist?.role?.archetype || run?.protagonist?.role?.profession);
+	const classId = normalize(run?.progression?.classId || run?.protagonist?.progression?.classId);
+	if (classId.includes('wizard') || classId.includes('sorcerer') || classId.includes('pyromancer')) {
+		if (capabilityText.includes('fire') || capabilityText.includes('flame')) return true;
+	}
 
 	if (Array.isArray(capability.restrictions) && capability.restrictions.length > 0) {
 		return capability.restrictions.every((restriction) =>
@@ -104,7 +108,7 @@ function inferDirectCompatibility(
 
 	const capabilityText = normalize(capability.name + ' ' + capability.description);
 	const domainKeywords: Record<string, string[]> = {
-		fire: ['mage', 'wizard', 'sorcerer', 'pyromancer', 'fire', 'flame', 'elementalist', 'arcane'],
+		fire: ['wizard', 'sorcerer', 'pyromancer', 'fire', 'flame', 'elementalist', 'arcane'],
 		shadow: ['dark mage', 'shadow mage', 'warlock', 'necromancer', 'shadow', 'void', 'curse'],
 		ice: ['ice mage', 'frost mage', 'cryomancer', 'frost', 'ice', 'winter'],
 		light: ['cleric', 'paladin', 'priest', 'light', 'radiant', 'holy'],

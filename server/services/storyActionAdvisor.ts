@@ -424,6 +424,17 @@ export class StoryActionAdvisor {
 				source: 'DETERMINISTIC' as const,
 			}));
 
+		const genericTips = actorCapabilities
+			.slice(0, 4)
+			.map((capability) => ({
+				id: deterministicId('generic_action_tip', storyId, actorId, capability.id),
+				title: 'Use ' + capability.name,
+				description: capability.description,
+				intent: capability.id,
+				actionText: capability.name,
+				source: 'DETERMINISTIC' as const,
+			}));
+
 		try {
 			const actorSummary = [
 				run?.protagonist?.role?.profession,
@@ -490,7 +501,7 @@ export class StoryActionAdvisor {
 			// Deterministic suggestions remain the guaranteed fallback.
 		}
 
-		return deterministicTips;
+		return deterministicTips.length > 0 ? deterministicTips : genericTips;
 	}
 }
 

@@ -161,26 +161,50 @@ The loop must cover:
 ## Current execution ledger
 
 ### Phase 1 — Canonical capability ownership & Skillbook boundary
-Status: **IMPLEMENTED — verification in progress**
+Status: **IMPLEMENTED — source audit complete; CI verification blocked by GitHub Actions startup failures**
 
-Implementation commits:
-- `7755e06dd4c7128b88c927576760e0d7737a5547` — implementation plan
-- `db8656a6294b933a55b7248bd07550f0387c629f` — centralized Skillbook projection boundary
-- `e323aed27be4beade3d482e315ce1e6605c768c0` — ten-pass player-boundary audit/regression tests
+Key implementation commits:
+- `7755e06dd4c7128b88c927576760e0d7737a5547` — implementation plan written into Dreamville.
+- `db8656a6294b933a55b7248bd07550f0387c629f` — centralized player capability/Skillbook projection boundary.
+- `e323aed27be4beade3d482e315ce1e6605c768c0` — ten-pass player capability boundary tests.
+- `a520015de1efb5e6d4d0707aaac1fdc3671780d5` — proposal-generation safety refactor.
+- `ce1bec30e02010aece4d850d4b8c748d941b2271` — canonical protagonist/actor identity alignment in the advisor.
+- `53fa5e377ed76f9231270b6d0c54a079a4ae4d7c` — world-affinity and generic-magic simulation hardening.
+- `699f35c03d81ffbf19311622c90495a347f6d747` — ten-pass world-law simulation regression coverage.
 
-Phase 1 changes:
-- Added canonical `projectPlayerSkillbook()` projection.
-- Skillbook ownership is now anchored to actor-scoped `SkillInstance` records.
-- Registry-only capabilities cannot enter the Skillbook merely because their definitions exist.
-- Equipment-granted capabilities remain effective actor capabilities but are not promoted into learned Skillbook entries.
-- Legacy `/run-canonical-state` uses the player-safe capability projection instead of the global registry.
-- Capability synthesis and interpretation remain explicitly AI/internal-only.
-- Added ten-pass regression coverage for ownership leakage, equipment-vs-learned separation, player projection internals, legacy route leakage, and AI-only authoring boundaries.
+Phase 1 implementation result:
+- The player Skillbook is projected from actor-owned `SkillInstance` records, not from the global capability registry.
+- Equipment-granted capabilities remain effective when appropriate but are not promoted to learned skills.
+- `/run-canonical-state` uses the player-safe capability projection.
+- Internal capability synthesis and freeform interpretation remain explicitly AI/internal-only.
+- The player-facing Character surface contains learned Skills & Spellbook only; the internal Capability DAG / Adjudication workspace is not part of the player Skillbook.
+- Legacy player roster projection is world-scoped and fails closed without a matching active-world identity.
+- The Story surface keeps immediate turn results separate from Recent Actions.
+- Current-scene comic generation is constrained to the immediate/latest turn.
+- Dice rendering uses actual 3D polyhedral construction/animation rather than a flat rotating sheet.
+- The dry-run capability simulator now has explicit bending-world affinity guards:
+  - Earthbender + Lightning => incompatible, not creatable.
+  - Bending-only + Teleportation => world-forbidden.
+  - Generic Wizard/Mage + permitted fire magic => developable, not automatically learned.
+  - Dark-magic specialist + ordinary Fireball => blocked until a compatible alternate mechanism is proposed and revalidated.
+- Generated alternate candidates must pass the same dry-run world/character/creation checks before becoming a proposal.
+- An alternate capability is not synthesized by the default advisor unless an explicit AI proposal generator is supplied.
 
-Static re-audit:
-- 10/10 boundary-loop passes satisfied at source level.
-- Story player surface still uses `CharacterSurface` and does not contain the internal Capability DAG / Adjudication panels.
-- GitHub Actions run `36160257145` is executing the repository verification workflow. At the last check, `npm install` and `npm run lint` had passed; `npm test` was still running, so full test/build success is not yet claimed.
+10-pass source audit:
+- Passes 1–10: **ALL GREEN at source-contract level**.
+- Checked ownership isolation, equipment separation, internal AI boundaries, simulation status classes, proposal revalidation, Character/Skillbook UI, immediate Story result flow, Recent Actions separation, world scoping, comic freshness, dice 3D renderer, and audit-loop coverage.
+- Added a dedicated ten-pass world-law audit test.
+
+CI verification:
+- Multiple GitHub Actions verification runs reached and passed through earlier `npm install` + lint + test execution, exposing real product/test mismatches that were subsequently corrected.
+- The most recent verification runs for the latest commits are currently failing before any workflow step starts (zero recorded steps). These are GitHub Actions runner/workflow startup failures rather than observed npm test/build failures. Therefore **full test/build success is not claimed** from the current state.
+
+### Phase 2 — World-law + character compatibility simulation
+Status: **IN PROGRESS**
+- The simulator remains dry-run only.
+- World-law hierarchy and bending affinity guards have been hardened.
+- Ten-pass world-law tests have been added.
+- Next implementation step is to formalize mechanism discovery and progression-path evaluation across lore, world rules, body/vessel, environment, and resource ceilings before any novel synthesis.
 
 ## Phase completion rule
 

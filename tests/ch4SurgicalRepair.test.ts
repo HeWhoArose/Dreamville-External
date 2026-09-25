@@ -7,6 +7,17 @@ import { CampaignArchiveService } from '../server/domain/campaignArchive';
 import { HistoricalEvidence } from '../server/domain/types';
 
 describe('CH4 SURGICAL REPAIR (Evidence Identity & AI Boundary)', () => {
+  const recordChronicleEvidence = (repository: InMemoryWorldRepository, storyId: string, chronicle: any, evidence: HistoricalEvidence) => {
+    repository.beginCanonicalCommandTransaction(storyId, `test_chronicle_${evidence.id}`);
+    try {
+      const result = recordChronicleEvidence(repo, 'ch4_test_story', chronicle, evidence);
+      repository.commitCanonicalCommandTransaction(storyId, evidence.sourceEventId || evidence.id);
+      return result;
+    } catch (error) {
+      repository.rollbackCanonicalCommandTransaction(storyId);
+      throw error;
+    }
+  };
 
   it('TEST 1 & 2: DETERMINISTIC EVIDENCE IDENTITY & REPLAY DEDUPLICATION', () => {
     const repo = new InMemoryWorldRepository();
@@ -28,7 +39,7 @@ describe('CH4 SURGICAL REPAIR (Evidence Identity & AI Boundary)', () => {
       visibility: 'PUBLIC'
     };
 
-    const res1 = chronicle.recordEvidence(evidenceInput);
+    const res1 = recordChronicleEvidence(repo, 'ch4_test_story', chronicle, evidenceInput);
     assert.strictEqual(res1.promotedToChronicle, true);
     
     const entries1 = chronicle.getChronicleEntries();
@@ -36,7 +47,7 @@ describe('CH4 SURGICAL REPAIR (Evidence Identity & AI Boundary)', () => {
     const id1 = entries1[0].evidenceId;
 
     // Process the exact same source event twice
-    const res2 = chronicle.recordEvidence(evidenceInput);
+    const res2 = recordChronicleEvidence(repo, 'ch4_test_story', chronicle, evidenceInput);
     assert.strictEqual(res2.promotedToChronicle, false, 'Should be deduplicated');
     
     const entries2 = chronicle.getChronicleEntries();
@@ -77,8 +88,8 @@ describe('CH4 SURGICAL REPAIR (Evidence Identity & AI Boundary)', () => {
       visibility: 'PUBLIC'
     };
 
-    chronicle.recordEvidence(ev1);
-    chronicle.recordEvidence(ev2);
+    recordChronicleEvidence(repo, 'ch4_test_story', chronicle, ev1);
+    recordChronicleEvidence(repo, 'ch4_test_story', chronicle, ev2);
 
     const entries = chronicle.getChronicleEntries();
     assert.strictEqual(entries.length, 2, 'Different events must be distinctly recorded');
@@ -105,7 +116,7 @@ describe('CH4 SURGICAL REPAIR (Evidence Identity & AI Boundary)', () => {
       visibility: 'PUBLIC'
     };
 
-    chronicle.recordEvidence(evidenceInput);
+    recordChronicleEvidence(repo, 'ch4_test_story', chronicle, evidenceInput);
 
     const archive = repo.exportCampaignArchive(storyId, 'Test Archive');
     
@@ -117,7 +128,7 @@ describe('CH4 SURGICAL REPAIR (Evidence Identity & AI Boundary)', () => {
     assert.strictEqual(restoredChronicle.getChronicleEntries().length, 1);
 
     // Reprocess the same event on restored state
-    const res = restoredChronicle.recordEvidence(evidenceInput);
+    const res = recordChronicleEvidence(repo, 'restored_story', restoredChronicle, evidenceInput);
     assert.strictEqual(res.promotedToChronicle, false, 'Should be deduplicated even after restore');
     
     assert.strictEqual(restoredChronicle.getChronicleEntries().length, 1, 'No duplicate entries');

@@ -136,17 +136,23 @@ test('Phase 16 action advisor: incompatible Fireball request from a Dark Mage pr
 	);
 });
 
-test('Phase 16 action advisor: a novel compatible power is offered for acquisition rather than silently synthesized', async () => {
+test('Phase 16 action advisor: an unknown capability request does not silently grant a new skill', async () => {
 	const repository = new InMemoryWorldRepository({ disablePersistence: true });
-	const storyId = 'phase16_advisor_novel_compatible';
+	const storyId = 'phase16_advisor_novel_unknown';
 	seedRun(repository, storyId, 'Dark Mage');
 
 	const advisor = new StoryActionAdvisor(repository);
-	const advice = await advisor.advise(storyId, 'I cast a shadow curse');
+	const advice = await advisor.advise(storyId, 'I invent an entirely new forbidden star curse');
 
-	assert.equal(advice.mode, 'AUTO_LEARN_AND_EXECUTE');
-	assert.ok(advice.recognizedCapability);
-	assert.equal(advice.recognizedCapability?.provenance, 'freeform_preview:I cast a shadow curse');
+	assert.equal(advice.mode, 'NORMAL_ACTION');
+	assert.equal(advice.recognizedCapability, undefined);
+	assert.equal(advice.proposal, undefined);
+	assert.equal(
+		repository.getEffectiveActorCapabilities(
+			repository.getPlayerLifecycle(storyId)?.actorId || 'player_actor_' + storyId
+		).some((capability) => capability.name.includes('Star Curse')),
+		false
+	);
 });
  
 test('Phase 16 action advisor: already-learned capability resolves directly', async () => {

@@ -17,9 +17,10 @@ import { StoryRelationshipsView } from './components/StoryRelationshipsView';
 
 // Domain views
 import { StoryView } from './components/StoryView';
-import { CharacterDossier } from './components/CharacterDossier';
+import { CharacterSurface } from './components/CharacterSurface';
+import { WorldView } from './components/WorldView';
+import { RecentActionsView } from './components/RecentActionsView';
 import { InventoryView } from './components/InventoryView';
-import { PowerWorkstation } from './components/PowerWorkstation';
 import { TacticalCombatView } from './components/TacticalCombatView';
 import { WorldMapView } from './components/WorldMapView';
 import { ChronicleView } from './components/ChronicleView';
@@ -73,6 +74,7 @@ export const App: React.FC = () => {
   const [recipes, setRecipes] = useState<CraftingRecipe[]>([]);
   const [powerState, setPowerState] = useState<PowerState | null>(null);
   const [capabilities, setCapabilities] = useState<CapabilityDefinition[]>([]);
+  const [skillInstances, setSkillInstances] = useState<any[]>([]);
   const [capabilityGraph, setCapabilityGraph] = useState<CapabilityGraphNode[]>([]);
   const [worldTemplates, setWorldTemplates] = useState<WorldTemplate[]>([]);
   const [phase8Projection, setPhase8Projection] = useState<any | null>(null);
@@ -186,6 +188,7 @@ export const App: React.FC = () => {
       if (capData) {
         setPowerState(capData.powerState || null);
         setCapabilities(capData.capabilities || []);
+        setSkillInstances(capData.skillInstances || []);
         setCapabilityGraph(capData.graph || []);
       }
       if (worldsData) {
@@ -227,6 +230,7 @@ export const App: React.FC = () => {
       if (capData) {
         setPowerState(capData.powerState || null);
         setCapabilities(capData.capabilities || []);
+        setSkillInstances(capData.skillInstances || []);
         setCapabilityGraph(capData.graph || []);
       }
       if (worldsData) {
@@ -600,7 +604,19 @@ export const App: React.FC = () => {
       )}
 
       {currentRoute === 'play.character' && viewState && (
-        <CharacterDossier
+        <CharacterSurface
+          protagonist={viewState.protagonist}
+          powerState={powerState}
+          capabilities={capabilities}
+          skillInstances={skillInstances}
+          equipment={viewState.equipment}
+          inventory={viewState.inventory}
+        />
+      )}
+
+      {currentRoute === 'play.world' && viewState && (
+        <WorldView
+          worldName={activeStorySummary?.worldName || 'Current World'}
           characters={viewState.characters}
           activeLocationId={viewState.activeLocationId}
           locations={viewState.locations}
@@ -608,6 +624,10 @@ export const App: React.FC = () => {
           dossiers={dossiers}
           phase8Relationships={phase8Projection?.relationships || []}
         />
+      )}
+
+      {currentRoute === 'play.recent-actions' && viewState && (
+        <RecentActionsView actionHistory={viewState.actionHistory} />
       )}
 
       {currentRoute === 'play.inventory' && viewState && (
@@ -621,15 +641,6 @@ export const App: React.FC = () => {
           onCraftRecipe={handleCraftRecipe}
           onRepairItem={handleRepairItem}
           isProcessingAction={isProcessingAction}
-        />
-      )}
-
-      {currentRoute === 'play.powers' && (
-        <PowerWorkstation
-          powerState={powerState}
-          capabilities={capabilities}
-          graph={capabilityGraph}
-          onRefresh={fetchAuxiliaryData}
         />
       )}
 

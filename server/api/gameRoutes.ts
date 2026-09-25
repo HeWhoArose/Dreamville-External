@@ -129,6 +129,29 @@ gameRouter.get('/state', (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/game/action/tips
+ * Returns player-facing, non-canonical suggestions for the current story scene.
+ * Suggestions never mutate game state.
+ */
+gameRouter.get('/action/tips', async (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    const tips = await storyActionAdvisor.getTipsForAction(storyId, '');
+    return res.json({
+      success: true,
+      storyId,
+      tips,
+    });
+  } catch (error: any) {
+    console.error('[Story Action Advisor] Scene tip generation failed:', error);
+    return res.status(500).json({
+      success: false,
+      errorReason: error?.message || 'Failed to generate scene tips.',
+    });
+  }
+});
+
+/**
  * POST /api/game/action/advice
  * Preflight advice for a freeform story action.
  * Never mutates canonical state.

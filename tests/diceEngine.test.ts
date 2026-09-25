@@ -63,3 +63,13 @@ test('mixed dice rolls retain one visual die per authoritative die term', () => 
 	assert.deepEqual(visualSides, [20, 6, 6, 4]);
 	assert.deepEqual(visualSides.map(getDieVisualType), ['D20', 'D6', 'D6', 'D4']);
 });
+
+
+test('dice renderer uses projected 3D canvas geometry rather than a flat SVG sheet', () => {
+  const source = require('node:fs').readFileSync(require('node:path').join(process.cwd(), 'src/components/common/DiceRollAnimation.tsx'), 'utf8');
+  assert.match(source, /HTMLCanvasElement/);
+  assert.match(source, /requestAnimationFrame/);
+  assert.match(source, /ICOSAHEDRON_FACES/);
+  assert.match(source, /rotate\(/);
+  assert.doesNotMatch(source, /const DieFace/);
+});

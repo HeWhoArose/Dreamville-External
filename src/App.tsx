@@ -412,15 +412,11 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleRejectActionAdvice = (advice: ActionAdvice) => {
+  const handleRejectActionAdvice = (_advice: ActionAdvice) => {
+    // Rejecting a capability proposal must not execute the original unsupported
+    // action as a generic freeform narrative action. The player simply returns
+    // to the normal turn composer with their existing abilities unchanged.
     setPendingActionAdvice(null);
-    dispatchAction({
-      type: 'CUSTOM_ACTION',
-      actionText: advice.actionText,
-      intent: advice.actionText,
-      bypassCapabilityAdvisor: true,
-      preventCapabilityExecution: true,
-    } as any);
   };
 
   const handleEngageDialogue = (characterId: string) => {

@@ -168,9 +168,9 @@ test('Phase 16 action advisor: an unknown capability request does not silently g
 	const advisor = new StoryActionAdvisor(repository);
 	const advice = await advisor.advise(storyId, 'I invent an entirely new forbidden star technique');
 
-	assert.equal(advice.mode, 'NORMAL_ACTION');
-	assert.equal(advice.recognizedCapability, undefined);
-	assert.equal(advice.proposal, undefined);
+	assert.notEqual(advice.mode, 'EXECUTE_EXISTING');
+	assert.equal(advice.canExecuteNow, false);
+	assert.ok(advice.simulation || advice.proposal);
 	assert.equal(
 		repository.getEffectiveActorCapabilities(
 			repository.getPlayerLifecycle(storyId)?.actorId || 'player_actor_' + storyId

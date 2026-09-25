@@ -235,7 +235,7 @@ export class StoryActionAdvisor {
 		let alternative: any;
 		try {
 			const { CharacterGenesisService } = await import('../services/characterGenesisService');
-			const service = new CharacterGenesisService(this.repository);
+			const service = new CharacterGenesisService();
 			alternative = await service.proposeCustomCapability(
 				{
 					worldId: run?.worldId || storyId,

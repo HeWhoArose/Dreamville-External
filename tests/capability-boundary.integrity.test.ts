@@ -17,8 +17,8 @@ test('player skill boundary never projects the global capability registry as lea
   assert.equal(canonicalSection.includes('coreCapabilities: actorCaps'), true);
   assert.equal(canonicalSection.includes('coreCapabilities: coreCaps'), false);
 
-  assert.match(surface, /capabilities.filter/);
-  assert.match(surface, /skillInstances.some/);
+  assert.match(surface, /learnedCapabilities/);
+  assert.match(surface, /skillInstances\.map/);
   assert.doesNotMatch(surface, /Capability DAG & Derived Skills|Adjudication Outcome/);
 
   assert.doesNotMatch(authority, /AUTO_LEARN_AND_EXECUTE.*acquireSkill/s);

@@ -56,6 +56,7 @@ import {
   OpeningScene,
   ActionAdvice,
   ActionTip,
+  CapabilitiesResponse,
 } from './types';
 
 export const App: React.FC = () => {
@@ -71,7 +72,7 @@ export const App: React.FC = () => {
   const [dossiers, setDossiers] = useState<NpcDossier[]>([]);
   const [recipes, setRecipes] = useState<CraftingRecipe[]>([]);
   const [powerState, setPowerState] = useState<PowerState | null>(null);
-  const [learnedCapabilities, setLearnedCapabilities] = useState<CapabilityDefinition[]>([]);
+  const [learnedCapabilities, setLearnedCapabilities] = useState<CapabilitiesResponse['learnedCapabilities']>([]);
   const [skillInstances, setSkillInstances] = useState<any[]>([]);
   const [worldTemplates, setWorldTemplates] = useState<WorldTemplate[]>([]);
   const [phase8Projection, setPhase8Projection] = useState<any | null>(null);
@@ -225,10 +226,8 @@ export const App: React.FC = () => {
       setRecipes(recipeData);
       if (capData) {
         setPowerState(capData.powerState || null);
-        setCapabilities(capData.capabilities || []);
         setLearnedCapabilities(capData.learnedCapabilities || []);
         setSkillInstances(capData.skillInstances || []);
-        setCapabilityGraph(capData.graph || []);
       }
       if (worldsData) {
         setWorldTemplates(worldsData);
@@ -614,7 +613,10 @@ export const App: React.FC = () => {
       {currentRoute === 'play.world' && viewState && (
         <WorldView
           worldName={worldTemplates.find((world) => world.worldId === viewState.worldId)?.title || activeStorySummary?.worldName || 'Current World'}
-          worldId={viewState.worldId}
+          // A valid story view always carries the active world id. The empty
+          // fallback is fail-closed: WorldView will render no characters rather
+          // than ever falling back to a global roster.
+          worldId={viewState.worldId || (activeRunFromLibrary as any)?.worldId || 'unknown-world'}
           characters={viewState.characters}
           activeLocationId={viewState.activeLocationId}
           locations={viewState.locations}

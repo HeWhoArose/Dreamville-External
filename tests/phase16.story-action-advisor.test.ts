@@ -101,6 +101,12 @@ test('Phase 16 action advisor: incompatible Fireball request from a Dark Mage pr
 	const fireball = fireballCapability();
 	repository.getCapabilityEngine(storyId).registerCapability(fireball);
 
+	const seededRun = repository.getStoryRun(storyId);
+	if (seededRun?.protagonist) {
+		seededRun.protagonist.progression = { classId: 'class_wizard' };
+		repository.saveStoryRun(seededRun);
+	}
+
 	const advisor = new StoryActionAdvisor(
 		repository,
 		async (concept, worldTemplate) => ({

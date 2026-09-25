@@ -71,6 +71,17 @@ export class ServerMockAuthority {
 
   public getDynamicStoryState(storyId: string): EngineState {
     if (storyId === 'default_story') {
+      // The legacy default Story state predates explicit world IDs on character
+      // records. Stamp the active story world once so the external projection can
+      // enforce strict world membership without falling back to a global roster.
+      const activeWorldId = worldRepository.getStoryRun('default_story')?.worldId;
+      if (activeWorldId) {
+        for (const character of Object.values(this.EXPERIMENTAL_SINGLE_INSTANCE_MOCK_STATE.characters || {})) {
+          if (!(character as any).worldId) {
+            (character as any).worldId = activeWorldId;
+          }
+        }
+      }
       return this.EXPERIMENTAL_SINGLE_INSTANCE_MOCK_STATE;
     }
     let dState = this.dynamicStoryStates.get(storyId);
@@ -202,8 +213,8 @@ export class ServerMockAuthority {
     const activeWorldId = run?.worldId;
     const sanitizedCharacters: Record<string, ExternalCharacter> = {};
     for (const [id, char] of Object.entries(state.characters)) {
-      const characterWorldId = (char as any).worldId || activeWorldId;
-      if (activeWorldId && characterWorldId !== activeWorldId) {
+      const characterWorldId = (char as any).worldId;
+      if (!activeWorldId || characterWorldId !== activeWorldId) {
         continue;
       }
       sanitizedCharacters[id] = {

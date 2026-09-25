@@ -108,6 +108,52 @@ class ApiClient {
   }
 
   /**
+   * Preflight a freeform story action without mutating canonical state.
+   * POST /api/game/action/advice
+   */
+  public async adviseStoryAction(actionText: string, storyId?: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/action/advice${storyId ? `?storyId=${encodeURIComponent(storyId)}` : ''}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({ actionText }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data?.errorReason || data?.error || `Action advice failed with HTTP ${res.status}`);
+    }
+    return data;
+  }
+
+  /**
+   * Accept a previously generated story action capability proposal.
+   * POST /api/game/action/accept-advice
+   */
+  public async acceptStoryActionAdvice(params: {
+    actionText: string;
+    proposalId?: string;
+    storyId?: string;
+  }): Promise<ActionResult> {
+    const res = await fetch(`${this.baseUrl}/action/accept-advice${params.storyId ? `?storyId=${encodeURIComponent(params.storyId)}` : ''}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(params),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data?.errorReason || data?.error || `Action advice acceptance failed with HTTP ${res.status}`);
+    }
+    return data as ActionResult;
+  }
+
+  /**
    * Phase 8.6–8.12 player-safe projection.
    * GET /api/game/phase8/projection
    */

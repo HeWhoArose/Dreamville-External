@@ -528,7 +528,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
       if (!allowDeterministicFallback) {
         try {
           const selection = await apiClient.selectOrchestratorModel({
-            task: 'narrative.generate',
+            task: 'character.extract',
             contextTokens: Math.max(1000, Math.ceil((naturalConcept.length + 5000) / 4)),
           });
           const selected = selection?.selectedModel;

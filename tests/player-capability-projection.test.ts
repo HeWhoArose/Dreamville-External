@@ -133,3 +133,20 @@ test('projection contains no internal DAG or simulation fields', () => {
   const serialized = JSON.stringify(result);
   assert.doesNotMatch(serialized, /Capability DAG|Adjudication Outcome|simulation|internalOnly/i);
 });
+
+test('player-facing capability endpoints consume the shared projection and do not expose the global registry', async () => {
+  const routes = await import('node:fs/promises').then((fs) => fs.readFile('server/api/gameRoutes.ts', 'utf8'));
+
+  const capabilitiesStart = routes.indexOf("gameRouter.get('/capabilities'");
+  const canonicalStart = routes.indexOf("gameRouter.get('/run-canonical-state'");
+  assert.ok(capabilitiesStart >= 0);
+  assert.ok(canonicalStart >= 0);
+
+  const capabilitiesSection = routes.slice(capabilitiesStart, capabilitiesStart + 2600);
+  const canonicalSection = routes.slice(canonicalStart, canonicalStart + 5200);
+
+  assert.match(capabilitiesSection, /projectPlayerCapabilities/);
+  assert.doesNotMatch(capabilitiesSection, /getAllCapabilities\(/);
+  assert.match(canonicalSection, /projectPlayerCapabilities/);
+  assert.doesNotMatch(canonicalSection, /const coreCaps = capEngine\.getAllCapabilities/);
+});

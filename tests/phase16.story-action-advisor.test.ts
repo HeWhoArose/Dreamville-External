@@ -73,7 +73,7 @@ test('Phase 16 action advisor: compatible unlearned capability requires explicit
 	const advisor = new StoryActionAdvisor(repository);
 	const advice = await advisor.advise(storyId, 'I cast Training Fireball');
 
-	assert.equal(advice.mode, 'SUGGEST_ALTERNATIVE');
+	assert.equal(advice.mode, 'SUGGEST_ALTERNATIVE', JSON.stringify(advice.simulation));
 	assert.ok(advice.proposal);
 	assert.equal(advice.recognizedCapability?.id, 'cap_fireball_test');
 	assert.equal(advice.canExecuteNow, false);

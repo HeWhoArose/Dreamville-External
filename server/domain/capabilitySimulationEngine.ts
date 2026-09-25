@@ -188,7 +188,13 @@ function requestedDomain(actionText: string, candidate?: CapabilityDefinition): 
   for (const [domain, pattern] of patterns) {
     if (pattern.test(text)) return domain;
   }
-  return candidate?.category ? normalize(candidate.category).toUpperCase() : undefined;
+  if (candidate?.category) {
+    const category = normalize(candidate.category).toUpperCase();
+    if (category === 'MOVEMENT') return 'PHYSICAL';
+    if (category === 'COMBAT' || category === 'BIOLOGICAL' || category === 'PERCEPTION' || category === 'SOCIAL') return category;
+    return category;
+  }
+  return undefined;
 }
 
 function detectScale(actionText: string, candidate?: CapabilityDefinition): CapabilityDefinition['powerTier'] {

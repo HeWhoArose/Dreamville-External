@@ -16,6 +16,7 @@ export type TaskId =
   | 'character.dialogue'
   | 'character.extract'
   | 'memory.extract'
+  | 'story.advice'
   | 'rules.adjudicate'
   | 'summary.scene'
   | 'speech.generate'
@@ -72,6 +73,7 @@ export type AiTaskCategory =
   | 'world_generation'
   | 'character_genesis'
   | 'research'
+  | 'gameplay_advice'
   | 'rules'
   | 'speech'
   | 'image';
@@ -1871,6 +1873,7 @@ export class MultiModelOrchestrator {
     if (task === 'narrative.generate' || task === 'character.dialogue') return 'narration';
     if (task === 'summary.scene') return 'world_generation';
     if (task === 'character.extract' || task === 'memory.extract') return 'character_genesis';
+    if (task === 'story.advice') return 'gameplay_advice';
     if (task === 'utility.inspect') return 'research';
     if (task === 'rules.adjudicate' || task === 'combat.tactics' || task === 'narrative.review') return 'rules';
     if (task === 'speech.generate' || task === 'speech.transcribe') return 'speech';
@@ -1888,6 +1891,7 @@ export class MultiModelOrchestrator {
       world_generation: ['summary.scene'],
       character_genesis: ['character.extract', 'memory.extract'],
       research: ['utility.inspect'],
+      gameplay_advice: ['story.advice'],
       rules: ['rules.adjudicate', 'combat.tactics', 'narrative.review'],
       speech: ['speech.generate', 'speech.transcribe'],
       image: ['image.generate'],
@@ -2063,6 +2067,7 @@ export class MultiModelOrchestrator {
   private seedDefaultPins(): void {
     this.taskPinnedModels.set('narrative.generate', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('character.dialogue', 'google_gemini::gemini-3.5-flash');
+    this.taskPinnedModels.set('story.advice', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('memory.extract', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('summary.scene', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('rules.adjudicate', 'google_gemini::gemini-3.5-flash');
@@ -2078,6 +2083,7 @@ export class MultiModelOrchestrator {
       'provider_deterministic_emergency::emergency-fallback-local',
     ];
     this.taskFallbackChains.set('narrative.generate', defaultChain);
+    this.taskFallbackChains.set('story.advice', defaultChain);
     this.taskFallbackChains.set('character.dialogue', defaultChain);
     this.taskFallbackChains.set('memory.extract', defaultChain);
     this.taskFallbackChains.set('summary.scene', defaultChain);
@@ -3329,6 +3335,12 @@ export class MultiModelOrchestrator {
       !effective.roleEligibility.includes('character.extract')
     ) {
       effective.roleEligibility = [...effective.roleEligibility, 'character.extract'];
+    }
+    if (
+      effective.roleEligibility.includes('narrative.generate') &&
+      !effective.roleEligibility.includes('story.advice')
+    ) {
+      effective.roleEligibility = [...effective.roleEligibility, 'story.advice'];
     }
     const key = `${effective.providerId}::${effective.modelId}`;
     this.models.set(key, effective);

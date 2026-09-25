@@ -22,7 +22,7 @@ test('advisor passes only active-world capabilities into world-canon simulation'
   const source = read('server/services/storyActionAdvisor.ts');
   assert.match(source, /const worldCapabilities = \[/);
   assert.match(source, /allWorldCapabilities: worldCapabilities/);
-  assert.match(source, /global registry is an AI\/internal candidate source/i);
+  assert.match(source, /const allCapabilities = capabilityEngine\.getAllCapabilities\(\)/);
   assert.doesNotMatch(source, /allWorldCapabilities: allCapabilities/);
 });
 
@@ -67,8 +67,15 @@ test('ten deterministic audits keep internal simulation out of the Skillbook and
     const capabilitiesGetStart = routes.indexOf("gameRouter.get('/capabilities'");
     assert.ok(interpretStart >= 0 && adjudicateStart >= 0 && capabilitiesGetStart >= 0);
     assert.match(routes, /AI_INTERNAL_INTERPRETATION_ONLY/);
-    assert.match(routes, /Internal capability DAG\/simulation metadata never crosses the player-facing API boundary/i);
-    assert.equal(routes.slice(capabilitiesGetStart, adjudicateStart).includes('graph'), false);
+    const capabilitiesBlock = routes.slice(capabilitiesGetStart, adjudicateStart);
+    const canonicalStateStart = routes.indexOf("gameRouter.get('/run-canonical-state'");
+    const canonicalStateBlock = canonicalStateStart >= 0 ? routes.slice(canonicalStateStart) : '';
+    assert.match(capabilitiesBlock, /projectPlayerCapabilities/);
+    assert.doesNotMatch(capabilitiesBlock, /getAllCapabilities\(\)/);
+    assert.match(canonicalStateBlock, /projectPlayerCapabilities/);
+    assert.doesNotMatch(canonicalStateBlock, /coreCapabilities:\s*coreCaps/);
+    assert.doesNotMatch(canonicalStateBlock, /generatedTechniques:\s*actorSkills/);
+    assert.equal(capabilitiesBlock.includes('graph'), false);
     assert.equal(routes.slice(interpretStart, interpretStart + 1200).includes("x-dreamville-internal-ai"), true);
     assert.match(dice, /HTMLCanvasElement/);
     assert.match(dice, /ICOSAHEDRON_FACES/);

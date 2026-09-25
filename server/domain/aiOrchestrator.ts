@@ -952,6 +952,104 @@ export function classifyDiscoveredModel(
  * Canonical adapter for OpenRouter's OpenAI-compatible API.
  * Model discovery uses GET /api/v1/models; execution uses POST /api/v1/chat/completions.
  */
+type OpenRouterTextExtraction = {
+  text: string;
+  failureReason?: string;
+};
+
+function extractOpenRouterAssistantText(payload: any): OpenRouterTextExtraction {
+  const choice = payload?.choices?.[0];
+  const message = choice?.message;
+
+  const appendPartText = (part: any): string => {
+    if (typeof part === 'string') return part;
+    if (!part || typeof part !== 'object') return '';
+
+    if (typeof part.text === 'string') return part.text;
+    if (typeof part.content === 'string') return part.content;
+    if (Array.isArray(part.content)) return part.content.map(appendPartText).join('');
+    if (typeof part.output_text === 'string') return part.output_text;
+    if (part.output_text && typeof part.output_text === 'object') return appendPartText(part.output_text);
+
+    return '';
+  };
+
+  const candidates = [
+    message?.content,
+    message?.output_text,
+    choice?.output_text,
+    payload?.output_text,
+  ];
+
+  for (const candidate of candidates) {
+    const extracted = Array.isArray(candidate)
+      ? candidate.map(appendPartText).join('')
+      : appendPartText(candidate);
+
+    if (extracted.trim()) {
+      return { text: extracted.trim() };
+    }
+  }
+
+  if (typeof choice?.text === 'string' && choice.text.trim()) {
+    return { text: choice.text.trim() };
+  }
+
+  const toolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls.length : 0;
+  if (toolCalls > 0) {
+    return {
+      text: '',
+      failureReason:
+        `OpenRouter returned ${toolCalls} tool call(s) but no assistant text. DreamBook has no tool-call continuation for this task.`,
+    };
+  }
+
+  const refusal = typeof message?.refusal === 'string' ? message.refusal.trim() : '';
+  if (refusal) {
+    return {
+      text: '',
+      failureReason: `OpenRouter returned a refusal instead of assistant content: ${refusal}`,
+    };
+  }
+
+  const reasoningDetails = Array.isArray(message?.reasoning_details)
+    ? message.reasoning_details.length
+    : 0;
+  const hasReasoning =
+    (typeof message?.reasoning === 'string' && message.reasoning.trim()) ||
+    (typeof message?.thought === 'string' && message.thought.trim()) ||
+    reasoningDetails > 0;
+
+  const finishReason = String(choice?.finish_reason || '').trim();
+  if (hasReasoning) {
+    return {
+      text: '',
+      failureReason:
+        'OpenRouter returned reasoning/thinking data but no final assistant content.' +
+        (finishReason ? ` finish_reason=${finishReason}.` : ''),
+    };
+  }
+
+  const responseModel = String(payload?.model || '').trim();
+  const choiceCount = Array.isArray(payload?.choices) ? payload.choices.length : 0;
+  const contentShape =
+    message?.content == null
+      ? String(message?.content)
+      : Array.isArray(message.content)
+      ? 'array'
+      : typeof message.content;
+
+  return {
+    text: '',
+    failureReason:
+      'OpenRouter returned no usable assistant content.' +
+      ` model=${responseModel || 'unknown'}` +
+      ` choices=${choiceCount}` +
+      ` content=${contentShape}` +
+      (finishReason ? ` finish_reason=${finishReason}` : ''),
+  };
+}
+
 export class OpenRouterAdapter implements IProviderAdapter {
   public readonly providerId = 'openrouter';
   public isMockOnly = false;
@@ -1113,23 +1211,14 @@ export class OpenRouterAdapter implements IProviderAdapter {
         throw new Error(String(choice.error.message || JSON.stringify(choice.error)));
       }
 
-      const message = choice?.message;
-      let text = '';
-      if (typeof message?.content === 'string') {
-        text = message.content;
-      } else if (Array.isArray(message?.content)) {
-        text = message.content.map((part: any) => typeof part === 'string' ? part : part?.text || '').join('');
-      } else if (typeof choice?.text === 'string') {
-        text = choice.text;
-      } else if (typeof message?.reasoning === 'string' && message.reasoning.trim()) {
-        text = message.reasoning;
-      } else if (typeof (message as any)?.thought === 'string' && (message as any).thought.trim()) {
-        text = (message as any).thought;
+      const extracted = extractOpenRouterAssistantText(payload);
+      if (!extracted.text) {
+        throw new Error(
+          extracted.failureReason || 'OpenRouter returned no usable assistant content.'
+        );
       }
 
-      if (!text.trim()) {
-        throw new Error('OpenRouter returned an empty model response.');
-      }
+      const text = extracted.text;
 
       return {
         text: text.trim(),

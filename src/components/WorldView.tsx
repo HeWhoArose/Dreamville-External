@@ -1,8 +1,9 @@
 import React from 'react';
-import { MapPin, MessageSquare, Shield } from 'lucide-react';
+import { MapPin, MessageSquare } from 'lucide-react';
 
 interface WorldViewProps {
   worldName: string;
+  worldId?: string;
   characters: Record<string, any>;
   activeLocationId: string;
   locations: Record<string, any>;
@@ -13,6 +14,7 @@ interface WorldViewProps {
 
 export const WorldView: React.FC<WorldViewProps> = ({
   worldName,
+  worldId,
   characters,
   activeLocationId,
   locations,
@@ -20,7 +22,10 @@ export const WorldView: React.FC<WorldViewProps> = ({
   dossiers = [],
   phase8Relationships = [],
 }) => {
-  const characterList = Object.values(characters || {});
+  const characterList = Object.values(characters || {}).filter((character: any) =>
+    character.role !== 'PROTAGONIST' &&
+    (!worldId || !character.worldId || character.worldId === worldId)
+  );
   const presentCharacters = characterList.filter((character: any) => character.locationId === activeLocationId);
   const otherCharacters = characterList.filter((character: any) => character.locationId !== activeLocationId);
 

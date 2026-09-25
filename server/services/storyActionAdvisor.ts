@@ -5,6 +5,7 @@ import type {
 	EffectiveCapability,
 } from '../domain/capabilityEngine';
 import type { WorldRepository } from '../repositories/worldRepository';
+import { worldRepository } from '../repositories/worldRepository';
 
 export type ActionAdviceMode =
 	| 'EXECUTE_EXISTING'
@@ -149,9 +150,23 @@ function deterministicAlternativeConcept(requestedName: string, run: any): strin
 }
 
 export class StoryActionAdvisor {
+	private readonly pendingProposals = new Map<string, ActionCapabilityProposal>();
+
 	constructor(
 		private readonly repository: WorldRepository,
 	) {}
+
+	public getPendingProposal(proposalId: string): ActionCapabilityProposal | null {
+		return this.pendingProposals.get(proposalId) || null;
+	}
+
+	public consumePendingProposal(proposalId: string): ActionCapabilityProposal | null {
+		const proposal = this.pendingProposals.get(proposalId) || null;
+		if (proposal) {
+			this.pendingProposals.delete(proposalId);
+		}
+		return proposal;
+	}
 
 	public async advise(storyId: string, actionText: string): Promise<ActionAdvice> {
 		const player = this.repository.getPlayerLifecycle(storyId);
@@ -211,6 +226,7 @@ export class StoryActionAdvisor {
 			run
 		);
 
+		this.pendingProposals.set(alternative.proposalId, alternative);
 		return {
 			mode: 'SUGGEST_ALTERNATIVE',
 			actionText,
@@ -326,3 +342,6 @@ export class StoryActionAdvisor {
 		return deterministicTips;
 	}
 }
+
+
+export const storyActionAdvisor = new StoryActionAdvisor(worldRepository);

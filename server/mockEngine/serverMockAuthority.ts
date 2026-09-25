@@ -489,7 +489,14 @@ export class ServerMockAuthority {
 
       if (advice.mode === 'AUTO_LEARN_AND_EXECUTE' && advice.recognizedCapability?.id) {
         const capEngine = worldRepository.getCapabilityEngine(targetStoryId);
-        capEngine.acquireSkill(actorId, advice.recognizedCapability.id, {
+        const capability = advice.recognizedCapability;
+        if (!capEngine.getCapability(capability.id)) {
+          capEngine.registerCapability({
+            ...capability,
+            provenance: capability.provenance || 'ACTION_ADVISOR_APPROVED',
+          });
+        }
+        capEngine.acquireSkill(actorId, capability.id, {
           libraryStatus: 'APPROVED',
           librarySourceStoryIds: [targetStoryId],
         });

@@ -435,7 +435,14 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
           preflightAdvice?.recognizedCapability?.id
         ) {
           const capabilityEngine = worldRepository.getCapabilityEngine(storyId);
-          capabilityEngine.acquireSkill(actorId, preflightAdvice.recognizedCapability.id, {
+          const capability = preflightAdvice.recognizedCapability;
+          if (!capabilityEngine.getCapability(capability.id)) {
+            capabilityEngine.registerCapability({
+              ...capability,
+              provenance: capability.provenance || 'ACTION_ADVISOR_APPROVED',
+            });
+          }
+          capabilityEngine.acquireSkill(actorId, capability.id, {
             libraryStatus: 'APPROVED',
             librarySourceStoryIds: [storyId],
           });

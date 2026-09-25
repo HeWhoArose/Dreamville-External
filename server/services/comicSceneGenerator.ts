@@ -72,7 +72,7 @@ export function buildComicScenePrompt(context: ComicSceneContext): ComicScenePro
       : '';
 
   const prompt = [
-    'Create a comic-book sequential-art page depicting ONLY the immediate current story turn.',
+    'Create a comic-book sequential-art page depicting ONLY the LATEST / IMMEDIATE CURRENT STORY TURN.',
     `World: ${context.worldTitle || 'Current story world'}.`,
     `Current location: ${context.location.name}.`,
     context.location.region ? `Location region: ${context.location.region}.` : '',

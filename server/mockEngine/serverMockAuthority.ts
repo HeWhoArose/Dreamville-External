@@ -1232,7 +1232,7 @@ export class ServerMockAuthority {
           actorId,
           actionText: freeformText,
           intendedCapabilityId: (request as any).intendedCapabilityId,
-          executeIfValid: !true,
+          executeIfValid: !preventCapabilityExecution,
         });
 
         if (interp.validationSuccess) {

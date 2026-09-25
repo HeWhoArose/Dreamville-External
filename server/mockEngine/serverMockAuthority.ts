@@ -1232,11 +1232,12 @@ export class ServerMockAuthority {
         const player = worldRepository.getPlayerLifecycle(targetStoryId);
         const actorId = player ? player.actorId : `player_actor_${targetStoryId}`;
 
+        const intendedCapabilityId = (request as any).intendedCapabilityId;
         const interp = capEngine.interpretFreeformAction({
           actorId,
           actionText: freeformText,
-          intendedCapabilityId: (request as any).intendedCapabilityId,
-          executeIfValid: !(request as any).preventCapabilityExecution,
+          intendedCapabilityId,
+          executeIfValid: Boolean(intendedCapabilityId) && !(request as any).preventCapabilityExecution,
         });
 
         if (interp.validationSuccess) {

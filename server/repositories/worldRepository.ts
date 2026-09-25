@@ -1527,9 +1527,12 @@ export class InMemoryWorldRepository implements WorldRepository {
     if (!engine) {
       engine = new CapabilityEngine(this.getConditionEngine(storyId));
       const player = this.getPlayerLifecycle(storyId);
+      const run = this.getStoryRun(storyId);
       const actorId = player ? player.actorId : `player_actor_${storyId}`;
-      engine.seedStarterPowerStateForActor(actorId);
-      const persisted = this.getStoryRun(storyId)?.runtimeState?.capabilities;
+      engine.seedStarterPowerStateForActor(actorId, {
+        starterCapabilities: run?.protagonist ? [] : undefined,
+      });
+      const persisted = run?.runtimeState?.capabilities;
       if (persisted) engine.importState(persisted);
       this.capabilityEngines.set(storyId, engine);
     }

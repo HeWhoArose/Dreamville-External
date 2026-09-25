@@ -439,7 +439,12 @@ function characterAllows(
   if (domain === 'SPATIAL_TRANSIT' && !hasExplicitMechanism(domainTerms('SPATIAL_TRANSIT')) && !isGenericMagicUser) return { allowed: false, reason: 'The character has no established spatial-transit mechanism such as teleportation, portals, or an equivalent existing technique.' };
   if (domain === 'LIGHTNING' && !hasExplicitMechanism(domainTerms('LIGHTNING')) && !/\b(firebender|avatar)\b/.test(mechanismText) && !isGenericMagicUser) return { allowed: false, reason: 'The character has no established lightning-compatible affinity or mechanism.' };
   if (domain === 'FIRE' && !hasExplicitMechanism(['fire', 'flame', 'pyromancy', 'fire magic', 'firebender'])) {
-    if (!isGenericMagicUser || isDarkMagicSpecialist) {
+    // A dark-magic specialist may express a fire-like effect through an explicitly
+    // dark/shadow/void/cursed mechanism. This is an alternate mechanism, not ordinary fire.
+    const darkFireExpression =
+      isDarkMagicSpecialist &&
+      /\b(dark|shadow|void|cursed|necrotic)\b/.test(candidateText);
+    if (!darkFireExpression && (!isGenericMagicUser || isDarkMagicSpecialist)) {
       return { allowed: false, reason: 'The character has no established fire-manipulation mechanism for this technique.' };
     }
   }

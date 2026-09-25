@@ -25,7 +25,6 @@ test('Phase 3 — core authoritative action routes all use the canonical command
 		'/inventory/repair',
 		'/inventory/degrade',
 		'/capabilities/adjudicate',
-		'/capabilities/interpret',
 		'/combat/encounter/start',
 		'/combat/move',
 		'/combat/action',

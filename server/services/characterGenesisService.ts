@@ -496,15 +496,17 @@ Rules:
         generationActiveModel = response.modelId;
         generationActiveProvider = response.providerId;
 
-        // The emergency floor is not a semantic Character Genesis model. When
-        // the AI chain reaches it, preserve the player's concept through the
-        // deterministic concept extractor and mark the result for user review.
+        // The orchestrator may report a deterministic emergency source. Treat that as
+        // AI unavailability here so the player can explicitly consent before we use it.
         if (response.source === 'DETERMINISTIC_FALLBACK') {
           generationFailureReason =
             response.fallbackReason ||
             'AI providers did not return usable Character Genesis output.';
-          extracted = this.proceduralExtraction(concept, worldTemplate);
-          generationSource = 'DETERMINISTIC_FALLBACK';
+          const error: any = new Error(generationFailureReason);
+          error.code = 'AI_UNAVAILABLE';
+          error.requiresDeterministicConfirmation = true;
+          error.attemptsTrail = generationAttemptsTrail;
+          throw error;
         } else if (response.text) {
           const parsed = this.parseJsonFromAiResponse(response.text);
           if (parsed && this.isValidCharacterExtractionShape(parsed)) {
@@ -512,27 +514,34 @@ Rules:
             generationSource = response.source;
             generationFailureReason = response.fallbackReason || '';
           } else {
-            generationFailureReason =
-              'AI returned invalid or incomplete Character Genesis structure. Deterministic concept extraction was used.';
-            extracted = this.proceduralExtraction(concept, worldTemplate);
-            generationSource = 'DETERMINISTIC_FALLBACK';
+            generationFailureReason = 'AI returned invalid or incomplete Character Genesis structure.';
+            const error: any = new Error(generationFailureReason);
+            error.code = 'AI_UNAVAILABLE';
+            error.requiresDeterministicConfirmation = true;
+            error.attemptsTrail = generationAttemptsTrail;
+            throw error;
           }
         } else {
           generationFailureReason =
             response.fallbackReason ||
-            'AI providers returned no usable Character Genesis text. Deterministic concept extraction was used.';
-          extracted = this.proceduralExtraction(concept, worldTemplate);
-          generationSource = 'DETERMINISTIC_FALLBACK';
+            'AI providers returned no usable Character Genesis text.';
+          const error: any = new Error(generationFailureReason);
+          error.code = 'AI_UNAVAILABLE';
+          error.requiresDeterministicConfirmation = true;
+          error.attemptsTrail = generationAttemptsTrail;
+          throw error;
         }
       } catch (err: any) {
-        generationFailureReason =
-          err?.message ||
-          'AI providers did not return usable Character Genesis output. Deterministic concept extraction was used.';
-        extracted = this.proceduralExtraction(concept, worldTemplate);
-        generationSource = 'DETERMINISTIC_FALLBACK';
+        if (err?.code === 'AI_UNAVAILABLE') {
+          throw err;
+        }
+        generationFailureReason = err?.message || String(err);
+        const error: any = new Error(generationFailureReason);
+        error.code = 'AI_UNAVAILABLE';
+        error.requiresDeterministicConfirmation = true;
+        error.attemptsTrail = generationAttemptsTrail;
+        throw error;
       }
-    }
-
     // Build canonical draft assembling all sections
     const generatedProvenance: CharacterProvenanceSource =
       generationSource === 'DETERMINISTIC_FALLBACK' ? 'DETERMINISTIC_FALLBACK' : 'AI_GENERATED';
@@ -1100,7 +1109,6 @@ Rules:
           activeProvider: generationActiveProvider,
           fallbackReason: generationFailureReason,
           attemptsTrail: generationAttemptsTrail,
-          requiresDeterministicConfirmation: generationSource === 'DETERMINISTIC_FALLBACK',
         };
 
     const rawCore = extracted.coreStats || {};

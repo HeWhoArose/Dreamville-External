@@ -49,6 +49,16 @@ export interface ActionAdvice {
 	canExecuteNow: boolean;
 }
 
+export interface StoryActionSceneContext {
+	locationName?: string;
+	locationRegion?: string;
+	locationDescription?: string;
+	worldTime?: string;
+	openingNarrative?: string;
+	startingSituation?: string;
+	activeDialogue?: string;
+	recentActions?: string[];
+}
 function normalize(value: unknown): string {
 	return String(value || '').trim().toLowerCase();
 }
@@ -199,7 +209,11 @@ export class StoryActionAdvisor {
 		return proposal;
 	}
 
-	public async advise(storyId: string, actionText: string): Promise<ActionAdvice> {
+	public async advise(
+		storyId: string,
+		actionText: string,
+		sceneContext?: StoryActionSceneContext,
+	): Promise<ActionAdvice> {
 		const player = this.repository.getPlayerLifecycle(storyId);
 		const actorId = player?.actorId || 'player_actor_' + storyId;
 		const run = this.repository.getStoryRun(storyId);
@@ -215,7 +229,13 @@ export class StoryActionAdvisor {
 			.filter((capability) => capabilityMatchesAction(capability, normalizedAction))
 			.sort((a, b) => normalize(b.name).length - normalize(a.name).length)[0];
 
-		const tips = await this.generateTips(storyId, actorId, actionText, actorCapabilities);
+		const tips = await this.generateTips(
+			storyId,
+			actorId,
+			actionText,
+			actorCapabilities,
+			sceneContext,
+		);
 
 		if (!recognizedCapability) {
 			const preview = capabilityEngine.interpretFreeformAction({
@@ -398,14 +418,24 @@ export class StoryActionAdvisor {
 		};
 	}
 
-	public async getTipsForAction(storyId: string, actionText: string): Promise<ActionTip[]> {
+	public async getTipsForAction(
+		storyId: string,
+		actionText: string,
+		sceneContext?: StoryActionSceneContext,
+	): Promise<ActionTip[]> {
 		const player = this.repository.getPlayerLifecycle(storyId);
 		const actorId = player?.actorId || 'player_actor_' + storyId;
 		const actorCapabilities = this.repository.getCapabilityEngine(storyId).getEffectiveActorCapabilities(
 			actorId,
 			this.repository.getInventoryEngine(storyId)
 		);
-		return this.generateTips(storyId, actorId, actionText, actorCapabilities);
+		return this.generateTips(
+			storyId,
+			actorId,
+			actionText,
+			actorCapabilities,
+			sceneContext,
+		);
 	}
 
 	private async generateTips(
@@ -413,6 +443,7 @@ export class StoryActionAdvisor {
 		actorId: string,
 		actionText: string,
 		actorCapabilities: EffectiveCapability[],
+		sceneContext?: StoryActionSceneContext,
 	): Promise<ActionTip[]> {
 		const run = this.repository.getStoryRun(storyId);
 		const location = this.repository.getGeographyGraph(storyId)
@@ -468,16 +499,30 @@ export class StoryActionAdvisor {
 				.map((capability) => `-${capability.name}: ${capability.description}`)
 				.join('\n');
 
+			const currentScene = [
+				sceneContext?.worldTime ? `World time: ${sceneContext.worldTime}` : '',
+				sceneContext?.locationName ? `Current location: ${sceneContext.locationName}` : '',
+				sceneContext?.locationRegion ? `Region: ${sceneContext.locationRegion}` : '',
+				sceneContext?.locationDescription ? `Location description: ${sceneContext.locationDescription}` : '',
+				sceneContext?.startingSituation ? `Starting/current situation: ${sceneContext.startingSituation}` : '',
+				sceneContext?.openingNarrative ? `Recent scene narration: ${sceneContext.openingNarrative}` : '',
+				sceneContext?.activeDialogue ? `Active dialogue: ${sceneContext.activeDialogue}` : '',
+				sceneContext?.recentActions?.length
+					? `Recent player actions:\n${sceneContext.recentActions.map((entry) => '- ' + entry).join('\n')}`
+					: '',
+			].filter(Boolean).join('\n');
+
 			const prompt =
 				`You are the gameplay suggestion assistant for an AI RPG.\n` +
 				`Give the player 2 to 4 actionable possibilities for the current situation.\n` +
-				`Suggestions must be actions the player can plausibly attempt using the supplied character capabilities and visible situation.\n` +
-				`Do not invent abilities, items, enemies, hidden information, or guaranteed outcomes.\n` +
+				`Suggestions should react to the supplied visible scene, not generic RPG advice.\n` +
+				`Use the supplied character capabilities when relevant, but basic physical, social, stealth, environmental, and tactical actions are allowed when the scene supports them.\n` +
+				`Do not invent hidden information, unavailable items, learned abilities, enemies, or guaranteed outcomes.\n` +
+				`If an action would require a capability the character does not have, phrase it as an attempt only if the player could reasonably attempt that action without possessing a special ability.\n` +
 				`Return ONLY JSON: {"tips":[{"title":"short title","description":"one concise explanation","actionText":"what the player could type"}]}.\n\n` +
 				`Character: ${actorSummary || 'unspecified'}\n` +
-				`Location: ${location?.name || 'unknown'}\n` +
-				`Location description: ${location?.description || 'unknown'}\n` +
-				`Current player action: ${actionText}\n` +
+				`Current visible scene:\n${currentScene || '- unavailable'}\n\n` +
+				`Current player action: ${actionText || '- none'}\n` +
 				`Known capabilities:\n${capabilitySummary || '- none'}`;
 
 			const orchestrator = this.repository.getAiOrchestrator();

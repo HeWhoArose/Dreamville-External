@@ -8488,6 +8488,7 @@ function buildCurrentComicSceneContext(storyId: string): { context: ComicSceneCo
     visibleCharacters: currentCharacters,
     latestAction: latestAction
       ? {
+          actionType: latestAction.actionType,
           description: latestAction.description,
           narrativeResponse: latestAction.narrativeResponse,
           authoritativeFeedback: latestAction.authoritativeFeedback,

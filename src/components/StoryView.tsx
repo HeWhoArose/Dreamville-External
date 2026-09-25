@@ -7,6 +7,7 @@ import {
   OpeningScene,
   CharacterStartingConditionState,
   ActionAdvice,
+  ActionTip,
 } from '../types';
 import { useAudioHaptic } from './AudioHapticManager';
 import { getCharacterSpeakerTheme } from './voiceResolver';
@@ -38,6 +39,7 @@ interface StoryViewProps {
   onRequestRest: () => void;
   onCustomAction?: (actionText: string) => void;
   pendingActionAdvice?: ActionAdvice | null;
+  actionTips?: ActionTip[];
   onAcceptActionAdvice?: (advice: ActionAdvice) => void;
   onRejectActionAdvice?: (advice: ActionAdvice) => void;
   isProcessingAction: boolean;
@@ -207,6 +209,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
   onRequestRest,
   onCustomAction,
   pendingActionAdvice = null,
+  actionTips = [],
   onAcceptActionAdvice,
   onRejectActionAdvice,
   isProcessingAction,
@@ -615,14 +618,32 @@ export const StoryView: React.FC<StoryViewProps> = ({
         </section>
       )}
 
-      {actionHistory.slice(0, 2).flatMap((action) =>
-        (action.actionAdvice?.tips || []).map((tip) => (
-          <button key={tip.id} type="button" onClick={() => onCustomAction?.(tip.actionText)} disabled={isProcessingAction} className="w-full rounded-xl border border-stone-800 bg-stone-950/70 px-4 py-3 text-left transition hover:border-stone-700 hover:bg-stone-900 disabled:opacity-50">
-            <p className="text-xs font-semibold text-stone-200">{tip.title}</p>
-            <p className="mt-1 text-xs leading-5 text-stone-500">{tip.description}</p>
-          </button>
-        ))
+      {(actionTips.length > 0 || actionHistory.some((action) => (action.actionAdvice?.tips || []).length > 0)) && (
+        <section className="space-y-2">
+          <div className="flex items-center gap-2 px-1">
+            <Sparkles className="h-3.5 w-3.5 text-stone-600" />
+            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-stone-600">Possible approaches</p>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {(actionTips.length > 0
+              ? actionTips
+              : actionHistory.slice(0, 2).flatMap((action) => action.actionAdvice?.tips || [])
+            ).slice(0, 4).map((tip) => (
+              <button
+                key={tip.id}
+                type="button"
+                onClick={() => onCustomAction?.(tip.actionText)}
+                disabled={isProcessingAction}
+                className="w-full rounded-xl border border-stone-800 bg-stone-950/70 px-4 py-3 text-left transition hover:border-stone-700 hover:bg-stone-900 disabled:opacity-50"
+              >
+                <p className="text-xs font-semibold text-stone-200">{tip.title}</p>
+                <p className="mt-1 text-xs leading-5 text-stone-500">{tip.description}</p>
+              </button>
+            ))}
+          </div>
+        </section>
       )}
+
       {/* Main interaction: deliberately obvious and simple. */}
       <section className="rounded-2xl border border-stone-700/80 bg-stone-950 px-4 py-4 shadow-md md:px-5">
         <div className="mb-2 flex items-center justify-between gap-3">

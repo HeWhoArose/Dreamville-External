@@ -19,6 +19,7 @@ export interface CapabilitySimulationWorld {
   genreTags?: string[];
   lore?: string[];
   capabilities?: any[];
+  customRules?: any[];
   canonicalCapabilities?: any[];
   powerSystem?: any;
   powerSystems?: any[];

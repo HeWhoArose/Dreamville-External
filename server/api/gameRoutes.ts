@@ -282,7 +282,6 @@ gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => 
 
     const recognizedCapabilityId = pendingProposal.requestedCapabilityId;
     const approvedAlternative = pendingProposal.alternative;
-    const shouldCreateAlternative = Boolean(approvedAlternative);
 
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||

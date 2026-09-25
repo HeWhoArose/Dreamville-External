@@ -1813,6 +1813,7 @@ export class MultiModelOrchestrator {
     this.seedDefaultAdapters();
     this.seedDefaultPins();
     this.loadPersistedConfig();
+    this.normalizeGeneralTextTaskEligibility();
   }
 
   private loadPersistedConfig(): void {
@@ -1893,6 +1894,49 @@ export class MultiModelOrchestrator {
       fs.writeFileSync(this.configFilePath, JSON.stringify({ pins, fallbackChains, categoryOverrides, overrides, customModels }, null, 2), 'utf-8');
     } catch (e) {
       // Ignore save errors
+    }
+  }
+
+  private normalizeGeneralTextTaskEligibility(): void {
+    const generalTasks: TaskId[] = [
+      'narrative.generate',
+      'character.dialogue',
+      'character.extract',
+      'memory.extract',
+      'character.capability.propose',
+      'story.advice',
+      'intent.interpret',
+      'capability.synthesize',
+      'capability.explain',
+      'research.query',
+      'research.world-brief',
+      'rules.adjudicate',
+      'rules.analyze',
+      'summary.scene',
+      'combat.tactics',
+      'tactical.reason',
+      'combat.animation.plan',
+      'narrative.review',
+      'utility.inspect',
+    ];
+    for (const model of this.models.values()) {
+      if (
+        model.isEmergencyFloor ||
+        model.hasImageGeneration ||
+        model.hasAudio ||
+        (model.capabilities || []).includes('speech_synthesis') ||
+        (model.capabilities || []).includes('speech_transcription')
+      ) {
+        continue;
+      }
+      const isTextModel =
+        (model.capabilities || []).includes('text_generation') ||
+        (model.capabilities || []).includes('creative_writing') ||
+        model.supportedOutputTypes?.includes('text') === true;
+      if (!isTextModel) continue;
+      for (const task of generalTasks) {
+        if (!model.roleEligibility.includes(task)) model.roleEligibility.push(task);
+      }
     }
   }
 

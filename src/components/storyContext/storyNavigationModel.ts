@@ -161,12 +161,22 @@ export function deriveStoryMenu(config: StoryNavigationConfig = {}): StoryMenuEn
     });
 
     menu.push({
-      id: 'powers',
-      label: hasSpellbook ? 'Spellbook & Skills' : 'Abilities & Skills',
-      iconType: hasSpellbook ? 'spellbook' : 'powers',
+      id: 'world',
+      label: 'World',
+      iconType: 'locations',
       enabled: true,
       visible: true,
-      route: 'play.powers',
+      route: 'play.world',
+      reason: 'Characters and places in the active world',
+    });
+
+    menu.push({
+      id: 'recent-actions',
+      label: 'Recent Actions',
+      iconType: 'journal',
+      enabled: true,
+      visible: true,
+      route: 'play.recent-actions',
     });
 
     menu.push({
@@ -223,12 +233,22 @@ export function deriveStoryMenu(config: StoryNavigationConfig = {}): StoryMenuEn
   });
 
   menu.push({
-    id: 'powers',
-    label: 'Capabilities',
-    iconType: 'powers',
+    id: 'world',
+    label: 'World',
+    iconType: 'locations',
     enabled: true,
     visible: true,
-    route: 'play.powers',
+    route: 'play.world',
+    reason: 'Characters and places in the active world',
+  });
+
+  menu.push({
+    id: 'recent-actions',
+    label: 'Recent Actions',
+    iconType: 'journal',
+    enabled: true,
+    visible: true,
+    route: 'play.recent-actions',
   });
 
   menu.push({

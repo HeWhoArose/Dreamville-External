@@ -22,9 +22,12 @@ export const WorldView: React.FC<WorldViewProps> = ({
   dossiers = [],
   phase8Relationships = [],
 }) => {
+  // World is authoritative: once an active world id is known, a character without an
+  // explicit matching world id is not projected into this world. This prevents global
+  // Dreamville entities from leaking into the current story world.
   const characterList = Object.values(characters || {}).filter((character: any) =>
     character.role !== 'PROTAGONIST' &&
-    (!worldId || !character.worldId || character.worldId === worldId)
+    (!worldId || character.worldId === worldId)
   );
   const presentCharacters = characterList.filter((character: any) => character.locationId === activeLocationId);
   const otherCharacters = characterList.filter((character: any) => character.locationId !== activeLocationId);

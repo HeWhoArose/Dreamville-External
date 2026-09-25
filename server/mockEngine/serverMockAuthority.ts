@@ -222,7 +222,6 @@ export class ServerMockAuthority {
     }
 
     const player = worldRepository.getPlayerLifecycle(targetStoryId);
-    const run = worldRepository.getStoryRun(targetStoryId);
     const conditionEngine = worldRepository.getConditionEngine(targetStoryId);
     const playerConditionState = player
       ? conditionEngine.getActorState(player.actorId)

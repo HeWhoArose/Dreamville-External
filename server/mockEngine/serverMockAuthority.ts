@@ -211,7 +211,7 @@ export class ServerMockAuthority {
     }
 
     const targetStoryId = storyId || this.activeStoryId;
-    const player = worldRepository.getPlayerLifecycle(targetStoryId);
+    const player = playerForAdvice;
     const run = worldRepository.getStoryRun(targetStoryId);
     const conditionEngine = worldRepository.getConditionEngine(targetStoryId);
     const playerConditionState = player
@@ -456,7 +456,10 @@ export class ServerMockAuthority {
    */
   public async processCustomAction(request: ActionRequest, canonicalCommandId?: string): Promise<ActionResult> {
     const bypassCapabilityAdvisor = Boolean((request as any).bypassCapabilityAdvisor);
+    const preventCapabilityExecution = Boolean((request as any).preventCapabilityExecution);
     const targetStoryId = (request as any).storyId || this.activeStoryId;
+    const playerForAdvice = worldRepository.getPlayerLifecycle(targetStoryId);
+    const actorId = playerForAdvice?.actorId || `player_actor_${targetStoryId}`;
 
     if (request.type === 'CUSTOM_ACTION' && !bypassCapabilityAdvisor) {
       const advice = await storyActionAdvisor.advise(targetStoryId, String(
@@ -511,8 +514,6 @@ export class ServerMockAuthority {
     const run = worldRepository.getStoryRun(targetStoryId);
     const rulesProfile = worldRepository.getRulesProfile(targetStoryId)
       || rulesProfileEngine.createDefault('FULL_DND');
-    const actorId = player?.actorId || `player_actor_${targetStoryId}`;
-
     // Narrative checks and authored challenge consequences are canonical mechanics. The AI may
     // describe the committed result, but it never supplies the die, modifier, DC, damage, or condition.
     const sceneText = [
@@ -1222,7 +1223,7 @@ export class ServerMockAuthority {
           actorId,
           actionText: freeformText,
           intendedCapabilityId: (request as any).intendedCapabilityId,
-          executeIfValid: !bypassCapabilityAdvisor,
+          executeIfValid: !preventCapabilityExecution,
         });
 
         if (interp.validationSuccess) {

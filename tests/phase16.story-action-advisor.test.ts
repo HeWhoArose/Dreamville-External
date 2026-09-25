@@ -134,6 +134,19 @@ test('Phase 16 action advisor: incompatible Fireball request from a Dark Mage pr
 	);
 });
 
+test('Phase 16 action advisor: a novel compatible power is offered for acquisition rather than silently synthesized', async () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'phase16_advisor_novel_compatible';
+	seedRun(repository, storyId, 'Dark Mage');
+
+	const advisor = new StoryActionAdvisor(repository);
+	const advice = await advisor.advise(storyId, 'I cast a shadow curse');
+
+	assert.equal(advice.mode, 'AUTO_LEARN_AND_EXECUTE');
+	assert.ok(advice.recognizedCapability);
+	assert.equal(advice.recognizedCapability?.provenance, 'freeform_preview:I cast a shadow curse');
+});
+ 
 test('Phase 16 action advisor: already-learned capability resolves directly', async () => {
 	const repository = new InMemoryWorldRepository({ disablePersistence: true });
 	const storyId = 'phase16_advisor_existing';

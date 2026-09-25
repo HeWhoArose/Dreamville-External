@@ -455,12 +455,50 @@ export class ServerMockAuthority {
    * cannot mutate state because MultiModelOrchestrator.generateNarrativeOnly strips state changes.
    */
   public async processCustomAction(request: ActionRequest, canonicalCommandId?: string): Promise<ActionResult> {
+    const bypassCapabilityAdvisor = Boolean((request as any).bypassCapabilityAdvisor);
+    const targetStoryId = (request as any).storyId || this.activeStoryId;
+
+    if (request.type === 'CUSTOM_ACTION' && !bypassCapabilityAdvisor) {
+      const advice = await storyActionAdvisor.advise(targetStoryId, String(
+        (request as any).actionText ||
+        (request as any).customText ||
+        (request as any).description ||
+        (request as any).input ||
+        ''
+      ));
+
+      if (advice.mode === 'SUGGEST_ALTERNATIVE') {
+        return {
+          success: false,
+          actionId: deterministicId('advice_pending', targetStoryId, String((request as any).actionText || '')),
+          requestType: request.type,
+          status: 'MOCK_ENGINE_REJECTED',
+          message: 'Action requires capability confirmation before execution.',
+          authoritativeFeedback: advice.proposal?.reasonRequestedCapabilityUnavailable || 'Capability confirmation required.',
+          actionAdvice: advice,
+          viewState: this.getSanitizedViewState(targetStoryId),
+        };
+      }
+
+      if (advice.recognizedCapability?.id) {
+        (request as any).intendedCapabilityId = advice.recognizedCapability.id;
+      }
+
+      if (advice.mode === 'AUTO_LEARN_AND_EXECUTE' && advice.recognizedCapability?.id) {
+        const capEngine = worldRepository.getCapabilityEngine(targetStoryId);
+        capEngine.acquireSkill(actorId, advice.recognizedCapability.id, {
+          libraryStatus: 'APPROVED',
+          librarySourceStoryIds: [targetStoryId],
+        });
+        worldRepository.persistCapabilityState(targetStoryId);
+      }
+    }
+
     const baseResult = this.processAction(request, canonicalCommandId);
     if (!baseResult || request.type !== 'CUSTOM_ACTION') {
       return baseResult;
     }
 
-    const targetStoryId = (request as any).storyId || this.activeStoryId;
     const freeformText =
       (request as any).actionText ||
       (request as any).customText ||
@@ -1184,7 +1222,7 @@ export class ServerMockAuthority {
           actorId,
           actionText: freeformText,
           intendedCapabilityId: (request as any).intendedCapabilityId,
-          executeIfValid: true,
+          executeIfValid: !bypassCapabilityAdvisor,
         });
 
         if (interp.validationSuccess) {

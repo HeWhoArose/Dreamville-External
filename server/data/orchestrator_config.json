@@ -16,7 +16,9 @@
     "research.query": "google_gemini::gemini-3.5-flash",
     "research.world-brief": "google_gemini::gemini-3.5-flash",
     "rules.analyze": "google_gemini::gemini-3.5-flash",
-    "tactical.reason": "google_gemini::gemini-3.5-flash"
+    "tactical.reason": "google_gemini::gemini-3.5-flash",
+    "character.extract": "google_gemini::gemini-3.5-flash-lite",
+    "combat.tactics": "google_gemini::gemini-3.5-flash"
   },
   "fallbackChains": {
     "narrative.generate": [
@@ -143,6 +145,18 @@
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "tactical.reason": [
+      "google_gemini::gemini-3.5-flash",
+      "openrouter::deepseek/deepseek-r1",
+      "google_gemini::gemini-3.8-flash",
+      "provider_deterministic_emergency::emergency-fallback-local"
+    ],
+    "character.extract": [
+      "google_gemini::gemini-3.5-flash-lite",
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "provider_deterministic_emergency::emergency-fallback-local"
+    ],
+    "combat.tactics": [
       "google_gemini::gemini-3.5-flash",
       "openrouter::deepseek/deepseek-r1",
       "google_gemini::gemini-3.8-flash",

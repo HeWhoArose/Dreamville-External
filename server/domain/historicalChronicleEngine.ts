@@ -65,9 +65,6 @@ export class HistoricalChronicleEngine {
       this.commitEvidence(enriched);
     }
 
-    // Transactional enforcement applies only while a canonical command is active.
-    // Legacy/domain simulations that use the Chronicle directly retain DIRECT mode.
-    this.writeMode = 'DIRECT';
   }
 
   public rollbackCanonicalTransaction(): void {
@@ -75,7 +72,8 @@ export class HistoricalChronicleEngine {
     this.pendingEvidence.clear();
     this.transactionOpen = false;
     this.transactionCommandId = undefined;
-    this.writeMode = 'DIRECT';
+    // The repository keeps the engine transactional between commands; only the
+    // pending transaction state is cleared here.
   }
 
   /**
@@ -136,11 +134,11 @@ export class HistoricalChronicleEngine {
     promotedToDossier: boolean;
     promotedToChronicle: boolean;
   } {
-    if (this.writeMode === 'TRANSACTIONAL' && !HistoricalChronicleEngine.bypassTransactionCheck) {
-      if (!this.transactionOpen) {
-        throw new Error('Historical Chronicle writes require an active canonical command transaction.');
-      }
-
+    if (
+      this.writeMode === 'TRANSACTIONAL' &&
+      !HistoricalChronicleEngine.bypassTransactionCheck &&
+      this.transactionOpen
+    ) {
       if (this.evidenceStore.has(evidence.id) || this.pendingEvidence.has(evidence.id)) {
         return {
           evidenceId: evidence.id,

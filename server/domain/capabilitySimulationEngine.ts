@@ -362,8 +362,10 @@ function characterAllows(
 
   const actorText = normalize(characterText);
   const ownedText = normalize(ownedCapabilities.map((cap) => `${cap.name} ${cap.description} ${cap.provenance}`).join(' '));
-  const candidateText = normalize(candidate ? `${candidate.name} ${candidate.description} ${candidate.provenance} ${(candidate.restrictions || []).join(' ')}` : '');
-  const mechanismText = actorText + ' ' + ownedText + ' ' + candidateText;
+  // Candidate metadata describes what is being evaluated; it must never become evidence
+  // that the character already possesses the candidate's supernatural mechanism.
+  const candidateText = normalize(candidate ? `${candidate.name} ${candidate.description} ${candidate.provenance}` : '');
+  const mechanismText = actorText + ' ' + ownedText;
 
   if (isBendingWorld(worldText)) {
     const isAvatar = /\bavatar\b/.test(actorText);
@@ -420,7 +422,7 @@ function characterAllows(
   if (domain === 'COMBAT' && !hasExplicitMechanism(domainTerms('COMBAT')) && !/\b(fighter|warrior|knight|soldier|swordsman|blade|weapon|martial)\b/.test(mechanismText)) return { allowed: false, reason: 'The character has no established combat discipline or compatible weapon mechanism for this technique.' };
 
   const candidateTokens = candidateText.split(/\s+/).filter((token) => token.length > 5);
-  if (candidateTokens.some((token) => ownedText.includes(token))) return { allowed: true };
+  if (candidateTokens.some((token) => actorText.includes(token) || ownedText.includes(token))) return { allowed: true };
   if (hasExplicitMechanism(domainTerms(domain))) return { allowed: true };
 
   return {

@@ -447,6 +447,13 @@ export class StoryActionAdvisor {
 				character: run?.protagonist,
 				world: world || { title: 'Current World' },
 				rulesProfile: this.repository.getRulesProfile(storyId) || undefined,
+				progressionPolicy,
+				progressionState: {
+					...progressionState,
+					maxCharacterLevel: progressionState?.currentLevel
+						? progressionPolicy.maxLevel
+						: 20,
+				},
 				customRules,
 				powerState: capabilityEngine.getPowerState(actorId),
 				ownedCapabilities: actorCapabilities,

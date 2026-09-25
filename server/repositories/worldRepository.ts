@@ -65,6 +65,7 @@ export interface WorldRepository {
   getInventoryEngine(storyId: string): InventoryItemEngine;
   getCapabilityEngine(storyId: string): CapabilityEngine;
   persistCapabilityState(storyId: string): void;
+  addAcquiredCapabilityToCharacter(storyId: string, capability: CapabilityDefinition): void;
   getCharacterProgressionEngine(storyId: string): CharacterProgressionEngine;
   getEntityRegistry(storyId: string): EntityRegistry;
   getEntityCard(storyId: string, entityId: string): EntityCard | null;
@@ -1546,6 +1547,61 @@ export class InMemoryWorldRepository implements WorldRepository {
     };
     this.storyRuns.set(storyId, run);
     this.persistLibrary();
+  }
+
+
+  public addAcquiredCapabilityToCharacter(storyId: string, capability: CapabilityDefinition): void {
+    const run = this.getStoryRun(storyId);
+    if (!run?.protagonist || !capability?.id || !capability?.name) return;
+
+    const existingCapabilities = Array.isArray(run.protagonist.capabilities)
+      ? [...run.protagonist.capabilities]
+      : [];
+    const hasCapability = existingCapabilities.some(
+      (entry: any) => entry?.id === capability.id || entry?.name === capability.name
+    );
+
+    if (!hasCapability) {
+      existingCapabilities.push(JSON.parse(JSON.stringify(capability)));
+      run.protagonist.capabilities = existingCapabilities;
+    }
+
+    const existingSkills = Array.isArray(run.protagonist.skills)
+      ? [...run.protagonist.skills]
+      : [];
+    const hasSkill = existingSkills.some(
+      (skill: any) => skill?.id === capability.id || skill?.name === capability.name
+    );
+
+    if (!hasSkill) {
+      const provenance =
+        capability.provenance === 'AI_GENERATED' ||
+        capability.provenance === 'DETERMINISTIC_FALLBACK'
+          ? capability.provenance
+          : 'SYSTEM_DERIVED';
+
+      existingSkills.push({
+        id: capability.id,
+        name: capability.name,
+        governingAbility: (capability as any).governingAbility || 'Intelligence',
+        proficiency: 'NONE',
+        isProficient: false,
+        isExpertise: false,
+        isCustom: capability.provenance === 'AI_GENERATED' || capability.provenance === 'DETERMINISTIC_FALLBACK',
+        description: capability.description || 'Acquired capability.',
+        mechanicalDescription: capability.damageFormula
+          ? `Use ${capability.damageFormula} damage when the capability resolves.`
+          : undefined,
+        tags: ['acquired-capability', ...(Array.isArray((capability as any).tags) ? (capability as any).tags : [])],
+        worldCompatibility: run.worldId,
+        provenance,
+        checkFormula: capability.checkFormula,
+      });
+      run.protagonist.skills = existingSkills;
+    }
+
+    run.characterSkills = JSON.parse(JSON.stringify(run.protagonist.skills || []));
+    this.storyRuns.set(storyId, run);
   }
 
   public getEntityRegistry(storyId: string): EntityRegistry {

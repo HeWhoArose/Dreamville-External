@@ -367,7 +367,7 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
 
     try {
       const orchestrator = this.getAiOrchestrator();
-      const execResult = await orchestrator.executeTaskGeneration('narrative.generate', prompt, systemInstruction);
+      const execResult = await orchestrator.executeTaskGeneration('world.generate', prompt, systemInstruction);
       generationSource = execResult.source;
       providerId = execResult.providerId;
       modelId = execResult.modelId;

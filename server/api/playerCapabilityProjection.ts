@@ -12,6 +12,12 @@ import type {
  * global capability registry itself. The global registry, capability graph,
  * simulation traces, and adjudication internals therefore cannot accidentally
  * become player data merely because they exist in CapabilityEngine.
+ *
+ * IMPORTANT:
+ * - `skillbookCapabilities` are learned Skillbook entries.
+ * - `capabilities` are currently effective actor abilities and may include
+ *   equipment grants.
+ * - Equipment grants are deliberately NOT promoted into the Skillbook.
  */
 export interface PlayerCapabilityProjection {
   /** Capabilities that are currently effective for the actor, including equipment grants. */
@@ -31,16 +37,36 @@ export interface PlayerCapabilityProjectionInput {
 const clone = <T>(value: T): T =>
   JSON.parse(JSON.stringify(value)) as T;
 
+/**
+ * Canonical Skillbook projection.
+ *
+ * A capability definition existing in the engine registry is NOT enough to enter
+ * the player Skillbook. A matching actor-owned SkillInstance is mandatory.
+ */
+export function projectPlayerSkillbook(
+  learnedCapabilities: CapabilityDefinition[],
+  skillInstances: SkillInstance[],
+): {
+  learnedCapabilities: CapabilityDefinition[];
+  skillInstances: SkillInstance[];
+} {
+  const projectedInstances = clone(skillInstances || []);
+  const learnedIds = new Set(projectedInstances.map((instance) => instance.capabilityId));
+
+  return {
+    learnedCapabilities: clone(
+      (learnedCapabilities || []).filter((capability) => learnedIds.has(capability.id)),
+    ),
+    skillInstances: projectedInstances,
+  };
+}
+
 export function projectPlayerCapabilities(
   input: PlayerCapabilityProjectionInput,
 ): PlayerCapabilityProjection {
-  const skillInstances = clone(input.skillInstances || []);
-  const learnedIds = new Set(skillInstances.map((instance) => instance.capabilityId));
-
-  // Defense in depth: learnedCapabilities must agree with actor SkillInstances.
-  // The projection never promotes an arbitrary global definition into a learned skill.
-  const learnedCapabilities = clone(
-    (input.learnedCapabilities || []).filter((capability) => learnedIds.has(capability.id)),
+  const skillbook = projectPlayerSkillbook(
+    input.learnedCapabilities || [],
+    input.skillInstances || [],
   );
 
   // Effective capabilities are already actor-resolved by CapabilityEngine. Keep only
@@ -53,7 +79,7 @@ export function projectPlayerCapabilities(
 
   return {
     capabilities,
-    learnedCapabilities,
-    skillInstances,
+    learnedCapabilities: skillbook.learnedCapabilities,
+    skillInstances: skillbook.skillInstances,
   };
 }

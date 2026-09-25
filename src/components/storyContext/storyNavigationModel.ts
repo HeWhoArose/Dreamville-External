@@ -132,14 +132,6 @@ export function deriveStoryMenu(config: StoryNavigationConfig = {}): StoryMenuEn
       route: 'play.codex',
     });
 
-    menu.push({
-      id: 'world-systems',
-      label: 'World Systems',
-      iconType: 'locations',
-      enabled: true,
-      visible: true,
-      route: 'play.world-systems',
-    });
 
     // Mystery stories do not expose tactical combat by default unless combat explicitly activates
     if (hasActiveCombat) {
@@ -287,14 +279,6 @@ export function deriveStoryMenu(config: StoryNavigationConfig = {}): StoryMenuEn
     route: 'play.codex',
   });
 
-  menu.push({
-    id: 'world-systems',
-    label: 'World Systems',
-    iconType: 'locations',
-    enabled: true,
-    visible: true,
-    route: 'play.world-systems',
-  });
 
   return menu;
 }

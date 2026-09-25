@@ -29,6 +29,83 @@ function randomFace(sides: number): number {
   return Math.floor(Math.random() * sides) + 1;
 }
 
+type DieVisualType = 'D4' | 'D6' | 'D8' | 'D10' | 'D12' | 'D20' | 'D100' | 'GENERIC';
+
+export function getDieVisualType(sides: number): DieVisualType {
+  if (sides === 4) return 'D4';
+  if (sides === 6) return 'D6';
+  if (sides === 8) return 'D8';
+  if (sides === 10) return 'D10';
+  if (sides === 12) return 'D12';
+  if (sides === 20) return 'D20';
+  if (sides === 100) return 'D100';
+  return 'GENERIC';
+}
+
+const DIE_POINTS: Record<DieVisualType, string> = {
+  D4: '50,6 92,86 8,86',
+  D6: '18,28 66,10 90,26 90,72 42,90 18,74',
+  D8: '50,5 94,50 50,95 6,50',
+  D10: '50,6 89,30 77,85 23,85 11,30',
+  D12: '50,5 78,16 94,50 78,84 50,95 22,84 6,50 22,16',
+  D20: '50,4 79,16 95,42 88,73 63,94 37,94 12,73 5,42 21,16',
+  D100: '50,4 79,16 95,42 88,73 63,94 37,94 12,73 5,42 21,16',
+  GENERIC: '50,4 82,18 94,50 82,82 50,96 18,82 6,50 18,18',
+};
+
+const DieFace: React.FC<{ sides: number; value: number }> = ({ sides, value }) => {
+  const type = getDieVisualType(sides);
+  const points = DIE_POINTS[type];
+  const center = type === 'D6' ? { x: 54, y: 54 } : { x: 50, y: 51 };
+  const fill = type === 'D100' ? '#be185d' : '#6d28d9';
+  const highlight = type === 'D100' ? '#f9a8d4' : '#c4b5fd';
+  const shadow = type === 'D100' ? '#831843' : '#4c1d95';
+
+  return (
+    <svg viewBox="0 0 100 100" className="h-20 w-20 drop-shadow-[0_12px_22px_rgba(0,0,0,0.38)]" role="img" aria-label={`D${sides} die`}>
+      <polygon points={points} fill={fill} stroke="rgba(255,255,255,0.82)" strokeWidth="2" />
+      {type === 'D4' ? (
+        <>
+          <polygon points="50,6 50,86 8,86" fill={highlight} opacity="0.58" />
+          <polygon points="50,6 92,86 50,86" fill={shadow} opacity="0.52" />
+        </>
+      ) : (
+        <>
+          <polygon
+            points={type === 'D6'
+              ? '18,28 66,10 54,54'
+              : type === 'D8'
+              ? '50,5 94,50 50,51'
+              : type === 'D10'
+              ? '50,6 89,30 50,50 11,30'
+              : '50,5 79,16 50,51 21,16'}
+            fill={highlight}
+            opacity="0.66"
+          />
+          <polygon
+            points={type === 'D6'
+              ? '18,28 42,90 54,54'
+              : type === 'D8'
+              ? '6,50 50,51 50,95'
+              : type === 'D10'
+              ? '11,30 50,50 23,85'
+              : '6,50 50,51 22,84'}
+            fill={shadow}
+            opacity="0.7"
+          />
+        </>
+      )}
+      <text x={center.x} y={center.y - 8} textAnchor="middle" fontSize="8" fontWeight="700" letterSpacing="1.3" fill="rgba(255,255,255,0.78)">
+        D{sides}
+      </text>
+      <text x={center.x} y={center.y + 24} textAnchor="middle" fontSize="25" fontWeight="800" fill="white">
+        {value}
+      </text>
+    </svg>
+  );
+};
+
+
 export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
   roll,
   onComplete,
@@ -84,7 +161,7 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
   };
 
   return (
-    <div className={`rounded-xl border border-stone-900 bg-stone-950/70 px-3 py-3 ${className}`}>
+    <div className={`rounded-xl border border-violet-400/10 bg-[#0b0712]/75 px-3 py-3 ${className}`}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Dices className="h-3.5 w-3.5 text-stone-600" />
@@ -106,7 +183,7 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
       </div>
 
       <div
-        className="mt-3 flex flex-wrap justify-center gap-3"
+        className="mt-4 flex flex-wrap justify-center gap-4"
         style={{ perspective: '1100px' }}
       >
         {diceSides.map((sides, index) => {
@@ -119,7 +196,7 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
           return (
             <div
               key={`${roll.rollId}-${index}`}
-              className="relative flex h-16 w-16 items-center justify-center rounded-2xl border border-stone-700 bg-stone-900 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03),0_10px_24px_rgba(0,0,0,0.3)]"
+              className="relative flex h-20 w-20 items-center justify-center"
               style={{
                 transform,
                 transformStyle: 'preserve-3d',
@@ -128,12 +205,7 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
                   : 'transform 280ms ease-out',
               }}
             >
-              <div className="absolute left-1.5 top-1 text-[8px] uppercase tracking-wide text-stone-600">
-                d{sides}
-              </div>
-              <span className="text-xl font-semibold text-stone-100">
-                {isRolling ? face : revealed ? finalValue : '—'}
-              </span>
+              <DieFace sides={sides} value={isRolling ? face : revealed ? finalValue : 1} />
             </div>
           );
         })}

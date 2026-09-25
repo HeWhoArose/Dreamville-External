@@ -2847,6 +2847,16 @@
           "recordedAt": "2026-09-25T18:30:10.276Z",
           "valid": true,
           "trustedProvenance": false
+        },
+        {
+          "evidenceId": "ev_1790370155378_850",
+          "requirementId": "CH16.WORLD.LIBRARY",
+          "evidenceType": "UNIT_TEST",
+          "sourceReference": "tests/ch16_behavioral_verification.test.ts",
+          "description": "Verified world creation and retrieval tests pass",
+          "recordedAt": "2026-09-25T21:02:35.378Z",
+          "valid": true,
+          "trustedProvenance": false
         }
       ]
     },
@@ -3116,10 +3126,10 @@
     }
   ],
   "metadata": {
-    "currentPhase": "CH17 — Living Bible & Workstation Persistence Audit",
+    "currentPhase": "CH17 Surgical Repair & Control Integration Pass",
     "phaseObjective": "Establish operational Living Bible registry, evidence-aware status validation, persistent Workstation ledger, and developer UI.",
     "lastAuditDate": "2026-09-18",
-    "nextTask": "Execute full regression and verify UI modal",
+    "nextTask": "Automated verification and CI/CD promotion gates (CH18)",
     "blockers": []
   },
   "iterationHistory": [
@@ -3152,43 +3162,6 @@
       "date": "2026-09-18",
       "description": "Implemented CH16 Reusable World Library, Story Modes, Emergent Narrative, Dice Clash, and Archive Restoration.",
       "outcome": "CH16 behavioral verification suite passing cleanly (12/12 subtests)."
-    },
-    {
-      "iteration": 6,
-      "id": "iter_6_1790361010278",
-      "date": "2026-09-25",
-      "description": "CH17 Developer Workstation Test Run",
-      "outcome": "Successfully tested iteration record creation",
-      "reason": "Automated test suite execution",
-      "affectedRequirements": [
-        "CH17.CONTROLS"
-      ]
-    },
-    {
-      "iteration": 7,
-      "id": "iter_7_1790361010279",
-      "date": "2026-09-25",
-      "description": "Persistence Check Iteration",
-      "outcome": "Verified file persistence",
-      "affectedRequirements": []
-    },
-    {
-      "iteration": 8,
-      "id": "iter_8_1790361010374",
-      "date": "2026-09-25",
-      "description": "HTTP POST iteration test",
-      "outcome": "Verified endpoint appends iteration",
-      "affectedRequirements": [
-        "CH17.CONTROLS"
-      ]
-    },
-    {
-      "iteration": 9,
-      "id": "iter_9_1790361010400",
-      "date": "2026-09-25",
-      "description": "Non-gameplay state mutation isolation test",
-      "outcome": "Verified zero impact on game state",
-      "affectedRequirements": []
     }
   ]
 }

@@ -95,6 +95,34 @@ function normalize(value: unknown): string {
   return String(value ?? '').trim().toLowerCase();
 }
 
+function hasPositiveTerm(text: string, terms: string[]): boolean {
+  const normalizedText = normalize(text);
+  
+  return terms.some((term) => {
+    const normalizedTerm = normalize(term);
+    let index = normalizedText.indexOf(normalizedTerm);
+    
+    while (index !== -1) {
+      // Check the preceding context for negations
+      const preceding = normalizedText.slice(0, index).trim();
+      const words = preceding.split(/\s+/).filter(Boolean);
+      const lastWords = words.slice(-4); // look back up to 4 words
+      
+      const isNegated = lastWords.some((w) => 
+        /\b(no|not|without|never|lack|lacks|lacking|forbidden|zero)\b/i.test(w)
+      );
+      
+      if (!isNegated) {
+        return true;
+      }
+      
+      index = normalizedText.indexOf(normalizedTerm, index + 1);
+    }
+    
+    return false;
+  });
+}
+
 function flattenText(value: unknown): string {
   if (value == null) return '';
   if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
@@ -390,11 +418,12 @@ function characterAllows(
   // that the character already possesses the candidate's supernatural mechanism.
   const candidateText = normalize(candidate ? `${candidate.name} ${candidate.description} ${candidate.provenance}` : '');
   const mechanismText = actorText + ' ' + ownedText;
-  const isDarkMagicSpecialist =
-    /\b(dark mage|shadow mage|necromancer|void mage|curse|shadow magic|void magic|cursed magic|umbral magic)\b/.test(mechanismText);
-  const isBroadMagicUser =
-    /\b(mage|wizard|sorcerer|spellcaster|warlock|archmage|magus|witch|cleric|paladin|priest)\b/.test(mechanismText) &&
-    !isDarkMagicSpecialist;
+  const isDarkMagicSpecialist = hasPositiveTerm(mechanismText, [
+    'dark mage', 'shadow mage', 'necromancer', 'void mage', 'curse', 'shadow magic', 'void magic', 'cursed magic', 'umbral magic'
+  ]);
+  const isBroadMagicUser = hasPositiveTerm(mechanismText, [
+    'mage', 'wizard', 'sorcerer', 'spellcaster', 'warlock', 'archmage', 'magus', 'witch', 'cleric', 'paladin', 'priest'
+  ]) && !isDarkMagicSpecialist;
 
   // Hard world-specific affinity gate: in an Avatar-style bending world,
   // lightning requires an established firebending or Avatar basis. Earthbending
@@ -402,8 +431,8 @@ function characterAllows(
   if (
     isBendingWorld(worldText) &&
     domain === 'LIGHTNING' &&
-    /\bearthbender\b|\bearth bending\b/.test(actorText) &&
-    !/\bfirebender\b|\bfire bending\b|\bavatar\b/.test(actorText)
+    hasPositiveTerm(actorText, ['earthbender', 'earth bending']) &&
+    !hasPositiveTerm(actorText, ['firebender', 'fire bending', 'avatar'])
   ) {
     return {
       allowed: false,
@@ -412,16 +441,16 @@ function characterAllows(
   }
 
   if (isBendingWorld(worldText)) {
-    const isAvatar = /\bavatar\b/.test(actorText);
+    const isAvatar = hasPositiveTerm(actorText, ['avatar']);
     const domains = new Set<string>();
     if (isAvatar) ['EARTH', 'WATER', 'FIRE', 'AIR', 'LIGHTNING'].forEach((entry) => domains.add(entry));
-    if (/\bearthbender\b|\bearth bending\b/.test(actorText)) domains.add('EARTH');
-    if (/\bwaterbender\b|\bwater bending\b/.test(actorText)) domains.add('WATER');
-    if (/\bfirebender\b|\bfire bending\b/.test(actorText)) {
+    if (hasPositiveTerm(actorText, ['earthbender', 'earth bending'])) domains.add('EARTH');
+    if (hasPositiveTerm(actorText, ['waterbender', 'water bending'])) domains.add('WATER');
+    if (hasPositiveTerm(actorText, ['firebender', 'fire bending'])) {
       domains.add('FIRE');
       domains.add('LIGHTNING');
     }
-    if (/\bairbender\b|\bair bending\b/.test(actorText)) domains.add('AIR');
+    if (hasPositiveTerm(actorText, ['airbender', 'air bending'])) domains.add('AIR');
 
     if (domains.has(domain)) return { allowed: true };
 
@@ -448,12 +477,12 @@ function characterAllows(
     }
   }
 
-  const hasExplicitMechanism = (terms: string[]) => hasAny(mechanismText, terms);
+  const hasExplicitMechanism = (terms: string[]) => hasPositiveTerm(mechanismText, terms);
   if (domain === 'MAGIC' && !hasExplicitMechanism(domainTerms('MAGIC')) && !isBroadMagicUser) return { allowed: false, reason: 'The character has no established magic/spellcasting mechanism from which this technique could be learned.' };
   if (domain === 'TEMPORAL' && !hasExplicitMechanism(domainTerms('TEMPORAL')) && !isBroadMagicUser) return { allowed: false, reason: 'The character has no established temporal mechanism or prerequisite power for this technique.' };
   if (domain === 'DIMENSIONAL' && !hasExplicitMechanism(domainTerms('DIMENSIONAL')) && !isBroadMagicUser) return { allowed: false, reason: 'The character has no established dimensional/reality-manipulation mechanism for this technique.' };
   if (domain === 'SPATIAL_TRANSIT' && !hasExplicitMechanism(domainTerms('SPATIAL_TRANSIT')) && !isBroadMagicUser) return { allowed: false, reason: 'The character has no established spatial-transit mechanism such as teleportation, portals, or an equivalent existing technique.' };
-  if (domain === 'LIGHTNING' && !hasExplicitMechanism(domainTerms('LIGHTNING')) && !/\b(firebender|avatar)\b/.test(mechanismText) && !isBroadMagicUser) return { allowed: false, reason: 'The character has no established lightning-compatible affinity or mechanism.' };
+  if (domain === 'LIGHTNING' && !hasExplicitMechanism(domainTerms('LIGHTNING')) && !hasPositiveTerm(mechanismText, ['firebender', 'avatar']) && !isBroadMagicUser) return { allowed: false, reason: 'The character has no established lightning-compatible affinity or mechanism.' };
   if (domain === 'FIRE' && !hasExplicitMechanism(['fire', 'flame', 'pyromancy', 'fire magic', 'firebender'])) {
     // A specialized dark/shadow/void character cannot silently inherit ordinary
     // fire magic just because their role name contains "mage". An alternate is only

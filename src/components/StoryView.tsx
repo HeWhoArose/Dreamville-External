@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   Location,
   DialogueNode,
@@ -12,12 +12,9 @@ import {
 import { useAudioHaptic } from './AudioHapticManager';
 import { getCharacterSpeakerTheme } from './voiceResolver';
 import { DiceRollAnimation } from './common/DiceRollAnimation';
-import { StoryHUDDrawer } from './StoryHUDDrawer';
-import { apiClient } from '../services/apiClient';
 import {
   AlertCircle,
   ArrowRight,
-  Compass,
   Dices,
   Headphones,
   Loader2,
@@ -229,70 +226,12 @@ export const StoryView: React.FC<StoryViewProps> = ({
   const { playSpeech, isPlayingSpeech, triggerHaptic, playSfx } = useAudioHaptic();
 
   const [typedAction, setTypedAction] = useState('');
-  const [aiRoutingStatus, setAiRoutingStatus] = useState<string>('Auto');
-  const [narrationModels, setNarrationModels] = useState<any[]>([]);
-  const [selectedNarrationModelKey, setSelectedNarrationModelKey] = useState<string>('');
-  const [narrationModelBusy, setNarrationModelBusy] = useState(false);
-  const [aiRoutingUsage, setAiRoutingUsage] = useState<{ requests: number; totalTokens: number } | null>(null);
-  const [lastAiTelemetry, setLastAiTelemetry] = useState<any | null>(null);
   const [revealedCheckIds, setRevealedCheckIds] = useState<Record<string, boolean>>({});
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-
-  const refreshAiRouting = async () => {
-    try {
-      const [operations, telemetry, modelCatalog] = await Promise.all([
-        apiClient.getOrchestratorOperations(),
-        apiClient.getOrchestratorTelemetry(),
-        apiClient.getOrchestratorModels(),
-      ]);
-      const narrationCategory = operations?.operations?.categories?.find(
-        (category: any) => category.category === 'narration'
-      );
-      setAiRoutingStatus(narrationCategory?.mode === 'MANUAL' ? 'Manual' : 'Auto');
-      setSelectedNarrationModelKey(narrationCategory?.activeModelKey || '');
-      const narrationTask = 'narrative.generate';
-      const eligibleModels = (modelCatalog?.models || []).filter((model: any) => {
-        const roles = Array.isArray(model.roleEligibility) ? model.roleEligibility : Array.isArray(model.roles) ? model.roles : [];
-        const health = model?.runtime?.operationalStatus || model.health;
-        return roles.includes(narrationTask) && health !== 'UNAVAILABLE' && health !== 'DISABLED';
-      });
-      setNarrationModels(eligibleModels);
-
-      const safeTelemetry = operations?.operations?.safeTelemetry;
-      if (safeTelemetry) {
-        setAiRoutingUsage({
-          requests: Number(safeTelemetry.totalRequests || 0),
-          totalTokens: Number(safeTelemetry.totalTokens || 0),
-        });
-      }
-      setLastAiTelemetry(telemetry?.lastTurnTelemetry || null);
-    } catch {
-      // AI routing UI is advisory; gameplay remains functional when telemetry is unavailable.
-    }
-  };
-
-  useEffect(() => {
-    refreshAiRouting();
-  }, [storyId, isProcessingAction]);
-
-  const handleNarrationModelChange = async (modelKey: string) => {
-    setNarrationModelBusy(true);
-    try {
-      await apiClient.setOrchestratorCategoryModel({
-        category: 'narration',
-        modelKey: modelKey || null,
-      });
-      await refreshAiRouting();
-    } catch {
-      setTranscriptionError('Unable to update the narration model. Auto mode remains available.');
-    } finally {
-      setNarrationModelBusy(false);
-    }
-  };
 
   const startRecording = async () => {
     setTranscriptionError(null);
@@ -391,8 +330,6 @@ export const StoryView: React.FC<StoryViewProps> = ({
 
   return (
     <div className="mx-auto w-full max-w-4xl space-y-4 pb-10 text-stone-100">
-      <StoryHUDDrawer storyId={storyId} />
-
       {/* Quiet identity bar */}
       <header className="rounded-2xl border border-stone-800/80 bg-stone-950/80 px-4 py-3 shadow-sm">
         <div className="flex flex-wrap items-center gap-3">
@@ -652,48 +589,6 @@ export const StoryView: React.FC<StoryViewProps> = ({
             <p className="mt-1 text-sm text-stone-300">What do you do?</p>
           </div>
           <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
-            {(() => {
-              const tokenText = aiRoutingUsage
-                ? `${aiRoutingUsage.totalTokens.toLocaleString()} tok`
-                : 'usage n/a';
-              const lastModel = lastAiTelemetry?.selectedModelId;
-              return (
-                <>
-                  <span
-                    className="hidden text-[10px] text-stone-600 sm:inline"
-                    title="DreamBook AI stays outside canonical world state."
-                  >
-                    {lastModel ? `Last: ${lastModel} · ${lastAiTelemetry?.latencyMs || 0}ms` : tokenText}
-                  </span>
-                  <label
-                    className="flex items-center gap-1.5 rounded-lg border border-stone-800 bg-stone-900 px-2 py-1 text-[10px] text-stone-400"
-                    title="Narration model selection is scoped to the narration category only."
-                  >
-                    <span>Narration</span>
-                    <select
-                      aria-label="Narration model"
-                      value={selectedNarrationModelKey}
-                      disabled={narrationModelBusy || narrationModels.length === 0}
-                      onChange={(event) => void handleNarrationModelChange(event.target.value)}
-                      className="max-w-[180px] bg-transparent text-[10px] text-stone-300 outline-none"
-                    >
-                      <option value="">Auto</option>
-                      {narrationModels.map((model: any) => (
-                        <option
-                          key={model.providerId + '::' + model.modelId}
-                          value={model.providerId + '::' + model.modelId}
-                        >
-                          {model.displayName || model.modelId}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <span className="text-[10px] text-stone-700">
-                    {aiRoutingStatus} · {tokenText}
-                  </span>
-                </>
-              );
-            })()}
           </div>
         </div>
 

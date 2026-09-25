@@ -18,6 +18,7 @@ export interface ActionTip {
 	title: string;
 	description: string;
 	intent: string;
+	actionText: string;
 	source: 'DETERMINISTIC' | 'AI';
 }
 
@@ -326,6 +327,11 @@ export class StoryActionAdvisor {
 		actionText: string,
 		actorCapabilities: EffectiveCapability[],
 	): Promise<ActionTip[]> {
+		const run = this.repository.getStoryRun(storyId);
+		const location = this.repository.getGeographyGraph(storyId)
+			.getAllNodes()
+			.find((node) => node.id === this.repository.getPlayerLifecycle(storyId)?.locationId);
+
 		const deterministicTips: ActionTip[] = actorCapabilities
 			.filter((capability) => {
 				const action = normalize(actionText);
@@ -340,14 +346,81 @@ export class StoryActionAdvisor {
 					capability.category === 'Perception'
 				);
 			})
-			.slice(0, 3)
+			.slice(0, 4)
 			.map((capability) => ({
 				id: deterministicId('action_tip', storyId, actorId, actionText, capability.id),
 				title: capability.name,
 				description: capability.description,
 				intent: capability.id,
+				actionText: capability.name,
 				source: 'DETERMINISTIC' as const,
 			}));
+
+		try {
+			const actorSummary = [
+				run?.protagonist?.role?.profession,
+				run?.protagonist?.role?.archetype,
+				run?.protagonist?.title,
+				...(run?.protagonist?.personality?.traits || []),
+				...(run?.protagonist?.motivations?.goals || []),
+			].filter(Boolean).join(', ');
+
+			const capabilitySummary = actorCapabilities
+				.slice(0, 18)
+				.map((capability) => `-${capability.name}: ${capability.description}`)
+				.join('\n');
+
+			const prompt =
+				`You are the gameplay suggestion assistant for an AI RPG.\n` +
+				`Give the player 2 to 4 actionable possibilities for the current situation.\n` +
+				`Suggestions must be actions the player can plausibly attempt using the supplied character capabilities and visible situation.\n` +
+				`Do not invent abilities, items, enemies, hidden information, or guaranteed outcomes.\n` +
+				`Return ONLY JSON: {"tips":[{"title":"short title","description":"one concise explanation","actionText":"what the player could type"}]}.\n\n` +
+				`Character: ${actorSummary || 'unspecified'}\n` +
+				`Location: ${location?.name || 'unknown'}\n` +
+				`Location description: ${location?.description || 'unknown'}\n` +
+				`Current player action: ${actionText}\n` +
+				`Known capabilities:\n${capabilitySummary || '- none'}`;
+
+			const orchestrator = this.repository.getAiOrchestrator();
+			const response = await orchestrator.executeTaskGeneration(
+				'story.advice',
+				prompt,
+				'Return only the requested JSON object with 2 to 4 tips.',
+				{
+					timeoutMs: 3500,
+					contextTokens: Math.min(6000, prompt.length),
+					validateResponse: (text) => {
+						try {
+							const parsed = JSON.parse(text);
+							return Array.isArray(parsed?.tips) && parsed.tips.length >= 1
+								? { valid: true }
+								: { valid: false, errorReason: 'Advice JSON must contain a non-empty tips array.' };
+						} catch {
+							return { valid: false, errorReason: 'Advice response was not valid JSON.' };
+						}
+					},
+				}
+			);
+
+			const parsed = JSON.parse(response.text);
+			if (Array.isArray(parsed?.tips)) {
+				const aiTips = parsed.tips
+					.filter((tip: any) => tip && typeof tip.title === 'string' && typeof tip.description === 'string' && typeof tip.actionText === 'string')
+					.slice(0, 4)
+					.map((tip: any, index: number) => ({
+						id: deterministicId('ai_action_tip', storyId, actorId, actionText, String(index), tip.title),
+						title: tip.title.trim(),
+						description: tip.description.trim(),
+						intent: tip.actionText.trim(),
+						actionText: tip.actionText.trim(),
+						source: 'AI' as const,
+					}));
+				if (aiTips.length > 0) return aiTips;
+			}
+		} catch {
+			// Deterministic suggestions remain the guaranteed fallback.
+		}
 
 		return deterministicTips;
 	}

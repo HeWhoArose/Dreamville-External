@@ -157,10 +157,20 @@ function deterministicAlternativeConcept(requestedName: string, run: any): strin
 
 export class StoryActionAdvisor {
 	private readonly pendingProposals = new Map<string, ActionCapabilityProposal>();
+	private readonly capabilityProposalGenerator?: (
+		concept: string,
+		worldTemplate: any
+	) => Promise<any>;
 
 	constructor(
 		private readonly repository: WorldRepository,
-	) {}
+		capabilityProposalGenerator?: (
+			concept: string,
+			worldTemplate: any
+		) => Promise<any>,
+	) {
+		this.capabilityProposalGenerator = capabilityProposalGenerator;
+	}
 
 	public getPendingProposal(proposalId: string): ActionCapabilityProposal | null {
 		return this.pendingProposals.get(proposalId) || null;
@@ -256,9 +266,19 @@ export class StoryActionAdvisor {
 
 		let alternative: any;
 		try {
-			const { CharacterGenesisService } = await import('../services/characterGenesisService');
-			const service = new CharacterGenesisService();
-			alternative = await service.proposeCustomCapability(
+			if (this.capabilityProposalGenerator) {
+				alternative = await this.capabilityProposalGenerator(
+					concept,
+					world || {
+						title: 'Current World',
+						genreTags: [],
+						dndRulesMode: 'FULL_DND',
+					}
+				);
+			} else {
+				const { CharacterGenesisService } = await import('../services/characterGenesisService');
+				const service = new CharacterGenesisService();
+				alternative = await service.proposeCustomCapability(
 				{
 					worldId: run?.worldId || storyId,
 					capabilityConcept: concept + ': an adaptation of ' + requestedCapability.name + ' that fits this character.',
@@ -273,7 +293,8 @@ export class StoryActionAdvisor {
 					genreTags: [],
 					dndRulesMode: 'FULL_DND',
 				} as any
-			);
+				);
+			}
 		} catch {
 			alternative = undefined;
 		}

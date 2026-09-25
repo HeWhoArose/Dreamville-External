@@ -28,6 +28,8 @@ export type AppRoute =
   // Play Experiences (Active Story Context)
   | 'play.story'
   | 'play.character'
+  | 'play.world'
+  | 'play.recent-actions'
   | 'play.inventory'
   | 'play.powers'
   | 'play.combat'
@@ -72,7 +74,9 @@ export const ROUTE_REGISTRY: Record<AppRoute, RouteMeta> = {
   'compendium.worlds': { route: 'compendium.worlds', title: 'Worlds Archive', category: 'COMPENDIUM' },
   'compendium.visuals': { route: 'compendium.visuals', title: 'Visual Collection', category: 'COMPENDIUM' },
   'play.story': { route: 'play.story', title: 'Story Narrative', category: 'PLAY', requiresActiveStory: true },
-  'play.character': { route: 'play.character', title: 'Character Dossier', category: 'PLAY', requiresActiveStory: true },
+  'play.character': { route: 'play.character', title: 'Character & Skills', category: 'PLAY', requiresActiveStory: true },
+  'play.world': { route: 'play.world', title: 'World', category: 'PLAY', requiresActiveStory: true },
+  'play.recent-actions': { route: 'play.recent-actions', title: 'Recent Actions', category: 'PLAY', requiresActiveStory: true },
   'play.inventory': { route: 'play.inventory', title: 'Inventory & Equipment', category: 'PLAY', requiresActiveStory: true },
   'play.powers': { route: 'play.powers', title: 'Powers & Capabilities', category: 'PLAY', requiresActiveStory: true },
   'play.combat': { route: 'play.combat', title: 'Tactical Combat', category: 'PLAY', requiresActiveStory: true },

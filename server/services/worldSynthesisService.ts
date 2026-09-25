@@ -306,6 +306,54 @@ The JSON schema must strictly be:
     const tonesStr = input.toneTags?.join(', ') || 'None specified';
     const mediumsStr = input.mediumTags?.join(', ') || 'None specified';
 
+    let researchBrief = '';
+    try {
+      const orchestrator = this.getAiOrchestrator();
+      const researchResult = await orchestrator.executeTaskGeneration(
+        'research.world-brief',
+        JSON.stringify({
+          premise: input.naturalLanguagePremise,
+          title: input.title,
+          genreTags: input.genreTags,
+          toneTags: input.toneTags,
+          setting: input.setting,
+          era: input.defaultEra,
+          rulesMode: requestedRulesMode,
+          instruction: 'Produce advisory research/world-building evidence only. Do not mutate canonical world state.'
+        }),
+        'Return ONLY JSON: {"brief":"...","facts":["..."],"themes":["..."],"constraints":["..."]}. Research is advisory evidence and must not be treated as canonical until validated.',
+        {
+          timeoutMs: 10000,
+          maxTokens: 1600,
+          contextTokens: 2500,
+          validateResponse: (text: string) => {
+            try {
+              const parsed = JSON.parse(text);
+              return parsed && typeof parsed.brief === 'string' && Array.isArray(parsed.facts)
+                ? { valid: true }
+                : { valid: false, errorReason: 'Invalid research world-brief schema.' };
+            } catch {
+              return { valid: false, errorReason: 'Research world-brief was not valid JSON.' };
+            }
+          },
+        }
+      );
+      if (researchResult.text) {
+        const parsedResearch = JSON.parse(researchResult.text);
+        researchBrief = JSON.stringify({
+          brief: parsedResearch.brief,
+          facts: parsedResearch.facts,
+          themes: parsedResearch.themes || [],
+          constraints: parsedResearch.constraints || [],
+          source: researchResult.source,
+          providerId: researchResult.providerId,
+          modelId: researchResult.modelId,
+        });
+      }
+    } catch {
+      researchBrief = 'No external/advisory research was available; remain faithful to the supplied premise and deterministic world synthesis rules.';
+    }
+
     const prompt = `Synthesize a rich, coherent campaign world template matching this specific natural language premise: "${input.naturalLanguagePremise}".
 
 CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
@@ -314,7 +362,8 @@ CRITICAL SEMANTIC PRIORITY & GUIDANCE INSTRUCTIONS:
 3. TONE GUIDANCE: ${tonesStr} (Optional modifier for narrative atmosphere).
 4. MEDIUM GUIDANCE: ${mediumsStr} (Optional stylistic expression).
 0. CANONICAL NARRATIVE MODE: ${requestedStoryMode} (${resolvedNarrativeProfile.profile.profileId}).
-5. Ensure factions are active, locations are sensory-rich, and the planned background events show a complex, living timeline of 5 to 10 events starting from Year 42, Month 10, Day 14.`;
+5. Ensure factions are active, locations are sensory-rich, and the planned background events show a complex, living timeline of 5 to 10 events starting from Year 42, Month 10, Day 14.
+6. ADVISORY RESEARCH BRIEF (not canonical until validated): ${researchBrief}`;
 
     try {
       const orchestrator = this.getAiOrchestrator();

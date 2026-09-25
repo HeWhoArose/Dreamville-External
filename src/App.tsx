@@ -377,7 +377,7 @@ export const App: React.FC = () => {
       const response = await apiClient.adviseStoryAction(actionText, activeStoryId);
       const advice = response?.advice as ActionAdvice | undefined;
 
-      if (advice?.mode === 'SUGGEST_ALTERNATIVE') {
+      if (advice?.mode === 'SUGGEST_ALTERNATIVE' || advice?.mode === 'CAPABILITY_SIMULATION') {
         setPendingActionAdvice(advice);
         return;
       }

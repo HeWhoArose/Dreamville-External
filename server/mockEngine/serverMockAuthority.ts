@@ -211,7 +211,7 @@ export class ServerMockAuthority {
     }
 
     const targetStoryId = storyId || this.activeStoryId;
-    const player = playerForAdvice;
+    const player = worldRepository.getPlayerLifecycle(targetStoryId);
     const run = worldRepository.getStoryRun(targetStoryId);
     const conditionEngine = worldRepository.getConditionEngine(targetStoryId);
     const playerConditionState = player
@@ -497,8 +497,10 @@ export class ServerMockAuthority {
           });
         }
         capEngine.acquireSkill(actorId, capability.id, {
-          libraryStatus: 'APPROVED',
-          librarySourceStoryIds: [targetStoryId],
+          libraryProvenance: {
+            libraryStatus: 'APPROVED',
+            sourceStoryIds: [targetStoryId],
+          },
         });
         worldRepository.persistCapabilityState(targetStoryId);
       }
@@ -1230,7 +1232,7 @@ export class ServerMockAuthority {
           actorId,
           actionText: freeformText,
           intendedCapabilityId: (request as any).intendedCapabilityId,
-          executeIfValid: !preventCapabilityExecution,
+          executeIfValid: !true,
         });
 
         if (interp.validationSuccess) {

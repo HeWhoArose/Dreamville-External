@@ -511,7 +511,7 @@ describe('CH1 Live Runtime Proof — Canonical Domain & HTTP API Path', () => {
     assert.strictEqual(repairData.item.isBroken, false);
   });
 
-  it('CH6 Live API: GET /api/game/capabilities returns anchored PowerState, capability registry, and DAG graph', async () => {
+  it('CH6 Live API: GET /api/game/capabilities returns anchored player-safe skill state without internal DAG metadata', async () => {
     const res = await fetch(`${baseUrl}/capabilities`);
     assert.strictEqual(res.status, 200);
     const data = (await res.json()) as any;
@@ -531,7 +531,9 @@ describe('CH1 Live Runtime Proof — Canonical Domain & HTTP API Path', () => {
       false,
       'Must filter out WorldScale capabilities exceeding vessel capacity'
     );
-    assert.ok(Array.isArray(data.graph), 'graph must be an array');
+    assert.ok(Array.isArray(data.learnedCapabilities), 'learnedCapabilities must be an array');
+    assert.ok(Array.isArray(data.skillInstances), 'skillInstances must be an array');
+    assert.equal(Object.prototype.hasOwnProperty.call(data, 'graph'), false, 'Internal capability DAG must not cross the player API boundary');
   });
 
   it('CH6 Live API: POST /api/game/capabilities/adjudicate deterministically resolves consequences and updates state', async () => {

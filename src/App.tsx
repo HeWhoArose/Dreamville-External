@@ -73,7 +73,7 @@ export const App: React.FC = () => {
   const [recipes, setRecipes] = useState<CraftingRecipe[]>([]);
   const [powerState, setPowerState] = useState<PowerState | null>(null);
   const [learnedCapabilities, setLearnedCapabilities] = useState<CapabilitiesResponse['learnedCapabilities']>([]);
-  const [skillInstances, setSkillInstances] = useState<any[]>([]);
+  const [skillInstances, setSkillInstances] = useState<CapabilitiesResponse['skillInstances']>([]);
   const [worldTemplates, setWorldTemplates] = useState<WorldTemplate[]>([]);
   const [phase8Projection, setPhase8Projection] = useState<any | null>(null);
   const [storyLibraryStories, setStoryLibraryStories] = useState<StorySummary[]>([]);

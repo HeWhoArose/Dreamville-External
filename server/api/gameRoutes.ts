@@ -1998,9 +1998,10 @@ gameRouter.post('/capabilities/adjudicate', async (req: Request, res: Response) 
           data: {
             result,
             powerState: capEngine.getPowerState(actorId),
-            capabilities: capEngine.getAllCapabilities(),
+            capabilities: capEngine.getEffectiveActorCapabilities(actorId, transactionInvEngine),
             skillInstances: capEngine.getAllSkillInstances(actorId),
-            graph: capEngine.getCapabilityGraph(),
+            graph: capEngine.getCapabilityGraph()
+              .filter((node) => capEngine.getSkillInstance(actorId, node.capabilityId) || node.derivedSkills.some((id) => Boolean(capEngine.getSkillInstance(actorId, id)))),
           },
           summary: result.approved
             ? `Capability ${intendedCapabilityId} adjudicated and committed.`
@@ -8450,8 +8451,11 @@ gameRouter.get('/run-canonical-state', (req: Request, res: Response) => {
     const inventoryItems = invEngine.getInventoryItems(actorId);
     const paperDoll = invEngine.getActorPaperDoll(actorId);
 
-    const coreCaps = capEngine.getAllCapabilities ? capEngine.getAllCapabilities() : [];
+    const actorCaps = capEngine.getEffectiveActorCapabilities(actorId, invEngine);
     const actorSkills = capEngine.getActorSkillInstances ? capEngine.getActorSkillInstances(actorId) : [];
+    const actorSkillIds = new Set(actorSkills.map((skill) => skill.capabilityId));
+    const actorGraph = (capEngine.getCapabilityGraph ? capEngine.getCapabilityGraph() : [])
+      .filter((node) => actorSkillIds.has(node.capabilityId) || node.derivedSkills.some((id) => actorSkillIds.has(id)));
 
     const activeQuests = (run?.plannedEvents || []).filter((e: any) => {
       const st = run?.eventStates?.[e.id]?.status;
@@ -8507,8 +8511,11 @@ gameRouter.get('/run-canonical-state', (req: Request, res: Response) => {
         items: inventoryItems,
       },
       capabilities: {
-        coreCapabilities: coreCaps,
+        // Player-safe projection: only actor-owned/effective capabilities cross the boundary.
+        // The global capability registry and full DAG remain AI/developer-only.
+        coreCapabilities: actorCaps,
         generatedTechniques: actorSkills,
+        graph: actorGraph,
       },
       quests: {
         active: activeQuests,

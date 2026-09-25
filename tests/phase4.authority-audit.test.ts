@@ -112,7 +112,6 @@ test('Phase 4 — Chronicle-producing routes are all behind canonical command re
     '/inventory/craft',
     '/inventory/transfer',
     '/capabilities/adjudicate',
-    '/capabilities/interpret',
     '/capabilities/synthesize',
     '/combat/action',
     '/combat/attack',

@@ -55,8 +55,12 @@ export interface CapabilitySimulationContext {
   skillInstances?: SkillInstance[];
   allWorldCapabilities?: CapabilityDefinition[];
   environment?: {
+    locationId?: string;
+    locationName?: string;
     conditions?: string[];
     description?: string;
+    ambientSensory?: string;
+    [key: string]: unknown;
   };
 }
 
@@ -98,7 +102,11 @@ function flattenText(value: unknown): string {
   return '';
 }
 
-function collectWorldText(world: CapabilitySimulationWorld, customRules: any[] = []): string {
+function collectWorldText(
+  world: CapabilitySimulationWorld,
+  customRules: any[] = [],
+  environment?: CapabilitySimulationContext['environment'],
+): string {
   return normalize([
     world.title,
     world.description,
@@ -111,9 +119,17 @@ function collectWorldText(world: CapabilitySimulationWorld, customRules: any[] =
     ...(world.magicSystems || []),
     ...(world.worldRules || []),
     ...(world.rules || []),
+    ...(world.ruleConstraints || []),
+    ...(world.forbiddenContradictions || []),
+    world.magicRules,
+    ...(world.customRules || []),
     ...(customRules || []),
     world.capabilities,
     world.canonicalCapabilities,
+    environment?.locationName,
+    environment?.description,
+    environment?.ambientSensory,
+    ...(environment?.conditions || []),
   ].map(flattenText).join(' '));
 }
 
@@ -470,7 +486,7 @@ export class CapabilitySimulationEngine {
 
     const domain = requestedDomain(actionText, candidateCapability);
     const scale = detectScale(actionText, candidateCapability);
-    const worldText = collectWorldText(context.world, context.customRules);
+    const worldText = collectWorldText(context.world, context.customRules, context.environment);
     const characterText = collectCharacterText(context.character, context.ownedCapabilities);
     const worldCheck = worldAllows(domain, worldText, context.world, candidateCapability);
     const characterCheck = characterAllows(domain, characterText, worldText, context.ownedCapabilities, candidateCapability);

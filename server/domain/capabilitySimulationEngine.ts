@@ -354,7 +354,14 @@ function worldAllows(
 
   if (domain === 'MAGIC') {
     if (explicitDomainSupport || dndMagicSupport) return { allowed: true };
-  } else if (explicitDomainSupport || (broadMagicSupport && ['FIRE', 'WATER', 'EARTH', 'AIR', 'LIGHTNING', 'HEALING', 'SHADOW'].includes(domain))) {
+  } else if (
+    explicitDomainSupport ||
+    dndMagicSupport ||
+    (broadMagicSupport && ['FIRE', 'WATER', 'EARTH', 'AIR', 'LIGHTNING', 'HEALING', 'SHADOW'].includes(domain))
+  ) {
+    // Full D&D establishes a canonical supernatural rules family even when the
+    // specific spell/technique has not yet been authored as a world capability.
+    // The character still needs a compatible mechanism in characterAllows().
     return { allowed: true };
   }
 

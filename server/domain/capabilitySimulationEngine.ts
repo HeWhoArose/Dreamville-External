@@ -285,7 +285,6 @@ function characterAllows(domain: string | undefined, characterText: string, worl
     return { allowed: false, reason: 'The character has no established mechanism for magical fire manipulation.' };
   }
 
-  const capabilityText = candidateText + ' ' + flattenText(candidate);
   const mechanismText = actorText + ' ' + ownedText;
 
   if (domain === 'BIOLOGICAL' || normalize(candidate?.category) === 'biological') {

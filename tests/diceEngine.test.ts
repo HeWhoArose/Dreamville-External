@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { LocalDiceEngine, Dnd521RulesetAdapter } from '../server/domain/combatEngine';
 import { getDieVisualType } from '../src/components/common/DiceRollAnimation';
 
@@ -66,7 +68,7 @@ test('mixed dice rolls retain one visual die per authoritative die term', () => 
 
 
 test('dice renderer uses projected 3D canvas geometry rather than a flat SVG sheet', () => {
-  const source = require('node:fs').readFileSync(require('node:path').join(process.cwd(), 'src/components/common/DiceRollAnimation.tsx'), 'utf8');
+  const source = fs.readFileSync(path.join(process.cwd(), 'src/components/common/DiceRollAnimation.tsx'), 'utf8');
   assert.match(source, /HTMLCanvasElement/);
   assert.match(source, /requestAnimationFrame/);
   assert.match(source, /ICOSAHEDRON_FACES/);

@@ -515,6 +515,55 @@ class ApiClient {
   }
 
   /**
+   * Builds a comic-page prompt from the latest committed story turn only.
+   */
+  public async generateCurrentScenePrompt(storyId?: string): Promise<{
+    success: boolean;
+    storyId: string;
+    prompt: string;
+    sourceActionId?: string;
+    sourceNarration: string;
+    panelCount: number;
+    freshnessRule: string;
+  }> {
+    const res = await fetch(`${this.baseUrl}/scene/generate-prompt`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...(storyId ? { 'X-Story-ID': storyId } : {}) },
+      body: JSON.stringify({ storyId }),
+    });
+    const data = await readJsonSafely<any>(res);
+    if (!res.ok) throw new Error(data?.errorReason || `Failed to generate current scene prompt: HTTP ${res.status}`);
+    return data;
+  }
+
+  /**
+   * Generates a current-scene comic page through the media adapter.
+   * Media generation is presentation-only and never mutates canonical story state.
+   */
+  public async generateCurrentSceneImage(storyId?: string): Promise<{
+    success: boolean;
+    storyId: string;
+    sourceActionId?: string;
+    prompt: string;
+    panelCount: number;
+    freshnessRule: string;
+    imageUrl?: string;
+    mediaAsset?: any;
+    isFallback?: boolean;
+    promptFallback?: string;
+    errorReason?: string;
+  }> {
+    const res = await fetch(`${this.baseUrl}/scene/generate-image`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...(storyId ? { 'X-Story-ID': storyId } : {}) },
+      body: JSON.stringify({ storyId }),
+    });
+    const data = await readJsonSafely<any>(res);
+    if (!res.ok) throw new Error(data?.errorReason || `Failed to generate current scene image: HTTP ${res.status}`);
+    return data;
+  }
+
+  /**
    * Submits a capability adjudication proposal for deterministic resolution (CH6).
    * POST /api/game/capabilities/adjudicate
    */

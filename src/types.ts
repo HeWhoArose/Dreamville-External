@@ -31,6 +31,7 @@ export interface ExternalCharacter {
   title: string;
   role: string;
   locationId: string;
+  worldId?: string;
   presence: 'present' | 'absent' | 'unknown';
   disposition: 'Friendly' | 'Cautious' | 'Enigmatic' | 'Reverent';
   playerVisibleKnowledge: string[];
@@ -296,6 +297,39 @@ export interface ActionTip {
   source: 'DETERMINISTIC' | 'AI';
 }
 
+export type CapabilitySimulationStatus =
+  | 'ALREADY_OWNED'
+  | 'CURRENTLY_EXECUTABLE'
+  | 'DEVELOPABLE'
+  | 'CONDITIONALLY_DEVELOPABLE'
+  | 'ALTERNATE_ROUTE'
+  | 'CHARACTER_INCOMPATIBLE'
+  | 'CURRENTLY_BLOCKED'
+  | 'WORLD_FORBIDDEN'
+  | 'UNSUPPORTED_REQUEST';
+
+export interface CapabilitySimulationResult {
+  status: CapabilitySimulationStatus;
+  actionText: string;
+  requestedDomain?: string;
+  candidateCapability?: any;
+  mechanism?: string;
+  scale?: 'Minor' | 'Moderate' | 'Major' | 'WorldScale';
+  worldAllowed: boolean;
+  characterCompatible: boolean;
+  currentlyExecutable: boolean;
+  progressionPossible: boolean;
+  acquisitionAllowed: boolean;
+  explanation: string;
+  blockers: string[];
+  requiredConditions: string[];
+  developmentPath: string[];
+  alternateRoutes: string[];
+  estimatedEnergyCost?: number;
+  estimatedVesselCapacityRequired?: number;
+  internalOnly?: boolean;
+}
+
 export interface ActionCapabilityProposal {
   proposalId: string;
   requestedAction: string;
@@ -303,17 +337,19 @@ export interface ActionCapabilityProposal {
   requestedCapabilityName?: string;
   reasonRequestedCapabilityUnavailable: string;
   alternative: any;
+  simulation?: CapabilitySimulationResult;
   acceptLabel: string;
   rejectLabel: string;
 }
 
 export interface ActionAdvice {
-  mode: 'EXECUTE_EXISTING' | 'AUTO_LEARN_AND_EXECUTE' | 'SUGGEST_ALTERNATIVE' | 'NORMAL_ACTION';
+  mode: 'EXECUTE_EXISTING' | 'AUTO_LEARN_AND_EXECUTE' | 'CAPABILITY_SIMULATION' | 'SUGGEST_ALTERNATIVE' | 'NORMAL_ACTION';
   actionText: string;
   actorId: string;
   tips: ActionTip[];
   proposal?: ActionCapabilityProposal;
   recognizedCapability?: any;
+  simulation?: CapabilitySimulationResult;
   canExecuteNow: boolean;
 }
 
@@ -868,6 +904,7 @@ export interface CapabilitiesResponse {
   actorId: string;
   powerState?: PowerState;
   capabilities: CapabilityDefinition[];
+  skillInstances: any[];
   graph: CapabilityGraphNode[];
 }
 

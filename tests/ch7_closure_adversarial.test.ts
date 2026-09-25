@@ -220,7 +220,7 @@ describe('CH7 Final Closure Adversarial Audit', () => {
       assert.strictEqual(engine.getAllCapabilities().length, initialCount);
     });
 
-    it('tests Outcome 3B: NOVEL_CAPABILITY_PROPOSAL (Execution: executeIfValid = true)', async () => {
+    it('tests Outcome 3B: NOVEL_CAPABILITY_PROPOSAL remains a dry-run even when executeIfValid is true', async () => {
       const storyId = 'story_exec_test';
       const engine = worldRepository.getCapabilityEngine(storyId);
       const initialCount = engine.getAllCapabilities().length;
@@ -243,11 +243,24 @@ describe('CH7 Final Closure Adversarial Audit', () => {
       assert.strictEqual(data.success, true);
       assert.strictEqual(data.interpretationType, 'NOVEL_CAPABILITY_PROPOSAL');
       assert.ok(data.proposedCapability);
-      assert.ok(data.adjudicationConsequence);
-      assert.strictEqual(data.adjudicationConsequence.approved, true);
+      assert.equal(data.adjudicationConsequence, undefined);
 
-      // Registered primary + 3 child techniques
-      assert.strictEqual(engine.getAllCapabilities().length, initialCount + 4);
+      // The interpreter never mutates the canonical capability registry.
+      assert.strictEqual(engine.getAllCapabilities().length, initialCount);
+    });
+
+    it('rejects player access to the internal capability interpreter', async () => {
+      const res = await fetch(`${baseUrl}/capabilities/interpret`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          actionText: 'I invent a new spell',
+          executeIfValid: true,
+        }),
+      });
+      assert.strictEqual(res.status, 403);
+      const data = await res.json();
+      assert.equal(data.code, 'AI_INTERNAL_INTERPRETATION_ONLY');
     });
 
     it('tests Outcome 4: UNSUPPORTED', async () => {

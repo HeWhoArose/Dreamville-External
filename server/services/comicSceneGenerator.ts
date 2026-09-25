@@ -95,6 +95,7 @@ export function buildComicScenePrompt(context: ComicSceneContext): ComicScenePro
     '• Use comic-style sequential art, expressive framing, cinematic perspective, strong panel composition, and readable visual storytelling.',
     '',
     'Freshness and canon constraints:',
+    '• Freshness rule: latest turn only; no prior-scene carryover.',
     '• This is a CURRENT-SCENE illustration, not a recap.',
     '• Use only the latest turn narration/action plus current location and current visible cast supplied above.',
     '• Do NOT use previous dialogue, previous actions, opening-scene events, old consequences, flashbacks, time skips, alternate outcomes, future events, or invented characters.',

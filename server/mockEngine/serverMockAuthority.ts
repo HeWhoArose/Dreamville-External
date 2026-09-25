@@ -22,6 +22,7 @@ import { storyCheckConsequenceEngine } from '../domain/storyCheckConsequenceEngi
 import { storyCheckChallengeResolver } from '../domain/storyCheckChallengeResolver';
 import { rulesProfileEngine } from '../domain/rulesProfileEngine';
 import { deterministicId, formatCanonicalTimestamp } from '../domain/deterministicRng';
+import { HistoricalChronicleEngine } from '../domain/historicalChronicleEngine';
 
 /**
  * ServerMockAuthority
@@ -35,6 +36,27 @@ import { deterministicId, formatCanonicalTimestamp } from '../domain/determinist
  * - hiddenCanonicalContext and serverBoundarySecret are NEVER returned to the client.
  */
 export class ServerMockAuthority {
+  private recordChronicleEvidence(
+    storyId: string,
+    chronicleEngine: HistoricalChronicleEngine,
+    evidence: Parameters<HistoricalChronicleEngine['recordEvidence']>[0],
+  ): void {
+    if (worldRepository.isCanonicalCommandTransactionActive()) {
+      chronicleEngine.recordEvidence(evidence);
+      return;
+    }
+
+    const commandId = `mock_action_chronicle_${storyId}_${evidence.id}`;
+    chronicleEngine.beginCanonicalTransaction(commandId);
+    try {
+      chronicleEngine.recordEvidence(evidence);
+      chronicleEngine.commitCanonicalTransaction(evidence.sourceEventId || evidence.id);
+    } catch (error) {
+      chronicleEngine.rollbackCanonicalTransaction();
+      throw error;
+    }
+  }
+
   // Labelled clearly per user specification: in-memory state for development experiment
   private EXPERIMENTAL_SINGLE_INSTANCE_MOCK_STATE: EngineState;
   private activeStoryId: string = 'default_story';
@@ -1154,7 +1176,7 @@ export class ServerMockAuthority {
         const chronicle = worldRepository.getHistoricalChronicleEngine(targetStoryId);
         const clock = worldRepository.getWorldClock(targetStoryId);
         const ts = clock.getTimestamp();
-        chronicle.recordEvidence({
+        this.recordChronicleEvidence(targetStoryId, chronicle, {
           id: `ev_custom_${ts.totalElapsedSeconds}_${chronicle.getChronicleEntries().length}`,
           category: 'SACRED_OR_HISTORIC',
           timestamp: ts,

@@ -178,6 +178,10 @@ function requestedDomain(actionText: string, candidate?: CapabilityDefinition): 
     ['SHADOW', /\b(shadow|darkness|void|umbral|oblivion)\b/],
     ['HEALING', /\b(heal|healing|restore|regenerate|rejuvenate)\b/],
     ['MAGIC', /\b(spell|magic|sorcery|wizard|mage|arcane|mana)\b/],
+    ['BIOLOGICAL', /\b(poison|venom|toxin|fang|claw|natural weapon|biological)\b/],
+    ['PERCEPTION', /\b(perception|notice|observe|sense|track|awareness|detect|vision|hearing)\b/],
+    ['SOCIAL', /\b(persuade|intimidate|deceive|charm|negotiate|leadership|social)\b/],
+    ['COMBAT', /\b(strike|slash|punch|kick|grapple|jump|climb|shoot|attack|sword|blade|weapon)\b/],
     ['PHYSICAL', /\b(strike|slash|punch|kick|grapple|jump|climb|shoot|attack)\b/],
   ];
 
@@ -230,7 +234,10 @@ function isBendingWorld(worldText: string): boolean {
 
 function hasAny(text: string, terms: string[]): boolean {
   const normalized = normalize(text);
-  return terms.some((term) => normalized.includes(normalize(term)));
+  return terms.some((term) => {
+    const normalizedTerm = normalize(term).replace(/[.*+?^\${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`\\b${normalizedTerm}\\b`, 'i').test(normalized);
+  });
 }
 
 function worldSystemIsStructured(world: CapabilitySimulationWorld): boolean {
@@ -334,7 +341,7 @@ function characterAllows(
   ownedCapabilities: CapabilityDefinition[],
   candidate?: CapabilityDefinition,
 ): { allowed: boolean; reason?: string; alternate?: string } {
-  if (!domain || domain === 'PHYSICAL') return { allowed: true };
+  if (!domain || ['PHYSICAL', 'COMBAT', 'BIOLOGICAL', 'PERCEPTION', 'SOCIAL'].includes(domain)) return { allowed: true };
 
   const actorText = normalize(characterText);
   const ownedText = normalize(ownedCapabilities.map((cap) => `${cap.name} ${cap.description} ${cap.provenance}`).join(' '));
@@ -390,6 +397,10 @@ function characterAllows(
   if (domain === 'AIR' && !hasExplicitMechanism(domainTerms('AIR'))) return { allowed: false, reason: 'The character has no established air/wind manipulation mechanism for this technique.' };
   if (domain === 'SHADOW' && !hasExplicitMechanism(domainTerms('SHADOW'))) return { allowed: false, reason: 'The character has no established shadow/void/darkness mechanism for this technique.' };
   if (domain === 'HEALING' && !hasExplicitMechanism(domainTerms('HEALING')) && !/\b(cleric|paladin|priest|medic|healer|divine|holy)\b/.test(mechanismText)) return { allowed: false, reason: 'The character has no established healing mechanism or compatible progression basis.' };
+  if (domain === 'BIOLOGICAL' && !hasExplicitMechanism(domainTerms('BIOLOGICAL'))) return { allowed: false, reason: 'The character has no established biological, venom, poison, mutation, or natural-weapon mechanism for this technique.' };
+  if (domain === 'PERCEPTION' && !hasExplicitMechanism(domainTerms('PERCEPTION'))) return { allowed: false, reason: 'The character has no established perception, sensory, tracking, or detection mechanism for this technique.' };
+  if (domain === 'SOCIAL' && !hasExplicitMechanism(domainTerms('SOCIAL'))) return { allowed: false, reason: 'The character has no established social or influence mechanism for this technique.' };
+  if (domain === 'COMBAT' && !hasExplicitMechanism(domainTerms('COMBAT')) && !/\b(fighter|warrior|knight|soldier|swordsman|blade|weapon|martial)\b/.test(mechanismText)) return { allowed: false, reason: 'The character has no established combat discipline or compatible weapon mechanism for this technique.' };
 
   const candidateTokens = candidateText.split(/\s+/).filter((token) => token.length > 5);
   if (candidateTokens.some((token) => ownedText.includes(token))) return { allowed: true };

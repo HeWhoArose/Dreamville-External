@@ -519,7 +519,22 @@ export class StoryActionAdvisor {
 		const concept = deterministicAlternativeConcept(requestedCapability.name, run);
 
 		let alternative: any;
-		try {
+		const worldCapabilityPool = [
+			...((world?.canonicalCapabilities || []) as any[]),
+			...((world?.capabilities || []) as any[]),
+		];
+		const canonicalWorldCapability = worldCapabilityPool.find((capability) =>
+			capability?.id === requestedCapability.id ||
+			(typeof capability?.name === 'string' && capability.name.trim().toLowerCase() === requestedCapability.name.trim().toLowerCase())
+		);
+
+		if (canonicalWorldCapability) {
+			// The capability already exists in this world's canon. Offer the canonical skill
+			// itself for explicit acquisition instead of inventing a duplicate adaptation.
+			alternative = requestedCapability;
+		}
+
+		if (!alternative) try {
 			if (this.capabilityProposalGenerator) {
 				alternative = await this.capabilityProposalGenerator(
 					concept,

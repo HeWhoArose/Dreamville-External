@@ -12,6 +12,7 @@ export interface UnifiedActionPipelineResult {
 	simulation: CapabilitySimulationResult;
 	rules: { status: 'PASS' | 'BLOCK' | 'REVIEW'; reason: string; source: 'DETERMINISTIC' | 'AI_ASSISTED' };
 	explanation: string;
+	ruleAnalysis?: string;
 	tacticalContext?: { required: boolean; plan?: string; source: 'AI' | 'DETERMINISTIC_FALLBACK' | 'NOT_REQUIRED' };
 	narrationDirective: string;
 	telemetry: Array<{ task: TaskId; modelId: string; providerId: string; source: string; attempts: number }>;
@@ -91,6 +92,42 @@ export class UnifiedAiActionOrchestrator {
 		const customRules=world?new (await import('../domain/customRuleEngine')).CustomRuleEngine().getRules(this.repository as any,storyId):[];
 		const simulation=simulator.simulate(cleanAction,{actorId,character:run?.protagonist,world:world||{title:'Current World',dndRulesMode:rulesProfile?.mode||'FULL_DND'},rulesProfile,progressionPolicy,progressionState:{...progressionState,maxCharacterLevel:progressionPolicy.maxLevel},customRules,powerState:capabilityEngine.getPowerState(actorId),ownedCapabilities:owned,skillInstances:capabilityEngine.getActorSkillInstances(actorId),allWorldCapabilities:[...((world?.canonicalCapabilities||[]) as CapabilityDefinition[]),...((world?.capabilities||[]) as CapabilityDefinition[])],environment:{}},finalCandidate);
 		const rules: UnifiedActionPipelineResult['rules']=simulation.status==='WORLD_FORBIDDEN'||simulation.worldAllowed===false?{status:'BLOCK',reason:simulation.explanation,source:'DETERMINISTIC'}:simulation.status==='UNSUPPORTED_REQUEST'?{status:'REVIEW',reason:'No capability mechanism was identified; use normal action resolution.',source:'DETERMINISTIC'}:{status:'PASS',reason:simulation.explanation,source:'DETERMINISTIC'};
+		let ruleAnalysis = '';
+		if (capabilityLike) {
+			try {
+				const result = await this.runTask(
+					'rules.analyze',
+					JSON.stringify({
+						action: cleanAction,
+						intent,
+						research,
+						simulation,
+						worldRules: world?.worldRules || world?.customRules || [],
+						rulesProfile,
+					}),
+					'Return ONLY a concise JSON object {"analysis":"..."}. Analyze applicable rules as advisory context only. Never override deterministic resolution.',
+					{
+						timeoutMs: 6000,
+						maxTokens: 800,
+						validateResponse: (text: string) => {
+							const p = json<any>(text);
+							return p && typeof p.analysis === 'string'
+								? { valid: true }
+								: { valid: false, errorReason: 'Invalid rule analysis schema.' };
+						},
+					},
+				);
+				const p = json<any>(result.text);
+				if (p) ruleAnalysis = p.analysis;
+				telemetry.push({
+					task: 'rules.analyze',
+					modelId: result.modelId,
+					providerId: result.providerId,
+					source: result.source,
+					attempts: result.attempts,
+				});
+			} catch {}
+		}
 		let explanation=rules.reason;
 		if(rules.status!=='PASS'){try{const result=await this.runTask('capability.explain',JSON.stringify({action:cleanAction,intent,research,simulation,rules}),'Explain the canonical result plainly. Do not override or invent mechanics.',{timeoutMs:4500,maxTokens:700});explanation=result.text||explanation;telemetry.push({task:'capability.explain',modelId:result.modelId,providerId:result.providerId,source:result.source,attempts:result.attempts});}catch{}}
 		let tacticalContext: UnifiedActionPipelineResult['tacticalContext']={required:false,source:'NOT_REQUIRED'};
@@ -98,6 +135,6 @@ export class UnifiedAiActionOrchestrator {
 			tacticalContext={required:true,source:'DETERMINISTIC_FALLBACK'};
 			try{const result=await this.runTask('tactical.reason',JSON.stringify({action:cleanAction,intent,rules,simulation,combat:this.repository.getCombatEngine(storyId).getParticipants()}),'Return ONLY JSON {"plan":"..."}. Never invent actors, abilities, positions, or outcomes.',{timeoutMs:6000,maxTokens:900,validateResponse:(text:string)=>{const p=json<any>(text);return p&&typeof p.plan==='string'?{valid:true}:{valid:false,errorReason:'Invalid tactical plan.'};}});const p=json<any>(result.text);if(p)tacticalContext={required:true,plan:p.plan,source:result.source==='DETERMINISTIC_FALLBACK'?'DETERMINISTIC_FALLBACK':'AI'};telemetry.push({task:'tactical.reason',modelId:result.modelId,providerId:result.providerId,source:result.source,attempts:result.attempts});}catch{}
 		}
-		return {actionText:cleanAction,intent,research,capability:finalCandidate,simulation,rules,explanation,tacticalContext,narrationDirective:rules.status==='PASS'?('Describe only the canonical outcome after resolution. Intent: '+intent.intent+'. Mechanical result: '+simulation.explanation):('Explain the canonical rejection/block without inventing success. '+explanation),telemetry};
+		return {actionText:cleanAction,intent,research,capability:finalCandidate,simulation,rules,explanation,ruleAnalysis,tacticalContext,narrationDirective:rules.status==='PASS'?('Describe only the canonical outcome after resolution. Intent: '+intent.intent+'. Mechanical result: '+simulation.explanation):('Explain the canonical rejection/block without inventing success. '+explanation),telemetry};
 	}
 }

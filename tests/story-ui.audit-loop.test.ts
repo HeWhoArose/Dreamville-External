@@ -17,7 +17,8 @@ test('Story UI audit-implementation-regression-fallback loop completes ten deter
 		'play.story',
 		'play.character',
 		'play.inventory',
-		'play.powers',
+		'play.world',
+		'play.recent-actions',
 		'play.combat',
 		'play.map',
 		'play.chronicle',
@@ -28,6 +29,8 @@ test('Story UI audit-implementation-regression-fallback loop completes ten deter
 
 	for (let iteration = 1; iteration <= 10; iteration += 1) {
 		assert.equal(menu.includes("route: 'play.world-systems'"), false, `Audit ${iteration}: developer World Systems route leaked into player navigation`);
+		assert.equal(menu.includes("route: 'play.powers'"), false, `Audit ${iteration}: internal capability workbench leaked into player navigation`);
+		assert.equal(shell.includes("primaryIds = new Set(['story', 'character', 'inventory', 'map', 'combat'])"), true, `Audit ${iteration}: Character/World primary-secondary navigation boundary changed`);
 		for (const route of playerRoutes) {
 			assert.equal(menu.includes(`route: '${route}'`), true, `Audit ${iteration}: navigation lost ${route}`);
 			assert.equal(app.includes(`currentRoute === '${route}'`), true, `Audit ${iteration}: ${route} has no real viewport`);
@@ -52,5 +55,11 @@ test('Story UI audit-implementation-regression-fallback loop completes ten deter
 
 		// Regression boundary: speaker themes remain world-scoped.
 		assert.equal(story.includes('getCharacterSpeakerTheme'), true, `Audit ${iteration}: world-scoped speaker color system disconnected`);
+		assert.equal(story.includes('Latest turn'), true, `Audit ${iteration}: immediate turn result disappeared`);
+		assert.equal(story.includes('Generate Scene'), true, `Audit ${iteration}: scene generation entry disappeared`);
+		assert.equal(story.includes('Generate Image'), true, `Audit ${iteration}: scene image action disappeared`);
+		assert.equal(story.includes('Generate Prompt'), true, `Audit ${iteration}: scene prompt action disappeared`);
+		assert.equal(story.includes('Capability DAG & Derived Skills'), false, `Audit ${iteration}: internal capability graph leaked into player UI`);
+		assert.equal(story.includes('Adjudication Outcome'), false, `Audit ${iteration}: internal adjudication panel leaked into player UI`);
 	}
 });

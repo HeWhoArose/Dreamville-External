@@ -10,7 +10,7 @@ describe('CH4 SURGICAL REPAIR (Evidence Identity & AI Boundary)', () => {
   const recordChronicleEvidence = (repository: InMemoryWorldRepository, storyId: string, chronicle: any, evidence: HistoricalEvidence) => {
     repository.beginCanonicalCommandTransaction(storyId, `test_chronicle_${evidence.id}`);
     try {
-      const result = recordChronicleEvidence(repo, 'ch4_test_story', chronicle, evidence);
+      const result = chronicle.recordEvidence(evidence);
       repository.commitCanonicalCommandTransaction(storyId, evidence.sourceEventId || evidence.id);
       return result;
     } catch (error) {

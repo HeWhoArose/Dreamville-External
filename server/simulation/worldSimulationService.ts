@@ -14,6 +14,27 @@ import { HistoricalEvidence } from '../domain/historicalEvidence';
 export class WorldSimulationService {
   constructor(private worldRepo: WorldRepository) {}
 
+  private recordChronicleEvidence(
+    storyId: string,
+    chronicleEngine: ReturnType<WorldRepository['getHistoricalChronicleEngine']>,
+    evidence: HistoricalEvidence,
+  ): void {
+    if (this.worldRepo.isCanonicalCommandTransactionActive()) {
+      chronicleEngine.recordEvidence(evidence);
+      return;
+    }
+
+    const commandId = `simulation_chronicle_${storyId}_${evidence.id}`;
+    chronicleEngine.beginCanonicalTransaction(commandId);
+    try {
+      chronicleEngine.recordEvidence(evidence);
+      chronicleEngine.commitCanonicalTransaction(evidence.sourceEventId || evidence.id);
+    } catch (error) {
+      chronicleEngine.rollbackCanonicalTransaction();
+      throw error;
+    }
+  }
+
   /**
    * Initiates a deterministic travel journey for the player.
    * DreamBook §307, §338, §339 & Decision 1.
@@ -157,7 +178,7 @@ export class WorldSimulationService {
         // Record historical evidence for completed territorial transit
         const destNode = this.worldRepo.getGeographyGraph(storyId).getNode(journey.destinationLocationId);
         const chronicleEngine = this.worldRepo.getHistoricalChronicleEngine(storyId);
-        chronicleEngine.recordEvidence({
+        this.recordChronicleEvidence(storyId, chronicleEngine, {
           id: `ev_travel_${journey.id}_completed`,
           category: 'TERRITORIAL_TRANSIT',
           timestamp: updatedClockState.timestamp,
@@ -364,7 +385,7 @@ export class WorldSimulationService {
 
     for (const ev of livingSummary.triggeredEvents) {
       const eventId = `ev_world_${ev.id}_${updatedClockState.timestamp.totalElapsedSeconds}`;
-      chronicleEngine.recordEvidence({
+      this.recordChronicleEvidence(storyId, chronicleEngine, {
         id: eventId,
         category: 'WORLD_ANOMALY',
         timestamp: updatedClockState.timestamp,
@@ -419,7 +440,7 @@ export class WorldSimulationService {
     }
 
     for (const ev of livingSummary.missedEvents) {
-      chronicleEngine.recordEvidence({
+      this.recordChronicleEvidence(storyId, chronicleEngine, {
         id: `ev_world_missed_${ev.id}_${updatedClockState.timestamp.totalElapsedSeconds}`,
         category: 'WORLD_ANOMALY',
         timestamp: updatedClockState.timestamp,
@@ -461,7 +482,7 @@ export class WorldSimulationService {
           this.worldRepo.updatePlayerLifecycle(storyId, updatedPlayer);
 
           const eventId = `ev_sunrise_reversion_${updatedClockState.timestamp.totalElapsedSeconds}`;
-          chronicleEngine.recordEvidence({
+          this.recordChronicleEvidence(storyId, chronicleEngine, {
             id: eventId,
             category: 'LIFECYCLE_TRANSITION',
             timestamp: updatedClockState.timestamp,
@@ -559,7 +580,7 @@ export class WorldSimulationService {
     this.worldRepo.updatePlayerLifecycle(storyId, updatedPlayer);
 
     const chronicleEngine = this.worldRepo.getHistoricalChronicleEngine(storyId);
-    chronicleEngine.recordEvidence({
+    this.recordChronicleEvidence(storyId, chronicleEngine, {
       id: `ev_journey_interrupt_${currentElapsed}`,
       category: 'TERRITORIAL_TRANSIT',
       timestamp: clock.getTimestamp(),
@@ -627,7 +648,7 @@ export class WorldSimulationService {
 
     // Record historical evidence
     const chronicleEngine = this.worldRepo.getHistoricalChronicleEngine(storyId);
-    chronicleEngine.recordEvidence({
+    this.recordChronicleEvidence(storyId, chronicleEngine, {
       id: `ev_inj_${injury.id}`,
       category: 'INJURY_OR_RECOVERY',
       timestamp,
@@ -674,7 +695,7 @@ export class WorldSimulationService {
 
     // Record historical evidence
     const chronicleEngine = this.worldRepo.getHistoricalChronicleEngine(storyId);
-    chronicleEngine.recordEvidence({
+    this.recordChronicleEvidence(storyId, chronicleEngine, {
       id: `ev_heal_${injuryId}_${timestamp.totalElapsedSeconds}`,
       category: 'INJURY_OR_RECOVERY',
       timestamp,
@@ -729,7 +750,7 @@ export class WorldSimulationService {
 
     // Record historical evidence
     const chronicleEngine = this.worldRepo.getHistoricalChronicleEngine(storyId);
-    chronicleEngine.recordEvidence({
+    this.recordChronicleEvidence(storyId, chronicleEngine, {
       id: `ev_trans_${record.id}`,
       category: 'LIFECYCLE_TRANSITION',
       timestamp,
@@ -771,7 +792,7 @@ export class WorldSimulationService {
 
     // Record historical evidence
     const chronicleEngine = this.worldRepo.getHistoricalChronicleEngine(storyId);
-    chronicleEngine.recordEvidence({
+    this.recordChronicleEvidence(storyId, chronicleEngine, {
       id: `ev_revert_trans_${updatedPlayer.actorId}_${timestamp.totalElapsedSeconds}`,
       category: 'LIFECYCLE_TRANSITION',
       timestamp,
@@ -821,7 +842,7 @@ export class WorldSimulationService {
 
     // Record historical evidence
     const chronicleEngine = this.worldRepo.getHistoricalChronicleEngine(storyId);
-    chronicleEngine.recordEvidence({
+    this.recordChronicleEvidence(storyId, chronicleEngine, {
       id: `ev_death_${updatedPlayer.actorId}_${timestamp.totalElapsedSeconds}`,
       category: 'LIFECYCLE_TRANSITION',
       timestamp,
@@ -867,7 +888,7 @@ export class WorldSimulationService {
 
     // Record historical evidence
     const chronicleEngine = this.worldRepo.getHistoricalChronicleEngine(storyId);
-    chronicleEngine.recordEvidence({
+    this.recordChronicleEvidence(storyId, chronicleEngine, {
       id: `ev_revive_${updatedPlayer.actorId}_${timestamp.totalElapsedSeconds}`,
       category: 'LIFECYCLE_TRANSITION',
       timestamp,
@@ -914,7 +935,7 @@ export class WorldSimulationService {
 
     // Record historical evidence
     const chronicleEngine = this.worldRepo.getHistoricalChronicleEngine(storyId);
-    chronicleEngine.recordEvidence({
+    this.recordChronicleEvidence(storyId, chronicleEngine, {
       id: `ev_possession_${updatedPlayer.actorId}_${timestamp.totalElapsedSeconds}`,
       category: 'LIFECYCLE_TRANSITION',
       timestamp,
@@ -956,7 +977,7 @@ export class WorldSimulationService {
 
     // Record historical evidence
     const chronicleEngine = this.worldRepo.getHistoricalChronicleEngine(storyId);
-    chronicleEngine.recordEvidence({
+    this.recordChronicleEvidence(storyId, chronicleEngine, {
       id: `ev_rel_poss_${updatedPlayer.actorId}_${timestamp.totalElapsedSeconds}`,
       category: 'LIFECYCLE_TRANSITION',
       timestamp,

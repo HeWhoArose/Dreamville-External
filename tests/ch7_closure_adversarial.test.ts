@@ -159,7 +159,10 @@ describe('CH7 Final Closure Adversarial Audit', () => {
     it('tests Outcome 1: EXISTING_CAPABILITY', async () => {
       const res = await fetch(`${baseUrl}/capabilities/interpret`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-dreamville-internal-ai': 'true',
+        },
         body: JSON.stringify({ actionText: 'Fireball', executeIfValid: false }),
       });
       assert.strictEqual(res.status, 200);
@@ -172,7 +175,10 @@ describe('CH7 Final Closure Adversarial Audit', () => {
     it('tests Outcome 2: CONTEXTUAL_MODIFICATION', async () => {
       const res = await fetch(`${baseUrl}/capabilities/interpret`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-dreamville-internal-ai': 'true',
+        },
         body: JSON.stringify({ actionText: 'I cast Fireball with maximum overcharge power', executeIfValid: false }),
       });
       assert.strictEqual(res.status, 200);
@@ -189,7 +195,10 @@ describe('CH7 Final Closure Adversarial Audit', () => {
 
       const res = await fetch(`${baseUrl}/capabilities/interpret`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-dreamville-internal-ai': 'true',
+        },
         body: JSON.stringify({
           storyId,
           actionText: 'I weave a veil of dampening starlight',
@@ -218,7 +227,10 @@ describe('CH7 Final Closure Adversarial Audit', () => {
 
       const res = await fetch(`${baseUrl}/capabilities/interpret`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-dreamville-internal-ai': 'true',
+        },
         body: JSON.stringify({
           storyId,
           actionText: 'I channel a vortex of cryogenic mist to freeze the floor',
@@ -241,7 +253,10 @@ describe('CH7 Final Closure Adversarial Audit', () => {
     it('tests Outcome 4: UNSUPPORTED', async () => {
       const res = await fetch(`${baseUrl}/capabilities/interpret`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-dreamville-internal-ai': 'true',
+        },
         body: JSON.stringify({ actionText: '   ', executeIfValid: false }),
       });
       assert.strictEqual(res.status, 200);
@@ -305,7 +320,10 @@ describe('CH7 Final Closure Adversarial Audit', () => {
       for (const t of invalidTiers) {
         const res = await fetch(`${baseUrl}/capabilities/synthesize`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+          'Content-Type': 'application/json',
+          'x-dreamville-internal-ai': 'true',
+        },
           body: JSON.stringify({ conceptName: 'Test Power', description: 'desc', powerTier: t }),
         });
         assert.strictEqual(res.status, 400, `Tier ${t} must return 400 Bad Request`);

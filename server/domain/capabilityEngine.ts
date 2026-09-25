@@ -870,6 +870,18 @@ export class CapabilityEngine {
     return inst ? JSON.parse(JSON.stringify(inst)) : undefined;
   }
 
+  /**
+   * Returns immutable capability definitions for skills the actor has actually learned.
+   * This deliberately does not require the capability to be currently effective/executable;
+   * a learned skill remains visible in the Skillbook even when vessel/resource limits block use.
+   */
+  public getActorLearnedCapabilities(actorId: string): CapabilityDefinition[] {
+    return this.getActorSkillInstances(actorId)
+      .map((instance) => this.capabilities.get(instance.capabilityId))
+      .filter((capability): capability is CapabilityDefinition => Boolean(capability))
+      .map((capability) => JSON.parse(JSON.stringify(capability)) as CapabilityDefinition);
+  }
+
   public getActorSkillInstances(actorId: string): SkillInstance[] {
     let instanceMap = this.actorSkillInstances.get(actorId);
     if (!instanceMap) {

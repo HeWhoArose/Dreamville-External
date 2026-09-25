@@ -54,6 +54,7 @@ export interface RouteMeta {
   title: string;
   category: 'BOOT' | 'HOME' | 'WORLDS' | 'CREATE' | 'COMPENDIUM' | 'PLAY' | 'ENGINE' | 'OPERATIONS';
   requiresActiveStory?: boolean;
+  internalOnly?: boolean;
 }
 
 export const ROUTE_REGISTRY: Record<AppRoute, RouteMeta> = {
@@ -78,14 +79,14 @@ export const ROUTE_REGISTRY: Record<AppRoute, RouteMeta> = {
   'play.world': { route: 'play.world', title: 'World', category: 'PLAY', requiresActiveStory: true },
   'play.recent-actions': { route: 'play.recent-actions', title: 'Recent Actions', category: 'PLAY', requiresActiveStory: true },
   'play.inventory': { route: 'play.inventory', title: 'Inventory & Equipment', category: 'PLAY', requiresActiveStory: true },
-  'play.powers': { route: 'play.powers', title: 'Powers & Capabilities', category: 'PLAY', requiresActiveStory: true },
+  'play.powers': { route: 'play.powers', title: 'Internal Capability Workbench', category: 'PLAY', requiresActiveStory: true, internalOnly: true },
   'play.combat': { route: 'play.combat', title: 'Tactical Combat', category: 'PLAY', requiresActiveStory: true },
   'play.map': { route: 'play.map', title: 'World Map', category: 'PLAY', requiresActiveStory: true },
   'play.chronicle': { route: 'play.chronicle', title: 'Chronicle & Memory', category: 'PLAY', requiresActiveStory: true },
   'play.codex': { route: 'play.codex', title: 'World Codex', category: 'PLAY', requiresActiveStory: true },
   'play.evidence': { route: 'play.evidence', title: 'Evidence & Clues', category: 'PLAY', requiresActiveStory: true },
   'play.relationships': { route: 'play.relationships', title: 'Relationships & Factions', category: 'PLAY', requiresActiveStory: true },
-  'play.world-systems': { route: 'play.world-systems', title: 'World Systems', category: 'PLAY', requiresActiveStory: true },
+  'play.world-systems': { route: 'play.world-systems', title: 'Internal World Systems', category: 'PLAY', requiresActiveStory: true, internalOnly: true },
   settings: { route: 'settings', title: 'Settings', category: 'ENGINE' },
   'engine.settings': { route: 'engine.settings', title: 'Settings', category: 'ENGINE' },
   'engine.routing': { route: 'engine.routing', title: 'Model Routing', category: 'ENGINE' },

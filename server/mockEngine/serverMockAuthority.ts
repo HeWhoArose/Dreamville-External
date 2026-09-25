@@ -82,12 +82,14 @@ export class ServerMockAuthority {
       const protagonistPortraitEmoji = run?.characterPortraitEmoji || '🧙‍♂️';
 
       const initialCharacters: Record<string, any> = {};
+      const activeWorldId = run?.worldId;
       const protagonistActorId = player?.actorId || `player_actor_${storyId}`;
       initialCharacters[protagonistActorId] = {
         id: protagonistActorId,
         name: protagonistName,
         title: protagonistRole,
         role: 'PROTAGONIST',
+        worldId: activeWorldId,
         locationId: player?.locationId || `loc_${storyId}_start`,
         presence: 'PRESENT',
         disposition: 'FRIENDLY',
@@ -102,6 +104,7 @@ export class ServerMockAuthority {
           name: npc.name,
           title: npc.currentActivity || 'Resident',
           role: 'NPC',
+          worldId: activeWorldId,
           locationId: npc.locationId,
           presence: npc.locationId === player?.locationId ? 'PRESENT' : 'ABSENT',
           disposition: 'NEUTRAL',
@@ -201,6 +204,7 @@ export class ServerMockAuthority {
         name: char.name,
         title: char.title,
         role: char.role,
+        worldId: (char as any).worldId || run?.worldId,
         locationId: char.locationId,
         presence: char.presence,
         disposition: char.disposition,
@@ -337,6 +341,7 @@ export class ServerMockAuthority {
 
     return {
       storyId: targetStoryId,
+      worldId: run?.worldId,
       narrativeProfile: worldRepository.getNarrativeProfile(targetStoryId) || undefined,
       rulesProfile: worldRepository.getRulesProfile(targetStoryId) || undefined,
       worldTime: { ...state.worldTime },

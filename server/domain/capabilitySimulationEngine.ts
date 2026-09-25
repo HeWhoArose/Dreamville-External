@@ -390,10 +390,11 @@ function characterAllows(
   // that the character already possesses the candidate's supernatural mechanism.
   const candidateText = normalize(candidate ? `${candidate.name} ${candidate.description} ${candidate.provenance}` : '');
   const mechanismText = actorText + ' ' + ownedText;
-  const isGenericMagicUser =
-    /\b(mage|wizard|sorcerer|spellcaster|warlock|archmage|magus|witch|cleric|paladin|priest)\b/.test(mechanismText);
   const isDarkMagicSpecialist =
-    /\b(dark mage|shadow mage|necromancer|void mage|curse|shadow magic|void magic)\b/.test(mechanismText);
+    /\b(dark mage|shadow mage|necromancer|void mage|curse|shadow magic|void magic|cursed magic|umbral magic)\b/.test(mechanismText);
+  const isBroadMagicUser =
+    /\b(mage|wizard|sorcerer|spellcaster|warlock|archmage|magus|witch|cleric|paladin|priest)\b/.test(mechanismText) &&
+    !isDarkMagicSpecialist;
 
   // Hard world-specific affinity gate: in an Avatar-style bending world,
   // lightning requires an established firebending or Avatar basis. Earthbending
@@ -454,22 +455,29 @@ function characterAllows(
   if (domain === 'SPATIAL_TRANSIT' && !hasExplicitMechanism(domainTerms('SPATIAL_TRANSIT')) && !isGenericMagicUser) return { allowed: false, reason: 'The character has no established spatial-transit mechanism such as teleportation, portals, or an equivalent existing technique.' };
   if (domain === 'LIGHTNING' && !hasExplicitMechanism(domainTerms('LIGHTNING')) && !/\b(firebender|avatar)\b/.test(mechanismText) && !isGenericMagicUser) return { allowed: false, reason: 'The character has no established lightning-compatible affinity or mechanism.' };
   if (domain === 'FIRE' && !hasExplicitMechanism(['fire', 'flame', 'pyromancy', 'fire magic', 'firebender'])) {
-    // A dark-magic specialist may express a fire-like effect through an explicitly
-    // dark/shadow/void/cursed mechanism. This is an alternate mechanism, not ordinary fire.
+    // A specialized dark/shadow/void character cannot silently inherit ordinary
+    // fire magic just because their role name contains "mage". An alternate is only
+    // acceptable when the proposed capability explicitly changes the mechanism.
     const darkFireExpression =
       isDarkMagicSpecialist &&
-      /\b(dark|shadow|void|cursed|necrotic)\b/.test(candidateText);
+      /\b(dark|shadow|void|cursed|necrotic|umbral)\b/.test(candidateText) &&
+      !/\b(fireball|pyromancy|fire magic|ordinary fire|firebending)\b/.test(candidateText);
 
     if (darkFireExpression) {
       return { allowed: true };
     }
 
-    if (!isGenericMagicUser) {
-      return { allowed: false, reason: 'The character has no established fire-manipulation mechanism for this technique.' };
+    if (!isBroadMagicUser) {
+      return {
+        allowed: false,
+        reason: isDarkMagicSpecialist
+          ? 'The character has an established dark/shadow mechanism but no established ordinary fire mechanism; a generic Fire technique cannot be created without an explicit compatible alternate mechanism.'
+          : 'The character has no established fire-manipulation mechanism for this technique.',
+      };
     }
 
-    // A generic mage/wizard/sorcerer is compatible with ordinary fire magic
-    // when the active world itself permits the magic system.
+    // A broad magic user may learn ordinary fire magic when the world supports
+    // spellcasting. Specialized magic disciplines do not inherit every elemental school.
     return { allowed: true };
   }
   if (domain === 'WATER' && !hasExplicitMechanism(domainTerms('WATER')) && !isGenericMagicUser) return { allowed: false, reason: 'The character has no established water/ice manipulation mechanism for this technique.' };
@@ -477,7 +485,7 @@ function characterAllows(
   if (domain === 'AIR' && !hasExplicitMechanism(domainTerms('AIR')) && !isGenericMagicUser) return { allowed: false, reason: 'The character has no established air/wind manipulation mechanism for this technique.' };
   if (domain === 'SHADOW' && !hasExplicitMechanism(domainTerms('SHADOW')) && !isGenericMagicUser) return { allowed: false, reason: 'The character has no established shadow/void/darkness mechanism for this technique.' };
   if (
-    isGenericMagicUser &&
+    isBroadMagicUser &&
     ['MAGIC', 'TEMPORAL', 'DIMENSIONAL', 'SPATIAL_TRANSIT', 'LIGHTNING', 'WATER', 'EARTH', 'AIR', 'SHADOW'].includes(domain || '')
   ) {
     return { allowed: true };

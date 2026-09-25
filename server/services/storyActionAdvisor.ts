@@ -439,45 +439,62 @@ export class StoryActionAdvisor {
 			};
 		}
 
-		const canExploreCharacterCompatibleAlternative =
-			simulation.worldAllowed &&
-			(simulation.status === 'DEVELOPABLE' ||
-				simulation.status === 'CHARACTER_INCOMPATIBLE' ||
-				simulation.status === 'ALTERNATE_ROUTE');
-
-		if (canExploreCharacterCompatibleAlternative) {
-			const proposalCandidate = candidate || simulation.candidateCapability;
-			if (!proposalCandidate) {
-				return {
-					mode: 'CAPABILITY_SIMULATION',
-					actionText,
-					actorId,
-					tips,
-					recognizedCapability: candidate,
-					simulation,
-					canExecuteNow: false,
-				};
-			}
-			const proposal = await this.createAlternativeProposal(
+		// A fully world/character-compatible capability that is not yet learned is
+		// a direct acquisition candidate. We do not invent a renamed clone just to
+		// manufacture a proposal; the canonical capability itself is the candidate.
+		if (simulation.status === 'DEVELOPABLE' && (candidate || simulation.candidateCapability)) {
+			const proposalCandidate = candidate || simulation.candidateCapability!;
+			const proposal = this.createDirectAcquisitionProposal(
 				storyId,
 				actorId,
 				actionText,
 				proposalCandidate,
-				run,
 				simulation,
 			);
-			if (proposal) {
-				this.pendingProposals.set(proposal.proposalId, proposal);
-				return {
-					mode: 'SUGGEST_ALTERNATIVE',
-					actionText,
+			this.pendingProposals.set(proposal.proposalId, proposal);
+			return {
+				mode: 'SUGGEST_ALTERNATIVE',
+				actionText,
+				actorId,
+				tips,
+				recognizedCapability: candidate,
+				simulation,
+				proposal,
+				canExecuteNow: false,
+			};
+		}
+
+		// Character incompatibility may justify an AI-generated alternate mechanism,
+		// but an alternate-route hint alone must never be turned into a renamed copy
+		// of the forbidden request. The generated candidate is dry-run validated below.
+		if (
+			simulation.worldAllowed &&
+			(simulation.status === 'CHARACTER_INCOMPATIBLE' ||
+				simulation.status === 'ALTERNATE_ROUTE')
+		) {
+			const proposalCandidate = candidate || simulation.candidateCapability;
+			if (proposalCandidate) {
+				const proposal = await this.createAlternativeProposal(
+					storyId,
 					actorId,
-					tips,
-					recognizedCapability: candidate,
-					simulation: proposal.simulation,
-					proposal,
-					canExecuteNow: false,
-				};
+					actionText,
+					proposalCandidate,
+					run,
+					simulation,
+				);
+				if (proposal) {
+					this.pendingProposals.set(proposal.proposalId, proposal);
+					return {
+						mode: 'SUGGEST_ALTERNATIVE',
+						actionText,
+						actorId,
+						tips,
+						recognizedCapability: candidate,
+						simulation: proposal.simulation,
+						proposal,
+						canExecuteNow: false,
+					};
+				}
 			}
 		}
 
@@ -500,6 +517,34 @@ export class StoryActionAdvisor {
 			recognizedCapability: candidate,
 			simulation,
 			canExecuteNow: false,
+		};
+	}
+
+	private createDirectAcquisitionProposal(
+		storyId: string,
+		actorId: string,
+		actionText: string,
+		capability: CapabilityDefinition,
+		simulation: CapabilitySimulationResult,
+	): ActionCapabilityProposal {
+		return {
+			proposalId: deterministicId(
+				'action_capability_proposal',
+				storyId,
+				actorId,
+				actionText,
+				capability.id,
+				'direct',
+			),
+			requestedAction: actionText,
+			requestedCapabilityId: capability.id,
+			requestedCapabilityName: capability.name,
+			reasonRequestedCapabilityUnavailable:
+				`'${capability.name}' is not currently learned. The world and character support it, but explicit acquisition is required; nothing has been acquired yet.`,
+			alternative: capability,
+			simulation,
+			acceptLabel: 'Learn ' + capability.name + ' and use it',
+			rejectLabel: 'Do not learn it',
 		};
 	}
 
@@ -634,23 +679,10 @@ export class StoryActionAdvisor {
 			alternative = undefined;
 		}
 
-		if (!alternative) {
-			alternative = {
-				id: deterministicId('cap_advisor_preview', storyId, actorId, actionText),
-				name: concept,
-				category: requestedCapability.category,
-				activationMode: requestedCapability.activationMode,
-				powerTier: requestedCapability.powerTier,
-				baseEnergyCost: requestedCapability.baseEnergyCost,
-				baseStrainCost: requestedCapability.baseStrainCost,
-				minVesselCapacityRequired: requestedCapability.minVesselCapacityRequired,
-				description: 'A character-compatible adaptation of ' + requestedCapability.name + ', expressed through the character’s established power domain.',
-				provenance: 'ACTION_ADVISOR_DETERMINISTIC_PREVIEW',
-				actionType: requestedCapability.actionType,
-				targetType: requestedCapability.targetType,
-				rangeScope: requestedCapability.rangeScope,
-			};
-		}
+		// No generated alternate means there is no safe alternative. Do not fall back
+		// to a renamed copy of the forbidden request; that would defeat world/character
+		// compatibility checks.
+		if (!alternative) return null;
 
 		// Never trust an AI/deterministic synthesis result by itself. Re-run the generated
 		// candidate through the same dry-run simulator before presenting it as learnable.

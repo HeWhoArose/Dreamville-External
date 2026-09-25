@@ -1244,7 +1244,13 @@ Rules:
     worldTemplate: WorldTemplate
   ): Promise<CapabilityDefinition & { generatedSkills: GeneratedTechnique[] }> {
     const concept = input.capabilityConcept || 'Unique Ability';
-    const capId = `cap_custom_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const capId = deterministicId(
+      'cap_custom_proposal',
+      input.worldId || worldTemplate?.worldId || 'unknown_world',
+      concept,
+      input.characterContext?.role || '',
+      input.characterContext?.species || ''
+    );
     let proposal: any = null;
 
     const charCtxStr = input.characterContext
@@ -1316,9 +1322,21 @@ IMPORTANT:
     try {
       const orchestrator = worldRepository.getAiOrchestrator();
       const response = await orchestrator.executeTaskGeneration(
-        'narrative.generate',
+        'character.capability.propose',
         prompt,
-        'Return only the requested structured custom capability JSON.'
+        'Return only the requested structured custom capability JSON.',
+        {
+          timeoutMs: 12000,
+          validateResponse: (text) => {
+            const parsed = this.parseJsonFromAiResponse(text);
+            return parsed && typeof parsed.name === 'string' && Array.isArray(parsed.techniques)
+              ? { valid: true }
+              : {
+                  valid: false,
+                  errorReason: 'Capability proposal must contain a name and a techniques array.',
+                };
+          },
+        }
       );
       if (response.text) {
         proposal = this.parseJsonFromAiResponse(response.text);

@@ -174,3 +174,41 @@ test('an already-owned skill resolves to canonical execution rather than simulat
   assert.equal(result.currentlyExecutable, true);
   assert.equal(result.acquisitionAllowed, false);
 });
+
+
+test('simulation respects progression ceilings without mutating the actor', () => {
+  const result = simulator.simulate(
+    'I split the world in two',
+    {
+      actorId: 'maxed',
+      character: { name: 'Unknown Dark Knight', role: 'Dark Knight' },
+      world: {
+        title: 'Primordial Realm',
+        description: 'A world with metaphysical techniques, rituals, artifacts, and ascension paths.',
+        metaphysics: ['World-scale severance is a valid metaphysical effect.'],
+      },
+      ownedCapabilities: [],
+      skillInstances: [],
+      allWorldCapabilities: [],
+      progressionPolicy: {
+        progressionAllowed: true,
+        acquisitionAllowed: true,
+        maxLevel: 20,
+      },
+      progressionState: {
+        currentLevel: 20,
+        maxCharacterLevel: 20,
+        allowLevelUp: false,
+      },
+      powerState: {
+        ...basePower,
+        vesselCapacity: 20,
+        magicalEnergy: 10,
+      },
+    }
+  );
+
+  assert.equal(result.progressionPossible, false);
+  assert.equal(result.status, 'CURRENTLY_BLOCKED');
+  assert.match(result.blockers.join(' '), /progression ceiling/i);
+});

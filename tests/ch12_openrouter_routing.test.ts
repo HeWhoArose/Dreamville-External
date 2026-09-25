@@ -408,7 +408,7 @@ test('OpenRouter reports tool-call-only responses distinctly instead of mislabel
       () => adapter.generate('character.extract', 'Return structured text.', {
         modelId: 'provider/tool-only',
       }),
-      /tool call(s).*no assistant text/i
+      /tool call\(s\).*no assistant text/i
     );
   } finally {
     globalThis.fetch = originalFetch;

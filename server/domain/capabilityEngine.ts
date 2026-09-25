@@ -437,7 +437,10 @@ export class CapabilityEngine {
     });
   }
 
-  public seedStarterPowerStateForActor(actorId: string): PowerState {
+  public seedStarterPowerStateForActor(
+    actorId: string,
+    options?: { starterCapabilities?: string[] }
+  ): PowerState {
     const existing = this.powerStates.get(actorId);
     if (existing) {
       this.initActorSkillInstances(actorId);
@@ -478,7 +481,12 @@ export class CapabilityEngine {
     const instanceMap = new Map<string, SkillInstance>();
     const learnedSet = new Set<string>();
 
-    const starterCaps = ['cap_venomous_bite', 'cap_shadow_step', 'cap_fireball', 'cap_analyze'];
+    const starterCaps = options?.starterCapabilities || [
+      'cap_venomous_bite',
+      'cap_shadow_step',
+      'cap_fireball',
+      'cap_analyze',
+    ];
     for (const capId of starterCaps) {
       if (this.capabilities.has(capId)) {
         const instance: SkillInstance = {
@@ -926,14 +934,15 @@ export class CapabilityEngine {
       return [];
     }
     const set = this.actorLearnedCapabilities.get(actorId);
-    if (set) {
-      return Array.from(set)
-        .map((id) => this.capabilities.get(id))
-        .filter((cap): cap is CapabilityDefinition => Boolean(cap && cap.minVesselCapacityRequired <= power.vesselCapacity));
+    if (!set) {
+      return [];
     }
-    return Array.from(this.capabilities.values()).filter(
-      (cap) => !cap.provenance.startsWith('equipment:') && cap.minVesselCapacityRequired <= power.vesselCapacity
-    );
+
+    return Array.from(set)
+      .map((id) => this.capabilities.get(id))
+      .filter((cap): cap is CapabilityDefinition => Boolean(
+        cap && cap.minVesselCapacityRequired <= power.vesselCapacity
+      ));
   }
 
   /**
@@ -1871,9 +1880,7 @@ export class CapabilityEngine {
     // Step 1: Check for exact ID match or direct capability name match
     let matchedCap: CapabilityDefinition | undefined;
     if (params.intendedCapabilityId) {
-      matchedCap =
-        actorCaps.find((c) => c.id === params.intendedCapabilityId) ||
-        this.capabilities.get(params.intendedCapabilityId);
+      matchedCap = actorCaps.find((c) => c.id === params.intendedCapabilityId);
     }
 
     if (!matchedCap) {

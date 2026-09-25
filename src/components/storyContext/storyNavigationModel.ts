@@ -133,6 +133,25 @@ export function deriveStoryMenu(config: StoryNavigationConfig = {}): StoryMenuEn
     });
 
 
+    menu.push({
+      id: 'world',
+      label: 'World',
+      iconType: 'locations',
+      enabled: true,
+      visible: true,
+      route: 'play.world',
+      reason: 'Characters and places in the active world',
+    });
+
+    menu.push({
+      id: 'recent-actions',
+      label: 'Recent Actions',
+      iconType: 'journal',
+      enabled: true,
+      visible: true,
+      route: 'play.recent-actions',
+    });
+
     // Mystery stories do not expose tactical combat by default unless combat explicitly activates
     if (hasActiveCombat) {
       menu.push({

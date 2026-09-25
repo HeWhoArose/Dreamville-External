@@ -1445,10 +1445,8 @@ export class InMemoryWorldRepository implements WorldRepository {
   public getHistoricalChronicleEngine(storyId: string): HistoricalChronicleEngine {
     let engine = this.chronicleEngines.get(storyId);
     if (!engine) {
-      // Chronicle transactions are enabled explicitly by the canonical command
-      // boundary. Outside that boundary, legacy/domain simulation APIs remain usable.
       engine = new HistoricalChronicleEngine({
-        writeMode: 'DIRECT',
+        writeMode: 'TRANSACTIONAL',
       });
       const persisted = this.getStoryRun(storyId)?.runtimeState?.chronicle;
       if (persisted) engine.importState(persisted);

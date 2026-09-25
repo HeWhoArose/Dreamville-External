@@ -1878,7 +1878,8 @@ gameRouter.post('/inventory/destroy', async (req: Request, res: Response) => {
 
 /**
  * GET /api/game/capabilities
- * Returns power state, effective capabilities list (including active equipment grants), and DAG graph for active player (CH6, CH7, CH3.2).
+ * Returns only player-safe capability state. Internal capability DAG/simulation
+ * metadata never crosses the player-facing API boundary.
  */
 gameRouter.get('/capabilities', async (req: Request, res: Response) => {
 	try {
@@ -1892,14 +1893,7 @@ gameRouter.get('/capabilities', async (req: Request, res: Response) => {
 		const capabilities = capEngine.getEffectiveActorCapabilities(actorId, invEngine);
 		const learnedCapabilities = capEngine.getActorLearnedCapabilities(actorId);
 		const skillInstances = capEngine.getAllSkillInstances(actorId);
-		const actorSkillIds = new Set(skillInstances.map((skill) => skill.capabilityId));
-		const graph = capEngine
-			.getCapabilityGraph()
-			.filter((node) =>
-				actorSkillIds.has(node.capabilityId) ||
-				node.derivedSkills.some((id) => actorSkillIds.has(id))
-			);
-		res.json({ actorId, powerState, capabilities, learnedCapabilities, skillInstances, graph });
+		res.json({ actorId, powerState, capabilities, learnedCapabilities, skillInstances });
 	} catch (error) {
     res.status(500).json({ error: 'Failed to retrieve capabilities.' });
   }
@@ -2028,8 +2022,6 @@ gameRouter.post('/capabilities/adjudicate', async (req: Request, res: Response) 
             powerState: capEngine.getPowerState(actorId),
             capabilities: capEngine.getEffectiveActorCapabilities(actorId, transactionInvEngine),
             skillInstances: capEngine.getAllSkillInstances(actorId),
-            graph: capEngine.getCapabilityGraph()
-              .filter((node) => capEngine.getSkillInstance(actorId, node.capabilityId) || node.derivedSkills.some((id) => Boolean(capEngine.getSkillInstance(actorId, id)))),
           },
           summary: result.approved
             ? `Capability ${intendedCapabilityId} adjudicated and committed.`
@@ -8572,9 +8564,6 @@ gameRouter.get('/run-canonical-state', (req: Request, res: Response) => {
 
     const actorCaps = capEngine.getEffectiveActorCapabilities(actorId, invEngine);
     const actorSkills = capEngine.getActorSkillInstances ? capEngine.getActorSkillInstances(actorId) : [];
-    const actorSkillIds = new Set(actorSkills.map((skill) => skill.capabilityId));
-    const actorGraph = (capEngine.getCapabilityGraph ? capEngine.getCapabilityGraph() : [])
-      .filter((node) => actorSkillIds.has(node.capabilityId) || node.derivedSkills.some((id) => actorSkillIds.has(id)));
 
     const activeQuests = (run?.plannedEvents || []).filter((e: any) => {
       const st = run?.eventStates?.[e.id]?.status;
@@ -8637,7 +8626,7 @@ gameRouter.get('/run-canonical-state', (req: Request, res: Response) => {
         coreCapabilities: actorCaps,
         learnedCapabilities: capEngine.getActorLearnedCapabilities(actorId),
         generatedTechniques: actorSkills,
-        graph: actorGraph,
+
       },
       quests: {
         active: activeQuests,

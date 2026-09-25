@@ -202,12 +202,16 @@ export class ServerMockAuthority {
     const activeWorldId = run?.worldId;
     const sanitizedCharacters: Record<string, ExternalCharacter> = {};
     for (const [id, char] of Object.entries(state.characters)) {
+      const characterWorldId = (char as any).worldId || activeWorldId;
+      if (activeWorldId && characterWorldId !== activeWorldId) {
+        continue;
+      }
       sanitizedCharacters[id] = {
         id: char.id,
         name: char.name,
         title: char.title,
         role: char.role,
-        worldId: (char as any).worldId || activeWorldId,
+        worldId: characterWorldId,
         locationId: char.locationId,
         presence: char.presence,
         disposition: char.disposition,

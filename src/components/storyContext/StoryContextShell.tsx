@@ -152,7 +152,9 @@ export const StoryContextShell: React.FC<StoryContextShellProps> = ({
             default: return <Compass className="h-4 w-4" />;
           }
         };
-        const primaryIds = new Set(['story', 'character', 'inventory', 'map', 'combat']);
+        // Character/World/Recent Actions are contextual tools and live inside More.
+        // Story, inventory, map, and active combat remain the primary in-scene tools.
+        const primaryIds = new Set(['story', 'inventory', 'map', 'combat']);
         const primaryEntries = storyMenu.filter((entry) => primaryIds.has(entry.id) && entry.visible);
         const moreEntries = storyMenu.filter((entry) => !primaryIds.has(entry.id) && entry.visible);
         const navigate = (route: AppRoute) => {

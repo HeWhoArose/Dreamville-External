@@ -499,12 +499,7 @@ class ApiClient {
    * Fetches power state, registered capabilities, and DAG graph (CH6).
    * GET /api/game/capabilities
    */
-  public async getCapabilities(): Promise<{
-    actorId: string;
-    powerState?: any;
-    capabilities: any[];
-    graph: any[];
-  }> {
+  public async getCapabilities(): Promise<import('../types').CapabilitiesResponse> {
     const res = await fetch(`${this.baseUrl}/capabilities`, {
       method: 'GET',
       headers: {

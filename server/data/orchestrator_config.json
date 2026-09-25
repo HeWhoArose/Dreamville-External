@@ -8,7 +8,15 @@
     "utility.inspect": "openrouter::sao10k/l3-lunaris-8b",
     "speech.generate": "provider_mock_speech::mock-speech-v1",
     "image.generate": "google_imagen::imagen-3.0-generate-002",
-    "speech.transcribe": "provider_mock_stt::mock-stt-v1"
+    "speech.transcribe": "provider_mock_stt::mock-stt-v1",
+    "world.generate": "google_gemini::gemini-3.5-flash",
+    "intent.interpret": "google_gemini::gemini-3.5-flash-lite",
+    "capability.synthesize": "google_gemini::gemini-3.5-flash",
+    "capability.explain": "google_gemini::gemini-3.5-flash-lite",
+    "research.query": "google_gemini::gemini-3.5-flash",
+    "research.world-brief": "google_gemini::gemini-3.5-flash",
+    "rules.analyze": "google_gemini::gemini-3.5-flash",
+    "tactical.reason": "google_gemini::gemini-3.5-flash"
   },
   "fallbackChains": {
     "narrative.generate": [
@@ -90,6 +98,54 @@
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "image.generate": [
+      "provider_deterministic_emergency::emergency-fallback-local"
+    ],
+    "world.generate": [
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "openrouter::google/gemma-3-12b-it",
+      "provider_deterministic_emergency::emergency-fallback-local"
+    ],
+    "intent.interpret": [
+      "google_gemini::gemini-3.5-flash-lite",
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "provider_deterministic_emergency::emergency-fallback-local"
+    ],
+    "capability.synthesize": [
+      "google_gemini::gemini-3.5-flash",
+      "openrouter::deepseek/deepseek-r1",
+      "google_gemini::gemini-3.8-flash",
+      "provider_deterministic_emergency::emergency-fallback-local"
+    ],
+    "capability.explain": [
+      "google_gemini::gemini-3.5-flash-lite",
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "provider_deterministic_emergency::emergency-fallback-local"
+    ],
+    "research.query": [
+      "google_gemini::gemini-3.5-flash",
+      "openrouter::deepseek/deepseek-r1",
+      "google_gemini::gemini-3.8-flash",
+      "provider_deterministic_emergency::emergency-fallback-local"
+    ],
+    "research.world-brief": [
+      "google_gemini::gemini-3.5-flash",
+      "openrouter::deepseek/deepseek-r1",
+      "google_gemini::gemini-3.8-flash",
+      "provider_deterministic_emergency::emergency-fallback-local"
+    ],
+    "rules.analyze": [
+      "google_gemini::gemini-3.5-flash",
+      "openrouter::deepseek/deepseek-r1",
+      "google_gemini::gemini-3.8-flash",
+      "provider_deterministic_emergency::emergency-fallback-local"
+    ],
+    "tactical.reason": [
+      "google_gemini::gemini-3.5-flash",
+      "openrouter::deepseek/deepseek-r1",
+      "google_gemini::gemini-3.8-flash",
       "provider_deterministic_emergency::emergency-fallback-local"
     ]
   },

@@ -35,6 +35,7 @@ export interface ComicSceneContext {
     speakerName?: string;
     text?: string;
   } | null;
+  actionType?: string;
 }
 
 export interface ComicScenePromptResult {
@@ -64,9 +65,10 @@ export function buildComicScenePrompt(context: ComicSceneContext): ComicScenePro
     ),
   ];
 
-  const immediateDialogue = context.activeDialogue?.text
-    ? `${context.activeDialogue.speakerName || 'Speaker'}: ${context.activeDialogue.text}`
-    : '';
+  const immediateDialogue =
+    latest.actionType === 'DIALOGUE_CHOICE' && context.activeDialogue?.text
+      ? `${context.activeDialogue.speakerName || 'Speaker'}: ${context.activeDialogue.text}`
+      : '';
 
   const prompt = [
     'Create a comic-book sequential-art page depicting ONLY the immediate current story turn.',

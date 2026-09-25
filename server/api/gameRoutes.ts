@@ -490,12 +490,10 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
             ? await serverMockAuthority.processCustomAction(actionRequest, requestedCommandId)
             : serverMockAuthority.processAction(actionRequest, requestedCommandId);
         return {
-          success: actionResult.success,
+          success: true,
           data: actionResult,
           errorReason: actionResult.success === false ? actionResult.message : undefined,
-          summary: actionResult.success
-            ? `Authoritative ${actionRequest.type} command resolved.`
-            : `Authoritative ${actionRequest.type} command rejected.`,
+          summary: `Authoritative ${actionRequest.type} command resolved.`,
         };
       }
     );

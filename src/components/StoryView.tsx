@@ -329,9 +329,9 @@ export const StoryView: React.FC<StoryViewProps> = ({
   };
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-4 pb-10 text-stone-100">
+    <div className="mx-auto w-full max-w-5xl space-y-6 pb-12 text-stone-100">
       {/* Quiet identity bar */}
-      <header className="rounded-2xl border border-stone-800/80 bg-stone-950/80 px-4 py-3 shadow-sm">
+      <header className="relative overflow-hidden rounded-3xl border border-violet-400/15 bg-gradient-to-br from-violet-500/[0.10] via-fuchsia-500/[0.04] to-transparent px-5 py-4 shadow-[0_18px_60px_rgba(124,58,237,0.08)]">
         <div className="flex flex-wrap items-center gap-3">
           <Portrait
             imageUrl={protagonistPortraitUrl}
@@ -420,11 +420,11 @@ export const StoryView: React.FC<StoryViewProps> = ({
 
       {/* Opening scene: one readable piece of narration */}
       {openingScene && (
-        <section className="rounded-2xl border border-stone-800/80 bg-stone-950/70 px-5 py-5 shadow-sm">
+        <section className="relative overflow-hidden rounded-3xl border border-violet-400/15 bg-gradient-to-br from-[#100a1c] via-[#0b0712] to-[#08050d] px-5 py-6 shadow-[0_24px_80px_rgba(124,58,237,0.10)] md:px-7 md:py-8">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
-              <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-stone-600">Opening</p>
-              <p className="mt-1 text-xs text-stone-500">{openingScene.startingLocationName}</p>
+              <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-violet-300/70">Opening</p>
+              <p className="mt-1 text-sm text-fuchsia-200/70">{openingScene.startingLocationName}</p>
             </div>
             <button
               onClick={() => handleReadAloud(openingScene.narrativeText)}
@@ -436,15 +436,15 @@ export const StoryView: React.FC<StoryViewProps> = ({
             </button>
           </div>
 
-          <div className="space-y-3 font-serif text-[15px] leading-7 text-stone-200 md:text-base">
+          <div className="space-y-3 font-serif text-[16px] leading-8 text-stone-100 md:text-lg md:leading-9">
             {openingScene.narrativeText.split('\n\n').map((paragraph, index) => (
               <p key={index}>{paragraph}</p>
             ))}
           </div>
 
           {openingScene.startingSituation && (
-            <div className="mt-4 border-l border-stone-700 pl-3">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-stone-600">Right now</p>
+            <div className="mt-4 border-l-2 border-fuchsia-400/35 pl-4">
+              <p className="text-[10px] uppercase tracking-[0.18em] text-fuchsia-300/60">Right now</p>
               <p className="mt-1 text-sm italic leading-6 text-stone-400">{openingScene.startingSituation}</p>
             </div>
           )}
@@ -477,7 +477,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
       {activeDialogue && (() => {
         const theme = getCharacterSpeakerTheme(activeDialogue.speakerName, worldId, activeDialogue.speakerId);
         return (
-          <section className={`rounded-2xl border ${theme.bubbleBorder} bg-stone-950/80 px-5 py-5`}>
+          <section className={`relative rounded-3xl border ${theme.bubbleBorder} bg-white/[0.025] px-5 py-6 shadow-[0_16px_50px_rgba(0,0,0,0.22)] md:px-7`}>
             <div className="mb-3 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
                 <div className={`flex h-9 w-9 items-center justify-center rounded-full border ${theme.badgeBorder} ${theme.badgeBg} text-lg`}>
@@ -485,7 +485,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
                 </div>
                 <div>
                   <p className={`text-sm font-semibold ${theme.nameColor}`}>{activeDialogue.speakerName}</p>
-                  <p className="text-[10px] text-stone-600">{activeDialogue.epistemicNote}</p>
+                  <p className="text-[10px] text-stone-500">{activeDialogue.epistemicNote}</p>
                 </div>
               </div>
               <button
@@ -498,7 +498,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
               </button>
             </div>
 
-            <p className="border-l border-stone-700 pl-3 font-serif text-base italic leading-7 text-stone-200">
+            <p className="border-l border-stone-700 pl-3 font-serif text-lg italic leading-8 text-white md:text-xl">
               “{activeDialogue.text}”
             </p>
 
@@ -508,7 +508,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
                   key={choice.id}
                   disabled={isProcessingAction}
                   onClick={() => onSelectChoice(choice)}
-                  className="group flex w-full items-start justify-between gap-4 rounded-xl border border-stone-800 bg-stone-900/60 px-4 py-3 text-left transition hover:bg-stone-900 disabled:opacity-50"
+                  className="group flex w-full items-start justify-between gap-4 rounded-xl border border-violet-400/10 bg-gradient-to-r from-white/[0.025] to-violet-500/[0.035] px-4 py-3 text-left transition hover:border-violet-400/25 hover:bg-violet-500/[0.07] disabled:opacity-50"
                 >
                   <span className="flex items-start gap-2.5">
                     <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-stone-600 transition group-hover:text-stone-300" />
@@ -582,11 +582,11 @@ export const StoryView: React.FC<StoryViewProps> = ({
       )}
 
       {/* Main interaction: deliberately obvious and simple. */}
-      <section className="rounded-2xl border border-stone-700/80 bg-stone-950 px-4 py-4 shadow-md md:px-5">
+      <section className="rounded-3xl border border-violet-400/20 bg-gradient-to-r from-violet-500/[0.08] via-fuchsia-500/[0.035] to-transparent px-4 py-4 shadow-[0_18px_60px_rgba(124,58,237,0.10)] md:px-5">
         <div className="mb-2 flex items-center justify-between gap-3">
           <div>
-            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-stone-500">Your turn</p>
-            <p className="mt-1 text-sm text-stone-300">What do you do?</p>
+            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-violet-300/70">Your turn</p>
+            <p className="mt-1 text-base font-serif text-white">What do you do?</p>
           </div>
           <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
           </div>
@@ -627,13 +627,13 @@ export const StoryView: React.FC<StoryViewProps> = ({
                 ? 'The world is responding…'
                 : 'Describe what you do…'
             }
-            className="h-11 min-w-0 flex-1 rounded-xl border border-stone-800 bg-stone-900/80 px-4 text-sm text-stone-100 placeholder:text-stone-600 focus:border-stone-600 focus:outline-none"
+            className="h-12 min-w-0 flex-1 rounded-2xl border border-violet-400/10 bg-black/20 px-4 text-sm text-stone-100 placeholder:text-stone-600 focus:border-violet-400/40 focus:outline-none focus:ring-2 focus:ring-violet-500/10"
           />
 
           <button
             type="submit"
             disabled={!typedAction.trim() || isProcessingAction || isRecording}
-            className="flex h-11 shrink-0 items-center gap-2 rounded-xl bg-stone-100 px-4 text-sm font-semibold text-stone-950 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-30"
+            className="flex h-12 shrink-0 items-center gap-2 rounded-2xl bg-gradient-to-r from-violet-300 to-fuchsia-300 px-5 text-sm font-semibold text-[#160b22] transition hover:from-violet-200 hover:to-fuchsia-200 disabled:cursor-not-allowed disabled:opacity-30"
           >
             {isProcessingAction ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             <span className="hidden sm:inline">Send</span>

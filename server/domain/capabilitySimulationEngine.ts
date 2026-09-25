@@ -259,6 +259,12 @@ function characterAllows(domain: string | undefined, characterText: string, worl
         reason: `The character is not established as a ${domain.toLowerCase()}-bender.`,
       };
     }
+    if (domain === 'HEALING' && !domains.has('WATER')) {
+      return {
+        allowed: false,
+        reason: 'In this bending world, this healing mechanism requires an established waterbending basis.',
+      };
+    }
   }
 
   const actorText = characterText;
@@ -307,7 +313,7 @@ function characterAllows(domain: string | undefined, characterText: string, worl
     return { allowed: false, reason: 'The character has no established magic or spellcasting mechanism for this technique.' };
   }
 
-  if (domain === 'SPATIAL_TRANSIT' && candidate && normalize(candidate.category) !== 'movement' && !/(teleport|blink|spatial|dimensional)/.test(actorText + ' ' + ownedText)) {
+  if (domain === 'SPATIAL_TRANSIT' && !/(teleport|blink|spatial|dimensional|shadow step|shadow pathway|portal)/.test(actorText + ' ' + ownedText)) {
     return { allowed: false, reason: 'The character has no established spatial-transit mechanism.' };
   }
 

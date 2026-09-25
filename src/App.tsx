@@ -53,6 +53,7 @@ import {
   WorldTemplate,
   OpeningScene,
   ActionAdvice,
+  ActionTip,
 } from './types';
 
 export const App: React.FC = () => {
@@ -78,6 +79,7 @@ export const App: React.FC = () => {
   const [networkError, setNetworkError] = useState<string | null>(null);
   const [isProcessingAction, setIsProcessingAction] = useState<boolean>(false);
   const [pendingActionAdvice, setPendingActionAdvice] = useState<ActionAdvice | null>(null);
+  const [storyActionTips, setStoryActionTips] = useState<ActionTip[]>([]);
   const actionSeqRef = useRef<number>(0);
 
   // Modal overlays
@@ -166,13 +168,14 @@ export const App: React.FC = () => {
 
   const fetchAuxiliaryData = async () => {
     try {
-      const [chronicleData, dossierData, recipeData, capData, worldsData, phase8Data] = await Promise.all([
+      const [chronicleData, dossierData, recipeData, capData, worldsData, phase8Data, actionTipsData] = await Promise.all([
         apiClient.getChronicle().catch(() => []),
         apiClient.getDossiers().catch(() => []),
         apiClient.getRecipes().catch(() => []),
         apiClient.getCapabilities().catch(() => null),
         apiClient.getWorlds().catch(() => []),
         apiClient.getPhase8Projection(activeStoryId).catch(() => null),
+        apiClient.getStoryActionTips(activeStoryId).catch(() => []),
       ]);
       setChronicleEntries(chronicleData);
       setDossiers(dossierData);
@@ -186,6 +189,7 @@ export const App: React.FC = () => {
         setWorldTemplates(worldsData);
       }
       setPhase8Projection(phase8Data);
+      setStoryActionTips(actionTipsData);
     } catch (e) {
       console.error('Failed to fetch auxiliary chronicle/dossier/capabilities data:', e);
     }
@@ -196,7 +200,7 @@ export const App: React.FC = () => {
     setSplashStatus('loading');
     setNetworkError(null);
     try {
-      const [state, chronicleData, dossierData, recipeData, capData, worldsData, phase8Data] = await Promise.all([
+      const [state, chronicleData, dossierData, recipeData, capData, worldsData, phase8Data, actionTipsData] = await Promise.all([
         apiClient.getGameState(storyIdToUse),
         apiClient.getChronicle().catch(() => []),
         apiClient.getDossiers().catch(() => []),
@@ -204,6 +208,7 @@ export const App: React.FC = () => {
         apiClient.getCapabilities().catch(() => null),
         apiClient.getWorlds().catch(() => []),
         apiClient.getPhase8Projection(storyIdToUse).catch(() => null),
+        apiClient.getStoryActionTips(storyIdToUse).catch(() => []),
       ]);
       setViewState(state);
       if (state.openingScene) {
@@ -225,6 +230,7 @@ export const App: React.FC = () => {
         setWorldTemplates(worldsData);
       }
       setPhase8Projection(phase8Data);
+      setStoryActionTips(actionTipsData);
 
       setSplashStatus('ready');
 
@@ -576,6 +582,7 @@ export const App: React.FC = () => {
           onRequestRest={handleAdvanceCycle}
           onCustomAction={handleCustomAction}
           pendingActionAdvice={pendingActionAdvice}
+          actionTips={storyActionTips}
           onAcceptActionAdvice={handleAcceptActionAdvice}
           onRejectActionAdvice={handleRejectActionAdvice}
           isProcessingAction={isProcessingAction}

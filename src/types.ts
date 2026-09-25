@@ -292,6 +292,7 @@ export interface ActionTip {
   title: string;
   description: string;
   intent: string;
+  actionText: string;
   source: 'DETERMINISTIC' | 'AI';
 }
 
@@ -503,6 +504,7 @@ export type ActionRequest =
       description?: string;
       input?: string;
       intendedCapabilityId?: string;
+      bypassCapabilityAdvisor?: boolean;
     };
 
 /**

@@ -287,6 +287,35 @@ export interface StoryCheckResult {
   consequence?: StoryCheckConsequenceResult;
 }
 
+export interface ActionTip {
+  id: string;
+  title: string;
+  description: string;
+  intent: string;
+  source: 'DETERMINISTIC' | 'AI';
+}
+
+export interface ActionCapabilityProposal {
+  proposalId: string;
+  requestedAction: string;
+  requestedCapabilityId?: string;
+  requestedCapabilityName?: string;
+  reasonRequestedCapabilityUnavailable: string;
+  alternative: any;
+  acceptLabel: string;
+  rejectLabel: string;
+}
+
+export interface ActionAdvice {
+  mode: 'EXECUTE_EXISTING' | 'AUTO_LEARN_AND_EXECUTE' | 'SUGGEST_ALTERNATIVE' | 'NORMAL_ACTION';
+  actionText: string;
+  actorId: string;
+  tips: ActionTip[];
+  proposal?: ActionCapabilityProposal;
+  recognizedCapability?: any;
+  canExecuteNow: boolean;
+}
+
 export interface ActionLog {
   id: string;
   timestamp: string;
@@ -298,6 +327,7 @@ export interface ActionLog {
   /** Player-facing narrator response, separate from internal/mechanical engine feedback. */
   narrativeResponse?: string;
   checkResult?: StoryCheckResult;
+  actionAdvice?: ActionAdvice;
 }
 
 export interface ProtagonistProfile {
@@ -486,6 +516,7 @@ export interface ActionResult {
   authoritativeFeedback: string;
   narrativeResponse?: string;
   checkResult?: StoryCheckResult;
+  actionAdvice?: ActionAdvice;
   viewState: ExternalViewState;
 }
 

@@ -52,8 +52,6 @@ import {
   NpcDossier,
   CraftingRecipe,
   PowerState,
-  CapabilityDefinition,
-  CapabilityGraphNode,
   WorldTemplate,
   OpeningScene,
   ActionAdvice,
@@ -73,10 +71,8 @@ export const App: React.FC = () => {
   const [dossiers, setDossiers] = useState<NpcDossier[]>([]);
   const [recipes, setRecipes] = useState<CraftingRecipe[]>([]);
   const [powerState, setPowerState] = useState<PowerState | null>(null);
-  const [capabilities, setCapabilities] = useState<CapabilityDefinition[]>([]);
   const [learnedCapabilities, setLearnedCapabilities] = useState<CapabilityDefinition[]>([]);
   const [skillInstances, setSkillInstances] = useState<any[]>([]);
-  const [capabilityGraph, setCapabilityGraph] = useState<CapabilityGraphNode[]>([]);
   const [worldTemplates, setWorldTemplates] = useState<WorldTemplate[]>([]);
   const [phase8Projection, setPhase8Projection] = useState<any | null>(null);
   const [storyLibraryStories, setStoryLibraryStories] = useState<StorySummary[]>([]);
@@ -188,10 +184,8 @@ export const App: React.FC = () => {
       setRecipes(recipeData);
       if (capData) {
         setPowerState(capData.powerState || null);
-        setCapabilities(capData.capabilities || []);
         setLearnedCapabilities(capData.learnedCapabilities || []);
         setSkillInstances(capData.skillInstances || []);
-        setCapabilityGraph(capData.graph || []);
       }
       if (worldsData) {
         setWorldTemplates(worldsData);
@@ -610,7 +604,6 @@ export const App: React.FC = () => {
         <CharacterSurface
           protagonist={viewState.protagonist}
           powerState={powerState}
-          capabilities={capabilities}
           learnedCapabilities={learnedCapabilities}
           skillInstances={skillInstances}
           equipment={viewState.equipment}

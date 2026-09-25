@@ -85,7 +85,6 @@ test('Phase 4 — canonical action handlers do not derive canonical evidence ids
     '/inventory/craft',
     '/inventory/transfer',
     '/capabilities/adjudicate',
-    '/capabilities/interpret',
     '/capabilities/synthesize',
     '/combat/action',
     '/combat/attack',

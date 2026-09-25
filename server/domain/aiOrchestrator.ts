@@ -1974,7 +1974,6 @@ export class MultiModelOrchestrator {
   private seedDefaultPins(): void {
     this.taskPinnedModels.set('narrative.generate', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('character.dialogue', 'google_gemini::gemini-3.5-flash');
-    this.taskPinnedModels.set('character.extract', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('memory.extract', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('summary.scene', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('rules.adjudicate', 'google_gemini::gemini-3.5-flash');
@@ -1991,7 +1990,6 @@ export class MultiModelOrchestrator {
     ];
     this.taskFallbackChains.set('narrative.generate', defaultChain);
     this.taskFallbackChains.set('character.dialogue', defaultChain);
-    this.taskFallbackChains.set('character.extract', defaultChain);
     this.taskFallbackChains.set('memory.extract', defaultChain);
     this.taskFallbackChains.set('summary.scene', defaultChain);
     this.taskFallbackChains.set('rules.adjudicate', defaultChain);
@@ -3397,7 +3395,13 @@ export class MultiModelOrchestrator {
   } {
     this.refreshAllProviderModelStatuses();
     const contextTokens = options?.contextTokens ?? 0;
-    const customChainKeys = this.taskFallbackChains.get(task);
+
+    // Character Genesis currently has no separate fallback editor in Settings.
+    // Its route therefore aliases the user-configured Memory & Extraction route.
+    // This prevents Character Genesis from silently inheriting narration or
+    // auto-ranked provider models that the user never selected.
+    const routeTask: TaskId = task === 'character.extract' ? 'memory.extract' : task;
+    const customChainKeys = this.taskFallbackChains.get(routeTask);
     const category = this.getTaskCategory(task);
     const categoryOverrideKey = this.categoryOverrides.get(category);
 
@@ -3437,7 +3441,7 @@ export class MultiModelOrchestrator {
     if (categoryOverrideKey) {
       const overridden = findConfiguredModel(categoryOverrideKey);
       if (overridden && isUsableCandidate(overridden)) {
-        const hasExplicitFallbackChain = this.explicitFallbackChainTasks.has(task);
+        const hasExplicitFallbackChain = this.explicitFallbackChainTasks.has(routeTask);
         const configuredFallbacks = hasExplicitFallbackChain && customChainKeys
           ? customChainKeys
               .map(findConfiguredModel)
@@ -3485,7 +3489,7 @@ export class MultiModelOrchestrator {
     }
 
     // Check if a model is manually pinned for this task
-    const pinnedKey = this.taskPinnedModels.get(task);
+    const pinnedKey = this.taskPinnedModels.get(routeTask);
     if (pinnedKey) {
       const pinnedModel = Array.from(this.models.values()).find(
         (m) => `${m.providerId}::${m.modelId}` === pinnedKey || m.modelId === pinnedKey

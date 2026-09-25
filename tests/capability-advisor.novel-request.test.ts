@@ -174,3 +174,43 @@ test('ten repeated forbidden novel requests never create a capability', async ()
     );
   }
 });
+
+
+test('generated alternate cannot preserve the forbidden Fire mechanism for a dark-magic specialist', async () => {
+  const repository = new InMemoryWorldRepository({ disablePersistence: true });
+  const storyId = 'novel_dark_fire_rejection';
+  seedRun(
+    repository,
+    storyId,
+    'dark_magic_world',
+    'Dark Mage',
+    'A curse-bound shadow mage with no fire affinity.',
+  );
+  const world = repository.getWorldTemplate('dark_magic_world');
+  world.magicSystems = ['spellcasting', 'shadow magic'];
+  world.worldRules = ['Characters must use an established compatible mechanism.'];
+  repository.saveWorldTemplate(world);
+
+  const advisor = new StoryActionAdvisor(
+    repository,
+    async () => ({
+      id: 'cap_training_fireball',
+      name: 'Training Fireball',
+      category: 'Magic',
+      activationMode: 'immediate',
+      powerTier: 'Moderate',
+      baseEnergyCost: 10,
+      baseStrainCost: 3,
+      minVesselCapacityRequired: 0,
+      description: 'A conventional fireball learned through training.',
+      provenance: 'AI_PROPOSAL',
+    }),
+  );
+
+  const result = await advisor.advise(storyId, 'I cast Fireball');
+
+  assert.equal(result.canExecuteNow, false);
+  assert.ok(result.simulation);
+  assert.equal(result.simulation?.characterCompatible, false);
+  assert.equal(result.proposal, undefined);
+});

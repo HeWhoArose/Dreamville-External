@@ -8630,9 +8630,12 @@ gameRouter.get('/run-canonical-state', (req: Request, res: Response) => {
         items: inventoryItems,
       },
       capabilities: {
-        // Player-safe projection: only actor-owned/effective capabilities cross the boundary.
+        // Player-safe projection: only actor-owned capabilities cross the boundary.
+        // Effective capabilities are executable right now; learnedCapabilities preserves
+        // the complete character Skillbook even when a current requirement blocks use.
         // The global capability registry and full DAG remain AI/developer-only.
         coreCapabilities: actorCaps,
+        learnedCapabilities: capEngine.getActorLearnedCapabilities(actorId),
         generatedTechniques: actorSkills,
         graph: actorGraph,
       },

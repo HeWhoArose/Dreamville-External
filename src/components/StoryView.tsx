@@ -10,20 +10,26 @@ import {
   ActionTip,
 } from '../types';
 import { useAudioHaptic } from './AudioHapticManager';
+import { apiClient } from '../services/apiClient';
 import { getCharacterSpeakerTheme } from './voiceResolver';
 import { DiceRollAnimation } from './common/DiceRollAnimation';
 import {
   AlertCircle,
   ArrowRight,
+  CheckCircle2,
   Dices,
+  FileText,
   Headphones,
+  Image as ImageIcon,
   Loader2,
   Mic,
   MicOff,
+  Plus,
   RotateCcw,
   Send,
   Sparkles,
   Volume2,
+  X,
 } from 'lucide-react';
 
 interface StoryViewProps {
@@ -228,6 +234,12 @@ export const StoryView: React.FC<StoryViewProps> = ({
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
+  const [sceneMenuOpen, setSceneMenuOpen] = useState(false);
+  const [sceneChoiceOpen, setSceneChoiceOpen] = useState(false);
+  const [sceneLoading, setSceneLoading] = useState(false);
+  const [scenePrompt, setScenePrompt] = useState<string | null>(null);
+  const [sceneImageUrl, setSceneImageUrl] = useState<string | null>(null);
+  const [sceneError, setSceneError] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
@@ -324,6 +336,40 @@ export const StoryView: React.FC<StoryViewProps> = ({
   const handleReadAloud = (text: string, speakerId = 'narrator') => {
     triggerHaptic('light');
     playSpeech(text, speakerId);
+  };
+
+  const latestTurnAction = actionHistory.find((action) => action.actionType !== 'NOTE_RECORD');
+
+  const requestScenePrompt = async () => {
+    setSceneLoading(true);
+    setSceneError(null);
+    try {
+      const result = await apiClient.generateCurrentScenePrompt();
+      setScenePrompt(result.prompt);
+      setSceneImageUrl(null);
+      setSceneChoiceOpen(false);
+    } catch (error: any) {
+      setSceneError(error?.message || 'Failed to build the current-scene comic prompt.');
+    } finally {
+      setSceneLoading(false);
+    }
+  };
+
+  const requestSceneImage = async () => {
+    setSceneLoading(true);
+    setSceneError(null);
+    try {
+      const result = await apiClient.generateCurrentSceneImage();
+      if (result.imageUrl) {
+        setSceneImageUrl(result.imageUrl);
+      }
+      setScenePrompt(result.prompt || null);
+      setSceneChoiceOpen(false);
+    } catch (error: any) {
+      setSceneError(error?.message || 'Failed to generate the current-scene comic image.');
+    } finally {
+      setSceneLoading(false);
+    }
   };
 
   return (
@@ -520,35 +566,50 @@ export const StoryView: React.FC<StoryViewProps> = ({
         );
       })()}
 
-      {pendingActionAdvice?.proposal && (
-        <section className="rounded-2xl border border-amber-800/70 bg-amber-950/20 px-4 py-4 shadow-sm">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-500">Capability suggestion</p>
-              <h3 className="mt-1 text-base font-semibold text-amber-100">{pendingActionAdvice.proposal.alternative.name}</h3>
-              <p className="mt-2 text-sm leading-6 text-stone-300">{pendingActionAdvice.proposal.reasonRequestedCapabilityUnavailable}</p>
-              <p className="mt-2 text-sm leading-6 text-stone-200">{pendingActionAdvice.proposal.alternative.description}</p>
-              <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-stone-500">
-                {pendingActionAdvice.proposal.alternative.category && <span className="rounded-md border border-stone-800 bg-stone-950 px-2 py-1">{pendingActionAdvice.proposal.alternative.category}</span>}
-                {pendingActionAdvice.proposal.alternative.powerTier && <span className="rounded-md border border-stone-800 bg-stone-950 px-2 py-1">{pendingActionAdvice.proposal.alternative.powerTier}</span>}
-                {pendingActionAdvice.proposal.alternative.actionType && <span className="rounded-md border border-stone-800 bg-stone-950 px-2 py-1">{pendingActionAdvice.proposal.alternative.actionType}</span>}
-                {pendingActionAdvice.proposal.alternative.rangeScope && <span className="rounded-md border border-stone-800 bg-stone-950 px-2 py-1">{pendingActionAdvice.proposal.alternative.rangeScope}</span>}
-                {pendingActionAdvice.proposal.alternative.effectDefinition?.damageType && <span className="rounded-md border border-stone-800 bg-stone-950 px-2 py-1">{pendingActionAdvice.proposal.alternative.effectDefinition.damageType}</span>}
-                {pendingActionAdvice.proposal.alternative.effectDefinition?.damageFormula && <span className="rounded-md border border-stone-800 bg-stone-950 px-2 py-1">{pendingActionAdvice.proposal.alternative.effectDefinition.damageFormula}</span>}
-              </div>
-              {Array.isArray(pendingActionAdvice.proposal.alternative.generatedSkills) && pendingActionAdvice.proposal.alternative.generatedSkills.length > 0 && (
+      {pendingActionAdvice?.simulation && (
+        <section className={`rounded-2xl border px-4 py-4 shadow-sm ${pendingActionAdvice.proposal ? 'border-amber-800/70 bg-amber-950/20' : 'border-sky-800/60 bg-sky-950/20'}`}>
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 shrink-0">
+              {pendingActionAdvice.proposal ? <Sparkles className="h-4 w-4 text-amber-300" /> : <AlertCircle className="h-4 w-4 text-sky-300" />}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${pendingActionAdvice.proposal ? 'text-amber-400' : 'text-sky-400'}`}>
+                {pendingActionAdvice.proposal ? 'Potential technique' : 'Capability simulation'}
+              </p>
+              <h3 className="mt-1 text-base font-semibold text-stone-100">
+                {pendingActionAdvice.proposal?.alternative?.name || pendingActionAdvice.simulation.candidateCapability?.name || 'Requested capability'}
+              </h3>
+              <p className="mt-2 text-sm leading-6 text-stone-300">{pendingActionAdvice.simulation.explanation}</p>
+              {pendingActionAdvice.simulation.blockers.length > 0 && (
                 <div className="mt-3 space-y-1">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-600">Derived techniques</p>
-                  {pendingActionAdvice.proposal.alternative.generatedSkills.slice(0, 3).map((skill: any) => (
-                    <p key={skill.name} className="text-xs text-stone-400"><span className="font-medium text-stone-300">{skill.name}</span>{skill.description ? ' — ' + skill.description : ''}</p>
+                  {pendingActionAdvice.simulation.blockers.slice(0, 4).map((blocker) => (
+                    <p key={blocker} className="text-xs text-stone-400">• {blocker}</p>
                   ))}
                 </div>
               )}
+              {pendingActionAdvice.simulation.developmentPath.length > 0 && (
+                <div className="mt-3 rounded-xl border border-white/7 bg-black/15 p-3">
+                  <p className="text-[10px] uppercase tracking-[0.15em] text-stone-600">Development path</p>
+                  {pendingActionAdvice.simulation.developmentPath.slice(0, 3).map((step) => (
+                    <p key={step} className="mt-1 text-xs text-stone-400">{step}</p>
+                  ))}
+                </div>
+              )}
+              {pendingActionAdvice.proposal && (
+                <p className="mt-3 text-xs text-amber-200/75">This is not learned yet. Choosing the action below is the explicit acquisition decision.</p>
+              )}
             </div>
-            <div className="flex shrink-0 flex-col gap-2">
-              <button type="button" onClick={() => onAcceptActionAdvice?.(pendingActionAdvice)} disabled={isProcessingAction} className="rounded-lg bg-amber-200 px-3 py-2 text-xs font-semibold text-stone-950 transition hover:bg-amber-100 disabled:opacity-50">{pendingActionAdvice.proposal.acceptLabel}</button>
-              <button type="button" onClick={() => onRejectActionAdvice?.(pendingActionAdvice)} disabled={isProcessingAction} className="rounded-lg border border-stone-800 bg-stone-900 px-3 py-2 text-xs text-stone-300 transition hover:bg-stone-800 disabled:opacity-50">{pendingActionAdvice.proposal.rejectLabel}</button>
-            </div>
+            {pendingActionAdvice.proposal && (
+              <div className="flex shrink-0 flex-col gap-2">
+                <button type="button" onClick={() => onAcceptActionAdvice?.(pendingActionAdvice)} disabled={isProcessingAction} className="rounded-lg bg-amber-200 px-3 py-2 text-xs font-semibold text-stone-950 transition hover:bg-amber-100 disabled:opacity-50">{pendingActionAdvice.proposal.acceptLabel}</button>
+                <button type="button" onClick={() => onRejectActionAdvice?.(pendingActionAdvice)} disabled={isProcessingAction} className="rounded-lg border border-stone-800 bg-stone-900 px-3 py-2 text-xs text-stone-300 transition hover:bg-stone-800 disabled:opacity-50">{pendingActionAdvice.proposal.rejectLabel}</button>
+              </div>
+            )}
+            {!pendingActionAdvice.proposal && (
+              <button type="button" onClick={() => onRejectActionAdvice?.(pendingActionAdvice)} className="rounded-lg border border-stone-800 bg-stone-900 p-2 text-stone-500 hover:text-stone-200" aria-label="Dismiss capability simulation">
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
         </section>
       )}
@@ -579,18 +640,104 @@ export const StoryView: React.FC<StoryViewProps> = ({
         </section>
       )}
 
-      {/* Main interaction: deliberately obvious and simple. */}
+      {latestTurnAction && (
+        <section className="rounded-3xl border border-violet-400/15 bg-[#0d0917]/90 px-4 py-4 shadow-[0_18px_60px_rgba(124,58,237,0.07)] md:px-5">
+          <div className="mb-3 flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-violet-300" />
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-300/70">Latest turn</p>
+              <p className="text-sm font-medium text-stone-200">Immediate result</p>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-white/7 bg-black/15 px-4 py-3">
+            <p className="text-[10px] uppercase tracking-wider text-stone-600">Your action</p>
+            <p className="mt-1 text-sm leading-6 text-stone-200">“{latestTurnAction.description}”</p>
+          </div>
+          {latestTurnAction.checkResult && (
+            <div className="mt-3">
+              <StoryCheckCard
+                check={latestTurnAction.checkResult}
+                revealed={Boolean(revealedCheckIds[latestTurnAction.id])}
+                onReveal={() => setRevealedCheckIds((current) => ({ ...current, [latestTurnAction.id]: true }))}
+              />
+            </div>
+          )}
+          {(latestTurnAction.narrativeResponse || latestTurnAction.authoritativeFeedback) && (
+            <div className="mt-3 rounded-2xl border border-white/7 bg-black/10 px-4 py-4">
+              <div className="mb-1 flex items-center gap-2">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-stone-600">Immediate narration</span>
+              </div>
+              <p className="whitespace-pre-line font-serif text-sm leading-6 text-stone-200">
+                {latestTurnAction.narrativeResponse ||
+                  (latestTurnAction.epistemicValidation === 'REJECTED_BY_ENGINE'
+                    ? 'That action could not be carried out.'
+                    : latestTurnAction.authoritativeFeedback)}
+              </p>
+              {latestTurnAction.narrativeResponse && (
+                <button
+                  onClick={() => handleReadAloud(latestTurnAction.narrativeResponse || '')}
+                  disabled={isPlayingSpeech}
+                  className="mt-2 inline-flex items-center gap-1.5 text-[10px] text-stone-600 transition hover:text-stone-300 disabled:opacity-50"
+                >
+                  <Headphones className="h-3 w-3" />
+                  Listen
+                </button>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
       <section className="rounded-3xl border border-violet-400/20 bg-gradient-to-r from-violet-500/[0.08] via-fuchsia-500/[0.035] to-transparent px-4 py-4 shadow-[0_18px_60px_rgba(124,58,237,0.10)] md:px-5">
         <div className="mb-2 flex items-center justify-between gap-3">
           <div>
             <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-violet-300/70">Your turn</p>
             <p className="mt-1 text-base font-serif text-white">What do you do?</p>
           </div>
-          <div className="ml-auto flex max-w-full flex-wrap items-center justify-end gap-2">
-          </div>
         </div>
 
         <form onSubmit={handleSubmitAction} className="flex items-center gap-2">
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setSceneMenuOpen((value) => !value);
+                setSceneChoiceOpen(false);
+                setSceneError(null);
+              }}
+              className="flex h-11 w-11 items-center justify-center rounded-xl border border-violet-400/15 bg-violet-500/10 text-violet-200 transition hover:bg-violet-500/15"
+              aria-label="Open story tools"
+              title="Story tools"
+            >
+              <Plus className="h-5 w-5" />
+            </button>
+
+            {sceneMenuOpen && (
+              <div className="absolute bottom-14 left-0 z-50 w-52 rounded-2xl border border-white/10 bg-[#110b1d] p-2 shadow-2xl">
+                <button
+                  type="button"
+                  onClick={() => setSceneChoiceOpen(true)}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-stone-200 hover:bg-violet-500/10"
+                >
+                  <Sparkles className="h-4 w-4 text-violet-300" />
+                  Generate Scene
+                </button>
+                {sceneChoiceOpen && (
+                  <div className="mt-1 rounded-xl border border-white/8 bg-black/20 p-1">
+                    <button type="button" onClick={requestSceneImage} disabled={sceneLoading} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs text-stone-300 hover:bg-white/[0.04] disabled:opacity-50">
+                      <ImageIcon className="h-4 w-4 text-fuchsia-300" />
+                      Generate Image
+                    </button>
+                    <button type="button" onClick={requestScenePrompt} disabled={sceneLoading} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs text-stone-300 hover:bg-white/[0.04] disabled:opacity-50">
+                      <FileText className="h-4 w-4 text-sky-300" />
+                      Generate Prompt
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           <button
             type="button"
             onClick={isRecording ? stopRecording : startRecording}
@@ -646,71 +793,52 @@ export const StoryView: React.FC<StoryViewProps> = ({
         )}
       </section>
 
-      {/* Narrative feed: action first, engine implementation details hidden. */}
-      {(dialogueHistory.length > 0 || actionHistory.length > 0) && (
-        <section className="space-y-3">
-          <div className="flex items-center justify-between px-1">
-            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-stone-600">Recent actions</p>
-            <span className="text-[10px] text-stone-700">
-              {actionHistory.length} actions
-            </span>
+      {(scenePrompt || sceneImageUrl || sceneError) && (
+        <section className="rounded-3xl border border-white/8 bg-[#0b0813]/75 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.18em] text-stone-600">Current-scene comic</p>
+              <p className="mt-1 text-sm font-semibold text-stone-200">Built from the latest turn only</p>
+            </div>
+            {sceneLoading && <Loader2 className="h-4 w-4 animate-spin text-violet-300" />}
           </div>
+          {sceneError && <p className="mt-3 text-xs text-red-300">{sceneError}</p>}
+          {sceneImageUrl && (
+            <img src={sceneImageUrl} alt="Current story scene comic page" className="mt-4 w-full rounded-2xl border border-white/8" />
+          )}
+          {scenePrompt && (
+            <details className="mt-4 rounded-2xl border border-white/7 bg-black/15 p-3">
+              <summary className="cursor-pointer text-xs font-medium text-stone-400">View generated prompt</summary>
+              <pre className="mt-3 whitespace-pre-wrap text-xs leading-5 text-stone-500">{scenePrompt}</pre>
+            </details>
+          )}
+        </section>
+      )}
 
-          <div className="space-y-3">
-            {actionHistory.slice(0, 4).map((action) => (
-              <article key={action.id} className="space-y-2">
+      <section className="space-y-2">
+        <div className="flex items-center justify-between px-1">
+          <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-stone-600">Recent actions</p>
+          <span className="text-[10px] text-stone-700">{actionHistory.filter((action) => action.actionType !== 'NOTE_RECORD').length} actions</span>
+        </div>
+        <div className="space-y-2">
+          {actionHistory
+            .filter((action) => action.actionType !== 'NOTE_RECORD')
+            .slice(0, 4)
+            .map((action) => (
+              <article key={action.id} className="rounded-xl border border-white/7 bg-stone-950/40 px-4 py-3">
                 <div className="flex items-start gap-2.5">
-                  <Portrait
-                    imageUrl={protagonistPortraitUrl}
-                    emoji={protagonistPortraitEmoji}
-                    size="sm"
-                  />
-                  <div className="min-w-0 flex-1 rounded-2xl rounded-tl-md border border-stone-800 bg-stone-900/70 px-4 py-3">
-                    <div className="mb-1 flex items-center justify-between gap-2">
-                      <span className="text-xs font-medium text-stone-400">{protagonistName || 'You'}</span>
-                      <span className="text-[10px] text-stone-700">{action.timestamp}</span>
-                    </div>
+                  <Portrait imageUrl={protagonistPortraitUrl} emoji={protagonistPortraitEmoji} size="sm" />
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm leading-6 text-stone-300">“{action.description}”</p>
+                    <p className="mt-1 text-[10px] text-stone-700">{action.timestamp}</p>
                   </div>
                 </div>
-
-                {action.checkResult && (
-                  <StoryCheckCard
-                    check={action.checkResult}
-                    revealed={Boolean(revealedCheckIds[action.id])}
-                    onReveal={() => setRevealedCheckIds((current) => ({ ...current, [action.id]: true }))}
-                  />
-                )}
-
-                {(!action.checkResult || revealedCheckIds[action.id]) &&
-                  (action.narrativeResponse || action.authoritativeFeedback) && (
-                    <div className="ml-[3.25rem] rounded-2xl rounded-tl-md border border-stone-800/80 bg-stone-950/60 px-4 py-3">
-                      <div className="mb-1 flex items-center gap-2">
-                        <span className="text-[10px] font-medium uppercase tracking-[0.16em] text-stone-600">Narrator</span>
-                      </div>
-                      <p className="whitespace-pre-line font-serif text-sm leading-6 text-stone-200">
-                        {action.narrativeResponse || (
-                          action.epistemicValidation === 'REJECTED_BY_ENGINE'
-                            ? 'That action could not be carried out.'
-                            : action.authoritativeFeedback
-                        )}
-                      </p>
-                      {action.narrativeResponse && (
-                        <button
-                          onClick={() => handleReadAloud(action.narrativeResponse || '')}
-                          disabled={isPlayingSpeech}
-                          className="mt-2 inline-flex items-center gap-1.5 text-[10px] text-stone-600 transition hover:text-stone-300 disabled:opacity-50"
-                        >
-                          <Headphones className="h-3 w-3" />
-                          Listen
-                        </button>
-                      )}
-                    </div>
-                  )}
               </article>
             ))}
+        </div>
+      </section>
 
-            {/* Past dialogue is intentionally omitted here; active dialogue remains above. */}
+      {/* Past dialogue is intentionally omitted here; active dialogue remains above. */}
           </div>
         </section>
       )}

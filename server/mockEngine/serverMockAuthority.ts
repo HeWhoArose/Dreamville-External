@@ -1261,7 +1261,7 @@ export class ServerMockAuthority {
           id: actionId,
           timestamp: now,
           cycle: clock.getTimestamp().day,
-          actionType: 'NOTE_RECORD',
+          actionType: 'CUSTOM_ACTION',
           description: freeformText,
           epistemicValidation: 'MOCK_ENGINE_COMMITTED',
           authoritativeFeedback,

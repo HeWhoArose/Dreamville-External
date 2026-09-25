@@ -367,6 +367,10 @@ function characterAllows(
   // that the character already possesses the candidate's supernatural mechanism.
   const candidateText = normalize(candidate ? `${candidate.name} ${candidate.description} ${candidate.provenance}` : '');
   const mechanismText = actorText + ' ' + ownedText;
+  const isGenericMagicUser =
+    /\b(mage|wizard|sorcerer|spellcaster|warlock|archmage|magus|witch|cleric|paladin|priest)\b/.test(mechanismText);
+  const isDarkMagicSpecialist =
+    /\b(dark mage|shadow mage|necromancer|void mage|curse|shadow magic|void magic)\b/.test(mechanismText);
 
   if (isBendingWorld(worldText)) {
     const isAvatar = /\bavatar\b/.test(actorText);
@@ -406,16 +410,20 @@ function characterAllows(
   }
 
   const hasExplicitMechanism = (terms: string[]) => hasAny(mechanismText, terms);
-  if (domain === 'MAGIC' && !hasExplicitMechanism(domainTerms('MAGIC'))) return { allowed: false, reason: 'The character has no established magic/spellcasting mechanism from which this technique could be learned.' };
+  if (domain === 'MAGIC' && !hasExplicitMechanism(domainTerms('MAGIC')) && !isGenericMagicUser) return { allowed: false, reason: 'The character has no established magic/spellcasting mechanism from which this technique could be learned.' };
   if (domain === 'TEMPORAL' && !hasExplicitMechanism(domainTerms('TEMPORAL'))) return { allowed: false, reason: 'The character has no established temporal mechanism or prerequisite power for this technique.' };
   if (domain === 'DIMENSIONAL' && !hasExplicitMechanism(domainTerms('DIMENSIONAL'))) return { allowed: false, reason: 'The character has no established dimensional/reality-manipulation mechanism for this technique.' };
   if (domain === 'SPATIAL_TRANSIT' && !hasExplicitMechanism(domainTerms('SPATIAL_TRANSIT'))) return { allowed: false, reason: 'The character has no established spatial-transit mechanism such as teleportation, portals, or an equivalent existing technique.' };
-  if (domain === 'LIGHTNING' && !hasExplicitMechanism(domainTerms('LIGHTNING')) && !/\b(firebender|avatar)\b/.test(mechanismText)) return { allowed: false, reason: 'The character has no established lightning-compatible affinity or mechanism.' };
-  if (domain === 'FIRE' && !hasExplicitMechanism(['fire', 'flame', 'pyromancy', 'fire magic', 'firebender'])) return { allowed: false, reason: 'The character has no established fire-manipulation mechanism for this technique.' };
-  if (domain === 'WATER' && !hasExplicitMechanism(domainTerms('WATER'))) return { allowed: false, reason: 'The character has no established water/ice manipulation mechanism for this technique.' };
-  if (domain === 'EARTH' && !hasExplicitMechanism(domainTerms('EARTH'))) return { allowed: false, reason: 'The character has no established earth/stone manipulation mechanism for this technique.' };
-  if (domain === 'AIR' && !hasExplicitMechanism(domainTerms('AIR'))) return { allowed: false, reason: 'The character has no established air/wind manipulation mechanism for this technique.' };
-  if (domain === 'SHADOW' && !hasExplicitMechanism(domainTerms('SHADOW'))) return { allowed: false, reason: 'The character has no established shadow/void/darkness mechanism for this technique.' };
+  if (domain === 'LIGHTNING' && !hasExplicitMechanism(domainTerms('LIGHTNING')) && !/\b(firebender|avatar)\b/.test(mechanismText) && !isGenericMagicUser) return { allowed: false, reason: 'The character has no established lightning-compatible affinity or mechanism.' };
+  if (domain === 'FIRE' && !hasExplicitMechanism(['fire', 'flame', 'pyromancy', 'fire magic', 'firebender'])) {
+    if (!isGenericMagicUser || isDarkMagicSpecialist) {
+      return { allowed: false, reason: 'The character has no established fire-manipulation mechanism for this technique.' };
+    }
+  }
+  if (domain === 'WATER' && !hasExplicitMechanism(domainTerms('WATER')) && !isGenericMagicUser) return { allowed: false, reason: 'The character has no established water/ice manipulation mechanism for this technique.' };
+  if (domain === 'EARTH' && !hasExplicitMechanism(domainTerms('EARTH')) && !isGenericMagicUser) return { allowed: false, reason: 'The character has no established earth/stone manipulation mechanism for this technique.' };
+  if (domain === 'AIR' && !hasExplicitMechanism(domainTerms('AIR')) && !isGenericMagicUser) return { allowed: false, reason: 'The character has no established air/wind manipulation mechanism for this technique.' };
+  if (domain === 'SHADOW' && !hasExplicitMechanism(domainTerms('SHADOW')) && !isGenericMagicUser) return { allowed: false, reason: 'The character has no established shadow/void/darkness mechanism for this technique.' };
   if (domain === 'HEALING' && !hasExplicitMechanism(domainTerms('HEALING')) && !/\b(cleric|paladin|priest|medic|healer|divine|holy)\b/.test(mechanismText)) return { allowed: false, reason: 'The character has no established healing mechanism or compatible progression basis.' };
   if (domain === 'BIOLOGICAL' && !hasExplicitMechanism(domainTerms('BIOLOGICAL'))) return { allowed: false, reason: 'The character has no established biological, venom, poison, mutation, or natural-weapon mechanism for this technique.' };
   if (domain === 'PERCEPTION' && !hasExplicitMechanism(domainTerms('PERCEPTION'))) return { allowed: false, reason: 'The character has no established perception, sensory, tracking, or detection mechanism for this technique.' };

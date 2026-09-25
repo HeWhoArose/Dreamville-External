@@ -122,7 +122,9 @@ describe('CH7 Evidence-Closure Audit: AI -> Novel Capability Pipeline & Internal
       const chronicle = worldRepository.getHistoricalChronicleEngine(storyId);
       const clock = worldRepository.getWorldClock(storyId);
       const ts = clock.getTimestamp();
-      chronicle.recordEvidence({
+      worldRepository.beginCanonicalCommandTransaction(storyId, `test_synth_${synthResult.primaryCapability.id}`);
+      try {
+        chronicle.recordEvidence({
         id: `ev_synth_${synthResult.primaryCapability.id}`,
         category: 'SACRED_OR_HISTORIC',
         timestamp: ts,
@@ -134,7 +136,12 @@ describe('CH7 Evidence-Closure Audit: AI -> Novel Capability Pipeline & Internal
         sourceEventId: `evt_synth_${synthResult.primaryCapability.id}`,
         provenance: 'custom_power_synthesis',
         visibility: 'PUBLIC',
-      });
+        });
+        worldRepository.commitCanonicalCommandTransaction(storyId, `evt_synth_${synthResult.primaryCapability.id}`);
+      } catch (error) {
+        worldRepository.rollbackCanonicalCommandTransaction(storyId);
+        throw error;
+      }
 
       const entries = chronicle.getChronicleEntries();
       assert.ok(entries.some((e) => (e.headline && e.headline.includes(conceptName)) || (e.historicalAccount && e.historicalAccount.includes(conceptName))));

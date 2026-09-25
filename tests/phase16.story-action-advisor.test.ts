@@ -127,7 +127,7 @@ test('Phase 16 action advisor: incompatible Fireball request from a Dark Mage pr
 	assert.equal(advice.mode, 'SUGGEST_ALTERNATIVE');
 	assert.ok(advice.proposal);
 	assert.equal(advice.proposal?.alternative.name, 'Dark Fire');
-	assert.match(advice.proposal?.reasonRequestedCapabilityUnavailable || '', /does not currently have 'Fireball'/i);
+	assert.match(advice.proposal?.reasonRequestedCapabilityUnavailable || '', /does not currently have 'Training Fireball'/i);
 	assert.equal(
 		repository.getEffectiveActorCapabilities(
 			repository.getPlayerLifecycle(storyId)?.actorId || 'player_actor_' + storyId

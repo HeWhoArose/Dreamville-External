@@ -4,12 +4,18 @@ import type {
 	CapabilityDefinition,
 	EffectiveCapability,
 } from '../domain/capabilityEngine';
+import type {
+	CapabilitySimulationResult,
+	CapabilitySimulationContext,
+} from '../domain/capabilitySimulationEngine';
+import { CapabilitySimulationEngine } from '../domain/capabilitySimulationEngine';
 import type { WorldRepository } from '../repositories/worldRepository';
 import { worldRepository } from '../repositories/worldRepository';
 
 export type ActionAdviceMode =
 	| 'EXECUTE_EXISTING'
 	| 'AUTO_LEARN_AND_EXECUTE'
+	| 'CAPABILITY_SIMULATION'
 	| 'SUGGEST_ALTERNATIVE'
 	| 'NORMAL_ACTION';
 
@@ -35,6 +41,7 @@ export interface ActionCapabilityProposal {
 			activationType?: string;
 		}>;
 	};
+	simulation: CapabilitySimulationResult;
 	acceptLabel: string;
 	rejectLabel: string;
 }
@@ -262,10 +269,6 @@ export class StoryActionAdvisor {
 		const allCapabilities = capabilityEngine.getAllCapabilities();
 		const normalizedAction = normalize(actionText);
 
-		const recognizedCapability = allCapabilities
-			.filter((capability) => capabilityMatchesAction(capability, normalizedAction))
-			.sort((a, b) => normalize(b.name).length - normalize(a.name).length)[0];
-
 		const tips = await this.generateTips(
 			storyId,
 			actorId,
@@ -274,59 +277,13 @@ export class StoryActionAdvisor {
 			sceneContext,
 		);
 
-		if (!recognizedCapability) {
-			const preview = capabilityEngine.interpretFreeformAction({
-				actorId,
-				actionText,
-				executeIfValid: false,
-			});
+		const recognizedCapability = allCapabilities
+			.filter((capability) => capabilityMatchesAction(capability, normalizedAction))
+			.sort((a, b) => normalize(b.name).length - normalize(a.name).length)[0];
 
-			if (
-				preview.interpretationType === 'NOVEL_CAPABILITY_PROPOSAL' &&
-				preview.proposedCapability
-			) {
-				const proposed = preview.proposedCapability;
-				if (inferDirectCompatibility(proposed, run)) {
-					return {
-						mode: 'AUTO_LEARN_AND_EXECUTE',
-						actionText,
-						actorId,
-						recognizedCapability: proposed,
-						tips,
-						canExecuteNow: false,
-					};
-				}
-
-				const alternative = await this.createAlternativeProposal(
-					storyId,
-					actorId,
-					actionText,
-					proposed,
-					run
-				);
-
-				this.pendingProposals.set(alternative.proposalId, alternative);
-				return {
-					mode: 'SUGGEST_ALTERNATIVE',
-					actionText,
-					actorId,
-					recognizedCapability: proposed,
-					tips,
-					proposal: alternative,
-					canExecuteNow: false,
-				};
-			}
-
-			return {
-				mode: 'NORMAL_ACTION',
-				actionText,
-				actorId,
-				tips,
-				canExecuteNow: true,
-			};
-		}
-
-		if (actorAlreadyHasCapability(actorCapabilities, recognizedCapability.id)) {
+		// Ownership is always checked against actor-owned/effective capabilities first.
+		// The global registry is an AI/internal candidate source, never a grant source.
+		if (recognizedCapability && actorAlreadyHasCapability(actorCapabilities, recognizedCapability.id)) {
 			return {
 				mode: 'EXECUTE_EXISTING',
 				actionText,
@@ -337,39 +294,172 @@ export class StoryActionAdvisor {
 			};
 		}
 
-		const progressionState = this.repository
-			.getCharacterProgressionEngine(storyId)
-			.getState(actorId);
+		let candidate = recognizedCapability;
+		if (!candidate) {
+			const preview = capabilityEngine.interpretFreeformAction({
+				actorId,
+				actionText,
+				executeIfValid: false,
+			});
+			if (preview.interpretationType !== 'NOVEL_CAPABILITY_PROPOSAL' || !preview.proposedCapability) {
+				return {
+					mode: 'NORMAL_ACTION',
+					actionText,
+					actorId,
+					tips,
+					canExecuteNow: true,
+				};
+			}
+			candidate = preview.proposedCapability;
+		}
 
-		if (inferDirectCompatibility(recognizedCapability, run, progressionState)) {
+		const world = run?.worldId ? this.repository.getWorldTemplate(run.worldId) : undefined;
+		const progressionState = this.repository.getCharacterProgressionEngine(storyId).getState(actorId);
+		const rulesProfile = this.repository.getRulesProfile(storyId);
+		const customRules = world?.worldId
+			? new (await import('../domain/customRuleEngine')).CustomRuleEngine().getRules(this.repository, storyId)
+			: [];
+
+		const simulationContext: CapabilitySimulationContext = {
+			actorId,
+			character: run?.protagonist,
+			world: world || {
+				title: 'Current World',
+				description: '',
+				capabilities: allCapabilities,
+				canonicalCapabilities: allCapabilities,
+				dndRulesMode: 'FULL_DND',
+			},
+			rulesProfile: rulesProfile || {
+				allowCharacterProgression: progressionState ? true : undefined,
+			},
+			customRules,
+			powerState: capabilityEngine.getPowerState(actorId),
+			ownedCapabilities: actorCapabilities,
+			skillInstances: capabilityEngine.getActorSkillInstances(actorId),
+			allWorldCapabilities: allCapabilities,
+		};
+
+		const simulator = new CapabilitySimulationEngine();
+		const simulation = simulator.simulate(actionText, simulationContext, candidate);
+
+		if (simulation.status === 'UNSUPPORTED_REQUEST') {
 			return {
-				mode: 'AUTO_LEARN_AND_EXECUTE',
+				mode: 'NORMAL_ACTION',
 				actionText,
 				actorId,
-				recognizedCapability,
 				tips,
+				canExecuteNow: true,
+			};
+		}
+
+		if (simulation.status === 'WORLD_FORBIDDEN' ||
+			simulation.status === 'CHARACTER_INCOMPATIBLE' ||
+			simulation.status === 'CURRENTLY_BLOCKED' ||
+			simulation.status === 'ALTERNATE_ROUTE') {
+			return {
+				mode: 'CAPABILITY_SIMULATION',
+				actionText,
+				actorId,
+				tips,
+				recognizedCapability: candidate,
+				simulation,
 				canExecuteNow: false,
 			};
 		}
 
-		const alternative = await this.createAlternativeProposal(
-			storyId,
-			actorId,
-			actionText,
-			recognizedCapability,
-			run
-		);
+		if (
+			simulation.status === 'DEVELOPABLE' ||
+			simulation.status === 'CONDITIONALLY_DEVELOPABLE'
+		) {
+			const proposal = await this.createAlternativeProposal(
+				storyId,
+				actorId,
+				actionText,
+				candidate,
+				run,
+				simulation,
+			);
+			this.pendingProposals.set(proposal.proposalId, proposal);
+			return {
+				mode: 'SUGGEST_ALTERNATIVE',
+				actionText,
+				actorId,
+				tips,
+				recognizedCapability: candidate,
+				simulation,
+				proposal,
+				canExecuteNow: false,
+			};
+		}
 
-		this.pendingProposals.set(alternative.proposalId, alternative);
 		return {
-			mode: 'SUGGEST_ALTERNATIVE',
+			mode: 'CAPABILITY_SIMULATION',
 			actionText,
 			actorId,
-			recognizedCapability,
 			tips,
-			proposal: alternative,
+			recognizedCapability: candidate,
+			simulation,
 			canExecuteNow: false,
 		};
+	}
+
+	public async validatePendingProposal(
+		storyId: string,
+		proposalId: string,
+	): Promise<ActionCapabilityProposal | null> {
+		const pending = this.pendingProposals.get(proposalId);
+		if (!pending) return null;
+
+		const player = this.repository.getPlayerLifecycle(storyId);
+		const actorId = player?.actorId || 'player_actor_' + storyId;
+		const run = this.repository.getStoryRun(storyId);
+		const capabilityEngine = this.repository.getCapabilityEngine(storyId);
+		const actorCapabilities = capabilityEngine.getEffectiveActorCapabilities(
+			actorId,
+			this.repository.getInventoryEngine(storyId)
+		);
+
+		if (actorCapabilities.some((capability) => capability.id === pending.alternative.id)) {
+			return null;
+		}
+
+		const allCapabilities = capabilityEngine.getAllCapabilities();
+		const world = run?.worldId ? this.repository.getWorldTemplate(run.worldId) : undefined;
+		const customRules = world?.worldId
+			? new (await import('../domain/customRuleEngine')).CustomRuleEngine().getRules(this.repository, storyId)
+			: [];
+
+		const simulator = new CapabilitySimulationEngine();
+		const simulation = simulator.simulate(
+			pending.requestedAction,
+			{
+				actorId,
+				character: run?.protagonist,
+				world: world || { title: 'Current World' },
+				rulesProfile: this.repository.getRulesProfile(storyId) || undefined,
+				customRules,
+				powerState: capabilityEngine.getPowerState(actorId),
+				ownedCapabilities: actorCapabilities,
+				skillInstances: capabilityEngine.getActorSkillInstances(actorId),
+				allWorldCapabilities: allCapabilities,
+			},
+			pending.alternative,
+		);
+
+		if (
+			simulation.status !== 'DEVELOPABLE' &&
+			simulation.status !== 'CONDITIONALLY_DEVELOPABLE'
+		) {
+			return null;
+		}
+
+		const refreshed: ActionCapabilityProposal = {
+			...pending,
+			simulation,
+		};
+		this.pendingProposals.set(proposalId, refreshed);
+		return refreshed;
 	}
 
 	private async createAlternativeProposal(
@@ -378,6 +468,7 @@ export class StoryActionAdvisor {
 		actionText: string,
 		requestedCapability: CapabilityDefinition,
 		run: any,
+		initialSimulation: CapabilitySimulationResult,
 	): Promise<ActionCapabilityProposal> {
 		const world = run?.worldId ? this.repository.getWorldTemplate(run.worldId) : undefined;
 		const concept = deterministicAlternativeConcept(requestedCapability.name, run);
@@ -435,6 +526,7 @@ export class StoryActionAdvisor {
 			};
 		}
 
+		// A generated alternative is still only a proposal until the explicit acceptance endpoint commits it.
 		return {
 			proposalId: deterministicId(
 				'action_capability_proposal',
@@ -448,10 +540,11 @@ export class StoryActionAdvisor {
 			requestedCapabilityId: requestedCapability.id,
 			requestedCapabilityName: requestedCapability.name,
 			reasonRequestedCapabilityUnavailable:
-				"Your character does not currently have '" + requestedCapability.name + "' and their established role/domain does not support directly invoking it.",
+				"'" + requestedCapability.name + "' is not currently learned. The simulation found a world/character-compatible development route; nothing has been acquired yet.",
 			alternative,
+			simulation: initialSimulation,
 			acceptLabel: 'Learn ' + alternative.name + ' and use it',
-			rejectLabel: 'Keep my current abilities',
+			rejectLabel: 'Do not learn it',
 		};
 	}
 

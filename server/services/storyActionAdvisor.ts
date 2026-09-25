@@ -11,6 +11,7 @@ import type {
 import { CapabilitySimulationEngine } from '../domain/capabilitySimulationEngine';
 import type { WorldRepository } from '../repositories/worldRepository';
 import { worldRepository } from '../repositories/worldRepository';
+import { UnifiedAiActionOrchestrator, type UnifiedActionPipelineResult } from './unifiedAiActionOrchestrator';
 
 export type ActionAdviceMode =
 	| 'EXECUTE_EXISTING'
@@ -54,6 +55,7 @@ export interface ActionAdvice {
 	recognizedCapability?: CapabilityDefinition;
 	simulation?: CapabilitySimulationResult;
 	canExecuteNow: boolean;
+	aiPipeline?: UnifiedActionPipelineResult;
 }
 
 export interface StoryActionSceneContext {
@@ -306,6 +308,18 @@ export class StoryActionAdvisor {
 		];
 		const simulator = new CapabilitySimulationEngine();
 		const capabilityLikeRequest = simulator.isCapabilityLikeRequest(actionText);
+		// Closed AI action pipeline: only capability-like requests enter the multi-model
+		// interpretation/research/synthesis/rules/tactics flow. Ordinary narrative actions
+		// retain the lightweight path and cannot be turned into powers accidentally.
+		const aiPipeline = capabilityLikeRequest
+			? await new UnifiedAiActionOrchestrator(this.repository).resolveAction(storyId, actionText, {
+				locationName: sceneContext?.locationName,
+				locationDescription: sceneContext?.locationDescription,
+				startingSituation: sceneContext?.startingSituation,
+				recentActions: sceneContext?.recentActions,
+			})
+			: undefined;
+
 
 		const tips = await this.generateTips(
 			storyId,
@@ -346,6 +360,7 @@ export class StoryActionAdvisor {
 				recognizedCapability: effectiveMatch,
 				tips,
 				canExecuteNow: true,
+				aiPipeline,
 			};
 		}
 
@@ -360,7 +375,7 @@ export class StoryActionAdvisor {
 				.filter((capability) => capabilityMatchesAction(capability, normalizedAction))
 				.sort((a, b) => normalize(b.name).length - normalize(a.name).length)[0]
 			: undefined;
-		let candidate = worldMatch || registryMatch;
+		let candidate = worldMatch || registryMatch || aiPipeline?.capability;
 
 		if (!candidate) {
 			const preview = capabilityEngine.interpretFreeformAction({
@@ -379,6 +394,7 @@ export class StoryActionAdvisor {
 					actorId,
 					tips,
 					canExecuteNow: true,
+					aiPipeline,
 				};
 			}
 		}
@@ -442,6 +458,7 @@ export class StoryActionAdvisor {
 				recognizedCapability: candidate,
 				simulation,
 				canExecuteNow: false,
+				aiPipeline,
 			};
 		}
 
@@ -467,7 +484,8 @@ export class StoryActionAdvisor {
 				simulation,
 				proposal,
 				canExecuteNow: false,
-			};
+					aiPipeline,
+				};
 		}
 
 		// Character incompatibility may justify an AI-generated alternate mechanism,
@@ -524,6 +542,7 @@ export class StoryActionAdvisor {
 			recognizedCapability: candidate,
 			simulation,
 			canExecuteNow: false,
+			aiPipeline,
 		};
 	}
 

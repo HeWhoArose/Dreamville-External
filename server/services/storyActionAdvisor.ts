@@ -292,6 +292,13 @@ export class StoryActionAdvisor {
 		);
 		const allCapabilities = capabilityEngine.getAllCapabilities();
 		const normalizedAction = normalize(actionText);
+		const world = run?.worldId ? this.repository.getWorldTemplate(run.worldId) : undefined;
+		const worldCapabilities = [
+			...((world?.canonicalCapabilities || []) as CapabilityDefinition[]),
+			...((world?.capabilities || []) as CapabilityDefinition[]),
+		];
+		const simulator = new CapabilitySimulationEngine();
+		const capabilityLikeRequest = simulator.isCapabilityLikeRequest(actionText);
 
 		const tips = await this.generateTips(
 			storyId,
@@ -301,25 +308,34 @@ export class StoryActionAdvisor {
 			sceneContext,
 		);
 
-		const recognizedCapability = allCapabilities
+		// Player-owned capabilities always win first. The global registry is never
+		// allowed to turn an ordinary narrative action into a supernatural request.
+		const ownedMatch = actorCapabilities
 			.filter((capability) => capabilityMatchesAction(capability, normalizedAction))
 			.sort((a, b) => normalize(b.name).length - normalize(a.name).length)[0];
-
-		// Ownership is always checked against actor-owned/effective capabilities first.
-		// The global registry is an AI/internal candidate source, never a grant source.
-		if (recognizedCapability && actorAlreadyHasCapability(actorCapabilities, recognizedCapability.id)) {
+		if (ownedMatch && actorAlreadyHasCapability(actorCapabilities, ownedMatch.id)) {
 			return {
 				mode: 'EXECUTE_EXISTING',
 				actionText,
 				actorId,
-				recognizedCapability,
+				recognizedCapability: ownedMatch,
 				tips,
 				canExecuteNow: true,
 			};
 		}
 
-		let candidate = recognizedCapability;
-		const simulator = new CapabilitySimulationEngine();
+		// An unlearned capability may come from the authored current world or from the
+		// internal registry as a candidate, but only after the request is clearly a
+		// capability request and before any proposal is synthesized.
+		const worldMatch = worldCapabilities
+			.filter((capability) => capabilityMatchesAction(capability, normalizedAction))
+			.sort((a, b) => normalize(b.name).length - normalize(a.name).length)[0];
+		const registryMatch = capabilityLikeRequest
+			? allCapabilities
+				.filter((capability) => capabilityMatchesAction(capability, normalizedAction))
+				.sort((a, b) => normalize(b.name).length - normalize(a.name).length)[0]
+			: undefined;
+		let candidate = worldMatch || registryMatch;
 
 		if (!candidate) {
 			const preview = capabilityEngine.interpretFreeformAction({
@@ -328,9 +344,9 @@ export class StoryActionAdvisor {
 				executeIfValid: false,
 			});
 
-			if (preview.interpretationType === 'NOVEL_CAPABILITY_PROPOSAL' && preview.proposedCapability) {
+			if (capabilityLikeRequest && preview.interpretationType === 'NOVEL_CAPABILITY_PROPOSAL' && preview.proposedCapability) {
 				candidate = preview.proposedCapability;
-			} else if (!simulator.isCapabilityLikeRequest(actionText)) {
+			} else if (!capabilityLikeRequest) {
 				// Ordinary freeform actions stay on the normal narrative/action path.
 				return {
 					mode: 'NORMAL_ACTION',
@@ -342,17 +358,12 @@ export class StoryActionAdvisor {
 			}
 		}
 
-		const world = run?.worldId ? this.repository.getWorldTemplate(run.worldId) : undefined;
 		const progressionState = this.repository.getCharacterProgressionEngine(storyId).getState(actorId);
 		const progressionPolicy = capabilityEngine.getProgressionPolicy();
 		const rulesProfile = this.repository.getRulesProfile(storyId);
 		const customRules = world?.worldId
 			? new (await import('../domain/customRuleEngine')).CustomRuleEngine().getRules(this.repository as any, storyId)
 			: [];
-		const worldCapabilities = [
-			...((world?.canonicalCapabilities || []) as CapabilityDefinition[]),
-			...((world?.capabilities || []) as CapabilityDefinition[]),
-		];
 
 		const simulationContext: CapabilitySimulationContext = {
 			actorId,

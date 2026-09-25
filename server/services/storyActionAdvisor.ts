@@ -85,14 +85,35 @@ function actorAlreadyHasCapability(capabilities: EffectiveCapability[], capabili
 function inferDirectCompatibility(
 	capability: CapabilityDefinition,
 	run: any,
+	progressionState?: any,
 ): boolean {
 	const actorText = actorNarrativeText(run);
 	const role = normalize(run?.protagonist?.role?.archetype || run?.protagonist?.role?.profession);
 	const capabilityText = normalize(capability.name + ' ' + capability.description);
-	const classId = normalize(run?.progression?.classId || run?.protagonist?.progression?.classId);
+	const classModule = progressionState?.classId
+		? run?.storyId
+			? undefined
+			: undefined
+		: undefined;
+	const classId = normalize(
+		progressionState?.classId ||
+		run?.progression?.classId ||
+		run?.protagonist?.progression?.classId ||
+		classModule
+	);
 
-	if (classId.includes('wizard') || classId.includes('sorcerer') || classId.includes('pyromancer')) {
-		if (capabilityText.includes('fire') || capabilityText.includes('flame')) return true;
+	if (
+		(classId.includes('wizard') || classId.includes('sorcerer') || classId.includes('pyromancer')) &&
+		(capabilityText.includes('fire') || capabilityText.includes('flame'))
+	) {
+		return true;
+	}
+
+	if (
+		(classId.includes('cleric') || classId.includes('paladin')) &&
+		(capabilityText.includes('light') || capabilityText.includes('radiant') || capabilityText.includes('holy'))
+	) {
+		return true;
 	}
 
 	if (Array.isArray(capability.restrictions) && capability.restrictions.length > 0) {
@@ -105,7 +126,7 @@ function inferDirectCompatibility(
 	const schoolMatch = provenance.match(/(?:skill|school|tradition|class):([^:]+)/);
 	if (schoolMatch?.[1]) {
 		const school = schoolMatch[1].replace(/[_-]/g, ' ');
-		if (actorText.includes(school) || role.includes(school)) return true;
+		if (actorText.includes(school) || role.includes(school) || classId.includes(school)) return true;
 	}
 
 	const domainKeywords: Record<string, string[]> = {
@@ -117,7 +138,7 @@ function inferDirectCompatibility(
 
 	for (const [domain, compatibleRoles] of Object.entries(domainKeywords)) {
 		if (capabilityText.includes(domain)) {
-			if (compatibleRoles.some((keyword) => role.includes(keyword) || actorText.includes(keyword))) {
+			if (compatibleRoles.some((keyword) => role.includes(keyword) || actorText.includes(keyword) || classId.includes(keyword))) {
 				return true;
 			}
 		}
@@ -265,7 +286,11 @@ export class StoryActionAdvisor {
 			};
 		}
 
-		if (inferDirectCompatibility(recognizedCapability, run)) {
+		const progressionState = this.repository
+			.getCharacterProgressionEngine(storyId)
+			.getState(actorId);
+
+		if (inferDirectCompatibility(recognizedCapability, run, progressionState)) {
 			return {
 				mode: 'AUTO_LEARN_AND_EXECUTE',
 				actionText,
@@ -468,7 +493,7 @@ export class StoryActionAdvisor {
 				'Return only the requested JSON object with 2 to 4 tips.',
 				{
 					timeoutMs: 3500,
-					contextTokens: Math.min(6000, prompt.length),
+					contextTokens: Math.min(6000, Math.ceil(prompt.length / 4)),
 					validateResponse: (text) => {
 						try {
 							const parsed = JSON.parse(text);

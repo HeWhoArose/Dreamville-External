@@ -126,7 +126,11 @@ describe('CH2 SURGICAL REPAIR VERIFICATION — EPISTEMIC HORIZON & ACTOR DISCOVE
 
 		it('CH2-06: CapabilityEngine.getActorCapabilities filters by vesselCapacity', () => {
 			const capEngine = worldRepository.getCapabilityEngine('default_story');
-			capEngine.seedStarterPowerStateForActor('actor_test_cap');
+			// Explicitly seed test ownership so this regression verifies vessel filtering,
+			// not implicit ownership from the global capability registry.
+			capEngine.seedStarterPowerStateForActor('actor_test_cap', {
+				starterCapabilities: ['cap_world_darkness', 'cap_venomous_bite'],
+			});
 			
 			const actorCaps = capEngine.getActorCapabilities('actor_test_cap');
 			// Vessel capacity is 40. cap_world_darkness requires minVesselCapacityRequired 60.

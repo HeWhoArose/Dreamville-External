@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CapabilitySimulationEngine } from '../server/domain/capabilitySimulationEngine';
-import type { CapabilityDefinition, PowerState } from '../src/types';
+import type { CapabilityDefinition, PowerState } from '../server/domain/capabilityEngine';
 
 const simulator = new CapabilitySimulationEngine();
 

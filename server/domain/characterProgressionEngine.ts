@@ -372,9 +372,6 @@ export class CharacterProgressionEngine {
     if (state.subclassId) {
       const subclassModule = this.modules.get(state.subclassId);
       if (!subclassModule || subclassModule.type !== 'SUBCLASS') throw new Error(`Genesis progression references invalid subclass '${state.subclassId}'.`);
-      if (subclassModule.minLevel && state.currentLevel < subclassModule.minLevel) {
-        throw new Error(`Genesis subclass '${state.subclassId}' requires level ${subclassModule.minLevel}.`);
-      }
       if (subclassModule.parentClassId && state.classId !== subclassModule.parentClassId) {
         throw new Error(`Genesis subclass '${state.subclassId}' requires class '${subclassModule.parentClassId}'.`);
       }
@@ -880,9 +877,6 @@ export class CharacterProgressionEngine {
       }
       if (state.subclassId) {
         const subclass = this.modules.get(state.subclassId)!;
-        if (subclass.minLevel && state.currentLevel < subclass.minLevel) {
-          throw new Error(`Progression snapshot subclass '${state.subclassId}' requires level ${subclass.minLevel}.`);
-        }
         if (subclass.parentClassId && state.classId !== subclass.parentClassId) {
           throw new Error(`Progression snapshot subclass '${state.subclassId}' requires class '${subclass.parentClassId}'.`);
         }

@@ -1,19 +1,17 @@
 {
   "pins": {
-    "narrative.generate": "provider_primary_failing::primary-fail-m1",
     "character.dialogue": "google_gemini::gemini-3.5-flash",
     "memory.extract": "google_gemini::gemini-3.5-flash",
     "summary.scene": "google_gemini::gemini-3.5-flash",
-    "rules.adjudicate": "google_gemini::gemini-3.5-flash",
+    "rules.adjudicate": "google_gemini::gemini-3.6-flash",
     "utility.inspect": "google_gemini::gemini-3.5-flash",
     "speech.generate": "provider_mock_speech::mock-speech-v1",
     "image.generate": "google_imagen::imagen-3.0-generate-002"
   },
   "fallbackChains": {
     "narrative.generate": [
-      "provider_primary_failing::primary-fail-m1",
-      "provider_secondary_failing::secondary-fail-m2",
-      "provider_tertiary_success::tertiary-success-m3"
+      "provider_category_selected_runtime::narrative-selected-runtime",
+      "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "character.dialogue": [
       "google_gemini::gemini-3.5-flash",
@@ -34,9 +32,8 @@
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "rules.adjudicate": [
-      "google_gemini::gemini-3.5-flash",
-      "google_gemini::gemini-3.8-flash",
-      "google_gemini::gemini-3.5-flash-lite",
+      "google_gemini::gemini-3.6-flash",
+      "provider_mock_reasoning::mock-reasoning-pro",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "utility.inspect": [
@@ -61,9 +58,9 @@
         "creative_writing"
       ],
       "contextWindow": 128000,
-      "health": "Healthy",
-      "quota": "Healthy",
-      "latencyMs": 350,
+      "health": "InvalidAuth",
+      "quota": "Unknown",
+      "latencyMs": 0,
       "userPriority": 70,
       "roleEligibility": [
         "narrative.generate",
@@ -74,7 +71,7 @@
         "utility.inspect"
       ],
       "fallbackEligibility": true,
-      "accessStatus": "accessible",
+      "accessStatus": "not_configured",
       "lifecycleState": "active",
       "isEmergencyFloor": false
     },
@@ -90,9 +87,9 @@
         "creative_writing"
       ],
       "contextWindow": 131072,
-      "health": "Healthy",
-      "quota": "Healthy",
-      "latencyMs": 350,
+      "health": "InvalidAuth",
+      "quota": "Unknown",
+      "latencyMs": 0,
       "userPriority": 70,
       "roleEligibility": [
         "narrative.generate",
@@ -103,7 +100,7 @@
         "utility.inspect"
       ],
       "fallbackEligibility": true,
-      "accessStatus": "accessible",
+      "accessStatus": "not_configured",
       "lifecycleState": "active",
       "isEmergencyFloor": false
     },
@@ -119,9 +116,9 @@
         "creative_writing"
       ],
       "contextWindow": 64000,
-      "health": "Healthy",
-      "quota": "Healthy",
-      "latencyMs": 350,
+      "health": "InvalidAuth",
+      "quota": "Unknown",
+      "latencyMs": 0,
       "userPriority": 70,
       "roleEligibility": [
         "narrative.generate",
@@ -132,7 +129,7 @@
         "utility.inspect"
       ],
       "fallbackEligibility": true,
-      "accessStatus": "accessible",
+      "accessStatus": "not_configured",
       "lifecycleState": "active",
       "isEmergencyFloor": false
     },
@@ -148,9 +145,9 @@
         "creative_writing"
       ],
       "contextWindow": 64000,
-      "health": "Healthy",
-      "quota": "Healthy",
-      "latencyMs": 350,
+      "health": "InvalidAuth",
+      "quota": "Unknown",
+      "latencyMs": 0,
       "userPriority": 70,
       "roleEligibility": [
         "narrative.generate",
@@ -161,7 +158,7 @@
         "utility.inspect"
       ],
       "fallbackEligibility": true,
-      "accessStatus": "accessible",
+      "accessStatus": "not_configured",
       "lifecycleState": "active",
       "isEmergencyFloor": false
     },
@@ -177,9 +174,9 @@
         "creative_writing"
       ],
       "contextWindow": 200000,
-      "health": "Healthy",
-      "quota": "Healthy",
-      "latencyMs": 350,
+      "health": "InvalidAuth",
+      "quota": "Unknown",
+      "latencyMs": 0,
       "userPriority": 70,
       "roleEligibility": [
         "narrative.generate",
@@ -190,7 +187,7 @@
         "utility.inspect"
       ],
       "fallbackEligibility": true,
-      "accessStatus": "accessible",
+      "accessStatus": "not_configured",
       "lifecycleState": "active",
       "isEmergencyFloor": false
     },
@@ -206,9 +203,9 @@
         "creative_writing"
       ],
       "contextWindow": 200000,
-      "health": "Healthy",
-      "quota": "Healthy",
-      "latencyMs": 350,
+      "health": "InvalidAuth",
+      "quota": "Unknown",
+      "latencyMs": 0,
       "userPriority": 70,
       "roleEligibility": [
         "narrative.generate",
@@ -219,7 +216,7 @@
         "utility.inspect"
       ],
       "fallbackEligibility": true,
-      "accessStatus": "accessible",
+      "accessStatus": "not_configured",
       "lifecycleState": "active",
       "isEmergencyFloor": false
     },
@@ -235,9 +232,9 @@
         "creative_writing"
       ],
       "contextWindow": 128000,
-      "health": "Healthy",
-      "quota": "Healthy",
-      "latencyMs": 350,
+      "health": "InvalidAuth",
+      "quota": "Unknown",
+      "latencyMs": 0,
       "userPriority": 70,
       "roleEligibility": [
         "narrative.generate",
@@ -248,7 +245,7 @@
         "utility.inspect"
       ],
       "fallbackEligibility": true,
-      "accessStatus": "accessible",
+      "accessStatus": "not_configured",
       "lifecycleState": "active",
       "isEmergencyFloor": false
     },
@@ -264,9 +261,9 @@
         "creative_writing"
       ],
       "contextWindow": 128000,
-      "health": "Healthy",
-      "quota": "Healthy",
-      "latencyMs": 350,
+      "health": "InvalidAuth",
+      "quota": "Unknown",
+      "latencyMs": 0,
       "userPriority": 70,
       "roleEligibility": [
         "narrative.generate",
@@ -277,7 +274,7 @@
         "utility.inspect"
       ],
       "fallbackEligibility": true,
-      "accessStatus": "accessible",
+      "accessStatus": "not_configured",
       "lifecycleState": "active",
       "isEmergencyFloor": false
     },
@@ -293,9 +290,9 @@
         "creative_writing"
       ],
       "contextWindow": 1048576,
-      "health": "Healthy",
-      "quota": "Healthy",
-      "latencyMs": 350,
+      "health": "InvalidAuth",
+      "quota": "Unknown",
+      "latencyMs": 0,
       "userPriority": 70,
       "roleEligibility": [
         "narrative.generate",
@@ -306,7 +303,7 @@
         "utility.inspect"
       ],
       "fallbackEligibility": true,
-      "accessStatus": "accessible",
+      "accessStatus": "not_configured",
       "lifecycleState": "active",
       "isEmergencyFloor": false
     },
@@ -322,9 +319,9 @@
         "creative_writing"
       ],
       "contextWindow": 128000,
-      "health": "Healthy",
-      "quota": "Healthy",
-      "latencyMs": 350,
+      "health": "InvalidAuth",
+      "quota": "Unknown",
+      "latencyMs": 0,
       "userPriority": 70,
       "roleEligibility": [
         "narrative.generate",
@@ -335,7 +332,7 @@
         "utility.inspect"
       ],
       "fallbackEligibility": true,
-      "accessStatus": "accessible",
+      "accessStatus": "not_configured",
       "lifecycleState": "active",
       "isEmergencyFloor": false
     },
@@ -351,9 +348,9 @@
         "creative_writing"
       ],
       "contextWindow": 131072,
-      "health": "Healthy",
-      "quota": "Healthy",
-      "latencyMs": 350,
+      "health": "InvalidAuth",
+      "quota": "Unknown",
+      "latencyMs": 0,
       "userPriority": 70,
       "roleEligibility": [
         "narrative.generate",
@@ -364,7 +361,7 @@
         "utility.inspect"
       ],
       "fallbackEligibility": true,
-      "accessStatus": "accessible",
+      "accessStatus": "not_configured",
       "lifecycleState": "active",
       "isEmergencyFloor": false
     },

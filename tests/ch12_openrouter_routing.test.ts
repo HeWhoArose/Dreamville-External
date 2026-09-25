@@ -305,14 +305,18 @@ test('manual category routing never promotes an ineligible fallback model into t
     'provider_deterministic_emergency::emergency-fallback-local',
   ]);
 
-  const selection = orchestrator.selectBestModel('narrative.generate');
-  assert.equal(selection.selectedModel.modelId, 'narrative-selected');
-  assert.equal(selection.fallbacks.some((model) => model.modelId === 'combat-only'), false);
+  try {
+    const selection = orchestrator.selectBestModel('narrative.generate');
+    assert.equal(selection.selectedModel.modelId, 'narrative-selected');
+    assert.equal(selection.fallbacks.some((model) => model.modelId === 'combat-only'), false);
 
-  const unrelated = orchestrator.getAllModels().find(
-    (model) => model.modelId === 'combat-only'
-  );
-  assert.deepEqual(unrelated?.roleEligibility, ['combat.tactics']);
+    const unrelated = orchestrator.getAllModels().find(
+      (model) => model.modelId === 'combat-only'
+    );
+    assert.deepEqual(unrelated?.roleEligibility, ['combat.tactics']);
+  } finally {
+    orchestrator.setCategoryModelOverride('narration', null as any);
+  }
 });
 
 test('manual category routing does not inject global recovery candidates after the selected model fails', async () => {
@@ -368,19 +372,23 @@ test('manual category routing does not inject global recovery candidates after t
     'provider_deterministic_emergency::emergency-fallback-local',
   ]);
 
-  const result = await orchestrator.executeTaskGeneration(
-    'narrative.generate',
-    'Return a valid narrative turn.',
-    undefined,
-    {
-      timeoutMs: 1000,
-    }
-  );
+  try {
+    const result = await orchestrator.executeTaskGeneration(
+      'narrative.generate',
+      'Return a valid narrative turn.',
+      undefined,
+      {
+        timeoutMs: 1000,
+      }
+    );
 
-  assert.equal(result.modelId, 'emergency-fallback-local');
-  assert.equal(result.source, 'DETERMINISTIC_FALLBACK');
-  assert.equal(
-    result.attemptsTrail.some((attempt) => attempt.modelId === 'combat-only-runtime'),
-    false
-  );
+    assert.equal(result.modelId, 'emergency-fallback-local');
+    assert.equal(result.source, 'DETERMINISTIC_FALLBACK');
+    assert.equal(
+      result.attemptsTrail.some((attempt) => attempt.modelId === 'combat-only-runtime'),
+      false
+    );
+  } finally {
+    orchestrator.setCategoryModelOverride('narration', null as any);
+  }
 });

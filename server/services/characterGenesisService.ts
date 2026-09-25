@@ -478,6 +478,7 @@ Rules:
           'Return only the requested Character Genesis JSON. Treat the player concept as authoritative input; do not overwrite preserved user fields.',
           {
             timeoutMs: 20000,
+            maxTokens: 4096,
             validateResponse: (text) => {
               const parsed = this.parseJsonFromAiResponse(text);
               if (!parsed || !this.isValidCharacterExtractionShape(parsed)) {

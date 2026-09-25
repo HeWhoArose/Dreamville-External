@@ -414,6 +414,69 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
         break;
       case 'narrative.generate':
       default:
+        if (
+          prompt.includes('Character Genesis') ||
+          prompt.includes('CharacterGenesisDraft') ||
+          options?.systemInstruction?.includes('Character Genesis')
+        ) {
+          text = JSON.stringify({
+            identity: {
+              name: 'Vanguard Traveler',
+              species: 'Human',
+              age: 24,
+              gender: 'Unspecified',
+            },
+            appearance: {
+              physicalDescription: 'A resolute traveler prepared for uncharted terrain, bearing weathered garments and disciplined posture.',
+              distinguishingTraits: ['Intense focused gaze', 'Practical traveler gear'],
+            },
+            personality: {
+              traits: ['Pragmatic', 'Vigilant'],
+              temperament: 'Calm under pressure',
+              values: ['Survival', 'Truth', 'Independence'],
+              fears: ['Loss of agency'],
+              desires: ['Mastery and understanding of anomalies'],
+              dialogueStyle: 'Measured and concise',
+            },
+            background: {
+              origin: 'Threshold borderlands',
+              history: 'Traversed anomalous crossings to reach the current frontier.',
+              socialClass: 'Wanderer',
+              formerOccupations: ['Scout'],
+            },
+            role: {
+              profession: 'Scout',
+              archetype: 'Wanderer',
+              specialization: 'Survival',
+            },
+            startingEquipment: {
+              mainHand: { id: 'item_blade', name: 'Field Blade', type: 'WEAPON', damageFormula: '1d6' },
+              body: { id: 'item_garb', name: 'Reinforced Traveler Garb', type: 'ARMOR' },
+              pack: [{ id: 'item_supplies', name: 'Survival Provisions', quantity: 3 }],
+            },
+            startingLocation: {
+              locationId: 'loc_threshold',
+              name: 'Border Threshold',
+              region: 'Outer Reach',
+              description: 'An ancient crossing where newcomers find their footing.',
+            },
+            startingSituation: {
+              summary: 'Arriving at an unfamiliar threshold seeking purpose.',
+              hook: 'A strange resonance marks the area.',
+              initialConditions: 'Alert and watchful of immediate surroundings.',
+              whyHereNow: 'Driven by necessity to explore this world.',
+            },
+            capabilities: [],
+            aiExtractionSummary: {
+              interpretation: 'Deterministic baseline character draft.',
+              keyFacts: ['Generated via deterministic emergency floor.'],
+              proposedHighlights: ['Balanced starting baseline.'],
+              uncertainties: [],
+            },
+          });
+          break;
+        }
+
         text = JSON.stringify({
           narrative: ['The brass armatures of the Whispering Orrery turn with steady, ancient precision as the world advances.'],
           dialogue: [],
@@ -1016,9 +1079,7 @@ export class OpenRouterAdapter implements IProviderAdapter {
         stream: false,
       };
 
-      if (options?.maxTokens) {
-        body.max_tokens = options.maxTokens;
-      }
+      body.max_tokens = Math.min(Number(options?.maxTokens || 4096), 4096);
 
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
@@ -1041,10 +1102,29 @@ export class OpenRouterAdapter implements IProviderAdapter {
         throw new Error(String(message));
       }
 
-      const content = payload?.choices?.[0]?.message?.content;
-      const text = Array.isArray(content)
-        ? content.map((part: any) => typeof part === 'string' ? part : part?.text || '').join('')
-        : String(content || '');
+      if (payload?.error) {
+        const message = payload.error.message || JSON.stringify(payload.error);
+        throw new Error(String(message));
+      }
+
+      const choice = payload?.choices?.[0];
+      if (choice?.error) {
+        throw new Error(String(choice.error.message || JSON.stringify(choice.error)));
+      }
+
+      const message = choice?.message;
+      let text = '';
+      if (typeof message?.content === 'string') {
+        text = message.content;
+      } else if (Array.isArray(message?.content)) {
+        text = message.content.map((part: any) => typeof part === 'string' ? part : part?.text || '').join('');
+      } else if (typeof choice?.text === 'string') {
+        text = choice.text;
+      } else if (typeof message?.reasoning === 'string' && message.reasoning.trim()) {
+        text = message.reasoning;
+      } else if (typeof (message as any)?.thought === 'string' && (message as any).thought.trim()) {
+        text = (message as any).thought;
+      }
 
       if (!text.trim()) {
         throw new Error('OpenRouter returned an empty model response.');
@@ -4767,6 +4847,7 @@ export class MultiModelOrchestrator {
     systemInstruction?: string,
     options?: {
       timeoutMs?: number;
+      maxTokens?: number;
       contextTokens?: number;
       validateResponse?: (text: string) => TaskResponseValidationResult;
     }
@@ -4890,6 +4971,7 @@ export class MultiModelOrchestrator {
         try {
           providerRes = await adapter.generate(task, prompt, {
             timeoutMs,
+            maxTokens: options?.maxTokens,
             abortSignal: abortController.signal,
             modelId: currentCandidate.modelId,
             systemInstruction,

@@ -86,14 +86,14 @@ test('Character Creation Slice 2 — Character Genesis Forensic Verification', a
         }
 
         let profession = 'Spellblade';
-        if (lowerPrompt.includes('blacksmith')) {
+        if (lowerPrompt.includes('soul reaper')) {
+          profession = 'Soul Reaper';
+        } else if (lowerPrompt.includes('blacksmith')) {
           profession = 'Runic Blacksmith';
         } else if (lowerPrompt.includes('scout')) {
           profession = 'Scout';
         } else if (lowerPrompt.includes('duelist')) {
           profession = 'Duelist';
-        } else if (lowerPrompt.includes('soul reaper')) {
-          profession = 'Soul Reaper';
         }
 
         const capabilityName = species === 'Soul Reaper' ? 'Spiritual Power (Reiatsu)' : 'Ley-line Manipulation';

@@ -416,6 +416,17 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
           audioCues: [],
         });
         break;
+      case 'story.advice':
+        text = JSON.stringify({
+          tips: [
+            {
+              title: 'Use a known ability',
+              description: 'Try one of your currently learned capabilities that matches the situation.',
+              actionText: 'Use one of my current abilities that fits the situation.',
+            },
+          ],
+        });
+        break;
       case 'narrative.generate':
       default:
         if (
@@ -2321,7 +2332,10 @@ export class MultiModelOrchestrator {
       roleEligibility: [
         'narrative.generate',
         'character.dialogue',
+        'character.extract',
+        'character.capability.propose',
         'memory.extract',
+        'story.advice',
         'rules.adjudicate',
         'summary.scene',
         'utility.inspect',
@@ -5264,7 +5278,10 @@ export class MultiModelOrchestrator {
     const tasksToConfigure: TaskId[] = [
       'narrative.generate',
       'character.dialogue',
+      'character.extract',
+      'character.capability.propose',
       'memory.extract',
+      'story.advice',
       'summary.scene',
       'rules.adjudicate',
       'utility.inspect',

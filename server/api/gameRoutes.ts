@@ -237,7 +237,7 @@ gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => 
     const player = worldRepository.getPlayerLifecycle(storyId);
     const actorId = player?.actorId || 'player_actor_' + storyId;
     const proposalId = typeof req.body?.proposalId === 'string' ? req.body.proposalId : undefined;
-    const pendingProposal = proposalId ? storyActionAdvisor.getPendingProposal(proposalId) : null;
+    const pendingProposal = proposalId ? await storyActionAdvisor.validatePendingProposal(storyId, proposalId) : null;
 
     if (!pendingProposal || pendingProposal.requestedAction !== actionText) {
       return res.status(409).json({
@@ -423,11 +423,16 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
       if (actionText) {
         preflightAdvice = await storyActionAdvisor.advise(storyId, actionText);
 
-        if (preflightAdvice.mode === 'SUGGEST_ALTERNATIVE') {
+        if (
+          preflightAdvice.mode === 'SUGGEST_ALTERNATIVE' ||
+          preflightAdvice.mode === 'CAPABILITY_SIMULATION'
+        ) {
+          const blocked = preflightAdvice.mode === 'CAPABILITY_SIMULATION';
           return res.status(409).json({
             success: false,
-            code: 'ACTION_ADVICE_CONFIRMATION_REQUIRED',
-            errorReason: 'This action requires a character-compatible capability decision before execution.',
+            code: blocked ? 'CAPABILITY_SIMULATION_BLOCKED' : 'ACTION_ADVICE_CONFIRMATION_REQUIRED',
+            errorReason: preflightAdvice.simulation?.explanation ||
+              'This action requires an explicit capability decision before execution.',
             advice: preflightAdvice,
           });
         }
@@ -498,29 +503,6 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
         transactionMode: 'ROLLBACK',
       },
       async () => {
-        if (
-          actionRequest.type === 'CUSTOM_ACTION' &&
-          preflightAdvice?.mode === 'AUTO_LEARN_AND_EXECUTE' &&
-          preflightAdvice?.recognizedCapability?.id
-        ) {
-          const capabilityEngine = worldRepository.getCapabilityEngine(storyId);
-          const capability = preflightAdvice.recognizedCapability;
-          if (!capabilityEngine.getCapability(capability.id)) {
-            capabilityEngine.registerCapability({
-              ...capability,
-              provenance: capability.provenance || 'ACTION_ADVISOR_APPROVED',
-            });
-          }
-          capabilityEngine.acquireSkill(actorId, capability.id, {
-            libraryProvenance: {
-              libraryStatus: 'APPROVED',
-              sourceStoryIds: [storyId],
-            },
-          });
-          worldRepository.persistCapabilityState(storyId);
-          worldRepository.addAcquiredCapabilityToCharacter(storyId, capability);
-        }
-
         const actionResult =
           actionRequest.type === 'CUSTOM_ACTION'
             ? await serverMockAuthority.processCustomAction(actionRequest, requestedCommandId)

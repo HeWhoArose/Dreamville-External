@@ -178,9 +178,9 @@ gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => 
     const player = worldRepository.getPlayerLifecycle(storyId);
     const actorId = player?.actorId || 'player_actor_' + storyId;
     const proposalId = typeof req.body?.proposalId === 'string' ? req.body.proposalId : undefined;
-    const pendingProposal = proposalId ? storyActionAdvisor.consumePendingProposal(proposalId) : null;
+    const pendingProposal = proposalId ? storyActionAdvisor.getPendingProposal(proposalId) : null;
 
-    if (!pendingProposal) {
+    if (!pendingProposal || pendingProposal.requestedAction !== actionText) {
       return res.status(409).json({
         success: false,
         code: 'ACTION_ADVICE_STALE',
@@ -314,6 +314,7 @@ gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => 
       });
     }
 
+    storyActionAdvisor.consumePendingProposal(pendingProposal.proposalId);
     return res.json(commandResult.data);
   } catch (error: any) {
     console.error('[Story Action Advisor] Approval failed:', error);

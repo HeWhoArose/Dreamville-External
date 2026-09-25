@@ -36,6 +36,17 @@ export interface CapabilitySimulationContext {
   world: CapabilitySimulationWorld;
   rulesProfile?: any;
   customRules?: any[];
+  progressionPolicy?: {
+    progressionAllowed?: boolean;
+    acquisitionAllowed?: boolean;
+    maxLevel?: number;
+  };
+  progressionState?: {
+    currentLevel?: number;
+    maxCharacterLevel?: number;
+    allowLevelUp?: boolean;
+    [key: string]: unknown;
+  };
   powerState?: PowerState;
   ownedCapabilities: CapabilityDefinition[];
   skillInstances?: SkillInstance[];
@@ -418,9 +429,20 @@ export class CapabilitySimulationEngine {
     const characterCheck = characterAllows(domain, characterText, worldText, context.ownedCapabilities, candidateCapability);
     const power = context.powerState;
     const cost = estimateCost(candidateCapability, scale);
-    const acquisitionAllowed = context.rulesProfile?.allowCharacterProgression !== false &&
+    const acquisitionAllowed =
+      context.progressionPolicy?.acquisitionAllowed !== false &&
+      context.progressionPolicy?.progressionAllowed !== false &&
+      context.progressionState?.allowLevelUp !== false &&
       context.rulesProfile?.enabledMechanics?.includes('character_progression') !== false &&
       context.world.progressionPolicy?.acquisitionAllowed !== false;
+
+    const currentLevel = Number(context.progressionState?.currentLevel || 1);
+    const configuredMaxLevel = Number(
+      context.progressionState?.maxCharacterLevel ??
+      context.progressionPolicy?.maxLevel ??
+      20
+    );
+    const hasProgressionHeadroom = currentLevel < configuredMaxLevel;
 
     const blockers: string[] = [];
     const requiredConditions: string[] = [];
@@ -523,14 +545,39 @@ export class CapabilitySimulationEngine {
     }
 
     const hasCurrentResourceBlock = blockers.length > 0;
-    const progressionPossible = true;
-    const currentlyExecutable = !hasCurrentResourceBlock && false; // not learned, therefore never directly executable.
+    let progressionPossible = acquisitionAllowed && hasProgressionHeadroom;
+    const currentlyExecutable = false; // A capability not owned by the actor is never directly executable.
 
-    developmentPath.push('Acquire the candidate capability through an explicit progression/learning decision.');
-    if (hasCurrentResourceBlock) {
+    if (Array.isArray(candidateCapability.prerequisites) && candidateCapability.prerequisites.length > 0) {
+      const characterAndOwned = normalize([
+        characterText,
+        ...context.ownedCapabilities.map((cap) => cap.name),
+      ].join(' '));
+      const missingPrerequisites = candidateCapability.prerequisites.filter(
+        (prerequisite) => !characterAndOwned.includes(normalize(prerequisite))
+      );
+      if (missingPrerequisites.length > 0) {
+        blockers.push(`Missing prerequisites: ${missingPrerequisites.join(', ')}.`);
+        requiredConditions.push(...missingPrerequisites.map((item) => `Establish prerequisite: ${item}`));
+      }
+    }
+
+    if (!acquisitionAllowed) {
+      progressionPossible = false;
+      blockers.push('The active progression rules do not permit acquiring new capabilities.');
+    } else if (!hasProgressionHeadroom) {
+      progressionPossible = false;
+      blockers.push(`Character is at the configured progression ceiling (level ${configuredMaxLevel}).`);
+    }
+
+    if (progressionPossible) {
+      developmentPath.push('Acquire the candidate capability through an explicit progression/learning decision.');
+    }
+
+    if (hasCurrentResourceBlock || !progressionPossible || requiredConditions.length > 0) {
       developmentPath.push(...requiredConditions.map((condition) => `Prerequisite: ${condition}`));
       return {
-        status: 'CONDITIONALLY_DEVELOPABLE',
+        status: !progressionPossible ? 'CURRENTLY_BLOCKED' : 'CONDITIONALLY_DEVELOPABLE',
         actionText,
         requestedDomain: domain,
         candidateCapability: clone(candidateCapability),
@@ -540,7 +587,8 @@ export class CapabilitySimulationEngine {
         characterCompatible: true,
         currentlyExecutable,
         progressionPossible,
-        acquisitionAllowed: true,
+        acquisitionAllowed,
+
         explanation: 'The world and character support this capability in principle, but current resources or vessel limits prevent immediate use.',
         blockers,
         requiredConditions,

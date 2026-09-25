@@ -134,11 +134,11 @@ export class HistoricalChronicleEngine {
     promotedToDossier: boolean;
     promotedToChronicle: boolean;
   } {
-    if (
-      this.writeMode === 'TRANSACTIONAL' &&
-      !HistoricalChronicleEngine.bypassTransactionCheck &&
-      this.transactionOpen
-    ) {
+    if (this.writeMode === 'TRANSACTIONAL' && !HistoricalChronicleEngine.bypassTransactionCheck) {
+      if (!this.transactionOpen) {
+        throw new Error('Historical Chronicle writes require an active canonical command transaction.');
+      }
+
       if (this.evidenceStore.has(evidence.id) || this.pendingEvidence.has(evidence.id)) {
         return {
           evidenceId: evidence.id,

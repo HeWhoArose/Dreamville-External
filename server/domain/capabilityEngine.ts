@@ -915,17 +915,19 @@ export class CapabilityEngine {
     }
   }
 
+  /**
+   * Returns true only when this actor has a canonical learned SkillInstance/learned-set entry.
+   * The global capability registry is intentionally never treated as player ownership.
+   * Equipment grants remain separate and are resolved by getEffectiveActorCapabilities().
+   */
   public hasLearnedCapability(actorId: string, capabilityId: string): boolean {
     const instanceMap = this.actorSkillInstances.get(actorId);
     if (instanceMap) {
       return instanceMap.has(capabilityId);
     }
-    const set = this.actorLearnedCapabilities.get(actorId);
-    if (set) {
-      return set.has(capabilityId);
-    }
-    const cap = this.capabilities.get(capabilityId);
-    return Boolean(cap && !cap.provenance.startsWith('equipment:'));
+
+    const learnedSet = this.actorLearnedCapabilities.get(actorId);
+    return Boolean(learnedSet?.has(capabilityId));
   }
 
   public getActorCapabilities(actorId: string): CapabilityDefinition[] {

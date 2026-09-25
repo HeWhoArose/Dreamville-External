@@ -2817,6 +2817,36 @@
           "recordedAt": "2026-09-25T12:28:29.364Z",
           "valid": true,
           "trustedProvenance": false
+        },
+        {
+          "evidenceId": "ev_1790360332503_934",
+          "requirementId": "CH16.WORLD.LIBRARY",
+          "evidenceType": "UNIT_TEST",
+          "sourceReference": "tests/ch16_behavioral_verification.test.ts",
+          "description": "Verified world creation and retrieval tests pass",
+          "recordedAt": "2026-09-25T18:18:52.503Z",
+          "valid": true,
+          "trustedProvenance": false
+        },
+        {
+          "evidenceId": "ev_1790360351269_228",
+          "requirementId": "CH16.WORLD.LIBRARY",
+          "evidenceType": "UNIT_TEST",
+          "sourceReference": "tests/ch16_behavioral_verification.test.ts",
+          "description": "Verified world creation and retrieval tests pass",
+          "recordedAt": "2026-09-25T18:19:11.269Z",
+          "valid": true,
+          "trustedProvenance": false
+        },
+        {
+          "evidenceId": "ev_1790361010276_249",
+          "requirementId": "CH16.WORLD.LIBRARY",
+          "evidenceType": "UNIT_TEST",
+          "sourceReference": "tests/ch16_behavioral_verification.test.ts",
+          "description": "Verified world creation and retrieval tests pass",
+          "recordedAt": "2026-09-25T18:30:10.276Z",
+          "valid": true,
+          "trustedProvenance": false
         }
       ]
     },
@@ -3086,10 +3116,10 @@
     }
   ],
   "metadata": {
-    "currentPhase": "CH17 Surgical Repair & Control Integration Pass",
+    "currentPhase": "CH17 — Living Bible & Workstation Persistence Audit",
     "phaseObjective": "Establish operational Living Bible registry, evidence-aware status validation, persistent Workstation ledger, and developer UI.",
     "lastAuditDate": "2026-09-18",
-    "nextTask": "Automated verification and CI/CD promotion gates (CH18)",
+    "nextTask": "Execute full regression and verify UI modal",
     "blockers": []
   },
   "iterationHistory": [
@@ -3122,6 +3152,43 @@
       "date": "2026-09-18",
       "description": "Implemented CH16 Reusable World Library, Story Modes, Emergent Narrative, Dice Clash, and Archive Restoration.",
       "outcome": "CH16 behavioral verification suite passing cleanly (12/12 subtests)."
+    },
+    {
+      "iteration": 6,
+      "id": "iter_6_1790361010278",
+      "date": "2026-09-25",
+      "description": "CH17 Developer Workstation Test Run",
+      "outcome": "Successfully tested iteration record creation",
+      "reason": "Automated test suite execution",
+      "affectedRequirements": [
+        "CH17.CONTROLS"
+      ]
+    },
+    {
+      "iteration": 7,
+      "id": "iter_7_1790361010279",
+      "date": "2026-09-25",
+      "description": "Persistence Check Iteration",
+      "outcome": "Verified file persistence",
+      "affectedRequirements": []
+    },
+    {
+      "iteration": 8,
+      "id": "iter_8_1790361010374",
+      "date": "2026-09-25",
+      "description": "HTTP POST iteration test",
+      "outcome": "Verified endpoint appends iteration",
+      "affectedRequirements": [
+        "CH17.CONTROLS"
+      ]
+    },
+    {
+      "iteration": 9,
+      "id": "iter_9_1790361010400",
+      "date": "2026-09-25",
+      "description": "Non-gameplay state mutation isolation test",
+      "outcome": "Verified zero impact on game state",
+      "affectedRequirements": []
     }
   ]
 }

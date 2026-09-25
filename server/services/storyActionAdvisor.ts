@@ -417,7 +417,13 @@ export class StoryActionAdvisor {
 			};
 		}
 
-		if (simulation.status === 'DEVELOPABLE' && simulation.creationAllowed !== false) {
+		const canExploreCharacterCompatibleAlternative =
+			simulation.worldAllowed &&
+			(simulation.status === 'DEVELOPABLE' ||
+				simulation.status === 'CHARACTER_INCOMPATIBLE' ||
+				simulation.status === 'ALTERNATE_ROUTE');
+
+		if (canExploreCharacterCompatibleAlternative) {
 			const proposalCandidate = candidate || simulation.candidateCapability;
 			if (!proposalCandidate) {
 				return {

@@ -4,7 +4,9 @@ import { Award, Shield, Sparkles, Zap } from 'lucide-react';
 interface CharacterSurfaceProps {
   protagonist: any;
   powerState: any;
+  /** Effective capabilities are used for execution state; learnedCapabilities is the Skillbook source. */
   capabilities: any[];
+  learnedCapabilities: any[];
   skillInstances: any[];
   equipment: Record<string, any>;
   inventory: any[];
@@ -14,14 +16,16 @@ export const CharacterSurface: React.FC<CharacterSurfaceProps> = ({
   protagonist,
   powerState,
   capabilities,
+  learnedCapabilities,
   skillInstances,
   equipment,
   inventory,
 }) => {
-  const skills = capabilities.filter((capability) =>
-    skillInstances.some((instance) => instance.capabilityId === capability.id)
-  );
-  const skillById = new Map(skillInstances.map((instance) => [instance.capabilityId, instance]));
+  // The Skillbook is strictly actor-owned. Do not derive it from the global or merely-effective registry.
+  const learnedById = new Map(learnedCapabilities.map((capability) => [capability.id, capability]));
+  const skills = skillInstances
+    .map((instance) => learnedById.get(instance.capabilityId))
+    .filter(Boolean);
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -74,7 +78,7 @@ export const CharacterSurface: React.FC<CharacterSurfaceProps> = ({
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
             {skills.map((skill) => {
-              const instance = skillById.get(skill.id);
+              const instance = skillInstances.find((candidate) => candidate.capabilityId === skill.id);
               return (
                 <article key={skill.id} className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
                   <div className="flex items-start gap-3">

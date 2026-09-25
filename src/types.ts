@@ -505,6 +505,7 @@ export type ActionRequest =
       input?: string;
       intendedCapabilityId?: string;
       bypassCapabilityAdvisor?: boolean;
+      preventCapabilityExecution?: boolean;
     };
 
 /**

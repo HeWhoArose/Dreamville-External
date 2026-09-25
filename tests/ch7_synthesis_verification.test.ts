@@ -300,7 +300,10 @@ describe('CH7 Comprehensive Verification: Concept-to-Mechanics / Custom Capabili
     it('POST /api/game/capabilities/interpret processes freeform action over HTTP', async () => {
       const res = await fetch(`${baseUrl}/capabilities/interpret`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-dreamville-internal-ai': 'true',
+        },
         body: JSON.stringify({
           actionText: 'Fireball',
           executeIfValid: false,

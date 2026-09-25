@@ -62,7 +62,7 @@ function givePlayerAnExistingCapability(
 	repository.persistCapabilityState(storyId);
 }
 
-test('Phase 16 action advisor: compatible unlearned capability is proposed as auto-learn-and-execute, not rejected', async () => {
+test('Phase 16 action advisor: compatible unlearned capability requires explicit acquisition approval', async () => {
 	const repository = new InMemoryWorldRepository({ disablePersistence: true });
 	const storyId = 'phase16_advisor_wizard';
 	seedRun(repository, storyId, 'Wizard');
@@ -73,9 +73,11 @@ test('Phase 16 action advisor: compatible unlearned capability is proposed as au
 	const advisor = new StoryActionAdvisor(repository);
 	const advice = await advisor.advise(storyId, 'I cast Training Fireball');
 
-	assert.equal(advice.mode, 'AUTO_LEARN_AND_EXECUTE');
+	assert.equal(advice.mode, 'SUGGEST_ALTERNATIVE');
+	assert.ok(advice.proposal);
 	assert.equal(advice.recognizedCapability?.id, 'cap_fireball_test');
 	assert.equal(advice.canExecuteNow, false);
+	assert.equal(repository.getEffectiveActorCapabilities(repository.getPlayerLifecycle(storyId)?.actorId || 'player_actor_' + storyId).some((capability) => capability.id === 'cap_fireball_test'), false);
 });
 
 test('Phase 16 action advisor: ordinary Mage compatibility is not confused with Dark Mage incompatibility', async () => {
@@ -89,7 +91,8 @@ test('Phase 16 action advisor: ordinary Mage compatibility is not confused with 
 	const advisor = new StoryActionAdvisor(repository);
 	const advice = await advisor.advise(storyId, 'I cast Training Fireball');
 
-	assert.equal(advice.mode, 'AUTO_LEARN_AND_EXECUTE');
+	assert.equal(advice.mode, 'SUGGEST_ALTERNATIVE');
+	assert.ok(advice.proposal);
 	assert.equal(advice.recognizedCapability?.id, 'cap_fireball_test');
 });
 

@@ -62,9 +62,13 @@ test('ten deterministic audits keep internal simulation out of the Skillbook and
     assert.match(menu, /route: 'play\.recent-actions'/);
     assert.match(world, /character\.worldId === worldId/);
     assert.doesNotMatch(world, /!worldId \|\| character\.worldId/);
+    const interpretStart = routes.indexOf("gameRouter.post('/capabilities/interpret'");
+    const adjudicateStart = routes.indexOf("gameRouter.post('/capabilities/adjudicate'");
+    const capabilitiesGetStart = routes.indexOf("gameRouter.get('/capabilities'");
     assert.match(routes, /AI_INTERNAL_INTERPRETATION_ONLY/);
     assert.match(routes, /Internal capability DAG\/simulation metadata never crosses the player-facing API boundary/i);
-    assert.doesNotMatch(routes, /res\.json\(\{ actorId, powerState, capabilities, learnedCapabilities, skillInstances, graph \}\)/);
+    assert.equal(routes.slice(capabilitiesGetStart, adjudicateStart).includes('graph'), false);
+    assert.equal(routes.slice(interpretStart, adjudicateStart).includes("x-dreamville-internal-ai"), true);
     assert.match(dice, /HTMLCanvasElement/);
     assert.match(dice, /ICOSAHEDRON_FACES/);
     assert.match(dice, /requestAnimationFrame/);

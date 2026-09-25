@@ -64,6 +64,7 @@ export interface WorldRepository {
   getHistoricalChronicleEngine(storyId: string): HistoricalChronicleEngine;
   getInventoryEngine(storyId: string): InventoryItemEngine;
   getCapabilityEngine(storyId: string): CapabilityEngine;
+  persistCapabilityState(storyId: string): void;
   getCharacterProgressionEngine(storyId: string): CharacterProgressionEngine;
   getEntityRegistry(storyId: string): EntityRegistry;
   getEntityCard(storyId: string, entityId: string): EntityCard | null;
@@ -1514,6 +1515,19 @@ export class InMemoryWorldRepository implements WorldRepository {
     return engine;
   }
 
+  public persistCapabilityState(storyId: string): void {
+    const engine = this.capabilityEngines.get(storyId);
+    const run = this.getStoryRun(storyId);
+    if (!engine || !run) return;
+
+    run.runtimeState = {
+      ...(run.runtimeState || {}),
+      capabilities: engine.exportState(),
+    };
+    this.storyRuns.set(storyId, run);
+    this.persistLibrary();
+  }
+
   public getEntityRegistry(storyId: string): EntityRegistry {
     let registry = this.entityRegistries.get(storyId);
     if (!registry) {
@@ -2630,6 +2644,14 @@ export class InMemoryWorldRepository implements WorldRepository {
       canonicalRun.runtimeState = {
         ...(canonicalRun.runtimeState || {}),
         characterAgency: dynamicAgencyEngine.exportState(),
+      };
+    }
+
+    const capabilityEngine = this.capabilityEngines.get(canonicalRun.storyId);
+    if (capabilityEngine) {
+      canonicalRun.runtimeState = {
+        ...(canonicalRun.runtimeState || {}),
+        capabilities: capabilityEngine.exportState(),
       };
     }
     this.storyRuns.set(canonicalRun.storyId, canonicalRun);

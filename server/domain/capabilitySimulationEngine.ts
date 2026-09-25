@@ -269,6 +269,10 @@ function domainTerms(domain?: string): string[] {
     SHADOW: ['shadow', 'darkness', 'void', 'umbral', 'oblivion'],
     HEALING: ['healing', 'restoration', 'regeneration', 'rejuvenation', 'healing magic'],
     MAGIC: ['magic', 'spell', 'spellcasting', 'sorcery', 'arcane', 'mage', 'wizard', 'mana'],
+    BIOLOGICAL: ['poison', 'venom', 'toxin', 'fang', 'claw', 'natural weapon', 'mutation', 'biological'],
+    PERCEPTION: ['perception', 'sense', 'sight', 'hearing', 'tracking', 'awareness', 'detection'],
+    SOCIAL: ['persuasion', 'intimidation', 'deception', 'charm', 'negotiation', 'leadership', 'social'],
+    COMBAT: ['combat', 'fight', 'sword', 'blade', 'weapon', 'martial', 'warrior', 'knight'],
   };
   return domain ? map[domain] || [normalize(domain)] : [];
 }
@@ -311,7 +315,14 @@ function worldAllows(
     };
   }
 
-  if (domain === 'PHYSICAL' || !domain) return { allowed: true };
+  if (
+    domain === 'PHYSICAL' ||
+    domain === 'COMBAT' ||
+    domain === 'BIOLOGICAL' ||
+    domain === 'PERCEPTION' ||
+    domain === 'SOCIAL' ||
+    !domain
+  ) return { allowed: true };
 
   const terms = domainTerms(domain);
   const explicitDomainSupport = hasAny(worldText, terms) || hasAny(canonicalText, terms);

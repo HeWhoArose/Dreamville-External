@@ -1875,13 +1875,19 @@ gameRouter.get('/capabilities', async (req: Request, res: Response) => {
 		const { worldRepository } = await import('../repositories/worldRepository');
 		const storyId = resolveStoryId(req);
 		const player = worldRepository.getPlayerLifecycle(storyId);
-		const actorId = (req.query.actorId as string) || (player ? player.actorId : `player_actor_${storyId}`);
+		const actorId = player?.actorId || `player_actor_${storyId}`;
 		const capEngine = worldRepository.getCapabilityEngine(storyId);
 		const invEngine = worldRepository.getInventoryEngine(storyId);
 		const powerState = capEngine.getPowerState(actorId);
 		const capabilities = capEngine.getEffectiveActorCapabilities(actorId, invEngine);
 		const skillInstances = capEngine.getAllSkillInstances(actorId);
-		const graph = capEngine.getCapabilityGraph();
+		const actorSkillIds = new Set(skillInstances.map((skill) => skill.capabilityId));
+		const graph = capEngine
+			.getCapabilityGraph()
+			.filter((node) =>
+				actorSkillIds.has(node.capabilityId) ||
+				node.derivedSkills.some((id) => actorSkillIds.has(id))
+			);
 		res.json({ actorId, powerState, capabilities, skillInstances, graph });
 	} catch (error) {
     res.status(500).json({ error: 'Failed to retrieve capabilities.' });

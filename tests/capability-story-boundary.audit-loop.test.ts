@@ -56,6 +56,8 @@ test('ten deterministic audits keep internal simulation out of the Skillbook and
     assert.doesNotMatch(story, /StoryHUDDrawer|Capability DAG & Derived Skills|Adjudication Outcome/);
 
     assert.match(shell, /primaryIds/);
+    assert.match(shell, /new Set\(\['story', 'inventory', 'map', 'combat'\]\)/);
+    assert.doesNotMatch(shell, /primaryIds = new Set\(\[[^\]]*'character'/);
     assert.match(menu, /label: 'World'/);
     assert.match(menu, /route: 'play\.recent-actions'/);
     assert.match(world, /character\.worldId === worldId/);

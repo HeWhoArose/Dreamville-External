@@ -2044,7 +2044,6 @@ gameRouter.post('/capabilities/adjudicate', async (req: Request, res: Response) 
       powerState: (commandResult.data as any)?.powerState,
       capabilities: (commandResult.data as any)?.capabilities,
       skillInstances: (commandResult.data as any)?.skillInstances,
-      graph: (commandResult.data as any)?.graph,
       commandId: commandResult.commandId,
       canonicalEvent: commandResult.event,
     });
@@ -2653,6 +2652,17 @@ gameRouter.post('/capabilities/synthesize', async (req: Request, res: Response) 
  */
 gameRouter.post('/capabilities/interpret', async (req: Request, res: Response) => {
   try {
+    // Interpretation is an AI/internal dry-run facility. The player-facing action
+    // pipeline uses StoryActionAdvisor directly and never exposes this authoring
+    // surface to the Skillbook.
+    if (req.headers['x-dreamville-internal-ai'] !== 'true') {
+      return res.status(403).json({
+        success: false,
+        code: 'AI_INTERNAL_INTERPRETATION_ONLY',
+        errorReason: 'Capability interpretation is reserved for internal AI simulation. Player actions use canonical story adjudication.',
+      });
+    }
+
     const {
       actionText,
       tags,

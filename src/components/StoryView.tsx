@@ -823,29 +823,6 @@ export const StoryView: React.FC<StoryViewProps> = ({
         </section>
       )}
 
-      <section className="space-y-2">
-        <div className="flex items-center justify-between px-1">
-          <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-stone-600">Recent actions</p>
-          <span className="text-[10px] text-stone-700">{actionHistory.filter((action) => action.actionType !== 'NOTE_RECORD').length} actions</span>
-        </div>
-        <div className="space-y-2">
-          {actionHistory
-            .filter((action) => action.actionType !== 'NOTE_RECORD')
-            .slice(0, 4)
-            .map((action) => (
-              <article key={action.id} className="rounded-xl border border-white/7 bg-stone-950/40 px-4 py-3">
-                <div className="flex items-start gap-2.5">
-                  <Portrait imageUrl={protagonistPortraitUrl} emoji={protagonistPortraitEmoji} size="sm" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm leading-6 text-stone-300">“{action.description}”</p>
-                    <p className="mt-1 text-[10px] text-stone-700">{action.timestamp}</p>
-                  </div>
-                </div>
-              </article>
-            ))}
-        </div>
-      </section>
-
       {/* Past dialogue is intentionally omitted here; active dialogue remains above. */}
     </div>
   );

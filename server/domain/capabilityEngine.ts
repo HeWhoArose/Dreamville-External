@@ -443,7 +443,7 @@ export class CapabilityEngine {
   ): PowerState {
     const existing = this.powerStates.get(actorId);
     if (existing) {
-      this.initActorSkillInstances(actorId);
+      this.initActorSkillInstances(actorId, options);
       return JSON.parse(JSON.stringify(existing));
     }
     const starterState: PowerState = {
@@ -466,7 +466,7 @@ export class CapabilityEngine {
       activeConditions: [],
     };
     this.powerStates.set(actorId, starterState);
-    this.initActorSkillInstances(actorId);
+    this.initActorSkillInstances(actorId, options);
     return JSON.parse(JSON.stringify(starterState));
   }
 
@@ -474,7 +474,10 @@ export class CapabilityEngine {
    * Initializes starter skill instances for an actor if not yet present.
    * Ensures every actor has their own independently mutable SkillInstances.
    */
-  public initActorSkillInstances(actorId: string): void {
+  public initActorSkillInstances(
+    actorId: string,
+    options?: { starterCapabilities?: string[] }
+  ): void {
     if (this.actorSkillInstances.has(actorId)) {
       return;
     }

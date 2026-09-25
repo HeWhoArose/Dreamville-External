@@ -272,6 +272,7 @@ gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => 
               sourceStoryIds: [storyId],
             },
           });
+          worldRepository.addAcquiredCapabilityToCharacter(storyId, alternative);
 
           intendedCapabilityId = alternative.id;
         } else if (intendedCapabilityId) {
@@ -281,6 +282,10 @@ gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => 
               sourceStoryIds: [storyId],
             },
           });
+          const learnedCapability = capabilityEngine.getCapability(intendedCapabilityId);
+          if (learnedCapability) {
+            worldRepository.addAcquiredCapabilityToCharacter(storyId, learnedCapability);
+          }
         }
 
         const result = await serverMockAuthority.processCustomAction(
@@ -454,6 +459,7 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
             },
           });
           worldRepository.persistCapabilityState(storyId);
+          worldRepository.addAcquiredCapabilityToCharacter(storyId, capability);
         }
 
         const actionResult =

@@ -52,6 +52,7 @@ import {
   CapabilityGraphNode,
   WorldTemplate,
   OpeningScene,
+  ActionAdvice,
 } from './types';
 
 export const App: React.FC = () => {
@@ -76,6 +77,7 @@ export const App: React.FC = () => {
   const [storyLibraryError, setStoryLibraryError] = useState<string | null>(null);
   const [networkError, setNetworkError] = useState<string | null>(null);
   const [isProcessingAction, setIsProcessingAction] = useState<boolean>(false);
+  const [pendingActionAdvice, setPendingActionAdvice] = useState<ActionAdvice | null>(null);
   const actionSeqRef = useRef<number>(0);
 
   // Modal overlays
@@ -355,11 +357,63 @@ export const App: React.FC = () => {
     });
   };
 
-  const handleCustomAction = (actionText: string) => {
+  const handleCustomAction = async (actionText: string) => {
+    setPendingActionAdvice(null);
+
+    try {
+      const response = await apiClient.adviseStoryAction(actionText, activeStoryId);
+      const advice = response?.advice as ActionAdvice | undefined;
+
+      if (advice?.mode === 'SUGGEST_ALTERNATIVE') {
+        setPendingActionAdvice(advice);
+        return;
+      }
+
+      dispatchAction({
+        type: 'CUSTOM_ACTION',
+        actionText,
+        intent: actionText,
+        intendedCapabilityId: advice?.recognizedCapability?.id,
+      } as any);
+    } catch (error) {
+      console.warn('Story action preflight unavailable; continuing through canonical action path.', error);
+      dispatchAction({
+        type: 'CUSTOM_ACTION',
+        actionText,
+        intent: actionText,
+      } as any);
+    }
+  };
+
+  const handleAcceptActionAdvice = async (advice: ActionAdvice) => {
+    const proposalId = advice.proposal?.proposalId;
+    if (!proposalId) return;
+    setPendingActionAdvice(null);
+    setIsProcessingAction(true);
+    try {
+      const result = await apiClient.acceptStoryActionAdvice({
+        actionText: advice.actionText,
+        proposalId,
+        storyId: activeStoryId,
+      });
+      setViewState(result.viewState);
+      fetchAuxiliaryData();
+    } catch (error) {
+      console.error('Failed to accept story action advice:', error);
+      setPendingActionAdvice(advice);
+    } finally {
+      setIsProcessingAction(false);
+    }
+  };
+
+  const handleRejectActionAdvice = (advice: ActionAdvice) => {
+    setPendingActionAdvice(null);
     dispatchAction({
       type: 'CUSTOM_ACTION',
-      actionText,
-      intent: actionText,
+      actionText: advice.actionText,
+      intent: advice.actionText,
+      bypassCapabilityAdvisor: true,
+      preventCapabilityExecution: true,
     } as any);
   };
 
@@ -521,6 +575,9 @@ export const App: React.FC = () => {
           onRequestInspect={handleInspectSurroundings}
           onRequestRest={handleAdvanceCycle}
           onCustomAction={handleCustomAction}
+          pendingActionAdvice={pendingActionAdvice}
+          onAcceptActionAdvice={handleAcceptActionAdvice}
+          onRejectActionAdvice={handleRejectActionAdvice}
           isProcessingAction={isProcessingAction}
           openingScene={activeOpeningScene || viewState.openingScene || null}
           worldTitle={activeStorySummary?.worldName}

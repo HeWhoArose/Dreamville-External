@@ -89,7 +89,7 @@ export interface CapabilitySimulationResult {
   creationAllowed?: boolean;
 }
 
-const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
+const clone = <T,>(value: T): T => value == null ? value : JSON.parse(JSON.stringify(value)) as T;
 
 function normalize(value: unknown): string {
   return String(value ?? '').trim().toLowerCase();

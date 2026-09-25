@@ -4,8 +4,7 @@ import { Award, Shield, Sparkles, Zap } from 'lucide-react';
 interface CharacterSurfaceProps {
   protagonist: any;
   powerState: any;
-  /** Effective capabilities are used for execution state; learnedCapabilities is the Skillbook source. */
-  capabilities: any[];
+  /** The Skillbook source is actor-owned learned capabilities only. */
   learnedCapabilities: any[];
   skillInstances: any[];
   equipment: Record<string, any>;
@@ -15,7 +14,6 @@ interface CharacterSurfaceProps {
 export const CharacterSurface: React.FC<CharacterSurfaceProps> = ({
   protagonist,
   powerState,
-  capabilities,
   learnedCapabilities,
   skillInstances,
   equipment,

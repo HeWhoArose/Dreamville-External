@@ -71,6 +71,30 @@ function normalize(value: unknown): string {
 	return String(value || '').trim().toLowerCase();
 }
 
+function buildSimulationEnvironment(
+	repository: WorldRepository,
+	storyId: string,
+	sceneContext?: StoryActionSceneContext,
+): CapabilitySimulationContext['environment'] {
+	const player = repository.getPlayerLifecycle(storyId);
+	const locationId = player?.locationId || repository.getCurrentLocation(storyId) || undefined;
+	const node = locationId ? repository.getGeographyGraph(storyId).getNode(locationId) : undefined;
+
+	return {
+		locationId,
+		locationName: sceneContext?.locationName || node?.name,
+		description: sceneContext?.locationDescription || node?.description,
+		ambientSensory: sceneContext?.locationRegion
+			? [node?.ambientSensory, `Region: ${sceneContext.locationRegion}`].filter(Boolean).join(' ')
+			: node?.ambientSensory,
+		conditions: [
+			...(Array.isArray((player as any)?.activeEffects) ? (player as any).activeEffects : []),
+			...(Array.isArray((player as any)?.conditions) ? (player as any).conditions : []),
+			sceneContext?.activeDialogue || '',
+		].filter(Boolean),
+	};
+}
+
 function actorNarrativeText(run: any): string {
 	const protagonist = run?.protagonist || {};
 	const role = protagonist?.role || {};
@@ -343,6 +367,7 @@ export class StoryActionAdvisor {
 			ownedCapabilities: actorCapabilities,
 			skillInstances: capabilityEngine.getActorSkillInstances(actorId),
 			allWorldCapabilities: allCapabilities,
+			environment: buildSimulationEnvironment(this.repository, storyId, sceneContext),
 		};
 
 		const simulator = new CapabilitySimulationEngine();
@@ -465,6 +490,7 @@ export class StoryActionAdvisor {
 				ownedCapabilities: actorCapabilities,
 				skillInstances: capabilityEngine.getActorSkillInstances(actorId),
 				allWorldCapabilities: allCapabilities,
+				environment: buildSimulationEnvironment(this.repository, storyId),
 			},
 			pending.alternative,
 		);
@@ -581,6 +607,7 @@ export class StoryActionAdvisor {
 				ownedCapabilities: proposalActorCaps,
 				skillInstances: proposalCapEngine.getActorSkillInstances(actorId),
 				allWorldCapabilities: proposalCapEngine.getAllCapabilities(),
+				environment: buildSimulationEnvironment(this.repository, storyId),
 			},
 			alternative,
 		);

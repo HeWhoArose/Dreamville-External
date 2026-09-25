@@ -52,7 +52,7 @@ function givePlayerAnExistingCapability(
 ): void {
 	const engine = repository.getCapabilityEngine(storyId);
 	engine.registerCapability(capability);
-	const actorId = repository.getPlayerLifecycle(storyId)?.actorId || 'player_actor_' + storyId;
+	const actorId = repository.getPlayerLifecycle(storyId)?.actorId || repository.getStoryRun(storyId)?.protagonist?.characterId || 'player_actor_' + storyId;
 	engine.acquireSkill(actorId, capability.id, {
 		libraryProvenance: {
 			libraryStatus: 'APPROVED',

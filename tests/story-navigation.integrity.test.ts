@@ -6,6 +6,8 @@ const PLAYER_RENDERED_ROUTES = new Set([
 	'play.story',
 	'play.character',
 	'play.inventory',
+	'play.world',
+	'play.recent-actions',
 	'play.combat',
 	'play.map',
 	'play.chronicle',

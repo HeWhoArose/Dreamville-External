@@ -348,6 +348,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
       setScenePrompt(result.prompt);
       setSceneImageUrl(null);
       setSceneChoiceOpen(false);
+      setSceneMenuOpen(false);
     } catch (error: any) {
       setSceneError(error?.message || 'Failed to build the current-scene comic prompt.');
     } finally {
@@ -365,6 +366,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
       }
       setScenePrompt(result.prompt || null);
       setSceneChoiceOpen(false);
+      setSceneMenuOpen(false);
     } catch (error: any) {
       setSceneError(error?.message || 'Failed to generate the current-scene comic image.');
     } finally {

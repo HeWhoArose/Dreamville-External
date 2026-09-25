@@ -164,6 +164,7 @@ describe('CH7 Comprehensive Verification: Concept-to-Mechanics / Custom Capabili
   describe('Target #2: Freeform Action Interpretation Pipeline', () => {
     it('maps to EXISTING_CAPABILITY when actor uses an exact known capability', () => {
       const engine = new CapabilityEngine();
+      engine.acquireSkill('player_hero', 'cap_fireball');
       const res = engine.interpretFreeformAction({
         actorId: 'player_hero',
         actionText: 'Fireball',
@@ -178,6 +179,7 @@ describe('CH7 Comprehensive Verification: Concept-to-Mechanics / Custom Capabili
 
     it('maps to CONTEXTUAL_MODIFICATION when freeform effort modifiers (e.g. overcharge) are described without mutating base capability', () => {
       const engine = new CapabilityEngine();
+      engine.acquireSkill('player_hero', 'cap_fireball');
       const originalFireballCost = engine.getCapability('cap_fireball')?.baseEnergyCost;
 
       const res = engine.interpretFreeformAction({
@@ -215,7 +217,7 @@ describe('CH7 Comprehensive Verification: Concept-to-Mechanics / Custom Capabili
       assert.strictEqual(engine.getAllCapabilities().length, initialCount);
     });
 
-    it('synthesizes and executes novel capability canonically when executeIfValid is true', () => {
+    it('keeps novel capability requests preview-only even when executeIfValid is true', () => {
       const engine = new CapabilityEngine();
       const initialCount = engine.getAllCapabilities().length;
 
@@ -229,12 +231,9 @@ describe('CH7 Comprehensive Verification: Concept-to-Mechanics / Custom Capabili
       assert.strictEqual(res.interpretationType, 'NOVEL_CAPABILITY_PROPOSAL');
       assert.strictEqual(res.validationSuccess, true);
       assert.ok(res.proposedCapability);
-      assert.ok(res.derivedTechniques && res.derivedTechniques.length === 3);
-      assert.ok(res.adjudicationConsequence);
-      assert.strictEqual(res.adjudicationConsequence.approved, true);
-
-      // Primary + 3 derived techniques registered in engine
-      assert.strictEqual(engine.getAllCapabilities().length, initialCount + 4);
+      assert.equal(res.adjudicationConsequence, undefined);
+      assert.equal(res.derivedTechniques, undefined);
+      assert.strictEqual(engine.getAllCapabilities().length, initialCount);
     });
 
     it('returns UNSUPPORTED for empty or blank action text', () => {
@@ -274,7 +273,10 @@ describe('CH7 Comprehensive Verification: Concept-to-Mechanics / Custom Capabili
     it('POST /api/game/capabilities/synthesize creates structured power and records CH4 evidence', async () => {
       const res = await fetch(`${baseUrl}/capabilities/synthesize`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-dreamville-internal-ai': 'true',
+        },
         body: JSON.stringify({
           conceptName: 'Solar Flare Ward',
           description: 'Erects a blinding barrier of pure solar radiation.',

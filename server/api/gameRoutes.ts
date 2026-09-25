@@ -8450,7 +8450,7 @@ function buildCurrentComicSceneContext(storyId: string): { context: ComicSceneCo
   const latestAction = Array.isArray(state.actionHistory) ? state.actionHistory[0] : undefined;
   const context: ComicSceneContext = {
     worldTitle: worldRepository.getStoryRun(storyId)?.worldId
-      ? worldRepository.getWorldTemplate(worldRepository.getStoryRun(storyId)!.worldId)?.name || worldRepository.getStoryRun(storyId)?.worldId
+      ? worldRepository.getWorldTemplate(worldRepository.getStoryRun(storyId)!.worldId)?.title || worldRepository.getStoryRun(storyId)?.worldId
       : undefined,
     location: {
       name: state.activeLocation?.name || 'Current location',

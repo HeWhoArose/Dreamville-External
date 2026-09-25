@@ -197,6 +197,9 @@ export class ServerMockAuthority {
    * Strips all hidden secrets, canonical character secrets, and server test secrets.
    */
   public filterForExternalClient(state: EngineState, storyId: string = 'default_story'): ExternalViewState {
+    const targetStoryId = storyId || this.activeStoryId;
+    const run = worldRepository.getStoryRun(targetStoryId);
+    const activeWorldId = run?.worldId;
     const sanitizedCharacters: Record<string, ExternalCharacter> = {};
     for (const [id, char] of Object.entries(state.characters)) {
       sanitizedCharacters[id] = {
@@ -204,7 +207,7 @@ export class ServerMockAuthority {
         name: char.name,
         title: char.title,
         role: char.role,
-        worldId: (char as any).worldId || run?.worldId,
+        worldId: (char as any).worldId || activeWorldId,
         locationId: char.locationId,
         presence: char.presence,
         disposition: char.disposition,
@@ -214,7 +217,6 @@ export class ServerMockAuthority {
       };
     }
 
-    const targetStoryId = storyId || this.activeStoryId;
     const player = worldRepository.getPlayerLifecycle(targetStoryId);
     const run = worldRepository.getStoryRun(targetStoryId);
     const conditionEngine = worldRepository.getConditionEngine(targetStoryId);
@@ -459,8 +461,13 @@ export class ServerMockAuthority {
    * A separate presentation-only narrator then describes the committed result. The narrator
    * cannot mutate state because MultiModelOrchestrator.generateNarrativeOnly strips state changes.
    */
-  public async processCustomAction(request: ActionRequest, canonicalCommandId?: string): Promise<ActionResult> {
-    const bypassCapabilityAdvisor = Boolean((request as any).bypassCapabilityAdvisor);
+  public async processCustomAction(
+    request: ActionRequest,
+    canonicalCommandId?: string,
+    options?: { bypassCapabilityAdvisor?: boolean },
+  ): Promise<ActionResult> {
+    // Bypass is an internal server option only. A client cannot inject it through the HTTP payload.
+    const bypassCapabilityAdvisor = Boolean(options?.bypassCapabilityAdvisor);
     const preventCapabilityExecution = Boolean((request as any).preventCapabilityExecution);
     const targetStoryId = (request as any).storyId || this.activeStoryId;
     const playerForAdvice = worldRepository.getPlayerLifecycle(targetStoryId);

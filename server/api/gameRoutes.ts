@@ -357,9 +357,9 @@ gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => 
             storyId,
             actionText,
             intendedCapabilityId,
-            bypassCapabilityAdvisor: true,
           } as any,
-          commandId
+          commandId,
+          { bypassCapabilityAdvisor: true }
         );
 
         return {
@@ -401,6 +401,12 @@ gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => 
 gameRouter.post('/action', async (req: Request, res: Response) => {
   try {
     const actionRequest = req.body as ActionRequest;
+
+    // Capability-advisor bypass is an internal server concern. Ignore any client-supplied
+    // bypass flag and let the canonical preflight decide whether a CUSTOM_ACTION is executable.
+    if (actionRequest && typeof actionRequest === 'object' && actionRequest.type === 'CUSTOM_ACTION') {
+      delete (actionRequest as any).bypassCapabilityAdvisor;
+    }
 
     if (!actionRequest || typeof actionRequest !== 'object' || !actionRequest.type) {
       res.status(400).json({

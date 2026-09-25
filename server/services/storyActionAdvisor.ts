@@ -310,6 +310,16 @@ export class StoryActionAdvisor {
 		};
 	}
 
+	public async getTipsForAction(storyId: string, actionText: string): Promise<ActionTip[]> {
+		const player = this.repository.getPlayerLifecycle(storyId);
+		const actorId = player?.actorId || 'player_actor_' + storyId;
+		const actorCapabilities = this.repository.getCapabilityEngine(storyId).getEffectiveActorCapabilities(
+			actorId,
+			this.repository.getInventoryEngine(storyId)
+		);
+		return this.generateTips(storyId, actorId, actionText, actorCapabilities);
+	}
+
 	private async generateTips(
 		storyId: string,
 		actorId: string,

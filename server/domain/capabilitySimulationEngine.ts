@@ -402,7 +402,7 @@ function buildPreviewCapability(actionText: string, domain: string | undefined, 
   const clean = actionText.trim().replace(/^i\s+/i, '');
   const name = clean.length > 42 ? clean.slice(0, 42).trimEnd() : clean;
   const category =
-    domain === 'PHYSICAL' ? 'Physical' :
+    domain === 'PHYSICAL' ? 'Combat' :
     domain === 'SPATIAL_TRANSIT' ? 'Movement' :
     domain === 'LIGHTNING' || domain === 'FIRE' || domain === 'WATER' || domain === 'EARTH' || domain === 'AIR' || domain === 'MAGIC' || domain === 'TEMPORAL' || domain === 'DIMENSIONAL' || domain === 'SHADOW' ? 'Magic' :
     'Domain';

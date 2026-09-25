@@ -487,7 +487,7 @@ export class CapabilitySimulationEngine {
     const configuredMaxLevel = Number(
       context.progressionState?.maxCharacterLevel ??
       context.progressionPolicy?.maxLevel ??
-      20
+      10
     );
     const hasProgressionHeadroom = currentLevel < configuredMaxLevel;
 
@@ -661,6 +661,7 @@ export class CapabilitySimulationEngine {
         estimatedEnergyCost: cost.energy,
         estimatedVesselCapacityRequired: cost.vessel,
         internalOnly: true,
+        creationAllowed: false,
       };
     }
 

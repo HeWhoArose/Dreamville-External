@@ -352,6 +352,10 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
         if (preflightAdvice.recognizedCapability?.id) {
           (actionRequest as any).intendedCapabilityId = preflightAdvice.recognizedCapability.id;
         }
+
+        // The request has already been preflighted here. Skip repeating the
+        // advisor inside ServerMockAuthority while preserving capability execution.
+        (actionRequest as any).bypassCapabilityAdvisor = true;
       }
     }
 
@@ -416,12 +420,12 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
           preflightAdvice?.mode === 'AUTO_LEARN_AND_EXECUTE' &&
           preflightAdvice?.recognizedCapability?.id
         ) {
-          const capabilityEngine = context.repository.getCapabilityEngine(storyId);
+          const capabilityEngine = worldRepository.getCapabilityEngine(storyId);
           capabilityEngine.acquireSkill(actorId, preflightAdvice.recognizedCapability.id, {
             libraryStatus: 'APPROVED',
             librarySourceStoryIds: [storyId],
           });
-          context.repository.persistCapabilityState(storyId);
+          worldRepository.persistCapabilityState(storyId);
         }
 
         const actionResult =
@@ -429,10 +433,12 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
             ? await serverMockAuthority.processCustomAction(actionRequest, requestedCommandId)
             : serverMockAuthority.processAction(actionRequest, requestedCommandId);
         return {
-          success: true,
+          success: actionResult.success,
           data: actionResult,
           errorReason: actionResult.success === false ? actionResult.message : undefined,
-          summary: `Authoritative ${actionRequest.type} command resolved.`,
+          summary: actionResult.success
+            ? `Authoritative ${actionRequest.type} command resolved.`
+            : `Authoritative ${actionRequest.type} command rejected.`,
         };
       }
     );

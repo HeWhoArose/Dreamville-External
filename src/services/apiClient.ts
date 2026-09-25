@@ -108,6 +108,23 @@ class ApiClient {
   }
 
   /**
+   * Fetches current-scene player tips without mutating canonical story state.
+   * GET /api/game/action/tips
+   */
+  public async getStoryActionTips(storyId?: string): Promise<any[]> {
+    const res = await fetch(`${this.baseUrl}/action/tips${storyId ? `?storyId=${encodeURIComponent(storyId)}` : ''}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data?.errorReason || data?.error || `Story tips failed with HTTP ${res.status}`);
+    }
+    return Array.isArray(data?.tips) ? data.tips : [];
+  }
+
+  /**
    * Preflight a freeform story action without mutating canonical state.
    * POST /api/game/action/advice
    */

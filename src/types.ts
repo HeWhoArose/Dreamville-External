@@ -904,14 +904,46 @@ export interface ApprovedConsequence {
   narrativeDirective: string;
 }
 
+export interface SkillProgressionHistoryEntry {
+  entryIndex: number;
+  timestampSeconds: number;
+  changeType: 'ACQUIRED' | 'XP_AWARDED' | 'LEVEL_UP' | 'EVOLVED' | 'DOWNGRADED' | 'RELEARNED';
+  details: string;
+  prevLevel?: number;
+  newLevel?: number;
+  prevXp?: number;
+  newXp?: number;
+}
+
+export interface SkillInstance {
+  instanceId: string;
+  actorId: string;
+  capabilityId: string;
+  currentLevel: number;
+  currentXp: number;
+  xpToNextLevel: number | null;
+  evolutionPoints: number;
+  evolutionLineage: string[];
+  progressionHistory: SkillProgressionHistoryEntry[];
+  unlockedAtSeconds: number;
+  isEquippedGrant?: boolean;
+  libraryEntryId?: string;
+  libraryStatus?: 'NATIVE' | 'REUSED' | 'APPROVED';
+  librarySourceStoryIds?: string[];
+}
+
 export interface CapabilitiesResponse {
   actorId: string;
   powerState?: PowerState;
-  /** Currently effective/executable capabilities, including active equipment grants. */
+  /**
+   * Actor-resolved capabilities that are currently effective, including active
+   * equipment grants. This is not the global capability registry.
+   */
   capabilities: CapabilityDefinition[];
-  /** Actor-owned learned capabilities, including those temporarily blocked by requirements. */
+  /** Actor-owned learned capability definitions derived from SkillInstances. */
   learnedCapabilities: CapabilityDefinition[];
-  skillInstances: any[];
+  /** Actor-scoped progression records for learned skills. */
+  skillInstances: SkillInstance[];
 }
 
 export interface AdjudicationResponse extends ApprovedConsequence {

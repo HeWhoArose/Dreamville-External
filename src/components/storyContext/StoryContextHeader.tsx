@@ -1,6 +1,4 @@
 import React from 'react';
-import { Button } from '../common/Button';
-import { Badge } from '../common/Badge';
 
 export interface StoryContextHeaderProps {
   worldTitle: string;
@@ -27,67 +25,45 @@ export const StoryContextHeader: React.FC<StoryContextHeaderProps> = ({
 }) => {
   return (
     <header
-      className={`border-b border-[var(--db-border-purple)] bg-[var(--db-bg-raised)]/95 backdrop-blur-md px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-30 select-none shadow-[var(--db-shadow-sm)] ${className}`}
+      className={`sticky top-0 z-30 border-b border-violet-400/15 bg-[#090611]/92 px-4 py-3 backdrop-blur-xl select-none ${className}`}
       data-testid="story-context-header"
     >
-      {/* 1. Left: Back Button & World / Story Identity */}
-      <div className="flex items-center gap-3">
-        <Button
-          variant="subtle"
-          size="sm"
+      <div className="mx-auto flex max-w-[1480px] items-center gap-3">
+        <button
+          type="button"
           onClick={onExitToLibrary}
-          className="gap-1 text-xs px-2.5 py-1 text-[var(--db-purple-300)] hover:text-white"
-          title="Exit to Story Library"
+          className="shrink-0 rounded-xl border border-white/8 bg-white/[0.035] px-3 py-2 text-xs font-medium text-stone-300 transition hover:border-violet-400/30 hover:bg-violet-500/10 hover:text-white"
+          title="Return to Story Library"
         >
-          <span className="text-sm">←</span>
-          <span className="hidden sm:inline">Library</span>
-        </Button>
+          ← <span className="hidden sm:inline">Library</span>
+        </button>
 
-        <div className="h-5 w-px bg-[var(--db-border-default)]" />
-
-        <div className="flex flex-col min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-semibold text-[var(--db-blue-400)] uppercase tracking-wider truncate max-w-[140px] sm:max-w-[200px]">
-              {worldTitle}
+            <span className="truncate text-[10px] font-semibold uppercase tracking-[0.24em] text-violet-300/75">{worldTitle}</span>
+            <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.15em] ${isCombatActive ? 'border-rose-400/30 bg-rose-500/10 text-rose-300' : 'border-violet-400/20 bg-violet-500/10 text-violet-200'}`}>
+              {isCombatActive ? 'Combat' : statusLabel}
             </span>
-            <Badge variant={isCombatActive ? 'rose' : 'purple'} size="sm">
-              {isCombatActive ? '⚔️ TACTICAL COMBAT' : statusLabel}
-            </Badge>
           </div>
-          <h1 className="font-serif font-bold text-sm sm:text-base text-[var(--db-text-primary)] truncate max-w-[200px] sm:max-w-[360px]">
-            {storyTitle}
-          </h1>
+          <h1 className="truncate font-serif text-lg font-semibold text-white sm:text-xl">{storyTitle}</h1>
         </div>
-      </div>
 
-      {/* 2. Right: Active Context Badges (Location & Time) + Settings */}
-      <div className="flex items-center gap-2 text-xs">
-        {currentLocationName && (
-          <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-[var(--db-radius-md)] bg-[var(--db-bg-card)] border border-[var(--db-border-default)] text-[var(--db-text-secondary)]">
-            <span className="text-[var(--db-gold-400)]">📍</span>
-            <span className="font-medium text-[var(--db-text-primary)] truncate max-w-[160px]">
-              {currentLocationName}
-            </span>
-          </div>
-        )}
-
-        {worldClockTime && (
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-[var(--db-radius-md)] bg-[var(--db-bg-card)] border border-[var(--db-border-default)] text-[var(--db-text-muted)] font-mono text-[11px]">
-            <span className="text-[var(--db-blue-400)]">⌛</span>
-            <span>{worldClockTime}</span>
-          </div>
-        )}
+        <div className="hidden items-center gap-2 text-[11px] text-stone-500 sm:flex">
+          {currentLocationName && <span className="max-w-[190px] truncate text-violet-200/70">{currentLocationName}</span>}
+          {currentLocationName && worldClockTime && <span className="text-stone-700">·</span>}
+          {worldClockTime && <span>{worldClockTime}</span>}
+        </div>
 
         {onOpenSettings && (
-          <Button
-            variant="ghost"
-            size="sm"
+          <button
+            type="button"
             onClick={onOpenSettings}
-            className="p-1.5 text-[var(--db-text-muted)] hover:text-[var(--db-text-primary)]"
-            title="Audio & Audio Engine Settings"
+            className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/8 bg-white/[0.035] text-stone-400 transition hover:border-violet-400/30 hover:bg-violet-500/10 hover:text-white"
+            title="Story settings"
+            aria-label="Story settings"
           >
-            ⚙️
-          </Button>
+            ⚙
+          </button>
         )}
       </div>
     </header>

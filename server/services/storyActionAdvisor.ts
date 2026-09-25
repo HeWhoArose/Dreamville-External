@@ -336,9 +336,7 @@ export class StoryActionAdvisor {
 			progressionPolicy,
 			progressionState: {
 				...progressionState,
-				maxCharacterLevel: progressionState?.currentLevel
-					? progressionPolicy.maxLevel
-					: 20,
+				maxCharacterLevel: progressionPolicy.maxLevel,
 			},
 			customRules,
 			powerState: capabilityEngine.getPowerState(actorId),
@@ -375,10 +373,7 @@ export class StoryActionAdvisor {
 			};
 		}
 
-		if (
-			simulation.status === 'DEVELOPABLE' ||
-			simulation.status === 'CONDITIONALLY_DEVELOPABLE'
-		) {
+		if (simulation.status === 'DEVELOPABLE' && simulation.creationAllowed !== false) {
 			const proposal = await this.createAlternativeProposal(
 				storyId,
 				actorId,
@@ -387,19 +382,32 @@ export class StoryActionAdvisor {
 				run,
 				simulation,
 			);
-			this.pendingProposals.set(proposal.proposalId, proposal);
+			if (proposal) {
+				this.pendingProposals.set(proposal.proposalId, proposal);
+				return {
+					mode: 'SUGGEST_ALTERNATIVE',
+					actionText,
+					actorId,
+					tips,
+					recognizedCapability: candidate,
+					simulation: proposal.simulation,
+					proposal,
+					canExecuteNow: false,
+				};
+			}
+		}
+
+		if (simulation.status === 'CONDITIONALLY_DEVELOPABLE' || simulation.status === 'DEVELOPABLE') {
 			return {
-				mode: 'SUGGEST_ALTERNATIVE',
+				mode: 'CAPABILITY_SIMULATION',
 				actionText,
 				actorId,
 				tips,
 				recognizedCapability: candidate,
 				simulation,
-				proposal,
 				canExecuteNow: false,
 			};
 		}
-
 		return {
 			mode: 'CAPABILITY_SIMULATION',
 			actionText,
@@ -450,9 +458,7 @@ export class StoryActionAdvisor {
 				progressionPolicy,
 				progressionState: {
 					...progressionState,
-					maxCharacterLevel: progressionState?.currentLevel
-						? progressionPolicy.maxLevel
-						: 20,
+					maxCharacterLevel: progressionPolicy.maxLevel,
 				},
 				customRules,
 				powerState: capabilityEngine.getPowerState(actorId),
@@ -463,10 +469,7 @@ export class StoryActionAdvisor {
 			pending.alternative,
 		);
 
-		if (
-			simulation.status !== 'DEVELOPABLE' &&
-			simulation.status !== 'CONDITIONALLY_DEVELOPABLE'
-		) {
+		if (simulation.status !== 'DEVELOPABLE' || simulation.creationAllowed === false) {
 			return null;
 		}
 
@@ -485,7 +488,7 @@ export class StoryActionAdvisor {
 		requestedCapability: CapabilityDefinition,
 		run: any,
 		initialSimulation: CapabilitySimulationResult,
-	): Promise<ActionCapabilityProposal> {
+	): Promise<ActionCapabilityProposal | null> {
 		const world = run?.worldId ? this.repository.getWorldTemplate(run.worldId) : undefined;
 		const concept = deterministicAlternativeConcept(requestedCapability.name, run);
 
@@ -542,6 +545,51 @@ export class StoryActionAdvisor {
 			};
 		}
 
+		// Never trust an AI/deterministic synthesis result by itself. Re-run the generated
+		// candidate through the same dry-run simulator before presenting it as learnable.
+		const proposalCapEngine = this.repository.getCapabilityEngine(storyId);
+		const proposalActorCaps = proposalCapEngine.getEffectiveActorCapabilities(
+			actorId,
+			this.repository.getInventoryEngine(storyId),
+		);
+		const proposalProgressionState = this.repository.getCharacterProgressionEngine(storyId).getState(actorId);
+		const proposalProgressionPolicy = proposalCapEngine.getProgressionPolicy();
+		const proposalWorld = world || {
+			title: 'Current World',
+			description: '',
+			capabilities: proposalCapEngine.getAllCapabilities(),
+			canonicalCapabilities: proposalCapEngine.getAllCapabilities(),
+			dndRulesMode: 'FULL_DND',
+		};
+		const proposalCustomRules = proposalWorld?.worldId
+			? new (await import('../domain/customRuleEngine')).CustomRuleEngine().getRules(this.repository, storyId)
+			: [];
+		const proposalSimulation = new CapabilitySimulationEngine().simulate(
+			actionText,
+			{
+				actorId,
+				character: run?.protagonist,
+				world: proposalWorld,
+				rulesProfile: this.repository.getRulesProfile(storyId) || undefined,
+				progressionPolicy: proposalProgressionPolicy,
+				progressionState: {
+					...proposalProgressionState,
+					maxCharacterLevel: proposalProgressionPolicy.maxLevel,
+				},
+				customRules: proposalCustomRules,
+				powerState: proposalCapEngine.getPowerState(actorId),
+				ownedCapabilities: proposalActorCaps,
+				skillInstances: proposalCapEngine.getActorSkillInstances(actorId),
+				allWorldCapabilities: proposalCapEngine.getAllCapabilities(),
+			},
+			alternative,
+		);
+
+		if (proposalSimulation.status !== 'DEVELOPABLE' || proposalSimulation.creationAllowed === false) {
+			return null;
+		}
+
+		initialSimulation = proposalSimulation;
 		// A generated alternative is still only a proposal until the explicit acceptance endpoint commits it.
 		return {
 			proposalId: deterministicId(

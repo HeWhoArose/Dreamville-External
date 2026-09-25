@@ -49,7 +49,7 @@ export const CharacterSurface: React.FC<CharacterSurfaceProps> = ({
         {powerState && (
           <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
             <Stat label="Health" value={`${powerState.healthCurrent} / ${powerState.healthMax}`} icon={<Shield className="h-4 w-4" />} />
-            <Stat label="Energy" value={`${powerState.magicalEnergy} / ${powerState.magicalEnergyMax}`} icon={<Zap className="h-4 w-4" />} />
+            <Stat label="Energy" value={String(powerState.magicalEnergy)} icon={<Zap className="h-4 w-4" />} />
             <Stat label="Strain" value={String(powerState.physicalStrain)} icon={<ActivityIcon />} />
             <Stat label="Vessel" value={String(powerState.vesselCapacity)} icon={<Award className="h-4 w-4" />} />
           </div>

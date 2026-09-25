@@ -212,3 +212,55 @@ test('simulation respects progression ceilings without mutating the actor', () =
   assert.equal(result.status, 'CURRENTLY_BLOCKED');
   assert.match(result.blockers.join(' '), /progression ceiling/i);
 });
+
+
+test('structured worlds reject supernatural domains that have no authored mechanism', () => {
+  const result = simulator.simulate(
+    'I cast Teleport',
+    {
+      actorId: 'earth',
+      character: { name: 'Traveler', role: 'Swordfighter' },
+      world: {
+        title: 'Bending World',
+        description: 'A structured world governed by elemental bending.',
+        genreTags: ['Avatar'],
+        worldRules: ['Only bending techniques are canonical.'],
+        ruleConstraints: ['Teleportation cannot exist in this world.'],
+        forbiddenContradictions: ['No spellcasting or dimensional magic.'],
+      },
+      ownedCapabilities: [],
+      skillInstances: [],
+      allWorldCapabilities: [],
+      powerState: basePower,
+    }
+  );
+
+  assert.equal(result.status, 'WORLD_FORBIDDEN');
+  assert.equal(result.worldAllowed, false);
+  assert.equal(result.creationAllowed, false);
+  assert.match(result.explanation, /cannot be created|no canonical mechanism/i);
+});
+
+test('an incompatible character cannot synthesize a new supernatural mechanism just because resources are sufficient', () => {
+  const result = simulator.simulate(
+    'I cast Lightning Bolt',
+    {
+      actorId: 'fighter',
+      character: { name: 'Knight', role: 'Knight', background: { summary: 'A mundane swordsman.' } },
+      world: {
+        title: 'Arcane Realm',
+        description: 'Magic exists, but lightning is not part of the knight\'s established path.',
+        magicSystems: ['Arcane spellcasting'],
+        worldRules: ['Abilities must arise from established character mechanisms.'],
+      },
+      ownedCapabilities: [],
+      skillInstances: [],
+      allWorldCapabilities: [],
+      powerState: { ...basePower, magicalEnergy: 10000, vesselCapacity: 10000 },
+    }
+  );
+
+  assert.notEqual(result.status, 'DEVELOPABLE');
+  assert.equal(result.characterCompatible, false);
+  assert.equal(result.creationAllowed, false);
+});

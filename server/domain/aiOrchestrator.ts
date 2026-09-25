@@ -16,6 +16,7 @@ export type TaskId =
   | 'character.dialogue'
   | 'character.extract'
   | 'memory.extract'
+  | 'character.capability.propose'
   | 'story.advice'
   | 'rules.adjudicate'
   | 'summary.scene'
@@ -1872,7 +1873,7 @@ export class MultiModelOrchestrator {
   private resolveTaskCategory(task: TaskId): AiTaskCategory {
     if (task === 'narrative.generate' || task === 'character.dialogue') return 'narration';
     if (task === 'summary.scene') return 'world_generation';
-    if (task === 'character.extract' || task === 'memory.extract') return 'character_genesis';
+    if (task === 'character.extract' || task === 'memory.extract' || task === 'character.capability.propose') return 'character_genesis';
     if (task === 'story.advice') return 'gameplay_advice';
     if (task === 'utility.inspect') return 'research';
     if (task === 'rules.adjudicate' || task === 'combat.tactics' || task === 'narrative.review') return 'rules';
@@ -1889,7 +1890,7 @@ export class MultiModelOrchestrator {
     const mapping: Record<AiTaskCategory, TaskId[]> = {
       narration: ['narrative.generate', 'character.dialogue'],
       world_generation: ['summary.scene'],
-      character_genesis: ['character.extract', 'memory.extract'],
+      character_genesis: ['character.extract', 'memory.extract', 'character.capability.propose'],
       research: ['utility.inspect'],
       gameplay_advice: ['story.advice'],
       rules: ['rules.adjudicate', 'combat.tactics', 'narrative.review'],
@@ -2069,6 +2070,7 @@ export class MultiModelOrchestrator {
     this.taskPinnedModels.set('character.dialogue', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('story.advice', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('memory.extract', 'google_gemini::gemini-3.5-flash');
+    this.taskPinnedModels.set('character.capability.propose', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('summary.scene', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('rules.adjudicate', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('utility.inspect', 'google_gemini::gemini-3.5-flash');
@@ -2086,6 +2088,7 @@ export class MultiModelOrchestrator {
     this.taskFallbackChains.set('story.advice', defaultChain);
     this.taskFallbackChains.set('character.dialogue', defaultChain);
     this.taskFallbackChains.set('memory.extract', defaultChain);
+    this.taskFallbackChains.set('character.capability.propose', defaultChain);
     this.taskFallbackChains.set('summary.scene', defaultChain);
     this.taskFallbackChains.set('rules.adjudicate', defaultChain);
     this.taskFallbackChains.set('utility.inspect', defaultChain);
@@ -3341,6 +3344,12 @@ export class MultiModelOrchestrator {
       !effective.roleEligibility.includes('story.advice')
     ) {
       effective.roleEligibility = [...effective.roleEligibility, 'story.advice'];
+    }
+    if (
+      effective.roleEligibility.includes('character.extract') &&
+      !effective.roleEligibility.includes('character.capability.propose')
+    ) {
+      effective.roleEligibility = [...effective.roleEligibility, 'character.capability.propose'];
     }
     const key = `${effective.providerId}::${effective.modelId}`;
     this.models.set(key, effective);

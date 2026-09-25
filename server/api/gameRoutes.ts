@@ -8447,7 +8447,12 @@ function buildCurrentComicSceneContext(storyId: string): { context: ComicSceneCo
       portraitEmoji: character.portraitEmoji,
     }));
 
-  const latestAction = Array.isArray(state.actionHistory) ? state.actionHistory[0] : undefined;
+  // Opening/note records are not turns. Scene generation must anchor to the
+  // most recent committed player action so an old opening narration can never
+  // become the source image for a new scene.
+  const latestAction = Array.isArray(state.actionHistory)
+    ? state.actionHistory.find((action: any) => action.actionType !== 'NOTE_RECORD')
+    : undefined;
   const context: ComicSceneContext = {
     worldTitle: worldRepository.getStoryRun(storyId)?.worldId
       ? worldRepository.getWorldTemplate(worldRepository.getStoryRun(storyId)!.worldId)?.title || worldRepository.getStoryRun(storyId)?.worldId

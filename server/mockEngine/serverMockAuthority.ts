@@ -475,14 +475,14 @@ export class ServerMockAuthority {
         ''
       ));
 
-      if (advice.mode === 'SUGGEST_ALTERNATIVE') {
+      if (advice.mode === 'SUGGEST_ALTERNATIVE' || advice.mode === 'CAPABILITY_SIMULATION') {
         return {
           success: false,
           actionId: deterministicId('advice_pending', targetStoryId, String((request as any).actionText || '')),
           requestType: request.type,
           status: 'MOCK_ENGINE_REJECTED',
-          message: 'Action requires capability confirmation before execution.',
-          authoritativeFeedback: advice.proposal?.reasonRequestedCapabilityUnavailable || 'Capability confirmation required.',
+          message: advice.simulation?.explanation || 'Action requires a capability decision before execution.',
+          authoritativeFeedback: advice.proposal?.reasonRequestedCapabilityUnavailable || advice.simulation?.explanation || 'Capability decision required.',
           actionAdvice: advice,
           viewState: this.getSanitizedViewState(targetStoryId),
         };
@@ -490,28 +490,6 @@ export class ServerMockAuthority {
 
       if (advice.recognizedCapability?.id) {
         (request as any).intendedCapabilityId = advice.recognizedCapability.id;
-      }
-
-      if (advice.mode === 'AUTO_LEARN_AND_EXECUTE' && advice.recognizedCapability?.id) {
-        const capEngine = worldRepository.getCapabilityEngine(targetStoryId);
-        const capability = advice.recognizedCapability;
-        if (!capEngine.getCapability(capability.id)) {
-          capEngine.registerCapability({
-            ...capability,
-            provenance: capability.provenance || 'ACTION_ADVISOR_APPROVED',
-          });
-        }
-        capEngine.acquireSkill(actorId, capability.id, {
-          libraryProvenance: {
-            libraryStatus: 'APPROVED',
-            sourceStoryIds: [targetStoryId],
-          },
-        });
-        worldRepository.persistCapabilityState(targetStoryId);
-        worldRepository.addAcquiredCapabilityToCharacter(
-          targetStoryId,
-          capability
-        );
       }
     }
 

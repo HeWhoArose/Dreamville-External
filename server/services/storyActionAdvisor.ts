@@ -349,6 +349,7 @@ export class StoryActionAdvisor {
 				recognizedCapability: effectiveMatch || learnedMatch,
 				tips,
 				canExecuteNow: Boolean(effectiveMatch),
+				aiPipeline,
 			};
 		}
 
@@ -440,6 +441,7 @@ export class StoryActionAdvisor {
 				actorId,
 				tips,
 				canExecuteNow: true,
+				aiPipeline,
 			};
 		}
 
@@ -532,6 +534,7 @@ export class StoryActionAdvisor {
 				recognizedCapability: candidate,
 				simulation,
 				canExecuteNow: false,
+				aiPipeline,
 			};
 		}
 		return {

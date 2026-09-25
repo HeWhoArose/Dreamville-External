@@ -25,6 +25,8 @@ import { combatAnimationService } from '../services/combatAnimationService';
 import { combatAssetService } from '../services/combatAssetService';
 import { bossPhaseEngine } from '../domain/bossPhaseEngine';
 import { combatEnvironmentEngine } from '../domain/combatEnvironmentEngine';
+import { mediaAdapterService } from '../services/mediaAdapterService';
+import { buildComicScenePrompt, ComicSceneContext } from '../services/comicSceneGenerator';
 
 export const gameRouter = Router();
 import { sensoryRouter } from './sensoryRoutes';
@@ -8431,6 +8433,116 @@ gameRouter.post('/spells/cast', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     res.status(400).json({ success: false, errorReason: error?.message || 'Failed to execute spell cast.' });
+  }
+});
+
+function buildCurrentComicSceneContext(storyId: string): { context: ComicSceneContext; sourceActionId?: string } {
+  const state = serverMockAuthority.getSanitizedViewState(storyId);
+  const currentCharacters = Object.values(state.characters || {})
+    .filter((character: any) => character.locationId === state.activeLocationId && character.role !== 'PROTAGONIST')
+    .map((character: any) => ({
+      name: character.name,
+      role: character.role,
+      title: character.title,
+      portraitEmoji: character.portraitEmoji,
+    }));
+
+  const latestAction = Array.isArray(state.actionHistory) ? state.actionHistory[0] : undefined;
+  const context: ComicSceneContext = {
+    worldTitle: worldRepository.getStoryRun(storyId)?.worldId
+      ? worldRepository.getWorldTemplate(worldRepository.getStoryRun(storyId)!.worldId)?.name || worldRepository.getStoryRun(storyId)?.worldId
+      : undefined,
+    location: {
+      name: state.activeLocation?.name || 'Current location',
+      region: state.activeLocation?.region,
+      description: state.activeLocation?.description,
+      ambientSensory: state.activeLocation?.ambientSensory,
+    },
+    protagonist: {
+      name: state.protagonist?.name || 'Protagonist',
+      role: state.protagonist?.title,
+      portraitEmoji: state.protagonist?.portraitEmoji,
+      portraitUrl: state.protagonist?.portraitUrl,
+    },
+    visibleCharacters: currentCharacters,
+    latestAction: latestAction
+      ? {
+          description: latestAction.description,
+          narrativeResponse: latestAction.narrativeResponse,
+          authoritativeFeedback: latestAction.authoritativeFeedback,
+          checkResult: latestAction.checkResult
+            ? {
+                success: latestAction.checkResult.success,
+                total: latestAction.checkResult.total,
+                difficultyClass: latestAction.checkResult.difficultyClass,
+                consequence: latestAction.checkResult.consequence
+                  ? { summary: latestAction.checkResult.consequence.summary }
+                  : undefined,
+              }
+            : undefined,
+        }
+      : undefined,
+    // Deliberately use active dialogue only; never include dialogueHistory in this context.
+    activeDialogue: state.activeDialogue
+      ? {
+          speakerName: state.activeDialogue.speakerName,
+          text: state.activeDialogue.text,
+        }
+      : null,
+  };
+  return { context, sourceActionId: latestAction?.id };
+}
+
+gameRouter.post('/scene/generate-prompt', (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    const { context, sourceActionId } = buildCurrentComicSceneContext(storyId);
+    const result = buildComicScenePrompt(context);
+    return res.json({
+      success: true,
+      storyId,
+      ...result,
+      sourceActionId,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      errorReason: error?.message || 'Failed to generate current-scene comic prompt.',
+    });
+  }
+});
+
+gameRouter.post('/scene/generate-image', async (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    const { context, sourceActionId } = buildCurrentComicSceneContext(storyId);
+    const promptResult = buildComicScenePrompt(context);
+    const media = await mediaAdapterService.generateImage({
+      storyId,
+      prompt: promptResult.prompt,
+      slotType: 'scene',
+      aspectRatio: '16:9',
+      tags: ['story-scene', 'comic-page', 'latest-turn'],
+      characterName: context.protagonist.name,
+    });
+    return res.json({
+      success: media.success,
+      storyId,
+      sourceActionId,
+      prompt: promptResult.prompt,
+      panelCount: promptResult.panelCount,
+      freshnessRule: promptResult.freshnessRule,
+      imageUrl: media.imageUrl,
+      mediaAsset: media.mediaAsset,
+      isFallback: media.isFallback,
+      promptFallback: media.promptFallback,
+      errorReason: media.errorReason,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      errorReason: error?.message || 'Failed to generate current-scene comic image.',
+    });
   }
 });
 

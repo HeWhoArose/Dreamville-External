@@ -316,6 +316,7 @@ export class StoryActionAdvisor {
 
 		const world = run?.worldId ? this.repository.getWorldTemplate(run.worldId) : undefined;
 		const progressionState = this.repository.getCharacterProgressionEngine(storyId).getState(actorId);
+		const progressionPolicy = capabilityEngine.getProgressionPolicy();
 		const rulesProfile = this.repository.getRulesProfile(storyId);
 		const customRules = world?.worldId
 			? new (await import('../domain/customRuleEngine')).CustomRuleEngine().getRules(this.repository, storyId)
@@ -331,8 +332,13 @@ export class StoryActionAdvisor {
 				canonicalCapabilities: allCapabilities,
 				dndRulesMode: 'FULL_DND',
 			},
-			rulesProfile: rulesProfile || {
-				allowCharacterProgression: progressionState ? true : undefined,
+			rulesProfile,
+			progressionPolicy,
+			progressionState: {
+				...progressionState,
+				maxCharacterLevel: progressionState?.currentLevel
+					? progressionPolicy.maxLevel
+					: 20,
 			},
 			customRules,
 			powerState: capabilityEngine.getPowerState(actorId),
@@ -426,6 +432,8 @@ export class StoryActionAdvisor {
 		}
 
 		const allCapabilities = capabilityEngine.getAllCapabilities();
+		const progressionState = this.repository.getCharacterProgressionEngine(storyId).getState(actorId);
+		const progressionPolicy = capabilityEngine.getProgressionPolicy();
 		const world = run?.worldId ? this.repository.getWorldTemplate(run.worldId) : undefined;
 		const customRules = world?.worldId
 			? new (await import('../domain/customRuleEngine')).CustomRuleEngine().getRules(this.repository, storyId)

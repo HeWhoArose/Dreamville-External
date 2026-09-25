@@ -496,7 +496,10 @@ class ApiClient {
   }
 
   /**
-   * Fetches power state, registered capabilities, and DAG graph (CH6).
+   * Fetches the player-safe capability projection (CH6).
+   * This contains only actor-resolved capabilities, learned skills, and
+   * actor-scoped SkillInstances. The global registry/DAG/simulation metadata
+   * never crosses this API boundary.
    * GET /api/game/capabilities
    */
   public async getCapabilities(): Promise<import('../types').CapabilitiesResponse> {

@@ -334,6 +334,7 @@ gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => 
             },
           });
           worldRepository.addAcquiredCapabilityToCharacter(storyId, alternative);
+          worldRepository.persistCapabilityState(storyId);
 
           intendedCapabilityId = alternative.id;
         } else if (intendedCapabilityId) {
@@ -347,6 +348,7 @@ gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => 
           if (learnedCapability) {
             worldRepository.addAcquiredCapabilityToCharacter(storyId, learnedCapability);
           }
+          worldRepository.persistCapabilityState(storyId);
         }
 
         const result = await serverMockAuthority.processCustomAction(

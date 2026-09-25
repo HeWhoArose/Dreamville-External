@@ -267,15 +267,19 @@ gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => 
           });
 
           capabilityEngine.acquireSkill(actorId, alternative.id, {
-            libraryStatus: 'APPROVED',
-            librarySourceStoryIds: [storyId],
+            libraryProvenance: {
+              libraryStatus: 'APPROVED',
+              sourceStoryIds: [storyId],
+            },
           });
 
           intendedCapabilityId = alternative.id;
         } else if (intendedCapabilityId) {
           capabilityEngine.acquireSkill(actorId, intendedCapabilityId, {
-            libraryStatus: 'APPROVED',
-            librarySourceStoryIds: [storyId],
+            libraryProvenance: {
+              libraryStatus: 'APPROVED',
+              sourceStoryIds: [storyId],
+            },
           });
         }
 
@@ -443,8 +447,10 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
             });
           }
           capabilityEngine.acquireSkill(actorId, capability.id, {
-            libraryStatus: 'APPROVED',
-            librarySourceStoryIds: [storyId],
+            libraryProvenance: {
+              libraryStatus: 'APPROVED',
+              sourceStoryIds: [storyId],
+            },
           });
           worldRepository.persistCapabilityState(storyId);
         }

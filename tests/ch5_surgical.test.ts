@@ -301,7 +301,9 @@ describe('CH5 Surgical Repair - Crafting & Transfer', () => {
        const item = worldRepository.getInventoryEngine('default_story').createInstance({ defId: 'def_iron_sword', ownerEntityId: 'player_actor_default_story', quantity: 1, provenance: 'test' });
        worldRepository.getInventoryEngine('default_story').transferItem(item.id, 'player_actor_default_story', 'loc_whispering_orrery', 'ground', 1);
        
-       chronicle.recordEvidence({
+       worldRepository.beginCanonicalCommandTransaction('default_story', 'test_ch5_ev_test');
+       try {
+         chronicle.recordEvidence({
           id: 'ev_test',
           category: 'WORLD_ANOMALY',
           timestamp: worldRepository.getWorldClock('default_story').getTimestamp(),
@@ -313,7 +315,12 @@ describe('CH5 Surgical Repair - Crafting & Transfer', () => {
           provenance: 'direct_observation',
           visibility: 'PUBLIC',
           metadata: {}
-       });
+         });
+         worldRepository.commitCanonicalCommandTransaction('default_story', 'test');
+       } catch (error) {
+         worldRepository.rollbackCanonicalCommandTransaction('default_story');
+         throw error;
+       }
        const history = chronicle.getChronicleEntries();
        assert.ok(history.find(e => e.evidenceId === 'ev_test'));
     });

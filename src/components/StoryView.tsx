@@ -43,7 +43,6 @@ interface StoryViewProps {
   openingScene?: OpeningScene | null;
   worldTitle?: string;
   worldId?: string;
-  storyId?: string;
   protagonistName?: string;
   protagonistRole?: string;
   protagonistPortraitUrl?: string;
@@ -213,7 +212,6 @@ export const StoryView: React.FC<StoryViewProps> = ({
   openingScene,
   worldTitle,
   worldId,
-  storyId,
   protagonistName,
   protagonistRole,
   protagonistPortraitUrl,

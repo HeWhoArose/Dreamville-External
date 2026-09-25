@@ -1678,6 +1678,7 @@ export class MultiModelOrchestrator {
   private usageLedger: UsageLedgerEntry[] = [];
   private taskPinnedModels: Map<TaskId, string> = new Map();
   private taskFallbackChains: Map<TaskId, string[]> = new Map();
+  private explicitFallbackChainTasks: Set<TaskId> = new Set();
   private discoveredCatalog: DiscoveredModelMetadata[] = [];
   private excludedCatalog: { modelId: string; rawName: string; reason: string }[] = [];
   private lastDiscoveredAt: number = 0;
@@ -1730,6 +1731,7 @@ export class MultiModelOrchestrator {
                   cleaned.push('provider_deterministic_emergency::emergency-fallback-local');
                 }
                 this.taskFallbackChains.set(task as TaskId, cleaned);
+                this.explicitFallbackChainTasks.add(task as TaskId);
               }
             }
           }
@@ -1995,6 +1997,7 @@ export class MultiModelOrchestrator {
 
   public setFallbackChain(task: TaskId, chain: string[]): void {
     this.taskFallbackChains.set(task, chain.filter(Boolean));
+    this.explicitFallbackChainTasks.add(task);
     this.savePersistedConfig();
   }
 
@@ -3421,7 +3424,8 @@ export class MultiModelOrchestrator {
     if (categoryOverrideKey) {
       const overridden = findConfiguredModel(categoryOverrideKey);
       if (overridden && isUsableCandidate(overridden)) {
-        const configuredFallbacks = customChainKeys
+        const hasExplicitFallbackChain = this.explicitFallbackChainTasks.has(task);
+        const configuredFallbacks = hasExplicitFallbackChain && customChainKeys
           ? customChainKeys
               .map(findConfiguredModel)
               .filter((m): m is ModelRegistryRecord => Boolean(m))

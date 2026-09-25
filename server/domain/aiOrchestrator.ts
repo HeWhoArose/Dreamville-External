@@ -5024,37 +5024,6 @@ export class MultiModelOrchestrator {
           error: lastError,
         });
 
-        // Recover a live candidate only when the configured chain has actually
-        // failed and is about to fall through to the emergency floor. This preserves
-        // explicit emergency-only chains while still repairing stale one-model chains.
-        const nextCandidate = candidateChain[cIdx + 1];
-        if (nextCandidate?.isEmergencyFloor) {
-          const existingKeys = new Set(candidateChain.map((model) => this.modelKey(model)));
-          const recoveryCandidates = Array.from(this.models.values())
-            .filter((model) => !existingKeys.has(this.modelKey(model)))
-            .filter((model) => !model.isEmergencyFloor)
-            .filter((model) => this.isCandidateUsable(model, task, contextTokens))
-            .sort((a, b) => {
-              const scoreA =
-                a.userPriority +
-                (a.health === 'Healthy' ? 50 : a.health === 'Degraded' ? 10 : 0) +
-                (a.quota === 'Healthy' ? 30 : a.quota === 'Low' ? 10 : 0);
-              const scoreB =
-                b.userPriority +
-                (b.health === 'Healthy' ? 50 : b.health === 'Degraded' ? 10 : 0) +
-                (b.quota === 'Healthy' ? 30 : b.quota === 'Low' ? 10 : 0);
-              if (scoreB !== scoreA) return scoreB - scoreA;
-              return a.modelId.localeCompare(b.modelId);
-            });
-
-          // Only repair a chain that has no remaining AI candidate before the floor.
-          const hasRemainingAiCandidate = candidateChain
-            .slice(cIdx + 1)
-            .some((model) => !model.isEmergencyFloor);
-          if (!hasRemainingAiCandidate && recoveryCandidates.length > 0) {
-            candidateChain.splice(cIdx + 1, 0, recoveryCandidates[0]);
-          }
-        }
       }
     }
 

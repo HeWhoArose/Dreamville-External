@@ -2531,6 +2531,18 @@ gameRouter.post('/capabilities/synthesize', async (req: Request, res: Response) 
     }
     const chosenTier = powerTier || 'Moderate';
 
+    // Capability synthesis is an AI/internal authoring operation, not a player action.
+    // Player-facing freeform requests must pass through dry-run simulation and explicit
+    // StoryActionAdvisor approval before canonical acquisition.
+    const internalAiRequest = req.headers['x-dreamville-internal-ai'] === 'true';
+    if (!internalAiRequest) {
+      return res.status(403).json({
+        success: false,
+        code: 'AI_INTERNAL_SYNTHESIS_ONLY',
+        errorReason: 'Capability synthesis is reserved for internal AI authoring. Player actions must use capability simulation and explicit acquisition.',
+      });
+    }
+
     const { targetType, rangeScope, actionType, cooldownTurns, durationTurns, restrictions, counters } = req.body;
 
     const storyId = reqStoryId || 'default_story';

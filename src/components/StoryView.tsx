@@ -575,8 +575,14 @@ export const StoryView: React.FC<StoryViewProps> = ({
               {pendingActionAdvice.proposal ? <Sparkles className="h-4 w-4 text-amber-300" /> : <AlertCircle className="h-4 w-4 text-sky-300" />}
             </div>
             <div className="min-w-0 flex-1">
-              <p className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${pendingActionAdvice.proposal ? 'text-amber-400' : 'text-sky-400'}`}>
-                {pendingActionAdvice.proposal ? 'Potential technique' : 'Capability simulation'}
+              <p className={`text-[10px] font-semibold uppercase tracking-[0.18em] ${pendingActionAdvice.proposal ? 'text-amber-400' : pendingActionAdvice.simulation.status === 'WORLD_FORBIDDEN' ? 'text-red-400' : 'text-sky-400'}`}>
+                {pendingActionAdvice.proposal
+                  ? 'Potential technique'
+                  : pendingActionAdvice.simulation.status === 'WORLD_FORBIDDEN'
+                  ? 'Unavailable in this world'
+                  : pendingActionAdvice.simulation.status === 'CHARACTER_INCOMPATIBLE'
+                  ? 'Not currently learnable'
+                  : 'Capability simulation'}
               </p>
               <h3 className="mt-1 text-base font-semibold text-stone-100">
                 {pendingActionAdvice.proposal?.alternative?.name || pendingActionAdvice.simulation.candidateCapability?.name || 'Requested capability'}

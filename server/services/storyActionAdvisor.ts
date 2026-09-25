@@ -292,6 +292,7 @@ export class StoryActionAdvisor {
 		);
 		const allCapabilities = capabilityEngine.getAllCapabilities();
 		const normalizedAction = normalize(actionText);
+		const learnedCapabilities = capabilityEngine.getActorLearnedCapabilities(actorId);
 		const world = run?.worldId ? this.repository.getWorldTemplate(run.worldId) : undefined;
 		const worldCapabilities = [
 			...((world?.canonicalCapabilities || []) as CapabilityDefinition[]),
@@ -310,15 +311,33 @@ export class StoryActionAdvisor {
 
 		// Player-owned capabilities always win first. The global registry is never
 		// allowed to turn an ordinary narrative action into a supernatural request.
-		const ownedMatch = actorCapabilities
+		const learnedMatch = learnedCapabilities
 			.filter((capability) => capabilityMatchesAction(capability, normalizedAction))
 			.sort((a, b) => normalize(b.name).length - normalize(a.name).length)[0];
-		if (ownedMatch && actorAlreadyHasCapability(actorCapabilities, ownedMatch.id)) {
+		const effectiveMatch = actorCapabilities
+			.filter((capability) => capabilityMatchesAction(capability, normalizedAction))
+			.sort((a, b) => normalize(b.name).length - normalize(a.name).length)[0];
+
+		// A learned capability remains owned even when current vessel/resource gates
+		// make it temporarily ineffective. The canonical execution path is responsible
+		// for rejecting that execution; ownership must never be mistaken for absence.
+		if (learnedMatch) {
 			return {
 				mode: 'EXECUTE_EXISTING',
 				actionText,
 				actorId,
-				recognizedCapability: ownedMatch,
+				recognizedCapability: effectiveMatch || learnedMatch,
+				tips,
+				canExecuteNow: Boolean(effectiveMatch),
+			};
+		}
+
+		if (effectiveMatch && actorAlreadyHasCapability(actorCapabilities, effectiveMatch.id)) {
+			return {
+				mode: 'EXECUTE_EXISTING',
+				actionText,
+				actorId,
+				recognizedCapability: effectiveMatch,
 				tips,
 				canExecuteNow: true,
 			};

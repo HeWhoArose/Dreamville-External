@@ -503,6 +503,10 @@ export class ServerMockAuthority {
           },
         });
         worldRepository.persistCapabilityState(targetStoryId);
+        worldRepository.addAcquiredCapabilityToCharacter(
+          targetStoryId,
+          capability
+        );
       }
     }
 

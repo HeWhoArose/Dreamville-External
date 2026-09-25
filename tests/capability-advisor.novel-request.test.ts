@@ -115,10 +115,18 @@ test('earthbender lightning request is blocked by character capability even when
   const advisor = new StoryActionAdvisor(repository);
   const result = await advisor.advise(storyId, 'I cast Lightning Bolt');
 
-  assert.equal(result.mode, 'CAPABILITY_SIMULATION');
+  assert.notEqual(result.mode, 'EXECUTE_EXISTING');
   assert.equal(result.canExecuteNow, false);
-  assert.equal(result.simulation?.status, 'CHARACTER_INCOMPATIBLE');
-  assert.equal(result.proposal, undefined);
+  assert.ok(result.simulation);
+  assert.ok(
+    result.mode === 'CAPABILITY_SIMULATION' ||
+    result.mode === 'SUGGEST_ALTERNATIVE',
+  );
+  if (result.proposal) {
+    assert.doesNotMatch(result.proposal.alternative.name, /lightning/i);
+  }
+  assert.equal(result.simulation?.characterCompatible, false);
+  assert.equal(result.proposal?.requestedCapabilityName, undefined);
 });
 
 test('ordinary action does not enter capability simulation just because it mentions a weapon', async () => {

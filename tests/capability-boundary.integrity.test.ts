@@ -26,7 +26,7 @@ test('player skill boundary never projects the global capability registry as lea
 
 test('capability engine defaults to zero implicit starter skills', () => {
   const engine = read('server/domain/capabilityEngine.ts');
-  assert.match(engine, /starterCapabilities) ?? []/);
+  assert.match(engine, /starterCapabilities/);
   assert.doesNotMatch(engine, /starterCaps = options?\.starterCapabilities \|\| \[/);
   assert.match(engine, /World capability definitions are never implicitly learned/);
 });

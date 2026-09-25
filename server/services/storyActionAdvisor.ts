@@ -196,9 +196,9 @@ export class StoryActionAdvisor {
 		const allCapabilities = capabilityEngine.getAllCapabilities();
 		const normalizedAction = normalize(actionText);
 
-		const recognizedCapability = allCapabilities.find((capability) =>
-			capabilityMatchesAction(capability, normalizedAction)
-		);
+		const recognizedCapability = allCapabilities
+			.filter((capability) => capabilityMatchesAction(capability, normalizedAction))
+			.sort((a, b) => normalize(b.name).length - normalize(a.name).length)[0];
 
 		const tips = await this.generateTips(storyId, actorId, actionText, actorCapabilities);
 

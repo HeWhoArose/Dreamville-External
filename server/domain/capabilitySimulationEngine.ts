@@ -655,7 +655,13 @@ export class CapabilitySimulationEngine {
     }
 
     if (!acquisitionAllowed) {
-      blockers.push('The active world progression rules do not permit capability acquisition.');
+      if (!hasProgressionHeadroom) {
+        blockers.push(`Character is at the configured progression ceiling (level ${configuredMaxLevel}).`);
+      } else if (context.progressionState?.allowLevelUp === false) {
+        blockers.push('Character progression is currently locked from advancing.');
+      } else {
+        blockers.push('The active world progression rules do not permit capability acquisition.');
+      }
       return {
         status: 'CURRENTLY_BLOCKED',
         actionText,

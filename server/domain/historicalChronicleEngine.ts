@@ -26,7 +26,7 @@ export class HistoricalChronicleEngine {
   private evidenceStore: Map<string, HistoricalEvidence> = new Map();
   private dossiers: Map<string, NpcDossier> = new Map(); // subjectId -> NpcDossier
   private chronicleEntries: Map<string, ChronicleEntry> = new Map(); // evidenceId -> ChronicleEntry
-  private readonly writeMode: ChronicleWriteMode;
+  private writeMode: ChronicleWriteMode;
   private transactionOpen = false;
   private transactionCommandId?: string;
   private pendingEvidence: Map<string, HistoricalEvidence> = new Map();
@@ -36,8 +36,8 @@ export class HistoricalChronicleEngine {
   }
 
   public beginCanonicalTransaction(commandId: string): void {
-    if (this.writeMode !== 'TRANSACTIONAL') return;
     if (this.transactionOpen) throw new Error('Historical Chronicle transaction is already open.');
+    this.writeMode = 'TRANSACTIONAL';
     this.transactionOpen = true;
     this.transactionCommandId = commandId;
     this.pendingEvidence.clear();
@@ -64,6 +64,10 @@ export class HistoricalChronicleEngine {
       };
       this.commitEvidence(enriched);
     }
+
+    // Transactional enforcement applies only while a canonical command is active.
+    // Legacy/domain simulations that use the Chronicle directly retain DIRECT mode.
+    this.writeMode = 'DIRECT';
   }
 
   public rollbackCanonicalTransaction(): void {
@@ -71,6 +75,7 @@ export class HistoricalChronicleEngine {
     this.pendingEvidence.clear();
     this.transactionOpen = false;
     this.transactionCommandId = undefined;
+    this.writeMode = 'DIRECT';
   }
 
   /**

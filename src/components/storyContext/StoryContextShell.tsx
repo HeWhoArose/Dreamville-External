@@ -47,6 +47,7 @@ export const StoryContextShell: React.FC<StoryContextShellProps> = ({
   storyConfig,
   children,
 }) => {
+  const [moreOpen, setMoreOpen] = useState(false);
   const effectiveWorldTitle = worldTitle || storyConfig?.worldName || 'Living World';
   const effectiveStoryTitle = storyTitle || storyConfig?.title || 'Active Chronicle';
   const effectiveLocation = currentLocationName || storyConfig?.currentLocation || 'Sanctum';
@@ -136,7 +137,6 @@ export const StoryContextShell: React.FC<StoryContextShellProps> = ({
 
       {/* Focused Story Navigation — primary tools stay visible, secondary tools live in More. */}
       {(() => {
-        const [moreOpen, setMoreOpen] = useState(false);
         const iconFor = (type: StoryMenuEntry['iconType']) => {
           switch (type) {
             case 'story': return <Feather className="h-4 w-4" />;

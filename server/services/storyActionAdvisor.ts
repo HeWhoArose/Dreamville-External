@@ -319,7 +319,7 @@ export class StoryActionAdvisor {
 		const progressionPolicy = capabilityEngine.getProgressionPolicy();
 		const rulesProfile = this.repository.getRulesProfile(storyId);
 		const customRules = world?.worldId
-			? new (await import('../domain/customRuleEngine')).CustomRuleEngine().getRules(this.repository, storyId)
+			? new (await import('../domain/customRuleEngine')).CustomRuleEngine().getRules(this.repository as any, storyId)
 			: [];
 
 		const simulationContext: CapabilitySimulationContext = {
@@ -444,7 +444,7 @@ export class StoryActionAdvisor {
 		const progressionPolicy = capabilityEngine.getProgressionPolicy();
 		const world = run?.worldId ? this.repository.getWorldTemplate(run.worldId) : undefined;
 		const customRules = world?.worldId
-			? new (await import('../domain/customRuleEngine')).CustomRuleEngine().getRules(this.repository, storyId)
+			? new (await import('../domain/customRuleEngine')).CustomRuleEngine().getRules(this.repository as any, storyId)
 			: [];
 
 		const simulator = new CapabilitySimulationEngine();
@@ -562,7 +562,7 @@ export class StoryActionAdvisor {
 			dndRulesMode: 'FULL_DND',
 		};
 		const proposalCustomRules = proposalWorld?.worldId
-			? new (await import('../domain/customRuleEngine')).CustomRuleEngine().getRules(this.repository, storyId)
+			? new (await import('../domain/customRuleEngine')).CustomRuleEngine().getRules(this.repository as any, storyId)
 			: [];
 		const proposalSimulation = new CapabilitySimulationEngine().simulate(
 			actionText,

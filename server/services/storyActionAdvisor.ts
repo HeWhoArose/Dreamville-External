@@ -407,11 +407,23 @@ export class StoryActionAdvisor {
 		}
 
 		if (simulation.status === 'DEVELOPABLE' && simulation.creationAllowed !== false) {
+			const proposalCandidate = candidate || simulation.candidateCapability;
+			if (!proposalCandidate) {
+				return {
+					mode: 'CAPABILITY_SIMULATION',
+					actionText,
+					actorId,
+					tips,
+					recognizedCapability: candidate,
+					simulation,
+					canExecuteNow: false,
+				};
+			}
 			const proposal = await this.createAlternativeProposal(
 				storyId,
 				actorId,
 				actionText,
-				candidate,
+				proposalCandidate,
 				run,
 				simulation,
 			);

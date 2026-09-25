@@ -133,8 +133,38 @@ function inferDirectCompatibility(
 		if (actorText.includes(school) || role.includes(school) || classId.includes(school)) return true;
 	}
 
+	const darkAffinity =
+		role.includes('dark mage') ||
+		role.includes('shadow mage') ||
+		role.includes('warlock') ||
+		role.includes('necromancer') ||
+		actorText.includes('curse') ||
+		actorText.includes('shadow magic') ||
+		actorText.includes('void magic');
+
+	const elementalFireAffinity =
+		classId.includes('wizard') ||
+		classId.includes('sorcerer') ||
+		classId.includes('pyromancer') ||
+		role.includes('mage') ||
+		role.includes('elementalist') ||
+		role.includes('pyromancer') ||
+		role.includes('wizard') ||
+		role.includes('sorcerer') ||
+		actorText.includes('fire magic') ||
+		actorText.includes('flame magic') ||
+		actorText.includes('elemental magic') ||
+		actorText.includes('pyromancy');
+
+	if (
+		capabilityText.includes('fire') ||
+		capabilityText.includes('flame')
+	) {
+		if (darkAffinity) return false;
+		if (elementalFireAffinity) return true;
+	}
+
 	const domainKeywords: Record<string, string[]> = {
-		fire: ['wizard', 'sorcerer', 'pyromancer', 'fire', 'flame', 'elementalist', 'arcane'],
 		shadow: ['dark mage', 'shadow mage', 'warlock', 'necromancer', 'shadow', 'void', 'curse'],
 		ice: ['ice mage', 'frost mage', 'cryomancer', 'frost', 'ice', 'winter'],
 		light: ['cleric', 'paladin', 'priest', 'light', 'radiant', 'holy'],

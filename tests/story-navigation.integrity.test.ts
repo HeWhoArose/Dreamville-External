@@ -42,3 +42,22 @@ test('mystery navigation exposes evidence and relationships only through player-
 	assert.equal(PLAYER_RENDERED_ROUTES.has('play.evidence'), true);
 	assert.equal(PLAYER_RENDERED_ROUTES.has('play.relationships'), true);
 });
+
+test('developer capability workbench stays internal while Character/World stay player-facing', () => {
+	const menu = deriveStoryMenu({ rules: 'FULL_DND', genre: 'Fantasy' });
+	const routes = new Set(menu.map((entry) => entry.route));
+	assert.equal(routes.has('play.world'), true);
+	assert.equal(routes.has('play.recent-actions'), true);
+	assert.equal(routes.has('play.powers'), false);
+	assert.equal(routes.has('play.world-systems'), false);
+});
+
+test('mystery mode retains World and Recent Actions in secondary navigation', () => {
+	const menu = deriveStoryMenu({
+		rules: 'INVESTIGATION',
+		storyMode: 'MYSTERY',
+	});
+	const routes = new Set(menu.map((entry) => entry.route));
+	assert.equal(routes.has('play.world'), true);
+	assert.equal(routes.has('play.recent-actions'), true);
+});

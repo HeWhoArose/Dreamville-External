@@ -8,7 +8,7 @@ import type { CapabilityDefinition } from '../server/domain/capabilityEngine';
 function fireballCapability(): CapabilityDefinition {
 	return {
 		id: 'cap_fireball_test',
-		name: 'Fireball',
+		name: 'Training Fireball',
 		category: 'Magic',
 		activationMode: 'immediate',
 		powerTier: 'Major',
@@ -71,7 +71,7 @@ test('Phase 16 action advisor: compatible unlearned capability is proposed as au
 	repository.getCapabilityEngine(storyId).registerCapability(fireball);
 
 	const advisor = new StoryActionAdvisor(repository);
-	const advice = await advisor.advise(storyId, 'I cast Fireball');
+	const advice = await advisor.advise(storyId, 'I cast Training Fireball');
 
 	assert.equal(advice.mode, 'AUTO_LEARN_AND_EXECUTE');
 	assert.equal(advice.recognizedCapability?.id, 'cap_fireball_test');
@@ -122,7 +122,7 @@ test('Phase 16 action advisor: incompatible Fireball request from a Dark Mage pr
 		} as any)
 	);
 
-	const advice = await advisor.advise(storyId, 'I cast Fireball');
+	const advice = await advisor.advise(storyId, 'I cast Training Fireball');
 
 	assert.equal(advice.mode, 'SUGGEST_ALTERNATIVE');
 	assert.ok(advice.proposal);
@@ -142,7 +142,7 @@ test('Phase 16 action advisor: an unknown capability request does not silently g
 	seedRun(repository, storyId, 'Dark Mage');
 
 	const advisor = new StoryActionAdvisor(repository);
-	const advice = await advisor.advise(storyId, 'I invent an entirely new forbidden star curse');
+	const advice = await advisor.advise(storyId, 'I invent an entirely new forbidden star technique');
 
 	assert.equal(advice.mode, 'NORMAL_ACTION');
 	assert.equal(advice.recognizedCapability, undefined);
@@ -164,7 +164,7 @@ test('Phase 16 action advisor: already-learned capability resolves directly', as
 	givePlayerAnExistingCapability(repository, storyId, fireball);
 
 	const advisor = new StoryActionAdvisor(repository);
-	const advice = await advisor.advise(storyId, 'I cast Fireball');
+	const advice = await advisor.advise(storyId, 'I cast Training Fireball');
 
 	assert.equal(advice.mode, 'EXECUTE_EXISTING');
 	assert.equal(advice.recognizedCapability?.id, 'cap_fireball_test');
@@ -179,7 +179,7 @@ test('Phase 16 action advisor: generated action tips are advisory only and never
 	givePlayerAnExistingCapability(repository, storyId, {
 		...fireballCapability(),
 		id: 'cap_fire_attack',
-		name: 'Fireball',
+		name: 'Training Fireball',
 	});
 
 	const advisor = new StoryActionAdvisor(repository);

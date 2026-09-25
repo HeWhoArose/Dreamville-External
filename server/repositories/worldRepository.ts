@@ -755,10 +755,21 @@ export class InMemoryWorldRepository implements WorldRepository {
       const capEngine = new CapabilityEngine();
       this.capabilityEngines.set(storyId, capEngine);
 
+      // The capability registry contains world-available definitions, while actor skill
+      // ownership is seeded exclusively from the confirmed character's current capabilities.
+      // This distinction is authoritative: a world definition is not automatically a learned skill.
+      capEngine.seedStarterPowerStateForActor(actorId, { starterCapabilities: [] });
+
       const allCaps = [
         ...(Array.isArray(world.capabilities) ? world.capabilities : []),
         ...(Array.isArray(char.capabilities) ? char.capabilities : []),
       ];
+      const characterCapabilityIds = new Set(
+        (Array.isArray(char.capabilities) ? char.capabilities : [])
+          .map((cap: any) => cap?.id || cap?.capabilityId || cap?.name)
+          .filter(Boolean)
+          .map(String)
+      );
 
       allCaps.forEach((cap: any, capIndex: number) => {
         if (cap && (cap.name || cap.id)) {
@@ -796,8 +807,14 @@ export class InMemoryWorldRepository implements WorldRepository {
             prerequisites: [],
           });
 
-          // Acquire skill for protagonist
-          capEngine.acquireSkill(actorId, capId);
+          // Only capabilities explicitly granted by the confirmed character are acquired.
+          const isCharacterCapability =
+            characterCapabilityIds.has(capId) ||
+            characterCapabilityIds.has(capDef.name);
+
+          if (isCharacterCapability) {
+            capEngine.acquireSkill(actorId, capId);
+          }
 
           this.reusableSkillRegistry.registerApprovedSkill({
             id: `lib_skill_${capId}`,
@@ -830,7 +847,10 @@ export class InMemoryWorldRepository implements WorldRepository {
       // Anchor the canonical power-state HP to the confirmed character's D&D core stats.
       // The capability system may still track its own energy/strain resources, but HP starts from
       // CharacterGenesis rather than a hard-coded default.
-      const seededPowerState = capEngine.seedStarterPowerStateForActor(actorId);
+      const seededPowerState = capEngine.seedStarterPowerStateForActor(
+        actorId,
+        { starterCapabilities: [] }
+      );
       const conditionEngine = this.getConditionEngine(storyId);
       const confirmedConditionState = char.conditionState || char.startingState?.conditionState;
       conditionEngine.seedActor(actorId, {

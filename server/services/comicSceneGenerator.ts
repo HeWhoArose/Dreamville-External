@@ -19,6 +19,7 @@ export interface ComicSceneContext {
     portraitEmoji?: string;
   }>;
   latestAction?: {
+    actionType?: string;
     description?: string;
     narrativeResponse?: string;
     authoritativeFeedback?: string;

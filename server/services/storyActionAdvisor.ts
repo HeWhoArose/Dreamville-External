@@ -319,13 +319,19 @@ export class StoryActionAdvisor {
 		}
 
 		let candidate = recognizedCapability;
+		const simulator = new CapabilitySimulationEngine();
+
 		if (!candidate) {
 			const preview = capabilityEngine.interpretFreeformAction({
 				actorId,
 				actionText,
 				executeIfValid: false,
 			});
-			if (preview.interpretationType !== 'NOVEL_CAPABILITY_PROPOSAL' || !preview.proposedCapability) {
+
+			if (preview.interpretationType === 'NOVEL_CAPABILITY_PROPOSAL' && preview.proposedCapability) {
+				candidate = preview.proposedCapability;
+			} else if (!simulator.isCapabilityLikeRequest(actionText)) {
+				// Ordinary freeform actions stay on the normal narrative/action path.
 				return {
 					mode: 'NORMAL_ACTION',
 					actionText,
@@ -334,7 +340,6 @@ export class StoryActionAdvisor {
 					canExecuteNow: true,
 				};
 			}
-			candidate = preview.proposedCapability;
 		}
 
 		const world = run?.worldId ? this.repository.getWorldTemplate(run.worldId) : undefined;
@@ -344,6 +349,10 @@ export class StoryActionAdvisor {
 		const customRules = world?.worldId
 			? new (await import('../domain/customRuleEngine')).CustomRuleEngine().getRules(this.repository as any, storyId)
 			: [];
+		const worldCapabilities = [
+			...((world?.canonicalCapabilities || []) as CapabilityDefinition[]),
+			...((world?.capabilities || []) as CapabilityDefinition[]),
+		];
 
 		const simulationContext: CapabilitySimulationContext = {
 			actorId,
@@ -351,9 +360,7 @@ export class StoryActionAdvisor {
 			world: world || {
 				title: 'Current World',
 				description: '',
-				capabilities: allCapabilities,
-				canonicalCapabilities: allCapabilities,
-				dndRulesMode: 'FULL_DND',
+				dndRulesMode: rulesProfile?.mode || 'FULL_DND',
 			},
 			rulesProfile,
 			progressionPolicy,
@@ -365,11 +372,13 @@ export class StoryActionAdvisor {
 			powerState: capabilityEngine.getPowerState(actorId),
 			ownedCapabilities: actorCapabilities,
 			skillInstances: capabilityEngine.getActorSkillInstances(actorId),
-			allWorldCapabilities: allCapabilities,
+			// Only capabilities authored for the active world can establish a
+			// world-specific supernatural mechanism. The global registry is internal
+			// candidate data, not world canon.
+			allWorldCapabilities: worldCapabilities,
 			environment: buildSimulationEnvironment(this.repository, storyId, sceneContext),
 		};
 
-		const simulator = new CapabilitySimulationEngine();
 		const simulation = simulator.simulate(actionText, simulationContext, candidate);
 
 		if (simulation.status === 'UNSUPPORTED_REQUEST') {
@@ -464,12 +473,16 @@ export class StoryActionAdvisor {
 		}
 
 		const allCapabilities = capabilityEngine.getAllCapabilities();
+		const world = run?.worldId ? this.repository.getWorldTemplate(run.worldId) : undefined;
 		const progressionState = this.repository.getCharacterProgressionEngine(storyId).getState(actorId);
 		const progressionPolicy = capabilityEngine.getProgressionPolicy();
-		const world = run?.worldId ? this.repository.getWorldTemplate(run.worldId) : undefined;
 		const customRules = world?.worldId
 			? new (await import('../domain/customRuleEngine')).CustomRuleEngine().getRules(this.repository as any, storyId)
 			: [];
+		const worldCapabilities = [
+			...((world?.canonicalCapabilities || []) as CapabilityDefinition[]),
+			...((world?.capabilities || []) as CapabilityDefinition[]),
+		];
 
 		const simulator = new CapabilitySimulationEngine();
 		const simulation = simulator.simulate(
@@ -477,7 +490,10 @@ export class StoryActionAdvisor {
 			{
 				actorId,
 				character: run?.protagonist,
-				world: world || { title: 'Current World' },
+				world: world || {
+					title: 'Current World',
+					dndRulesMode: this.repository.getRulesProfile(storyId)?.mode || 'FULL_DND',
+				},
 				rulesProfile: this.repository.getRulesProfile(storyId) || undefined,
 				progressionPolicy,
 				progressionState: {
@@ -488,7 +504,7 @@ export class StoryActionAdvisor {
 				powerState: capabilityEngine.getPowerState(actorId),
 				ownedCapabilities: actorCapabilities,
 				skillInstances: capabilityEngine.getActorSkillInstances(actorId),
-				allWorldCapabilities: allCapabilities,
+				allWorldCapabilities: worldCapabilities,
 				environment: buildSimulationEnvironment(this.repository, storyId),
 			},
 			pending.alternative,
@@ -597,13 +613,15 @@ export class StoryActionAdvisor {
 		const proposalWorld = world || {
 			title: 'Current World',
 			description: '',
-			capabilities: proposalCapEngine.getAllCapabilities(),
-			canonicalCapabilities: proposalCapEngine.getAllCapabilities(),
-			dndRulesMode: 'FULL_DND',
+			dndRulesMode: this.repository.getRulesProfile(storyId)?.mode || 'FULL_DND',
 		};
 		const proposalCustomRules = proposalWorld?.worldId
 			? new (await import('../domain/customRuleEngine')).CustomRuleEngine().getRules(this.repository as any, storyId)
 			: [];
+		const proposalWorldCapabilities = [
+			...((proposalWorld.canonicalCapabilities || []) as CapabilityDefinition[]),
+			...((proposalWorld.capabilities || []) as CapabilityDefinition[]),
+		];
 		const proposalSimulation = new CapabilitySimulationEngine().simulate(
 			actionText,
 			{
@@ -620,7 +638,7 @@ export class StoryActionAdvisor {
 				powerState: proposalCapEngine.getPowerState(actorId),
 				ownedCapabilities: proposalActorCaps,
 				skillInstances: proposalCapEngine.getActorSkillInstances(actorId),
-				allWorldCapabilities: proposalCapEngine.getAllCapabilities(),
+				allWorldCapabilities: proposalWorldCapabilities,
 				environment: buildSimulationEnvironment(this.repository, storyId),
 			},
 			alternative,

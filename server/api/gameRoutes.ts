@@ -1921,7 +1921,14 @@ gameRouter.post('/capabilities/adjudicate', async (req: Request, res: Response) 
     const { worldRepository } = await import('../repositories/worldRepository');
     const storyId = resolveStoryId(req);
     const player = worldRepository.getPlayerLifecycle(storyId);
-    const actorId = reqActorId || (player ? player.actorId : `player_actor_${storyId}`);
+    const activeActorId = player?.actorId || `player_actor_${storyId}`;
+    if (reqActorId && reqActorId !== activeActorId) {
+      return res.status(403).json({
+        approved: false,
+        rejectionReason: 'Player capability adjudication may only target the active player actor.',
+      });
+    }
+    const actorId = activeActorId;
     const capEngine = worldRepository.getCapabilityEngine(storyId);
     const invEngine = worldRepository.getInventoryEngine(storyId);
 

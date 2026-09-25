@@ -76,7 +76,7 @@ export interface CapabilitySimulationResult {
   alternateRoutes: string[];
   estimatedEnergyCost?: number;
   estimatedVesselCapacityRequired?: number;
-  internalOnly: boolean;
+  internalOnly: boolean;\n  /** True only when the dry-run found a valid path for canonical acquisition. */\n  creationAllowed?: boolean;
 }
 
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
@@ -207,139 +207,7 @@ function isBendingWorld(worldText: string): boolean {
   );
 }
 
-function worldAllows(domain: string | undefined, worldText: string, world: CapabilitySimulationWorld, candidate?: CapabilityDefinition): { allowed: boolean; reason?: string } {
-  if (hasExplicitForbidden(worldText, domain)) {
-    return { allowed: false, reason: 'The active world rules explicitly forbid this capability family.' };
-  }
-
-  const canonicalText = normalize([
-    ...(world.canonicalCapabilities || []),
-    ...(world.capabilities || []),
-  ].map(flattenText).join(' '));
-
-  if (candidate && canonicalText.includes(normalize(candidate.name))) {
-    return { allowed: true };
-  }
-
-  if (isBendingWorld(worldText)) {
-    if (domain === 'SPATIAL_TRANSIT' || domain === 'DIMENSIONAL' || domain === 'TEMPORAL' || domain === 'MAGIC') {
-      return { allowed: false, reason: 'This world is governed by an elemental-bending power system and has no canonical mechanism for this capability family.' };
-    }
-    if (domain === 'LIGHTNING' && !/\b(lightning|lightning generation)\b/.test(canonicalText)) {
-      // Lightning is a bending expression, not a free spell, so character compatibility
-      // still has to authorize it below.
-      return { allowed: true };
-    }
-  }
-
-  if (domain === 'MAGIC' && /\b(no magic|magic does not exist|non-magical world|mundane world|no spellcasting)\b/.test(worldText)) {
-    return { allowed: false, reason: 'The active world does not contain a usable magic/spellcasting system.' };
-  }
-
-  return { allowed: true };
-}
-
-function characterAllows(domain: string | undefined, characterText: string, worldText: string, ownedCapabilities: CapabilityDefinition[], candidate?: CapabilityDefinition): { allowed: boolean; reason?: string; alternate?: string } {
-  if (!domain) return { allowed: true };
-
-  if (isBendingWorld(worldText)) {
-    const isAvatar = /\bavatar\b/.test(characterText);
-    const domains = new Set<string>();
-    if (isAvatar) {
-      ['EARTH', 'WATER', 'FIRE', 'AIR', 'LIGHTNING'].forEach((entry) => domains.add(entry));
-    }
-    if (/\bearthbender\b|\bearth bending\b/.test(characterText)) domains.add('EARTH');
-    if (/\bwaterbender\b|\bwater bending\b/.test(characterText)) domains.add('WATER');
-    if (/\bfirebender\b|\bfire bending\b/.test(characterText)) {
-      domains.add('FIRE');
-      domains.add('LIGHTNING');
-    }
-    if (/\bairbender\b|\bair bending\b/.test(characterText)) domains.add('AIR');
-
-    if (domains.has(domain)) return { allowed: true };
-    if (domain === 'LIGHTNING') {
-      return {
-        allowed: false,
-        reason: 'The character has no firebending or Avatar-level basis for lightning generation.',
-        alternate: domains.has('EARTH') ? 'Develop a higher-order earthbending technique instead.' : undefined,
-      };
-    }
-    if (['EARTH', 'WATER', 'FIRE', 'AIR'].includes(domain)) {
-      return {
-        allowed: false,
-        reason: `The character is not established as a ${domain.toLowerCase()}-bender.`,
-      };
-    }
-    if (domain === 'HEALING' && !domains.has('WATER')) {
-      return {
-        allowed: false,
-        reason: 'In this bending world, this healing mechanism requires an established waterbending basis.',
-      };
-    }
-  }
-
-  const actorText = characterText;
-  const candidateText = normalize(candidate ? `${candidate.name} ${candidate.description} ${candidate.provenance} ${(candidate.restrictions || []).join(' ')}` : '');
-  if (candidate?.restrictions?.length) {
-    const missing = candidate.restrictions.filter((restriction) => !actorText.includes(normalize(restriction)));
-    if (missing.length) {
-      return {
-        allowed: false,
-        reason: `The character lacks the required established trait/domain: ${missing.join(', ')}.`,
-      };
-    }
-  }
-
-  const ownedText = normalize(ownedCapabilities.map((cap) => `${cap.name} ${cap.description}`).join(' '));
-
-  if (domain === 'SHADOW' && !/(shadow|void|dark|curse|oblivion)/.test(actorText)) {
-    return { allowed: false, reason: 'No established shadow/void/darkness mechanism exists in the character record.' };
-  }
-  if (domain === 'LIGHTNING' && !/(lightning|electric|storm|firebender|avatar)/.test(actorText + ' ' + ownedText)) {
-    return { allowed: false, reason: 'No established lightning-compatible affinity or mechanism exists for this character.' };
-  }
-  if (domain === 'FIRE' && candidate && normalize(candidate.category) === 'magic' && !/(fire|flame|mage|magic|pyromanc|elemental)/.test(actorText + ' ' + ownedText)) {
-    return { allowed: false, reason: 'The character has no established mechanism for magical fire manipulation.' };
-  }
-
-  const mechanismText = actorText + ' ' + ownedText;
-
-  if (domain === 'BIOLOGICAL' || normalize(candidate?.category) === 'biological') {
-    if (!/(venom|toxin|poison|fang|bite|claw|predator|serpent|draconic|insect|beast|mutant|biological)/.test(mechanismText)) {
-      return { allowed: false, reason: 'The character has no established biological mechanism for this technique.' };
-    }
-  }
-
-  if (
-    normalize(candidate?.name).includes('flight') ||
-    normalize(candidate?.name).includes('aerial')
-  ) {
-    if (!/(wing|flight|flying|levitat|aerial|airbender|flying shoes|winged|feather)/.test(mechanismText)) {
-      return { allowed: false, reason: 'The character has no established flight mechanism, equipment, or compatible progression basis.' };
-    }
-  }
-
-  if (domain === 'MAGIC' && normalize(candidate?.category) === 'magic' &&
-      !/(magic|spell|sorcer|wizard|mage|mana|arcane|caster|warlock|cleric|ritual|bending)/.test(mechanismText)) {
-    return { allowed: false, reason: 'The character has no established magic or spellcasting mechanism for this technique.' };
-  }
-
-  if (domain === 'SPATIAL_TRANSIT' && !/(teleport|blink|spatial|dimensional|shadow step|shadow pathway|portal)/.test(actorText + ' ' + ownedText)) {
-    return { allowed: false, reason: 'The character has no established spatial-transit mechanism.' };
-  }
-
-  if (candidateText && ownedText && candidateText.split(/\s+/).some((token) => token.length > 5 && ownedText.includes(token))) {
-    return { allowed: true };
-  }
-
-  // A novel physical technique may remain learnable through normal progression when
-  // it does not demand a new supernatural mechanism.
-  if (domain === 'PHYSICAL') return { allowed: true };
-
-  return { allowed: true };
-}
-
-function estimateCost(candidate: CapabilityDefinition | undefined, scale: CapabilityDefinition['powerTier']): { energy: number; vessel: number } {
+function hasAny(text: string, terms: string[]): boolean {\n  const normalized = normalize(text);\n  return terms.some((term) => normalized.includes(normalize(term)));\n}\n\nfunction worldSystemIsStructured(world: CapabilitySimulationWorld): boolean {\n  return Boolean(\n    (world.canonicalCapabilities || []).length ||\n    (world.capabilities || []).length ||\n    (world.worldRules || []).length ||\n    (world.rules || []).length ||\n    (world.powerSystem != null) ||\n    (world.powerSystems || []).length ||\n    (world.metaphysics != null) ||\n    (world.magicSystems || []).length ||\n    (world.forbiddenContradictions || []).length ||\n    (world.ruleConstraints || []).length ||\n    world.magicRules != null\n  );\n}\n\nfunction domainTerms(domain?: string): string[] {\n  const map: Record<string, string[]> = {\n    TEMPORAL: ['time', 'temporal', 'chronomancy', 'time manipulation'],\n    DIMENSIONAL: ['dimension', 'dimensional', 'reality', 'realm', 'world split', 'tear reality'],\n    SPATIAL_TRANSIT: ['teleport', 'teleportation', 'blink', 'warp', 'portal', 'spatial travel'],\n    LIGHTNING: ['lightning', 'electricity', 'electric', 'thunderbolt', 'storm'],\n    FIRE: ['fire', 'flame', 'pyromancy', 'fire magic', 'firebending'],\n    WATER: ['water', 'water magic', 'waterbending', 'hydromancy', 'ice', 'frost'],\n    EARTH: ['earth magic', 'earthbending', 'geomancy', 'stone magic', 'seismic'],\n    AIR: ['air magic', 'airbending', 'aeromancy', 'wind magic'],\n    SHADOW: ['shadow', 'darkness', 'void', 'umbral', 'oblivion'],\n    HEALING: ['healing', 'restoration', 'regeneration', 'rejuvenation', 'healing magic'],\n    MAGIC: ['magic', 'spell', 'spellcasting', 'sorcery', 'arcane', 'mage', 'wizard', 'mana'],\n  };\n  return domain ? map[domain] || [normalize(domain)] : [];\n}\n\nfunction worldAllows(\n  domain: string | undefined,\n  worldText: string,\n  world: CapabilitySimulationWorld,\n  candidate?: CapabilityDefinition,\n): { allowed: boolean; reason?: string } {\n  if (hasExplicitForbidden(worldText, domain)) {\n    return { allowed: false, reason: 'The active world rules explicitly forbid this capability family.' };\n  }\n\n  const canonicalText = normalize([\n    ...(world.canonicalCapabilities || []),\n    ...(world.capabilities || []),\n  ].map(flattenText).join(' '));\n\n  if (candidate && canonicalText.includes(normalize(candidate.name))) {\n    return { allowed: true };\n  }\n\n  if (isBendingWorld(worldText)) {\n    if (domain === 'SPATIAL_TRANSIT' || domain === 'DIMENSIONAL' || domain === 'TEMPORAL' || domain === 'MAGIC') {\n      return {\n        allowed: false,\n        reason: 'This world is governed by an elemental-bending power system and has no canonical mechanism for this capability family; the requested skill cannot be created in the current world.',\n      };\n    }\n    if (domain === 'LIGHTNING' && !hasAny(canonicalText, domainTerms('LIGHTNING'))) {\n      return { allowed: true };\n    }\n  }\n\n  if (domain === 'MAGIC' && /\b(no magic|magic does not exist|non-magical world|mundane world|no spellcasting)\b/.test(worldText)) {\n    return {\n      allowed: false,\n      reason: 'The active world does not contain a usable magic/spellcasting system; this skill or spell cannot be created here.',\n    };\n  }\n\n  if (domain === 'PHYSICAL' || !domain) return { allowed: true };\n\n  const terms = domainTerms(domain);\n  const explicitDomainSupport = hasAny(worldText, terms) || hasAny(canonicalText, terms);\n  const broadMagicSupport = /\b(magic|spellcasting|sorcery|arcane|mana|wizard|mage|caster)\b/.test(worldText);\n  const dndMagicSupport = world.dndRulesMode === 'FULL_DND' || world.rulesetId === 'DND_5E';\n\n  if (domain === 'MAGIC') {\n    if (explicitDomainSupport || dndMagicSupport) return { allowed: true };\n  } else if (explicitDomainSupport || (broadMagicSupport && ['FIRE', 'WATER', 'EARTH', 'AIR', 'LIGHTNING', 'HEALING', 'SHADOW'].includes(domain))) {\n    return { allowed: true };\n  }\n\n  if (worldSystemIsStructured(world)) {\n    return {\n      allowed: false,\n      reason: 'The active world has an authored power system, but no canonical mechanism for this capability family; the requested skill cannot be created in the current world.',\n    };\n  }\n\n  return { allowed: true };\n}\n\nfunction characterAllows(\n  domain: string | undefined,\n  characterText: string,\n  worldText: string,\n  ownedCapabilities: CapabilityDefinition[],\n  candidate?: CapabilityDefinition,\n): { allowed: boolean; reason?: string; alternate?: string } {\n  if (!domain || domain === 'PHYSICAL') return { allowed: true };\n\n  const actorText = normalize(characterText);\n  const ownedText = normalize(ownedCapabilities.map((cap) => `${cap.name} ${cap.description} ${cap.provenance}`).join(' '));\n  const candidateText = normalize(candidate ? `${candidate.name} ${candidate.description} ${candidate.provenance} ${(candidate.restrictions || []).join(' ')}` : '');\n  const mechanismText = actorText + ' ' + ownedText + ' ' + candidateText;\n\n  if (isBendingWorld(worldText)) {\n    const isAvatar = /\bavatar\b/.test(actorText);\n    const domains = new Set<string>();\n    if (isAvatar) ['EARTH', 'WATER', 'FIRE', 'AIR', 'LIGHTNING'].forEach((entry) => domains.add(entry));\n    if (/\bearthbender\b|\bearth bending\b/.test(actorText)) domains.add('EARTH');\n    if (/\bwaterbender\b|\bwater bending\b/.test(actorText)) domains.add('WATER');\n    if (/\bfirebender\b|\bfire bending\b/.test(actorText)) {\n      domains.add('FIRE');\n      domains.add('LIGHTNING');\n    }\n    if (/\bairbender\b|\bair bending\b/.test(actorText)) domains.add('AIR');\n\n    if (domains.has(domain)) return { allowed: true };\n\n    if (domain === 'LIGHTNING') {\n      return {\n        allowed: false,\n        reason: 'The character has no firebending or Avatar-level basis for lightning generation; the requested lightning technique cannot be learned by this character.',\n        alternate: domains.has('EARTH') ? 'Develop a higher-order earthbending technique instead.' : undefined,\n      };\n    }\n    if (['EARTH', 'WATER', 'FIRE', 'AIR'].includes(domain)) {\n      return { allowed: false, reason: `The character is not established as a ${domain.toLowerCase()}-bender, so this technique cannot be created for the character.` };\n    }\n    if (domain === 'HEALING' && !domains.has('WATER')) {\n      return { allowed: false, reason: 'In this bending world, the established healing mechanism requires a waterbending basis.' };\n    }\n    return { allowed: false, reason: 'The character has no compatible mechanism within this world’s bending system.' };\n  }\n\n  if (candidate?.restrictions?.length) {\n    const missing = candidate.restrictions.filter((restriction) => !actorText.includes(normalize(restriction)));\n    if (missing.length) {\n      return { allowed: false, reason: `The character lacks the required established trait/domain: ${missing.join(', ')}.` };\n    }\n  }\n\n  const hasExplicitMechanism = (terms: string[]) => hasAny(mechanismText, terms);\n  if (domain === 'MAGIC' && !hasExplicitMechanism(domainTerms('MAGIC'))) return { allowed: false, reason: 'The character has no established magic/spellcasting mechanism from which this technique could be learned.' };\n  if (domain === 'TEMPORAL' && !hasExplicitMechanism(domainTerms('TEMPORAL'))) return { allowed: false, reason: 'The character has no established temporal mechanism or prerequisite power for this technique.' };\n  if (domain === 'DIMENSIONAL' && !hasExplicitMechanism(domainTerms('DIMENSIONAL'))) return { allowed: false, reason: 'The character has no established dimensional/reality-manipulation mechanism for this technique.' };\n  if (domain === 'SPATIAL_TRANSIT' && !hasExplicitMechanism(domainTerms('SPATIAL_TRANSIT'))) return { allowed: false, reason: 'The character has no established spatial-transit mechanism such as teleportation, portals, or an equivalent existing technique.' };\n  if (domain === 'LIGHTNING' && !hasExplicitMechanism(domainTerms('LIGHTNING')) && !/\b(firebender|avatar)\b/.test(mechanismText)) return { allowed: false, reason: 'The character has no established lightning-compatible affinity or mechanism.' };\n  if (domain === 'FIRE' && !hasExplicitMechanism(['fire', 'flame', 'pyromancy', 'fire magic', 'firebender'])) return { allowed: false, reason: 'The character has no established fire-manipulation mechanism for this technique.' };\n  if (domain === 'WATER' && !hasExplicitMechanism(domainTerms('WATER'))) return { allowed: false, reason: 'The character has no established water/ice manipulation mechanism for this technique.' };\n  if (domain === 'EARTH' && !hasExplicitMechanism(domainTerms('EARTH'))) return { allowed: false, reason: 'The character has no established earth/stone manipulation mechanism for this technique.' };\n  if (domain === 'AIR' && !hasExplicitMechanism(domainTerms('AIR'))) return { allowed: false, reason: 'The character has no established air/wind manipulation mechanism for this technique.' };\n  if (domain === 'SHADOW' && !hasExplicitMechanism(domainTerms('SHADOW'))) return { allowed: false, reason: 'The character has no established shadow/void/darkness mechanism for this technique.' };\n  if (domain === 'HEALING' && !hasExplicitMechanism(domainTerms('HEALING')) && !/\b(cleric|paladin|priest|medic|healer|divine|holy)\b/.test(mechanismText)) return { allowed: false, reason: 'The character has no established healing mechanism or compatible progression basis.' };\n\n  const candidateTokens = candidateText.split(/\s+/).filter((token) => token.length > 5);\n  if (candidateTokens.some((token) => ownedText.includes(token))) return { allowed: true };\n  if (hasExplicitMechanism(domainTerms(domain))) return { allowed: true };\n\n  return {\n    allowed: false,\n    reason: 'The character record does not establish a compatible mechanism, affinity, or progression route for this capability.',\n  };\n}\nfunction estimateCost(candidate: CapabilityDefinition | undefined, scale: CapabilityDefinition['powerTier']): { energy: number; vessel: number } {
   if (candidate) {
     return {
       energy: Math.max(0, Number(candidate.baseEnergyCost || 0)),

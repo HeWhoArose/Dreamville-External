@@ -337,3 +337,151 @@ test('manual category routing does not inject global recovery candidates after t
     orchestrator.setCategoryModelOverride('narration', null as any);
   }
 });
+
+
+test('OpenRouter extracts assistant text from structured content-part arrays', async () => {
+  const originalKey = process.env.OPENROUTER_API_KEY;
+  const originalFetch = globalThis.fetch;
+  process.env.OPENROUTER_API_KEY = 'test-openrouter-key';
+
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        model: 'provider/content-parts',
+        choices: [{
+          finish_reason: 'stop',
+          message: {
+            content: [
+              { type: 'output_text', text: 'Part one ' },
+              { type: 'text', text: 'part two' },
+            ],
+          },
+        }],
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    )
+  ) as typeof fetch;
+
+  try {
+    const adapter = new OpenRouterAdapter();
+    const result = await adapter.generate('character.extract', 'Return structured text.', {
+      modelId: 'provider/content-parts',
+    });
+    assert.equal(result.text, 'Part one part two');
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = originalKey;
+  }
+});
+
+test('OpenRouter reports tool-call-only responses distinctly instead of mislabeling them as empty', async () => {
+  const originalKey = process.env.OPENROUTER_API_KEY;
+  const originalFetch = globalThis.fetch;
+  process.env.OPENROUTER_API_KEY = 'test-openrouter-key';
+
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        model: 'provider/tool-only',
+        choices: [{
+          finish_reason: 'tool_calls',
+          message: {
+            content: null,
+            tool_calls: [
+              {
+                id: 'call_1',
+                type: 'function',
+                function: { name: 'lookup', arguments: '{}' },
+              },
+            ],
+          },
+        }],
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    )
+  ) as typeof fetch;
+
+  try {
+    const adapter = new OpenRouterAdapter();
+    await assert.rejects(
+      () => adapter.generate('character.extract', 'Return structured text.', {
+        modelId: 'provider/tool-only',
+      }),
+      /tool call(s).*no assistant text/i
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = originalKey;
+  }
+});
+
+test('OpenRouter reports reasoning-only responses distinctly so the orchestrator can fall back', async () => {
+  const originalKey = process.env.OPENROUTER_API_KEY;
+  const originalFetch = globalThis.fetch;
+  process.env.OPENROUTER_API_KEY = 'test-openrouter-key';
+
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        model: 'provider/reasoning-only',
+        choices: [{
+          finish_reason: 'stop',
+          message: {
+            content: null,
+            reasoning: 'Internal reasoning exists, but there is no final answer.',
+          },
+        }],
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    )
+  ) as typeof fetch;
+
+  try {
+    const adapter = new OpenRouterAdapter();
+    await assert.rejects(
+      () => adapter.generate('character.extract', 'Return structured JSON.', {
+        modelId: 'provider/reasoning-only',
+      }),
+      /reasoning\/thinking data.*no final assistant content/i
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = originalKey;
+  }
+});
+
+test('OpenRouter empty-content diagnostics include returned model, choice count, content shape, and finish reason', async () => {
+  const originalKey = process.env.OPENROUTER_API_KEY;
+  const originalFetch = globalThis.fetch;
+  process.env.OPENROUTER_API_KEY = 'test-openrouter-key';
+
+  globalThis.fetch = (async () =>
+    new Response(
+      JSON.stringify({
+        model: 'provider/empty-content',
+        choices: [{
+          finish_reason: 'length',
+          message: { content: null },
+        }],
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    )
+  ) as typeof fetch;
+
+  try {
+    const adapter = new OpenRouterAdapter();
+    await assert.rejects(
+      () => adapter.generate('character.extract', 'Return structured JSON.', {
+        modelId: 'provider/empty-content',
+      }),
+      /model=provider\/empty-content.*choices=1.*content=null.*finish_reason=length/i
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalKey === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = originalKey;
+  }
+});

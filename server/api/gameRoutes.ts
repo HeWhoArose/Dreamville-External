@@ -271,6 +271,7 @@ gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => 
             storyId,
             actionText,
             intendedCapabilityId,
+            bypassCapabilityAdvisor: true,
           } as any,
           commandId
         );
@@ -326,6 +327,34 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
     }
 
     const storyId = (actionRequest as any).storyId as string;
+    let preflightAdvice: any = null;
+    if (actionRequest.type === 'CUSTOM_ACTION' && !(actionRequest as any).bypassCapabilityAdvisor) {
+      const actionText = String(
+        (actionRequest as any).actionText ||
+        (actionRequest as any).customText ||
+        (actionRequest as any).description ||
+        (actionRequest as any).input ||
+        ''
+      ).trim();
+
+      if (actionText) {
+        preflightAdvice = await storyActionAdvisor.advise(storyId, actionText);
+
+        if (preflightAdvice.mode === 'SUGGEST_ALTERNATIVE') {
+          return res.status(409).json({
+            success: false,
+            code: 'ACTION_ADVICE_CONFIRMATION_REQUIRED',
+            errorReason: 'This action requires a character-compatible capability decision before execution.',
+            advice: preflightAdvice,
+          });
+        }
+
+        if (preflightAdvice.recognizedCapability?.id) {
+          (actionRequest as any).intendedCapabilityId = preflightAdvice.recognizedCapability.id;
+        }
+      }
+    }
+
     const requestedCommandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
@@ -382,6 +411,19 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
         transactionMode: 'ROLLBACK',
       },
       async () => {
+        if (
+          actionRequest.type === 'CUSTOM_ACTION' &&
+          preflightAdvice?.mode === 'AUTO_LEARN_AND_EXECUTE' &&
+          preflightAdvice?.recognizedCapability?.id
+        ) {
+          const capabilityEngine = context.repository.getCapabilityEngine(storyId);
+          capabilityEngine.acquireSkill(actorId, preflightAdvice.recognizedCapability.id, {
+            libraryStatus: 'APPROVED',
+            librarySourceStoryIds: [storyId],
+          });
+          context.repository.persistCapabilityState(storyId);
+        }
+
         const actionResult =
           actionRequest.type === 'CUSTOM_ACTION'
             ? await serverMockAuthority.processCustomAction(actionRequest, requestedCommandId)

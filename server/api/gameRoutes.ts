@@ -238,7 +238,11 @@ gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => 
     }
 
     const player = worldRepository.getPlayerLifecycle(storyId);
-    const actorId = player?.actorId || 'player_actor_' + storyId;
+    const run = worldRepository.getStoryRun(storyId);
+    const actorId =
+      player?.actorId ||
+      run?.protagonist?.characterId ||
+      'player_actor_' + storyId;
     const proposalId = typeof req.body?.proposalId === 'string' ? req.body.proposalId : undefined;
     const pendingProposal = proposalId ? await storyActionAdvisor.validatePendingProposal(storyId, proposalId) : null;
 
@@ -308,11 +312,28 @@ gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => 
         transactionMode: 'ROLLBACK',
       },
       async (_command) => {
-        const capabilityEngine = worldRepository.getCapabilityEngine(storyId);
-        let intendedCapabilityId = recognizedCapabilityId;
+        // Revalidate inside the canonical transaction as well as before entering it.
+        // This closes the stale-proposal window if world rules, progression, or
+        // actor ownership change between the preflight and the commit.
+        const transactionProposal = proposalId
+          ? await storyActionAdvisor.validatePendingProposal(storyId, proposalId)
+          : null;
+        if (!transactionProposal || transactionProposal.requestedAction !== actionText) {
+          return {
+            success: false,
+            data: null,
+            errorReason: 'Capability proposal became stale before canonical commit.',
+            summary: 'Rejected stale capability proposal.',
+          };
+        }
 
-        if (shouldCreateAlternative) {
-          const alternative = approvedAlternative;
+        const capabilityEngine = worldRepository.getCapabilityEngine(storyId);
+        const transactionAlternative = transactionProposal.alternative;
+        const transactionRequestedCapabilityId = transactionProposal.requestedCapabilityId;
+        let intendedCapabilityId = transactionRequestedCapabilityId;
+
+        if (transactionAlternative) {
+          const alternative = transactionAlternative;
           if (!alternative?.id || !alternative?.name) {
             return {
               success: false,

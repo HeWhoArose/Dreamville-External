@@ -90,16 +90,10 @@ function inferDirectCompatibility(
 	const actorText = actorNarrativeText(run);
 	const role = normalize(run?.protagonist?.role?.archetype || run?.protagonist?.role?.profession);
 	const capabilityText = normalize(capability.name + ' ' + capability.description);
-	const classModule = progressionState?.classId
-		? run?.storyId
-			? undefined
-			: undefined
-		: undefined;
 	const classId = normalize(
 		progressionState?.classId ||
 		run?.progression?.classId ||
-		run?.protagonist?.progression?.classId ||
-		classModule
+		run?.protagonist?.progression?.classId
 	);
 
 	if (

@@ -502,6 +502,7 @@ export type ActionRequest =
       customText?: string;
       description?: string;
       input?: string;
+      intendedCapabilityId?: string;
     };
 
 /**

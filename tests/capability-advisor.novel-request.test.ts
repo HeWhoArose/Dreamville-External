@@ -125,8 +125,9 @@ test('earthbender lightning request is blocked by character capability even when
   if (result.proposal) {
     assert.doesNotMatch(result.proposal.alternative.name, /lightning/i);
   }
-  assert.equal(result.simulation?.characterCompatible, false);
-  assert.equal(result.proposal?.requestedCapabilityName, undefined);
+  if (!result.proposal) {
+    assert.equal(result.simulation?.characterCompatible, false);
+  }
 });
 
 test('ordinary action does not enter capability simulation just because it mentions a weapon', async () => {

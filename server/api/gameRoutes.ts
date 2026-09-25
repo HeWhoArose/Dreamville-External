@@ -136,7 +136,25 @@ gameRouter.get('/state', (req: Request, res: Response) => {
 gameRouter.get('/action/tips', async (req: Request, res: Response) => {
   try {
     const storyId = resolveStoryId(req, true);
-    const tips = await storyActionAdvisor.getTipsForAction(storyId, '');
+    const sceneState = serverMockAuthority.getSanitizedViewState(storyId);
+    const tips = await storyActionAdvisor.getTipsForAction(storyId, '', {
+      worldTime: sceneState.worldTime
+        ? `${sceneState.worldTime.period}, Day ${sceneState.worldTime.cycle}, ${sceneState.worldTime.era}`
+        : undefined,
+      locationName: sceneState.activeLocation?.name,
+      locationRegion: sceneState.activeLocation?.region,
+      locationDescription: sceneState.activeLocation?.description,
+      openingNarrative: sceneState.openingScene?.narrativeText,
+      startingSituation: sceneState.openingScene?.startingSituation,
+      activeDialogue: sceneState.activeDialogue
+        ? `${sceneState.activeDialogue.speakerName || sceneState.activeDialogue.speakerId || 'Speaker'}: ${sceneState.activeDialogue.text || ''}`
+        : undefined,
+      recentActions: Array.isArray(sceneState.actionHistory)
+        ? sceneState.actionHistory.slice(0, 4).map((action: any) =>
+            action.narrativeResponse || action.description || ''
+          ).filter(Boolean)
+        : [],
+    });
     return res.json({
       success: true,
       storyId,
@@ -167,7 +185,25 @@ gameRouter.post('/action/advice', async (req: Request, res: Response) => {
       });
     }
 
-    const advice = await storyActionAdvisor.advise(storyId, actionText);
+    const sceneState = serverMockAuthority.getSanitizedViewState(storyId);
+    const advice = await storyActionAdvisor.advise(storyId, actionText, {
+      worldTime: sceneState.worldTime
+        ? `${sceneState.worldTime.period}, Day ${sceneState.worldTime.cycle}, ${sceneState.worldTime.era}`
+        : undefined,
+      locationName: sceneState.activeLocation?.name,
+      locationRegion: sceneState.activeLocation?.region,
+      locationDescription: sceneState.activeLocation?.description,
+      openingNarrative: sceneState.openingScene?.narrativeText,
+      startingSituation: sceneState.openingScene?.startingSituation,
+      activeDialogue: sceneState.activeDialogue
+        ? `${sceneState.activeDialogue.speakerName || sceneState.activeDialogue.speakerId || 'Speaker'}: ${sceneState.activeDialogue.text || ''}`
+        : undefined,
+      recentActions: Array.isArray(sceneState.actionHistory)
+        ? sceneState.actionHistory.slice(0, 4).map((action: any) =>
+            action.narrativeResponse || action.description || ''
+          ).filter(Boolean)
+        : [],
+    });
     return res.json({
       success: true,
       storyId,

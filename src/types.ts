@@ -345,7 +345,8 @@ export interface ActionCapabilityProposal {
 }
 
 export interface ActionAdvice {
-  mode: 'EXECUTE_EXISTING' | 'AUTO_LEARN_AND_EXECUTE' | 'CAPABILITY_SIMULATION' | 'SUGGEST_ALTERNATIVE' | 'NORMAL_ACTION';
+  /** Player-facing action state. New capabilities are never silently learned. */
+  mode: 'EXECUTE_EXISTING' | 'CAPABILITY_SIMULATION' | 'SUGGEST_ALTERNATIVE' | 'NORMAL_ACTION';
   actionText: string;
   actorId: string;
   tips: ActionTip[];

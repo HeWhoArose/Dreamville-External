@@ -473,7 +473,7 @@ Rules:
       try {
         const orchestrator = worldRepository.getAiOrchestrator();
         const response = await orchestrator.executeTaskGeneration(
-          'narrative.generate',
+          'character.extract',
           prompt,
           'Return only the requested Character Genesis JSON. Treat the player concept as authoritative input; do not overwrite preserved user fields.',
           {

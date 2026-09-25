@@ -39,3 +39,23 @@ test('simulation results remain internal metadata rather than DAG/adjudication p
   assert.doesNotMatch(story, /Capability DAG & Derived Skills/);
   assert.doesNotMatch(story, /Adjudication Outcome/);
 });
+
+
+test('freeform player actions remain the only content in Recent Actions history', () => {
+  const authority = read('server/mockEngine/serverMockAuthority.ts');
+  const recent = read('src/components/RecentActionsView.tsx');
+  assert.match(authority, /actionType: 'CUSTOM_ACTION'/);
+  assert.match(recent, /action\.actionType !== 'NOTE_RECORD'/);
+  assert.match(recent, /action\.description/);
+  assert.doesNotMatch(recent, /action\.narrativeResponse|action\.checkResult|action\.authoritativeFeedback/);
+});
+
+test('capability advisor bypass is server-internal only', () => {
+  const routes = read('server/api/gameRoutes.ts');
+  const authority = read('server/mockEngine/serverMockAuthority.ts');
+  assert.match(authority, /options\?: \{ bypassCapabilityAdvisor\?: boolean \}/);
+  assert.match(authority, /options\?\.bypassCapabilityAdvisor/);
+  assert.doesNotMatch(authority, /Boolean\(\(request as any\)\.bypassCapabilityAdvisor\)/);
+  assert.match(routes, /delete \(actionRequest as any\)\.bypassCapabilityAdvisor/);
+  assert.match(routes, /bypassCapabilityAdvisor: true/);
+});

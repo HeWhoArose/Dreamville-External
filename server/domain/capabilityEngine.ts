@@ -484,12 +484,9 @@ export class CapabilityEngine {
     const instanceMap = new Map<string, SkillInstance>();
     const learnedSet = new Set<string>();
 
-    const starterCaps = options?.starterCapabilities || [
-      'cap_venomous_bite',
-      'cap_shadow_step',
-      'cap_fireball',
-      'cap_analyze',
-    ];
+    // World capability definitions are never implicitly learned by the actor.
+    // Character ownership must be supplied explicitly by confirmed character/progression state.
+    const starterCaps = options?.starterCapabilities ?? [];
     for (const capId of starterCaps) {
       if (this.capabilities.has(capId)) {
         const instance: SkillInstance = {

@@ -1,5 +1,5 @@
 
-import { deterministicId } from './deterministicRng';
+import { deterministicId } from '../domain/deterministicRng';
 import type {
 	CapabilityDefinition,
 	EffectiveCapability,

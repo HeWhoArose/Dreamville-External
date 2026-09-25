@@ -11,6 +11,9 @@ import { DashboardView, StorySummary } from './components/dashboard/DashboardVie
 import { StoryLibraryView } from './components/library/StoryLibraryView';
 import { AudioHapticProvider } from './components/AudioHapticManager';
 import { SensoryEventProcessor } from './components/SensoryEventProcessor';
+import { StoryCodexView } from './components/StoryCodexView';
+import { StoryEvidenceView } from './components/StoryEvidenceView';
+import { StoryRelationshipsView } from './components/StoryRelationshipsView';
 
 // Domain views
 import { StoryView } from './components/StoryView';
@@ -650,6 +653,26 @@ export const App: React.FC = () => {
 
       {currentRoute === 'play.world-systems' && (
         <Phase8WorldWorkbench storyId={activeStoryId} />
+      )}
+
+      {currentRoute === 'play.codex' && viewState && (
+        <StoryCodexView
+          locations={viewState.locations}
+          activeLocationId={viewState.activeLocationId}
+          knowledgeBase={viewState.knowledgeBase}
+          worldName={activeStorySummary?.worldName}
+        />
+      )}
+
+      {currentRoute === 'play.evidence' && viewState && (
+        <StoryEvidenceView knowledgeBase={viewState.knowledgeBase} />
+      )}
+
+      {currentRoute === 'play.relationships' && viewState && (
+        <StoryRelationshipsView
+          characters={viewState.characters}
+          relationships={phase8Projection?.relationships || []}
+        />
       )}
 
       {currentRoute === 'play.chronicle' && viewState && (

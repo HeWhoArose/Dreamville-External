@@ -616,7 +616,8 @@ export const App: React.FC = () => {
 
       {currentRoute === 'play.world' && viewState && (
         <WorldView
-          worldName={activeStorySummary?.worldName || 'Current World'}
+          worldName={worldTemplates.find((world) => world.worldId === viewState.worldId)?.title || activeStorySummary?.worldName || 'Current World'}
+          worldId={viewState.worldId}
           characters={viewState.characters}
           activeLocationId={viewState.activeLocationId}
           locations={viewState.locations}

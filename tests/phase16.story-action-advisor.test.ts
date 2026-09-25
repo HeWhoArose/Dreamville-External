@@ -78,6 +78,21 @@ test('Phase 16 action advisor: compatible unlearned capability is proposed as au
 	assert.equal(advice.canExecuteNow, false);
 });
 
+test('Phase 16 action advisor: ordinary Mage compatibility is not confused with Dark Mage incompatibility', async () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'phase16_advisor_mage';
+	seedRun(repository, storyId, 'Mage');
+
+	const fireball = fireballCapability();
+	repository.getCapabilityEngine(storyId).registerCapability(fireball);
+
+	const advisor = new StoryActionAdvisor(repository);
+	const advice = await advisor.advise(storyId, 'I cast Training Fireball');
+
+	assert.equal(advice.mode, 'AUTO_LEARN_AND_EXECUTE');
+	assert.equal(advice.recognizedCapability?.id, 'cap_fireball_test');
+});
+
 test('Phase 16 action advisor: incompatible Fireball request from a Dark Mage produces a non-canonical alternative proposal', async () => {
 	const repository = new InMemoryWorldRepository({ disablePersistence: true });
 	const storyId = 'phase16_advisor_dark_mage';

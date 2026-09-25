@@ -411,9 +411,9 @@ function characterAllows(
 
   const hasExplicitMechanism = (terms: string[]) => hasAny(mechanismText, terms);
   if (domain === 'MAGIC' && !hasExplicitMechanism(domainTerms('MAGIC')) && !isGenericMagicUser) return { allowed: false, reason: 'The character has no established magic/spellcasting mechanism from which this technique could be learned.' };
-  if (domain === 'TEMPORAL' && !hasExplicitMechanism(domainTerms('TEMPORAL'))) return { allowed: false, reason: 'The character has no established temporal mechanism or prerequisite power for this technique.' };
-  if (domain === 'DIMENSIONAL' && !hasExplicitMechanism(domainTerms('DIMENSIONAL'))) return { allowed: false, reason: 'The character has no established dimensional/reality-manipulation mechanism for this technique.' };
-  if (domain === 'SPATIAL_TRANSIT' && !hasExplicitMechanism(domainTerms('SPATIAL_TRANSIT'))) return { allowed: false, reason: 'The character has no established spatial-transit mechanism such as teleportation, portals, or an equivalent existing technique.' };
+  if (domain === 'TEMPORAL' && !hasExplicitMechanism(domainTerms('TEMPORAL')) && !isGenericMagicUser) return { allowed: false, reason: 'The character has no established temporal mechanism or prerequisite power for this technique.' };
+  if (domain === 'DIMENSIONAL' && !hasExplicitMechanism(domainTerms('DIMENSIONAL')) && !isGenericMagicUser) return { allowed: false, reason: 'The character has no established dimensional/reality-manipulation mechanism for this technique.' };
+  if (domain === 'SPATIAL_TRANSIT' && !hasExplicitMechanism(domainTerms('SPATIAL_TRANSIT')) && !isGenericMagicUser) return { allowed: false, reason: 'The character has no established spatial-transit mechanism such as teleportation, portals, or an equivalent existing technique.' };
   if (domain === 'LIGHTNING' && !hasExplicitMechanism(domainTerms('LIGHTNING')) && !/\b(firebender|avatar)\b/.test(mechanismText) && !isGenericMagicUser) return { allowed: false, reason: 'The character has no established lightning-compatible affinity or mechanism.' };
   if (domain === 'FIRE' && !hasExplicitMechanism(['fire', 'flame', 'pyromancy', 'fire magic', 'firebender'])) {
     if (!isGenericMagicUser || isDarkMagicSpecialist) {

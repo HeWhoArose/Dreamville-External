@@ -268,7 +268,7 @@ gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => 
         source: 'PLAYER',
         transactionMode: 'ROLLBACK',
       },
-      async (_command, context) => {
+      async (_command) => {
         const capabilityEngine = worldRepository.getCapabilityEngine(storyId);
         let intendedCapabilityId = recognizedCapabilityId;
 

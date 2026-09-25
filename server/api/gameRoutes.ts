@@ -453,7 +453,7 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
 
         // The request has already been preflighted here. Skip repeating the
         // advisor inside ServerMockAuthority while preserving capability execution.
-        (actionRequest as any).bypassCapabilityAdvisor = true;
+
       }
     }
 
@@ -515,7 +515,11 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
       async () => {
         const actionResult =
           actionRequest.type === 'CUSTOM_ACTION'
-            ? await serverMockAuthority.processCustomAction(actionRequest, requestedCommandId)
+            ? await serverMockAuthority.processCustomAction(
+                actionRequest,
+                requestedCommandId,
+                { bypassCapabilityAdvisor: true }
+              )
             : serverMockAuthority.processAction(actionRequest, requestedCommandId);
         return {
           success: true,

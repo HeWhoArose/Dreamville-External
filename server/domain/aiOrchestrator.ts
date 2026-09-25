@@ -1527,20 +1527,79 @@ Do not enclose in markdown ticks, output pure JSON.`;
     }
 
     // Deterministic mock generation for offline/sandbox runtime
-    const text = JSON.stringify({
-      narrative: [
-        'The prismatic lenses align with celestial geometry, casting refracted amber rays across the chamber floor.',
-      ],
-      dialogue: [
-        { speaker: 'Scribe Vael', text: 'The astral alignment matches the parchment records from Cycle 3.' },
-      ],
-      events: ['CELESTIAL_ALIGNMENT_OBSERVED'],
-      stateChanges: [
-        { kind: 'ALIGNMENT', targetId: 'ev_celestial_alignment', value: 'Observed prismatic celestial alignment' },
-      ],
-      memoryCandidates: ['The prismatic lenses aligned with the third astral ring.'],
-      audioCues: ['glass_harmonic', 'brass_gear_click'],
-    });
+    let text: string;
+    if (task === 'character.extract' || prompt.includes('Character Genesis') || prompt.includes('CharacterGenesisDraft')) {
+      text = JSON.stringify({
+        identity: {
+          name: 'Vanguard Traveler',
+          species: 'Human',
+          age: 24,
+          gender: 'Unspecified',
+        },
+        appearance: {
+          physicalDescription: 'A resolute traveler prepared for uncharted terrain, bearing weathered garments and disciplined posture.',
+          distinguishingTraits: ['Intense focused gaze', 'Practical traveler gear'],
+        },
+        personality: {
+          traits: ['Pragmatic', 'Vigilant'],
+          temperament: 'Calm under pressure',
+          values: ['Survival', 'Truth', 'Independence'],
+          fears: ['Loss of agency'],
+          desires: ['Mastery and understanding of anomalies'],
+          dialogueStyle: 'Measured and concise',
+        },
+        background: {
+          origin: 'Threshold borderlands',
+          history: 'Traversed anomalous crossings to reach the current frontier.',
+          socialClass: 'Wanderer',
+          formerOccupations: ['Scout'],
+        },
+        role: {
+          profession: 'Scout',
+          archetype: 'Wanderer',
+          specialization: 'Survival',
+        },
+        startingEquipment: {
+          mainHand: { id: 'item_blade', name: 'Field Blade', type: 'WEAPON', damageFormula: '1d6' },
+          body: { id: 'item_garb', name: 'Reinforced Traveler Garb', type: 'ARMOR' },
+          pack: [{ id: 'item_supplies', name: 'Survival Provisions', quantity: 3 }],
+        },
+        startingLocation: {
+          locationId: 'loc_threshold',
+          name: 'Border Threshold',
+          region: 'Outer Reach',
+          description: 'An ancient crossing where newcomers find their footing.',
+        },
+        startingSituation: {
+          summary: 'Arriving at an unfamiliar threshold seeking purpose.',
+          hook: 'A strange resonance marks the area.',
+          initialConditions: 'Alert and watchful of immediate surroundings.',
+          whyHereNow: 'Driven by necessity to explore this world.',
+        },
+        capabilities: [],
+        aiExtractionSummary: {
+          interpretation: 'AI-assisted character draft.',
+          keyFacts: ['Extracted via selected AI model.'],
+          proposedHighlights: ['Balanced starting baseline.'],
+          uncertainties: [],
+        },
+      });
+    } else {
+      text = JSON.stringify({
+        narrative: [
+          'The prismatic lenses align with celestial geometry, casting refracted amber rays across the chamber floor.',
+        ],
+        dialogue: [
+          { speaker: 'Scribe Vael', text: 'The astral alignment matches the parchment records from Cycle 3.' },
+        ],
+        events: ['CELESTIAL_ALIGNMENT_OBSERVED'],
+        stateChanges: [
+          { kind: 'ALIGNMENT', targetId: 'ev_celestial_alignment', value: 'Observed prismatic celestial alignment' },
+        ],
+        memoryCandidates: ['The prismatic lenses aligned with the third astral ring.'],
+        audioCues: ['glass_harmonic', 'brass_gear_click'],
+      });
+    }
 
     return {
       text,

@@ -725,7 +725,14 @@ export const App: React.FC = () => {
               recentStories={storyLibraryStories}
               curatedWorlds={worldTemplates}
               isLoading={!viewState}
-              onResumeStory={() => setCurrentRoute('play.story')}
+              onResumeStory={(runId) => {
+                const story = storyLibraryStories.find((entry) => entry.runId === runId || entry.storyId === runId);
+                const storyId = story?.storyId || runId;
+                apiClient.setActiveStoryId(storyId);
+                setActiveStoryId(storyId);
+                setCurrentRoute('play.story');
+                initializeApp(storyId);
+              }}
               onNewStory={() => setCurrentRoute('create')}
               onExploreWorlds={() => setIsWorldLibraryModalOpen(true)}
               onOpenLibrary={() => setCurrentRoute('story-library')}

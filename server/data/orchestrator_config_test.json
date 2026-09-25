@@ -1,10 +1,18 @@
 {
   "pins": {
     "narrative.generate": "provider_primary_failing::primary-fail-m1",
+    "world.generate": "google_gemini::gemini-3.5-flash",
     "character.dialogue": "google_gemini::gemini-3.5-flash",
     "story.advice": "google_gemini::gemini-3.5-flash",
     "memory.extract": "google_gemini::gemini-3.5-flash",
     "character.capability.propose": "google_gemini::gemini-3.5-flash",
+    "intent.interpret": "google_gemini::gemini-3.5-flash-lite",
+    "capability.synthesize": "google_gemini::gemini-3.5-flash",
+    "capability.explain": "google_gemini::gemini-3.5-flash-lite",
+    "research.query": "google_gemini::gemini-3.5-flash",
+    "research.world-brief": "google_gemini::gemini-3.5-flash",
+    "rules.analyze": "google_gemini::gemini-3.5-flash",
+    "tactical.reason": "google_gemini::gemini-3.5-flash",
     "summary.scene": "google_gemini::gemini-3.5-flash",
     "rules.adjudicate": "google_gemini::gemini-3.5-flash",
     "utility.inspect": "google_gemini::gemini-3.5-flash",
@@ -17,13 +25,13 @@
       "provider_secondary_failing::secondary-fail-m2",
       "provider_tertiary_success::tertiary-success-m3"
     ],
-    "story.advice": [
+    "character.dialogue": [
       "google_gemini::gemini-3.5-flash",
       "google_gemini::gemini-3.8-flash",
       "google_gemini::gemini-3.5-flash-lite",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
-    "character.dialogue": [
+    "character.extract": [
       "google_gemini::gemini-3.5-flash",
       "google_gemini::gemini-3.8-flash",
       "google_gemini::gemini-3.5-flash-lite",
@@ -41,13 +49,79 @@
       "google_gemini::gemini-3.5-flash-lite",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
-    "summary.scene": [
+    "story.advice": [
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
+      "provider_deterministic_emergency::emergency-fallback-local"
+    ],
+    "intent.interpret": [
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
+      "provider_deterministic_emergency::emergency-fallback-local"
+    ],
+    "capability.synthesize": [
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
+      "provider_deterministic_emergency::emergency-fallback-local"
+    ],
+    "capability.explain": [
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
+      "provider_deterministic_emergency::emergency-fallback-local"
+    ],
+    "research.query": [
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
+      "provider_deterministic_emergency::emergency-fallback-local"
+    ],
+    "research.world-brief": [
       "google_gemini::gemini-3.5-flash",
       "google_gemini::gemini-3.8-flash",
       "google_gemini::gemini-3.5-flash-lite",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "rules.adjudicate": [
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
+      "provider_deterministic_emergency::emergency-fallback-local"
+    ],
+    "rules.analyze": [
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
+      "provider_deterministic_emergency::emergency-fallback-local"
+    ],
+    "summary.scene": [
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
+      "provider_deterministic_emergency::emergency-fallback-local"
+    ],
+    "combat.tactics": [
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
+      "provider_deterministic_emergency::emergency-fallback-local"
+    ],
+    "tactical.reason": [
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
+      "provider_deterministic_emergency::emergency-fallback-local"
+    ],
+    "combat.animation.plan": [
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
+      "provider_deterministic_emergency::emergency-fallback-local"
+    ],
+    "narrative.review": [
       "google_gemini::gemini-3.5-flash",
       "google_gemini::gemini-3.8-flash",
       "google_gemini::gemini-3.5-flash-lite",
@@ -88,7 +162,18 @@
         "utility.inspect",
         "character.extract",
         "story.advice",
-        "character.capability.propose"
+        "character.capability.propose",
+        "world.generate",
+        "intent.interpret",
+        "capability.synthesize",
+        "capability.explain",
+        "research.query",
+        "research.world-brief",
+        "rules.analyze",
+        "combat.tactics",
+        "tactical.reason",
+        "combat.animation.plan",
+        "narrative.review"
       ],
       "fallbackEligibility": true,
       "accessStatus": "not_configured",
@@ -120,7 +205,18 @@
         "utility.inspect",
         "character.extract",
         "story.advice",
-        "character.capability.propose"
+        "character.capability.propose",
+        "world.generate",
+        "intent.interpret",
+        "capability.synthesize",
+        "capability.explain",
+        "research.query",
+        "research.world-brief",
+        "rules.analyze",
+        "combat.tactics",
+        "tactical.reason",
+        "combat.animation.plan",
+        "narrative.review"
       ],
       "fallbackEligibility": true,
       "accessStatus": "not_configured",
@@ -152,7 +248,18 @@
         "utility.inspect",
         "character.extract",
         "story.advice",
-        "character.capability.propose"
+        "character.capability.propose",
+        "world.generate",
+        "intent.interpret",
+        "capability.synthesize",
+        "capability.explain",
+        "research.query",
+        "research.world-brief",
+        "rules.analyze",
+        "combat.tactics",
+        "tactical.reason",
+        "combat.animation.plan",
+        "narrative.review"
       ],
       "fallbackEligibility": true,
       "accessStatus": "not_configured",
@@ -184,7 +291,18 @@
         "utility.inspect",
         "character.extract",
         "story.advice",
-        "character.capability.propose"
+        "character.capability.propose",
+        "world.generate",
+        "intent.interpret",
+        "capability.synthesize",
+        "capability.explain",
+        "research.query",
+        "research.world-brief",
+        "rules.analyze",
+        "combat.tactics",
+        "tactical.reason",
+        "combat.animation.plan",
+        "narrative.review"
       ],
       "fallbackEligibility": true,
       "accessStatus": "not_configured",
@@ -216,7 +334,18 @@
         "utility.inspect",
         "character.extract",
         "story.advice",
-        "character.capability.propose"
+        "character.capability.propose",
+        "world.generate",
+        "intent.interpret",
+        "capability.synthesize",
+        "capability.explain",
+        "research.query",
+        "research.world-brief",
+        "rules.analyze",
+        "combat.tactics",
+        "tactical.reason",
+        "combat.animation.plan",
+        "narrative.review"
       ],
       "fallbackEligibility": true,
       "accessStatus": "not_configured",
@@ -248,7 +377,18 @@
         "utility.inspect",
         "character.extract",
         "story.advice",
-        "character.capability.propose"
+        "character.capability.propose",
+        "world.generate",
+        "intent.interpret",
+        "capability.synthesize",
+        "capability.explain",
+        "research.query",
+        "research.world-brief",
+        "rules.analyze",
+        "combat.tactics",
+        "tactical.reason",
+        "combat.animation.plan",
+        "narrative.review"
       ],
       "fallbackEligibility": true,
       "accessStatus": "not_configured",
@@ -280,7 +420,18 @@
         "utility.inspect",
         "character.extract",
         "story.advice",
-        "character.capability.propose"
+        "character.capability.propose",
+        "world.generate",
+        "intent.interpret",
+        "capability.synthesize",
+        "capability.explain",
+        "research.query",
+        "research.world-brief",
+        "rules.analyze",
+        "combat.tactics",
+        "tactical.reason",
+        "combat.animation.plan",
+        "narrative.review"
       ],
       "fallbackEligibility": true,
       "accessStatus": "not_configured",
@@ -312,7 +463,18 @@
         "utility.inspect",
         "character.extract",
         "story.advice",
-        "character.capability.propose"
+        "character.capability.propose",
+        "world.generate",
+        "intent.interpret",
+        "capability.synthesize",
+        "capability.explain",
+        "research.query",
+        "research.world-brief",
+        "rules.analyze",
+        "combat.tactics",
+        "tactical.reason",
+        "combat.animation.plan",
+        "narrative.review"
       ],
       "fallbackEligibility": true,
       "accessStatus": "not_configured",
@@ -344,7 +506,18 @@
         "utility.inspect",
         "character.extract",
         "story.advice",
-        "character.capability.propose"
+        "character.capability.propose",
+        "world.generate",
+        "intent.interpret",
+        "capability.synthesize",
+        "capability.explain",
+        "research.query",
+        "research.world-brief",
+        "rules.analyze",
+        "combat.tactics",
+        "tactical.reason",
+        "combat.animation.plan",
+        "narrative.review"
       ],
       "fallbackEligibility": true,
       "accessStatus": "not_configured",
@@ -376,7 +549,18 @@
         "utility.inspect",
         "character.extract",
         "story.advice",
-        "character.capability.propose"
+        "character.capability.propose",
+        "world.generate",
+        "intent.interpret",
+        "capability.synthesize",
+        "capability.explain",
+        "research.query",
+        "research.world-brief",
+        "rules.analyze",
+        "combat.tactics",
+        "tactical.reason",
+        "combat.animation.plan",
+        "narrative.review"
       ],
       "fallbackEligibility": true,
       "accessStatus": "not_configured",
@@ -408,7 +592,18 @@
         "utility.inspect",
         "character.extract",
         "story.advice",
-        "character.capability.propose"
+        "character.capability.propose",
+        "world.generate",
+        "intent.interpret",
+        "capability.synthesize",
+        "capability.explain",
+        "research.query",
+        "research.world-brief",
+        "rules.analyze",
+        "combat.tactics",
+        "tactical.reason",
+        "combat.animation.plan",
+        "narrative.review"
       ],
       "fallbackEligibility": true,
       "accessStatus": "not_configured",
@@ -432,7 +627,24 @@
       "roleEligibility": [
         "narrative.generate",
         "character.dialogue",
-        "story.advice"
+        "story.advice",
+        "world.generate",
+        "character.extract",
+        "memory.extract",
+        "character.capability.propose",
+        "intent.interpret",
+        "capability.synthesize",
+        "capability.explain",
+        "research.query",
+        "research.world-brief",
+        "rules.adjudicate",
+        "rules.analyze",
+        "summary.scene",
+        "combat.tactics",
+        "tactical.reason",
+        "combat.animation.plan",
+        "narrative.review",
+        "utility.inspect"
       ],
       "accessStatus": "not_configured",
       "lifecycleState": "active",
@@ -455,7 +667,24 @@
       "roleEligibility": [
         "narrative.generate",
         "summary.scene",
-        "story.advice"
+        "story.advice",
+        "world.generate",
+        "character.dialogue",
+        "character.extract",
+        "memory.extract",
+        "character.capability.propose",
+        "intent.interpret",
+        "capability.synthesize",
+        "capability.explain",
+        "research.query",
+        "research.world-brief",
+        "rules.adjudicate",
+        "rules.analyze",
+        "combat.tactics",
+        "tactical.reason",
+        "combat.animation.plan",
+        "narrative.review",
+        "utility.inspect"
       ],
       "accessStatus": "not_configured",
       "lifecycleState": "active",

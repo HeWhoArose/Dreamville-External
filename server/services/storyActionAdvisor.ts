@@ -728,7 +728,12 @@ export class StoryActionAdvisor {
 			alternative,
 		);
 
-		if (proposalSimulation.status !== 'DEVELOPABLE' || proposalSimulation.creationAllowed === false) {
+		if (
+			proposalSimulation.status !== 'DEVELOPABLE' ||
+			proposalSimulation.creationAllowed === false ||
+			proposalSimulation.worldAllowed === false ||
+			proposalSimulation.characterCompatible === false
+		) {
 			return null;
 		}
 

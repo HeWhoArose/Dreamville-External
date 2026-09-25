@@ -166,7 +166,16 @@ function collectCharacterText(character: any, ownedCapabilities: CapabilityDefin
 }
 
 function requestedDomain(actionText: string, candidate?: CapabilityDefinition): string | undefined {
-  const text = normalize(actionText + ' ' + (candidate ? `${candidate.name} ${candidate.description}` : ''));
+  // When a candidate capability exists, its own definition is the authoritative object
+  // being evaluated. This prevents a requested "Fireball" from forcing a synthesized
+  // "Dark Fire" alternative back through the original FIRE domain.
+  const candidateText = normalize(candidate ? [
+    candidate.name,
+    candidate.description,
+    candidate.provenance,
+    ...(candidate.restrictions || []),
+  ].join(' ') : '');
+
   const patterns: Array<[string, RegExp]> = [
     ['TEMPORAL', /\b(time|temporal|stop time|rewind|accelerate time)\b/],
     ['DIMENSIONAL', /\b(dimension|dimensional|world[- ]split|tear reality|sever reality)\b/],
@@ -186,6 +195,13 @@ function requestedDomain(actionText: string, candidate?: CapabilityDefinition): 
     ['PHYSICAL', /\b(strike|slash|punch|kick|grapple|jump|climb|shoot|attack)\b/],
   ];
 
+  if (candidateText) {
+    for (const [domain, pattern] of patterns) {
+      if (pattern.test(candidateText)) return domain;
+    }
+  }
+
+  const text = normalize(actionText);
   for (const [domain, pattern] of patterns) {
     if (pattern.test(text)) return domain;
   }

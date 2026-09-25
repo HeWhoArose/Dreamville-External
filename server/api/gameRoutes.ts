@@ -27,6 +27,7 @@ import { bossPhaseEngine } from '../domain/bossPhaseEngine';
 import { combatEnvironmentEngine } from '../domain/combatEnvironmentEngine';
 import { mediaAdapterService } from '../services/mediaAdapterService';
 import { buildComicScenePrompt, ComicSceneContext } from '../services/comicSceneGenerator';
+import { projectPlayerCapabilities } from './playerCapabilityProjection';
 
 export const gameRouter = Router();
 import { sensoryRouter } from './sensoryRoutes';
@@ -1890,10 +1891,16 @@ gameRouter.get('/capabilities', async (req: Request, res: Response) => {
 		const capEngine = worldRepository.getCapabilityEngine(storyId);
 		const invEngine = worldRepository.getInventoryEngine(storyId);
 		const powerState = capEngine.getPowerState(actorId);
-		const capabilities = capEngine.getEffectiveActorCapabilities(actorId, invEngine);
-		const learnedCapabilities = capEngine.getActorLearnedCapabilities(actorId);
-		const skillInstances = capEngine.getAllSkillInstances(actorId);
-		res.json({ actorId, powerState, capabilities, learnedCapabilities, skillInstances });
+		const playerCapabilities = projectPlayerCapabilities({
+			 effectiveCapabilities: capEngine.getEffectiveActorCapabilities(actorId, invEngine),
+			 learnedCapabilities: capEngine.getActorLearnedCapabilities(actorId),
+			 skillInstances: capEngine.getAllSkillInstances(actorId),
+		});
+		res.json({
+			 actorId,
+			 powerState,
+			 ...playerCapabilities,
+		});
 	} catch (error) {
     res.status(500).json({ error: 'Failed to retrieve capabilities.' });
   }
@@ -8572,8 +8579,11 @@ gameRouter.get('/run-canonical-state', (req: Request, res: Response) => {
     const inventoryItems = invEngine.getInventoryItems(actorId);
     const paperDoll = invEngine.getActorPaperDoll(actorId);
 
-    const actorCaps = capEngine.getEffectiveActorCapabilities(actorId, invEngine);
-    const actorSkills = capEngine.getActorSkillInstances ? capEngine.getActorSkillInstances(actorId) : [];
+    const playerCapabilities = projectPlayerCapabilities({
+      effectiveCapabilities: capEngine.getEffectiveActorCapabilities(actorId, invEngine),
+      learnedCapabilities: capEngine.getActorLearnedCapabilities(actorId),
+      skillInstances: capEngine.getActorSkillInstances ? capEngine.getActorSkillInstances(actorId) : [],
+    });
 
     const activeQuests = (run?.plannedEvents || []).filter((e: any) => {
       const st = run?.eventStates?.[e.id]?.status;
@@ -8629,14 +8639,11 @@ gameRouter.get('/run-canonical-state', (req: Request, res: Response) => {
         items: inventoryItems,
       },
       capabilities: {
-        // Player-safe projection: only actor-owned capabilities cross the boundary.
-        // Effective capabilities are executable right now; learnedCapabilities preserves
-        // the complete character Skillbook even when a current requirement blocks use.
-        // The global capability registry and full DAG remain AI/developer-only.
-        coreCapabilities: actorCaps,
-        learnedCapabilities: capEngine.getActorLearnedCapabilities(actorId),
-        generatedTechniques: actorSkills,
-
+        // All player-facing capability payloads come from one boundary projection.
+        // Internal registry, DAG, simulation, and adjudication data never cross this API.
+        coreCapabilities: playerCapabilities.capabilities,
+        learnedCapabilities: playerCapabilities.learnedCapabilities,
+        generatedTechniques: playerCapabilities.skillInstances,
       },
       quests: {
         active: activeQuests,

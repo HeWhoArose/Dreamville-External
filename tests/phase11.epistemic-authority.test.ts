@@ -289,7 +289,9 @@ test('Phase 11: faction evidence is not visible to unrelated viewers', () => {
 	const chronicle = repository.getHistoricalChronicleEngine(storyId);
 	const timestamp = repository.getWorldClock(storyId).getTimestamp();
 
-	chronicle.recordEvidence({
+	repository.beginCanonicalCommandTransaction(storyId, 'test_faction_secret_1');
+	try {
+		chronicle.recordEvidence({
 		id: 'faction_secret_1',
 		category: 'FACTION_ALIGNMENT',
 		timestamp,
@@ -301,7 +303,12 @@ test('Phase 11: faction evidence is not visible to unrelated viewers', () => {
 		sourceEventId: 'evt_faction_secret_1',
 		provenance: 'system_test',
 		visibility: 'FACTION',
-	});
+		});
+		repository.commitCanonicalCommandTransaction(storyId, 'evt_faction_secret_1');
+	} catch (error) {
+		repository.rollbackCanonicalCommandTransaction(storyId);
+		throw error;
+	}
 
 	assert.equal(chronicle.getEpistemicEvidence('unrelated_player').some((entry) => entry.id === 'faction_secret_1'), false);
 	assert.equal(chronicle.getEpistemicEvidence('faction_leader').some((entry) => entry.id === 'faction_secret_1'), true);
@@ -314,7 +321,9 @@ test('Phase 11: private chronicle evidence requires viewer linkage', () => {
 	const chronicle = repository.getHistoricalChronicleEngine(storyId);
 	const timestamp = repository.getWorldClock(storyId).getTimestamp();
 
-	chronicle.recordEvidence({
+	repository.beginCanonicalCommandTransaction(storyId, 'test_private_secret_1');
+	try {
+		chronicle.recordEvidence({
 		id: 'private_secret_1',
 		category: 'WORLD_ANOMALY',
 		timestamp,
@@ -326,7 +335,12 @@ test('Phase 11: private chronicle evidence requires viewer linkage', () => {
 		provenance: 'system_test',
 		visibility: 'SECRET',
 		confidentialToEntityIds: ['trusted_viewer'],
-	});
+		});
+		repository.commitCanonicalCommandTransaction(storyId, 'evt_private_secret_1');
+	} catch (error) {
+		repository.rollbackCanonicalCommandTransaction(storyId);
+		throw error;
+	}
 
 	assert.equal(chronicle.getEpistemicEvidence('untrusted_viewer').some((entry) => entry.id === 'private_secret_1'), false);
 	assert.equal(chronicle.getEpistemicEvidence('trusted_viewer').some((entry) => entry.id === 'private_secret_1'), true);

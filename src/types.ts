@@ -906,7 +906,10 @@ export interface ApprovedConsequence {
 export interface CapabilitiesResponse {
   actorId: string;
   powerState?: PowerState;
+  /** Currently effective/executable capabilities, including active equipment grants. */
   capabilities: CapabilityDefinition[];
+  /** Actor-owned learned capabilities, including those temporarily blocked by requirements. */
+  learnedCapabilities: CapabilityDefinition[];
   skillInstances: any[];
   graph: CapabilityGraphNode[];
 }

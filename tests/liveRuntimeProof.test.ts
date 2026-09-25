@@ -585,7 +585,10 @@ describe('CH1 Live Runtime Proof — Canonical Domain & HTTP API Path', () => {
   it('CH6/CH7 Live API: POST /api/game/capabilities/synthesize creates structured power, derived techniques, and emits chronicle evidence', async () => {
     const synthRes = await fetch(`${baseUrl}/capabilities/synthesize`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-dreamville-internal-ai': 'true',
+      },
       body: JSON.stringify({
         conceptName: 'Astral Resonance Blade',
         description: 'Hardens acoustic astronomical harmonics into an edge of pure resonant force.',

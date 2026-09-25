@@ -542,6 +542,8 @@ Rules:
         error.attemptsTrail = generationAttemptsTrail;
         throw error;
       }
+    }
+    
     // Build canonical draft assembling all sections
     const generatedProvenance: CharacterProvenanceSource =
       generationSource === 'DETERMINISTIC_FALLBACK' ? 'DETERMINISTIC_FALLBACK' : 'AI_GENERATED';

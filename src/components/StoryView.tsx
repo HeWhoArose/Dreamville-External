@@ -6,6 +6,7 @@ import {
   ActionLog,
   OpeningScene,
   CharacterStartingConditionState,
+  ActionAdvice,
 } from '../types';
 import { useAudioHaptic } from './AudioHapticManager';
 import { getCharacterSpeakerTheme } from './voiceResolver';
@@ -36,6 +37,9 @@ interface StoryViewProps {
   onRequestInspect: () => void;
   onRequestRest: () => void;
   onCustomAction?: (actionText: string) => void;
+  pendingActionAdvice?: ActionAdvice | null;
+  onAcceptActionAdvice?: (advice: ActionAdvice) => void;
+  onRejectActionAdvice?: (advice: ActionAdvice) => void;
   isProcessingAction: boolean;
   openingScene?: OpeningScene | null;
   worldTitle?: string;
@@ -202,6 +206,9 @@ export const StoryView: React.FC<StoryViewProps> = ({
   onRequestInspect,
   onRequestRest,
   onCustomAction,
+  pendingActionAdvice = null,
+  onAcceptActionAdvice,
+  onRejectActionAdvice,
   isProcessingAction,
   openingScene,
   worldTitle,
@@ -575,6 +582,47 @@ export const StoryView: React.FC<StoryViewProps> = ({
         );
       })()}
 
+      {pendingActionAdvice?.proposal && (
+        <section className="rounded-2xl border border-amber-800/70 bg-amber-950/20 px-4 py-4 shadow-sm">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-500">Capability suggestion</p>
+              <h3 className="mt-1 text-base font-semibold text-amber-100">{pendingActionAdvice.proposal.alternative.name}</h3>
+              <p className="mt-2 text-sm leading-6 text-stone-300">{pendingActionAdvice.proposal.reasonRequestedCapabilityUnavailable}</p>
+              <p className="mt-2 text-sm leading-6 text-stone-200">{pendingActionAdvice.proposal.alternative.description}</p>
+              <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-stone-500">
+                {pendingActionAdvice.proposal.alternative.category && <span className="rounded-md border border-stone-800 bg-stone-950 px-2 py-1">{pendingActionAdvice.proposal.alternative.category}</span>}
+                {pendingActionAdvice.proposal.alternative.powerTier && <span className="rounded-md border border-stone-800 bg-stone-950 px-2 py-1">{pendingActionAdvice.proposal.alternative.powerTier}</span>}
+                {pendingActionAdvice.proposal.alternative.actionType && <span className="rounded-md border border-stone-800 bg-stone-950 px-2 py-1">{pendingActionAdvice.proposal.alternative.actionType}</span>}
+                {pendingActionAdvice.proposal.alternative.rangeScope && <span className="rounded-md border border-stone-800 bg-stone-950 px-2 py-1">{pendingActionAdvice.proposal.alternative.rangeScope}</span>}
+                {pendingActionAdvice.proposal.alternative.effectDefinition?.damageType && <span className="rounded-md border border-stone-800 bg-stone-950 px-2 py-1">{pendingActionAdvice.proposal.alternative.effectDefinition.damageType}</span>}
+                {pendingActionAdvice.proposal.alternative.effectDefinition?.damageFormula && <span className="rounded-md border border-stone-800 bg-stone-950 px-2 py-1">{pendingActionAdvice.proposal.alternative.effectDefinition.damageFormula}</span>}
+              </div>
+              {Array.isArray(pendingActionAdvice.proposal.alternative.generatedSkills) && pendingActionAdvice.proposal.alternative.generatedSkills.length > 0 && (
+                <div className="mt-3 space-y-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-600">Derived techniques</p>
+                  {pendingActionAdvice.proposal.alternative.generatedSkills.slice(0, 3).map((skill: any) => (
+                    <p key={skill.name} className="text-xs text-stone-400"><span className="font-medium text-stone-300">{skill.name}</span>{skill.description ? ' — ' + skill.description : ''}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="flex shrink-0 flex-col gap-2">
+              <button type="button" onClick={() => onAcceptActionAdvice?.(pendingActionAdvice)} disabled={isProcessingAction} className="rounded-lg bg-amber-200 px-3 py-2 text-xs font-semibold text-stone-950 transition hover:bg-amber-100 disabled:opacity-50">{pendingActionAdvice.proposal.acceptLabel}</button>
+              <button type="button" onClick={() => onRejectActionAdvice?.(pendingActionAdvice)} disabled={isProcessingAction} className="rounded-lg border border-stone-800 bg-stone-900 px-3 py-2 text-xs text-stone-300 transition hover:bg-stone-800 disabled:opacity-50">{pendingActionAdvice.proposal.rejectLabel}</button>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {actionHistory.slice(0, 2).flatMap((action) =>
+        (action.actionAdvice?.tips || []).map((tip) => (
+          <button key={tip.id} type="button" onClick={() => onCustomAction?.(tip.actionText)} disabled={isProcessingAction} className="w-full rounded-xl border border-stone-800 bg-stone-950/70 px-4 py-3 text-left transition hover:border-stone-700 hover:bg-stone-900 disabled:opacity-50">
+            <p className="text-xs font-semibold text-stone-200">{tip.title}</p>
+            <p className="mt-1 text-xs leading-5 text-stone-500">{tip.description}</p>
+          </button>
+        ))
+      )}
       {/* Main interaction: deliberately obvious and simple. */}
       <section className="rounded-2xl border border-stone-700/80 bg-stone-950 px-4 py-4 shadow-md md:px-5">
         <div className="mb-2 flex items-center justify-between gap-3">

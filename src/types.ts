@@ -328,6 +328,8 @@ export interface CapabilitySimulationResult {
   estimatedEnergyCost?: number;
   estimatedVesselCapacityRequired?: number;
   internalOnly?: boolean;
+  /** True only when canonical acquisition may be committed now. */
+  creationAllowed?: boolean;
 }
 
 export interface ActionCapabilityProposal {
@@ -357,7 +359,7 @@ export interface ActionLog {
   id: string;
   timestamp: string;
   cycle: number;
-  actionType: 'MOVEMENT' | 'DIALOGUE_CHOICE' | 'INSPECTION' | 'EQUIP_REQUEST' | 'NOTE_RECORD';
+  actionType: 'MOVEMENT' | 'DIALOGUE_CHOICE' | 'INSPECTION' | 'EQUIP_REQUEST' | 'CUSTOM_ACTION' | 'NOTE_RECORD';
   description: string;
   epistemicValidation: EpistemicValidationStatus;
   authoritativeFeedback: string;

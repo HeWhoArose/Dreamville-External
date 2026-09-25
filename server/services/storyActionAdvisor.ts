@@ -421,10 +421,13 @@ export class StoryActionAdvisor {
 			};
 		}
 
-		if (simulation.status === 'WORLD_FORBIDDEN' ||
-			simulation.status === 'CHARACTER_INCOMPATIBLE' ||
-			simulation.status === 'CURRENTLY_BLOCKED' ||
-			simulation.status === 'ALTERNATE_ROUTE') {
+		// World-forbidden or progression-locked requests stop here. Character incompatibility
+		// is different: when the world permits the concept, the simulator may search for a
+		// coherent character-specific mechanism without granting the requested skill.
+		if (
+			simulation.status === 'WORLD_FORBIDDEN' ||
+			simulation.status === 'CURRENTLY_BLOCKED'
+		) {
 			return {
 				mode: 'CAPABILITY_SIMULATION',
 				actionText,

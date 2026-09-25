@@ -122,6 +122,19 @@ const CONTRACTS: Record<TaskId, AiTaskContract> = {
 		defaultTimeoutMs: 8000,
 		defaultMaxTokens: 900,
 	},
+	'world.generate': {
+		task: 'world.generate',
+		category: 'world_generation',
+		requiredCapabilities: ['text_generation', 'structured_output'],
+		preferredCapabilities: ['creative_writing', 'reasoning'],
+		requiredInputTypes: ['text'],
+		requiredOutputTypes: ['json'],
+		requiresStructuredOutput: true,
+		preferredPools: ['creative', 'reasoning'],
+		defaultTimeoutMs: 20000,
+		defaultMaxTokens: 3000,
+	},
+
 	'speech.generate': {
 		task: 'speech.generate',
 		category: 'speech',

@@ -576,6 +576,19 @@ export class CapabilitySimulationEngine {
 
     if (hasCurrentResourceBlock || !progressionPossible || requiredConditions.length > 0) {
       developmentPath.push(...requiredConditions.map((condition) => `Prerequisite: ${condition}`));
+
+      if (hasCurrentResourceBlock) {
+        if (/\b(ritual|ceremony|sacrifice|binding vow|binding-vow)\b/.test(worldText)) {
+          alternateRoutes.push('A world-sanctioned ritual or binding-vow mechanism may provide an alternate development route.');
+        }
+        if (/\b(artifact|relic|equipment|weapon|external source|energy source|crystal|core)\b/.test(worldText)) {
+          alternateRoutes.push('An external catalyst, artifact, or energy source may reduce the current vessel/resource requirement.');
+        }
+        if (/\b(transformation|ascension|true form|awakening)\b/.test(worldText)) {
+          alternateRoutes.push('A sanctioned transformation or awakening may raise the character\'s usable power ceiling.');
+        }
+      }
+
       return {
         status: !progressionPossible ? 'CURRENTLY_BLOCKED' : 'CONDITIONALLY_DEVELOPABLE',
         actionText,
@@ -588,8 +601,9 @@ export class CapabilitySimulationEngine {
         currentlyExecutable,
         progressionPossible,
         acquisitionAllowed,
-
-        explanation: 'The world and character support this capability in principle, but current resources or vessel limits prevent immediate use.',
+        explanation: !progressionPossible
+          ? 'The requested effect is compatible in principle, but the current progression state or world progression rules do not permit acquisition now.'
+          : 'The world and character support this capability in principle, but current resources, prerequisites, or vessel limits prevent immediate use.',
         blockers,
         requiredConditions,
         developmentPath,
@@ -611,7 +625,7 @@ export class CapabilitySimulationEngine {
       characterCompatible: true,
       currentlyExecutable,
       progressionPossible,
-      acquisitionAllowed: true,
+      acquisitionAllowed,
       explanation: 'The requested effect is compatible with the current world and character, but the character does not currently own the technique.',
       blockers: [],
       requiredConditions: [],

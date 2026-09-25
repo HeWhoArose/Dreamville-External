@@ -2648,7 +2648,18 @@ gameRouter.post('/capabilities/synthesize', async (req: Request, res: Response) 
  */
 gameRouter.post('/capabilities/interpret', async (req: Request, res: Response) => {
   try {
-    const { actionText, tags, intendedCapabilityId, requestedModifiers, requestedScale, environment, actorConditions, executeIfValid, actorId: reqActorId, storyId: reqStoryId } = req.body;
+    const {
+      actionText,
+      tags,
+      intendedCapabilityId,
+      requestedModifiers,
+      requestedScale,
+      environment,
+      actorConditions,
+      actorId: reqActorId,
+      storyId: reqStoryId,
+    } = req.body;
+
     if (actionText === undefined || typeof actionText !== 'string') {
       return res.status(400).json({
         success: false,
@@ -2656,89 +2667,41 @@ gameRouter.post('/capabilities/interpret', async (req: Request, res: Response) =
       });
     }
 
-    const { worldRepository } = await import('../repositories/worldRepository');
     const storyId = reqStoryId || 'default_story';
     const player = worldRepository.getPlayerLifecycle(storyId);
     const actorId = reqActorId || (player ? player.actorId : `player_actor_${storyId}`);
     const capEngine = worldRepository.getCapabilityEngine(storyId);
 
-    let interpretationResult: any;
-    if (Boolean(executeIfValid)) {
-      const commandId =
-        (req.headers['x-command-id'] as string | undefined) ||
-        (req.body?.commandId as string | undefined) ||
-        deterministicId('cmd_route', storyId, "/capabilities/interpret", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
-      const commandResult = await canonicalCommandEngine.execute(
-        worldRepository,
-        {
-          commandId,
-          storyId,
-          actorId,
-          type: 'CAST',
-          payload: { actionText, intendedCapabilityId, requestedScale },
-          source: 'PLAYER',
-          transactionMode: 'STAGED',
-        },
-        async (_command, context) => {
-          const transactionCapEngine = context.repository.getCapabilityEngine(storyId);
-          const result = transactionCapEngine.interpretFreeformAction({
-            actorId,
-            actionText: actionText.trim(),
-            tags: Array.isArray(tags) ? tags : undefined,
-            intendedCapabilityId,
-            requestedModifiers,
-            requestedScale,
-            environment,
-            actorConditions,
-            executeIfValid: true,
-          });
-          return {
-            success: result.validationSuccess,
-            data: result,
-            errorReason: result.rejectionReason,
-            summary: result.validationSuccess
-              ? 'Freeform action interpreted and committed.'
-              : 'Freeform action rejected without mutation.',
-          };
-        }
-      );
-      if (!commandResult.success) {
-        return res.status(400).json({
-          success: false,
-          errorReason: commandResult.errorReason,
-          rolledBack: commandResult.rolledBack,
-          commandId: commandResult.commandId,
-        });
-      }
-      interpretationResult = commandResult.data;
-    } else {
-      interpretationResult = capEngine.interpretFreeformAction({
-        actorId,
-        actionText: actionText.trim(),
-        tags: Array.isArray(tags) ? tags : undefined,
-        intendedCapabilityId,
-        requestedModifiers,
-        requestedScale,
-        environment,
-        actorConditions,
-        executeIfValid: false,
-      });
-    }
+    // This endpoint is a dry-run interpreter. The client-provided executeIfValid flag is
+    // intentionally ignored: novel capabilities can never be created or executed here.
+    // Owned capabilities are executed through the canonical story-action path instead.
+    const interpretationResult = capEngine.interpretFreeformAction({
+      actorId,
+      actionText: actionText.trim(),
+      tags: Array.isArray(tags) ? tags : undefined,
+      intendedCapabilityId,
+      requestedModifiers,
+      requestedScale,
+      environment,
+      actorConditions,
+      executeIfValid: false,
+    });
 
-    const powerState = capEngine.getPowerState(actorId);
-    const capabilities = capEngine.getAllCapabilities();
+    const inventory = worldRepository.getInventoryEngine(storyId);
+    const effectiveCapabilities = capEngine.getEffectiveActorCapabilities(actorId, inventory);
+    const skillInstances = capEngine.getActorSkillInstances(actorId);
 
-    res.json({
+    return res.json({
       success: interpretationResult.validationSuccess,
       ...interpretationResult,
-      powerState,
-      capabilities,
+      powerState: capEngine.getPowerState(actorId),
+      capabilities: effectiveCapabilities,
+      skillInstances,
     });
   } catch (error: any) {
-    res.status(500).json({ error: error.message || 'Failed to interpret freeform action.' });
+    return res.status(500).json({ error: error.message || 'Failed to interpret freeform action.' });
   }
 });
-
 // ==========================================
 // CH8: Tactical Combat & D&D Ruleset Adapter
 // ==========================================

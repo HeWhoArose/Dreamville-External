@@ -116,7 +116,7 @@ describe('CH4 SURGICAL REPAIR (Evidence Identity & AI Boundary)', () => {
       visibility: 'PUBLIC'
     };
 
-    recordChronicleEvidence(repo, 'ch4_test_story', chronicle, evidenceInput);
+    recordChronicleEvidence(repo, storyId, chronicle, evidenceInput);
 
     const archive = repo.exportCampaignArchive(storyId, 'Test Archive');
     

@@ -23,6 +23,7 @@ import { storyCheckChallengeResolver } from '../domain/storyCheckChallengeResolv
 import { rulesProfileEngine } from '../domain/rulesProfileEngine';
 import { deterministicId, formatCanonicalTimestamp } from '../domain/deterministicRng';
 import { HistoricalChronicleEngine } from '../domain/historicalChronicleEngine';
+import { storyActionAdvisor } from '../services/storyActionAdvisor';
 
 /**
  * ServerMockAuthority
@@ -587,10 +588,24 @@ export class ServerMockAuthority {
 
     const state = this.getDynamicStoryState(targetStoryId);
     const actionLog = state.actionHistory.find((entry) => entry.id === baseResult.actionId);
+    const actionTips = await storyActionAdvisor.getTipsForAction(
+      targetStoryId,
+      String(freeformText)
+    );
+
     if (actionLog) {
       actionLog.narrativeResponse = narrativeResponse;
       if (storyCheck) {
         actionLog.checkResult = storyCheck;
+      }
+      if (actionTips.length > 0) {
+        actionLog.actionAdvice = {
+          mode: 'NORMAL_ACTION',
+          actionText: String(freeformText),
+          actorId,
+          tips: actionTips,
+          canExecuteNow: true,
+        };
       }
     }
 
@@ -599,6 +614,15 @@ export class ServerMockAuthority {
       message: narrativeResponse,
       narrativeResponse,
       checkResult: storyCheck || undefined,
+      actionAdvice: actionTips.length > 0
+        ? {
+            mode: 'NORMAL_ACTION',
+            actionText: String(freeformText),
+            actorId,
+            tips: actionTips,
+            canExecuteNow: true,
+          }
+        : undefined,
       viewState: this.filterForExternalClient(state, targetStoryId),
     };
   }
@@ -1159,6 +1183,7 @@ export class ServerMockAuthority {
         const interp = capEngine.interpretFreeformAction({
           actorId,
           actionText: freeformText,
+          intendedCapabilityId: (request as any).intendedCapabilityId,
           executeIfValid: true,
         });
 

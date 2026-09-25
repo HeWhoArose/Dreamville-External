@@ -203,6 +203,48 @@ export class StoryActionAdvisor {
 		const tips = await this.generateTips(storyId, actorId, actionText, actorCapabilities);
 
 		if (!recognizedCapability) {
+			const preview = capabilityEngine.interpretFreeformAction({
+				actorId,
+				actionText,
+				executeIfValid: false,
+			});
+
+			if (
+				preview.interpretationType === 'NOVEL_CAPABILITY_PROPOSAL' &&
+				preview.proposedCapability
+			) {
+				const proposed = preview.proposedCapability;
+				if (inferDirectCompatibility(proposed, run)) {
+					return {
+						mode: 'AUTO_LEARN_AND_EXECUTE',
+						actionText,
+						actorId,
+						recognizedCapability: proposed,
+						tips,
+						canExecuteNow: false,
+					};
+				}
+
+				const alternative = await this.createAlternativeProposal(
+					storyId,
+					actorId,
+					actionText,
+					proposed,
+					run
+				);
+
+				this.pendingProposals.set(alternative.proposalId, alternative);
+				return {
+					mode: 'SUGGEST_ALTERNATIVE',
+					actionText,
+					actorId,
+					recognizedCapability: proposed,
+					tips,
+					proposal: alternative,
+					canExecuteNow: false,
+				};
+			}
+
 			return {
 				mode: 'NORMAL_ACTION',
 				actionText,

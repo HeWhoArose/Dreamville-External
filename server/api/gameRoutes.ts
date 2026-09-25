@@ -180,29 +180,43 @@ gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => 
     const proposalId = typeof req.body?.proposalId === 'string' ? req.body.proposalId : undefined;
     const pendingProposal = proposalId ? storyActionAdvisor.consumePendingProposal(proposalId) : null;
 
-    const freshAdvice = await storyActionAdvisor.advise(storyId, actionText);
-    if (pendingProposal && freshAdvice.proposal?.proposalId !== pendingProposal.proposalId) {
+    if (!pendingProposal) {
       return res.status(409).json({
         success: false,
         code: 'ACTION_ADVICE_STALE',
-        errorReason: 'The suggested capability is no longer valid for the current character state. Please submit the action again.',
+        errorReason: 'The capability suggestion is no longer available. Please submit the action again.',
       });
     }
 
-    if (freshAdvice.mode === 'SUGGEST_ALTERNATIVE' && !pendingProposal) {
+    const currentCapabilities = worldRepository
+      .getCapabilityEngine(storyId)
+      .getEffectiveActorCapabilities(actorId);
+
+    if (
+      pendingProposal.requestedCapabilityId &&
+      currentCapabilities.some((capability) => capability.id === pendingProposal.requestedCapabilityId && capability.isLearned)
+    ) {
       return res.status(409).json({
         success: false,
-        code: 'ACTION_ADVICE_CONFIRMATION_REQUIRED',
-        advice: freshAdvice,
+        code: 'ACTION_ADVICE_STALE',
+        errorReason: 'The requested capability was learned or changed before the suggestion was accepted.',
       });
     }
 
-    const recognizedCapabilityId =
-      freshAdvice.recognizedCapability?.id ||
-      pendingProposal?.requestedCapabilityId;
+    if (
+      pendingProposal.alternative?.id &&
+      currentCapabilities.some((capability) => capability.id === pendingProposal.alternative.id && capability.isLearned)
+    ) {
+      return res.status(409).json({
+        success: false,
+        code: 'ACTION_ADVICE_STALE',
+        errorReason: 'The suggested alternative has already been learned.',
+      });
+    }
 
-    const approvedAlternative = pendingProposal?.alternative || freshAdvice.proposal?.alternative;
-    const shouldCreateAlternative = Boolean(pendingProposal && approvedAlternative);
+    const recognizedCapabilityId = pendingProposal.requestedCapabilityId;
+    const approvedAlternative = pendingProposal.alternative;
+    const shouldCreateAlternative = Boolean(approvedAlternative);
 
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||

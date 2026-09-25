@@ -2029,109 +2029,57 @@ export class CapabilityEngine {
         ? 'Moderate'
         : 'Minor';
 
-    if (params.executeIfValid) {
-      // Novel capability requests are ALWAYS preview-only at this layer.
-      // Canonical acquisition is an explicit progression decision handled by StoryActionAdvisor
-      // + /action/accept-advice. This prevents a freeform HTTP/client request from silently
-      // synthesizing, registering, or executing a new skill.
-      const inferred = this.inferStructuredMechanics(tags);
-      let baseEnergyCost = 4;
-      let baseStrainCost = 1;
-      let minVesselCapacityRequired = 5;
+    // Novel capability requests are ALWAYS preview-only at this layer.
+    // Canonical acquisition is an explicit progression decision handled by StoryActionAdvisor
+    // + /action/accept-advice. This prevents a freeform HTTP/client request from silently
+    // synthesizing, registering, or executing a new skill.
+    const inferred = this.inferStructuredMechanics(tags);
+    let baseEnergyCost = 4;
+    let baseStrainCost = 1;
+    let minVesselCapacityRequired = 5;
 
-      switch (powerTier) {
-        case 'WorldScale':
-          baseEnergyCost = 35;
-          baseStrainCost = 25;
-          minVesselCapacityRequired = 50;
-          break;
-        case 'Moderate':
-          baseEnergyCost = 12;
-          baseStrainCost = 5;
-          minVesselCapacityRequired = 15;
-          break;
-        case 'Minor':
-        default:
-          baseEnergyCost = 4;
-          baseStrainCost = 1;
-          minVesselCapacityRequired = 5;
-          break;
-      }
-
-      const previewCap: CapabilityDefinition = {
-        id: deterministicId('cap_preview', actorId, actionText, powerTier, tags.slice().sort()),
-        name: actionText.slice(0, 60),
-        category: inferred.category,
-        activationMode: inferred.activationMode,
-        powerTier,
-        baseEnergyCost,
-        baseStrainCost,
-        minVesselCapacityRequired,
-        targetType: inferred.targetType,
-        rangeScope: inferred.rangeScope,
-        actionType: inferred.actionType,
-        description: actionText,
-        provenance: `freeform_preview:${actionText}`,
-      };
-
-      return {
-        interpretationType: 'NOVEL_CAPABILITY_PROPOSAL',
-        actorId,
-        actionText,
-        proposedCapability: previewCap,
-        validationSuccess: true,
-        narrativeInterpretation: `Proposed novel capability preview '${previewCap.name}' (${previewCap.category}, ${previewCap.powerTier}). Canonical acquisition requires explicit approval.`,
-      };
-    }    } else {
-      // Preview proposal without mutating canonical state
-      const inferred = this.inferStructuredMechanics(tags);
-      let baseEnergyCost = 4;
-      let baseStrainCost = 1;
-      let minVesselCapacityRequired = 5;
-
-      switch (powerTier) {
-        case 'WorldScale':
-          baseEnergyCost = 35;
-          baseStrainCost = 25;
-          minVesselCapacityRequired = 50;
-          break;
-        case 'Moderate':
-          baseEnergyCost = 12;
-          baseStrainCost = 5;
-          minVesselCapacityRequired = 15;
-          break;
-        case 'Minor':
-        default:
-          baseEnergyCost = 4;
-          baseStrainCost = 1;
-          minVesselCapacityRequired = 5;
-          break;
-      }
-
-      const previewCap: CapabilityDefinition = {
-        id: deterministicId('cap_preview', actorId, actionText, powerTier, tags.slice().sort()),
-        name: actionText.slice(0, 60),
-        category: inferred.category,
-        activationMode: inferred.activationMode,
-        powerTier,
-        baseEnergyCost,
-        baseStrainCost,
-        minVesselCapacityRequired,
-        targetType: inferred.targetType,
-        rangeScope: inferred.rangeScope,
-        actionType: inferred.actionType,
-        description: actionText,
-        provenance: `freeform_preview:${actionText}`,
-      };
-
-      return {
-        interpretationType: 'NOVEL_CAPABILITY_PROPOSAL',
-        actorId,
-        actionText,
-        proposedCapability: previewCap,
-        validationSuccess: true,
-        narrativeInterpretation: `Proposed novel capability preview '${previewCap.name}' (${previewCap.category}, ${previewCap.powerTier}).`,
-      };
+    switch (powerTier) {
+      case 'WorldScale':
+        baseEnergyCost = 35;
+        baseStrainCost = 25;
+        minVesselCapacityRequired = 50;
+        break;
+      case 'Moderate':
+        baseEnergyCost = 12;
+        baseStrainCost = 5;
+        minVesselCapacityRequired = 15;
+        break;
+      case 'Minor':
+      default:
+        baseEnergyCost = 4;
+        baseStrainCost = 1;
+        minVesselCapacityRequired = 5;
+        break;
     }
+
+    const previewCap: CapabilityDefinition = {
+      id: deterministicId('cap_preview', actorId, actionText, powerTier, tags.slice().sort()),
+      name: actionText.slice(0, 60),
+      category: inferred.category,
+      activationMode: inferred.activationMode,
+      powerTier,
+      baseEnergyCost,
+      baseStrainCost,
+      minVesselCapacityRequired,
+      targetType: inferred.targetType,
+      rangeScope: inferred.rangeScope,
+      actionType: inferred.actionType,
+      description: actionText,
+      provenance: `freeform_preview:${actionText}`,
+    };
+
+    return {
+      interpretationType: 'NOVEL_CAPABILITY_PROPOSAL',
+      actorId,
+      actionText,
+      proposedCapability: previewCap,
+      validationSuccess: true,
+      narrativeInterpretation: `Proposed novel capability preview '${previewCap.name}' (${previewCap.category}, ${previewCap.powerTier}). Canonical acquisition requires explicit approval.`,
+    };
   }
 }

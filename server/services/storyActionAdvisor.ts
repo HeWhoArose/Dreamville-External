@@ -106,6 +106,22 @@ function inferDirectCompatibility(
 		run?.protagonist?.progression?.classId
 	);
 
+	const darkAffinity =
+		role.includes('dark mage') ||
+		role.includes('shadow mage') ||
+		role.includes('warlock') ||
+		role.includes('necromancer') ||
+		actorText.includes('curse') ||
+		actorText.includes('shadow magic') ||
+		actorText.includes('void magic');
+
+	if (
+		darkAffinity &&
+		(capabilityText.includes('fire') || capabilityText.includes('flame'))
+	) {
+		return false;
+	}
+
 	if (
 		(classId.includes('wizard') || classId.includes('sorcerer') || classId.includes('pyromancer')) &&
 		(capabilityText.includes('fire') || capabilityText.includes('flame'))
@@ -132,15 +148,6 @@ function inferDirectCompatibility(
 		const school = schoolMatch[1].replace(/[_-]/g, ' ');
 		if (actorText.includes(school) || role.includes(school) || classId.includes(school)) return true;
 	}
-
-	const darkAffinity =
-		role.includes('dark mage') ||
-		role.includes('shadow mage') ||
-		role.includes('warlock') ||
-		role.includes('necromancer') ||
-		actorText.includes('curse') ||
-		actorText.includes('shadow magic') ||
-		actorText.includes('void magic');
 
 	const elementalFireAffinity =
 		classId.includes('wizard') ||

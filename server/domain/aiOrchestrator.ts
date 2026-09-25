@@ -1900,6 +1900,7 @@ export class MultiModelOrchestrator {
   private normalizeGeneralTextTaskEligibility(): void {
     const generalTasks: TaskId[] = [
       'narrative.generate',
+      'world.generate',
       'character.dialogue',
       'character.extract',
       'memory.extract',
@@ -2135,6 +2136,7 @@ export class MultiModelOrchestrator {
 
   private seedDefaultPins(): void {
     this.taskPinnedModels.set('narrative.generate', 'google_gemini::gemini-3.5-flash');
+    this.taskPinnedModels.set('world.generate', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('character.dialogue', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('story.advice', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('memory.extract', 'google_gemini::gemini-3.5-flash');

@@ -19,7 +19,7 @@ test('player skill boundary never projects the global capability registry as lea
   assert.doesNotMatch(canonicalSection, /capEngine\.getAllCapabilities\(\)/);
 
   assert.match(surface, /learnedCapabilities/);
-  assert.match(surface, /skillInstances\.map/);
+  assert.match(surface, /skillInstances\\s*[\\n\\r]*\\s*\\.map/);
   assert.doesNotMatch(surface, /Capability DAG & Derived Skills|Adjudication Outcome/);
 
   assert.doesNotMatch(authority, /AUTO_LEARN_AND_EXECUTE.*acquireSkill/s);

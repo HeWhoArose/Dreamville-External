@@ -497,6 +497,33 @@ function buildPreviewCapability(actionText: string, domain: string | undefined, 
 }
 
 export class CapabilitySimulationEngine {
+  /**
+   * Identifies requests that are plausibly asking for a supernatural capability,
+   * rather than an ordinary physical/narrative action.
+   *
+   * This is deliberately conservative: it only decides whether the request should
+   * enter the capability simulation path. It never grants, creates, or executes a skill.
+   */
+  public isCapabilityLikeRequest(
+    actionText: string,
+    candidateCapability?: CapabilityDefinition,
+  ): boolean {
+    if (candidateCapability) return true;
+
+    const text = normalize(actionText);
+    if (!text) return false;
+
+    return (
+      /\b(cast|spell|spells|skill|technique|ability|power|invoke|channel|conjure|summon)\b/.test(text) ||
+      /\b(teleport|teleportation|blink|warp|portal|lightning|thunderbolt|fireball|pyromancy|shadow step)\b/.test(text) ||
+      /\b(time manipulation|stop time|rewind time|accelerate time|temporal|chronomancy)\b/.test(text) ||
+      /\b(dimension|dimensional|tear reality|reality manipulation|spatial magic)\b/.test(text) ||
+      /\b(magic|sorcery|sorcerous|arcane|mana|spellcasting)\b/.test(text) ||
+      /\b(firebending|waterbending|earthbending|airbending|bending technique)\b/.test(text) ||
+      /\b(split the world|split the realm|sever the world|tear the world|shatter reality)\b/.test(text)
+    );
+  }
+
   public simulate(actionText: string, context: CapabilitySimulationContext, candidateCapability?: CapabilityDefinition): CapabilitySimulationResult {
     const normalizedAction = normalize(actionText);
     if (!normalizedAction) {

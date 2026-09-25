@@ -158,6 +158,30 @@ The loop must cover:
 - AI/provider failure fallback;
 - UI/route regression.
 
+## Current execution ledger
+
+### Phase 1 — Canonical capability ownership & Skillbook boundary
+Status: **IMPLEMENTED — verification in progress**
+
+Implementation commits:
+- `7755e06dd4c7128b88c927576760e0d7737a5547` — implementation plan
+- `db8656a6294b933a55b7248bd07550f0387c629f` — centralized Skillbook projection boundary
+- `e323aed27be4beade3d482e315ce1e6605c768c0` — ten-pass player-boundary audit/regression tests
+
+Phase 1 changes:
+- Added canonical `projectPlayerSkillbook()` projection.
+- Skillbook ownership is now anchored to actor-scoped `SkillInstance` records.
+- Registry-only capabilities cannot enter the Skillbook merely because their definitions exist.
+- Equipment-granted capabilities remain effective actor capabilities but are not promoted into learned Skillbook entries.
+- Legacy `/run-canonical-state` uses the player-safe capability projection instead of the global registry.
+- Capability synthesis and interpretation remain explicitly AI/internal-only.
+- Added ten-pass regression coverage for ownership leakage, equipment-vs-learned separation, player projection internals, legacy route leakage, and AI-only authoring boundaries.
+
+Static re-audit:
+- 10/10 boundary-loop passes satisfied at source level.
+- Story player surface still uses `CharacterSurface` and does not contain the internal Capability DAG / Adjudication panels.
+- GitHub Actions run `36160257145` is executing the repository verification workflow. At the last check, `npm install` and `npm run lint` had passed; `npm test` was still running, so full test/build success is not yet claimed.
+
 ## Phase completion rule
 
 A phase is not marked complete until:

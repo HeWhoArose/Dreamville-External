@@ -470,7 +470,8 @@ export class StoryActionAdvisor {
 		if (
 			simulation.worldAllowed &&
 			(simulation.status === 'CHARACTER_INCOMPATIBLE' ||
-				simulation.status === 'ALTERNATE_ROUTE')
+				simulation.status === 'ALTERNATE_ROUTE') &&
+			this.capabilityProposalGenerator
 		) {
 			const proposalCandidate = candidate || simulation.candidateCapability;
 			if (proposalCandidate) {

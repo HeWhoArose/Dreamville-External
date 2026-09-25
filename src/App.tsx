@@ -74,6 +74,7 @@ export const App: React.FC = () => {
   const [recipes, setRecipes] = useState<CraftingRecipe[]>([]);
   const [powerState, setPowerState] = useState<PowerState | null>(null);
   const [capabilities, setCapabilities] = useState<CapabilityDefinition[]>([]);
+  const [learnedCapabilities, setLearnedCapabilities] = useState<CapabilityDefinition[]>([]);
   const [skillInstances, setSkillInstances] = useState<any[]>([]);
   const [capabilityGraph, setCapabilityGraph] = useState<CapabilityGraphNode[]>([]);
   const [worldTemplates, setWorldTemplates] = useState<WorldTemplate[]>([]);
@@ -188,6 +189,7 @@ export const App: React.FC = () => {
       if (capData) {
         setPowerState(capData.powerState || null);
         setCapabilities(capData.capabilities || []);
+        setLearnedCapabilities(capData.learnedCapabilities || []);
         setSkillInstances(capData.skillInstances || []);
         setCapabilityGraph(capData.graph || []);
       }
@@ -230,6 +232,7 @@ export const App: React.FC = () => {
       if (capData) {
         setPowerState(capData.powerState || null);
         setCapabilities(capData.capabilities || []);
+        setLearnedCapabilities(capData.learnedCapabilities || []);
         setSkillInstances(capData.skillInstances || []);
         setCapabilityGraph(capData.graph || []);
       }
@@ -608,6 +611,7 @@ export const App: React.FC = () => {
           protagonist={viewState.protagonist}
           powerState={powerState}
           capabilities={capabilities}
+          learnedCapabilities={learnedCapabilities}
           skillInstances={skillInstances}
           equipment={viewState.equipment}
           inventory={viewState.inventory}

@@ -263,7 +263,7 @@ export class WorldSimulationService {
       if (conditionEvents.length > 0) {
         const chronicle = this.worldRepo.getHistoricalChronicleEngine(storyId);
         for (const event of conditionEvents) {
-          chronicle.recordEvidence({
+          this.recordChronicleEvidence(storyId, chronicle, {
             id: 'ev_condition_tick_' + storyId + '_' + currentElapsed + '_' + event.conditionId,
             category: 'INJURY_OR_RECOVERY',
             timestamp: updatedClockState.timestamp,
@@ -311,7 +311,7 @@ export class WorldSimulationService {
             eventsUpdated = true;
 
             const chronicle = this.worldRepo.getHistoricalChronicleEngine(storyId);
-            chronicle.recordEvidence({
+            this.recordChronicleEvidence(storyId, chronicle, {
               id: `ev_story_run_event_${ev.id}_${currentElapsed}`,
               category: 'SACRED_OR_HISTORIC',
               timestamp: updatedClockState.timestamp,

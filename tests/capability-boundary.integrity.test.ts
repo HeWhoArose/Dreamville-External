@@ -14,8 +14,9 @@ test('player skill boundary never projects the global capability registry as lea
   assert.ok(canonicalIndex >= 0);
 
   const canonicalSection = routes.slice(canonicalIndex);
-  assert.equal(canonicalSection.includes('coreCapabilities: actorCaps'), true);
-  assert.equal(canonicalSection.includes('coreCapabilities: coreCaps'), false);
+  assert.match(canonicalSection, /projectPlayerCapabilities/);
+  assert.doesNotMatch(canonicalSection, /coreCapabilities:\s*coreCaps/);
+  assert.doesNotMatch(canonicalSection, /capEngine\.getAllCapabilities\(\)/);
 
   assert.match(surface, /learnedCapabilities/);
   assert.match(surface, /skillInstances\.map/);

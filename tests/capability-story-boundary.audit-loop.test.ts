@@ -37,6 +37,7 @@ test('ten deterministic audits keep internal simulation out of the Skillbook and
   const story = read('src/components/StoryView.tsx');
   const shell = read('src/components/storyContext/StoryContextShell.tsx');
   const menu = read('src/components/storyContext/storyNavigationModel.ts');
+  const world = read('src/components/WorldView.tsx');
 
   for (let pass = 1; pass <= 10; pass += 1) {
     assert.match(surface, /skillInstances\\s*\\.map/, 'Skillbook lost actor ownership filtering');
@@ -52,5 +53,7 @@ test('ten deterministic audits keep internal simulation out of the Skillbook and
     assert.match(shell, /primaryIds/);
     assert.match(menu, /label: 'World'/);
     assert.match(menu, /route: 'play\.recent-actions'/);
+    assert.match(world, /character\.worldId === worldId/);
+    assert.doesNotMatch(world, /!worldId \|\| character\.worldId/);
   }
 });

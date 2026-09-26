@@ -298,7 +298,7 @@ export class StoryActionAdvisor {
 				player?.actorId ||
 				run?.protagonist?.characterId ||
 				'player_actor_' + storyId;
-			const tips = await this.generateTips(storyId, actorId, cleanAction, [], sceneContext);
+			const tips = await this.generateTips(storyId, actorId, cleanAction, [], canonicalSceneContext);
 			return {
 				mode: 'NORMAL_ACTION',
 				actionText: cleanAction,
@@ -316,6 +316,39 @@ export class StoryActionAdvisor {
 			player?.actorId ||
 			run?.protagonist?.characterId ||
 			'player_actor_' + storyId;
+
+		const canonicalPlayerLocationId = player?.locationId || run?.currentLocationId;
+		const canonicalLocation = canonicalPlayerLocationId
+			? this.repository.getGeographyGraph(storyId).getNode(canonicalPlayerLocationId)
+			: undefined;
+		const dynamicState = this.repository.getDynamicStoryState(storyId);
+		const canonicalSceneContext: StoryActionSceneContext = {
+			locationName: sceneContext?.locationName || canonicalLocation?.name,
+			locationRegion: sceneContext?.locationRegion || canonicalLocation?.regionId,
+			locationDescription: sceneContext?.locationDescription || canonicalLocation?.description,
+			worldTime: sceneContext?.worldTime,
+			startingSituation:
+				sceneContext?.startingSituation ||
+				run?.startingSituation?.summary ||
+				run?.startingSituation?.hook ||
+				run?.initialScene,
+			openingNarrative:
+				sceneContext?.openingNarrative ||
+				run?.openingScene?.narrativeText ||
+				dynamicState?.actionHistory?.[0]?.narrativeResponse ||
+				dynamicState?.actionHistory?.[0]?.description,
+			activeDialogue:
+				sceneContext?.activeDialogue ||
+				(dynamicState?.activeDialogue
+					? `${dynamicState.activeDialogue.speakerName}: ${dynamicState.activeDialogue.text}`
+					: undefined),
+			recentActions:
+				sceneContext?.recentActions ||
+				dynamicState?.actionHistory
+					?.slice(0, 4)
+					.map((entry: any) => entry.narrativeResponse || entry.description)
+					.filter(Boolean),
+		};
 		const capabilityEngine = this.repository.getCapabilityEngine(storyId);
 		const actorCapabilities = capabilityEngine.getEffectiveActorCapabilities(
 			actorId,
@@ -336,10 +369,10 @@ export class StoryActionAdvisor {
 		// retain the lightweight path and cannot be turned into powers accidentally.
 		const aiPipeline = capabilityLikeRequest
 			? await new UnifiedAiActionOrchestrator(this.repository).resolveAction(storyId, actionText, {
-				locationName: sceneContext?.locationName,
-				locationDescription: sceneContext?.locationDescription,
-				startingSituation: sceneContext?.startingSituation,
-				recentActions: sceneContext?.recentActions,
+				locationName: canonicalSceneContext.locationName,
+				locationDescription: canonicalSceneContext.locationDescription,
+				startingSituation: canonicalSceneContext.startingSituation,
+				recentActions: canonicalSceneContext.recentActions,
 			})
 			: undefined;
 
@@ -349,7 +382,7 @@ export class StoryActionAdvisor {
 			actorId,
 			actionText,
 			actorCapabilities,
-			sceneContext,
+			canonicalSceneContext,
 		);
 
 		// Player-owned capabilities always win first. The global registry is never
@@ -1020,7 +1053,7 @@ export class StoryActionAdvisor {
 				if (aiTips.length > 0) {
 					const groundedAiTips = aiTips.filter((tip) => {
 						const haystack = normalize(tip.title + ' ' + tip.description + ' ' + tip.actionText);
-						const cueWords = sceneSources.flatMap((cue) => normalize(cue).split(/\\s+/)).filter((word) => word.length >= 5);
+						const cueWords = sceneSources.flatMap((cue) => normalize(cue).split(/\s+/)).filter((word) => word.length >= 5);
 						return cueWords.length === 0 || cueWords.some((word) => haystack.includes(word));
 					});
 					if (groundedAiTips.length > 0) {

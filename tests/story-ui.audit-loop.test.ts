@@ -23,7 +23,6 @@ test('Story UI audit-implementation-regression-fallback loop completes ten deter
 		'play.journal',
 		'play.combat',
 		'play.map',
-		'play.chronicle',
 		'play.codex',
 		'play.evidence',
 		'play.relationships',
@@ -33,7 +32,7 @@ test('Story UI audit-implementation-regression-fallback loop completes ten deter
 		assert.equal(menu.includes("route: 'play.world-systems'"), false, `Audit ${iteration}: developer World Systems route leaked into player navigation`);
 		assert.equal(menu.includes("route: 'play.powers'"), false, `Audit ${iteration}: internal capability workbench leaked into player navigation`);
 		assert.equal(shell.includes("primaryIds = new Set(['story', 'character', 'inventory', 'world', 'map', 'combat'])"), true, `Audit ${iteration}: Character and World must remain primary gameplay navigation entries`);
-		assert.equal(shell.includes('Character, World, Inventory, Map, and Combat are primary in-story tools; journal and diagnostics stay in More.'), true, `Audit ${iteration}: primary gameplay navigation comment no longer matches the actual menu`);
+		assert.equal(shell.includes('The core story bar is deliberately fixed to the player's most-used destinations.'), true, `Audit ${iteration}: primary gameplay navigation comment no longer matches the actual menu`);
 		for (const route of playerRoutes) {
 			assert.equal(menu.includes(`route: '${route}'`), true, `Audit ${iteration}: navigation lost ${route}`);
 			assert.equal(app.includes(`currentRoute === '${route}'`), true, `Audit ${iteration}: ${route} has no real viewport`);

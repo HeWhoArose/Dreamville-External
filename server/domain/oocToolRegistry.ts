@@ -314,7 +314,7 @@ export class OocToolRegistry {
 			commandSequence,
 		);
 
-		const result = await canonicalCommandEngine.execute(
+		const result = await canonicalCommandEngine.execute<Record<string, unknown>, any>(
 			params.repository,
 			{
 				commandId: id,
@@ -401,7 +401,7 @@ export class OocToolRegistry {
 			name: params.toolName,
 			success: result.success,
 			message: result.success
-				? String(result.errorReason || result.data?.message || 'Canonical OOC tool completed.')
+				? String(result.errorReason || (result.data as any)?.message || 'Canonical OOC tool completed.')
 				: String(result.errorReason || 'Canonical OOC tool was rejected.'),
 			data: result.data,
 			commandId: result.commandId,

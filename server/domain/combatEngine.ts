@@ -4,7 +4,7 @@ import { ConditionEngine } from './conditionEngine';
 import { CombatActionEconomy, CombatTurnResourceSnapshot, ReadyTriggerType } from './combatActionEconomy';
 import { CombatReactionEngine } from './combatReactionEngine';
 import { deathSaveEngine } from './deathSaveEngine';
-import type { DeathSaveState, RulesProfile, CombatAttackInstanceResult, CombatEffectDefinition, CombatEffectResult, CombatEventRecord, CombatReplayRecord, BodyRegionId, DestructibleEnvironmentObject, CombatMoraleState, CombatForcedMovementDefinition, CombatForcedMovementResult, CombatMovementCollisionResult, TacticalPlanState } from '../../src/types';
+import type { DeathSaveState, RulesProfile, CombatAttackInstanceResult, CombatEffectDefinition, CombatEffectResult, CombatEventRecord, CombatReplayRecord, BodyRegionId, DestructibleEnvironmentObject, CombatMoraleState, CombatForcedMovementDefinition, CombatForcedMovementResult, CombatMovementCollisionResult, TacticalPlanState, CombatPhase, CombatInitiativeRoll, CombatNarrativeResolution } from '../../src/types';
 import { CombatMoraleEngine } from './combatMoraleEngine';
 import { resolveCapabilityCheckFormula } from '../../src/data/rulesDice';
 import type { ProgressionResolution } from './characterProgressionEngine';
@@ -52,6 +52,8 @@ export interface IRulesetAdapter {
   resolveInitiative?(params: {
     actorId: string;
     participant: BattlefieldParticipant;
+    advantage?: boolean;
+    disadvantage?: boolean;
     diceEngine?: LocalDiceEngine;
   }): { roll: RollRecord; totalInitiative: number };
   resolveAttack(params: {
@@ -240,14 +242,23 @@ export class Dnd521RulesetAdapter implements IRulesetAdapter {
   public resolveInitiative(params: {
     actorId: string;
     participant: BattlefieldParticipant;
+    advantage?: boolean;
+    disadvantage?: boolean;
     diceEngine?: LocalDiceEngine;
   }): { roll: RollRecord; totalInitiative: number } {
     const dice = params.diceEngine || LocalDiceEngine;
     const mod = typeof params.participant.initiativeModifier === 'number'
       ? params.participant.initiativeModifier
       : (typeof params.participant.attackBonus === 'number' ? Math.max(0, Math.floor(params.participant.attackBonus / 2)) : 0);
-    const roll = dice.roll('1d20', mod);
-    return { roll, totalInitiative: roll.total };
+    const roll1 = dice.roll('1d20', mod);
+    if ((params.advantage && params.disadvantage) || (!params.advantage && !params.disadvantage)) {
+      return { roll: roll1, totalInitiative: roll1.total };
+    }
+    const roll2 = dice.roll('1d20', mod);
+    const chosenRoll = params.advantage
+      ? (roll2.total > roll1.total ? roll2 : roll1)
+      : (roll2.total < roll1.total ? roll2 : roll1);
+    return { roll: chosenRoll, totalInitiative: chosenRoll.total };
   }
 
   public resolveAttack(params: {
@@ -433,6 +444,13 @@ export interface TacticalCombatStateExport {
   conditionEngineState?: ReturnType<ConditionEngine['exportState']>;
   progressionResolutions?: Record<string, any>;
   tacticalPlans?: Record<string, TacticalPlanState>;
+  phase?: CombatPhase;
+  initiativeRolls?: CombatInitiativeRoll[];
+  surprisedActorIds?: string[];
+  combatBanner?: string;
+  lastResolution?: CombatNarrativeResolution;
+  encounterId?: string;
+  encounterSource?: 'STORY' | 'MANUAL' | 'SYSTEM';
 }
 
 export interface ProjectedCombatState {
@@ -488,6 +506,13 @@ export class TacticalCombatEngine {
   private readonly moraleEngine = new CombatMoraleEngine();
   private combatActionSequence = 0;
   private tacticalPlans = new Map<string, TacticalPlanState>();
+  private combatPhase: CombatPhase = 'INACTIVE';
+  private initiativeRolls: CombatInitiativeRoll[] = [];
+  private surprisedActorIds = new Set<string>();
+  private combatBanner = '';
+  private lastResolution?: CombatNarrativeResolution;
+  private encounterId?: string;
+  private encounterSource?: 'STORY' | 'MANUAL' | 'SYSTEM';
   private initialSeed: number;
 
   constructor(seed = 1337, ruleset?: IRulesetAdapter, conditionEngine?: ConditionEngine) {
@@ -615,6 +640,13 @@ export class TacticalCombatEngine {
     this.moraleEngine.importState([]);
     this.combatActionSequence = 0;
     this.tacticalPlans.clear();
+    this.combatPhase = 'INACTIVE';
+    this.initiativeRolls = [];
+    this.surprisedActorIds.clear();
+    this.combatBanner = '';
+    this.lastResolution = undefined;
+    this.encounterId = undefined;
+    this.encounterSource = undefined;
     this.pendingActivations.clear();
     this.bossPhaseStates.clear();
     this.actionEconomy.clear();
@@ -759,35 +791,103 @@ export class TacticalCombatEngine {
     return { success: true };
   }
 
-  public rollInitiative(): void {
-    for (const p of Array.from(this.participants.values())) {
-      if (p.initiative && p.initiative > 0) {
-        continue;
-      }
-      if (this.ruleset.resolveInitiative) {
-        const initRes = this.ruleset.resolveInitiative({
-          actorId: p.id,
-          participant: p,
-          diceEngine: this.diceEngine,
-        });
-        p.initiative = initRes.totalInitiative;
-      } else {
-        const mod = typeof p.initiativeModifier === 'number' ? p.initiativeModifier : 0;
-        const roll = this.diceEngine.roll('1d20', mod);
-        p.initiative = roll.total;
+  public rollInitiative(options?: { reset?: boolean; surprisedActorIds?: Iterable<string> }): CombatInitiativeRoll[] {
+    const reset = options?.reset === true;
+    if (reset) {
+      for (const participant of this.participants.values()) {
+        participant.initiative = 0;
       }
     }
+    if (options?.surprisedActorIds) {
+      this.setSurprisedActors(options.surprisedActorIds);
+    }
+
+    const results: CombatInitiativeRoll[] = [];
+    for (const participant of Array.from(this.participants.values())) {
+      const surprised = this.surprisedActorIds.has(participant.id);
+      if (!reset && participant.initiative && participant.initiative > 0) {
+        const preservedRoll: RollRecord = {
+          rollId: `initiative_preserved_${participant.id}_${this.currentRound}`,
+          rulesetVersion: this.ruleset.version,
+          formula: '1d20',
+          diceTerms: [{ count: 1, sides: 20 }],
+          individualDice: [participant.initiative],
+          modifier: 0,
+          total: participant.initiative,
+          isCriticalSuccess: false,
+          isCriticalFailure: false,
+          timestamp: this.diceEngine.getRollCounter(),
+        };
+        results.push({
+          actorId: participant.id,
+          actorName: participant.name,
+          roll: preservedRoll,
+          total: participant.initiative,
+          advantageState: 'NORMAL',
+          surprised,
+          position: 0,
+        });
+        continue;
+      }
+
+      if (this.ruleset.resolveInitiative) {
+        const initiativeResult = this.ruleset.resolveInitiative({
+          actorId: participant.id,
+          participant,
+          advantage: false,
+          disadvantage: surprised,
+          diceEngine: this.diceEngine,
+        });
+        participant.initiative = initiativeResult.totalInitiative;
+        results.push({
+          actorId: participant.id,
+          actorName: participant.name,
+          roll: initiativeResult.roll,
+          total: initiativeResult.totalInitiative,
+          advantageState: surprised ? 'DISADVANTAGE' : 'NORMAL',
+          surprised,
+          position: 0,
+        });
+      } else {
+        const roll = this.diceEngine.roll('1d20', participant.initiativeModifier || 0);
+        participant.initiative = roll.total;
+        results.push({
+          actorId: participant.id,
+          actorName: participant.name,
+          roll,
+          total: roll.total,
+          advantageState: 'NORMAL',
+          surprised,
+          position: 0,
+        });
+      }
+    }
+
     this.turnQueue = Array.from(this.participants.values())
+      .filter((participant) => !participant.isDead)
       .sort((a, b) => (b.initiative !== a.initiative ? b.initiative - a.initiative : a.id.localeCompare(b.id)))
-      .map((p) => p.id);
+      .map((participant) => participant.id);
+
+    this.initiativeRolls = [...results]
+      .sort((a, b) => {
+        const actorA = this.participants.get(a.actorId);
+        const actorB = this.participants.get(b.actorId);
+        return (actorB?.initiative || 0) - (actorA?.initiative || 0) || a.actorId.localeCompare(b.actorId);
+      })
+      .map((entry, index) => ({ ...entry, position: index + 1 }));
+
     this.currentTurnIndex = 0;
+    this.combatPhase = 'ACTIVE';
+    this.combatBanner = 'Initiative rolled. Turn order established.';
 
     const currentActor = this.getCurrentActor();
     if (currentActor) {
       this.processConditionCombatEvent(currentActor.id, 'ON_ROUND_START', 'round_start');
       this.actionEconomy.beginTurn(currentActor.id, currentActor.speedCells, this.currentRound);
     }
+    return this.getInitiativeRolls();
   }
+
 
   public getCurrentActor(): BattlefieldParticipant | undefined {
     if (this.turnQueue.length === 0) return undefined;
@@ -834,6 +934,73 @@ export class TacticalCombatEngine {
 
   public clearTacticalPlan(actorId: string): void {
     this.tacticalPlans.delete(actorId);
+  }
+
+  public getCombatPhase(): CombatPhase {
+    return this.combatPhase;
+  }
+
+  public setCombatPhase(
+    phase: CombatPhase,
+    options?: {
+      banner?: string;
+      encounterId?: string;
+      encounterSource?: 'STORY' | 'MANUAL' | 'SYSTEM';
+    }
+  ): void {
+    this.combatPhase = phase;
+    if (options?.banner !== undefined) this.combatBanner = options.banner;
+    if (options?.encounterId !== undefined) this.encounterId = options.encounterId;
+    if (options?.encounterSource !== undefined) this.encounterSource = options.encounterSource;
+  }
+
+  public getInitiativeRolls(): CombatInitiativeRoll[] {
+    return JSON.parse(JSON.stringify(this.initiativeRolls));
+  }
+
+  public getSurprisedActorIds(): string[] {
+    return Array.from(this.surprisedActorIds.values());
+  }
+
+  public setSurprisedActors(actorIds: Iterable<string>): void {
+    this.surprisedActorIds = new Set(Array.from(actorIds).filter((id) => this.participants.has(id)));
+  }
+
+  public getCombatBanner(): string {
+    return this.combatBanner;
+  }
+
+  public setLastResolution(resolution?: CombatNarrativeResolution): void {
+    this.lastResolution = resolution ? JSON.parse(JSON.stringify(resolution)) : undefined;
+  }
+
+  public getLastResolution(): CombatNarrativeResolution | undefined {
+    return this.lastResolution ? JSON.parse(JSON.stringify(this.lastResolution)) : undefined;
+  }
+
+  public prepareEncounter(options?: {
+    resetInitiatives?: boolean;
+    surprisedActorIds?: Iterable<string>;
+    banner?: string;
+    encounterId?: string;
+    encounterSource?: 'STORY' | 'MANUAL' | 'SYSTEM';
+  }): void {
+    if (options?.resetInitiatives) {
+      for (const participant of this.participants.values()) {
+        participant.initiative = 0;
+      }
+    }
+    this.turnQueue = [];
+    this.currentTurnIndex = 0;
+    this.initiativeRolls = [];
+    this.surprisedActorIds = new Set(
+      Array.from(options?.surprisedActorIds || []).filter((id) => this.participants.has(id))
+    );
+    this.combatBanner = options?.banner || 'Combat initiated. Roll for initiative.';
+    this.lastResolution = undefined;
+    this.encounterId = options?.encounterId || this.encounterId;
+    this.encounterSource = options?.encounterSource || this.encounterSource || 'SYSTEM';
+    this.combatPhase = 'INITIATIVE_PENDING';
   }
 
   public getMoraleState(actorId: string): CombatMoraleState | undefined {
@@ -4031,6 +4198,13 @@ export class TacticalCombatEngine {
             ])
           )
         : undefined,
+      phase: this.combatPhase,
+      initiativeRolls: this.getInitiativeRolls(),
+      surprisedActorIds: this.getSurprisedActorIds(),
+      combatBanner: this.combatBanner,
+      lastResolution: this.getLastResolution(),
+      encounterId: this.encounterId,
+      encounterSource: this.encounterSource,
     };
   }
 
@@ -4145,5 +4319,16 @@ export class TacticalCombatEngine {
       if (!plan || typeof plan !== 'object') continue;
       this.tacticalPlans.set(actorId, JSON.parse(JSON.stringify(plan)));
     }
+    this.combatPhase = data.phase || 'INACTIVE';
+    this.initiativeRolls = Array.isArray(data.initiativeRolls)
+      ? JSON.parse(JSON.stringify(data.initiativeRolls))
+      : [];
+    this.surprisedActorIds = new Set(
+      (data.surprisedActorIds || []).filter((id) => this.participants.has(id))
+    );
+    this.combatBanner = typeof data.combatBanner === 'string' ? data.combatBanner : '';
+    this.lastResolution = data.lastResolution ? JSON.parse(JSON.stringify(data.lastResolution)) : undefined;
+    this.encounterId = data.encounterId;
+    this.encounterSource = data.encounterSource;
   }
 }

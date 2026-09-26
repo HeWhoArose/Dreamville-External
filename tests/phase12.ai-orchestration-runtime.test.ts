@@ -292,6 +292,10 @@ test('Phase 12: HTTP 5xx provider failure falls through to the next eligible pro
 
 test('Phase 12: fallback exhaustion reaches the deterministic emergency floor', async () => {
 	const orchestrator = createTestOrchestrator();
+	orchestrator.setCategoryModelOverride('narration', null);
+	for (const existing of orchestrator.getAllModels()) {
+		if (!existing.isEmergencyFloor) orchestrator.updateModelHealth(existing.providerId, existing.modelId, 'DisabledByUser');
+	}
 	const failing = new DeterministicMockAdapter('phase12_exhausted_provider');
 	failing.failureMode = '429';
 

@@ -840,7 +840,7 @@ export class TacticalCombatEngine {
           actorId: participant.id,
           participant,
           advantage: false,
-          disadvantage: surprised,
+          disadvantage: false,
           diceEngine: this.diceEngine,
         });
         participant.initiative = initiativeResult.totalInitiative;
@@ -849,7 +849,7 @@ export class TacticalCombatEngine {
           actorName: participant.name,
           roll: initiativeResult.roll,
           total: initiativeResult.totalInitiative,
-          advantageState: surprised ? 'DISADVANTAGE' : 'NORMAL',
+          advantageState: 'NORMAL',
           surprised,
           position: 0,
         });
@@ -965,6 +965,12 @@ export class TacticalCombatEngine {
 
   public getSurprisedActorIds(): string[] {
     return Array.from(this.surprisedActorIds.values());
+  }
+
+  public consumeSurprise(actorId: string): boolean {
+    if (!this.surprisedActorIds.has(actorId)) return false;
+    this.surprisedActorIds.delete(actorId);
+    return true;
   }
 
   public setSurprisedActors(actorIds: Iterable<string>): void {

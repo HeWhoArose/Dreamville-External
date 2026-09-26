@@ -89,7 +89,7 @@ test('stale active dialogue is excluded from non-dialogue current-scene art', ()
 });
 
 
-test('current-scene comic prompt uses fewer panels when the turn has only one visual beat', () => {
+test('adaptive panel planning uses fewer panels when the turn has only one visual beat', () => {
 	const result = buildComicScenePrompt({
 		location: { name: 'Abyssal Trench', description: 'A sealed structure rises from the dark water.' },
 		protagonist: { name: 'The Ashen Knight' },

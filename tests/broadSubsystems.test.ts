@@ -1518,7 +1518,7 @@ describe('Broad Implementation Pass — Domain Subsystems', () => {
         modelId: 'model_beta',
         displayName: 'Model Beta',
         pool: 'creative',
-        capabilities: ['general'],
+        capabilities: ['text_generation', 'structured_output'],
         contextWindow: 100000,
         health: 'Healthy',
         quota: 'Healthy',

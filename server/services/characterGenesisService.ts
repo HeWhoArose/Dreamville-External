@@ -1037,7 +1037,7 @@ Rules:
           emoji: extracted.portraitAsset?.emoji || this.getEmojiForRole(role.profession || role.archetype),
           promptFallback:
             extracted.portraitAsset?.promptFallback ||
-            `Digital portrait of ${identity.name}, ${identity.age} year old ${identity.species} ${role.profession}. ${appearance.physicalDescription}. Stylized oil painting, atmospheric lighting.`,
+            `Character identity poster portrait of ${identity.name}, a ${identity.age}-year-old ${identity.species} ${role.profession || role.archetype || 'character'}. Face clearly visible and dominant in frame; defining physical features: ${appearance.physicalDescription}; distinguishing traits: ${appearance.distinguishingTraits.join(', ')}. Show the character from the chest or waist up with signature clothing and equipment visible, restrained character-focused backdrop, cinematic character lighting. Single character only. This is a character poster, NOT a world poster, location poster, landscape, or scene illustration. Output: 1024 x 1024 pixels, 1:1 square. No poster text, UI, watermark, or arbitrary typography.`,
           isFallback: true,
           status: 'idle',
         };
@@ -3178,7 +3178,7 @@ IMPORTANT: Select an appropriate category and paper-doll slot. If the item is a 
         whyHereNow: 'Seeking information on how to navigate this world and confront looming threats.',
       },
       portraitAsset: {
-        promptFallback: `Heroic portrait of ${name}, ${species} ${profession} in ${worldTemplate?.title || 'fantasy'} setting, cinematic rim lighting.`,
+        promptFallback: `Character identity poster portrait of ${name}, ${species} ${profession || 'character'} in the ${worldTemplate?.title || 'current'} setting. Face and defining physical features must be clearly readable; show a three-quarter bust or waist-up presentation with signature attire/equipment and a restrained character-focused background. Single character only; not a world poster, location poster, landscape, or scene illustration. Output: 1024 x 1024 pixels, 1:1 square. No poster text, UI, watermark, or arbitrary typography.`,
         emoji: this.getEmojiForRole(profession),
       },
     };

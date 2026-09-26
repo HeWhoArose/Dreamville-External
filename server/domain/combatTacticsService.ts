@@ -22,6 +22,17 @@ interface CombatTacticsAiResponse {
 	steps?: CombatTacticsAiStep[];
 }
 
+export interface TacticalIntelligenceProfile {
+	strategyRating: number;
+	planningHorizon: number;
+	adaptability: number;
+	threatAssessment: number;
+	spatialAwareness: number;
+	teamCoordination: number;
+	riskTolerance: number;
+	resourceDiscipline: number;
+}
+
 export interface CombatTacticsDecisionResult {
 	proposal: TacticalActionProposal;
 	plan?: TacticalPlanState;
@@ -204,6 +215,25 @@ export class CombatTacticsService {
 
 		const agency = repository.getDynamicCharacterAgencyEngine(storyId).getCharacter(storyId, actorId);
 		const currentPlan = combatEngine.getTacticalPlan(actorId);
+		const actorIntelligence = this.deriveTacticalIntelligence(actor, agency);
+		const memoryKeywords = [
+			actor.name,
+			...(currentPlan?.steps || []).slice(currentPlan.currentStepIndex).map((step) => step.actionType),
+			...knownParticipants.slice(0, 4).map((participant) => participant.name),
+		]
+			.map((value) => String(value).toLowerCase())
+			.filter((value) => value.length >= 3)
+			.slice(0, 12);
+		const tacticalMemories = repository.getMemoryEngine(storyId).retrieveMemories({
+			storyId,
+			viewerActorId: actorId,
+			queryKeywords: memoryKeywords,
+			currentTurn: combatEngine.getCurrentRound(),
+			currentTimestamp: repository.getWorldClock(storyId).getTimestamp(),
+			maxResults: 6,
+			includeDormant: false,
+			includeArchived: false,
+		});
 		const perception = {
 			knownParticipantIds: knownParticipants.map((participant) => participant.id),
 		};
@@ -223,6 +253,7 @@ export class CombatTacticsService {
 				id: actor.id,
 				name: actor.name,
 				team: actor.team,
+				tacticalIntelligence: actorIntelligence,
 				hpCurrent: actor.hpCurrent,
 				hpMax: actor.hpMax,
 				armorClass: actor.armorClass,
@@ -241,6 +272,13 @@ export class CombatTacticsService {
 			pendingActivation: combatEngine.getPendingActivation(actorId),
 			capabilities: effectiveCapabilities,
 			currentPlan,
+			tacticalMemory: tacticalMemories.map((memory) => ({
+				id: memory.id,
+				content: memory.content,
+				importance: memory.importance,
+				confidence: memory.confidence,
+				sourceEventId: memory.sourceEventId,
+			})),
 			deterministicFallback: deterministicProposal,
 			outputSchema: {
 				objective: 'string',
@@ -375,6 +413,9 @@ export class CombatTacticsService {
 		combatEngine: TacticalCombatEngine,
 		actorId: string,
 		success: boolean,
+		repository?: WorldRepository,
+		storyId?: string,
+		commandId?: string,
 	): void {
 		const plan = combatEngine.getTacticalPlan(actorId);
 		if (!plan) return;
@@ -391,6 +432,82 @@ export class CombatTacticsService {
 		plan.updatedAt = new Date().toISOString();
 		plan.revision += 1;
 		combatEngine.setTacticalPlan(plan);
+
+		if (repository && storyId) {
+			const actor = combatEngine.getParticipant(actorId);
+			if (actor) {
+				const memoryId = deterministicId(
+					'combat_tactical_memory',
+					storyId,
+					actorId,
+					combatEngine.getCurrentRound(),
+					plan.revision,
+					commandId || 'turn',
+				);
+				const memoryEngine = repository.getMemoryEngine(storyId);
+				if (!memoryEngine.getMemory(memoryId)) {
+					memoryEngine.storeMemory({
+						id: memoryId,
+						storyId,
+						memoryClass: 'CAUSAL',
+						subjectEntityId: actorId,
+						relatedEntityIds: combatEngine.getParticipants()
+							.filter((participant) => participant.id !== actorId && !participant.isDead)
+							.slice(0, 6)
+							.map((participant) => participant.id),
+						content: success
+							? 'Combat tactic succeeded: ' + plan.objective
+							: 'Combat tactic failed and required replanning: ' + plan.objective,
+						importance: success ? 70 : 80,
+						confidence: 1,
+						status: 'active',
+						visibility: 'PRIVATE',
+						accessibleToEntityIds: [actorId],
+						isPersistentCritical: false,
+						provenance: 'combat_tactical_execution',
+						sourceEventId: commandId,
+						validFromTurn: combatEngine.getCurrentRound(),
+						lastRecalledTurn: combatEngine.getCurrentRound(),
+						createdAtTimestamp: repository.getWorldClock(storyId).getTimestamp(),
+						lastRecalledTimestamp: repository.getWorldClock(storyId).getTimestamp(),
+						triggerConditionTags: [
+							'combat',
+							success ? 'tactic_success' : 'tactic_failure',
+							...plan.steps.slice(0, 3).map((step) => step.actionType.toLowerCase()),
+						],
+					});
+				}
+			}
+		}
+	}
+
+	private deriveTacticalIntelligence(
+		actor: BattlefieldParticipant,
+		agency: any,
+	): TacticalIntelligenceProfile {
+		const personality = agency?.personality || {};
+		const goals = Array.isArray(agency?.goals) ? agency.goals.filter((goal: any) => goal.active !== false).length : 0;
+		const strategyRating = Math.max(
+			0,
+			Math.min(
+				100,
+				50 +
+					Number(actor.initiativeModifier || 0) * 4 +
+					Number(actor.attackBonus || 0) * 3 +
+					Number(personality.ambition || 0) * 0.1 +
+					goals * 5,
+			),
+		);
+		return {
+			strategyRating,
+			planningHorizon: Math.max(1, Math.min(6, 1 + Math.floor(strategyRating / 20))),
+			adaptability: Math.max(10, Math.min(100, 50 + Number(personality.courage || 0) * 0.25 + Number(personality.empathy || 0) * 0.15)),
+			threatAssessment: Math.max(10, Math.min(100, 50 + Number(actor.armorClass || 10) - 10)),
+			spatialAwareness: Math.max(10, Math.min(100, 45 + Number(actor.speedCells || 3) * 6)),
+			teamCoordination: Math.max(10, Math.min(100, 50 + Number(personality.loyalty || 0) * 0.4)),
+			riskTolerance: Math.max(10, Math.min(100, 50 + Number(personality.courage || 0) * 0.5 - Number(personality.fearfulness || 0) * 0.4)),
+			resourceDiscipline: Math.max(10, Math.min(100, 60 + Number(actor.combatResources ? Object.keys(actor.combatResources).length : 0) * 3)),
+		};
 	}
 
 	private validateProposal(

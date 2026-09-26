@@ -3540,6 +3540,7 @@ export class TacticalCombatEngine {
     isRitual?: boolean;
     advantage?: boolean;
     disadvantage?: boolean;
+    consumeResource?: boolean;
   }): {
     success: boolean;
     errorReason?: string;
@@ -3651,7 +3652,9 @@ export class TacticalCombatEngine {
     }
 
     // Consume action resource only after the spell has resolved successfully.
-    this.actionEconomy.consume(params.actorId, resourceType);
+    if (params.consumeResource !== false) {
+      this.actionEconomy.consume(params.actorId, resourceType);
+    }
 
     // Synchronize state back to participant
     actor.spellSlots = state.spellSlots;

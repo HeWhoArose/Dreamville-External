@@ -236,15 +236,15 @@ export class WorkingContextEngine {
     const combatEngine = repo.getCombatEngine(storyId);
     const memoryEngine = repo.getMemoryEngine(storyId);
     const livingSim = repo.getLivingWorldSimulation(storyId);
-    const worldMomentum = ((run?.runtimeState as any)?.worldMomentum || {}) as {
-      pressure?: number;
-      unresolvedSignals?: string[];
-    };
 
     const viewerId = params.viewerActorId || (player ? player.actorId : `player_actor_${storyId}`);
 
     // 2. Epistemic Projection: Scene & Geography
     const run = repo.getStoryRun(storyId);
+    const worldMomentum = ((run?.runtimeState as any)?.worldMomentum || {}) as {
+      pressure?: number;
+      unresolvedSignals?: string[];
+    };
     const narrativeProfile = repo.getNarrativeProfile(storyId);
     const rulesProfile = repo.getRulesProfile(storyId);
     const locId = player ? player.locationId : (run?.startingLocationId || run?.currentLocationId || (storyId === 'default_story' ? 'loc_whispering_orrery' : 'loc_unknown'));

@@ -856,6 +856,28 @@ export class StoryActionAdvisor {
 		actionText: string,
 		sceneContext?: StoryActionSceneContext,
 	): Promise<ActionTip[]> {
+		const suppliedContext = sceneContext;
+		if (
+			!actionText.trim() &&
+			suppliedContext &&
+			(suppliedContext.locationName ||
+				suppliedContext.locationDescription ||
+				suppliedContext.startingSituation ||
+				suppliedContext.openingNarrative ||
+				suppliedContext.activeDialogue ||
+				suppliedContext.recentActions?.length)
+		) {
+			const fallbackLocation = suppliedContext.locationName || 'the current area';
+			return [{
+				id: deterministicId('empty_action_scene_tip', storyId, fallbackLocation),
+				title: 'Read the scene',
+				description: 'Use the visible situation to decide what deserves your attention before committing to an action.',
+				intent: 'OBSERVE_ENVIRONMENT',
+				actionText: `I carefully examine ${fallbackLocation} and look for useful clues, hazards, exits, or signs of what is happening.`,
+				source: 'DETERMINISTIC',
+			}];
+		}
+
 		const player = this.repository.getPlayerLifecycle(storyId);
 		const run = this.repository.getStoryRun(storyId);
 		const actorId =

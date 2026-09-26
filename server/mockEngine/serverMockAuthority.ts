@@ -478,7 +478,7 @@ export class ServerMockAuthority {
   public async processCustomAction(
     request: ActionRequest,
     canonicalCommandId?: string,
-    options?: { bypassCapabilityAdvisor?: boolean },
+    options?: { bypassCapabilityAdvisor?: boolean; narrationDirective?: string },
   ): Promise<ActionResult> {
     // Bypass is an internal server option only. A client cannot inject it through the HTTP payload.
     const bypassCapabilityAdvisor = Boolean(options?.bypassCapabilityAdvisor);
@@ -621,7 +621,10 @@ export class ServerMockAuthority {
         hardTokenBudget: 500,
         timeoutMs: 5000,
         maxRetries: 1,
-      });
+        continuationDirective: options?.narrationDirective
+          ? 'Connected AI pipeline directive. Treat this as presentation guidance only; canonical mechanics and committed outcome remain authoritative: ' + options.narrationDirective
+          : undefined,
+      } as any);
 
       if (
         generated.success &&

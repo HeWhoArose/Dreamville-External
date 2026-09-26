@@ -493,15 +493,27 @@ export class ServerMockAuthority {
     const targetStoryId = (request as any).storyId || this.activeStoryId;
     const playerForAdvice = worldRepository.getPlayerLifecycle(targetStoryId);
     const actorId = playerForAdvice?.actorId || `player_actor_${targetStoryId}`;
+    const freeformText =
+      (request as any).actionText ||
+      (request as any).customText ||
+      (request as any).description ||
+      (request as any).input ||
+      'Performed freeform action.';
 
-    if (request.type === 'CUSTOM_ACTION' && !bypassCapabilityAdvisor) {
-      const advice = await storyActionAdvisor.advise(targetStoryId, String(
-        (request as any).actionText ||
-        (request as any).customText ||
-        (request as any).description ||
-        (request as any).input ||
-        ''
-      ));
+    // Detect an actionable hostile encounter before capability-advisor gating.
+    // A canonical spell such as Fireball can live in SpellRuntime rather than
+    // CapabilityEngine, and must still reach the combat transition pipeline.
+    const encounterCandidate = request.type === 'CUSTOM_ACTION'
+      ? combatEncounterService.findHostileCandidate(
+          targetStoryId,
+          actorId,
+          String(freeformText),
+          worldRepository,
+        )
+      : undefined;
+
+    if (request.type === 'CUSTOM_ACTION' && !bypassCapabilityAdvisor && !encounterCandidate) {
+      const advice = await storyActionAdvisor.advise(targetStoryId, String(freeformText));
 
       if (advice.mode === 'SUGGEST_ALTERNATIVE' || advice.mode === 'CAPABILITY_SIMULATION') {
         return {
@@ -526,22 +538,9 @@ export class ServerMockAuthority {
       return this.processAction(request, canonicalCommandId);
     }
 
-    const freeformText =
-      (request as any).actionText ||
-      (request as any).customText ||
-      (request as any).description ||
-      (request as any).input ||
-      'Performed freeform action.';
-
     // Encounter detection must happen before the generic story-action resolver.
     // Otherwise a hostile opening action could be executed once as a story action
     // and a second time as a combat action.
-    const encounterCandidate = combatEncounterService.findHostileCandidate(
-      targetStoryId,
-      actorId,
-      String(freeformText),
-      worldRepository,
-    );
     if (encounterCandidate) {
       const pending = combatEncounterService.buildPendingCombatTransition(encounterCandidate);
       pending.targetId = encounterCandidate.targetId;

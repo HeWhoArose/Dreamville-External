@@ -37,6 +37,8 @@ export interface ComicSceneContext {
     text?: string;
   } | null;
   actionType?: string;
+  currentSituation?: string;
+  latestVisibleNarrative?: string;
 }
 
 export interface ComicScenePromptResult {
@@ -76,6 +78,8 @@ export function buildComicScenePrompt(context: ComicSceneContext): ComicScenePro
     `Exact location: ${context.location.name}${context.location.region ? ` — ${context.location.region}` : ''}.`,
     context.location.description ? `Physical appearance and spatial facts: ${context.location.description}.` : '',
     context.location.ambientSensory ? `Atmosphere and sensory cues: ${context.location.ambientSensory}.` : '',
+    context.currentSituation ? `Current situation: ${context.currentSituation}.` : '',
+    context.latestVisibleNarrative ? `Latest visible scene narration: ${context.latestVisibleNarrative}.` : '',
     `Visible cast only: ${cast.join('; ')}.`,
     action ? `Immediate action: ${action}.` : 'No new player action was recorded; depict the latest visible state exactly as supplied.',
     narration ? `Latest narrative beat: ${narration}.` : '',
@@ -84,16 +88,19 @@ export function buildComicScenePrompt(context: ComicSceneContext): ComicScenePro
     checkOutcome,
   ].filter(Boolean).join('\\n');
 
-  const beatCount = [action, narration, consequence, dialogue].filter(Boolean).length;
+  const beatCount = [action, narration, consequence, dialogue, context.currentSituation, context.latestVisibleNarrative].filter(Boolean).length;
   const panelCount: 1 | 2 | 3 | 4 =
-    !action && !dialogue ? 1 :
+    !action && !dialogue && !consequence && !context.currentSituation && !context.latestVisibleNarrative
+      ? 1 :
     consequence && dialogue ? 4 :
     consequence || narration.length > 180 ? 3 :
     2;
 
   const panelPlan =
     panelCount === 1
-      ? ['Panel 1 / splash: depict the exact current scene state as one strong establishing composition. Do not invent a prior or later event merely to fill space.']
+      ? [
+          'Panel 1 / splash: depict the exact current scene state as one strong establishing composition using the supplied location, atmosphere, current situation, latest visible narration, and cast. Do not invent a prior or later event merely to fill space.',
+        ]
       : panelCount === 2
         ? [
             'Panel 1: establish the exact current location, atmosphere, and visible cast.',

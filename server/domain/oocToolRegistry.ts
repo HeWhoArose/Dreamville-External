@@ -342,7 +342,7 @@ export class OocToolRegistry {
 					}
 					case 'USE_ITEM': {
 						const inventory = context.repository.getInventoryEngine(params.storyId);
-						const outcome = inventory.useItem(params.actorId, String(command.payload.itemId));
+						const outcome = inventory.consumeItem(params.actorId, String(command.payload.itemId));
 						return outcome.success
 							? { success: true, data: outcome, summary: `OOC used ${String(command.payload.itemId)}.` }
 							: { success: false, errorReason: outcome.errorReason || 'Item use rejected.' };

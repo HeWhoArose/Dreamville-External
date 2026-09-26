@@ -85,7 +85,6 @@ export const ROUTE_REGISTRY: Record<AppRoute, RouteMeta> = {
   'play.powers': { route: 'play.powers', title: 'Internal Capability Workbench', category: 'PLAY', requiresActiveStory: true, internalOnly: true },
   'play.combat': { route: 'play.combat', title: 'Tactical Combat', category: 'PLAY', requiresActiveStory: true },
   'play.map': { route: 'play.map', title: 'World Map', category: 'PLAY', requiresActiveStory: true },
-  'play.chronicle': { route: 'play.chronicle', title: 'Quests & Journal', category: 'PLAY', requiresActiveStory: true },
   'play.codex': { route: 'play.codex', title: 'World Codex', category: 'PLAY', requiresActiveStory: true },
   'play.evidence': { route: 'play.evidence', title: 'Evidence & Clues', category: 'PLAY', requiresActiveStory: true },
   'play.relationships': { route: 'play.relationships', title: 'Relationships & Factions', category: 'PLAY', requiresActiveStory: true },

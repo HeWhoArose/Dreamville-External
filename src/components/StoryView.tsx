@@ -761,6 +761,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
                 )}
               </div>
             )}
+          </div>
 
           <button
             type="button"

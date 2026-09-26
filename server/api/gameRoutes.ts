@@ -5418,6 +5418,9 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
           transactionCombatEngine,
           transactionCurrentActor.id,
           executionResult.success,
+          transactionRepo,
+          storyId,
+          commandId,
         );
 
         const deadParticipants = transactionCombatEngine.getParticipants().filter(

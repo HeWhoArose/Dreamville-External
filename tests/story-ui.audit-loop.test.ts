@@ -51,8 +51,10 @@ test('Story UI audit-implementation-regression-fallback loop completes ten deter
 		assert.equal(app.includes('StoryEvidenceView'), true, `Audit ${iteration}: evidence viewport disconnected`);
 		assert.equal(app.includes('StoryRelationshipsView'), true, `Audit ${iteration}: relationship viewport disconnected`);
 
-		// Fallback boundary: a failed action-advice preflight must still reach canonical action dispatch.
-		assert.equal(app.includes('Story action preflight unavailable; continuing through canonical action path.'), true, `Audit ${iteration}: action fallback path removed`);
+		// Action boundary: typed actions now enter the canonical /action path directly;
+		// the server performs capability preflight and returns advice only when required.
+		assert.equal(app.includes("type: 'CUSTOM_ACTION'"), true, `Audit ${iteration}: custom action dispatch removed`);
+		assert.equal(app.includes('canonical /action endpoint performs capability preflight itself.'), true, `Audit ${iteration}: canonical action preflight boundary removed`);
 
 		// Regression boundary: speaker themes remain world-scoped.
 		assert.equal(story.includes('getCharacterSpeakerTheme'), true, `Audit ${iteration}: world-scoped speaker color system disconnected`);

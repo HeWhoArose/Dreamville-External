@@ -60,7 +60,11 @@ export function compileProviderNeutralPrompt(meta: ImageAssetMeta): string {
   const subjectDesc = meta.subject || meta.title;
 
   if (meta.slotType === 'character_portrait' || meta.slotType === 'npc_portrait') {
-    parts.push('High-fidelity character portrait of ' + subjectDesc);
+    parts.push('Character identity poster portrait of ' + subjectDesc);
+    parts.push('Single character only; prominently show the face, eyes, hairstyle, facial structure, skin, fur, scales, distinctive markings, body silhouette, and other defining physical features.');
+    parts.push('Three-quarter bust or waist-up presentation with the head and face large and clearly readable in frame.');
+    parts.push('Use a polished illustrated character-poster composition with a restrained backdrop and cinematic character lighting that supports the subject without becoming a world or location poster.');
+    parts.push('This is a CHARACTER POSTER, not a world poster, location poster, landscape, scene establishing shot, group illustration, or environment-focused artwork.');
     if (meta.role) parts.push('Role: ' + meta.role);
     if (meta.traits?.length) parts.push('Key visual traits: ' + meta.traits.join(', '));
     if (meta.equipment) parts.push('Attire and gear: ' + meta.equipment);

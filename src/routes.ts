@@ -30,6 +30,8 @@ export type AppRoute =
   | 'play.character'
   | 'play.world'
   | 'play.recent-actions'
+  | 'play.quests'
+  | 'play.journal'
   | 'play.inventory'
   | 'play.powers'
   | 'play.combat'
@@ -78,6 +80,8 @@ export const ROUTE_REGISTRY: Record<AppRoute, RouteMeta> = {
   'play.character': { route: 'play.character', title: 'Character & Skills', category: 'PLAY', requiresActiveStory: true },
   'play.world': { route: 'play.world', title: 'World', category: 'PLAY', requiresActiveStory: true },
   'play.recent-actions': { route: 'play.recent-actions', title: 'Recent Actions', category: 'PLAY', requiresActiveStory: true },
+  'play.quests': { route: 'play.quests', title: 'Quests', category: 'PLAY', requiresActiveStory: true },
+  'play.journal': { route: 'play.journal', title: 'Journal', category: 'PLAY', requiresActiveStory: true },
   'play.inventory': { route: 'play.inventory', title: 'Inventory & Equipment', category: 'PLAY', requiresActiveStory: true },
   'play.powers': { route: 'play.powers', title: 'Internal Capability Workbench', category: 'PLAY', requiresActiveStory: true, internalOnly: true },
   'play.combat': { route: 'play.combat', title: 'Tactical Combat', category: 'PLAY', requiresActiveStory: true },

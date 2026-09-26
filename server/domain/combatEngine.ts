@@ -432,6 +432,7 @@ export interface TacticalCombatStateExport {
   bossPhaseStates?: Array<{ bossId: string; phaseId: string; modifiers: Record<string, number>; abilities: string[]; targetPriority?: string; environmentEffects: string[] }>;
   conditionEngineState?: ReturnType<ConditionEngine['exportState']>;
   progressionResolutions?: Record<string, any>;
+  tacticalPlans?: Record<string, TacticalPlanState>;
 }
 
 export interface ProjectedCombatState {

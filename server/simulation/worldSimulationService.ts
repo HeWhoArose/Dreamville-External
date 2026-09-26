@@ -522,10 +522,19 @@ export class WorldSimulationService {
       }
     }
 
+    const worldMomentum = worldMomentumEngine.advance({
+      repository: this.worldRepo,
+      storyId,
+      currentSeconds: currentElapsed,
+      triggeredEvents: livingSummary.triggeredEvents,
+      missedEvents: livingSummary.missedEvents,
+    });
+
     return {
       newTimestamp: updatedClockState.timestamp,
       completedArrivals,
       livingWorldSummary: livingSummary,
+      worldMomentum,
     };
   }
 
@@ -1000,4 +1009,5 @@ export class WorldSimulationService {
 }
 
 import { worldRepository } from '../repositories/worldRepository';
+import { worldMomentumEngine } from '../domain/worldMomentumEngine';
 export const worldSimulationService = new WorldSimulationService(worldRepository);

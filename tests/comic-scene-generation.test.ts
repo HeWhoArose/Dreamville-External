@@ -40,9 +40,11 @@ test('current-scene comic prompt is anchored to the latest turn only', () => {
   assert.match(result.prompt, /latest turn only/i);
   assert.match(result.prompt, /raise my blade/i);
   assert.match(result.prompt, /Archivist retreats one step/i);
-  assert.match(result.prompt, /Do NOT use previous dialogue/i);
+  assert.match(result.prompt, /CURRENT SCENE VISUAL BRIEF/i);
+  assert.match(result.prompt, /PANEL LOGIC/i);
+  assert.match(result.prompt, /Panel 1: establish the exact current location/i);
   assert.match(result.prompt, /no flashbacks/i);
-  assert.match(result.prompt, /failed actions as successful/i);
+  assert.match(result.prompt, /A failed action must remain visibly failed/i);
   assert.doesNotMatch(result.prompt, /old opening scene/i);
 });
 
@@ -59,7 +61,7 @@ test('comic generation context contract does not require dialogue history', () =
   });
 
   assert.match(result.prompt, /Current location: Current Hall/i);
-  assert.match(result.prompt, /Immediate player action: I open the gate/i);
+  assert.match(result.prompt, /Immediate action: I open the gate/i);
   assert.doesNotMatch(result.prompt, /dialogueHistory/i);
 });
 

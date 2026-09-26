@@ -4072,22 +4072,18 @@ export class MultiModelOrchestrator {
     });
 
     if (customChainKeys && customChainKeys.length > 0 && !hasActiveManualOverrideForTask) {
-      // Configured chains are strict allow-lists. A model appearing in a chain
-      // must already be eligible for this exact task. The first configured model
-      // is preserved as the selected route even when currently throttled; the
-      // execution loop will skip unusable entries and fail over to the next model.
+      // Configured chains are strict allow-lists. Every entry must be eligible
+      // for this exact task AND currently usable for the requested context.
+      // Unusable entries are skipped before selection; the next configured model
+      // becomes the selected candidate, and the ordered remainder is preserved.
       const configuredModels = customChainKeys
         .map(findConfiguredModel)
         .filter((m): m is ModelRegistryRecord => Boolean(m))
-        .filter((m) => m.roleEligibility.includes(task));
+        .filter((m) => isUsableCandidate(m));
 
       if (configuredModels.length > 0) {
         const selectedFromChain = configuredModels[0];
-        const fallbackModels = configuredModels.slice(1).filter((m) =>
-          m.health !== 'Unavailable' &&
-          m.health !== 'DisabledByUser' &&
-          !this.isCircuitBreakerTripped(m.providerId, m.modelId)
-        );
+        const fallbackModels = configuredModels.slice(1);
 
         const emergency = Array.from(this.models.values()).find(
           (m) => m.isEmergencyFloor && m.roleEligibility.includes(task)

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { WorldTemplate, WorldSearchCriteria, WorldSynthesisInput, CharacterStoryMode, DndRulesMode , Trash2} from '../types';
+import { WorldTemplate, WorldSearchCriteria, WorldSynthesisInput, CharacterStoryMode, DndRulesMode } from '../types';
 import { WorldArtCover } from './common/WorldArtCover';
 import { apiClient } from '../services/apiClient';
 import {
@@ -23,6 +23,7 @@ import {
   User,
   Swords,
   Scroll,
+  Trash2,
 } from 'lucide-react';
 
 interface WorldLibraryModalProps {
@@ -38,6 +39,7 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
   onClose,
   onSelectRun,
   onGenesisCharacter,
+  onDeleteWorld,
 }) => {
   const [worlds, setWorlds] = useState<WorldTemplate[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);

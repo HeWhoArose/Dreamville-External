@@ -5183,11 +5183,21 @@ gameRouter.post('/combat/end-turn', async (req: Request, res: Response) => {
         const transactionPlayer = transactionRepo.getPlayerLifecycle(storyId);
         const advanceResult = combatEngine.advanceTurn();
 
-        const npcResolution = await resolveNpcTurnsUntilPlayer(
-          storyId,
-          serverPlayerActorId,
-          transactionRepo,
+        const deadParticipants = combatEngine.getParticipants().filter(
+          p => p.isDead && p.id !== serverPlayerActorId
         );
+        for (const dp of deadParticipants) {
+          syncNpcCombatDeath(storyId, dp, 'environmental hazard', transactionPlayer?.locationId, transactionRepo);
+        }
+
+        let npcResolution: { turns: Array<Record<string, unknown>>; stoppedReason: string } | undefined;
+        if (combatEngine.getCombatPhase() === 'ACTIVE') {
+          npcResolution = await resolveNpcTurnsUntilPlayer(
+            storyId,
+            serverPlayerActorId,
+            transactionRepo,
+          );
+        }
 
         if (transactionPlayer && !transactionPlayer.isDead) {
           const playerPart = combatEngine.getParticipant(serverPlayerActorId);

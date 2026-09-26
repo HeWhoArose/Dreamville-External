@@ -41,8 +41,8 @@ const CONTRACTS: Record<TaskId, AiTaskContract> = {
 	'character.extract': {
 		task: 'character.extract',
 		category: 'character_genesis',
-		requiredCapabilities: ['text_generation', 'structured_output'],
-		preferredCapabilities: ['fast', 'structured_extraction'],
+		requiredCapabilities: ['text_generation'],
+		preferredCapabilities: ['fast', 'structured_extraction', 'structured_output'],
 		requiredInputTypes: ['text'],
 		requiredOutputTypes: ['json'],
 		requiresStructuredOutput: true,
@@ -53,8 +53,8 @@ const CONTRACTS: Record<TaskId, AiTaskContract> = {
 	'memory.extract': {
 		task: 'memory.extract',
 		category: 'character_genesis',
-		requiredCapabilities: ['text_generation', 'structured_output'],
-		preferredCapabilities: ['fast', 'structured_extraction'],
+		requiredCapabilities: ['text_generation'],
+		preferredCapabilities: ['fast', 'structured_extraction', 'structured_output'],
 		requiredInputTypes: ['text'],
 		requiredOutputTypes: ['json'],
 		requiresStructuredOutput: true,
@@ -65,8 +65,8 @@ const CONTRACTS: Record<TaskId, AiTaskContract> = {
 	'character.capability.propose': {
 		task: 'character.capability.propose',
 		category: 'capability_synthesis',
-		requiredCapabilities: ['text_generation', 'structured_output'],
-		preferredCapabilities: ['reasoning', 'extended_thinking'],
+		requiredCapabilities: ['text_generation'],
+		preferredCapabilities: ['reasoning', 'extended_thinking', 'structured_output'],
 		requiredInputTypes: ['text'],
 		requiredOutputTypes: ['json'],
 		requiresStructuredOutput: true,
@@ -77,7 +77,7 @@ const CONTRACTS: Record<TaskId, AiTaskContract> = {
 	'story.advice': {
 		task: 'story.advice',
 		category: 'gameplay_advice',
-		requiredCapabilities: ['text_generation', 'structured_output'],
+		requiredCapabilities: ['text_generation'],
 		preferredCapabilities: ['fast'],
 		requiredInputTypes: ['text'],
 		requiredOutputTypes: ['json'],
@@ -89,8 +89,8 @@ const CONTRACTS: Record<TaskId, AiTaskContract> = {
 	'rules.adjudicate': {
 		task: 'rules.adjudicate',
 		category: 'rules',
-		requiredCapabilities: ['text_generation', 'structured_output'],
-		preferredCapabilities: ['reasoning', 'extended_thinking'],
+		requiredCapabilities: ['text_generation'],
+		preferredCapabilities: ['reasoning', 'extended_thinking', 'structured_output'],
 		requiredInputTypes: ['text'],
 		requiredOutputTypes: ['json'],
 		requiresStructuredOutput: true,
@@ -101,8 +101,8 @@ const CONTRACTS: Record<TaskId, AiTaskContract> = {
 	'rules.analyze': {
 		task: 'rules.analyze',
 		category: 'rule_analysis',
-		requiredCapabilities: ['text_generation', 'structured_output'],
-		preferredCapabilities: ['reasoning', 'extended_thinking'],
+		requiredCapabilities: ['text_generation'],
+		preferredCapabilities: ['reasoning', 'extended_thinking', 'structured_output'],
 		requiredInputTypes: ['text'],
 		requiredOutputTypes: ['json'],
 		requiresStructuredOutput: true,
@@ -125,7 +125,7 @@ const CONTRACTS: Record<TaskId, AiTaskContract> = {
 	'world.generate': {
 		task: 'world.generate',
 		category: 'world_generation',
-		requiredCapabilities: ['text_generation', 'structured_output'],
+		requiredCapabilities: ['text_generation'],
 		preferredCapabilities: ['creative_writing', 'reasoning'],
 		requiredInputTypes: ['text'],
 		requiredOutputTypes: ['json'],
@@ -162,8 +162,8 @@ const CONTRACTS: Record<TaskId, AiTaskContract> = {
 	'combat.tactics': {
 		task: 'combat.tactics',
 		category: 'tactical_reasoning',
-		requiredCapabilities: ['text_generation', 'structured_output'],
-		preferredCapabilities: ['reasoning', 'extended_thinking'],
+		requiredCapabilities: ['text_generation'],
+		preferredCapabilities: ['reasoning', 'extended_thinking', 'structured_output'],
 		requiredInputTypes: ['text'],
 		requiredOutputTypes: ['json'],
 		requiresStructuredOutput: true,
@@ -174,8 +174,8 @@ const CONTRACTS: Record<TaskId, AiTaskContract> = {
 	'tactical.reason': {
 		task: 'tactical.reason',
 		category: 'tactical_reasoning',
-		requiredCapabilities: ['text_generation', 'structured_output'],
-		preferredCapabilities: ['reasoning', 'extended_thinking'],
+		requiredCapabilities: ['text_generation'],
+		preferredCapabilities: ['reasoning', 'extended_thinking', 'structured_output'],
 		requiredInputTypes: ['text'],
 		requiredOutputTypes: ['json'],
 		requiresStructuredOutput: true,
@@ -186,7 +186,7 @@ const CONTRACTS: Record<TaskId, AiTaskContract> = {
 	'combat.animation.plan': {
 		task: 'combat.animation.plan',
 		category: 'tactical_reasoning',
-		requiredCapabilities: ['text_generation', 'structured_output'],
+		requiredCapabilities: ['text_generation'],
 		preferredCapabilities: ['fast'],
 		requiredInputTypes: ['text'],
 		requiredOutputTypes: ['json'],
@@ -210,8 +210,8 @@ const CONTRACTS: Record<TaskId, AiTaskContract> = {
 	'intent.interpret': {
 		task: 'intent.interpret',
 		category: 'intent_interpretation',
-		requiredCapabilities: ['text_generation', 'structured_output'],
-		preferredCapabilities: ['fast', 'structured_extraction'],
+		requiredCapabilities: ['text_generation'],
+		preferredCapabilities: ['fast', 'structured_extraction', 'structured_output'],
 		requiredInputTypes: ['text'],
 		requiredOutputTypes: ['json'],
 		requiresStructuredOutput: true,
@@ -222,8 +222,8 @@ const CONTRACTS: Record<TaskId, AiTaskContract> = {
 	'capability.synthesize': {
 		task: 'capability.synthesize',
 		category: 'capability_synthesis',
-		requiredCapabilities: ['text_generation', 'structured_output'],
-		preferredCapabilities: ['reasoning', 'extended_thinking'],
+		requiredCapabilities: ['text_generation'],
+		preferredCapabilities: ['reasoning', 'extended_thinking', 'structured_output'],
 		requiredInputTypes: ['text'],
 		requiredOutputTypes: ['json'],
 		requiresStructuredOutput: true,
@@ -234,7 +234,7 @@ const CONTRACTS: Record<TaskId, AiTaskContract> = {
 	'research.query': {
 		task: 'research.query',
 		category: 'research',
-		requiredCapabilities: ['text_generation', 'structured_output'],
+		requiredCapabilities: ['text_generation'],
 		preferredCapabilities: ['reasoning', 'long_context', 'tools'],
 		requiredInputTypes: ['text'],
 		requiredOutputTypes: ['json'],
@@ -246,7 +246,7 @@ const CONTRACTS: Record<TaskId, AiTaskContract> = {
 	'research.world-brief': {
 		task: 'research.world-brief',
 		category: 'research',
-		requiredCapabilities: ['text_generation', 'structured_output'],
+		requiredCapabilities: ['text_generation'],
 		preferredCapabilities: ['reasoning', 'long_context'],
 		requiredInputTypes: ['text'],
 		requiredOutputTypes: ['json'],

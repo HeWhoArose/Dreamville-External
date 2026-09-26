@@ -107,6 +107,7 @@ const INITIAL_PROVIDERS: ProviderInfo[] = [
 const TASK_ID_MAP: Record<string, string> = {
   narrative: 'narrative.generate',
   dialogue: 'character.dialogue',
+  characterGenesis: 'character.extract',
   memory: 'memory.extract',
   summarization: 'summary.scene',
   consistency: 'rules.adjudicate',
@@ -1218,6 +1219,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               {[
                 { key: 'narrative', label: 'Narrative Storytelling', desc: 'Main prose, scene descriptions, world narration' },
                 { key: 'dialogue', label: 'Character Dialogue', desc: 'NPC speech and interpersonal exchanges' },
+                { key: 'characterGenesis', label: 'Character Genesis', desc: 'Extract and structure a character from the player concept' },
                 { key: 'memory', label: 'Memory & Extraction', desc: 'Fact extraction and chronicle indexing' },
                 { key: 'summarization', label: 'Summarization', desc: 'Context compression and story memory' },
                 { key: 'consistency', label: 'Canon Consistency', desc: 'Rules, canon, and world validation' },

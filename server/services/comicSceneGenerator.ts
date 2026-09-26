@@ -66,9 +66,10 @@ export function buildComicScenePrompt(context: ComicSceneContext): ComicScenePro
     ),
   ];
 
-  const dialogue = context.activeDialogue?.text
-    ? `${context.activeDialogue.speakerName || 'Speaker'} says: "${context.activeDialogue.text}"`
-    : '';
+  const dialogue =
+    latest.actionType === 'DIALOGUE_CHOICE' && context.activeDialogue?.text
+      ? `${context.activeDialogue.speakerName || 'Speaker'} says: "${context.activeDialogue.text}"`
+      : '';
 
   const sceneBrief = [
     `World identity: ${context.worldTitle || 'Current story world'}.`,

@@ -223,6 +223,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
   openingScene,
   worldTitle,
   worldId,
+  storyId,
   protagonistName,
   protagonistRole,
   protagonistPortraitUrl,

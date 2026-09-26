@@ -678,6 +678,20 @@ describe('CH1 Live Runtime Proof — Canonical Domain & HTTP API Path', () => {
     assert.strictEqual(typeof data.isEncounterActive, 'boolean');
   });
 
+  it('CH8 Live API: POST /api/game/combat/initiative/roll establishes turn order before player movement', async () => {
+    const res = await fetch(`${baseUrl}/combat/initiative/roll`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    assert.strictEqual(res.status, 200);
+    const data = (await res.json()) as any;
+    assert.ok(Array.isArray(data.initiativeRolls));
+    assert.ok(data.initiativeRolls.length >= 2);
+    assert.strictEqual(data.combatState.phase, 'ACTIVE');
+  });
+
   it('CH8 Live API: POST /api/game/combat/move moves actor within speed limit', async () => {
     const res = await fetch(`${baseUrl}/combat/move`, {
       method: 'POST',

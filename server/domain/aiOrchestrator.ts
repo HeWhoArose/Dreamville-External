@@ -80,10 +80,14 @@ export interface ModelRegistryRecord {
 
 export type AiTaskCategory =
   | 'narration'
+  | 'dialogue'
   | 'summarization'
   | 'world_generation'
   | 'character_genesis'
+  | 'memory'
   | 'research'
+  | 'research_world_brief'
+  | 'utility'
   | 'intent_interpretation'
   | 'capability_synthesis'
   | 'capability_explanation'
@@ -2029,11 +2033,15 @@ export class MultiModelOrchestrator {
 
   private getCategoryTasks(category: AiTaskCategory): TaskId[] {
     const mapping: Record<AiTaskCategory, TaskId[]> = {
-      narration: ['narrative.generate', 'character.dialogue', 'narrative.review'],
+      narration: ['narrative.generate', 'narrative.review'],
+      dialogue: ['character.dialogue'],
       summarization: ['summary.scene'],
-      world_generation: ['summary.scene', 'world.generate'],
-      character_genesis: ['character.extract', 'memory.extract'],
-      research: ['research.query', 'research.world-brief', 'utility.inspect'],
+      world_generation: ['world.generate'],
+      character_genesis: ['character.extract'],
+      memory: ['memory.extract'],
+      research: ['research.query'],
+      research_world_brief: ['research.world-brief'],
+      utility: ['utility.inspect'],
       intent_interpretation: ['intent.interpret'],
       capability_synthesis: ['character.capability.propose', 'capability.synthesize'],
       capability_explanation: ['capability.explain'],
@@ -2217,6 +2225,7 @@ export class MultiModelOrchestrator {
     this.taskPinnedModels.set('world.generate', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('character.dialogue', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('story.advice', 'google_gemini::gemini-3.5-flash');
+    this.taskPinnedModels.set('character.extract', 'google_gemini::gemini-3.5-flash-lite');
     this.taskPinnedModels.set('memory.extract', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('character.capability.propose', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('intent.interpret', 'google_gemini::gemini-3.5-flash-lite');
@@ -2254,19 +2263,35 @@ export class MultiModelOrchestrator {
       'rules.adjudicate',
       'rules.analyze',
       'summary.scene',
+      'world.generate',
       'combat.tactics',
       'tactical.reason',
       'combat.animation.plan',
       'narrative.review',
       'utility.inspect',
     ] as TaskId[]) {
-      this.taskFallbackChains.set(task, defaultChain);
+      this.taskFallbackChains.set(task, [...defaultChain]);
     }
+    this.taskFallbackChains.set('speech.generate', [
+      'provider_mock_speech::mock-speech-v1',
+      'provider_deterministic_emergency::emergency-fallback-local',
+    ]);
+    this.taskFallbackChains.set('speech.transcribe', [
+      'provider_mock_stt::mock-stt-v1',
+      'provider_deterministic_emergency::emergency-fallback-local',
+    ]);
+    this.taskFallbackChains.set('image.generate', [
+      'google_imagen::imagen-3.0-generate-002',
+      'provider_deterministic_emergency::emergency-fallback-local',
+    ]);
 
   }
 
   public setFallbackChain(task: TaskId, chain: string[]): void {
-    this.taskFallbackChains.set(task, chain.filter(Boolean));
+    const emergencyKey = 'provider_deterministic_emergency::emergency-fallback-local';
+    const cleaned = Array.from(new Set(chain.filter(Boolean)));
+    if (!cleaned.includes(emergencyKey)) cleaned.push(emergencyKey);
+    this.taskFallbackChains.set(task, cleaned);
     this.explicitFallbackChainTasks.add(task);
     this.savePersistedConfig();
   }
@@ -3077,9 +3102,14 @@ export class MultiModelOrchestrator {
   public getCategoryRuntimeStates(): CategoryRuntimeState[] {
     const categories: AiTaskCategory[] = [
       'narration',
+      'dialogue',
+      'summarization',
       'world_generation',
       'character_genesis',
+      'memory',
       'research',
+      'research_world_brief',
+      'utility',
       'intent_interpretation',
       'capability_synthesis',
       'capability_explanation',
@@ -3728,6 +3758,14 @@ export class MultiModelOrchestrator {
       model.health === 'Unavailable' ||
       model.health === 'InvalidAuth'
     ) return false;
+    // A known exhausted quota is not a runnable candidate. Do not let the
+    // selector advertise a model as callable and then discover the quota error
+    // only inside the provider attempt loop.
+    if (
+      model.quota === 'Exhausted' ||
+      model.accessStatus === 'quota_limited' ||
+      model.accessStatus === 'rate_limited'
+    ) return false;
     if (this.isCircuitBreakerTripped(model.providerId, model.modelId)) return false;
     if (this.isModelCoolingDown(model)) return false;
     if (contextTokens > 0 && model.contextWindow > 0 && contextTokens > model.contextWindow) return false;
@@ -3755,11 +3793,10 @@ export class MultiModelOrchestrator {
     this.refreshAllProviderModelStatuses();
     const contextTokens = options?.contextTokens ?? 0;
 
-    // Character Genesis currently has no separate fallback editor in Settings.
-    // Its route therefore aliases the user-configured Memory & Extraction route.
-    // This prevents Character Genesis from silently inheriting narration or
-    // auto-ranked provider models that the user never selected.
-    const routeTask: TaskId = task === 'character.extract' ? 'memory.extract' : task;
+    // Every task owns its own configured fallback route. Never alias one task
+    // to another task's chain: the Settings UI and the runtime must describe and
+    // execute the same route.
+    const routeTask: TaskId = task;
     const customChainKeys = this.taskFallbackChains.get(routeTask);
     const category = this.getTaskCategory(task);
     const categoryOverrideKey = this.categoryOverrides.get(category);

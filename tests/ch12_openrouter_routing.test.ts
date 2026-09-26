@@ -90,15 +90,20 @@ test('configured fallback chain controls the actual fallback candidate set', () 
 });
 
 
-test('Character Genesis uses the user-selected Memory & Extraction fallback route', () => {
+test('Character Genesis uses its own Character Genesis fallback route', () => {
   const orchestrator = new MultiModelOrchestrator();
 
   const primaryKey = 'google_gemini::gemini-3.5-flash';
   const fallbackKey = 'google_gemini::gemini-3.5-flash-lite';
-  const unrelatedKey = 'provider_mock_reasoning::mock-reasoning-pro';
 
-  orchestrator.pinModelForTask('memory.extract', primaryKey);
+  orchestrator.pinModelForTask('memory.extract', 'provider_mock_reasoning::mock-reasoning-pro');
   orchestrator.setFallbackChain('memory.extract', [
+    'provider_mock_reasoning::mock-reasoning-pro',
+    'provider_deterministic_emergency::emergency-fallback-local',
+  ]);
+
+  orchestrator.pinModelForTask('character.extract', primaryKey);
+  orchestrator.setFallbackChain('character.extract', [
     primaryKey,
     fallbackKey,
     'provider_deterministic_emergency::emergency-fallback-local',
@@ -114,7 +119,7 @@ test('Character Genesis uses the user-selected Memory & Extraction fallback rout
   assert.equal(
     selection.fallbacks.some((model) => model.modelId === 'mock-reasoning-pro'),
     false,
-    'Character Genesis must not inject unrelated models that the user did not select.'
+    'Character Genesis must not inherit the Memory & Extraction route.'
   );
 });
 

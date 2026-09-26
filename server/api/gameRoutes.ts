@@ -7156,6 +7156,7 @@ gameRouter.get('/story-runs', async (_req: Request, res: Response) => {
             : undefined,
           excerpt: run.initialScene || run.openingScene?.narrativeText || '',
           status: run.status || 'ACTIVE',
+          isAdapted: Boolean(worldRepository.getAdaptedStoryBible(run.storyId)),
         };
       })
       .sort((a: any, b: any) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));

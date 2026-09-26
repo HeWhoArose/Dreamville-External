@@ -2780,6 +2780,20 @@ function getCombatStateHelper(
  * Implements CH5-COMBAT-01 (updating existing alive NPC lifecycles) and CH5-COMBAT-02 (immediate attack-time synchronization).
  * Idempotent: repeated synchronization preserves existing death record and timestamp.
  */
+async function ensureCombatReadyForLegacyAction(
+  storyId: string,
+  playerActorId: string,
+  repository: typeof worldRepository,
+): Promise<void> {
+  const combatEngine = repository.getCombatEngine(storyId);
+  if (combatEngine.getCombatPhase() !== 'INITIATIVE_PENDING') return;
+
+  combatEngine.rollInitiative({ reset: true });
+  if (combatEngine.getCurrentActor()?.id !== playerActorId) {
+    await resolveNpcTurnsUntilPlayer(storyId, playerActorId, repository);
+  }
+}
+
 async function resolveNpcTurnsUntilPlayer(
   storyId: string,
   playerActorId: string,
@@ -3452,6 +3466,7 @@ gameRouter.post('/combat/move', async (req: Request, res: Response) => {
       },
       async (_command, context) => {
         const transactionRepo = context.repository;
+        await ensureCombatReadyForLegacyAction(storyId, serverPlayerActorId, transactionRepo);
         const combatEngine = transactionRepo.getCombatEngine(storyId);
         const moveResult = combatEngine.moveActor(serverPlayerActorId, targetX, targetY);
         if (!moveResult.success) {
@@ -3535,6 +3550,7 @@ gameRouter.post('/combat/action', async (req: Request, res: Response) => {
         transactionMode: 'STAGED',
       },
       async (_command, context) => {
+        await ensureCombatReadyForLegacyAction(storyId, serverPlayerActorId, context.repository);
         const combatEngine = context.repository.getCombatEngine(storyId);
         const result = combatEngine.executeCoreAction(serverPlayerActorId, action);
         if (!result.success) {
@@ -3810,6 +3826,7 @@ gameRouter.post('/combat/attack', async (req: Request, res: Response) => {
       },
       async (_command, context) => {
         const transactionRepo = context.repository;
+        await ensureCombatReadyForLegacyAction(storyId, serverPlayerActorId, transactionRepo);
         const combatEngine = transactionRepo.getCombatEngine(storyId);
         const inv = transactionRepo.getInventoryEngine(storyId);
         const capEngine = transactionRepo.getCapabilityEngine(storyId);
@@ -4840,6 +4857,7 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
       },
       async (_command, context) => {
         const transactionRepo = context.repository;
+        await ensureCombatReadyForLegacyAction(storyId, serverPlayerActorId, transactionRepo);
         const combatEngine = transactionRepo.getCombatEngine(storyId);
         const capEngine = transactionRepo.getCapabilityEngine(storyId);
         const chronicle = transactionRepo.getHistoricalChronicleEngine(storyId);

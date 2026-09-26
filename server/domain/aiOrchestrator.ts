@@ -5399,6 +5399,7 @@ export class MultiModelOrchestrator {
 
     const selectedCandidates: ModelRegistryRecord[] = [selection.selectedModel, ...selection.fallbacks];
     const candidateKeys = new Set(selectedCandidates.map((model) => this.modelKey(model)));
+    const categoryHasManualOverride = Boolean(this.categoryOverrides.get(this.getTaskCategory(task)));
 
     // Recover from stale or underspecified persisted chains. Discovery, quota, credentials,
     // lifecycle changes, and task eligibility can invalidate a saved chain between requests.
@@ -5426,7 +5427,7 @@ export class MultiModelOrchestrator {
         this.isCandidateUsable(candidate, task, contextTokens)
     ).length;
 
-    if (runnableNonEmergencyCount < 2) {
+    if (!categoryHasManualOverride && runnableNonEmergencyCount < 2) {
       for (const model of usableCandidates) {
         if (candidateKeys.has(this.modelKey(model))) continue;
         if (!model.roleEligibility.includes(task)) continue;
@@ -5475,6 +5476,7 @@ export class MultiModelOrchestrator {
       // configured entries are unusable even though another eligible provider
       // is currently runnable.
       if (
+        !categoryHasManualOverride &&
         cIdx === candidateChain.length - 2 &&
         !candidateChain[cIdx].isEmergencyFloor &&
         candidateChain[cIdx + 1]?.isEmergencyFloor

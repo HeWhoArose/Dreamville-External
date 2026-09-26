@@ -237,6 +237,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
 
   const [typedAction, setTypedAction] = useState('');
   const [revealedCheckIds, setRevealedCheckIds] = useState<Record<string, boolean>>({});
+  const [visibleTurnCount, setVisibleTurnCount] = useState(12);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
@@ -698,54 +699,80 @@ export const StoryView: React.FC<StoryViewProps> = ({
           </div>
         </section>
       )}
-      {latestTurnAction && (
-        <section className="rounded-3xl border border-violet-400/15 bg-[#0d0917]/90 px-4 py-4 shadow-[0_18px_60px_rgba(124,58,237,0.07)] md:px-5">
-          <div className="mb-3 flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-violet-300" />
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-300/70">Latest turn</p>
-              <p className="text-sm font-medium text-stone-200">Immediate result</p>
-            </div>
-          </div>
-          <div className="rounded-2xl border border-white/7 bg-black/15 px-4 py-3">
-            <p className="text-[10px] uppercase tracking-wider text-stone-600">Your action</p>
-            <p className="mt-1 text-sm leading-6 text-stone-200">“{latestTurnAction.description}”</p>
-          </div>
-          {latestTurnAction.checkResult && (
-            <div className="mt-3">
-              <StoryCheckCard
-                check={latestTurnAction.checkResult}
-                revealed={Boolean(revealedCheckIds[latestTurnAction.id])}
-                onReveal={() => setRevealedCheckIds((current) => ({ ...current, [latestTurnAction.id]: true }))}
-              />
-            </div>
-          )}
-          {(latestTurnAction.narrativeResponse || latestTurnAction.authoritativeFeedback) && (
-            <div className="mt-3 rounded-2xl border border-white/7 bg-black/10 px-4 py-4">
-              <div className="mb-1 flex items-center gap-2">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-stone-600">Immediate narration</span>
-              </div>
-              <p className="whitespace-pre-line font-serif text-sm leading-6 text-stone-200">
-                {latestTurnAction.narrativeResponse ||
-                  (latestTurnAction.epistemicValidation === 'REJECTED_BY_ENGINE'
-                    ? 'That action could not be carried out.'
-                    : latestTurnAction.authoritativeFeedback)}
-              </p>
-              {latestTurnAction.narrativeResponse && (
-                <button
-                  onClick={() => handleReadAloud(latestTurnAction.narrativeResponse || '')}
-                  disabled={isPlayingSpeech}
-                  className="mt-2 inline-flex items-center gap-1.5 text-[10px] text-stone-600 transition hover:text-stone-300 disabled:opacity-50"
-                >
-                  <Headphones className="h-3 w-3" />
-                  Listen
-                </button>
-              )}
-            </div>
-          )}
-        </section>
-      )}
+      {(() => {
+        const history = (actionHistory || [])
+          .filter((entry) => !(entry.actionType === 'NOTE_RECORD' && entry.id.includes('act_open_')))
+          .slice()
+          .reverse();
+        const visible = history.slice(Math.max(0, history.length - visibleTurnCount));
+        const olderCount = Math.max(0, history.length - visible.length);
 
+        return (
+          <section className="space-y-4" aria-label="Story conversation">
+            {olderCount > 0 && (
+              <div className="flex justify-center">
+                <button
+                  type="button"
+                  onClick={() => setVisibleTurnCount((count) => count + 12)}
+                  className="rounded-full border border-violet-400/15 bg-violet-500/[0.045] px-4 py-2 text-xs font-medium text-violet-200/80 transition hover:border-violet-400/30 hover:bg-violet-500/[0.09] hover:text-white"
+                >
+                  Load {Math.min(12, olderCount)} earlier turns
+                </button>
+              </div>
+            )}
+
+            {visible.map((entry) => {
+              const narration = entry.narrativeResponse || (
+                entry.epistemicValidation === 'REJECTED_BY_ENGINE'
+                  ? 'The action could not be carried out.'
+                  : entry.authoritativeFeedback || ''
+              );
+              if (!entry.description && !narration) return null;
+
+              return (
+                <div key={entry.id} className="space-y-3">
+                  <div className="flex justify-end">
+                    <div className="max-w-[88%] rounded-3xl rounded-br-md border border-fuchsia-400/15 bg-gradient-to-br from-fuchsia-500/[0.10] to-violet-500/[0.06] px-5 py-3 shadow-[0_12px_40px_rgba(236,72,153,0.06)]">
+                      <p className="mb-1 text-[9px] font-semibold uppercase tracking-[0.2em] text-fuchsia-300/55">You</p>
+                      <p className="text-sm leading-6 text-stone-100">{entry.description}</p>
+                    </div>
+                  </div>
+
+                  {entry.checkResult && (
+                    <StoryCheckCard
+                      check={entry.checkResult}
+                      revealed={Boolean(revealedCheckIds[entry.id])}
+                      onReveal={() => setRevealedCheckIds((current) => ({ ...current, [entry.id]: true }))}
+                    />
+                  )}
+
+                  {narration && (
+                    <div className="max-w-[94%] rounded-3xl rounded-tl-md border border-violet-400/15 bg-gradient-to-br from-violet-500/[0.065] via-white/[0.018] to-fuchsia-500/[0.025] px-5 py-5 shadow-[0_14px_45px_rgba(124,58,237,0.06)]">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-violet-300/60">Narrator</p>
+                        {entry.narrativeResponse && (
+                          <button
+                            type="button"
+                            onClick={() => handleReadAloud(entry.narrativeResponse || '')}
+                            disabled={isPlayingSpeech}
+                            className="inline-flex items-center gap-1.5 text-[10px] text-stone-500 transition hover:text-stone-200 disabled:opacity-50"
+                          >
+                            <Headphones className="h-3 w-3" />
+                            Listen
+                          </button>
+                        )}
+                      </div>
+                      <p className="whitespace-pre-line font-serif text-[15px] leading-8 text-stone-100 md:text-base md:leading-8">
+                        {narration}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </section>
+        );
+      })()}
       <section className="rounded-3xl border border-violet-400/20 bg-gradient-to-r from-violet-500/[0.08] via-fuchsia-500/[0.035] to-transparent px-4 py-4 shadow-[0_18px_60px_rgba(124,58,237,0.10)] md:px-5">
         <div className="mb-2 flex items-center justify-between gap-3">
           <div>

@@ -454,6 +454,11 @@ export interface TacticalCombatStateExport {
 }
 
 export interface ProjectedCombatState {
+  phase: CombatPhase;
+  initiativeRolls: CombatInitiativeRoll[];
+  surprisedActorIds: string[];
+  combatBanner: string;
+  lastResolution?: CombatNarrativeResolution;
   participants: BattlefieldParticipant[];
   currentActor: BattlefieldParticipant | undefined;
   hazards: DynamicHazardZone[];
@@ -1235,6 +1240,11 @@ export class TacticalCombatEngine {
     const viewerTurnResources = this.actionEconomy.get(viewerActorId);
 
     return {
+      phase: this.combatPhase,
+      initiativeRolls: this.getInitiativeRolls(),
+      surprisedActorIds: this.getSurprisedActorIds(),
+      combatBanner: this.combatBanner,
+      lastResolution: this.getLastResolution(),
       participants: projectedParticipants,
       currentActor: projectedCurrentActor,
       hazards: this.getHazards(),

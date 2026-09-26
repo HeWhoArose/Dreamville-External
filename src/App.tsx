@@ -795,11 +795,21 @@ export const App: React.FC = () => {
         />
       )}
 
-      {currentRoute === 'play.chronicle' && viewState && (
+      {currentRoute === 'play.quests' && viewState && (
         <ChronicleView
           storyId={activeStoryId}
           actionHistory={viewState.actionHistory}
           dialogueHistory={viewState.dialogueHistory}
+          initialSection="quests"
+        />
+      )}
+
+      {currentRoute === 'play.journal' && viewState && (
+        <ChronicleView
+          storyId={activeStoryId}
+          actionHistory={viewState.actionHistory}
+          dialogueHistory={viewState.dialogueHistory}
+          initialSection="journal"
         />
       )}
     </>

@@ -574,7 +574,7 @@ export class StoryActionAdvisor {
 			requestedCapabilityId: capability.id,
 			requestedCapabilityName: capability.name,
 			reasonRequestedCapabilityUnavailable:
-				`'${capability.name}' is not currently learned. The world and character support it, but explicit acquisition is required; nothing has been acquired yet.`,
+				`The character does not currently have '${capability.name}'. The world and character support it, but explicit acquisition is required; nothing has been acquired yet.`,
 			alternative: capability,
 			simulation,
 			acceptLabel: 'Learn ' + capability.name + ' and use it',
@@ -790,7 +790,7 @@ export class StoryActionAdvisor {
 			requestedCapabilityId: requestedCapability.id,
 			requestedCapabilityName: requestedCapability.name,
 			reasonRequestedCapabilityUnavailable:
-				"'" + requestedCapability.name + "' is not currently learned. The simulation found a world/character-compatible development route; nothing has been acquired yet.",
+				"The character does not currently have '" + requestedCapability.name + "'. The simulation found a world/character-compatible development route; nothing has been acquired yet.",
 			alternative,
 			simulation: initialSimulation,
 			acceptLabel: 'Learn ' + alternative.name + ' and use it',

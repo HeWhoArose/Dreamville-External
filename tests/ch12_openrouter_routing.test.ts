@@ -5,6 +5,7 @@ import {
   MultiModelOrchestrator,
   DeterministicMockAdapter,
 } from '../server/domain/aiOrchestrator';
+import { narrativeContinuityEngine } from '../server/domain/narrativeContinuityEngine';
 
 test('OpenRouter adapter discovers models and executes chat completions with the server key', async () => {
   const originalKey = process.env.OPENROUTER_API_KEY;
@@ -489,4 +490,172 @@ test('OpenRouter empty-content diagnostics include returned model, choice count,
     if (originalKey === undefined) delete process.env.OPENROUTER_API_KEY;
     else process.env.OPENROUTER_API_KEY = originalKey;
   }
+});
+
+
+test('task fallback recovers a live eligible model when the persisted chain has only one AI candidate', async () => {
+  const orchestrator = new MultiModelOrchestrator();
+  const primary = new DeterministicMockAdapter('provider_stale_primary');
+  primary.failureMode = '500';
+  primary.maxFailuresBeforeSuccess = 1;
+  const recovered = new DeterministicMockAdapter('provider_stale_recovered');
+  recovered.cannedResponses.set('narrative.generate', JSON.stringify({
+    narrative: ['Recovered model succeeded.'],
+    dialogue: [],
+    events: [],
+    stateChanges: [],
+    memoryCandidates: [],
+    audioCues: [],
+  }));
+
+  orchestrator.registerAdapter(primary);
+  orchestrator.registerAdapter(recovered);
+  orchestrator.registerModel({
+    providerId: 'provider_stale_primary',
+    modelId: 'stale-primary',
+    displayName: 'Stale Primary',
+    pool: 'fast',
+    capabilities: ['text_generation'],
+    contextWindow: 64000,
+    health: 'Healthy',
+    quota: 'Healthy',
+    latencyMs: 20,
+    userPriority: 100,
+    roleEligibility: ['narrative.generate'],
+    fallbackEligibility: true,
+  });
+  orchestrator.registerModel({
+    providerId: 'provider_stale_recovered',
+    modelId: 'recovered-model',
+    displayName: 'Recovered Model',
+    pool: 'fast',
+    capabilities: ['text_generation'],
+    contextWindow: 64000,
+    health: 'Healthy',
+    quota: 'Healthy',
+    latencyMs: 25,
+    userPriority: 90,
+    roleEligibility: ['narrative.generate'],
+    fallbackEligibility: true,
+  });
+
+  (orchestrator as any).taskPinnedModels.set(
+    'narrative.generate',
+    'provider_stale_primary::stale-primary'
+  );
+  (orchestrator as any).taskFallbackChains.set('narrative.generate', [
+    'provider_stale_primary::stale-primary',
+    'provider_deterministic_emergency::emergency-fallback-local',
+  ]);
+
+  const result = await orchestrator.executeTaskGeneration(
+    'narrative.generate',
+    'Produce a narrative.',
+    undefined,
+    { timeoutMs: 1000 }
+  );
+
+  assert.equal(result.source, 'AI_FALLBACK');
+  assert.equal(result.modelId, 'recovered-model');
+  assert.equal(result.attempts, 2);
+  assert.equal(result.attemptsTrail.map((attempt) => attempt.modelId).join(','), 'stale-primary,recovered-model');
+});
+
+test('deterministic emergency floor is actually executed after all AI candidates fail', async () => {
+  const orchestrator = new MultiModelOrchestrator();
+  const failing = new DeterministicMockAdapter('provider_all_failed');
+  failing.failureMode = '500';
+  failing.maxFailuresBeforeSuccess = 1;
+  orchestrator.registerAdapter(failing);
+  orchestrator.registerModel({
+    providerId: 'provider_all_failed',
+    modelId: 'all-failed-model',
+    displayName: 'All Failed Model',
+    pool: 'fast',
+    capabilities: ['text_generation'],
+    contextWindow: 64000,
+    health: 'Healthy',
+    quota: 'Healthy',
+    latencyMs: 20,
+    userPriority: 100,
+    roleEligibility: ['narrative.generate'],
+    fallbackEligibility: true,
+  });
+
+  (orchestrator as any).taskPinnedModels.set(
+    'narrative.generate',
+    'provider_all_failed::all-failed-model'
+  );
+  (orchestrator as any).taskFallbackChains.set('narrative.generate', [
+    'provider_all_failed::all-failed-model',
+    'provider_deterministic_emergency::emergency-fallback-local',
+  ]);
+
+  const result = await orchestrator.executeTaskGeneration(
+    'narrative.generate',
+    'Produce a narrative.',
+    undefined,
+    {
+      timeoutMs: 1000,
+      validateResponse: (text) => {
+        try {
+          const parsed = JSON.parse(text);
+          return Array.isArray(parsed.narrative)
+            ? { valid: true }
+            : { valid: false, errorReason: 'Emergency narrative schema missing.' };
+        } catch {
+          return { valid: false, errorReason: 'Emergency response was not JSON.' };
+        }
+      },
+    }
+  );
+
+  assert.equal(result.source, 'DETERMINISTIC_FALLBACK');
+  assert.equal(result.modelId, 'emergency-fallback-local');
+  assert.equal(result.attempts, 2);
+  assert.equal(result.attemptsTrail.at(-1)?.status, 'SUCCESS');
+});
+
+test('narrative continuity records canonical turn outcomes into plot and plan state', () => {
+  const saved: any[] = [];
+  const repository: any = {
+    getStoryRun: () => ({
+      runtimeState: {},
+    }),
+    getWorldClock: () => ({
+      getTimestamp: () => ({
+        year: 42,
+        month: 10,
+        day: 14,
+        hour: 12,
+        minute: 0,
+        second: 0,
+        totalElapsedSeconds: 12345,
+      }),
+    }),
+    saveStoryRun: (run: any) => saved.push(run),
+  };
+
+  const result = narrativeContinuityEngine.recordTurn(repository, {
+    storyId: 'continuity-test',
+    turnId: 'turn-1',
+    playerAction: 'Search the ruined observatory',
+    turnPackage: {
+      narrative: ['Dust falls as the observatory mechanism wakes.'],
+      dialogue: [],
+      events: ['OBSERVATORY_ACTIVATED'],
+      stateChanges: [],
+      memoryCandidates: ['The observatory mechanism has awakened.'],
+      audioCues: [],
+    },
+  });
+
+  assert.equal(result.plot.version, 2);
+  assert.equal(result.plot.beats.length, 1);
+  assert.equal(result.plot.beats[0].tags[0], 'OBSERVATORY_ACTIVATED');
+  assert.equal(result.plot.openThreads.length, 1);
+  assert.match(result.plan.objective, /observatory/i);
+  assert.equal(saved.length, 1);
+  assert.ok(saved[0].runtimeState.plot);
+  assert.ok(saved[0].runtimeState.narrativePlan);
 });

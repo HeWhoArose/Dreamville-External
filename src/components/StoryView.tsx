@@ -763,10 +763,25 @@ export const StoryView: React.FC<StoryViewProps> = ({
 
               return (
                 <div key={entry.id} className="space-y-3">
-                  <div className="flex justify-end">
-                    <div className="max-w-[88%] rounded-3xl rounded-br-md border border-fuchsia-400/15 bg-gradient-to-br from-fuchsia-500/[0.10] to-violet-500/[0.06] px-5 py-3 shadow-[0_12px_40px_rgba(236,72,153,0.06)]">
+                  <div className="flex items-end justify-end gap-2.5">
+                    <div className="max-w-[82%] rounded-3xl rounded-br-md border border-fuchsia-400/15 bg-gradient-to-br from-fuchsia-500/[0.10] to-violet-500/[0.06] px-5 py-3 shadow-[0_12px_40px_rgba(236,72,153,0.06)]">
                       <p className="mb-1 text-[9px] font-semibold uppercase tracking-[0.2em] text-fuchsia-300/55">You</p>
                       <p className="text-sm leading-6 text-stone-100">{entry.description}</p>
+                    </div>
+                    <div
+                      className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-fuchsia-300/30 bg-fuchsia-300/10 shadow-[0_6px_22px_rgba(236,72,153,0.12)]"
+                      title={protagonistName || 'Player Character'}
+                      aria-label={protagonistName || 'Player Character'}
+                    >
+                      {protagonistPortraitUrl ? (
+                        <img
+                          src={protagonistPortraitUrl}
+                          alt=""
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-base">{protagonistPortraitEmoji || '🧙'}</span>
+                      )}
                     </div>
                   </div>
 

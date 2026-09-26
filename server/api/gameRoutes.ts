@@ -2830,6 +2830,11 @@ async function resolveNpcTurnsUntilPlayer(
       capabilityEngine,
       repository.getRulesProfile(storyId) || rulesProfileEngine.createDefault('FULL_DND'),
     );
+    combatTacticsService.recordExecution(
+      combatEngine,
+      currentActor.id,
+      executionResult.success,
+    );
 
     const player = repository.getPlayerLifecycle(storyId);
     for (const participant of combatEngine.getParticipants()) {
@@ -5348,6 +5353,11 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
           transactionCombatEngine,
           transactionCapEngine,
           transactionRepo.getRulesProfile(storyId) || rulesProfileEngine.createDefault('FULL_DND')
+        );
+        combatTacticsService.recordExecution(
+          transactionCombatEngine,
+          transactionCurrentActor.id,
+          executionResult.success,
         );
 
         const deadParticipants = transactionCombatEngine.getParticipants().filter(

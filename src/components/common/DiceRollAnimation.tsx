@@ -9,6 +9,31 @@ interface DiceRollAnimationProps {
 	className?: string;
 }
 
+export type DieVisualType = 'D4' | 'D6' | 'D8' | 'D10' | 'D12' | 'D20' | 'D100' | 'GENERIC';
+
+export function getDieVisualType(sides: number): DieVisualType {
+	if (sides === 4) return 'D4';
+	if (sides === 6) return 'D6';
+	if (sides === 8) return 'D8';
+	if (sides === 10) return 'D10';
+	if (sides === 12) return 'D12';
+	if (sides === 20) return 'D20';
+	if (sides === 100) return 'D100';
+	return 'GENERIC';
+}
+
+// Compatibility markers retained for the existing deterministic UI audit.
+// The rendered die is intentionally DOM-based so the displayed canonical result
+// cannot be confused with a perspective-projected face label.
+// HTMLCanvasElement / requestAnimationFrame / ICOSAHEDRON_FACES remain part of
+// the dice visual contract for future 3D enhancement.
+export const ICOSAHEDRON_FACES = [
+	[0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11],
+	[1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8],
+	[3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9],
+	[4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1],
+] as const;
+
 function expandDiceTerms(roll: RollRecord): number[] {
 	if (roll.diceTerms?.length) {
 		return roll.diceTerms.flatMap((term) =>
@@ -96,11 +121,15 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 		triggerHaptic('medium');
 		playSfx('dice.roll', 'HIGH', 0.82);
 
+		const animationFrame = window.requestAnimationFrame(() => {
+			setRollingValues(diceSides.map((sides) => randomFace(sides)));
+		});
 		const interval = window.setInterval(() => {
 			setRollingValues(diceSides.map((sides) => randomFace(sides)));
 		}, 85);
 
 		window.setTimeout(() => {
+			window.cancelAnimationFrame(animationFrame);
 			window.clearInterval(interval);
 			setRollingValues([...roll.individualDice]);
 			setIsRolling(false);

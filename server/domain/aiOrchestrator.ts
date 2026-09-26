@@ -5419,13 +5419,14 @@ export class MultiModelOrchestrator {
         return diff !== 0 ? diff : this.modelKey(a).localeCompare(this.modelKey(b));
       });
 
-    const usableNonEmergencyCount = selectedCandidates.filter(
+    const runnableNonEmergencyCount = selectedCandidates.filter(
       (candidate) =>
         !candidate.isEmergencyFloor &&
+        Boolean(this.getAdapter(candidate.providerId)) &&
         this.isCandidateUsable(candidate, task, contextTokens)
     ).length;
 
-    if (usableNonEmergencyCount < 2) {
+    if (runnableNonEmergencyCount < 2) {
       for (const model of usableCandidates) {
         if (candidateKeys.has(this.modelKey(model))) continue;
         selectedCandidates.push(model);

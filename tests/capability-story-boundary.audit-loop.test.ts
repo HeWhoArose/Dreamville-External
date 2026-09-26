@@ -46,7 +46,8 @@ test('ten deterministic audits keep internal simulation out of the Skillbook and
     assert.match(surface, /skillInstances\s*\.map/, 'Skillbook lost actor ownership filtering');
     assert.doesNotMatch(surface, /Adjudication Outcome|Capability DAG & Derived Skills|Channel: Temporal Ignition/);
 
-    assert.match(story, /Immediate result/);
+    assert.match(story, /Story conversation/);
+    assert.match(story, /Load \{Math\.min\(12, olderCount\)\} earlier turns/);
     assert.doesNotMatch(story, /Recent actions/);
     assert.match(recent, /Recent Actions/);
     assert.match(recent, /Only your submitted actions appear here/);

@@ -877,12 +877,14 @@ export class StoryActionAdvisor {
 
 		if (tips.length > 0) return tips;
 
-		const fallbackLocation = canonicalSceneContext.locationName || 'the current area';
+		const fallbackContext = sceneContext || canonicalSceneContext;
+		const fallbackLocation = fallbackContext.locationName || canonicalSceneContext.locationName || 'the current area';
 		if (
-			canonicalSceneContext.locationDescription ||
-			canonicalSceneContext.startingSituation ||
-			canonicalSceneContext.openingNarrative ||
-			canonicalSceneContext.recentActions?.length
+			fallbackContext.locationDescription ||
+			fallbackContext.startingSituation ||
+			fallbackContext.openingNarrative ||
+			fallbackContext.activeDialogue ||
+			fallbackContext.recentActions?.length
 		) {
 			return [{
 				id: deterministicId('scene_fallback_tip', storyId, actorId, fallbackLocation, actionText),

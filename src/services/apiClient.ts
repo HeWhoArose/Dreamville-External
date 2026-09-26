@@ -150,6 +150,20 @@ class ApiClient {
   }
 
   /**
+   * Sends an out-of-character question/request to the dedicated OOC assistant.
+   * POST /api/game/action/ooc
+   */
+  public async sendOocMessage(message: string, storyId?: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/action/ooc${storyId ? `?storyId=${encodeURIComponent(storyId)}` : ''}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ message, storyId }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.errorReason || data?.error || `OOC request failed with HTTP ${res.status}`);
+    return data;
+  }
+  /**
    * Preflight a freeform story action without mutating canonical state.
    * POST /api/game/action/advice
    */

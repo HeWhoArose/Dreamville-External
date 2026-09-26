@@ -103,10 +103,12 @@ test('Quest journal surface uses canonical quest projection and player-facing jo
 		assert.equal(route.includes('const isQuestEvent = (event: any): boolean =>'), true, `Audit ${iteration}: world events are still being treated as quests without classification`);
 		assert.equal(route.includes('questCategories = new Set'), true, `Audit ${iteration}: quest classification categories are not explicit`);
 		assert.equal(chronicle.includes('Quests & Journal'), true, `Audit ${iteration}: player-facing title missing`);
-		assert.equal(chronicle.includes('Engine diagnostics and validation data stay out of this player-facing page.'), true, `Audit ${iteration}: engine diagnostics leaked back into the player journal`);
+		assert.equal(chronicle.includes('Engine diagnostics and validation data stay out of this player-facing page.'), false, `Audit ${iteration}: legacy diagnostic copy remains in the player journal`);
 		assert.equal(chronicle.includes('No active quests'), true, `Audit ${iteration}: explicit empty quest state missing`);
-		assert.equal(chronicle.includes('Your action'), true, `Audit ${iteration}: journal does not show player actions`);
-		assert.equal(chronicle.includes('What happened'), true, `Audit ${iteration}: journal does not show narrative consequences`);
+		assert.equal(chronicle.includes('Your move'), true, `Audit ${iteration}: journal does not show player actions`);
+		assert.equal(chronicle.includes('Outcome'), true, `Audit ${iteration}: journal does not show narrative consequences`);
 		assert.equal(chronicle.includes('Objectives'), true, `Audit ${iteration}: quest objective section missing`);
+		assert.equal(chronicle.includes('Origin'), false, `Audit ${iteration}: quest provenance/debug metadata leaked into player UI`);
+		assert.equal(chronicle.includes('Last updated'), false, `Audit ${iteration}: quest timestamp metadata leaked into player UI`);
 	}
 });

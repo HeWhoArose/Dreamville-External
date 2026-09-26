@@ -223,3 +223,18 @@ test('Phase 16 action advisor: generated action tips are advisory only and never
 		false
 	);
 });
+
+
+test('Phase 16 regression: ordinary movement never becomes a novel capability proposal', async () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'phase16_advisor_ordinary_move';
+	seedRun(repository, storyId, 'Unknown Dark Knight');
+
+	const advisor = new StoryActionAdvisor(repository);
+	const advice = await advisor.advise(storyId, 'I move towards the structure');
+
+	assert.equal(advice.mode, 'NORMAL_ACTION');
+	assert.equal(advice.canExecuteNow, true);
+	assert.equal(advice.proposal, undefined);
+	assert.equal(advice.simulation, undefined);
+});

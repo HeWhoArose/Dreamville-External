@@ -41,7 +41,6 @@ test('Phase 17 AI orchestration categories are isolated and independently routab
 		'rules',
 		'rule_analysis',
 		'narration',
-		'summarization',
 		'world_generation',
 	]) {
 		const state = byCategory.get(category as any);

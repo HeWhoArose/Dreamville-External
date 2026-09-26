@@ -1994,6 +1994,9 @@ export class MultiModelOrchestrator {
         (model.capabilities || []).includes('creative_writing') ||
         model.supportedOutputTypes?.includes('text') === true;
       if (!isTextModel) continue;
+      if (!model.capabilities.includes('text_generation')) model.capabilities.push('text_generation');
+      if (!model.supportedInputTypes || model.supportedInputTypes.length === 0) model.supportedInputTypes = ['text'];
+      if (!model.supportedOutputTypes || model.supportedOutputTypes.length === 0) model.supportedOutputTypes = ['text'];
       for (const task of generalTasks) {
         if (!model.roleEligibility.includes(task)) model.roleEligibility.push(task);
       }

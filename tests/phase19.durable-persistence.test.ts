@@ -198,3 +198,62 @@ test('Phase 19: corrupted primary persistence can recover from the latest durabl
     assert.equal(recovered.getUserData('recovery', 'marker')?.value, 'recoverable');
   });
 });
+
+
+test('Phase 19 audit rule: 10 consecutive durable-data connectivity audits pass end-to-end', () => {
+  for (let audit = 1; audit <= 10; audit += 1) {
+    withPersistence(() => {
+      const repository = new InMemoryWorldRepository();
+      const worldId = `audit_world_${audit}`;
+      const draftId = `audit_draft_${audit}`;
+      const runId = `audit_run_${audit}`;
+      const userKey = `audit_form_${audit}`;
+
+      repository.saveWorldTemplate({
+        worldId,
+        title: `Audit World ${audit}`,
+        storyMode: 'PROTAGONIST',
+        dndRulesMode: 'FULL_DND',
+      });
+
+      repository.saveCharacterDraft(worldId, {
+        draftId,
+        characterName: `Audit Character ${audit}`,
+        identity: { name: `Audit Character ${audit}` },
+        auditMarker: audit,
+      });
+
+      repository.saveConfirmedCharacter(worldId, {
+        characterId: `audit_character_${audit}`,
+        identity: { name: `Audit Character ${audit}` },
+        worldId,
+      });
+
+      repository.saveStoryRun({
+        storyId: runId,
+        worldId,
+        title: `Audit Run ${audit}`,
+        characterName: `Audit Character ${audit}`,
+        runtimeState: { auditMarker: audit },
+      });
+
+      repository.saveUserData('audit', userKey, { audit });
+
+      const archive = repository.exportUserDataArchive();
+      assert.equal(UserDataArchiveService.validate(archive).valid, true);
+
+      const restarted = new InMemoryWorldRepository();
+      assert.equal(restarted.getWorldTemplate(worldId)?.title, `Audit World ${audit}`);
+      assert.equal(restarted.getCharacterDrafts(worldId)[0]?.auditMarker, audit);
+      assert.equal(restarted.getConfirmedCharacters(worldId)[0]?.worldId, worldId);
+      assert.equal(restarted.getStoryRun(runId)?.runtimeState?.auditMarker, audit);
+      assert.equal(restarted.getUserData('audit', userKey)?.audit, audit);
+
+      restarted.deleteStoryRun(runId);
+      assert.equal(restarted.getStoryRun(runId), null);
+
+      const postDeleteRestart = new InMemoryWorldRepository();
+      assert.equal(postDeleteRestart.getStoryRun(runId), null);
+    });
+  }
+});

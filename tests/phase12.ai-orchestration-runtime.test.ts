@@ -48,19 +48,19 @@ test('Phase 12: narration category override does not change world-generation rou
 	orchestrator.registerAdapter(world);
 
 	orchestrator.registerModel(model('phase12_narration_provider', 'narration-model', ['narrative.generate', 'character.dialogue']));
-	orchestrator.registerModel(model('phase12_world_provider', 'world-model', ['summary.scene']));
+	orchestrator.registerModel(model('phase12_world_provider', 'world-model', ['world.generate']));
 
 	orchestrator.setCategoryModelOverride('narration', 'phase12_narration_provider::narration-model');
 	orchestrator.setCategoryModelOverride('world_generation', 'phase12_world_provider::world-model');
 
 	const narrationSelection = orchestrator.selectBestModel('narrative.generate', { contextTokens: 100 });
-	const worldSelection = orchestrator.selectBestModel('summary.scene', { contextTokens: 100 });
+	const worldSelection = orchestrator.selectBestModel('world.generate', { contextTokens: 100 });
 
 	assert.equal(narrationSelection.selectedModel.modelId, 'narration-model');
 	assert.equal(worldSelection.selectedModel.modelId, 'world-model');
 
 	orchestrator.setCategoryModelOverride('narration', null);
-	const worldAfterNarrationChange = orchestrator.selectBestModel('summary.scene', { contextTokens: 100 });
+	const worldAfterNarrationChange = orchestrator.selectBestModel('world.generate', { contextTokens: 100 });
 	assert.equal(worldAfterNarrationChange.selectedModel.modelId, 'world-model');
 });
 

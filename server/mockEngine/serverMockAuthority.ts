@@ -24,6 +24,7 @@ import { rulesProfileEngine } from '../domain/rulesProfileEngine';
 import { deterministicId, formatCanonicalTimestamp } from '../domain/deterministicRng';
 import { HistoricalChronicleEngine } from '../domain/historicalChronicleEngine';
 import { storyActionAdvisor } from '../services/storyActionAdvisor';
+import { combatEncounterService } from '../domain/combatEncounterService';
 
 /**
  * ServerMockAuthority
@@ -233,6 +234,26 @@ export class ServerMockAuthority {
     }
 
     const player = worldRepository.getPlayerLifecycle(targetStoryId);
+    const encounterCandidate = combatEncounterService.findHostileCandidate(
+      targetStoryId,
+      actorId,
+      String(freeformText),
+      worldRepository,
+    );
+    if (encounterCandidate && !encounterCandidate.targetAwareOfPlayer) {
+      const pending = combatEncounterService.buildPendingCombatTransition(encounterCandidate);
+      pending.targetId = encounterCandidate.targetId;
+      pending.targetName = encounterCandidate.targetName;
+      pending.actionText = String(freeformText);
+      pending.precombatActionPending = true;
+      return {
+        ...baseResult,
+        narrativeResponse: `A hostile presence is here. ${encounterCandidate.targetName} has not perceived you. Your opening action can resolve before initiative.`,
+        combatTransition: pending,
+        viewState: this.getSanitizedViewState(targetStoryId),
+      };
+    }
+
     const conditionEngine = worldRepository.getConditionEngine(targetStoryId);
     const playerConditionState = player
       ? conditionEngine.getActorState(player.actorId)
@@ -398,7 +419,13 @@ export class ServerMockAuthority {
       activeJourney: activeJourney ? JSON.parse(JSON.stringify(activeJourney)) : null,
       isTraveling,
       playerLifecycle: player ? player.toJSON() : null,
+    const combatEngine = worldRepository.getCombatEngine(targetStoryId);
+    const combatProjection = combatEngine.projectCombatForActor(
+      actorId,
+      worldRepository.getCombatPerceptionOptions(targetStoryId, actorId),
+    );
       openingScene: run?.openingScene || null,
+      combatState: combatProjection,
     };
   }
 

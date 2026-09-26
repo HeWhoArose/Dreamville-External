@@ -78,7 +78,6 @@ export class NarrativeContinuityEngine {
       plan: state.plan,
       epistemicallyBoundTo: viewerActorId,
     };
-    this.persistResearch(repository, storyId, packet);
     return packet;
   }
 
@@ -106,7 +105,21 @@ export class NarrativeContinuityEngine {
     state.plan.contingencies = ['Respect current world and character knowledge boundaries.', 'Prefer canonical consequences over invented drama.'];
     state.plan.updatedAt = timestamp;
     state.plan.version += 1;
-    run.runtimeState = { ...(run.runtimeState || {}), plot: state.plot, narrativePlan: state.plan };
+    const researchPacket = this.research(
+      repository,
+      params.storyId,
+      params.playerAction || 'current story context',
+      repository.getPlayerLifecycle(params.storyId)?.actorId,
+    );
+    run.runtimeState = {
+      ...(run.runtimeState || {}),
+      plot: state.plot,
+      narrativePlan: state.plan,
+      narrativeResearch: {
+        ...researchPacket,
+        capturedAt: timestamp,
+      },
+    };
     repository.saveStoryRun(run);
     return state;
   }

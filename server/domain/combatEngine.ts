@@ -451,6 +451,18 @@ export interface TacticalCombatStateExport {
   lastResolution?: CombatNarrativeResolution;
   encounterId?: string;
   encounterSource?: 'STORY' | 'MANUAL' | 'SYSTEM';
+  encounterNotes?: CombatEncounterNote[];
+}
+
+export interface CombatEncounterNote {
+  noteId: string;
+  encounterId?: string;
+  actorId?: string;
+  text: string;
+  category: 'TACTICAL' | 'DISCOVERY' | 'THREAT' | 'OBJECTIVE' | 'OUTCOME';
+  turn: number;
+  createdAt: string;
+  source: 'SYSTEM' | 'AI' | 'PLAYER';
 }
 
 export interface ProjectedCombatState {
@@ -518,6 +530,7 @@ export class TacticalCombatEngine {
   private lastResolution?: CombatNarrativeResolution;
   private encounterId?: string;
   private encounterSource?: 'STORY' | 'MANUAL' | 'SYSTEM';
+  private encounterNotes: CombatEncounterNote[] = [];
   private initialSeed: number;
 
   constructor(seed = 1337, ruleset?: IRulesetAdapter, conditionEngine?: ConditionEngine) {
@@ -652,6 +665,7 @@ export class TacticalCombatEngine {
     this.lastResolution = undefined;
     this.encounterId = undefined;
     this.encounterSource = undefined;
+    this.encounterNotes = [];
     this.pendingActivations.clear();
     this.bossPhaseStates.clear();
     this.actionEconomy.clear();
@@ -939,6 +953,26 @@ export class TacticalCombatEngine {
 
   public clearTacticalPlan(actorId: string): void {
     this.tacticalPlans.delete(actorId);
+  }
+
+  public getEncounterNotes(): CombatEncounterNote[] {
+    return JSON.parse(JSON.stringify(this.encounterNotes));
+  }
+
+  public addEncounterNote(note: Omit<CombatEncounterNote, 'noteId' | 'createdAt' | 'encounterId' | 'turn'> & Partial<Pick<CombatEncounterNote, 'encounterId' | 'turn'>>): CombatEncounterNote {
+    const created: CombatEncounterNote = {
+      noteId: deterministicId('combat_note', this.encounterId || 'encounter', note.actorId || 'system', note.text, this.combatActionSequence, this.encounterNotes.length),
+      encounterId: note.encounterId || this.encounterId,
+      actorId: note.actorId,
+      text: note.text.slice(0, 1000),
+      category: note.category,
+      turn: note.turn ?? this.currentRound,
+      createdAt: formatCanonicalTimestamp({ totalElapsedSeconds: this.currentRound } as any),
+      source: note.source,
+    };
+    this.encounterNotes.push(created);
+    this.encounterNotes = this.encounterNotes.slice(-100);
+    return JSON.parse(JSON.stringify(created));
   }
 
   public getCombatPhase(): CombatPhase {
@@ -4230,6 +4264,7 @@ export class TacticalCombatEngine {
       lastResolution: this.getLastResolution(),
       encounterId: this.encounterId,
       encounterSource: this.encounterSource,
+      encounterNotes: this.getEncounterNotes(),
     };
   }
 
@@ -4355,5 +4390,6 @@ export class TacticalCombatEngine {
     this.lastResolution = data.lastResolution ? JSON.parse(JSON.stringify(data.lastResolution)) : undefined;
     this.encounterId = data.encounterId;
     this.encounterSource = data.encounterSource;
+    this.encounterNotes = Array.isArray(data.encounterNotes) ? JSON.parse(JSON.stringify(data.encounterNotes)).slice(-100) : [];
   }
 }

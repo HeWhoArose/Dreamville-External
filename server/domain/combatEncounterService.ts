@@ -96,7 +96,11 @@ export class CombatEncounterService {
         ...capability.effectDefinition,
       } as CombatEffectDefinition, { consumeAction: false });
     } else {
-      const spellName = text.replace(/^cast\s+/, '').replace(/^use\s+/, '').trim();
+      const spellName = text
+        .replace(/^cast\s+/, '')
+        .replace(/^use\s+/, '')
+        .split(/\s+at\s+|\s+on\s+/)[0]
+        .trim();
       const spell = combat.getSpellRuntime().getSpell(spellName);
       if (spell) {
         label = spell.name;

@@ -846,6 +846,38 @@ class ApiClient {
   }
 
   /**
+   * Resolves a natural-language player action in active tactical combat.
+   * POST /api/game/combat/player-action
+   */
+  public async executeCombatPlayerAction(params: {
+    actionText: string;
+  }): Promise<{
+    success: boolean;
+    actionType?: 'ATTACK' | 'CAST' | 'MOVE';
+    targetId?: string;
+    mechanicalResolution?: import('../types').CombatNarrativeResolution;
+    narrativeResponse?: string;
+    npcResolution?: any;
+    combatTransition?: import('../types').CombatTransitionState;
+    combatState: import('../types').CombatStateResponse;
+  }> {
+    const res = await fetch(`${this.baseUrl}/combat/player-action`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(params),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data?.errorReason || data?.error || `Combat action failed: HTTP ${res.status}`);
+    }
+    return data;
+  }
+
+  /**
    * Adjudicates and executes capability cast in tactical combat (CH8/CH6).
    * POST /api/game/combat/cast
    */

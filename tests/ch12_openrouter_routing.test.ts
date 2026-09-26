@@ -201,7 +201,7 @@ test('task response validation failure advances to the next AI model instead of 
     }
   );
 
-  assert.equal(result.source, 'AI_FALLBACK');
+  assert.equal(result.source, 'AI_FALLBACK', JSON.stringify(result));
   assert.equal(result.modelId, 'second-model');
   assert.equal(result.attempts, 2);
   assert.equal(result.attemptsTrail.length, 2);

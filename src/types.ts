@@ -1871,6 +1871,7 @@ export interface WorldSynthesisInput {
 }
 
 export interface ResearchEvidenceItem {
+  storyId?: string;
   evidenceId: string;
   sourceUri: string;
   sourceTitle: string;

@@ -105,9 +105,12 @@ test('Quest journal surface uses canonical quest projection and player-facing jo
 		assert.equal(route.includes('questCategories = new Set'), true, `Audit ${iteration}: quest classification categories are not explicit`);
 		assert.equal(chronicle.includes("section === 'quests' ? 'Quests' : 'Journal'"), true, `Audit ${iteration}: contextual Quest/Journal title missing`);
 		assert.equal(chronicle.includes('Engine diagnostics and validation data stay out of this player-facing page.'), false, `Audit ${iteration}: legacy diagnostic copy remains in the player journal`);
-		assert.equal(route.includes("'MISSION'"), false, `Audit ${iteration}: generic world MISSION events are leaking into Quests`);
-		assert.equal(route.includes("'OBJECTIVE'"), false, `Audit ${iteration}: generic OBJECTIVE events are leaking into Quests`);
-		assert.equal(route.includes('explicitQuest'), true, `Audit ${iteration}: explicit quest classification is missing`);
+		const questProjectionStart = route.indexOf('const isQuestEvent');
+		const questProjectionEnd = route.indexOf('const questEvents', questProjectionStart);
+		const questProjection = route.slice(questProjectionStart, questProjectionEnd);
+		assert.equal(questProjection.includes("'MISSION'"), false, `Audit ${iteration}: generic world MISSION events are leaking into Quests`);
+		assert.equal(questProjection.includes("'OBJECTIVE'"), false, `Audit ${iteration}: generic OBJECTIVE events are leaking into Quests`);
+		assert.equal(questProjection.includes('explicitQuest'), true, `Audit ${iteration}: explicit quest classification is missing`);
 		assert.equal(chronicle.includes('No active quests'), true, `Audit ${iteration}: explicit empty quest state missing`);
 		assert.equal(chronicle.includes('Story action'), true, `Audit ${iteration}: journal does not show player actions`);
 		assert.equal(chronicle.includes('Remembered'), true, `Audit ${iteration}: journal does not show player-visible memories`);

@@ -935,6 +935,7 @@ export class InMemoryWorldRepository implements WorldRepository {
         title: ev.title,
         description: ev.description,
         category: ev.category,
+        isQuest: ev.isQuest === true || ev.quest === true,
         scheduledTime: ev.scheduledTime ? { ...ev.scheduledTime } : undefined,
         locationId: ev.locationId,
         status: 'PLANNED' as const,

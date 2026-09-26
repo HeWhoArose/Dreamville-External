@@ -264,3 +264,26 @@ test('Phase 16 contextual fallback: suggestions are tied to the visible scene wh
 		tips.every((tip) => !/^use (?:a|an|the) known ability$/i.test(tip.title))
 	);
 });
+
+
+test('Phase 16 regression: exact ordinary movement stays narrative and receives scene-grounded suggestions', async () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'phase16_advisor_move_exact_scene';
+	seedRun(repository, storyId, 'Unknown Dark Knight');
+
+	const advisor = new StoryActionAdvisor(repository);
+	const advice = await advisor.advise(storyId, 'i move towards the structure');
+
+	assert.equal(advice.mode, 'NORMAL_ACTION');
+	assert.equal(advice.canExecuteNow, true);
+	assert.equal(advice.proposal, undefined);
+	assert.equal(advice.simulation, undefined);
+
+	const titles = advice.tips.map((tip) => tip.title.toLowerCase());
+	const actionTexts = advice.tips.map((tip) => tip.actionText.toLowerCase());
+	assert.ok(
+		titles.some((title) => /environment|investigate|disturbance|position|conversation/.test(title)) ||
+		actionTexts.some((action) => /inspect|examine|position|respond/.test(action)),
+		'Expected at least one contextual suggestion instead of only a generic known-ability recommendation.'
+	);
+});

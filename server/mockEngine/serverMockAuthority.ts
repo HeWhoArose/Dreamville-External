@@ -25,6 +25,7 @@ import { deterministicId, formatCanonicalTimestamp } from '../domain/determinist
 import { HistoricalChronicleEngine } from '../domain/historicalChronicleEngine';
 import { storyActionAdvisor } from '../services/storyActionAdvisor';
 import { combatEncounterService } from '../domain/combatEncounterService';
+import { CapabilitySimulationEngine } from '../domain/capabilitySimulationEngine';
 
 /**
  * ServerMockAuthority
@@ -528,7 +529,11 @@ export class ServerMockAuthority {
         };
       }
 
-      if (advice.recognizedCapability?.id) {
+      if (advice.mode === 'NORMAL_ACTION') {
+        // Ordinary narrative actions never inherit capability execution state.
+        delete (request as any).intendedCapabilityId;
+        (request as any).preventCapabilityExecution = true;
+      } else if (advice.recognizedCapability?.id) {
         (request as any).intendedCapabilityId = advice.recognizedCapability.id;
       }
     }
@@ -618,7 +623,7 @@ export class ServerMockAuthority {
       rulesProfile
     );
 
-    let committedOutcome = baseResult.message;
+    let committedOutcome = '';
     if (storyCheck) {
       const testLabel = storyCheck.testType === 'SAVING_THROW'
         ? storyCheck.ability + ' saving throw'
@@ -640,6 +645,14 @@ export class ServerMockAuthority {
         committedOutcome += ' ' + consequence.summary;
       }
     }
+    if (!storyCheck) {
+      if (explicitCapabilityIntentForNarration(String(freeformText))) {
+        committedOutcome = 'A special capability-related action was resolved by the canonical capability/rules layer. Narrate only the visible result and never expose capability or engine terminology.';
+      } else {
+        committedOutcome = 'This is an ordinary narrative/world action. No special capability was invoked. Narrate the physical and sensory result naturally and continue the scene.';
+      }
+    }
+
     // Resolve condition-driven action triggers before narration so the narrator sees the committed result.
     conditionEngine.processAction(actorId, String(freeformText), worldRepository.getWorldClock(targetStoryId).getAbsoluteTime());
     conditionEngine.tickActor(actorId, 'TURN', worldRepository.getWorldClock(targetStoryId).getAbsoluteTime());
@@ -739,6 +752,9 @@ export class ServerMockAuthority {
     };
   }
 
+  const explicitCapabilityIntentForNarration = (text: string): boolean =>
+    new CapabilitySimulationEngine().isCapabilityLikeRequest(text);
+
   private synthesizeFreeformActionFallback(
     storyId: string,
     actionText: string,
@@ -746,40 +762,48 @@ export class ServerMockAuthority {
   ): string {
     const player = worldRepository.getPlayerLifecycle(storyId);
     const run = worldRepository.getStoryRun(storyId);
-    const actorName = player?.name || run?.characterName || 'You';
+    const actorName = player?.name || run?.characterName || 'The protagonist';
     const location = worldRepository.getGeographyGraph(storyId)
       .getAllNodes()
       .find((node) => node.id === player?.locationId || node.id === run?.currentLocationId);
     const atmosphere = location?.ambientSensory || location?.description || 'The surroundings remain still.';
-
     const normalized = actionText.toLowerCase();
 
-    if (/\\b(inhale|breathe|breath|take a breath)\\b/.test(normalized)) {
-      return `${actorName} draws a slow breath. The air is cool and clean against the lungs; for a moment, nothing asks anything of you but to be still. ${atmosphere}`;
+    if (/\b(inhale|breathe|breath|take a breath)\b/.test(normalized)) {
+      return `${actorName} draws a slow breath. ${atmosphere}`;
     }
 
-    if (/\\b(look|observe|inspect|search|scan|survey|examine|notice)\\b/.test(normalized)) {
-      return `${actorName} takes a careful look around. ${atmosphere}`;
+    if (/\b(look|observe|inspect|search|scan|survey|examine|notice)\b/.test(normalized)) {
+      return `${actorName} studies the scene carefully, letting the smallest details come into focus. ${atmosphere}`;
     }
 
-    if (/\\b(listen|hear|listen for)\\b/.test(normalized)) {
-      return `${actorName} pauses and listens. ${atmosphere}`;
+    if (/\b(listen|hear|listen for)\b/.test(normalized)) {
+      return `${actorName} falls still and listens. ${atmosphere}`;
     }
 
-    if (/\\b(walk|move|step|approach|head|go)\\b/.test(normalized)) {
-      return `${actorName} follows through on the movement, changing position without disturbing the wider scene. ${atmosphere}`;
+    if (/\b(walk|move|step|approach|head|go|travel)\b/.test(normalized)) {
+      const targetMatch = actionText.match(/\b(?:toward|towards|to|into|through|around)\s+(.+?)(?:[.!?]|$)/i);
+      const destination = targetMatch?.[1]?.trim();
+      return destination
+        ? `${actorName} moves toward ${destination}. The distance closes with each step as ${atmosphere.toLowerCase()}`
+        : `${actorName} moves forward, changing position within the scene. ${atmosphere}`;
     }
 
-    if (/\\b(touch|feel|pick up|grasp|hold)\\b/.test(normalized)) {
-      return `${actorName} follows the impulse and reaches out. ${atmosphere}`;
+    if (/\b(open|close|unlock|enter|leave|follow|touch|pick up|take|grasp|hold)\b/.test(normalized)) {
+      return `${actorName} follows through, and the world responds to the movement. ${atmosphere}`;
     }
 
-    if (committedOutcome) {
-      return `${actorName} acts. ${committedOutcome} ${atmosphere}`;
+    if (/\b(ask|say|speak|talk|tell|answer|reply)\b/.test(normalized)) {
+      return `${actorName} speaks, breaking the stillness of the moment. ${atmosphere}`;
     }
 
-    return `${actorName} follows through. ${atmosphere}`;
+    if (committedOutcome && !/attempted action|outcome unfolds|canonical|capability|server authority|proposed novel/i.test(committedOutcome)) {
+      return `${atmosphere} ${actorName} remains alert to what follows.`;
+    }
+
+    return `${actorName} follows through on the decision, and the scene shifts around the moment. ${atmosphere}`;
   }
+
 
   /**
    * Server-authoritative resolution of player ActionRequests.
@@ -1293,12 +1317,25 @@ export class ServerMockAuthority {
         const actorId = player ? player.actorId : `player_actor_${targetStoryId}`;
 
         const intendedCapabilityId = (request as any).intendedCapabilityId;
-        const interp = capEngine.interpretFreeformAction({
-          actorId,
-          actionText: freeformText,
-          intendedCapabilityId,
-          executeIfValid: Boolean(intendedCapabilityId) && !(request as any).preventCapabilityExecution,
-        });
+        const capabilitySimulation = new CapabilitySimulationEngine();
+        const explicitCapabilityIntent =
+          Boolean(intendedCapabilityId) ||
+          capabilitySimulation.isCapabilityLikeRequest(freeformText);
+
+        const interp = explicitCapabilityIntent
+          ? capEngine.interpretFreeformAction({
+              actorId,
+              actionText: freeformText,
+              intendedCapabilityId,
+              executeIfValid: Boolean(intendedCapabilityId) && !(request as any).preventCapabilityExecution,
+            })
+          : {
+              interpretationType: 'UNSUPPORTED' as const,
+              actorId,
+              actionText: freeformText,
+              validationSuccess: false,
+              narrativeInterpretation: 'Ordinary narrative action; no capability interpretation required.',
+            };
 
         if (
           interp.interpretationType === 'NOVEL_CAPABILITY_PROPOSAL' &&

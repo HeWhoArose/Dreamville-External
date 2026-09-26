@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { Trash2 } from 'lucide-react';
 import { Card } from '../common/Card';
 import { Button } from '../common/Button';
 import { Badge } from '../common/Badge';
@@ -18,6 +19,7 @@ export interface StoryLibraryViewProps {
   onNewStory: () => void;
   onBranchStory?: (runId: string) => void;
   onStoryAssetChange?: (runId: string, newUrl?: string, provenance?: string) => void | Promise<void>;
+  onDeleteStory?: (story: StorySummary) => void | Promise<void>;
 }
 
 export const StoryLibraryView: React.FC<StoryLibraryViewProps> = ({
@@ -29,6 +31,7 @@ export const StoryLibraryView: React.FC<StoryLibraryViewProps> = ({
   onNewStory,
   onBranchStory,
   onStoryAssetChange,
+  onDeleteStory,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGenre, setSelectedGenre] = useState<string>('all');
@@ -266,6 +269,21 @@ export const StoryLibraryView: React.FC<StoryLibraryViewProps> = ({
                         <circle cx="6" cy="18" r="3" />
                         <path d="M18 9a9 9 0 0 1-9 9" />
                       </svg>
+                    </Button>
+                  )}
+                  {onDeleteStory && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteStory(story);
+                      }}
+                      className="min-h-[30px] p-1.5 text-rose-300 hover:bg-rose-500/10"
+                      title="Delete Story Run"
+                      aria-label={`Delete ${story.title}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   )}
                   <Button

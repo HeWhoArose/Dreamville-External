@@ -959,6 +959,13 @@ export class StoryActionAdvisor {
 			source: 'DETERMINISTIC' as const,
 		}));
 
+		// When the player opens suggestions without supplying an action, prefer the
+		// deterministic scene interpretation immediately. This keeps the fallback useful
+		// even when the AI advice provider is unavailable or slow.
+		if (!actionText.trim() && deterministicTips.length > 0) {
+			return deterministicTips;
+		}
+
 		try {
 			const actorSummary = [
 				run?.protagonist?.role?.profession,

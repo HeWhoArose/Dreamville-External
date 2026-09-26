@@ -350,7 +350,7 @@ export const ChronicleView: React.FC<ChronicleViewProps> = ({
                   </div>
                 </div>
               </article>
-            ))}
+            )))}
         </section>
       )}
     </div>

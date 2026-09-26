@@ -379,13 +379,19 @@ export const App: React.FC = () => {
     });
   };
 
-  const handleEnterCombatTransition = async () => {
-    const transition = combatTransition;
+  const handleEnterCombatTransition = async (requestedTransition?: CombatTransitionState) => {
+    const transition = requestedTransition || combatTransition;
     if (!transition) return;
 
     try {
       setIsProcessingAction(true);
       setNetworkError(null);
+
+      if (transition.phase === 'ENDED' && transition.returnToStory) {
+        setCombatTransition(transition);
+        setCurrentRoute('play.story');
+        return;
+      }
 
       const startResult = await apiClient.startCombatEncounter({
         enemyId: transition.targetId,
@@ -394,23 +400,33 @@ export const App: React.FC = () => {
 
       setViewState((current) => current ? { ...current, combatState: startResult.combatState } : current);
 
+      let nextTransition: CombatTransitionState = {
+        ...transition,
+        started: true,
+        phase: startResult.combatState.phase,
+        requiresInitiativeRoll: startResult.combatState.phase === 'INITIATIVE_PENDING',
+        combatState: startResult.combatState,
+      };
+
       if (transition.precombatActionPending && transition.targetId && transition.actionText) {
         const opening = await apiClient.executePrecombatAction({
           targetId: transition.targetId,
           actionText: transition.actionText,
         });
+
         setViewState((current) => current ? { ...current, combatState: opening.combatState } : current);
-        setCombatTransition(opening.combatTransition || null);
+        nextTransition = opening.combatTransition || nextTransition;
+      }
+
+      setCombatTransition(nextTransition);
+
+      if (nextTransition.returnToStory || nextTransition.phase === 'ENDED') {
+        setCurrentRoute('play.story');
       } else {
-        setCombatTransition({
-          ...transition,
-          started: true,
-          phase: startResult.combatState.phase,
-          requiresInitiativeRoll: startResult.combatState.phase === 'INITIATIVE_PENDING',
-          combatState: startResult.combatState,
-        });
+        setCurrentRoute('play.combat');
       }
     } catch (error: any) {
+      setCombatTransition(transition);
       setNetworkError(error?.message || 'Failed to initialize the combat encounter.');
     } finally {
       setIsProcessingAction(false);
@@ -431,14 +447,21 @@ export const App: React.FC = () => {
   const handleCustomAction = async (actionText: string) => {
     setPendingActionAdvice(null);
 
-    // The canonical /action endpoint performs capability preflight itself.
-    // Sending the typed action directly avoids a duplicate AI advice request and
-    // guarantees that ordinary freeform actions reach the authoritative action path.
-    dispatchAction({
-      type: 'CUSTOM_ACTION',
-      actionText,
-      intent: actionText,
-    } as any);
+    // Hostile freeform actions now return a canonical combat transition.
+    // Resolve that transition immediately so the player does not have to
+    // click through an unnecessary intermediate prompt.
+    dispatchAction(
+      {
+        type: 'CUSTOM_ACTION',
+        actionText,
+        intent: actionText,
+      } as any,
+      (result) => {
+        if (result.combatTransition) {
+          void handleEnterCombatTransition(result.combatTransition);
+        }
+      },
+    );
   };
 
   const handleAcceptActionAdvice = async (advice: ActionAdvice) => {

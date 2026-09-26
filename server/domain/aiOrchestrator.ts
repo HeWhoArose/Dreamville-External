@@ -5400,20 +5400,36 @@ export class MultiModelOrchestrator {
     const selectedCandidates: ModelRegistryRecord[] = [selection.selectedModel, ...selection.fallbacks];
     const candidateKeys = new Set(selectedCandidates.map((model) => this.modelKey(model)));
 
-    const candidateChain: ModelRegistryRecord[] = selectedCandidates
-      .filter((model) =>
-        model.isEmergencyFloor ||
-        this.isCandidateUsable(model, task, contextTokens)
-      );
+    // Recover from stale or underspecified persisted chains. Discovery, quota, credentials,
+    // lifecycle changes, and task eligibility can invalidate a saved chain between requests.
+    const usableCandidates = Array.from(this.models.values())
+      .filter((model) => !candidateKeys.has(this.modelKey(model)))
+      .filter((model) => !model.isEmergencyFloor)
+      .filter((model) => this.isCandidateUsable(model, task, contextTokens))
+      .sort((a, b) => {
+        const runtimeA = this.ensureRuntimeStatus(a);
+        const runtimeB = this.ensureRuntimeStatus(b);
+        const score = (model: ModelRegistryRecord, runtime: ModelRuntimeStatus) =>
+          model.userPriority +
+          (model.health === 'Healthy' ? 50 : model.health === 'Degraded' ? 15 : 0) +
+          (model.quota === 'Healthy' ? 30 : model.quota === 'Low' ? 10 : 0) -
+          runtime.consecutiveFailures * 25 -
+          Math.min(20, (model.latencyMs || 500) / 100);
+        const diff = score(b, runtimeB) - score(a, runtimeA);
+        return diff !== 0 ? diff : this.modelKey(a).localeCompare(this.modelKey(b));
+      });
 
-    if (candidateChain.length === 0) {
-      const emergency = Array.from(this.models.values()).find(
-        (model) => model.isEmergencyFloor && model.roleEligibility.includes(task)
-      );
-      if (emergency) {
-        candidateChain.push(emergency);
+    if (selectedCandidates.filter((candidate) => !candidate.isEmergencyFloor).length < 2) {
+      for (const model of usableCandidates) {
+        if (candidateKeys.has(this.modelKey(model))) continue;
+        selectedCandidates.push(model);
+        candidateKeys.add(this.modelKey(model));
+        if (selectedCandidates.filter((candidate) => !candidate.isEmergencyFloor).length >= 4) break;
       }
     }
+
+    const candidateChain: ModelRegistryRecord[] = selectedCandidates
+      .filter((model) => model.isEmergencyFloor || this.isCandidateUsable(model, task, contextTokens));
     let totalAttempts = 0;
     let lastError = '';
     const attemptsTrail: Array<{
@@ -5545,10 +5561,63 @@ export class MultiModelOrchestrator {
       modelId: 'emergency-fallback-local',
     };
 
+    const emergencyAdapter = this.getAdapter(emergency.providerId);
+    if (emergencyAdapter) {
+      const emergencyStartedAt = Date.now();
+      try {
+        totalAttempts++;
+        const emergencyResult = await emergencyAdapter.generate(task, prompt, {
+          timeoutMs,
+          maxTokens: options?.maxTokens,
+          modelId: emergency.modelId,
+          systemInstruction,
+        });
+        if (!emergencyResult.text) throw new Error('Deterministic emergency floor returned an empty response.');
+
+        if (options?.validateResponse) {
+          const validation = options.validateResponse(emergencyResult.text);
+          if (!validation.valid) {
+            throw new Error(
+              'Emergency task response validation failed' +
+              (validation.errorReason ? ': ' + validation.errorReason : '.'),
+            );
+          }
+        }
+
+        const latencyMs = Math.max(1, Date.now() - emergencyStartedAt);
+        this.recordProviderSuccess(emergency, emergencyResult, task, emergencyStartedAt);
+        attemptsTrail.push({
+          providerId: emergency.providerId,
+          modelId: emergency.modelId,
+          displayName: emergency.displayName || emergency.modelId,
+          status: 'SUCCESS',
+          latencyMs,
+        });
+
+        return {
+          text: emergencyResult.text,
+          source: 'DETERMINISTIC_FALLBACK',
+          providerId: emergency.providerId,
+          modelId: emergency.modelId,
+          fallbackReason: 'All AI candidates were exhausted; deterministic emergency floor used.',
+          attempts: totalAttempts,
+          attemptsTrail,
+        };
+      } catch (emergencyError: any) {
+        lastError = emergencyError?.message || String(emergencyError);
+        attemptsTrail.push({
+          providerId: emergency.providerId,
+          modelId: emergency.modelId,
+          displayName: emergency.displayName || emergency.modelId,
+          status: 'FAILED',
+          latencyMs: Math.max(1, Date.now() - emergencyStartedAt),
+          error: lastError,
+        });
+      }
+    }
+
     const trailSummary = attemptsTrail.length > 0
-      ? attemptsTrail
-          .map((a, i) => `${i + 1}. ${a.displayName || a.modelId} (${a.providerId}) — ${a.error || 'Unavailable'}`)
-          .join('; ')
+      ? attemptsTrail.map((a, i) => `${i + 1}. ${a.displayName || a.modelId} (${a.providerId}) — ${a.error || 'success'}`).join('; ')
       : lastError;
 
     return {
@@ -5556,7 +5625,7 @@ export class MultiModelOrchestrator {
       source: 'DETERMINISTIC_FALLBACK',
       providerId: emergency.providerId,
       modelId: emergency.modelId,
-      fallbackReason: `All ${attemptsTrail.length} AI providers failed: ${trailSummary}`,
+      fallbackReason: `All ${attemptsTrail.length} AI/emergency attempts failed: ${trailSummary}`,
       attempts: totalAttempts,
       attemptsTrail,
     };

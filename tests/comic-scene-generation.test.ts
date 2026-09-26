@@ -87,3 +87,42 @@ test('stale active dialogue is excluded from non-dialogue current-scene art', ()
   assert.match(result.prompt, /Immediate narration from the latest turn: The guard staggers backward/i);
   assert.doesNotMatch(result.prompt, /This was said on the previous turn/i);
 });
+
+
+test('current-scene comic prompt uses fewer panels when the turn has only one visual beat', () => {
+	const result = buildComicScenePrompt({
+		location: { name: 'Abyssal Trench', description: 'A sealed structure rises from the dark water.' },
+		protagonist: { name: 'The Ashen Knight' },
+		visibleCharacters: [],
+		latestAction: {
+			actionType: 'CUSTOM_ACTION',
+			description: 'I move toward the structure.',
+			narrativeResponse: 'The knight approaches the sealed structure.',
+		},
+		activeDialogue: null,
+	});
+
+	assert.equal(result.panelCount, 2);
+	assert.match(result.prompt, /VISUAL SCENE BRIEF/i);
+	assert.match(result.prompt, /Panel 2: depict the immediate current action or dialogue beat/i);
+	assert.doesNotMatch(result.prompt, /Invent additional story beats/i);
+});
+
+test('stale dialogue does not enter non-dialogue comic prompts', () => {
+	const result = buildComicScenePrompt({
+		location: { name: 'Current Hall' },
+		protagonist: { name: 'Hero' },
+		visibleCharacters: [{ name: 'Guard' }],
+		latestAction: {
+			actionType: 'CUSTOM_ACTION',
+			description: 'I inspect the gate.',
+			narrativeResponse: 'The gate shows fresh scratches.',
+		},
+		activeDialogue: {
+			speakerName: 'Guard',
+			text: 'This was from the previous turn.',
+		},
+	});
+
+	assert.doesNotMatch(result.prompt, /previous turn/i);
+});

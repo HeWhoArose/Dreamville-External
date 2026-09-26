@@ -52,12 +52,12 @@ export function buildComicScenePrompt(context: ComicSceneContext): ComicScenePro
   const latest = context.latestAction || {};
   const narration = (latest.narrativeResponse || latest.authoritativeFeedback || '').trim();
   const action = (latest.description || '').trim();
-  const outcome = latest.checkResult
-    ? latest.checkResult.success
-      ? `Successful check: ${latest.checkResult.total ?? ''} vs DC ${latest.checkResult.difficultyClass ?? ''}.`
-      : `Failed check: ${latest.checkResult.total ?? ''} vs DC ${latest.checkResult.difficultyClass ?? ''}.`
-    : '';
   const consequence = latest.checkResult?.consequence?.summary?.trim() || '';
+  const checkOutcome = latest.checkResult
+    ? latest.checkResult.success
+      ? 'The latest check succeeded. Show the successful visible result without exposing dice, DC numbers, or engine terminology.'
+      : 'The latest check failed. Show the failure and its immediate visible consequence. Never turn the failure into success.'
+    : '';
 
   const cast = [
     `${context.protagonist.name}${context.protagonist.role ? ` (${context.protagonist.role})` : ''}`,
@@ -66,52 +66,81 @@ export function buildComicScenePrompt(context: ComicSceneContext): ComicScenePro
     ),
   ];
 
-  const immediateDialogue =
-    latest.actionType === 'DIALOGUE_CHOICE' && context.activeDialogue?.text
-      ? `${context.activeDialogue.speakerName || 'Speaker'}: ${context.activeDialogue.text}`
-      : '';
+  const dialogue = context.activeDialogue?.text
+    ? `${context.activeDialogue.speakerName || 'Speaker'} says: "${context.activeDialogue.text}"`
+    : '';
+
+  const sceneBrief = [
+    `World identity: ${context.worldTitle || 'Current story world'}.`,
+    `Exact location: ${context.location.name}${context.location.region ? ` — ${context.location.region}` : ''}.`,
+    context.location.description ? `Physical appearance and spatial facts: ${context.location.description}.` : '',
+    context.location.ambientSensory ? `Atmosphere and sensory cues: ${context.location.ambientSensory}.` : '',
+    `Visible cast only: ${cast.join('; ')}.`,
+    action ? `Immediate action: ${action}.` : 'No new player action was recorded; depict the latest visible state exactly as supplied.',
+    narration ? `Latest narrative beat: ${narration}.` : '',
+    consequence ? `Immediate consequence: ${consequence}.` : '',
+    dialogue ? `Current dialogue beat: ${dialogue}.` : '',
+    checkOutcome,
+  ].filter(Boolean).join('\\n');
+
+  const beatCount = [action, narration, consequence, dialogue].filter(Boolean).length;
+  const panelCount: 1 | 2 | 3 | 4 =
+    !action && !dialogue ? 1 :
+    consequence && dialogue ? 4 :
+    consequence || narration.length > 180 ? 3 :
+    2;
+
+  const panelPlan =
+    panelCount === 1
+      ? ['Panel 1 / splash: depict the exact current scene state as one strong establishing composition. Do not invent a prior or later event merely to fill space.']
+      : panelCount === 2
+        ? [
+            'Panel 1: establish the exact current location, atmosphere, and visible cast.',
+            'Panel 2: depict the immediate current action or dialogue beat exactly as supplied.',
+          ]
+        : panelCount === 3
+          ? [
+              'Panel 1: establish the exact current location, atmosphere, and visible cast.',
+              'Panel 2: depict the immediate action or dialogue beat at the exact moment it occurs.',
+              'Panel 3: depict the latest canonical result and only its immediate visible consequence.',
+            ]
+          : [
+              'Panel 1: establish the exact current location, atmosphere, and visible cast.',
+              'Panel 2: depict the immediate player action or dialogue beat.',
+              'Panel 3: depict the latest canonical result and immediate visible consequence.',
+              'Panel 4: depict only the immediate aftermath, preserving spatial and character continuity.',
+            ];
 
   const prompt = [
-    'Create a comic-book sequential-art page depicting ONLY the LATEST / IMMEDIATE CURRENT STORY TURN.',
-    `World: ${context.worldTitle || 'Current story world'}.`,
-    `Current location: ${context.location.name}.`,
-    context.location.region ? `Location region: ${context.location.region}.` : '',
-    context.location.description ? `Current location visual facts: ${context.location.description}.` : '',
-    context.location.ambientSensory ? `Current atmosphere: ${context.location.ambientSensory}.` : '',
-    `Current cast, and ONLY this cast: ${cast.join('; ')}.`,
-    action ? `Immediate player action: ${action}.` : 'Immediate player action: not recorded; show the latest visible scene state.',
-    outcome,
-    consequence ? `Immediate consequence: ${consequence}.` : '',
-    narration ? `Immediate narration from the latest turn: ${narration}.` : '',
-    immediateDialogue ? `Current active dialogue only: ${immediateDialogue}.` : '',
+    'Create a polished comic-book sequential-art page depicting ONLY the LATEST / IMMEDIATE CURRENT STORY TURN.',
     '',
-    'Composition requirements:',
-    '• One full comic page with 4 distinct panels separated by visible gutters.',
-    '• Panel 1 establishes the exact current location and characters.',
-    '• Panel 2 depicts the immediate player action at the exact moment it happens.',
-    '• Panel 3 depicts the latest mechanical/narrative result and immediate consequence.',
-    '• Panel 4 depicts the immediate aftermath, preserving the same location, characters, clothing, injuries, lighting, and spatial continuity.',
-    '• Keep character appearance, clothing, equipment, proportions, and relative positions consistent from panel to panel.',
-    '• Use comic-style sequential art, expressive framing, cinematic perspective, strong panel composition, and readable visual storytelling.',
+    'CURRENT SCENE VISUAL BRIEF',
+    sceneBrief,
     '',
-    'Freshness and canon constraints:',
-    '• Freshness rule: latest turn only; no prior-scene carryover.',
-    '• This is a CURRENT-SCENE illustration, not a recap.',
-    '• Use only the latest turn narration/action plus current location and current visible cast supplied above.',
-    '• Do NOT use previous dialogue, previous actions, opening-scene events, or old consequences.',
-    '• No flashbacks, no time skips, no alternate outcomes, no future events, and no invented characters.',
-    '• Do NOT add powers, equipment, injuries, locations, or events that are absent from the supplied immediate turn.',
-    '• Do not depict failed actions as successful; failed actions must remain visibly failed. Never depict failed actions as successful.',
-    '• Do not turn internal engine mechanics into visible UI text.',
-    '• Do not add captions, speech balloons, title cards, watermarks, interface chrome, or arbitrary text unless it is naturally present in the scene.',
-  ].filter(Boolean).join('\n');
+    'PANEL LOGIC',
+    `There are ${beatCount} supplied immediate story beats. Use exactly ${panelCount} panel${panelCount === 1 ? '' : 's'}; never invent additional story beats to fill panels.`,
+    ...panelPlan,
+    '',
+    'VISUAL CONTINUITY',
+    'Keep every named character visually consistent from panel to panel: face, hairstyle, body proportions, species traits, clothing, armor, equipment, injuries, colors, and relative position.',
+    'Keep the same physical environment, terrain, architecture, lighting direction, weather, and spatial relationships unless the immediate action explicitly changes them.',
+    'Use cinematic comic-book composition, readable silhouettes, expressive perspective, strong panel gutters, and clear sequential visual storytelling.',
+    '',
+    'CANON / FRESHNESS RULES',
+    'Use only the current location, current visible cast, latest action, latest narration, current dialogue, and immediate consequence supplied above.',
+    'Do not recap prior scenes. No flashbacks, time skips, future events, alternate outcomes, invented characters, invented powers, invented equipment, invented injuries, or invented environmental effects.',
+    'Do not expose engine internals such as actionType, DC, roll totals, API fields, canonical IDs, or internal rule labels as UI text.',
+    'A failed action must remain visibly failed. A successful action must remain consistent with the supplied result.',
+    'No title cards, captions, speech balloons, watermarks, interface chrome, or arbitrary text unless natural in-world text is explicitly part of the supplied current scene.',
+  ].join('\\n');
 
   return {
     prompt,
     sourceActionId: undefined,
     sourceNarration: narration,
-    panelCount: 4,
+    panelCount,
     aspectRatio: '16:9',
     freshnessRule: 'Immediate latest turn only; no prior-scene carryover.',
   };
+}
 }

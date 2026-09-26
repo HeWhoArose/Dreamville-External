@@ -238,3 +238,29 @@ test('Phase 16 regression: ordinary movement never becomes a novel capability pr
 	assert.equal(advice.proposal, undefined);
 	assert.equal(advice.simulation, undefined);
 });
+
+
+test('Phase 16 contextual fallback: suggestions are tied to the visible scene when AI advice is unavailable', async () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'phase16_advisor_contextual_fallback';
+	seedRun(repository, storyId, 'Ranger');
+
+	const tips = await repository
+		? new StoryActionAdvisor(repository).getTipsForAction(storyId, '', {
+			locationName: 'Abyssal Trench',
+			locationDescription: 'Cold stone, burning vents, smoke, and fresh footprints surround a sealed structure.',
+			startingSituation: 'A disturbance is coming from the structure.',
+			recentActions: ['The ground trembled moments ago.'],
+		})
+		: [];
+
+	assert.ok(tips.length > 0);
+	assert.ok(
+		tips.some((tip) => /inspect|examine|investigate|disturbance|terrain|threat|position/i.test(
+			`${tip.title} ${tip.description} ${tip.actionText}`
+		))
+	);
+	assert.ok(
+		tips.every((tip) => !/^use (?:a|an|the) known ability$/i.test(tip.title))
+	);
+});

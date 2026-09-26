@@ -9,6 +9,7 @@ import { StoryAdaptationPipeline } from './storyAdaptation';
 import { getProviderApiKey } from '../services/providerCredentialService';
 import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
 import { getAiTaskContract } from './aiTaskContracts';
+import { narrativeContinuityEngine } from './narrativeContinuityEngine';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
 
@@ -4826,11 +4827,27 @@ export class MultiModelOrchestrator {
 
     const executeCore = async (): Promise<OrchestratedTurnResult> => {
       // 1. Ingest CH11 Working Context (DEF-CH12-02)
+      const researchPacket = narrativeContinuityEngine.research(
+        repo,
+        storyId,
+        params.playerAction || 'current story context',
+        repo.getPlayerLifecycle(storyId)?.actorId,
+      );
       const assembledContext: AssembledTurnContext = WorkingContextEngine.assembleTurnContext({
         storyId,
         playerAction: params.playerAction || 'Observe surroundings and assess position',
         hardTokenBudget,
         worldRepo: repo,
+        customChunks: [{
+          id: 'b3_narrative_research',
+          band: 'B3_CAUSAL_OPPORTUNITY',
+          label: 'Narrative Research / Plot / Plan',
+          content: JSON.stringify(researchPacket),
+          estimatedTokens: WorkingContextEngine.estimateTokens(JSON.stringify(researchPacket)),
+          sourceAuthority: 'NarrativeContinuityEngine',
+          relevanceScore: 0.9,
+          isProtected: false,
+        }],
       });
 
       // 1b. CH15 Source Adaptation Adjudication Check
@@ -5096,6 +5113,12 @@ export class MultiModelOrchestrator {
               idempotencyKey: rawIdempotencyKey,
             };
             this.lastTurnTelemetry = telemetry;
+            narrativeContinuityEngine.recordTurn(repo, {
+              storyId,
+              turnId,
+              playerAction: params.playerAction,
+              turnPackage: validation.turnPackage,
+            });
 
             return {
               success: true,

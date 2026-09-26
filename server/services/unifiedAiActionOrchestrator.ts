@@ -9,6 +9,7 @@ export interface UnifiedActionPipelineResult {
 	intent: { baseAction: string; intent: string; requestedEffects: string[]; modifiers: string[]; target?: string; confidence: number; source: 'AI' | 'DETERMINISTIC_FALLBACK' };
 	research: { required: boolean; brief: string; facts: string[]; source: 'AI' | 'DETERMINISTIC_FALLBACK' | 'NOT_REQUIRED' };
 	capability?: CapabilityDefinition;
+	alternativeCapability?: CapabilityDefinition;
 	simulation: CapabilitySimulationResult;
 	rules: { status: 'PASS' | 'BLOCK' | 'REVIEW'; reason: string; source: 'DETERMINISTIC' | 'AI_ASSISTED' };
 	explanation: string;
@@ -91,6 +92,55 @@ export class UnifiedAiActionOrchestrator {
 		const rulesProfile=this.repository.getRulesProfile(storyId);
 		const customRules=world?new (await import('../domain/customRuleEngine')).CustomRuleEngine().getRules(this.repository as any,storyId):[];
 		const simulation=simulator.simulate(cleanAction,{actorId,character:run?.protagonist,world:world||{title:'Current World',dndRulesMode:rulesProfile?.mode||'FULL_DND'},rulesProfile,progressionPolicy,progressionState:{...progressionState,maxCharacterLevel:progressionPolicy.maxLevel},customRules,powerState:capabilityEngine.getPowerState(actorId),ownedCapabilities:owned,skillInstances:capabilityEngine.getActorSkillInstances(actorId),allWorldCapabilities:[...((world?.canonicalCapabilities||[]) as CapabilityDefinition[]),...((world?.capabilities||[]) as CapabilityDefinition[])],environment:{}},finalCandidate);
+		let alternativeCapability: CapabilityDefinition | undefined;
+		if (
+			capabilityLike &&
+			finalCandidate &&
+			(simulation.status === 'CHARACTER_INCOMPATIBLE' || simulation.status === 'ALTERNATE_ROUTE')
+		) {
+			try {
+				const result = await this.runTask(
+					'capability.synthesize',
+					JSON.stringify({
+						mode: 'ALTERNATIVE_MECHANISM',
+						requestedAction: cleanAction,
+						intent,
+						research,
+						requestedCapability: finalCandidate,
+						simulation,
+						character: run?.protagonist,
+						world,
+					}),
+					'Return ONLY JSON describing one alternative capability that can achieve a coherent approximation of the requested intent while respecting the character, world, and rules. It must be meaningfully different from the unavailable capability and is a proposal only.',
+					{
+						timeoutMs: 12000,
+						maxTokens: 1600,
+						validateResponse: (text: string) => {
+							const p = json<any>(text);
+							return p && typeof p.name === 'string' && typeof p.description === 'string'
+								? { valid: true }
+								: { valid: false, errorReason: 'Invalid alternative capability schema.' };
+						},
+					},
+				);
+				const p = json<any>(result.text);
+				if (p) {
+					alternativeCapability = {
+						...p,
+						id: 'proposal_alt_' + storyId + '_' + actorId,
+						provenance: 'AI_GENERATED',
+					};
+				}
+				telemetry.push({
+					task: 'capability.synthesize',
+					modelId: result.modelId,
+					providerId: result.providerId,
+					source: result.source,
+					attempts: result.attempts,
+				});
+			} catch {}
+		}
+
 		const rules: UnifiedActionPipelineResult['rules']=simulation.status==='WORLD_FORBIDDEN'||simulation.worldAllowed===false?{status:'BLOCK',reason:simulation.explanation,source:'DETERMINISTIC'}:simulation.status==='UNSUPPORTED_REQUEST'?{status:'REVIEW',reason:'No capability mechanism was identified; use normal action resolution.',source:'DETERMINISTIC'}:{status:'PASS',reason:simulation.explanation,source:'DETERMINISTIC'};
 		let ruleAnalysis = '';
 		if (capabilityLike) {
@@ -167,6 +217,7 @@ export class UnifiedAiActionOrchestrator {
 			intent,
 			research,
 			capability:finalCandidate,
+			alternativeCapability,
 			simulation,
 			rules,
 			explanation,

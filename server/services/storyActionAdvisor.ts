@@ -289,7 +289,7 @@ export class StoryActionAdvisor {
 	): Promise<ActionAdvice> {
 
 		const cleanAction = String(actionText || '').trim();
-		const ordinaryActionPattern = /^(?:i|we|the character|my character)\\s+(?:walk|walks|move|moves|step|steps|approach|approaches|go|goes|head|heads|travel|travels|look|looks|observe|observes|inspect|inspects|search|searches|listen|listens|wait|waits|rest|rests|sit|sits|stand|stands|touch|touches|pick up|picks up|take|takes|open|opens|close|closes|enter|enters|leave|leaves|follow|follows|speak|speaks|talk|talks|ask|asks|say|says)\\b/i;
+		const ordinaryActionPattern = /^(?:i|we|the character|my character)\s+(?:walk|walks|move|moves|step|steps|approach|approaches|go|goes|head|heads|travel|travels|look|looks|observe|observes|inspect|inspects|search|searches|listen|listens|wait|waits|rest|rests|sit|sits|stand|stands|touch|touches|pick up|picks up|take|takes|open|opens|close|closes|enter|enters|leave|leaves|follow|follows|speak|speaks|talk|talks|ask|asks|say|says)\b/i;
 		const explicitCapabilityIntent = new CapabilitySimulationEngine().isCapabilityLikeRequest(cleanAction);
 		if (cleanAction && ordinaryActionPattern.test(cleanAction) && !explicitCapabilityIntent) {
 			const player = this.repository.getPlayerLifecycle(storyId);

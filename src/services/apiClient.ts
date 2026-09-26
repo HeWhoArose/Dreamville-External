@@ -67,6 +67,25 @@ class ApiClient {
    * Fetches initial or refreshed ExternalViewState from the server authority.
    * GET /api/game/state
    */
+  /**
+   * Fetches the player-safe canonical Story Run projection, including quests.
+   * GET /api/game/run-canonical-state
+   */
+  public async getRunCanonicalState(storyId?: string): Promise<any> {
+    const url = storyId
+      ? `${this.baseUrl}/run-canonical-state?storyId=${encodeURIComponent(storyId)}`
+      : `${this.baseUrl}/run-canonical-state`;
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data?.error || `Failed to fetch canonical Story Run state: HTTP ${res.status}`);
+    }
+    return data;
+  }
+
   public async getGameState(storyId?: string): Promise<ExternalViewState> {
     const url = storyId ? `${this.baseUrl}/state?storyId=${encodeURIComponent(storyId)}` : `${this.baseUrl}/state`;
     const res = await fetch(url, {

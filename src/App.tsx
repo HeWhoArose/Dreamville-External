@@ -57,6 +57,7 @@ import {
   ActionAdvice,
   ActionTip,
   CapabilitiesResponse,
+  CombatTransitionState,
 } from './types';
 
 export const App: React.FC = () => {
@@ -83,6 +84,7 @@ export const App: React.FC = () => {
   const [isProcessingAction, setIsProcessingAction] = useState<boolean>(false);
   const [pendingActionAdvice, setPendingActionAdvice] = useState<ActionAdvice | null>(null);
   const [storyActionTips, setStoryActionTips] = useState<ActionTip[]>([]);
+  const [combatTransition, setCombatTransition] = useState<CombatTransitionState | null>(null);
   const actionSeqRef = useRef<number>(0);
 
   // Modal overlays
@@ -277,6 +279,9 @@ export const App: React.FC = () => {
         return;
       }
       setViewState(result.viewState);
+      if (result.combatTransition) {
+        setCombatTransition(result.combatTransition);
+      }
       fetchAuxiliaryData();
       apiClient.getStoryActionTips((payload as any).storyId).then(setStoryActionTips).catch(() => undefined);
       if (onComplete) {
@@ -372,6 +377,55 @@ export const App: React.FC = () => {
       type: 'ADVANCE_TIME',
       seconds: 28800,
     });
+  };
+
+  const handleEnterCombatTransition = async () => {
+    const transition = combatTransition;
+    if (!transition) return;
+
+    try {
+      setIsProcessingAction(true);
+      setNetworkError(null);
+
+      const startResult = await apiClient.startCombatEncounter({
+        enemyId: transition.targetId,
+        enemyName: transition.targetName,
+      });
+
+      setViewState((current) => current ? { ...current, combatState: startResult.combatState } : current);
+
+      if (transition.precombatActionPending && transition.targetId && transition.actionText) {
+        const opening = await apiClient.executePrecombatAction({
+          targetId: transition.targetId,
+          actionText: transition.actionText,
+        });
+        setViewState((current) => current ? { ...current, combatState: opening.combatState } : current);
+        setCombatTransition(opening.combatTransition || null);
+      } else {
+        setCombatTransition({
+          ...transition,
+          started: true,
+          phase: startResult.combatState.phase,
+          requiresInitiativeRoll: startResult.combatState.phase === 'INITIATIVE_PENDING',
+          combatState: startResult.combatState,
+        });
+      }
+    } catch (error: any) {
+      setNetworkError(error?.message || 'Failed to initialize the combat encounter.');
+    } finally {
+      setIsProcessingAction(false);
+    }
+  };
+
+  const handleOpenCombatView = () => {
+    setCombatTransition(null);
+    setCurrentRoute('play.combat');
+  };
+
+  const handleCombatEnded = (transition: CombatTransitionState) => {
+    setCombatTransition(transition);
+    setCurrentRoute('play.story');
+    initializeApp(activeStoryId);
   };
 
   const handleCustomAction = async (actionText: string) => {
@@ -558,7 +612,7 @@ export const App: React.FC = () => {
     currentLocation: activeStorySummary?.currentLocation || 'Sanctum Gateway',
     currentCycle: formattedWorldTime || 'Dawn, Cycle 1',
     turnCount: activeStorySummary?.turnCount || 1,
-    hasCombatActive: false,
+    hasCombatActive: Boolean(viewState?.combatState?.phase && viewState.combatState.phase !== 'INACTIVE' && viewState.combatState.phase !== 'ENDED'),
   };
 
   const renderPlayContent = () => (
@@ -589,6 +643,8 @@ export const App: React.FC = () => {
           isLoadingOpening={isLoadingOpening}
           openingError={openingError}
           onRetryOpening={handleRetryOpening}
+          combatTransition={combatTransition}
+          onEnterCombat={handleOpenCombatView}
         />
       )}
 
@@ -638,7 +694,10 @@ export const App: React.FC = () => {
       )}
 
       {currentRoute === 'play.combat' && (
-        <TacticalCombatView onRefreshWorldState={fetchAuxiliaryData} />
+        <TacticalCombatView
+          onRefreshWorldState={fetchAuxiliaryData}
+          onCombatEnded={handleCombatEnded}
+        />
       )}
 
       {currentRoute === 'play.map' && viewState && (

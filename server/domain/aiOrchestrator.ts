@@ -5523,13 +5523,24 @@ export class MultiModelOrchestrator {
     // 3. Assign optimal fallback chains for each canonical task
     const tasksToConfigure: TaskId[] = [
       'narrative.generate',
+      'world.generate',
       'character.dialogue',
       'character.extract',
       'character.capability.propose',
       'memory.extract',
       'story.advice',
+      'intent.interpret',
+      'capability.synthesize',
+      'capability.explain',
+      'research.query',
+      'research.world-brief',
       'summary.scene',
       'rules.adjudicate',
+      'rules.analyze',
+      'combat.tactics',
+      'tactical.reason',
+      'combat.animation.plan',
+      'narrative.review',
       'utility.inspect',
       'speech.generate',
       'speech.transcribe',
@@ -5544,12 +5555,29 @@ export class MultiModelOrchestrator {
         .sort((a, b) => {
           let scoreA = a.userPriority - (a.latencyMs || 500) / 10;
           let scoreB = b.userPriority - (b.latencyMs || 500) / 10;
-          if (task === 'narrative.generate' || task === 'character.dialogue') {
-            if (a.pool === 'creative') scoreA += 50;
-            if (b.pool === 'creative') scoreB += 50;
-          } else if (task === 'memory.extract' || task === 'rules.adjudicate' || task === 'utility.inspect') {
-            if (a.pool === 'fast' || a.pool === 'reasoning') scoreA += 40;
-            if (b.pool === 'fast' || b.pool === 'reasoning') scoreB += 40;
+          if (task === 'narrative.generate' || task === 'world.generate' || task === 'character.dialogue' || task === 'narrative.review') {
+            if (a.pool === 'creative' || a.pool === 'reasoning') scoreA += 50;
+            if (b.pool === 'creative' || b.pool === 'reasoning') scoreB += 50;
+          } else if (
+            task === 'intent.interpret' ||
+            task === 'capability.explain' ||
+            task === 'story.advice' ||
+            task === 'memory.extract' ||
+            task === 'character.extract'
+          ) {
+            if (a.pool === 'fast') scoreA += 40;
+            if (b.pool === 'fast') scoreB += 40;
+          } else if (
+            task === 'capability.synthesize' ||
+            task === 'research.query' ||
+            task === 'research.world-brief' ||
+            task === 'rules.adjudicate' ||
+            task === 'rules.analyze' ||
+            task === 'combat.tactics' ||
+            task === 'tactical.reason'
+          ) {
+            if (a.pool === 'reasoning' || a.pool === 'long_context') scoreA += 45;
+            if (b.pool === 'reasoning' || b.pool === 'long_context') scoreB += 45;
           }
           return scoreB - scoreA;
         });

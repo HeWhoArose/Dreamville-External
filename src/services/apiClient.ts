@@ -99,9 +99,15 @@ class ApiClient {
 
     if (!res.ok) {
       const errorData = await res.json().catch(() => null);
-      throw new Error(
-        errorData?.error || `Action submission failed with HTTP ${res.status}`
-      );
+      const error = new Error(
+        errorData?.errorReason ||
+        errorData?.error ||
+        errorData?.message ||
+        `Action submission failed with HTTP ${res.status}`
+      ) as Error & { status?: number; data?: any };
+      error.status = res.status;
+      error.data = errorData;
+      throw error;
     }
 
     return (await res.json()) as ActionResult;

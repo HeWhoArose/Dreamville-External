@@ -39,7 +39,8 @@ export interface StoryNavigationConfig {
 
 /**
  * Derives the contextual in-story navigation menu from the active story/world ruleset and mode.
- * Invariant: Combat is strictly conditional and hidden if tactical combat is not enabled.
+ * Character, World, Inventory, Map, and Tactics are the core in-scene destinations.
+ * Quests, Journal, Recent Actions, Codex, and investigation tools remain contextual.
  */
 export function deriveStoryMenu(config: StoryNavigationConfig = {}): StoryMenuEntry[] {
   const {
@@ -48,7 +49,6 @@ export function deriveStoryMenu(config: StoryNavigationConfig = {}): StoryMenuEn
     genre = 'Fantasy',
     hasActiveCombat = false,
     hasTacticalCombatRule = rules === 'FULL_DND',
-    hasSpellbook = rules === 'FULL_DND',
     unresolvedCluesCount = 0,
   } = config;
 
@@ -64,7 +64,6 @@ export function deriveStoryMenu(config: StoryNavigationConfig = {}): StoryMenuEn
 
   const menu: StoryMenuEntry[] = [];
 
-  // 1. Story Narrative (Always present and primary)
   menu.push({
     id: 'story',
     label: 'Story',
@@ -74,7 +73,6 @@ export function deriveStoryMenu(config: StoryNavigationConfig = {}): StoryMenuEn
     route: 'play.story',
   });
 
-  // 2. Character / Protagonist Dossier
   menu.push({
     id: 'character',
     label: isMystery ? 'Detective Dossier' : 'Character',
@@ -84,101 +82,7 @@ export function deriveStoryMenu(config: StoryNavigationConfig = {}): StoryMenuEn
     route: 'play.character',
   });
 
-  // 3. Narrative Mystery / Investigation Branch
   if (isMystery) {
-    menu.push({
-      id: 'evidence',
-      label: 'Evidence & Clues',
-      iconType: 'evidence',
-      enabled: true,
-      visible: true,
-      route: 'play.evidence',
-      badge: unresolvedCluesCount > 0 ? `${unresolvedCluesCount}` : undefined,
-    });
-
-    menu.push({
-      id: 'quests',
-      label: 'Quests',
-      iconType: 'quests',
-      enabled: true,
-      visible: true,
-      route: 'play.quests',
-    });
-
-    menu.push({
-      id: 'journal',
-      label: 'Journal',
-      iconType: 'journal',
-      enabled: true,
-      visible: true,
-      route: 'play.journal',
-    });
-
-    menu.push({
-      id: 'relationships',
-      label: 'Suspects & Leads',
-      iconType: 'relationships',
-      enabled: true,
-      visible: true,
-      route: 'play.relationships',
-    });
-
-    menu.push({
-      id: 'map',
-      label: 'Crime Scenes & Map',
-      iconType: 'map',
-      enabled: true,
-      visible: true,
-      route: 'play.map',
-    });
-
-    menu.push({
-      id: 'codex',
-      label: 'World Codex',
-      iconType: 'codex',
-      enabled: true,
-      visible: true,
-      route: 'play.codex',
-    });
-
-
-    menu.push({
-      id: 'world',
-      label: 'World',
-      iconType: 'locations',
-      enabled: true,
-      visible: true,
-      route: 'play.world',
-      reason: 'Characters and places in the active world',
-    });
-
-    menu.push({
-      id: 'recent-actions',
-      label: 'Recent Actions',
-      iconType: 'journal',
-      enabled: true,
-      visible: true,
-      route: 'play.recent-actions',
-    });
-
-    // Mystery stories do not expose tactical combat by default unless combat explicitly activates
-    if (hasActiveCombat) {
-      menu.push({
-        id: 'combat',
-        label: 'Combat Encounter',
-        iconType: 'combat',
-        enabled: true,
-        visible: true,
-        route: 'play.combat',
-        badge: 'ACTIVE',
-      });
-    }
-
-    return menu;
-  }
-
-  // 4. D&D / Tactical Fantasy Branch
-  if (isDnD) {
     menu.push({
       id: 'inventory',
       label: 'Inventory',
@@ -200,14 +104,14 @@ export function deriveStoryMenu(config: StoryNavigationConfig = {}): StoryMenuEn
 
     menu.push({
       id: 'map',
-      label: 'World Map',
+      label: 'Crime Scenes & Map',
       iconType: 'map',
       enabled: true,
       visible: true,
       route: 'play.map',
     });
 
-    if (hasTacticalCombatRule || hasActiveCombat) {
+    if (hasActiveCombat) {
       menu.push({
         id: 'combat',
         label: 'Tactics',
@@ -215,7 +119,7 @@ export function deriveStoryMenu(config: StoryNavigationConfig = {}): StoryMenuEn
         enabled: true,
         visible: true,
         route: 'play.combat',
-        badge: hasActiveCombat ? 'COMBAT' : undefined,
+        badge: 'ACTIVE',
       });
     }
 
@@ -247,6 +151,25 @@ export function deriveStoryMenu(config: StoryNavigationConfig = {}): StoryMenuEn
     });
 
     menu.push({
+      id: 'evidence',
+      label: 'Evidence & Clues',
+      iconType: 'evidence',
+      enabled: true,
+      visible: true,
+      route: 'play.evidence',
+      badge: unresolvedCluesCount > 0 ? `${unresolvedCluesCount}` : undefined,
+    });
+
+    menu.push({
+      id: 'relationships',
+      label: 'Suspects & Leads',
+      iconType: 'relationships',
+      enabled: true,
+      visible: true,
+      route: 'play.relationships',
+    });
+
+    menu.push({
       id: 'codex',
       label: 'World Codex',
       iconType: 'codex',
@@ -256,20 +179,8 @@ export function deriveStoryMenu(config: StoryNavigationConfig = {}): StoryMenuEn
     });
 
     return menu;
-
-  // Combat is strictly conditional
-    if (hasTacticalCombatRule || hasActiveCombat) {
-      label: 'World Map',
-      iconType: 'map',
-      enabled: true,
-      visible: true,
-      route: 'play.map',
-    });
-
-    return menu;
   }
 
-  // 5. Default / Freeform Story Branch
   menu.push({
     id: 'inventory',
     label: 'Inventory',
@@ -290,13 +201,25 @@ export function deriveStoryMenu(config: StoryNavigationConfig = {}): StoryMenuEn
   });
 
   menu.push({
-    id: 'recent-actions',
-    label: 'Recent Actions',
-    iconType: 'journal',
+    id: 'map',
+    label: 'World Map',
+    iconType: 'map',
     enabled: true,
     visible: true,
-    route: 'play.recent-actions',
+    route: 'play.map',
   });
+
+  if (hasTacticalCombatRule || hasActiveCombat) {
+    menu.push({
+      id: 'combat',
+      label: 'Tactics',
+      iconType: 'combat',
+      enabled: true,
+      visible: true,
+      route: 'play.combat',
+      badge: hasActiveCombat ? 'COMBAT' : undefined,
+    });
+  }
 
   menu.push({
     id: 'quests',
@@ -317,25 +240,13 @@ export function deriveStoryMenu(config: StoryNavigationConfig = {}): StoryMenuEn
   });
 
   menu.push({
-    id: 'map',
-    label: 'World Map',
-    iconType: 'map',
+    id: 'recent-actions',
+    label: 'Recent Actions',
+    iconType: 'journal',
     enabled: true,
     visible: true,
-    route: 'play.map',
+    route: 'play.recent-actions',
   });
-
-  if (hasActiveCombat) {
-    menu.push({
-      id: 'combat',
-      label: 'Tactics',
-      iconType: 'combat',
-      enabled: true,
-      visible: true,
-      route: 'play.combat',
-      badge: 'ACTIVE',
-    });
-  }
 
   menu.push({
     id: 'codex',
@@ -345,7 +256,6 @@ export function deriveStoryMenu(config: StoryNavigationConfig = {}): StoryMenuEn
     visible: true,
     route: 'play.codex',
   });
-
 
   return menu;
 }

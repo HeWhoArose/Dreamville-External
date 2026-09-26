@@ -35,7 +35,7 @@ test('current-scene comic prompt is anchored to the latest turn only', () => {
     },
   });
 
-  assert.equal(result.panelCount, 4);
+  assert.equal(result.panelCount, 3);
   assert.equal(result.aspectRatio, '16:9');
   assert.match(result.prompt, /latest turn only/i);
   assert.match(result.prompt, /raise my blade/i);
@@ -60,7 +60,7 @@ test('comic generation context contract does not require dialogue history', () =
     activeDialogue: null,
   });
 
-  assert.match(result.prompt, /Current location: Current Hall/i);
+  assert.match(result.prompt, /Exact location: Current Hall/i);
   assert.match(result.prompt, /Immediate action: I open the gate/i);
   assert.doesNotMatch(result.prompt, /dialogueHistory/i);
 });
@@ -83,8 +83,8 @@ test('stale active dialogue is excluded from non-dialogue current-scene art', ()
     },
   });
 
-  assert.match(result.prompt, /Immediate player action: I strike the guard/i);
-  assert.match(result.prompt, /Immediate narration from the latest turn: The guard staggers backward/i);
+  assert.match(result.prompt, /Immediate action: I strike the guard/i);
+  assert.match(result.prompt, /Latest narrative beat: The guard staggers backward/i);
   assert.doesNotMatch(result.prompt, /This was said on the previous turn/i);
 });
 
@@ -103,7 +103,7 @@ test('adaptive panel planning uses fewer panels when the turn has only one visua
 	});
 
 	assert.equal(result.panelCount, 2);
-	assert.match(result.prompt, /VISUAL SCENE BRIEF/i);
+	assert.match(result.prompt, /CURRENT SCENE VISUAL BRIEF/i);
 	assert.match(result.prompt, /Panel 2: depict the immediate current action or dialogue beat/i);
 	assert.doesNotMatch(result.prompt, /Invent additional story beats/i);
 });

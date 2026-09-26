@@ -180,6 +180,50 @@ gameRouter.get('/action/tips', async (req: Request, res: Response) => {
  * Preflight advice for a freeform story action.
  * Never mutates canonical state.
  */
+gameRouter.post('/action/ooc', async (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
+    if (!message) return res.status(400).json({ success: false, errorReason: 'message is required.' });
+
+    const context = WorkingContextEngine.assembleTurnContext({
+      storyId,
+      playerAction: message,
+      hardTokenBudget: 1400,
+      worldRepo: worldRepository,
+    });
+    const orchestrator = worldRepository.getAiOrchestrator();
+    const systemInstruction = [
+      'You are DreamBook OOC, the player-facing out-of-character assistant for the current Story Run.',
+      'Answer questions using only the supplied canonical working context and clearly mark uncertainty when the context does not contain the answer.',
+      'You may explain rules, character abilities, current conditions, inventory, known lore, recent events, and what is currently happening.',
+      'Never claim that a canonical state change happened merely because the player asked for it.',
+      'If the player asks to change game state, explain what can be done and return a concise suggested action request for the game layer rather than fabricating completion.',
+      'Do not write story narration unless the player explicitly asks for an explanation of what is happening.',
+    ].join(' ');
+    const generated = await orchestrator.executeTaskGeneration(
+      'ooc.respond',
+      context.assembledText,
+      systemInstruction,
+      { timeoutMs: 8000, maxTokens: 1200 }
+    );
+    if (!generated.text) {
+      return res.status(503).json({ success: false, errorReason: generated.fallbackReason || 'OOC assistant could not produce a response.' });
+    }
+    return res.json({
+      success: true,
+      storyId,
+      message,
+      response: generated.text.trim(),
+      modelId: generated.modelId,
+      providerId: generated.providerId,
+      contextTokens: context.totalTokens,
+    });
+  } catch (error: any) {
+    console.error('[OOC] Failed to answer OOC request:', error);
+    return res.status(500).json({ success: false, errorReason: error?.message || 'Failed to answer OOC request.' });
+  }
+});
 gameRouter.post('/action/advice', async (req: Request, res: Response) => {
   try {
     const storyId = resolveStoryId(req, true);

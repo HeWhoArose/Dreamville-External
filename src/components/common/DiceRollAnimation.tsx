@@ -52,6 +52,10 @@ function expandDiceTerms(roll: RollRecord): number[] {
 	});
 }
 
+function rotate(degrees: number): string {
+	return `rotate(${degrees}deg)`;
+}
+
 function randomFace(sides: number): number {
 	return Math.floor(Math.random() * sides) + 1;
 }
@@ -86,6 +90,7 @@ const AnimatedDie: React.FC<{
 					: 'border-white/25 bg-gradient-to-br from-violet-300 via-fuchsia-300 to-sky-300 text-[#170c25] shadow-[0_10px_35px_rgba(217,70,239,0.18)]',
 			].join(' ')}
 			aria-label={`${diceLabel(sides)} result ${finalValue}`}
+			style={{ transform: rotate(rolling ? 8 : 0) }}
 		>
 			<span className={rolling ? 'animate-pulse' : ''}>{rolling ? value : finalValue}</span>
 		</div>

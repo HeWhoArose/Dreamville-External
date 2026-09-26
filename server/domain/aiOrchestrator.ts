@@ -5465,6 +5465,24 @@ export class MultiModelOrchestrator {
     }> = [];
 
     for (let cIdx = 0; cIdx < candidateChain.length; cIdx++) {
+      // Before entering the emergency floor, perform one last live-registry
+      // recovery pass. This handles stale persisted chains whose remaining
+      // configured entries are unusable even though another eligible provider
+      // is currently runnable.
+      if (cIdx === candidateChain.length - 1 && !candidateChain[cIdx].isEmergencyFloor) {
+        const attemptedKeys = new Set(candidateChain.slice(0, cIdx + 1).map((candidate) => this.modelKey(candidate)));
+        const lateRecovery = Array.from(this.models.values())
+          .filter((model) => !model.isEmergencyFloor)
+          .filter((model) => !attemptedKeys.has(this.modelKey(model)))
+          .filter((model) => Boolean(this.getAdapter(model.providerId)))
+          .filter((model) => this.isCandidateUsable(model, task, contextTokens))
+          .sort((a, b) => b.userPriority - a.userPriority || this.modelKey(a).localeCompare(this.modelKey(b)))[0];
+
+        if (lateRecovery) {
+          candidateChain.splice(cIdx + 1, 0, lateRecovery);
+        }
+      }
+
       const currentCandidate = candidateChain[cIdx];
       const modelKey = `${currentCandidate.providerId}::${currentCandidate.modelId}`;
 

@@ -521,6 +521,7 @@ export class ServerMockAuthority {
       }
     }
 
+    let baseResult: ActionResult | null = null;
     if (request.type !== 'CUSTOM_ACTION') {
       return this.processAction(request, canonicalCommandId);
     }
@@ -535,6 +536,50 @@ export class ServerMockAuthority {
     // Encounter detection must happen before the generic story-action resolver.
     // Otherwise a hostile opening action could be executed once as a story action
     // and a second time as a combat action.
+    const encounterCandidate = combatEncounterService.findHostileCandidate(
+      targetStoryId,
+      actorId,
+      String(freeformText),
+      worldRepository,
+    );
+    if (encounterCandidate) {
+      const pending = combatEncounterService.buildPendingCombatTransition(encounterCandidate);
+      pending.targetId = encounterCandidate.targetId;
+      pending.targetName = encounterCandidate.targetName;
+      pending.actionText = String(freeformText);
+      pending.precombatActionPending = !encounterCandidate.targetAwareOfPlayer;
+      pending.narrativeLeadIn = encounterCandidate.targetAwareOfPlayer
+        ? encounterCandidate.targetName + ' has perceived you. The encounter escalates into tactical combat.'
+        : encounterCandidate.targetName + ' has not perceived you. Your opening action can resolve before initiative.';
+      const transitionActionId = deterministicId(
+        'story_combat_transition',
+        targetStoryId,
+        actorId,
+        String(freeformText),
+        canonicalCommandId || 'story-action',
+      );
+      return {
+        success: true,
+        actionId: transitionActionId,
+        requestType: request.type,
+        status: 'MOCK_ENGINE_COMMITTED',
+        message: encounterCandidate.targetAwareOfPlayer
+          ? 'Hostile encounter detected; tactical combat transition prepared.'
+          : 'Hostile encounter detected; a pre-combat opening is available.',
+        authoritativeFeedback: encounterCandidate.reason,
+        narrativeResponse: pending.precombatActionPending
+          ? 'A hostile presence is here, but it has not perceived you. Your opening action can resolve before initiative.'
+          : 'A hostile presence has perceived you. Tactical combat is now ready to begin.',
+        combatTransition: pending,
+        viewState: this.getSanitizedViewState(targetStoryId),
+      };
+    }
+
+    baseResult = this.processAction(request, canonicalCommandId);
+    if (!baseResult) {
+      return baseResult;
+    }
+
     const conditionEngine = worldRepository.getConditionEngine(targetStoryId);
     const player = worldRepository.getPlayerLifecycle(targetStoryId);
     const run = worldRepository.getStoryRun(targetStoryId);

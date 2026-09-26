@@ -889,42 +889,6 @@ export class StoryActionAdvisor {
 		const location = this.repository.getGeographyGraph(storyId)
 			.getAllNodes()
 			.find((node) => node.id === this.repository.getPlayerLifecycle(storyId)?.locationId);
-
-		const deterministicTips: ActionTip[] = actorCapabilities
-			.filter((capability) => {
-				const action = normalize(actionText);
-				return (
-					(action.includes('attack') || action.includes('fight')) &&
-					capability.category === 'Combat'
-				) || (
-					(action.includes('move') || action.includes('escape')) &&
-					capability.category === 'Movement'
-				) || (
-					(action.includes('inspect') || action.includes('search')) &&
-					capability.category === 'Perception'
-				);
-			})
-			.slice(0, 4)
-			.map((capability) => ({
-				id: deterministicId('action_tip', storyId, actorId, actionText, capability.id),
-				title: capability.name,
-				description: capability.description,
-				intent: capability.id,
-				actionText: capability.name,
-				source: 'DETERMINISTIC' as const,
-			}));
-
-		const genericTips = actorCapabilities
-			.slice(0, 4)
-			.map((capability) => ({
-				id: deterministicId('generic_action_tip', storyId, actorId, capability.id),
-				title: 'Use ' + capability.name,
-				description: capability.description,
-				intent: capability.id,
-				actionText: capability.name,
-				source: 'DETERMINISTIC' as const,
-			}));
-
 		const sceneSources = [
 			sceneContext?.locationName,
 			sceneContext?.locationDescription,

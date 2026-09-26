@@ -37,7 +37,7 @@ test('current-scene comic prompt is anchored to the latest turn only', () => {
 
   assert.equal(result.panelCount, 3);
   assert.equal(result.aspectRatio, '16:9');
-  assert.match(result.prompt, /latest turn only/i);
+  assert.match(result.prompt, /LATEST \/ IMMEDIATE CURRENT STORY TURN/i);
   assert.match(result.prompt, /raise my blade/i);
   assert.match(result.prompt, /Archivist retreats one step/i);
   assert.match(result.prompt, /CURRENT SCENE VISUAL BRIEF/i);
@@ -105,7 +105,7 @@ test('adaptive panel planning uses fewer panels when the turn has only one visua
 	assert.equal(result.panelCount, 2);
 	assert.match(result.prompt, /CURRENT SCENE VISUAL BRIEF/i);
 	assert.match(result.prompt, /Panel 2: depict the immediate current action or dialogue beat/i);
-	assert.doesNotMatch(result.prompt, /Invent additional story beats/i);
+	assert.match(result.prompt, /never invent additional story beats/i);
 });
 
 test('stale dialogue does not enter non-dialogue comic prompts', () => {

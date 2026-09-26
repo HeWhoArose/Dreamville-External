@@ -152,9 +152,9 @@ export const StoryContextShell: React.FC<StoryContextShellProps> = ({
             default: return <Compass className="h-4 w-4" />;
           }
         };
-        // Character/World/Recent Actions are contextual tools and live inside More.
+        // Character, World, Inventory, Map, and Combat are primary in-story tools; journal and diagnostics stay in More.
         // Story, inventory, map, and active combat remain the primary in-scene tools.
-        const primaryIds = new Set(['story', 'inventory', 'map', 'combat']);
+        const primaryIds = new Set(['story', 'character', 'inventory', 'world', 'map', 'combat']);
         const primaryEntries = storyMenu.filter((entry) => primaryIds.has(entry.id) && entry.visible);
         const moreEntries = storyMenu.filter((entry) => !primaryIds.has(entry.id) && entry.visible);
         const navigate = (route: AppRoute) => {
@@ -199,8 +199,8 @@ export const StoryContextShell: React.FC<StoryContextShellProps> = ({
               </button>
             </nav>
 
-            <nav className="fixed inset-x-0 bottom-0 z-40 flex items-center justify-around border-t border-violet-500/15 bg-[#090611]/92 px-2 py-2 backdrop-blur-xl lg:hidden" aria-label="Mobile story navigation">
-              {primaryEntries.slice(0, 4).map((entry) => {
+            <nav className="fixed inset-x-0 bottom-0 z-40 flex items-center gap-1 overflow-x-auto border-t border-violet-500/15 bg-[#090611]/92 px-2 py-2 backdrop-blur-xl lg:hidden" aria-label="Mobile story navigation">
+              {primaryEntries.map((entry) => {
                 const selected = currentRoute === entry.route;
                 return (
                   <button
@@ -208,7 +208,7 @@ export const StoryContextShell: React.FC<StoryContextShellProps> = ({
                     type="button"
                     onClick={() => navigate(entry.route)}
                     className={
-                      'flex min-w-[58px] flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-[10px] ' +
+                      'flex min-w-[64px] shrink-0 flex-col items-center gap-1 rounded-xl px-2 py-1.5 text-[10px] ' +
                       (selected ? 'bg-violet-500/12 text-violet-200' : 'text-stone-500')
                     }
                   >

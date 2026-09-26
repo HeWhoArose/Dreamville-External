@@ -4619,6 +4619,8 @@ export class MultiModelOrchestrator {
     maxRetries?: number;
     styleInstruction?: string;
     continuationDirective?: string;
+    recentTurns?: Array<{ playerAction: string; narration: string; worldTime?: string }>;
+    sceneContext?: string;
   }): Promise<{
     success: boolean;
     turnPackage?: StructuredTurnPackage;
@@ -4649,10 +4651,12 @@ export class MultiModelOrchestrator {
       'Do not tell the player what they attempted; depict the attempt as something that happened in the fiction.',
       'Do not restate the player action verbatim or quote it back.',
       'Show immediate sensory and physical consequences, NPC reactions, environmental response, or tension when the canonical context supports them.',
-      'The response should feel like the next paragraph of an interactive novel or tabletop GM narration. It may describe motion, perception, dialogue, reaction, discovery, resistance, success, failure, or uncertainty according to the committed state.',
-      'For an ordinary physical action such as walking, approaching, looking, opening, touching, speaking, waiting, or moving, narrate the physical/world response naturally instead of treating the action as a capability request.',
-      'If the action produces a meaningful change, show that change. If it produces no meaningful change, still give a natural sensory beat and leave a clear opening for the next decision.',
-      'Keep it concise: usually 1–3 short paragraphs, extending only when the scene genuinely needs more space.',
+      'The response should feel like the next passage of an interactive novel or tabletop GM session, not a paraphrase of the player input.',
+      'Use the current scene plus recent turn history to maintain continuity. The narration should feel like events are unfolding from a larger living situation, with visible consequences, atmosphere, character reactions, unresolved tension, and a sensible opening for what can happen next.',
+      'For ordinary physical action such as walking, approaching, looking, opening, touching, speaking, waiting, or moving, narrate the physical/world response naturally instead of treating the action as a capability request.',
+      'Do not repeat the action in sentence form. Transform it into fiction: describe what the character notices, how the environment responds, what changes because of the movement, what remains uncertain, and what catches attention next.',
+      'Whenever canonical context supports it, add one forward-looking beat: a visible opportunity, complication, clue, threat, NPC response, environmental change, or decision point. Do not invent a new fact merely to create drama.',
+      'Use 2–4 paragraphs for a normal story turn. A tiny action can be shorter only when the canonical scene genuinely provides no additional consequence; meaningful exploration, discovery, danger, dialogue, or combat should receive enough space to develop.',
       'Do not add menus, meta-commentary, engine terminology, model names, system-status language, labels, or debug text.',
       'Do not invent hidden facts, NPC knowledge, items, powers, or outcomes that are not supported by canonical context.',
       'Do not propose or perform canonical state changes. The response is presentation only.',
@@ -4665,6 +4669,31 @@ export class MultiModelOrchestrator {
       hardTokenBudget,
       worldRepo: this.getWorldRepository(),
       customChunks: [
+        ...(params.sceneContext ? [{
+          id: 'current_scene_context',
+          band: 'B2_IMPORTANT',
+          label: 'Current Scene Context',
+          content: params.sceneContext,
+          estimatedTokens: WorkingContextEngine.estimateTokens(params.sceneContext),
+          sourceAuthority: 'Canonical Story Context',
+          isProtected: false,
+          relevanceScore: 0.98,
+        }] : []),
+        ...(params.recentTurns?.length ? [{
+          id: 'recent_story_turns',
+          band: 'B2_IMPORTANT',
+          label: 'Recent Story Turns',
+          content: params.recentTurns
+            .slice(-8)
+            .map((turn, index) => `Turn ${index + 1} | ${turn.worldTime || 'current'} | Player: ${turn.playerAction} | Narration: ${turn.narration}`)
+            .join('\n'),
+          estimatedTokens: WorkingContextEngine.estimateTokens(
+            params.recentTurns.slice(-8).map((turn) => `${turn.playerAction} ${turn.narration}`).join(' ')
+          ),
+          sourceAuthority: 'Canonical Story History',
+          isProtected: false,
+          relevanceScore: 0.92,
+        }] : []),
         {
           id: 'narrative_presentation_contract',
           band: 'B1_CRITICAL',
@@ -4684,7 +4713,7 @@ export class MultiModelOrchestrator {
       styleInstruction,
       {
         timeoutMs,
-        maxTokens: 350,
+        maxTokens: 650,
         contextTokens: assembledContext.totalTokens,
         validateResponse: (text) => {
           const validation = this.validateTurnPackage(text);

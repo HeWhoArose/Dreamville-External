@@ -1521,6 +1521,79 @@ class ApiClient {
     return data;
   }
 
+  /** Durable user-data archive: exports all persistent user-owned entities. */
+  public async exportUserDataArchive(): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/archive/user-data/export`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `User-data archive export failed: HTTP ${res.status}`);
+    return data;
+  }
+
+  /** Durable user-data archive: validates integrity without mutating state. */
+  public async validateUserDataArchive(archive: any): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/archive/user-data/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ archive }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.errorReason || `User-data archive validation failed: HTTP ${res.status}`);
+    return data;
+  }
+
+  /** Durable user-data archive: safely merges archived records into the current store. */
+  public async importUserDataArchive(archive: any, options?: { mode?: 'MERGE' | 'REPLACE'; confirmationText?: string }): Promise<any> {
+    const mode = options?.mode || 'MERGE';
+    const res = await fetch(`${this.baseUrl}/archive/user-data/import`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        archive,
+        mode,
+        confirm: mode === 'REPLACE',
+        confirmationText: options?.confirmationText,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.errorReason || `User-data archive import failed: HTTP ${res.status}`);
+    return data;
+  }
+
+  public async getUserData(namespace: string, key: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/user-data/${encodeURIComponent(namespace)}/${encodeURIComponent(key)}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `User data load failed: HTTP ${res.status}`);
+    return data.value;
+  }
+
+  public async saveUserData(namespace: string, key: string, value: any): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/user-data/${encodeURIComponent(namespace)}/${encodeURIComponent(key)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ value }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `User data save failed: HTTP ${res.status}`);
+    return data;
+  }
+
+  public async deleteUserData(namespace: string, key: string, confirmationText: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/user-data/${encodeURIComponent(namespace)}/${encodeURIComponent(key)}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ confirm: true, confirmationText }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.errorReason || `User data deletion failed: HTTP ${res.status}`);
+    return data;
+  }
+
   /**
    * Phase 13: migrate legacy persistence transactionally.
    */

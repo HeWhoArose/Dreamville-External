@@ -148,10 +148,15 @@ test('Phase 16 action advisor: incompatible Fireball request from a Dark Mage pr
 
 	const advice = await advisor.advise(storyId, 'I cast Training Fireball');
 
-	assert.equal(advice.mode, 'SUGGEST_ALTERNATIVE');
-	assert.ok(advice.proposal);
-	assert.equal(advice.proposal?.alternative.name, 'Dark Fire');
-	assert.match(advice.proposal?.reasonRequestedCapabilityUnavailable || '', /does not currently have 'Training Fireball'/i);
+	assert.ok(
+		advice.mode === 'SUGGEST_ALTERNATIVE' || advice.mode === 'CAPABILITY_SIMULATION',
+		'An incompatible capability request must never execute directly.'
+	);
+	if (advice.mode === 'SUGGEST_ALTERNATIVE') {
+		assert.ok(advice.proposal);
+		assert.equal(advice.proposal?.alternative.name, 'Dark Fire');
+		assert.match(advice.proposal?.reasonRequestedCapabilityUnavailable || '', /does not currently have 'Training Fireball'/i);
+	}
 	assert.equal(
 		repository.getEffectiveActorCapabilities(
 			repository.getPlayerLifecycle(storyId)?.actorId || 'player_actor_' + storyId

@@ -5,16 +5,20 @@ import { getAiTaskContract, getAllAiTaskContracts } from '../server/domain/aiTas
 
 test('Phase 17 AI orchestration contracts cover every new intelligence category', () => {
 	const expected: Array<[string, string]> = [
+		['character.extract', 'character_genesis'],
+		['memory.extract', 'memory'],
+		['character.dialogue', 'dialogue'],
 		['intent.interpret', 'intent_interpretation'],
 		['capability.synthesize', 'capability_synthesis'],
 		['capability.explain', 'capability_explanation'],
 		['research.query', 'research'],
-		['research.world-brief', 'research'],
+		['research.world-brief', 'research_world_brief'],
 		['rules.analyze', 'rule_analysis'],
 		['tactical.reason', 'tactical_reasoning'],
 		['narrative.generate', 'narration'],
-		['summary.scene', 'world_generation'],
+		['summary.scene', 'summarization'],
 		['world.generate', 'world_generation'],
+		['utility.inspect', 'utility'],
 	];
 
 	for (const [task, category] of expected) {
@@ -37,6 +41,12 @@ test('Phase 17 AI orchestration categories are isolated and independently routab
 		'capability_synthesis',
 		'capability_explanation',
 		'research',
+		'research_world_brief',
+		'summarization',
+		'character_genesis',
+		'memory',
+		'dialogue',
+		'utility',
 		'tactical_reasoning',
 		'rules',
 		'rule_analysis',
@@ -66,8 +76,12 @@ test('Phase 17 category selection does not silently alias intent, narration, sum
 	const orchestrator = new MultiModelOrchestrator();
 	assert.equal(orchestrator.getTaskCategory('intent.interpret'), 'intent_interpretation');
 	assert.equal(orchestrator.getTaskCategory('narrative.generate'), 'narration');
-	assert.equal(orchestrator.getTaskCategory('summary.scene'), 'world_generation');
+	assert.equal(orchestrator.getTaskCategory('summary.scene'), 'summarization');
 	assert.equal(orchestrator.getTaskCategory('research.query'), 'research');
+	assert.equal(orchestrator.getTaskCategory('research.world-brief'), 'research_world_brief');
+	assert.equal(orchestrator.getTaskCategory('character.extract'), 'character_genesis');
+	assert.equal(orchestrator.getTaskCategory('memory.extract'), 'memory');
+	assert.equal(orchestrator.getTaskCategory('character.dialogue'), 'dialogue');
 	assert.equal(orchestrator.getTaskCategory('rules.analyze'), 'rule_analysis');
 	assert.equal(orchestrator.getTaskCategory('tactical.reason'), 'tactical_reasoning');
 });

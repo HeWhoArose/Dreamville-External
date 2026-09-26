@@ -689,6 +689,62 @@ class ApiClient {
   }
 
   /**
+   * Rolls initiative for an initialized combat encounter.
+   * POST /api/game/combat/initiative/roll
+   */
+  public async rollCombatInitiative(): Promise<{
+    success: boolean;
+    initiativeRolls: import('../types').CombatInitiativeRoll[];
+    npcResolution?: any;
+    combatState: import('../types').CombatStateResponse;
+  }> {
+    const res = await fetch(`${this.baseUrl}/combat/initiative/roll`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({}),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data?.errorReason || data?.error || `Failed to roll initiative: HTTP ${res.status}`);
+    }
+    return data;
+  }
+
+  /**
+   * Resolves a hidden hostile opening action before initiative.
+   * POST /api/game/combat/precombat-action
+   */
+  public async executePrecombatAction(params: {
+    targetId: string;
+    actionText: string;
+  }): Promise<{
+    success: boolean;
+    mechanicalResolution?: import('../types').CombatNarrativeResolution;
+    narrativeResponse?: string;
+    combatTransition?: import('../types').CombatTransitionState;
+    combatState: import('../types').CombatStateResponse;
+  }> {
+    const res = await fetch(`${this.baseUrl}/combat/precombat-action`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify(params),
+    });
+
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data?.errorReason || data?.error || `Pre-combat action failed: HTTP ${res.status}`);
+    }
+    return data;
+  }
+
+  /**
    * Fetches current server-authoritative combat state (CH8).
    * GET /api/game/combat/state
    */

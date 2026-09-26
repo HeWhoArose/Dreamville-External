@@ -41,6 +41,18 @@ import { ArchiveModal } from './components/ArchiveModal';
 import { CreateStoryWizard } from './components/CreateStoryWizard';
 import { CharacterGenesisView } from './components/characterGenesis/CharacterGenesisView';
 
+const ACTIVE_STORY_STORAGE_KEY = 'dreambook.activeStoryId';
+
+function readPersistedActiveStoryId(): string {
+  try {
+    const stored = window.localStorage.getItem(ACTIVE_STORY_STORAGE_KEY);
+    return stored && stored.trim() ? stored : 'default_story';
+  } catch {
+    return 'default_story';
+  }
+}
+
+
 import { apiClient } from './services/apiClient';
 import {
   ExternalViewState,
@@ -65,7 +77,7 @@ export const App: React.FC = () => {
   const [bootPhase, setBootPhase] = useState<'splash' | 'onboarding' | 'ready'>('splash');
   const [splashStatus, setSplashStatus] = useState<'loading' | 'restoring' | 'ready' | 'error'>('loading');
   const [currentRoute, setCurrentRoute] = useState<AppRoute>('dashboard');
-  const [activeStoryId, setActiveStoryId] = useState<string>('default_story');
+  const [activeStoryId, setActiveStoryId] = useState<string>(() => readPersistedActiveStoryId());
 
   // Presentation state received from server authority
   const [viewState, setViewState] = useState<ExternalViewState | null>(null);
@@ -104,6 +116,16 @@ export const App: React.FC = () => {
   const [isLoadingOpening, setIsLoadingOpening] = useState(false);
   const [openingError, setOpeningError] = useState<string | null>(null);
 
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(ACTIVE_STORY_STORAGE_KEY, activeStoryId);
+    } catch {
+      // Browser storage can be unavailable in private/embedded environments.
+    }
+    apiClient.setActiveStoryId(activeStoryId);
+  }, [activeStoryId]);
+
   const fetchStoryLibrary = async () => {
     setIsLoadingStoryLibrary(true);
     setStoryLibraryError(null);
@@ -124,7 +146,19 @@ export const App: React.FC = () => {
         lastPlayed: run.lastPlayed || run.updatedAt || run.createdAt || 'Never',
         excerpt: run.excerpt || '',
       }));
+
       setStoryLibraryStories(summaries);
+
+      if (activeStoryId !== 'default_story' && !summaries.some((story) => story.storyId === activeStoryId)) {
+        try {
+          await apiClient.getStoryRun(activeStoryId);
+        } catch {
+          apiClient.setActiveStoryId('default_story');
+          setActiveStoryId('default_story');
+          setCurrentRoute((route) => route === 'play.story' ? 'dashboard' : route);
+          await initializeApp('default_story');
+        }
+      }
     } catch (err: any) {
       setStoryLibraryError(err?.message || 'Failed to load persisted Story Runs.');
     } finally {
@@ -256,14 +290,14 @@ export const App: React.FC = () => {
   };
 
   useEffect(() => {
-    initializeApp();
+    initializeApp(activeStoryId);
   }, []);
 
   useEffect(() => {
-    if (bootPhase === 'ready' && currentRoute === 'story-library') {
+    if (bootPhase === 'ready') {
       fetchStoryLibrary();
     }
-  }, [bootPhase, currentRoute]);
+  }, [bootPhase]);
 
   const dispatchAction = async (
     action: ActionRequest,
@@ -947,20 +981,28 @@ export const App: React.FC = () => {
       <VoiceStudioModal
         isOpen={isVoiceStudioOpen}
         onClose={() => setIsVoiceStudioOpen(false)}
-        storyId="default_story"
+        storyId={activeStoryId}
       />
       <ImportStoryModal
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
         onStoryAdapted={() => {
           setIsImportModalOpen(false);
-          initializeApp();
+          initializeApp(activeStoryId);
+          fetchStoryLibrary();
         }}
       />
       <StoryLibraryModal
         isOpen={isStoryLibraryModalOpen}
         onClose={() => setIsStoryLibraryModalOpen(false)}
-        onSelectStory={() => initializeApp()}
+        activeStoryId={activeStoryId}
+        onSelectStory={(storyId) => {
+          apiClient.setActiveStoryId(storyId);
+          setActiveStoryId(storyId);
+          setCurrentRoute('play.story');
+          initializeApp(storyId);
+          fetchStoryLibrary();
+        }}
       />
       <WorldLibraryModal
         isOpen={isWorldLibraryModalOpen}
@@ -972,6 +1014,7 @@ export const App: React.FC = () => {
         }}
         onSelectRun={(runStoryId) => {
           if (runStoryId) {
+            apiClient.setActiveStoryId(runStoryId);
             setActiveStoryId(runStoryId);
             setIsWorldLibraryModalOpen(false);
             setCurrentRoute('play.story');
@@ -984,7 +1027,7 @@ export const App: React.FC = () => {
       <RoutingWorkstationModal
         isOpen={isRoutingModalOpen}
         onClose={() => setIsRoutingModalOpen(false)}
-        storyId="default_story"
+        storyId={activeStoryId}
       />
       <LivingBibleWorkstationModal
         isOpen={isLivingBibleModalOpen}
@@ -1006,7 +1049,10 @@ export const App: React.FC = () => {
       <ArchiveModal
         isOpen={isArchiveModalOpen}
         onClose={() => setIsArchiveModalOpen(false)}
-        onRestoreSuccess={() => initializeApp()}
+        onRestoreSuccess={() => {
+          initializeApp(activeStoryId);
+          fetchStoryLibrary();
+        }}
       />
     </AudioHapticProvider>
   );

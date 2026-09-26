@@ -38,39 +38,39 @@ test('Phase 15 OOC read tools remain epistemically scoped', async () => {
 
 test('Phase 15 invalid OOC equipment mutation fails closed without state drift', async () => {
 	const { repository, storyId, actorId } = seed();
-	const before = captureCanonicalStateSnapshot(repository, storyId);
+	const before = captureCanonicalStateSnapshot(storyId, repository);
 	const result = await oocToolRegistry.execute(repository, {
 		storyId,
 		actorId,
 		call: { name: 'equip_item', arguments: { itemId: 'does-not-exist', slot: 'body' } },
 	});
-	const after = captureCanonicalStateSnapshot(repository, storyId);
+	const after = captureCanonicalStateSnapshot(storyId, repository);
 	assert.equal(result.success, false);
 	assert.deepEqual(after, before);
 });
 
 test('Phase 15 invalid OOC ability mutation fails closed without fabricated capability state', async () => {
 	const { repository, storyId, actorId } = seed();
-	const before = captureCanonicalStateSnapshot(repository, storyId);
+	const before = captureCanonicalStateSnapshot(storyId, repository);
 	const result = await oocToolRegistry.execute(repository, {
 		storyId,
 		actorId,
 		call: { name: 'use_ability', arguments: { abilityId: 'unknown_ability', targetId: actorId } },
 	});
-	const after = captureCanonicalStateSnapshot(repository, storyId);
+	const after = captureCanonicalStateSnapshot(storyId, repository);
 	assert.equal(result.success, false);
 	assert.deepEqual(after, before);
 });
 
 test('Phase 15 OOC rest tool rejects malformed durations before canonical mutation', async () => {
 	const { repository, storyId, actorId } = seed();
-	const before = captureCanonicalStateSnapshot(repository, storyId);
+	const before = captureCanonicalStateSnapshot(storyId, repository);
 	const result = await oocToolRegistry.execute(repository, {
 		storyId,
 		actorId,
 		call: { name: 'rest', arguments: { action: 'ADVANCE', seconds: -1 } },
 	});
-	const after = captureCanonicalStateSnapshot(repository, storyId);
+	const after = captureCanonicalStateSnapshot(storyId, repository);
 	assert.equal(result.success, false);
 	assert.deepEqual(after, before);
 });

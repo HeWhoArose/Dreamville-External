@@ -234,31 +234,6 @@ export class ServerMockAuthority {
     }
 
     const player = worldRepository.getPlayerLifecycle(targetStoryId);
-    const encounterCandidate = combatEncounterService.findHostileCandidate(
-      targetStoryId,
-      actorId,
-      String(freeformText),
-      worldRepository,
-    );
-    if (encounterCandidate) {
-      const pending = combatEncounterService.buildPendingCombatTransition(encounterCandidate);
-      pending.targetId = encounterCandidate.targetId;
-      pending.targetName = encounterCandidate.targetName;
-      pending.actionText = String(freeformText);
-      pending.precombatActionPending = !encounterCandidate.targetAwareOfPlayer;
-      pending.narrativeLeadIn = encounterCandidate.targetAwareOfPlayer
-        ? encounterCandidate.targetName + ' has perceived you. The encounter escalates into tactical combat.'
-        : encounterCandidate.targetName + ' has not perceived you. Your opening action can resolve before initiative.';
-      return {
-        ...baseResult,
-        narrativeResponse: pending.precombatActionPending
-          ? 'A hostile presence is here, but it has not perceived you. Your opening action can resolve before initiative.'
-          : 'A hostile presence has perceived you. Tactical combat is now ready to begin.',
-        combatTransition: pending,
-        viewState: this.getSanitizedViewState(targetStoryId),
-      };
-    }
-
     const conditionEngine = worldRepository.getConditionEngine(targetStoryId);
     const playerConditionState = player
       ? conditionEngine.getActorState(player.actorId)

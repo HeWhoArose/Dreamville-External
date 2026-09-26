@@ -683,6 +683,12 @@ export class StoryActionAdvisor {
 			alternative = requestedCapability;
 		}
 
+		if (!alternative && aiPipeline?.alternativeCapability) {
+			// Prefer the alternative synthesized by the closed AI action pipeline so
+			// intent -> research -> synthesis -> simulation remains one connected chain.
+			alternative = aiPipeline.alternativeCapability;
+		}
+
 		if (!alternative) try {
 			if (this.capabilityProposalGenerator) {
 				alternative = await this.capabilityProposalGenerator(

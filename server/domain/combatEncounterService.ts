@@ -148,8 +148,18 @@ export class CombatEncounterService {
     if (mechanical.spellResult?.savingThrowResult?.roll) rolls.push({ label: mechanical.spellResult.savingThrowResult.ability + ' Saving Throw', roll: mechanical.spellResult.savingThrowResult.roll, total: mechanical.spellResult.savingThrowResult.roll.total, kind: 'SAVE' });
     const damage = Number(mechanical.totalDamage || mechanical.spellResult?.damageInflicted || 0);
     const first = mechanical.instances?.[0];
-    const succeeded = Boolean(first?.hits || mechanical.spellResult?.attackResult?.hits || (mechanical.spellResult?.savingThrowResult && !mechanical.spellResult.savingThrowResult.succeeds));
-    const mechanicalSummary = label + ': ' + (succeeded ? 'resolved successfully' : 'did not overcome the target defense') + (damage > 0 ? ' for ' + damage + ' damage.' : '.');
+    const saveResult = mechanical.spellResult?.savingThrowResult;
+    const attackSucceeded = mechanical.spellResult?.attackResult?.hits ?? first?.hits;
+    const succeeded = attackSucceeded !== undefined
+      ? Boolean(attackSucceeded)
+      : Boolean(saveResult);
+    const mechanicalSummary = label + ': ' + (
+      saveResult
+        ? (saveResult.succeeds ? saveResult.ability + ' save succeeded; the spell effect was partially avoided.' : saveResult.ability + ' save failed; the spell effect landed.')
+        : succeeded
+          ? 'resolved successfully.'
+          : 'did not overcome the target defense.'
+    ) + (damage > 0 ? ' Damage: ' + damage + '.' : '');
     const narration = await this.generateNarration({
       storyId: params.storyId,
       actionText: params.actionText,

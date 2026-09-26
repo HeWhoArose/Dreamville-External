@@ -218,7 +218,7 @@ export class CombatTacticsService {
 		const actorIntelligence = this.deriveTacticalIntelligence(actor, agency);
 		const memoryKeywords = [
 			actor.name,
-			...(currentPlan?.steps || []).slice(currentPlan.currentStepIndex).map((step) => step.actionType),
+			...(currentPlan?.steps || []).slice(currentPlan?.currentStepIndex || 0).map((step) => step.actionType),
 			...knownParticipants.slice(0, 4).map((participant) => participant.name),
 		]
 			.map((value) => String(value).toLowerCase())

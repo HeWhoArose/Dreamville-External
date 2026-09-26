@@ -622,7 +622,7 @@ export class ServerMockAuthority {
         timeoutMs: 5000,
         maxRetries: 1,
         continuationDirective: (options as any)?.narrationDirective
-          ? 'Connected AI pipeline directive. Treat this as presentation guidance only; canonical mechanics and committed outcome remain authoritative: ' + options.narrationDirective
+          ? 'Connected AI pipeline directive. Treat this as presentation guidance only; canonical mechanics and committed outcome remain authoritative: ' + (options as any).narrationDirective
           : undefined,
       } as any);
 

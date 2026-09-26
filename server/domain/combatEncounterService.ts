@@ -194,6 +194,6 @@ export class CombatEncounterService {
     }
     return params.mechanicalSummary + ' ' + params.targetName + ' has ' + params.targetHp + ' HP remaining. Combat is now initiated; roll for initiative.';
   }
-
+}
 
 export const combatEncounterService = new CombatEncounterService();

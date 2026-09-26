@@ -4,7 +4,6 @@ import {
   CheckCircle2,
   Circle,
   ClipboardList,
-  Clock3,
   History,
   Loader2,
   ScrollText,
@@ -257,7 +256,6 @@ export const ChronicleView: React.FC<ChronicleViewProps> = ({
                     </div>
 
                     <div className="mt-4">
-                      <div className="mb-2 flex items-center gap-2 text-xs font-medium text-stone-300"><ClipboardList className="h-3.5 w-3.5 text-violet-300" /> Objectives</div>
                       {objectives.length === 0 ? (
                         <div className="rounded-2xl border border-dashed border-white/8 px-3 py-3 text-sm text-stone-600">
                           No structured objectives are recorded for this quest yet.
@@ -352,7 +350,7 @@ export const ChronicleView: React.FC<ChronicleViewProps> = ({
                   </div>
                 </div>
               </article>
-            )))}
+            ))}
         </section>
       )}
     </div>

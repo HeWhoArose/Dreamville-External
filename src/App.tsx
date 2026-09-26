@@ -623,7 +623,7 @@ export const App: React.FC = () => {
   const activeStorySummary: StorySummary | null = viewState
     ? {
         storyId: activeStoryId,
-        runId: `run_${activeStoryId}`,
+        runId: activeRunFromLibrary?.runId || activeStoryId,
         title: viewState.openingScene?.worldName
           ? `Chronicle of ${viewState.openingScene.worldName}`
           : activeLocation

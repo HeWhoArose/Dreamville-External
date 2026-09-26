@@ -2518,11 +2518,22 @@ export class MultiModelOrchestrator {
         'narrative.generate',
         'character.dialogue',
         'character.extract',
-        'character.capability.propose',
         'memory.extract',
+        'character.capability.propose',
         'story.advice',
+        'intent.interpret',
+        'capability.synthesize',
+        'capability.explain',
+        'research.query',
+        'research.world-brief',
         'rules.adjudicate',
+        'rules.analyze',
         'summary.scene',
+        'world.generate',
+        'combat.tactics',
+        'tactical.reason',
+        'combat.animation.plan',
+        'narrative.review',
         'utility.inspect',
       ],
       isEmergencyFloor: true,
@@ -4607,84 +4618,52 @@ export class MultiModelOrchestrator {
       ],
     });
 
-    const selection = this.selectBestModel('narrative.generate', {
-      contextTokens: assembledContext.totalTokens,
-    });
+    const generated = await this.executeTaskGeneration(
+      'narrative.generate',
+      assembledContext.assembledText,
+      styleInstruction,
+      {
+        timeoutMs,
+        maxTokens: 350,
+        contextTokens: assembledContext.totalTokens,
+        validateResponse: (text) => {
+          const validation = this.validateTurnPackage(text);
+          return validation.valid
+            ? { valid: true }
+            : { valid: false, errorReason: validation.errorReason };
+        },
+      },
+    );
 
-    const candidates: ModelRegistryRecord[] = [selection.selectedModel, ...selection.fallbacks];
-    let lastError = '';
-
-    for (const candidate of candidates) {
-      const modelKey = `${candidate.providerId}::${candidate.modelId}`;
-      if (this.isCircuitBreakerTripped(candidate.providerId, candidate.modelId)) continue;
-
-      const adapter = this.getAdapter(candidate.providerId);
-      if (!adapter) continue;
-
-      if (this.isModelCoolingDown(candidate)) continue;
-      for (let attempt = 0; attempt <= maxRetries; attempt++) {
-        const attemptStartedAt = Date.now();
-        try {
-          const abortController = new AbortController();
-          const timer = setTimeout(() => abortController.abort(), timeoutMs);
-          let providerRes: ProviderGenerateResult;
-          try {
-            providerRes = await adapter.generate('narrative.generate', assembledContext.assembledText, {
-              timeoutMs,
-              abortSignal: abortController.signal,
-              retryCount: attempt,
-              modelId: candidate.modelId,
-              temperature: 0.7,
-              maxTokens: 350,
-            });
-          } finally {
-            clearTimeout(timer);
-          }
-
-          const validation = this.validateTurnPackage(providerRes.text);
-          if (!validation.valid || !validation.turnPackage) {
-            throw new Error(validation.errorReason || 'Narrative response failed structured validation.');
-          }
-
-          this.recordProviderSuccess(candidate, providerRes, 'narrative.generate', attemptStartedAt);
-          this.consecutiveFailures.set(modelKey, 0);
-
-          // Presentation-only contract: never propagate provider state changes from this path.
-          const turnPackage: StructuredTurnPackage = {
-            ...validation.turnPackage,
-            stateChanges: [],
-          };
-
-          return {
-            success: true,
-            turnPackage,
-            modelId: candidate.modelId,
-            providerId: candidate.providerId,
-          };
-        } catch (err: any) {
-          lastError = err?.message || String(err);
-          this.recordProviderFailure(candidate, 'narrative.generate', err, attemptStartedAt);
-          const failures = (this.consecutiveFailures.get(modelKey) || 0) + 1;
-          this.consecutiveFailures.set(modelKey, failures);
-
-          if (
-            lastError.includes('429') ||
-            lastError.includes('rate limit') ||
-            lastError.includes('Resource Exhausted') ||
-            lastError.includes('quota')
-          ) {
-            candidate.health = 'Throttled';
-            candidate.quota = 'Exhausted';
-            break;
-          }
-
-          if (attempt < maxRetries) {
-            await new Promise((resolve) => setTimeout(resolve, Math.min(200, 50 * Math.pow(2, attempt))));
-          }
-        }
-      }
+    if (generated.source === 'DETERMINISTIC_FALLBACK' && !generated.text) {
+      return {
+        success: false,
+        providerId: generated.providerId,
+        modelId: generated.modelId,
+        error: generated.fallbackReason || 'Deterministic narrative fallback produced no text.',
+      };
     }
 
+    const validation = this.validateTurnPackage(generated.text);
+    if (!validation.valid || !validation.turnPackage) {
+      return {
+        success: false,
+        providerId: generated.providerId,
+        modelId: generated.modelId,
+        error: validation.errorReason || 'Narrative response failed structured validation.',
+      };
+    }
+
+    return {
+      success: true,
+      turnPackage: {
+        ...validation.turnPackage,
+        stateChanges: [],
+      },
+      modelId: generated.modelId,
+      providerId: generated.providerId,
+    };
+  }
     return {
       success: false,
       error: lastError || 'No narrative model was available.',

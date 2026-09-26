@@ -4,6 +4,7 @@ import { ActionRequest } from '../mockEngine/serverTypes';
 import { worldRepository } from '../repositories/worldRepository';
 import { NpcTacticalDecisionPolicy } from '../domain/tacticalDecisionPolicy';
 import { combatEncounterService } from '../domain/combatEncounterService';
+import { combatPlayerActionService } from '../domain/combatPlayerActionService';
 import { combatTacticsService } from '../domain/combatTacticsService';
 import { PlayerLifecycleState } from '../domain/playerLifecycleState';
 import { OpeningSceneService } from '../services/openingSceneService';
@@ -3938,6 +3939,140 @@ gameRouter.post('/combat/attack', async (req: Request, res: Response) => {
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to execute combat attack.' });
+  }
+});
+
+/**
+ * POST /api/game/combat/player-action
+ * Resolves a natural-language player action inside active tactical combat.
+ */
+gameRouter.post('/combat/player-action', async (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    if (!requireDndTacticalCombat(res, storyId)) return;
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player?.actorId || `player_actor_${storyId}`;
+    const actionText = typeof req.body?.actionText === 'string' ? req.body.actionText.trim() : '';
+    if (!actionText) return res.status(400).json({ success: false, errorReason: 'actionText is required.' });
+
+    const combat = worldRepository.getCombatEngine(storyId);
+    if (combat.getCombatPhase() !== 'ACTIVE') {
+      return res.status(409).json({
+        success: false,
+        errorReason: 'Player actions are only available during active tactical combat.',
+        combatState: getCombatStateHelper(combat, storyId, actorId),
+      });
+    }
+
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      deterministicId('cmd_route', storyId, '/combat/player-action', req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'CORE_ACTION',
+        payload: { actionText },
+        source: 'PLAYER',
+        transactionMode: 'STAGED',
+      },
+      async (_command, context) => {
+        const transactionRepo = context.repository;
+        const decision = await combatPlayerActionService.resolve({
+          storyId,
+          actorId,
+          actionText,
+          repository: transactionRepo,
+        });
+        if (!decision.success || !decision.resolution) {
+          return {
+            success: false,
+            errorReason: decision.errorReason || 'Combat action failed.',
+          };
+        }
+
+        const transactionCombat = transactionRepo.getCombatEngine(storyId);
+        const projectionAfterAction = transactionCombat.projectCombatForActor(
+          actorId,
+          transactionRepo.getCombatPerceptionOptions(storyId, actorId),
+        );
+
+        let npcResolution: { turns: Array<Record<string, unknown>>; stoppedReason: string } | undefined;
+        if (projectionAfterAction.victory || projectionAfterAction.defeat) {
+          transactionCombat.setCombatPhase('ENDED', {
+            banner: projectionAfterAction.victory ? 'Combat ended — victory.' : 'Combat ended — defeat.',
+          });
+        } else {
+          transactionCombat.advanceTurn();
+          npcResolution = await resolveNpcTurnsUntilPlayer(storyId, actorId, transactionRepo);
+          const afterNpc = transactionCombat.projectCombatForActor(
+            actorId,
+            transactionRepo.getCombatPerceptionOptions(storyId, actorId),
+          );
+          if (afterNpc.victory || afterNpc.defeat) {
+            transactionCombat.setCombatPhase('ENDED', {
+              banner: afterNpc.victory ? 'Combat ended — victory.' : 'Combat ended — defeat.',
+            });
+          }
+        }
+
+        return {
+          success: true,
+          data: {
+            resolution: decision.resolution,
+            npcResolution,
+            actionType: decision.actionType,
+            targetId: decision.targetId,
+          },
+          summary: 'Player combat action resolved through canonical tactical rules.',
+        };
+      },
+    );
+
+    const state = getCombatStateHelper(combat, storyId, actorId);
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        combatState: state,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
+      });
+    }
+
+    const data = commandResult.data as any;
+    const ended = state.phase === 'ENDED';
+    const victory = state.victory;
+    const continuationNarrative = ended ? data?.resolution?.narrativeResponse : undefined;
+    res.json({
+      success: true,
+      actionType: data?.actionType,
+      targetId: data?.targetId,
+      mechanicalResolution: data?.resolution,
+      narrativeResponse: data?.resolution?.narrativeResponse,
+      npcResolution: data?.npcResolution,
+      combatState: state,
+      combatTransition: ended
+        ? {
+          started: true,
+          phase: 'ENDED',
+          requiresInitiativeRoll: false,
+          fromStory: false,
+          returnToStory: true,
+          continuationNarrative,
+          combatState: state,
+        }
+        : undefined,
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
+      victory,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, errorReason: error?.message || 'Failed to resolve player combat action.' });
   }
 });
 

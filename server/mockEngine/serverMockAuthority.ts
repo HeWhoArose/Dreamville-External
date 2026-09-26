@@ -423,12 +423,51 @@ export class ServerMockAuthority {
       engineContractVersion: state.engineContractVersion,
       activeJourney: activeJourney ? JSON.parse(JSON.stringify(activeJourney)) : null,
       isTraveling,
-      playerLifecycle: player ? player.toJSON() : null,
     const combatEngine = worldRepository.getCombatEngine(targetStoryId);
     const combatProjection = combatEngine.projectCombatForActor(
       actorId,
       worldRepository.getCombatPerceptionOptions(targetStoryId, actorId),
     );
+
+    return {
+      storyId: targetStoryId,
+      worldId: run?.worldId,
+      narrativeProfile: worldRepository.getNarrativeProfile(targetStoryId) || undefined,
+      rulesProfile: worldRepository.getRulesProfile(targetStoryId) || undefined,
+      worldTime: { ...state.worldTime },
+      activeLocationId: canonicalLocationId,
+      activeLocation,
+      protagonist: {
+        ...state.protagonist,
+        name: player ? player.name : (run ? run.characterName : state.protagonist.name),
+        title: run?.characterRole || state.protagonist.title,
+        portraitUrl: run?.characterPortraitUrl,
+        portraitEmoji: run?.characterPortraitEmoji || sanitizedCharacters[actorId]?.portraitEmoji || '🧙‍♂️',
+        conditionState: playerConditionState ? conditionEngine.exportActorState(actorId) : undefined,
+        status: player?.isDead
+          ? 'Deceased'
+          : player?.isPossessed
+          ? 'Possessed'
+          : player?.transformationRecord?.active
+          ? `Transformed (${player.transformationRecord.formName})`
+          : player?.isTraveling
+          ? 'In Transit'
+          : 'Active',
+      },
+      locations: projectedLocations,
+      routeEdges: worldRepository.getGeographyGraph(targetStoryId).getAllEdges()
+        .filter((edge) => Boolean(projectedLocations[edge.fromLocationId] && projectedLocations[edge.toLocationId])),
+      characters: sanitizedCharacters,
+      activeDialogue: state.activeDialogue ? { ...state.activeDialogue } : null,
+      dialogueHistory: state.dialogueHistory.map((d) => ({ ...d })),
+      inventory: projectedInventory,
+      equipment: projectedEquipment,
+      knowledgeBase: state.knowledgeBase.map((k) => ({ ...k })),
+      actionHistory: state.actionHistory.map((a) => ({ ...a })),
+      engineContractVersion: state.engineContractVersion,
+      activeJourney: activeJourney ? JSON.parse(JSON.stringify(activeJourney)) : null,
+      isTraveling,
+      playerLifecycle: player ? player.toJSON() : null,
       openingScene: run?.openingScene || null,
       combatState: combatProjection,
     };

@@ -9100,18 +9100,49 @@ gameRouter.get('/run-canonical-state', (req: Request, res: Response) => {
       skillInstances: capEngine.getActorSkillInstances ? capEngine.getActorSkillInstances(actorId) : [],
     });
 
-    const activeQuests = (run?.plannedEvents || []).filter((e: any) => {
-      const st = run?.eventStates?.[e.id]?.status;
-      return st === 'READY' || st === 'ACTIVE' || st === 'PLANNED';
-    });
-    const completedQuests = (run?.plannedEvents || []).filter((e: any) => {
-      const st = run?.eventStates?.[e.id]?.status;
-      return st === 'COMPLETED';
-    });
-    const failedQuests = (run?.plannedEvents || []).filter((e: any) => {
-      const st = run?.eventStates?.[e.id]?.status;
-      return st === 'FAILED' || st === 'PREVENTED';
-    });
+    const isQuestEvent = (event: any): boolean => {
+      const category = String(event?.category || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+      const explicitObjectives = Array.isArray(event?.objectives) && event.objectives.length > 0;
+      const questCategories = new Set([
+        'QUEST',
+        'MAIN_QUEST',
+        'SIDE_QUEST',
+        'MISSION',
+        'OBJECTIVE',
+        'STORY_QUEST',
+      ]);
+      return explicitObjectives || questCategories.has(category);
+    };
+
+    const questEvents = (run?.plannedEvents || []).filter(isQuestEvent);
+    const projectQuest = (event: any) => {
+      const status = run?.eventStates?.[event.id]?.status || event.status || 'PLANNED';
+      return {
+        ...event,
+        status,
+        objectives: Array.isArray(event?.objectives) ? event.objectives : [],
+        origin: event?.origin || event?.provenance || event?.category || 'Story',
+        lastUpdated: event?.updatedAt || event?.lastUpdated || event?.scheduledTime || run?.updatedAt || run?.createdAt || null,
+      };
+    };
+
+    const activeQuests = questEvents
+      .filter((e: any) => {
+        const st = run?.eventStates?.[e.id]?.status || e.status;
+        return st === 'READY' || st === 'ACTIVE' || st === 'PLANNED';
+      })
+      .map(projectQuest);
+
+    const completedQuests = questEvents
+      .filter((e: any) => (run?.eventStates?.[e.id]?.status || e.status) === 'COMPLETED')
+      .map(projectQuest);
+
+    const failedQuests = questEvents
+      .filter((e: any) => {
+        const st = run?.eventStates?.[e.id]?.status || e.status;
+        return st === 'FAILED' || st === 'PREVENTED';
+      })
+      .map(projectQuest);
 
     const locations = geography.getAllNodes().map(n => ({
       id: n.id,

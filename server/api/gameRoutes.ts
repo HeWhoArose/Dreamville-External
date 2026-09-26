@@ -9116,13 +9116,37 @@ gameRouter.get('/run-canonical-state', (req: Request, res: Response) => {
 
     const questEvents = (run?.plannedEvents || []).filter(isQuestEvent);
     const projectQuest = (event: any) => {
-      const status = run?.eventStates?.[event.id]?.status || event.status || 'PLANNED';
+      const rawStatus = String(
+        run?.eventStates?.[event.id]?.status ||
+        event.status ||
+        'PLANNED'
+      ).toUpperCase();
+
+      const status =
+        rawStatus === 'COMPLETED'
+          ? 'COMPLETED'
+          : rawStatus === 'FAILED' || rawStatus === 'PREVENTED'
+            ? 'FAILED'
+            : 'ACTIVE';
+
+      const objectives = Array.isArray(event?.objectives)
+        ? event.objectives.map((objective: any, index: number) => ({
+            id: objective?.id || event.id + '_objective_' + (index + 1),
+            title: objective?.title || objective?.description || objective?.text || 'Objective ' + (index + 1),
+            description: objective?.description || objective?.text || '',
+            status: objective?.status === 'COMPLETED' || objective?.completed === true
+              ? 'COMPLETED'
+              : 'ACTIVE',
+            completed: objective?.status === 'COMPLETED' || objective?.completed === true,
+          }))
+        : [];
+
       return {
-        ...event,
+        id: event.id,
+        title: event.title || event.name || 'Untitled Quest',
+        description: event.description || event.summary || '',
         status,
-        objectives: Array.isArray(event?.objectives) ? event.objectives : [],
-        origin: event?.origin || event?.provenance || event?.category || 'Story',
-        lastUpdated: event?.updatedAt || event?.lastUpdated || event?.scheduledTime || run?.updatedAt || run?.createdAt || null,
+        objectives,
       };
     };
 

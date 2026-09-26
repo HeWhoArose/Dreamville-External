@@ -149,7 +149,8 @@ test('Story navigation keeps Character primary and separates Quests and Journal 
 
 test('story suggestion selection inserts text without executing the action', () => {
 	const view = read('src/components/StoryView.tsx');
-	assert.equal(view.includes('export function mergeSuggestedActionText'), true);
+	const composer = read('src/utils/storyActionComposer.ts');
+	assert.equal(composer.includes('export function mergeSuggestedActionText'), true);
 	assert.equal(view.includes('onClick={() => insertSuggestedAction(tip.actionText)}'), true);
 	assert.equal(view.includes('onCustomAction?.(tip.actionText)'), false);
 });

@@ -1,6 +1,8 @@
 import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
 import type { WorldRepository } from '../repositories/worldRepository';
 import type { StructuredTurnPackage } from './aiOrchestrator';
+import { worldMomentumEngine } from './worldMomentumEngine';
+import { researchEvidencePipeline } from './researchEvidence';
 
 export interface NarrativePlotState {
   storyId: string;
@@ -32,6 +34,9 @@ export interface NarrativeResearchPacket {
   plot: NarrativePlotState;
   plan: NarrativePlanState;
   epistemicallyBoundTo?: string;
+  worldMomentum?: ReturnType<typeof worldMomentumEngine.getState>;
+  researchEvidence?: unknown[];
+  causalProvenance?: unknown;
 }
 
 export class NarrativeContinuityEngine {
@@ -77,7 +82,11 @@ export class NarrativeContinuityEngine {
       plot: state.plot,
       plan: state.plan,
       epistemicallyBoundTo: viewerActorId,
+      worldMomentum: worldMomentumEngine.getState(repository, storyId),
+      researchEvidence: researchEvidencePipeline.getEvidenceForStory(storyId),
+      causalProvenance: researchEvidencePipeline.getCausalGraphForStory(storyId),
     };
+    this.persistResearch(repository, storyId, packet);
     return packet;
   }
 

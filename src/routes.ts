@@ -36,7 +36,6 @@ export type AppRoute =
   | 'play.powers'
   | 'play.combat'
   | 'play.map'
-  | 'play.chronicle'
   | 'play.codex'
   | 'play.evidence'
   | 'play.relationships'

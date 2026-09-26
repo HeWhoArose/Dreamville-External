@@ -121,7 +121,7 @@ export class CombatEncounterService {
         mechanical = {
           success: attack.success,
           errorReason: attack.errorReason,
-          instances: attack.success ? [{ instanceIndex: 0, targetId: params.targetId, hits: Boolean(attack.hits), isCritical: Boolean(attack.isCritical), damage: Number(attack.damage || 0), targetDied: Boolean(attack.targetDied), roll: attack.roll, damageRoll: attack.damageRoll, attackRollTotal: attack.roll?.total, targetArmorClass: target.armorClass }] : [],
+          instances: attack.success ? [{ instanceIndex: 0, targetId: params.targetId, hits: Boolean(attack.hits), isCritical: Boolean(attack.isCritical), damage: Number(attack.damage || 0), targetDied: Boolean(attack.targetDied), roll: attack.roll, attackRollTotal: attack.roll?.total, targetArmorClass: target.armorClass }] : [],
           totalDamage: Number(attack.damage || 0),
           canonicalEventIds: [],
         };
@@ -188,7 +188,7 @@ export class CombatEncounterService {
         committedOutcome: params.mechanicalSummary + ' ' + params.targetName + ' has ' + params.targetHp + ' HP remaining.',
         continuationDirective: 'This is a pre-combat opening action. Narrate the already-resolved result. Do not roll again and do not start initiative in the prose.',
       });
-      if (generated.success && generated.turnPackage?.narrativeResponse) return generated.turnPackage.narrativeResponse;
+      if (generated.success && generated.turnPackage?.narrative?.length) return generated.turnPackage.narrative.join('\n\n').trim();
     } catch {
       // Deterministic fallback below.
     }

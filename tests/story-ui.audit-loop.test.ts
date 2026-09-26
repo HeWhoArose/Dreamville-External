@@ -103,10 +103,15 @@ test('Quest journal surface uses canonical quest projection and player-facing jo
 		assert.equal(apiClient.includes('getRunCanonicalState'), true, `Audit ${iteration}: canonical quest projection client method missing`);
 		assert.equal(route.includes('const isQuestEvent = (event: any): boolean =>'), true, `Audit ${iteration}: world events are still being treated as quests without classification`);
 		assert.equal(route.includes('questCategories = new Set'), true, `Audit ${iteration}: quest classification categories are not explicit`);
-		assert.equal(chronicle.includes('Quests & Journal'), true, `Audit ${iteration}: player-facing title missing`);
+		assert.equal(chronicle.includes("section === 'quests' ? 'Quests' : 'Journal'"), true, `Audit ${iteration}: contextual Quest/Journal title missing`);
 		assert.equal(chronicle.includes('Engine diagnostics and validation data stay out of this player-facing page.'), false, `Audit ${iteration}: legacy diagnostic copy remains in the player journal`);
+		assert.equal(route.includes("'MISSION'"), false, `Audit ${iteration}: generic world MISSION events are leaking into Quests`);
+		assert.equal(route.includes("'OBJECTIVE'"), false, `Audit ${iteration}: generic OBJECTIVE events are leaking into Quests`);
+		assert.equal(route.includes('explicitQuest'), true, `Audit ${iteration}: explicit quest classification is missing`);
 		assert.equal(chronicle.includes('No active quests'), true, `Audit ${iteration}: explicit empty quest state missing`);
-		assert.equal(chronicle.includes('Your move'), true, `Audit ${iteration}: journal does not show player actions`);
+		assert.equal(chronicle.includes('Story action'), true, `Audit ${iteration}: journal does not show player actions`);
+		assert.equal(chronicle.includes('Remembered'), true, `Audit ${iteration}: journal does not show player-visible memories`);
+		assert.equal(chronicle.includes('setMemories(Array.isArray(data?.memory?.facts)'), true, `Audit ${iteration}: canonical memory projection is disconnected`);
 		assert.equal(chronicle.includes('Outcome'), true, `Audit ${iteration}: journal does not show narrative consequences`);
 		assert.equal(chronicle.includes('Objectives'), true, `Audit ${iteration}: quest objective section missing`);
 		assert.equal(chronicle.includes('Origin'), false, `Audit ${iteration}: quest provenance/debug metadata leaked into player UI`);

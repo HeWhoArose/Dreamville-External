@@ -206,3 +206,38 @@ test('D&D adapter uses advantage/disadvantage for saving throws', () => {
 
   assert.notEqual(advantageRoll.roll.total, disadvantageRoll.roll.total);
 });
+
+test('story combat lifecycle keeps initiative separate from surprise and preserves the surprise skip state', () => {
+  const engine = new TacticalCombatEngine(1337, new Dnd521RulesetAdapter());
+  engine.addParticipant(participant({
+    initiativeModifier: 5,
+  }));
+  engine.addParticipant(participant({
+    id: 'enemy',
+    name: 'Enemy',
+    team: 'enemies',
+    initiativeModifier: 0,
+  }));
+
+  engine.prepareEncounter({
+    resetInitiatives: true,
+    surprisedActorIds: ['enemy'],
+    banner: 'Combat initiated. Roll for initiative.',
+  });
+
+  assert.equal(engine.getCombatPhase(), 'INITIATIVE_PENDING');
+  assert.deepEqual(engine.getSurprisedActorIds(), ['enemy']);
+
+  const rolls = engine.rollInitiative({ reset: false });
+  assert.equal(engine.getCombatPhase(), 'ACTIVE');
+  assert.equal(rolls.length, 2);
+  assert.equal(
+    rolls.find((entry) => entry.actorId === 'enemy')?.advantageState,
+    'NORMAL',
+    'Surprise must not change initiative math.',
+  );
+
+  assert.equal(engine.consumeSurprise('enemy'), true);
+  assert.equal(engine.consumeSurprise('enemy'), false);
+  assert.deepEqual(engine.getSurprisedActorIds(), []);
+});

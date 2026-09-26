@@ -432,6 +432,12 @@ export class CombatTacticsService {
 		plan.updatedAt = new Date().toISOString();
 		plan.revision += 1;
 		combatEngine.setTacticalPlan(plan);
+		combatEngine.addEncounterNote({
+			actorId,
+			text: success ? 'Tactical plan step resolved successfully: ' + plan.objective : 'Tactical plan step failed; replanning required: ' + plan.objective,
+			category: success ? 'OUTCOME' : 'TACTICAL',
+			source: plan.source === 'AI' ? 'AI' : 'SYSTEM',
+		});
 
 		if (repository && storyId) {
 			const actor = combatEngine.getParticipant(actorId);

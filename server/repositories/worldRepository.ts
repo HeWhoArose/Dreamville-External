@@ -32,6 +32,7 @@ import { narrativeProfileEngine } from '../domain/narrativeProfileEngine';
 import { deterministicId, hashStringToSeed } from '../domain/deterministicRng';
 import type { NarrativeProfile } from '../../src/types';
 import { PersistentGameStore } from '../services/persistentGameStore';
+import { UserDataArchiveService, type DeletionTombstone, type UserDataArchive } from '../domain/userDataArchive';
 import {
   AdaptedStoryBible,
   AdaptationProfile,
@@ -156,6 +157,12 @@ export interface WorldRepository {
   inspectPersistence(): import('../services/persistenceMigrationService').PersistenceInspection;
   migratePersistence(): import('../services/persistenceMigrationService').PersistenceInspection;
   repairPersistence(): import('../services/persistenceMigrationService').PersistenceRepairResult;
+  getPersistenceHealth(): ReturnType<PersistentGameStore['getPersistenceHealth']>;
+  exportUserDataArchive(title?: string): UserDataArchive;
+  restoreUserDataArchive(archive: UserDataArchive, options?: { mode?: 'MERGE' | 'REPLACE' }): { success: boolean; errorReason?: string; importedCounts?: Record<string, number> };
+  getUserData(namespace: string, key: string): any | null;
+  saveUserData(namespace: string, key: string, value: any): void;
+  deleteUserData(namespace: string, key: string): void;
 }
 
 const NARRATIVE_MODE_VALUES = new Set(['PROTAGONIST', 'SIDE_CHARACTER', 'FREE_ROAM']);
@@ -259,15 +266,44 @@ export class InMemoryWorldRepository implements WorldRepository {
   // Slice 2 Storage Maps
   private characterDraftsMap: Map<string, any[]> = new Map();
   private confirmedCharactersMap: Map<string, any[]> = new Map();
+  private userDataMap: Map<string, Map<string, any>> = new Map();
+  private deletionTombstones: Map<string, DeletionTombstone> = new Map();
   private readonly persistentStore = new PersistentGameStore();
   private readonly persistenceSuppressed: boolean;
+
+  private tombstoneKey(entityType: DeletionTombstone['entityType'], entityId: string, scopeId?: string): string {
+    return `${entityType}:${scopeId || ''}:${entityId}`;
+  }
+
+  private isDeleted(entityType: DeletionTombstone['entityType'], entityId: string, scopeId?: string): boolean {
+    if (!entityId) return false;
+    return this.deletionTombstones.has(this.tombstoneKey(entityType, entityId, scopeId));
+  }
+
+  private recordDeletion(entityType: DeletionTombstone['entityType'], entityId: string, scopeId?: string): void {
+    if (!entityId) return;
+    const tombstone: DeletionTombstone = {
+      entityType,
+      entityId,
+      ...(scopeId ? { scopeId } : {}),
+      deletedAt: new Date().toISOString(),
+      reason: 'USER_REQUESTED',
+    };
+    this.deletionTombstones.set(this.tombstoneKey(entityType, entityId, scopeId), tombstone);
+  }
 
   constructor(options: { disablePersistence?: boolean } = {}) {
     this.persistenceSuppressed = options.disablePersistence === true;
     const persisted = this.persistentStore.load();
     let requiresNarrativeMigration = false;
 
+    for (const tombstone of persisted.deletionTombstones || []) {
+      if (!tombstone?.entityType || !tombstone?.entityId) continue;
+      this.deletionTombstones.set(this.tombstoneKey(tombstone.entityType, tombstone.entityId, tombstone.scopeId), tombstone as DeletionTombstone);
+    }
+
     for (const [worldId, world] of Object.entries(persisted.worldTemplates)) {
+      if (this.isDeleted('WORLD', worldId)) continue;
       const resolvedNarrative = narrativeProfileEngine.resolve({
         mode: ['PROTAGONIST', 'SIDE_CHARACTER', 'FREE_ROAM'].includes((world as any)?.storyMode)
           ? (world as any)?.storyMode
@@ -294,10 +330,29 @@ export class InMemoryWorldRepository implements WorldRepository {
     }
 
     for (const [worldId, chars] of Object.entries(persisted.confirmedCharacters || {})) {
-      this.confirmedCharactersMap.set(worldId, Array.isArray(chars) ? chars : []);
+      const filteredChars = (Array.isArray(chars) ? chars : []).filter((char: any) =>
+        !this.isDeleted('CHARACTER', String(char?.characterId || char?.id || ''), worldId)
+      );
+      this.confirmedCharactersMap.set(worldId, filteredChars);
+    }
+
+    for (const [worldId, drafts] of Object.entries(persisted.characterDrafts || {})) {
+      const filteredDrafts = (Array.isArray(drafts) ? drafts : []).filter((draft: any) =>
+        !this.isDeleted('CHARACTER_DRAFT', String(draft?.draftId || draft?.id || ''), worldId)
+      );
+      this.characterDraftsMap.set(worldId, filteredDrafts);
+    }
+
+    for (const [namespace, values] of Object.entries(persisted.userData || {})) {
+      const namespaceMap = new Map<string, any>();
+      for (const [key, value] of Object.entries((values && typeof values === 'object') ? values as Record<string, any> : {})) {
+        if (!this.isDeleted('USER_DATA', `${namespace}:${key}`, namespace)) namespaceMap.set(key, value);
+      }
+      this.userDataMap.set(namespace, namespaceMap);
     }
 
     for (const [storyId, run] of Object.entries(persisted.storyRuns)) {
+      if (this.isDeleted('STORY_RUN', storyId)) continue;
       const world = run && (run as any).worldId ? this.worldTemplates.get((run as any).worldId) : null;
       const resolvedNarrative = narrativeProfileEngine.resolve({
         mode: (run as any)?.storyMode,
@@ -2507,9 +2562,7 @@ export class InMemoryWorldRepository implements WorldRepository {
     this.persistLibrary();
   }
 
-  private persistLibrary(): void {
-    if (this.persistenceSuppressed) return;
-
+  private buildPersistentData(): any {
     for (const [storyId, run] of this.storyRuns.entries()) {
       const runtimeState = {
         ...(run?.runtimeState || {}),
@@ -2524,24 +2577,31 @@ export class InMemoryWorldRepository implements WorldRepository {
         ...(this.inventoryEngines.has(storyId) ? { inventory: this.inventoryEngines.get(storyId)!.exportState() } : {}),
         ...(this.entityRegistries.has(storyId) ? { entities: this.entityRegistries.get(storyId)!.exportState() } : {}),
       };
-      if (Object.keys(runtimeState).length > 0) {
-        run.runtimeState = runtimeState;
-      }
+      if (Object.keys(runtimeState).length > 0) run.runtimeState = runtimeState;
     }
 
-    this.persistentStore.save({
-      version: 2,
-      schemaVersions: {
-        world: 2,
-        character: 2,
-        rules: 2,
-        content: 2,
-      },
+    const userData: Record<string, Record<string, any>> = {};
+    for (const [namespace, values] of this.userDataMap.entries()) {
+      userData[namespace] = Object.fromEntries(values);
+    }
+
+    return {
+      version: 3,
+      schemaVersions: { world: 2, character: 3, rules: 2, content: 2 },
       worldTemplates: Object.fromEntries(this.worldTemplates),
       storyRuns: Object.fromEntries(this.storyRuns),
       confirmedCharacters: Object.fromEntries(this.confirmedCharactersMap),
-    });
+      characterDrafts: Object.fromEntries(this.characterDraftsMap),
+      userData,
+      deletionTombstones: Array.from(this.deletionTombstones.values()),
+    };
   }
+
+  private persistLibrary(): void {
+    if (this.persistenceSuppressed) return;
+    this.persistentStore.save(this.buildPersistentData());
+  }
+
 
   public searchWorldTemplates(criteria: {
     query?: string;
@@ -3036,6 +3096,7 @@ export class InMemoryWorldRepository implements WorldRepository {
       existing.push(draft);
     }
     this.characterDraftsMap.set(worldId, [...existing]);
+    this.persistLibrary();
   }
 
   public getConfirmedCharacters(worldId: string): any[] {
@@ -3112,6 +3173,15 @@ export class InMemoryWorldRepository implements WorldRepository {
       this.deleteStoryRun(runId);
     }
 
+    for (const char of this.getConfirmedCharacters(worldId)) {
+      const characterId = String(char?.characterId || char?.id || '');
+      if (characterId) this.recordDeletion('CHARACTER', characterId, worldId);
+    }
+    for (const draft of this.getCharacterDrafts(worldId)) {
+      const draftId = String(draft?.draftId || draft?.id || '');
+      if (draftId) this.recordDeletion('CHARACTER_DRAFT', draftId, worldId);
+    }
+
     const deleted = this.worldTemplates.delete(worldId);
     if (deleted) {
       this.confirmedCharactersMap.delete(worldId);
@@ -3121,6 +3191,118 @@ export class InMemoryWorldRepository implements WorldRepository {
 
     return { success: deleted, deletedRunIds: linkedRunIds };
   }
+  public getPersistenceHealth(): ReturnType<PersistentGameStore['getPersistenceHealth']> {
+    return this.persistentStore.getPersistenceHealth();
+  }
+
+  public exportUserDataArchive(_title = 'DreamBook User Data'): UserDataArchive {
+    const data = this.buildPersistentData();
+    return UserDataArchiveService.create({
+      worldTemplates: data.worldTemplates,
+      storyRuns: data.storyRuns,
+      confirmedCharacters: data.confirmedCharacters,
+      characterDrafts: data.characterDrafts,
+      userData: data.userData,
+      deletionTombstones: data.deletionTombstones,
+    });
+  }
+
+  public restoreUserDataArchive(
+    archive: UserDataArchive,
+    options: { mode?: 'MERGE' | 'REPLACE' } = {},
+  ): { success: boolean; errorReason?: string; importedCounts?: Record<string, number> } {
+    const validation = UserDataArchiveService.validate(archive);
+    if (!validation.valid) return { success: false, errorReason: validation.errorReason };
+
+    const payload = UserDataArchiveService.extract(archive);
+    const mode = options.mode || 'MERGE';
+
+    if (mode === 'REPLACE') {
+      this.worldTemplates.clear();
+      this.storyRuns.clear();
+      this.confirmedCharactersMap.clear();
+      this.characterDraftsMap.clear();
+      this.userDataMap.clear();
+    }
+
+    for (const tombstone of payload.deletionTombstones) {
+      this.deletionTombstones.set(
+        this.tombstoneKey(tombstone.entityType, tombstone.entityId, tombstone.scopeId),
+        tombstone,
+      );
+    }
+
+    for (const [worldId, world] of Object.entries(payload.worldTemplates)) {
+      if (!this.isDeleted('WORLD', worldId)) this.worldTemplates.set(worldId, world);
+    }
+
+    for (const [storyId, run] of Object.entries(payload.storyRuns)) {
+      if (!this.isDeleted('STORY_RUN', storyId)) this.storyRuns.set(storyId, run);
+    }
+
+    for (const [worldId, chars] of Object.entries(payload.confirmedCharacters)) {
+      const existing = this.confirmedCharactersMap.get(worldId) || [];
+      const byId = new Map(existing.map((char: any) => [String(char?.characterId || char?.id), char]));
+      for (const char of Array.isArray(chars) ? chars : []) {
+        const id = String(char?.characterId || char?.id || '');
+        if (id && !this.isDeleted('CHARACTER', id, worldId)) byId.set(id, char);
+      }
+      this.confirmedCharactersMap.set(worldId, Array.from(byId.values()));
+    }
+
+    for (const [worldId, drafts] of Object.entries(payload.characterDrafts)) {
+      const existing = this.characterDraftsMap.get(worldId) || [];
+      const byId = new Map(existing.map((draft: any) => [String(draft?.draftId || draft?.id), draft]));
+      for (const draft of Array.isArray(drafts) ? drafts : []) {
+        const id = String(draft?.draftId || draft?.id || '');
+        if (id && !this.isDeleted('CHARACTER_DRAFT', id, worldId)) byId.set(id, draft);
+      }
+      this.characterDraftsMap.set(worldId, Array.from(byId.values()));
+    }
+
+    for (const [namespace, values] of Object.entries(payload.userData)) {
+      const namespaceMap = this.userDataMap.get(namespace) || new Map<string, any>();
+      for (const [key, value] of Object.entries(values || {})) {
+        if (!this.isDeleted('USER_DATA', `${namespace}:${key}`, namespace)) namespaceMap.set(key, value);
+      }
+      this.userDataMap.set(namespace, namespaceMap);
+    }
+
+    this.persistLibrary();
+
+    return {
+      success: true,
+      importedCounts: {
+        worlds: Object.keys(payload.worldTemplates).length,
+        storyRuns: Object.keys(payload.storyRuns).length,
+        confirmedCharacters: Object.values(payload.confirmedCharacters).reduce((n, value) => n + (Array.isArray(value) ? value.length : 0), 0),
+        characterDrafts: Object.values(payload.characterDrafts).reduce((n, value) => n + (Array.isArray(value) ? value.length : 0), 0),
+        userData: Object.values(payload.userData).reduce((n, value) => n + Object.keys(value || {}).length, 0),
+        tombstones: payload.deletionTombstones.length,
+      },
+    };
+  }
+
+  public getUserData(namespace: string, key: string): any | null {
+    if (!namespace || !key || this.isDeleted('USER_DATA', `${namespace}:${key}`, namespace)) return null;
+    return this.userDataMap.get(namespace)?.get(key) ?? null;
+  }
+
+  public saveUserData(namespace: string, key: string, value: any): void {
+    if (!namespace || !key) throw new Error('User data namespace and key are required.');
+    const namespaceMap = this.userDataMap.get(namespace) || new Map<string, any>();
+    namespaceMap.set(key, value);
+    this.userDataMap.set(namespace, namespaceMap);
+    this.persistLibrary();
+  }
+
+  public deleteUserData(namespace: string, key: string): void {
+    if (!namespace || !key) return;
+    this.recordDeletion('USER_DATA', `${namespace}:${key}`, namespace);
+    this.userDataMap.get(namespace)?.delete(key);
+    this.persistLibrary();
+  }
+
 }
 
 export const worldRepository = new InMemoryWorldRepository();

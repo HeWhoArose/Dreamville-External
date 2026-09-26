@@ -702,8 +702,14 @@ describe('CH1 Live Runtime Proof — Canonical Domain & HTTP API Path', () => {
       }),
     });
 
-    assert.strictEqual(res.status, 200);
-    const data = (await res.json()) as any;
+    const moveResponseText = await res.text();
+    let data: any;
+    try {
+      data = JSON.parse(moveResponseText);
+    } catch {
+      data = { raw: moveResponseText };
+    }
+    assert.strictEqual(res.status, 200, `Move route rejected: ${JSON.stringify(data)}`);
     assert.strictEqual(data.success, true);
     const playerPart = data.combatState.participants.find((p: any) => p.team === 'player_allies');
     assert.strictEqual(playerPart.x, 2);

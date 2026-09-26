@@ -201,7 +201,7 @@ test('task response validation failure advances to the next AI model instead of 
     }
   );
 
-  assert.equal(result.source, 'AI_FALLBACK', JSON.stringify(result));
+  assert.equal(result.source, 'AI_FALLBACK');
   assert.equal(result.modelId, 'second-model');
   assert.equal(result.attempts, 2);
   assert.equal(result.attemptsTrail.length, 2);
@@ -539,6 +539,14 @@ test('task fallback recovers a live eligible model when the persisted chain has 
     fallbackEligibility: true,
   });
 
+
+  for (const model of orchestrator.getAllModels()) {
+    if (
+      !['stale-primary', 'recovered-model', 'emergency-fallback-local'].includes(model.modelId)
+    ) {
+      orchestrator.updateModelHealth(model.providerId, model.modelId, 'DisabledByUser');
+    }
+  }
   (orchestrator as any).taskPinnedModels.set(
     'narrative.generate',
     'provider_stale_primary::stale-primary'

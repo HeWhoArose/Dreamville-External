@@ -175,7 +175,41 @@ export class CombatEncounterService {
       createdAt: formatCanonicalTimestamp(params.repository.getWorldClock(params.storyId).getTimestamp()),
     };
     combat.setLastResolution(resolution);
-    combat.setCombatPhase('INITIATIVE_PENDING', { banner: 'Combat initiated. The opening action has resolved. Roll for initiative.' });
+
+    const postActionState = combat.projectCombatForActor(
+      params.actorId,
+      params.repository.getCombatPerceptionOptions(params.storyId, params.actorId),
+    );
+
+    if (postActionState.victory || postActionState.defeat) {
+      combat.setCombatPhase('ENDED', {
+        banner: postActionState.victory ? 'Combat ended — victory.' : 'Combat ended — defeat.',
+      });
+      return {
+        success: true,
+        resolution,
+        transition: {
+          started: true,
+          phase: 'ENDED',
+          narrativeLeadIn: postActionState.victory
+            ? 'The opening strike ended the encounter before initiative was needed.'
+            : 'The opening action ended the encounter.',
+          requiresInitiativeRoll: false,
+          fromStory: true,
+          precombatResolution: resolution,
+          combatState: combat.projectCombatForActor(
+            params.actorId,
+            params.repository.getCombatPerceptionOptions(params.storyId, params.actorId),
+          ),
+          returnToStory: true,
+          continuationNarrative: narration,
+        },
+      };
+    }
+
+    combat.setCombatPhase('INITIATIVE_PENDING', {
+      banner: 'Combat initiated. The opening action has resolved. Roll for initiative.',
+    });
     const transition: CombatTransitionState = {
       started: true,
       phase: 'INITIATIVE_PENDING',
@@ -183,7 +217,10 @@ export class CombatEncounterService {
       requiresInitiativeRoll: true,
       fromStory: true,
       precombatResolution: resolution,
-      combatState: combat.projectCombatForActor(params.actorId, params.repository.getCombatPerceptionOptions(params.storyId, params.actorId)),
+      combatState: combat.projectCombatForActor(
+        params.actorId,
+        params.repository.getCombatPerceptionOptions(params.storyId, params.actorId),
+      ),
     };
     return { success: true, resolution, transition };
   }

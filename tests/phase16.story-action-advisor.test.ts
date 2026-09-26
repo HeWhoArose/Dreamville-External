@@ -290,3 +290,16 @@ test('Phase 16 regression: exact ordinary movement stays narrative and receives 
 		'Expected at least one contextual suggestion instead of only a generic known-ability recommendation.'
 	);
 });
+
+
+test('Phase 16 regression: suggestion text is inserted into the composer and not executed', async () => {
+	const { mergeSuggestedActionText } = await import('../src/utils/storyActionComposer');
+	assert.equal(
+		mergeSuggestedActionText('', 'I inspect the structure carefully.'),
+		'I inspect the structure carefully.'
+	);
+	assert.equal(
+		mergeSuggestedActionText('I draw my sword.', 'I move toward the structure.'),
+		'I draw my sword. I move toward the structure.'
+	);
+});

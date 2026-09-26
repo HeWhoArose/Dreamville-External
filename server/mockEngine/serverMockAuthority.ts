@@ -1359,8 +1359,8 @@ export class ServerMockAuthority {
           authoritativeFeedback = `Server authority processed an owned capability action through CapabilityEngine (${matchedId}).`;
         } else {
           success = true;
-          message = `Attempted action: ${freeformText}. The outcome unfolds in the narrative.`;
-          authoritativeFeedback = `Server authority recorded narrative action.`;
+          message = 'Ordinary story action recorded for narrative resolution.';
+          authoritativeFeedback = 'Canonical authority recorded the player action; no capability was invoked.';
         }
 
         const chronicle = worldRepository.getHistoricalChronicleEngine(targetStoryId);

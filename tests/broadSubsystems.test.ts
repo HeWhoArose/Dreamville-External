@@ -1481,7 +1481,6 @@ describe('Broad Implementation Pass — Domain Subsystems', () => {
     it('validates context-window capacity and excludes models whose context window is smaller than contextTokens (DEF-CH12-02)', () => {
       const orchestrator = new MultiModelOrchestrator();
       orchestrator.pinModelForTask('narrative.generate', null);
-      orchestrator.setFallbackChain('narrative.generate', []);
 
       // Register a tiny context model with high priority
       orchestrator.registerModel({
@@ -1510,7 +1509,6 @@ describe('Broad Implementation Pass — Domain Subsystems', () => {
 
     it('enforces deterministic multi-tier tie breaking in model selection (DEF-CH12-03)', () => {
       const orchestrator = new MultiModelOrchestrator();
-      orchestrator.setFallbackChain('narrative.generate', []);
 
       // Register two models with identical priority, health, quota, and latency
       orchestrator.registerModel({
@@ -1532,7 +1530,7 @@ describe('Broad Implementation Pass — Domain Subsystems', () => {
         modelId: 'model_alpha',
         displayName: 'Model Alpha',
         pool: 'creative',
-        capabilities: ['general'],
+        capabilities: ['text_generation', 'structured_output'],
         contextWindow: 100000,
         health: 'Healthy',
         quota: 'Healthy',

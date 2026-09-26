@@ -21,22 +21,30 @@ interface ChronicleViewProps {
 
 type QuestStatus = 'ACTIVE' | 'COMPLETED' | 'FAILED';
 
+interface QuestObjective {
+  id: string;
+  title: string;
+  description?: string;
+  status?: 'ACTIVE' | 'COMPLETED';
+  completed?: boolean;
+}
+
 interface QuestRecord {
   id: string;
   title: string;
   description?: string;
   status: QuestStatus;
-  objectives?: Array<any>;
-  origin?: string;
-  lastUpdated?: string | number | Record<string, unknown> | null;
+  objectives?: QuestObjective[];
 }
 
 interface JournalEntry {
   id: string;
-  kind: 'action' | 'dialogue' | 'response';
+  kind: 'action' | 'dialogue';
   cycle: number;
-  title: string;
-  text: string;
+  speaker?: string;
+  actionText?: string;
+  outcomeText?: string;
+  text?: string;
 }
 
 export const ChronicleView: React.FC<ChronicleViewProps> = ({
@@ -89,33 +97,29 @@ export const ChronicleView: React.FC<ChronicleViewProps> = ({
 
     for (const action of actionHistory || []) {
       if (!action || action.actionType === 'NOTE_RECORD') continue;
+
+      const actionText = String(action.description || '').trim();
+      const outcomeText = String(action.narrativeResponse || '').trim();
+
       entries.push({
         id: `action-${action.id}`,
         kind: 'action',
         cycle: Number(action.cycle) || 0,
-        title: 'Your action',
-        text: action.description || 'Action recorded.',
+        actionText: actionText || 'Action recorded.',
+        outcomeText: outcomeText || undefined,
       });
-
-      if (action.narrativeResponse) {
-        entries.push({
-          id: `response-${action.id}`,
-          kind: 'response',
-          cycle: Number(action.cycle) || 0,
-          title: 'What happened',
-          text: action.narrativeResponse,
-        });
-      }
     }
 
     for (const dialogue of dialogueHistory || []) {
-      if (!dialogue?.text) continue;
+      const text = String(dialogue?.text || '').trim();
+      if (!text) continue;
+
       entries.push({
         id: `dialogue-${dialogue.cycle}-${entries.length}`,
         kind: 'dialogue',
         cycle: Number(dialogue.cycle) || 0,
-        title: dialogue.speaker || 'Character',
-        text: dialogue.text,
+        speaker: dialogue.speaker || 'Character',
+        text,
       });
     }
 
@@ -128,21 +132,9 @@ export const ChronicleView: React.FC<ChronicleViewProps> = ({
   const activeRecords =
     questTab === 'ACTIVE' ? quests.active : questTab === 'COMPLETED' ? quests.completed : quests.failed;
 
-  const formatUpdated = (value: QuestRecord['lastUpdated']): string => {
-    if (!value) return 'Not recorded';
-    if (typeof value === 'string' || typeof value === 'number') return String(value);
-    if (typeof value === 'object' && 'year' in value && 'month' in value && 'day' in value) {
-      const v = value as any;
-      const hour = typeof v.hour === 'number' ? String(v.hour).padStart(2, '0') : '--';
-      const minute = typeof v.minute === 'number' ? String(v.minute).padStart(2, '0') : '--';
-      return `Year ${v.year}, Month ${v.month}, Day ${v.day} · ${hour}:${minute}`;
-    }
-    return 'Not recorded';
-  };
-
   const statusMeta = {
     ACTIVE: {
-      label: 'Active',
+      label: 'In Progress',
       icon: Circle,
       className: 'text-violet-300 border-violet-400/20 bg-violet-500/10',
     },
@@ -163,11 +155,10 @@ export const ChronicleView: React.FC<ChronicleViewProps> = ({
       <header className="rounded-3xl border border-violet-400/10 bg-[#0b0813]/90 p-5 sm:p-6">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300/75">Your story journal</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300/75">Story record</p>
             <h1 className="mt-1 font-serif text-2xl font-semibold text-white sm:text-3xl">Quests & Journal</h1>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-stone-500">
-              Quests track objectives. Journal records what you actually did, what happened, and what characters said.
-              Engine diagnostics and validation data stay out of this player-facing page.
+              Quests hold your objectives. Journal keeps a readable record of your actions, their outcomes, and important conversations.
             </p>
           </div>
           <ScrollText className="hidden h-8 w-8 text-violet-300/60 sm:block" />
@@ -255,15 +246,14 @@ export const ChronicleView: React.FC<ChronicleViewProps> = ({
                       </span>
                     </div>
 
-                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                      <div className="rounded-2xl border border-white/6 bg-black/15 p-3">
-                        <div className="text-[10px] uppercase tracking-[0.16em] text-stone-600">Origin</div>
-                        <div className="mt-1 text-sm text-stone-300">{quest.origin || 'Story'}</div>
+                    <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-white/6 bg-black/15 px-3 py-2">
+                      <div className="flex items-center gap-2 text-xs font-medium text-stone-300">
+                        <ClipboardList className="h-3.5 w-3.5 text-violet-300" />
+                        Objectives
                       </div>
-                      <div className="rounded-2xl border border-white/6 bg-black/15 p-3">
-                        <div className="text-[10px] uppercase tracking-[0.16em] text-stone-600">Last updated</div>
-                        <div className="mt-1 flex items-center gap-2 text-sm text-stone-300"><Clock3 className="h-3.5 w-3.5 text-stone-500" />{formatUpdated(quest.lastUpdated)}</div>
-                      </div>
+                      <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-stone-500">
+                        {objectives.filter((objective: any) => Boolean(objective?.completed || objective?.status === 'COMPLETED')).length} / {objectives.length}
+                      </span>
                     </div>
 
                     <div className="mt-4">
@@ -277,9 +267,18 @@ export const ChronicleView: React.FC<ChronicleViewProps> = ({
                           {objectives.map((objective: any, index: number) => {
                             const done = Boolean(objective?.completed || objective?.status === 'COMPLETED');
                             return (
-                              <li key={objective?.id || index} className="flex items-start gap-2 text-sm text-stone-300">
-                                {done ? <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-300" /> : <Circle className="mt-0.5 h-4 w-4 text-stone-600" />}
-                                <span>{objective?.title || objective?.description || objective?.text || String(objective)}</span>
+                              <li
+                                key={objective?.id || index}
+                                className={`flex items-start gap-2 rounded-2xl border px-3 py-2 text-sm ${
+                                  done
+                                    ? 'border-emerald-400/10 bg-emerald-500/[0.04] text-stone-400'
+                                    : 'border-white/6 bg-black/10 text-stone-200'
+                                }`}
+                              >
+                                {done ? <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" /> : <Circle className="mt-0.5 h-4 w-4 shrink-0 text-stone-600" />}
+                                <span className={done ? 'line-through decoration-stone-600' : ''}>
+                                  {objective?.title || objective?.description || objective?.text || String(objective)}
+                                </span>
                               </li>
                             );
                           })}
@@ -298,26 +297,62 @@ export const ChronicleView: React.FC<ChronicleViewProps> = ({
             <div className="rounded-3xl border border-dashed border-white/10 bg-[#0b0813]/60 p-10 text-center">
               <BookOpen className="mx-auto mb-3 h-6 w-6 text-violet-300/60" />
               <h2 className="text-base font-medium text-stone-200">Your journal is empty</h2>
-              <p className="mt-2 text-sm text-stone-600">Your actions, consequences, and character conversations will appear here as the story unfolds.</p>
+              <p className="mt-2 text-sm text-stone-600">Your actions, their outcomes, and important conversations will appear here as the story unfolds.</p>
             </div>
           ) : (
             journalEntries.map((entry) => (
-              <article key={entry.id} className="rounded-2xl border border-white/8 bg-[#0b0813]/75 p-4">
+              <article
+                key={entry.id}
+                className="rounded-2xl border border-white/8 bg-[#0b0813]/75 p-4"
+              >
                 <div className="flex items-start gap-3">
                   <div className="mt-0.5 rounded-xl bg-violet-500/10 p-2">
-                    {entry.kind === 'dialogue' ? <BookOpen className="h-4 w-4 text-fuchsia-300" /> : entry.kind === 'response' ? <Sparkles className="h-4 w-4 text-violet-300" /> : <History className="h-4 w-4 text-stone-500" />}
+                    {entry.kind === 'dialogue'
+                      ? <BookOpen className="h-4 w-4 text-fuchsia-300" />
+                      : <History className="h-4 w-4 text-violet-300" />}
                   </div>
+
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <h3 className="text-sm font-medium text-stone-200">{entry.title}</h3>
-                      <span className="text-[10px] uppercase tracking-[0.14em] text-stone-600">Cycle {entry.cycle}</span>
+                      <h3 className="text-sm font-medium text-stone-200">
+                        {entry.kind === 'dialogue' ? entry.speaker : 'Your move'}
+                      </h3>
+                      <span className="text-[10px] uppercase tracking-[0.14em] text-stone-600">
+                        Cycle {entry.cycle}
+                      </span>
                     </div>
-                    <p className="mt-1.5 text-sm leading-relaxed text-stone-400">{entry.text}</p>
+
+                    {entry.kind === 'dialogue' ? (
+                      <p className="mt-2 text-sm leading-relaxed text-stone-300">
+                        “{entry.text}”
+                      </p>
+                    ) : (
+                      <div className="mt-2 space-y-3">
+                        <div>
+                          <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-stone-600">
+                            Action
+                          </div>
+                          <p className="mt-1 text-sm leading-relaxed text-stone-300">
+                            {entry.actionText}
+                          </p>
+                        </div>
+
+                        {entry.outcomeText && (
+                          <div className="border-t border-white/6 pt-3">
+                            <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-violet-300/70">
+                              Outcome
+                            </div>
+                            <p className="mt-1 text-sm leading-relaxed text-stone-400">
+                              {entry.outcomeText}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               </article>
-            ))
-          )}
+            )))}
         </section>
       )}
     </div>

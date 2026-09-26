@@ -289,66 +289,6 @@ export class StoryActionAdvisor {
 	): Promise<ActionAdvice> {
 
 		const cleanAction = String(actionText || '').trim();
-		const ordinaryActionPattern = /^(?:i|we|the character|my character)\s+(?:walk|walks|move|moves|step|steps|approach|approaches|go|goes|head|heads|travel|travels|look|looks|observe|observes|inspect|inspects|search|searches|listen|listens|wait|waits|rest|rests|sit|sits|stand|stands|touch|touches|pick up|picks up|take|takes|open|opens|close|closes|enter|enters|leave|leaves|follow|follows|speak|speaks|talk|talks|ask|asks|say|says)\b/i;
-		const explicitCapabilityIntent = new CapabilitySimulationEngine().isCapabilityLikeRequest(cleanAction);
-		if (cleanAction && ordinaryActionPattern.test(cleanAction) && !explicitCapabilityIntent) {
-			const player = this.repository.getPlayerLifecycle(storyId);
-			const run = this.repository.getStoryRun(storyId);
-			const actorId =
-				player?.actorId ||
-				run?.protagonist?.characterId ||
-				'player_actor_' + storyId;
-			const tips = await this.generateTips(storyId, actorId, cleanAction, [], canonicalSceneContext);
-			return {
-				mode: 'NORMAL_ACTION',
-				actionText: cleanAction,
-				actorId,
-				tips,
-				canExecuteNow: true,
-			};
-		}
-		const player = this.repository.getPlayerLifecycle(storyId);
-		const run = this.repository.getStoryRun(storyId);
-		// Prefer the canonical lifecycle actor, then the confirmed protagonist identity.
-		// This keeps progression/skill state aligned for story runs whose lifecycle is
-		// not materialized yet (tests, previews, and import-time simulations).
-		const actorId =
-			player?.actorId ||
-			run?.protagonist?.characterId ||
-			'player_actor_' + storyId;
-
-		const canonicalPlayerLocationId = player?.locationId || run?.currentLocationId;
-		const canonicalLocation = canonicalPlayerLocationId
-			? this.repository.getGeographyGraph(storyId).getNode(canonicalPlayerLocationId)
-			: undefined;
-		const dynamicState = this.repository.getDynamicStoryState(storyId);
-		const canonicalSceneContext: StoryActionSceneContext = {
-			locationName: sceneContext?.locationName || canonicalLocation?.name,
-			locationRegion: sceneContext?.locationRegion || canonicalLocation?.regionId,
-			locationDescription: sceneContext?.locationDescription || canonicalLocation?.description,
-			worldTime: sceneContext?.worldTime,
-			startingSituation:
-				sceneContext?.startingSituation ||
-				run?.startingSituation?.summary ||
-				run?.startingSituation?.hook ||
-				run?.initialScene,
-			openingNarrative:
-				sceneContext?.openingNarrative ||
-				run?.openingScene?.narrativeText ||
-				dynamicState?.actionHistory?.[0]?.narrativeResponse ||
-				dynamicState?.actionHistory?.[0]?.description,
-			activeDialogue:
-				sceneContext?.activeDialogue ||
-				(dynamicState?.activeDialogue
-					? `${dynamicState.activeDialogue.speakerName}: ${dynamicState.activeDialogue.text}`
-					: undefined),
-			recentActions:
-				sceneContext?.recentActions ||
-				dynamicState?.actionHistory
-					?.slice(0, 4)
-					.map((entry: any) => entry.narrativeResponse || entry.description)
-					.filter(Boolean),
-		};
 		const capabilityEngine = this.repository.getCapabilityEngine(storyId);
 		const actorCapabilities = capabilityEngine.getEffectiveActorCapabilities(
 			actorId,

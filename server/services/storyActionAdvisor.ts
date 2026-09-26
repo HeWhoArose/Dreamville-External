@@ -867,13 +867,41 @@ export class StoryActionAdvisor {
 			actorId,
 			this.repository.getInventoryEngine(storyId)
 		);
-		return this.generateTips(
+		const tips = await this.generateTips(
 			storyId,
 			actorId,
 			actionText,
 			actorCapabilities,
 			canonicalSceneContext,
 		);
+
+		if (tips.length > 0) return tips;
+
+		const fallbackLocation = canonicalSceneContext.locationName || 'the current area';
+		if (
+			canonicalSceneContext.locationDescription ||
+			canonicalSceneContext.startingSituation ||
+			canonicalSceneContext.openingNarrative ||
+			canonicalSceneContext.recentActions?.length
+		) {
+			return [{
+				id: deterministicId('scene_fallback_tip', storyId, actorId, fallbackLocation, actionText),
+				title: 'Investigate the current scene',
+				description: 'Use the visible environment and the latest situation to decide your next move.',
+				intent: 'INVESTIGATE_SCENE',
+				actionText: `I carefully inspect ${fallbackLocation} for useful clues, hazards, exits, or signs of what is happening.`,
+				source: 'DETERMINISTIC',
+			}];
+		}
+
+		return actorCapabilities.slice(0, 4).map((capability) => ({
+			id: deterministicId('generic_action_tip_final_fallback', storyId, actorId, capability.id),
+			title: 'Use ' + capability.name,
+			description: capability.description,
+			intent: capability.id,
+			actionText: 'I use ' + capability.name + '.',
+			source: 'DETERMINISTIC' as const,
+		}));
 	}
 
 	private async generateTips(

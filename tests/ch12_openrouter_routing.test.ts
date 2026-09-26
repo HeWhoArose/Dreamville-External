@@ -495,6 +495,7 @@ test('OpenRouter empty-content diagnostics include returned model, choice count,
 
 test('task fallback recovers a live eligible model when the persisted chain has only one AI candidate', async () => {
   const orchestrator = new MultiModelOrchestrator();
+  orchestrator.setCategoryModelOverride('narration', null as any);
   const primary = new DeterministicMockAdapter('provider_stale_primary');
   primary.failureMode = '500';
   primary.maxFailuresBeforeSuccess = 1;
@@ -571,6 +572,7 @@ test('task fallback recovers a live eligible model when the persisted chain has 
 
 test('deterministic emergency floor is actually executed after all AI candidates fail', async () => {
   const orchestrator = new MultiModelOrchestrator();
+  orchestrator.setCategoryModelOverride('narration', null as any);
   const failing = new DeterministicMockAdapter('provider_all_failed');
   failing.failureMode = '500';
   failing.maxFailuresBeforeSuccess = 1;

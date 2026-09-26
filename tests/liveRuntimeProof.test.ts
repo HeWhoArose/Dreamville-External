@@ -693,12 +693,32 @@ describe('CH1 Live Runtime Proof — Canonical Domain & HTTP API Path', () => {
   });
 
   it('CH8 Live API: POST /api/game/combat/move moves actor within speed limit', async () => {
+    const stateRes = await fetch(`${baseUrl}/combat/state`);
+    assert.strictEqual(stateRes.status, 200);
+    const stateData = (await stateRes.json()) as any;
+    const playerPart = stateData.participants.find((p: any) => p.team === 'player_allies');
+    assert.ok(playerPart);
+
+    const occupied = new Set(
+      stateData.participants
+        .filter((p: any) => !p.isDead)
+        .map((p: any) => `${p.x},${p.y}`)
+    );
+    const candidates = [
+      { x: playerPart.x + 1, y: playerPart.y },
+      { x: playerPart.x, y: playerPart.y + 1 },
+      { x: Math.max(0, playerPart.x - 1), y: playerPart.y },
+      { x: playerPart.x, y: Math.max(0, playerPart.y - 1) },
+    ];
+    const target = candidates.find((candidate) => !occupied.has(`${candidate.x},${candidate.y}`));
+    assert.ok(target, 'A neighboring unoccupied cell must exist for the movement regression.');
+
     const res = await fetch(`${baseUrl}/combat/move`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        targetX: 2,
-        targetY: 1,
+        targetX: target.x,
+        targetY: target.y,
       }),
     });
 
@@ -711,9 +731,9 @@ describe('CH1 Live Runtime Proof — Canonical Domain & HTTP API Path', () => {
     }
     assert.strictEqual(res.status, 200, `Move route rejected: ${JSON.stringify(data)}`);
     assert.strictEqual(data.success, true);
-    const playerPart = data.combatState.participants.find((p: any) => p.team === 'player_allies');
-    assert.strictEqual(playerPart.x, 2);
-    assert.strictEqual(playerPart.y, 1);
+    const movedPlayer = data.combatState.participants.find((p: any) => p.team === 'player_allies');
+    assert.strictEqual(movedPlayer.x, target.x);
+    assert.strictEqual(movedPlayer.y, target.y);
   });
 
   it('CH8 Live API: POST /api/game/combat/attack resolves D&D attack and degrades equipped weapon durability', async () => {

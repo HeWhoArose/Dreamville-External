@@ -2807,6 +2807,26 @@ async function resolveNpcTurnsUntilPlayer(
   for (let index = 0; index < maxNpcTurns; index++) {
     const currentActor = combatEngine.getCurrentActor();
     if (!currentActor) return { turns, stoppedReason: 'NO_ACTIVE_ACTOR' };
+
+    // D&D surprise does not impose initiative disadvantage. A surprised creature
+    // simply cannot take its first turn until the surprise state is consumed.
+    if (combatEngine.getSurprisedActorIds().includes(currentActor.id)) {
+      const skipped = combatEngine.consumeSurprise(currentActor.id);
+      const advanceResult = combatEngine.advanceTurn();
+      turns.push({
+        actorId: currentActor.id,
+        actorName: currentActor.name,
+        proposal: {
+          actionType: 'SURPRISE_SKIPPED',
+          summary: currentActor.name + ' is surprised and loses the first turn.',
+        },
+        executionResult: { success: skipped, skipped: true },
+        tacticalSource: 'DETERMINISTIC_SURPRISE_RULE',
+        advanceResult,
+      });
+      continue;
+    }
+
     if (currentActor.id === playerActorId) return { turns, stoppedReason: 'PLAYER_TURN_REACHED' };
     const aliveEnemies = combatEngine.getParticipants().filter((participant) => participant.team === 'enemies' && !participant.isDead);
     const aliveAllies = combatEngine.getParticipants().filter((participant) => participant.team === 'player_allies' && !participant.isDead);
@@ -3241,11 +3261,7 @@ gameRouter.post('/combat/initiative/roll', async (req: Request, res: Response) =
           surprisedActorIds: surprised,
         });
 
-        let npcResolution: { turns: Array<Record<string, unknown>>; stoppedReason: string } | undefined;
-        const current = transactionCombat.getCurrentActor();
-        if (current && current.id !== actorId && !transactionCombat.getParticipants().find((p) => p.id === actorId)?.isDead) {
-          npcResolution = await resolveNpcTurnsUntilPlayer(storyId, actorId, transactionRepo);
-        }
+        const npcResolution = await resolveNpcTurnsUntilPlayer(storyId, actorId, transactionRepo);
 
         const state = getCombatStateHelper(transactionCombat, storyId, actorId, transactionRepo);
         return {

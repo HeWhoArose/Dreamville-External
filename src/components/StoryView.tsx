@@ -62,6 +62,13 @@ interface StoryViewProps {
   onEnterCombat?: () => void;
 }
 
+export function mergeSuggestedActionText(current: string, suggestion: string): string {
+  const cleanSuggestion = suggestion.trim();
+  if (!cleanSuggestion) return current;
+  const cleanCurrent = current.trim();
+  return cleanCurrent ? cleanCurrent + ' ' + cleanSuggestion : cleanSuggestion;
+}
+
 const StoryCheckCard: React.FC<{
   check: NonNullable<ActionLog['checkResult']>;
   revealed: boolean;
@@ -343,10 +350,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
     const cleanSuggestion = suggestion.trim();
     if (!cleanSuggestion) return;
 
-    setTypedAction((current) => {
-      if (!current.trim()) return cleanSuggestion;
-      return current.trimEnd() + ' ' + cleanSuggestion;
-    });
+    setTypedAction((current) => mergeSuggestedActionText(current, cleanSuggestion));
     setSuggestionsOpen(false);
     setSceneMenuOpen(false);
     triggerHaptic('light');

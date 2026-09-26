@@ -671,13 +671,18 @@ class ApiClient {
    * Starts a new combat encounter or resets current encounter (CH8).
    * POST /api/game/combat/encounter/start
    */
-  public async startCombatEncounter(): Promise<{ success: boolean; combatState: import('../types').CombatStateResponse }> {
+  public async startCombatEncounter(params?: {
+    enemyId?: string;
+    enemyName?: string;
+    skipIfDead?: boolean;
+  }): Promise<{ success: boolean; combatState: import('../types').CombatStateResponse }> {
     const res = await fetch(`${this.baseUrl}/combat/encounter/start`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
       },
+      body: JSON.stringify(params || {}),
     });
 
     if (!res.ok) {

@@ -383,7 +383,7 @@ gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => 
           {
             bypassCapabilityAdvisor: true,
             narrationDirective: transactionProposal.aiPipeline?.narrationDirective,
-          }
+          } as any
         );
 
         return {
@@ -548,7 +548,7 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
                 {
                   bypassCapabilityAdvisor: true,
                   narrationDirective: (actionRequest as any).__narrationDirective,
-                }
+                } as any
               )
             : serverMockAuthority.processAction(actionRequest, requestedCommandId);
         return {

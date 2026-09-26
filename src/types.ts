@@ -1166,6 +1166,10 @@ export interface CombatNarrativeResolution {
 export interface CombatTransitionState {
   started: boolean;
   phase: CombatPhase;
+  targetId?: string;
+  targetName?: string;
+  actionText?: string;
+  precombatActionPending?: boolean;
   narrativeLeadIn?: string;
   requiresInitiativeRoll: boolean;
   fromStory: boolean;

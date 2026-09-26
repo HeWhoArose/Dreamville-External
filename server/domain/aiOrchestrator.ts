@@ -5556,9 +5556,20 @@ export class MultiModelOrchestrator {
       }
     }
 
-    const emergency = Array.from(this.models.values()).find((m) => m.isEmergencyFloor) || {
+    const emergency: ModelRegistryRecord = Array.from(this.models.values()).find((m) => m.isEmergencyFloor) || {
       providerId: 'provider_deterministic_emergency',
       modelId: 'emergency-fallback-local',
+      displayName: 'Deterministic Emergency Floor',
+      pool: 'emergency',
+      capabilities: ['text_generation'],
+      contextWindow: 1000000,
+      health: 'Healthy',
+      quota: 'Healthy',
+      latencyMs: 1,
+      userPriority: -1000,
+      roleEligibility: [task],
+      isEmergencyFloor: true,
+      fallbackEligibility: true,
     };
 
     const emergencyAdapter = this.getAdapter(emergency.providerId);

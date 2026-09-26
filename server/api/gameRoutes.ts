@@ -2792,7 +2792,11 @@ async function resolveNpcTurnsUntilPlayer(
     const currentActor = combatEngine.getCurrentActor();
     if (!currentActor) return { turns, stoppedReason: 'NO_ACTIVE_ACTOR' };
     if (currentActor.id === playerActorId) return { turns, stoppedReason: 'PLAYER_TURN_REACHED' };
-    if (combatEngine.isVictory() || combatEngine.isDefeat()) return { turns, stoppedReason: 'COMBAT_ENDED' };
+    const aliveEnemies = combatEngine.getParticipants().filter((participant) => participant.team === 'enemies' && !participant.isDead);
+    const aliveAllies = combatEngine.getParticipants().filter((participant) => participant.team === 'player_allies' && !participant.isDead);
+    if (aliveEnemies.length === 0 || aliveAllies.length === 0) {
+      return { turns, stoppedReason: 'COMBAT_ENDED' };
+    }
 
     const perceptionOptions = repository.getCombatPerceptionOptions(storyId, currentActor.id);
     const tacticalDecision = await combatTacticsService.decideNpcTurn({

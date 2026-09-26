@@ -995,7 +995,13 @@ export class TacticalCombatEngine {
         participant.initiative = 0;
       }
     }
-    this.turnQueue = [];
+    this.turnQueue = Array.from(this.participants.values())
+      .filter((participant) => !participant.isDead)
+      .sort((a, b) => (
+        (b.initiativeModifier ?? 0) - (a.initiativeModifier ?? 0) ||
+        a.id.localeCompare(b.id)
+      ))
+      .map((participant) => participant.id);
     this.currentTurnIndex = 0;
     this.initiativeRolls = [];
     this.surprisedActorIds = new Set(
@@ -1236,7 +1242,7 @@ export class TacticalCombatEngine {
     const victory = totalEnemies.length > 0 && aliveEnemies.length === 0;
     const defeat = aliveAllies.length === 0 && projectedParticipants.some((p) => p.team === 'player_allies');
     const isEncounterActive = !victory && !defeat && projectedParticipants.length > 0;
-    const isPlayerTurn = canonicalCurrentActor?.id === viewerActorId && !canonicalCurrentActor.isDead;
+    const isPlayerTurn = this.combatPhase === 'ACTIVE' && canonicalCurrentActor?.id === viewerActorId && !canonicalCurrentActor.isDead;
     const viewerTurnResources = this.actionEconomy.get(viewerActorId);
 
     return {

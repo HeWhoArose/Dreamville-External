@@ -4,7 +4,7 @@ import { ConditionEngine } from './conditionEngine';
 import { CombatActionEconomy, CombatTurnResourceSnapshot, ReadyTriggerType } from './combatActionEconomy';
 import { CombatReactionEngine } from './combatReactionEngine';
 import { deathSaveEngine } from './deathSaveEngine';
-import type { DeathSaveState, RulesProfile, CombatAttackInstanceResult, CombatEffectDefinition, CombatEffectResult, CombatEventRecord, CombatReplayRecord, BodyRegionId, DestructibleEnvironmentObject, CombatMoraleState, CombatForcedMovementDefinition, CombatForcedMovementResult, CombatMovementCollisionResult } from '../../src/types';
+import type { DeathSaveState, RulesProfile, CombatAttackInstanceResult, CombatEffectDefinition, CombatEffectResult, CombatEventRecord, CombatReplayRecord, BodyRegionId, DestructibleEnvironmentObject, CombatMoraleState, CombatForcedMovementDefinition, CombatForcedMovementResult, CombatMovementCollisionResult, TacticalPlanState } from '../../src/types';
 import { CombatMoraleEngine } from './combatMoraleEngine';
 import { resolveCapabilityCheckFormula } from '../../src/data/rulesDice';
 import type { ProgressionResolution } from './characterProgressionEngine';
@@ -486,6 +486,7 @@ export class TacticalCombatEngine {
   private combatReplayRecords: CombatReplayRecord[] = [];
   private readonly moraleEngine = new CombatMoraleEngine();
   private combatActionSequence = 0;
+  private tacticalPlans = new Map<string, TacticalPlanState>();
   private initialSeed: number;
 
   constructor(seed = 1337, ruleset?: IRulesetAdapter, conditionEngine?: ConditionEngine) {
@@ -612,6 +613,7 @@ export class TacticalCombatEngine {
     this.destructibleObjects.clear();
     this.moraleEngine.importState([]);
     this.combatActionSequence = 0;
+    this.tacticalPlans.clear();
     this.pendingActivations.clear();
     this.bossPhaseStates.clear();
     this.actionEconomy.clear();
@@ -818,6 +820,19 @@ export class TacticalCombatEngine {
 
   public getDestructibleObjects(): DestructibleEnvironmentObject[] {
     return Array.from(this.destructibleObjects.values()).map((object) => JSON.parse(JSON.stringify(object)));
+  }
+
+  public getTacticalPlan(actorId: string): TacticalPlanState | undefined {
+    const plan = this.tacticalPlans.get(actorId);
+    return plan ? JSON.parse(JSON.stringify(plan)) : undefined;
+  }
+
+  public setTacticalPlan(plan: TacticalPlanState): void {
+    this.tacticalPlans.set(plan.actorId, JSON.parse(JSON.stringify(plan)));
+  }
+
+  public clearTacticalPlan(actorId: string): void {
+    this.tacticalPlans.delete(actorId);
   }
 
   public getMoraleState(actorId: string): CombatMoraleState | undefined {
@@ -4007,6 +4022,14 @@ export class TacticalCombatEngine {
       bossPhaseStates: Array.from(this.bossPhaseStates.entries()).map(([bossId, state]) => ({ bossId, ...state })),
       conditionEngineState: this.conditionEngine?.exportState(),
       progressionResolutions: Object.keys(progressionResolutions).length > 0 ? progressionResolutions : undefined,
+      tacticalPlans: this.tacticalPlans.size > 0
+        ? Object.fromEntries(
+            Array.from(this.tacticalPlans.entries()).map(([actorId, plan]) => [
+              actorId,
+              JSON.parse(JSON.stringify(plan)),
+            ])
+          )
+        : undefined,
     };
   }
 
@@ -4115,6 +4138,11 @@ export class TacticalCombatEngine {
     if (data.progressionResolutions) {
       const resolutions = { ...data.progressionResolutions };
       this.setProgressionModifierResolver((actorId) => resolutions[actorId]);
+    }
+    this.tacticalPlans.clear();
+    for (const [actorId, plan] of Object.entries(data.tacticalPlans || {})) {
+      if (!plan || typeof plan !== 'object') continue;
+      this.tacticalPlans.set(actorId, JSON.parse(JSON.stringify(plan)));
     }
   }
 }

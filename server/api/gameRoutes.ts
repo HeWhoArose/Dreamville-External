@@ -1090,6 +1090,7 @@ gameRouter.get('/persistence/status', (_req: Request, res: Response) => {
     res.json({
       success: true,
       persistence: worldRepository.inspectPersistence(),
+      health: worldRepository.getPersistenceHealth(),
     });
   } catch (error: any) {
     res.status(500).json({
@@ -7006,6 +7007,62 @@ gameRouter.get('/archive/export', async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Failed to export campaign archive.' });
   }
 });
+/**
+ * GET /api/game/archive/user-data/export
+ * Exports the complete user-owned data boundary: worlds, runs, characters,
+ * drafts, generic saved user data, and deletion tombstones.
+ */
+gameRouter.get('/archive/user-data/export', (_req: Request, res: Response) => {
+  try {
+    res.json(worldRepository.exportUserDataArchive());
+  } catch (error: any) {
+    console.error('Failed to export user data archive:', error);
+    res.status(500).json({ error: error?.message || 'Failed to export user data archive.' });
+  }
+});
+
+/**
+ * POST /api/game/archive/user-data/validate
+ * Validates archive schema and integrity without mutating live state.
+ */
+gameRouter.post('/archive/user-data/validate', async (req: Request, res: Response) => {
+  try {
+    const { archive } = req.body || {};
+    const { UserDataArchiveService } = await import('../domain/userDataArchive');
+    const result = UserDataArchiveService.validate(archive);
+    res.status(result.valid ? 200 : 400).json(result);
+  } catch (error: any) {
+    res.status(500).json({ valid: false, errorReason: error?.message || 'Failed to validate user data archive.' });
+  }
+});
+
+/**
+ * POST /api/game/archive/user-data/import
+ * Merge is the safe default and never removes existing user data.
+ * Full replacement requires an explicit confirmation phrase.
+ */
+gameRouter.post('/archive/user-data/import', async (req: Request, res: Response) => {
+  try {
+    const { archive, mode = 'MERGE', confirm, confirmationText } = req.body || {};
+    const normalizedMode = mode === 'REPLACE' ? 'REPLACE' : 'MERGE';
+    if (normalizedMode === 'REPLACE' && (
+      confirm !== true ||
+      String(confirmationText || '').trim() !== 'REPLACE ALL USER DATA'
+    )) {
+      return res.status(400).json({
+        success: false,
+        errorReason: 'Replacing existing user data requires explicit confirmation text: REPLACE ALL USER DATA.',
+      });
+    }
+
+    const result = worldRepository.restoreUserDataArchive(archive, { mode: normalizedMode });
+    if (!result.success) return res.status(400).json(result);
+    return res.json(result);
+  } catch (error: any) {
+    return res.status(500).json({ success: false, errorReason: error?.message || 'Failed to import user data archive.' });
+  }
+});
+
 
 /**
  * POST /api/game/archive/validate
@@ -7857,6 +7914,56 @@ gameRouter.post('/worlds/:worldId/characters/custom-equipment', async (req: Requ
   } catch (error: any) {
     console.error('Error proposing custom equipment:', error);
     res.status(500).json({ error: error?.message || 'Failed to propose custom equipment.' });
+  }
+});
+
+/**
+ * Generic durable user-owned data boundary for future forms/settings/collections.
+ * DELETE is explicit and persisted as a tombstone so a deployment rollback cannot resurrect it.
+ */
+gameRouter.get('/user-data/:namespace/:key', (req: Request, res: Response) => {
+  try {
+    const namespace = String(req.params.namespace || '').trim();
+    const key = String(req.params.key || '').trim();
+    if (!namespace || !key) return res.status(400).json({ success: false, error: 'namespace and key are required.' });
+    const value = worldRepository.getUserData(namespace, key);
+    if (value === null) return res.status(404).json({ success: false, error: 'User data not found.' });
+    return res.json({ success: true, namespace, key, value });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error?.message || 'Failed to load user data.' });
+  }
+});
+
+gameRouter.post('/user-data/:namespace/:key', (req: Request, res: Response) => {
+  try {
+    const namespace = String(req.params.namespace || '').trim();
+    const key = String(req.params.key || '').trim();
+    if (!namespace || !key) return res.status(400).json({ success: false, error: 'namespace and key are required.' });
+    if (req.body?.value === undefined) return res.status(400).json({ success: false, error: 'value is required.' });
+    worldRepository.saveUserData(namespace, key, req.body.value);
+    return res.json({ success: true, namespace, key, value: worldRepository.getUserData(namespace, key) });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, error: error?.message || 'Failed to save user data.' });
+  }
+});
+
+gameRouter.delete('/user-data/:namespace/:key', (req: Request, res: Response) => {
+  try {
+    const namespace = String(req.params.namespace || '').trim();
+    const key = String(req.params.key || '').trim();
+    const confirmationText = String(req.body?.confirmationText || '').trim();
+    const expected = `${namespace}/${key}`;
+    if (req.body?.confirm !== true || confirmationText !== expected) {
+      return res.status(400).json({
+        success: false,
+        errorReason: 'Deletion requires explicit confirmation and the exact user-data key.',
+        requiredConfirmationText: expected,
+      });
+    }
+    worldRepository.deleteUserData(namespace, key);
+    return res.json({ success: true, namespace, key, deleted: true });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, errorReason: error?.message || 'Failed to delete user data.' });
   }
 });
 

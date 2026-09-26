@@ -12,7 +12,7 @@ function seed() {
 	return { repository, storyId, actorId: repository.getPlayerLifecycle(storyId)?.actorId || `player_actor_${storyId}` };
 }
 
-test('Phase 15 OOC registry exposes only canonical read/write tools', () => {
+test('Phase 15 OOC registry exposes only canonical read/write tools', async () => {
 	const { repository, storyId, actorId } = seed();
 	const tools = oocToolRegistry.listTools();
 	assert.ok(tools.some((tool) => tool.name === 'search_memory' && tool.mode === 'READ'));

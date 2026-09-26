@@ -21,6 +21,9 @@ test('external prompts include exact dimensions and ratio', () => {
   });
   assert.match(prompt, /1024 × 1024 pixels/);
   assert.match(prompt, /Aspect ratio: 1:1/);
+  assert.match(prompt, /character identity poster/i);
+  assert.match(prompt, /face, eyes, hairstyle, facial structure/i);
+  assert.match(prompt, /not a world poster/i);
   assert.match(prompt, /Fit policy: contain/);
 });
 

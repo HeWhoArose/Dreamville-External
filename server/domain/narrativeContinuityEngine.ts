@@ -68,7 +68,12 @@ export class NarrativeContinuityEngine {
       knowledgeFacts: this.rankAndLimit(knowledgeFacts, queryKeywords, 12),
       memories,
       storyThreads: repository.getStoryThreads(storyId).slice(-12),
-      relationships: viewerActorId ? repository.getDynamicCharacterAgencyEngine(storyId).getRelationshipsForCharacter(storyId, viewerActorId) : [],
+      relationships: viewerActorId
+        ? repository
+            .getEntityCards(storyId)
+            .map((entity) => repository.getDynamicCharacterAgencyEngine(storyId).getRelationship(storyId, viewerActorId, entity.id))
+            .filter(Boolean)
+        : [],
       plot: state.plot,
       plan: state.plan,
       epistemicallyBoundTo: viewerActorId,

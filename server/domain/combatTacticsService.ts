@@ -67,6 +67,79 @@ function clampStep(step: CombatTacticsAiStep, index: number): TacticalPlanStepSt
 }
 
 export class CombatTacticsService {
+	private deriveGroupContext(
+		storyId: string,
+		actorId: string,
+		combatEngine: TacticalCombatEngine,
+		capabilityEngine: CapabilityEngine,
+		repository: WorldRepository,
+	): TacticalGroupContext | undefined {
+		const actor = combatEngine.getParticipant(actorId);
+		if (!actor) return undefined;
+
+		const agency = repository.getDynamicCharacterAgencyEngine(storyId).getCharacter(storyId, actorId);
+		const allies = combatEngine.getParticipants()
+			.filter((participant) => participant.team === actor.team && !participant.isDead)
+			.sort((a, b) => a.id.localeCompare(b.id));
+
+		const members = allies.map((member) => {
+			const caps = capabilityEngine.getEffectiveActorCapabilities(
+				member.id,
+				repository.getInventoryEngine(storyId),
+			);
+			const hasSupportCapability = caps.some((capability) =>
+				['Support', 'Healing', 'Utility'].includes(String(capability.category))
+			);
+			const role =
+				hasSupportCapability
+					? 'SUPPORT'
+					: member.hpMax >= 25 && member.armorClass >= 14
+						? 'VANGUARD'
+						: member.speedCells >= 5
+							? 'SKIRMISHER'
+							: 'REARGUARD';
+
+			return {
+				actorId: member.id,
+				role: role as TacticalGroupContext['members'][number]['role'],
+			};
+		});
+
+		const goalText = String(
+			agency?.canonicalGoal ||
+			agency?.goals.find((goal) => goal.active)?.description ||
+			'',
+		).toLowerCase();
+
+		const groupObjective: TacticalGroupContext['groupObjective'] =
+			/retreat|withdraw|flee|escape/.test(goalText)
+				? 'RETREAT'
+				: /protect|guard|defend/.test(goalText)
+					? 'PROTECT_VIP'
+					: /hold|line/.test(goalText)
+						? 'HOLD_LINE'
+						: 'ASSAULT';
+
+		const enemies = combatEngine.getParticipants()
+			.filter((participant) =>
+				!participant.isDead &&
+				participant.team !== actor.team &&
+				participant.team !== 'neutral'
+			)
+			.sort((a, b) =>
+				a.hpCurrent - b.hpCurrent ||
+				a.id.localeCompare(b.id)
+			);
+
+		return {
+			groupId: deterministicId('combat_group', storyId, actor.team),
+			team: actor.team,
+			members,
+			focusTargetId: enemies[0]?.id,
+			groupObjective,
+		};
+	}
+
 	public async decideNpcTurn(params: {
 		storyId: string;
 		actorId: string;
@@ -86,11 +159,15 @@ export class CombatTacticsService {
 			groupContext,
 		} = params;
 
+		const effectiveGroupContext =
+			groupContext ||
+			this.deriveGroupContext(storyId, actorId, combatEngine, capabilityEngine, repository);
+
 		const deterministic = () => NpcTacticalDecisionPolicy.decide({
 			actorId,
 			combatEngine,
 			capabilityEngine,
-			groupContext,
+			groupContext: effectiveGroupContext,
 			perceptionOptions,
 		});
 
@@ -155,7 +232,7 @@ export class CombatTacticsService {
 				knowledgeBoundary: perception,
 			},
 			agency: agency || null,
-			groupContext: groupContext || null,
+			groupContext: effectiveGroupContext || null,
 			participants: knownParticipants,
 			hazards: combatEngine.getHazards(),
 			obstacles: combatEngine.getObstacles(),
@@ -210,8 +287,30 @@ export class CombatTacticsService {
 			);
 
 			if (generated.source === 'DETERMINISTIC_FALLBACK' || !generated.text) {
+				const step: TacticalPlanStepState = {
+					id: 'fallback_step_1',
+					actionType: deterministicProposal.actionType,
+					targetId: deterministicProposal.targetId,
+					targetPosition: deterministicProposal.targetPosition,
+					capabilityId: deterministicProposal.capabilityId,
+					trigger: deterministicProposal.reason,
+				};
+				const fallbackPlan: TacticalPlanState = {
+					planId: deterministicId('tactical_plan_fallback', storyId, actorId, combatEngine.getCurrentRound(), String((currentPlan?.revision || 0) + 1)),
+					actorId,
+					objective: 'Deterministic fallback tactical response.',
+					steps: [step],
+					currentStepIndex: 0,
+					status: 'ACTIVE',
+					revision: (currentPlan?.revision || 0) + 1,
+					source: 'DETERMINISTIC_FALLBACK',
+					updatedTurn: combatEngine.getCurrentRound(),
+					updatedAt: formatCanonicalTimestamp(repository.getWorldClock(storyId).getTimestamp()),
+				};
+				combatEngine.setTacticalPlan(fallbackPlan);
 				return {
 					proposal: deterministicProposal,
+					plan: fallbackPlan,
 					source: 'DETERMINISTIC_FALLBACK',
 					modelId: generated.modelId,
 					providerId: generated.providerId,
@@ -270,6 +369,28 @@ export class CombatTacticsService {
 				fallbackReason: error instanceof Error ? error.message : String(error),
 			};
 		}
+	}
+
+	public recordExecution(
+		combatEngine: TacticalCombatEngine,
+		actorId: string,
+		success: boolean,
+	): void {
+		const plan = combatEngine.getTacticalPlan(actorId);
+		if (!plan) return;
+
+		const nowTurn = combatEngine.getCurrentRound();
+		if (!success) {
+			plan.status = 'REPLANNING';
+		} else {
+			plan.currentStepIndex += 1;
+			plan.status = plan.currentStepIndex >= plan.steps.length ? 'COMPLETED' : 'ACTIVE';
+		}
+
+		plan.updatedTurn = nowTurn;
+		plan.updatedAt = new Date().toISOString();
+		plan.revision += 1;
+		combatEngine.setTacticalPlan(plan);
 	}
 
 	private validateProposal(

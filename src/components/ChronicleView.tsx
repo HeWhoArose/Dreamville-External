@@ -1,313 +1,325 @@
-import React, { useState } from 'react';
-import { PlayerKnowledge, ActionLog, ChronicleEntry } from '../types';
-import { BookOpen, CheckCircle2, History, AlertCircle, Scroll, Landmark, Sparkles } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  BookOpen,
+  CheckCircle2,
+  Circle,
+  ClipboardList,
+  Clock3,
+  History,
+  Loader2,
+  ScrollText,
+  Sparkles,
+  XCircle,
+} from 'lucide-react';
+import { apiClient } from '../services/apiClient';
 
 interface ChronicleViewProps {
-  knowledgeBase: PlayerKnowledge[];
-  actionHistory: ActionLog[];
-  engineContractVersion: string;
-  chronicleEntries?: ChronicleEntry[];
+  storyId?: string;
+  actionHistory: any[];
+  dialogueHistory?: Array<{ speaker: string; text: string; cycle: number }>;
+}
+
+type QuestStatus = 'ACTIVE' | 'COMPLETED' | 'FAILED';
+
+interface QuestRecord {
+  id: string;
+  title: string;
+  description?: string;
+  status: QuestStatus;
+  objectives?: Array<any>;
+  origin?: string;
+  lastUpdated?: string | number | Record<string, unknown> | null;
+}
+
+interface JournalEntry {
+  id: string;
+  kind: 'action' | 'dialogue' | 'response';
+  cycle: number;
+  title: string;
+  text: string;
 }
 
 export const ChronicleView: React.FC<ChronicleViewProps> = ({
-  knowledgeBase,
-  actionHistory,
-  engineContractVersion,
-  chronicleEntries = [],
+  storyId,
+  actionHistory = [],
+  dialogueHistory = [],
 }) => {
-  const [activeSection, setActiveSection] = useState<'chronicle' | 'knowledge' | 'validation'>('chronicle');
+  const [section, setSection] = useState<'quests' | 'journal'>('quests');
+  const [questTab, setQuestTab] = useState<'ACTIVE' | 'COMPLETED' | 'FAILED'>('ACTIVE');
+  const [quests, setQuests] = useState<{ active: QuestRecord[]; completed: QuestRecord[]; failed: QuestRecord[] }>({
+    active: [],
+    completed: [],
+    failed: [],
+  });
+  const [loading, setLoading] = useState(Boolean(storyId));
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      if (!storyId) {
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await apiClient.getRunCanonicalState(storyId);
+        if (!cancelled) {
+          setQuests({
+            active: Array.isArray(data?.quests?.active) ? data.quests.active : [],
+            completed: Array.isArray(data?.quests?.completed) ? data.quests.completed : [],
+            failed: Array.isArray(data?.quests?.failed) ? data.quests.failed : [],
+          });
+        }
+      } catch (err: any) {
+        if (!cancelled) setError(err?.message || 'Failed to load quests.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [storyId]);
+
+  const journalEntries = useMemo<JournalEntry[]>(() => {
+    const entries: JournalEntry[] = [];
+
+    for (const action of actionHistory || []) {
+      if (!action || action.actionType === 'NOTE_RECORD') continue;
+      entries.push({
+        id: `action-${action.id}`,
+        kind: 'action',
+        cycle: Number(action.cycle) || 0,
+        title: 'Your action',
+        text: action.description || 'Action recorded.',
+      });
+
+      if (action.narrativeResponse) {
+        entries.push({
+          id: `response-${action.id}`,
+          kind: 'response',
+          cycle: Number(action.cycle) || 0,
+          title: 'What happened',
+          text: action.narrativeResponse,
+        });
+      }
+    }
+
+    for (const dialogue of dialogueHistory || []) {
+      if (!dialogue?.text) continue;
+      entries.push({
+        id: `dialogue-${dialogue.cycle}-${entries.length}`,
+        kind: 'dialogue',
+        cycle: Number(dialogue.cycle) || 0,
+        title: dialogue.speaker || 'Character',
+        text: dialogue.text,
+      });
+    }
+
+    return entries
+      .sort((a, b) => a.cycle - b.cycle)
+      .slice(-80)
+      .reverse();
+  }, [actionHistory, dialogueHistory]);
+
+  const activeRecords =
+    questTab === 'ACTIVE' ? quests.active : questTab === 'COMPLETED' ? quests.completed : quests.failed;
+
+  const formatUpdated = (value: QuestRecord['lastUpdated']): string => {
+    if (!value) return 'Not recorded';
+    if (typeof value === 'string' || typeof value === 'number') return String(value);
+    if (typeof value === 'object' && 'year' in value && 'month' in value && 'day' in value) {
+      const v = value as any;
+      const hour = typeof v.hour === 'number' ? String(v.hour).padStart(2, '0') : '--';
+      const minute = typeof v.minute === 'number' ? String(v.minute).padStart(2, '0') : '--';
+      return `Year ${v.year}, Month ${v.month}, Day ${v.day} · ${hour}:${minute}`;
+    }
+    return 'Not recorded';
+  };
+
+  const statusMeta = {
+    ACTIVE: {
+      label: 'Active',
+      icon: Circle,
+      className: 'text-violet-300 border-violet-400/20 bg-violet-500/10',
+    },
+    COMPLETED: {
+      label: 'Completed',
+      icon: CheckCircle2,
+      className: 'text-emerald-300 border-emerald-400/20 bg-emerald-500/10',
+    },
+    FAILED: {
+      label: 'Failed',
+      icon: XCircle,
+      className: 'text-rose-300 border-rose-400/20 bg-rose-500/10',
+    },
+  } as const;
 
   return (
-    <div className="space-y-6">
-      {/* Overview Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-stone-900/60 rounded-2xl border border-stone-800 p-4">
-          <span className="text-[10px] font-mono uppercase tracking-wider text-stone-500 block mb-1">
-            Engine Contract
-          </span>
-          <div className="text-lg font-mono font-bold text-amber-300">
-            {engineContractVersion}
+    <div className="mx-auto max-w-5xl space-y-6">
+      <header className="rounded-3xl border border-violet-400/10 bg-[#0b0813]/90 p-5 sm:p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300/75">Your story journal</p>
+            <h1 className="mt-1 font-serif text-2xl font-semibold text-white sm:text-3xl">Quests & Journal</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-stone-500">
+              Quests track objectives. Journal records what you actually did, what happened, and what characters said.
+              Engine diagnostics and validation data stay out of this player-facing page.
+            </p>
           </div>
-          <span className="text-xs text-stone-400">
-            Downstream Presentation Boundary
-          </span>
+          <ScrollText className="hidden h-8 w-8 text-violet-300/60 sm:block" />
         </div>
 
-        <div className="bg-stone-900/60 rounded-2xl border border-stone-800 p-4">
-          <span className="text-[10px] font-mono uppercase tracking-wider text-stone-500 block mb-1">
-            World Chronicle
-          </span>
-          <div className="text-lg font-mono font-bold text-amber-400">
-            {chronicleEntries.length} Recorded
-          </div>
-          <span className="text-xs text-stone-400">
-            Authoritative Historical Ledger
-          </span>
+        <div className="mt-5 inline-flex rounded-2xl border border-white/8 bg-black/20 p-1">
+          <button
+            type="button"
+            onClick={() => setSection('quests')}
+            className={`rounded-xl px-4 py-2 text-sm font-medium ${section === 'quests' ? 'bg-violet-500/15 text-white' : 'text-stone-500 hover:text-stone-200'}`}
+          >
+            <span className="inline-flex items-center gap-2"><ClipboardList className="h-4 w-4" /> Quests</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setSection('journal')}
+            className={`rounded-xl px-4 py-2 text-sm font-medium ${section === 'journal' ? 'bg-violet-500/15 text-white' : 'text-stone-500 hover:text-stone-200'}`}
+          >
+            <span className="inline-flex items-center gap-2"><History className="h-4 w-4" /> Journal</span>
+          </button>
         </div>
+      </header>
 
-        <div className="bg-stone-900/60 rounded-2xl border border-stone-800 p-4">
-          <span className="text-[10px] font-mono uppercase tracking-wider text-stone-500 block mb-1">
-            Player Knowledge
-          </span>
-          <div className="text-lg font-mono font-bold text-emerald-400">
-            {knowledgeBase.length} Unlocked
-          </div>
-          <span className="text-xs text-stone-400">
-            Epistemically Authorized to Protagonist
-          </span>
-        </div>
-
-        <div className="bg-stone-900/60 rounded-2xl border border-stone-800 p-4">
-          <span className="text-[10px] font-mono uppercase tracking-wider text-stone-500 block mb-1">
-            Mock Engine Commits
-          </span>
-          <div className="text-lg font-mono font-bold text-stone-200">
-            {actionHistory.length} Validated
-          </div>
-          <span className="text-xs text-stone-400">
-            Processed via MockEngineAdapter
-          </span>
-        </div>
-      </div>
-
-      {/* Navigation Sub-Tabs */}
-      <div className="flex items-center gap-2 border-b border-stone-800 pb-2">
-        <button
-          id="tab-view-world-chronicle"
-          onClick={() => setActiveSection('chronicle')}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition ${
-            activeSection === 'chronicle'
-              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-              : 'text-stone-400 hover:text-stone-200 bg-stone-900/40 border border-stone-800'
-          }`}
-        >
-          <Scroll className="w-3.5 h-3.5" />
-          <span>Historical Chronicle ({chronicleEntries.length})</span>
-        </button>
-
-        <button
-          id="tab-view-player-knowledge"
-          onClick={() => setActiveSection('knowledge')}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition ${
-            activeSection === 'knowledge'
-              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-              : 'text-stone-400 hover:text-stone-200 bg-stone-900/40 border border-stone-800'
-          }`}
-        >
-          <BookOpen className="w-3.5 h-3.5" />
-          <span>Knowledge Base ({knowledgeBase.length})</span>
-        </button>
-
-        <button
-          id="tab-view-validation-stream"
-          onClick={() => setActiveSection('validation')}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition ${
-            activeSection === 'validation'
-              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-              : 'text-stone-400 hover:text-stone-200 bg-stone-900/40 border border-stone-800'
-          }`}
-        >
-          <History className="w-3.5 h-3.5" />
-          <span>Validation Stream ({actionHistory.length})</span>
-        </button>
-      </div>
-
-      {/* Section 1: Historical Chronicle (CH4) */}
-      {activeSection === 'chronicle' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between gap-3 pb-2 border-b border-stone-800">
-            <h3 className="text-sm font-mono uppercase tracking-wider text-stone-200 font-semibold flex items-center gap-2">
-              <Landmark className="w-4 h-4 text-amber-400" />
-              <span>Authoritative World Chronicle (Epistemically Filtered)</span>
-            </h3>
-            <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-              Deterministic Significance Evaluator
-            </span>
+      {section === 'quests' ? (
+        <section className="space-y-4">
+          <div className="flex flex-wrap gap-2 border-b border-white/8 pb-3">
+            {(Object.keys(statusMeta) as Array<keyof typeof statusMeta>).map((status) => {
+              const count = status === 'ACTIVE' ? quests.active.length : status === 'COMPLETED' ? quests.completed.length : quests.failed.length;
+              const MetaIcon = statusMeta[status].icon;
+              const selected = questTab === status;
+              return (
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() => setQuestTab(status)}
+                  className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-medium ${selected ? statusMeta[status].className : 'border-white/8 bg-white/[0.02] text-stone-500 hover:text-stone-200'}`}
+                >
+                  <MetaIcon className="h-3.5 w-3.5" />
+                  {statusMeta[status].label}
+                  <span className="rounded-full bg-black/20 px-1.5 py-0.5 text-[10px]">{count}</span>
+                </button>
+              );
+            })}
           </div>
 
-          {chronicleEntries.length === 0 ? (
-            <div className="rounded-xl border border-stone-800 bg-stone-900/30 p-8 text-center text-stone-500 text-xs">
-              No historical chronicle milestones recorded yet for this era.
+          {loading ? (
+            <div className="rounded-3xl border border-white/8 bg-[#0b0813]/75 p-10 text-center text-sm text-stone-500">
+              <Loader2 className="mx-auto mb-3 h-5 w-5 animate-spin text-violet-300" />
+              Loading quests…
+            </div>
+          ) : error ? (
+            <div className="rounded-3xl border border-rose-400/15 bg-rose-500/5 p-6 text-sm text-rose-200">
+              {error}
+            </div>
+          ) : activeRecords.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-white/10 bg-[#0b0813]/60 p-10 text-center">
+              <Sparkles className="mx-auto mb-3 h-6 w-6 text-violet-300/60" />
+              <h2 className="text-base font-medium text-stone-200">
+                {questTab === 'ACTIVE' ? 'No active quests' : questTab === 'COMPLETED' ? 'No completed quests yet' : 'No failed quests'}
+              </h2>
+              <p className="mt-2 text-sm text-stone-600">
+                {questTab === 'ACTIVE'
+                  ? 'A quest will appear here only when the canonical world state creates an explicit quest or mission objective.'
+                  : 'This section updates when the canonical quest state changes.'}
+              </p>
             </div>
           ) : (
             <div className="space-y-3">
-              {chronicleEntries.map((entry) => {
-                const isHistoric = entry.significance === 'HISTORIC';
-                const isSignificant = entry.significance === 'SIGNIFICANT';
-
+              {activeRecords.map((quest) => {
+                const meta = statusMeta[quest.status];
+                const MetaIcon = meta.icon;
+                const objectives = Array.isArray(quest.objectives) ? quest.objectives : [];
                 return (
-                  <div
-                    key={entry.id}
-                    className={`rounded-xl border p-4 space-y-2 transition ${
-                      isHistoric
-                        ? 'bg-amber-950/20 border-amber-500/40 shadow-sm'
-                        : isSignificant
-                        ? 'bg-purple-950/20 border-purple-500/40'
-                        : 'bg-stone-900/70 border-stone-800'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        <Sparkles
-                          className={`w-4 h-4 flex-shrink-0 ${
-                            isHistoric
-                              ? 'text-amber-400'
-                              : isSignificant
-                              ? 'text-purple-400'
-                              : 'text-stone-400'
-                          }`}
-                        />
-                        <h4 className="font-serif font-bold text-stone-100 text-sm">
-                          {entry.headline}
-                        </h4>
+                  <article key={quest.id} className="rounded-3xl border border-white/8 bg-[#0b0813]/80 p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <MetaIcon className="h-4 w-4 text-violet-300" />
+                          <h2 className="font-serif text-lg font-semibold text-white">{quest.title || 'Untitled Quest'}</h2>
+                        </div>
+                        {quest.description && <p className="mt-2 text-sm leading-relaxed text-stone-400">{quest.description}</p>}
                       </div>
-
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <span
-                          className={`text-[9px] font-mono uppercase font-bold px-2 py-0.5 rounded border ${
-                            isHistoric
-                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                              : isSignificant
-                              ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
-                              : 'bg-stone-800 text-stone-400 border-stone-700'
-                          }`}
-                        >
-                          {entry.significance}
-                        </span>
-                        <span className="text-[9px] font-mono uppercase px-2 py-0.5 rounded bg-stone-800 text-stone-400 border border-stone-700">
-                          {entry.category.replace(/_/g, ' ')}
-                        </span>
-                      </div>
-                    </div>
-
-                    <p className="text-xs text-stone-300 leading-relaxed font-serif pl-6">
-                      {entry.historicalAccount}
-                    </p>
-
-                    <div className="pt-2 border-t border-stone-850 flex items-center justify-between text-[10px] font-mono text-stone-500 pl-6">
-                      <span>Location: {entry.locationId}</span>
-                      <span>
-                        Time: Year {entry.timestamp.year}, Month {entry.timestamp.month}, Day {entry.timestamp.day} ({entry.timestamp.hour.toString().padStart(2, '0')}:{entry.timestamp.minute.toString().padStart(2, '0')})
+                      <span className={`rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${meta.className}`}>
+                        {meta.label}
                       </span>
-                      <span>Provenance: {entry.provenance}</span>
                     </div>
-                  </div>
+
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-2xl border border-white/6 bg-black/15 p-3">
+                        <div className="text-[10px] uppercase tracking-[0.16em] text-stone-600">Origin</div>
+                        <div className="mt-1 text-sm text-stone-300">{quest.origin || 'Story'}</div>
+                      </div>
+                      <div className="rounded-2xl border border-white/6 bg-black/15 p-3">
+                        <div className="text-[10px] uppercase tracking-[0.16em] text-stone-600">Last updated</div>
+                        <div className="mt-1 flex items-center gap-2 text-sm text-stone-300"><Clock3 className="h-3.5 w-3.5 text-stone-500" />{formatUpdated(quest.lastUpdated)}</div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4">
+                      <div className="mb-2 flex items-center gap-2 text-xs font-medium text-stone-300"><ClipboardList className="h-3.5 w-3.5 text-violet-300" /> Objectives</div>
+                      {objectives.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-white/8 px-3 py-3 text-sm text-stone-600">
+                          No structured objectives are recorded for this quest yet.
+                        </div>
+                      ) : (
+                        <ul className="space-y-2">
+                          {objectives.map((objective: any, index: number) => {
+                            const done = Boolean(objective?.completed || objective?.status === 'COMPLETED');
+                            return (
+                              <li key={objective?.id || index} className="flex items-start gap-2 text-sm text-stone-300">
+                                {done ? <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-300" /> : <Circle className="mt-0.5 h-4 w-4 text-stone-600" />}
+                                <span>{objective?.title || objective?.description || objective?.text || String(objective)}</span>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </div>
+                  </article>
                 );
               })}
             </div>
           )}
-        </div>
-      )}
-
-      {/* Section 2: Player Knowledge Base */}
-      {activeSection === 'knowledge' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between gap-3 pb-2 border-b border-stone-800">
-            <h3 className="text-sm font-mono uppercase tracking-wider text-stone-200 font-semibold flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-amber-400" />
-              <span>Player Knowledge Base ({knowledgeBase.length})</span>
-            </h3>
-            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-              Bounded Viewer
-            </span>
-          </div>
-
-          <div className="space-y-3">
-            {knowledgeBase.map((kb) => (
-              <div
-                key={kb.id}
-                className="bg-stone-900/70 rounded-xl border border-stone-800 p-4 space-y-2 hover:border-amber-500/30 transition"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <h4 className="font-serif font-bold text-stone-100 text-sm">
-                    {kb.title}
-                  </h4>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-stone-800 text-amber-400/90 border border-stone-700">
-                    {kb.category}
-                  </span>
-                </div>
-
-                <p className="text-xs text-stone-300 leading-relaxed font-serif">
-                  {kb.summary}
-                </p>
-
-                <div className="pt-2 border-t border-stone-850 flex items-center justify-between text-[10px] font-mono text-stone-500">
-                  <span>Source: {kb.source}</span>
-                  <span>Acquired: Cycle {kb.acquiredAtCycle}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Section 3: Action Request Validation Stream */}
-      {activeSection === 'validation' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between gap-3 pb-2 border-b border-stone-800">
-            <h3 className="text-sm font-mono uppercase tracking-wider text-stone-200 font-semibold flex items-center gap-2">
-              <History className="w-4 h-4 text-amber-400" />
-              <span>Engine Validation Stream</span>
-            </h3>
-            <span className="text-[10px] font-mono text-stone-400">
-              Deterministic Verification
-            </span>
-          </div>
-
-          <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
-            {actionHistory.map((act) => {
-              const isRejected = act.epistemicValidation === 'REJECTED_BY_ENGINE';
-              return (
-                <div
-                  key={act.id}
-                  className="bg-stone-900/70 rounded-xl border border-stone-800 p-4 space-y-2"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      {isRejected ? (
-                        <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
-                      ) : (
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                      )}
-                      <span className="text-xs font-mono font-bold text-stone-200 uppercase">
-                        {act.actionType}
-                      </span>
-                    </div>
-                    <span className="text-[10px] font-mono text-stone-500">
-                      {act.timestamp} • Cycle {act.cycle}
-                    </span>
+        </section>
+      ) : (
+        <section className="space-y-3">
+          {journalEntries.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-white/10 bg-[#0b0813]/60 p-10 text-center">
+              <BookOpen className="mx-auto mb-3 h-6 w-6 text-violet-300/60" />
+              <h2 className="text-base font-medium text-stone-200">Your journal is empty</h2>
+              <p className="mt-2 text-sm text-stone-600">Your actions, consequences, and character conversations will appear here as the story unfolds.</p>
+            </div>
+          ) : (
+            journalEntries.map((entry) => (
+              <article key={entry.id} className="rounded-2xl border border-white/8 bg-[#0b0813]/75 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 rounded-xl bg-violet-500/10 p-2">
+                    {entry.kind === 'dialogue' ? <BookOpen className="h-4 w-4 text-fuchsia-300" /> : entry.kind === 'response' ? <Sparkles className="h-4 w-4 text-violet-300" /> : <History className="h-4 w-4 text-stone-500" />}
                   </div>
-
-                  <p className="text-xs text-stone-300 font-medium">
-                    {act.description}
-                  </p>
-
-                  <div className="bg-stone-950/70 rounded-lg p-2.5 border border-stone-850 text-[11px] font-mono text-stone-300">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[10px] uppercase text-stone-500 font-bold">
-                        Engine Transition:
-                      </span>
-                      <span
-                        className={`text-[9px] uppercase px-1.5 py-0.2 rounded font-mono ${
-                          isRejected
-                            ? 'bg-rose-950 text-rose-300 border border-rose-800'
-                            : 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                        }`}
-                      >
-                        {act.epistemicValidation}
-                      </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <h3 className="text-sm font-medium text-stone-200">{entry.title}</h3>
+                      <span className="text-[10px] uppercase tracking-[0.14em] text-stone-600">Cycle {entry.cycle}</span>
                     </div>
-                    <span className={isRejected ? 'text-rose-300' : 'text-emerald-400/90'}>
-                      {act.authoritativeFeedback}
-                    </span>
+                    <p className="mt-1.5 text-sm leading-relaxed text-stone-400">{entry.text}</p>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        </div>
+              </article>
+            ))
+          )}
+        </section>
       )}
     </div>
   );
 };
-

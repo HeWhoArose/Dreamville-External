@@ -195,35 +195,5 @@ export class CombatEncounterService {
     return params.mechanicalSummary + ' ' + params.targetName + ' has ' + params.targetHp + ' HP remaining. Combat is now initiated; roll for initiative.';
   }
 
-  public buildPendingCombatTransition(candidate: CombatEncounterCandidate): CombatTransitionState {
-    return { started: false, phase: 'PRECOMBAT', narrativeLeadIn: candidate.targetName + ' is present, but has not perceived you. Resolve the opening action before initiative.', requiresInitiativeRoll: true, fromStory: true };
-  }
-
-  private isHostileCard(card: EntityCard, actorId: string, storyId: string, repository: WorldRepository): boolean {
-    if (card.classification.tags.some((tag) => this.hostileTags.has(tag.toLowerCase()))) return true;
-    const behavior = (card.behavior.combatBehavior || '') + ' ' + (card.behavior.threatResponse || '') + ' ' + (card.behavior.defaultBehavior || '');
-    if (/attack|hunt|hostile/i.test(behavior)) return true;
-    const relation = repository.getDynamicCharacterAgencyEngine(storyId).getRelationship(storyId, card.id, actorId);
-    return Boolean(relation && (relation.stance === 'ENEMY' || relation.stance === 'RIVAL' || relation.hostility >= 55));
-  }
-
-  public findHostileCandidate(storyId: string, actorId: string, actionText: string, repository: WorldRepository): CombatEncounterCandidate | undefined {
-    if (!this.isHostileAction(actionText)) return undefined;
-    const player = repository.getPlayerLifecycle(storyId);
-    const locationId = player?.locationId || repository.getCurrentLocation(storyId);
-    if (!locationId) return undefined;
-    const cards = repository.getEntityCards(storyId).filter((card) => card.id !== actorId && card.kind !== 'PLAYER' && card.worldState.isAlive && card.worldState.presence === 'present' && card.worldState.locationId === locationId && !['DEAD', 'DESTROYED', 'ARCHIVED'].includes(card.lifecycle.status) && this.isHostileCard(card, actorId, storyId, repository));
-    if (!cards.length) return undefined;
-    const normalized = actionText.toLowerCase();
-    const explicit = cards.find((card) => normalized.includes(card.name.toLowerCase()) || card.identity.aliases.some((alias) => normalized.includes(alias.toLowerCase())));
-    const target = explicit || cards[0];
-    const targetAwareOfPlayer = repository.isEntityEpistemicallyKnown(storyId, target.id, actorId);
-    return { targetId: target.id, targetName: target.name, locationId, targetCard: target, targetAwareOfPlayer, reason: explicit ? 'Explicit hostile target named.' : 'Hostile entity matched current location and action.' };
-  }
-
-  private isHostileAction(actionText: string): boolean {
-    return ['attack', 'strike', 'hit', 'shoot', 'stab', 'slash', 'cast', 'spell', 'fireball', 'kill', 'blast', 'burn', 'freeze', 'ambush', 'smite', 'curse', 'harm'].some((token) => actionText.toLowerCase().includes(token));
-  }
-}
 
 export const combatEncounterService = new CombatEncounterService();

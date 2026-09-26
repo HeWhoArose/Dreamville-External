@@ -863,40 +863,83 @@ export class StoryActionAdvisor {
 			.getAllNodes()
 			.find((node) => node.id === this.repository.getPlayerLifecycle(storyId)?.locationId);
 
-		const deterministicTips: ActionTip[] = actorCapabilities
+		const sceneSources = [
+			sceneContext?.locationName,
+			sceneContext?.locationDescription,
+			sceneContext?.startingSituation,
+			sceneContext?.activeDialogue,
+			sceneContext?.openingNarrative,
+			...(sceneContext?.recentActions || []),
+		].filter(Boolean).map((value) => String(value).trim()).filter(Boolean);
+
+		const normalizedScene = normalize(sceneSources.join(' '));
+		const locationLabel = sceneContext?.locationName || location?.name || 'the current area';
+		const contextualTips: ActionTip[] = [];
+		const addContextTip = (title: string, description: string, actionText: string, intent: string) => {
+			if (contextualTips.some((tip) => normalize(tip.actionText) === normalize(actionText))) return;
+			contextualTips.push({
+				id: deterministicId('context_action_tip', storyId, actorId, title, actionText),
+				title,
+				description,
+				intent,
+				actionText,
+				source: 'DETERMINISTIC',
+			});
+		};
+
+		if (sceneContext?.activeDialogue) {
+			const speaker = String(sceneContext.activeDialogue).split(':')[0]?.trim() || 'the nearby character';
+			addContextTip('Press the conversation', `Respond to ${speaker} and test what they are willing to reveal.`, `I respond to ${speaker} and ask what they are hiding.`, 'DIALOGUE');
+		}
+
+		if (/(anomal|disturb|strange|rift|collapse|unstable|temporal|magic|energy|threat|danger|trap|blood|fire|smoke|ice|footprint|sound|noise)/i.test(normalizedScene)) {
+			addContextTip('Investigate the immediate disturbance', `Study the unusual details currently visible in ${locationLabel} before committing to an action.`, `I carefully inspect the immediate area of ${locationLabel} for the source of the disturbance.`, 'INVESTIGATE_SCENE');
+		}
+
+		if (sceneContext?.locationDescription || sceneContext?.openingNarrative) {
+			addContextTip('Read the environment', 'Use the visible terrain, sounds, traces, exits, cover, and other physical clues to understand what the scene is offering.', `I carefully examine the terrain and visible details around me in ${locationLabel}.`, 'OBSERVE_ENVIRONMENT');
+		}
+
+		if (sceneContext?.recentActions?.length) {
+			addContextTip('Follow up on what just happened', 'Build on the most recent event instead of treating the scene as a reset.', 'I follow up on the immediate consequence of what just happened before moving on.', 'FOLLOW_UP_RECENT_EVENT');
+		}
+
+		const actionLooksThreatened = /(enemy|attacked|combat|fight|battle|ambush|threat|danger|chase|pursuit|hostile)/i.test(normalizedScene);
+		if (actionLooksThreatened) {
+			addContextTip('Take a safer position', 'Create distance, seek cover, or move toward a position that gives you more information before committing to a fight.', 'I reposition toward safer ground and keep the current threat in sight.', 'TACTICAL_REPOSITION');
+		}
+
+		const contextualCapabilityTips: ActionTip[] = actorCapabilities
+			.filter((capability) => capability.name && capability.description)
 			.filter((capability) => {
-				const action = normalize(actionText);
-				return (
-					(action.includes('attack') || action.includes('fight')) &&
-					capability.category === 'Combat'
-				) || (
-					(action.includes('move') || action.includes('escape')) &&
-					capability.category === 'Movement'
-				) || (
-					(action.includes('inspect') || action.includes('search')) &&
-					capability.category === 'Perception'
-				);
+				const capabilityText = normalize(capability.name + ' ' + capability.description);
+				return actionLooksThreatened
+					? /attack|defend|shield|heal|guard|counter|protect|move|escape|evade|stealth/i.test(capabilityText)
+					: /inspect|perceive|search|sense|detect|talk|persuade|stealth|move|travel|interact/i.test(capabilityText);
 			})
-			.slice(0, 4)
+			.slice(0, 2)
 			.map((capability) => ({
-				id: deterministicId('action_tip', storyId, actorId, actionText, capability.id),
-				title: capability.name,
-				description: capability.description,
+				id: deterministicId('context_capability_tip', storyId, actorId, capability.id, locationLabel),
+				title: `Use ${capability.name} here`,
+				description: actionLooksThreatened
+					? `Your ${capability.name} may be useful against the current threat or positioning problem in ${locationLabel}.`
+					: `Your ${capability.name} may help you interact with the current scene rather than simply using it in isolation.`,
 				intent: capability.id,
-				actionText: capability.name,
+				actionText: actionLooksThreatened
+					? `I use ${capability.name} to respond to the current threat in ${locationLabel}.`
+					: `I use ${capability.name} to investigate or interact with what is happening in ${locationLabel}.`,
 				source: 'DETERMINISTIC' as const,
 			}));
 
-		const genericTips = actorCapabilities
-			.slice(0, 4)
-			.map((capability) => ({
-				id: deterministicId('generic_action_tip', storyId, actorId, capability.id),
-				title: 'Use ' + capability.name,
-				description: capability.description,
-				intent: capability.id,
-				actionText: capability.name,
-				source: 'DETERMINISTIC' as const,
-			}));
+		const deterministicTips: ActionTip[] = [...contextualTips, ...contextualCapabilityTips].slice(0, 4);
+		const genericTips: ActionTip[] = actorCapabilities.slice(0, 4).map((capability) => ({
+			id: deterministicId('generic_action_tip', storyId, actorId, capability.id),
+			title: 'Use ' + capability.name,
+			description: capability.description,
+			intent: capability.id,
+			actionText: 'I use ' + capability.name + '.',
+			source: 'DETERMINISTIC' as const,
+		}));
 
 		try {
 			const actorSummary = [
@@ -928,7 +971,9 @@ export class StoryActionAdvisor {
 			const prompt =
 				`You are the gameplay suggestion assistant for an AI RPG.\n` +
 				`Give the player 2 to 4 actionable possibilities for the current situation.\n` +
-				`Suggestions should react to the supplied visible scene, not generic RPG advice.\n` +
+				`Every suggestion MUST be grounded in a concrete visible scene cue such as location, terrain, danger, anomaly, dialogue, recent consequence, visible object, or environmental condition.\n` +
+				`Do NOT output a generic "use a known ability" suggestion unless the ability is explicitly connected to the current situation and explains why it is useful here.\n` +
+				`When the scene contains an active problem, vary suggestions across investigation, social interaction, movement/positioning, environmental interaction, and relevant known abilities when supported by the scene.\n` +
 				`Use the supplied character capabilities when relevant, but basic physical, social, stealth, environmental, and tactical actions are allowed when the scene supports them.\n` +
 				`Do not invent hidden information, unavailable items, learned abilities, enemies, or guaranteed outcomes.\n` +
 				`If an action would require a capability the character does not have, phrase it as an attempt only if the player could reasonably attempt that action without possessing a special ability.\n` +
@@ -972,7 +1017,16 @@ export class StoryActionAdvisor {
 						actionText: tip.actionText.trim(),
 						source: 'AI' as const,
 					}));
-				if (aiTips.length > 0) return aiTips;
+				if (aiTips.length > 0) {
+					const groundedAiTips = aiTips.filter((tip) => {
+						const haystack = normalize(tip.title + ' ' + tip.description + ' ' + tip.actionText);
+						const cueWords = sceneSources.flatMap((cue) => normalize(cue).split(/\\s+/)).filter((word) => word.length >= 5);
+						return cueWords.length === 0 || cueWords.some((word) => haystack.includes(word));
+					});
+					if (groundedAiTips.length > 0) {
+						return [...groundedAiTips, ...deterministicTips].slice(0, 4);
+					}
+				}
 			}
 		} catch {
 			// Deterministic suggestions remain the guaranteed fallback.

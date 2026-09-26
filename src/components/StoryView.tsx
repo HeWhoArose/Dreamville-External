@@ -51,6 +51,7 @@ interface StoryViewProps {
   openingScene?: OpeningScene | null;
   worldTitle?: string;
   worldId?: string;
+  storyId?: string;
   protagonistName?: string;
   protagonistRole?: string;
   protagonistPortraitUrl?: string;
@@ -236,6 +237,9 @@ export const StoryView: React.FC<StoryViewProps> = ({
   const { playSpeech, isPlayingSpeech, triggerHaptic, playSfx } = useAudioHaptic();
 
   const [typedAction, setTypedAction] = useState('');
+  const [inputMode, setInputMode] = useState<'STORY' | 'OOC'>('STORY');
+  const [oocHistory, setOocHistory] = useState<Array<{ role: 'player' | 'assistant'; text: string }>>([]);
+  const [isProcessingOoc, setIsProcessingOoc] = useState(false);
   const [revealedCheckIds, setRevealedCheckIds] = useState<Record<string, boolean>>({});
   const [visibleTurnCount, setVisibleTurnCount] = useState(12);
   const [isRecording, setIsRecording] = useState(false);
@@ -330,15 +334,44 @@ export const StoryView: React.FC<StoryViewProps> = ({
     }
   };
 
-  const handleSubmitAction = (event: React.FormEvent) => {
+  const handleSubmitAction = async (event: React.FormEvent) => {
     event.preventDefault();
     const actionText = typedAction.trim();
-    if (!actionText || isProcessingAction) return;
+    if (!actionText || isProcessingAction || isProcessingOoc) return;
 
     triggerHaptic('medium');
     playSfx('ui.click', 'LOW', 0.5);
+
+    if (inputMode === 'OOC') {
+      setIsProcessingOoc(true);
+      setOocHistory((history) => [...history, { role: 'player', text: actionText }]);
+      setTypedAction('');
+      try {
+        const result = await apiClient.sendOocMessage(actionText, storyId);
+        setOocHistory((history) => [
+          ...history,
+          { role: 'assistant', text: result.response || 'I could not produce an OOC response.' },
+        ]);
+      } catch (error: any) {
+        setOocHistory((history) => [
+          ...history,
+          { role: 'assistant', text: error?.message || 'The OOC assistant could not respond.' },
+        ]);
+      } finally {
+        setIsProcessingOoc(false);
+      }
+      return;
+    }
+
     onCustomAction?.(actionText);
     setTypedAction('');
+  };
+
+  const handleContinueStory = () => {
+    if (isProcessingAction || isProcessingOoc) return;
+    triggerHaptic('medium');
+    playSfx('ui.click', 'LOW', 0.5);
+    onCustomAction?.('Continue the story naturally from the current moment without introducing an out-of-character explanation.');
   };
 
   const insertSuggestedAction = (suggestion: string) => {
@@ -779,6 +812,48 @@ export const StoryView: React.FC<StoryViewProps> = ({
           </div>
         </div>
 
+        <div className="mb-2 flex flex-wrap items-center gap-1.5 rounded-2xl border border-white/8 bg-[#0b0813]/70 p-1.5">
+          <button
+            type="button"
+            onClick={() => setInputMode('STORY')}
+            className={`rounded-xl px-3 py-1.5 text-[11px] font-semibold transition ${inputMode === 'STORY' ? 'bg-violet-300 text-[#170c25]' : 'text-stone-500 hover:bg-white/[0.04] hover:text-stone-200'}`}
+          >
+            Story
+          </button>
+          <button
+            type="button"
+            onClick={() => setInputMode('OOC')}
+            className={`rounded-xl px-3 py-1.5 text-[11px] font-semibold transition ${inputMode === 'OOC' ? 'bg-sky-300 text-[#07131d]' : 'text-stone-500 hover:bg-white/[0.04] hover:text-stone-200'}`}
+          >
+            OOC
+          </button>
+          <button
+            type="button"
+            onClick={handleContinueStory}
+            disabled={isProcessingAction || isProcessingOoc}
+            className="ml-auto inline-flex items-center gap-1.5 rounded-xl border border-fuchsia-300/20 bg-fuchsia-300/10 px-3 py-1.5 text-[11px] font-semibold text-fuchsia-100 transition hover:bg-fuchsia-300/15 disabled:opacity-40"
+            title="Ask the narrator to continue from the current moment"
+          >
+            <ArrowRight className="h-3.5 w-3.5" />
+            Continue
+          </button>
+        </div>
+
+        {oocHistory.length > 0 && (
+          <div className="mb-3 max-h-52 space-y-2 overflow-y-auto rounded-2xl border border-sky-300/10 bg-sky-400/[0.03] p-3">
+            {oocHistory.slice(-8).map((entry, index) => (
+              <div key={`ooc-${index}`} className={entry.role === 'player' ? 'text-right' : 'text-left'}>
+                <div className={`inline-block max-w-[90%] rounded-2xl px-3 py-2 text-xs leading-5 ${entry.role === 'player' ? 'bg-sky-300/10 text-sky-100' : 'bg-white/[0.04] text-stone-300'}`}>
+                  <div className="mb-0.5 text-[9px] font-bold uppercase tracking-[0.16em] opacity-50">
+                    {entry.role === 'player' ? 'OOC' : 'DreamBook OOC'}
+                  </div>
+                  {entry.text}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         <form onSubmit={handleSubmitAction} className="flex items-center gap-2">
           <div className="relative shrink-0">
             <button
@@ -883,14 +958,18 @@ export const StoryView: React.FC<StoryViewProps> = ({
             type="text"
             value={typedAction}
             onChange={(event) => setTypedAction(event.target.value)}
-            disabled={isProcessingAction || isRecording}
+            disabled={isProcessingAction || isProcessingOoc || isRecording}
             placeholder={
               isRecording
                 ? 'Listening…'
                 : isTranscribing
                 ? 'Transcribing…'
+                : isProcessingOoc
+                ? 'DreamBook is answering…'
                 : isProcessingAction
                 ? 'The world is responding…'
+                : inputMode === 'OOC'
+                ? 'Ask OOC about your character, rules, lore, inventory, or the current story…'
                 : 'Describe what you do…'
             }
             className="h-12 min-w-0 flex-1 rounded-2xl border border-violet-400/10 bg-black/20 px-4 text-sm text-stone-100 placeholder:text-stone-600 focus:border-violet-400/40 focus:outline-none focus:ring-2 focus:ring-violet-500/10"
@@ -898,7 +977,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
 
           <button
             type="submit"
-            disabled={!typedAction.trim() || isProcessingAction || isRecording}
+            disabled={!typedAction.trim() || isProcessingAction || isProcessingOoc || isRecording}
             className="flex h-12 shrink-0 items-center gap-2 rounded-2xl bg-gradient-to-r from-violet-300 to-fuchsia-300 px-5 text-sm font-semibold text-[#160b22] transition hover:from-violet-200 hover:to-fuchsia-200 disabled:cursor-not-allowed disabled:opacity-30"
           >
             {isProcessingAction ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}

@@ -86,7 +86,6 @@ export class CombatEncounterService {
       label = capability.name;
       mechanical = combatEffectEngine.resolve(combat, params.actorId, [params.targetId], {
         ...capability.effectDefinition,
-        advantage: Boolean(capability.effectDefinition.advantage || params.advantageFromAmbush),
       } as CombatEffectDefinition, { consumeAction: false });
     } else {
       const spellName = text.replace(/^cast\s+/, '').replace(/^use\s+/, '').trim();

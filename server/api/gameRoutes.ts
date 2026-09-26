@@ -3,6 +3,7 @@ import { serverMockAuthority } from '../mockEngine/serverMockAuthority';
 import { ActionRequest } from '../mockEngine/serverTypes';
 import { worldRepository } from '../repositories/worldRepository';
 import { NpcTacticalDecisionPolicy } from '../domain/tacticalDecisionPolicy';
+import { combatEncounterService } from '../domain/combatEncounterService';
 import { combatTacticsService } from '../domain/combatTacticsService';
 import { PlayerLifecycleState } from '../domain/playerLifecycleState';
 import { OpeningSceneService } from '../services/openingSceneService';
@@ -2990,7 +2991,7 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
       name: player?.name || 'Vael the Seeker',
       x: 1,
       y: 1,
-      initiative: 18,
+      initiative: 0,
       initiativeModifier: dexMod,
       saveModifiers: {
         STR: strMod,
@@ -3093,7 +3094,7 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
           name: enemyName,
           x: 4,
           y: 3,
-          initiative: 11,
+          initiative: 0,
           team: 'enemies',
           hpCurrent: enemyHp,
           hpMax: enemyHp,
@@ -3112,7 +3113,7 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
         name: enemyName,
         x: 4,
         y: 3,
-        initiative: 11,
+        initiative: 0,
         team: 'enemies',
         hpCurrent: enemyHp,
         hpMax: enemyHp,
@@ -3136,19 +3137,18 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
       damagePerTurn: 4,
     });
 
-    combatEngine.rollInitiative();
-
-    const npcResolution = await resolveNpcTurnsUntilPlayer(
-      storyId,
-      actorId,
-      transactionRepo,
-    );
+    combatEngine.prepareEncounter({
+      resetInitiatives: true,
+      banner: 'Combat initiated. Roll for initiative.',
+      encounterId: deterministicId('encounter', storyId, enemyId, combatEngine.getCurrentRound(), combatEngine.getDiceEngine().getRollCounter()),
+      encounterSource: 'SYSTEM',
+    });
 
         const state = getCombatStateHelper(combatEngine, storyId, actorId, transactionRepo);
         return {
           success: true,
-          data: { combatState: state, npcResolution },
-          summary: 'Tactical combat encounter initialized and NPC turns resolved through combat.tactics until the player turn.',
+          data: { combatState: state },
+          summary: 'Tactical combat encounter initialized. Initiative is pending player input.',
         };
       }
     );

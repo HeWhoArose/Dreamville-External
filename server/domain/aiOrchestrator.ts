@@ -3698,6 +3698,7 @@ export class MultiModelOrchestrator {
               capabilities.has('fast') ||
               capabilities.has('reasoning') ||
               capabilities.has('structured_output') ||
+              capabilities.has('deep_reasoning') ||
               capabilities.has('text')
             )) ||
             (required === 'structured_output' && model.hasStructuredOutput === true);

@@ -80,9 +80,16 @@ export class CombatPlayerActionService {
     if (saveRoll) rolls.push({ label: mechanical.spellResult.savingThrowResult.ability + ' Saving Throw', roll: saveRoll, total: saveRoll.total, kind: 'SAVE' });
     if (damageRoll) rolls.push({ label: 'Damage', roll: damageRoll, total: damageRoll.total, kind: 'DAMAGE' });
     const hits = mechanical.attackResult?.hits ?? mechanical.spellResult?.attackResult?.hits ?? (mechanical.spellResult?.savingThrowResult ? !mechanical.spellResult.savingThrowResult.succeeds : undefined);
+    const saveResult = mechanical.spellResult?.savingThrowResult;
     const damage = Number(mechanical.totalDamage || 0);
     const targetName = targetId ? (combat.getParticipant(targetId)?.name || 'target') : 'the battlefield';
-    const mechanicalSummary = actionLabel + ': ' + (hits === false ? 'failed to hit or overcome the defense' : 'resolved') + (damage > 0 ? ' for ' + damage + ' damage.' : '.');
+    const mechanicalSummary = actionLabel + ': ' + (
+      saveResult
+        ? (saveResult.succeeds ? saveResult.ability + ' save succeeded; the spell effect was partially avoided.' : saveResult.ability + ' save failed; the spell effect landed.')
+        : hits === false
+          ? 'failed to hit or overcome the defense.'
+          : 'resolved successfully.'
+    ) + (damage > 0 ? ' Damage: ' + damage + '.' : '');
     const narration = await this.generateNarration(params, mechanicalSummary, targetName, updatedTargets[0]?.hpCurrent);
     const resolution: CombatNarrativeResolution = {
       id: deterministicId('combat_player_resolution', params.storyId, params.actorId, params.actionText, combat.getCurrentRound(), combat.getDiceEngine().getRollCounter()),

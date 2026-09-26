@@ -3087,6 +3087,39 @@ export class InMemoryWorldRepository implements WorldRepository {
     this.livingSimulations.delete(storyId);
     this.dynamicCharacterAgencyEngines.delete(storyId);
     this.npcLifecycles.delete(storyId);
+    this.restRecoveryEngines.delete(storyId);
+    this.phase8SimulationEngines.delete(storyId);
+    this.storyCheckEngines.delete(storyId);
+    this.activeEffects.delete(storyId);
+    this.storyThreads.delete(storyId);
+    this.worldFactsMap.delete(storyId);
+    this.protagonistAgendas.delete(storyId);
+    this.characterDraftsMap.delete(storyId);
+    this.confirmedCharactersMap.delete(storyId);
+    this.dynamicCharacterAgencyEngines.delete(storyId);
+    this.persistLibrary();
+  }
+
+  public deleteWorldTemplate(worldId: string): { success: boolean; deletedRunIds: string[] } {
+    if (!worldId) return { success: false, deletedRunIds: [] };
+
+    const linkedRunIds = this.getAllStoryRuns()
+      .filter((run: any) => run?.worldId === worldId)
+      .map((run: any) => String(run.storyId || run.id))
+      .filter(Boolean);
+
+    for (const runId of linkedRunIds) {
+      this.deleteStoryRun(runId);
+    }
+
+    const deleted = this.worldTemplates.delete(worldId);
+    if (deleted) {
+      this.confirmedCharactersMap.delete(worldId);
+      this.characterDraftsMap.delete(worldId);
+      this.persistLibrary();
+    }
+
+    return { success: deleted, deletedRunIds: linkedRunIds };
   }
 }
 

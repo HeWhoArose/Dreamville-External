@@ -152,8 +152,8 @@ export const StoryContextShell: React.FC<StoryContextShellProps> = ({
             default: return <Compass className="h-4 w-4" />;
           }
         };
-        // Character, World, Inventory, Map, and Combat are primary in-story tools; journal and diagnostics stay in More.
-        // Story, inventory, map, and active combat remain the primary in-scene tools.
+        // The core story bar is deliberately fixed to the player's most-used destinations.
+        // Quests, Journal, Codex, and Recent Actions remain in More.
         const primaryIds = new Set(['story', 'character', 'inventory', 'world', 'map', 'combat']);
         const primaryEntries = storyMenu.filter((entry) => primaryIds.has(entry.id) && entry.visible);
         const moreEntries = storyMenu.filter((entry) => !primaryIds.has(entry.id) && entry.visible);

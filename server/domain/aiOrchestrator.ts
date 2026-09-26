@@ -5435,8 +5435,24 @@ export class MultiModelOrchestrator {
       }
     }
 
-    const candidateChain: ModelRegistryRecord[] = selectedCandidates
+    let candidateChain: ModelRegistryRecord[] = selectedCandidates
       .filter((model) => model.isEmergencyFloor || this.isCandidateUsable(model, task, contextTokens));
+
+    // Final preflight recovery: count only models that can actually be contacted.
+    // This prevents unusable configured entries from consuming the fallback slots.
+    const runnableNonEmergency = candidateChain.filter(
+      (model) => !model.isEmergencyFloor && Boolean(this.getAdapter(model.providerId))
+    ).length;
+
+    if (runnableNonEmergency < 2) {
+      for (const model of usableCandidates) {
+        if (candidateChain.some((candidate) => this.modelKey(candidate) === this.modelKey(model))) continue;
+        if (!this.getAdapter(model.providerId)) continue;
+        candidateChain.push(model);
+        if (candidateChain.filter((candidate) => !candidate.isEmergencyFloor && Boolean(this.getAdapter(candidate.providerId))).length >= 4) break;
+      }
+    }
+
     let totalAttempts = 0;
     let lastError = '';
     const attemptsTrail: Array<{

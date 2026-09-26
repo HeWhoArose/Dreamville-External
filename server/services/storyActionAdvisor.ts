@@ -125,6 +125,16 @@ function buildSimulationEnvironment(
 	};
 }
 
+function capabilityEngineActionNameHint(actionText: string, capabilityNames: string[]): boolean {
+	const normalizedAction = normalize(actionText);
+	return capabilityNames
+		.filter(Boolean)
+		.some((name) => {
+			const normalizedName = normalize(name);
+			return normalizedName.length > 2 && normalizedAction.includes(normalizedName);
+		});
+}
+
 function actorNarrativeText(run: any): string {
 	const protagonist = run?.protagonist || {};
 	const role = protagonist?.role || {};
@@ -330,7 +340,12 @@ export class StoryActionAdvisor {
 		const cleanAction = String(actionText || '').trim();
 		const ordinaryActionPattern = /^(?:i|we|the character|my character)\s+(?:walk|walks|move|moves|step|steps|approach|approaches|go|goes|head|heads|travel|travels|look|looks|observe|observes|inspect|inspects|search|searches|listen|listens|wait|waits|rest|rests|sit|sits|stand|stands|touch|touches|pick up|picks up|take|takes|open|opens|close|closes|enter|enters|leave|leaves|follow|follows|speak|speaks|talk|talks|ask|asks|say|says)\b/i;
 		const explicitCapabilityIntent = new CapabilitySimulationEngine().isCapabilityLikeRequest(cleanAction);
-		if (cleanAction && ordinaryActionPattern.test(cleanAction) && !explicitCapabilityIntent) {
+		const looksLikeExplicitCapabilityCommand = /\b(use|cast|activate|invoke|trigger|channel|release)\b/i.test(cleanAction)
+			|| capabilityEngineActionNameHint(cleanAction, this.repository.getCapabilityEngine(storyId).getEffectiveActorCapabilities(
+				actorId,
+				this.repository.getInventoryEngine(storyId),
+			).map((capability) => capability.name));
+		if (cleanAction && ordinaryActionPattern.test(cleanAction) && !looksLikeExplicitCapabilityCommand) {
 			const tips = await this.generateTips(storyId, actorId, cleanAction, [], canonicalSceneContext);
 			return {
 				mode: 'NORMAL_ACTION',

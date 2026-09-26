@@ -16,6 +16,7 @@ interface ChronicleViewProps {
   storyId?: string;
   actionHistory: any[];
   dialogueHistory?: Array<{ speaker: string; text: string; cycle: number }>;
+  initialSection?: 'quests' | 'journal';
 }
 
 type QuestStatus = 'ACTIVE' | 'COMPLETED' | 'FAILED';
@@ -50,8 +51,9 @@ export const ChronicleView: React.FC<ChronicleViewProps> = ({
   storyId,
   actionHistory = [],
   dialogueHistory = [],
+  initialSection = 'quests',
 }) => {
-  const [section, setSection] = useState<'quests' | 'journal'>('quests');
+  const [section] = useState<'quests' | 'journal'>(initialSection);
   const [questTab, setQuestTab] = useState<'ACTIVE' | 'COMPLETED' | 'FAILED'>('ACTIVE');
   const [quests, setQuests] = useState<{ active: QuestRecord[]; completed: QuestRecord[]; failed: QuestRecord[] }>({
     active: [],
@@ -105,7 +107,12 @@ export const ChronicleView: React.FC<ChronicleViewProps> = ({
         kind: 'action',
         cycle: Number(action.cycle) || 0,
         actionText: actionText || 'Action recorded.',
-        outcomeText: outcomeText || undefined,
+        outcomeText:
+          outcomeText &&
+          outcomeText !== actionText &&
+          action.epistemicValidation !== 'REJECTED_BY_ENGINE'
+            ? outcomeText
+            : undefined,
       });
     }
 
@@ -155,31 +162,19 @@ export const ChronicleView: React.FC<ChronicleViewProps> = ({
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-violet-300/75">Story record</p>
-            <h1 className="mt-1 font-serif text-2xl font-semibold text-white sm:text-3xl">Quests & Journal</h1>
+            <h1 className="mt-1 font-serif text-2xl font-semibold text-white sm:text-3xl">
+              {section === 'quests' ? 'Quests' : 'Journal'}
+            </h1>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-stone-500">
-              Quests hold your objectives. Journal keeps a readable record of your actions, their outcomes, and important conversations.
+              {section === 'quests'
+                ? 'Track active, completed, and failed objectives recorded by the canonical story state.'
+                : 'A player-visible timeline of your actions, their outcomes, and important conversations.'}
             </p>
           </div>
           <ScrollText className="hidden h-8 w-8 text-violet-300/60 sm:block" />
         </div>
 
-        <div className="mt-5 inline-flex rounded-2xl border border-white/8 bg-black/20 p-1">
-          <button
-            type="button"
-            onClick={() => setSection('quests')}
-            className={`rounded-xl px-4 py-2 text-sm font-medium ${section === 'quests' ? 'bg-violet-500/15 text-white' : 'text-stone-500 hover:text-stone-200'}`}
-          >
-            <span className="inline-flex items-center gap-2"><ClipboardList className="h-4 w-4" /> Quests</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setSection('journal')}
-            className={`rounded-xl px-4 py-2 text-sm font-medium ${section === 'journal' ? 'bg-violet-500/15 text-white' : 'text-stone-500 hover:text-stone-200'}`}
-          >
-            <span className="inline-flex items-center gap-2"><History className="h-4 w-4" /> Journal</span>
-          </button>
-        </div>
-      </header>
+     </header>
 
       {section === 'quests' ? (
         <section className="space-y-4">
@@ -313,7 +308,9 @@ export const ChronicleView: React.FC<ChronicleViewProps> = ({
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <h3 className="text-sm font-medium text-stone-200">
-                        {entry.kind === 'dialogue' ? entry.speaker : 'Your move'}
+                        {entry.kind === 'dialogue'
+                          ? entry.speaker
+                          : 'Story action'}
                       </h3>
                       <span className="text-[10px] uppercase tracking-[0.14em] text-stone-600">
                         Cycle {entry.cycle}

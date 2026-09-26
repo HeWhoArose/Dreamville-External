@@ -103,7 +103,9 @@ const CHECK_PROFILES: CheckProfile[] = [
   { skill: 'Religion', ability: 'Intelligence', keywords: ['religion', 'deity', 'god', 'temple', 'holy', 'sacred', 'divine'], dc: 13, reason: 'Recognizing religious or divine knowledge.' },
   { skill: 'Persuasion', ability: 'Charisma', keywords: ['persuade', 'convince', 'negotiate', 'bargain', 'reason with'], dc: 12, reason: 'Influencing someone through honest persuasion.' },
   { skill: 'Deception', ability: 'Charisma', keywords: ['lie', 'deceive', 'mislead', 'bluff', 'pretend', 'disguise'], dc: 13, reason: 'Convincing others of something untrue or misleading.' },
+  { skill: 'Insight', ability: 'Wisdom', keywords: ['read them', 'read him', 'read her', 'read the room', 'detect lie', 'detect lies', 'motive', 'motives', 'intuition', 'sense their intent', 'sense his intent', 'sense her intent', 'insight'], dc: 12, reason: 'Reading a creature\'s intentions, emotional state, or deception.' },
   { skill: 'Intimidation', ability: 'Charisma', keywords: ['intimidate', 'threaten', 'coerce', 'scare'], dc: 12, reason: 'Using pressure or threat to influence someone.' },
+  { skill: 'Performance', ability: 'Charisma', keywords: ['perform', 'performance', 'sing', 'dance', 'act', 'play music', 'play an instrument', 'entertain', 'entertaining', 'recite', 'stage'], dc: 12, reason: 'Using artistic or theatrical performance to influence the scene.' },
   { skill: 'Animal Handling', ability: 'Wisdom', keywords: ['calm the horse', 'handle the beast', 'handle the animal', 'soothe the animal', 'calm the animal'], dc: 11, reason: 'Handling or calming an animal.' },
   { skill: 'Sleight of Hand', ability: 'Dexterity', keywords: ['pickpocket', 'palming', 'sleight', 'lift the coin', 'conceal the item'], dc: 13, reason: 'Performing precise manual manipulation unnoticed.' },
 ];

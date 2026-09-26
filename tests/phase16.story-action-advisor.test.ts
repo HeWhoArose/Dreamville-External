@@ -272,7 +272,12 @@ test('Phase 16 regression: exact ordinary movement stays narrative and receives 
 	seedRun(repository, storyId, 'Unknown Dark Knight');
 
 	const advisor = new StoryActionAdvisor(repository);
-	const advice = await advisor.advise(storyId, 'i move towards the structure');
+	const advice = await advisor.advise(storyId, 'i move towards the structure', {
+		locationName: 'Abyssal Trench',
+		locationDescription: 'A sealed structure rises from the dark water beside fresh footprints.',
+		startingSituation: 'A disturbance is coming from the structure.',
+		recentActions: ['The ground trembled moments ago.'],
+	});
 
 	assert.equal(advice.mode, 'NORMAL_ACTION');
 	assert.equal(advice.canExecuteNow, true);

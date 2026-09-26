@@ -12,6 +12,7 @@ import {
 } from '../types';
 import { useAudioHaptic } from './AudioHapticManager';
 import { apiClient } from '../services/apiClient';
+import { mergeSuggestedActionText } from '../utils/storyActionComposer';
 import { getCharacterSpeakerTheme } from './voiceResolver';
 import { DiceRollAnimation } from './common/DiceRollAnimation';
 import {
@@ -60,13 +61,6 @@ interface StoryViewProps {
   onRetryOpening?: () => void;
   combatTransition?: CombatTransitionState | null;
   onEnterCombat?: () => void;
-}
-
-export function mergeSuggestedActionText(current: string, suggestion: string): string {
-  const cleanSuggestion = suggestion.trim();
-  if (!cleanSuggestion) return current;
-  const cleanCurrent = current.trim();
-  return cleanCurrent ? cleanCurrent + ' ' + cleanSuggestion : cleanSuggestion;
 }
 
 const StoryCheckCard: React.FC<{

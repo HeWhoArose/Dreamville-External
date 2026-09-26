@@ -31,6 +31,7 @@ import { combatEnvironmentEngine } from '../domain/combatEnvironmentEngine';
 import { mediaAdapterService } from '../services/mediaAdapterService';
 import { buildComicScenePrompt, ComicSceneContext } from '../services/comicSceneGenerator';
 import { projectPlayerCapabilities } from './playerCapabilityProjection';
+import { oocToolRegistry, type OocToolCall } from '../domain/oocToolRegistry';
 
 export const gameRouter = Router();
 import { sensoryRouter } from './sensoryRoutes';
@@ -180,6 +181,23 @@ gameRouter.get('/action/tips', async (req: Request, res: Response) => {
  * Preflight advice for a freeform story action.
  * Never mutates canonical state.
  */
+function parseOocToolResponse(text: string): { response: string; toolCall?: OocToolCall } {
+	const clean = String(text || '').trim();
+	const candidates = [clean, clean.replace(/^\`\`\`(?:json)?\s*/i, '').replace(/\s*\`\`\`$/i, '')];
+	for (const candidate of candidates) {
+		try {
+			const parsed = JSON.parse(candidate);
+			if (parsed && typeof parsed === 'object' && typeof parsed.response === 'string') {
+				const toolCall = parsed.toolCall && typeof parsed.toolCall === 'object'
+					? { name: String(parsed.toolCall.name || ''), arguments: parsed.toolCall.arguments || {} }
+					: undefined;
+				return { response: parsed.response.trim(), toolCall };
+			}
+		} catch {}
+	}
+	return { response: clean };
+}
+
 gameRouter.post('/action/ooc', async (req: Request, res: Response) => {
   try {
     const storyId = resolveStoryId(req, true);
@@ -198,7 +216,7 @@ gameRouter.post('/action/ooc', async (req: Request, res: Response) => {
       'Answer questions using only the supplied canonical working context and clearly mark uncertainty when the context does not contain the answer.',
       'You may explain rules, character abilities, current conditions, inventory, known lore, recent events, and what is currently happening.',
       'Never claim that a canonical state change happened merely because the player asked for it.',
-      'If the player asks to change game state, explain what can be done and return a concise suggested action request for the game layer rather than fabricating completion.',
+      'If the player explicitly requests a supported state change, return JSON with response and an optional toolCall {name, arguments}. Never claim completion before the tool result exists. Only use tools from the supplied canonical OOC tool registry.',
       'Do not write story narration unless the player explicitly asks for an explanation of what is happening.',
     ].join(' ');
     const generated = await orchestrator.executeTaskGeneration(
@@ -210,11 +228,25 @@ gameRouter.post('/action/ooc', async (req: Request, res: Response) => {
     if (!generated.text) {
       return res.status(503).json({ success: false, errorReason: generated.fallbackReason || 'OOC assistant could not produce a response.' });
     }
+    const agent = parseOocToolResponse(generated.text);
+    let toolResult: any = undefined;
+    if (agent.toolCall?.name) {
+      toolResult = await oocToolRegistry.execute(worldRepository, {
+        storyId,
+        actorId: worldRepository.getPlayerLifecycle(storyId)?.actorId || `player_actor_${storyId}`,
+        call: agent.toolCall,
+        sequence: worldRepository.getCanonicalCommandEvents(storyId).length + 1,
+      });
+    }
     return res.json({
       success: true,
       storyId,
       message,
-      response: generated.text.trim(),
+      response: toolResult
+        ? (agent.response + (toolResult.success ? '\\n\\n✓ ' : '\\n\\n✗ ') + toolResult.message).trim()
+        : agent.response,
+      toolCall: agent.toolCall || null,
+      toolResult: toolResult || null,
       modelId: generated.modelId,
       providerId: generated.providerId,
       contextTokens: context.totalTokens,
@@ -224,6 +256,39 @@ gameRouter.post('/action/ooc', async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, errorReason: error?.message || 'Failed to answer OOC request.' });
   }
 });
+
+/**
+ * GET /api/game/action/ooc/tools
+ * Lists the canonical tools available to the OOC agent.
+ */
+gameRouter.get('/action/ooc/tools', (_req: Request, res: Response) => {
+	res.json({ success: true, tools: oocToolRegistry.listTools() });
+});
+
+/**
+ * POST /api/game/action/ooc/tool
+ * Executes one explicitly requested OOC tool through canonical authority.
+ */
+gameRouter.post('/action/ooc/tool', async (req: Request, res: Response) => {
+	try {
+		const storyId = resolveStoryId(req, true);
+		const actorId = worldRepository.getPlayerLifecycle(storyId)?.actorId || `player_actor_${storyId}`;
+		const call = req.body?.toolCall;
+		if (!call || typeof call.name !== 'string') {
+			return res.status(400).json({ success: false, errorReason: 'toolCall.name is required.' });
+		}
+		const result = await oocToolRegistry.execute(worldRepository, {
+			storyId,
+			actorId,
+			call,
+			sequence: worldRepository.getCanonicalCommandEvents(storyId).length + 1,
+		});
+		return res.status(result.success ? 200 : 400).json(result);
+	} catch (error: any) {
+		return res.status(500).json({ success: false, errorReason: error?.message || 'OOC tool execution failed.' });
+	}
+});
+
 gameRouter.post('/action/advice', async (req: Request, res: Response) => {
   try {
     const storyId = resolveStoryId(req, true);

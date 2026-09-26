@@ -446,6 +446,66 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
           ],
         });
         break;
+      case 'intent.interpret':
+        text = JSON.stringify({
+          baseAction: 'INTERACT',
+          intent: 'INTERACT',
+          requestedEffects: [],
+          modifiers: [],
+          target: '',
+          confidence: 0.55,
+        });
+        break;
+      case 'capability.synthesize':
+      case 'character.capability.propose':
+        text = JSON.stringify({
+          name: 'Deterministic Proposed Capability',
+          category: 'General',
+          activationMode: 'action',
+          powerTier: 'Minor',
+          baseEnergyCost: 0,
+          baseStrainCost: 0,
+          minVesselCapacityRequired: 0,
+          description: 'No AI capability synthesis was available; canonical systems must validate any proposal before use.',
+          targetType: 'self',
+          rangeScope: 'self',
+          actionType: 'INTERACT',
+        });
+        break;
+      case 'capability.explain':
+        text = 'The canonical capability and rules engines remain authoritative. No additional AI explanation was available.';
+        break;
+      case 'research.query':
+      case 'research.world-brief':
+        text = JSON.stringify({
+          brief: 'No external research was available. Use only supplied world information and canonical deterministic rules.',
+          facts: [],
+          themes: [],
+          constraints: [],
+        });
+        break;
+      case 'rules.analyze':
+        text = JSON.stringify({
+          analysis: 'No advisory rule analysis was available. Canonical rule resolution remains authoritative.',
+        });
+        break;
+      case 'tactical.reason':
+      case 'combat.tactics':
+        text = JSON.stringify({
+          plan: 'No AI tactical plan was available. Preserve the canonical combat state and use deterministic combat rules.',
+        });
+        break;
+      case 'utility.inspect':
+        text = JSON.stringify({
+          success: true,
+          result: 'Deterministic inspection completed.',
+        });
+        break;
+      case 'narrative.review':
+        text = JSON.stringify({
+          review: 'No AI review was available; preserve canonical content without alteration.',
+        });
+        break;
       case 'narrative.generate':
       default:
         if (

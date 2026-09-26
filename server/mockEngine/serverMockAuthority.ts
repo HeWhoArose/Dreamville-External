@@ -629,8 +629,8 @@ export class ServerMockAuthority {
         ? storyCheck.ability + ' saving throw'
         : storyCheck.skill + ' check';
       committedOutcome = storyCheck.success
-        ? testLabel + ': ' + storyCheck.total + ' vs DC ' + storyCheck.difficultyClass + ' — success.'
-        : testLabel + ': ' + storyCheck.total + ' vs DC ' + storyCheck.difficultyClass + ' — failure.';
+        ? testLabel + ' succeeded. Narrate the visible result and immediate consequence naturally.'
+        : testLabel + ' failed. Narrate the visible failure and immediate consequence naturally.';
 
       if (authoredChallenge) {
         const consequence = storyCheckConsequenceEngine.apply(

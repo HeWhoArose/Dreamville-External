@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { WorldTemplate, WorldSearchCriteria, WorldSynthesisInput, CharacterStoryMode, DndRulesMode } from '../types';
+import { WorldTemplate, WorldSearchCriteria, WorldSynthesisInput, CharacterStoryMode, DndRulesMode , Trash2} from '../types';
 import { WorldArtCover } from './common/WorldArtCover';
 import { apiClient } from '../services/apiClient';
 import {
@@ -30,6 +30,7 @@ interface WorldLibraryModalProps {
   onClose: () => void;
   onSelectRun?: (storyId: string) => void;
   onGenesisCharacter?: (world: WorldTemplate) => void;
+  onDeleteWorld?: (world: WorldTemplate) => void | Promise<void>;
 }
 
 export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
@@ -593,6 +594,21 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
                           <User className="w-3.5 h-3.5" />
                           <span className="hidden sm:inline">Create Character</span>
                           <span className="sm:hidden">Character</span>
+                        </button>
+                      )}
+                      {onDeleteWorld && (
+                        <button
+                          id={`delete-world-btn-${w.worldId}`}
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onDeleteWorld(w);
+                          }}
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-rose-700/50 bg-rose-950/30 hover:bg-rose-900/40 text-rose-300 text-xs font-medium transition"
+                          title="Delete World"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Delete</span>
                         </button>
                       )}
                       <button

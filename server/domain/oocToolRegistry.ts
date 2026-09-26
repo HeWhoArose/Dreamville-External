@@ -196,6 +196,7 @@ export class OocToolRegistry {
 
 				case 'equip_item':
 					return this.executeCanonicalMutation({
+		repository,
 						storyId,
 						actorId,
 						toolName: call.name,
@@ -209,6 +210,7 @@ export class OocToolRegistry {
 
 				case 'unequip_item':
 					return this.executeCanonicalMutation({
+		repository,
 						storyId,
 						actorId,
 						toolName: call.name,
@@ -219,6 +221,7 @@ export class OocToolRegistry {
 
 				case 'use_item':
 					return this.executeCanonicalMutation({
+		repository,
 						storyId,
 						actorId,
 						toolName: call.name,
@@ -229,6 +232,7 @@ export class OocToolRegistry {
 
 				case 'use_ability':
 					return this.executeCanonicalMutation({
+		repository,
 						storyId,
 						actorId,
 						toolName: call.name,
@@ -254,6 +258,7 @@ export class OocToolRegistry {
 						return { name: call.name, success: false, message: 'hitDiceToSpend must be an integer from 0 to 20.' };
 					}
 					return this.executeCanonicalMutation({
+		repository,
 						storyId,
 						actorId,
 						toolName: call.name,
@@ -275,6 +280,7 @@ export class OocToolRegistry {
 						return { name: call.name, success: false, message: 'seconds must be between 1 and 86400.' };
 					}
 					return this.executeCanonicalMutation({
+		repository,
 						storyId,
 						actorId,
 						toolName: call.name,

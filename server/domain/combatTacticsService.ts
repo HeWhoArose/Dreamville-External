@@ -4,6 +4,7 @@ import { TacticalCombatEngine, BattlefieldParticipant, CombatPerceptionOptions }
 import { CapabilityEngine } from './capabilityEngine';
 import type { TacticalPlanState, TacticalPlanStepState } from '../../src/types';
 import type { WorldRepository } from '../repositories/worldRepository';
+import { NpcAutonomyEngine, type NpcAgentState, type NpcDecision } from './npcAutonomyEngine';
 
 interface CombatTacticsAiStep {
 	id?: string;
@@ -224,6 +225,67 @@ export class CombatTacticsService {
 			.map((value) => String(value).toLowerCase())
 			.filter((value) => value.length >= 3)
 			.slice(0, 12);
+		const autonomyEngine = new NpcAutonomyEngine();
+		const autonomyState: NpcAgentState = autonomyEngine.createState(
+			actorId,
+			repository.getWorldClock(storyId).getTimestamp().totalElapsedSeconds,
+		);
+		if (agency) {
+			autonomyState.goals = (agency.goals || []).map((goal: any) => ({
+				id: goal.goalId,
+				description: goal.description || goal.title,
+				priority: Number(goal.priority || 0),
+				visibility: 'PRIVATE',
+				active: goal.active !== false,
+			}));
+			autonomyState.fears = [...(agency.fears || [])];
+			autonomyState.desires = [...(agency.desires || [])];
+			autonomyState.loyalties = agency.factionId ? { [agency.factionId]: Number(agency.personality?.factionLoyalty || 0) } : {};
+			autonomyState.beliefs = repository.getDynamicCharacterAgencyEngine(storyId)
+			.getBeliefs(storyId, actorId)
+			.map((belief: any) => ({
+				id: belief.beliefId,
+				factId: belief.believedValue,
+				confidence: belief.confidence,
+				source: belief.sourceEventIds?.[0] || 'agency',
+			}));
+			autonomyState.riskTolerance = Number(actorIntelligence.riskTolerance || 50);
+		const autonomyActions = [
+			{
+				id: 'deterministic:' + deterministicProposal.actionType,
+				description: deterministicProposal.reason,
+				targetEntityId: deterministicProposal.targetId,
+				baseUtility: deterministicProposal.priorityScore,
+				risk: Math.max(0, 100 - deterministicProposal.priorityScore),
+			},
+			{
+				id: 'end_turn',
+				description: 'End the current turn without taking a new tactical action.',
+				baseUtility: 5,
+				risk: 0,
+			},
+		];
+		if (currentPlan?.steps?.[currentPlan.currentStepIndex]) {
+			const plannedStep = currentPlan.steps[currentPlan.currentStepIndex];
+			autonomyActions.push({
+				id: 'plan:' + plannedStep.id,
+				description: plannedStep.actionType + (plannedStep.targetId ? ' against ' + plannedStep.targetId : ''),
+				targetEntityId: plannedStep.targetId,
+				baseUtility: 60 + Math.max(0, 20 - currentPlan.currentStepIndex * 5),
+				risk: plannedStep.actionType === 'RETREAT' ? 15 : 40,
+			});
+		}
+		const autonomyDecision: NpcDecision | undefined = autonomyEngine.decide(
+			autonomyState,
+			{
+				actorId,
+				availableActions: autonomyActions,
+				knownFactIds: [],
+				opportunityScore: 0,
+				nowSeconds: repository.getWorldClock(storyId).getTimestamp().totalElapsedSeconds,
+			},
+		);
+
 		const tacticalMemories = repository.getMemoryEngine(storyId).retrieveMemories({
 			storyId,
 			viewerActorId: actorId,
@@ -272,6 +334,13 @@ export class CombatTacticsService {
 			pendingActivation: combatEngine.getPendingActivation(actorId),
 			capabilities: effectiveCapabilities,
 			currentPlan,
+			npcAutonomy: autonomyDecision ? {
+				actionId: autonomyDecision.actionId,
+				utility: autonomyDecision.utility,
+				deception: autonomyDecision.deception,
+				goalId: autonomyDecision.goalId,
+				rationale: autonomyDecision.rationale,
+			} : null,
 			tacticalMemory: tacticalMemories.map((memory) => ({
 				id: memory.id,
 				content: memory.content,

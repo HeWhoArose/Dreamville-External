@@ -385,7 +385,7 @@ export class InMemoryWorldRepository implements WorldRepository {
 
   private seedDefaultTemplates(): void {
     if (this.worldTemplates.size === 0) {
-      this.worldTemplates.set('world_solar_archive', {
+      if (!this.isDeleted('WORLD', 'world_solar_archive')) this.worldTemplates.set('world_solar_archive', {
         worldId: 'world_solar_archive',
         title: 'Elysium Solar Citadel',
         worldManifestVersion: 1,
@@ -421,7 +421,7 @@ export class InMemoryWorldRepository implements WorldRepository {
         ],
       });
 
-      this.worldTemplates.set('world_shadow_depths', {
+      if (!this.isDeleted('WORLD', 'world_shadow_depths')) this.worldTemplates.set('world_shadow_depths', {
         worldId: 'world_shadow_depths',
         title: 'Shadow Depths of the Sunken Spire',
         worldManifestVersion: 1,
@@ -1226,6 +1226,7 @@ export class InMemoryWorldRepository implements WorldRepository {
   }
 
   private seedDefaultStory(storyId: string): void {
+    if (this.isDeleted('STORY_RUN', storyId)) return;
     if (!this.storyRuns.has(storyId)) {
       const defaultRun = {
         id: storyId,

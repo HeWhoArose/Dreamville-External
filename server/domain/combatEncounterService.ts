@@ -22,6 +22,14 @@ export class CombatEncounterService {
       .some((token) => text.includes(token));
   }
 
+  private isHostileCard(card: EntityCard, actorId: string, storyId: string, repository: WorldRepository): boolean {
+    if (card.classification.tags.some((tag) => this.hostileTags.has(tag.toLowerCase()))) return true;
+    const behavior = (card.behavior.combatBehavior || '') + ' ' + (card.behavior.threatResponse || '') + ' ' + (card.behavior.defaultBehavior || '');
+    if (/attack|hunt|hostile/i.test(behavior)) return true;
+    const relation = repository.getDynamicCharacterAgencyEngine(storyId).getRelationship(storyId, card.id, actorId);
+    return Boolean(relation && (relation.stance === 'ENEMY' || relation.stance === 'RIVAL' || relation.hostility >= 55));
+  }
+
   public findHostileCandidate(storyId: string, actorId: string, actionText: string, repository: WorldRepository): CombatEncounterCandidate | undefined {
     if (!this.isHostileAction(actionText)) return undefined;
     const player = repository.getPlayerLifecycle(storyId);

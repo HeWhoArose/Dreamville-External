@@ -1998,7 +1998,7 @@ export class CapabilityEngine {
       'enchant', 'manifest', 'transform', 'fireball', 'lightning',
       'weave', 'veil', 'aura', 'aegis', 'hex', 'starlight',
     ];
-    const hasCapabilityIntent = capabilityIntentKeywords.some((keyword) => normalizedText.includes(keyword));
+    const hasCapabilityIntent = capabilityIntentKeywords.some((keyword) => {\n      const escapedKeyword = keyword.replace(/[.*+?^\\${}()|[\\]\\\\]/g, '\\\\    const hasCapabilityIntent = capabilityIntentKeywords.some((keyword) => normalizedText.includes(keyword));');\n      return new RegExp('\\\\b' + escapedKeyword + '\\\\b', 'i').test(normalizedText);\n    });
     if (!hasCapabilityIntent) {
       return {
         interpretationType: 'UNSUPPORTED',

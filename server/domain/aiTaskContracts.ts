@@ -13,7 +13,21 @@ export interface AiTaskContract {
 	defaultMaxTokens: number;
 }
 
+const OOC_CONTRACT: AiTaskContract = {
+	task: 'ooc.respond',
+	category: 'gameplay_advice',
+	requiredCapabilities: ['text_generation'],
+	preferredCapabilities: ['fast', 'reasoning', 'long_context'],
+	requiredInputTypes: ['text'],
+	requiredOutputTypes: ['text', 'json'],
+	requiresStructuredOutput: false,
+	preferredPools: ['fast', 'reasoning', 'long_context'],
+	defaultTimeoutMs: 8000,
+	defaultMaxTokens: 1200,
+};
+
 const CONTRACTS: Record<TaskId, AiTaskContract> = {
+	'ooc.respond': OOC_CONTRACT,
 	'narrative.generate': {
 		task: 'narrative.generate',
 		category: 'narration',

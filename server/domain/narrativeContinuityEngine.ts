@@ -54,7 +54,7 @@ export class NarrativeContinuityEngine {
       storyId,
       viewerActorId,
       queryKeywords,
-      currentTurn: 1,
+      currentTurn: repository.getCanonicalCommandEvents(storyId).length + 1,
       currentTimestamp: clock.getTimestamp(),
       maxResults: 8,
       includeDormant: false,

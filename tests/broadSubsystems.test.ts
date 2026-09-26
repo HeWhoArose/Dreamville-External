@@ -1497,6 +1497,11 @@ describe('Broad Implementation Pass — Domain Subsystems', () => {
         roleEligibility: ['narrative.generate'],
       });
 
+      orchestrator.setFallbackChain('narrative.generate', [
+        'provider_test::tiny-context-model',
+        'provider_deterministic_emergency::emergency-fallback-local',
+      ]);
+
       // Query with 200 tokens: tiny model is eligible
       const selSmall = orchestrator.selectBestModel('narrative.generate', { contextTokens: 200 });
       assert.strictEqual(selSmall.selectedModel.modelId, 'tiny-context-model');
@@ -1538,6 +1543,12 @@ describe('Broad Implementation Pass — Domain Subsystems', () => {
         userPriority: 80,
         roleEligibility: ['narrative.generate'],
       });
+
+      orchestrator.setFallbackChain('narrative.generate', [
+        'provider_a::model_alpha',
+        'provider_b::model_beta',
+        'provider_deterministic_emergency::emergency-fallback-local',
+      ]);
 
       // Degrade primary models so the test models compete
       orchestrator.updateModelHealth('provider_google_gemini', 'gemini-2.5-pro', 'Unavailable');

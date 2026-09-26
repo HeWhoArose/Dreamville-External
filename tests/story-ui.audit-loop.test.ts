@@ -59,7 +59,7 @@ test('Story UI audit-implementation-regression-fallback loop completes ten deter
 
 		// Regression boundary: speaker themes remain world-scoped.
 		assert.equal(story.includes('getCharacterSpeakerTheme'), true, `Audit ${iteration}: world-scoped speaker color system disconnected`);
-		assert.equal(story.includes('Latest turn'), true, `Audit ${iteration}: immediate turn result disappeared`);
+		assert.equal(story.includes('Story conversation'), true, `Audit ${iteration}: story conversation disappeared`);
 		assert.equal(story.includes('Generate Scene'), true, `Audit ${iteration}: scene generation entry disappeared`);
 		assert.equal(story.includes('Generate Image'), true, `Audit ${iteration}: scene image action disappeared`);
 		assert.equal(story.includes('Generate Prompt'), true, `Audit ${iteration}: scene prompt action disappeared`);

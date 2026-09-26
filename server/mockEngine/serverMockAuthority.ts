@@ -587,6 +587,10 @@ export class ServerMockAuthority {
     const conditionEngine = worldRepository.getConditionEngine(targetStoryId);
     const player = worldRepository.getPlayerLifecycle(targetStoryId);
     const run = worldRepository.getStoryRun(targetStoryId);
+    const currentLocationId = player?.locationId || run?.currentLocationId;
+    const location = currentLocationId
+      ? worldRepository.getGeographyGraph(targetStoryId).getNode(currentLocationId)
+      : undefined;
     const rulesProfile = worldRepository.getRulesProfile(targetStoryId)
       || rulesProfileEngine.createDefault('FULL_DND');
     // Narrative checks and authored challenge consequences are canonical mechanics. The AI may

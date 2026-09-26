@@ -967,7 +967,7 @@ export class TacticalCombatEngine {
       text: note.text.slice(0, 1000),
       category: note.category,
       turn: note.turn ?? this.currentRound,
-      createdAt: formatCanonicalTimestamp({ totalElapsedSeconds: this.currentRound } as any),
+      createdAt: new Date(this.currentRound * 1000).toISOString(),
       source: note.source,
     };
     this.encounterNotes.push(created);

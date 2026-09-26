@@ -2,6 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MultiModelOrchestrator } from '../server/domain/aiOrchestrator';
 import { getAiTaskContract, getAllAiTaskContracts } from '../server/domain/aiTaskContracts';
+import { narrativeContinuityEngine } from '../server/domain/narrativeContinuityEngine';
+import { WorldMomentumEngine } from '../server/domain/worldMomentumEngine';
+import { MemoryOpportunityEngine } from '../server/domain/memoryOpportunityEngine';
+import { TacticalCombatEngine } from '../server/domain/combatEngine';
+import { combatTacticsService } from '../server/domain/combatTacticsService';
 
 test('Phase 17 AI orchestration contracts cover every new intelligence category', () => {
 	const expected: Array<[string, string]> = [
@@ -102,4 +107,120 @@ test('Phase 17 new task selection exposes an eligible model or deterministic fal
 		assert.ok(selection.selectedModel);
 		assert.ok(selection.fallbacks.length >= 1);
 	}
+});
+
+
+test('Phase 17: narrative continuity is persisted only when a canonical turn is recorded', () => {
+	const saved: any[] = [];
+	const repository: any = {
+		getStoryRun: () => ({ runtimeState: {} }),
+		getWorldClock: () => ({
+			getTimestamp: () => ({ totalElapsedSeconds: 100, year: 1, month: 1, day: 1, hour: 12, minute: 0, second: 0 }),
+		}),
+		getCanonicalCommandEvents: () => [],
+		getPlayerLifecycle: () => ({ actorId: 'player' }),
+		getMemoryEngine: () => new MemoryOpportunityEngine(),
+		saveStoryRun: (run: any) => saved.push(run),
+	};
+	const result = narrativeContinuityEngine.recordTurn(repository, {
+		storyId: 'phase17_continuity',
+		turnId: 'turn_1',
+		playerAction: 'Inspect the gate.',
+		turnPackage: {
+			narrative: ['The gate groans open.'],
+			dialogue: [],
+			events: ['GATE_OPENED'],
+			stateChanges: [],
+			memoryCandidates: ['The old gate is open.'],
+			audioCues: [],
+		},
+	});
+	assert.equal(result.plot.beats.length, 1);
+	assert.equal(saved.length, 1);
+	assert.ok(saved[0].runtimeState.narrativeResearch);
+});
+
+test('Phase 17: world momentum is deterministic and connected to world-time simulation output', () => {
+	const saved: any[] = [];
+	const repository: any = {
+		getStoryRun: () => ({ runtimeState: {} }),
+		saveStoryRun: (run: any) => saved.push(run),
+	};
+	const result = WorldMomentumEngine.advance({
+		repository,
+		storyId: 'phase17_momentum',
+		currentSeconds: 3600,
+		triggeredEvents: [{ id: 'event_1', name: 'Siege begins' }],
+		missedEvents: [{ id: 'event_2', name: 'Council deadline' }],
+	});
+	assert.equal(result.state.pressure, 11);
+	assert.deepEqual(result.signals, ['WORLD_EVENT:Siege begins', 'MISSED_EVENT:Council deadline']);
+	assert.equal(saved.length, 1);
+	assert.equal(saved[0].runtimeState.worldMomentum.pressure, 11);
+});
+
+test('Phase 17: NPC tactical execution leaves encounter-specific private memory for future planning', () => {
+	const engine = new TacticalCombatEngine(42);
+	engine.addParticipant({
+		id: 'npc',
+		name: 'Tactician',
+		x: 0,
+		y: 0,
+		initiative: 10,
+		team: 'enemies',
+		hpCurrent: 20,
+		hpMax: 20,
+		armorClass: 14,
+		speedCells: 5,
+		attackBonus: 5,
+		damageFormula: '1d6',
+		conditions: [],
+		isDead: false,
+	});
+	engine.addParticipant({
+		id: 'player',
+		name: 'Player',
+		x: 2,
+		y: 0,
+		initiative: 5,
+		team: 'player_allies',
+		hpCurrent: 20,
+		hpMax: 20,
+		armorClass: 12,
+		speedCells: 6,
+		attackBonus: 5,
+		damageFormula: '1d6',
+		conditions: [],
+		isDead: false,
+	});
+	const plan: any = {
+		planId: 'plan_phase17',
+		actorId: 'npc',
+		objective: 'Protect the escape route.',
+		steps: [{
+			id: 'step_1',
+			actionType: 'ATTACK',
+			targetId: 'player',
+		}],
+		currentStepIndex: 0,
+		status: 'ACTIVE',
+		revision: 1,
+		source: 'AI',
+		updatedTurn: 1,
+		updatedAt: new Date().toISOString(),
+	};
+	engine.setTacticalPlan(plan);
+	const memory = new MemoryOpportunityEngine();
+	const repository: any = {
+		getMemoryEngine: () => memory,
+		getWorldClock: () => ({
+			getTimestamp: () => ({ totalElapsedSeconds: 10, year: 1, month: 1, day: 1, hour: 12, minute: 0, second: 0 }),
+		}),
+	};
+	combatTacticsService.recordExecution(engine, 'npc', false, repository, 'phase17_combat', 'cmd_1');
+	const memories = memory.getAllMemories('phase17_combat');
+	assert.equal(memories.length, 1);
+	assert.equal(memories[0].subjectEntityId, 'npc');
+	assert.equal(memories[0].visibility, 'PRIVATE');
+	assert.match(memories[0].content, /replanning/i);
 });

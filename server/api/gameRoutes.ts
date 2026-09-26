@@ -7973,7 +7973,10 @@ gameRouter.post('/media/fault-injection', async (req: Request, res: Response) =>
 gameRouter.post('/research/evidence', async (req: Request, res: Response) => {
   try {
     const { researchEvidencePipeline } = await import('../domain/researchEvidence');
-    const item = req.body;
+    const item = {
+      ...req.body,
+      storyId: String(req.body?.storyId || 'default_story'),
+    };
     if (!item.evidenceId || !item.claimText) {
       return res.status(400).json({ error: 'evidenceId and claimText are required.' });
     }

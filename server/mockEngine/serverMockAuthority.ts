@@ -1300,11 +1300,25 @@ export class ServerMockAuthority {
           executeIfValid: Boolean(intendedCapabilityId) && !(request as any).preventCapabilityExecution,
         });
 
-        if (interp.validationSuccess) {
+        if (
+          interp.interpretationType === 'NOVEL_CAPABILITY_PROPOSAL' &&
+          !intendedCapabilityId &&
+          !(request as any).preventCapabilityExecution
+        ) {
+          // A novel proposal is an internal advisory state, not a player action outcome.
+          // Ordinary canonical action resolution must never expose capability-preview
+          // mechanics or grant/execute an unapproved capability.
           success = true;
-          message = interp.narrativeInterpretation || `Executed custom action: ${freeformText}`;
-          const matchedId = interp.mappedCapability?.id || interp.proposedCapability?.id || 'Novel Capability';
-          authoritativeFeedback = `Server authority processed freeform action through CapabilityEngine (${matchedId}).`;
+          message = `Attempted action: ${freeformText}. The outcome unfolds in the narrative.`;
+          authoritativeFeedback = 'Server authority recorded the freeform action as narrative intent; no new capability was acquired or executed.';
+        } else if (interp.validationSuccess) {
+          success = true;
+          message =
+            interp.interpretationType === 'EXISTING_CAPABILITY' || interp.interpretationType === 'CONTEXTUAL_MODIFICATION'
+              ? (interp.narrativeInterpretation || `Executed custom action: ${freeformText}`)
+              : `Attempted action: ${freeformText}. The outcome unfolds in the narrative.`;
+          const matchedId = interp.mappedCapability?.id || 'Existing Capability';
+          authoritativeFeedback = `Server authority processed an owned capability action through CapabilityEngine (${matchedId}).`;
         } else {
           success = true;
           message = `Attempted action: ${freeformText}. The outcome unfolds in the narrative.`;

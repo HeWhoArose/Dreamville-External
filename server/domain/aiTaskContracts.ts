@@ -28,7 +28,7 @@ const CONTRACTS: Record<TaskId, AiTaskContract> = {
 	},
 	'character.dialogue': {
 		task: 'character.dialogue',
-		category: 'narration',
+		category: 'dialogue',
 		requiredCapabilities: ['text_generation'],
 		preferredCapabilities: ['creative_writing'],
 		requiredInputTypes: ['text'],
@@ -52,7 +52,7 @@ const CONTRACTS: Record<TaskId, AiTaskContract> = {
 	},
 	'memory.extract': {
 		task: 'memory.extract',
-		category: 'character_genesis',
+		category: 'memory',
 		requiredCapabilities: ['text_generation'],
 		preferredCapabilities: ['fast', 'structured_extraction', 'structured_output'],
 		requiredInputTypes: ['text'],
@@ -112,7 +112,7 @@ const CONTRACTS: Record<TaskId, AiTaskContract> = {
 	},
 	'summary.scene': {
 		task: 'summary.scene',
-		category: 'world_generation',
+		category: 'summarization',
 		requiredCapabilities: ['text_generation'],
 		preferredCapabilities: ['fast', 'long_context'],
 		requiredInputTypes: ['text'],
@@ -245,7 +245,7 @@ const CONTRACTS: Record<TaskId, AiTaskContract> = {
 	},
 	'research.world-brief': {
 		task: 'research.world-brief',
-		category: 'research',
+		category: 'research_world_brief',
 		requiredCapabilities: ['text_generation'],
 		preferredCapabilities: ['reasoning', 'long_context'],
 		requiredInputTypes: ['text'],
@@ -269,7 +269,7 @@ const CONTRACTS: Record<TaskId, AiTaskContract> = {
 	},
 	'utility.inspect': {
 		task: 'utility.inspect',
-		category: 'research',
+		category: 'utility',
 		requiredCapabilities: ['text_generation'],
 		preferredCapabilities: ['fast'],
 		requiredInputTypes: ['text'],

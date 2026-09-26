@@ -548,6 +548,14 @@ test('task fallback recovers a live eligible model when the persisted chain has 
     'provider_deterministic_emergency::emergency-fallback-local',
   ]);
 
+  const recoveredRecord = orchestrator.getModel('provider_stale_recovered', 'recovered-model');
+  assert.ok(recoveredRecord, 'Recovered model was not registered.');
+  assert.equal(
+    orchestrator.isCandidateUsable(recoveredRecord!, 'narrative.generate'),
+    true,
+    JSON.stringify(recoveredRecord),
+  );
+
   const result = await orchestrator.executeTaskGeneration(
     'narrative.generate',
     'Produce a narrative.',

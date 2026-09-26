@@ -26,9 +26,10 @@ import {
 
 interface TacticalCombatViewProps {
   onRefreshWorldState?: () => void;
+  onCombatEnded?: (transition: import('../types').CombatTransitionState) => void;
 }
 
-export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefreshWorldState }) => {
+export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefreshWorldState, onCombatEnded }) => {
   const [combatState, setCombatState] = useState<CombatStateResponse | null>(null);
   const [capabilities, setCapabilities] = useState<CapabilityDefinition[]>([]);
   const [powerState, setPowerState] = useState<PowerState | null>(null);
@@ -67,6 +68,8 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
   const [selectedReplayId, setSelectedReplayId] = useState<string>('');
   const [replayResult, setReplayResult] = useState<any>(null);
   const [replayLoading, setReplayLoading] = useState<boolean>(false);
+  const [playerActionText, setPlayerActionText] = useState<string>('');
+  const [resolutionBusy, setResolutionBusy] = useState<boolean>(false);
 
   const fetchCombatData = async () => {
     try {
@@ -427,6 +430,42 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
     }
   };
 
+  const handleRollInitiative = async () => {
+    try {
+      setActionLoading(true);
+      setErrorMsg(null);
+      const res = await apiClient.rollCombatInitiative();
+      setCombatState(res.combatState);
+      onRefreshWorldState?.();
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to roll initiative.');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handlePlayerCombatAction = async () => {
+    const actionText = playerActionText.trim();
+    if (!actionText) {
+      setErrorMsg('Describe what you want to do in combat.');
+      return;
+    }
+    try {
+      setResolutionBusy(true);
+      setErrorMsg(null);
+      const res = await apiClient.executeCombatPlayerAction({ actionText });
+      setCombatState(res.combatState);
+      setPlayerActionText('');
+      onRefreshWorldState?.();
+      if (res.combatTransition?.returnToStory && res.combatTransition) {
+        onCombatEnded?.(res.combatTransition);
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Failed to resolve combat action.');
+    } finally {
+      setResolutionBusy(false);
+    }
+  };
   const handleEndTurn = async () => {
     try {
       setActionLoading(true);
@@ -544,6 +583,85 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
             </div>
           </div>
 
+          {combatState.phase === 'INITIATIVE_PENDING' && (
+            <div className="p-4 rounded-xl border border-amber-700/40 bg-amber-950/20">
+              <div className="text-sm font-semibold text-amber-200">Combat initiated</div>
+              <div className="mt-1 text-xs text-stone-300">{combatState.combatBanner || 'Roll for initiative to establish turn order.'}</div>
+              <button
+                type="button"
+                onClick={handleRollInitiative}
+                disabled={actionLoading}
+                className="mt-3 px-4 py-2 rounded-lg bg-amber-700 hover:bg-amber-600 text-amber-50 text-xs font-semibold disabled:opacity-50"
+              >
+                Roll for Initiative
+              </button>
+            </div>
+          )}
+
+          {combatState.initiativeRolls?.length ? (
+            <div className="p-4 rounded-xl border border-stone-800 bg-stone-900/70">
+              <div className="text-[10px] uppercase tracking-wider font-mono text-stone-500">Initiative Order</div>
+              <div className="mt-2 grid gap-2 md:grid-cols-2">
+                {combatState.initiativeRolls.map((entry) => (
+                  <div key={entry.actorId} className="flex items-center justify-between rounded-lg bg-stone-950/60 border border-stone-800 px-3 py-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="w-6 h-6 rounded-full bg-stone-800 flex items-center justify-center text-[10px] font-bold text-amber-300">{entry.position}</span>
+                      <span className="truncate text-xs text-stone-200">{entry.actorName}</span>
+                    </div>
+                    <span className="font-mono text-xs text-amber-300">{entry.total} {entry.surprised ? '• surprised' : ''}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {combatState.lastResolution && (
+            <div className="p-4 rounded-xl border border-violet-700/40 bg-violet-950/20">
+              <div className="text-[10px] uppercase tracking-wider font-mono text-violet-300">Mechanical Resolution</div>
+              <div className="mt-1 text-sm font-semibold text-stone-100">{combatState.lastResolution.actionLabel}</div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {combatState.lastResolution.rolls.map((roll, index) => (
+                  <div key={roll.label + index} className="rounded-lg border border-stone-800 bg-stone-950/50 px-3 py-2">
+                    <div className="text-[10px] uppercase font-mono text-stone-500">{roll.label}</div>
+                    <div className="mt-1 text-lg font-bold text-amber-300">{roll.total ?? '—'}</div>
+                    {roll.roll?.individualDice?.length ? <div className="text-[10px] font-mono text-stone-500">dice: {roll.roll.individualDice.join(', ')}</div> : null}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 text-xs text-stone-300">{combatState.lastResolution.mechanicalSummary}</div>
+              {combatState.lastResolution.targetHp?.map((hp) => (
+                <div key={hp.targetId} className="mt-3">
+                  <div className="flex justify-between text-[10px] font-mono text-stone-400"><span>{hp.targetId}</span><span>{hp.hpCurrent}/{hp.hpMax} HP</span></div>
+                  <div className="mt-1 h-2 rounded-full bg-stone-800 overflow-hidden">
+                    <div className="h-full bg-red-500" style={{ width: Math.max(0, Math.min(100, (hp.hpCurrent / Math.max(1, hp.hpMax)) * 100)) + '%' }} />
+                  </div>
+                </div>
+              ))}
+              <div className="mt-4 border-t border-stone-800 pt-3 text-sm leading-6 text-stone-200">{combatState.lastResolution.narrativeResponse}</div>
+            </div>
+          )}
+
+          {combatState.phase === 'ACTIVE' && isPlayerTurn && !combatState.victory && !combatState.defeat ? (
+            <div className="p-4 rounded-xl border border-cyan-700/40 bg-cyan-950/10">
+              <div className="text-[10px] uppercase tracking-wider font-mono text-cyan-300">Describe Your Combat Action</div>
+              <textarea
+                value={playerActionText}
+                onChange={(event) => setPlayerActionText(event.target.value)}
+                placeholder="Example: Cast Fireball at the Astral Void Sentry"
+                rows={3}
+                className="mt-2 w-full rounded-lg bg-stone-950 border border-stone-800 px-3 py-2 text-xs text-stone-100"
+                disabled={resolutionBusy || actionLoading}
+              />
+              <button
+                type="button"
+                onClick={handlePlayerCombatAction}
+                disabled={resolutionBusy || actionLoading || !playerActionText.trim()}
+                className="mt-2 px-4 py-2 rounded-lg bg-cyan-700 hover:bg-cyan-600 text-cyan-50 text-xs font-semibold disabled:opacity-50"
+              >
+                Resolve Action
+              </button>
+            </div>
+          ) : null}
           {currentActor?.usesDeathSaves && currentActor.hpCurrent <= 0 && !currentActor.isDead && (
             <div className="col-span-2 sm:col-span-4 p-3 bg-red-950/20 border border-red-900/40 rounded-xl">
               <div className="flex items-center justify-between gap-3">

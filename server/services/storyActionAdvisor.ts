@@ -73,6 +73,34 @@ function normalize(value: unknown): string {
 	return String(value || '').trim().toLowerCase();
 }
 
+function getCanonicalSceneContext(
+	repository: WorldRepository,
+	storyId: string,
+	supplied?: StoryActionSceneContext,
+): StoryActionSceneContext {
+	const player = repository.getPlayerLifecycle(storyId);
+	const run = repository.getStoryRun(storyId);
+	const locationId = player?.locationId || run?.currentLocationId;
+	const location = locationId
+		? repository.getGeographyGraph(storyId).getNode(locationId)
+		: undefined;
+
+	return {
+		locationName: supplied?.locationName || location?.name,
+		locationRegion: supplied?.locationRegion || location?.regionId,
+		locationDescription: supplied?.locationDescription || location?.description,
+		worldTime: supplied?.worldTime,
+		openingNarrative: supplied?.openingNarrative || run?.openingScene?.narrativeText,
+		startingSituation:
+			supplied?.startingSituation ||
+			run?.startingSituation?.summary ||
+			run?.startingSituation?.hook ||
+			run?.initialScene,
+		activeDialogue: supplied?.activeDialogue,
+		recentActions: supplied?.recentActions,
+	};
+}
+
 function buildSimulationEnvironment(
 	repository: WorldRepository,
 	storyId: string,
@@ -297,26 +325,7 @@ export class StoryActionAdvisor {
 			run?.protagonist?.characterId ||
 			'player_actor_' + storyId;
 
-		const canonicalPlayerLocationId = player?.locationId || run?.currentLocationId;
-		const canonicalLocation = canonicalPlayerLocationId
-			? this.repository.getGeographyGraph(storyId).getNode(canonicalPlayerLocationId)
-			: undefined;
-		const canonicalSceneContext: StoryActionSceneContext = {
-			locationName: sceneContext?.locationName || canonicalLocation?.name,
-			locationRegion: sceneContext?.locationRegion || canonicalLocation?.regionId,
-			locationDescription: sceneContext?.locationDescription || canonicalLocation?.description,
-			worldTime: sceneContext?.worldTime,
-			startingSituation:
-				sceneContext?.startingSituation ||
-				run?.startingSituation?.summary ||
-				run?.startingSituation?.hook ||
-				run?.initialScene,
-			openingNarrative:
-				sceneContext?.openingNarrative ||
-				run?.openingScene?.narrativeText,
-			activeDialogue: sceneContext?.activeDialogue,
-			recentActions: sceneContext?.recentActions,
-		};
+		const canonicalSceneContext = getCanonicalSceneContext(this.repository, storyId, sceneContext);
 
 		const cleanAction = String(actionText || '').trim();
 		const ordinaryActionPattern = /^(?:i|we|the character|my character)\s+(?:walk|walks|move|moves|step|steps|approach|approaches|go|goes|head|heads|travel|travels|look|looks|observe|observes|inspect|inspects|search|searches|listen|listens|wait|waits|rest|rests|sit|sits|stand|stands|touch|touches|pick up|picks up|take|takes|open|opens|close|closes|enter|enters|leave|leaves|follow|follows|speak|speaks|talk|talks|ask|asks|say|says)\b/i;
@@ -853,6 +862,7 @@ export class StoryActionAdvisor {
 			player?.actorId ||
 			run?.protagonist?.characterId ||
 			'player_actor_' + storyId;
+		const canonicalSceneContext = getCanonicalSceneContext(this.repository, storyId, sceneContext);
 		const actorCapabilities = this.repository.getCapabilityEngine(storyId).getEffectiveActorCapabilities(
 			actorId,
 			this.repository.getInventoryEngine(storyId)
@@ -862,7 +872,7 @@ export class StoryActionAdvisor {
 			actorId,
 			actionText,
 			actorCapabilities,
-			sceneContext,
+			canonicalSceneContext,
 		);
 	}
 

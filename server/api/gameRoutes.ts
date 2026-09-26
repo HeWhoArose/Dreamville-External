@@ -3177,6 +3177,199 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
 });
 
 /**
+ * POST /api/game/combat/initiative/roll
+ * Rolls initiative only after the encounter has been initialized.
+ */
+gameRouter.post('/combat/initiative/roll', async (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    if (!requireDndTacticalCombat(res, storyId)) return;
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player?.actorId || `player_actor_${storyId}`;
+    const combatEngine = worldRepository.getCombatEngine(storyId);
+
+    if (combatEngine.getCombatPhase() !== 'INITIATIVE_PENDING') {
+      return res.status(409).json({
+        success: false,
+        errorReason: `Initiative cannot be rolled during combat phase '${combatEngine.getCombatPhase()}'.`,
+        combatState: getCombatStateHelper(combatEngine, storyId, actorId),
+      });
+    }
+
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      deterministicId('cmd_route', storyId, '/combat/initiative/roll', req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'CORE_ACTION',
+        payload: { action: 'ROLL_INITIATIVE' },
+        source: 'PLAYER',
+        transactionMode: 'STAGED',
+      },
+      async (_command, context) => {
+        const transactionRepo = context.repository;
+        const transactionCombat = transactionRepo.getCombatEngine(storyId);
+        const surprised = transactionCombat.getSurprisedActorIds();
+        const initiativeRolls = transactionCombat.rollInitiative({
+          reset: true,
+          surprisedActorIds: surprised,
+        });
+
+        let npcResolution: { turns: Array<Record<string, unknown>>; stoppedReason: string } | undefined;
+        const current = transactionCombat.getCurrentActor();
+        if (current && current.id !== actorId && !transactionCombat.getParticipants().find((p) => p.id === actorId)?.isDead) {
+          npcResolution = await resolveNpcTurnsUntilPlayer(storyId, actorId, transactionRepo);
+        }
+
+        const state = getCombatStateHelper(transactionCombat, storyId, actorId, transactionRepo);
+        return {
+          success: true,
+          data: { initiativeRolls, npcResolution, combatState: state },
+          summary: 'Initiative rolled and turn order established.',
+        };
+      },
+    );
+
+    const state = getCombatStateHelper(combatEngine, storyId, actorId);
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        combatState: state,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
+      });
+    }
+
+    res.json({
+      success: true,
+      initiativeRolls: (commandResult.data as any)?.initiativeRolls || combatEngine.getInitiativeRolls(),
+      npcResolution: (commandResult.data as any)?.npcResolution,
+      combatState: state,
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, errorReason: error?.message || 'Failed to roll initiative.' });
+  }
+});
+
+/**
+ * POST /api/game/combat/precombat-action
+ * Resolves a hidden opening hostile action before initiative.
+ */
+gameRouter.post('/combat/precombat-action', async (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    if (!requireDndTacticalCombat(res, storyId)) return;
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player?.actorId || `player_actor_${storyId}`;
+    const targetId = typeof req.body?.targetId === 'string' ? req.body.targetId.trim() : '';
+    const actionText = typeof req.body?.actionText === 'string' ? req.body.actionText.trim() : '';
+
+    if (!targetId || !actionText) {
+      return res.status(400).json({
+        success: false,
+        errorReason: 'targetId and actionText are required for a pre-combat action.',
+      });
+    }
+
+    const combatEngine = worldRepository.getCombatEngine(storyId);
+    if (combatEngine.getCombatPhase() !== 'INITIATIVE_PENDING') {
+      return res.status(409).json({
+        success: false,
+        errorReason: 'Pre-combat action is only legal before initiative is rolled.',
+        combatState: getCombatStateHelper(combatEngine, storyId, actorId),
+      });
+    }
+
+    const target = combatEngine.getParticipant(targetId);
+    const actor = combatEngine.getParticipant(actorId);
+    if (!actor || !target) {
+      return res.status(404).json({
+        success: false,
+        errorReason: 'Pre-combat actor or target is not present in canonical encounter state.',
+      });
+    }
+
+    const commandId =
+      (req.headers['x-command-id'] as string | undefined) ||
+      (req.body?.commandId as string | undefined) ||
+      deterministicId('cmd_route', storyId, '/combat/precombat-action', req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'ATTACK',
+        payload: { actionText, targetId, precombat: true },
+        source: 'PLAYER',
+        transactionMode: 'STAGED',
+      },
+      async (_command, context) => {
+        const transactionRepo = context.repository;
+        const transactionCombat = transactionRepo.getCombatEngine(storyId);
+        transactionCombat.setSurprisedActors([targetId]);
+        const result = await combatEncounterService.resolvePrecombatAction({
+          storyId,
+          actorId,
+          targetId,
+          actionText,
+          repository: transactionRepo,
+          advantageFromAmbush: true,
+        });
+        if (!result.success || !result.resolution || !result.transition) {
+          return {
+            success: false,
+            errorReason: result.errorReason || 'Pre-combat action failed.',
+          };
+        }
+        return {
+          success: true,
+          data: {
+            resolution: result.resolution,
+            combatTransition: result.transition,
+          },
+          summary: 'Pre-combat hostile action resolved canonically before initiative.',
+        };
+      },
+    );
+
+    const state = getCombatStateHelper(combatEngine, storyId, actorId);
+    if (!commandResult.success) {
+      return res.status(400).json({
+        success: false,
+        errorReason: commandResult.errorReason,
+        combatState: state,
+        rolledBack: commandResult.rolledBack,
+        commandId: commandResult.commandId,
+      });
+    }
+
+    const data = commandResult.data as any;
+    res.json({
+      success: true,
+      mechanicalResolution: data?.resolution,
+      narrativeResponse: data?.resolution?.narrativeResponse,
+      combatTransition: data?.combatTransition,
+      combatState: state,
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, errorReason: error?.message || 'Failed to resolve pre-combat action.' });
+  }
+});
+
+/**
  * GET /api/game/combat/state
  * Returns the actor-scoped projected combat state (CH2-08 / DEF-CH8-01).
  * Identity is bound to server-authoritative player actor.

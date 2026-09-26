@@ -2,6 +2,7 @@ import { ResearchEvidenceItem, WorldFact } from '../../src/types';
 import { KnowledgeFact } from './types';
 import type { InMemoryWorldRepository } from '../repositories/worldRepository';
 import { deterministicId } from './deterministicRng';
+import { CausalProvenanceGraph, type CausalGraphState } from './causalProvenanceGraph';
 
 /**
  * ResearchEvidencePipeline
@@ -15,10 +16,71 @@ import { deterministicId } from './deterministicRng';
  * 5. Rejected or unknown research creates ZERO canonical state.
  */
 export class ResearchEvidencePipeline {
-  private evidenceStore: Map<string, ResearchEvidenceItem> = new Map();
+  private evidenceStore: Map<string, ResearchEvidenceItem & { storyId?: string }> = new Map();
+  private readonly causalGraph = new CausalProvenanceGraph();
+  private causalGraphState: CausalGraphState = this.causalGraph.create();
 
-  public registerEvidence(item: ResearchEvidenceItem): void {
+  public registerEvidence(item: ResearchEvidenceItem & { storyId?: string }): void {
     this.evidenceStore.set(item.evidenceId, item);
+    const storyId = item.storyId || 'global';
+    const sourceNodeId = deterministicId('research_source', storyId, item.sourceUri, item.sourceTitle);
+    const evidenceNodeId = deterministicId('research_evidence', storyId, item.evidenceId);
+    this.causalGraph.upsertNode(this.causalGraphState, {
+      id: sourceNodeId,
+      kind: 'RESEARCH_SOURCE',
+      label: item.sourceTitle || item.sourceUri,
+      metadata: { storyId, sourceUri: item.sourceUri },
+    });
+    this.causalGraph.upsertNode(this.causalGraphState, {
+      id: evidenceNodeId,
+      kind: 'RESEARCH_EVIDENCE',
+      label: item.claimText.slice(0, 240),
+      metadata: {
+        storyId,
+        evidenceId: item.evidenceId,
+        qualification: item.qualification,
+        validationStatus: item.validationStatus,
+      },
+    });
+    this.causalGraph.addEdge(this.causalGraphState, {
+      id: deterministicId('research_edge', evidenceNodeId, sourceNodeId),
+      fromId: sourceNodeId,
+      toId: evidenceNodeId,
+      relation: 'REPORTED',
+      eventId: item.evidenceId,
+      timestampSeconds: 0,
+      confidence: item.provenance?.isGeneratedProposal ? 0.5 : 1,
+      metadata: { storyId, sourceTitle: item.sourceTitle },
+    });
+  }
+
+  public getEvidenceForStory(storyId: string): Array<ResearchEvidenceItem & { storyId?: string }> {
+    return Array.from(this.evidenceStore.values())
+      .filter((item) => !item.storyId || item.storyId === 'global' || item.storyId === storyId)
+      .slice(-24)
+      .map((item) => JSON.parse(JSON.stringify(item)));
+  }
+
+  public getCausalGraphForStory(storyId: string): CausalGraphState {
+    const evidenceIds = new Set(
+      this.getEvidenceForStory(storyId).map((item) => item.evidenceId)
+    );
+    const state = this.causalGraph.create();
+    for (const node of Object.values(this.causalGraphState.nodes)) {
+      const metadataStoryId = String(node.metadata?.storyId || '');
+      if (metadataStoryId === storyId || metadataStoryId === 'global') {
+        this.causalGraph.upsertNode(state, node);
+      }
+    }
+    for (const edge of Object.values(this.causalGraphState.edges)) {
+      const metadataStoryId = String(edge.metadata?.storyId || '');
+      if ((metadataStoryId === storyId || metadataStoryId === 'global') && (evidenceIds.size === 0 || evidenceIds.has(String(edge.eventId)))) {
+        if (state.nodes[edge.fromId] && state.nodes[edge.toId]) {
+          this.causalGraph.addEdge(state, edge);
+        }
+      }
+    }
+    return this.causalGraph.serialize(state);
   }
 
   public getEvidence(evidenceId: string): ResearchEvidenceItem | null {
@@ -75,6 +137,27 @@ export class ResearchEvidencePipeline {
       scope: 'exact',
       provenanceSummary: `Validated Research from ${item.sourceTitle} (${item.sourceUri}). Lawful Notice: ${item.provenance.lawfulNotice || 'Academic Citation'}.`,
     };
+
+    const evidenceNodeId = deterministicId('research_evidence', item.storyId || storyId, item.evidenceId);
+    const factNodeId = deterministicId('research_fact', storyId, factId);
+    this.causalGraph.upsertNode(this.causalGraphState, {
+      id: factNodeId,
+      kind: 'CANONICAL_FACT',
+      label: canonicalFact.objectValue,
+      metadata: { storyId, factId, predicate: canonicalFact.predicate },
+    });
+    if (this.causalGraphState.nodes[evidenceNodeId]) {
+      this.causalGraph.addEdge(this.causalGraphState, {
+        id: deterministicId('research_promotion', evidenceNodeId, factNodeId),
+        fromId: evidenceNodeId,
+        toId: factNodeId,
+        relation: 'DISCOVERED',
+        eventId: evidenceId,
+        timestampSeconds: clock.getTimestamp().totalElapsedSeconds,
+        confidence: 1,
+        metadata: { storyId, promotion: 'VALIDATED_RESEARCH' },
+      });
+    }
 
     worldRepo.addKnowledgeFact(storyId, canonicalFact);
 

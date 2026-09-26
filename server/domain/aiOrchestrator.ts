@@ -1980,22 +1980,30 @@ export class MultiModelOrchestrator {
       'utility.inspect',
     ];
     for (const model of this.models.values()) {
+      const capabilities = new Set(model.capabilities || []);
       const isSpecializedNonText =
         model.hasImageGeneration ||
         model.hasAudio ||
-        (model.capabilities || []).includes('speech_synthesis') ||
-        (model.capabilities || []).includes('speech_transcription');
+        capabilities.has('speech_synthesis') ||
+        capabilities.has('speech_transcription') ||
+        capabilities.has('tts') ||
+        capabilities.has('stt');
       if (isSpecializedNonText) continue;
 
-      const isTextModel =
+      const hasTextCapability =
         model.isEmergencyFloor ||
-        (model.capabilities || []).includes('text_generation') ||
-        (model.capabilities || []).includes('creative_writing') ||
-        (model.capabilities || []).includes('reasoning') ||
-        model.supportedOutputTypes?.includes('text') === true ||
-        model.roleEligibility?.some((task) => generalTasks.includes(task));
+        capabilities.has('text_generation') ||
+        capabilities.has('text') ||
+        capabilities.has('creative_writing') ||
+        capabilities.has('fast') ||
+        capabilities.has('reasoning') ||
+        capabilities.has('structured_output');
 
-      if (!isTextModel) continue;
+      const legacyGeneralTextModel =
+        capabilities.size === 0 &&
+        model.roleEligibility.some((task) => generalTasks.includes(task));
+
+      if (!hasTextCapability && !legacyGeneralTextModel) continue;
 
       if (!model.capabilities) model.capabilities = [];
       if (!model.isEmergencyFloor && !model.capabilities.includes('text_generation')) {
@@ -3689,7 +3697,8 @@ export class MultiModelOrchestrator {
               capabilities.has('creative_writing') ||
               capabilities.has('fast') ||
               capabilities.has('reasoning') ||
-              capabilities.has('structured_output')
+              capabilities.has('structured_output') ||
+              capabilities.has('text')
             )) ||
             (required === 'structured_output' && model.hasStructuredOutput === true);
           if (!satisfied) return false;
@@ -3955,16 +3964,21 @@ export class MultiModelOrchestrator {
 
     if (customChainKeys && customChainKeys.length > 0 && !hasActiveManualOverrideForTask) {
       // Configured chains are strict allow-lists. A model appearing in a chain
-      // must already be eligible for this exact task; the router must never
-      // mutate the model registry to make the chain executable.
+      // must already be eligible for this exact task. The first configured model
+      // is preserved as the selected route even when currently throttled; the
+      // execution loop will skip unusable entries and fail over to the next model.
       const configuredModels = customChainKeys
         .map(findConfiguredModel)
         .filter((m): m is ModelRegistryRecord => Boolean(m))
-        .filter((m) => isUsableCandidate(m));
+        .filter((m) => m.roleEligibility.includes(task));
 
       if (configuredModels.length > 0) {
         const selectedFromChain = configuredModels[0];
-        const fallbackModels = configuredModels.slice(1);
+        const fallbackModels = configuredModels.slice(1).filter((m) =>
+          m.health !== 'Unavailable' &&
+          m.health !== 'DisabledByUser' &&
+          !this.isCircuitBreakerTripped(m.providerId, m.modelId)
+        );
 
         const emergency = Array.from(this.models.values()).find(
           (m) => m.isEmergencyFloor && m.roleEligibility.includes(task)
@@ -3985,6 +3999,7 @@ export class MultiModelOrchestrator {
         };
       }
     }
+
 
     const scored = eligible.map((model) => {
       let score = model.userPriority;

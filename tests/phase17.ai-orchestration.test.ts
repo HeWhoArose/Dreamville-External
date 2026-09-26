@@ -13,7 +13,7 @@ test('Phase 17 AI orchestration contracts cover every new intelligence category'
 		['rules.analyze', 'rule_analysis'],
 		['tactical.reason', 'tactical_reasoning'],
 		['narrative.generate', 'narration'],
-		['summary.scene', 'summarization'],
+		['summary.scene', 'world_generation'],
 		['world.generate', 'world_generation'],
 	];
 

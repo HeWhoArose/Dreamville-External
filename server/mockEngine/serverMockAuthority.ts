@@ -1347,14 +1347,14 @@ export class ServerMockAuthority {
           // Ordinary canonical action resolution must never expose capability-preview
           // mechanics or grant/execute an unapproved capability.
           success = true;
-          message = `Attempted action: ${freeformText}. The outcome unfolds in the narrative.`;
+          message = 'The action is being resolved through the story rules.';
           authoritativeFeedback = 'Server authority recorded the freeform action as narrative intent; no new capability was acquired or executed.';
         } else if (interp.validationSuccess) {
           success = true;
           message =
             interp.interpretationType === 'EXISTING_CAPABILITY' || interp.interpretationType === 'CONTEXTUAL_MODIFICATION'
-              ? (interp.narrativeInterpretation || `Executed custom action: ${freeformText}`)
-              : `Attempted action: ${freeformText}. The outcome unfolds in the narrative.`;
+              ? 'The action is resolved through the character\'s established capabilities.'
+              : 'The action is being resolved through the story rules.';
           const matchedId = interp.mappedCapability?.id || 'Existing Capability';
           authoritativeFeedback = `Server authority processed an owned capability action through CapabilityEngine (${matchedId}).`;
         } else {

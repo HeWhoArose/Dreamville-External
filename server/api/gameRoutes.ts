@@ -3,6 +3,7 @@ import { serverMockAuthority } from '../mockEngine/serverMockAuthority';
 import { ActionRequest } from '../mockEngine/serverTypes';
 import { worldRepository } from '../repositories/worldRepository';
 import { NpcTacticalDecisionPolicy } from '../domain/tacticalDecisionPolicy';
+import { combatTacticsService } from '../domain/combatTacticsService';
 import { PlayerLifecycleState } from '../domain/playerLifecycleState';
 import { OpeningSceneService } from '../services/openingSceneService';
 import { WorkingContextEngine } from '../domain/workingContextEngine';
@@ -4901,12 +4902,15 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
           storyId,
           transactionCurrentActor.id
         );
-        const proposal = NpcTacticalDecisionPolicy.decide({
+        const tacticalDecision = await combatTacticsService.decideNpcTurn({
+          storyId,
           actorId: transactionCurrentActor.id,
           combatEngine: transactionCombatEngine,
           capabilityEngine: transactionCapEngine,
+          repository: transactionRepo,
           perceptionOptions: transactionPerceptionOptions,
         });
+        const proposal = tacticalDecision.proposal;
         const executionResult = NpcTacticalDecisionPolicy.executeDecidedAction(
           proposal,
           transactionCombatEngine,
@@ -4949,8 +4953,17 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
 
         return {
           success: true,
-          data: { executionResult, advanceResult, proposal },
-          summary: `NPC turn for ${currentActor.name} resolved and committed.`,
+          data: {
+            executionResult,
+            advanceResult,
+            proposal,
+            tacticalPlan: tacticalDecision.plan,
+            tacticalSource: tacticalDecision.source,
+            tacticalModelId: tacticalDecision.modelId,
+            tacticalProviderId: tacticalDecision.providerId,
+            tacticalFallbackReason: tacticalDecision.fallbackReason,
+          },
+          summary: `NPC turn for ${currentActor.name} resolved and committed through combat.tactics.`,
         };
       }
     );

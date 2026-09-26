@@ -357,8 +357,6 @@ export const StoryView: React.FC<StoryViewProps> = ({
     playSpeech(text, speakerId);
   };
 
-  const latestTurnAction = actionHistory.find((action) => action.actionType !== 'NOTE_RECORD');
-
   const requestScenePrompt = async () => {
     setSceneLoading(true);
     setSceneError(null);

@@ -301,7 +301,6 @@ export class StoryActionAdvisor {
 		const canonicalLocation = canonicalPlayerLocationId
 			? this.repository.getGeographyGraph(storyId).getNode(canonicalPlayerLocationId)
 			: undefined;
-		const dynamicState = this.repository.getDynamicStoryState(storyId);
 		const canonicalSceneContext: StoryActionSceneContext = {
 			locationName: sceneContext?.locationName || canonicalLocation?.name,
 			locationRegion: sceneContext?.locationRegion || canonicalLocation?.regionId,
@@ -314,20 +313,9 @@ export class StoryActionAdvisor {
 				run?.initialScene,
 			openingNarrative:
 				sceneContext?.openingNarrative ||
-				run?.openingScene?.narrativeText ||
-				dynamicState?.actionHistory?.[0]?.narrativeResponse ||
-				dynamicState?.actionHistory?.[0]?.description,
-			activeDialogue:
-				sceneContext?.activeDialogue ||
-				(dynamicState?.activeDialogue
-					? `${dynamicState.activeDialogue.speakerName}: ${dynamicState.activeDialogue.text}`
-					: undefined),
-			recentActions:
-				sceneContext?.recentActions ||
-				dynamicState?.actionHistory
-					?.slice(0, 4)
-					.map((entry: any) => entry.narrativeResponse || entry.description)
-					.filter(Boolean),
+				run?.openingScene?.narrativeText,
+			activeDialogue: sceneContext?.activeDialogue,
+			recentActions: sceneContext?.recentActions,
 		};
 
 		const cleanAction = String(actionText || '').trim();
@@ -1036,7 +1024,7 @@ export class StoryActionAdvisor {
 						source: 'AI' as const,
 					}));
 				if (aiTips.length > 0) {
-					const groundedAiTips = aiTips.filter((tip) => {
+					const groundedAiTips = aiTips.filter((tip: ActionTip) => {
 						const haystack = normalize(tip.title + ' ' + tip.description + ' ' + tip.actionText);
 						const cueWords = sceneSources.flatMap((cue) => normalize(cue).split(/\s+/)).filter((word) => word.length >= 5);
 						return cueWords.length === 0 || cueWords.some((word) => haystack.includes(word));

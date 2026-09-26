@@ -4578,7 +4578,6 @@ export class MultiModelOrchestrator {
 
     const hardTokenBudget = params.hardTokenBudget ?? 500;
     const timeoutMs = params.timeoutMs ?? 5000;
-    const maxRetries = params.maxRetries ?? 1;
     const authoritativeOutcome = (params.committedOutcome || '').trim();
     const connectedDirective = (params.continuationDirective || '').trim();
     const styleInstruction = params.styleInstruction || [
@@ -4664,10 +4663,6 @@ export class MultiModelOrchestrator {
       providerId: generated.providerId,
     };
   }
-    return {
-      success: false,
-      error: lastError || 'No narrative model was available.',
-    };
   }
 
   public async executeTurn(params: {

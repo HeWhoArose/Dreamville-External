@@ -236,6 +236,10 @@ export class WorkingContextEngine {
     const combatEngine = repo.getCombatEngine(storyId);
     const memoryEngine = repo.getMemoryEngine(storyId);
     const livingSim = repo.getLivingWorldSimulation(storyId);
+    const worldMomentum = ((run?.runtimeState as any)?.worldMomentum || {}) as {
+      pressure?: number;
+      unresolvedSignals?: string[];
+    };
 
     const viewerId = params.viewerActorId || (player ? player.actorId : `player_actor_${storyId}`);
 
@@ -549,6 +553,22 @@ export class WorkingContextEngine {
       isProtected: true,
       relevanceScore: 0.8,
     });
+
+    if (typeof worldMomentum.pressure === 'number' || (worldMomentum.unresolvedSignals || []).length > 0) {
+      const momentumContent = [
+        'World momentum pressure: ' + Math.round(Number(worldMomentum.pressure || 0)) + '/100',
+        'Unresolved world signals: ' + ((worldMomentum.unresolvedSignals || []).slice(-6).join('; ') || 'None'),
+      ].join('\n');
+      candidateChunks.push({
+        id: 'b3_world_momentum',
+        band: 'B3_CAUSAL_OPPORTUNITY',
+        label: 'Living World Momentum',
+        content: momentumContent,
+        estimatedTokens: WorkingContextEngine.estimateTokens(momentumContent),
+        sourceAuthority: 'WorldMomentumEngine',
+        relevanceScore: 0.76,
+      });
+    }
 
     // B3_CAUSAL_OPPORTUNITY: Latent opportunities, active capabilities, immediate threats
     if (opportunityMatches.length > 0) {

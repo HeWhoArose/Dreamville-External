@@ -282,10 +282,15 @@ export const App: React.FC = () => {
       if (onComplete) {
         onComplete(result);
       }
-    } catch (err) {
+    } catch (err: any) {
       if (currentSeq === actionSeqRef.current) {
         console.error('Failed to execute story action:', err);
-        setNetworkError(err instanceof Error ? err.message : 'The story action could not be executed.');
+        if (err?.status === 409 && err?.data?.advice) {
+          setPendingActionAdvice(err.data.advice as ActionAdvice);
+          setNetworkError(null);
+        } else {
+          setNetworkError(err instanceof Error ? err.message : 'The story action could not be executed.');
+        }
       }
     } finally {
       if (currentSeq === actionSeqRef.current) {
@@ -372,29 +377,14 @@ export const App: React.FC = () => {
   const handleCustomAction = async (actionText: string) => {
     setPendingActionAdvice(null);
 
-    try {
-      const response = await apiClient.adviseStoryAction(actionText, activeStoryId);
-      const advice = response?.advice as ActionAdvice | undefined;
-
-      if (advice?.mode === 'SUGGEST_ALTERNATIVE' || advice?.mode === 'CAPABILITY_SIMULATION') {
-        setPendingActionAdvice(advice);
-        return;
-      }
-
-      dispatchAction({
-        type: 'CUSTOM_ACTION',
-        actionText,
-        intent: actionText,
-        intendedCapabilityId: advice?.recognizedCapability?.id,
-      } as any);
-    } catch (error) {
-      console.warn('Story action preflight unavailable; continuing through canonical action path.', error);
-      dispatchAction({
-        type: 'CUSTOM_ACTION',
-        actionText,
-        intent: actionText,
-      } as any);
-    }
+    // The canonical /action endpoint performs capability preflight itself.
+    // Sending the typed action directly avoids a duplicate AI advice request and
+    // guarantees that ordinary freeform actions reach the authoritative action path.
+    dispatchAction({
+      type: 'CUSTOM_ACTION',
+      actionText,
+      intent: actionText,
+    } as any);
   };
 
   const handleAcceptActionAdvice = async (advice: ActionAdvice) => {

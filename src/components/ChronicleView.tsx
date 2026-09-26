@@ -60,6 +60,7 @@ export const ChronicleView: React.FC<ChronicleViewProps> = ({
     completed: [],
     failed: [],
   });
+  const [memories, setMemories] = useState<any[]>([]);
   const [loading, setLoading] = useState(Boolean(storyId));
   const [error, setError] = useState<string | null>(null);
 
@@ -80,6 +81,7 @@ export const ChronicleView: React.FC<ChronicleViewProps> = ({
             completed: Array.isArray(data?.quests?.completed) ? data.quests.completed : [],
             failed: Array.isArray(data?.quests?.failed) ? data.quests.failed : [],
           });
+          setMemories(Array.isArray(data?.memory?.facts) ? data.memory.facts : []);
         }
       } catch (err: any) {
         if (!cancelled) setError(err?.message || 'Failed to load quests.');
@@ -286,11 +288,38 @@ export const ChronicleView: React.FC<ChronicleViewProps> = ({
         </section>
       ) : (
         <section className="space-y-3">
+          {memories.length > 0 && (
+            <section className="space-y-3">
+              <div className="flex items-center gap-2 px-1">
+                <BookOpen className="h-4 w-4 text-fuchsia-300" />
+                <h2 className="text-sm font-semibold uppercase tracking-[0.16em] text-fuchsia-200/80">Remembered</h2>
+                <span className="text-[10px] text-stone-600">{memories.length}</span>
+              </div>
+              <div className="space-y-2">
+                {memories.slice(0, 20).map((memory: any, index: number) => (
+                  <article
+                    key={memory?.id || `memory-${index}`}
+                    className="rounded-2xl border border-fuchsia-400/10 bg-fuchsia-500/[0.035] p-4"
+                  >
+                    <p className="text-sm leading-relaxed text-stone-300">
+                      {memory?.objectValue || memory?.statement || memory?.content || 'A memory was recorded.'}
+                    </p>
+                    {memory?.provenanceSummary && (
+                      <p className="mt-2 text-[10px] uppercase tracking-[0.12em] text-stone-600">
+                        {memory.provenanceSummary}
+                      </p>
+                    )}
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+
           {journalEntries.length === 0 ? (
             <div className="rounded-3xl border border-dashed border-white/10 bg-[#0b0813]/60 p-10 text-center">
               <BookOpen className="mx-auto mb-3 h-6 w-6 text-violet-300/60" />
               <h2 className="text-base font-medium text-stone-200">Your journal is empty</h2>
-              <p className="mt-2 text-sm text-stone-600">Your actions, their outcomes, and important conversations will appear here as the story unfolds.</p>
+              <p className="mt-2 text-sm text-stone-600">Player-visible memories, important conversations, actions, and their outcomes will appear here as the story unfolds.</p>
             </div>
           ) : (
             journalEntries.map((entry) => (

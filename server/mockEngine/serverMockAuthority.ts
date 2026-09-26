@@ -240,15 +240,20 @@ export class ServerMockAuthority {
       String(freeformText),
       worldRepository,
     );
-    if (encounterCandidate && !encounterCandidate.targetAwareOfPlayer) {
+    if (encounterCandidate) {
       const pending = combatEncounterService.buildPendingCombatTransition(encounterCandidate);
       pending.targetId = encounterCandidate.targetId;
       pending.targetName = encounterCandidate.targetName;
       pending.actionText = String(freeformText);
-      pending.precombatActionPending = true;
+      pending.precombatActionPending = !encounterCandidate.targetAwareOfPlayer;
+      pending.narrativeLeadIn = encounterCandidate.targetAwareOfPlayer
+        ? encounterCandidate.targetName + ' has perceived you. The encounter escalates into tactical combat.'
+        : encounterCandidate.targetName + ' has not perceived you. Your opening action can resolve before initiative.';
       return {
         ...baseResult,
-        narrativeResponse: `A hostile presence is here. ${encounterCandidate.targetName} has not perceived you. Your opening action can resolve before initiative.`,
+        narrativeResponse: pending.precombatActionPending
+          ? 'A hostile presence is here, but it has not perceived you. Your opening action can resolve before initiative.'
+          : 'A hostile presence has perceived you. Tactical combat is now ready to begin.',
         combatTransition: pending,
         viewState: this.getSanitizedViewState(targetStoryId),
       };

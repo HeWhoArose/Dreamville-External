@@ -4723,7 +4723,6 @@ export class MultiModelOrchestrator {
       providerId: generated.providerId,
     };
   }
-  }
 
   public async executeTurn(params: {
     storyId?: string;

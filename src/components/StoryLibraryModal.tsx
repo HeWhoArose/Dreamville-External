@@ -39,7 +39,7 @@ export const StoryLibraryModal: React.FC<StoryLibraryModalProps> = ({
     setIsLoading(true);
     setError(null);
     try {
-      const list = await apiClient.listAdaptedStories();
+      const list = await apiClient.getStoryRuns();
       setStories(list);
     } catch (err: any) {
       setError(err?.message || 'Failed to load story library.');
@@ -128,7 +128,7 @@ export const StoryLibraryModal: React.FC<StoryLibraryModalProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {stories.map((story) => {
                 const isActive = story.storyId === activeStoryId;
-                const isDefault = story.storyId === 'default_story' || !story.isAdapted;
+                const isDefault = story.storyId === 'default_story';
 
                 return (
                   <div
@@ -218,7 +218,7 @@ export const StoryLibraryModal: React.FC<StoryLibraryModalProps> = ({
                             <Play className="w-3.5 h-3.5" />
                             {isActive ? 'Currently Active' : 'Step Inside & Play'}
                           </button>
-                          {!isDefault && (
+                          {!isDefault && story.isAdapted && (
                             <button
                               onClick={() => setDuplicatingStoryId(story.storyId)}
                               title="Duplicate Adaptation Branch"

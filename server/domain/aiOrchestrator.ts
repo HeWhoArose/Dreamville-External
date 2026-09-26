@@ -5469,7 +5469,11 @@ export class MultiModelOrchestrator {
       // recovery pass. This handles stale persisted chains whose remaining
       // configured entries are unusable even though another eligible provider
       // is currently runnable.
-      if (cIdx === candidateChain.length - 1 && !candidateChain[cIdx].isEmergencyFloor) {
+      if (
+        cIdx === candidateChain.length - 2 &&
+        !candidateChain[cIdx].isEmergencyFloor &&
+        candidateChain[cIdx + 1]?.isEmergencyFloor
+      ) {
         const attemptedKeys = new Set(candidateChain.slice(0, cIdx + 1).map((candidate) => this.modelKey(candidate)));
         const lateRecovery = Array.from(this.models.values())
           .filter((model) => !model.isEmergencyFloor)

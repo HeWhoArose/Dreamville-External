@@ -245,14 +245,12 @@ test('Phase 16 contextual fallback: suggestions are tied to the visible scene wh
 	const storyId = 'phase16_advisor_contextual_fallback';
 	seedRun(repository, storyId, 'Ranger');
 
-	const tips = await repository
-		? new StoryActionAdvisor(repository).getTipsForAction(storyId, '', {
-			locationName: 'Abyssal Trench',
-			locationDescription: 'Cold stone, burning vents, smoke, and fresh footprints surround a sealed structure.',
-			startingSituation: 'A disturbance is coming from the structure.',
-			recentActions: ['The ground trembled moments ago.'],
-		})
-		: [];
+	const tips = await new StoryActionAdvisor(repository).getTipsForAction(storyId, '', {
+		locationName: 'Abyssal Trench',
+		locationDescription: 'Cold stone, burning vents, smoke, and fresh footprints surround a sealed structure.',
+		startingSituation: 'A disturbance is coming from the structure.',
+		recentActions: ['The ground trembled moments ago.'],
+	});
 
 	assert.ok(tips.length > 0);
 	assert.ok(

@@ -965,6 +965,29 @@ export const App: React.FC = () => {
                 initializeApp(storyId);
                 fetchStoryLibrary();
               }}
+              onDeleteWorld={async (world) => {
+                const confirmation = window.prompt(
+                  `This permanently deletes "${world.title}", every Story Run attached to it, and the world's canonical data. This cannot be undone.\n\nType the exact world title to confirm:`
+                );
+                if (confirmation === null) return;
+                if (confirmation !== world.title) {
+                  window.alert('Deletion cancelled: the confirmation text did not exactly match the world title.');
+                  return;
+                }
+                try {
+                  await apiClient.deleteWorld(world.worldId, confirmation);
+                  await fetchStoryLibrary();
+                  await fetchWorldTemplates();
+                  if (activeStoryId && world.worldId === (activeRunFromLibrary as any)?.worldId) {
+                    apiClient.setActiveStoryId('default_story');
+                    setActiveStoryId('default_story');
+                    setCurrentRoute('dashboard');
+                    await initializeApp('default_story');
+                  }
+                } catch (error: any) {
+                  window.alert(error?.message || 'Failed to delete world.');
+                }
+              }}
               onGenesisCharacter={(world) => {
                 setGenesisWorld(world);
                 setCurrentRoute('create.genesis');

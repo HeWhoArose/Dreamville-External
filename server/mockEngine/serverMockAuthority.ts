@@ -546,9 +546,8 @@ export class ServerMockAuthority {
       }
     }
 
-    const baseResult = this.processAction(request, canonicalCommandId);
-    if (!baseResult || request.type !== 'CUSTOM_ACTION') {
-      return baseResult;
+    if (request.type !== 'CUSTOM_ACTION') {
+      return this.processAction(request, canonicalCommandId);
     }
 
     const freeformText =
@@ -558,6 +557,9 @@ export class ServerMockAuthority {
       (request as any).input ||
       'Performed freeform action.';
 
+    // Encounter detection must happen before the generic story-action resolver.
+    // Otherwise a hostile opening action could be executed once as a story action
+    // and a second time as a combat action.
     const conditionEngine = worldRepository.getConditionEngine(targetStoryId);
     const player = worldRepository.getPlayerLifecycle(targetStoryId);
     const run = worldRepository.getStoryRun(targetStoryId);

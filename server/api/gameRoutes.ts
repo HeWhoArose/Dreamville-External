@@ -3134,11 +3134,17 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
 
     combatEngine.rollInitiative();
 
+    const npcResolution = await resolveNpcTurnsUntilPlayer(
+      storyId,
+      actorId,
+      transactionRepo,
+    );
+
         const state = getCombatStateHelper(combatEngine, storyId, actorId, transactionRepo);
         return {
           success: true,
-          data: { combatState: state },
-          summary: 'Tactical combat encounter initialized.',
+          data: { combatState: state, npcResolution },
+          summary: 'Tactical combat encounter initialized and NPC turns resolved through combat.tactics until the player turn.',
         };
       }
     );

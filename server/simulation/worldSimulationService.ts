@@ -136,6 +136,7 @@ export class WorldSimulationService {
     newTimestamp: ReturnType<InstanceType<typeof import('../domain/worldClock').WorldClock>['getTimestamp']>;
     completedArrivals: string[];
     livingWorldSummary?: import('../domain/livingWorldSimulation').LivingWorldSimulationSummary;
+    worldMomentum?: import('../domain/worldMomentumEngine').WorldMomentumUpdate;
   } {
     const clock = this.worldRepo.getWorldClock(storyId);
     const previousElapsed = clock.getTimestamp().totalElapsedSeconds;

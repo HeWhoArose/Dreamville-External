@@ -112,7 +112,7 @@ const CONTRACTS: Record<TaskId, AiTaskContract> = {
 	},
 	'summary.scene': {
 		task: 'summary.scene',
-		category: 'summarization',
+		category: 'world_generation',
 		requiredCapabilities: ['text_generation'],
 		preferredCapabilities: ['fast', 'long_context'],
 		requiredInputTypes: ['text'],

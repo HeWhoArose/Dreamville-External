@@ -1,105 +1,196 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import {
-	CURRENT_PERSISTENCE_VERSION,
-	CURRENT_SCHEMA_VERSIONS,
-	PersistenceMigrationService,
-	type PersistenceInspection,
-	type PersistenceRepairResult,
-	migratePersistenceData,
+  CURRENT_PERSISTENCE_VERSION,
+  CURRENT_SCHEMA_VERSIONS,
+  PersistenceMigrationService,
+  type PersistenceInspection,
+  type PersistenceRepairResult,
+  migratePersistenceData,
+  type VersionedPersistenceData,
 } from './persistenceMigrationService';
 
-export interface PersistentGameStoreData {
-	version: typeof CURRENT_PERSISTENCE_VERSION;
-	schemaVersions: typeof CURRENT_SCHEMA_VERSIONS;
-	worldTemplates: Record<string, any>;
-	storyRuns: Record<string, any>;
-	confirmedCharacters?: Record<string, any>;
-}
+export type PersistentGameStoreData = VersionedPersistenceData;
 
-const EMPTY_STORE: PersistentGameStoreData = {
-	version: CURRENT_PERSISTENCE_VERSION,
-	schemaVersions: { ...CURRENT_SCHEMA_VERSIONS },
-	worldTemplates: {},
-	storyRuns: {},
-	confirmedCharacters: {},
-};
+const EMPTY_STORE: PersistentGameStoreData = PersistenceMigrationService.emptyData();
 
 function isRunningUnderTests(): boolean {
-	return Boolean(
-		process.env.NODE_TEST_CONTEXT ||
-		process.env.npm_lifecycle_event === 'test' ||
-		process.argv.some((arg) => arg.includes('--test'))
-	);
+  return Boolean(
+    process.env.NODE_TEST_CONTEXT ||
+    process.env.npm_lifecycle_event === 'test' ||
+    process.argv.some((arg) => arg.includes('--test'))
+  );
+}
+
+function clone<T>(value: T): T {
+  return value === undefined ? value : JSON.parse(JSON.stringify(value));
 }
 
 export class PersistentGameStore {
-	private readonly filePath?: string;
-	private readonly isEnabled: boolean;
+  private readonly filePath?: string;
+  private readonly isEnabled: boolean;
+  private readonly snapshotLimit: number;
 
-	constructor(filePath = process.env.DREAMBOOK_PERSISTENCE_PATH) {
-		if (filePath) {
-			this.filePath = resolve(filePath);
-			this.isEnabled = true;
-		} else if (isRunningUnderTests()) {
-			this.filePath = undefined;
-			this.isEnabled = false;
-		} else {
-			this.filePath = resolve(process.cwd(), '.dreambook', 'data.json');
-			this.isEnabled = true;
-		}
-	}
+  constructor(filePath = process.env.DREAMBOOK_PERSISTENCE_PATH) {
+    if (filePath) {
+      this.filePath = resolve(filePath);
+      this.isEnabled = true;
+    } else if (isRunningUnderTests()) {
+      this.filePath = undefined;
+      this.isEnabled = false;
+    } else {
+      this.filePath = resolve(process.cwd(), '.dreambook', 'data.json');
+      this.isEnabled = true;
+    }
 
-	load(): PersistentGameStoreData {
-		if (!this.isEnabled || !this.filePath || !existsSync(this.filePath)) {
-			return structuredClone(EMPTY_STORE);
-		}
+    const configuredLimit = Number(process.env.DREAMBOOK_PERSISTENCE_SNAPSHOT_LIMIT || 20);
+    this.snapshotLimit = Number.isInteger(configuredLimit) && configuredLimit > 0 ? configuredLimit : 20;
+  }
 
-		try {
-			const parsed = JSON.parse(readFileSync(this.filePath, 'utf8'));
-			const migrated = Number(parsed?.version ?? 1) < CURRENT_PERSISTENCE_VERSION
-				? migratePersistenceData(PersistenceMigrationService.migrateFile(this.filePath).path ? JSON.parse(readFileSync(this.filePath, 'utf8')) : parsed)
-				: migratePersistenceData(parsed);
-			return {
-				version: CURRENT_PERSISTENCE_VERSION,
-				schemaVersions: migrated.schemaVersions,
-				worldTemplates: migrated.worldTemplates,
-				storyRuns: migrated.storyRuns,
-				confirmedCharacters: migrated.confirmedCharacters,
-			};
-		} catch (error) {
-			console.error('[PersistentGameStore] Persistence load/migration failed; source file was not modified.', error);
-			throw error;
-		}
-	}
+  load(): PersistentGameStoreData {
+    if (!this.isEnabled || !this.filePath || !existsSync(this.filePath)) {
+      return clone(EMPTY_STORE);
+    }
 
-	save(data: PersistentGameStoreData): void {
-		if (!this.isEnabled || !this.filePath) {
-			return;
-		}
+    try {
+      const parsed = JSON.parse(readFileSync(this.filePath, 'utf8'));
+      const migrated = migratePersistenceData(parsed);
+      if (JSON.stringify(parsed) !== JSON.stringify(migrated)) {
+        // The migration service creates its own pre-migration backup before changing
+        // the primary file. We do not mutate the source during a normal read here.
+        this.migrateIfNeeded(migrated);
+      }
+      return clone(migrated);
+    } catch (error) {
+      const recovered = this.tryRecoverFromLatestSnapshot(error);
+      if (recovered) return recovered;
+      console.error('[PersistentGameStore] Persistence load failed and no valid snapshot could be recovered.', error);
+      throw error;
+    }
+  }
 
-		const directory = dirname(this.filePath);
-		mkdirSync(directory, { recursive: true });
+  save(data: PersistentGameStoreData): void {
+    if (!this.isEnabled || !this.filePath) return;
 
-		const temporaryPath = `${this.filePath}.tmp`;
-		const serialized = JSON.stringify(data, null, 2);
-		writeFileSync(temporaryPath, serialized, 'utf8');
-		renameSync(temporaryPath, this.filePath);
-	}
+    const normalized = migratePersistenceData(data);
+    const directory = dirname(this.filePath);
+    mkdirSync(directory, { recursive: true });
 
-	getPath(): string | undefined {
-		return this.filePath;
-	}
+    if (existsSync(this.filePath)) {
+      this.createSnapshot();
+    }
 
-	inspectPersistence(): PersistenceInspection {
-		return PersistenceMigrationService.inspectFile(this.filePath);
-	}
+    const temporaryPath = `${this.filePath}.tmp`;
+    writeFileSync(temporaryPath, JSON.stringify(normalized, null, 2), 'utf8');
+    renameSync(temporaryPath, this.filePath);
+    this.pruneSnapshots();
+  }
 
-	migratePersistence(): PersistenceInspection {
-		return PersistenceMigrationService.migrateFile(this.filePath);
-	}
+  private migrateIfNeeded(migrated: PersistentGameStoreData): void {
+    if (!this.filePath) return;
+    const inspection = PersistenceMigrationService.inspectFile(this.filePath);
+    if (!inspection.needsMigration) return;
+    // migrateFile validates, creates a pre-migration backup, atomically writes,
+    // and restores the original source if post-migration validation fails.
+    PersistenceMigrationService.migrateFile(this.filePath);
+    // Keep the typed migration result available for callers even if the file was
+    // concurrently changed between inspection and migration.
+    void migrated;
+  }
 
-	repairPersistence(): PersistenceRepairResult {
-		return PersistenceMigrationService.repairFile(this.filePath);
-	}
+  private getSnapshotDirectory(): string {
+    return this.filePath ? `${dirname(this.filePath)}/history` : '';
+  }
+
+  private createSnapshot(): void {
+    if (!this.filePath || !existsSync(this.filePath)) return;
+    const snapshotDirectory = this.getSnapshotDirectory();
+    mkdirSync(snapshotDirectory, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const snapshotPath = `${snapshotDirectory}/data-${stamp}-${process.pid}.json`;
+    copyFileSync(this.filePath, snapshotPath);
+  }
+
+  private pruneSnapshots(): void {
+    const directory = this.getSnapshotDirectory();
+    if (!directory || !existsSync(directory)) return;
+
+    const files = readdirSync(directory)
+      .filter((name) => name.endsWith('.json'))
+      .sort()
+      .reverse();
+
+    for (const file of files.slice(this.snapshotLimit)) {
+      try { unlinkSync(`${directory}/${file}`); } catch {}
+    }
+  }
+
+  private tryRecoverFromLatestSnapshot(loadError: unknown): PersistentGameStoreData | null {
+    const directory = this.getSnapshotDirectory();
+    if (!directory || !existsSync(directory)) return null;
+
+    const candidates = readdirSync(directory)
+      .filter((name) => name.endsWith('.json'))
+      .sort()
+      .reverse();
+
+    for (const candidate of candidates) {
+      const path = `${directory}/${candidate}`;
+      try {
+        const parsed = JSON.parse(readFileSync(path, 'utf8'));
+        const recovered = migratePersistenceData(parsed);
+        console.error('[PersistentGameStore] Primary persistence was unreadable; recovered the last valid snapshot.', {
+          primaryPath: this.filePath,
+          snapshotPath: path,
+          error: loadError instanceof Error ? loadError.message : String(loadError),
+        });
+        return clone(recovered);
+      } catch {
+        // Continue searching older snapshots.
+      }
+    }
+
+    return null;
+  }
+
+  getPath(): string | undefined {
+    return this.filePath;
+  }
+
+  getSnapshots(): string[] {
+    const directory = this.getSnapshotDirectory();
+    if (!directory || !existsSync(directory)) return [];
+    return readdirSync(directory)
+      .filter((name) => name.endsWith('.json'))
+      .sort()
+      .reverse()
+      .map((name) => `${directory}/${name}`);
+  }
+
+  inspectPersistence(): PersistenceInspection {
+    return PersistenceMigrationService.inspectFile(this.filePath);
+  }
+
+  migratePersistence(): PersistenceInspection {
+    return PersistenceMigrationService.migrateFile(this.filePath);
+  }
+
+  repairPersistence(): PersistenceRepairResult {
+    return PersistenceMigrationService.repairFile(this.filePath);
+  }
+
+  getPersistenceHealth(): {
+    enabled: boolean;
+    path?: string;
+    snapshotCount: number;
+    latestSnapshot?: string;
+  } {
+    const snapshots = this.getSnapshots();
+    return {
+      enabled: this.isEnabled,
+      path: this.filePath,
+      snapshotCount: snapshots.length,
+      latestSnapshot: snapshots[0],
+    };
+  }
 }

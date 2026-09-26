@@ -2543,6 +2543,10 @@ export class InMemoryWorldRepository implements WorldRepository {
   }
 
   public saveWorldTemplate(world: any): void {
+    const worldId = String(world?.worldId || '').trim();
+    if (!worldId || this.isDeleted('WORLD', worldId)) {
+      throw new Error('Cannot save a world that has an explicit deletion tombstone.');
+    }
     const resolvedNarrative = narrativeProfileEngine.resolve({
       mode: ['PROTAGONIST', 'SIDE_CHARACTER', 'FREE_ROAM'].includes(world?.storyMode)
         ? world?.storyMode
@@ -2695,6 +2699,7 @@ export class InMemoryWorldRepository implements WorldRepository {
   }
 
   public getStoryRun(storyId: string): any | null {
+    if (!storyId || this.isDeleted('STORY_RUN', storyId)) return null;
     let run = this.storyRuns.get(storyId);
     if (!run && storyId === 'default_story') {
       run = {
@@ -2768,6 +2773,10 @@ export class InMemoryWorldRepository implements WorldRepository {
   }
 
   public saveStoryRun(run: any): void {
+    const storyId = String(run?.storyId || run?.id || '').trim();
+    if (!storyId || this.isDeleted('STORY_RUN', storyId)) {
+      throw new Error('Cannot save a Story Run that has an explicit deletion tombstone.');
+    }
     const world = run?.worldId ? this.getWorldTemplate(run.worldId) : null;
     const resolvedNarrative = narrativeProfileEngine.resolve({
       mode: run?.storyMode,
@@ -3075,12 +3084,13 @@ export class InMemoryWorldRepository implements WorldRepository {
 
   // Character Genesis / Drafts & Confirmed Characters (Slice 2)
   public getCharacterDrafts(worldId: string): any[] {
-    if (!worldId) return [];
+    if (!worldId || this.isDeleted('WORLD', worldId)) return [];
     return this.characterDraftsMap.get(worldId) || [];
   }
 
   public saveCharacterDraft(worldId: string, draft: any): void {
     if (!worldId || !draft) return;
+    if (this.isDeleted('WORLD', worldId)) throw new Error('Cannot save a character draft into an explicitly deleted world.');
     const existing = this.getCharacterDrafts(worldId);
     const draftSequence = existing.length + 1;
     const draftId = draft.draftId || draft.id || deterministicId('draft',
@@ -3090,6 +3100,7 @@ export class InMemoryWorldRepository implements WorldRepository {
     );
     draft.draftId = draftId;
     draft.worldId = worldId;
+    if (this.isDeleted('CHARACTER_DRAFT', String(draftId), worldId)) throw new Error('Cannot save a character draft with an explicit deletion tombstone.');
     const idx = existing.findIndex((d) => (d.draftId || d.id) === draftId);
     if (idx >= 0) {
       existing[idx] = draft;
@@ -3101,12 +3112,13 @@ export class InMemoryWorldRepository implements WorldRepository {
   }
 
   public getConfirmedCharacters(worldId: string): any[] {
-    if (!worldId) return [];
+    if (!worldId || this.isDeleted('WORLD', worldId)) return [];
     return this.confirmedCharactersMap.get(worldId) || [];
   }
 
   public saveConfirmedCharacter(worldId: string, char: any): void {
     if (!worldId || !char) return;
+    if (this.isDeleted('WORLD', worldId)) throw new Error('Cannot save a character into an explicitly deleted world.');
     const existing = this.getConfirmedCharacters(worldId);
     const characterSequence = existing.length + 1;
     const charId = char.characterId || char.id || deterministicId('char',
@@ -3116,6 +3128,7 @@ export class InMemoryWorldRepository implements WorldRepository {
     );
     char.characterId = charId;
     char.worldId = worldId;
+    if (this.isDeleted('CHARACTER', String(charId), worldId)) throw new Error('Cannot save a character with an explicit deletion tombstone.');
     const idx = existing.findIndex((c) => (c.characterId || c.id) === charId);
     if (idx >= 0) {
       existing[idx] = char;

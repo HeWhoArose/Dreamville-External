@@ -268,6 +268,7 @@ export const App: React.FC = () => {
     onComplete?: (result: ActionResult) => void
   ) => {
     const currentSeq = ++actionSeqRef.current;
+    setNetworkError(null);
     setIsProcessingAction(true);
     try {
       const payload = { ...action, storyId: (action as any).storyId || activeStoryId };
@@ -277,12 +278,14 @@ export const App: React.FC = () => {
       }
       setViewState(result.viewState);
       fetchAuxiliaryData();
+      apiClient.getStoryActionTips((payload as any).storyId).then(setStoryActionTips).catch(() => undefined);
       if (onComplete) {
         onComplete(result);
       }
     } catch (err) {
       if (currentSeq === actionSeqRef.current) {
         console.error('Failed to execute story action:', err);
+        setNetworkError(err instanceof Error ? err.message : 'The story action could not be executed.');
       }
     } finally {
       if (currentSeq === actionSeqRef.current) {

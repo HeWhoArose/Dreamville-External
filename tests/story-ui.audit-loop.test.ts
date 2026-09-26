@@ -66,3 +66,25 @@ test('Story UI audit-implementation-regression-fallback loop completes ten deter
 		assert.equal(story.includes('Adjudication Outcome'), false, `Audit ${iteration}: internal adjudication panel leaked into player UI`);
 	}
 });
+
+
+test('Story library persistence and canonical-source audit completes ten deterministic passes', () => {
+	const app = read('src/App.tsx');
+	const library = read('src/components/StoryLibraryModal.tsx');
+	const routes = read('server/api/gameRoutes.ts');
+
+	for (let iteration = 1; iteration <= 10; iteration += 1) {
+		assert.equal(app.includes("const ACTIVE_STORY_STORAGE_KEY = 'dreambook.activeStoryId';"), true, `Audit ${iteration}: active story persistence key missing`);
+		assert.equal(app.includes("useState<string>(() => readPersistedActiveStoryId())"), true, `Audit ${iteration}: active story is not restored on remount`);
+		assert.equal(app.includes("localStorage.setItem(ACTIVE_STORY_STORAGE_KEY, activeStoryId)"), true, `Audit ${iteration}: active story is not persisted`);
+		assert.equal(app.includes("apiClient.setActiveStoryId(activeStoryId);"), true, `Audit ${iteration}: API active-story authority is not synchronized`);
+		assert.equal(app.includes("initializeApp(activeStoryId);"), true, `Audit ${iteration}: remount falls back to an implicit dummy story`);
+		assert.equal(app.includes("const runs = await apiClient.getStoryRuns();"), true, `Audit ${iteration}: main library is not using canonical Story Runs`);
+
+		assert.equal(library.includes("const list = await apiClient.getStoryRuns();"), true, `Audit ${iteration}: legacy adaptation-only library source remains`);
+		assert.equal(library.includes("apiClient.listAdaptedStories()"), false, `Audit ${iteration}: decoy adapted-story endpoint remains connected to Story Library`);
+		assert.equal(library.includes("story.isAdapted"), true, `Audit ${iteration}: adaptation-only branch action is not guarded`);
+
+		assert.equal(routes.includes("isAdapted: Boolean(worldRepository.getAdaptedStoryBible(run.storyId))"), true, `Audit ${iteration}: canonical Story Run projection lacks adaptation metadata`);
+	}
+});

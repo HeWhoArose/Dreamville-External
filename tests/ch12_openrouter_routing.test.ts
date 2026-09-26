@@ -555,8 +555,8 @@ test('task fallback recovers a live eligible model when the persisted chain has 
     { timeoutMs: 1000 }
   );
 
-  assert.equal(result.source, 'AI_FALLBACK');
-  assert.equal(result.modelId, 'recovered-model');
+  assert.equal(result.source, 'AI_FALLBACK', JSON.stringify(result));
+  assert.equal(result.modelId, 'recovered-model', JSON.stringify(result));
   assert.equal(result.attempts, 2);
   assert.equal(result.attemptsTrail.map((attempt) => attempt.modelId).join(','), 'stale-primary,recovered-model');
 });

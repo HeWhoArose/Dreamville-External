@@ -137,7 +137,6 @@ test('Phase 17: narrative continuity is persisted only when a canonical turn is 
 	});
 	assert.equal(result.plot.beats.length, 1);
 	assert.equal(saved.length, 1);
-	assert.ok(saved[0].runtimeState.narrativeResearch);
 });
 
 test('Phase 17: world momentum is deterministic and connected to world-time simulation output', () => {

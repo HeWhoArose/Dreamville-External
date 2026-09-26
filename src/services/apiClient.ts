@@ -1988,6 +1988,27 @@ class ApiClient {
     return await res.json();
   }
 
+  public async deleteStoryRun(storyId: string, confirmationText: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/story-runs/${encodeURIComponent(storyId)}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ confirm: true, confirmationText }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(data?.errorReason || `Failed to delete Story Run: HTTP ${res.status}`);
+    return data;
+  }
+
+  public async deleteWorld(worldId: string, confirmationText: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/worlds/${encodeURIComponent(worldId)}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ confirm: true, confirmationText }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(data?.errorReason || `Failed to delete world: HTTP ${res.status}`);
+    return data;
+  }
   public async getWorlds(filters?: any): Promise<any[]> {
     const params = new URLSearchParams();
     if (filters) {

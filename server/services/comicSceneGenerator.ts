@@ -144,4 +144,3 @@ export function buildComicScenePrompt(context: ComicSceneContext): ComicScenePro
     freshnessRule: 'Immediate latest turn only; no prior-scene carryover.',
   };
 }
-}

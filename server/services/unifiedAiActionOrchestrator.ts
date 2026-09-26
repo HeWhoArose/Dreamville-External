@@ -129,14 +129,53 @@ export class UnifiedAiActionOrchestrator {
 			} catch {}
 		}
 		let explanation=rules.reason;
-		if(rules.status!=='PASS'){try{const result=await this.runTask('capability.explain',JSON.stringify({action:cleanAction,intent,research,simulation,rules,ruleAnalysis}),'Explain the canonical result plainly. Do not override or invent mechanics.',{timeoutMs:4500,maxTokens:700});explanation=result.text||explanation;telemetry.push({task:'capability.explain',modelId:result.modelId,providerId:result.providerId,source:result.source,attempts:result.attempts});}catch{}}
+		if(capabilityLike){
+			try{
+				const result=await this.runTask(
+					'capability.explain',
+					JSON.stringify({
+						action:cleanAction,
+						intent,
+						research,
+						simulation,
+						rules,
+						ruleAnalysis,
+					}),
+					'Explain the canonical result plainly, including why the action is allowed, blocked, or requires progression. Never override or invent mechanics.',
+					{timeoutMs:4500,maxTokens:700}
+				);
+				explanation=result.text||explanation;
+				telemetry.push({
+					task:'capability.explain',
+					modelId:result.modelId,
+					providerId:result.providerId,
+					source:result.source,
+					attempts:result.attempts,
+				});
+			}catch{}
+		}
 		let tacticalContext: UnifiedActionPipelineResult['tacticalContext']={required:false,source:'NOT_REQUIRED'};
 		if(Boolean(this.repository.getCombatEngine(storyId).getCurrentActor())&&capabilityLike){
 			tacticalContext={required:true,source:'DETERMINISTIC_FALLBACK'};
 			try{const result=await this.runTask('tactical.reason',JSON.stringify({action:cleanAction,intent,research,rules,ruleAnalysis,simulation,combat:this.repository.getCombatEngine(storyId).getParticipants()}),'Return ONLY JSON {"plan":"..."}. Never invent actors, abilities, positions, or outcomes.',{timeoutMs:6000,maxTokens:900,validateResponse:(text:string)=>{const p=json<any>(text);return p&&typeof p.plan==='string'?{valid:true}:{valid:false,errorReason:'Invalid tactical plan.'};}});const p=json<any>(result.text);if(p)tacticalContext={required:true,plan:p.plan,source:result.source==='DETERMINISTIC_FALLBACK'?'DETERMINISTIC_FALLBACK':'AI'};telemetry.push({task:'tactical.reason',modelId:result.modelId,providerId:result.providerId,source:result.source,attempts:result.attempts});}catch{}
 		}
-		return {actionText:cleanAction,intent,research,capability:finalCandidate,simulation,rules,explanation,ruleAnalysis,tacticalContext,narrationDirective:rules.status==='PASS'
-				? ('Describe only the canonical outcome after resolution. Intent: '+intent.intent+'. Mechanical result: '+simulation.explanation+'. Research context: '+research.brief+'. Rule analysis context: '+ruleAnalysis)
-				: ('Explain the canonical rejection/block without inventing success. '+explanation+'. Research context: '+research.brief+'. Rule analysis context: '+ruleAnalysis),telemetry};
+		const tacticalDirective = tacticalContext?.required
+			? ' Tactical context: ' + (tacticalContext.plan || 'No tactical plan was produced; keep the canonical action outcome authoritative.')
+			: '';
+		return {
+			actionText:cleanAction,
+			intent,
+			research,
+			capability:finalCandidate,
+			simulation,
+			rules,
+			explanation,
+			ruleAnalysis,
+			tacticalContext,
+			narrationDirective: rules.status==='PASS'
+				? ('Describe only the canonical outcome after resolution. Intent: '+intent.intent+'. Requested effects: '+intent.requestedEffects.join(', ')+'. Mechanical result: '+simulation.explanation+'. Capability explanation: '+explanation+'. Research context: '+research.brief+'. Rule analysis context: '+ruleAnalysis+'.'+tacticalDirective)
+				: ('Explain the canonical rejection/block without inventing success. '+explanation+'. Research context: '+research.brief+'. Rule analysis context: '+ruleAnalysis+'.'+tacticalDirective),
+			telemetry,
+		};
 	}
 }

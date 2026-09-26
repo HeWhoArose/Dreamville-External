@@ -1,4 +1,5 @@
 import { WorldTimestamp } from './types';
+import { deterministicId } from './deterministicRng';
 import { PendingActivationState } from './capabilityEngine';
 import { ConditionEngine } from './conditionEngine';
 import { CombatActionEconomy, CombatTurnResourceSnapshot, ReadyTriggerType } from './combatActionEconomy';

@@ -267,7 +267,7 @@ export const App: React.FC = () => {
 
   const dispatchAction = async (
     action: ActionRequest,
-    onComplete?: (result: ActionResult) => void
+    onComplete?: (result: ActionResult) => void | Promise<void>
   ) => {
     const currentSeq = ++actionSeqRef.current;
     setNetworkError(null);
@@ -285,7 +285,7 @@ export const App: React.FC = () => {
       fetchAuxiliaryData();
       apiClient.getStoryActionTips((payload as any).storyId).then(setStoryActionTips).catch(() => undefined);
       if (onComplete) {
-        onComplete(result);
+        await onComplete(result);
       }
     } catch (err: any) {
       if (currentSeq === actionSeqRef.current) {
@@ -456,9 +456,9 @@ export const App: React.FC = () => {
         actionText,
         intent: actionText,
       } as any,
-      (result) => {
+      async (result) => {
         if (result.combatTransition) {
-          void handleEnterCombatTransition(result.combatTransition);
+          await handleEnterCombatTransition(result.combatTransition);
         }
       },
     );

@@ -5429,6 +5429,11 @@ export class MultiModelOrchestrator {
     if (runnableNonEmergencyCount < 2) {
       for (const model of usableCandidates) {
         if (candidateKeys.has(this.modelKey(model))) continue;
+        if (!model.roleEligibility.includes(task)) continue;
+        if (!this.getAdapter(model.providerId)) continue;
+        if (model.health === 'Unavailable' || model.health === 'DisabledByUser' || model.health === 'InvalidAuth') continue;
+        if (model.quota === 'Exhausted' || model.accessStatus === 'quota_limited' || model.accessStatus === 'rate_limited') continue;
+        if (contextTokens > 0 && model.contextWindow > 0 && contextTokens > model.contextWindow) continue;
         selectedCandidates.push(model);
         candidateKeys.add(this.modelKey(model));
         if (selectedCandidates.filter((candidate) => !candidate.isEmergencyFloor).length >= 4) break;
@@ -5478,8 +5483,11 @@ export class MultiModelOrchestrator {
         const lateRecovery = Array.from(this.models.values())
           .filter((model) => !model.isEmergencyFloor)
           .filter((model) => !attemptedKeys.has(this.modelKey(model)))
+          .filter((model) => model.roleEligibility.includes(task))
           .filter((model) => Boolean(this.getAdapter(model.providerId)))
-          .filter((model) => this.isCandidateUsable(model, task, contextTokens))
+          .filter((model) => model.health !== 'Unavailable' && model.health !== 'DisabledByUser' && model.health !== 'InvalidAuth')
+          .filter((model) => model.quota !== 'Exhausted' && model.accessStatus !== 'quota_limited' && model.accessStatus !== 'rate_limited')
+          .filter((model) => contextTokens <= 0 || model.contextWindow <= 0 || contextTokens <= model.contextWindow)
           .sort((a, b) => b.userPriority - a.userPriority || this.modelKey(a).localeCompare(this.modelKey(b)))[0];
 
         if (lateRecovery) {

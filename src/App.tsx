@@ -876,6 +876,27 @@ export const App: React.FC = () => {
               }}
               onNewStory={() => setCurrentRoute('create')}
               onBranchStory={() => setIsStoryLibraryModalOpen(true)}
+              onDeleteStory={async (story) => {
+                const confirmation = window.prompt(
+                  `This permanently deletes "${story.title}" and its entire Story Run state. This cannot be undone.\n\nType the exact Story Run title to confirm:`
+                );
+                if (confirmation === null) return;
+                if (confirmation !== story.title) {
+                  window.alert('Deletion cancelled: the confirmation text did not exactly match the Story Run title.');
+                  return;
+                }
+                try {
+                  await apiClient.deleteStoryRun(story.storyId, confirmation);
+                  if (activeStoryId === story.storyId) {
+                    apiClient.setActiveStoryId('default_story');
+                    setActiveStoryId('default_story');
+                    await initializeApp('default_story');
+                  }
+                  await fetchStoryLibrary();
+                } catch (error: any) {
+                  window.alert(error?.message || 'Failed to delete Story Run.');
+                }
+              }}
               onStoryAssetChange={async (runId, newUrl, provenance) => {
                 try {
                   const updated = await apiClient.saveStoryRunVisualAsset(runId, {

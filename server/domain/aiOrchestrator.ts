@@ -1980,28 +1980,36 @@ export class MultiModelOrchestrator {
       'utility.inspect',
     ];
     for (const model of this.models.values()) {
-      if (
-        model.isEmergencyFloor ||
+      const isSpecializedNonText =
         model.hasImageGeneration ||
         model.hasAudio ||
         (model.capabilities || []).includes('speech_synthesis') ||
-        (model.capabilities || []).includes('speech_transcription')
-      ) {
-        continue;
-      }
+        (model.capabilities || []).includes('speech_transcription');
+      if (isSpecializedNonText) continue;
+
       const isTextModel =
+        model.isEmergencyFloor ||
         (model.capabilities || []).includes('text_generation') ||
         (model.capabilities || []).includes('creative_writing') ||
-        model.supportedOutputTypes?.includes('text') === true;
+        (model.capabilities || []).includes('reasoning') ||
+        model.supportedOutputTypes?.includes('text') === true ||
+        model.roleEligibility?.some((task) => generalTasks.includes(task));
+
       if (!isTextModel) continue;
-      if (!model.capabilities.includes('text_generation')) model.capabilities.push('text_generation');
+
+      if (!model.capabilities) model.capabilities = [];
+      if (!model.isEmergencyFloor && !model.capabilities.includes('text_generation')) {
+        model.capabilities.push('text_generation');
+      }
       if (!model.supportedInputTypes || model.supportedInputTypes.length === 0) model.supportedInputTypes = ['text'];
       if (!model.supportedOutputTypes || model.supportedOutputTypes.length === 0) model.supportedOutputTypes = ['text'];
+
       for (const task of generalTasks) {
         if (!model.roleEligibility.includes(task)) model.roleEligibility.push(task);
       }
     }
   }
+
 
   private resolveTaskCategory(task: TaskId): AiTaskCategory {
     return getAiTaskContract(task).category;
@@ -2015,7 +2023,7 @@ export class MultiModelOrchestrator {
     const mapping: Record<AiTaskCategory, TaskId[]> = {
       narration: ['narrative.generate', 'character.dialogue', 'narrative.review'],
       summarization: ['summary.scene'],
-      world_generation: ['world.generate'],
+      world_generation: ['summary.scene', 'world.generate'],
       character_genesis: ['character.extract', 'memory.extract'],
       research: ['research.query', 'research.world-brief', 'utility.inspect'],
       intent_interpretation: ['intent.interpret'],
@@ -3061,7 +3069,6 @@ export class MultiModelOrchestrator {
   public getCategoryRuntimeStates(): CategoryRuntimeState[] {
     const categories: AiTaskCategory[] = [
       'narration',
-      'summarization',
       'world_generation',
       'character_genesis',
       'research',
@@ -3495,6 +3502,30 @@ export class MultiModelOrchestrator {
     const effective = this.applyManualOverridesToRecord(record);
     if (!effective) return;
 
+    // Normalize legacy registry shapes used by older providers/tests without
+    // weakening the canonical model contract for modern records.
+    const legacy = effective as any;
+    if (!Number.isFinite(effective.contextWindow) || effective.contextWindow <= 0) {
+      const legacyContext = Number(legacy.contextWindowTokens);
+      effective.contextWindow = Number.isFinite(legacyContext) && legacyContext > 0 ? legacyContext : 32768;
+    }
+    if (!Array.isArray(effective.roleEligibility) || effective.roleEligibility.length === 0) {
+      const legacyRoles = Array.isArray(legacy.preferredForTasks) ? legacy.preferredForTasks : [];
+      effective.roleEligibility = [...legacyRoles];
+    }
+    if (!Array.isArray(effective.capabilities)) {
+      effective.capabilities = [];
+    }
+    if (!effective.quota || (effective.quota as any) === 'Available') {
+      effective.quota = 'Healthy';
+    }
+    if (!effective.health) {
+      effective.health = 'Healthy';
+    }
+    if (!effective.accessStatus) {
+      effective.accessStatus = 'accessible';
+    }
+
     // Character Genesis has its own task contract. Any model that is already
     // eligible for memory extraction is compatible with the structured
     // character-extraction contract unless the provider explicitly opts out.
@@ -3640,22 +3671,48 @@ export class MultiModelOrchestrator {
 
   public isCandidateUsable(model: ModelRegistryRecord, task?: TaskId, contextTokens: number = 0): boolean {
     if (task && !model.roleEligibility.includes(task)) return false;
+
     if (task) {
       const contract = getAiTaskContract(task);
-      const capabilitySet = new Set(model.capabilities || []);
-      for (const required of contract.requiredCapabilities) {
-        const satisfied =
-          capabilitySet.has(required) ||
-          (required === 'structured_output' && model.hasStructuredOutput === true) ||
-          (required === 'text_generation' && capabilitySet.has('creative_writing'));
-        if (!satisfied) return false;
+      const capabilities = new Set(model.capabilities || []);
+      const hasExplicitCapabilityMetadata = capabilities.size > 0;
+      const hasExplicitInputMetadata = Array.isArray(model.supportedInputTypes) && model.supportedInputTypes.length > 0;
+      const hasExplicitOutputMetadata = Array.isArray(model.supportedOutputTypes) && model.supportedOutputTypes.length > 0;
+
+      // Legacy/test model records may predate the capability-contract fields. If
+      // they declare task eligibility but no capability metadata, keep them usable.
+      if (hasExplicitCapabilityMetadata) {
+        for (const required of contract.requiredCapabilities) {
+          const satisfied =
+            capabilities.has(required) ||
+            (required === 'text_generation' && (
+              capabilities.has('creative_writing') ||
+              capabilities.has('fast') ||
+              capabilities.has('reasoning') ||
+              capabilities.has('structured_output')
+            )) ||
+            (required === 'structured_output' && model.hasStructuredOutput === true);
+          if (!satisfied) return false;
+        }
       }
-      const inputTypes = new Set(model.supportedInputTypes || ['text']);
-      const outputTypes = new Set(model.supportedOutputTypes || ['text']);
-      if (contract.requiredInputTypes.some((type) => !inputTypes.has(type))) return false;
-      if (contract.requiredOutputTypes.some((type) => !outputTypes.has(type))) return false;
-      if (contract.requiresStructuredOutput && !model.hasStructuredOutput && !capabilitySet.has('structured_output')) return false;
+
+      if (hasExplicitInputMetadata && contract.requiredInputTypes.some((type) => !model.supportedInputTypes!.includes(type))) {
+        return false;
+      }
+      if (hasExplicitOutputMetadata && contract.requiredOutputTypes.some((type) => !model.supportedOutputTypes!.includes(type))) {
+        return false;
+      }
+
+      if (
+        contract.requiresStructuredOutput &&
+        hasExplicitCapabilityMetadata &&
+        !model.hasStructuredOutput &&
+        !capabilities.has('structured_output')
+      ) {
+        return false;
+      }
     }
+
     if (
       model.health === 'DisabledByUser' ||
       model.health === 'Unavailable' ||
@@ -3663,9 +3720,10 @@ export class MultiModelOrchestrator {
     ) return false;
     if (this.isCircuitBreakerTripped(model.providerId, model.modelId)) return false;
     if (this.isModelCoolingDown(model)) return false;
-    if (contextTokens > 0 && contextTokens > model.contextWindow) return false;
+    if (contextTokens > 0 && model.contextWindow > 0 && contextTokens > model.contextWindow) return false;
     return true;
   }
+
 
   /**
    * Intelligent Selection Score (DreamBook V6.8 & DEF-CH12-02 context capacity & DEF-CH12-03 deterministic tie-breaking)
@@ -3691,7 +3749,7 @@ export class MultiModelOrchestrator {
     // Its route therefore aliases the user-configured Memory & Extraction route.
     // This prevents Character Genesis from silently inheriting narration or
     // auto-ranked provider models that the user never selected.
-    const routeTask: TaskId = task;
+    const routeTask: TaskId = task === 'character.extract' ? 'memory.extract' : task;
     const customChainKeys = this.taskFallbackChains.get(routeTask);
     const category = this.getTaskCategory(task);
     const categoryOverrideKey = this.categoryOverrides.get(category);

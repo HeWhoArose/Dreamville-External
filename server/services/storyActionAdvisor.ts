@@ -119,7 +119,8 @@ function capabilityMatchesAction(capability: CapabilityDefinition, text: string)
 	const normalized = normalize(text);
 	const capabilityName = normalize(capability.name);
 	if (!capabilityName) return false;
-	return normalized.includes(capabilityName) || normalized === capability.id.toLowerCase();
+	const capId = String(capability?.id || '');
+	return normalized.includes(capabilityName) || (capId ? normalized === capId.toLowerCase() : false);
 }
 
 function actorAlreadyHasCapability(capabilities: EffectiveCapability[], capabilityId: string): boolean {
@@ -225,30 +226,31 @@ function inferDirectCompatibility(
 function deterministicAlternativeConcept(requestedName: string, run: any): string {
 	const actorText = actorNarrativeText(run);
 	const role = normalize(run?.protagonist?.role?.archetype || run?.protagonist?.role?.profession);
-	const requested = requestedName.toLowerCase();
+	const name = String(requestedName || 'Custom Capability');
+	const requested = name.toLowerCase();
 
 	if (requested.includes('fireball') || requested.includes('fire')) {
 		if (role.includes('dark') || actorText.includes('curse') || actorText.includes('shadow') || actorText.includes('void')) {
 			return 'Dark Fire';
 		}
-		return 'Personalized ' + requestedName;
+		return 'Personalized ' + name;
 	}
 
 	if (requested.includes('ice') || requested.includes('frost')) {
 		if (role.includes('dark') || actorText.includes('shadow') || actorText.includes('curse')) {
 			return 'Black Frost';
 		}
-		return 'Personalized ' + requestedName;
+		return 'Personalized ' + name;
 	}
 
 	if (requested.includes('lightning') || requested.includes('thunder')) {
 		if (role.includes('dark') || actorText.includes('shadow') || actorText.includes('curse')) {
 			return 'Void Lightning';
 		}
-		return 'Personalized ' + requestedName;
+		return 'Personalized ' + name;
 	}
 
-	return 'Personalized ' + requestedName;
+	return 'Personalized ' + name;
 }
 
 export class StoryActionAdvisor {
@@ -665,7 +667,8 @@ export class StoryActionAdvisor {
 		aiPipeline?: UnifiedActionPipelineResult,
 	): Promise<ActionCapabilityProposal | null> {
 		const world = run?.worldId ? this.repository.getWorldTemplate(run.worldId) : undefined;
-		const concept = deterministicAlternativeConcept(requestedCapability.name, run);
+		const capName = requestedCapability?.name || actionText || 'Custom Capability';
+		const concept = deterministicAlternativeConcept(capName, run);
 
 		let alternative: any;
 		const worldCapabilityPool = [
@@ -673,8 +676,8 @@ export class StoryActionAdvisor {
 			...((world?.capabilities || []) as any[]),
 		];
 		const canonicalWorldCapability = worldCapabilityPool.find((capability) =>
-			capability?.id === requestedCapability.id ||
-			(typeof capability?.name === 'string' && capability.name.trim().toLowerCase() === requestedCapability.name.trim().toLowerCase())
+			capability?.id === requestedCapability?.id ||
+			(typeof capability?.name === 'string' && requestedCapability?.name && capability.name.trim().toLowerCase() === requestedCapability.name.trim().toLowerCase())
 		);
 
 		if (canonicalWorldCapability) {
@@ -705,7 +708,7 @@ export class StoryActionAdvisor {
 				alternative = await service.proposeCustomCapability(
 				{
 					worldId: run?.worldId || storyId,
-					capabilityConcept: concept + ': an adaptation of ' + requestedCapability.name + ' that fits this character.',
+					capabilityConcept: concept + ': an adaptation of ' + capName + ' that fits this character.',
 					characterContext: {
 						role: run?.protagonist?.role?.archetype || run?.protagonist?.role?.profession,
 						species: run?.protagonist?.identity?.species,
@@ -789,14 +792,14 @@ export class StoryActionAdvisor {
 				storyId,
 				actorId,
 				actionText,
-				requestedCapability.id,
+				requestedCapability?.id || 'unknown_cap',
 				alternative.name
 			),
 			requestedAction: actionText,
-			requestedCapabilityId: requestedCapability.id,
-			requestedCapabilityName: requestedCapability.name,
+			requestedCapabilityId: requestedCapability?.id || 'unknown_cap',
+			requestedCapabilityName: requestedCapability?.name || capName,
 			reasonRequestedCapabilityUnavailable:
-				"The character does not currently have '" + requestedCapability.name + "'. The simulation found a world/character-compatible development route; nothing has been acquired yet.",
+				"The character does not currently have '" + (requestedCapability?.name || capName) + "'. The simulation found a world/character-compatible development route; nothing has been acquired yet.",
 			alternative,
 			simulation: initialSimulation,
 			acceptLabel: 'Learn ' + alternative.name + ' and use it',

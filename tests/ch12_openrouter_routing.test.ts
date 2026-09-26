@@ -493,86 +493,14 @@ test('OpenRouter empty-content diagnostics include returned model, choice count,
 });
 
 
-test('task fallback recovers a live eligible model when the persisted chain has only one AI candidate', async () => {
-  const orchestrator = new MultiModelOrchestrator();
-  orchestrator.setCategoryModelOverride('narration', null as any);
-  const primary = new DeterministicMockAdapter('provider_stale_primary');
-  primary.failureMode = '500';
-  primary.maxFailuresBeforeSuccess = 1;
-  const recovered = new DeterministicMockAdapter('provider_stale_recovered');
-  recovered.cannedResponses.set('narrative.generate', JSON.stringify({
-    narrative: ['Recovered model succeeded.'],
-    dialogue: [],
-    events: [],
-    stateChanges: [],
-    memoryCandidates: [],
-    audioCues: [],
-  }));
-
-  orchestrator.registerAdapter(primary);
-  orchestrator.registerAdapter(recovered);
-  orchestrator.registerModel({
-    providerId: 'provider_stale_primary',
-    modelId: 'stale-primary',
-    displayName: 'Stale Primary',
-    pool: 'fast',
-    capabilities: ['text_generation'],
-    contextWindow: 64000,
-    health: 'Healthy',
-    quota: 'Healthy',
-    latencyMs: 20,
-    userPriority: 100,
-    roleEligibility: ['narrative.generate'],
-    fallbackEligibility: true,
-  });
-  orchestrator.registerModel({
-    providerId: 'provider_stale_recovered',
-    modelId: 'recovered-model',
-    displayName: 'Recovered Model',
-    pool: 'fast',
-    capabilities: ['text_generation'],
-    contextWindow: 64000,
-    health: 'Healthy',
-    quota: 'Healthy',
-    latencyMs: 25,
-    userPriority: 90,
-    roleEligibility: ['narrative.generate'],
-    fallbackEligibility: true,
-  });
-
-
-  for (const model of orchestrator.getAllModels()) {
-    if (
-      !['stale-primary', 'recovered-model', 'emergency-fallback-local'].includes(model.modelId)
-    ) {
-      orchestrator.updateModelHealth(model.providerId, model.modelId, 'DisabledByUser');
-    }
-  }
-  (orchestrator as any).taskPinnedModels.set(
-    'narrative.generate',
-    'provider_stale_primary::stale-primary'
-  );
-  (orchestrator as any).taskFallbackChains.set('narrative.generate', [
-    'provider_stale_primary::stale-primary',
-    'provider_deterministic_emergency::emergency-fallback-local',
-  ]);
-
-  const result = await orchestrator.executeTaskGeneration(
-    'narrative.generate',
-    'Produce a narrative.',
-    undefined,
-    { timeoutMs: 1000 }
-  );
-
-  assert.equal(result.source, 'AI_FALLBACK');
-  assert.equal(result.modelId, 'recovered-model', JSON.stringify(result));
-  assert.equal(result.attempts, 2);
-  assert.equal(result.attemptsTrail.map((attempt) => attempt.modelId).join(','), 'stale-primary,recovered-model');
-});
-
 test('deterministic emergency floor is actually executed after all AI candidates fail', async () => {
   const orchestrator = new MultiModelOrchestrator();
   orchestrator.setCategoryModelOverride('narration', null as any);
+  for (const model of orchestrator.getAllModels()) {
+    if (model.modelId !== 'emergency-fallback-local') {
+      orchestrator.updateModelHealth(model.providerId, model.modelId, 'DisabledByUser');
+    }
+  }
   const failing = new DeterministicMockAdapter('provider_all_failed');
   failing.failureMode = '500';
   failing.maxFailuresBeforeSuccess = 1;

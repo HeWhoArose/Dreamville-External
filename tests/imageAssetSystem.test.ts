@@ -40,3 +40,22 @@ test('contain mode preserves a tall portrait without cropping', () => {
   assert.equal(Math.round(rect.x), 171);
   assert.equal(Math.round(rect.y), 0);
 });
+
+
+test('character poster prompt names the face and presentation target rather than the world', () => {
+	const prompt = compileProviderNeutralPrompt({
+		slotId: 'char_poster',
+		slotType: 'character_portrait',
+		title: 'Ashen Knight',
+		subject: 'Ashen Knight',
+		role: 'Temporal Executioner',
+		traits: ['silver eyes', 'ashen hair', 'scar across left cheek'],
+		equipment: 'black plate armor and a runed greatsword',
+	});
+	assert.match(prompt, /single character only/i);
+	assert.match(prompt, /face.*eyes.*hairstyle/i);
+	assert.match(prompt, /character poster/i);
+	assert.match(prompt, /not a world poster/i);
+	assert.match(prompt, /1024 × 1024 pixels/);
+	assert.match(prompt, /1:1/);
+});

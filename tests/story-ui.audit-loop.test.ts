@@ -19,6 +19,8 @@ test('Story UI audit-implementation-regression-fallback loop completes ten deter
 		'play.inventory',
 		'play.world',
 		'play.recent-actions',
+		'play.quests',
+		'play.journal',
 		'play.combat',
 		'play.map',
 		'play.chronicle',
@@ -110,5 +112,29 @@ test('Quest journal surface uses canonical quest projection and player-facing jo
 		assert.equal(chronicle.includes('Objectives'), true, `Audit ${iteration}: quest objective section missing`);
 		assert.equal(chronicle.includes('Origin'), false, `Audit ${iteration}: quest provenance/debug metadata leaked into player UI`);
 		assert.equal(chronicle.includes('Last updated'), false, `Audit ${iteration}: quest timestamp metadata leaked into player UI`);
+	}
+});
+
+
+test('Story navigation keeps Character primary and separates Quests and Journal destinations across ten audit passes', () => {
+	const shell = read('src/components/storyContext/StoryContextShell.tsx');
+	const menu = read('src/components/storyContext/storyNavigationModel.ts');
+	const app = read('src/App.tsx');
+	const routes = read('src/routes.ts');
+	const chronicle = read('src/components/ChronicleView.tsx');
+
+	for (let iteration = 1; iteration <= 10; iteration += 1) {
+		assert.equal(shell.includes("const primaryIds = new Set(['story', 'character', 'inventory', 'world', 'map', 'combat']);"), true, `Audit ${iteration}: Character is not in the primary story menu`);
+		assert.equal(menu.includes("id: 'character'"), true, `Audit ${iteration}: Character menu entry missing`);
+		assert.equal(menu.includes("route: 'play.quests'"), true, `Audit ${iteration}: Quests is not a dedicated destination`);
+		assert.equal(menu.includes("route: 'play.journal'"), true, `Audit ${iteration}: Journal is not a dedicated destination`);
+		assert.equal(menu.includes("label: 'Tactics'"), true, `Audit ${iteration}: Tactics label missing`);
+		assert.equal(menu.includes("label: 'Quests & Journal'"), false, `Audit ${iteration}: combined Quests & Journal label remains`);
+		assert.equal(routes.includes("  | 'play.quests'"), true, `Audit ${iteration}: Quests route missing`);
+		assert.equal(routes.includes("  | 'play.journal'"), true, `Audit ${iteration}: Journal route missing`);
+		assert.equal(app.includes("currentRoute === 'play.quests'"), true, `Audit ${iteration}: Quests viewport disconnected`);
+		assert.equal(app.includes("currentRoute === 'play.journal'"), true, `Audit ${iteration}: Journal viewport disconnected`);
+		assert.equal(chronicle.includes("initialSection?: 'quests' | 'journal'"), true, `Audit ${iteration}: section-aware ChronicleView contract missing`);
+		assert.equal(chronicle.includes("section === 'quests' ? 'Quests' : 'Journal'"), true, `Audit ${iteration}: contextual title missing`);
 	}
 });

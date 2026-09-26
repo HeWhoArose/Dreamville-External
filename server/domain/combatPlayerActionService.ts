@@ -34,7 +34,7 @@ export class CombatPlayerActionService {
     const capability = capabilities.find((candidate) => lower.includes(candidate.name.toLowerCase()) || lower.includes(candidate.id.toLowerCase()));
 
     let mechanical: any;
-    let actionType: 'ATTACK' | 'CAST' | 'MOVE';
+    let actionType: 'ATTACK' | 'CAST' | 'MOVE' = 'CAST';
     let actionLabel = text;
     let targetId = target?.id;
 
@@ -68,7 +68,6 @@ export class CombatPlayerActionService {
       } else {
         return { success: false, errorReason: 'The combat action could not be mapped to a canonical move, attack, spell, or owned capability.', advanceTurn: false };
       }
-      if (!actionType) actionType = 'CAST';
     }
 
     if (!mechanical?.success) return { success: false, errorReason: mechanical?.errorReason || 'Combat action failed.', advanceTurn: false };
@@ -119,7 +118,7 @@ export class CombatPlayerActionService {
         committedOutcome: mechanicalSummary + (targetHp !== undefined ? ' ' + targetName + ' has ' + targetHp + ' HP remaining.' : ''),
         continuationDirective: 'This is an active tactical combat action. The mechanical result is already resolved. Narrate only that committed outcome; never invent a different roll, damage, target state, or condition.',
       });
-      if (generated.success && generated.turnPackage?.narrativeResponse) return generated.turnPackage.narrativeResponse;
+      if (generated.success && generated.turnPackage?.narrative?.length) return generated.turnPackage.narrative.join('\n\n').trim();
     } catch {
       // Deterministic fallback below.
     }

@@ -97,12 +97,21 @@ export function deriveStoryMenu(config: StoryNavigationConfig = {}): StoryMenuEn
     });
 
     menu.push({
+      id: 'quests',
+      label: 'Quests',
+      iconType: 'quests',
+      enabled: true,
+      visible: true,
+      route: 'play.quests',
+    });
+
+    menu.push({
       id: 'journal',
-      label: 'Case Journal',
+      label: 'Journal',
       iconType: 'journal',
       enabled: true,
       visible: true,
-      route: 'play.chronicle',
+      route: 'play.journal',
     });
 
     menu.push({
@@ -190,24 +199,6 @@ export function deriveStoryMenu(config: StoryNavigationConfig = {}): StoryMenuEn
     });
 
     menu.push({
-      id: 'recent-actions',
-      label: 'Recent Actions',
-      iconType: 'journal',
-      enabled: true,
-      visible: true,
-      route: 'play.recent-actions',
-    });
-
-    menu.push({
-      id: 'journal',
-      label: 'Quests & Journal',
-      iconType: 'quests',
-      enabled: true,
-      visible: true,
-      route: 'play.chronicle',
-    });
-
-    menu.push({
       id: 'map',
       label: 'World Map',
       iconType: 'map',
@@ -216,11 +207,10 @@ export function deriveStoryMenu(config: StoryNavigationConfig = {}): StoryMenuEn
       route: 'play.map',
     });
 
-    // Combat is strictly conditional
     if (hasTacticalCombatRule || hasActiveCombat) {
       menu.push({
         id: 'combat',
-        label: 'Tactical Combat',
+        label: 'Tactics',
         iconType: 'combat',
         enabled: true,
         visible: true,
@@ -230,12 +220,50 @@ export function deriveStoryMenu(config: StoryNavigationConfig = {}): StoryMenuEn
     }
 
     menu.push({
+      id: 'quests',
+      label: 'Quests',
+      iconType: 'quests',
+      enabled: true,
+      visible: true,
+      route: 'play.quests',
+    });
+
+    menu.push({
+      id: 'journal',
+      label: 'Journal',
+      iconType: 'journal',
+      enabled: true,
+      visible: true,
+      route: 'play.journal',
+    });
+
+    menu.push({
+      id: 'recent-actions',
+      label: 'Recent Actions',
+      iconType: 'journal',
+      enabled: true,
+      visible: true,
+      route: 'play.recent-actions',
+    });
+
+    menu.push({
       id: 'codex',
       label: 'World Codex',
       iconType: 'codex',
       enabled: true,
       visible: true,
       route: 'play.codex',
+    });
+
+    return menu;
+
+  // Combat is strictly conditional
+    if (hasTacticalCombatRule || hasActiveCombat) {
+      label: 'World Map',
+      iconType: 'map',
+      enabled: true,
+      visible: true,
+      route: 'play.map',
     });
 
     return menu;
@@ -271,12 +299,21 @@ export function deriveStoryMenu(config: StoryNavigationConfig = {}): StoryMenuEn
   });
 
   menu.push({
+    id: 'quests',
+    label: 'Quests',
+    iconType: 'quests',
+    enabled: true,
+    visible: true,
+    route: 'play.quests',
+  });
+
+  menu.push({
     id: 'journal',
-    label: 'Chronicle & Memory',
+    label: 'Journal',
     iconType: 'journal',
     enabled: true,
     visible: true,
-    route: 'play.chronicle',
+    route: 'play.journal',
   });
 
   menu.push({
@@ -291,7 +328,7 @@ export function deriveStoryMenu(config: StoryNavigationConfig = {}): StoryMenuEn
   if (hasActiveCombat) {
     menu.push({
       id: 'combat',
-      label: 'Active Encounter',
+      label: 'Tactics',
       iconType: 'combat',
       enabled: true,
       visible: true,

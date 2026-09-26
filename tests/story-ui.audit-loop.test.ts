@@ -88,3 +88,25 @@ test('Story library persistence and canonical-source audit completes ten determi
 		assert.equal(routes.includes("isAdapted: Boolean(worldRepository.getAdaptedStoryBible(run.storyId))"), true, `Audit ${iteration}: canonical Story Run projection lacks adaptation metadata`);
 	}
 });
+
+
+test('Quest journal surface uses canonical quest projection and player-facing journal data', () => {
+	const app = read('src/App.tsx');
+	const apiClient = read('src/services/apiClient.ts');
+	const route = read('server/api/gameRoutes.ts');
+	const chronicle = read('src/components/ChronicleView.tsx');
+
+	for (let iteration = 1; iteration <= 10; iteration += 1) {
+		assert.equal(app.includes('storyId={activeStoryId}'), true, `Audit ${iteration}: Quest Journal is not scoped to the active story`);
+		assert.equal(app.includes('dialogueHistory={viewState.dialogueHistory}'), true, `Audit ${iteration}: journal dialogue history is disconnected`);
+		assert.equal(apiClient.includes('getRunCanonicalState'), true, `Audit ${iteration}: canonical quest projection client method missing`);
+		assert.equal(route.includes('const isQuestEvent = (event: any): boolean =>'), true, `Audit ${iteration}: world events are still being treated as quests without classification`);
+		assert.equal(route.includes('questCategories = new Set'), true, `Audit ${iteration}: quest classification categories are not explicit`);
+		assert.equal(chronicle.includes('Quests & Journal'), true, `Audit ${iteration}: player-facing title missing`);
+		assert.equal(chronicle.includes('Engine diagnostics and validation data stay out of this player-facing page.'), true, `Audit ${iteration}: engine diagnostics leaked back into the player journal`);
+		assert.equal(chronicle.includes('No active quests'), true, `Audit ${iteration}: explicit empty quest state missing`);
+		assert.equal(chronicle.includes('Your action'), true, `Audit ${iteration}: journal does not show player actions`);
+		assert.equal(chronicle.includes('What happened'), true, `Audit ${iteration}: journal does not show narrative consequences`);
+		assert.equal(chronicle.includes('Objectives'), true, `Audit ${iteration}: quest objective section missing`);
+	}
+});

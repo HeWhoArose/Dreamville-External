@@ -684,9 +684,25 @@ export class ServerMockAuthority {
         storyId: targetStoryId,
         playerAction: String(freeformText),
         committedOutcome,
-        hardTokenBudget: 500,
-        timeoutMs: 5000,
+        hardTokenBudget: 650,
+        timeoutMs: 7000,
         maxRetries: 1,
+        recentTurns: this.getDynamicStoryState(targetStoryId).actionHistory
+          .filter((entry) => entry.id !== baseResult?.actionId && Boolean(entry.narrativeResponse || entry.description))
+          .slice(-8)
+          .reverse()
+          .map((entry) => ({
+            playerAction: entry.description,
+            narration: entry.narrativeResponse || entry.authoritativeFeedback || '',
+            worldTime: entry.timestamp,
+          })),
+        sceneContext: [
+          run?.startingSituation?.summary,
+          run?.startingSituation?.hook,
+          location?.name,
+          location?.description,
+          location?.ambientSensory,
+        ].filter(Boolean).join(' '),
         continuationDirective: (options as any)?.narrationDirective
           ? 'Connected AI pipeline directive. Treat this as presentation guidance only; canonical mechanics and committed outcome remain authoritative: ' + (options as any).narrationDirective
           : undefined,
@@ -786,8 +802,8 @@ export class ServerMockAuthority {
       const targetMatch = actionText.match(/\b(?:toward|towards|to|into|through|around)\s+(.+?)(?:[.!?]|$)/i);
       const destination = targetMatch?.[1]?.trim();
       return destination
-        ? `${actorName} moves toward ${destination}. The distance closes with each step as ${atmosphere.toLowerCase()}`
-        : `${actorName} moves forward, changing position within the scene. ${atmosphere}`;
+        ? `${actorName} moves toward ${destination}. Each step draws the surroundings into sharper focus: ${atmosphere.toLowerCase()} The approach leaves the scene poised for whatever waits ahead.`
+        : `${actorName} moves forward, changing position within the scene. ${atmosphere} The new vantage point leaves more of the surroundings open to notice.`;
     }
 
     if (/\b(open|close|unlock|enter|leave|follow|touch|pick up|take|grasp|hold)\b/.test(normalized)) {
@@ -802,7 +818,7 @@ export class ServerMockAuthority {
       return `${atmosphere} ${actorName} remains alert to what follows.`;
     }
 
-    return `${actorName} follows through on the decision, and the scene shifts around the moment. ${atmosphere}`;
+    return `${actorName} follows through on the decision. ${atmosphere} The moment settles just enough for the next detail, reaction, or opportunity to emerge.`;
   }
 
 

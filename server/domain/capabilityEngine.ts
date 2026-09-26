@@ -2009,7 +2009,7 @@ export class CapabilityEngine {
         actionText,
         validationSuccess: false,
         rejectionReason: 'No registered capability or explicit power invocation was identified. Treat this as an ordinary narrative action.',
-        narrativeInterpretation: 'No special capability was invoked; resolve the action through the narrative/world simulation layer.',
+        narrativeInterpretation: 'No special capability was invoked; treat this as an ordinary narrative action and resolve it through the narrative/world simulation layer.',
       };
     }
 

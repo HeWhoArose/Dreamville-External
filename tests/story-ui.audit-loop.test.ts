@@ -30,7 +30,7 @@ test('Story UI audit-implementation-regression-fallback loop completes ten deter
 	for (let iteration = 1; iteration <= 10; iteration += 1) {
 		assert.equal(menu.includes("route: 'play.world-systems'"), false, `Audit ${iteration}: developer World Systems route leaked into player navigation`);
 		assert.equal(menu.includes("route: 'play.powers'"), false, `Audit ${iteration}: internal capability workbench leaked into player navigation`);
-		assert.equal(shell.includes("primaryIds = new Set(['story', 'inventory', 'map', 'combat'])"), true, `Audit ${iteration}: Character/World/Recent Actions must stay in More`);
+		assert.equal(shell.includes("primaryIds = new Set(['story', 'character', 'inventory', 'world', 'map', 'combat'])"), true, `Audit ${iteration}: Character and World must remain primary gameplay navigation entries`);
 		assert.equal(shell.includes('Character, World, Inventory, Map, and Combat are primary in-story tools; journal and diagnostics stay in More.'), true, `Audit ${iteration}: primary gameplay navigation comment no longer matches the actual menu`);
 		for (const route of playerRoutes) {
 			assert.equal(menu.includes(`route: '${route}'`), true, `Audit ${iteration}: navigation lost ${route}`);

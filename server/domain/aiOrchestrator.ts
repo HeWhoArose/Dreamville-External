@@ -4671,7 +4671,7 @@ export class MultiModelOrchestrator {
       customChunks: [
         ...(params.sceneContext ? [{
           id: 'current_scene_context',
-          band: 'B2_IMPORTANT',
+          band: 'B2_IMMEDIATE' as const,
           label: 'Current Scene Context',
           content: params.sceneContext,
           estimatedTokens: WorkingContextEngine.estimateTokens(params.sceneContext),
@@ -4681,7 +4681,7 @@ export class MultiModelOrchestrator {
         }] : []),
         ...(params.recentTurns?.length ? [{
           id: 'recent_story_turns',
-          band: 'B2_IMPORTANT',
+          band: 'B2_IMMEDIATE' as const,
           label: 'Recent Story Turns',
           content: params.recentTurns
             .slice(-8)
@@ -4696,7 +4696,7 @@ export class MultiModelOrchestrator {
         }] : []),
         {
           id: 'narrative_presentation_contract',
-          band: 'B1_CRITICAL',
+          band: 'B1_CRITICAL' as const,
           label: 'Narrative Presentation Contract',
           content: styleInstruction,
           estimatedTokens: WorkingContextEngine.estimateTokens(styleInstruction),

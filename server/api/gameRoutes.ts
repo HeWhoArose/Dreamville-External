@@ -9013,6 +9013,12 @@ function buildCurrentComicSceneContext(storyId: string): { context: ComicSceneCo
             : undefined,
         }
       : undefined,
+    currentSituation:
+      state.openingScene?.startingSituation ||
+      state.openingScene?.narrativeText ||
+      worldRepository.getStoryRun(storyId)?.startingSituation?.summary ||
+      worldRepository.getStoryRun(storyId)?.startingSituation?.hook,
+    latestVisibleNarrative: latestAction?.narrativeResponse || state.openingScene?.narrativeText,
     // Deliberately use active dialogue only; never include dialogueHistory in this context.
     activeDialogue: state.activeDialogue
       ? {

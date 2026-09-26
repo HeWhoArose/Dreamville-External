@@ -67,7 +67,7 @@ export class UnifiedAiActionOrchestrator {
 			if(p) intent={ baseAction:p.baseAction, intent:p.intent, requestedEffects:Array.isArray(p.requestedEffects)?p.requestedEffects.map(String):[], modifiers:Array.isArray(p.modifiers)?p.modifiers.map(String):[], target:typeof p.target==='string'?p.target:undefined, confidence:Number.isFinite(p.confidence)?Math.max(0,Math.min(1,p.confidence)):0.8, source:result.source==='DETERMINISTIC_FALLBACK'?'DETERMINISTIC_FALLBACK':'AI' };
 			telemetry.push({task:'intent.interpret',modelId:result.modelId,providerId:result.providerId,source:result.source,attempts:result.attempts});
 		} catch {}
-		const candidate = owned.find((cap) => cleanAction.toLowerCase().includes(cap.name.toLowerCase())) || capabilityCandidateFromWorld(world, cleanAction);
+		const candidate = owned.find((cap) => typeof cap?.name === 'string' && cleanAction.toLowerCase().includes(cap.name.toLowerCase())) || capabilityCandidateFromWorld(world, cleanAction);
 		const capabilityLike = simulator.isCapabilityLikeRequest(cleanAction, candidate);
 		let research: UnifiedActionPipelineResult['research'] = {required:false,brief:'',facts:[],source:'NOT_REQUIRED'};
 		if (capabilityLike && !candidate || /research|study|investigate|ancient|lore|unknown|how does|is it possible/i.test(cleanAction)) {

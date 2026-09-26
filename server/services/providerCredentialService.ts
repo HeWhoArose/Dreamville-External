@@ -37,17 +37,22 @@ function saveCredentials(credentials: ProviderCredentialStore): void {
 }
 
 export function getProviderApiKey(providerId: string): string | undefined {
-  const envKeys: Record<string, string> = {
-    openrouter: 'OPENROUTER_API_KEY',
-    google_gemini: 'GEMINI_API_KEY',
-    openai: 'OPENAI_API_KEY',
-    anthropic: 'ANTHROPIC_API_KEY',
+  const envKeysMap: Record<string, string[]> = {
+    openrouter: ['OPENROUTER_API_KEY'],
+    google_gemini: ['GEMINI_API_KEY', 'API_KEY', 'GOOGLE_API_KEY'],
+    provider_google_gemini: ['GEMINI_API_KEY', 'API_KEY', 'GOOGLE_API_KEY'],
+    google_imagen: ['GEMINI_API_KEY', 'API_KEY', 'GOOGLE_API_KEY'],
+    google_cloud_tts: ['GEMINI_API_KEY', 'API_KEY', 'GOOGLE_API_KEY'],
+    openai: ['OPENAI_API_KEY'],
+    anthropic: ['ANTHROPIC_API_KEY'],
   };
 
-  const envName = envKeys[providerId];
-  if (envName && typeof process !== 'undefined') {
-    if (process.env?.[envName]) {
-      return process.env[envName];
+  const envNames = envKeysMap[providerId] || [];
+  if (typeof process !== 'undefined') {
+    for (const envName of envNames) {
+      if (process.env?.[envName]) {
+        return process.env[envName];
+      }
     }
     if (process.env.NODE_ENV === 'test' || process.env.NODE_TEST_CONTEXT) {
       return undefined;

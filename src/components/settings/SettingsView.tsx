@@ -1003,6 +1003,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       <option value="deepseek">DeepSeek</option>
                       <option value="local">Local (Ollama/LM Studio)</option>
                     </select>
+                    {customModelProvider === 'openrouter' && (
+                      <div className="mt-2 text-[10px] text-[var(--db-text-muted)] leading-relaxed">
+                        💡 OpenRouter models require your OpenRouter API key to be saved under <span className="text-[var(--db-purple-300)] font-semibold">Settings & API Keys</span> to connect.
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="block text-[11px] font-medium text-[var(--db-text-secondary)] mb-1">
@@ -1378,6 +1383,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 Close
               </button>
             </div>
+
+            {getModelStatusInfo(selectedModel).label === 'NOT CONFIGURED' && (
+              <div className="mx-5 mt-5 p-3 rounded-lg bg-amber-950/40 border border-amber-800/60 text-xs text-amber-200">
+                ⚠️ This model's provider (<span className="font-bold">{getProviderDisplayName(selectedModel.providerId)}</span>) is not yet configured. Please go to <span className="underline font-semibold">Settings & API Keys</span> to enter and save your API key.
+              </div>
+            )}
 
             <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="p-3 rounded-lg bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)]">

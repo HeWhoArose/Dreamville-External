@@ -4437,6 +4437,7 @@ export class MultiModelOrchestrator {
     timeoutMs?: number;
     maxRetries?: number;
     styleInstruction?: string;
+    continuationDirective?: string;
   }): Promise<{
     success: boolean;
     turnPackage?: StructuredTurnPackage;
@@ -4454,11 +4455,15 @@ export class MultiModelOrchestrator {
     const timeoutMs = params.timeoutMs ?? 5000;
     const maxRetries = params.maxRetries ?? 1;
     const authoritativeOutcome = (params.committedOutcome || '').trim();
+    const connectedDirective = (params.continuationDirective || '').trim();
     const styleInstruction = params.styleInstruction || [
       'Write the immediate player-facing narrator response to the current action.',
       authoritativeOutcome
         ? `The authoritative game engine has already committed this outcome. Acknowledge and narrate THIS outcome; do not replace it with a different result: ${authoritativeOutcome}`
         : 'There is no additional mechanical outcome supplied. Do not invent one.',
+      connectedDirective
+        ? `Connected pipeline presentation directive. Follow it only as style/presentation guidance while preserving canonical mechanics: ${connectedDirective}`
+        : '',
 
       'Return only what the character can reasonably perceive and what the world immediately does in response.',
       'Keep it concise: 1–3 short paragraphs, normally under 90 words.',

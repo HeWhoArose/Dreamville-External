@@ -977,7 +977,7 @@ export const App: React.FC = () => {
                 try {
                   await apiClient.deleteWorld(world.worldId, confirmation);
                   await fetchStoryLibrary();
-                  await fetchWorldTemplates();
+                  await fetchAuxiliaryData();
                   if (activeStoryId && world.worldId === (activeRunFromLibrary as any)?.worldId) {
                     apiClient.setActiveStoryId('default_story');
                     setActiveStoryId('default_story');

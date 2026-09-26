@@ -2778,6 +2778,65 @@ function getCombatStateHelper(
  * Implements CH5-COMBAT-01 (updating existing alive NPC lifecycles) and CH5-COMBAT-02 (immediate attack-time synchronization).
  * Idempotent: repeated synchronization preserves existing death record and timestamp.
  */
+async function resolveNpcTurnsUntilPlayer(
+  storyId: string,
+  playerActorId: string,
+  repository: typeof worldRepository,
+  maxNpcTurns = 32,
+): Promise<{ turns: Array<Record<string, unknown>>; stoppedReason: string }> {
+  const turns: Array<Record<string, unknown>> = [];
+  const combatEngine = repository.getCombatEngine(storyId);
+  const capabilityEngine = repository.getCapabilityEngine(storyId);
+
+  for (let index = 0; index < maxNpcTurns; index++) {
+    const currentActor = combatEngine.getCurrentActor();
+    if (!currentActor) return { turns, stoppedReason: 'NO_ACTIVE_ACTOR' };
+    if (currentActor.id === playerActorId) return { turns, stoppedReason: 'PLAYER_TURN_REACHED' };
+    if (combatEngine.isVictory() || combatEngine.isDefeat()) return { turns, stoppedReason: 'COMBAT_ENDED' };
+
+    const perceptionOptions = repository.getCombatPerceptionOptions(storyId, currentActor.id);
+    const tacticalDecision = await combatTacticsService.decideNpcTurn({
+      storyId,
+      actorId: currentActor.id,
+      combatEngine,
+      capabilityEngine,
+      repository,
+      perceptionOptions,
+    });
+
+    const executionResult = NpcTacticalDecisionPolicy.executeDecidedAction(
+      tacticalDecision.proposal,
+      combatEngine,
+      capabilityEngine,
+      repository.getRulesProfile(storyId) || rulesProfileEngine.createDefault('FULL_DND'),
+    );
+
+    const player = repository.getPlayerLifecycle(storyId);
+    for (const participant of combatEngine.getParticipants()) {
+      if (participant.isDead && participant.id !== playerActorId) {
+        syncNpcCombatDeath(storyId, participant, currentActor.name, player?.locationId, repository);
+      }
+    }
+
+    const advanceResult = combatEngine.advanceTurn();
+
+    turns.push({
+      actorId: currentActor.id,
+      actorName: currentActor.name,
+      proposal: tacticalDecision.proposal,
+      executionResult,
+      tacticalSource: tacticalDecision.source,
+      tacticalModelId: tacticalDecision.modelId,
+      tacticalProviderId: tacticalDecision.providerId,
+      tacticalFallbackReason: tacticalDecision.fallbackReason,
+      tacticalPlan: tacticalDecision.plan,
+      advanceResult,
+    });
+  }
+
+  return { turns, stoppedReason: 'MAX_NPC_TURNS_REACHED' };
+}
+
 function syncNpcCombatDeath(
   storyId: string,
   participant: import('../domain/combatEngine').BattlefieldParticipant,
@@ -4778,12 +4837,11 @@ gameRouter.post('/combat/end-turn', async (req: Request, res: Response) => {
         const transactionPlayer = transactionRepo.getPlayerLifecycle(storyId);
         const advanceResult = combatEngine.advanceTurn();
 
-        const deadParticipants = combatEngine.getParticipants().filter(
-          p => p.isDead && p.id !== serverPlayerActorId
+        const npcResolution = await resolveNpcTurnsUntilPlayer(
+          storyId,
+          serverPlayerActorId,
+          transactionRepo,
         );
-        for (const dp of deadParticipants) {
-          syncNpcCombatDeath(storyId, dp, 'environmental hazard', transactionPlayer?.locationId, transactionRepo);
-        }
 
         if (transactionPlayer && !transactionPlayer.isDead) {
           const playerPart = combatEngine.getParticipant(serverPlayerActorId);
@@ -4794,7 +4852,7 @@ gameRouter.post('/combat/end-turn', async (req: Request, res: Response) => {
                 diedAtTimestamp: transactionRepo.getWorldClock(storyId).getTimestamp(),
                 cause: (playerPart.deathSaveState?.failures ?? 0) >= 3
                   ? 'Failed three death saves in tactical combat.'
-                  : 'Defeated in tactical combat by environmental hazard.',
+                  : 'Defeated in tactical combat.',
                 revivalPossible: true,
               },
             });
@@ -4804,8 +4862,8 @@ gameRouter.post('/combat/end-turn', async (req: Request, res: Response) => {
 
         return {
           success: true,
-          data: { advanceResult },
-          summary: `Combat turn advanced for ${serverPlayerActorId}.`,
+          data: { advanceResult, npcResolution },
+          summary: `Player turn advanced; NPC tactical turns resolved through combat.tactics until the next player turn.`,
         };
       }
     );

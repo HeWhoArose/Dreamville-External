@@ -287,6 +287,26 @@ export class StoryActionAdvisor {
 		actionText: string,
 		sceneContext?: StoryActionSceneContext,
 	): Promise<ActionAdvice> {
+
+		const cleanAction = String(actionText || '').trim();
+		const ordinaryActionPattern = /^(?:i|we|the character|my character)\\s+(?:walk|walks|move|moves|step|steps|approach|approaches|go|goes|head|heads|travel|travels|look|looks|observe|observes|inspect|inspects|search|searches|listen|listens|wait|waits|rest|rests|sit|sits|stand|stands|touch|touches|pick up|picks up|take|takes|open|opens|close|closes|enter|enters|leave|leaves|follow|follows|speak|speaks|talk|talks|ask|asks|say|says)\\b/i;
+		const explicitCapabilityIntent = new CapabilitySimulationEngine().isCapabilityLikeRequest(cleanAction);
+		if (cleanAction && ordinaryActionPattern.test(cleanAction) && !explicitCapabilityIntent) {
+			const player = this.repository.getPlayerLifecycle(storyId);
+			const run = this.repository.getStoryRun(storyId);
+			const actorId =
+				player?.actorId ||
+				run?.protagonist?.characterId ||
+				'player_actor_' + storyId;
+			const tips = await this.generateTips(storyId, actorId, cleanAction, [], sceneContext);
+			return {
+				mode: 'NORMAL_ACTION',
+				actionText: cleanAction,
+				actorId,
+				tips,
+				canExecuteNow: true,
+			};
+		}
 		const player = this.repository.getPlayerLifecycle(storyId);
 		const run = this.repository.getStoryRun(storyId);
 		// Prefer the canonical lifecycle actor, then the confirmed protagonist identity.

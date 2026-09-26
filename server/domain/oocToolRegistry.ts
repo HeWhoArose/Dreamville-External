@@ -1,5 +1,6 @@
 import type { InMemoryWorldRepository } from '../repositories/worldRepository';
 import { deterministicId } from './deterministicRng';
+import { narrativeContinuityEngine } from './narrativeContinuityEngine';
 import { canonicalCommandEngine, type CanonicalCommandType } from './canonicalCommandEngine';
 
 export type OocToolMode = 'READ' | 'MUTATE';
@@ -49,6 +50,36 @@ const TOOL_DEFINITIONS: OocToolDefinition[] = [
 		description: 'Read the player-safe Phase 8 world projection.',
 		mode: 'READ',
 		input: {},
+	},
+	{
+		name: 'get_combat_state',
+		description: 'Read the current canonical combat projection and encounter notes.',
+		mode: 'READ',
+		input: {},
+	},
+	{
+		name: 'research_context',
+		description: 'Research current canonical lore, memories, relationships, plot and plan with player epistemic filtering.',
+		mode: 'READ',
+		input: { query: 'text' },
+	},
+	{
+		name: 'get_quests',
+		description: 'Read current canonical story threads and quest-like narrative threads.',
+		mode: 'READ',
+		input: {},
+	},
+	{
+		name: 'get_lore',
+		description: 'Read player-authorized world knowledge facts without revealing hidden facts.',
+		mode: 'READ',
+		input: {},
+	},
+	{
+		name: 'create_entity',
+		description: 'Instantiate an authored entity template through canonical authority.',
+		mode: 'MUTATE',
+		input: { templateId: 'string', overrides: 'object' },
 	},
 	{
 		name: 'equip_item',
@@ -185,6 +216,34 @@ export class OocToolRegistry {
 					};
 				}
 
+				case 'get_combat_state': {
+					return {
+						name: call.name,
+						success: true,
+						message: 'Canonical combat state retrieved.',
+						data: {
+							state: clone(repository.getCombatEngine(storyId).exportState()),
+							notes: clone(repository.getCombatEngine(storyId).getEncounterNotes()),
+						},
+					};
+				}
+
+				case 'research_context': {
+					const query = typeof args.query === 'string' ? args.query : 'current story context';
+					return {
+						name: call.name,
+						success: true,
+						message: 'Canonical research context retrieved.',
+						data: clone(narrativeContinuityEngine.research(repository, storyId, query, actorId)),
+					};
+				}
+
+				case 'get_quests':
+					return { name: call.name, success: true, message: 'Canonical story threads retrieved.', data: clone(repository.getStoryThreads(storyId)) };
+
+				case 'get_lore':
+					return { name: call.name, success: true, message: 'Authorized lore retrieved.', data: clone(repository.getAuthorizedKnowledgeFacts(storyId, actorId)) };
+
 				case 'get_world_state': {
 					return {
 						name: call.name,
@@ -273,6 +332,21 @@ export class OocToolRegistry {
 						sequence: params.sequence,
 					});
 				}
+
+				case 'create_entity':
+					return this.executeCanonicalMutation({
+						repository,
+						storyId,
+						actorId,
+						toolName: call.name,
+						commandType: 'INTERACT',
+						payload: {
+							action: 'CREATE_OOC_ENTITY',
+							templateId: String(args.templateId || ''),
+							overrides: isRecord(args.overrides) ? args.overrides : {},
+						},
+						sequence: params.sequence,
+					});
 
 				case 'advance_time': {
 					const seconds = Number(args.seconds);
@@ -385,6 +459,24 @@ export class OocToolRegistry {
 							summary: result.success ? 'OOC rest command resolved.' : result.errorReason || 'Rest rejected.',
 						};
 					}
+					case 'INTERACT': {
+						if (String(command.payload.action) !== 'CREATE_OOC_ENTITY') {
+							return { success: false, errorReason: 'Unsupported OOC interaction.' };
+						}
+						const templateId = String(command.payload.templateId || '');
+						if (!templateId) return { success: false, errorReason: 'templateId is required.' };
+						const entity = context.repository.instantiateEntityFromTemplate(
+							params.storyId,
+							templateId,
+							isRecord(command.payload.overrides) ? command.payload.overrides : {},
+						);
+						return {
+							success: true,
+							data: entity,
+							summary: `OOC created entity ${entity.name || entity.id} from authored template ${templateId}.`,
+						};
+					}
+
 					case 'ADVANCE_TIME': {
 						const { WorldSimulationService } = await import('../simulation/worldSimulationService');
 						const result = new WorldSimulationService(context.repository).advanceTime(

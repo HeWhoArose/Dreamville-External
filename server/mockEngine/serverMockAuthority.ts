@@ -1334,6 +1334,8 @@ export class ServerMockAuthority {
               interpretationType: 'UNSUPPORTED' as const,
               actorId,
               actionText: freeformText,
+              mappedCapability: undefined,
+              proposedCapability: undefined,
               validationSuccess: false,
               narrativeInterpretation: 'Ordinary narrative action; no capability interpretation required.',
             };

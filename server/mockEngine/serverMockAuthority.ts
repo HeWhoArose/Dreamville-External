@@ -646,7 +646,7 @@ export class ServerMockAuthority {
       }
     }
     if (!storyCheck) {
-      if (explicitCapabilityIntentForNarration(String(freeformText))) {
+      if (this.explicitCapabilityIntentForNarration(String(freeformText))) {
         committedOutcome = 'A special capability-related action was resolved by the canonical capability/rules layer. Narrate only the visible result and never expose capability or engine terminology.';
       } else {
         committedOutcome = 'This is an ordinary narrative/world action. No special capability was invoked. Narrate the physical and sensory result naturally and continue the scene.';
@@ -752,8 +752,9 @@ export class ServerMockAuthority {
     };
   }
 
-  const explicitCapabilityIntentForNarration = (text: string): boolean =>
-    new CapabilitySimulationEngine().isCapabilityLikeRequest(text);
+  private explicitCapabilityIntentForNarration(text: string): boolean {
+    return new CapabilitySimulationEngine().isCapabilityLikeRequest(text);
+  }
 
   private synthesizeFreeformActionFallback(
     storyId: string,

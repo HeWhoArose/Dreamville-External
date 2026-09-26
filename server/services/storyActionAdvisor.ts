@@ -29,6 +29,7 @@ export interface ActionTip {
 }
 
 export interface ActionCapabilityProposal {
+	aiPipeline?: UnifiedActionPipelineResult;
 	proposalId: string;
 	requestedAction: string;
 	requestedCapabilityId?: string;
@@ -508,6 +509,7 @@ export class StoryActionAdvisor {
 					proposalCandidate,
 					run,
 					simulation,
+					aiPipeline,
 				);
 				if (proposal) {
 					this.pendingProposals.set(proposal.proposalId, proposal);
@@ -555,8 +557,10 @@ export class StoryActionAdvisor {
 		actionText: string,
 		capability: CapabilityDefinition,
 		simulation: CapabilitySimulationResult,
+		aiPipeline?: UnifiedActionPipelineResult,
 	): ActionCapabilityProposal {
 		return {
+			aiPipeline,
 			proposalId: deterministicId(
 				'action_capability_proposal',
 				storyId,
@@ -657,6 +661,7 @@ export class StoryActionAdvisor {
 		requestedCapability: CapabilityDefinition,
 		run: any,
 		initialSimulation: CapabilitySimulationResult,
+		aiPipeline?: UnifiedActionPipelineResult,
 	): Promise<ActionCapabilityProposal | null> {
 		const world = run?.worldId ? this.repository.getWorldTemplate(run.worldId) : undefined;
 		const concept = deterministicAlternativeConcept(requestedCapability.name, run);
@@ -771,6 +776,7 @@ export class StoryActionAdvisor {
 		initialSimulation = proposalSimulation;
 		// A generated alternative is still only a proposal until the explicit acceptance endpoint commits it.
 		return {
+			aiPipeline,
 			proposalId: deterministicId(
 				'action_capability_proposal',
 				storyId,

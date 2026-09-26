@@ -67,7 +67,7 @@ test('Phase 17 category selection does not silently alias intent, narration, sum
 	const orchestrator = new MultiModelOrchestrator();
 	assert.equal(orchestrator.getTaskCategory('intent.interpret'), 'intent_interpretation');
 	assert.equal(orchestrator.getTaskCategory('narrative.generate'), 'narration');
-	assert.equal(orchestrator.getTaskCategory('summary.scene'), 'summarization');
+	assert.equal(orchestrator.getTaskCategory('summary.scene'), 'world_generation');
 	assert.equal(orchestrator.getTaskCategory('research.query'), 'research');
 	assert.equal(orchestrator.getTaskCategory('rules.analyze'), 'rule_analysis');
 	assert.equal(orchestrator.getTaskCategory('tactical.reason'), 'tactical_reasoning');

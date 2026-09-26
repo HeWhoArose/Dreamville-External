@@ -15,6 +15,7 @@ export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
 export type TaskId =
   | 'narrative.generate'
   | 'character.dialogue'
+  | 'ooc.respond'
   | 'character.extract'
   | 'memory.extract'
   | 'character.capability.propose'

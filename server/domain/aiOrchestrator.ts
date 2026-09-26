@@ -4637,21 +4637,26 @@ export class MultiModelOrchestrator {
     const authoritativeOutcome = (params.committedOutcome || '').trim();
     const connectedDirective = (params.continuationDirective || '').trim();
     const styleInstruction = params.styleInstruction || [
-      'Write the immediate player-facing narrator response to the current action.',
+      'Write an immersive tabletop-RPG narrator response to the player’s latest action, as continuous story prose rather than a status report.',
       authoritativeOutcome
-        ? `The authoritative game engine has already committed this outcome. Acknowledge and narrate THIS outcome; do not replace it with a different result: ${authoritativeOutcome}`
+        ? `The authoritative game engine has already resolved the mechanics. Treat this outcome as hidden canonical guidance. Narrate what the character experiences and what the world visibly does because of it, but NEVER quote, summarize, label, or expose the wording of the authoritative outcome: ${authoritativeOutcome}`
         : 'There is no additional mechanical outcome supplied. Do not invent one.',
       connectedDirective
         ? `Connected pipeline presentation directive. Follow it only as style/presentation guidance while preserving canonical mechanics: ${connectedDirective}`
         : '',
 
-      'Return only what the character can reasonably perceive and what the world immediately does in response.',
-      'Keep it concise: 1–3 short paragraphs, normally under 90 words.',
-      'Do not restate the player action verbatim.',
-      'Do not add menus, meta-commentary, engine terminology, model names, or system-status language.',
-      'Do not invent hidden facts, NPC knowledge, items, or outcomes that are not supported by the canonical context.',
+      'Begin in-scene, with the world, character, NPC, environment, or consequence—not with "Your action", "Immediate narration", "The character acts", "Attempted action", "Performed action", or any engine/status phrasing.',
+      'Do not tell the player what they attempted; depict the attempt as something that happened in the fiction.',
+      'Do not restate the player action verbatim or quote it back.',
+      'Show immediate sensory and physical consequences, NPC reactions, environmental response, or tension when the canonical context supports them.',
+      'The response should feel like the next paragraph of an interactive novel or tabletop GM narration. It may describe motion, perception, dialogue, reaction, discovery, resistance, success, failure, or uncertainty according to the committed state.',
+      'For an ordinary physical action such as walking, approaching, looking, opening, touching, speaking, waiting, or moving, narrate the physical/world response naturally instead of treating the action as a capability request.',
+      'If the action produces a meaningful change, show that change. If it produces no meaningful change, still give a natural sensory beat and leave a clear opening for the next decision.',
+      'Keep it concise: usually 1–3 short paragraphs, extending only when the scene genuinely needs more space.',
+      'Do not add menus, meta-commentary, engine terminology, model names, system-status language, labels, or debug text.',
+      'Do not invent hidden facts, NPC knowledge, items, powers, or outcomes that are not supported by canonical context.',
       'Do not propose or perform canonical state changes. The response is presentation only.',
-      'When the action has no meaningful mechanical consequence, acknowledge the sensory or emotional result naturally and leave a clear opening for the next action.',
+      'Never use phrases such as "the outcome unfolds in the narrative", "the action is committed", "canonical acquisition", "proposed capability", "server authority", or similar implementation language.',
     ].join(' ');
 
     const assembledContext = WorkingContextEngine.assembleTurnContext({

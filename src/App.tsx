@@ -797,10 +797,9 @@ export const App: React.FC = () => {
 
       {currentRoute === 'play.chronicle' && viewState && (
         <ChronicleView
-          knowledgeBase={viewState.knowledgeBase}
+          storyId={activeStoryId}
           actionHistory={viewState.actionHistory}
-          engineContractVersion={viewState.engineContractVersion}
-          chronicleEntries={chronicleEntries}
+          dialogueHistory={viewState.dialogueHistory}
         />
       )}
     </>

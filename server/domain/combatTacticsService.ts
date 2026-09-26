@@ -250,6 +250,7 @@ export class CombatTacticsService {
 				source: belief.sourceEventIds?.[0] || 'agency',
 			}));
 			autonomyState.riskTolerance = Number(actorIntelligence.riskTolerance || 50);
+		}
 		const autonomyActions = [
 			{
 				id: 'deterministic:' + deterministicProposal.actionType,

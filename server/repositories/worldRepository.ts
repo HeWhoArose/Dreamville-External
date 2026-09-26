@@ -3184,6 +3184,7 @@ export class InMemoryWorldRepository implements WorldRepository {
     }
 
     const deleted = this.worldTemplates.delete(worldId);
+    if (deleted) this.recordDeletion('WORLD', worldId);
     if (deleted) {
       this.confirmedCharactersMap.delete(worldId);
       this.characterDraftsMap.delete(worldId);

@@ -447,6 +447,7 @@ export const App: React.FC = () => {
   const handleCustomAction = async (actionText: string) => {
     setPendingActionAdvice(null);
 
+    // The canonical /action endpoint performs capability preflight itself.
     // Hostile freeform actions now return a canonical combat transition.
     // Resolve that transition immediately so the player does not have to
     // click through an unnecessary intermediate prompt.

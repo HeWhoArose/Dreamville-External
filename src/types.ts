@@ -393,6 +393,7 @@ export interface ProtagonistProfile {
  */
 export interface ExternalViewState {
 	storyId?: string;
+	combatState?: CombatStateResponse;
 	worldId?: string;
 	narrativeProfile?: NarrativeProfile;
 	rulesProfile?: RulesProfile;
@@ -561,6 +562,7 @@ export interface ActionResult {
   narrativeResponse?: string;
   checkResult?: StoryCheckResult;
   actionAdvice?: ActionAdvice;
+  combatTransition?: CombatTransitionState;
   viewState: ExternalViewState;
 }
 
@@ -1116,8 +1118,70 @@ export interface CombatTurnResourceSnapshot {
   };
 }
 
+export type CombatPhase =
+  | 'INACTIVE'
+  | 'PRECOMBAT'
+  | 'INITIATIVE_PENDING'
+  | 'ACTIVE'
+  | 'ENDED';
+
+export interface CombatInitiativeRoll {
+  actorId: string;
+  actorName: string;
+  roll: RollRecord;
+  total: number;
+  advantageState: 'NORMAL' | 'ADVANTAGE' | 'DISADVANTAGE';
+  surprised: boolean;
+  position: number;
+}
+
+export interface CombatNarrativeResolution {
+  id: string;
+  actorId: string;
+  targetIds: string[];
+  actionText: string;
+  actionLabel: string;
+  rolls: Array<{
+    label: string;
+    roll?: RollRecord;
+    total?: number;
+    kind: 'ATTACK' | 'SAVE' | 'DAMAGE' | 'INITIATIVE' | 'CHECK';
+  }>;
+  success: boolean;
+  hits?: boolean;
+  damage?: number;
+  targetHp?: Array<{
+    targetId: string;
+    hpCurrent: number;
+    hpMax: number;
+    targetDied: boolean;
+  }>;
+  mechanicalSummary: string;
+  narrativeResponse: string;
+  canonicalEventIds: string[];
+  fallbackUsed?: boolean;
+  createdAt: string;
+}
+
+export interface CombatTransitionState {
+  started: boolean;
+  phase: CombatPhase;
+  narrativeLeadIn?: string;
+  requiresInitiativeRoll: boolean;
+  fromStory: boolean;
+  precombatResolution?: CombatNarrativeResolution;
+  combatState?: CombatStateResponse;
+  returnToStory?: boolean;
+  continuationNarrative?: string;
+}
+
 export interface CombatStateResponse {
   storyId?: string;
+  phase: CombatPhase;
+  initiativeRolls?: CombatInitiativeRoll[];
+  surprisedActorIds?: string[];
+  combatBanner?: string;
+  lastResolution?: CombatNarrativeResolution;
   participants: BattlefieldParticipant[];
   currentActor?: BattlefieldParticipant;
   hazards: DynamicHazardZone[];
@@ -1137,6 +1201,9 @@ export interface CombatActionResponse {
   success: boolean;
   errorReason?: string;
   combatState: CombatStateResponse;
+  narrativeResponse?: string;
+  mechanicalResolution?: CombatNarrativeResolution;
+  combatTransition?: CombatTransitionState;
   hits?: boolean;
   damage?: number;
   targetDied?: boolean;

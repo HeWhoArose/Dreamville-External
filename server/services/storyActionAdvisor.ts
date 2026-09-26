@@ -476,6 +476,7 @@ export class StoryActionAdvisor {
 				actionText,
 				proposalCandidate,
 				simulation,
+				aiPipeline,
 			);
 			this.pendingProposals.set(proposal.proposalId, proposal);
 			return {

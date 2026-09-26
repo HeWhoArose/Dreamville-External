@@ -3299,6 +3299,14 @@ gameRouter.post('/combat/precombat-action', async (req: Request, res: Response) 
       });
     }
 
+    if (worldRepository.isEntityEpistemicallyKnown(storyId, targetId, actorId)) {
+      return res.status(409).json({
+        success: false,
+        errorReason: 'The target is already aware of the player; a pre-combat ambush action is not legal.',
+        combatState: getCombatStateHelper(combatEngine, storyId, actorId),
+      });
+    }
+
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||

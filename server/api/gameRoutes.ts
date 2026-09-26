@@ -6140,7 +6140,21 @@ gameRouter.post('/orchestrator/category', async (req: Request, res: Response) =>
   try {
     const category = String(req.body?.category || '') as import('../domain/aiOrchestrator').AiTaskCategory;
     const modelKey = req.body?.modelKey ? String(req.body.modelKey) : null;
-    const allowedCategories = ['narration', 'world_generation', 'character_genesis', 'research', 'rules', 'speech', 'image'];
+    const allowedCategories = [
+      'narration',
+      'world_generation',
+      'character_genesis',
+      'research',
+      'intent_interpretation',
+      'capability_synthesis',
+      'capability_explanation',
+      'tactical_reasoning',
+      'gameplay_advice',
+      'rules',
+      'rule_analysis',
+      'speech',
+      'image',
+    ];
 
     if (!allowedCategories.includes(category)) {
       return res.status(400).json({ success: false, error: 'Invalid AI model category.' });

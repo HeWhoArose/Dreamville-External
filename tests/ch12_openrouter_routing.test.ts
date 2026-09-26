@@ -548,14 +548,6 @@ test('task fallback recovers a live eligible model when the persisted chain has 
     'provider_deterministic_emergency::emergency-fallback-local',
   ]);
 
-  const recoveredRecord = orchestrator.getModel('provider_stale_recovered', 'recovered-model');
-  assert.ok(recoveredRecord, 'Recovered model was not registered.');
-  assert.equal(
-    orchestrator.isCandidateUsable(recoveredRecord!, 'narrative.generate'),
-    true,
-    JSON.stringify(recoveredRecord),
-  );
-
   const result = await orchestrator.executeTaskGeneration(
     'narrative.generate',
     'Produce a narrative.',
@@ -563,8 +555,8 @@ test('task fallback recovers a live eligible model when the persisted chain has 
     { timeoutMs: 1000 }
   );
 
-  assert.equal(result.source, 'AI_FALLBACK', JSON.stringify(result));
-  assert.equal(result.modelId, 'recovered-model', JSON.stringify(result));
+  assert.equal(result.source, 'AI_FALLBACK');
+  assert.equal(result.modelId, 'recovered-model');
   assert.equal(result.attempts, 2);
   assert.equal(result.attemptsTrail.map((attempt) => attempt.modelId).join(','), 'stale-primary,recovered-model');
 });

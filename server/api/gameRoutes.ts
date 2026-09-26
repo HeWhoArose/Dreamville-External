@@ -380,7 +380,10 @@ gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => 
             intendedCapabilityId,
           } as any,
           commandId,
-          { bypassCapabilityAdvisor: true }
+          {
+            bypassCapabilityAdvisor: true,
+            narrationDirective: transactionProposal.aiPipeline?.narrationDirective,
+          }
         );
 
         return {
@@ -471,6 +474,9 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
         if (preflightAdvice.recognizedCapability?.id) {
           (actionRequest as any).intendedCapabilityId = preflightAdvice.recognizedCapability.id;
         }
+        if (preflightAdvice.aiPipeline?.narrationDirective) {
+          (actionRequest as any).__narrationDirective = preflightAdvice.aiPipeline.narrationDirective;
+        }
 
         // The request has already been preflighted here. Skip repeating the
         // advisor inside ServerMockAuthority while preserving capability execution.
@@ -539,7 +545,10 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
             ? await serverMockAuthority.processCustomAction(
                 actionRequest,
                 requestedCommandId,
-                { bypassCapabilityAdvisor: true }
+                {
+                  bypassCapabilityAdvisor: true,
+                  narrationDirective: (actionRequest as any).__narrationDirective,
+                }
               )
             : serverMockAuthority.processAction(actionRequest, requestedCommandId);
         return {

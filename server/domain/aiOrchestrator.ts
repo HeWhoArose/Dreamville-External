@@ -3909,23 +3909,21 @@ export class MultiModelOrchestrator {
     if (categoryOverrideKey) {
       const overridden = findConfiguredModel(categoryOverrideKey);
       if (overridden && isUsableCandidate(overridden)) {
-        const hasExplicitFallbackChain = this.explicitFallbackChainTasks.has(routeTask);
-        const configuredFallbacks = hasExplicitFallbackChain && customChainKeys
-          ? customChainKeys
-              .map(findConfiguredModel)
-              .filter((m): m is ModelRegistryRecord => Boolean(m))
-              .filter((m) => m.modelId !== overridden.modelId && isUsableCandidate(m))
-          : Array.from(this.models.values())
-              .filter((m) => m.modelId !== overridden.modelId)
-              .filter((m) => m.roleEligibility.includes(task))
-              .filter((m) => !m.isEmergencyFloor)
-              .filter((m) => isUsableCandidate(m))
-              .sort((a, b) => {
-                const scoreA = a.userPriority + (a.health === 'Healthy' ? 50 : 0);
-                const scoreB = b.userPriority + (b.health === 'Healthy' ? 50 : 0);
-                if (scoreB !== scoreA) return scoreB - scoreA;
-                return a.modelId.localeCompare(b.modelId);
-              });
+        // A category override selects the requested primary model, but it must
+        // retain automatic task-eligible failover candidates. This is important
+        // when the persisted task chain is stale or intentionally excludes a
+        // newly discovered eligible model.
+        const configuredFallbacks = Array.from(this.models.values())
+          .filter((m) => m.modelId !== overridden.modelId)
+          .filter((m) => m.roleEligibility.includes(task))
+          .filter((m) => !m.isEmergencyFloor)
+          .filter((m) => isUsableCandidate(m))
+          .sort((a, b) => {
+            const scoreA = a.userPriority + (a.health === 'Healthy' ? 50 : 0);
+            const scoreB = b.userPriority + (b.health === 'Healthy' ? 50 : 0);
+            if (scoreB !== scoreA) return scoreB - scoreA;
+            return a.modelId.localeCompare(b.modelId);
+          });
 
         const fallbackSet = new Set<string>();
         const fallbackModels: ModelRegistryRecord[] = [];
@@ -3949,7 +3947,7 @@ export class MultiModelOrchestrator {
           selectionReason:
             'Category-scoped manual override for ' +
             category +
-            '; fallback candidates are restricted to the configured task chain.',
+            '; automatic task-eligible failover candidates remain available.',
           selectionScore: overridden.userPriority + 1000,
           fallbacks: fallbackModels,
         };

@@ -9102,16 +9102,15 @@ gameRouter.get('/run-canonical-state', (req: Request, res: Response) => {
 
     const isQuestEvent = (event: any): boolean => {
       const category = String(event?.category || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+      const explicitQuest = event?.isQuest === true || event?.quest === true;
       const explicitObjectives = Array.isArray(event?.objectives) && event.objectives.length > 0;
       const questCategories = new Set([
         'QUEST',
         'MAIN_QUEST',
         'SIDE_QUEST',
-        'MISSION',
-        'OBJECTIVE',
         'STORY_QUEST',
       ]);
-      return explicitObjectives || questCategories.has(category);
+      return explicitQuest || explicitObjectives || questCategories.has(category);
     };
 
     const questEvents = (run?.plannedEvents || []).filter(isQuestEvent);

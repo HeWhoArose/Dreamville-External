@@ -235,6 +235,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
   const [sceneMenuOpen, setSceneMenuOpen] = useState(false);
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [sceneChoiceOpen, setSceneChoiceOpen] = useState(false);
   const [sceneLoading, setSceneLoading] = useState(false);
   const [scenePrompt, setScenePrompt] = useState<string | null>(null);
@@ -622,32 +623,6 @@ export const StoryView: React.FC<StoryViewProps> = ({
         </section>
       )}
 
-      {(actionTips.length > 0 || actionHistory.some((action) => (action.actionAdvice?.tips || []).length > 0)) && (
-        <section className="space-y-2">
-          <div className="flex items-center gap-2 px-1">
-            <Sparkles className="h-3.5 w-3.5 text-stone-600" />
-            <p className="text-[10px] font-medium uppercase tracking-[0.18em] text-stone-600">Possible approaches</p>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {(actionTips.length > 0
-              ? actionTips
-              : actionHistory.slice(0, 2).flatMap((action) => action.actionAdvice?.tips || [])
-            ).slice(0, 4).map((tip) => (
-              <button
-                key={tip.id}
-                type="button"
-                onClick={() => onCustomAction?.(tip.actionText)}
-                disabled={isProcessingAction}
-                className="w-full rounded-xl border border-stone-800 bg-stone-950/70 px-4 py-3 text-left transition hover:border-stone-700 hover:bg-stone-900 disabled:opacity-50"
-              >
-                <p className="text-xs font-semibold text-stone-200">{tip.title}</p>
-                <p className="mt-1 text-xs leading-5 text-stone-500">{tip.description}</p>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
-
       {latestTurnAction && (
         <section className="rounded-3xl border border-violet-400/15 bg-[#0d0917]/90 px-4 py-4 shadow-[0_18px_60px_rgba(124,58,237,0.07)] md:px-5">
           <div className="mb-3 flex items-center gap-2">
@@ -711,6 +686,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
               onClick={() => {
                 setSceneMenuOpen((value) => !value);
                 setSceneChoiceOpen(false);
+                setSuggestionsOpen(false);
                 setSceneError(null);
               }}
               className="flex h-11 w-11 items-center justify-center rounded-xl border border-violet-400/15 bg-violet-500/10 text-violet-200 transition hover:bg-violet-500/15"
@@ -721,15 +697,56 @@ export const StoryView: React.FC<StoryViewProps> = ({
             </button>
 
             {sceneMenuOpen && (
-              <div className="absolute bottom-14 left-0 z-50 w-52 rounded-2xl border border-white/10 bg-[#110b1d] p-2 shadow-2xl">
+              <div className="absolute bottom-14 left-0 z-50 w-72 rounded-2xl border border-white/10 bg-[#110b1d] p-2 shadow-2xl">
                 <button
                   type="button"
-                  onClick={() => setSceneChoiceOpen(true)}
+                  onClick={() => setSuggestionsOpen((value) => !value)}
                   className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-stone-200 hover:bg-violet-500/10"
+                >
+                  <Sparkles className="h-4 w-4 text-violet-300" />
+                  <span className="flex-1">Suggestions</span>
+                  <span className="text-[10px] text-stone-600">{actionTips.length}</span>
+                </button>
+
+                {suggestionsOpen && (
+                  <div className="mt-1 max-h-80 space-y-1 overflow-y-auto rounded-xl border border-white/8 bg-black/20 p-1">
+                    {actionTips.length > 0 ? (
+                      actionTips.slice(0, 6).map((tip) => (
+                        <button
+                          key={tip.id}
+                          type="button"
+                          onClick={() => {
+                            setSuggestionsOpen(false);
+                            setSceneMenuOpen(false);
+                            onCustomAction?.(tip.actionText);
+                          }}
+                          disabled={isProcessingAction}
+                          className="w-full rounded-lg px-3 py-2.5 text-left transition hover:bg-white/[0.04] disabled:opacity-50"
+                        >
+                          <p className="text-xs font-semibold text-stone-200">{tip.title}</p>
+                          <p className="mt-1 text-[11px] leading-4 text-stone-500">{tip.description}</p>
+                        </button>
+                      ))
+                    ) : (
+                      <p className="px-3 py-3 text-xs text-stone-500">
+                        No suggestions are available yet.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSceneChoiceOpen(true);
+                    setSuggestionsOpen(false);
+                  }}
+                  className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-stone-200 hover:bg-violet-500/10"
                 >
                   <Sparkles className="h-4 w-4 text-violet-300" />
                   Generate Scene
                 </button>
+
                 {sceneChoiceOpen && (
                   <div className="mt-1 rounded-xl border border-white/8 bg-black/20 p-1">
                     <button type="button" onClick={requestSceneImage} disabled={sceneLoading} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-xs text-stone-300 hover:bg-white/[0.04] disabled:opacity-50">
@@ -744,7 +761,6 @@ export const StoryView: React.FC<StoryViewProps> = ({
                 )}
               </div>
             )}
-          </div>
 
           <button
             type="button"

@@ -1,4 +1,5 @@
 import type { InMemoryWorldRepository } from '../repositories/worldRepository';
+import { deterministicId } from './deterministicRng';
 import { canonicalCommandEngine, type CanonicalCommandType } from './canonicalCommandEngine';
 
 export type OocToolMode = 'READ' | 'MUTATE';
@@ -194,7 +195,7 @@ export class OocToolRegistry {
 				}
 
 				case 'equip_item':
-					return this.executeCanonicalMutation(repository, {
+					return this.executeCanonicalMutation({
 						storyId,
 						actorId,
 						toolName: call.name,
@@ -207,7 +208,7 @@ export class OocToolRegistry {
 					});
 
 				case 'unequip_item':
-					return this.executeCanonicalMutation(repository, {
+					return this.executeCanonicalMutation({
 						storyId,
 						actorId,
 						toolName: call.name,
@@ -217,7 +218,7 @@ export class OocToolRegistry {
 					});
 
 				case 'use_item':
-					return this.executeCanonicalMutation(repository, {
+					return this.executeCanonicalMutation({
 						storyId,
 						actorId,
 						toolName: call.name,
@@ -227,7 +228,7 @@ export class OocToolRegistry {
 					});
 
 				case 'use_ability':
-					return this.executeCanonicalMutation(repository, {
+					return this.executeCanonicalMutation({
 						storyId,
 						actorId,
 						toolName: call.name,
@@ -252,7 +253,7 @@ export class OocToolRegistry {
 					if (hitDiceToSpend !== undefined && (!Number.isInteger(hitDiceToSpend) || hitDiceToSpend < 0 || hitDiceToSpend > 20)) {
 						return { name: call.name, success: false, message: 'hitDiceToSpend must be an integer from 0 to 20.' };
 					}
-					return this.executeCanonicalMutation(repository, {
+					return this.executeCanonicalMutation({
 						storyId,
 						actorId,
 						toolName: call.name,
@@ -273,7 +274,7 @@ export class OocToolRegistry {
 					if (!Number.isFinite(seconds) || seconds <= 0 || seconds > 86400) {
 						return { name: call.name, success: false, message: 'seconds must be between 1 and 86400.' };
 					}
-					return this.executeCanonicalMutation(repository, {
+					return this.executeCanonicalMutation({
 						storyId,
 						actorId,
 						toolName: call.name,
@@ -328,7 +329,7 @@ export class OocToolRegistry {
 				switch (command.type) {
 					case 'EQUIP': {
 						const inventory = context.repository.getInventoryEngine(params.storyId);
-						const outcome = inventory.equipItem(params.actorId, String(command.payload.itemId), String(command.payload.slot));
+						const outcome = inventory.equipItem(params.actorId, String(command.payload.itemId), String(command.payload.slot) as any);
 						return outcome.success
 							? { success: true, data: outcome, summary: `OOC equipped ${String(command.payload.itemId)}.` }
 							: { success: false, errorReason: outcome.errorReason || 'Equip rejected.' };
@@ -349,14 +350,17 @@ export class OocToolRegistry {
 					}
 					case 'APPLY_ABILITY': {
 						const abilityEngine = context.repository.getCapabilityEngine(params.storyId);
-						const outcome = await abilityEngine.applyAbility(
-							params.actorId,
-							String(command.payload.abilityId),
-							String(command.payload.targetId),
-						);
-						return outcome.success
+						const actor = context.repository.getPlayerLifecycle(params.storyId);
+						const outcome = abilityEngine.adjudicate({
+							actionDescription: `OOC ability activation against ${String(command.payload.targetId)}`,
+							intendedCapabilityId: String(command.payload.abilityId),
+							requestedScale: 'Local',
+							actorId: params.actorId,
+							actorConditions: actor?.injuries?.map((injury) => injury.description) || [],
+						});
+						return outcome.approved
 							? { success: true, data: outcome, summary: `OOC used ability ${String(command.payload.abilityId)}.` }
-							: { success: false, errorReason: outcome.errorReason || 'Ability use rejected.' };
+							: { success: false, errorReason: outcome.rejectionReason || 'Ability use rejected.' };
 					}
 					case 'REST': {
 						const result = context.repository.getRestRecoveryEngine(params.storyId).execute({

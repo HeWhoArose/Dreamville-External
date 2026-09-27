@@ -1521,7 +1521,7 @@ OUTPUT STRICT JSON:
 
     try {
       const response = await worldRepository.getAiOrchestrator().executeTaskGeneration(
-        'narrative.generate',
+        'character.extract',
         prompt,
         'Return only the requested progression selection JSON.'
       );
@@ -1772,7 +1772,7 @@ Provide at least one useful feature.
 
     try {
       const response = await worldRepository.getAiOrchestrator().executeTaskGeneration(
-        'narrative.generate',
+        'character.extract',
         prompt,
         'Return only the requested custom progression module JSON.'
       );

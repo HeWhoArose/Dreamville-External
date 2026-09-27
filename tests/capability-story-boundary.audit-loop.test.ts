@@ -78,8 +78,13 @@ test('ten deterministic audits keep internal simulation out of the Skillbook and
     assert.doesNotMatch(canonicalStateBlock, /generatedTechniques:\s*actorSkills/);
     assert.equal(capabilitiesBlock.includes('graph'), false);
     assert.equal(routes.slice(interpretStart, interpretStart + 1200).includes("x-dreamville-internal-ai"), true);
-    assert.match(dice, /HTMLCanvasElement/);
-    assert.match(dice, /ICOSAHEDRON_FACES/);
-    assert.match(dice, /requestAnimationFrame/);
+    assert.match(dice, /@3d-dice\/dice-box-threejs/);
+    assert.match(dice, /theme_colorset:\s*['"]diceOfRolling['"]/);
+    assert.match(dice, /theme_material:\s*['"]plastic['"]/);
+    assert.match(dice, /await box\.init\(\)/);
+    assert.match(dice, /await box\.roll\(notation\)/);
+    assert.ok(dice.includes("@${values.join(',')}"));
+    assert.match(dice, /setRevealed\(true\)/);
+    assert.match(dice, /onComplete\?\.\(\)/);
   }
 });

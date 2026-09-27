@@ -1,240 +1,182 @@
-# Dreamville — Capability, Skillbook, World-Rule & Story Flow Implementation Plan
+# Dreamville — Capability, Skillbook, World-Law & Check Implementation Plan
+## Version 2.0 — Surgical Capability Contract
 
-Status: **ACTIVE — Phase 1 beginning**
-Repository: `HeWhoArose/Dreamville-External`
-Primary branch: `main`
+**Status:** ACTIVE
+**Scope owner:** capability ownership, Skillbook projection, world-law compatibility, progression/acquisition and skill-check resolution.
+**Does not own:** general Story UI, dice presentation, narration orchestration, persistence, spatial simulation or Operations UI.
 
-## Purpose
+## 1. Authority law
 
-This plan is the implementation ledger for the capability/Skillbook/story systems discussed in the current development pass. It is intentionally written into Dreamville before implementation so that the work remains connected across backend authority, player projections, AI-only simulation, progression, Story UI, world scoping, media generation, and regression verification.
+Owned capability ≠ global capability registry entry.
 
-## Non-negotiable architecture rules
+The player-facing Skillbook contains only actor-owned learned SkillInstances and explicitly active/effective grants that the product contract permits.
 
-1. **Owned capability ≠ global capability registry entry.**
-   The Skillbook can only display actor-owned learned skills/techniques/spells/abilities, backed by canonical `SkillInstance` ownership.
+Simulation is not acquisition.
+Proposal is not acquisition.
+Only an explicit canonical acquisition path can create a learned SkillInstance.
 
-2. **AI simulation is not player UI.**
-   Adjudication data, DAGs, derived skills, internal capability IDs, simulation traces, resource calculations, sensory directives, synthesis metadata, and authoring controls remain AI/internal only.
+## 2. Capability decision pipeline
 
-3. **Simulation never silently grants.**
-   A request for an unknown ability is evaluated first as a dry run. Canonical acquisition happens only after an explicit acquisition decision and a fresh authoritative commit.
+REQUEST
+ ↓
+already owned?
+ ├─ YES → canonical execution
+ └─ NO → dry-run simulation
+       ↓
+world-law compatibility
+       ↓
+character mechanism/compatibility
+       ↓
+resource/body/progression gates
+       ↓
+DEVELOPMENT PROPOSAL or rejection
+       ↓
+explicit player acceptance
+       ↓
+canonical command
+       ↓
+SkillInstance persistence
 
-4. **World law is authoritative.**
-   A concept that cannot exist under the active world's metaphysics/rules must not be synthesized as a character skill. The system must distinguish:
-   - already owned;
-   - world-supported but not learned;
-   - character-compatible but currently blocked;
-   - conditionally/developably compatible;
-   - character-incompatible;
-   - world-forbidden/unsupported.
+Dry-run simulation must not mutate canonical capability state.
 
-5. **Existing mechanisms are preferred before invention.**
-   The simulator should first reuse, extend, transform, or combine existing character/world mechanisms. Novel synthesis is only a later option and must be revalidated through the same simulation gate.
+## 3. World-law categories
 
-6. **Story turn output is separate from Recent Actions.**
-   The active scene owns the immediate result: player action → dice/check → success/failure → consequence → immediate narration. Recent Actions contains only a compact history of player-submitted actions.
+Every speculative capability resolves to one of:
+- ALREADY_OWNED;
+- WORLD_SUPPORTED_NOT_LEARNED;
+- CURRENTLY_BLOCKED;
+- DEVELOPABLE;
+- CHARACTER_INCOMPATIBLE;
+- WORLD_FORBIDDEN/UNSUPPORTED.
 
-7. **World is world-scoped.**
-   World view may expose characters at the current location and elsewhere in the active world, never a global Dreamville roster.
+A global capability registry entry cannot establish world support by itself.
 
-8. **Scene media uses the latest turn only.**
-   Comic scene generation must anchor to the immediate/latest narration and current scene facts, with no stale prior-scene carryover.
+## 4. Character compatibility
 
-9. **Player-facing synthesis is forbidden.**
-   Internal AI routes such as capability synthesis/interpretation remain explicitly guarded by the internal-AI boundary.
+Evaluation may use:
+- character identity;
+- lore/background;
+- existing capabilities;
+- progression;
+- body/vessel constraints;
+- resources;
+- conditions;
+- environment;
+- authored world rules.
 
-## Implementation phases
+Novel synthesis must pass the same simulation and validation gates as an existing mechanism.
 
-### Phase 0 — Audit & dependency map
-- Inventory all player-facing and internal capability data paths.
-- Locate every use of global capability registries and capability graphs.
-- Locate all Skillbook/Character/Power/Workstation duplicates.
-- Trace Story action history ordering and immediate-result ownership.
-- Trace World character projection back to authoritative world identity.
-- Trace current-scene prompt/image endpoints to their actual source action.
-- Confirm dice renderer and dice-type mapping are true 3D geometry, not flat transforms.
-- Record findings before mutations.
+## 5. Skill checks
 
-### Phase 1 — Canonical capability ownership & Skillbook boundary
-- Make one authoritative player capability projection contract.
-- Ensure Skillbook data comes only from actor-owned learned `SkillInstance` records.
-- Keep equipment-granted capabilities separate from learned Skillbook entries.
-- Prevent any legacy/global registry projection from reaching player-facing state.
-- Keep capability DAG, synthesis output, and adjudication internals on AI/internal routes only.
-- Add regression tests for global-registry leakage, equipment-vs-learned separation, and internal-route guards.
-- Run the loop protocol below for ten deterministic audit passes.
+The check system owns the mapping from a situation to a canonical skill profile.
 
-**Acceptance gates**
-- A capability existing in `CapabilityEngine` is not visible in the Skillbook unless a matching actor-owned `SkillInstance` exists.
-- A skill acquired by equipment is executable/effective when appropriate but is not presented as learned.
-- Player-facing capability payloads do not expose the global capability graph or simulation internals.
-- Internal synthesis/interpretation routes remain inaccessible without the internal-AI boundary.
+The expected core skill set is 18 skills:
+- Acrobatics
+- Animal Handling
+- Arcana
+- Athletics
+- Deception
+- History
+- Insight
+- Intimidation
+- Investigation
+- Medicine
+- Nature
+- Perception
+- Performance
+- Persuasion
+- Religion
+- Sleight of Hand
+- Stealth
+- Survival
 
-### Phase 2 — World-law + character compatibility simulation
-- Harden the dry-run simulator as the only speculative capability feasibility layer.
-- Build a stricter world-law hierarchy: world law → power system/metaphysics → custom rules → character mechanism → resources/body → progression.
-- Add deterministic world-forbidden cases (e.g. bending-only world + teleportation).
-- Add character-affinity cases (e.g. earthbender + lightning).
-- Distinguish impossible-in-world from possible-in-world-but-not-for-this-character.
-- Prefer existing mechanisms and progression routes before novel synthesis.
-- Keep all simulation output internal until the normal player-facing explanation requires a safe summary.
-- Re-run generated candidates through the same simulation before proposal.
+Each skill must resolve to:
+- governing ability;
+- proficiency state;
+- relevant modifiers;
+- equipment/condition modifiers;
+- advantage/disadvantage state where supported;
+- canonical dice request;
+- DC comparison;
+- canonical result.
 
-### Phase 2.5 — Character Genesis Additional Skill Discovery
-- Add a Character Genesis "Add More Skills" action directly below the custom skill synthesis controls.
-- Use the original natural-language character concept plus current character identity, role, background, motivations, capabilities, and already-listed skills as the inference context.
-- Ask the AI to propose multiple distinct additional skills rather than a single custom skill.
-- Exclude duplicates of existing or newly proposed skills.
-- Respect the active world rules and D&D rules mode.
-- Return structured skill proposals containing name, governing ability, description, mechanical description, check formula, tags, and world compatibility.
-- Never add suggestions automatically. The Character Genesis draft remains authoritative and the player must explicitly accept one or more proposals.
-- Support repeated discovery passes: after accepting Lightning, a later "Add More Skills" request must see Lightning in the current draft and seek other distinct skills such as Lightning Chain, Fog Mist, Mirror Ward, or another contextually appropriate result.
-- Keep AI failure explicit. Do not silently invent deterministic suggestions when the additional-skill discovery model fails.
-- Add regression tests for duplicate filtering, D&D formula normalization, multi-suggestion output, and zero-result failure.
+The LLM may explain or narrate a check. It must not invent the roll result.
 
-**Acceptance gates**
-- The button is available in the Capabilities & Skills step.
-- A discovery pass proposes multiple distinct skills from the character description and existing draft state.
-- A proposed skill is not committed until the player accepts it.
-- Accepting one skill updates the draft immediately.
-- Accepting all skills adds each unique proposal once.
-- Rejecting/dismissing proposals does not mutate the draft.
-- Re-running discovery after accepting skills uses the updated skill list and seeks different skills.
-- AI-unavailable or invalid discovery responses produce an explicit error and no skill grant.
+## 6. Skill-check invocation
 
-### Phase 3 — Explicit acquisition/progression commit
-- Make proposal acceptance the only canonical path from simulation → acquisition.
-- Revalidate the proposal at commit time against the current world, actor ownership, progression state, resources, and rules.
-- Prevent stale proposals and race-condition grants.
-- Ensure canonical progression events are the persistence source for newly learned skills.
-- Ensure rejected simulation has zero capability-state mutation.
-- Ensure acquired skills immediately appear in Skillbook via the same projection path.
+Checks are invoked by the canonical rules/action layer when a situation requires them.
 
-### Phase 4 — Story immediate-result flow
-- Keep only the player action in Recent Actions.
-- Keep dice, check result, success/failure, consequences, and immediate narration in the active turn result.
-- Ensure newest canonical action is the displayed latest turn.
-- Keep the action composer below the immediate result.
-- Preserve fallback behavior when AI action advice is unavailable.
+Examples:
+- noticing a hidden object → Perception;
+- reading motives/deception → Insight;
+- recalling magical knowledge → Arcana;
+- performing before an audience → Performance.
 
-### Phase 5 — World-scoped character projection
-- Ensure server-side character projection carries authoritative world identity.
-- Keep current-location characters and elsewhere-in-world characters.
-- Never fall back to a global Dreamville roster.
-- Fail closed when world identity cannot be established.
+Keyword recognition may assist intent interpretation, but it must never be the final authority when structured action context already identifies the required skill.
 
-### Phase 6 — Current-scene comic generation
-- Trace and harden `Generate Scene → Generate Image/Prompt`.
-- Build context only from the latest completed turn and current scene.
-- Enforce 4-panel sequential-art continuity and exact immediate result.
-- Prohibit stale dialogue/history, flashbacks, invented characters, alternate outcomes, and invented powers.
-- Ensure generated asset display and prompt output are connected to the same turn.
+## 7. Acquisition
 
-### Phase 7 — Dice visual integrity
-- Verify every supported die is represented as a recognizable 3D polyhedron.
-- Preserve exact D4/D6/D8/D10/D12/D20/D100 identification.
-- Ensure animation uses volumetric rotation rather than a flat-sheet effect.
-- Add renderer-source and behavioral regression coverage.
+Accepted acquisition must:
+- revalidate the proposal;
+- execute through canonical command authority;
+- create exactly one SkillInstance;
+- persist it;
+- update the same player projection used by Skillbook;
+- emit the appropriate canonical event.
 
-### Phase 8 — Duplicate/legacy surface retirement
-- Retire unused CharacterDossier/legacy HUD/workstation surfaces from player routing.
-- Keep only one player Character/Skillbook surface.
-- Keep internal workbench/diagnostic surfaces in developer-only routes.
-- Audit imports and references so dead UI cannot silently re-enter the player flow.
+Rejected, stale or invalid proposals must produce zero capability mutation.
 
-### Phase 9 — Cross-system contract tests
-- Test the chain:
-  action → ownership resolution → simulation → proposal/deny → acquisition → execution → Skillbook.
-- Test world-forbidden and character-incompatible paths.
-- Test scene-generation freshness.
-- Test World scoping.
-- Test Story immediate-result placement and Recent Actions separation.
-- Test fallback paths.
+## 8. Equipment-granted capabilities
 
-### Phase 10 — Final 10-pass integration loop
-Every pass performs:
-1. Audit current implementation against the plan.
-2. Identify any disconnected, duplicated, leaked, or stale path.
-3. Implement the smallest coherent correction.
-4. Re-audit the changed path and its upstream/downstream contracts.
-5. Verify regression/fallback behavior.
-6. Record the pass outcome in the test/audit ledger.
+Equipment may grant an effective capability without creating a learned SkillInstance.
 
-No pass is considered complete merely because a UI appears correct; the API boundary, canonical state, projection, and persistence path must agree.
+Therefore:
+- executable/effective ≠ learned;
+- equipped capability ≠ Skillbook ownership unless explicitly defined by product rules.
 
-## Loop rule
+## 9. Player boundary
 
-For each implementation phase, and especially the final integration phase, use **10 explicit audit/implementation passes**:
+Do not expose:
+- Capability DAG;
+- adjudication worksheets;
+- internal capability IDs;
+- speculative simulation traces;
+- synthesis metadata;
+- developer AI controls.
 
-**Audit → Implement → Re-audit → Regression/Fallback → Repeat**
+Player UI consumes one canonical projection.
 
-The loop must cover:
-- happy path;
-- world-forbidden path;
-- character-incompatible path;
-- insufficient resource/body path;
-- progression-locked path;
-- stale proposal path;
-- equipment-granted-but-not-learned path;
-- global-registry leakage path;
-- AI/provider failure fallback;
-- UI/route regression.
+## 10. Implementation order
 
-## Current execution ledger
+CAP-0 audit current ownership
+↓
+CAP-1 player-safe Skillbook projection
+↓
+CAP-2 world-law/character simulation
+↓
+CAP-3 acquisition/progression commit gate
+↓
+CAP-4 skill-check resolver completeness
+↓
+CAP-5 equipment-granted vs learned separation
+↓
+CAP-6 regression and 10-pass integration
 
-### Phase 1 — Canonical capability ownership & Skillbook boundary
-Status: **IMPLEMENTED — source audit complete; CI verification blocked by GitHub Actions startup failures**
+Story UI and dice work are referenced by contract but implemented under the Story Runtime specification.
 
-Key implementation commits:
-- `7755e06dd4c7128b88c927576760e0d7737a5547` — implementation plan written into Dreamville.
-- `db8656a6294b933a55b7248bd07550f0387c629f` — centralized player capability/Skillbook projection boundary.
-- `e323aed27be4beade3d482e315ce1e6605c768c0` — ten-pass player capability boundary tests.
-- `a520015de1efb5e6d4d0707aaac1fdc3671780d5` — proposal-generation safety refactor.
-- `ce1bec30e02010aece4d850d4b8c748d941b2271` — canonical protagonist/actor identity alignment in the advisor.
-- `53fa5e377ed76f9231270b6d0c54a079a4ae4d7c` — world-affinity and generic-magic simulation hardening.
-- `699f35c03d81ffbf19311622c90495a347f6d747` — ten-pass world-law simulation regression coverage.
+## 11. Acceptance
 
-Phase 1 implementation result:
-- The player Skillbook is projected from actor-owned `SkillInstance` records, not from the global capability registry.
-- Equipment-granted capabilities remain effective when appropriate but are not promoted to learned skills.
-- `/run-canonical-state` uses the player-safe capability projection.
-- Internal capability synthesis and freeform interpretation remain explicitly AI/internal-only.
-- The player-facing Character surface contains learned Skills & Spellbook only; the internal Capability DAG / Adjudication workspace is not part of the player Skillbook.
-- Legacy player roster projection is world-scoped and fails closed without a matching active-world identity.
-- The Story surface keeps immediate turn results separate from Recent Actions.
-- Current-scene comic generation is constrained to the immediate/latest turn.
-- Dice rendering uses actual 3D polyhedral construction/animation rather than a flat rotating sheet.
-- The dry-run capability simulator now has explicit bending-world affinity guards:
-  - Earthbender + Lightning => incompatible, not creatable.
-  - Bending-only + Teleportation => world-forbidden.
-  - Generic Wizard/Mage + permitted fire magic => developable, not automatically learned.
-  - Dark-magic specialist + ordinary Fireball => blocked until a compatible alternate mechanism is proposed and revalidated.
-- Generated alternate candidates must pass the same dry-run world/character/creation checks before becoming a proposal.
-- An alternate capability is not synthesized by the default advisor unless an explicit AI proposal generator is supplied.
+Prove:
+- global registry entries do not leak into Skillbook;
+- equipment grants are separated from learned skills;
+- simulation is side-effect free;
+- world-forbidden capabilities cannot be acquired;
+- character-incompatible capabilities cannot be silently granted;
+- stale proposals are rejected;
+- all 18 skills resolve correctly;
+- check results originate from the canonical dice/rules path;
+- persistence uses existing campaign authority.
 
-10-pass source audit:
-- Passes 1–10: **ALL GREEN at source-contract level**.
-- Checked ownership isolation, equipment separation, internal AI boundaries, simulation status classes, proposal revalidation, Character/Skillbook UI, immediate Story result flow, Recent Actions separation, world scoping, comic freshness, dice 3D renderer, and audit-loop coverage.
-- Added a dedicated ten-pass world-law audit test.
+## 12. Boundary
 
-CI verification:
-- Multiple GitHub Actions verification runs reached and passed through earlier `npm install` + lint + test execution, exposing real product/test mismatches that were subsequently corrected.
-- The most recent verification runs for the latest commits are currently failing before any workflow step starts (zero recorded steps). These are GitHub Actions runner/workflow startup failures rather than observed npm test/build failures. Therefore **full test/build success is not claimed** from the current state.
-
-### Phase 2 — World-law + character compatibility simulation
-Status: **IN PROGRESS**
-- The simulator remains dry-run only.
-- World-law hierarchy and bending affinity guards have been hardened.
-- Ten-pass world-law tests have been added.
-- Next implementation step is to formalize mechanism discovery and progression-path evaluation across lore, world rules, body/vessel, environment, and resource ceilings before any novel synthesis.
-
-## Phase completion rule
-
-A phase is not marked complete until:
-- source-level audit is clean;
-- connected contracts are verified;
-- regression coverage exists for new boundaries;
-- fallback behavior is verified;
-- no internal-only panel/data is exposed through the player surface;
-- no claim of build/test success is made without an actual verification result.
-
+This document owns capability truth. The Story Runtime document owns how checks and capabilities are displayed to the player. The AI Orchestration document owns how AI requests or explains capability-related tasks.

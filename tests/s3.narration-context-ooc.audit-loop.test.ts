@@ -53,8 +53,28 @@ test('S3 OOC boundary exposes canonical tools, enforces the active actor, and re
 
 test('S3 OOC research strips private relationship internals and planner/evidence context', async () => {
 	const { repository, storyId, actorId } = seed();
-	const entity = repository.getEntityCards(storyId).find((candidate) => candidate.id !== actorId);
-	assert.ok(entity, 'Seed story must expose at least one non-player entity card');
+	const entity = repository.saveEntityCard(storyId, {
+		id: 's3_known_npc',
+		worldId: repository.getStoryRun(storyId)?.worldId || storyId,
+		name: 'S3 Known NPC',
+		kind: 'NPC',
+		isTemplate: false,
+		identity: { aliases: [] },
+		classification: { tags: [] },
+		personality: { traits: [], values: [], motivations: [], fears: [], desires: [] },
+		behavior: { priorities: [], routines: [] },
+		social: { factionIds: [], reputation: {}, relationships: {} },
+		worldState: { isAlive: true, presence: 'present' },
+		traits: [],
+		capabilities: [],
+		feats: [],
+		equipment: [],
+		memoryRefs: [],
+		provenance: { source: 'S3_TEST', createdBy: 'SYSTEM' },
+		lifecycle: { status: 'ACTIVE' },
+		metadata: {},
+	});
+	assert.ok(entity && entity.id !== actorId, 'Test must create a non-player entity card');
 
 	const agency = repository.getDynamicCharacterAgencyEngine(storyId);
 	agency.setRelationship(storyId, {

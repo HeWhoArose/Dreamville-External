@@ -477,7 +477,7 @@ export class UniverseRuntimeService {
 				memoryClass: 'ATOMIC_FACT',
 				subjectEntityId: universe.playerIdentity.universeActorId,
 				relatedEntityIds: [],
-				content: 'Acquired item: ' + (item.customName || def?.name || item.defId) + '. Quantity now ' + String(item.quantity) + '.',
+				content: 'Acquired item: ' + (item.name || def?.name || item.defId) + '. Quantity now ' + String(item.quantity) + '.',
 				importance: 80,
 				confidence: 1,
 				status: 'active',
@@ -490,7 +490,7 @@ export class UniverseRuntimeService {
 				lastRecalledTurn: repository.getCanonicalCommandEvents(params.storyId).length,
 				createdAtTimestamp: clock.getTimestamp(),
 				lastRecalledTimestamp: clock.getTimestamp(),
-				triggerConditionTags: ['inventory', 'item', 'acquired', String(item.customName || def?.name || item.defId).toLowerCase()],
+				triggerConditionTags: ['inventory', 'item', 'acquired', String(item.name || def?.name || item.defId).toLowerCase()],
 			});
 		}
 
@@ -502,7 +502,7 @@ export class UniverseRuntimeService {
 				memoryClass: 'ATOMIC_FACT',
 				subjectEntityId: universe.playerIdentity.universeActorId,
 				relatedEntityIds: [],
-				content: 'Inventory changed: ' + lostItems.map((item: any) => item.customName || item.id).slice(0, 8).join(', ') + '.',
+				content: 'Inventory changed: ' + lostItems.map((item: any) => item.name || item.id).slice(0, 8).join(', ') + '.',
 				importance: 65,
 				confidence: 1,
 				status: 'active',
@@ -534,8 +534,15 @@ export class UniverseRuntimeService {
 		return repository.getUniverse(universe.universeId);
 	}
 
-	private static storeUniverseMemory(repository: WorldRepository, universeId: string, memory: UniverseMemoryRecord): void {
-		repository.saveUniverseMemory(universeId, memory);
+	private static storeUniverseMemory(
+		repository: WorldRepository,
+		universeId: string,
+		memory: Omit<UniverseMemoryRecord, 'universeId'> & { universeId?: string },
+	): void {
+		repository.saveUniverseMemory(universeId, {
+			...memory,
+			universeId: memory.universeId || universeId,
+		});
 	}
 
 	public static getRelevantUniverseMemories(
@@ -700,10 +707,16 @@ export class UniverseRuntimeService {
 		const capabilityActors = portable.capabilities?.powerStates || portable.capabilities?.actorLearnedCapabilities || {};
 		const sourceActorId = Object.keys(capabilityActors)[0] || '';
 		const targetActorId = player.actorId;
-		player.name = portable.identity?.name || player.name;
-		if (Array.isArray(portable.identity?.injuries)) player.injuries = JSON.parse(JSON.stringify(portable.identity.injuries));
-		if (portable.identity?.transformation) player.transformationRecord = JSON.parse(JSON.stringify(portable.identity.transformation));
-		repository.updatePlayerLifecycle(storyId, player);
+		const updatedPlayer = player.copyWith({
+			name: portable.identity?.name || player.name,
+			injuries: Array.isArray(portable.identity?.injuries)
+				? JSON.parse(JSON.stringify(portable.identity.injuries))
+				: [...player.injuries],
+			transformationRecord: portable.identity?.transformation
+				? JSON.parse(JSON.stringify(portable.identity.transformation))
+				: player.transformationRecord,
+		});
+		repository.updatePlayerLifecycle(storyId, updatedPlayer);
 		if (portable.currentHp !== undefined) run.currentHp = portable.currentHp;
 
 		// Inventory is portable and remains owned by the player.

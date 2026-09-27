@@ -63,14 +63,21 @@ export interface CharacterAlignmentProfile {
 export class CharacterAlignmentEngine {
   private profiles: Map<string, CharacterAlignmentProfile> = new Map();
   private relationships: Map<string, CharacterRelationship> = new Map(); // `${actorId}:${targetId}` -> CharacterRelationship
+  private mutationListener?: () => void;
+
+  public setMutationListener(listener?: () => void): void {
+    this.mutationListener = listener;
+  }
 
   public registerProfile(profile: CharacterAlignmentProfile): void {
     this.profiles.set(profile.characterId, { ...profile });
+    this.mutationListener?.();
   }
 
   public setRelationship(rel: CharacterRelationship): void {
     const key = `${rel.actorId}:${rel.targetId}`;
     this.relationships.set(key, { ...rel });
+    this.mutationListener?.();
   }
 
   public getProfile(characterId: string): CharacterAlignmentProfile | undefined {
@@ -123,6 +130,7 @@ export class CharacterAlignmentEngine {
     // Update player opposition flag
     profile.isCurrentlyOpposingPlayer = params.newRole === 'enemy' || params.newRole === 'antagonist' || params.newRole === 'rival';
 
+    this.mutationListener?.();
     return { success: true, updatedProfile: JSON.parse(JSON.stringify(profile)) };
   }
 
@@ -189,8 +197,14 @@ export class CharacterAlignmentEngine {
       }
     }
     if (Array.isArray(state.relationships)) {
-      for (const r of state.relationships) {
-        this.setRelationship(r);
+      const listener = this.mutationListener;
+      this.mutationListener = undefined;
+      try {
+        for (const r of state.relationships) {
+          this.setRelationship(r);
+        }
+      } finally {
+        this.mutationListener = listener;
       }
     }
   }

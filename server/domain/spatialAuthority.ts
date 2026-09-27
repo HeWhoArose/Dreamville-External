@@ -157,6 +157,59 @@ function distance(a: SpatialPoint, b: SpatialPoint): number {
 	return Math.hypot(a.x - b.x, a.y - b.y, dz);
 }
 
+export function resolveSpatialLineOfSight(
+	origin: SpatialPoint,
+	destination: SpatialPoint,
+	obstacles: SpatialObstacle[],
+): SpatialLineQueryResult {
+	const totalDistance = distance(origin, destination);
+	if (totalDistance === 0) return { clear: true, distance: 0 };
+
+	const blockers = obstacles.filter((obstacle) => obstacle.blocksSight);
+	const samples = Math.max(1, Math.min(512, Math.ceil(totalDistance * 4)));
+
+	for (let step = 1; step < samples; step += 1) {
+		const point = interpolate(origin, destination, step / samples);
+		const blocker = blockers.find((candidate) => pointInsideObstacle(point, candidate));
+		if (blocker) {
+			return {
+				clear: false,
+				blockedBy: blocker.id,
+				distance: totalDistance,
+				reason: `Line of sight is blocked by spatial obstacle "${blocker.id}".`,
+			};
+		}
+	}
+
+	return { clear: true, distance: totalDistance };
+}
+
+export function resolveSpatialCoverBetweenPoints(
+	origin: SpatialPoint,
+	destination: SpatialPoint,
+	obstacles: SpatialObstacle[],
+): SpatialCoverQueryResult {
+	const totalDistance = distance(origin, destination);
+	const candidates = obstacles
+		.filter((obstacle) => obstacle.cover && obstacle.cover !== 'NONE')
+		.filter((obstacle) => {
+			const samples = Math.max(1, Math.min(512, Math.ceil(totalDistance * 4)));
+			for (let step = 1; step < samples; step += 1) {
+				if (pointInsideObstacle(interpolate(origin, destination, step / samples), obstacle)) return true;
+			}
+			return false;
+		})
+		.sort((a, b) => {
+			const strength = (level?: SpatialCoverLevel) => level === 'TOTAL' ? 3 : level === 'THREE_QUARTERS' ? 2 : level === 'HALF' ? 1 : 0;
+			return strength(b.cover) - strength(a.cover) || a.id.localeCompare(b.id);
+		});
+
+	const strongest = candidates[0];
+	return strongest
+		? { level: strongest.cover || 'NONE', sourceId: strongest.id, distance: totalDistance }
+		: { level: 'NONE', distance: totalDistance };
+}
+
 export class SpatialAuthority {
 	private readonly context: SpatialQueryContext;
 
@@ -273,26 +326,7 @@ export class SpatialAuthority {
 	}
 
 	public canSeePoints(origin: SpatialPoint, destination: SpatialPoint): SpatialLineQueryResult {
-		const totalDistance = distance(origin, destination);
-		if (totalDistance === 0) return { clear: true, distance: 0 };
-
-		const blockers = this.getObstacles().filter((obstacle) => obstacle.blocksSight);
-		const samples = Math.max(1, Math.min(512, Math.ceil(totalDistance * 4)));
-
-		for (let step = 1; step < samples; step += 1) {
-			const point = interpolate(origin, destination, step / samples);
-			const blocker = blockers.find((candidate) => pointInsideObstacle(point, candidate));
-			if (blocker) {
-				return {
-					clear: false,
-					blockedBy: blocker.id,
-					distance: totalDistance,
-					reason: `Line of sight is blocked by spatial obstacle "${blocker.id}".`,
-				};
-			}
-		}
-
-		return { clear: true, distance: totalDistance };
+		return resolveSpatialLineOfSight(origin, destination, this.getObstacles());
 	}
 
 	public canHearLocations(originLocationId: string, destinationLocationId: string, maxDistance = 30): boolean {
@@ -323,16 +357,7 @@ export class SpatialAuthority {
 		if (!origin || !destination) {
 			return { level: 'NONE', distance: 0 };
 		}
-
-		const candidates = this.getObstacles()
-			.filter((obstacle) => obstacle.cover && obstacle.cover !== 'NONE')
-			.filter((obstacle) => this.lineIntersectsObstacle(origin.point, destination.point, obstacle))
-			.sort((a, b) => this.coverStrength(b.cover) - this.coverStrength(a.cover) || a.id.localeCompare(b.id));
-
-		const strongest = candidates[0];
-		return strongest
-			? { level: strongest.cover || 'NONE', sourceId: strongest.id, distance: distance(origin.point, destination.point) }
-			: { level: 'NONE', distance: distance(origin.point, destination.point) };
+		return resolveSpatialCoverBetweenPoints(origin.point, destination.point, this.getObstacles());
 	}
 
 	public getElevationDifference(originLocationId: string, destinationLocationId: string): number | null {
@@ -417,25 +442,6 @@ export class SpatialAuthority {
 		return environment && typeof environment === 'object' ? { ...environment } : undefined;
 	}
 
-	private getCoverStrength(level?: SpatialCoverLevel): number {
-		switch (level) {
-			case 'TOTAL': return 3;
-			case 'THREE_QUARTERS': return 2;
-			case 'HALF': return 1;
-			default: return 0;
-		}
-	}
-
-	private lineIntersectsObstacle(origin: SpatialPoint, destination: SpatialPoint, obstacle: SpatialObstacle): boolean {
-		const distanceValue = distance(origin, destination);
-		const samples = Math.max(1, Math.min(512, Math.ceil(distanceValue * 4)));
-
-		for (let step = 1; step < samples; step += 1) {
-			if (pointInsideObstacle(interpolate(origin, destination, step / samples), obstacle)) return true;
-		}
-
-		return false;
-	}
 
 	private getHazardsForPoint(point: SpatialPoint): SpatialHazard[] {
 		return this.getHazards().filter((hazard) =>

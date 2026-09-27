@@ -282,31 +282,15 @@ export class WorkingContextEngine {
         ].filter(Boolean).join(' | ')
       : 'Protagonist identity unavailable';
 
-    const publicWorldCharacters = Array.isArray(worldTemplate?.characters)
-      ? worldTemplate.characters.slice(0, 8).map((character: any) => {
-          const name = character?.name || character?.identity?.name;
-          if (!name) return '';
-          const role = character?.role?.profession || character?.role || character?.title || '';
-          const description = character?.description || character?.summary || '';
-          return `${name}${role ? ` (${role})` : ''}${description ? `: ${description}` : ''}`;
-        }).filter(Boolean)
-      : [];
-
-    const publicWorldFactions = Array.isArray(worldTemplate?.factions)
-      ? worldTemplate.factions.slice(0, 8).map((faction: any) => {
-          const name = typeof faction === 'string' ? faction : faction?.name || faction?.title;
-          const description = typeof faction === 'string' ? '' : faction?.description || faction?.summary || '';
-          return name ? `${name}${description ? `: ${description}` : ''}` : '';
-        }).filter(Boolean)
-      : [];
-
-    const publicWorldTimeline = Array.isArray(worldTemplate?.timeline)
-      ? worldTemplate.timeline.slice(-8).map((event: any) => {
-          const title = event?.title || event?.name || event?.event || '';
-          const description = event?.description || event?.summary || '';
-          return title ? `${title}${description ? `: ${description}` : ''}` : '';
-        }).filter(Boolean)
-      : [];
+    // WorldTemplate identity fields are treated as public world metadata. Detailed
+    // characters, factions, timeline entries, magic rules and terminology are NOT injected
+    // directly here because their visibility must come through the canonical epistemic
+    // knowledge projection below.
+    const authorizedWorldFacts = repo
+      .getAuthorizedKnowledgeFacts(storyId, viewerId)
+      .slice(0, 12)
+      .map((fact: any) => `[${fact.predicate}] ${fact.objectValue}`)
+      .filter(Boolean);
 
     const worldKnowledgeSnapshot = [
       worldTemplate?.title ? `World: ${worldTemplate.title}` : '',
@@ -314,16 +298,8 @@ export class WorkingContextEngine {
       worldTemplate?.description ? `Description: ${worldTemplate.description}` : '',
       worldTemplate?.setting ? `Setting: ${worldTemplate.setting}` : '',
       worldTemplate?.era || worldTemplate?.defaultEra ? `Era: ${worldTemplate?.era || worldTemplate?.defaultEra}` : '',
-      worldTemplate?.magicRules
-        ? `Magic/technology: ${typeof worldTemplate.magicRules === 'string' ? worldTemplate.magicRules : JSON.stringify(worldTemplate.magicRules)}`
-        : '',
-      publicWorldCharacters.length ? `Named world characters: ${publicWorldCharacters.join(' | ')}` : '',
-      publicWorldFactions.length ? `Factions: ${publicWorldFactions.join(' | ')}` : '',
-      publicWorldTimeline.length ? `Timeline: ${publicWorldTimeline.join(' | ')}` : '',
-      worldTemplate?.terminology
-        ? `Terminology: ${Object.entries(worldTemplate.terminology).slice(0, 12).map(([k, v]) => `${k}=${v}`).join('; ')}`
-        : '',
-    ].filter(Boolean).join('\n');
+      authorizedWorldFacts.length ? `Authorized world facts: ${authorizedWorldFacts.join(' | ')}` : '',
+    ].filter(Boolean).join('\\n');
 
     const startingSituation = run?.startingSituation
       ? [
@@ -628,7 +604,7 @@ export class WorkingContextEngine {
         label: 'World Bible Snapshot',
         content: worldKnowledgeSnapshot,
         estimatedTokens: WorkingContextEngine.estimateTokens(worldKnowledgeSnapshot),
-        sourceAuthority: 'Pinned WorldTemplate public world data',
+        sourceAuthority: 'Pinned WorldTemplate public identity + authorized epistemic knowledge projection',
         relevanceScore: 0.74,
       });
     }

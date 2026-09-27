@@ -872,26 +872,11 @@ export class StoryActionAdvisor {
 		sceneContext?: StoryActionSceneContext,
 	): Promise<ActionTip[]> {
 		const suppliedContext = sceneContext;
-		if (
-			!actionText.trim() &&
-			suppliedContext &&
-			(suppliedContext.locationName ||
-				suppliedContext.locationDescription ||
-				suppliedContext.startingSituation ||
-				suppliedContext.openingNarrative ||
-				suppliedContext.activeDialogue ||
-				suppliedContext.recentActions?.length)
-		) {
-			const fallbackLocation = suppliedContext.locationName || 'the current area';
-			return [{
-				id: deterministicId('empty_action_scene_tip', storyId, fallbackLocation),
-				title: 'Read the scene',
-				description: 'Use the visible situation to decide what deserves your attention before committing to an action.',
-				intent: 'OBSERVE_ENVIRONMENT',
-				actionText: `I carefully examine ${fallbackLocation} and look for useful clues, hazards, exits, or signs of what is happening.`,
-				source: 'DETERMINISTIC',
-			}];
-		}
+		// Empty-action requests (the Suggestions popup) should still flow through
+		// the scene-aware deterministic + AI suggestion pipeline. Returning a single
+		// generic "Read the scene" tip here prevented all richer contextual tips from
+		// ever being generated.
+
 
 		const player = this.repository.getPlayerLifecycle(storyId);
 		const run = this.repository.getStoryRun(storyId);

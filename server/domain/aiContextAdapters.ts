@@ -133,7 +133,11 @@ export class AiContextAdapters {
 			storyId,
 			actorId,
 			rulesProfile: repository.getRulesProfile(storyId),
-			playerProjection: projectPlayerCapabilities(repository, storyId, actorId) as unknown as Record<string, unknown>,
+			playerProjection: projectPlayerCapabilities({
+				effectiveCapabilities: repository.getEffectiveActorCapabilities(storyId, actorId),
+				learnedCapabilities: repository.getCapabilityEngine(storyId).getActorLearnedCapabilities(actorId),
+				skillInstances: repository.getCapabilityEngine(storyId).getActorSkillInstances(actorId),
+			}) as unknown as Record<string, unknown>,
 			canonicalEvents: repository.getCanonicalCommandEvents(storyId).slice(-12),
 		};
 	}
@@ -148,7 +152,11 @@ export class AiContextAdapters {
 				actorId,
 				repository.getCombatPerceptionOptions(storyId, actorId),
 			),
-			capabilities: projectPlayerCapabilities(repository, storyId, actorId),
+			capabilities: projectPlayerCapabilities({
+				effectiveCapabilities: repository.getEffectiveActorCapabilities(storyId, actorId),
+				learnedCapabilities: repository.getCapabilityEngine(storyId).getActorLearnedCapabilities(actorId),
+				skillInstances: repository.getCapabilityEngine(storyId).getActorSkillInstances(actorId),
+			}),
 			conditions: player?.injuries ? JSON.parse(JSON.stringify(player.injuries)) : [],
 			progression: repository.getCharacterProgressionEngine(storyId).getState(actorId),
 			rulesProfile: repository.getRulesProfile(storyId),

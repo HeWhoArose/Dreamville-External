@@ -67,22 +67,24 @@ test('mixed dice rolls retain one visual die per authoritative die term', () => 
 });
 
 
-test('dice renderer uses projected 3D canvas geometry rather than a flat SVG sheet', () => {
+test('dice renderer uses Frank Ali's 3D physics engine rather than a flat SVG sheet', () => {
   const source = fs.readFileSync(path.join(process.cwd(), 'src/components/common/DiceRollAnimation.tsx'), 'utf8');
-  assert.match(source, /HTMLCanvasElement/);
-  assert.match(source, /requestAnimationFrame/);
-  assert.match(source, /ICOSAHEDRON_FACES/);
-  assert.match(source, /rotate\(/);
+  assert.match(source, /@3d-dice\/dice-box-threejs/);
+  assert.match(source, /theme_colorset:\s*['"]diceOfRolling['"]/);
+  assert.match(source, /theme_material:\s*['"]plastic['"]/);
+  assert.match(source, /await box\.init\(\)/);
+  assert.match(source, /await box\.roll\(notation\)/);
+  assert.match(source, /@\$\{values\.join\(','\)\}/);
   assert.doesNotMatch(source, /const DieFace/);
 });
 
-test('dice UI does not reveal the canonical result before the roll is started', () => {
+test('dice UI does not reveal the canonical result before the physical roll is complete', () => {
   const source = fs.readFileSync(path.join(process.cwd(), 'src/components/common/DiceRollAnimation.tsx'), 'utf8');
   const beforeStartRoll = source.slice(0, source.indexOf('const startRoll'));
-  assert.equal(beforeStartRoll.includes('diceSides.map((sides) => randomFace(sides))'), true);
-  assert.equal(beforeStartRoll.includes('roll.individualDice[index]'), false);
-  assert.equal(source.includes('setRollingValues(diceSides.map((sides) => randomFace(sides)));'), true);
-  assert.equal(source.includes('setRollingValues([...roll.individualDice]);'), true);
+  assert.equal(beforeStartRoll.includes('revealed'), true);
+  assert.equal(beforeStartRoll.includes('roll.individualDice'), false);
+  assert.match(source, /setRevealed\(true\)/);
+  assert.match(source, /onComplete\?\.\(\)/);
 });;
 
 test('combat resolution consumes the shared vibrant dice presentation instead of developer-style roll rows', () => {

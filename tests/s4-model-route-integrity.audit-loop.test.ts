@@ -178,10 +178,11 @@ test('S4 configured route reaches only its ordered fallbacks before deterministi
 });
 
 
-test('S4 multi-task category override must be eligible for every task in the category', () => {
+test('S4 category override is task-compatible inside multi-task speech category', () => {
 	const orchestrator = new MultiModelOrchestrator();
-	const speechTasks = orchestrator.getCategoryRuntimeStates().find((state) => state.category === 'speech')?.tasks || [];
-	assert.deepEqual(speechTasks, ['speech.generate', 'speech.transcribe']);
+	const state = orchestrator.getCategoryRuntimeStates().find((entry) => entry.category === 'speech');
+	const tasks = state?.tasks || [];
+	assert.deepEqual([...tasks].sort(), ['speech.generate', 'speech.transcribe']);
 
 	orchestrator.registerModel({
 		providerId: 'category_partial',
@@ -203,17 +204,25 @@ test('S4 multi-task category override must be eligible for every task in the cat
 		lifecycleState: 'active',
 	});
 
-	assert.throws(
-		() => orchestrator.setCategoryModelOverride('speech', 'category_partial::partial-speech'),
-		/missing task eligibility: speech\.transcribe/i,
-	);
-});
+	orchestrator.setCategoryModelOverride('speech', 'category_partial::partial-speech');
 
+	const runtime = orchestrator.getCategoryRuntimeStates().find((entry) => entry.category === 'speech');
+	const generationRoute = runtime?.taskRoutes.find((route) => route.task === 'speech.generate');
+	const transcriptionRoute = runtime?.taskRoutes.find((route) => route.task === 'speech.transcribe');
+
+	assert.equal(generationRoute?.activeModelKey, 'category_partial::partial-speech');
+	assert.equal(generationRoute?.mode, 'CATEGORY_MANUAL');
+	assert.notEqual(transcriptionRoute?.activeModelKey, 'category_partial::partial-speech');
+	assert.notEqual(transcriptionRoute?.mode, 'CATEGORY_MANUAL');
+
+	assert.equal(orchestrator.selectBestModel('speech.generate').selectedModel.modelId, 'partial-speech');
+	assert.notEqual(orchestrator.selectBestModel('speech.transcribe').selectedModel.modelId, 'partial-speech');
+});
 test('S4 valid category override is applied to every task in a multi-task category', () => {
 	const orchestrator = new MultiModelOrchestrator();
 	const category = 'gameplay_advice' as const;
 	const tasks = orchestrator.getCategoryRuntimeStates().find((state) => state.category === category)?.tasks || [];
-	assert.deepEqual(tasks, ['story.advice', 'ooc.respond']);
+	assert.deepEqual([...tasks].sort(), ['ooc.respond', 'story.advice']);
 
 	orchestrator.registerModel({
 		providerId: 'category_shared',

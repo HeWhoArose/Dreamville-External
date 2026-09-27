@@ -2601,6 +2601,116 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
               )}
             </div>
 
+            {/* AI Additional Skill Discovery Review */}
+            <div className="p-4 rounded-xl bg-indigo-950/40 border border-indigo-800/60 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="text-xs font-semibold text-indigo-200 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>Additional Skill Suggestions</span>
+                  </div>
+                  <p className="text-[11px] text-neutral-400 mt-1 leading-relaxed">
+                    Review the skills the AI discovered from the full character concept and current capabilities. Nothing is added until you accept it.
+                  </p>
+                </div>
+                <span className="text-[10px] px-2 py-1 rounded bg-neutral-950/70 border border-indigo-800 text-indigo-300 font-mono shrink-0">
+                  AI REVIEW
+                </span>
+              </div>
+
+              {additionalSkillsError && (
+                <div className="p-3 rounded-lg bg-red-950/40 border border-red-800/60 text-xs text-red-300">
+                  {additionalSkillsError}
+                </div>
+              )}
+
+              {additionalSkillSuggestions.length > 0 && (
+                <div className="space-y-3 pt-2 border-t border-indigo-900/80">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-xs font-semibold text-indigo-200">
+                      Suggested Skills ({additionalSkillSuggestions.length})
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleRejectAllAdditionalSkills}
+                        className="px-2.5 py-1 rounded bg-neutral-900 border border-neutral-700 text-[10px] text-neutral-400 hover:text-white"
+                      >
+                        Dismiss All
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAcceptAllAdditionalSkills}
+                        className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-[10px] text-white font-semibold"
+                      >
+                        Accept All
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                    {additionalSkillSuggestions.map((skill) => (
+                      <div
+                        key={skill.id}
+                        className="p-3 rounded-lg bg-neutral-950 border border-indigo-900/70 space-y-2"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold text-white">{skill.name}</div>
+                            <div className="text-[10px] text-indigo-300 font-mono mt-0.5">
+                              {skill.governingAbility} • {skill.checkFormula || '1d20'}
+                            </div>
+                          </div>
+                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 font-mono shrink-0">
+                            AI
+                          </span>
+                        </div>
+
+                        <p className="text-[11px] text-neutral-300 leading-relaxed">
+                          {skill.description}
+                        </p>
+
+                        {skill.mechanicalDescription && (
+                          <div className="p-2 rounded bg-neutral-900 border border-neutral-800 text-[10px] text-indigo-200 leading-relaxed">
+                            <span className="text-neutral-500">Effect:</span> {skill.mechanicalDescription}
+                          </div>
+                        )}
+
+                        {skill.worldCompatibility && (
+                          <div className="text-[10px] text-neutral-500 leading-relaxed">
+                            {skill.worldCompatibility}
+                          </div>
+                        )}
+
+                        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 pt-1 border-t border-neutral-800">
+                          <button
+                            type="button"
+                            onClick={() => handleRejectAdditionalSkill(skill.id)}
+                            className="w-full sm:w-auto justify-center px-2.5 py-1.5 rounded bg-neutral-900 border border-neutral-700 text-[10px] text-neutral-400 hover:text-white"
+                          >
+                            Reject
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleAcceptAdditionalSkill(skill)}
+                            className="w-full sm:w-auto justify-center px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-[10px] text-white font-semibold"
+                          >
+                            Add Skill
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {additionalSkillSuggestions.length === 0 && !additionalSkillsError && !isSuggestingMoreSkills && (
+                <div className="text-[10px] text-neutral-500">
+                  Press <span className="text-indigo-300 font-medium">Add More Skills</span> to generate proposals.
+                </div>
+              )}
+            </div>
+
             {/* Capabilities Cards */}
 
             {/* Extensible Custom Attributes & Stats */}

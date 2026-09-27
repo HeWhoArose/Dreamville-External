@@ -4683,6 +4683,13 @@ export class MultiModelOrchestrator {
       error?: string;
     }>;
     researchPacket?: ReturnType<typeof narrativeContinuityEngine.research>;
+    contextAudit?: {
+      hardTokenBudget: number;
+      totalTokens: number;
+      includedChunks: Array<{ label: string; source?: string; relevanceScore?: number; estimatedTokens: number }>;
+      evictedChunkLabels: string[];
+      assembledTextPreview: string;
+    };
   }> {
     const storyId = params.storyId || 'default_story';
     const playerAction = (params.playerAction || '').trim();
@@ -4796,6 +4803,19 @@ export class MultiModelOrchestrator {
       ],
     });
 
+    const contextAudit = {
+      hardTokenBudget: assembledContext.hardTokenBudget,
+      totalTokens: assembledContext.totalTokens,
+      includedChunks: assembledContext.includedChunks.map((chunk) => ({
+        label: chunk.label,
+        source: chunk.sourceAuthority,
+        relevanceScore: chunk.relevanceScore,
+        estimatedTokens: chunk.estimatedTokens,
+      })),
+      evictedChunkLabels: assembledContext.evictedChunkLabels,
+      assembledTextPreview: assembledContext.assembledText.slice(0, 6000),
+    };
+
     const generated = await this.executeTaskGeneration(
       'narrative.generate',
       assembledContext.assembledText,
@@ -4828,6 +4848,7 @@ export class MultiModelOrchestrator {
           fallbackReason: generated.fallbackReason,
           attemptsTrail: generated.attemptsTrail,
           researchPacket,
+          contextAudit,
           error: generated.fallbackReason || 'All AI narration models failed; deterministic emergency fallback was withheld from player-facing narration.',
         };
       }
@@ -4843,6 +4864,7 @@ export class MultiModelOrchestrator {
         fallbackReason: generated.fallbackReason,
         attemptsTrail: generated.attemptsTrail,
         researchPacket,
+        contextAudit,
         error: validation.errorReason || 'Narrative response failed structured validation.',
       };
     }
@@ -4859,6 +4881,7 @@ export class MultiModelOrchestrator {
       fallbackReason: generated.fallbackReason,
       attemptsTrail: generated.attemptsTrail,
       researchPacket,
+      contextAudit,
     };
   }
 

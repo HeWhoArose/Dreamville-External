@@ -129,7 +129,11 @@ class ApiClient {
       throw error;
     }
 
-    return (await res.json()) as ActionResult;
+    const result = (await res.json()) as ActionResult & { storyId?: string };
+    if (result.storyId && result.storyId !== globalActiveStoryId) {
+      this.setActiveStoryId(result.storyId);
+    }
+    return result;
   }
 
   /**
@@ -2141,6 +2145,7 @@ class ApiClient {
     });
     const data = await res.json().catch(() => null);
     if (!res.ok) throw new Error(data?.errorReason || `Failed to travel to world: HTTP ${res.status}`);
+    if (data?.storyId) this.setActiveStoryId(String(data.storyId));
     return data;
   }
 

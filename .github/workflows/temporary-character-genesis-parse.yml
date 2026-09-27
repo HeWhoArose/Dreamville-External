@@ -40,10 +40,7 @@ jobs:
           const diagnostics = sf.parseDiagnostics.map(format);
           const interestingLines = source.split('\\n');
           const windows = diagnostics.map((d) => ({
-            lineWindow: interestingLines.slice(Math.max(0, d.line - 12), d.line + 8).map((line, index) => ({
-              line: Math.max(1, d.line - 11 + index),
-              text: line,
-            })),
+            sourceWindow: source.slice(Math.max(0, d.start - 1200), Math.min(source.length, d.start + 1600)),
           }));
           console.log(JSON.stringify({
             parseDiagnostics: diagnostics,

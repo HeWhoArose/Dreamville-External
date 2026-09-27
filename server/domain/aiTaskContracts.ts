@@ -494,10 +494,6 @@ export function evaluateAiTaskReadiness(
 	if (model.contextWindow > 0 && contextTokens > model.contextWindow) {
 		return { task, modelId: model.modelId, providerId: model.providerId, state: 'REJECTED', reason: 'Requested context exceeds the model context window.', capabilityCompatible: true, contextCompatible: false, quotaAvailable: true };
 	}
-	if (model.health === 'Healthy' && model.quota !== 'Unknown' && model.quota !== 'Exhausted' && model.quota !== 'Low' && model.quota !== 'NearExhaustion') {
-		// fall through after capability checks below
-	}
-
 	const capabilities = new Set(model.capabilities || []);
 	if (capabilities.size > 0) {
 		for (const required of contract.requiredCapabilities) {

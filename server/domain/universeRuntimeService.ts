@@ -230,6 +230,16 @@ export class UniverseRuntimeService {
 			this.applyPortablePlayerState(repository, universe.universeId, targetStoryId);
 		}
 
+		// Destination time is authoritative for the binding's last-visited timestamp.
+		const destinationTimestamp = formatCanonicalTimestamp(
+			repository.getWorldClock(targetStoryId).getTimestamp(),
+		);
+		const destinationBinding = universe.worldBindings.find((binding) => binding.storyId === targetStoryId);
+		if (destinationBinding) {
+			destinationBinding.lastVisitedAt = destinationTimestamp;
+			destinationBinding.lastSimulatedUniverseSeconds = universe.universeElapsedSeconds;
+		}
+
 		for (const binding of universe.worldBindings) {
 			if (binding.storyId === targetStoryId) binding.status = 'CURRENT';
 			else if (binding.status === 'CURRENT') binding.status = 'VISITED';

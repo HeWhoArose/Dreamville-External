@@ -896,6 +896,50 @@ export class CharacterProgressionEngine {
     }
   }
 
+  /**
+   * Applies a player's portable progression state without replacing the destination world's
+   * module registry. World-specific class/species/feat definitions remain authoritative.
+   */
+  public importPortableActorState(snapshot: CharacterProgressionState, targetActorId: string): void {
+    if (!snapshot || !targetActorId) return;
+
+    const state = clone(snapshot);
+    state.actorId = targetActorId;
+
+    const classId = state.classId && this.modules.get(state.classId)?.type === 'CLASS'
+      ? state.classId
+      : undefined;
+    const subclassCandidate = state.subclassId ? this.modules.get(state.subclassId) : undefined;
+    const subclassId =
+      subclassCandidate?.type === 'SUBCLASS' &&
+      (!subclassCandidate.parentClassId || subclassCandidate.parentClassId === classId)
+        ? state.subclassId
+        : undefined;
+    const speciesId = state.speciesId && this.modules.get(state.speciesId)?.type === 'SPECIES'
+      ? state.speciesId
+      : undefined;
+
+    const featIds = (state.featIds || []).filter((id) => this.modules.get(id)?.type === 'FEAT');
+    const enabledModuleIds = (state.enabledModuleIds || []).filter((id) => this.modules.has(id));
+    const knownFeatures = new Set(
+      Array.from(this.modules.values()).flatMap((module) => module.features.map((feature) => feature.id)),
+    );
+    const unlockedFeatureIds = (state.unlockedFeatureIds || []).filter((id) => knownFeatures.has(id));
+
+    this.actorStates.set(targetActorId, {
+      ...state,
+      classId,
+      subclassId,
+      speciesId,
+      featIds,
+      enabledModuleIds,
+      unlockedFeatureIds,
+      progressionHistory: clone(state.progressionHistory || []),
+      usage: clone(state.usage || {}),
+      genesisSelectionSource: state.genesisSelectionSource ? clone(state.genesisSelectionSource) : undefined,
+    });
+  }
+
   private assertCanonicalMutationAuthority(): void {
     if (this.canonicalMutationGuard && !this.canonicalMutationGuard()) throw new Error('Character progression mutation requires an active canonical command transaction.');
   }

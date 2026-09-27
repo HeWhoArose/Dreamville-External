@@ -206,19 +206,43 @@ gameRouter.post('/action/ooc', async (req: Request, res: Response) => {
     const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
     if (!message) return res.status(400).json({ success: false, errorReason: 'message is required.' });
 
+    const oocTools = oocToolRegistry.listTools();
+    const toolManifest = oocTools
+      .map((tool) => {
+        const inputs = Object.entries(tool.input)
+          .map(([name, type]) => `${name}: ${type}`)
+          .join(', ');
+        const required = tool.requiredInput?.length ? `; required=${tool.requiredInput.join(', ')}` : '';
+        return `- ${tool.name} [${tool.mode}]${required}${inputs ? ` | ${inputs}` : ''}`;
+      })
+      .join('\n');
+
     const context = WorkingContextEngine.assembleTurnContext({
       storyId,
+      viewerActorId: worldRepository.getPlayerLifecycle(storyId)?.actorId,
       playerAction: message,
       hardTokenBudget: 1400,
       worldRepo: worldRepository,
+      customChunks: [{
+        id: 'ooc_tool_registry',
+        band: 'B1_CRITICAL',
+        label: 'Canonical OOC Tool Registry',
+        content: toolManifest,
+        estimatedTokens: WorkingContextEngine.estimateTokens(toolManifest),
+        sourceAuthority: 'OocToolRegistry',
+        isProtected: true,
+        relevanceScore: 1,
+      }],
     });
     const orchestrator = worldRepository.getAiOrchestrator();
     const systemInstruction = [
       'You are DreamBook OOC, the player-facing out-of-character assistant for the current Story Run.',
       'Answer questions using only the supplied canonical working context and clearly mark uncertainty when the context does not contain the answer.',
       'You may explain rules, character abilities, current conditions, inventory, known lore, recent events, and what is currently happening.',
+      'Use only the exact canonical OOC tools listed in the tool registry. Never invent a tool name or arguments schema.',
+      'READ tools may retrieve authorized state to answer the player. MUTATE tools may be used only when the player explicitly requests the supported state change; never mutate state to answer a question, hypothetical, explanation, or suggestion.',
+      'Return JSON with response and an optional toolCall {name, arguments}. Never claim a mutation completed before the tool result exists.',
       'Never claim that a canonical state change happened merely because the player asked for it.',
-      'If the player explicitly requests a supported state change, return JSON with response and an optional toolCall {name, arguments}. Never claim completion before the tool result exists. Only use tools from the supplied canonical OOC tool registry.',
       'Do not write story narration unless the player explicitly asks for an explanation of what is happening.',
     ].join(' ');
     const generated = await orchestrator.executeTaskGeneration(

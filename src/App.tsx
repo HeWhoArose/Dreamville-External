@@ -167,6 +167,10 @@ export const App: React.FC = () => {
         setActiveStoryId('default_story');
         setCurrentRoute((route) => route === 'play.story' ? 'dashboard' : route);
         await initializeApp('default_story');
+      } else if (summaries.length === 0 && activeStoryId === 'default_story') {
+        // No persisted user run exists. Bootstrap the engine only after the library
+        // has confirmed that there is nothing real to display on the dashboard.
+        await initializeApp('default_story');
       }
     } catch (err: any) {
       setStoryLibraryError(err?.message || 'Failed to load persisted Story Runs.');
@@ -299,7 +303,9 @@ export const App: React.FC = () => {
   };
 
   useEffect(() => {
-    initializeApp(activeStoryId);
+    // Library-first bootstrap prevents the dashboard from briefly treating the
+    // legacy default_story seed as the player's latest campaign.
+    fetchStoryLibrary();
   }, []);
 
   useEffect(() => {

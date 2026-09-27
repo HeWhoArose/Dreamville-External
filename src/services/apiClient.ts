@@ -2128,6 +2128,7 @@ class ApiClient {
     worldId?: string;
     worldPremise?: string;
     worldTitle?: string;
+    travelDurationSeconds?: number;
   }): Promise<any> {
     const universe = await this.getCurrentUniverse();
     const universeId = universe?.universe?.universeId;

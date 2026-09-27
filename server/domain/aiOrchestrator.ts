@@ -5574,9 +5574,12 @@ export class MultiModelOrchestrator {
         selectedModel: forced,
         selectionReason: 'Explicitly selected model "' + (forced.displayName || forced.modelId) + '".',
         selectionScore: forced.userPriority,
-        fallbacks: this.getFallbackChain(task)
-          .map((key) => Array.from(this.models.values()).find((model) => this.modelKey(model) === key || model.modelId === key))
-          .filter((model): model is ModelRegistryRecord => Boolean(model) && this.modelKey(model) !== this.modelKey(forced)),
+        fallbacks: this.getFallbackChain(task).flatMap((key) => {
+          const model = Array.from(this.models.values()).find(
+            (candidate) => this.modelKey(candidate) === key || candidate.modelId === key,
+          );
+          return model && this.modelKey(model) !== this.modelKey(forced) ? [model] : [];
+        }),
       };
     }
 

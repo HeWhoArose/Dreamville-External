@@ -1,7 +1,7 @@
 # DreamBook — Spatial World Simulation Specification
 ## Version 2.0 — Surgical Spatial Authority Contract
 
-**Status:** DESIGN / IMPLEMENTATION BLUEPRINT
+**Status:** VERIFIED — IMPLEMENTED / RUNTIME AUDITED 2026-09-27
 **Scope owner:** spatial geometry, movement, navigation, line of sight, perception inputs, terrain, cover, elevation and environmental simulation.
 **Does not own:** persistence/migration, AI routing, epistemic authority, capability ownership, narration or overall roadmap.
 
@@ -10,6 +10,18 @@
 Create a persistent deterministic spatial layer in which physical facts are resolved by canonical simulation rather than AI invention.
 
 AI is a consumer of spatial projections, not the spatial authority.
+
+## 1A. Implemented connection points
+
+The current implementation is connected through these canonical boundaries:
+
+- `WorldRepository.getSpatialAuthority(storyId)` exposes the shared spatial query authority.
+- `WorldSimulationService.startPlayerTravel()` consumes SpatialAuthority for macro route validation.
+- `TacticalCombatEngine` consumes shared spatial line-of-sight, tactical grid path and tactical movement-cost helpers while retaining combat-resolution ownership.
+- `canonicalSnapshot.ts` already persists and restores geography as canonical spatial state.
+- `WorkingContextEngine` and player-facing projections continue to enforce epistemic filtering outside the spatial authority.
+
+These adapters do not create a second persistence store, second world repository, or second combat authority.
 
 ## 2. Authority boundary
 

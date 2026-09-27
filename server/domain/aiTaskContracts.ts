@@ -443,6 +443,12 @@ export function getAllAiTaskContracts(): AiTaskContract[] {
 	return Object.keys(CONTRACTS).map((task) => getAiTaskContract(task as TaskId));
 }
 
+export function getAiTasksByCategory(category: AiTaskCategory): TaskId[] {
+	return Object.values(CONTRACTS)
+		.filter((contract) => contract.category === category)
+		.map((contract) => contract.task);
+}
+
 export function validateAiTaskResponse(task: TaskId, text: string): { valid: boolean; errorReason?: string } {
 	const contract = getAiTaskContract(task);
 	const kind = contract.validatorKind || 'NONE';

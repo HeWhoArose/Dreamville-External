@@ -86,7 +86,8 @@ export class NarrativeContinuityEngine {
       researchEvidence: researchEvidencePipeline.getEvidenceForStory(storyId),
       causalProvenance: researchEvidencePipeline.getCausalGraphForStory(storyId),
     };
-    this.persistResearch(repository, storyId, packet);
+    // Research is ephemeral context. It must not mutate canonical story/save state
+    // merely because a narrator was asked to think about an action.
     return packet;
   }
 
@@ -121,13 +122,6 @@ export class NarrativeContinuityEngine {
     };
     repository.saveStoryRun(run);
     return state;
-  }
-
-  private static persistResearch(repository: WorldRepository, storyId: string, packet: NarrativeResearchPacket): void {
-    const run = repository.getStoryRun(storyId);
-    if (!run) return;
-    run.runtimeState = { ...(run.runtimeState || {}), narrativeResearch: { ...packet, capturedAt: formatCanonicalTimestamp(repository.getWorldClock(storyId).getTimestamp()) } };
-    repository.saveStoryRun(run);
   }
 
   private static rankAndLimit<T>(facts: T[], keywords: string[], max: number): T[] {

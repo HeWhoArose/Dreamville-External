@@ -88,7 +88,7 @@ export class NarrativeContinuityEngine {
     // memories even when the memory text itself does not repeat the entity's name.
     // This is what lets an NPC remember an old event hundreds of turns later.
     const entityCards = repository.getEntityCards(storyId);
-    const normalizedQuery = normalizedQuery.toLowerCase();
+    const normalizedQueryText = normalizedQuery.toLowerCase();
     const focusEntityIds = entityCards
       .filter((entity) => entity.id !== viewerActorId)
       .filter((entity) => {
@@ -96,7 +96,7 @@ export class NarrativeContinuityEngine {
         const names = [entity.name, ...aliases]
           .map((value) => String(value || '').trim().toLowerCase())
           .filter((value) => value.length >= 3);
-        return names.some((name) => normalizedQuery.includes(name));
+        return names.some((name) => normalizedQueryText.includes(name));
       })
       .map((entity) => entity.id);
 

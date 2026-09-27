@@ -67,7 +67,14 @@ Finish the capability and skill boundary first because Story UI, narration and O
 - Full verification: 995/995 tests passed; lint/typecheck passed; production build passed.
 
 ### S2 — Story runtime and player interaction
-Repair resume-run routing, world/run deletion, confirmation, dice presentation, player portrait, Story/OOC/Continue interaction, and canonical skill-check presentation.
+**Status:** VERIFIED — RUNTIME TESTED 2026-09-27
+- Mixed-dice 3D presentation grouping repaired without replacing the existing dice authority.
+- Story/OOC/Continue, player portrait, exact Story Run resume, and destructive deletion boundaries audited.
+- World-deletion active-run fallback repaired to use freshly fetched remaining Story Runs.
+- 11-pass S2 audit added.
+- Live API workflow verifies exact-title deletion rejection/acceptance and cascade cleanup.
+- Full verification on commit `6176b9c2dd26ca79999dd24825f5419b90fa65f2`: lint, test, build, and both verification workflows passed.
+- Browser-only WebGL visual inspection of the 3D dice renderer remains a client-side manual check; it is not claimed as automated.
 
 ### S3 — Narration context and OOC architecture
 Connect the existing WorkingContext, continuity, knowledge and canonical tools without creating a second AI authority.

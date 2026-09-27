@@ -315,7 +315,8 @@ export class OocToolRegistry {
 							relationships: playerVisibleRelationships,
 							plot: research.plot,
 							epistemicallyBoundTo: actorId,
-						});
+						}),
+					};
 				}
 
 				case 'get_quests': {

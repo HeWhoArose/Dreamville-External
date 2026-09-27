@@ -73,7 +73,7 @@ export class NarrativeContinuityEngine {
     const clock = repository.getWorldClock(storyId);
     const normalizedQuery = query.trim() || 'current story context';
     const queryKeywords = normalizedQuery.toLowerCase().split(/\W+/).filter((token) => token.length >= 3).slice(0, 12);
-    const memories = memoryEngine.retrieveMemories({
+    const baseMemories = memoryEngine.retrieveMemories({
       storyId,
       viewerActorId,
       queryKeywords,
@@ -83,6 +83,56 @@ export class NarrativeContinuityEngine {
       includeDormant: false,
       includeArchived: false,
     });
+
+    // When the player explicitly addresses a known entity, retrieve entity-linked
+    // memories even when the memory text itself does not repeat the entity's name.
+    // This is what lets an NPC remember an old event hundreds of turns later.
+    const entityCards = repository.getEntityCards(storyId);
+    const normalizedQuery = normalizedQuery.toLowerCase();
+    const focusEntityIds = entityCards
+      .filter((entity) => entity.id !== viewerActorId)
+      .filter((entity) => {
+        const aliases = Array.isArray(entity.identity?.aliases) ? entity.identity.aliases : [];
+        const names = [entity.name, ...aliases]
+          .map((value) => String(value || '').trim().toLowerCase())
+          .filter((value) => value.length >= 3);
+        return names.some((name) => normalizedQuery.includes(name));
+      })
+      .map((entity) => entity.id);
+
+    const focusedMemories = focusEntityIds.length > 0
+      ? memoryEngine
+          .getAllMemories(storyId)
+          .filter((memory) => {
+            if (memory.status === 'archived') return false;
+            if (memory.status === 'dormant' && !memory.isPersistentCritical) return false;
+            const touchesEntity =
+              focusEntityIds.includes(memory.subjectEntityId) ||
+              focusEntityIds.some((entityId) => memory.relatedEntityIds?.includes(entityId));
+            if (!touchesEntity) return false;
+
+            if (!viewerActorId) return true;
+            const isSubject = memory.subjectEntityId === viewerActorId;
+            const isPublic = memory.visibility === 'PUBLIC';
+            const isSharedWithViewer =
+              memory.visibility === 'SHARED' &&
+              (memory.relatedEntityIds?.includes(viewerActorId) || memory.accessibleToEntityIds?.includes(viewerActorId));
+            return isSubject || isPublic || isSharedWithViewer;
+          })
+          .sort((a, b) => {
+            const scoreA = Number(a.importance || 0) + Number(a.confidence || 0) * 10;
+            const scoreB = Number(b.importance || 0) + Number(b.confidence || 0) * 10;
+            return scoreB - scoreA;
+          })
+          .slice(0, 8)
+      : [];
+
+    const memoryMap = new Map<string, any>();
+    for (const memory of [...focusedMemories, ...baseMemories]) {
+      memoryMap.set(memory.id, memory);
+    }
+    const memories = Array.from(memoryMap.values()).slice(0, 12);
+
     const universe = repository.getUniverseForStory(storyId);
     const universeMemories = universe
       ? UniverseRuntimeService.getRelevantUniverseMemories(

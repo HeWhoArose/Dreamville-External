@@ -7468,7 +7468,7 @@ gameRouter.get('/story-runs', async (_req: Request, res: Response) => {
   try {
     const runs = worldRepository.getAllStoryRuns();
     const summaries = runs
-      .filter((run: any) => run && run.storyId)
+      .filter((run: any) => run && run.storyId && run.storyId !== 'default_story')
       .map((run: any) => {
         const world = run.worldId ? worldRepository.getWorldTemplate(run.worldId) : null;
         let turnCount = Array.isArray(run.actionHistory) ? run.actionHistory.length : 0;

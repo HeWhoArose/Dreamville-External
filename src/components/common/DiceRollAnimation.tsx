@@ -134,9 +134,10 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 			const module = await import('@3d-dice/dice-box-threejs');
 			const DiceBox = module.default;
 			const box = new DiceBox(`#${containerId}`, {
+				assetPath: '/assets/dice-box/',
 				framerate: 1 / 60,
-				sounds: true,
-				volume: 75,
+				sounds: false,
+				volume: 0,
 				shadows: true,
 				theme_surface: 'green-felt',
 				theme_colorset: 'diceOfRolling',
@@ -146,7 +147,7 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 				baseScale: 80,
 				strength: 1.2,
 			});
-			await box.init();
+			await box.initialize();
 			diceBoxRef.current = box;
 			setIsInitializing(false);
 			return box;
@@ -199,30 +200,32 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 
 		try {
 			const box = await initializeDiceBox();
-			const predeterminedValues = [...roll.individualDice];
-			const groups = expandDiceGroups(roll, predeterminedValues);
-
-			// The upstream engine is physically simulated, but it also supports
-			// deterministic landed faces through the @value,value notation.
-			// That lets the visual throw remain physical while the authoritative
-			// server result is preserved exactly.
-			for (let index = 0; index < groups.length; index += 1) {
-				const group = groups[index];
-				const values = predeterminedValues.splice(0, group.count);
-				const notation = `${group.count}d${group.sides}@${values.join(',')}`;
-
-				if (index === 0) {
-					await box.roll(notation);
-				} else if (typeof box.add === 'function') {
-					await box.add(notation);
-				} else {
-					await box.roll(notation);
-				}
-			}
-
 			if (!roll.individualDice.length) {
 				await box.roll(formulaWithoutModifier);
-			}
+			} else {
+				const predeterminedValues = [...roll.individualDice];
+				const groups = expandDiceGroups(roll, predeterminedValues);
+
+				// The upstream engine is physically simulated, but it also supports
+				// deterministic landed faces through the @value,value notation.
+				// That lets the visual throw remain physical while the authoritative
+				// server result is preserved exactly.
+				for (let index = 0; index < groups.length; index += 1) {
+					const group = groups[index];
+					const values = predeterminedValues.splice(0, group.count);
+					const notation = values.length === group.count
+						? `${group.count}d${group.sides}@${values.join(',')}`
+						: `${group.count}d${group.sides}`;
+
+					if (index === 0) {
+						await box.roll(notation);
+					} else if (typeof box.add === 'function') {
+						await box.add(notation);
+					} else {
+						await box.roll(notation);
+					}
+				}
+			}			}
 
 			setRevealed(true);
 			setIsRolling(false);

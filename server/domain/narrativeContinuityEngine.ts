@@ -3,6 +3,7 @@ import type { WorldRepository } from '../repositories/worldRepository';
 import type { StructuredTurnPackage } from './aiOrchestrator';
 import { worldMomentumEngine } from './worldMomentumEngine';
 import { researchEvidencePipeline } from './researchEvidence';
+import { UniverseRuntimeService } from './universeRuntimeService';
 
 export interface NarrativePlotState {
   storyId: string;
@@ -82,13 +83,27 @@ export class NarrativeContinuityEngine {
       includeDormant: false,
       includeArchived: false,
     });
+    const universe = repository.getUniverseForStory(storyId);
+    const universeMemories = universe
+      ? UniverseRuntimeService.getRelevantUniverseMemories(
+          repository,
+          storyId,
+          universe.playerIdentity.universeActorId,
+          queryKeywords,
+          8,
+        )
+      : [];
+    const continuityMemories = [
+      ...memories.map((memory) => ({ ...memory, continuityScope: 'WORLD' })),
+      ...universeMemories.map((memory) => ({ ...memory, continuityScope: 'UNIVERSE' })),
+    ];
     const knowledgeFacts = viewerActorId ? repository.getAuthorizedKnowledgeFacts(storyId, viewerActorId) : repository.getKnowledgeFacts(storyId);
     const state = this.getState(repository, storyId);
     const packet: NarrativeResearchPacket = {
       storyId,
       query: normalizedQuery,
       knowledgeFacts: this.rankAndLimit(knowledgeFacts, queryKeywords, 12),
-      memories,
+      memories: continuityMemories,
       storyThreads: repository.getStoryThreads(storyId).slice(-12),
       relationships: viewerActorId
         ? repository
@@ -104,7 +119,7 @@ export class NarrativeContinuityEngine {
       causalProvenance: researchEvidencePipeline.getCausalGraphForStory(storyId),
       usageGuidance: {
         knowledgeFacts: 'Use only to establish facts the viewer is authorized to know; never turn secret or uncertain knowledge into certainty.',
-        memories: 'Use to maintain continuity with what the protagonist has actually experienced, learned, or persistently remembers.',
+        memories: 'Use both world-local and universe-level durable memories to maintain continuity with what the protagonist has experienced, learned, acquired, or persistently remembers. Universe memories may refer to worlds the protagonist is not currently visiting.',
         storyThreads: 'Use to preserve unresolved situations and consequences so the scene does not reset between turns.',
         relationships: 'Use to shape believable reactions, familiarity, trust, tension, and dialogue when a known entity is present.',
         plot: 'Use as the compressed history of what has actually happened; use it to avoid contradictions and repeated beats.',

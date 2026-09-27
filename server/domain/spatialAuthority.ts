@@ -210,6 +210,133 @@ export function resolveSpatialCoverBetweenPoints(
 		: { level: 'NONE', distance: totalDistance };
 }
 
+export interface SpatialGridPoint {
+	x: number;
+	y: number;
+}
+
+export interface SpatialGridParticipant {
+	id: string;
+	x: number;
+	y: number;
+	isDead?: boolean;
+}
+
+export interface SpatialGridObstacle {
+	x: number;
+	y: number;
+	isImpassable?: boolean;
+}
+
+export interface SpatialGridHazard {
+	type: string;
+	x: number;
+	y: number;
+	radiusCells?: number;
+}
+
+export interface SpatialGridBounds {
+	minX: number;
+	maxX: number;
+	minY: number;
+	maxY: number;
+}
+
+export function isSpatialGridCellBlocked(
+	x: number,
+	y: number,
+	mapBounds: SpatialGridBounds | undefined,
+	obstacles: SpatialGridObstacle[],
+	hazards: SpatialGridHazard[],
+): boolean {
+	if (
+		mapBounds &&
+		(x < mapBounds.minX || x > mapBounds.maxX || y < mapBounds.minY || y > mapBounds.maxY)
+	) {
+		return true;
+	}
+
+	if (obstacles.some((obstacle) =>
+		obstacle.x === x &&
+		obstacle.y === y &&
+		obstacle.isImpassable !== false
+	)) {
+		return true;
+	}
+
+	return hazards.some((hazard) =>
+		hazard.type === 'barricade' &&
+		hazard.x === x &&
+		hazard.y === y
+	);
+}
+
+export function resolveSpatialGridMovementPath(
+	actorId: string,
+	from: SpatialGridPoint,
+	to: SpatialGridPoint,
+	mapBounds: SpatialGridBounds | undefined,
+	obstacles: SpatialGridObstacle[],
+	hazards: SpatialGridHazard[],
+	participants: Iterable<SpatialGridParticipant>,
+): SpatialGridPoint[] | undefined {
+	const steps = Math.max(Math.abs(to.x - from.x), Math.abs(to.y - from.y));
+	if (steps === 0) return [{ ...from }];
+
+	const occupiedParticipants = Array.from(participants);
+	const path: SpatialGridPoint[] = [{ ...from }];
+
+	for (let i = 1; i <= steps; i += 1) {
+		const x = Math.round(from.x + ((to.x - from.x) * i) / steps);
+		const y = Math.round(from.y + ((to.y - from.y) * i) / steps);
+
+		if (isSpatialGridCellBlocked(x, y, mapBounds, obstacles, hazards)) return undefined;
+
+		const previous = path[path.length - 1];
+		const diagonal = previous.x !== x && previous.y !== y;
+		if (diagonal) {
+			const cornerBlocked =
+				isSpatialGridCellBlocked(previous.x, y, mapBounds, obstacles, hazards) ||
+				isSpatialGridCellBlocked(x, previous.y, mapBounds, obstacles, hazards);
+			if (cornerBlocked) return undefined;
+		}
+
+		if (occupiedParticipants.some((participant) =>
+			participant.id !== actorId &&
+			!participant.isDead &&
+			participant.x === x &&
+			participant.y === y
+		)) {
+			return undefined;
+		}
+
+		path.push({ x, y });
+	}
+
+	return path;
+}
+
+export function calculateSpatialGridMovementCost(
+	path: SpatialGridPoint[],
+	hazards: SpatialGridHazard[],
+): number {
+	let cost = 0;
+
+	for (let i = 1; i < path.length; i += 1) {
+		const previous = path[i - 1];
+		const current = path[i];
+		const diagonal = previous.x !== current.x && previous.y !== current.y;
+		const base = diagonal ? Math.SQRT2 : 1;
+		const difficult = hazards.some((hazard) =>
+			hazard.type === 'ice_patch' &&
+			Math.hypot(current.x - hazard.x, current.y - hazard.y) <= (hazard.radiusCells || 0)
+		);
+		cost += difficult ? base * 2 : base;
+	}
+
+	return cost;
+}
+
 export class SpatialAuthority {
 	private readonly context: SpatialQueryContext;
 

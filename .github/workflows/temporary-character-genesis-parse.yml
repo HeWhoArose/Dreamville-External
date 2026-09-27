@@ -30,13 +30,24 @@ jobs:
               category: diagnostic.category,
               line: lc.line + 1,
               column: lc.character + 1,
+              start,
+              length: diagnostic.length ?? 0,
               message: ts.flattenDiagnosticMessageText(diagnostic.messageText, '\\n'),
               snippet: source.split('\\n').slice(Math.max(0, lc.line - 3), lc.line + 4).join('\\n'),
             };
           };
 
+          const diagnostics = sf.parseDiagnostics.map(format);
+          const interestingLines = source.split('\\n');
+          const windows = diagnostics.map((d) => ({
+            lineWindow: interestingLines.slice(Math.max(0, d.line - 12), d.line + 8).map((line, index) => ({
+              line: Math.max(1, d.line - 11 + index),
+              text: line,
+            })),
+          }));
           console.log(JSON.stringify({
-            parseDiagnostics: sf.parseDiagnostics.map(format),
+            parseDiagnostics: diagnostics,
+            windows,
             syntaxDiagnostics: sf.getChildren(sf).length,
           }, null, 2));
 

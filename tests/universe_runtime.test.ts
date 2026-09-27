@@ -7,6 +7,7 @@ import { InMemoryWorldRepository } from '../server/repositories/worldRepository'
 import { PlayerLifecycleState } from '../server/domain/playerLifecycleState';
 import { UniverseRuntimeService } from '../server/domain/universeRuntimeService';
 import { WorkingContextEngine } from '../server/domain/workingContextEngine';
+import { persistTurnMemoryCandidates } from '../server/domain/aiOrchestrator';
 import { worldSynthesisService } from '../server/services/worldSynthesisService';
 import { WorldSimulationService } from '../server/simulation/worldSimulationService';
 
@@ -357,6 +358,57 @@ test('Universe and world/NPC continuity survive repository restart', () => {
 		else process.env.DREAMBOOK_PERSISTENCE_PATH = previousPath;
 		rmSync(tempDir, { recursive: true, force: true });
 	}
+});
+
+test('Structured AI memory candidates are saved automatically to world and universe continuity', () => {
+	const repo = new InMemoryWorldRepository({ disablePersistence: true });
+	const world = makeWorld('world_ai_memory_candidate', 'Memory World');
+	repo.saveWorldTemplate(world);
+
+	const created = repo.createStoryRunFromConfirmedCharacter({
+		worldId: world.worldId,
+		confirmedCharacter: makeCharacter(world.worldId),
+		storyId: 'story_ai_memory_candidate',
+	});
+	const universe = UniverseRuntimeService.ensureUniverse(repo, created.storyId);
+	const stored = persistTurnMemoryCandidates(
+		repo,
+		created.storyId,
+		'turn_memory_candidate',
+		['Mira promised to watch the northern gate.', 'Mira promised to watch the northern gate.'],
+	);
+
+	assert.equal(stored, 1);
+
+	const localMemories = repo.getMemoryEngine(created.storyId).retrieveMemories({
+		storyId: created.storyId,
+		viewerActorId: repo.getPlayerLifecycle(created.storyId)!.actorId,
+		queryKeywords: ['Mira', 'northern', 'gate'],
+		currentTurn: 1,
+		currentTimestamp: repo.getWorldClock(created.storyId).getTimestamp(),
+		maxResults: 8,
+		includeDormant: false,
+		includeArchived: false,
+	});
+	assert.ok(localMemories.some((memory) => memory.content.includes('northern gate')));
+
+	UniverseRuntimeService.captureAction(repo, {
+		storyId: created.storyId,
+		actionType: 'AI_TURN',
+		actionText: 'Talk to Mira.',
+		commandId: 'cmd_memory_candidate',
+		memoryCandidates: ['Mira promised to watch the northern gate.'],
+		beforeInventoryState: repo.getInventoryEngine(created.storyId).exportState(),
+	});
+
+	const universeMemories = UniverseRuntimeService.getRelevantUniverseMemories(
+		repo,
+		created.storyId,
+		universe.playerIdentity.universeActorId,
+		['northern', 'gate'],
+		10,
+	);
+	assert.ok(universeMemories.some((memory) => memory.content.includes('northern gate')));
 });
 
 test('Universe travel intent only activates for explicit cross-world language', () => {

@@ -22,6 +22,64 @@ interface StoryCheckCharacter {
   sceneText?: string;
 }
 
+interface SaveProfile {
+  ability: StoryCheckAbility;
+  explicitKeywords: string[];
+  sceneHazards: string[];
+  actionTriggers: string[];
+  dc: number;
+  reason: string;
+  triggerReason: string;
+}
+
+const SAVE_PROFILES: SaveProfile[] = [
+  {
+    ability: 'Dexterity',
+    explicitKeywords: ['dodge', 'duck', 'evade', 'avoid the blast', 'leap clear', 'jump clear', 'roll away', 'get out of the way'],
+    sceneHazards: ['collapsing', 'collapse', 'falling debris', 'explosion', 'blast', 'trap', 'fall', 'cave-in'],
+    actionTriggers: ['open', 'touch', 'step', 'walk', 'move', 'enter', 'pull', 'push'],
+    dc: 13,
+    reason: 'Reacting quickly to avoid a physical hazard.',
+    triggerReason: 'The scene contains a sudden physical hazard that requires a reflexive response.',
+  },
+  {
+    ability: 'Constitution',
+    explicitKeywords: ['resist poison', 'fight the poison', 'withstand the toxin', 'endure the fumes', 'hold my breath', 'breathe the gas', 'resist the disease', 'fight the venom'],
+    sceneHazards: ['poison gas', 'toxic gas', 'fumes', 'venom', 'poison', 'disease', 'toxin', 'smoke'],
+    actionTriggers: ['breathe', 'inhale', 'enter', 'walk', 'remain', 'endure'],
+    dc: 13,
+    reason: 'Withstanding a harmful physical or biological effect.',
+    triggerReason: 'The scene exposes the character to a harmful physical or biological threat.',
+  },
+  {
+    ability: 'Wisdom',
+    explicitKeywords: ['resist fear', 'resist being charmed', 'resist the charm', 'resist the voice', 'resist possession', 'shake off the fear', 'fight the compulsion'],
+    sceneHazards: ['terror', 'fear', 'dread', 'charm', 'compulsion', 'possession', 'supernatural voice'],
+    actionTriggers: ['look', 'listen', 'hear', 'enter', 'approach', 'touch'],
+    dc: 14,
+    reason: 'Resisting a mental or supernatural influence.',
+    triggerReason: 'The scene exerts a mental or supernatural influence that calls for resistance.',
+  },
+  {
+    ability: 'Intelligence',
+    explicitKeywords: ['resist the illusion', 'see through the illusion', 'break the illusion', 'resist the mind trick'],
+    sceneHazards: ['illusion', 'mind trick', 'mental puzzle', 'memory attack'],
+    actionTriggers: ['look', 'inspect', 'observe', 'touch'],
+    dc: 14,
+    reason: 'Resisting or recognizing a hostile mental distortion.',
+    triggerReason: 'The scene contains a mental distortion that threatens to mislead or overwhelm the character.',
+  },
+  {
+    ability: 'Charisma',
+    explicitKeywords: ['resist banishment', 'resist possession', 'resist being displaced', 'assert my identity'],
+    sceneHazards: ['banishment', 'possession', 'planar pull', 'soul pull'],
+    actionTriggers: ['enter', 'touch', 'approach', 'resist'],
+    dc: 15,
+    reason: 'Resisting a force that attempts to displace or possess the character.',
+    triggerReason: 'The scene contains a force attempting to displace, bind, or possess the character.',
+  },
+];
+
 const CHECK_PROFILES = getAllStorySkillCheckDefinitions().map((definition) => ({
   skill: definition.name,
   skillId: definition.id,

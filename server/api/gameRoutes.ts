@@ -200,12 +200,162 @@ function parseOocToolResponse(text: string): { response: string; toolCall?: OocT
 	return { response: clean };
 }
 
+async function tryExecuteOocCanonicalAction(storyId: string, message: string): Promise<null | {
+  response: string;
+  executedAction: string;
+  data?: unknown;
+}> {
+  const normalized = message.trim().toLowerCase();
+  const player = worldRepository.getPlayerLifecycle(storyId);
+  const actorId = player?.actorId || ('player_actor_' + storyId);
+
+  if (/^(?:continue|continue the story|keep going|go on|proceed|continue narration)\b/.test(normalized)) {
+    const action = await serverMockAuthority.processCustomAction(
+      {
+        type: 'CUSTOM_ACTION',
+        storyId,
+        actionText: 'Continue the story naturally from the current moment. Advance only what the canonical world state supports.',
+      } as any,
+    );
+    return {
+      executedAction: 'CONTINUE_STORY',
+      response: action.narrativeResponse || action.message || 'The story continued from the current moment.',
+      data: action.viewState,
+    };
+  }
+
+  if (/\b(?:reset|restore|refresh)\b.*\bspell\s*slots?\b|\bspell\s*slots?\b.*\b(?:reset|restore|refresh)\b/i.test(message)) {
+    const commandId = deterministicId('ooc_spell_reset', storyId, actorId, message);
+    const result = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'INTERACT',
+        payload: { action: 'OOC_RESET_SPELL_SLOTS', requestText: message },
+        source: 'PLAYER',
+        transactionMode: 'STAGED',
+      },
+      async (_command, context) => {
+        const combat = context.repository.getCombatEngine(storyId);
+        const spellRuntime = combat.getSpellRuntime();
+        const before = spellRuntime.getOrCreateActorState(actorId);
+        const beforeSlots = JSON.parse(JSON.stringify(before.spellSlots));
+        spellRuntime.restoreSpellSlots(actorId, 'LONG_REST');
+        const after = spellRuntime.getActorState(actorId);
+        if (!after) {
+          return { success: false, errorReason: 'Spellcasting state could not be resolved.', summary: 'OOC spell-slot reset rejected.' };
+        }
+        const changed = Object.keys(after.spellSlots || {}).some((level) =>
+          Number(after.spellSlots[Number(level)]?.current || 0) !== Number(beforeSlots[Number(level)]?.current || 0)
+        );
+        const currentRun = context.repository.getStoryRun(storyId);
+        if (currentRun) context.repository.saveStoryRun(currentRun);
+        return {
+          success: true,
+          data: { spellSlots: after.spellSlots, changed },
+          summary: 'OOC spell slots restored to their canonical maximums.',
+        };
+      },
+    );
+    if (!result.success) throw new Error(result.errorReason || 'The spell-slot reset was rejected.');
+    return {
+      executedAction: 'RESET_SPELL_SLOTS',
+      response: 'Done. Your spell slots have been restored to their canonical maximums.',
+      data: result.data,
+    };
+  }
+
+  const itemMatch = message.match(/^(?:ooc:\s*)?(?:create|make|add|give me)\s+(?:a|an|the)?\s*(.+?)(?:[,.]?\s+(?:it\s+)?(?:should\s+have|with)\s+(\d+d\d+(?:[+-]\d+)?)\s+([a-z]+)\s+damage)?\s*$/i);
+  if (itemMatch && /\b(?:sword|axe|mace|staff|bow|dagger|spear|shield|armor|armour|blade|weapon|ring|amulet|boots|helm|helmet|cloak|robe|potion|salve|scroll)\b/i.test(itemMatch[1])) {
+    const rawName = itemMatch[1].replace(/\s+/g, ' ').trim();
+    const damageDice = itemMatch[2];
+    const damageType = itemMatch[3]?.toLowerCase() || 'slashing';
+    const category = /\b(?:sword|axe|mace|staff|bow|dagger|spear|blade|weapon)\b/i.test(rawName)
+      ? 'Weapon'
+      : /\bshield\b/i.test(rawName)
+        ? 'Shield'
+        : /\b(?:armor|armour|boots|helm|helmet|cloak|robe)\b/i.test(rawName)
+          ? 'Armor'
+          : /\b(?:potion|salve)\b/i.test(rawName)
+            ? 'Potion'
+            : 'Accessory';
+    const commandId = deterministicId('ooc_create_item', storyId, actorId, rawName, damageDice || '', damageType);
+    const result = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId,
+        storyId,
+        actorId,
+        type: 'INTERACT',
+        payload: { action: 'OOC_CREATE_ITEM', itemName: rawName, damageDice, damageType, category },
+        source: 'PLAYER',
+        transactionMode: 'STAGED',
+      },
+      async (_command, context) => {
+        const inventory = context.repository.getInventoryEngine(storyId);
+        const defId = deterministicId('ooc_item_def', storyId, rawName, damageDice || '', damageType);
+        if (!inventory.getItemDefinition(defId)) {
+          inventory.registerDefinition({
+            id: defId,
+            name: rawName,
+            category: category as any,
+            rarity: 'Common',
+            description: 'Created from an OOC request: ' + rawName + '.',
+            allowedSlots: category === 'Weapon' ? ['mainHand'] : category === 'Shield' ? ['offHand'] : undefined,
+            equipable: category !== 'Potion',
+            handUsage: category === 'Weapon' ? 'MAIN_HAND' : undefined,
+            weightKg: 1,
+            baseValueGold: 0,
+            maxDurability: 100,
+            tags: ['ooc-created'],
+            properties: damageDice ? { damageDice, damageType } : {},
+          } as any);
+        }
+        const created = inventory.createInstance({
+          defId,
+          ownerEntityId: actorId,
+          provenance: 'ooc_created',
+          customName: rawName,
+        });
+        const currentRun = context.repository.getStoryRun(storyId);
+        if (currentRun) context.repository.saveStoryRun(currentRun);
+        return {
+          success: true,
+          data: { item: created, definition: inventory.getItemDefinition(defId) },
+          summary: 'Created ' + rawName + ' and added it to the player inventory.',
+        };
+      },
+    );
+    if (!result.success) throw new Error(result.errorReason || 'The requested item could not be created.');
+    return {
+      executedAction: 'CREATE_ITEM',
+      response: 'Done. ' + rawName + ' was created and added to your inventory' + (damageDice ? ' with ' + damageDice + ' ' + damageType + ' damage.' : '.'),
+      data: result.data,
+    };
+  }
+
+  return null;
+}
 gameRouter.post('/action/ooc', async (req: Request, res: Response) => {
   try {
     const storyId = resolveStoryId(req, true);
     const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
     if (!message) return res.status(400).json({ success: false, errorReason: 'message is required.' });
 
+    const canonicalAction = await tryExecuteOocCanonicalAction(storyId, message);
+    if (canonicalAction) {
+      return res.json({
+        success: true,
+        storyId,
+        message,
+        response: canonicalAction.response,
+        executedAction: canonicalAction.executedAction,
+        actionData: canonicalAction.data,
+        canonical: true,
+      });
+    }
     const context = WorkingContextEngine.assembleTurnContext({
       storyId,
       playerAction: message,

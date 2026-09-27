@@ -992,14 +992,26 @@ export const App: React.FC = () => {
                   await apiClient.deleteWorld(world.worldId, confirmation);
                   await fetchStoryLibrary();
                   await fetchAuxiliaryData();
-                  if (activeStoryId && world.worldId === (activeRunFromLibrary as any)?.worldId) {
-                    apiClient.setActiveStoryId('default_story');
-                    setActiveStoryId('default_story');
-                    setCurrentRoute('dashboard');
-                    await initializeApp('default_story');
+                  const deletingActiveWorld = activeStoryId
+                    ? storyLibraryStories.some((story) => story.storyId === activeStoryId && story.worldId === world.worldId)
+                    : false;
+                  if (deletingActiveWorld) {
+                    const nextRun = storyLibraryStories.find((story) => story.worldId !== world.worldId);
+                    if (nextRun) {
+                      apiClient.setActiveStoryId(nextRun.storyId);
+                      setActiveStoryId(nextRun.storyId);
+                      setCurrentRoute('dashboard');
+                      await initializeApp(nextRun.storyId);
+                    } else {
+                      apiClient.setActiveStoryId('default_story');
+                      setActiveStoryId('default_story');
+                      setCurrentRoute('dashboard');
+                      await initializeApp('default_story');
+                    }
                   }
                 } catch (error: any) {
                   window.alert(error?.message || 'Failed to delete world.');
+                  throw error;
                 }
               }}
               onGenesisCharacter={(world) => {

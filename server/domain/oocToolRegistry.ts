@@ -11,6 +11,7 @@ export interface OocToolDefinition {
 	description: string;
 	mode: OocToolMode;
 	input: Record<string, string>;
+	requiredInput?: string[];
 }
 
 export interface OocToolCall {
@@ -45,6 +46,7 @@ const TOOL_DEFINITIONS: OocToolDefinition[] = [
 		description: 'Search memories available to the active player using canonical epistemic filtering.',
 		mode: 'READ',
 		input: { query: 'text' },
+		requiredInput: ['query'],
 	},
 	{
 		name: 'get_world_state',
@@ -63,6 +65,7 @@ const TOOL_DEFINITIONS: OocToolDefinition[] = [
 		description: 'Research current canonical lore, memories, relationships, plot and plan with player epistemic filtering.',
 		mode: 'READ',
 		input: { query: 'text' },
+		requiredInput: ['query'],
 	},
 	{
 		name: 'get_quests',
@@ -81,30 +84,35 @@ const TOOL_DEFINITIONS: OocToolDefinition[] = [
 		description: 'Instantiate an authored entity template through canonical authority.',
 		mode: 'MUTATE',
 		input: { templateId: 'string', overrides: 'object' },
+		requiredInput: ['templateId'],
 	},
 	{
 		name: 'equip_item',
 		description: 'Equip an owned item into a valid equipment slot through canonical authority.',
 		mode: 'MUTATE',
 		input: { itemId: 'string', slot: 'string' },
+		requiredInput: ['itemId', 'slot'],
 	},
 	{
 		name: 'unequip_item',
 		description: 'Unequip an equipment slot through canonical authority.',
 		mode: 'MUTATE',
 		input: { slot: 'string' },
+		requiredInput: ['slot'],
 	},
 	{
 		name: 'use_item',
 		description: 'Use an owned item through canonical authority.',
 		mode: 'MUTATE',
 		input: { itemId: 'string' },
+		requiredInput: ['itemId'],
 	},
 	{
 		name: 'use_ability',
 		description: 'Apply an already-authorized ability to an explicit target through canonical authority.',
 		mode: 'MUTATE',
 		input: { abilityId: 'string', targetId: 'string' },
+		requiredInput: ['abilityId', 'targetId'],
 	},
 	{
 		name: 'rest',
@@ -117,6 +125,7 @@ const TOOL_DEFINITIONS: OocToolDefinition[] = [
 		description: 'Advance canonical world time for a bounded interval. This may trigger world simulation.',
 		mode: 'MUTATE',
 		input: { seconds: 'positive number <= 86400' },
+		requiredInput: ['seconds'],
 	},
 	{
 		name: 'travel_to_world',
@@ -152,6 +161,16 @@ function deterministicToolId(namespace: string, ...parts: unknown[]): string {
 	return `${namespace}_${(hash >>> 0).toString(16)}`;
 }
 
+function validateToolArguments(tool: OocToolDefinition, args: Record<string, unknown>): string | null {
+	for (const field of tool.requiredInput || []) {
+		const value = args[field];
+		if (value === undefined || value === null || (typeof value === 'string' && value.trim() === '')) {
+			return `Missing required OOC tool argument: ${field}.`;
+		}
+	}
+	return null;
+}
+
 export class OocToolRegistry {
 	public listTools(): OocToolDefinition[] {
 		return TOOL_DEFINITIONS.map(clone);
@@ -165,6 +184,21 @@ export class OocToolRegistry {
 		const args = normalizeArguments(call);
 		const tool = TOOL_DEFINITIONS.find((entry) => entry.name === call.name);
 		if (!tool) return { name: call.name, success: false, message: 'Unknown OOC tool.' };
+
+		const activePlayer = repository.getPlayerLifecycle(storyId);
+		const canonicalActorId = activePlayer?.actorId || `player_actor_${storyId}`;
+		if (actorId !== canonicalActorId) {
+			return {
+				name: call.name,
+				success: false,
+				message: 'OOC tools may only operate for the canonical active player actor.',
+			};
+		}
+
+		const argumentError = validateToolArguments(tool, args);
+		if (argumentError) {
+			return { name: call.name, success: false, message: argumentError };
+		}
 
 		try {
 			switch (call.name) {
@@ -235,29 +269,64 @@ export class OocToolRegistry {
 				}
 
 				case 'get_combat_state': {
+					const combatEngine = repository.getCombatEngine(storyId);
+					const projection = combatEngine.projectCombatForActor(
+						actorId,
+						repository.getCombatPerceptionOptions(storyId, actorId),
+					);
 					return {
 						name: call.name,
 						success: true,
-						message: 'Canonical combat state retrieved.',
-						data: {
-							state: clone(repository.getCombatEngine(storyId).exportState()),
-							notes: clone(repository.getCombatEngine(storyId).getEncounterNotes()),
-						},
+						message: 'Player-visible canonical combat projection retrieved.',
+						data: clone(projection),
 					};
 				}
 
 				case 'research_context': {
-					const query = typeof args.query === 'string' ? args.query : 'current story context';
+					const query = typeof args.query === 'string' ? args.query.trim() : 'current story context';
+					const research = narrativeContinuityEngine.research(repository, storyId, query, actorId, { persist: false });
+					const entityCards = repository.getEntityCards(storyId);
+					const agency = repository.getDynamicCharacterAgencyEngine(storyId);
+					const playerVisibleRelationships = research.relationships
+						.map((relationship: any) => {
+							const targetId = typeof relationship?.targetId === 'string' ? relationship.targetId : '';
+							if (!targetId || !repository.isEntityEpistemicallyKnown(storyId, actorId, targetId)) return null;
+							const guidance = agency.getPlayerFacingGuidance(storyId, actorId, targetId);
+							const target = entityCards.find((entity) => entity.id === targetId);
+							return {
+								targetId,
+								targetName: target?.name || targetId,
+								stance: guidance.stance,
+								surfaceDisposition: guidance.surfaceDisposition,
+								canRestoreFriendship: guidance.canRestoreFriendship,
+							};
+						})
+						.filter(Boolean);
 					return {
 						name: call.name,
 						success: true,
-						message: 'Canonical research context retrieved.',
-						data: clone(narrativeContinuityEngine.research(repository, storyId, query, actorId)),
-					};
+						message: 'Player-authorized narrative research retrieved.',
+						data: clone({
+							storyId: research.storyId,
+							query: research.query,
+							knowledgeFacts: research.knowledgeFacts,
+							memories: research.memories,
+							storyThreads: research.storyThreads,
+							relationships: playerVisibleRelationships,
+							plot: research.plot,
+							epistemicallyBoundTo: actorId,
+						});
 				}
 
-				case 'get_quests':
-					return { name: call.name, success: true, message: 'Canonical story threads retrieved.', data: clone(repository.getStoryThreads(storyId)) };
+				case 'get_quests': {
+					const visibleThreads = repository.getStoryThreads(storyId).filter((thread: any) => {
+						const visibility = String(thread?.visibility || thread?.epistemicVisibility || 'PUBLIC').toUpperCase();
+						if (visibility === 'PRIVATE' || visibility === 'HIDDEN') return false;
+						if (Array.isArray(thread?.visibleToActorIds) && thread.visibleToActorIds.length > 0 && !thread.visibleToActorIds.includes(actorId)) return false;
+						return true;
+					});
+					return { name: call.name, success: true, message: 'Player-visible canonical story threads retrieved.', data: clone(visibleThreads) };
+				}
 
 				case 'get_lore':
 					return { name: call.name, success: true, message: 'Authorized lore retrieved.', data: clone(repository.getAuthorizedKnowledgeFacts(storyId, actorId)) };

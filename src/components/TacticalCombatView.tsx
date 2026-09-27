@@ -625,24 +625,23 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
                     ? combatState.participants.find((participant) => participant.id === combatState.lastResolution?.targetIds?.[0])
                     : undefined;
                   const isDamageRoll = roll.kind === 'DAMAGE';
-                  const isAttackLike = roll.kind === 'ATTACK' || roll.kind === 'SAVE' || roll.kind === 'CHECK';
+                  if (!roll.roll) {
+                    return (
+                      <div key={roll.label + index} className="rounded-2xl border border-amber-300/30 bg-[#100b2f]/90 px-4 py-4">
+                        <div className="text-xs font-bold uppercase tracking-[0.16em] text-cyan-100/80">{roll.label}</div>
+                        <div className="mt-2 text-3xl font-black text-white">{roll.total ?? '—'}</div>
+                        <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-violet-100/60">
+                          Canonical resolution
+                        </div>
+                      </div>
+                    );
+                  }
                   return (
                     <DiceRollAnimation
                       key={roll.label + index}
-                      roll={roll.roll || {
-                        rollId: `resolution-${combatState.lastResolution?.id}-${index}`,
-                        rulesetVersion: combatState.rulesProfile?.id || 'unknown',
-                        formula: '1d20',
-                        diceTerms: [{ count: 1, sides: 20 }],
-                        individualDice: [roll.total ?? 1],
-                        modifier: 0,
-                        total: roll.total ?? 1,
-                        isCriticalSuccess: false,
-                        isCriticalFailure: false,
-                        timestamp: Date.now(),
-                      }}
+                      roll={roll.roll}
                       title={roll.label}
-                      subtitle={roll.roll?.formula || (isDamageRoll ? 'Damage' : roll.kind)}
+                      subtitle={roll.roll.formula}
                       defenseLabel={isDamageRoll ? 'TARGET' : 'ARMOR CLASS'}
                       defenseValue={primaryTarget?.armorClass ?? undefined}
                       outcome={
@@ -657,8 +656,7 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
                       showRollButton={false}
                     />
                   );
-                })}
-              </div>
+                })}             </div>
               <div className="mt-3 text-xs text-stone-300">{combatState.lastResolution.mechanicalSummary}</div>
               {combatState.lastResolution.targetHp?.map((hp) => (
                 <div key={hp.targetId} className="mt-3">

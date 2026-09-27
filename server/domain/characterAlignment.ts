@@ -191,21 +191,21 @@ export class CharacterAlignmentEngine {
     this.profiles.clear();
     this.relationships.clear();
 
-    if (Array.isArray(state.profiles)) {
-      for (const p of state.profiles) {
-        this.registerProfile(p);
+    const listener = this.mutationListener;
+    this.mutationListener = undefined;
+    try {
+      if (Array.isArray(state.profiles)) {
+        for (const p of state.profiles) {
+          this.registerProfile(p);
+        }
       }
-    }
-    if (Array.isArray(state.relationships)) {
-      const listener = this.mutationListener;
-      this.mutationListener = undefined;
-      try {
+      if (Array.isArray(state.relationships)) {
         for (const r of state.relationships) {
           this.setRelationship(r);
         }
-      } finally {
-        this.mutationListener = listener;
       }
+    } finally {
+      this.mutationListener = listener;
     }
   }
 }

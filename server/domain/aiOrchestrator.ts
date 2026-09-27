@@ -4056,7 +4056,7 @@ export class MultiModelOrchestrator {
 
         return {
           selectedModel: overridden,
-          selectionReason: 'Category-scoped manual override for ' + category + '; using the requested task's configured fallback route.',
+          selectionReason: `Category-scoped manual override for ${category}; using the requested task's configured fallback route.`,
           selectionScore: overridden.userPriority + 1000,
           fallbacks: configuredFallbacks,
         };

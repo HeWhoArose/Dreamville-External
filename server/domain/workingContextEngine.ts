@@ -4,6 +4,7 @@ import { UniverseRuntimeService } from './universeRuntimeService';
 import type { DndRulesMode, NarrativeProfile } from '../../src/types';
 import { rulesProfileEngine } from './rulesProfileEngine';
 import { worldRepository } from '../repositories/worldRepository';
+import { NarrativeContinuityEngine } from './narrativeContinuityEngine';
 
 export interface WorkingContextPacket {
   scene: string;
@@ -244,6 +245,13 @@ export class WorkingContextEngine {
     const livingSim = repo.getLivingWorldSimulation(storyId);
 
     const viewerId = params.viewerActorId || (player ? player.actorId : `player_actor_${storyId}`);
+    const continuityResearch = NarrativeContinuityEngine.research(
+      repo,
+      storyId,
+      params.playerAction || 'current story context',
+      viewerId,
+      { persist: false },
+    );
 
     // 2. Epistemic Projection: Campaign & Scene Knowledge
     const run = repo.getStoryRun(storyId);
@@ -634,6 +642,71 @@ export class WorkingContextEngine {
         estimatedTokens: WorkingContextEngine.estimateTokens(plotAndContinuity),
         sourceAuthority: 'Canonical Chronicle + WorldMomentumEngine',
         relevanceScore: 0.81,
+      });
+    }
+
+    if (continuityResearch.plot || continuityResearch.plan) {
+      const continuityContent = [
+        `Plot summary: ${continuityResearch.plot.summary || 'No compressed plot summary yet.'}`,
+        `Current arc: ${continuityResearch.plot.currentArc || 'OPENING'}`,
+        continuityResearch.plot.openThreads?.length
+          ? `Open threads: ${continuityResearch.plot.openThreads.slice(-8).join(' | ')}`
+          : '',
+        `Plan objective: ${continuityResearch.plan.objective || 'Respond coherently to current canonical state.'}`,
+        continuityResearch.plan.nextBeats?.length
+          ? `Next-beat candidates: ${continuityResearch.plan.nextBeats.slice(0, 6).join(' | ')}`
+          : '',
+        continuityResearch.plan.priorityThreads?.length
+          ? `Priority threads: ${continuityResearch.plan.priorityThreads.slice(0, 6).join(' | ')}`
+          : '',
+      ].filter(Boolean).join('\n');
+      candidateChunks.push({
+        id: 'b3_narrative_continuity',
+        band: 'B3_CAUSAL_OPPORTUNITY',
+        label: 'Narrative Plot & Plan',
+        content: continuityContent,
+        estimatedTokens: WorkingContextEngine.estimateTokens(continuityContent),
+        sourceAuthority: 'NarrativeContinuityEngine',
+        relevanceScore: 0.9,
+      });
+    }
+
+    if (continuityResearch.storyThreads.length > 0) {
+      const threadContent = continuityResearch.storyThreads
+        .slice(-10)
+        .map((thread: any) => {
+          const label = thread?.title || thread?.name || thread?.summary || thread?.description || thread?.id;
+          const status = thread?.status ? ` [${thread.status}]` : '';
+          return label ? `${label}${status}` : '';
+        })
+        .filter(Boolean)
+        .join('\n');
+      if (threadContent) {
+        candidateChunks.push({
+          id: 'b4_story_threads',
+          band: 'B4_EPISODIC',
+          label: 'Unresolved Story Threads',
+          content: threadContent,
+          estimatedTokens: WorkingContextEngine.estimateTokens(threadContent),
+          sourceAuthority: 'NarrativeContinuityEngine.storyThreads',
+          relevanceScore: 0.8,
+        });
+      }
+    }
+
+    if (continuityResearch.knowledgeFacts.length > 0) {
+      const researchKnowledgeContent = continuityResearch.knowledgeFacts
+        .slice(0, 10)
+        .map((fact: any) => `Fact: ${JSON.stringify(fact)}`)
+        .join('\n');
+      candidateChunks.push({
+        id: 'b5_researched_knowledge',
+        band: 'B5_SEMANTIC_LORE',
+        label: 'Research: Authorized Knowledge',
+        content: researchKnowledgeContent,
+        estimatedTokens: WorkingContextEngine.estimateTokens(researchKnowledgeContent),
+        sourceAuthority: 'NarrativeContinuityEngine.research',
+        relevanceScore: 0.78,
       });
     }
 

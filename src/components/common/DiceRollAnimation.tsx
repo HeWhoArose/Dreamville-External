@@ -30,10 +30,10 @@ export function getDieVisualType(sides: number): DieVisualType {
 	return 'GENERIC';
 }
 
-function expandDiceTerms(roll: RollRecord): number[] {
+export function expandDiceTerms(roll: RollRecord): number[] {
 	if (roll.diceTerms?.length) {
 		return roll.diceTerms.flatMap((term) =>
-			Array.from({ length: term.count }, () => Math.max(2, term.sides))
+			Array.from({ length: Math.max(1, term.count) }, () => Math.max(2, term.sides))
 		);
 	}
 
@@ -48,28 +48,42 @@ function expandDiceTerms(roll: RollRecord): number[] {
 	});
 }
 
-function expandDiceGroups(
+export function expandDiceGroups(
 	roll: Pick<RollRecord, 'diceTerms' | 'formula'>,
 	individualDice: number[],
 ): Array<{ count: number; sides: number; values: number[] }> {
 	if (roll.diceTerms?.length) {
 		let offset = 0;
 		return roll.diceTerms.map((term) => {
-			const values = individualDice.slice(offset, offset + term.count);
-			offset += term.count;
+			const count = Math.max(1, term.count);
+			const values = individualDice.slice(offset, offset + count);
+			offset += count;
 			return {
-				count: term.count,
+				count,
 				sides: Math.max(2, term.sides),
 				values,
 			};
 		});
 	}
 
-	return [{
-		count: 1,
-		sides: 20,
-		values: [individualDice[0] || 1],
-	}];
+	const groups = roll.formula.match(/(\d*)d(\d+)/gi);
+	if (!groups?.length) {
+		return [{
+			count: 1,
+			sides: 20,
+			values: [individualDice[0] || 1],
+		}];
+	}
+
+	let offset = 0;
+	return groups.map((term) => {
+		const match = term.match(/(\d*)d(\d+)/i);
+		const count = Math.max(1, Number(match?.[1] || 1));
+		const sides = Math.max(2, Number(match?.[2] || 20));
+		const values = individualDice.slice(offset, offset + count);
+		offset += count;
+		return { count, sides, values };
+	});
 }
 
 function resultTone(roll: RollRecord): string {

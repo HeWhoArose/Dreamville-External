@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { InMemoryWorldRepository, worldRepository as liveWorldRepository } from '../server/repositories/worldRepository';
+import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
 import { PlayerLifecycleState } from '../server/domain/playerLifecycleState';
 import { UniverseRuntimeService } from '../server/domain/universeRuntimeService';
 import { WorkingContextEngine } from '../server/domain/workingContextEngine';
@@ -300,9 +300,6 @@ test('Universe and world/NPC continuity survive repository restart', () => {
 		assert.ok(repo2.getMemoryEngine(created.storyId).getMemory('restart_memory_friend'));
 		assert.equal(repo2.getStoryRun(created.storyId)?.worldId, world.worldId);
 
-		// The imported global singleton is not part of the restart assertion; this line
-		// simply proves the test's temp repository is independent of the process singleton.
-		assert.ok(liveWorldRepository);
 	} finally {
 		if (previousPath === undefined) delete process.env.DREAMBOOK_PERSISTENCE_PATH;
 		else process.env.DREAMBOOK_PERSISTENCE_PATH = previousPath;

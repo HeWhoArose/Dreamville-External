@@ -4,6 +4,7 @@ import { InMemoryWorldRepository } from '../server/repositories/worldRepository'
 import { UniverseRuntimeService } from '../server/domain/universeRuntimeService';
 import { WorkingContextEngine } from '../server/domain/workingContextEngine';
 import { worldSynthesisService } from '../server/services/worldSynthesisService';
+import { WorldSimulationService } from '../server/simulation/worldSimulationService';
 
 function makeWorld(worldId: string, title: string) {
 	return {
@@ -150,6 +151,27 @@ test('Universe runtime preserves identity, creates worlds, returns to old worlds
 	assert.notEqual(travelToB.storyId, created.storyId);
 	assert.equal(travelToB.universe.currentWorldId, worldB.worldId);
 
+	// Time spent in World B becomes universe elapsed time and is caught up in World A
+	// when the player returns, without regenerating World A.
+	const worldBBefore = repo.getWorldClock(travelToB.storyId).getTimestamp().totalElapsedSeconds;
+	const worldAStartElapsed = repo.getWorldClock(created.storyId).getTimestamp().totalElapsedSeconds;
+	new WorldSimulationService(repo).advanceTime(travelToB.storyId, 7200);
+	UniverseRuntimeService.captureAction(repo, {
+		storyId: travelToB.storyId,
+		actionType: 'ADVANCE_TIME',
+		actionText: 'Spent time exploring World B.',
+		commandId: 'cmd_world_b_time',
+		authoritativeFeedback: 'World B time advanced.',
+		beforeInventoryState: repo.getInventoryEngine(travelToB.storyId).exportState(),
+		beforeWorldElapsedSeconds: worldBBefore,
+	});
+
+	assert.equal(
+		UniverseRuntimeService.getUniverse(repo, universe.universeId)?.universeElapsedSeconds,
+		10800,
+	);
+
+
 	const travelBack = await UniverseRuntimeService.travel(repo, {
 		storyId: travelToB.storyId,
 		universeId: universe.universeId,
@@ -157,6 +179,10 @@ test('Universe runtime preserves identity, creates worlds, returns to old worlds
 		trigger: 'PLAYER',
 	});
 	assert.equal(travelBack.storyId, created.storyId);
+	assert.equal(
+		repo.getWorldClock(created.storyId).getTimestamp().totalElapsedSeconds,
+		worldAStartElapsed + 7200,
+	);
 	assert.equal(travelBack.universe.currentWorldId, worldA.worldId);
 	assert.ok(travelBack.universe.travelHistory.length >= 2);
 

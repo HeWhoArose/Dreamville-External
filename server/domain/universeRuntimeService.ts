@@ -363,6 +363,7 @@ export class UniverseRuntimeService {
 			commandId?: string;
 			authoritativeFeedback?: string;
 			narrativeResponse?: string;
+			memoryCandidates?: string[];
 			beforeInventoryState?: any;
 			beforeWorldElapsedSeconds?: number;
 		},
@@ -400,6 +401,14 @@ export class UniverseRuntimeService {
 		const actionLabel = String(params.actionText || '').trim().slice(0, 500);
 		const feedback = String(params.authoritativeFeedback || '').trim();
 		const narration = String(params.narrativeResponse || '').trim();
+		const memoryCandidates = Array.from(
+			new Map(
+				(Array.isArray(params.memoryCandidates) ? params.memoryCandidates : [])
+					.map((candidate) => String(candidate || '').trim())
+					.filter((candidate) => candidate.length >= 8)
+					.map((candidate) => [candidate.toLowerCase(), candidate]),
+			).values(),
+		).slice(0, 6);
 
 		if (actionLabel) {
 			this.storeUniverseMemory(repository, universe.universeId, {
@@ -423,6 +432,39 @@ export class UniverseRuntimeService {
 				createdAtTimestamp: clock.getTimestamp(),
 				lastRecalledTimestamp: clock.getTimestamp(),
 				triggerConditionTags: ['action'].concat(actionLabel.toLowerCase().split(/\W+/).filter((token) => token.length >= 3).slice(0, 8)),
+			});
+		}
+
+		for (const candidate of memoryCandidates) {
+			this.storeUniverseMemory(repository, universe.universeId, {
+				id: deterministicId(
+					'universe_memory_ai_candidate',
+					universe.universeId,
+					params.commandId || timestamp,
+					candidate,
+				),
+				storyId: params.storyId,
+				sourceWorldId: String(worldId || 'unknown'),
+				memoryClass: 'EPISODIC',
+				subjectEntityId: universe.playerIdentity.universeActorId,
+				relatedEntityIds: [],
+				content: candidate,
+				importance: 50,
+				confidence: 0.7,
+				status: 'active',
+				visibility: 'PRIVATE',
+				accessibleToEntityIds: [universe.playerIdentity.universeActorId],
+				isPersistentCritical: false,
+				provenance: 'automatic_ai_turn_memory_candidate',
+				sourceEventId: params.commandId,
+				validFromTurn: repository.getCanonicalCommandEvents(params.storyId).length,
+				lastRecalledTurn: repository.getCanonicalCommandEvents(params.storyId).length,
+				createdAtTimestamp: clock.getTimestamp(),
+				lastRecalledTimestamp: clock.getTimestamp(),
+				triggerConditionTags: [
+					'ai_turn_memory',
+					...candidate.toLowerCase().split(/\W+/).filter((token) => token.length >= 3).slice(0, 8),
+				],
 			});
 		}
 

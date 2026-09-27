@@ -1,5 +1,6 @@
 declare module '@3d-dice/dice-box-threejs' {
 	interface DiceBoxConfig {
+		assetPath?: string;
 		framerate?: number;
 		sounds?: boolean;
 		volume?: number;
@@ -19,7 +20,7 @@ declare module '@3d-dice/dice-box-threejs' {
 	}
 
 	interface DiceBoxInstance {
-		init(): Promise<void>;
+		initialize(): Promise<void>;
 		roll(notation: string): Promise<unknown>;
 		add?(notation: string): Promise<unknown>;
 		clear?(): void;

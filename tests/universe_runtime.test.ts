@@ -200,6 +200,60 @@ test('Universe runtime preserves identity, creates worlds, returns to old worlds
 	assert.ok(context.packet.relevantMemories.some((memory) => memory.includes('lighthouse keeper')));
 });
 
+test('Canonical inventory gains are captured automatically as universe memories', () => {
+	const repo = new InMemoryWorldRepository({ disablePersistence: true });
+	const world = makeWorld('world_item_capture', 'Item Memory World');
+	repo.saveWorldTemplate(world);
+
+	const created = repo.createStoryRunFromConfirmedCharacter({
+		worldId: world.worldId,
+		confirmedCharacter: makeCharacter(world.worldId),
+		storyId: 'story_item_capture',
+	});
+	const universe = UniverseRuntimeService.ensureUniverse(repo, created.storyId);
+	const playerActorId = repo.getPlayerLifecycle(created.storyId)!.actorId;
+	const inventory = repo.getInventoryEngine(created.storyId);
+
+	const beforeInventoryState = inventory.exportState();
+	const sourceItem = inventory.createInstance({
+		defId: 'def_iron_sword',
+		ownerEntityId: 'treasure_chest',
+		containerType: 'container',
+		quantity: 1,
+		provenance: 'loot',
+	});
+	const transfer = inventory.transferItem(
+		sourceItem.id,
+		'treasure_chest',
+		playerActorId,
+		'actor',
+	);
+	assert.equal(transfer.success, true);
+
+	UniverseRuntimeService.captureAction(repo, {
+		storyId: created.storyId,
+		actionType: 'LOOT',
+		actionText: 'Take the iron longsword from the chest.',
+		commandId: 'cmd_item_capture',
+		authoritativeFeedback: 'The item was transferred to the player inventory.',
+		beforeInventoryState,
+	});
+
+	const memories = UniverseRuntimeService.getRelevantUniverseMemories(
+		repo,
+		created.storyId,
+		universe.playerIdentity.universeActorId,
+		['inventory', 'acquired', 'sword'],
+		20,
+	);
+	assert.ok(memories.some((memory) => /Acquired item: Iron Longsword/i.test(memory.content)));
+	assert.ok(
+		UniverseRuntimeService
+			.getUniverse(repo, universe.universeId)
+			?.portablePlayerState?.inventory?.itemInstances?.some((item: any) => item.ownerEntityId === playerActorId && item.id === sourceItem.id),
+	);
+});
+
 test('Universe runtime can generate a new world from a premise', async () => {
 	const repo = new InMemoryWorldRepository({ disablePersistence: true });
 	const sourceWorld = makeWorld('world_universe_generate_source', 'Source World');

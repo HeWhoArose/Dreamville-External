@@ -717,6 +717,7 @@ export class ServerMockAuthority {
             narration: entry.narrativeResponse || entry.authoritativeFeedback || '',
             worldTime: entry.timestamp,
           })),
+        npcTargetId: this.getDynamicStoryState(targetStoryId).activeDialogue?.speakerId || undefined,
         sceneContext: [
           run?.startingSituation?.summary,
           run?.startingSituation?.hook,

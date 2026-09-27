@@ -7902,6 +7902,16 @@ gameRouter.post('/worlds/:worldId/characters/progression-custom', async (req: Re
     return res.json({ success: true, module });
   } catch (error: any) {
     console.error('Error generating custom progression module:', error);
+    if (error?.code === 'AI_UNAVAILABLE') {
+      return res.status(503).json({
+        success: false,
+        code: 'AI_UNAVAILABLE',
+        category: 'character_genesis',
+        errorReason: error?.message || 'AI custom progression generation is unavailable.',
+        fallbackReason: error?.fallbackReason,
+        attemptsTrail: error?.attemptsTrail || [],
+      });
+    }
     return res.status(500).json({ success: false, errorReason: error?.message || 'Failed to generate custom progression module.' });
   }
 });
@@ -7931,6 +7941,15 @@ gameRouter.post('/worlds/:worldId/characters/condition-suggest', async (req: Req
     return res.json({ success: true, conditionState });
   } catch (error: any) {
     console.error('Error suggesting starting condition:', error);
+    if (error?.code === 'AI_UNAVAILABLE') {
+      return res.status(503).json({
+        success: false,
+        code: 'AI_UNAVAILABLE',
+        category: 'character_genesis',
+        errorReason: error?.message || 'AI starting-condition inference is unavailable.',
+        attemptsTrail: error?.attemptsTrail || [],
+      });
+    }
     return res.status(500).json({ success: false, errorReason: error?.message || 'Failed to suggest starting condition.' });
   }
 });
@@ -7956,6 +7975,16 @@ gameRouter.post('/worlds/:worldId/characters/custom-capability', async (req: Req
     res.json({ success: true, capability });
   } catch (error: any) {
     console.error('Error proposing custom capability:', error);
+    if (error?.code === 'AI_UNAVAILABLE') {
+      return res.status(503).json({
+        success: false,
+        code: 'AI_UNAVAILABLE',
+        category: 'character_genesis',
+        errorReason: error?.message || 'AI custom capability generation is unavailable.',
+        fallbackReason: error?.fallbackReason,
+        attemptsTrail: error?.attemptsTrail || [],
+      });
+    }
     res.status(500).json({ error: error?.message || 'Failed to propose custom capability.' });
   }
 });
@@ -7986,6 +8015,16 @@ gameRouter.post('/worlds/:worldId/characters/custom-feat', async (req: Request, 
     res.json({ success: true, feat });
   } catch (error: any) {
     console.error('Error proposing custom feat:', error);
+    if (error?.code === 'AI_UNAVAILABLE') {
+      return res.status(503).json({
+        success: false,
+        code: 'AI_UNAVAILABLE',
+        category: 'character_genesis',
+        errorReason: error?.message || 'AI custom feat generation is unavailable.',
+        fallbackReason: error?.fallbackReason,
+        attemptsTrail: error?.attemptsTrail || [],
+      });
+    }
     res.status(500).json({ error: error?.message || 'Failed to propose custom feat.' });
   }
 });
@@ -8017,6 +8056,16 @@ gameRouter.post('/worlds/:worldId/characters/custom-attribute', async (req: Requ
     res.json({ success: true, attribute });
   } catch (error: any) {
     console.error('Error proposing custom attribute:', error);
+    if (error?.code === 'AI_UNAVAILABLE') {
+      return res.status(503).json({
+        success: false,
+        code: 'AI_UNAVAILABLE',
+        category: 'character_genesis',
+        errorReason: error?.message || 'AI custom attribute generation is unavailable.',
+        fallbackReason: error?.fallbackReason,
+        attemptsTrail: error?.attemptsTrail || [],
+      });
+    }
     res.status(500).json({ error: error?.message || 'Failed to propose custom attribute.' });
   }
 });
@@ -8047,6 +8096,16 @@ gameRouter.post('/worlds/:worldId/characters/custom-skill', async (req: Request,
     res.json({ success: true, skill });
   } catch (error: any) {
     console.error('Error proposing custom skill:', error);
+    if (error?.code === 'AI_UNAVAILABLE') {
+      return res.status(503).json({
+        success: false,
+        code: 'AI_UNAVAILABLE',
+        category: 'character_genesis',
+        errorReason: error?.message || 'AI custom skill generation is unavailable.',
+        fallbackReason: error?.fallbackReason,
+        attemptsTrail: error?.attemptsTrail || [],
+      });
+    }
     res.status(500).json({ error: error?.message || 'Failed to propose custom skill.' });
   }
 });
@@ -8077,6 +8136,16 @@ gameRouter.post('/worlds/:worldId/characters/custom-equipment', async (req: Requ
     res.json({ success: true, item });
   } catch (error: any) {
     console.error('Error proposing custom equipment:', error);
+    if (error?.code === 'AI_UNAVAILABLE') {
+      return res.status(503).json({
+        success: false,
+        code: 'AI_UNAVAILABLE',
+        category: 'character_genesis',
+        errorReason: error?.message || 'AI custom equipment generation is unavailable.',
+        fallbackReason: error?.fallbackReason,
+        attemptsTrail: error?.attemptsTrail || [],
+      });
+    }
     res.status(500).json({ error: error?.message || 'Failed to propose custom equipment.' });
   }
 });

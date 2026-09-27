@@ -562,9 +562,25 @@ export class UniverseRuntimeService {
 		if (portable.identity?.transformation) player.transformationRecord = JSON.parse(JSON.stringify(portable.identity.transformation));
 		repository.updatePlayerLifecycle(storyId, player);
 		if (portable.currentHp !== undefined) run.currentHp = portable.currentHp;
+
+		// Inventory is portable and remains owned by the player.
 		repository.getInventoryEngine(storyId).importState(this.remapInventoryState(portable.inventory, targetActorId));
+
+		// Only player-owned capabilities cross worlds; the destination retains its own world registry.
 		repository.getCapabilityEngine(storyId).importState(this.remapCapabilityState(portable.capabilities, sourceActorId, targetActorId));
-		repository.getCharacterProgressionEngine(storyId).importState(this.remapProgressionState(portable.progression, sourceActorId, targetActorId));
+
+		// Merge progression into the destination world without replacing its module registry.
+		const sourceActor = Array.isArray(portable.progression?.actors)
+			? portable.progression.actors.find((actor: any) => actor?.actorId === sourceActorId) ||
+				portable.progression.actors[0]
+			: undefined;
+		if (sourceActor) {
+			repository.getCharacterProgressionEngine(storyId).importPortableActorState(
+				sourceActor,
+				targetActorId,
+			);
+		}
+
 		repository.saveStoryRun(run);
 		universe.updatedAt = formatCanonicalTimestamp(repository.getWorldClock(storyId).getTimestamp());
 		repository.saveUniverse(universe);

@@ -5,6 +5,7 @@ import {
 	MultiModelOrchestrator,
 	type ModelRegistryRecord,
 } from '../server/domain/aiOrchestrator';
+import { getAllAiTaskContracts } from '../server/domain/aiTaskContracts';
 
 const emergencyKey = 'provider_deterministic_emergency::emergency-fallback-local';
 

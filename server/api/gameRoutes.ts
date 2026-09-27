@@ -422,6 +422,7 @@ gameRouter.post('/action/narrate/regenerate', async (req: Request, res: Response
             regeneration: true,
             editInstruction: editInstruction || null,
             research: generated.researchPacket || null,
+            contextAudit: generated.contextAudit || null,
             narration: {
               response: action.narrativeResponse,
               modelId: generated.modelId,

@@ -35,19 +35,39 @@ function makeNarrationModel(
 	};
 }
 
-test('S4 route authority keeps the narration picker category bound to narrative.generate and its configured route', () => {
+test('S4 category routes are bound to their owning task and start at the task pin before deterministic recovery', () => {
 	const orchestrator = new MultiModelOrchestrator();
-	const state = orchestrator
-		.getCategoryRuntimeStates()
-		.find((entry) => entry.category === 'narration');
+	const states = orchestrator.getCategoryRuntimeStates();
 
-	assert.ok(state);
-	assert.equal(state?.tasks[0], 'narrative.generate');
+	for (const state of states) {
+		const firstTask = state.tasks[0];
+		assert.ok(firstTask, 'Category has no owning task: ' + state.category);
 
-	const configuredRoute = orchestrator.getFallbackChain('narrative.generate');
-	assert.deepEqual(state?.fallbackChain, configuredRoute);
-	assert.ok(configuredRoute.length > 0);
-	assert.equal(configuredRoute.at(-1), emergencyKey);
+		const configuredRoute = orchestrator.getFallbackChain(firstTask);
+		assert.deepEqual(state.fallbackChain, configuredRoute, state.category);
+		assert.ok(configuredRoute.length > 0, 'Empty route: ' + state.category);
+		assert.equal(configuredRoute.at(-1), emergencyKey, 'Route must terminate at deterministic recovery: ' + state.category);
+
+		const pinned = orchestrator.getPinnedModelForTask(firstTask);
+		if (!state.mode || state.mode === 'AUTO') {
+			if (pinned) {
+				assert.equal(
+					configuredRoute[0],
+					pinned,
+					'Configured primary must match the task pin for ' + state.category,
+				);
+				assert.equal(
+					state.activeModelKey,
+					pinned,
+					'Category AUTO state must expose its task pin as active primary for ' + state.category,
+				);
+			}
+		}
+	}
+
+	const narration = states.find((entry) => entry.category === 'narration');
+	assert.ok(narration);
+	assert.equal(narration?.tasks[0], 'narrative.generate');
 });
 
 test('S4 configured task route is authoritative for primary selection, even against a higher-scoring unrelated eligible model', () => {

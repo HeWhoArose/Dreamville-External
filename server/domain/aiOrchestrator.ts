@@ -4775,7 +4775,11 @@ export class MultiModelOrchestrator {
           label: 'Narrative Research',
           content: JSON.stringify({
             relevantResearch: researchPacket,
-            instruction: 'Use this research to understand what matters now. Never expose research mechanics or hidden information.',
+            instruction: [
+              'Use usageGuidance to decide what each research block is for.',
+              'Knowledge grounds facts; memories ground continuity; story threads preserve unresolved situations; relationships shape NPC reactions; plot prevents contradictions; plan guides the current turn without forcing the player; momentum adds pressure only when supported; causal provenance preserves cause and consequence.',
+              'Select only the research that materially helps this exact player action. Do not dump the whole research packet into prose and do not expose research machinery.',
+            ].join(' '),
           }),
           estimatedTokens: WorkingContextEngine.estimateTokens(JSON.stringify(researchPacket)),
           sourceAuthority: 'NarrativeContinuityEngine',

@@ -4887,5 +4887,6 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
         </div>
       )}
     </div>
+    </div>
   );
 };

@@ -215,4 +215,70 @@ test('CH16 20-Step Live World/Run UI Workflow & Isolation Sequence', async () =>
   assert.equal(inspectedBaseWorld.worldId, worldId);
   assert.equal(inspectedBaseWorld.title, 'Aethelgard Dawn Spires');
   assert.equal(inspectedBaseWorld.worldManifestVersion, 1);
+
+  // Step 21: Destructive Story Run deletion must reject an incorrect title.
+  const runLibraryBeforeDelete = await (await fetch(`${baseUrl}/api/game/story-runs`)).json();
+  const runASummary = runLibraryBeforeDelete.find((run: any) => run.storyId === storyIdA);
+  assert.ok(runASummary, 'Run A must remain resumable before deletion');
+  const exactRunTitle = String(runASummary.title).trim();
+
+  const wrongRunDelete = await fetch(`${baseUrl}/api/game/story-runs/${storyIdA}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      confirm: true,
+      confirmationText: 'WRONG TITLE',
+    }),
+  });
+  assert.equal(wrongRunDelete.status, 400);
+  const wrongRunDeleteBody = await wrongRunDelete.json();
+  assert.equal(wrongRunDeleteBody.success, false);
+  assert.equal(wrongRunDeleteBody.requiredConfirmationText, exactRunTitle);
+
+  const correctRunDelete = await fetch(`${baseUrl}/api/game/story-runs/${storyIdA}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      confirm: true,
+      confirmationText: exactRunTitle,
+    }),
+  });
+  assert.equal(correctRunDelete.status, 200);
+  assert.equal((await correctRunDelete.json()).deleted, true);
+
+  const deletedRunLookup = await fetch(`${baseUrl}/api/game/worlds/runs/${storyIdA}`);
+  assert.equal(deletedRunLookup.status, 404);
+
+  // Step 22: World deletion must use the exact world title and clean up remaining runs.
+  const wrongWorldDelete = await fetch(`${baseUrl}/api/game/worlds/${worldId}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      confirm: true,
+      confirmationText: 'WRONG WORLD TITLE',
+    }),
+  });
+  assert.equal(wrongWorldDelete.status, 400);
+  const wrongWorldDeleteBody = await wrongWorldDelete.json();
+  assert.equal(wrongWorldDeleteBody.success, false);
+  assert.equal(wrongWorldDeleteBody.requiredConfirmationText, 'Aethelgard Dawn Spires');
+
+  const correctWorldDelete = await fetch(`${baseUrl}/api/game/worlds/${worldId}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      confirm: true,
+      confirmationText: 'Aethelgard Dawn Spires',
+    }),
+  });
+  assert.equal(correctWorldDelete.status, 200);
+  const correctWorldDeleteBody = await correctWorldDelete.json();
+  assert.equal(correctWorldDeleteBody.deleted, true);
+  assert.ok(correctWorldDeleteBody.deletedRunIds.includes(storyIdB));
+
+  const deletedWorldLookup = await fetch(`${baseUrl}/api/game/worlds/${worldId}`);
+  assert.equal(deletedWorldLookup.status, 404);
+
+  const deletedRunBRemainder = await fetch(`${baseUrl}/api/game/worlds/runs/${storyIdB}`);
+  assert.equal(deletedRunBRemainder.status, 404);
 });

@@ -423,8 +423,17 @@ export const StoryView: React.FC<StoryViewProps> = ({
       const eligible = (modelResponse.models || [])
         .filter((model: any) => Array.isArray(model.roleEligibility) && model.roleEligibility.includes('narrative.generate'))
         .filter((model: any) => !model.isEmergencyFloor)
-        .filter((model: any) => model.health !== 'Unavailable' && model.health !== 'DisabledByUser' && model.health !== 'InvalidAuth')
-        .filter((model: any) => model.quota !== 'Exhausted' && model.accessStatus !== 'quota_limited' && model.accessStatus !== 'rate_limited');
+        .sort((a: any, b: any) => {
+          const usable = (model: any) => (
+            model.health !== 'Unavailable' &&
+            model.health !== 'DisabledByUser' &&
+            model.health !== 'InvalidAuth' &&
+            model.quota !== 'Exhausted' &&
+            model.accessStatus !== 'quota_limited' &&
+            model.accessStatus !== 'rate_limited'
+          );
+          return Number(usable(b)) - Number(usable(a));
+        });
       setNarrationModels(eligible);
       setNarrationCategoryState(category || null);
     } catch (error: any) {
@@ -1034,7 +1043,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
                           <span className="flex-1 text-xs font-semibold text-stone-200">{model.displayName || model.modelId}</span>
                           {active && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />}
                         </div>
-                        <div className="mt-1 text-[9px] text-stone-600">{model.providerId} · {model.health || 'Unknown'} · {model.quota || 'Unknown'}</div>
+                        <div className={`mt-1 text-[9px] ${model.health === 'Unavailable' || model.health === 'InvalidAuth' || model.quota === 'Exhausted' ? 'text-red-300/70' : 'text-stone-600'}`}>{model.providerId} · {model.health || 'Unknown'} · {model.quota || 'Unknown'}</div>
                       </button>;
                     })}
                     {!narrationModelLoading && narrationModels.length === 0 && !narrationModelError && <div className="px-3 py-3 text-[10px] text-stone-500">No eligible narration AI models are currently available.</div>}

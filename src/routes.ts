@@ -46,6 +46,7 @@ export type AppRoute =
   | 'engine.routing'
   | 'engine.voice'
   | 'engine.audio'
+  | 'ops.importer'
   | 'ops.archive'
   | 'ops.bible'
   | 'ops.debug';
@@ -94,7 +95,8 @@ export const ROUTE_REGISTRY: Record<AppRoute, RouteMeta> = {
   'engine.routing': { route: 'engine.routing', title: 'Model Routing', category: 'ENGINE' },
   'engine.voice': { route: 'engine.voice', title: 'Voice Studio', category: 'ENGINE' },
   'engine.audio': { route: 'engine.audio', title: 'Audio & Haptics', category: 'ENGINE' },
+  'ops.importer': { route: 'ops.importer', title: 'Importer', category: 'OPERATIONS' },
   'ops.archive': { route: 'ops.archive', title: 'Archive & Export', category: 'OPERATIONS' },
-  'ops.bible': { route: 'ops.bible', title: 'Living Bible', category: 'OPERATIONS' },
+  'ops.bible': { route: 'ops.bible', title: 'Dream Book', category: 'OPERATIONS' },
   'ops.debug': { route: 'ops.debug', title: 'Debug & Context', category: 'OPERATIONS' },
 };

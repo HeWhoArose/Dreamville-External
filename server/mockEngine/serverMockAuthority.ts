@@ -687,6 +687,7 @@ export class ServerMockAuthority {
     let narrativeError: import('../../src/types').ActionLog['narrativeError'];
     let narrativeGeneration: import('../../src/types').ActionLog['narrativeGeneration'];
     let narrativeResearchPacket: any;
+    let narrativeContextAudit: any;
     try {
       const narrator = worldRepository.getAiOrchestrator();
       const generated = await narrator.generateNarrativeOnly({
@@ -718,6 +719,7 @@ export class ServerMockAuthority {
       } as any);
 
       narrativeResearchPacket = generated.researchPacket;
+      narrativeContextAudit = generated.contextAudit;
       narrativeGeneration = {
         source: generated.source,
         providerId: generated.providerId,
@@ -809,6 +811,7 @@ export class ServerMockAuthority {
             playerAction: String(freeformText),
             committedOutcome,
             research: narrativeResearchPacket || null,
+            contextAudit: narrativeContextAudit || null,
             narration: {
               response: narrativeResponse || null,
               error: narrativeError || null,
@@ -841,6 +844,16 @@ export class ServerMockAuthority {
     };
   }
 
+  private formatNarrativeAtmosphere(raw: string): string {
+    return String(raw || '')
+      .split(/\n+/)
+      .map((part) => part
+        .replace(/^\s*(?:Visual|Sounds?|Scent|Tactile|Right now|Your turn)\s*:\s*/i, '')
+        .trim())
+      .filter(Boolean)
+      .join(' ');
+  }
+
   private explicitCapabilityIntentForNarration(text: string): boolean {
     return new CapabilitySimulationEngine().isCapabilityLikeRequest(text);
   }
@@ -856,7 +869,9 @@ export class ServerMockAuthority {
     const location = worldRepository.getGeographyGraph(storyId)
       .getAllNodes()
       .find((node) => node.id === player?.locationId || node.id === run?.currentLocationId);
-    const atmosphere = location?.ambientSensory || location?.description || 'The surroundings remain still.';
+    const atmosphere = this.formatNarrativeAtmosphere(
+      location?.ambientSensory || location?.description || 'The surroundings remain still.',
+    );
     const normalized = actionText.toLowerCase();
     const continuity = narrativeContinuityEngine.getState(worldRepository, storyId);
     const recentBeat = continuity.plot.beats.at(-1)?.text || continuity.plot.summary;

@@ -1,0 +1,44 @@
+name: temporary-character-genesis-parse
+
+on:
+  push:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - name: Parse CharacterGenesisView
+        run: |
+          node --input-type=module - <<'NODE'
+          import fs from 'node:fs';
+          import ts from 'typescript';
+
+          const file = 'src/components/characterGenesis/CharacterGenesisView.tsx';
+          const source = fs.readFileSync(file, 'utf8');
+          const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+
+          const format = (diagnostic) => {
+            const start = diagnostic.start ?? 0;
+            const lc = sf.getLineAndCharacterOfPosition(start);
+            return {
+              code: diagnostic.code,
+              category: diagnostic.category,
+              line: lc.line + 1,
+              column: lc.character + 1,
+              message: ts.flattenDiagnosticMessageText(diagnostic.messageText, '\\n'),
+              snippet: source.split('\\n').slice(Math.max(0, lc.line - 3), lc.line + 4).join('\\n'),
+            };
+          };
+
+          console.log(JSON.stringify({
+            parseDiagnostics: sf.parseDiagnostics.map(format),
+            syntaxDiagnostics: sf.getChildren(sf).length,
+          }, null, 2));
+
+          if (sf.parseDiagnostics.length) process.exit(1);
+          NODE

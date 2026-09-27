@@ -653,8 +653,8 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
                             : 'FAILURE'
                       }
                       resultSuffix={isDamageRoll ? (primaryTarget?.name ? `Damage to ${primaryTarget.name}` : 'Damage') : ''}
-                      autoReveal
-                      showRollButton={false}
+                      autoReveal={false}
+                      showRollButton
                     />
                   );
                 })}             </div>

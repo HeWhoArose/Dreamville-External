@@ -149,15 +149,23 @@ export const App: React.FC = () => {
 
       setStoryLibraryStories(summaries);
 
-      if (activeStoryId !== 'default_story' && !summaries.some((story) => story.storyId === activeStoryId)) {
-        try {
-          await apiClient.getStoryRun(activeStoryId);
-        } catch {
-          apiClient.setActiveStoryId('default_story');
-          setActiveStoryId('default_story');
-          setCurrentRoute((route) => route === 'play.story' ? 'dashboard' : route);
-          await initializeApp('default_story');
-        }
+      const activeSummary = summaries.find(
+        (story) => story.storyId === activeStoryId || story.runId === activeStoryId,
+      );
+      const shouldAdoptLatestRun =
+        summaries.length > 0 &&
+        (!activeSummary || activeStoryId === 'default_story');
+
+      if (shouldAdoptLatestRun) {
+        const latest = summaries[0];
+        apiClient.setActiveStoryId(latest.storyId);
+        setActiveStoryId(latest.storyId);
+        await initializeApp(latest.storyId);
+      } else if (activeStoryId !== 'default_story' && !activeSummary) {
+        apiClient.setActiveStoryId('default_story');
+        setActiveStoryId('default_story');
+        setCurrentRoute((route) => route === 'play.story' ? 'dashboard' : route);
+        await initializeApp('default_story');
       }
     } catch (err: any) {
       setStoryLibraryError(err?.message || 'Failed to load persisted Story Runs.');
@@ -661,7 +669,7 @@ export const App: React.FC = () => {
 
   const activeStoryConfig = {
     storyId: activeStoryId,
-    runId: activeRunFromLibrary?.runId || `run_${activeStoryId}`,
+    runId: activeRunFromLibrary?.runId || activeStoryId,
     title: activeStorySummary?.title || 'The Awakening Chronicle',
     worldName: activeStorySummary?.worldName || 'Living Aethelgard',
     ruleset: activeRunFromLibrary?.dndRulesMode || activeStorySummary?.dndRulesMode || 'FULL_DND',

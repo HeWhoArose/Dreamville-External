@@ -2454,6 +2454,23 @@ export interface CustomSkillProposalRequest {
   };
 }
 
+export interface AdditionalCharacterSkillsProposalRequest {
+  worldId: string;
+  characterConcept: string;
+  existingSkills: CharacterSkill[];
+  characterContext?: {
+    name?: string;
+    species?: string;
+    role?: string;
+    profession?: string;
+    background?: string;
+    personality?: string[];
+    motivations?: string[];
+    capabilities?: string[];
+  };
+  desiredCount?: number;
+}
+
 export interface CustomEquipmentProposalRequest {
   worldId: string;
   itemName: string;

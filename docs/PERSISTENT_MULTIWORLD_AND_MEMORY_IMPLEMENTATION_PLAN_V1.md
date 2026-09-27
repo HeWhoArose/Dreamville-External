@@ -294,29 +294,40 @@ The world synthesis pipeline remains authoritative for world generation. The gen
 Provide player-facing world travel UI, destination picker, generated-world confirmation, and seamless active-story switching.
 
 ### Phase B — Autonomous dormant-world simulation
-When the player is absent from a world, advance that world according to its own clock and simulation tier.
 
-Required future behavior:
+**Initial catch-up implementation: ACTIVE**
+
+UniverseRuntimeService now maintains a universe-level elapsed-time counter and records the last simulated universe time for each world binding.
+
+When the player returns to an existing world:
+
+1. DreamBook calculates how much universe time elapsed while that world was inactive.
+2. The existing Story Run is restored.
+3. WorldSimulationService advances the dormant world by that elapsed duration.
+4. The resulting world state is persisted.
+5. Portable player state is then rehydrated.
+
+This establishes the core return-after-long-absence behavior without regenerating the world.
 
 ```
-last simulated timestamp
-        |
-elapsed world time
-        |
-scheduled events
-        |
-NPC schedules/goals
-        |
-faction changes
-        |
-economy / settlement changes
-        |
-historical events
-        |
-persist updated world state
+World A active
+   |
+leave
+   |
+World B advances
+   |
+universe elapsed time increases
+   |
+return World A
+   |
+elapsed gap calculated
+   |
+WorldSimulationService catches World A up
+   |
+same Story Run continues
 ```
 
-Only important state changes should be simulated at strategic scale.
+The current implementation is a **catch-up simulation**, not yet a continuously running off-screen universe server.
 
 ### Phase C — Long absence / multi-scale simulation
 

@@ -74,7 +74,7 @@ test('dice renderer uses Frank Ali's 3D physics engine rather than a flat SVG sh
   assert.match(source, /theme_material:\s*['"]plastic['"]/);
   assert.match(source, /await box\.init\(\)/);
   assert.match(source, /await box\.roll\(notation\)/);
-  assert.match(source, /@\$\{values\.join\(','\)\}/);
+  assert.ok(source.includes("@${values.join(',')}"));
   assert.doesNotMatch(source, /const DieFace/);
 });
 

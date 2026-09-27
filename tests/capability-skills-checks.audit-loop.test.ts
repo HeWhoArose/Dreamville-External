@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { StoryCheckEngine } from '../server/domain/storyCheckEngine';
+import { storyCheckAuthority } from '../server/domain/storyCheckAuthority';
 import {
 	STORY_SKILL_CHECK_REGISTRY,
 	getStorySkillCheckDefinition,
@@ -140,7 +141,6 @@ test('routine actions remain narration-only when no skill trigger or authored ch
 
 
 test('story check authority rejects non-active actor and reads the canonical actor state', () => {
-	const { storyCheckAuthority } = require('../server/domain/storyCheckAuthority');
 	const engine = new StoryCheckEngine();
 	const run = {
 		characterCoreStats: {

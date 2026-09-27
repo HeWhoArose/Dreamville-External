@@ -147,6 +147,7 @@ export class UniverseRuntimeService {
 			worldPremise?: string;
 			worldTitle?: string;
 			trigger?: 'PLAYER' | 'AI_TOOL' | 'SYSTEM';
+			travelDurationSeconds?: number;
 		},
 	): Promise<{ universe: UniverseCampaignState; world: any; storyId: string; createdWorld: boolean; createdSession: boolean }> {
 		let universe = params.universeId ? repository.getUniverse(params.universeId) : repository.getUniverseForStory(params.storyId);
@@ -165,6 +166,14 @@ export class UniverseRuntimeService {
 		this.syncPortablePlayerState(repository, universe.universeId, params.storyId);
 
 		const timestamp = formatCanonicalTimestamp(repository.getWorldClock(params.storyId).getTimestamp());
+		const travelDurationSeconds = Math.max(0, Math.min(30 * 86400, Number(params.travelDurationSeconds || 0)));
+		universe.universeElapsedSeconds = Number(universe.universeElapsedSeconds || 0) + travelDurationSeconds;
+		const sourceBinding = universe.worldBindings.find((binding) => binding.storyId === params.storyId);
+		if (sourceBinding) {
+			sourceBinding.status = 'VISITED';
+			sourceBinding.lastVisitedAt = timestamp;
+			sourceBinding.lastSimulatedUniverseSeconds = universe.universeElapsedSeconds;
+		}
 		const existingBinding = universe.worldBindings.find((binding) => binding.worldId === ensured.worldId);
 		let targetStoryId = existingBinding?.storyId;
 		let createdSession = false;
@@ -195,16 +204,30 @@ export class UniverseRuntimeService {
 				visitCount: 1,
 				pinnedWorldVersion: Number(ensured.world.worldManifestVersion || 1),
 				status: 'CURRENT',
+				lastSimulatedUniverseSeconds: universe.universeElapsedSeconds,
 			});
 		} else {
 			repository.seedStory(targetStoryId);
-			this.applyPortablePlayerState(repository, universe.universeId, targetStoryId);
 			const binding = universe.worldBindings.find((entry) => entry.worldId === ensured.worldId);
 			if (binding) {
+				const dormantSeconds = Math.max(
+					0,
+					universe.universeElapsedSeconds - Number(binding.lastSimulatedUniverseSeconds || 0),
+				);
+				if (dormantSeconds > 0) {
+					try {
+						const { WorldSimulationService } = await import('../simulation/worldSimulationService');
+						new WorldSimulationService(repository).advanceTime(targetStoryId, dormantSeconds);
+					} catch (simulationError) {
+						console.warn('[UniverseRuntime] Dormant-world simulation failed:', simulationError);
+					}
+				}
 				binding.lastVisitedAt = timestamp;
 				binding.visitCount += 1;
 				binding.status = 'CURRENT';
+				binding.lastSimulatedUniverseSeconds = universe.universeElapsedSeconds;
 			}
+			this.applyPortablePlayerState(repository, universe.universeId, targetStoryId);
 		}
 
 		for (const binding of universe.worldBindings) {

@@ -8191,6 +8191,50 @@ gameRouter.post('/worlds/:worldId/characters/custom-skill', async (req: Request,
 });
 
 /**
+ * POST /api/game/worlds/:worldId/characters/additional-skills
+ * Infers additional skill proposals from the full character concept and current draft.
+ * Suggestions are never committed automatically; the Character Genesis UI must accept them.
+ */
+gameRouter.post('/worlds/:worldId/characters/additional-skills', async (req: Request, res: Response) => {
+  try {
+    const worldId = String(req.params.worldId);
+    const worldTemplate = worldRepository.getWorldTemplate(worldId);
+    if (!worldTemplate) {
+      return res.status(404).json({ error: `World ${worldId} not found.` });
+    }
+
+    const result = await characterGenesisService.suggestAdditionalSkills(
+      {
+        worldId,
+        characterConcept: String(req.body?.characterConcept || ''),
+        existingSkills: Array.isArray(req.body?.existingSkills) ? req.body.existingSkills : [],
+        characterContext: req.body?.characterContext,
+        desiredCount: req.body?.desiredCount,
+      },
+      worldTemplate,
+    );
+
+    return res.json({ success: true, skills: result });
+  } catch (error: any) {
+    console.error('Error suggesting additional character skills:', error);
+    if (error?.code === 'AI_UNAVAILABLE') {
+      return res.status(503).json({
+        success: false,
+        code: 'AI_UNAVAILABLE',
+        category: 'character_genesis',
+        errorReason: error?.message || 'AI additional-skill discovery is unavailable.',
+        fallbackReason: error?.fallbackReason,
+        attemptsTrail: error?.attemptsTrail || [],
+      });
+    }
+    return res.status(500).json({
+      success: false,
+      error: error?.message || 'Failed to suggest additional character skills.',
+    });
+  }
+});
+
+/**
  * POST /api/game/worlds/:worldId/characters/custom-equipment
  * Synthesizes a structured starting equipment item proposal based on concept.
  */

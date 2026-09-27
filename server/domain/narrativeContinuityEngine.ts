@@ -111,6 +111,17 @@ export class NarrativeContinuityEngine {
       worldMomentum: worldMomentumEngine.getState(repository, storyId),
       researchEvidence: researchEvidencePipeline.getEvidenceForStory(storyId),
       causalProvenance: researchEvidencePipeline.getCausalGraphForStory(storyId),
+      usageGuidance: {
+        knowledgeFacts: 'Use only to establish facts the viewer is authorized to know; never turn secret or uncertain knowledge into certainty.',
+        memories: 'Use to maintain continuity with what the protagonist has actually experienced, learned, or persistently remembers.',
+        storyThreads: 'Use to preserve unresolved situations and consequences so the scene does not reset between turns.',
+        relationships: 'Use to shape believable reactions, familiarity, trust, tension, and dialogue when a known entity is present.',
+        plot: 'Use as the compressed history of what has actually happened; use it to avoid contradictions and repeated beats.',
+        plan: 'Use as a GM planning aid for the current narrative direction; never force a planned beat or remove player agency.',
+        worldMomentum: 'Use only when supported to add pressure, movement, or consequence already present in the simulation.',
+        researchEvidence: 'Use to support causal or factual claims when the evidence is relevant and player-visible.',
+        causalProvenance: 'Use to understand why the current situation exists and preserve cause-and-effect across turns.',
+      },
     };
     if (options.persist !== false) {
       const run = repository.getStoryRun(storyId);

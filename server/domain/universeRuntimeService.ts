@@ -135,8 +135,7 @@ export class UniverseRuntimeService {
 
 		const normalized = text.toLowerCase();
 		const travelVerb = /\b(fly|travel|warp|jump|cross|journey|leave|depart|go|head|teleport)\b/i.test(text);
-		const worldMarker = /\b(another world|new world|other world|planet|planets|dimension|dimensions|realm|realms|universe|galaxy)\b/i.test(text);
-		if (!travelVerb || !worldMarker) return null;
+		if (!travelVerb) return null;
 
 		const knownWorld = repository.getAllWorldTemplates()
 			.slice()
@@ -149,6 +148,9 @@ export class UniverseRuntimeService {
 		if (knownWorld?.worldId) {
 			return { worldId: knownWorld.worldId, worldTitle: knownWorld.title };
 		}
+
+		const worldMarker = /\b(another world|new world|other world|planet|planets|dimension|dimensions|realm|realms|universe|galaxy)\b/i.test(text);
+		if (!worldMarker) return null;
 
 		const titleMatch =
 			text.match(/\b(?:planet|world|dimension|realm)\s+(?:called|named)\s+["']?([^"'!?.,]+)["']?/i) ||
@@ -334,6 +336,10 @@ export class UniverseRuntimeService {
 			triggerConditionTags: ['world', 'travel', 'planet', (ensured.world.title || ensured.world.worldId).toLowerCase()],
 		});
 
+		const persistedAfterTravelMemoryWrite = repository.getUniverse(universe.universeId);
+		if (persistedAfterTravelMemoryWrite) {
+			universe.memories = persistedAfterTravelMemoryWrite.memories;
+		}
 		repository.saveUniverse(universe);
 		const targetRun = repository.getStoryRun(targetStoryId);
 		if (targetRun) {
@@ -528,6 +534,11 @@ export class UniverseRuntimeService {
 		universe.currentWorldId = String(worldId || universe.currentWorldId);
 		universe.currentStoryId = params.storyId;
 		universe.updatedAt = timestamp;
+
+		const persistedAfterCaptureMemoryWrite = repository.getUniverse(universe.universeId);
+		if (persistedAfterCaptureMemoryWrite) {
+			universe.memories = persistedAfterCaptureMemoryWrite.memories;
+		}
 		repository.saveUniverse(universe);
 
 		this.syncPortablePlayerState(repository, universe.universeId, params.storyId);

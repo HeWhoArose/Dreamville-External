@@ -4693,6 +4693,7 @@ export class MultiModelOrchestrator {
     continuationDirective?: string;
     recentTurns?: Array<{ playerAction: string; narration: string; worldTime?: string }>;
     sceneContext?: string;
+    forceModelId?: string;
   }): Promise<{
     success: boolean;
     turnPackage?: StructuredTurnPackage;
@@ -4827,6 +4828,7 @@ export class MultiModelOrchestrator {
         timeoutMs,
         maxTokens: 900,
         contextTokens: assembledContext.totalTokens,
+        forceModelId: params.forceModelId,
         validateResponse: (text) => {
           const validation = this.validateTurnPackage(text);
           return validation.valid
@@ -5498,6 +5500,7 @@ export class MultiModelOrchestrator {
       timeoutMs?: number;
       maxTokens?: number;
       contextTokens?: number;
+      forceModelId?: string;
       validateResponse?: (text: string) => TaskResponseValidationResult;
     }
   ): Promise<{
@@ -5547,6 +5550,29 @@ export class MultiModelOrchestrator {
         selectionReason: 'Emergency floor fallback selected after routing failure.',
         selectionScore: emergency.userPriority,
         fallbacks: [],
+      };
+    }
+
+    if (options?.forceModelId) {
+      const forced = Array.from(this.models.values()).find(
+        (model) => model.modelId === options.forceModelId || this.modelKey(model) === options.forceModelId,
+      );
+      if (!forced) {
+        throw new Error('Requested AI model "' + options.forceModelId + '" is not registered.');
+      }
+      if (!forced.roleEligibility.includes(task)) {
+        throw new Error('Requested AI model "' + options.forceModelId + '" is not eligible for task "' + task + '".');
+      }
+      if (!this.isCandidateUsable(forced, task, contextTokens) && !forced.isEmergencyFloor) {
+        throw new Error('Requested AI model "' + options.forceModelId + '" is unavailable, cooling down, quota-limited, or not context-eligible.');
+      }
+      selection = {
+        selectedModel: forced,
+        selectionReason: 'Explicitly selected model "' + (forced.displayName || forced.modelId) + '".',
+        selectionScore: forced.userPriority,
+        fallbacks: this.getFallbackChain(task)
+          .map((key) => Array.from(this.models.values()).find((model) => this.modelKey(model) === key || model.modelId === key))
+          .filter((model): model is ModelRegistryRecord => Boolean(model) && this.modelKey(model) !== this.modelKey(forced)),
       };
     }
 

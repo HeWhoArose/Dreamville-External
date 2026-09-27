@@ -19,9 +19,16 @@
     "tactical.reason": "google_gemini::gemini-3.5-flash",
     "character.extract": "google_gemini::gemini-3.5-flash-lite",
     "combat.tactics": "google_gemini::gemini-3.5-flash",
-    "character.capability.propose": "google_gemini::gemini-3.5-flash"
+    "character.capability.propose": "google_gemini::gemini-3.5-flash",
+    "ooc.respond": "google_gemini::gemini-3.5-flash"
   },
   "fallbackChains": {
+    "ooc.respond": [
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
+      "provider_deterministic_emergency::emergency-fallback-local"
+    ],
     "narrative.generate": [
       "openrouter::meta-llama/llama-3.2-1b-instruct",
       "openrouter::meta-llama/llama-3.2-3b-instruct",

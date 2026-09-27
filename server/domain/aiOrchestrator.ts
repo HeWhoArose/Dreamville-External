@@ -437,6 +437,11 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
           audioCues: [],
         });
         break;
+      case 'ooc.respond':
+        text = JSON.stringify({
+          response: 'DreamBook OOC is running in deterministic mode. The current story context and canonical systems are active. Please refer to your character sheet, active location, and journal for authoritative state.',
+        });
+        break;
       case 'story.advice':
         text = JSON.stringify({
           tips: [
@@ -921,6 +926,7 @@ export function classifyDiscoveredModel(
       roleEligibility: [
         'narrative.generate',
         'character.dialogue',
+        'ooc.respond',
         'memory.extract',
         'summary.scene',
         'rules.adjudicate',
@@ -965,6 +971,7 @@ export function classifyDiscoveredModel(
   let roleEligibility: TaskId[] = [
     'narrative.generate',
     'character.dialogue',
+    'ooc.respond',
     'memory.extract',
     'summary.scene',
     'rules.adjudicate',
@@ -980,19 +987,19 @@ export function classifyDiscoveredModel(
     latencyMs = 400;
   } else if (lowerId.includes('flash-lite') || lowerId.includes('lite')) {
     pool = 'fast';
-    roleEligibility = ['character.dialogue', 'memory.extract', 'rules.adjudicate', 'utility.inspect'];
+    roleEligibility = ['character.dialogue', 'ooc.respond', 'memory.extract', 'rules.adjudicate', 'utility.inspect'];
     userPriority = 95;
     latencyMs = 150;
     capabilities.push('low_latency', 'cost_efficient');
   } else if (lowerId.includes('flash')) {
     pool = 'fast';
-    roleEligibility = ['character.dialogue', 'memory.extract', 'rules.adjudicate', 'utility.inspect', 'narrative.generate'];
+    roleEligibility = ['character.dialogue', 'ooc.respond', 'memory.extract', 'rules.adjudicate', 'utility.inspect', 'narrative.generate'];
     userPriority = 90;
     latencyMs = 250;
     capabilities.push('fast_utility');
   } else if (lowerId.includes('pro')) {
     pool = 'creative';
-    roleEligibility = ['narrative.generate', 'summary.scene', 'character.dialogue'];
+    roleEligibility = ['narrative.generate', 'summary.scene', 'character.dialogue', 'ooc.respond'];
     userPriority = 100;
     latencyMs = 800;
     capabilities.push('creative_writing', 'deep_reasoning');
@@ -1594,7 +1601,11 @@ Do not enclose in markdown ticks, output pure JSON.`;
 
     // Deterministic mock generation for offline/sandbox runtime
     let text: string;
-    if (task === 'character.extract' || prompt.includes('Character Genesis') || prompt.includes('CharacterGenesisDraft')) {
+    if (task === 'ooc.respond') {
+      text = JSON.stringify({
+        response: 'DreamBook OOC: Based on the current story context, everything is currently operating within canonical rules.',
+      });
+    } else if (task === 'character.extract' || prompt.includes('Character Genesis') || prompt.includes('CharacterGenesisDraft')) {
       text = JSON.stringify({
         identity: {
           name: 'Vanguard Traveler',
@@ -2027,6 +2038,7 @@ export class MultiModelOrchestrator {
       'narrative.generate',
       'world.generate',
       'character.dialogue',
+      'ooc.respond',
       'character.extract',
       'memory.extract',
       'character.capability.propose',
@@ -2072,11 +2084,15 @@ export class MultiModelOrchestrator {
       if (!hasTextCapability && !legacyGeneralTextModel) continue;
 
       if (!model.capabilities) model.capabilities = [];
-      if (!model.isEmergencyFloor && !model.capabilities.includes('text_generation')) {
+      if (!model.capabilities.includes('text_generation')) {
         model.capabilities.push('text_generation');
       }
       if (!model.supportedInputTypes || model.supportedInputTypes.length === 0) model.supportedInputTypes = ['text'];
-      if (!model.supportedOutputTypes || model.supportedOutputTypes.length === 0) model.supportedOutputTypes = ['text'];
+      if (!model.supportedOutputTypes || model.supportedOutputTypes.length === 0) {
+        model.supportedOutputTypes = ['text', 'json'];
+      } else if (!model.supportedOutputTypes.includes('json')) {
+        model.supportedOutputTypes.push('json');
+      }
 
       for (const task of generalTasks) {
         if (!model.roleEligibility.includes(task)) model.roleEligibility.push(task);
@@ -2108,7 +2124,7 @@ export class MultiModelOrchestrator {
       capability_synthesis: ['character.capability.propose', 'capability.synthesize'],
       capability_explanation: ['capability.explain'],
       tactical_reasoning: ['combat.tactics', 'tactical.reason', 'combat.animation.plan'],
-      gameplay_advice: ['story.advice'],
+      gameplay_advice: ['story.advice', 'ooc.respond'],
       rules: ['rules.adjudicate'],
       rule_analysis: ['rules.analyze'],
       speech: ['speech.generate', 'speech.transcribe'],
@@ -2286,6 +2302,7 @@ export class MultiModelOrchestrator {
     this.taskPinnedModels.set('narrative.generate', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('world.generate', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('character.dialogue', 'google_gemini::gemini-3.5-flash');
+    this.taskPinnedModels.set('ooc.respond', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('story.advice', 'google_gemini::gemini-3.5-flash');
     this.taskPinnedModels.set('character.extract', 'google_gemini::gemini-3.5-flash-lite');
     this.taskPinnedModels.set('memory.extract', 'google_gemini::gemini-3.5-flash');
@@ -2313,6 +2330,7 @@ export class MultiModelOrchestrator {
     for (const task of [
       'narrative.generate',
       'character.dialogue',
+      'ooc.respond',
       'character.extract',
       'memory.extract',
       'character.capability.propose',
@@ -2399,6 +2417,7 @@ export class MultiModelOrchestrator {
       roleEligibility: [
         'narrative.generate',
         'character.dialogue',
+        'ooc.respond',
         'memory.extract',
         'summary.scene',
         'rules.adjudicate',
@@ -2425,6 +2444,7 @@ export class MultiModelOrchestrator {
       roleEligibility: [
         'narrative.generate',
         'character.dialogue',
+        'ooc.respond',
         'memory.extract',
         'summary.scene',
         'rules.adjudicate',
@@ -2451,6 +2471,7 @@ export class MultiModelOrchestrator {
       roleEligibility: [
         'narrative.generate',
         'character.dialogue',
+        'ooc.respond',
         'memory.extract',
         'summary.scene',
         'rules.adjudicate',
@@ -2477,6 +2498,7 @@ export class MultiModelOrchestrator {
       roleEligibility: [
         'narrative.generate',
         'character.dialogue',
+        'ooc.respond',
         'memory.extract',
         'summary.scene',
         'rules.adjudicate',
@@ -2519,7 +2541,7 @@ export class MultiModelOrchestrator {
       quota: 'Exhausted',
       latencyMs: 250,
       userPriority: 40,
-      roleEligibility: ['character.dialogue', 'memory.extract', 'rules.adjudicate'],
+      roleEligibility: ['character.dialogue', 'ooc.respond', 'memory.extract', 'rules.adjudicate'],
       fallbackEligibility: true,
       accessStatus: 'quota_limited',
       lifecycleState: 'active',
@@ -2570,8 +2592,8 @@ export class MultiModelOrchestrator {
       modelId: 'emergency-fallback-local',
       displayName: 'Deterministic Rule Engine (Emergency Floor)',
       pool: 'emergency',
-      capabilities: ['zero_cost', 'unlimited_quota', 'deterministic'],
-      contextWindow: 32000,
+      capabilities: ['zero_cost', 'unlimited_quota', 'deterministic', 'text_generation', 'structured_output', 'text'],
+      contextWindow: 1000000,
       health: 'Healthy',
       quota: 'Healthy',
       latencyMs: 5,
@@ -2579,6 +2601,7 @@ export class MultiModelOrchestrator {
       roleEligibility: [
         'narrative.generate',
         'character.dialogue',
+        'ooc.respond',
         'character.extract',
         'memory.extract',
         'character.capability.propose',
@@ -2598,6 +2621,8 @@ export class MultiModelOrchestrator {
         'narrative.review',
         'utility.inspect',
       ],
+      supportedInputTypes: ['text'],
+      supportedOutputTypes: ['text', 'json'],
       isEmergencyFloor: true,
       fallbackEligibility: true,
       accessStatus: 'accessible',
@@ -3653,6 +3678,12 @@ export class MultiModelOrchestrator {
       effective.roleEligibility = [...effective.roleEligibility, 'story.advice'];
     }
     if (
+      (effective.roleEligibility.includes('narrative.generate') || effective.roleEligibility.includes('character.dialogue')) &&
+      !effective.roleEligibility.includes('ooc.respond')
+    ) {
+      effective.roleEligibility = [...effective.roleEligibility, 'ooc.respond'];
+    }
+    if (
       effective.roleEligibility.includes('character.extract') &&
       !effective.roleEligibility.includes('character.capability.propose')
     ) {
@@ -3782,6 +3813,9 @@ export class MultiModelOrchestrator {
 
   public isCandidateUsable(model: ModelRegistryRecord, task?: TaskId, contextTokens: number = 0): boolean {
     if (task && !model.roleEligibility.includes(task)) return false;
+    if (model.isEmergencyFloor) {
+      return true;
+    }
 
     if (task) {
       const contract = getAiTaskContract(task);
@@ -4040,22 +4074,32 @@ export class MultiModelOrchestrator {
     });
 
     if (eligible.length === 0) {
-      // Return emergency floor model (unless task is speech or completely incompatible)
-      const emergency = Array.from(this.models.values()).find((m) => m.isEmergencyFloor);
-      if (!emergency || !emergency.roleEligibility.includes(task)) {
-        // Find if any model exists for this task
-        const anyModel = Array.from(this.models.values()).find(
-          (m) => m.roleEligibility.includes(task) && !this.isModelCoolingDown(m) && m.health !== 'DisabledByUser'
-        );
-        if (anyModel) {
-          return {
-            selectedModel: anyModel,
-            selectionReason: `Selected eligible model for task '${task}', though degraded/exhausted.`,
-            selectionScore: anyModel.userPriority,
-            fallbacks: [],
-          };
-        }
-        throw new Error(`No model available for task ${task}.`);
+      // Return emergency floor model (guaranteed deterministic recovery for every canonical task)
+      let emergency = Array.from(this.models.values()).find((m) => m.isEmergencyFloor);
+      if (!emergency) {
+        emergency = {
+          providerId: 'provider_deterministic_emergency',
+          modelId: 'emergency-fallback-local',
+          displayName: 'Deterministic Rule Engine (Emergency Floor)',
+          pool: 'emergency',
+          capabilities: ['zero_cost', 'unlimited_quota', 'deterministic', 'text_generation', 'structured_output', 'text'],
+          contextWindow: 1000000,
+          health: 'Healthy',
+          quota: 'Healthy',
+          latencyMs: 5,
+          userPriority: 10,
+          roleEligibility: [task],
+          isEmergencyFloor: true,
+          fallbackEligibility: true,
+          accessStatus: 'accessible',
+          lifecycleState: 'active',
+          supportedInputTypes: ['text'],
+          supportedOutputTypes: ['text', 'json'],
+        };
+        this.models.set(this.modelKey(emergency), emergency);
+      }
+      if (!emergency.roleEligibility.includes(task)) {
+        emergency.roleEligibility = [...emergency.roleEligibility, task];
       }
       return {
         selectedModel: emergency,
@@ -4137,6 +4181,34 @@ export class MultiModelOrchestrator {
       if (modelDiff !== 0) return modelDiff;
       return a.model.providerId.localeCompare(b.model.providerId);
     });
+
+    if (scored.length === 0) {
+      const emergency = Array.from(this.models.values()).find((m) => m.isEmergencyFloor) || {
+        providerId: 'provider_deterministic_emergency',
+        modelId: 'emergency-fallback-local',
+        displayName: 'Deterministic Rule Engine (Emergency Floor)',
+        pool: 'emergency',
+        capabilities: ['zero_cost', 'unlimited_quota', 'deterministic', 'text_generation', 'structured_output', 'text'],
+        contextWindow: 1000000,
+        health: 'Healthy',
+        quota: 'Healthy',
+        latencyMs: 5,
+        userPriority: 10,
+        roleEligibility: [task],
+        isEmergencyFloor: true,
+        fallbackEligibility: true,
+        accessStatus: 'accessible',
+        lifecycleState: 'active',
+        supportedInputTypes: ['text'],
+        supportedOutputTypes: ['text', 'json'],
+      };
+      return {
+        selectedModel: emergency,
+        selectionReason: 'Emergency floor fallback selected; no scored primary models available.',
+        selectionScore: emergency.userPriority,
+        fallbacks: [],
+      };
+    }
 
     const best = scored[0].model;
     const fallbacks = scored.slice(1).map((s) => s.model);
@@ -5424,7 +5496,36 @@ export class MultiModelOrchestrator {
     this.refreshAllProviderModelStatuses();
     const timeoutMs = options?.timeoutMs || 35000;
     const contextTokens = options?.contextTokens ?? 0;
-    const selection = this.selectBestModel(task, { contextTokens });
+    let selection: ReturnType<typeof this.selectBestModel>;
+    try {
+      selection = this.selectBestModel(task, { contextTokens });
+    } catch {
+      const emergency = Array.from(this.models.values()).find((m) => m.isEmergencyFloor) || {
+        providerId: 'provider_deterministic_emergency',
+        modelId: 'emergency-fallback-local',
+        displayName: 'Deterministic Rule Engine (Emergency Floor)',
+        pool: 'emergency',
+        capabilities: ['zero_cost', 'unlimited_quota', 'deterministic', 'text_generation', 'structured_output', 'text'],
+        contextWindow: 1000000,
+        health: 'Healthy',
+        quota: 'Healthy',
+        latencyMs: 5,
+        userPriority: 10,
+        roleEligibility: [task],
+        isEmergencyFloor: true,
+        fallbackEligibility: true,
+        accessStatus: 'accessible',
+        lifecycleState: 'active',
+        supportedInputTypes: ['text'],
+        supportedOutputTypes: ['text', 'json'],
+      };
+      selection = {
+        selectedModel: emergency,
+        selectionReason: 'Emergency floor fallback selected after routing failure.',
+        selectionScore: emergency.userPriority,
+        fallbacks: [],
+      };
+    }
 
     const selectedCandidates: ModelRegistryRecord[] = [selection.selectedModel, ...selection.fallbacks];
     const candidateKeys = new Set(selectedCandidates.map((model) => this.modelKey(model)));
@@ -5811,6 +5912,7 @@ export class MultiModelOrchestrator {
       'narrative.generate',
       'world.generate',
       'character.dialogue',
+      'ooc.respond',
       'character.extract',
       'character.capability.propose',
       'memory.extract',

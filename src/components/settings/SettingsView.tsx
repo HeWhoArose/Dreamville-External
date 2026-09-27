@@ -107,6 +107,7 @@ const INITIAL_PROVIDERS: ProviderInfo[] = [
 const TASK_ID_MAP: Record<string, string> = {
   narrative: 'narrative.generate',
   dialogue: 'character.dialogue',
+  ooc: 'ooc.respond',
   characterGenesis: 'character.extract',
   memory: 'memory.extract',
   summarization: 'summary.scene',
@@ -1456,6 +1457,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               const taskLabelMap: Record<string, string> = {
                 'narrative.generate': 'Narrative Storytelling',
                 'character.dialogue': 'Character Dialogue',
+                'ooc.respond': 'Out-of-Character (OOC) Assistant',
                 'memory.extract': 'Memory & Extraction',
                 'summary.scene': 'Summarization',
                 'rules.adjudicate': 'Canon Consistency',
@@ -1474,6 +1476,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               const taskKeyMap: Record<string, string> = {
                 'narrative.generate': 'narrative',
                 'character.dialogue': 'dialogue',
+                'ooc.respond': 'ooc',
                 'memory.extract': 'memory',
                 'summary.scene': 'summarization',
                 'rules.adjudicate': 'consistency',

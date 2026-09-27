@@ -102,6 +102,7 @@ test('Phase 17 new task selection exposes an eligible model or deterministic fal
 		'rules.analyze',
 		'tactical.reason',
 		'world.generate',
+		'ooc.respond',
 	] as any[]) {
 		const selection = orchestrator.selectBestModel(task);
 		assert.ok(selection.selectedModel);

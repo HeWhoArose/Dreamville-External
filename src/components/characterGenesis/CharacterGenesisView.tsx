@@ -2649,6 +2649,18 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 </div>
               )}
 
+              {isSuggestingMoreSkills && (
+                <div className="p-4 rounded-lg bg-neutral-950/70 border border-indigo-900/70 flex items-center gap-3 text-xs text-indigo-200">
+                  <RefreshCw className="w-4 h-4 animate-spin text-indigo-400 shrink-0" />
+                  <div>
+                    <div className="font-semibold">Generating additional skill proposals…</div>
+                    <div className="text-[10px] text-neutral-500 mt-0.5">
+                      The AI is reviewing your full character concept, capabilities, background, and existing skills.
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {additionalSkillSuggestions.length > 0 && (
                 <div className="space-y-3 pt-2 border-t border-indigo-900/80">
                   <div className="flex items-center justify-between gap-2">

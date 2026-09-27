@@ -1356,8 +1356,9 @@ IMPORTANT:
       if (response.text) {
         proposal = this.parseJsonFromAiResponse(response.text);
       }
-    } catch (err) {
-      console.warn('[CharacterGenesisService] Orchestrated custom capability proposal failed, using procedural fallback:', err);
+    } catch (err: any) {
+      if (err?.code === 'AI_UNAVAILABLE') throw err;
+      console.warn('[CharacterGenesisService] Orchestrated custom capability proposal failed:', err);
     }
 
     if (!proposal || !proposal.name) {
@@ -1990,8 +1991,9 @@ IMPORTANT:
       if (response.text) {
         proposal = this.parseJsonFromAiResponse(response.text);
       }
-    } catch (err) {
-      console.warn('[CharacterGenesisService] Custom feat proposal failed, using procedural fallback:', err);
+    } catch (err: any) {
+      if (err?.code === 'AI_UNAVAILABLE') throw err;
+      console.warn('[CharacterGenesisService] Custom feat proposal failed:', err);
     }
 
     if (!proposal || !proposal.name) {
@@ -2091,8 +2093,9 @@ IMPORTANT: Provide sensible starting default value, optional min/max, clear desc
       if (response.text) {
         proposal = this.parseJsonFromAiResponse(response.text);
       }
-    } catch (err) {
-      console.warn('[CharacterGenesisService] Custom attribute proposal failed, using fallback:', err);
+    } catch (err: any) {
+      if (err?.code === 'AI_UNAVAILABLE') throw err;
+      console.warn('[CharacterGenesisService] Custom attribute proposal failed:', err);
     }
 
     if (!proposal || !proposal.name) {
@@ -2185,8 +2188,9 @@ IMPORTANT:
       if (response.text) {
         proposal = this.parseJsonFromAiResponse(response.text);
       }
-    } catch (err) {
-      console.warn('[CharacterGenesisService] Custom skill proposal failed, using fallback:', err);
+    } catch (err: any) {
+      if (err?.code === 'AI_UNAVAILABLE') throw err;
+      console.warn('[CharacterGenesisService] Custom skill proposal failed:', err);
     }
 
     if (!proposal || !proposal.name) {
@@ -2396,8 +2400,9 @@ IMPORTANT: Select an appropriate category and paper-doll slot. If the item is a 
       if (response.text) {
         proposal = this.parseJsonFromAiResponse(response.text);
       }
-    } catch (err) {
-      console.warn('[CharacterGenesisService] Custom equipment proposal failed, using fallback:', err);
+    } catch (err: any) {
+      if (err?.code === 'AI_UNAVAILABLE') throw err;
+      console.warn('[CharacterGenesisService] Custom equipment proposal failed:', err);
     }
 
     if (!proposal || !proposal.name) {

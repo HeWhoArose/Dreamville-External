@@ -57,9 +57,6 @@ A supporting specification may define an adapter, projection, validator, or cons
 4. Record the clean baseline.
 
 ### S1 — Capability / Skill / Check integrity
-Finish the capability and skill boundary first because Story UI, narration and OOC must consume canonical character data.
-
-### S1 — Capability / Skill / Check integrity
 **Status:** VERIFIED — runtime tested 2026-09-27
 - 18-skill canonical registry established.
 - StoryCheckAuthority established as the server-side check boundary.
@@ -112,10 +109,25 @@ Harden universe/world/run identity, cross-world continuity, dormant-world catch-
 - Full surgical record: docs/S5_PERSISTENT_MULTIWORLD_SURGICAL_AUDIT_2026-09-27.md.
 
 ### S6 — Spatial world
-Only after the above contracts are stable, implement spatial authority, navigation, LOS, environment and tactical geometry.
+**Status:** VERIFIED — RUNTIME TESTED 2026-09-27
+
+- Canonical `SpatialAuthority` added as the shared spatial-query boundary.
+- Repository exposes `getSpatialAuthority(storyId)` without introducing a second repository or persistence store.
+- Macro travel now consumes SpatialAuthority for route validation while WorldSimulationService remains the journey/time authority.
+- Tactical combat now consumes shared spatial LOS and tactical grid movement/cost helpers.
+- Geography remains part of canonical snapshots and restoration.
+- Ten-pass S6 runtime audit added in `tests/spatial-world-surgical.audit-loop.test.ts`.
+- Spatial ownership remains separate from rules, capability, combat resolution, epistemic authority and persistence.
+- Full verification is recorded in `docs/FINAL_S1_S7_SURGICAL_10_PASS_AUDIT_2026-09-27.md`.
 
 ### S7 — Final integration
-Cross-system acceptance, regression, performance, persistence and deployment verification.
+**Status:** VERIFIED — RUNTIME TESTED 2026-09-27
+
+- Ten consecutive S1–S7 architecture passes added in `tests/final.s1-s7.surgical.audit-loop.test.ts`.
+- The audit covers canonical ownership, caller boundaries, cross-system connectivity and forbidden duplicate authority paths.
+- Intermediate CI failures caused by the tactical refactor were diagnosed and surgically repaired before final verification.
+- The Master Plan remains unchanged and frozen.
+- Final audit record: `docs/FINAL_S1_S7_SURGICAL_10_PASS_AUDIT_2026-09-27.md`.
 
 ## 5. Status vocabulary
 

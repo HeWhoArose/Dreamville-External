@@ -366,6 +366,27 @@ export interface ActionLog {
   authoritativeFeedback: string;
   /** Player-facing narrator response, separate from internal/mechanical engine feedback. */
   narrativeResponse?: string;
+  narrativeError?: {
+    code: string;
+    message: string;
+    providerId?: string;
+    modelId?: string;
+    fallbackReason?: string;
+    attemptsTrail?: Array<{
+      providerId: string;
+      modelId: string;
+      displayName?: string;
+      status: 'SUCCESS' | 'FAILED';
+      latencyMs: number;
+      error?: string;
+    }>;
+  };
+  narrativeGeneration?: {
+    source?: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK';
+    providerId?: string;
+    modelId?: string;
+    regenerated?: boolean;
+  };
   checkResult?: StoryCheckResult;
   actionAdvice?: ActionAdvice;
 }
@@ -560,6 +581,8 @@ export interface ActionResult {
   message: string;
   authoritativeFeedback: string;
   narrativeResponse?: string;
+  narrativeError?: ActionLog['narrativeError'];
+  narrativeGeneration?: ActionLog['narrativeGeneration'];
   checkResult?: StoryCheckResult;
   actionAdvice?: ActionAdvice;
   combatTransition?: CombatTransitionState;

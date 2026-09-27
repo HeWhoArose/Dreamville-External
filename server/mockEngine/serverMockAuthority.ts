@@ -683,6 +683,7 @@ export class ServerMockAuthority {
     }
 
     let narrativeResponse = '';
+    let narrativeTurnPackage: import('../domain/aiOrchestrator').StructuredTurnPackage | undefined;
     try {
       const narrator = worldRepository.getAiOrchestrator();
       const generated = await narrator.generateNarrativeOnly({
@@ -718,6 +719,7 @@ export class ServerMockAuthority {
         generated.turnPackage?.narrative?.length &&
         generated.providerId !== 'provider_deterministic_emergency'
       ) {
+        narrativeTurnPackage = generated.turnPackage;
         narrativeResponse = generated.turnPackage.narrative.join('\n\n').trim();
       }
     } catch (error) {
@@ -761,7 +763,7 @@ export class ServerMockAuthority {
       storyId: targetStoryId,
       turnId: baseResult.actionId,
       playerAction: String(freeformText),
-      turnPackage: generated?.turnPackage || {
+      turnPackage: narrativeTurnPackage || {
         narrative: [narrativeResponse],
         dialogue: [],
         events: [

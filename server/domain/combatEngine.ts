@@ -1,5 +1,6 @@
 import { WorldTimestamp } from './types';
 import { deterministicId } from './deterministicRng';
+import { resolveSpatialLineOfSight, type SpatialObstacle } from './spatialAuthority';
 import { PendingActivationState } from './capabilityEngine';
 import { ConditionEngine } from './conditionEngine';
 import { CombatActionEconomy, CombatTurnResourceSnapshot, ReadyTriggerType } from './combatActionEconomy';
@@ -2141,6 +2142,25 @@ export class TacticalCombatEngine {
     options?: { advantage?: boolean; disadvantage?: boolean; attackFormula?: string }
   ): { blocked: boolean; roll?: { roll: RollRecord; hits: boolean; isCritical: boolean } } {
     if (target.cover === 'TOTAL') return { blocked: true };
+
+    const spatialObstacles: SpatialObstacle[] = this.obstacles.map((obstacle, index) => ({
+      id: `combat_obstacle_${index + 1}_${obstacle.x}_${obstacle.y}`,
+      minX: obstacle.x,
+      maxX: obstacle.x,
+      minY: obstacle.y,
+      maxY: obstacle.y,
+      blocksMovement: obstacle.isImpassable !== false,
+      blocksSight: obstacle.isImpassable !== false,
+      cover: 'TOTAL',
+    }));
+    const spatialLine = resolveSpatialLineOfSight(
+      { x: attacker.x, y: attacker.y },
+      { x: target.x, y: target.y },
+      spatialObstacles,
+    );
+    if (!spatialLine.clear) {
+      return { blocked: true };
+    }
 
     const attackerConditions = new Set(attacker.conditions.map((condition) => condition.toLowerCase()));
     const targetConditions = new Set(target.conditions.map((condition) => condition.toLowerCase()));

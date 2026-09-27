@@ -6,6 +6,8 @@ import {
 	SpatialAuthority,
 	resolveSpatialLineOfSight,
 	resolveSpatialCoverBetweenPoints,
+	resolveSpatialGridMovementPath,
+	calculateSpatialGridMovementCost,
 	type SpatialObstacle,
 } from '../server/domain/spatialAuthority';
 

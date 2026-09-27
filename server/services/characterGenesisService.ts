@@ -1512,15 +1512,33 @@ OUTPUT STRICT JSON:
         prompt,
         'Return only the requested progression selection JSON.'
       );
-      if (response.text) {
-        proposal = this.parseJsonFromAiResponse(response.text);
-        if (response.source === 'DETERMINISTIC_FALLBACK') {
-          provenance = 'DETERMINISTIC_FALLBACK';
-        }
+      if (response.source === 'DETERMINISTIC_FALLBACK') {
+        const error: any = new Error(
+          response.fallbackReason || 'AI progression inference is unavailable; deterministic fallback was withheld.',
+        );
+        error.code = 'AI_UNAVAILABLE';
+        error.fallbackReason = response.fallbackReason;
+        error.attemptsTrail = response.attemptsTrail;
+        throw error;
       }
-    } catch (error) {
-      console.warn('[CharacterGenesisService] Progression inference failed; using deterministic catalogue matching.', error);
-      provenance = 'DETERMINISTIC_FALLBACK';
+      if (!response.text) {
+        const error: any = new Error('AI progression inference returned no usable response.');
+        error.code = 'AI_UNAVAILABLE';
+        error.attemptsTrail = response.attemptsTrail;
+        throw error;
+      }
+      proposal = this.parseJsonFromAiResponse(response.text);
+      if (!proposal) {
+        const error: any = new Error('AI progression inference returned invalid structured JSON.');
+        error.code = 'AI_UNAVAILABLE';
+        error.attemptsTrail = response.attemptsTrail;
+        throw error;
+      }
+    } catch (error: any) {
+      if (error?.code === 'AI_UNAVAILABLE') throw error;
+      const wrapped: any = new Error(error?.message || 'AI progression inference failed.');
+      wrapped.code = 'AI_UNAVAILABLE';
+      throw wrapped;
     }
 
     const findModule = (type: 'CLASS' | 'SUBCLASS' | 'SPECIES', value?: string) => {
@@ -1745,13 +1763,33 @@ Provide at least one useful feature.
         prompt,
         'Return only the requested custom progression module JSON.'
       );
-      if (response.text) {
-        proposal = this.parseJsonFromAiResponse(response.text);
-        if (response.source === 'DETERMINISTIC_FALLBACK') provenance = 'DETERMINISTIC_FALLBACK';
+      if (response.source === 'DETERMINISTIC_FALLBACK') {
+        const error: any = new Error(
+          response.fallbackReason || 'AI custom progression generation is unavailable; deterministic fallback was withheld.',
+        );
+        error.code = 'AI_UNAVAILABLE';
+        error.fallbackReason = response.fallbackReason;
+        error.attemptsTrail = response.attemptsTrail;
+        throw error;
       }
-    } catch (error) {
-      console.warn('[CharacterGenesisService] Custom progression generation failed; using deterministic fallback.', error);
-      provenance = 'DETERMINISTIC_FALLBACK';
+      if (!response.text) {
+        const error: any = new Error('AI custom progression generation returned no usable response.');
+        error.code = 'AI_UNAVAILABLE';
+        error.attemptsTrail = response.attemptsTrail;
+        throw error;
+      }
+      proposal = this.parseJsonFromAiResponse(response.text);
+      if (!proposal) {
+        const error: any = new Error('AI custom progression generation returned invalid structured JSON.');
+        error.code = 'AI_UNAVAILABLE';
+        error.attemptsTrail = response.attemptsTrail;
+        throw error;
+      }
+    } catch (error: any) {
+      if (error?.code === 'AI_UNAVAILABLE') throw error;
+      const wrapped: any = new Error(error?.message || 'AI custom progression generation failed.');
+      wrapped.code = 'AI_UNAVAILABLE';
+      throw wrapped;
     }
 
     const fallbackFeature = {

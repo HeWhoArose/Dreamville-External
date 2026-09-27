@@ -787,11 +787,30 @@ export const StoryView: React.FC<StoryViewProps> = ({
                   <div className="mt-1 text-sm font-semibold text-stone-100">{combatTransition.precombatResolution.actionLabel}</div>
                   <div className="mt-2 grid gap-2 sm:grid-cols-2">
                     {combatTransition.precombatResolution.rolls.map((roll, index) => (
-                      <div key={roll.label + index} className="rounded-lg border border-stone-800 bg-stone-950/60 px-3 py-2">
-                        <div className="text-[10px] uppercase text-stone-600">{roll.label}</div>
-                        <div className="mt-1 text-lg font-bold text-amber-300">{roll.total ?? '—'}</div>
-                        {roll.roll?.individualDice?.length ? <div className="text-[10px] font-mono text-stone-500">dice: {roll.roll.individualDice.join(', ')}</div> : null}
-                      </div>
+                      roll.roll ? (
+                        <DiceRollAnimation
+                          key={roll.label + index}
+                          roll={roll.roll}
+                          title={roll.label}
+                          subtitle={roll.roll.formula}
+                          defenseLabel={roll.kind === 'DAMAGE' ? 'TARGET' : 'ARMOR CLASS'}
+                          defenseValue={combatTransition.targetName || undefined}
+                          outcome={
+                            roll.kind === 'DAMAGE'
+                              ? 'DAMAGE'
+                              : combatTransition.precombatResolution?.hits === false
+                                ? 'FAILURE'
+                                : 'SUCCESS'
+                          }
+                          resultSuffix={roll.kind === 'DAMAGE' ? 'Damage' : ''}
+                          showRollButton
+                        />
+                      ) : (
+                        <div key={roll.label + index} className="rounded-2xl border border-amber-300/25 bg-[#100b2f]/90 px-4 py-4">
+                          <div className="text-xs font-black uppercase tracking-[0.16em] text-cyan-100/75">{roll.label}</div>
+                          <div className="mt-2 text-3xl font-black text-white">{roll.total ?? '—'}</div>
+                        </div>
+                      )
                     ))}
                   </div>
                   <div className="mt-3 text-xs text-stone-300">{combatTransition.precombatResolution.mechanicalSummary}</div>

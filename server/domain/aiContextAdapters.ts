@@ -186,14 +186,26 @@ export class AiContextAdapters {
 			params.viewerActorId,
 			{ persist: false },
 		);
+		const customChunks = [...(params.customChunks || [])];
+		if (params.committedOutcome) {
+			customChunks.push({
+				id: 'committed_outcome',
+				band: 'B1_CRITICAL',
+				label: 'Authoritative committed outcome',
+				content: params.committedOutcome,
+				estimatedTokens: WorkingContextEngine.estimateTokens(params.committedOutcome),
+				sourceAuthority: 'CanonicalCommandEngine',
+				isProtected: true,
+				relevanceScore: 1,
+			});
+		}
 		const assembled = WorkingContextEngine.assembleTurnContext({
 			storyId: params.storyId,
 			viewerActorId: params.viewerActorId,
 			playerAction: params.playerAction,
-			committedOutcome: params.committedOutcome,
 			hardTokenBudget: params.hardTokenBudget || 1400,
 			worldRepo: repository,
-			customChunks: params.customChunks,
+			customChunks: customChunks.length > 0 ? customChunks : undefined,
 		});
 		return {
 			storyId: params.storyId,

@@ -39,7 +39,13 @@ const TOOL_DEFINITIONS: OocToolDefinition[] = [
 		description: 'Read the active player inventory and paper-doll equipment.',
 		mode: 'READ',
 		input: {},
+	},	{
+		name: 'get_character_sheet',
+		description: 'Read the active character sheet including core stats, skills, proficiencies, level, AC, speed, HP, and character identity.',
+		mode: 'READ',
+		input: {},
 	},
+
 	{
 		name: 'search_memory',
 		description: 'Search memories available to the active player using canonical epistemic filtering.',
@@ -77,6 +83,12 @@ const TOOL_DEFINITIONS: OocToolDefinition[] = [
 		input: {},
 	},
 	{
+	{
+		name: 'create_item',
+		description: 'Create an inventory item for the active player and add it through canonical authority. Use only for explicit player requests to create an item.',
+		mode: 'MUTATE',
+		input: { itemName: 'string', category: 'Weapon|Shield|Armor|Potion|Accessory|Tool|Consumable', damageDice: 'optional dice formula such as 1d8', damageType: 'optional damage type' },
+	},
 		name: 'create_entity',
 		description: 'Instantiate an authored entity template through canonical authority.',
 		mode: 'MUTATE',
@@ -198,6 +210,36 @@ export class OocToolRegistry {
 						data: {
 							items: clone(inventory.getActorInventory(actorId)),
 							paperDoll: clone(inventory.getActorPaperDoll(actorId)),
+						},
+					};
+				}
+
+				case 'get_character_sheet': {
+					const run = repository.getStoryRun(storyId) as any;
+					const player = repository.getPlayerLifecycle(storyId);
+					if (!run && !player) {
+						return { name: call.name, success: false, message: 'The active character sheet is unavailable.' };
+					}
+					return {
+						name: call.name,
+						success: true,
+						message: 'Canonical character sheet retrieved.',
+						data: {
+							identity: {
+								name: player?.name || run?.characterName || 'Protagonist',
+								role: run?.characterRole,
+								background: run?.characterBackground,
+								personality: run?.characterPersonality,
+								motivations: run?.characterMotivations,
+								appearance: run?.characterAppearance,
+								traits: clone(run?.characterTraits || []),
+							},
+							coreStats: clone(run?.characterCoreStats || run?.protagonist?.coreStats || {}),
+							skills: clone(run?.characterSkills || run?.protagonist?.skills || {}),
+							level: run?.characterCoreStats?.level ?? run?.protagonist?.coreStats?.level,
+							proficiencyBonus: run?.characterCoreStats?.proficiencyBonus ?? run?.protagonist?.coreStats?.proficiencyBonus,
+							currentHp: run?.currentHp,
+						hitDice: clone(run?.characterCoreStats?.hitDice || run?.protagonist?.coreStats?.hitDice || {}),
 						},
 					};
 				}
@@ -351,6 +393,27 @@ export class OocToolRegistry {
 					});
 				}
 
+				case 'create_item': {
+					const itemName = String(args.itemName || '').trim();
+					if (!itemName) return { name: call.name, success: false, message: 'itemName is required.' };
+					const category = String(args.category || 'Accessory').trim();
+					const allowedCategories = new Set(['Weapon', 'Shield', 'Armor', 'Potion', 'Accessory', 'Tool', 'Consumable']);
+					if (!allowedCategories.has(category)) return { name: call.name, success: false, message: 'Unsupported item category.' };
+					const damageDice = typeof args.damageDice === 'string' ? args.damageDice.trim() : undefined;
+					const damageType = typeof args.damageType === 'string' && args.damageType.trim() ? args.damageType.trim().toLowerCase() : 'slashing';
+					if (damageDice && !/^\d+d\d+(?:[+-]\d+)?$/i.test(damageDice)) {
+						return { name: call.name, success: false, message: 'damageDice must use a simple dice formula such as 1d8.' };
+					}
+					return this.executeCanonicalMutation({
+						repository,
+						storyId,
+						actorId,
+						toolName: call.name,
+						commandType: 'INTERACT',
+						payload: { action: 'OOC_CREATE_ITEM', itemName, category, damageDice, damageType },
+						sequence: params.sequence,
+					});
+				}
 				case 'create_entity':
 					return this.executeCanonicalMutation({
 						repository,
@@ -509,6 +572,39 @@ export class OocToolRegistry {
 						};
 					}
 					case 'INTERACT': {
+						if (String(command.payload.action) === 'OOC_CREATE_ITEM') {
+							const inventory = context.repository.getInventoryEngine(params.storyId);
+							const itemName = String(command.payload.itemName || '').trim();
+							const category = String(command.payload.category || 'Accessory');
+							const damageDice = typeof command.payload.damageDice === 'string' ? String(command.payload.damageDice) : undefined;
+							const damageType = String(command.payload.damageType || 'slashing').toLowerCase();
+							const defId = deterministicId('ooc_item_def', params.storyId, itemName, category, damageDice || '', damageType);
+							if (!inventory.getItemDefinition(defId)) {
+								inventory.registerDefinition({
+									id: defId,
+									name: itemName,
+									category: category as any,
+									rarity: 'Common',
+									description: 'Created from an OOC request: ' + itemName + '.',
+									allowedSlots: category === 'Weapon' ? ['mainHand'] : category === 'Shield' ? ['offHand'] : category === 'Armor' ? ['body'] : undefined,
+									equipable: !['Potion', 'Consumable'].includes(category),
+									handUsage: category === 'Weapon' ? 'MAIN_HAND' : undefined,
+									weightKg: 1,
+									baseValueGold: 0,
+									maxDurability: 100,
+									tags: ['ooc-created'],
+									properties: damageDice ? { damageDice, damageType } : {},
+								} as any);
+							}
+							const created = inventory.createInstance({ defId, ownerEntityId: params.actorId, provenance: 'ooc_created', customName: itemName });
+							const currentRun = context.repository.getStoryRun(params.storyId);
+							if (currentRun) context.repository.saveStoryRun(currentRun);
+							return {
+								success: true,
+								data: { item: created, definition: inventory.getItemDefinition(defId) },
+								summary: 'Created ' + itemName + ' and added it to the player inventory.',
+							};
+						}
 						if (String(command.payload.action) !== 'CREATE_OOC_ENTITY') {
 							return { success: false, errorReason: 'Unsupported OOC interaction.' };
 						}

@@ -2114,6 +2114,50 @@ class ApiClient {
   // Challenge 16: Worlds & Campaign Discovery
   // ==========================================
 
+  public async getCurrentUniverse(): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/universe/current`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(data?.errorReason || `Failed to fetch current universe: HTTP ${res.status}`);
+    return data;
+  }
+
+  public async travelToWorld(input: {
+    worldId?: string;
+    worldPremise?: string;
+    worldTitle?: string;
+  }): Promise<any> {
+    const universe = await this.getCurrentUniverse();
+    const universeId = universe?.universe?.universeId;
+    if (!universeId) throw new Error('No active universe is available for world travel.');
+
+    const res = await fetch(`${this.baseUrl}/universe/${encodeURIComponent(universeId)}/travel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(input),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(data?.errorReason || `Failed to travel to world: HTTP ${res.status}`);
+    return data;
+  }
+
+  public async getUniverseMemories(query = ''): Promise<any> {
+    const universe = await this.getCurrentUniverse();
+    const universeId = universe?.universe?.universeId;
+    if (!universeId) throw new Error('No active universe is available.');
+
+    const params = query.trim() ? `?query=${encodeURIComponent(query.trim())}` : '';
+    const res = await fetch(`${this.baseUrl}/universe/${encodeURIComponent(universeId)}/memories${params}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(data?.errorReason || `Failed to fetch universe memories: HTTP ${res.status}`);
+    return data;
+  }
+
   public async getStoryRuns(): Promise<any[]> {
     const res = await fetch(`${this.baseUrl}/story-runs`, {
       method: 'GET',

@@ -52,6 +52,8 @@ test('Phase 17 AI orchestration categories are isolated and independently routab
 		'memory',
 		'dialogue',
 		'utility',
+		'gameplay_advice',
+		'speech',
 		'tactical_reasoning',
 		'rules',
 		'rule_analysis',
@@ -61,7 +63,18 @@ test('Phase 17 AI orchestration categories are isolated and independently routab
 		const state = byCategory.get(category as any);
 		assert.ok(state, 'Missing category runtime state: ' + category);
 		assert.ok(state!.tasks.length > 0, 'Category has no task bindings: ' + category);
-		assert.ok(state!.fallbackChain.length > 0, 'Category has no fallback chain: ' + category);
+		assert.equal(
+			state!.taskRoutes.length,
+			state!.tasks.length,
+			'Category does not expose a route state for every task: ' + category,
+		);
+		for (const route of state!.taskRoutes) {
+			assert.ok(route.fallbackChain.length > 0, 'Task has no fallback chain: ' + route.task);
+			assert.ok(
+				route.fallbackChain.some((key) => key.includes('emergency-fallback-local')),
+				'Task has no deterministic emergency fallback: ' + route.task,
+			);
+		}
 	}
 });
 

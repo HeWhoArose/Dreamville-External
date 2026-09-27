@@ -59,6 +59,13 @@ A supporting specification may define an adapter, projection, validator, or cons
 ### S1 — Capability / Skill / Check integrity
 Finish the capability and skill boundary first because Story UI, narration and OOC must consume canonical character data.
 
+### S1 — Capability / Skill / Check integrity
+**Status:** VERIFIED — runtime tested 2026-09-27
+- 18-skill canonical registry established.
+- StoryCheckAuthority established as the server-side check boundary.
+- 10 source audit passes completed, plus post-regression audit pass 11.
+- Full verification: 995/995 tests passed; lint/typecheck passed; production build passed.
+
 ### S2 — Story runtime and player interaction
 Repair resume-run routing, world/run deletion, confirmation, dice presentation, player portrait, Story/OOC/Continue interaction, and canonical skill-check presentation.
 

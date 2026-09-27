@@ -170,6 +170,9 @@ class ApiClient {
       error.data = data;
       throw error;
     }
+    if (data?.storyId && data.storyId !== globalActiveStoryId) {
+      this.setActiveStoryId(String(data.storyId));
+    }
     return data;
   }
 

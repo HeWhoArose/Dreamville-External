@@ -516,6 +516,20 @@ export class UniverseRuntimeService {
 		state.powerStates = remapActorMap(state.powerStates);
 		state.actorLearnedCapabilities = remapActorMap(state.actorLearnedCapabilities);
 		state.skillInstances = remapActorMap(state.skillInstances);
+
+		const ownedIds = new Set<string>([
+			...(state.actorLearnedCapabilities?.[targetActorId] || []).map((id: any) => String(id)),
+			...(state.skillInstances?.[targetActorId] || []).map((instance: any) => String(instance.capabilityId)),
+		]);
+
+		// Carry only player-owned capability definitions. The destination world keeps
+		// its own world capability registry, rules and unrelated capability graph.
+		if (Array.isArray(state.capabilities)) {
+			state.capabilities = state.capabilities.filter((cap: any) => ownedIds.has(String(cap.id || cap.capabilityId)));
+		}
+		if (Array.isArray(state.capabilityGraph)) {
+			state.capabilityGraph = state.capabilityGraph.filter((node: any) => ownedIds.has(String(node.capabilityId)));
+		}
 		if (Array.isArray(state.skillInstances?.[targetActorId])) {
 			state.skillInstances[targetActorId] = state.skillInstances[targetActorId].map((instance: any) => ({ ...instance, actorId: targetActorId }));
 		}

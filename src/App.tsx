@@ -1067,9 +1067,9 @@ export const App: React.FC = () => {
 
                   await fetchAuxiliaryData();
 
-                  const deletingActiveWorld = activeStoryId
-                    ? (await apiClient.getStoryRuns()).some((story) => story.storyId === activeStoryId && story.worldId === world.worldId)
-                    : false;
+                  const deletingActiveWorld =
+                    activeStoryId !== 'default_story' &&
+                    !remainingRuns.some((story) => story.storyId === activeStoryId);
 
                   if (deletingActiveWorld) {
                     const nextRun = remainingRuns[0];

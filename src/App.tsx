@@ -909,6 +909,7 @@ export const App: React.FC = () => {
                   await fetchStoryLibrary();
                 } catch (error: any) {
                   window.alert(error?.message || 'Failed to delete Story Run.');
+                  throw error;
                 }
               }}
               onStoryAssetChange={async (runId, newUrl, provenance) => {

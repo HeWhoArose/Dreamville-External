@@ -31,6 +31,7 @@ import { rulesProfileEngine } from '../domain/rulesProfileEngine';
 import { narrativeProfileEngine } from '../domain/narrativeProfileEngine';
 import { deterministicId, hashStringToSeed } from '../domain/deterministicRng';
 import type { NarrativeProfile } from '../../src/types';
+import type { UniverseCampaignState, UniverseMemoryRecord } from '../domain/universeRuntimeService';
 import { PersistentGameStore } from '../services/persistentGameStore';
 import { UserDataArchiveService, type DeletionTombstone, type UserDataArchive } from '../domain/userDataArchive';
 import {
@@ -163,6 +164,10 @@ export interface WorldRepository {
   getUserData(namespace: string, key: string): any | null;
   saveUserData(namespace: string, key: string, value: any): void;
   deleteUserData(namespace: string, key: string): void;
+  getUniverse(universeId: string): UniverseCampaignState | null;
+  getUniverseForStory(storyId: string): UniverseCampaignState | null;
+  saveUniverse(universe: UniverseCampaignState): void;
+  saveUniverseMemory(universeId: string, memory: UniverseMemoryRecord): void;
 }
 
 const NARRATIVE_MODE_VALUES = new Set(['PROTAGONIST', 'SIDE_CHARACTER', 'FREE_ROAM']);
@@ -268,6 +273,7 @@ export class InMemoryWorldRepository implements WorldRepository {
   private confirmedCharactersMap: Map<string, any[]> = new Map();
   private userDataMap: Map<string, Map<string, any>> = new Map();
   private deletionTombstones: Map<string, DeletionTombstone> = new Map();
+  private universes: Map<string, UniverseCampaignState> = new Map();
   private readonly persistentStore = new PersistentGameStore();
   private readonly persistenceSuppressed: boolean;
 
@@ -341,6 +347,11 @@ export class InMemoryWorldRepository implements WorldRepository {
         !this.isDeleted('CHARACTER_DRAFT', String(draft?.draftId || draft?.id || ''), worldId)
       );
       this.characterDraftsMap.set(worldId, filteredDrafts);
+    }
+
+    for (const [universeId, universe] of Object.entries((persisted as any).universes || {})) {
+      if (!universeId || !universe || this.isDeleted('STORY_RUN', String(universe.currentStoryId || ''))) continue;
+      this.universes.set(universeId, JSON.parse(JSON.stringify(universe)));
     }
 
     for (const [namespace, values] of Object.entries(persisted.userData || {})) {
@@ -2597,6 +2608,7 @@ export class InMemoryWorldRepository implements WorldRepository {
       storyRuns: Object.fromEntries(this.storyRuns),
       confirmedCharacters: Object.fromEntries(this.confirmedCharactersMap),
       characterDrafts: Object.fromEntries(this.characterDraftsMap),
+      universes: Object.fromEntries(this.universes),
       userData,
       deletionTombstones: Array.from(this.deletionTombstones.values()),
     };
@@ -2606,6 +2618,53 @@ export class InMemoryWorldRepository implements WorldRepository {
     if (this.persistenceSuppressed) return;
     this.persistentStore.save(this.buildPersistentData());
   }
+
+  public getUniverse(universeId: string): UniverseCampaignState | null {
+    const universe = this.universes.get(String(universeId || ''));
+    return universe ? JSON.parse(JSON.stringify(universe)) : null;
+  }
+
+  public getUniverseForStory(storyId: string): UniverseCampaignState | null {
+    const targetStoryId = String(storyId || '');
+    for (const universe of this.universes.values()) {
+      if (universe.currentStoryId === targetStoryId || universe.worldBindings?.some((binding: any) => binding.storyId === targetStoryId)) {
+        return JSON.parse(JSON.stringify(universe));
+      }
+    }
+    return null;
+  }
+
+  public saveUniverse(universe: UniverseCampaignState): void {
+    const universeId = String(universe?.universeId || '').trim();
+    if (!universeId) throw new Error('Cannot save a universe without universeId.');
+    const existing = this.universes.get(universeId);
+    const normalized: UniverseCampaignState = JSON.parse(JSON.stringify({
+      ...existing,
+      ...universe,
+      universeId,
+      worldBindings: Array.isArray(universe.worldBindings) ? universe.worldBindings : [],
+      travelHistory: Array.isArray(universe.travelHistory) ? universe.travelHistory : [],
+      memories: Array.isArray(universe.memories) ? universe.memories : [],
+    }));
+    this.universes.set(universeId, normalized);
+    this.persistLibrary();
+  }
+
+  public saveUniverseMemory(universeId: string, memory: UniverseMemoryRecord): void {
+    const universe = this.universes.get(String(universeId || ''));
+    if (!universe) throw new Error('Universe not found: ' + universeId);
+    const memories = Array.isArray(universe.memories) ? universe.memories : [];
+    const index = memories.findIndex((entry: any) => entry.id === memory.id);
+    const cloned = JSON.parse(JSON.stringify(memory));
+    if (index >= 0) memories[index] = cloned;
+    else memories.push(cloned);
+    universe.memories = memories.slice(-2000);
+    universe.updatedAt = new Date().toISOString();
+    this.universes.set(universe.universeId, universe);
+    this.persistLibrary();
+  }
+
+
 
 
   public searchWorldTemplates(criteria: {

@@ -133,24 +133,56 @@ export class MediaAdapterService {
 
     if (apiKey) {
       try {
-        const ai = new GoogleGenAI({ apiKey });
-        const interaction = await ai.interactions.create({
-          model: 'gemini-3.1-flash-image',
-          input: finalPrompt,
-          response_format: {
-            type: 'image',
-            aspect_ratio: requestedAspectRatio,
-            image_size: spec.imageSize,
+        const ai = new GoogleGenAI({
+          apiKey,
+          httpOptions: {
+            headers: {
+              'User-Agent': 'aistudio-build',
+            },
           },
-        } as any);
+        });
 
-        const outputImage = (interaction as any).output_image;
-        if (outputImage?.data) {
-          const buffer = Buffer.from(outputImage.data, 'base64');
-          const filePath = path.join(publicDir, assetKey + '.png');
+        const imageConfig: { aspectRatio?: string; imageSize?: string } = {};
+        if (requestedAspectRatio) {
+          imageConfig.aspectRatio = requestedAspectRatio;
+        }
+        if (spec.imageSize) {
+          imageConfig.imageSize = spec.imageSize;
+        }
+
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.1-flash-image',
+          contents: {
+            parts: [
+              {
+                text: finalPrompt,
+              },
+            ],
+          },
+          config: {
+            imageConfig,
+          },
+        });
+
+        const parts = response.candidates?.[0]?.content?.parts || [];
+        let base64Data: string | null = null;
+        let mimeType = 'image/png';
+
+        for (const part of parts) {
+          if (part.inlineData?.data) {
+            base64Data = part.inlineData.data;
+            mimeType = part.inlineData.mimeType || 'image/png';
+            break;
+          }
+        }
+
+        if (base64Data) {
+          const buffer = Buffer.from(base64Data, 'base64');
+          const ext = mimeType.includes('jpeg') || mimeType.includes('jpg') ? 'jpg' : 'png';
+          const filePath = path.join(publicDir, `${assetKey}.${ext}`);
           fs.writeFileSync(filePath, buffer);
 
-          const generatedUrl = '/assets/generated/' + assetKey + '.png';
+          const generatedUrl = `/assets/generated/${assetKey}.${ext}`;
           return {
             success: true,
             isFallback: false,
@@ -159,7 +191,7 @@ export class MediaAdapterService {
             mediaAsset: {
               assetId: assetKey,
               url: generatedUrl,
-              format: 'png',
+              format: ext,
               aspectRatio: spec.aspectRatio,
               width: spec.width,
               height: spec.height,
@@ -179,7 +211,7 @@ export class MediaAdapterService {
           };
         }
       } catch (err: any) {
-        console.warn('[MediaAdapterService] Gemini image generation failed:', err?.message || err);
+        console.warn('[MediaAdapterService] Gemini image generation notice:', err?.message || err);
       }
     }
 

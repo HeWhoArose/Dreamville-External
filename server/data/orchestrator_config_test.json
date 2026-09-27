@@ -1,12 +1,12 @@
 {
   "pins": {
-    "narrative.generate": "google_gemini::gemini-3.5-flash",
+    "narrative.generate": "provider_primary_failing::primary-fail-m1",
     "world.generate": "google_gemini::gemini-3.5-flash",
     "character.dialogue": "google_gemini::gemini-3.5-flash",
     "ooc.respond": "google_gemini::gemini-3.5-flash",
     "story.advice": "google_gemini::gemini-3.5-flash",
-    "character.extract": "google_gemini::gemini-3.5-flash",
-    "memory.extract": "provider_mock_reasoning::mock-reasoning-pro",
+    "character.extract": "google_gemini::gemini-3.5-flash-lite",
+    "memory.extract": "google_gemini::gemini-3.5-flash",
     "character.capability.propose": "google_gemini::gemini-3.5-flash",
     "intent.interpret": "google_gemini::gemini-3.5-flash-lite",
     "capability.synthesize": "google_gemini::gemini-3.5-flash",
@@ -16,14 +16,16 @@
     "rules.analyze": "google_gemini::gemini-3.5-flash",
     "tactical.reason": "google_gemini::gemini-3.5-flash",
     "summary.scene": "google_gemini::gemini-3.5-flash",
-    "rules.adjudicate": "google_gemini::gemini-3.6-flash",
+    "rules.adjudicate": "google_gemini::gemini-3.5-flash",
     "utility.inspect": "google_gemini::gemini-3.5-flash",
     "speech.generate": "provider_mock_speech::mock-speech-v1",
     "image.generate": "google_imagen::imagen-3.0-generate-002"
   },
   "fallbackChains": {
     "narrative.generate": [
-      "provider_category_selected_runtime::narrative-selected-runtime",
+      "provider_primary_failing::primary-fail-m1",
+      "provider_secondary_failing::secondary-fail-m2",
+      "provider_tertiary_success::tertiary-success-m3",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "character.dialogue": [
@@ -40,11 +42,14 @@
     ],
     "character.extract": [
       "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
       "google_gemini::gemini-3.5-flash-lite",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "memory.extract": [
-      "provider_mock_reasoning::mock-reasoning-pro",
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "character.capability.propose": [
@@ -90,8 +95,9 @@
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "rules.adjudicate": [
-      "google_gemini::gemini-3.6-flash",
-      "provider_mock_reasoning::mock-reasoning-pro",
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "rules.analyze": [

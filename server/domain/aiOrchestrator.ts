@@ -3938,57 +3938,32 @@ export class MultiModelOrchestrator {
     };
 
     // Category-scoped manual override has precedence over task auto-selection.
-    // IMPORTANT: once a category is manually selected, its fallback scope is closed
-    // to the task's configured chain. Never inject unrelated automatically-ranked
-    // models into a user-selected category.
+    // Its failover scope is the same category/task route; do not inject unrelated
+    // global models behind a player-selected narrator.
     if (categoryOverrideKey) {
       const overridden = findConfiguredModel(categoryOverrideKey);
       if (overridden && isUsableCandidate(overridden)) {
-        // A category override selects the requested primary model, but it must
-        // retain automatic task-eligible failover candidates. This is important
-        // when the persisted task chain is stale or intentionally excludes a
-        // newly discovered eligible model.
-        const configuredFallbacks = Array.from(this.models.values())
-          .filter((m) => m.modelId !== overridden.modelId)
-          .filter((m) => m.roleEligibility.includes(task))
-          .filter((m) => !m.isEmergencyFloor)
-          .filter((m) => isUsableCandidate(m))
-          .sort((a, b) => {
-            const scoreA = a.userPriority + (a.health === 'Healthy' ? 50 : 0);
-            const scoreB = b.userPriority + (b.health === 'Healthy' ? 50 : 0);
-            if (scoreB !== scoreA) return scoreB - scoreA;
-            return a.modelId.localeCompare(b.modelId);
-          });
-
-        const fallbackSet = new Set<string>();
-        const fallbackModels: ModelRegistryRecord[] = [];
-        for (const candidate of configuredFallbacks) {
-          const candidateKey = this.modelKey(candidate);
-          if (!fallbackSet.has(candidateKey)) {
-            fallbackSet.add(candidateKey);
-            fallbackModels.push(candidate);
-          }
-        }
+        const configuredFallbacks = (customChainKeys || [])
+          .map(findConfiguredModel)
+          .filter((model): model is ModelRegistryRecord => Boolean(model))
+          .filter((model) => this.modelKey(model) !== this.modelKey(overridden))
+          .filter((model) => isUsableCandidate(model));
 
         const emergency = Array.from(this.models.values()).find(
-          (m) => m.isEmergencyFloor && m.roleEligibility.includes(task)
+          (model) => model.isEmergencyFloor && model.roleEligibility.includes(task),
         );
-        if (emergency && !fallbackModels.some((m) => this.modelKey(m) === this.modelKey(emergency))) {
-          fallbackModels.push(emergency);
+        if (emergency && !configuredFallbacks.some((model) => this.modelKey(model) === this.modelKey(emergency))) {
+          configuredFallbacks.push(emergency);
         }
 
         return {
           selectedModel: overridden,
-          selectionReason:
-            'Category-scoped manual override for ' +
-            category +
-            '; automatic task-eligible failover candidates remain available.',
+          selectionReason: 'Category-scoped manual override for ' + category + '; using the narration category fallback route.',
           selectionScore: overridden.userPriority + 1000,
-          fallbacks: fallbackModels,
+          fallbacks: configuredFallbacks,
         };
       }
     }
-
     // Check if a model is manually pinned for this task
     const pinnedKey = this.taskPinnedModels.get(routeTask);
     if (pinnedKey) {

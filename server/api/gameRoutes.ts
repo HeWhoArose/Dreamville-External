@@ -237,7 +237,7 @@ gameRouter.post('/action/ooc', async (req: Request, res: Response) => {
         modelId: generated.modelId,
       });
     }
-    if (generated.source === 'DETERMINISTIC_FALLBACK' || !generated.text) {
+    if (!generated.text) {
       return res.status(503).json({
         success: false,
         code: 'AI_UNAVAILABLE',

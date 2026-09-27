@@ -44,6 +44,15 @@ export class CharacterGenesisAiUnavailableError extends Error {
 }
 
 export class CharacterGenesisService {
+  private buildAiUnavailableError(message: string, response?: any): CharacterGenesisAiUnavailableError {
+    const error = new CharacterGenesisAiUnavailableError(message);
+    (error as any).attemptsTrail = response?.attemptsTrail || [];
+    (error as any).fallbackReason = response?.fallbackReason;
+    (error as any).providerId = response?.providerId;
+    (error as any).modelId = response?.modelId;
+    return error;
+  }
+
   /**
    * Extracts a structured CharacterGenesisDraft from a natural language concept,
    * respecting world template constraints and preserving any user-edited fields.
@@ -1338,11 +1347,14 @@ IMPORTANT:
           },
         }
       );
+      if (response.source === 'DETERMINISTIC_FALLBACK') {
+        throw this.buildAiUnavailableError(
+          response.fallbackReason || 'AI custom capability generation is unavailable; deterministic fallback was withheld.',
+          response,
+        );
+      }
       if (response.text) {
         proposal = this.parseJsonFromAiResponse(response.text);
-        if (response.source === 'DETERMINISTIC_FALLBACK') {
-          generatedProvenance = 'DETERMINISTIC_FALLBACK';
-        }
       }
     } catch (err) {
       console.warn('[CharacterGenesisService] Orchestrated custom capability proposal failed, using procedural fallback:', err);
@@ -1969,11 +1981,14 @@ IMPORTANT:
         prompt,
         'Return only the requested structured custom feat JSON.'
       );
+      if (response.source === 'DETERMINISTIC_FALLBACK') {
+        throw this.buildAiUnavailableError(
+          response.fallbackReason || 'AI custom capability generation is unavailable; deterministic fallback was withheld.',
+          response,
+        );
+      }
       if (response.text) {
         proposal = this.parseJsonFromAiResponse(response.text);
-        if (response.source === 'DETERMINISTIC_FALLBACK') {
-          generatedProvenance = 'DETERMINISTIC_FALLBACK';
-        }
       }
     } catch (err) {
       console.warn('[CharacterGenesisService] Custom feat proposal failed, using procedural fallback:', err);
@@ -2067,11 +2082,14 @@ IMPORTANT: Provide sensible starting default value, optional min/max, clear desc
         prompt,
         'Return only the requested structured stat definition JSON.'
       );
+      if (response.source === 'DETERMINISTIC_FALLBACK') {
+        throw this.buildAiUnavailableError(
+          response.fallbackReason || 'AI custom capability generation is unavailable; deterministic fallback was withheld.',
+          response,
+        );
+      }
       if (response.text) {
         proposal = this.parseJsonFromAiResponse(response.text);
-        if (response.source === 'DETERMINISTIC_FALLBACK') {
-          generatedProvenance = 'DETERMINISTIC_FALLBACK';
-        }
       }
     } catch (err) {
       console.warn('[CharacterGenesisService] Custom attribute proposal failed, using fallback:', err);
@@ -2158,11 +2176,14 @@ IMPORTANT:
         prompt,
         'Return only the requested structured custom skill JSON.'
       );
+      if (response.source === 'DETERMINISTIC_FALLBACK') {
+        throw this.buildAiUnavailableError(
+          response.fallbackReason || 'AI custom capability generation is unavailable; deterministic fallback was withheld.',
+          response,
+        );
+      }
       if (response.text) {
         proposal = this.parseJsonFromAiResponse(response.text);
-        if (response.source === 'DETERMINISTIC_FALLBACK') {
-          generatedProvenance = 'DETERMINISTIC_FALLBACK';
-        }
       }
     } catch (err) {
       console.warn('[CharacterGenesisService] Custom skill proposal failed, using fallback:', err);
@@ -2366,11 +2387,14 @@ IMPORTANT: Select an appropriate category and paper-doll slot. If the item is a 
         prompt,
         'Return only the requested structured custom equipment JSON.'
       );
+      if (response.source === 'DETERMINISTIC_FALLBACK') {
+        throw this.buildAiUnavailableError(
+          response.fallbackReason || 'AI custom capability generation is unavailable; deterministic fallback was withheld.',
+          response,
+        );
+      }
       if (response.text) {
         proposal = this.parseJsonFromAiResponse(response.text);
-        if (response.source === 'DETERMINISTIC_FALLBACK') {
-          generatedProvenance = 'DETERMINISTIC_FALLBACK';
-        }
       }
     } catch (err) {
       console.warn('[CharacterGenesisService] Custom equipment proposal failed, using fallback:', err);

@@ -117,6 +117,54 @@ export class UniverseRuntimeService {
 		return repository.getUniverse(universeId);
 	}
 
+	/**
+	 * Parses an explicitly cross-world player action into a canonical travel intent.
+	 * This is deliberately narrow: ordinary local travel never creates a new world.
+	 */
+	public static inferCrossWorldTravelIntent(
+		repository: WorldRepository,
+		storyId: string,
+		actionText: string,
+	): {
+		worldId?: string;
+		worldPremise?: string;
+		worldTitle?: string;
+	} | null {
+		const text = String(actionText || '').trim();
+		if (!text) return null;
+
+		const normalized = text.toLowerCase();
+		const travelVerb = /\b(fly|travel|warp|jump|cross|journey|leave|depart|go|head|teleport)\b/i.test(text);
+		const worldMarker = /\b(another world|new world|other world|planet|planets|dimension|dimensions|realm|realms|universe|galaxy)\b/i.test(text);
+		if (!travelVerb || !worldMarker) return null;
+
+		const knownWorld = repository.getAllWorldTemplates()
+			.slice()
+			.sort((a, b) => String(b?.title || '').length - String(a?.title || '').length)
+			.find((world: any) => {
+				const title = String(world?.title || '').trim().toLowerCase();
+				return title.length >= 3 && normalized.includes(title);
+			});
+
+		if (knownWorld?.worldId) {
+			return { worldId: knownWorld.worldId, worldTitle: knownWorld.title };
+		}
+
+		const titleMatch =
+			text.match(/\b(?:planet|world|dimension|realm)\s+(?:called|named)\s+["']?([^"'!?.,]+)["']?/i) ||
+			text.match(/\b(?:planet|world|dimension|realm)\s+([A-Za-z0-9][^!?.,;]*)/i);
+
+		const title = titleMatch?.[1]?.trim().replace(/\s+/g, ' ');
+		const premise = title
+			? `A world or planet known as ${title}, reached by an interworld traveler.`
+			: `A new world reached by the protagonist through the following intent: ${text}`;
+
+		return {
+			worldPremise: premise,
+			worldTitle: title || undefined,
+		};
+	}
+
 	public static async ensureWorldAsync(
 		repository: WorldRepository,
 		universeId: string,

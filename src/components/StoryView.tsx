@@ -62,6 +62,7 @@ interface StoryViewProps {
   onRetryOpening?: () => void;
   combatTransition?: CombatTransitionState | null;
   onEnterCombat?: () => void;
+  onNarrationUpdated?: (viewState: import('../types').ExternalViewState) => void;
 }
 
 const StoryCheckCard: React.FC<{
@@ -243,6 +244,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
   onRetryOpening,
   combatTransition = null,
   onEnterCombat,
+  onNarrationUpdated,
 }) => {
   const { playSpeech, isPlayingSpeech, triggerHaptic, playSfx } = useAudioHaptic();
 
@@ -262,6 +264,14 @@ export const StoryView: React.FC<StoryViewProps> = ({
   const [scenePrompt, setScenePrompt] = useState<string | null>(null);
   const [sceneImageUrl, setSceneImageUrl] = useState<string | null>(null);
   const [sceneError, setSceneError] = useState<string | null>(null);
+  const [narrationBusyActionId, setNarrationBusyActionId] = useState<string | null>(null);
+  const [narrationEditActionId, setNarrationEditActionId] = useState<string | null>(null);
+  const [narrationEditInstruction, setNarrationEditInstruction] = useState('');
+  const [narrationPickerOpen, setNarrationPickerOpen] = useState(false);
+  const [narrationModels, setNarrationModels] = useState<any[]>([]);
+  const [narrationCategoryState, setNarrationCategoryState] = useState<any | null>(null);
+  const [narrationModelLoading, setNarrationModelLoading] = useState(false);
+  const [narrationModelError, setNarrationModelError] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
@@ -363,9 +373,13 @@ export const StoryView: React.FC<StoryViewProps> = ({
           { role: 'assistant', text: result.response || 'I could not produce an OOC response.' },
         ]);
       } catch (error: any) {
+        const detail = error?.data?.errorReason || error?.message || 'The OOC assistant could not respond.';
+        const attempts = Array.isArray(error?.data?.attemptsTrail)
+          ? error.data.attemptsTrail.filter((attempt: any) => attempt.status === 'FAILED').map((attempt: any) => attempt.error).filter(Boolean).slice(0, 3).join(' | ')
+          : '';
         setOocHistory((history) => [
           ...history,
-          { role: 'assistant', text: error?.message || 'The OOC assistant could not respond.' },
+          { role: 'assistant', text: attempts ? detail + '\n\nAttempts: ' + attempts : detail },
         ]);
       } finally {
         setIsProcessingOoc(false);
@@ -398,6 +412,67 @@ export const StoryView: React.FC<StoryViewProps> = ({
   const handleReadAloud = (text: string, speakerId = 'narrator') => {
     triggerHaptic('light');
     playSpeech(text, speakerId);
+  };
+
+  const loadNarrationModels = async () => {
+    setNarrationModelLoading(true);
+    setNarrationModelError(null);
+    try {
+      const [modelResponse, categories] = await Promise.all([apiClient.getOrchestratorModels(), apiClient.getOrchestratorCategoryStates()]);
+      const category = categories.find((entry: any) => entry.category === 'narration');
+      const eligible = (modelResponse.models || [])
+        .filter((model: any) => Array.isArray(model.roleEligibility) && model.roleEligibility.includes('narrative.generate'))
+        .filter((model: any) => !model.isEmergencyFloor)
+        .filter((model: any) => model.health !== 'Unavailable' && model.health !== 'DisabledByUser' && model.health !== 'InvalidAuth')
+        .filter((model: any) => model.quota !== 'Exhausted' && model.accessStatus !== 'quota_limited' && model.accessStatus !== 'rate_limited');
+      setNarrationModels(eligible);
+      setNarrationCategoryState(category || null);
+    } catch (error: any) {
+      setNarrationModelError(error?.message || 'Failed to load narration models.');
+    } finally {
+      setNarrationModelLoading(false);
+    }
+  };
+
+  const openNarrationModelPicker = async () => {
+    setSceneMenuOpen(true);
+    setSuggestionsOpen(false);
+    setSceneChoiceOpen(false);
+    setNarrationPickerOpen(true);
+    await loadNarrationModels();
+  };
+
+  const selectNarrationModel = async (modelKey: string | null) => {
+    setNarrationModelLoading(true);
+    setNarrationModelError(null);
+    try {
+      await apiClient.setOrchestratorCategoryModel({ category: 'narration', modelKey });
+      await loadNarrationModels();
+    } catch (error: any) {
+      setNarrationModelError(error?.message || 'Failed to change the narration model.');
+    } finally {
+      setNarrationModelLoading(false);
+    }
+  };
+
+  const regenerateNarration = async (entry: ActionLog, editInstruction = '') => {
+    if (!storyId || narrationBusyActionId) return;
+    setNarrationBusyActionId(entry.id);
+    try {
+      const result = await apiClient.regenerateNarration({
+        storyId,
+        actionId: entry.id,
+        forceModelId: narrationCategoryState?.activeModelKey || undefined,
+        editInstruction: editInstruction.trim() || undefined,
+      });
+      onNarrationUpdated?.(result.viewState);
+      setNarrationEditActionId(null);
+      setNarrationEditInstruction('');
+    } catch (error: any) {
+      setNarrationModelError(error?.data?.errorReason || error?.message || 'Narration regeneration failed.');
+    } finally {
+      setNarrationBusyActionId(null);
+    }
   };
 
   const requestScenePrompt = async () => {

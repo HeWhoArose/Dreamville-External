@@ -1,3 +1,11 @@
+## Document status — Surgical Architecture Registry
+
+**Classification:** FROZEN HISTORICAL IMPLEMENTATION RECORD
+
+This file records what was implemented/audited at its original checkpoint. It is not an active implementation plan. Current architecture and future work are governed by the Surgical Architecture Registry and the scoped active specifications. Do not use this record to create a second authority or to infer that its old 'pending runtime verification' statement still describes the current repository state.
+
+---
+
 # Phase 8.6–8.12 Initial Audit — 2026-09-23
 
 ## Audit rule

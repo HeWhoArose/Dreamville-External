@@ -80,6 +80,28 @@ This plan is the implementation ledger for the capability/Skillbook/story system
 - Keep all simulation output internal until the normal player-facing explanation requires a safe summary.
 - Re-run generated candidates through the same simulation before proposal.
 
+### Phase 2.5 — Character Genesis Additional Skill Discovery
+- Add a Character Genesis "Add More Skills" action directly below the custom skill synthesis controls.
+- Use the original natural-language character concept plus current character identity, role, background, motivations, capabilities, and already-listed skills as the inference context.
+- Ask the AI to propose multiple distinct additional skills rather than a single custom skill.
+- Exclude duplicates of existing or newly proposed skills.
+- Respect the active world rules and D&D rules mode.
+- Return structured skill proposals containing name, governing ability, description, mechanical description, check formula, tags, and world compatibility.
+- Never add suggestions automatically. The Character Genesis draft remains authoritative and the player must explicitly accept one or more proposals.
+- Support repeated discovery passes: after accepting Lightning, a later "Add More Skills" request must see Lightning in the current draft and seek other distinct skills such as Lightning Chain, Fog Mist, Mirror Ward, or another contextually appropriate result.
+- Keep AI failure explicit. Do not silently invent deterministic suggestions when the additional-skill discovery model fails.
+- Add regression tests for duplicate filtering, D&D formula normalization, multi-suggestion output, and zero-result failure.
+
+**Acceptance gates**
+- The button is available in the Capabilities & Skills step.
+- A discovery pass proposes multiple distinct skills from the character description and existing draft state.
+- A proposed skill is not committed until the player accepts it.
+- Accepting one skill updates the draft immediately.
+- Accepting all skills adds each unique proposal once.
+- Rejecting/dismissing proposals does not mutate the draft.
+- Re-running discovery after accepting skills uses the updated skill list and seeks different skills.
+- AI-unavailable or invalid discovery responses produce an explicit error and no skill grant.
+
 ### Phase 3 — Explicit acquisition/progression commit
 - Make proposal acceptance the only canonical path from simulation → acquisition.
 - Revalidate the proposal at commit time against the current world, actor ownership, progression state, resources, and rules.

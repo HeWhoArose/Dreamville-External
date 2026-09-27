@@ -44,6 +44,19 @@ AI context is assembled from canonical repository projections and player-authori
 
 Committed canonical outcomes may be inserted as protected working-context chunks. AI prose remains downstream of canonical adjudication.
 
+### 6. Canonical category-to-task mapping and route semantics
+Category membership is now derived directly from the canonical task-contract registry through getAiTasksByCategory() rather than a second hardcoded category map.
+
+getCategoryRuntimeStates() no longer treats tasks[0] as the category's route. Each task in a category receives its own TaskRuntimeRouteState, exposing:
+- the task's active model;
+- whether the route is AUTO, TASK_PINNED, or CATEGORY_MANUAL;
+- that task's configured fallback chain.
+
+For multi-task categories such as narration, tactical_reasoning, gameplay_advice, and speech, the runtime now reports every task independently. Category-level presentation fields are only populated when the task routes actually share a common active model or common fallback chain; divergent task routes are not collapsed into the first task.
+
+Category overrides remain task-compatible: a category-selected model may be used by every task for which it is eligible, while tasks that require a different modality/capability retain their own task route. This preserves existing speech/transcription and tactical/narrative task boundaries instead of forcing incompatible tasks onto one provider path.
+
+autoConfigureFallbacks() also derives its task list from the canonical contract registry, so newly registered or multi-task category members cannot be silently omitted from fallback configuration.
 ## Call graph
 Canonical state -> authority-owned projection -> AiTaskContract -> evaluateAiTaskReadiness -> MultiModelOrchestrator -> provider adapter -> task response validator -> fallback or accepted AI result -> existing authoritative consumer -> canonical commit / derived narration
 
@@ -59,12 +72,13 @@ Coverage:
 - schema-invalid primary models fall through to an eligible fallback;
 - context adapters remain read-only and player-authorized.
 
-Final repository verification on commit 809b9432769a9ce46d1d87ec1c6add1af9bf626b:
+Final repository verification for the category-to-task routing hardening on commit e3e56288f952da4ca80fb1f7c1c172e4873d3c0d:
 - npm run lint — PASS
 - npm test — PASS
 - npm run build — PASS
-- 1011 tests passed, 0 failed, 0 skipped
-- both GitHub verification workflows — PASS (run 36344663269 and run 36344663274).
+- 1018 tests passed, 0 failed, 0 skipped
+- both GitHub verification workflows — PASS
+- the dedicated S4 route audit exercises ten repeated passes over every task in every category and explicitly covers narration, tactical_reasoning, gameplay_advice, and speech.
 
 ## Ownership
 S4 implementation is owned by the AI orchestration layer and its contract/readiness/adapter files. Existing canonical game systems remain the owners of state and adjudication.

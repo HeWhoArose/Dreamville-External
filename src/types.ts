@@ -500,6 +500,12 @@ export type ActionRequest =
       mode?: 'Foot' | 'Horse' | 'Coach' | 'Boat' | 'Flight' | 'Teleport';
     }
   | {
+      type: 'WORLD_TRAVEL_REQUEST';
+      worldId?: string;
+      worldPremise?: string;
+      worldTitle?: string;
+    }
+  | {
       type: 'CANCEL_TRAVEL';
     }
   | {

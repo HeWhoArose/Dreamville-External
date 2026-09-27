@@ -68,6 +68,22 @@ export interface OocContext extends NarrativeOutcomeContext {
 	allowedToolModes: Array<'READ' | 'MUTATE'>;
 }
 
+function playerCapabilityProjection(repository: WorldRepository, storyId: string, actorId: string) {
+	const state = repository.getCapabilityEngine(storyId).exportState();
+	const skillInstances = Array.isArray(state?.skillInstances?.[actorId])
+		? JSON.parse(JSON.stringify(state.skillInstances[actorId]))
+		: [];
+	const learnedIds = new Set(skillInstances.map((instance: any) => String(instance.capabilityId)));
+	const learnedCapabilities = Array.isArray(state?.capabilities)
+		? JSON.parse(JSON.stringify(state.capabilities.filter((capability: any) => learnedIds.has(String(capability.id || capability.capabilityId)))))
+		: [];
+	return projectPlayerCapabilities({
+		effectiveCapabilities: repository.getEffectiveActorCapabilities(storyId, actorId),
+		learnedCapabilities,
+		skillInstances,
+	});
+}
+
 function safeWorld(world: any): CharacterGenerationContext['world'] {
 	if (!world) return {};
 	return {
@@ -133,11 +149,7 @@ export class AiContextAdapters {
 			storyId,
 			actorId,
 			rulesProfile: repository.getRulesProfile(storyId),
-			playerProjection: projectPlayerCapabilities({
-				effectiveCapabilities: repository.getEffectiveActorCapabilities(storyId, actorId),
-				learnedCapabilities: repository.getCapabilityEngine(storyId).getActorLearnedCapabilities(actorId),
-				skillInstances: repository.getCapabilityEngine(storyId).getActorSkillInstances(actorId),
-			}) as unknown as Record<string, unknown>,
+			playerProjection: playerCapabilityProjection(repository, storyId, actorId) as unknown as Record<string, unknown>,
 			canonicalEvents: repository.getCanonicalCommandEvents(storyId).slice(-12),
 		};
 	}
@@ -152,11 +164,7 @@ export class AiContextAdapters {
 				actorId,
 				repository.getCombatPerceptionOptions(storyId, actorId),
 			),
-			capabilities: projectPlayerCapabilities({
-				effectiveCapabilities: repository.getEffectiveActorCapabilities(storyId, actorId),
-				learnedCapabilities: repository.getCapabilityEngine(storyId).getActorLearnedCapabilities(actorId),
-				skillInstances: repository.getCapabilityEngine(storyId).getActorSkillInstances(actorId),
-			}),
+			capabilities: playerCapabilityProjection(repository, storyId, actorId),
 			conditions: player?.injuries ? JSON.parse(JSON.stringify(player.injuries)) : [],
 			progression: repository.getCharacterProgressionEngine(storyId).getState(actorId),
 			rulesProfile: repository.getRulesProfile(storyId),

@@ -839,11 +839,13 @@ export const StoryView: React.FC<StoryViewProps> = ({
 
             {visible.map((entry) => {
               const narration = entry.narrativeResponse || (
-                entry.epistemicValidation === 'REJECTED_BY_ENGINE'
-                  ? 'The action could not be carried out.'
-                  : entry.authoritativeFeedback || ''
+                entry.narrativeError
+                  ? ''
+                  : entry.epistemicValidation === 'REJECTED_BY_ENGINE'
+                    ? 'The action could not be carried out.'
+                    : entry.authoritativeFeedback || ''
               );
-              if (!entry.description && !narration) return null;
+              if (!entry.description && !narration && !entry.narrativeError) return null;
 
               return (
                 <div key={entry.id} className="space-y-3">
@@ -877,28 +879,33 @@ export const StoryView: React.FC<StoryViewProps> = ({
                     />
                   )}
 
-                  {narration && (
+                  {(narration || entry.narrativeError) && (
                     <div className="max-w-[94%] rounded-3xl rounded-tl-md border border-violet-400/15 bg-gradient-to-br from-violet-500/[0.065] via-white/[0.018] to-fuchsia-500/[0.025] px-5 py-5 shadow-[0_14px_45px_rgba(124,58,237,0.06)]">
                       <div className="mb-2 flex items-center justify-between gap-3">
                         <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-violet-300/60">Narrator</p>
-                        {entry.narrativeResponse && (
-                          <button
-                            type="button"
-                            onClick={() => handleReadAloud(entry.narrativeResponse || '')}
-                            disabled={isPlayingSpeech}
-                            className="inline-flex items-center gap-1.5 text-[10px] text-stone-500 transition hover:text-stone-200 disabled:opacity-50"
-                          >
-                            <Headphones className="h-3 w-3" />
-                            Listen
-                          </button>
-                        )}
+                        <div className="flex items-center gap-3">
+                          {entry.narrativeResponse && <button type="button" onClick={() => handleReadAloud(entry.narrativeResponse || '')} disabled={isPlayingSpeech} className="inline-flex items-center gap-1.5 text-[10px] text-stone-500 transition hover:text-stone-200 disabled:opacity-50"><Headphones className="h-3 w-3" />Listen</button>}
+                          {entry.narrativeResponse && <button type="button" onClick={() => regenerateNarration(entry)} disabled={Boolean(narrationBusyActionId)} className="inline-flex items-center gap-1.5 text-[10px] text-cyan-200/70 transition hover:text-cyan-100 disabled:opacity-40"><RotateCcw className="h-3 w-3" />{narrationBusyActionId === entry.id ? 'Regenerating…' : 'Retry'}</button>}
+                          <button type="button" onClick={() => { setNarrationEditActionId(narrationEditActionId === entry.id ? null : entry.id); setNarrationEditInstruction(''); }} className="text-[10px] text-stone-500 transition hover:text-stone-200">Edit & Retry</button>
+                        </div>
                       </div>
-                      <p className="whitespace-pre-line font-serif text-[15px] leading-8 text-stone-100 md:text-base md:leading-8">
-                        {narration}
-                      </p>
+                      {entry.narrativeError ? (
+                        <div className="rounded-2xl border border-red-400/20 bg-red-400/[0.06] px-4 py-3">
+                          <p className="text-xs font-semibold text-red-200">Narration AI unavailable</p>
+                          <p className="mt-1 text-xs leading-5 text-red-100/75">{entry.narrativeError.message}</p>
+                          {entry.narrativeError.attemptsTrail?.length ? <p className="mt-2 text-[10px] leading-4 text-red-100/55">{entry.narrativeError.attemptsTrail.filter((attempt) => attempt.status === 'FAILED').map((attempt) => attempt.modelId + ': ' + (attempt.error || 'failed')).slice(0, 3).join(' • ')}</p> : null}
+                          <button type="button" onClick={() => regenerateNarration(entry)} disabled={Boolean(narrationBusyActionId)} className="mt-3 rounded-lg border border-red-200/20 bg-red-200/10 px-3 py-1.5 text-[10px] font-semibold text-red-100 hover:bg-red-200/15 disabled:opacity-40">{narrationBusyActionId === entry.id ? 'Trying again…' : 'Retry narration'}</button>
+                        </div>
+                      ) : <p className="whitespace-pre-line font-serif text-[15px] leading-8 text-stone-100 md:text-base md:leading-8">{narration}</p>}
+                      {narrationEditActionId === entry.id && (
+                        <div className="mt-3 rounded-2xl border border-cyan-300/10 bg-black/15 p-3">
+                          <label className="text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-200/65">Narration edit instruction</label>
+                          <textarea value={narrationEditInstruction} onChange={(event) => setNarrationEditInstruction(event.target.value)} placeholder="Example: Make this more cinematic and focus on the temporal resonance." rows={3} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs leading-5 text-stone-200 outline-none focus:border-cyan-300/30" />
+                          <div className="mt-2 flex justify-end"><button type="button" onClick={() => regenerateNarration(entry, narrationEditInstruction)} disabled={!narrationEditInstruction.trim() || Boolean(narrationBusyActionId)} className="rounded-lg bg-cyan-200 px-3 py-1.5 text-[10px] font-bold text-[#08131a] disabled:opacity-40">Regenerate with instruction</button></div>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  )}                </div>
               );
             })}
           </section>

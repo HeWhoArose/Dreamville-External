@@ -7451,6 +7451,7 @@ gameRouter.delete('/story-runs/:storyId', async (req: Request, res: Response) =>
       return res.status(400).json({ success: false, errorReason: 'Deletion requires explicit confirmation and the exact Story Run title.', requiredConfirmationText: expectedConfirmation });
     }
     worldRepository.deleteStoryRun(storyId);
+    serverMockAuthority.removeStoryState(storyId);
     if (serverMockAuthority.getActiveStoryId() === storyId) serverMockAuthority.setActiveStoryId('default_story');
     return res.json({ success: true, storyId, deleted: true });
   } catch (error: any) {
@@ -7469,6 +7470,9 @@ gameRouter.delete('/worlds/:worldId', async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, errorReason: 'Deletion requires explicit confirmation and the exact world title.', requiredConfirmationText: expectedConfirmation });
     }
     const result = worldRepository.deleteWorldTemplate(worldId);
+    for (const deletedRunId of result.deletedRunIds) {
+      serverMockAuthority.removeStoryState(deletedRunId);
+    }
     if (result.deletedRunIds.includes(serverMockAuthority.getActiveStoryId())) serverMockAuthority.setActiveStoryId('default_story');
     return res.json({ success: result.success, worldId, deletedRunIds: result.deletedRunIds, deleted: result.success });
   } catch (error: any) {

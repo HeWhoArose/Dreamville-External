@@ -118,7 +118,16 @@ The final audit is only considered complete when the latest main-branch workflow
 - S6 ten-pass runtime audit — PASS
 - S1–S7 ten-pass cross-architecture audit — PASS
 
-Earlier successful verification before the final tactical-geometry refinement reached **1013/1013 tests passing**, with lint and build passing. The later CombatEngine refactor deliberately triggered CI failures, which were diagnosed and repaired; those intermediate failures are not treated as final verification.
+Final verification on commit `5696468de099d44670963b35769c126d02484b48` completed successfully in both repository verification workflows (runs `36346253402` and `36346253410`):
+
+- **1013 / 1013 tests passed**
+- **0 failures**
+- **Typecheck/lint passed**
+- **Production build passed**
+- **S6 ten-pass runtime audit passed**
+- **S1–S7 ten-pass cross-architecture audit passed**
+
+The final cycle also caught and repaired intermediate CombatEngine refactor regressions before this final green run. Those intermediate failures remain documented as audit evidence, not as final-state failures.
 
 ## Ownership conclusion
 

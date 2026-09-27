@@ -9,6 +9,7 @@ import { combatTacticsService } from '../domain/combatTacticsService';
 import { PlayerLifecycleState } from '../domain/playerLifecycleState';
 import { OpeningSceneService } from '../services/openingSceneService';
 import { WorkingContextEngine } from '../domain/workingContextEngine';
+import { narrativeContinuityEngine } from '../domain/narrativeContinuityEngine';
 import { worldVisualIdentityService } from '../services/worldVisualIdentityService';
 import { rulesProfileEngine } from '../domain/rulesProfileEngine';
 import { CustomRuleEngine } from '../domain/customRuleEngine';
@@ -7789,6 +7790,46 @@ gameRouter.get('/story-runs/:storyId/opening/context', (req: Request, res: Respo
     return res.json({ success: true, storyId, context });
   } catch (error: any) {
     return res.status(500).json({ error: error?.message || 'Failed to assemble opening context.' });
+  }
+});
+
+/**
+ * GET /api/game/story-runs/:storyId/narrative/context
+ * Returns the latest saved narrative research/context audit for verification.
+ * Read-only; no canonical state mutation occurs.
+ */
+gameRouter.get('/story-runs/:storyId/narrative/context', (req: Request, res: Response) => {
+  try {
+    const storyId = String(req.params.storyId || '').trim();
+    const run = worldRepository.getStoryRun(storyId);
+    if (!run) {
+      return res.status(404).json({
+        success: false,
+        code: 'STORY_RUN_NOT_FOUND',
+        errorReason: `StoryRun with ID "${storyId}" was not found.`,
+      });
+    }
+
+    const continuity = narrativeContinuityEngine.getState(worldRepository, storyId);
+    const history = Array.isArray(run.runtimeState?.narrativeContextHistory)
+      ? run.runtimeState.narrativeContextHistory.slice(-12)
+      : [];
+
+    return res.json({
+      success: true,
+      storyId,
+      plot: continuity.plot,
+      plan: continuity.plan,
+      latestResearch: history.at(-1)?.research || run.runtimeState?.narrativeResearch || null,
+      latestContextAudit: history.at(-1)?.contextAudit || null,
+      history,
+      openingNarrativeContext: run.runtimeState?.openingNarrativeContext || null,
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      errorReason: error?.message || 'Failed to retrieve narrative context audit.',
+    });
   }
 });
 

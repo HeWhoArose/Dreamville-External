@@ -4173,8 +4173,10 @@ export class MultiModelOrchestrator {
       return override && roles && roles.includes(task);
     });
 
-    if (customChainKeys && customChainKeys.length > 0) {
-      // An explicit task route is authoritative. The first currently usable
+    if (customChainKeys && customChainKeys.length > 0 && !hasActiveManualOverrideForTask) {
+      // An explicit task route is authoritative unless a direct model-level
+      // manual override deliberately changes the model's role/priority.
+      // The first currently usable
       // model in the configured chain is the primary; later usable entries
       // remain in the exact configured order, followed by the deterministic
       // emergency floor. Do not replace the configured route with an

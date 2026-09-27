@@ -602,9 +602,15 @@ export const WorldLibraryModal: React.FC<WorldLibraryModalProps> = ({
                         <button
                           id={`delete-world-btn-${w.worldId}`}
                           type="button"
-                          onClick={(event) => {
+                          onClick={async (event) => {
                             event.stopPropagation();
-                            onDeleteWorld(w);
+                            try {
+                              await onDeleteWorld(w);
+                              setWorlds((current) => current.filter((entry) => entry.worldId !== w.worldId));
+                              if (previewWorld?.worldId === w.worldId) setPreviewWorld(null);
+                            } catch {
+                              // Parent handler already surfaced the deletion failure.
+                            }
                           }}
                           className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-rose-700/50 bg-rose-950/30 hover:bg-rose-900/40 text-rose-300 text-xs font-medium transition"
                           title="Delete World"

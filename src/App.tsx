@@ -586,6 +586,10 @@ export const App: React.FC = () => {
       setIsAudioSettingsOpen(true);
       return;
     }
+    if (route === 'ops.importer') {
+      setIsImportModalOpen(true);
+      return;
+    }
     if (route === 'ops.archive') {
       setIsArchiveModalOpen(true);
       return;
@@ -1064,9 +1068,12 @@ export const App: React.FC = () => {
       <ImportStoryModal
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
-        onStoryAdapted={() => {
+        onStoryAdapted={(storyId) => {
           setIsImportModalOpen(false);
-          initializeApp(activeStoryId);
+          apiClient.setActiveStoryId(storyId);
+          setActiveStoryId(storyId);
+          setCurrentRoute('play.story');
+          initializeApp(storyId);
           fetchStoryLibrary();
         }}
       />
@@ -1128,8 +1135,13 @@ export const App: React.FC = () => {
       <ArchiveModal
         isOpen={isArchiveModalOpen}
         onClose={() => setIsArchiveModalOpen(false)}
-        onRestoreSuccess={() => {
-          initializeApp(activeStoryId);
+        storyId={activeStoryId}
+        onRestoreSuccess={(restoredStoryId) => {
+          const nextStoryId = restoredStoryId || activeStoryId;
+          apiClient.setActiveStoryId(nextStoryId);
+          setActiveStoryId(nextStoryId);
+          setCurrentRoute('play.story');
+          initializeApp(nextStoryId);
           fetchStoryLibrary();
         }}
       />

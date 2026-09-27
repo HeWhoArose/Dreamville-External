@@ -215,11 +215,22 @@ export class OocToolRegistry {
 						includeDormant: false,
 						includeArchived: false,
 					});
+					const universeMemories = UniverseRuntimeService.getRelevantUniverseMemories(
+						repository,
+						storyId,
+						undefined,
+						keywords,
+						8,
+					);
+					const combined = [
+						...memories.map((memory) => ({ ...memory, continuityScope: 'WORLD' })),
+						...universeMemories.map((memory) => ({ ...memory, continuityScope: 'UNIVERSE' })),
+					];
 					return {
 						name: call.name,
 						success: true,
-						message: `Found ${memories.length} player-visible memories.`,
-						data: clone(memories),
+						message: `Found ${combined.length} player-visible memories across the active world and universe.`,
+						data: clone(combined),
 					};
 				}
 

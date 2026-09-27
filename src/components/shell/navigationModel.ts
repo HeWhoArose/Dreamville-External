@@ -15,6 +15,7 @@ export type NavigationIconKey =
 	| 'create'
 	| 'compendium'
 	| 'settings'
+	| 'importer'
 	| 'archive'
 	| 'bible'
 	| 'debug';

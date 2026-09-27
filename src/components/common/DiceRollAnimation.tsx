@@ -180,6 +180,7 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 	}, []);
 
 	useEffect(() => {
+		autoRollStartedRef.current = false;
 		setRevealed(false);
 		setError(null);
 		setIsRolling(false);
@@ -225,7 +226,7 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 						await box.roll(notation);
 					}
 				}
-			}			}
+			}
 
 			setRevealed(true);
 			setIsRolling(false);

@@ -166,11 +166,11 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 	const [isRolling, setIsRolling] = useState(false);
 	const [revealed, setRevealed] = useState(false);
 	const [rollingValues, setRollingValues] = useState<number[]>(() =>
-		diceSides.map((sides, index) => roll.individualDice[index] || randomFace(sides))
+		diceSides.map((sides) => randomFace(sides))
 	);
 
 	useEffect(() => {
-		setRollingValues(diceSides.map((sides, index) => roll.individualDice[index] || randomFace(sides)));
+		setRollingValues(diceSides.map((sides) => randomFace(sides)));
 		setIsRolling(false);
 		setRevealed(false);
 	}, [roll, diceSides]);

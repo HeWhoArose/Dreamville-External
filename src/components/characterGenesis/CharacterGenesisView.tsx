@@ -174,6 +174,9 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
   const [isProposingSkill, setIsProposingSkill] = useState<boolean>(false);
   const [skillProposalError, setSkillProposalError] = useState<string | null>(null);
   const [pendingSkillProposal, setPendingSkillProposal] = useState<CharacterSkill | null>(null);
+  const [additionalSkillSuggestions, setAdditionalSkillSuggestions] = useState<CharacterSkill[]>([]);
+  const [isSuggestingMoreSkills, setIsSuggestingMoreSkills] = useState<boolean>(false);
+  const [additionalSkillsError, setAdditionalSkillsError] = useState<string | null>(null);
 
   // Custom attribute proposal state
   const [customAttributeConcept, setCustomAttributeConcept] = useState<string>('');
@@ -947,6 +950,110 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
 
   const handleRejectSkillProposal = () => {
     setPendingSkillProposal(null);
+  };
+
+  // AI Additional Skill Discovery: infer more distinct skills from the full character concept.
+  // Nothing is added to the draft until the player explicitly accepts a proposal.
+  const handleSuggestAdditionalSkills = async () => {
+    if (!selectedWorld || !draft) return;
+
+    setAdditionalSkillsError(null);
+    setAdditionalSkillSuggestions([]);
+    setIsSuggestingMoreSkills(true);
+
+    try {
+      const existingSkills = getInitialDndSkills(draft.skills || []);
+      const capabilityNames = (draft.capabilities || []).map((capability) => capability.name);
+      const characterContext = {
+        name: draft.identity?.name,
+        species: draft.identity?.species,
+        role: draft.role?.role || draft.role?.archetype,
+        profession: draft.role?.profession,
+        background: draft.background?.history,
+        personality: draft.personality?.traits || [],
+        motivations: [
+          ...(draft.motivations?.goals || []),
+          ...(draft.motivations?.desires || []),
+          ...(draft.motivations?.fears || []),
+        ],
+        capabilities: capabilityNames,
+      };
+
+      const res = await apiClient.suggestAdditionalCharacterSkills(
+        selectedWorld.worldId,
+        {
+          characterConcept: naturalConcept || draft.sourceDescription || '',
+          existingSkills,
+          characterContext,
+          desiredCount: 4,
+        },
+      );
+
+      const suggestions = Array.isArray(res?.skills) ? res.skills : [];
+      if (suggestions.length === 0) {
+        throw new Error('The AI did not return any additional skill proposals.');
+      }
+
+      setAdditionalSkillSuggestions(suggestions);
+    } catch (err: any) {
+      setAdditionalSkillsError(err?.message || 'Could not discover additional skills.');
+    } finally {
+      setIsSuggestingMoreSkills(false);
+    }
+  };
+
+  const handleAcceptAdditionalSkill = (skill: CharacterSkill) => {
+    if (!draft) return;
+
+    const currentSkills = getInitialDndSkills(draft.skills || []);
+    const alreadyExists = currentSkills.some(
+      (existing) => existing.name.trim().toLowerCase() === skill.name.trim().toLowerCase(),
+    );
+
+    if (alreadyExists) {
+      setAdditionalSkillSuggestions((current) => current.filter((entry) => entry.id !== skill.id));
+      return;
+    }
+
+    setDraft({
+      ...draft,
+      skills: [...currentSkills, skill],
+    });
+    markFieldEdited('skills');
+    setAdditionalSkillSuggestions((current) => current.filter((entry) => entry.id !== skill.id));
+  };
+
+  const handleAcceptAllAdditionalSkills = () => {
+    if (!draft || additionalSkillSuggestions.length === 0) return;
+
+    const currentSkills = getInitialDndSkills(draft.skills || []);
+    const existingNames = new Set(currentSkills.map((skill) => skill.name.trim().toLowerCase()));
+    const accepted = additionalSkillSuggestions.filter((skill) => {
+      const key = skill.name.trim().toLowerCase();
+      if (!key || existingNames.has(key)) return false;
+      existingNames.add(key);
+      return true;
+    });
+
+    if (accepted.length === 0) {
+      setAdditionalSkillSuggestions([]);
+      return;
+    }
+
+    setDraft({
+      ...draft,
+      skills: [...currentSkills, ...accepted],
+    });
+    markFieldEdited('skills');
+    setAdditionalSkillSuggestions([]);
+  };
+
+  const handleRejectAdditionalSkill = (skillId: string) => {
+    setAdditionalSkillSuggestions((current) => current.filter((skill) => skill.id !== skillId));
+  };
+
+  const handleRejectAllAdditionalSkills = () => {
+    setAdditionalSkillSuggestions([]);
   };
 
   const toggleSkillProficiency = (skillId: string) => {
@@ -2719,7 +2826,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                     D&D Skills & Proficiencies
                   </h2>
                   <p className="text-xs text-neutral-400 mt-0.5">
-                    18 official D&D 5e skills automatically initialized and calculated from ability modifiers and proficiency bonus.
+                    18 official D&D 5e skills are initialized automatically. Your character description can also be used to discover additional custom skills, which you review before adding.
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -2886,6 +2993,128 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                         <Check className="w-3.5 h-3.5" />
                         <span>Accept & Add Skill</span>
                       </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* AI Additional Skill Discovery */}
+              <div className="p-4 rounded-xl bg-indigo-950/40 border border-indigo-800/60 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-semibold text-indigo-200 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Add More Skills</span>
+                    </div>
+                    <p className="text-[11px] text-neutral-400 mt-1 leading-relaxed">
+                      Ask the AI to look at your original character description, background, role, capabilities, and existing skills and discover additional distinct skills you may want.
+                    </p>
+                  </div>
+                  <span className="text-[10px] px-2 py-1 rounded bg-neutral-950/70 border border-indigo-800 text-indigo-300 font-mono shrink-0">
+                    AI SUGGESTIONS
+                  </span>
+                </div>
+
+                <button
+                  id="btn-add-more-skills"
+                  onClick={handleSuggestAdditionalSkills}
+                  disabled={isSuggestingMoreSkills}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-xs text-white font-semibold flex items-center justify-center gap-1.5 shadow-sm"
+                >
+                  {isSuggestingMoreSkills ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5" />
+                  )}
+                  <span>{isSuggestingMoreSkills ? 'Discovering Skills...' : 'Add More Skills'}</span>
+                </button>
+
+                <div className="text-[10px] text-neutral-500">
+                  Nothing is added automatically. Review and accept each suggestion below.
+                </div>
+
+                {additionalSkillsError && (
+                  <div className="p-3 rounded-lg bg-red-950/40 border border-red-800/60 text-xs text-red-300">
+                    {additionalSkillsError}
+                  </div>
+                )}
+
+                {additionalSkillSuggestions.length > 0 && (
+                  <div className="space-y-3 pt-2 border-t border-indigo-900/80">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-xs font-semibold text-indigo-200">
+                        Suggested Skills ({additionalSkillSuggestions.length})
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleRejectAllAdditionalSkills}
+                          className="px-2.5 py-1 rounded bg-neutral-900 border border-neutral-700 text-[10px] text-neutral-400 hover:text-white"
+                        >
+                          Dismiss All
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleAcceptAllAdditionalSkills}
+                          className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-[10px] text-white font-semibold"
+                        >
+                          Accept All
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                      {additionalSkillSuggestions.map((skill) => (
+                        <div
+                          key={skill.id}
+                          className="p-3 rounded-lg bg-neutral-950 border border-indigo-900/70 space-y-2"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <div className="text-xs font-semibold text-white">{skill.name}</div>
+                              <div className="text-[10px] text-indigo-300 font-mono mt-0.5">
+                                {skill.governingAbility} • {skill.checkFormula || '1d20'}
+                              </div>
+                            </div>
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 font-mono">
+                              AI
+                            </span>
+                          </div>
+
+                          <p className="text-[11px] text-neutral-300 leading-relaxed">
+                            {skill.description}
+                          </p>
+
+                          {skill.mechanicalDescription && (
+                            <div className="p-2 rounded bg-neutral-900 border border-neutral-800 text-[10px] text-indigo-200 leading-relaxed">
+                              <span className="text-neutral-500">Effect:</span> {skill.mechanicalDescription}
+                            </div>
+                          )}
+
+                          {skill.worldCompatibility && (
+                            <div className="text-[10px] text-neutral-500 leading-relaxed">
+                              {skill.worldCompatibility}
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-end gap-2 pt-1 border-t border-neutral-800">
+                            <button
+                              type="button"
+                              onClick={() => handleRejectAdditionalSkill(skill.id)}
+                              className="px-2.5 py-1.5 rounded bg-neutral-900 border border-neutral-700 text-[10px] text-neutral-400 hover:text-white"
+                            >
+                              Reject
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleAcceptAdditionalSkill(skill)}
+                              className="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-[10px] text-white font-semibold"
+                            >
+                              Add Skill
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}

@@ -237,8 +237,18 @@ gameRouter.post('/action/ooc', async (req: Request, res: Response) => {
         modelId: generated.modelId,
       });
     }
-    if (!generated.text) {
-      return res.status(503).json({ success: false, errorReason: generated.fallbackReason || 'OOC assistant could not produce a response.' });
+    if (generated.source === 'DETERMINISTIC_FALLBACK' || !generated.text) {
+      return res.status(503).json({
+        success: false,
+        code: 'AI_UNAVAILABLE',
+        category: 'gameplay_advice',
+        errorReason: generated.fallbackReason || 'No usable AI model was available for OOC mode. The deterministic fallback was withheld so the failure reason remains visible.',
+        fallbackReason: generated.fallbackReason,
+        attemptsTrail: generated.attemptsTrail || [],
+        providerId: generated.providerId,
+        modelId: generated.modelId,
+        recoverable: true,
+      });
     }
     const agent = parseOocToolResponse(generated.text);
     let toolResult: any = undefined;

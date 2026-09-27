@@ -9,6 +9,7 @@ import {
   CustomFeatProposalRequest,
   CustomAttributeProposalRequest,
   CustomSkillProposalRequest,
+  AdditionalCharacterSkillsProposalRequest,
   CustomEquipmentProposalRequest,
   CapabilityDefinition,
   GeneratedTechnique,
@@ -2222,6 +2223,170 @@ IMPORTANT:
       worldCompatibility: proposal.worldCompatibility,
       provenance: generatedProvenance,
     };
+  }
+
+  /**
+   * Infers additional character skills from the original character concept and
+   * current draft without automatically adding them. Every returned skill is a
+   * player-reviewed proposal and is filtered against already existing skills.
+   */
+  public async suggestAdditionalSkills(
+    input: AdditionalCharacterSkillsProposalRequest,
+    worldTemplate: WorldTemplate
+  ): Promise<CharacterSkill[]> {
+    const desiredCount = Math.max(1, Math.min(Number(input.desiredCount) || 3, 6));
+    const existingNames = new Set(
+      (input.existingSkills || [])
+        .map((skill) => String(skill?.name || '').trim().toLowerCase())
+        .filter(Boolean),
+    );
+
+    const characterContext = input.characterContext || {};
+    const prompt = `You are the DreamBook Character Genesis additional-skill discovery engine.
+
+The player already has a character draft. Your job is to infer OTHER useful, distinct skills that logically follow from the character concept, background, role, personality, motivations, capabilities, and the skills the character already has.
+
+This is a SUGGESTION stage. Do not add or grant anything. Do not assume the player will accept any suggestion.
+
+WORLD:
+Title: ${worldTemplate?.title || 'Unknown World'}
+Genre: ${worldTemplate?.genreTags?.join(', ') || 'Unknown'}
+Tone: ${worldTemplate?.toneTags?.join(', ') || 'Unknown'}
+Setting: ${worldTemplate?.setting || 'Unknown'}
+Rules Mode: ${worldTemplate?.dndRulesMode || 'FULL_DND'}
+World Rules: ${JSON.stringify(worldTemplate?.worldRules || worldTemplate?.ruleConstraints || [])}
+
+CHARACTER:
+Name: ${characterContext.name || 'Unnamed'}
+Species: ${characterContext.species || 'Unknown'}
+Role: ${characterContext.role || 'Unknown'}
+Profession: ${characterContext.profession || 'Unknown'}
+Background: ${characterContext.background || 'Not provided'}
+Personality: ${JSON.stringify(characterContext.personality || [])}
+Motivations: ${JSON.stringify(characterContext.motivations || [])}
+Capabilities: ${JSON.stringify(characterContext.capabilities || [])}
+
+ORIGINAL CHARACTER CONCEPT:
+${input.characterConcept || 'Not provided'}
+
+ALREADY OWNED / DRAFT SKILLS:
+${JSON.stringify((input.existingSkills || []).map((skill) => ({
+      name: skill.name,
+      governingAbility: skill.governingAbility,
+      description: skill.description,
+      mechanicalDescription: skill.mechanicalDescription,
+      tags: skill.tags,
+    })))}
+
+Generate exactly ${desiredCount} DISTINCT skill proposals when the character context supports that many. Prefer complementary abilities instead of trivial variations or duplicates.
+Examples of the kind of inference allowed: a mage may gain Lightning, Lightning Chain, Fog Mist, Mirror Ward, or similar abilities when the concept and world support them. These are examples only; infer from the actual character.
+
+Do not repeat an existing skill or another proposal with only cosmetic wording changes.
+Do not invent powers that contradict hard world rules.
+Prefer abilities that can be represented as character skills with a clear governing ability and mechanics.
+
+OUTPUT STRICT JSON:
+{
+  "skills": [
+    {
+      "name": string,
+      "governingAbility": "Strength" | "Dexterity" | "Constitution" | "Intelligence" | "Wisdom" | "Charisma",
+      "description": string,
+      "mechanicalDescription": string,
+      "checkFormula": string,
+      "tags": [string],
+      "worldCompatibility": string
+    }
+  ]
+}`;
+
+    let raw: any = null;
+    try {
+      const response = await worldRepository.getAiOrchestrator().executeTaskGeneration(
+        'narrative.generate',
+        prompt,
+        'Return only the requested JSON object containing the additional skill proposals.',
+      );
+
+      if (response.source === 'DETERMINISTIC_FALLBACK') {
+        throw this.buildAiUnavailableError(
+          response.fallbackReason || 'AI additional-skill discovery is unavailable; no automatic skill suggestions were created.',
+          response,
+        );
+      }
+
+      if (response.text) {
+        raw = this.parseJsonFromAiResponse(response.text);
+      }
+    } catch (error: any) {
+      if (error?.code === 'AI_UNAVAILABLE') throw error;
+      throw this.buildAiUnavailableError(
+        error?.message || 'AI additional-skill discovery failed; no automatic skill suggestions were created.',
+        error,
+      );
+    }
+
+    const candidates = Array.isArray(raw)
+      ? raw
+      : Array.isArray(raw?.skills)
+        ? raw.skills
+        : [];
+
+    const legalAbilities = new Set([
+      'Strength',
+      'Dexterity',
+      'Constitution',
+      'Intelligence',
+      'Wisdom',
+      'Charisma',
+    ]);
+    const seenNames = new Set(existingNames);
+    const suggestions: CharacterSkill[] = [];
+
+    for (const candidate of candidates) {
+      if (!candidate || typeof candidate !== 'object') continue;
+      const name = String(candidate.name || '').trim();
+      if (!name) continue;
+      const normalizedName = name.toLowerCase();
+      if (seenNames.has(normalizedName)) continue;
+
+      const governingAbility = legalAbilities.has(candidate.governingAbility)
+        ? candidate.governingAbility
+        : 'Intelligence';
+      const description = String(candidate.description || '').trim();
+      const mechanicalDescription = String(candidate.mechanicalDescription || '').trim();
+      if (!description || !mechanicalDescription) continue;
+
+      suggestions.push({
+        id: `skill_ai_discovery_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        name,
+        governingAbility,
+        proficiency: 'NONE',
+        isProficient: false,
+        isExpertise: false,
+        isCustom: true,
+        description,
+        mechanicalDescription,
+        checkFormula:
+          worldTemplate?.dndRulesMode === 'FULL_DND' || !worldTemplate?.dndRulesMode
+            ? '1d20'
+            : normalizeDiceFormula(candidate.checkFormula, '1d20'),
+        tags: Array.isArray(candidate.tags) ? candidate.tags.map(String).slice(0, 12) : ['AI_DISCOVERED'],
+        worldCompatibility: String(candidate.worldCompatibility || 'AI-inferred from the active world and character context.'),
+        provenance: 'AI_GENERATED',
+      });
+
+      seenNames.add(normalizedName);
+      if (suggestions.length >= desiredCount) break;
+    }
+
+    if (suggestions.length === 0) {
+      throw this.buildAiUnavailableError(
+        'AI did not return any distinct, usable additional skills for this character. No skill suggestions were added.',
+      );
+    }
+
+    return suggestions;
   }
 
   /**

@@ -1013,6 +1013,34 @@ export const StoryView: React.FC<StoryViewProps> = ({
                   </div>
                 )}
 
+                <button type="button" onClick={openNarrationModelPicker} className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-stone-200 hover:bg-violet-500/10">
+                  <Sparkles className="h-4 w-4 text-cyan-300" />
+                  <span className="flex-1">Narration AI Model</span>
+                  {narrationCategoryState?.activeModelKey && <span className="max-w-24 truncate text-[9px] text-cyan-200/50">{narrationCategoryState.activeModelKey.split('::').pop()}</span>}
+                </button>
+                {narrationPickerOpen && (
+                  <div className="mt-1 rounded-xl border border-cyan-200/10 bg-black/20 p-1">
+                    <button type="button" onClick={() => selectNarrationModel(null)} className="flex w-full items-center rounded-lg px-3 py-2.5 text-left text-xs text-stone-300 hover:bg-white/[0.04]">
+                      <span className="flex-1">Automatic routing</span>
+                      {!narrationCategoryState?.activeModelKey && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />}
+                    </button>
+                    {narrationModelLoading && <div className="px-3 py-2 text-[10px] text-cyan-100/60">Loading narration models…</div>}
+                    {narrationModelError && <div className="px-3 py-2 text-[10px] leading-4 text-red-200">{narrationModelError}</div>}
+                    {narrationModels.map((model: any) => {
+                      const key = model.providerId + '::' + model.modelId;
+                      const active = narrationCategoryState?.activeModelKey === key || narrationCategoryState?.activeModelKey === model.modelId;
+                      return <button key={key} type="button" onClick={() => selectNarrationModel(key)} className="w-full rounded-lg px-3 py-2.5 text-left transition hover:bg-white/[0.04]">
+                        <div className="flex items-center gap-2">
+                          <span className="flex-1 text-xs font-semibold text-stone-200">{model.displayName || model.modelId}</span>
+                          {active && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />}
+                        </div>
+                        <div className="mt-1 text-[9px] text-stone-600">{model.providerId} · {model.health || 'Unknown'} · {model.quota || 'Unknown'}</div>
+                      </button>;
+                    })}
+                    {!narrationModelLoading && narrationModels.length === 0 && !narrationModelError && <div className="px-3 py-3 text-[10px] text-stone-500">No eligible narration AI models are currently available.</div>}
+                  </div>
+                )}
+
                 <button
                   type="button"
                   onClick={() => {

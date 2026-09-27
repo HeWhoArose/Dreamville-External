@@ -5561,8 +5561,6 @@ export class MultiModelOrchestrator {
       validateResponse?: (text: string) => TaskResponseValidationResult;
     }
   ): Promise<{
-    const contract = getAiTaskContract(task);
-    const contractValidator = options?.validateResponse || ((text: string) => validateAiTaskResponse(task, text));
     text: string;
     source: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK';
     providerId: string;
@@ -5578,6 +5576,8 @@ export class MultiModelOrchestrator {
       error?: string;
     }>;
   }> {
+    const contract = getAiTaskContract(task);
+    const contractValidator = options?.validateResponse || ((text: string) => validateAiTaskResponse(task, text));
     this.refreshAllProviderModelStatuses();
     const timeoutMs = options?.timeoutMs || 35000;
     const contextTokens = options?.contextTokens ?? 0;

@@ -1,6 +1,6 @@
 {
   "pins": {
-    "narrative.generate": "openrouter::meta-llama/llama-3.2-1b-instruct",
+    "narrative.generate": "google_gemini::gemini-3.5-flash",
     "character.dialogue": "openrouter::meta-llama/llama-3.2-1b-instruct",
     "memory.extract": "openrouter::sao10k/l3-lunaris-8b",
     "summary.scene": "openrouter::sao10k/l3-lunaris-8b",
@@ -30,18 +30,9 @@
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "narrative.generate": [
-      "openrouter::meta-llama/llama-3.2-1b-instruct",
-      "openrouter::meta-llama/llama-3.2-3b-instruct",
-      "openrouter::google/gemma-3-12b-it",
-      "openrouter::rekaai/reka-edge",
-      "openrouter::openrouter/free",
-      "openrouter::nvidia/nemotron-3-super-120b-a12b:free",
-      "openrouter::nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-      "openrouter::nvidia/nemotron-3-ultra-550b-a55b:free",
       "google_gemini::gemini-3.5-flash",
       "google_gemini::gemini-3.8-flash",
       "google_gemini::gemini-3.5-flash-lite",
-      "google_gemini::gemini-2.5-flash",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "character.dialogue": [

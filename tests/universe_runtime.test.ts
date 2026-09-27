@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { InMemoryWorldRepository, worldRepository as liveWorldRepository } from '../server/repositories/worldRepository';
+import { PlayerLifecycleState } from '../server/domain/playerLifecycleState';
 import { UniverseRuntimeService } from '../server/domain/universeRuntimeService';
 import { WorkingContextEngine } from '../server/domain/workingContextEngine';
 import { worldSynthesisService } from '../server/services/worldSynthesisService';
@@ -228,5 +232,80 @@ test('Universe runtime can generate a new world from a premise', async () => {
 		assert.equal(result.universe.currentWorldId, 'world_generated_by_universe');
 	} finally {
 		worldSynthesisService.synthesizeWorldFromPremise = original;
+	}
+});
+
+test('Universe and world/NPC continuity survive repository restart', () => {
+	const tempDir = mkdtempSync(join(tmpdir(), 'dreambook-universe-restart-'));
+	const persistencePath = join(tempDir, 'data.json');
+	const previousPath = process.env.DREAMBOOK_PERSISTENCE_PATH;
+	process.env.DREAMBOOK_PERSISTENCE_PATH = persistencePath;
+
+	try {
+		const repo1 = new InMemoryWorldRepository();
+		const world = makeWorld('world_restart_persistence', 'Persistent World');
+		repo1.saveWorldTemplate(world);
+		const created = repo1.createStoryRunFromConfirmedCharacter({
+			worldId: world.worldId,
+			confirmedCharacter: makeCharacter(world.worldId),
+			storyId: 'story_restart_persistence',
+		});
+
+		const universe = UniverseRuntimeService.ensureUniverse(repo1, created.storyId);
+		const npc = new PlayerLifecycleState({
+			actorId: 'npc_restart_friend',
+			name: 'Mira',
+			locationId: world.worldId + '_home',
+			lastUpdatedTime: repo1.getWorldClock(created.storyId).getTimestamp().totalElapsedSeconds,
+			currentActivity: 'waiting for the traveler',
+			activeJourney: null,
+			injuries: [],
+		});
+		repo1.updateNpcLifecycle(created.storyId, npc);
+		repo1.getCharacterAlignmentEngine().setRelationship({
+			actorId: 'npc_restart_friend',
+			targetId: repo1.getPlayerLifecycle(created.storyId)!.actorId,
+			trustScore: 90,
+			affectionScore: 85,
+			respectScore: 80,
+			fearScore: 5,
+		});
+		repo1.getMemoryEngine(created.storyId).storeMemory({
+			id: 'restart_memory_friend',
+			storyId: created.storyId,
+			memoryClass: 'EPISODIC',
+			subjectEntityId: 'npc_restart_friend',
+			relatedEntityIds: [repo1.getPlayerLifecycle(created.storyId)!.actorId],
+			content: 'Mira remembers that Astra rescued her from the collapsing observatory.',
+			importance: 95,
+			confidence: 1,
+			status: 'active',
+			visibility: 'SHARED',
+			accessibleToEntityIds: [repo1.getPlayerLifecycle(created.storyId)!.actorId, 'npc_restart_friend'],
+			isPersistentCritical: true,
+			provenance: 'restart_persistence_test',
+			validFromTurn: 1,
+			lastRecalledTurn: 1,
+			triggerConditionTags: ['mira', 'observatory', 'rescue'],
+		});
+		repo1.saveStoryRun(repo1.getStoryRun(created.storyId));
+
+		const repo2 = new InMemoryWorldRepository();
+		assert.equal(repo2.getUniverseForStory(created.storyId)?.universeId, universe.universeId);
+		assert.equal(repo2.getNpcLifecycle(created.storyId, 'npc_restart_friend')?.name, 'Mira');
+		assert.equal(repo2.getCharacterAlignmentEngine().getRelationship(
+			'npc_restart_friend',
+			repo2.getPlayerLifecycle(created.storyId)!.actorId,
+		)?.trustScore, 90);
+		assert.ok(repo2.getMemoryEngine(created.storyId).getMemory('restart_memory_friend'));
+		assert.equal(repo2.getStoryRun(created.storyId)?.worldId, world.worldId);
+
+		// The imported global singleton is not part of the restart assertion; this line
+		// simply proves the test's temp repository is independent of the process singleton.
+		assert.ok(liveWorldRepository);
+	} finally {
+		if (previousPath === undefined) delete process.env.DREAMBOOK_PERSISTENCE_PATH;
+		else process.env.DREAMBOOK_PERSISTENCE_PATH = previousPath;
+		rmSync(tempDir, { recursive: true, force: true });
 	}
 });

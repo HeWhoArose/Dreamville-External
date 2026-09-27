@@ -1,5 +1,6 @@
 import { WorldTimestamp } from './types';
 import type { WorldRepository } from '../repositories/worldRepository';
+import { UniverseRuntimeService } from './universeRuntimeService';
 import type { DndRulesMode, NarrativeProfile } from '../../src/types';
 import { rulesProfileEngine } from './rulesProfileEngine';
 import { worldRepository } from '../repositories/worldRepository';
@@ -88,6 +89,11 @@ export interface AssembledOpeningContext {
  * Authority: Pure assembly & budgeting layer. Reads canonical models via WorldRepository.
  * Does NOT own canonical game state.
  */
+function universeViewerId(repo: WorldRepository, storyId: string, fallbackActorId: string): string {
+  const universe = repo.getUniverseForStory(storyId);
+  return universe?.playerIdentity?.universeActorId || fallbackActorId;
+}
+
 export class WorkingContextEngine {
   /**
    * Estimates token count (~4 chars per token for English text).
@@ -320,13 +326,24 @@ export class WorkingContextEngine {
     });
 
     // 8. Epistemic Projection: Memories (Anti-Recency & Epistemic Visibility Filtering)
+    const memoryKeywords = [locId, params.playerAction || ''].filter(Boolean);
     const retrievedMemories = memoryEngine.retrieveMemories({
       storyId,
       viewerActorId: viewerId, // Excludes PRIVATE memories of other entities
-      queryKeywords: [locId, params.playerAction || ''].filter(Boolean),
+      queryKeywords: memoryKeywords,
       maxResults: 4,
     });
-    const relevantMemories = retrievedMemories.map((m) => `[${m.memoryClass}] ${m.content}`);
+    const universeMemories = UniverseRuntimeService.getRelevantUniverseMemories(
+      repo,
+      storyId,
+      universeViewerId(repo, storyId, viewerId),
+      memoryKeywords.flatMap((value) => String(value).toLowerCase().split(/\W+/).filter((token) => token.length >= 3)).slice(0, 12),
+      6,
+    );
+    const relevantMemories = [
+      ...retrievedMemories.map((m) => `[WORLD ${m.memoryClass}] ${m.content}`),
+      ...universeMemories.map((m) => `[UNIVERSE ${m.memoryClass} from ${m.sourceWorldId}] ${m.content}`),
+    ].slice(0, 10);
 
     // 9. Latent Opportunities (CH9 Poison-Teeth Exemplar)
     const actionText = params.playerAction || 'Observe surroundings';

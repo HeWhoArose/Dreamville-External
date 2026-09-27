@@ -423,23 +423,38 @@ export const StoryView: React.FC<StoryViewProps> = ({
     setNarrationModelLoading(true);
     setNarrationModelError(null);
     try {
-      const [modelResponse, categories] = await Promise.all([apiClient.getOrchestratorModels(), apiClient.getOrchestratorCategoryStates()]);
+      const [modelResponse, categories] = await Promise.all([
+        apiClient.getOrchestratorModels(),
+        apiClient.getOrchestratorCategoryStates(),
+      ]);
       const category = categories.find((entry: any) => entry.category === 'narration');
-      const eligible = (modelResponse.models || [])
-        .filter((model: any) => Array.isArray(model.roleEligibility) && model.roleEligibility.includes('narrative.generate'))
-        .filter((model: any) => !model.isEmergencyFloor)
-        .sort((a: any, b: any) => {
-          const usable = (model: any) => (
-            model.health !== 'Unavailable' &&
-            model.health !== 'DisabledByUser' &&
-            model.health !== 'InvalidAuth' &&
-            model.quota !== 'Exhausted' &&
-            model.accessStatus !== 'quota_limited' &&
-            model.accessStatus !== 'rate_limited'
+      const registeredModels = Array.isArray(modelResponse.models) ? modelResponse.models : [];
+      const fallbackChain = Array.isArray(category?.fallbackChain) ? category.fallbackChain : [];
+      const modelsByKey = new Map(
+        registeredModels.map((model: any) => [
+          `${model.providerId}::${model.modelId}`,
+          model,
+        ]),
+      );
+
+      // The Story picker is category-scoped: show the models that actually belong
+      // to the narration task's configured route, in the exact configured order.
+      // Do not expand this list to every model that merely declares
+      // narrative.generate eligibility.
+      const routeModels = fallbackChain
+        .filter((key: string) => !key.includes('emergency-fallback-local'))
+        .map((key: string) => {
+          const direct = modelsByKey.get(key);
+          if (direct) return direct;
+          return registeredModels.find(
+            (model: any) =>
+              model.modelId === key ||
+              `${model.providerId}::${model.modelId}` === key,
           );
-          return Number(usable(b)) - Number(usable(a));
-        });
-      setNarrationModels(eligible);
+        })
+        .filter(Boolean);
+
+      setNarrationModels(routeModels);
       setNarrationCategoryState(category || null);
     } catch (error: any) {
       setNarrationModelError(error?.message || 'Failed to load narration models.');
@@ -476,7 +491,12 @@ export const StoryView: React.FC<StoryViewProps> = ({
       const result = await apiClient.regenerateNarration({
         storyId,
         actionId: entry.id,
-        forceModelId: narrationCategoryState?.activeModelKey || undefined,
+        // AUTO must remain on the orchestrator's configured narration route.
+        // Only a MANUAL category override should force a specific model.
+        forceModelId:
+          narrationCategoryState?.mode === 'MANUAL'
+            ? narrationCategoryState.activeModelKey || undefined
+            : undefined,
         editInstruction: editInstruction.trim() || undefined,
       });
       onNarrationUpdated?.(result.viewState);
@@ -1049,7 +1069,11 @@ export const StoryView: React.FC<StoryViewProps> = ({
                 <button type="button" onClick={openNarrationModelPicker} className="mt-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-stone-200 hover:bg-violet-500/10">
                   <Sparkles className="h-4 w-4 text-cyan-300" />
                   <span className="flex-1">Narration AI Model</span>
-                  {narrationCategoryState?.activeModelKey && <span className="max-w-24 truncate text-[9px] text-cyan-200/50">{narrationCategoryState.activeModelKey.split('::').pop()}</span>}
+                  {narrationCategoryState?.activeModelKey && (
+                    <span className="max-w-24 truncate text-[9px] text-cyan-200/50">
+                      {narrationCategoryState.mode === 'MANUAL' ? narrationCategoryState.activeModelKey.split('::').pop() : 'Automatic'}
+                    </span>
+                  )}
                 </button>
                 {narrationPickerOpen && (
                   <div className="mt-1 rounded-xl border border-cyan-200/10 bg-black/20 p-1">
@@ -1057,11 +1081,17 @@ export const StoryView: React.FC<StoryViewProps> = ({
                       <div className="px-3 py-2 border-b border-white/[0.05]">
                         <div className="text-[9px] font-black uppercase tracking-[0.16em] text-cyan-100/55">Narration fallback route</div>
                         <div className="mt-1 flex flex-wrap gap-1.5">
-                          {narrationCategoryState.fallbackChain.slice(0, 5).map((key: string, index: number) => {
-                            const model = narrationModels.find((candidate: any) => `${candidate.providerId}::${candidate.modelId}` === key || candidate.modelId === key);
+                          {narrationCategoryState.fallbackChain.map((key: string, index: number) => {
+                            const model = narrationModels.find(
+                              (candidate: any) =>
+                                `${candidate.providerId}::${candidate.modelId}` === key || candidate.modelId === key
+                            );
+                            const label = key.includes('emergency-fallback-local')
+                              ? 'Deterministic emergency'
+                              : model?.displayName || key.split('::').pop();
                             return (
                               <span key={key} className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-1 text-[9px] text-stone-400">
-                                {index === 0 ? 'Primary' : `Fallback ${index}`} · {model?.displayName || key.split('::').pop()}
+                                {index === 0 ? 'Primary' : key.includes('emergency-fallback-local') ? 'Final' : `Fallback ${index}`} · {label}
                               </span>
                             );
                           })}
@@ -1071,22 +1101,29 @@ export const StoryView: React.FC<StoryViewProps> = ({
 
                     <button type="button" onClick={() => selectNarrationModel(null)} className="flex w-full items-center rounded-lg px-3 py-2.5 text-left text-xs text-stone-300 hover:bg-white/[0.04]">
                       <span className="flex-1">Automatic routing</span>
-                      {!narrationCategoryState?.activeModelKey && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />}
+                      {narrationCategoryState?.mode !== 'MANUAL' && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />}
                     </button>
                     {narrationModelLoading && <div className="px-3 py-2 text-[10px] text-cyan-100/60">Loading narration models…</div>}
                     {narrationModelError && <div className="px-3 py-2 text-[10px] leading-4 text-red-200">{narrationModelError}</div>}
-                    {narrationModels.map((model: any) => {
+                    {narrationModels.map((model: any, index: number) => {
                       const key = model.providerId + '::' + model.modelId;
-                      const active = narrationCategoryState?.activeModelKey === key || narrationCategoryState?.activeModelKey === model.modelId;
-                      return <button key={key} type="button" onClick={() => selectNarrationModel(key)} className="w-full rounded-lg px-3 py-2.5 text-left transition hover:bg-white/[0.04]">
-                        <div className="flex items-center gap-2">
-                          <span className="flex-1 text-xs font-semibold text-stone-200">{model.displayName || model.modelId}</span>
-                          {active && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />}
-                        </div>
-                        <div className={`mt-1 text-[9px] ${model.health === 'Unavailable' || model.health === 'InvalidAuth' || model.quota === 'Exhausted' ? 'text-red-300/70' : 'text-stone-600'}`}>{model.providerId} · {model.health || 'Unknown'} · {model.quota || 'Unknown'}</div>
-                      </button>;
+                      const active =
+                        narrationCategoryState?.mode === 'MANUAL' &&
+                        (narrationCategoryState?.activeModelKey === key || narrationCategoryState?.activeModelKey === model.modelId);
+                      return (
+                        <button key={key} type="button" onClick={() => selectNarrationModel(key)} className="w-full rounded-lg px-3 py-2.5 text-left transition hover:bg-white/[0.04]">
+                          <div className="flex items-center gap-2">
+                            <span className="mr-1 text-[9px] font-mono text-stone-600">{index + 1}</span>
+                            <span className="flex-1 text-xs font-semibold text-stone-200">{model.displayName || model.modelId}</span>
+                            {active && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />}
+                          </div>
+                          <div className={`mt-1 text-[9px] ${model.health === 'Unavailable' || model.health === 'InvalidAuth' || model.quota === 'Exhausted' ? 'text-red-300/70' : 'text-stone-600'}`}>{model.providerId} · {model.health || 'Unknown'} · {model.quota || 'Unknown'}</div>
+                        </button>
+                      );
                     })}
-                    {!narrationModelLoading && narrationModels.length === 0 && !narrationModelError && <div className="px-3 py-3 text-[10px] text-stone-500">No eligible narration AI models are currently available.</div>}
+                    {!narrationModelLoading && narrationModels.length === 0 && !narrationModelError && (
+                      <div className="px-3 py-3 text-[10px] text-stone-500">No configured AI models are currently assigned to the narration route.</div>
+                    )}
                   </div>
                 )}
 

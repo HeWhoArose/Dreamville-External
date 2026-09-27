@@ -304,3 +304,27 @@ test('Universe and world/NPC continuity survive repository restart', () => {
 		rmSync(tempDir, { recursive: true, force: true });
 	}
 });
+
+test('Universe travel intent only activates for explicit cross-world language', () => {
+	const repo = new InMemoryWorldRepository({ disablePersistence: true });
+	const world = makeWorld('world_intent_known', 'Aether Prime');
+	repo.saveWorldTemplate(world);
+
+	assert.deepEqual(
+		UniverseRuntimeService.inferCrossWorldTravelIntent(repo, 'story_intent', 'I walk to the old market.'),
+		null,
+	);
+
+	assert.deepEqual(
+		UniverseRuntimeService.inferCrossWorldTravelIntent(repo, 'story_intent', 'I fly to Aether Prime.'),
+		{ worldId: world.worldId, worldTitle: world.title },
+	);
+
+	const generated = UniverseRuntimeService.inferCrossWorldTravelIntent(
+		repo,
+		'story_intent',
+		'I fly to a planet called Nyxara.',
+	);
+	assert.equal(generated?.worldTitle, 'Nyxara');
+	assert.match(generated?.worldPremise || '', /Nyxara/);
+});

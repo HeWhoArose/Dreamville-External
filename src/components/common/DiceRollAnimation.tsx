@@ -1,13 +1,20 @@
-import React, { useEffect, useRef, useState } from 'react';
-import DiceBox from '@3d-dice/dice-box-threejs';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { RollRecord } from '../../types';
-import { Dices, RotateCw } from 'lucide-react';
+import { Dices, Loader2, RotateCw } from 'lucide-react';
 import { useAudioHaptic } from '../AudioHapticManager';
 
 interface DiceRollAnimationProps {
 	roll: RollRecord;
 	onComplete?: () => void;
 	className?: string;
+	title?: string;
+	subtitle?: string;
+	defenseLabel?: string;
+	defenseValue?: number | string;
+	outcome?: string;
+	resultSuffix?: string;
+	showRollButton?: boolean;
+	autoReveal?: boolean;
 }
 
 export type DieVisualType = 'D4' | 'D6' | 'D8' | 'D10' | 'D12' | 'D20' | 'D100' | 'GENERIC';
@@ -23,109 +30,151 @@ export function getDieVisualType(sides: number): DieVisualType {
 	return 'GENERIC';
 }
 
-// The existing deterministic audit checks these symbols as part of the dice
-// visual contract. The actual renderer below is the Frank Ali ThreeJS/Cannon
-// dice-box used by Friends & Fables.
-// HTMLCanvasElement
-// requestAnimationFrame
-// ICOSAHEDRON_FACES
-export const ICOSAHEDRON_FACES = [
-	[0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11],
-	[1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8],
-	[3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9],
-	[4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1],
-] as const;
+function expandDiceTerms(roll: RollRecord): number[] {
+	if (roll.diceTerms?.length) {
+		return roll.diceTerms.flatMap((term) =>
+			Array.from({ length: term.count }, () => Math.max(2, term.sides))
+		);
+	}
 
-function describeFormula(roll: RollRecord): string {
-	return roll.modifier > 0
-		? `${roll.formula.replace(/([+-]d+)$/, '')} + ${roll.modifier}`
-		: roll.formula;
+	const dice = roll.formula.match(/(\d*)d(\d+)/gi);
+	if (!dice?.length) return [20];
+
+	return dice.flatMap((term) => {
+		const match = term.match(/(\d*)d(\d+)/i);
+		const count = Math.max(1, Number(match?.[1] || 1));
+		const sides = Math.max(2, Number(match?.[2] || 20));
+		return Array.from({ length: count }, () => sides);
+	});
+}
+
+function expandDiceGroups(roll: RollRecord): Array<{ count: number; sides: number; values: number[] }> {
+	if (roll.diceTerms?.length) {
+		let offset = 0;
+		return roll.diceTerms.map((term) => {
+			const values = roll.individualDice.slice(offset, offset + term.count);
+			offset += term.count;
+			return {
+				count: term.count,
+				sides: Math.max(2, term.sides),
+				values,
+			};
+		});
+	}
+
+	return [{
+		count: 1,
+		sides: 20,
+		values: [roll.individualDice[0] || 1],
+	}];
+}
+
+function resultTone(roll: RollRecord): string {
+	if (roll.isCriticalSuccess) {
+		return 'border-emerald-300/40 bg-emerald-400/10 text-emerald-100 shadow-[0_0_45px_rgba(16,185,129,0.22)]';
+	}
+	if (roll.isCriticalFailure) {
+		return 'border-rose-300/40 bg-rose-400/10 text-rose-100 shadow-[0_0_45px_rgba(244,63,94,0.22)]';
+	}
+	return 'border-violet-300/25 bg-gradient-to-br from-violet-500/15 via-fuchsia-500/10 to-sky-500/10 text-white shadow-[0_0_45px_rgba(139,92,246,0.16)]';
 }
 
 export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 	roll,
 	onComplete,
 	className = '',
+	title,
+	subtitle,
+	defenseLabel,
+	defenseValue,
+	outcome,
+	resultSuffix,
+	showRollButton = true,
+	autoReveal = false,
 }) => {
 	const { playSfx, triggerHaptic } = useAudioHaptic();
-	const sceneRef = useRef<HTMLDivElement | null>(null);
-	const diceBoxRef = useRef<InstanceType<typeof DiceBox> | null>(null);
+	const containerId = useId().replace(/:/g, '');
+	const diceBoxRef = useRef<any>(null);
+	const initializationRef = useRef<Promise<any> | null>(null);
+	const [isInitializing, setIsInitializing] = useState(true);
 	const [isRolling, setIsRolling] = useState(false);
 	const [revealed, setRevealed] = useState(false);
-	const [initializing, setInitializing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const autoRollStartedRef = useRef(false);
 
-	const cleanupDiceBox = () => {
-		if (sceneRef.current) {
-			sceneRef.current.innerHTML = '';
-		}
-		diceBoxRef.current = null;
+	const diceSides = useMemo(() => expandDiceTerms(roll), [roll]);
+	const diceGroups = useMemo(() => expandDiceGroups(roll), [roll]);
+
+	const formulaWithoutModifier = useMemo(() => {
+		const formula = roll.formula.replace(/[+-]\d+$/, '');
+		return formula || '1d20';
+	}, [roll.formula]);
+
+	const initializeDiceBox = async () => {
+		if (diceBoxRef.current) return diceBoxRef.current;
+		if (initializationRef.current) return initializationRef.current;
+
+		initializationRef.current = (async () => {
+			const module = await import('@3d-dice/dice-box-threejs');
+			const DiceBox = module.default;
+			const box = new DiceBox(`#${containerId}`, {
+				framerate: 1 / 60,
+				sounds: true,
+				volume: 75,
+				shadows: true,
+				theme_surface: 'green-felt',
+				theme_colorset: 'diceOfRolling',
+				theme_material: 'plastic',
+				gravity_multiplier: 400,
+				light_intensity: 0.78,
+				baseScale: 80,
+				strength: 1.2,
+			});
+			await box.init();
+			diceBoxRef.current = box;
+			setIsInitializing(false);
+			return box;
+		})().catch((err) => {
+			initializationRef.current = null;
+			setIsInitializing(false);
+			throw err;
+		});
+
+		return initializationRef.current;
 	};
 
 	useEffect(() => {
-		let cancelled = false;
-
-		const initialize = async () => {
-			if (!sceneRef.current) return;
-			setInitializing(true);
-			setError(null);
-
-			try {
-				cleanupDiceBox();
-
-				const DiceBoxConstructor = DiceBox as unknown as new (
-					selector: string,
-					config: Record<string, unknown>
-				) => {
-					init: () => Promise<void>;
-					roll: (notation: string) => Promise<unknown>;
-				};
-
-				const box = new DiceBoxConstructor('#dreambook-dice-box', {
-					assetPath: '/assets/dice-box/',
-					sounds: false,
-					theme_surface: 'black',
-					theme_colorset: 'diceOfRolling',
-					theme_material: 'plastic',
-					shadows: true,
-					baseScale: 110,
-					strength: 1.2,
-					gravity_multiplier: 450,
-				});
-
-				diceBoxRef.current = box as InstanceType<typeof DiceBox>;
-				await box.init();
-
-				if (cancelled) {
-					cleanupDiceBox();
-					return;
-				}
-			} catch (initializationError: any) {
-				console.error('[DiceRollAnimation] 3D dice initialization failed:', initializationError);
-				setError('3D dice could not be initialized. The canonical result remains available below.');
-			} finally {
-				if (!cancelled) setInitializing(false);
+		let disposed = false;
+		initializeDiceBox().catch((err) => {
+			if (!disposed) {
+				setError(err?.message || 'The 3D dice engine failed to initialize.');
 			}
-		};
-
-		void initialize();
+		});
 
 		return () => {
-			cancelled = true;
-			cleanupDiceBox();
+			disposed = true;
+			try {
+				diceBoxRef.current?.clear?.();
+			} catch {
+				// The upstream package does not expose a formal dispose API.
+			}
+			diceBoxRef.current = null;
 		};
+	}, []);
+
+	useEffect(() => {
+		setRevealed(false);
+		setError(null);
+		setIsRolling(false);
+		try {
+			diceBoxRef.current?.clear?.();
+		} catch {
+			// Best-effort visual reset.
+		}
 	}, [roll.rollId]);
 
 	const startRoll = async () => {
-		if (isRolling || revealed || initializing || error) {
-			return;
-		}
-
-		const box = diceBoxRef.current;
-		if (!box) {
-			setError('3D dice are not ready yet. Please try again.');
-			return;
-		}
+		if (isRolling || revealed || isInitializing) return;
 
 		setIsRolling(true);
 		setError(null);
@@ -133,91 +182,140 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 		playSfx('dice.roll', 'HIGH', 0.82);
 
 		try {
-			const forcedNotation = roll.individualDice.length > 0
-				? `${roll.formula}@${roll.individualDice.join(',')}`
-				: roll.formula;
+			const box = await initializeDiceBox();
+			const predeterminedValues = [...roll.individualDice];
+			const groups = [...diceGroups];
 
-			await box.roll(forcedNotation);
+			// The upstream engine is physically simulated, but it also supports
+			// deterministic landed faces through the @value,value notation.
+			// That lets the visual throw remain physical while the authoritative
+			// server result is preserved exactly.
+			for (let index = 0; index < groups.length; index += 1) {
+				const group = groups[index];
+				const values = predeterminedValues.splice(0, group.count);
+				const notation = `${group.count}d${group.sides}@${values.join(',')}`;
+
+				if (index === 0) {
+					await box.roll(notation);
+				} else if (typeof box.add === 'function') {
+					await box.add(notation);
+				} else {
+					await box.roll(notation);
+				}
+			}
+
+			if (!roll.individualDice.length) {
+				await box.roll(formulaWithoutModifier);
+			}
 
 			setRevealed(true);
 			setIsRolling(false);
-
-			window.requestAnimationFrame(() => {
-				playSfx(
-					roll.isCriticalSuccess
-						? 'dice.critical'
-						: roll.isCriticalFailure
-							? 'dice.failure'
-							: 'dice.result',
-					roll.isCriticalSuccess || roll.isCriticalFailure ? 'HIGH' : 'NORMAL',
-					0.82,
-				);
-				triggerHaptic(
-					roll.isCriticalSuccess
-						? 'heavy'
-						: roll.isCriticalFailure
-							? 'medium'
-							: 'light',
-				);
-				onComplete?.();
-			});
-		} catch (rollError: any) {
-			console.error('[DiceRollAnimation] 3D dice roll failed:', rollError);
+			playSfx(
+				roll.isCriticalSuccess
+					? 'dice.critical'
+					: roll.isCriticalFailure
+						? 'dice.failure'
+						: 'dice.result',
+				roll.isCriticalSuccess || roll.isCriticalFailure ? 'HIGH' : 'NORMAL',
+				0.82,
+			);
+			triggerHaptic(
+				roll.isCriticalSuccess
+					? 'heavy'
+					: roll.isCriticalFailure
+						? 'medium'
+						: 'light',
+			);
+			onComplete?.();
+		} catch (err: any) {
 			setIsRolling(false);
-			setError('The 3D roll failed, so the canonical engine result is shown instead.');
+			setError(err?.message || 'The 3D dice roll could not be completed.');
 		}
 	};
 
+	useEffect(() => {
+		if (autoReveal && !isInitializing && !autoRollStartedRef.current && !isRolling && !revealed) {
+			autoRollStartedRef.current = true;
+			void startRoll();
+		}
+	}, [autoReveal, isInitializing, isRolling, revealed]);
+
+	const modifier = roll.modifier || 0;
+	const modifierLabel = modifier > 0 ? `+${modifier}` : String(modifier);
+	const diceTotal = roll.individualDice.reduce((sum, value) => sum + value, 0);
 	const total = roll.total;
-	const modifierLabel = roll.modifier > 0 ? `+${roll.modifier}` : String(roll.modifier);
-	const tone = roll.isCriticalSuccess
-		? 'border-emerald-300/40 bg-emerald-400/10 text-emerald-100'
-		: roll.isCriticalFailure
-			? 'border-rose-300/40 bg-rose-400/10 text-rose-100'
-			: 'border-violet-300/25 bg-violet-400/10 text-white';
+	const tone = resultTone(roll);
+	const headerTitle = title || 'Physical Dice';
+	const headerSubtitle = subtitle || roll.formula;
+	const buttonVisible = showRollButton !== false;
 
 	return (
-		<div className={`overflow-hidden rounded-3xl border border-white/10 bg-[#0b0712]/95 ${className}`}>
-			<div className="flex items-center justify-between gap-3 border-b border-white/6 px-4 py-3">
-				<div className="flex items-center gap-2">
-					<div className="rounded-xl bg-violet-400/10 p-2 text-violet-200">
+		<div className={`overflow-hidden rounded-3xl border border-white/10 bg-[#090616]/95 ${className}`}>
+			<div className="flex items-center justify-between gap-3 border-b border-white/8 bg-gradient-to-r from-violet-500/10 via-fuchsia-500/8 to-sky-500/8 px-4 py-3">
+				<div className="flex min-w-0 items-center gap-2.5">
+					<div className="rounded-xl border border-violet-300/15 bg-violet-400/10 p-2 text-violet-100">
 						<Dices className="h-4 w-4" />
 					</div>
-					<div>
-						<p className="text-[10px] font-bold uppercase tracking-[0.18em] text-stone-500">Dice Roll</p>
-						<p className="mt-0.5 text-xs font-semibold text-stone-200">{describeFormula(roll)}</p>
+					<div className="min-w-0">
+						<p className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-violet-200/60">{headerTitle}</p>
+						<p className="mt-0.5 truncate text-xs font-semibold text-white">{headerSubtitle}</p>
 					</div>
 				</div>
 
-				{!revealed && (
+				{buttonVisible && (
 					<button
 						type="button"
-						onClick={() => void startRoll()}
-						disabled={isRolling || initializing || Boolean(error)}
-						className="inline-flex items-center gap-1.5 rounded-xl border border-violet-300/20 bg-gradient-to-r from-violet-300/15 via-fuchsia-300/15 to-sky-300/15 px-3 py-1.5 text-xs font-semibold text-violet-100 transition hover:border-violet-200/35 hover:bg-violet-300/20 disabled:cursor-wait disabled:opacity-45"
+						onClick={startRoll}
+						disabled={isInitializing || isRolling || revealed}
+						className="inline-flex items-center gap-1.5 rounded-xl border border-fuchsia-300/20 bg-gradient-to-r from-violet-400/15 to-fuchsia-400/15 px-3 py-1.5 text-xs font-semibold text-violet-50 transition hover:from-violet-400/25 hover:to-fuchsia-400/25 disabled:cursor-wait disabled:opacity-45"
 					>
-						<RotateCw className={`h-3.5 w-3.5 ${isRolling ? 'animate-spin' : ''}`} />
-						{initializing ? 'Preparing…' : isRolling ? 'Rolling…' : 'Roll'}
+						{isInitializing || isRolling ? (
+							<Loader2 className="h-3.5 w-3.5 animate-spin" />
+						) : (
+							<RotateCw className="h-3.5 w-3.5" />
+						)}
+						{isInitializing ? 'Loading…' : isRolling ? 'Rolling…' : revealed ? 'Rolled' : 'Roll'}
 					</button>
 				)}
 			</div>
 
-			<div className="relative min-h-[220px] px-2 py-2">
-				<div
-					id="dreambook-dice-box"
-					ref={sceneRef}
-					className="h-[220px] w-full overflow-hidden rounded-2xl bg-[radial-gradient(circle_at_center,_rgba(124,58,237,0.24),_rgba(8,6,18,0.98)_68%)]"
-				/>
-				{!revealed && !isRolling && !initializing && !error && (
-					<div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-						<span className="rounded-full border border-white/10 bg-black/35 px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-stone-500 backdrop-blur">
-							Click Roll
-						</span>
+			<div
+				id={containerId}
+				className="relative h-56 overflow-hidden bg-[radial-gradient(circle_at_50%_35%,rgba(167,139,250,0.16),transparent_45%),linear-gradient(135deg,#120d24,#07131a)]"
+				aria-label={`3D physical dice table for ${roll.formula}`}
+			/>
+
+			<div className="grid grid-cols-2 gap-2 border-t border-white/8 bg-black/20 px-4 py-3 sm:grid-cols-4">
+				{diceSides.slice(0, 8).map((sides, index) => (
+					<div key={`${roll.rollId}-${index}`} className="rounded-xl border border-white/8 bg-white/[0.03] px-2.5 py-2 text-center">
+						<p className="text-[9px] font-bold uppercase tracking-[0.18em] text-stone-500">D{sides}</p>
+						<p className={`mt-0.5 text-lg font-black ${revealed ? 'text-white' : 'text-stone-600'}`}>
+							{revealed ? roll.individualDice[index] ?? '—' : '•'}
+						</p>
 					</div>
-				)}
+				))}
 			</div>
 
-			<div className={`mx-4 mb-4 rounded-2xl border px-4 py-3 text-center ${tone}`}>
+			{(defenseLabel || defenseValue !== undefined || outcome) && (
+				<div className="grid grid-cols-3 gap-2 border-t border-white/8 bg-black/15 px-4 py-3 text-center">
+					{defenseLabel && (
+						<div>
+							<p className="text-[9px] font-bold uppercase tracking-[0.18em] text-stone-500">{defenseLabel}</p>
+							<p className="mt-0.5 text-sm font-black text-white">{defenseValue ?? '—'}</p>
+						</div>
+					)}
+					<div>
+						<p className="text-[9px] font-bold uppercase tracking-[0.18em] text-stone-500">Outcome</p>
+						<p className="mt-0.5 text-sm font-black text-white">{outcome || (revealed ? 'RESULT' : 'READY')}</p>
+					</div>
+					<div>
+						<p className="text-[9px] font-bold uppercase tracking-[0.18em] text-stone-500">Formula</p>
+						<p className="mt-0.5 text-sm font-black text-white">{roll.formula}</p>
+					</div>
+				</div>
+			)}
+
+			<div className={`mx-auto max-w-sm border-t border-white/8 px-4 py-4 text-center ${tone}`}>
 				<p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-70">
 					{roll.isCriticalSuccess
 						? 'Critical Success'
@@ -225,17 +323,28 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 							? 'Critical Failure'
 							: revealed
 								? 'Result'
-								: 'Canonical Result'}
+								: 'Awaiting Roll'}
 				</p>
-				<p className="mt-1 text-4xl font-black tracking-tight">{total}</p>
-				<p className="mt-1 text-[11px] font-medium opacity-75">
-					{roll.individualDice.join(' + ')}
-					{roll.modifier !== 0 ? ` ${modifierLabel}` : ''}
-				</p>
-				{error && (
-					<p className="mt-2 text-[10px] leading-4 text-rose-300">{error}</p>
+				{revealed ? (
+					<>
+						<p className="mt-1 text-4xl font-black tracking-tight">{total}</p>
+						<p className="mt-1 text-[11px] font-medium opacity-75">
+							{diceTotal}
+							{modifier !== 0 ? ` ${modifierLabel}` : ''}
+							{modifier !== 0 ? ` = ${total}` : ''}
+							{resultSuffix ? ` ${resultSuffix}` : ''}
+						</p>
+					</>
+				) : (
+					<p className="mt-1 text-sm font-semibold opacity-70">The physical result will be revealed when the dice settle.</p>
 				)}
 			</div>
+
+			{error && (
+				<div className="border-t border-rose-400/10 bg-rose-400/5 px-4 py-3 text-xs text-rose-200">
+					{error}
+				</div>
+			)}
 		</div>
 	);
 };

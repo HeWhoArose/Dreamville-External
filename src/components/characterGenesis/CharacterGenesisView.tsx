@@ -2524,7 +2524,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                     id="btn-add-more-skills"
                     type="button"
                     onClick={handleSuggestAdditionalSkills}
-                    disabled={isSuggestingMoreSkills}
+                    disabled={isSuggestingMoreSkills || additionalSkillSuggestions.length > 0}
                     className="w-full sm:w-auto justify-center shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-indigo-700/80 disabled:opacity-50 text-xs text-indigo-200 font-semibold transition-colors"
                   >
                     {isSuggestingMoreSkills ? (
@@ -2532,7 +2532,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                     ) : (
                       <Sparkles className="w-3.5 h-3.5" />
                     )}
-                    <span>{isSuggestingMoreSkills ? 'Discovering Skills...' : 'Add More Skills'}</span>
+                    <span>{isSuggestingMoreSkills ? 'Discovering Skills...' : additionalSkillSuggestions.length > 0 ? 'Review Suggestions Below' : 'Add More Skills'}</span>
                   </button>
                 </div>
               </div>

@@ -136,6 +136,7 @@ export const App: React.FC = () => {
         runId: run.runId || run.storyId,
         title: run.title || run.storyTitle || 'Untitled Story',
         worldName: run.worldName || run.worldTitle || 'Unknown World',
+        worldId: run.worldId,
         genre: run.genre || run.genreTags?.[0] || 'Dynamic Adventure',
         imageUrl: run.imageAsset,
         imageMetadata: run.imageMetadata,

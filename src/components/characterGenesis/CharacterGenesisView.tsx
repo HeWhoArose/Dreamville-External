@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Sparkles,
   User,
@@ -177,7 +177,6 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
   const [additionalSkillSuggestions, setAdditionalSkillSuggestions] = useState<CharacterSkill[]>([]);
   const [isSuggestingMoreSkills, setIsSuggestingMoreSkills] = useState<boolean>(false);
   const [additionalSkillsError, setAdditionalSkillsError] = useState<string | null>(null);
-  const additionalSkillsReviewRef = useRef<HTMLDivElement | null>(null);
 
   // Custom attribute proposal state
   const [customAttributeConcept, setCustomAttributeConcept] = useState<string>('');
@@ -1002,17 +1001,6 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
       setIsSuggestingMoreSkills(false);
     }
   };
-
-  useEffect(() => {
-    if (additionalSkillSuggestions.length > 0) {
-      window.requestAnimationFrame(() => {
-        additionalSkillsReviewRef.current?.scrollIntoView({
-          behavior: 'smooth',
-          block: 'center',
-        });
-      });
-    }
-  }, [additionalSkillSuggestions.length]);
 
   const handleAcceptAdditionalSkill = (skill: CharacterSkill) => {
     if (!draft) return;
@@ -2535,16 +2523,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                   <button
                     id="btn-add-more-skills"
                     type="button"
-                    onClick={() => {
-                      if (additionalSkillSuggestions.length > 0) {
-                        additionalSkillsReviewRef.current?.scrollIntoView({
-                          behavior: 'smooth',
-                          block: 'center',
-                        });
-                        return;
-                      }
-                      void handleSuggestAdditionalSkills();
-                    }}
+                    onClick={handleSuggestAdditionalSkills}
                     disabled={isSuggestingMoreSkills}
                     className="w-full sm:w-auto justify-center shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-indigo-700/80 disabled:opacity-50 text-xs text-indigo-200 font-semibold transition-colors"
                   >
@@ -2553,13 +2532,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                     ) : (
                       <Sparkles className="w-3.5 h-3.5" />
                     )}
-                    <span>
-                      {isSuggestingMoreSkills
-                        ? 'Discovering Skills...'
-                        : additionalSkillSuggestions.length > 0
-                        ? 'View Suggestions (' + additionalSkillSuggestions.length + ')'
-                        : 'Add More Skills'}
-                    </span>
+                    <span>{isSuggestingMoreSkills ? 'Discovering Skills...' : 'Add More Skills'}</span>
                   </button>
                 </div>
               </div>
@@ -2619,137 +2592,545 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                     </button>
                   </div>
                 </div>
-
-
               )}
 
-                        {/* AI Additional Skill Discovery Review */}
-            <div
-              ref={additionalSkillsReviewRef}
-              className="p-4 rounded-xl bg-indigo-950/40 border border-indigo-800/60 space-y-3 scroll-mt-24"
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-xs font-semibold text-indigo-200 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>Additional Skill Suggestions</span>
-                  </div>
-                  <p className="text-[11px] text-neutral-400 mt-1 leading-relaxed">
-                    Review the skills the AI discovered from the full character concept and current capabilities. Nothing is added until you accept it.
-                  </p>
-                </div>
-                <span className="text-[10px] px-2 py-1 rounded bg-neutral-950/70 border border-indigo-800 text-indigo-300 font-mono shrink-0">
-                  AI REVIEW
-                </span>
-              </div>
-
-              {additionalSkillsError && (
-                <div className="p-3 rounded-lg bg-red-950/40 border border-red-800/60 text-xs text-red-300">
-                  {additionalSkillsError}
-                </div>
-              )}
-
-              {isSuggestingMoreSkills && (
-                <div className="p-4 rounded-lg bg-neutral-950/70 border border-indigo-900/70 flex items-center gap-3 text-xs text-indigo-200">
-                  <RefreshCw className="w-4 h-4 animate-spin text-indigo-400 shrink-0" />
-                  <div>
-                    <div className="font-semibold">Generating additional skill proposals…</div>
-                    <div className="text-[10px] text-neutral-500 mt-0.5">
-                      The AI is reviewing your full character concept, capabilities, background, and existing skills.
+              {/* AI Additional Skill Discovery Review Gate */}
+              <div className="p-4 rounded-xl bg-indigo-950/40 border border-indigo-800/70 space-y-3 mt-3 shadow-inner">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-indigo-200 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Additional Skill Discovery</span>
                     </div>
+                    <p className="text-[11px] text-neutral-400 mt-1 leading-relaxed">
+                      The AI reviews the full character concept, background, capabilities, motivations, and current skills, then proposes additional distinct skills. Nothing is added until you accept it.
+                    </p>
                   </div>
+                  <span className="text-[10px] px-2 py-1 rounded bg-neutral-950/70 border border-indigo-800 text-indigo-300 font-mono shrink-0">
+                    REVIEW FIRST
+                  </span>
                 </div>
-              )}
 
-              {additionalSkillSuggestions.length > 0 && (
-                <div className="space-y-3 pt-2 border-t border-indigo-900/80">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-xs font-semibold text-indigo-200">
-                      Suggested Skills ({additionalSkillSuggestions.length})
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleRejectAllAdditionalSkills}
-                        className="px-2.5 py-1 rounded bg-neutral-900 border border-neutral-700 text-[10px] text-neutral-400 hover:text-white"
-                      >
-                        Dismiss All
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleAcceptAllAdditionalSkills}
-                        className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-[10px] text-white font-semibold"
-                      >
-                        Accept All
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                    {additionalSkillSuggestions.map((skill) => (
-                      <div
-                        key={skill.id}
-                        className="p-3 rounded-lg bg-neutral-950 border border-indigo-900/70 space-y-2"
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <div className="text-xs font-semibold text-white">{skill.name}</div>
-                            <div className="text-[10px] text-indigo-300 font-mono mt-0.5">
-                              {skill.governingAbility} • {skill.checkFormula || '1d20'}
-                            </div>
-                          </div>
-                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 font-mono shrink-0">
-                            AI
-                          </span>
-                        </div>
-
-                        <p className="text-[11px] text-neutral-300 leading-relaxed">
-                          {skill.description}
-                        </p>
-
-                        {skill.mechanicalDescription && (
-                          <div className="p-2 rounded bg-neutral-900 border border-neutral-800 text-[10px] text-indigo-200 leading-relaxed">
-                            <span className="text-neutral-500">Effect:</span> {skill.mechanicalDescription}
-                          </div>
-                        )}
-
-                        {skill.worldCompatibility && (
-                          <div className="text-[10px] text-neutral-500 leading-relaxed">
-                            {skill.worldCompatibility}
-                          </div>
-                        )}
-
-                        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 pt-1 border-t border-neutral-800">
-                          <button
-                            type="button"
-                            onClick={() => handleRejectAdditionalSkill(skill.id)}
-                            className="w-full sm:w-auto justify-center px-2.5 py-1.5 rounded bg-neutral-900 border border-neutral-700 text-[10px] text-neutral-400 hover:text-white"
-                          >
-                            Reject
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleAcceptAdditionalSkill(skill)}
-                            className="w-full sm:w-auto justify-center px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-[10px] text-white font-semibold"
-                          >
-                            Add Skill
-                          </button>
-                        </div>
+                {isSuggestingMoreSkills && (
+                  <div className="p-3 rounded-lg bg-neutral-950/80 border border-indigo-900/80 flex items-center gap-3 text-xs text-indigo-200">
+                    <RefreshCw className="w-4 h-4 animate-spin text-indigo-400 shrink-0" />
+                    <div>
+                      <div className="font-semibold">Generating skill proposals…</div>
+                      <div className="text-[10px] text-neutral-500 mt-0.5">
+                        Reviewing your character and existing skills.
                       </div>
-                    ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {additionalSkillSuggestions.length === 0 && !additionalSkillsError && !isSuggestingMoreSkills && (
-                <div className="text-[10px] text-neutral-500">
-                  Press <span className="text-indigo-300 font-medium">Add More Skills</span> to generate proposals.
-                </div>
-              )}
-            </div>
+                {additionalSkillsError && (
+                  <div className="p-3 rounded-lg bg-red-950/40 border border-red-800/60 text-xs text-red-300">
+                    {additionalSkillsError}
+                  </div>
+                )}
+
+                {additionalSkillSuggestions.length > 0 ? (
+                  <div className="space-y-3 pt-2 border-t border-indigo-900/80">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <div className="text-xs font-semibold text-indigo-200">
+                        AI Proposed Skills ({additionalSkillSuggestions.length})
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleRejectAllAdditionalSkills}
+                          className="px-2.5 py-1 rounded bg-neutral-900 border border-neutral-700 text-[10px] text-neutral-400 hover:text-white"
+                        >
+                          Dismiss All
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleAcceptAllAdditionalSkills}
+                          className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-[10px] text-white font-semibold"
+                        >
+                          Accept All
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                      {additionalSkillSuggestions.map((skill) => (
+                        <div
+                          key={skill.id}
+                          className="p-3 rounded-lg bg-neutral-950 border border-indigo-900/70 space-y-2"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="text-xs font-semibold text-white break-words">{skill.name}</div>
+                              <div className="text-[10px] text-indigo-300 font-mono mt-0.5">
+                                {skill.governingAbility} • {skill.checkFormula || '1d20'}
+                              </div>
+                            </div>
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 font-mono shrink-0">
+                              AI
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-neutral-300 leading-relaxed">
+                            {skill.description}
+                          </p>
+                          {skill.mechanicalDescription && (
+                            <div className="p-2 rounded bg-neutral-900 border border-neutral-800 text-[10px] text-indigo-200 leading-relaxed">
+                              <span className="text-neutral-500">Effect:</span> {skill.mechanicalDescription}
+                            </div>
+                          )}
+                          {skill.worldCompatibility && (
+                            <div className="text-[10px] text-neutral-500 leading-relaxed">
+                              {skill.worldCompatibility}
+                            </div>
+                          )}
+                          <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 pt-1 border-t border-neutral-800">
+                            <button
+                              type="button"
+                              onClick={() => handleRejectAdditionalSkill(skill.id)}
+                              className="w-full sm:w-auto justify-center px-2.5 py-1.5 rounded bg-neutral-900 border border-neutral-700 text-[10px] text-neutral-400 hover:text-white"
+                            >
+                              Reject
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleAcceptAdditionalSkill(skill)}
+                              className="w-full sm:w-auto justify-center px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-[10px] text-white font-semibold"
+                            >
+                              Add Skill
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : !additionalSkillsError && !isSuggestingMoreSkills ? (
+                  <div className="text-[10px] text-neutral-500">
+                    Press <span className="text-indigo-300 font-medium">Add More Skills</span> to generate proposals.
+                  </div>
+                ) : null}
+              </div>
             </div>
 
             {/* Capabilities Cards */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-semibold text-neutral-300 uppercase tracking-wider flex items-center justify-between">
+                <span>Active Capabilities ({draft.capabilities.length})</span>
+                <span className="text-[11px] text-neutral-500 font-normal">
+                  Underlying potential & power pool
+                </span>
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {draft.capabilities.map((cap) => (
+                  <div
+                    key={cap.id}
+                    className="p-4 rounded-xl bg-neutral-950 border border-neutral-800 space-y-3 relative group"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h4 className="text-sm font-semibold text-white flex items-center gap-2">
+                          {cap.name}
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-300 border border-neutral-700 font-mono">
+                            {cap.powerTier}
+                          </span>
+                        </h4>
+                        <div className="text-xs text-neutral-400 mt-0.5">
+                          {cap.category} • Mode: {cap.activationMode || 'immediate'}
+                        </div>
+                      </div>
+
+                      <button
+                        onClick={() => handleDeleteCapability(cap.id)}
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded text-neutral-500 hover:text-red-400 transition-opacity"
+                        title="Remove Capability"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <p className="text-xs text-neutral-300 leading-relaxed">
+                      {cap.description}
+                    </p>
+
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-neutral-400 border-t border-neutral-800/80 pt-2 font-mono">
+                      <span>Cost: {cap.baseEnergyCost ?? 15} Energy</span>
+                      {cap.checkFormula && <span>Check: {cap.checkFormula}</span>}
+                      {cap.damageFormula && <span>Damage: {cap.damageFormula}</span>}
+                      <span>Strain: {cap.baseStrainCost ?? 5}</span>
+                      <span className="ml-auto text-[10px] text-indigo-400 uppercase">
+                        {cap.provenance || 'AI_GENERATED'}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Generated Skills / Techniques Lineage */}
+            <div className="space-y-3 pt-2">
+              <h3 className="text-xs font-semibold text-neutral-300 uppercase tracking-wider flex items-center justify-between">
+                <span>Derived Techniques & Skills ({draft.generatedSkills.length})</span>
+                <span className="text-[11px] text-neutral-500 font-normal">
+                  Concrete combat & spell expressions linked to parent capabilities
+                </span>
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {draft.generatedSkills.map((skill) => (
+                  <div
+                    key={skill.id}
+                    className="p-3.5 rounded-lg bg-neutral-950 border border-neutral-800 space-y-2 relative group"
+                  >
+                    <div className="flex items-start justify-between">
+                      <h5 className="text-xs font-semibold text-white">{skill.name}</h5>
+                      <button
+                        onClick={() => handleDeleteTechnique(skill.id)}
+                        className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-red-400 transition-opacity"
+                        title="Delete Technique (Preserves parent capability)"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <p className="text-[11px] text-neutral-400 leading-relaxed">
+                      {skill.description}
+                    </p>
+
+                    <div className="text-[10px] text-indigo-300/80 pt-1 border-t border-neutral-800/60 flex items-center justify-between font-mono">
+                      <span>Lineage: {skill.parentCapabilityName}</span>
+                      <span>{skill.range || 'Close'}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Navigation */}
+            <div className="flex items-center justify-between pt-4">
+              <button
+                onClick={() => setActiveStep(2)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-xs text-neutral-200 transition-colors"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Back to Progression</span>
+              </button>
+              <button
+                onClick={() => setActiveStep(5)}
+                className="flex items-center gap-1.5 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white transition-colors"
+              >
+                <span>Proceed to Stats & Attributes</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* STEP 4: DEDICATED STATS & ATTRIBUTES TAB */}
+        {draft && activeStep === 5 && (
+          <div className="space-y-6">
+            {/* Core D&D Stats Card */}
+            <div className="p-6 rounded-xl bg-neutral-950 border border-neutral-800 space-y-6">
+              <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
+                <div>
+                  <h2 className="text-base font-semibold text-white flex items-center gap-2">
+                    <BarChart2 className="w-4 h-4 text-indigo-400" />
+                    Permanent D&D Core Stats & Abilities
+                  </h2>
+                  <p className="text-xs text-neutral-400 mt-0.5">
+                    Configure official D&D combat statistics and core ability scores (clamped between 1 and 20).
+                  </p>
+                </div>
+                <span className="text-xs font-mono px-2.5 py-1 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">
+                  D&D 5e Ruleset
+                </span>
+              </div>
+
+              {/* Combat Stats Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 text-xs">
+                <div className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 space-y-1">
+                  <label className="text-[11px] font-medium text-neutral-400">Level</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={30}
+                    value={draft.coreStats?.level ?? 1}
+                    onChange={(e) => updateCoreStat('level', e.target.value)}
+                    className="w-full px-2 py-1 rounded bg-neutral-950 border border-neutral-700 font-mono text-sm text-white font-bold"
+                  />
+                </div>
+                <div className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 space-y-1">
+                  <label className="text-[11px] font-medium text-neutral-400">Armor Class (AC)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={draft.coreStats?.armorClass ?? 10}
+                    onChange={(e) => updateCoreStat('armorClass', e.target.value)}
+                    className="w-full px-2 py-1 rounded bg-neutral-950 border border-neutral-700 font-mono text-sm text-white font-bold"
+                  />
+                </div>
+                <div className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 space-y-1">
+                  <label className="text-[11px] font-medium text-neutral-400">Speed (ft)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={300}
+                    value={draft.coreStats?.speed ?? 30}
+                    onChange={(e) => updateCoreStat('speed', e.target.value)}
+                    className="w-full px-2 py-1 rounded bg-neutral-950 border border-neutral-700 font-mono text-sm text-white font-bold"
+                  />
+                </div>
+                <div className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 space-y-1">
+                  <label className="text-[11px] font-medium text-neutral-400">Hit Dice</label>
+                  <input
+                    type="text"
+                    value={draft.coreStats?.hitDice ?? '1d8'}
+                    onChange={(e) => updateCoreStat('hitDice', e.target.value)}
+                    className="w-full px-2 py-1 rounded bg-neutral-950 border border-neutral-700 font-mono text-sm text-white font-bold"
+                  />
+                </div>
+                <div className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 space-y-1">
+                  <label className="text-[11px] font-medium text-neutral-400">Current HP</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={draft.coreStats?.hpMax ?? 10}
+                    value={draft.coreStats?.hpCurrent ?? 10}
+                    onChange={(e) => updateCoreStat('hpCurrent', e.target.value)}
+                    className="w-full px-2 py-1 rounded bg-neutral-950 border border-neutral-700 font-mono text-sm text-emerald-400 font-bold"
+                  />
+                </div>
+                <div className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 space-y-1">
+                  <label className="text-[11px] font-medium text-neutral-400">Max HP</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={999}
+                    value={draft.coreStats?.hpMax ?? 10}
+                    onChange={(e) => updateCoreStat('hpMax', e.target.value)}
+                    className="w-full px-2 py-1 rounded bg-neutral-950 border border-neutral-700 font-mono text-sm text-emerald-400 font-bold"
+                  />
+                </div>
+              </div>
+
+              {/* 6 Core Ability Scores Grid */}
+              <div className="space-y-3 pt-2">
+                <h3 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">
+                  Core Ability Scores (1 - 20)
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+                  {[
+                    { key: 'strength', label: 'Strength (STR)', score: draft.coreStats?.strength ?? 10 },
+                    { key: 'dexterity', label: 'Dexterity (DEX)', score: draft.coreStats?.dexterity ?? 10 },
+                    { key: 'constitution', label: 'Constitution (CON)', score: draft.coreStats?.constitution ?? 10 },
+                    { key: 'intelligence', label: 'Intelligence (INT)', score: draft.coreStats?.intelligence ?? 10 },
+                    { key: 'wisdom', label: 'Wisdom (WIS)', score: draft.coreStats?.wisdom ?? 10 },
+                    { key: 'charisma', label: 'Charisma (CHA)', score: draft.coreStats?.charisma ?? 10 },
+                  ].map((stat) => {
+                    const mod = Math.floor((stat.score - 10) / 2);
+                    const modStr = mod >= 0 ? `+${mod}` : `${mod}`;
+                    return (
+                      <div key={stat.key} className="p-3.5 rounded-xl bg-neutral-900 border border-neutral-800 text-center space-y-1">
+                        <div className="text-[11px] font-semibold text-neutral-300 uppercase">{stat.key.slice(0, 3)}</div>
+                        <div className="text-[10px] text-neutral-500">{stat.label}</div>
+                        <input
+                          type="number"
+                          min={1}
+                          max={20}
+                          value={stat.score}
+                          onChange={(e) => updateCoreStat(stat.key as any, e.target.value)}
+                          className="w-16 mx-auto text-center px-2 py-1 rounded bg-neutral-950 border border-neutral-700 font-mono text-base font-bold text-white focus:outline-none focus:border-indigo-500"
+                        />
+                        <div className="text-xs font-mono font-bold text-indigo-400 pt-0.5">
+                          Modifier: {modStr}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* D&D Skills & Proficiencies Card */}
+            <div className="p-6 rounded-xl bg-neutral-950 border border-neutral-800 space-y-6">
+              <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
+                <div>
+                  <h2 className="text-base font-semibold text-white flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-indigo-400" />
+                    D&D Skills & Proficiencies
+                  </h2>
+                  <p className="text-xs text-neutral-400 mt-0.5">
+                    18 official D&D 5e skills are initialized automatically. Your character description can also be used to discover additional custom skills, which you review before adding.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono px-2.5 py-1 rounded bg-indigo-950 text-indigo-300 border border-indigo-800">
+                    PB: +{Math.floor(( (draft.coreStats?.level || 1) - 1) / 4) + 2}
+                  </span>
+                  <span className="text-xs font-mono px-2.5 py-1 rounded bg-neutral-900 text-neutral-300 border border-neutral-800">
+                    Proficient: {(draft.skills || []).filter(s => s.proficiency === 'PROFICIENT' || s.proficiency === 'EXPERTISE').length}
+                  </span>
+                </div>
+              </div>
+
+              {/* Skills Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-96 overflow-y-auto pr-1">
+                {getInitialDndSkills(draft.skills || []).map((skill) => {
+                  const modObj = calculateSkillModifier(skill, draft.coreStats);
+                  const modStr = modObj.modString;
+                  return (
+                    <div
+                      key={skill.id}
+                      className={`p-2.5 rounded-lg border transition-all flex items-center justify-between text-xs ${
+                        skill.proficiency === 'EXPERTISE'
+                          ? 'bg-purple-950/40 border-purple-500/50'
+                          : skill.proficiency === 'PROFICIENT'
+                          ? 'bg-emerald-950/40 border-emerald-500/50'
+                          : 'bg-neutral-900 border-neutral-800'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        {/* Icon & Icon Studio Button */}
+                        <div className="relative group/icon shrink-0">
+                          <div className="w-7 h-7 rounded bg-neutral-950 border border-neutral-800 flex items-center justify-center text-sm overflow-hidden shadow-inner">
+                            {skill.icon?.url ? (
+                              <img src={skill.icon.url} alt={skill.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <span>{getDefaultIconForSkill(skill).emoji}</span>
+                            )}
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setIconStudioTarget({ itemOrSkill: skill, type: 'SKILL' });
+                            }}
+                            className="absolute -top-1 -right-1 p-0.5 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white opacity-0 group-hover/icon:opacity-100 transition-opacity text-[9px] shadow z-10"
+                            title="Customize Icon in Icon Studio"
+                          >
+                            <Edit3 className="w-2.5 h-2.5" />
+                          </button>
+                        </div>
+
+                        <button
+                          onClick={() => setInspectingSkill(skill)}
+                          className="text-neutral-500 hover:text-indigo-300 shrink-0"
+                          title="Inspect skill details"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        <div className="min-w-0">
+                          <div className="font-semibold text-white truncate flex items-center gap-1.5">
+                            <span className="truncate">{skill.name}</span>
+                            {skill.isCustom && (
+                              <span className="text-[9px] px-1 rounded bg-indigo-950 text-indigo-300 border border-indigo-800 font-mono shrink-0">
+                                CUSTOM
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-neutral-400 font-mono">
+                            <span>{skill.governingAbility.slice(0, 3)}</span>
+                            <span className="text-indigo-300/70">Check {skill.checkFormula || '1d20'}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-mono text-xs font-bold text-indigo-300">
+                          {modStr}
+                        </span>
+                        <button
+                          onClick={() => toggleSkillProficiency(skill.id)}
+                          className={`px-2 py-0.5 rounded font-mono text-[10px] uppercase font-semibold transition-all ${
+                            skill.proficiency === 'EXPERTISE'
+                              ? 'bg-purple-600 text-white shadow-sm'
+                              : skill.proficiency === 'PROFICIENT'
+                              ? 'bg-emerald-600 text-white shadow-sm'
+                              : 'bg-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-700'
+                          }`}
+                          title="Click to cycle: None -> Proficient -> Expertise -> None"
+                        >
+                          {skill.proficiency === 'EXPERTISE' ? 'EXP' : skill.proficiency === 'PROFICIENT' ? 'PROF' : '—'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* AI Custom Skill Synthesis */}
+              <div className="p-4 rounded-xl bg-neutral-900 border border-neutral-800 space-y-3 pt-3">
+                <div className="text-xs font-semibold text-indigo-300 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>AI Custom Skill Synthesis</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    value={customSkillName}
+                    onChange={(e) => setCustomSkillName(e.target.value)}
+                    placeholder="Custom skill name (e.g. Void Navigation)"
+                    className="px-3 py-2 rounded bg-neutral-950 border border-neutral-700 text-xs text-white"
+                  />
+                  <input
+                    type="text"
+                    value={customSkillConcept}
+                    onChange={(e) => setCustomSkillConcept(e.target.value)}
+                    placeholder="Skill concept or mechanical usage"
+                    className="px-3 py-2 rounded bg-neutral-950 border border-neutral-700 text-xs text-white"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <button
+                    id="btn-propose-skill"
+                    onClick={handleProposeCustomSkill}
+                    disabled={isProposingSkill || (!customSkillName.trim() && !customSkillConcept.trim())}
+                    className="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-xs text-white font-medium flex items-center gap-1.5 shadow-sm"
+                  >
+                    {isProposingSkill ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                    <span>Synthesize AI Skill</span>
+                  </button>
+                </div>
+                {skillProposalError && <div className="text-xs text-red-400">{skillProposalError}</div>}
+
+                {/* Skill Proposal Review Gate */}
+                {pendingSkillProposal && (
+                  <div className="p-4 rounded-lg bg-indigo-950/70 border-2 border-indigo-500 space-y-2 mt-2 shadow-lg">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-indigo-300 uppercase">
+                        AI Proposed Skill: {pendingSkillProposal.name}
+                      </span>
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-900 text-indigo-200 border border-indigo-700 font-mono">
+                        Governing: {pendingSkillProposal.governingAbility}
+                      </span>
+                    </div>
+                    <p className="text-xs text-neutral-300 leading-relaxed">{pendingSkillProposal.description}</p>
+                    {pendingSkillProposal.mechanicalDescription && (
+                      <div className="text-xs text-indigo-200 font-mono pt-1 border-t border-indigo-900">
+                        <span className="text-neutral-400">Mechanics:</span> {pendingSkillProposal.mechanicalDescription}
+                      </div>
+                    )}
+                    <div className="text-xs text-indigo-200 font-mono">
+                      <span className="text-neutral-400">Resolution:</span> {pendingSkillProposal.checkFormula || '1d20'}
+                    </div>
+                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-indigo-900">
+                      <button
+                        onClick={handleRejectSkillProposal}
+                        className="px-3 py-1 rounded bg-neutral-900 border border-neutral-700 text-xs text-neutral-300 hover:text-white"
+                      >
+                        Reject
+                      </button>
+                      <button
+                        id="btn-accept-skill"
+                        onClick={handleAcceptSkillProposal}
+                        className="px-3.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white flex items-center gap-1"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Accept & Add Skill</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
 
             {/* Extensible Custom Attributes & Stats */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

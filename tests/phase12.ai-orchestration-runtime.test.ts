@@ -394,6 +394,11 @@ test('Phase 12: category override retains automatic failover candidates', async 
 	orchestrator.registerAdapter(healthy);
 	orchestrator.registerModel(model('phase12_category_failing', 'category-failing', ['narrative.generate']));
 	orchestrator.registerModel(model('phase12_category_healthy', 'category-healthy', ['narrative.generate']));
+	orchestrator.setFallbackChain('narrative.generate', [
+		'phase12_category_failing::category-failing',
+		'phase12_category_healthy::category-healthy',
+		'provider_deterministic_emergency::emergency-fallback-local',
+	]);
 	orchestrator.setCategoryModelOverride('narration', 'phase12_category_failing::category-failing');
 
 	const selection = orchestrator.selectBestModel('narrative.generate', { contextTokens: 100 });

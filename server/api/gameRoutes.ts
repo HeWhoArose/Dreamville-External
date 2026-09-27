@@ -721,7 +721,54 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
     const storyId = (actionRequest as any).storyId as string;
     // Lazily bind every active Story Run to a persistent Universe identity.
     // This is idempotent and does not replace the Story Run's canonical world state.
-    UniverseRuntimeService.ensureUniverse(worldRepository, storyId);
+    const universe = UniverseRuntimeService.ensureUniverse(worldRepository, storyId);
+
+    if (actionRequest.type === 'WORLD_TRAVEL_REQUEST') {
+      if (!actionRequest.worldId && !actionRequest.worldPremise) {
+        return res.status(400).json({
+          success: false,
+          code: 'WORLD_TRAVEL_TARGET_REQUIRED',
+          errorReason: 'Provide worldId for an existing world or worldPremise to generate a new world.',
+        });
+      }
+
+      try {
+        const result = await UniverseRuntimeService.travel(worldRepository, {
+          storyId,
+          universeId: universe.universeId,
+          worldId: actionRequest.worldId,
+          worldPremise: actionRequest.worldPremise,
+          worldTitle: actionRequest.worldTitle,
+          trigger: 'PLAYER',
+        });
+        serverMockAuthority.setActiveStoryId(result.storyId);
+        const viewState = serverMockAuthority.getSanitizedViewState(result.storyId);
+        return res.json({
+          success: true,
+          actionId: deterministicId('world_travel_action', universe.universeId, storyId, result.storyId),
+          requestType: actionRequest.type,
+          status: 'MOCK_ENGINE_COMMITTED',
+          message: result.createdWorld
+            ? 'A new world was generated and the player arrived there.'
+            : 'The player traveled to the requested world.',
+          authoritativeFeedback: 'Cross-world travel committed through the persistent Universe runtime.',
+          narrativeResponse: 'The universe carries you beyond the boundary of the current world.',
+          viewState,
+          universe: result.universe,
+          world: result.world,
+          storyId: result.storyId,
+          createdWorld: result.createdWorld,
+          createdSession: result.createdSession,
+        });
+      } catch (error: any) {
+        return res.status(400).json({
+          success: false,
+          code: 'WORLD_TRAVEL_FAILED',
+          errorReason: error?.message || 'World travel failed.',
+        });
+      }
+    }
+
     const beforeInventoryState = worldRepository.getInventoryEngine(storyId).exportState();
     let preflightAdvice: any = null;
     if (actionRequest.type === 'CUSTOM_ACTION' && !(actionRequest as any).bypassCapabilityAdvisor) {

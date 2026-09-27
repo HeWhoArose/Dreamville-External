@@ -397,6 +397,23 @@ export class InMemoryWorldRepository implements WorldRepository {
       if ((migratedRun as any)?.runtimeState?.memory) {
         this.getMemoryEngine(storyId).importState((migratedRun as any).runtimeState.memory);
       }
+      const persistedRuntime = (migratedRun as any)?.runtimeState || {};
+      if (persistedRuntime.worldClock) this.getWorldClock(storyId).importState(persistedRuntime.worldClock);
+      if (persistedRuntime.geography) this.getGeographyGraph(storyId).importState(persistedRuntime.geography);
+      if (persistedRuntime.playerLifecycle) this.playerLifecycles.set(storyId, PlayerLifecycleState.fromJSON(persistedRuntime.playerLifecycle));
+      if (Array.isArray(persistedRuntime.npcLifecycles)) {
+        const restoredNpcs = new Map<string, PlayerLifecycleState>();
+        for (const rawNpc of persistedRuntime.npcLifecycles) {
+          const npc = PlayerLifecycleState.fromJSON(rawNpc);
+          restoredNpcs.set(npc.actorId, npc);
+        }
+        this.npcLifecycles.set(storyId, restoredNpcs);
+      }
+      if (Array.isArray(persistedRuntime.knowledgeFacts)) this.knowledgeBases.set(storyId, JSON.parse(JSON.stringify(persistedRuntime.knowledgeFacts)));
+      if (Array.isArray(persistedRuntime.storyThreads)) this.storyThreads.set(storyId, JSON.parse(JSON.stringify(persistedRuntime.storyThreads)));
+      if (Array.isArray(persistedRuntime.activeEffects)) this.activeEffects.set(storyId, JSON.parse(JSON.stringify(persistedRuntime.activeEffects)));
+      if (Array.isArray(persistedRuntime.worldFacts)) this.worldFactsMap.set(storyId, JSON.parse(JSON.stringify(persistedRuntime.worldFacts)));
+      if (persistedRuntime.protagonistAgenda) this.protagonistAgendas.set(storyId, JSON.parse(JSON.stringify(persistedRuntime.protagonistAgenda)));
     }
 
     this.geographies.set('default_story', new GeographyGraph());
@@ -2607,6 +2624,16 @@ export class InMemoryWorldRepository implements WorldRepository {
         ...(this.inventoryEngines.has(storyId) ? { inventory: this.inventoryEngines.get(storyId)!.exportState() } : {}),
         ...(this.entityRegistries.has(storyId) ? { entities: this.entityRegistries.get(storyId)!.exportState() } : {}),
         ...(this.memoryEngines.has(storyId) ? { memory: this.memoryEngines.get(storyId)!.exportState() } : {}),
+        ...(this.geographies.has(storyId) ? { geography: this.geographies.get(storyId)!.exportState() } : {}),
+        ...(this.playerLifecycles.has(storyId) ? { playerLifecycle: this.playerLifecycles.get(storyId)!.toJSON() } : {}),
+        ...(this.npcLifecycles.has(storyId) ? {
+          npcLifecycles: Array.from(this.npcLifecycles.get(storyId)!.values()).map((npc) => npc.toJSON()),
+        } : {}),
+        ...(this.knowledgeBases.has(storyId) ? { knowledgeFacts: this.knowledgeBases.get(storyId) } : {}),
+        ...(this.storyThreads.has(storyId) ? { storyThreads: this.storyThreads.get(storyId) } : {}),
+        ...(this.activeEffects.has(storyId) ? { activeEffects: this.activeEffects.get(storyId) } : {}),
+        ...(this.worldFactsMap.has(storyId) ? { worldFacts: this.worldFactsMap.get(storyId) } : {}),
+        ...(this.protagonistAgendas.has(storyId) ? { protagonistAgenda: this.protagonistAgendas.get(storyId) } : {}),
       };
       if (Object.keys(runtimeState).length > 0) run.runtimeState = runtimeState;
     }

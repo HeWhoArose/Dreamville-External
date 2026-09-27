@@ -41,7 +41,7 @@ export const LivingBibleWorkstationModal: React.FC<LivingBibleWorkstationModalPr
       setRequirements(bibleData);
       setWorkstation(workstationData);
     } catch (err: any) {
-      setError(err.message || 'Failed to load Living Bible / Workstation state.');
+      setError(err.message || 'Failed to load Dream Book / Workstation state.');
     } finally {
       setLoading(false);
     }
@@ -129,7 +129,7 @@ export const LivingBibleWorkstationModal: React.FC<LivingBibleWorkstationModalPr
             </div>
             <div>
               <h2 className="text-lg font-semibold text-stone-100 flex items-center gap-2">
-                Living Bible Registry & Developer Workstation
+                Dream Book Registry & Developer Workstation
                 <span className="text-xs font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
                   CH17 OPERATIONAL LEDGER
                 </span>
@@ -171,7 +171,7 @@ export const LivingBibleWorkstationModal: React.FC<LivingBibleWorkstationModalPr
               }`}
             >
               <BookOpen className="w-4 h-4" />
-              <span>Living Bible Requirements ({requirements.length})</span>
+              <span>Dream Book Requirements ({requirements.length})</span>
             </button>
 
             <button

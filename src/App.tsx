@@ -486,6 +486,10 @@ export const App: React.FC = () => {
     initializeApp(activeStoryId);
   };
 
+  const handleNarrationUpdated = (nextViewState: any) => {
+    if (!nextViewState) return;
+    setViewState(nextViewState);
+  };
   const handleCustomAction = async (actionText: string) => {
     setPendingActionAdvice(null);
 
@@ -712,6 +716,7 @@ export const App: React.FC = () => {
           onRetryOpening={handleRetryOpening}
           combatTransition={combatTransition}
           onEnterCombat={handleOpenCombatView}
+          onNarrationUpdated={handleNarrationUpdated}
         />
       )}
 

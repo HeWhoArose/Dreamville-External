@@ -4,6 +4,7 @@ declare module '@3d-dice/dice-box-threejs' {
 		sounds?: boolean;
 		volume?: number;
 		shadows?: boolean;
+		theme_surface?: string;
 		color_spotlight?: number;
 		sound_dieMaterial?: string;
 		theme_customColorset?: unknown;

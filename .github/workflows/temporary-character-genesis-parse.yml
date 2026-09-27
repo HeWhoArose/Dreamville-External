@@ -37,6 +37,22 @@ jobs:
             };
           };
 
+          const scanner = ts.createScanner(ts.ScriptTarget.Latest, true, ts.LanguageVariant.JSX, source);
+          const tokens = [];
+          let token = scanner.scan();
+          while (token !== ts.SyntaxKind.EndOfFileToken) {
+            const startPos = scanner.getTokenPos();
+            const endPos = scanner.getTextPos();
+            if (Math.abs(startPos - 158953) < 1400) {
+              tokens.push({
+                start: startPos,
+                end: endPos,
+                kind: ts.tokenToString(token) || token,
+                text: source.slice(startPos, endPos),
+              });
+            }
+            token = scanner.scan();
+          }
           const diagnostics = sf.parseDiagnostics.map(format);
           const interestingLines = source.split('\\n');
           const windows = diagnostics.map((d) => ({
@@ -46,6 +62,7 @@ jobs:
             parseDiagnostics: diagnostics,
             windows,
             syntaxDiagnostics: sf.getChildren(sf).length,
+            tokens,
           }, null, 2));
 
           if (sf.parseDiagnostics.length) process.exit(1);

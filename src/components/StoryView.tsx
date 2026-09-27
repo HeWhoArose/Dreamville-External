@@ -101,7 +101,16 @@ const StoryCheckCard: React.FC<{
     )}
 
     <div className="mt-3">
-      <DiceRollAnimation roll={check.roll} onComplete={onReveal} />
+      <DiceRollAnimation
+			roll={check.roll}
+			onComplete={onReveal}
+			title={check.testType === 'SAVING_THROW' ? `${check.ability} Saving Throw` : `${check.skill} Check`}
+			subtitle={`${check.roll.formula} · ${check.ability}`}
+			defenseLabel="DC"
+			defenseValue={check.difficultyClass}
+			outcome={revealed ? (check.success ? 'SUCCESS' : 'FAILURE') : 'NEUTRAL'}
+			showRollButton
+		/>
     </div>
 
     {revealed && (

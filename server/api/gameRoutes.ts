@@ -6872,6 +6872,7 @@ gameRouter.post('/orchestrator/turn', async (req: Request, res: Response) => {
         commandId: commandResult.commandId,
         authoritativeFeedback: turnResult?.mechanicalResolution?.mechanicalSummary || turnResult?.summary || turnResult?.error,
         narrativeResponse: turnResult?.turnPackage?.narrative?.join('\n\n'),
+        memoryCandidates: turnResult?.turnPackage?.memoryCandidates,
         beforeInventoryState: beforeOrchestratorInventoryState,
         beforeWorldElapsedSeconds: beforeOrchestratorWorldElapsedSeconds,
       });

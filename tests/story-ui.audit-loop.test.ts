@@ -40,8 +40,9 @@ test('Story UI audit-implementation-regression-fallback loop completes ten deter
 
 		assert.equal(story.includes('StoryHUDDrawer'), false, `Audit ${iteration}: legacy HUD remains embedded in StoryView`);
 		assert.equal(story.includes('getOrchestratorOperations'), false, `Audit ${iteration}: AI operations leaked into StoryView`);
-		assert.equal(story.includes('getOrchestratorModels'), false, `Audit ${iteration}: model catalog leaked into StoryView`);
-		assert.equal(story.includes('setOrchestratorCategoryModel'), false, `Audit ${iteration}: narration model selector remains in player UI`);
+		assert.equal(story.includes('getOrchestratorModels'), true, `Audit ${iteration}: narration model catalog is not connected to the player picker`);
+		assert.equal(story.includes('setOrchestratorCategoryModel'), true, `Audit ${iteration}: narration model selector is missing from the player UI`);
+		assert.equal(story.includes('Narration AI Model'), true, `Audit ${iteration}: narration AI model tool is missing from the plus menu`);
 
 		assert.equal(shell.includes('Story tools'), true, `Audit ${iteration}: secondary story tools drawer missing`);
 		assert.equal(shell.includes('primaryIds'), true, `Audit ${iteration}: primary/secondary navigation separation missing`);

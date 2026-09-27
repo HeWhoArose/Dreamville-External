@@ -4116,36 +4116,33 @@ export class MultiModelOrchestrator {
     });
 
     if (customChainKeys && customChainKeys.length > 0 && !hasActiveManualOverrideForTask) {
-      // Configured chains are strict allow-lists. Every entry must be eligible
-      // for this exact task AND currently usable for the requested context.
-      // Unusable entries are skipped before selection; the next configured model
-      // becomes the selected candidate, and the ordered remainder is preserved.
+      // The configured chain controls failover order. Without an explicit pin or
+      // category override, primary selection remains score-based.
       const configuredModels = customChainKeys
         .map(findConfiguredModel)
         .filter((m): m is ModelRegistryRecord => Boolean(m))
         .filter((m) => isUsableCandidate(m));
 
       if (configuredModels.length > 0) {
-        const selectedFromChain = configuredModels[0];
-        const fallbackModels = configuredModels.slice(1);
+        const primary = eligible
+          .filter((model) => !model.isEmergencyFloor)
+          .sort((a, b) => {
+            const scoreA = a.userPriority + (a.health === 'Healthy' ? 50 : 0);
+            const scoreB = b.userPriority + (b.health === 'Healthy' ? 50 : 0);
+            if (scoreB !== scoreA) return scoreB - scoreA;
+            return a.modelId.localeCompare(b.modelId);
+          })[0];
 
-        const emergency = Array.from(this.models.values()).find(
-          (m) => m.isEmergencyFloor && m.roleEligibility.includes(task)
-        );
-        if (
-          emergency &&
-          !fallbackModels.some((m) => this.modelKey(m) === this.modelKey(emergency))
-        ) {
-          fallbackModels.push(emergency);
+        if (primary) {
+          const primaryKey = this.modelKey(primary);
+          const fallbackModels = configuredModels.filter((model) => this.modelKey(model) !== primaryKey);
+          return {
+            selectedModel: primary,
+            selectionReason: "Normal task selection chose '" + primary.modelId + "'; configured fallback chain controls failover order.",
+            selectionScore: primary.userPriority,
+            fallbacks: fallbackModels,
+          };
         }
-
-        return {
-          selectedModel: selectedFromChain,
-          selectionReason:
-            `Using the configured AI fallback order for '${task}' with task-eligible models only.`,
-          selectionScore: selectedFromChain.userPriority + 500,
-          fallbacks: fallbackModels,
-        };
       }
     }
 

@@ -122,7 +122,7 @@ const TOOL_DEFINITIONS: OocToolDefinition[] = [
 		name: 'travel_to_world',
 		description: 'Travel the persistent player identity to an existing world or generate a new world from a natural-language premise. The current world is saved before departure.',
 		mode: 'MUTATE',
-		input: { worldId: 'optional existing world id', worldPremise: 'optional new world premise', worldTitle: 'optional new world title' },
+		input: { worldId: 'optional existing world id', worldPremise: 'optional new world premise', worldTitle: 'optional new world title', travelDurationSeconds: 'optional non-negative duration <= 30 days' },
 	},
 ];
 
@@ -375,6 +375,10 @@ export class OocToolRegistry {
 					const worldId = typeof args.worldId === 'string' && args.worldId.trim() ? args.worldId.trim() : undefined;
 					const worldPremise = typeof args.worldPremise === 'string' && args.worldPremise.trim() ? args.worldPremise.trim() : undefined;
 					const worldTitle = typeof args.worldTitle === 'string' && args.worldTitle.trim() ? args.worldTitle.trim() : undefined;
+					const travelDurationSeconds = args.travelDurationSeconds === undefined ? undefined : Number(args.travelDurationSeconds);
+					if (travelDurationSeconds !== undefined && (!Number.isFinite(travelDurationSeconds) || travelDurationSeconds < 0 || travelDurationSeconds > 30 * 86400)) {
+						return { name: call.name, success: false, message: 'travelDurationSeconds must be between 0 and 2592000.' };
+					}
 					if (!worldId && !worldPremise) {
 						return { name: call.name, success: false, message: 'Provide worldId for an existing world or worldPremise to generate a new one.' };
 					}
@@ -385,6 +389,7 @@ export class OocToolRegistry {
 						worldId,
 						worldPremise,
 						worldTitle,
+						travelDurationSeconds,
 						trigger: 'AI_TOOL',
 					});
 					return {

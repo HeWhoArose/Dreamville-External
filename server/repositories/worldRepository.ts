@@ -2066,9 +2066,26 @@ export class InMemoryWorldRepository implements WorldRepository {
         ],
       });
 
+      engine.setMutationListener(() => {
+        this.persistMemoryState(storyId);
+      });
       this.memoryEngines.set(storyId, engine);
     }
     return engine;
+  }
+
+  private persistMemoryState(storyId: string): void {
+    if (this.persistenceSuppressed) return;
+    const run = this.storyRuns.get(storyId);
+    const engine = this.memoryEngines.get(storyId);
+    if (!run || !engine) return;
+
+    run.runtimeState = {
+      ...(run.runtimeState || {}),
+      memory: engine.exportState(),
+    };
+    this.storyRuns.set(storyId, run);
+    this.persistLibrary();
   }
 
   public getLivingWorldSimulation(storyId: string): LivingWorldSimulation {

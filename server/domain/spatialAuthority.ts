@@ -316,6 +316,50 @@ export function resolveSpatialGridMovementPath(
 	return path;
 }
 
+export function getSpatialGridMovementFailureReason(
+	actorId: string,
+	from: SpatialGridPoint,
+	to: SpatialGridPoint,
+	mapBounds: SpatialGridBounds | undefined,
+	obstacles: SpatialGridObstacle[],
+	hazards: SpatialGridHazard[],
+	participants: Iterable<SpatialGridParticipant>,
+): string | undefined {
+	if (
+		mapBounds &&
+		(to.x < mapBounds.minX || to.x > mapBounds.maxX || to.y < mapBounds.minY || to.y > mapBounds.maxY)
+	) {
+		return `Target coordinates (${to.x}, ${to.y}) exceed map boundaries [${mapBounds.minX}..${mapBounds.maxX}, ${mapBounds.minY}..${mapBounds.maxY}].`;
+	}
+
+	if (obstacles.some((obstacle) =>
+		obstacle.x === to.x &&
+		obstacle.y === to.y &&
+		obstacle.isImpassable !== false
+	)) {
+		return `Target cell (${to.x}, ${to.y}) is blocked by an impassable obstacle.`;
+	}
+
+	if (Array.from(participants).some((participant) =>
+		participant.id !== actorId &&
+		!participant.isDead &&
+		participant.x === to.x &&
+		participant.y === to.y
+	)) {
+		return 'Target cell is occupied by another participant.';
+	}
+
+	if (hazards.some((hazard) =>
+		hazard.type === 'barricade' &&
+		hazard.x === to.x &&
+		hazard.y === to.y
+	)) {
+		return 'Target cell is blocked by a barricade.';
+	}
+
+	return undefined;
+}
+
 export function calculateSpatialGridMovementCost(
 	path: SpatialGridPoint[],
 	hazards: SpatialGridHazard[],

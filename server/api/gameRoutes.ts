@@ -230,7 +230,7 @@ gameRouter.post('/action/ooc', async (req: Request, res: Response) => {
         success: false,
         code: 'AI_UNAVAILABLE',
         task: 'ooc.respond',
-        category: 'utility',
+        category: 'gameplay_advice',
         errorReason: generated.fallbackReason || 'All configured OOC AI models failed. Deterministic fallback was withheld.',
         attemptsTrail: generated.attemptsTrail,
         providerId: generated.providerId,

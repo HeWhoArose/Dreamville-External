@@ -14,6 +14,7 @@ export interface StorySummary {
   runId: string;
   title: string;
   worldName: string;
+  worldId?: string;
   genre?: string;
   imageUrl?: string;
   characterName?: string;

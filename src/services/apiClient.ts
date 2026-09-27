@@ -160,8 +160,44 @@ class ApiClient {
       body: JSON.stringify({ message, storyId }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.errorReason || data?.error || `OOC request failed with HTTP ${res.status}`);
+    if (!res.ok) {
+      const error: any = new Error(data?.errorReason || data?.error || `OOC request failed with HTTP ${res.status}`);
+      error.status = res.status;
+      error.data = data;
+      throw error;
+    }
     return data;
+  }
+
+  public async regenerateNarration(params: {
+    storyId?: string;
+    actionId: string;
+    forceModelId?: string;
+    editInstruction?: string;
+  }): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/action/narrate/regenerate${params.storyId ? `?storyId=${encodeURIComponent(params.storyId)}` : ''}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const error: any = new Error(data?.errorReason || data?.error || `Narration regeneration failed with HTTP ${res.status}`);
+      error.status = res.status;
+      error.data = data;
+      throw error;
+    }
+    return data;
+  }
+
+  public async getOrchestratorCategoryStates(): Promise<any[]> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/categories`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `Failed to get AI category states: HTTP ${res.status}`);
+    return Array.isArray(data?.categories) ? data.categories : [];
   }
   /**
    * Preflight a freeform story action without mutating canonical state.
@@ -2323,7 +2359,12 @@ class ApiClient {
       body: JSON.stringify(params),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data?.errorReason || ('Failed to infer progression: HTTP ' + res.status));
+    if (!res.ok) {
+      const error: any = new Error(data?.errorReason || ('Failed to infer progression: HTTP ' + res.status));
+      error.status = res.status;
+      error.data = data;
+      throw error;
+    }
     return data;
   }
 

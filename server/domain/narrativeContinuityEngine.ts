@@ -50,7 +50,13 @@ export class NarrativeContinuityEngine {
     };
   }
 
-  public static research(repository: WorldRepository, storyId: string, query: string, viewerActorId?: string): NarrativeResearchPacket {
+  public static research(
+    repository: WorldRepository,
+    storyId: string,
+    query: string,
+    viewerActorId?: string,
+    options: { persist?: boolean } = {},
+  ): NarrativeResearchPacket {
     const memoryEngine = repository.getMemoryEngine(storyId);
     const clock = repository.getWorldClock(storyId);
     const normalizedQuery = query.trim() || 'current story context';
@@ -86,8 +92,19 @@ export class NarrativeContinuityEngine {
       researchEvidence: researchEvidencePipeline.getEvidenceForStory(storyId),
       causalProvenance: researchEvidencePipeline.getCausalGraphForStory(storyId),
     };
-    // Research is ephemeral context. It must not mutate canonical story/save state
-    // merely because a narrator was asked to think about an action.
+    if (options.persist !== false) {
+      const run = repository.getStoryRun(storyId);
+      if (run) {
+        run.runtimeState = {
+          ...(run.runtimeState || {}),
+          narrativeResearch: {
+            ...packet,
+            capturedAt: formatCanonicalTimestamp(repository.getWorldClock(storyId).getTimestamp()),
+          },
+        };
+        repository.saveStoryRun(run);
+      }
+    }
     return packet;
   }
 

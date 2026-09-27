@@ -8,7 +8,8 @@
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "lint": "tsc --noEmit",
-    "test": "tsx --test tests/*.test.ts"
+    "test": "tsx --test tests/*.test.ts",
+    "postinstall": "node scripts/copy-dice-assets.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.22.0",
@@ -18,7 +19,8 @@
     "motion": "^12.4.7",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "tailwind-merge": "^3.0.1"
+    "tailwind-merge": "^3.0.1",
+    "@3d-dice/dice-box-threejs": "^0.0.12"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",

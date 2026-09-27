@@ -245,14 +245,106 @@ export class WorkingContextEngine {
 
     const viewerId = params.viewerActorId || (player ? player.actorId : `player_actor_${storyId}`);
 
-    // 2. Epistemic Projection: Scene & Geography
+    // 2. Epistemic Projection: Campaign & Scene Knowledge
     const run = repo.getStoryRun(storyId);
+    const worldTemplate = run?.worldId ? repo.getWorldTemplate(run.worldId) : undefined;
     const worldMomentum = ((run?.runtimeState as any)?.worldMomentum || {}) as {
       pressure?: number;
       unresolvedSignals?: string[];
     };
     const narrativeProfile = repo.getNarrativeProfile(storyId);
     const rulesProfile = repo.getRulesProfile(storyId);
+
+    const protagonistIdentity = player
+      ? [
+          `Name: ${player.name}`,
+          run?.characterRole ? `Role: ${run.characterRole}` : '',
+          run?.characterBackground ? `Background: ${run.characterBackground}` : '',
+          run?.characterPersonality ? `Personality: ${run.characterPersonality}` : '',
+          run?.characterMotivations ? `Motivations: ${run.characterMotivations}` : '',
+          Array.isArray(run?.characterTraits) && run.characterTraits.length
+            ? `Traits: ${run.characterTraits.join(', ')}`
+            : '',
+          Array.isArray(run?.characterFeats) && run.characterFeats.length
+            ? `Feats: ${run.characterFeats.map((f: any) => f?.name || f).join(', ')}`
+            : '',
+          Array.isArray(run?.characterTitles) && run.characterTitles.length
+            ? `Titles: ${run.characterTitles.map((t: any) => t?.name || t).join(', ')}`
+            : '',
+        ].filter(Boolean).join(' | ')
+      : 'Protagonist identity unavailable';
+
+    const publicWorldCharacters = Array.isArray(worldTemplate?.characters)
+      ? worldTemplate.characters.slice(0, 8).map((character: any) => {
+          const name = character?.name || character?.identity?.name;
+          if (!name) return '';
+          const role = character?.role?.profession || character?.role || character?.title || '';
+          const description = character?.description || character?.summary || '';
+          return `${name}${role ? ` (${role})` : ''}${description ? `: ${description}` : ''}`;
+        }).filter(Boolean)
+      : [];
+
+    const publicWorldFactions = Array.isArray(worldTemplate?.factions)
+      ? worldTemplate.factions.slice(0, 8).map((faction: any) => {
+          const name = typeof faction === 'string' ? faction : faction?.name || faction?.title;
+          const description = typeof faction === 'string' ? '' : faction?.description || faction?.summary || '';
+          return name ? `${name}${description ? `: ${description}` : ''}` : '';
+        }).filter(Boolean)
+      : [];
+
+    const publicWorldTimeline = Array.isArray(worldTemplate?.timeline)
+      ? worldTemplate.timeline.slice(-8).map((event: any) => {
+          const title = event?.title || event?.name || event?.event || '';
+          const description = event?.description || event?.summary || '';
+          return title ? `${title}${description ? `: ${description}` : ''}` : '';
+        }).filter(Boolean)
+      : [];
+
+    const worldKnowledgeSnapshot = [
+      worldTemplate?.title ? `World: ${worldTemplate.title}` : '',
+      worldTemplate?.summary ? `Summary: ${worldTemplate.summary}` : '',
+      worldTemplate?.description ? `Description: ${worldTemplate.description}` : '',
+      worldTemplate?.setting ? `Setting: ${worldTemplate.setting}` : '',
+      worldTemplate?.era || worldTemplate?.defaultEra ? `Era: ${worldTemplate?.era || worldTemplate?.defaultEra}` : '',
+      worldTemplate?.magicRules
+        ? `Magic/technology: ${typeof worldTemplate.magicRules === 'string' ? worldTemplate.magicRules : JSON.stringify(worldTemplate.magicRules)}`
+        : '',
+      publicWorldCharacters.length ? `Named world characters: ${publicWorldCharacters.join(' | ')}` : '',
+      publicWorldFactions.length ? `Factions: ${publicWorldFactions.join(' | ')}` : '',
+      publicWorldTimeline.length ? `Timeline: ${publicWorldTimeline.join(' | ')}` : '',
+      worldTemplate?.terminology
+        ? `Terminology: ${Object.entries(worldTemplate.terminology).slice(0, 12).map(([k, v]) => `${k}=${v}`).join('; ')}`
+        : '',
+    ].filter(Boolean).join('\n');
+
+    const startingSituation = run?.startingSituation
+      ? [
+          run.startingSituation.summary,
+          run.startingSituation.hook,
+          run.startingSituation.objective,
+          run.startingSituation.threat,
+          run.startingSituation.incitingIncident,
+        ].filter(Boolean).join(' ')
+      : '';
+
+    const recentPlotEntries = repo.getHistoricalChronicleEngine(storyId)
+      .projectPlayerChronicle(viewerId)
+      .slice(-8)
+      .map((entry: any) => entry.headline || entry.summary || entry.details)
+      .filter(Boolean);
+
+    const plotAndContinuity = [
+      startingSituation ? `Campaign opening: ${startingSituation}` : '',
+      recentPlotEntries.length ? `Recent canonical developments: ${recentPlotEntries.join(' | ')}` : '',
+      worldMomentum.unresolvedSignals?.length
+        ? `Unresolved world signals: ${worldMomentum.unresolvedSignals.slice(-6).join('; ')}`
+        : '',
+      worldMomentum.pressure !== undefined
+        ? `World momentum pressure: ${Math.round(Number(worldMomentum.pressure || 0))}/100`
+        : '',
+    ].filter(Boolean).join('\n');
+
+    // 2. Epistemic Projection: Scene & Geography
     const locId = player ? player.locationId : (run?.startingLocationId || run?.currentLocationId || (storyId === 'default_story' ? 'loc_whispering_orrery' : 'loc_unknown'));
     const locNode = geography.getNode(locId);
 		const isDiscovered = player ? player.discoveredLocationIds.includes(locId) : false;
@@ -494,6 +586,54 @@ export class WorkingContextEngine {
         sourceAuthority: 'TacticalCombatEngine (CH8)',
         isProtected: true,
         relevanceScore: 0.95,
+      });
+    }
+
+    candidateChunks.push({
+      id: 'b2_protagonist_identity',
+      band: 'B2_IMMEDIATE',
+      label: 'Protagonist Identity & Motivation',
+      content: protagonistIdentity,
+      estimatedTokens: WorkingContextEngine.estimateTokens(protagonistIdentity),
+      sourceAuthority: 'Persisted Story Run character snapshot',
+      isProtected: true,
+      relevanceScore: 0.87,
+    });
+
+    if (startingSituation) {
+      candidateChunks.push({
+        id: 'b2_campaign_opening',
+        band: 'B2_IMMEDIATE',
+        label: 'Campaign Opening & Premise',
+        content: startingSituation,
+        estimatedTokens: WorkingContextEngine.estimateTokens(startingSituation),
+        sourceAuthority: 'Persisted Story Run startingSituation',
+        isProtected: false,
+        relevanceScore: 0.82,
+      });
+    }
+
+    if (worldKnowledgeSnapshot) {
+      candidateChunks.push({
+        id: 'b3_world_bible_snapshot',
+        band: 'B3_CAUSAL_OPPORTUNITY',
+        label: 'World Bible Snapshot',
+        content: worldKnowledgeSnapshot,
+        estimatedTokens: WorkingContextEngine.estimateTokens(worldKnowledgeSnapshot),
+        sourceAuthority: 'Pinned WorldTemplate public world data',
+        relevanceScore: 0.74,
+      });
+    }
+
+    if (plotAndContinuity) {
+      candidateChunks.push({
+        id: 'b3_plot_continuity',
+        band: 'B3_CAUSAL_OPPORTUNITY',
+        label: 'Plot & Continuity Snapshot',
+        content: plotAndContinuity,
+        estimatedTokens: WorkingContextEngine.estimateTokens(plotAndContinuity),
+        sourceAuthority: 'Canonical Chronicle + WorldMomentumEngine',
+        relevanceScore: 0.81,
       });
     }
 

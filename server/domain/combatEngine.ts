@@ -4,6 +4,7 @@ import {
   resolveSpatialLineOfSight,
   resolveSpatialGridMovementPath,
   calculateSpatialGridMovementCost,
+  getSpatialGridMovementFailureReason,
   type SpatialObstacle,
 } from './spatialAuthority';
 import { PendingActivationState } from './capabilityEngine';
@@ -1657,7 +1658,17 @@ export class TacticalCombatEngine {
     if (!path) {
       return {
         success: false,
-        errorReason: 'Movement path is blocked or leaves the configured map bounds.',
+        errorReason:
+          getSpatialGridMovementFailureReason(
+            actorId,
+            { x: actor.x, y: actor.y },
+            { x: targetX, y: targetY },
+            this.mapBounds,
+            this.obstacles,
+            this.hazards,
+            this.participants.values(),
+          ) ||
+          'Movement path is blocked or leaves the configured map bounds.',
       };
     }
     const movementCost = calculateSpatialGridMovementCost(path, this.hazards);

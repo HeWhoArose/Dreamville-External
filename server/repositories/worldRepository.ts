@@ -351,7 +351,15 @@ export class InMemoryWorldRepository implements WorldRepository {
 
     for (const [universeId, universe] of Object.entries((persisted as any).universes || {})) {
       if (!universeId || !universe || this.isDeleted('STORY_RUN', String(universe.currentStoryId || ''))) continue;
-      this.universes.set(universeId, JSON.parse(JSON.stringify(universe)));
+      const normalizedUniverse: any = JSON.parse(JSON.stringify(universe));
+      normalizedUniverse.universeElapsedSeconds = Number(normalizedUniverse.universeElapsedSeconds || 0);
+      normalizedUniverse.worldBindings = Array.isArray(normalizedUniverse.worldBindings)
+        ? normalizedUniverse.worldBindings.map((binding: any) => ({
+            ...binding,
+            lastSimulatedUniverseSeconds: Number(binding?.lastSimulatedUniverseSeconds || 0),
+          }))
+        : [];
+      this.universes.set(universeId, normalizedUniverse);
     }
 
     for (const [namespace, values] of Object.entries(persisted.userData || {})) {
@@ -2649,9 +2657,13 @@ export class InMemoryWorldRepository implements WorldRepository {
       ...existing,
       ...universe,
       universeId,
-      worldBindings: Array.isArray(universe.worldBindings) ? universe.worldBindings : [],
+      worldBindings: (Array.isArray(universe.worldBindings) ? universe.worldBindings : []).map((binding: any) => ({
+        ...binding,
+        lastSimulatedUniverseSeconds: Number(binding?.lastSimulatedUniverseSeconds || 0),
+      })),
       travelHistory: Array.isArray(universe.travelHistory) ? universe.travelHistory : [],
       memories: Array.isArray(universe.memories) ? universe.memories : [],
+      universeElapsedSeconds: Number(universe.universeElapsedSeconds || 0),
     }));
     this.universes.set(universeId, normalized);
     this.persistLibrary();

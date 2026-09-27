@@ -1,1141 +1,363 @@
-# DreamBook — Spatial World & Simulation Master Specification
-## Version 1.0 — Pre-Implementation Architecture Contract
+# DreamBook — Spatial World Simulation Specification
+## Version 2.0 — Surgical Spatial Authority Contract
 
-**Status:** DESIGN / PRE-IMPLEMENTATION  
-**Source basis:** Spatial World & Simulation plan supplied for DreamBook implementation.  
-**Execution rule:** No spatial implementation begins until the Phase 0 design gate passes.
+**Status:** DESIGN / IMPLEMENTATION BLUEPRINT
+**Scope owner:** spatial geometry, movement, navigation, line of sight, perception inputs, terrain, cover, elevation and environmental simulation.
+**Does not own:** persistence/migration, AI routing, epistemic authority, capability ownership, narration or overall roadmap.
 
----
+## 1. Objective
 
-# 1. Objective
+Create a persistent deterministic spatial layer in which physical facts are resolved by canonical simulation rather than AI invention.
 
-DreamBook must eventually provide a persistent, deterministic spatial world in which:
+AI is a consumer of spatial projections, not the spatial authority.
 
-- movement;
-- visibility;
-- combat;
-- terrain;
-- environmental effects;
-- NPC behavior;
-- destruction;
-- world changes;
+## 2. Authority boundary
 
-are governed by canonical simulation rather than AI invention.
-
-The AI is a participant and planner, not the authority over physical reality.
-
----
-
-# 2. Canonical Spatial Architecture
-
-```
-PLAYER
- ↓
-Intent / Action Request
- ↓
-Narrative / AI Interpretation
- ↓
-Action Validator
- ↓
-┌──────────────┬──────────────┬─────────────────┐
-Spatial        Rules          Character
-Authority      Authority      Authority
-└──────────────┴──────────────┴─────────────────┘
- ↓
-World Simulation
- ↓
-Environment + Combat + Agency
- ↓
-Canonical Event
- ├── Persistence
- └── AI Context → Narration / UI
-```
-
-No subsystem may create a second authority for the same fact.
-
----
-
-# 3. Phase 0 — Architectural Freeze
-
-Before spatial implementation, freeze:
-
-## 3.1 Authority map
-
-Ownership must be explicit for:
-
-- world truth;
+Spatial Authority owns:
 - map geometry;
-- entity position;
-- movement;
-- collision;
+- coordinates;
+- entity spatial position;
+- collision/blocking;
+- movement legality from a spatial perspective;
+- navigation/path cost;
 - line of sight;
-- navigation;
-- terrain;
-- environmental state;
-- combat;
-- damage;
-- destruction;
-- character knowledge;
-- NPC intent;
-- persistence;
-- replay;
-- narration.
-
-Example:
-
-```
-LLM: "The player crosses the wall."
-Spatial Authority: NO.
-```
-
-## 3.2 State transitions
-
-Every meaningful state transition should retain:
-
-- eventId;
-- actorId;
-- cause;
-- source;
-- before;
-- after;
-- world timestamp/tick;
-- evidence.
-
-## 3.3 Coordinate model
-
-Freeze:
-
-- world coordinates;
-- local coordinates;
-- map coordinates;
-- screen coordinates;
-- tactical coordinates;
-- elevation.
-
-Prefer one unified world-space model with projections rather than incompatible coordinate systems.
-
-## 3.4 Units
-
-Freeze:
-
-- distance;
-- movement;
-- speed;
-- range;
-- area-of-effect radius;
-- height;
-- elevation;
-- time;
-- simulation tick.
-
----
-
-# 4. Phase 1 — Canonical Spatial Model
-
-A map is data, not merely an image.
-
-Required conceptual structure:
-
-```
-WorldMap
- ├── MapId
- ├── CoordinateSystem
- ├── Bounds
- ├── Chunks
- ├── TerrainLayers
- ├── Features
- ├── Structures
- ├── WaterBodies
- ├── NavigationData
- ├── EnvironmentState
- └── SpatialEntities
-```
-
-Terrain properties may include:
-
-- walkability;
-- movementCost;
+- line of fire;
 - cover;
-- opacity;
-- flammability;
-- wetness;
-- temperature;
-- traction;
 - elevation;
-- soundModifier;
-- visibilityModifier.
+- terrain state;
+- spatial hazards;
+- environmental spatial effects;
+- structure/material spatial state where explicitly implemented.
 
-Spatial features may include:
+Rules Authority owns mechanical interpretation.
+Character/Capability Authority owns what an actor is capable of doing.
+Combat Authority owns combat resolution.
+Epistemic Authority owns who is allowed to know a spatial fact.
+Persistence Authority stores the canonical spatial state.
 
-- wall;
-- door;
-- bridge;
-- tree;
-- rock;
-- building;
-- fire;
-- ice;
-- river;
-- cliff;
-- fence;
-- debris.
+## 3. Canonical pipeline
 
-A wall must have machine-readable properties such as:
-
-- position;
-- geometry;
-- material;
-- movementBlock;
-- visionBlock;
-- durability;
-- destructibility;
-- cover.
-
----
-
-# 5. Phase 2 — Watabou Adapter
-
-Watabou is an input/generation source, not DreamBook's canonical world authority.
-
-Architecture:
-
-```
-Watabou Output
+PLAYER/NPC INTENT
  ↓
-WatabouAdapter
+ACTION VALIDATION
  ↓
-Parser
+Spatial query
  ↓
-Validator
+Rules + Character/Capability checks
  ↓
-Normalizer
+Canonical resolution
  ↓
-DreamBook Spatial Schema
+Spatial state mutation
  ↓
-Navigation / Collision / LOS Data
+Canonical event
  ↓
-Stable IDs
+Chronicle / persistence / narration projections
+
+## 4. Spatial data model
+
+Minimum stable identifiers:
+- worldId;
+- mapId;
+- regionId;
+- locationId;
+- structureId;
+- roomId;
+- spatialEntityId;
+- terrainCellId where grid representation is used.
+
+Representations must support both authored and procedurally generated layouts.
+
+Coordinate representation must be chosen once and documented before implementation. No subsystem may invent its own coordinate convention.
+
+## 5. Map generation adapters
+
+External generators such as Watabou are input providers, not authorities.
+
+Correct boundary:
+
+Generator output
  ↓
-Canonical Persistence
-```
-
-Support only actual export capabilities of the chosen generator.
-
-The generated image is a rendering of canonical spatial data, not the canonical source itself.
-
-DreamBook should remain generator-agnostic so future adapters can support:
-
-- Watabou;
-- other procedural generators;
-- hand-authored maps;
-- future map tools;
-- AI-assisted generation.
-
-Licensing must be reviewed before embedding or redistributing third-party source code.
-
----
-
-# 6. Phase 3 — Map Rendering
-
-Separate:
-
-```
-Canonical Map
+Importer/normalizer
  ↓
-Renderer
+DreamBook Spatial Model
  ↓
-Visual Layers
-```
+DreamBook Spatial Authority
 
-Visual layers:
+Hand-authored maps and future generators must be able to use the same canonical model.
 
-- terrain;
-- water;
-- roads;
-- structures;
-- objects;
-- entities;
-- effects;
-- fog of war;
-- selection;
-- movement preview;
-- combat overlays.
+Any third-party source/license assumption must be verified before embedding source code. Generated output and generator source licensing are separate questions.
 
-Rendering must never mutate canonical simulation merely because something is drawn differently.
+## 6. Movement
 
----
+Movement resolves through:
 
-# 7. Phase 4 — Exploration
-
-Exploration actions include:
-
-- walking;
-- following roads;
-- approaching buildings;
-- crossing bridges;
-- entering settlements;
-- leaving settlements;
-- discovering locations.
-
-Movement must resolve through:
-
-```
 movement request
  ↓
 navigation
  ↓
 terrain
  ↓
-obstacles
+blocking/obstacles
  ↓
-distance
+actor movement capability
  ↓
-travel speed
+distance/cost
  ↓
 world time
  ↓
 canonical movement
-```
 
-Narration must describe the result rather than inventing travel legality.
+Movement must produce a canonical event and must be replayable through the existing event/replay architecture.
 
----
-
-# 8. Phase 5 — Navigation Authority
+## 7. Navigation
 
 Navigation answers:
+- can A reach B?
+- what route is available?
+- what is the route cost?
+- what terrain is crossed?
+- what obstacle blocks the route?
+- what capability is required?
 
-- Can A reach B?
-- What route is possible?
-- What is the route cost?
-- Which terrain is crossed?
-- Which obstacles block the route?
+Movement modes may include walk, run, climb, swim, fly, burrow, teleport or pass-through only when supported by canonical capability/rules systems.
 
-Movement capabilities may include:
+## 8. LOS and perception inputs
 
-- walk;
-- run;
-- climb;
-- swim;
-- fly;
-- burrow;
-- teleport;
-- pass-through.
-
-The result depends on canonical actor capabilities.
-
----
-
-# 9. Phase 6 — LOS and Perception
-
-Provide authoritative queries:
-
+Authoritative queries include:
 - canSee(A,B);
 - canHear(A,B);
 - hasLineOfFire(A,B);
 - isHidden(A);
 - isExposed(A).
 
-The same authority should support:
+These queries are reusable by combat, spells, stealth, perception, ambushes and NPC awareness.
 
-- ranged attacks;
-- spells;
-- stealth;
-- perception;
-- ambushes;
-- fog of war;
-- NPC awareness.
+The spatial system supplies physical facts; epistemic authority decides whether those facts enter an actor's knowledge projection.
 
-One spatial authority, many consumers.
+## 9. Tactical geometry
 
----
-
-# 10. Phase 7 — Tactical Combat Integration
-
-Combat actions include:
-
-- move;
-- attack;
-- cast;
-- defend;
-- dash;
-- flee;
-- hide;
-- interact;
-- push;
-- pull;
-- grapple;
-- destroy.
-
-Resolution:
-
-```
-Can I do it?
- ↓
-Can I reach the location?
- ↓
-Do I have LOS?
- ↓
-Is target in range?
- ↓
-Does terrain modify it?
- ↓
-Do rules allow it?
- ↓
-Resolve
-```
-
-AI tactical planning may select among legal actions but cannot bypass these checks.
-
----
-
-# 11. Phase 8 — Tactical Geometry
-
-Implement machine-readable:
-
-### Cover
-- none;
-- partial;
-- half;
-- full.
-
-### Elevation
-- ground;
-- hill;
-- platform;
-- tower;
-- rooftop;
-- cliff.
-
-### Position relationships
-- adjacent;
-- behind;
-- above;
-- below;
+Support machine-readable:
+- cover;
+- elevation;
+- adjacency;
+- behind/above/below relationships;
 - flanking;
-- surrounded;
-- corner;
-- chokepoint.
+- surrounded state;
+- corners;
+- chokepoints;
+- route exposure.
 
-These become facts available to rules, combat, perception and tactical AI.
+Do not build a separate tactical geometry engine inside combat.
 
----
+## 10. Environment
 
-# 12. Phase 9 — Environmental Authority
-
-Environment is simulation, not decoration.
-
-## Fire
-
-- ignition;
-- fuel;
-- spread;
-- intensity;
-- temperature;
-- smoke;
-- burn damage;
-- structural damage;
-- extinguishing.
-
-## Water
-
-- depth;
-- current;
-- swimming;
-- drowning;
-- wetness;
-- flow;
-- flooding.
-
-## Ice
-
-- thickness;
-- stability;
-- temperature;
-- load;
-- cracks;
-- breakage;
-- melting.
-
-## Weather
-
-- rain;
-- wind;
-- snow;
-- storm;
-- fog;
-- temperature.
-
-## Smoke
-
-- visibility;
-- breathing hazard;
-- fire propagation.
-
----
-
-# 13. Phase 10 — Materials and Destruction
-
-Initial material categories may include:
-
-- wood;
-- stone;
-- metal;
+Environmental simulation may cover:
+- fire;
+- water;
 - ice;
-- earth;
-- magical.
+- weather;
+- smoke;
+- temperature;
+- wind;
+- structural integrity;
+- material interactions.
 
-Material properties may include:
-
-- health;
-- flammability;
-- blastResistance;
-- impactResistance;
-- heatResistance;
-- waterInteraction;
-- collapseBehavior.
+Environmental outcomes must be deterministic and expressed as canonical events.
 
 Example:
 
-```
-Fire
- ↓
-Wood wall
- ↓
-Structural integrity decreases
- ↓
-Wall collapses
- ↓
-Navigation changes
- ↓
-LOS changes
- ↓
-Cover changes
- ↓
-Debris appears
-```
+Fire → wood structure → integrity decreases → collapse → navigation changes → LOS changes → cover changes.
 
-All downstream changes must be canonical events.
+## 11. Materials and destruction
 
----
+Initial material categories may include wood, stone, metal, ice, earth and magical materials.
 
-# 14. Phase 11 — Environmental Interactions
+Properties may include:
+- health;
+- flammability;
+- blast resistance;
+- impact resistance;
+- heat resistance;
+- water interaction;
+- collapse behavior.
 
-Rule-driven interactions include examples such as:
+Material rules must be implemented through the existing rules/effect architecture rather than a second rules engine.
 
-- Fire + Oil → intensified fire;
-- Fire + Ice → melting;
-- Water + Electricity → conductive hazard;
-- Water + Fire → extinguishing;
-- Explosion + Wall → destruction;
-- Heavy creature + Ice → structural stress;
-- Wind + Fire → changed spread;
-- Smoke + Character → reduced visibility.
+## 12. Environmental interactions
 
-These interactions must be represented as deterministic rules, not model inventions.
+Examples:
+- fire + oil;
+- fire + ice;
+- water + electricity;
+- water + fire;
+- explosion + wall;
+- weight + unstable ice;
+- wind + fire;
+- smoke + visibility.
 
----
+These are deterministic rules. AI may describe or propose an interaction only where the rules system permits it.
 
-# 15. Phase 12 — Spatial AI Interface
+## 13. AI spatial interface
 
-Do not send a giant raw map to the LLM.
+AI receives controlled queries/projections such as:
+- nearby entities;
+- visible entities;
+- line of sight;
+- route options;
+- movement options;
+- cover options;
+- hazards;
+- area targets;
+- escape routes;
+- terrain around an actor;
+- environmental state.
 
-Expose controlled queries such as:
-
-- getNearbyEntities();
-- getVisibleEntities();
-- checkLineOfSight();
-- findPath();
-- getMovementOptions();
-- getCoverOptions();
-- getNearbyHazards();
-- getAreaTargets();
-- getEscapeRoutes();
-- getTerrainAround();
-- getEnvironmentalState().
+Do not send unrestricted raw map state merely because the model can accept it.
 
 Example projection:
 
-```
 Target: Player
 Distance: 14m
-Direct path: blocked
-North route: clear
-South route: fire
-West: ally present
+Direct route: blocked
+North: clear
+South: fire
 East: river
-Available preferred route: north
-```
+West: ally
 
-The AI reasons from facts; canonical systems decide what is physically possible.
+The AI reasons from the projection; spatial authority determines the actual result.
 
----
+## 14. Combat integration
 
-# 16. Phase 13 — Epistemic Integration
+Combat may ask spatial authority for:
+- range;
+- LOS;
+- cover;
+- movement;
+- target reachability;
+- terrain modifiers;
+- hazards;
+- structure state.
+
+Combat authority remains responsible for combat resolution.
+
+## 15. Capability integration
+
+Spatial authority may report a physical constraint, such as a blocked route or missing climb surface.
+
+CapabilityEngine determines whether an actor possesses a capability such as flight, climbing or teleportation.
+
+Do not duplicate capability ownership in spatial state.
+
+## 16. NPC integration
+
+Dynamic Character Agency remains the owner of goals, motivations, relationships and agency state.
+
+Spatial authority contributes:
+- where the NPC is;
+- what it can physically perceive;
+- where it can move;
+- cover/hazards/routes.
+
+Together they produce the inputs for NPC decision-making.
+
+## 17. Epistemic integration
 
 Keep separate:
-
 - WORLD TRUTH;
 - PLAYER KNOWLEDGE;
 - NPC KNOWLEDGE;
 - AI CONTEXT.
 
-Example:
+Spatial Authority does not decide who knows something.
 
-```
-Secret tunnel exists:
-World = TRUE
-Player = UNKNOWN
-Bandit leader = KNOWN
-```
+## 18. Persistence boundary
 
-The player must not receive hidden information simply because the model received it.
+Spatial state is persisted through the existing world/persistence architecture.
 
----
+Persist stable spatial identifiers and canonical mutations, but do not create a SpatialPersistenceEngine or SpatialMigrationEngine.
 
-# 17. Phase 14 — Spatial NPC Agency
+Migration belongs to the existing migration registry.
+Replay belongs to the existing canonical event/replay system.
 
-Existing Dynamic Character Agency should be extended, not replaced.
+## 19. Diagnostics boundary
 
-NPC decision inputs:
+Spatial diagnostics are projections of the existing Developer Diagnostics system.
 
-```
-Personality
-+
-Motivation
-+
-Goal
-+
-Relationship
-+
-Beliefs
-+
-Knowledge
-+
-Agency State
-+
-Spatial State
-+
-Threat
-=
-NPC Intent
-```
+Required questions:
+- Why could the player not cross?
+- Why could an NPC not see the player?
+- Why did a route become unavailable?
+- Why did a structure collapse?
+- Why did a hazard spread?
 
-Examples:
+Do not create a second diagnostics workstation.
 
-- protect friend;
-- find cover;
-- escape fire;
-- intercept player;
-- guard entrance;
-- ambush;
-- retreat;
-- pursue;
-- investigate noise.
+## 20. Performance
 
----
-
-# 18. Phase 15 — Autonomous Encounters
-
-Introduce a World/Encounter Director only after spatial authority exists.
-
-Examples:
-
-```
-Bandits spot player
- ↓
-Evaluate terrain
- ↓
-Find ambush positions
- ↓
-Hide
- ↓
-Wait
- ↓
-Perception
- ↓
-Encounter
-```
-
-Or:
-
-```
-Storm
- ↓
-River rises
- ↓
-Bridge becomes unsafe
- ↓
-Travel route changes
-```
-
-The Director may schedule or propose events but must obey canonical simulation.
-
----
-
-# 19. Phase 16 — Multi-Scale World
-
-Use:
-
-```
-CONTINENT
- ↓
-REGION
- ↓
-KINGDOM
- ↓
-SETTLEMENT
- ↓
-DISTRICT
- ↓
-BUILDING
- ↓
-ROOM
- ↓
-TACTICAL SPACE
-```
-
-Use simulation resolution tiers:
-
-- far away → abstract;
-- nearby → moderate;
-- active scene → detailed;
-- active combat → maximum tactical resolution.
-
-Never simulate an entire continent at combat resolution.
-
----
-
-# 20. Phase 17 — Persistence
-
-Spatial changes must survive reload.
-
-Example:
-
-```
-Player burns tavern
- ↓
-Canonical mutation
- ↓
-Save
- ↓
-Logout
- ↓
-Reload
- ↓
-Tavern remains burned
-```
-
-Persist stable IDs for:
-
-- maps;
-- regions;
-- structures;
-- terrain features;
-- objects;
-- doors;
-- NPC positions;
-- environmental effects.
-
-Generated geometry plus canonical mutations must reconstruct the same world.
-
----
-
-# 21. Phase 18 — Deterministic Replay
-
-Record canonical spatial events such as:
-
-- player position changed;
-- NPC perception resolved;
-- ambush triggered;
-- attack resolved;
-- fire created;
-- wall damaged;
-- wall destroyed;
-- navigation graph updated.
-
-A diagnostic question such as "Why did the bridge collapse?" must be answerable from evidence rather than an AI explanation.
-
----
-
-# 22. Phase 19 — AI Narration
-
-Only after simulation decides the outcome:
-
-```
-Canonical Result
- ↓
-NarrativeOutcomeContext
- ↓
-Narration
-```
-
-Example canonical result:
-
-- fireball impact;
-- wall damage;
-- wall destroyed;
-- guard exposed;
-- smoke increased;
-- player visibility reduced.
-
-Narration converts those facts into prose.
-
----
-
-# 23. Phase 20 — Spatial UX
-
-Provide:
-
-### Exploration
-- map;
-- player;
-- nearby POIs;
-- discovered locations;
-- route.
-
-### Tactical
-- positions/grid;
-- movement preview;
-- range;
-- LOS;
-- cover;
-- targets;
-- environment.
-
-### Inspection
-- walls;
-- doors;
-- fire;
-- rivers;
-- NPCs;
-- buildings;
-- terrain.
-
-### Map intelligence
-- known locations;
-- rumors;
-- discovered paths;
-- quest markers;
-- faction territory.
-
-Every display respects epistemic visibility.
-
----
-
-# 24. Phase 21 — Performance
-
-Required mechanisms:
-
+Required mechanisms may include:
 - chunking;
 - lazy loading;
 - spatial indexing;
 - entity culling;
-- simulation levels;
+- simulation resolution tiers;
 - event batching;
 - navigation caching;
 - LOS caching;
 - environment tick throttling.
 
-Avoid frame-by-frame simulation of every entity and environmental effect.
+Long-range world simulation must not run every entity at tactical resolution.
 
----
+## 21. Implementation order
 
-# 25. Phase 22 — Diagnostics
-
-Developer Diagnostics should eventually inspect:
-
-- current map;
-- spatial chunk;
-- entity position;
-- navigation;
-- LOS;
-- environment;
-- active hazards;
-- combat;
-- NPC knowledge;
-- NPC intent;
-- world events;
-- simulation tick.
-
-Required questions:
-
-- Why couldn't the player cross?
-- Why couldn't NPC see the player?
-- Why did the fire spread?
-- Why did the bridge collapse?
-- Why did NPC flee?
-- Why couldn't the spell hit?
-- Why did the route become unavailable?
-
----
-
-# 26. Phase 23 — Testing
-
-## Unit tests
-
-Cover:
-
-- LOS;
-- pathfinding;
-- movement;
-- terrain;
-- fire;
-- ice;
-- water;
-- damage;
-- destruction;
-- cover;
-- elevation;
-- perception.
-
-## Integration tests
-
-Cover:
-
-- movement + terrain;
-- combat + LOS;
-- spell + wall;
-- fire + structure;
-- ice + weight;
-- water + movement;
-- NPC + perception;
-- NPC + navigation;
-- environment + persistence.
-
-## Cross-system acceptance
-
-Example:
-
-```
-Player enters forest
- ↓
-Enemy ambush
- ↓
-Perception determines detection
- ↓
-Combat
- ↓
-Wall blocks attack
- ↓
-Fire spreads
- ↓
-Enemy retreats
- ↓
-World persists
- ↓
-Reload
- ↓
-Same state
-```
-
----
-
-# 27. Phase 24 — Stress Testing
-
-Deliberately test:
-
-- 500 entities;
-- 1,000 entities;
-- large maps;
-- many environmental effects;
-- large fires;
-- many NPCs;
-- simultaneous combats;
-- mass destruction;
-- repeated pathfinding;
-- long sessions.
-
-Measure:
-
-- CPU;
-- memory;
-- latency;
-- simulation ticks;
-- network payload;
-- render cost;
-- save size.
-
-Mobile/low-end constraints remain a design requirement.
-
----
-
-# 28. Phase 25 — Security / AI Containment
-
-Verify:
-
-- AI cannot directly mutate canonical state;
-- AI cannot access hidden information without authorization;
-- AI cannot move entities illegally;
-- AI cannot bypass rules;
-- AI cannot invent map geometry;
-- AI cannot claim events occurred without canonical evidence.
-
----
-
-# 29. Phase 26 — Persistence Migration
-
-Every future spatial schema change requires:
-
-- version;
-- migration;
-- validation;
-- fallback.
-
-Example:
-
-```
-SpatialState v1
- ↓
-SpatialState v2
- ↓
-Migration
- ↓
-Validation
-```
-
-Existing campaigns must remain recoverable.
-
----
-
-# 30. Phase 27 — Final Polish
-
-Only after simulation is verified:
-
-- map art;
-- animations;
-- effects;
-- fire;
-- smoke;
-- water;
-- ice;
-- movement previews;
-- selection;
-- combat indicators;
-- camera;
-- zoom;
-- mobile controls.
-
-Presentation must not be allowed to drive canonical architecture.
-
----
-
-# 31. Dependency Chain
-
-```
-0  Architecture freeze
+SP-0 Architecture freeze
 ↓
-1  Canonical spatial model
+SP-1 Canonical spatial model
 ↓
-2  Watabou adapter
+SP-2 Map importer/adapter
 ↓
-3  Renderer
+SP-3 Rendering projection
 ↓
-4  Exploration
+SP-4 Movement
 ↓
-5  Navigation
+SP-5 Navigation
 ↓
-6  LOS / perception
+SP-6 LOS/perception queries
 ↓
-7  Tactical combat
+SP-7 Tactical geometry
 ↓
-8  Cover / elevation
+SP-8 Environment
 ↓
-9  Environment
+SP-9 Materials/destruction
 ↓
-10 Materials / destruction
+SP-10 AI spatial projections
 ↓
-11 Environmental interaction
+SP-11 Combat/NPC integration
 ↓
-12 AI spatial tools
+SP-12 Persistence/replay integration
 ↓
-13 Epistemic integration
+SP-13 Diagnostics
 ↓
-14 NPC spatial agency
+SP-14 Performance/stress
 ↓
-15 Autonomous encounters
-↓
-16 Multi-scale world
-↓
-17 Persistence
-↓
-18 Replay
-↓
-19 Narration
-↓
-20 UX
-↓
-21 Performance
-↓
-22 Diagnostics
-↓
-23 Tests
-↓
-24 Stress
-↓
-25 Security
-↓
-26 Migration
-↓
-27 Final polish
-↓
-FINAL ACCEPTANCE
-```
+SP-15 Acceptance
 
----
+## 22. Acceptance
 
-# 32. Pre-Implementation Gate
+Acceptance must prove:
+- movement correctness;
+- route correctness;
+- LOS correctness;
+- terrain/cover/elevation correctness;
+- environment correctness;
+- combat integration;
+- NPC integration;
+- epistemic filtering;
+- persistence after restart;
+- deterministic replay;
+- performance under representative loads.
 
-No spatial implementation begins until:
+Runtime test evidence is required before VERIFIED status.
 
-- requirements are complete;
-- authority boundaries are complete;
-- schemas are complete;
-- Watabou integration strategy is settled;
-- coordinate system is settled;
-- navigation model is settled;
-- LOS model is settled;
-- environment rules are settled;
-- combat integration is settled;
-- NPC/agency integration is settled;
-- epistemic model is settled;
-- persistence model is settled;
-- replay model is settled;
-- performance targets are settled;
-- UI contract is settled;
-- test matrix is settled;
-- licensing assumptions are reviewed;
-- no unresolved architectural blocker remains.
+## 23. Document boundary
 
----
-
-# 33. Implementation Protocol
-
-Every spatial phase follows:
-
-```
-AUDIT
-→ IMPLEMENT
-→ CONNECT
-→ FALLBACK
-→ TEST
-→ REGRESSION
-→ PERFORMANCE
-→ 10× AUDIT
-→ ACCEPTANCE
-```
-
-No phase is considered complete from source inspection alone.
-
----
-
-# 34. Completion / Retirement Rule
-
-Keep this document in `docs/` until the spatial system is completely implemented and accepted.
-
-It may be archived or deleted only after:
-
-- all phases pass;
-- final architecture is documented elsewhere;
-- migration notes are preserved;
-- no unfinished requirement depends on it.
+This document no longer contains separate roadmaps for AI orchestration, persistence, migration, epistemics, narration, diagnostics or the Master Plan. Those concerns are consumed through the existing authorities and the Surgical Architecture Registry.

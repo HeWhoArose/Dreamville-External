@@ -362,6 +362,10 @@ export class InMemoryWorldRepository implements WorldRepository {
       this.universes.set(universeId, normalizedUniverse);
     }
 
+    if ((persisted as any).characterAlignment) {
+      this.characterAlignmentEngine.importState((persisted as any).characterAlignment);
+    }
+
     for (const [namespace, values] of Object.entries(persisted.userData || {})) {
       const namespaceMap = new Map<string, any>();
       for (const [key, value] of Object.entries((values && typeof values === 'object') ? values as Record<string, any> : {})) {
@@ -2687,6 +2691,7 @@ export class InMemoryWorldRepository implements WorldRepository {
       confirmedCharacters: Object.fromEntries(this.confirmedCharactersMap),
       characterDrafts: Object.fromEntries(this.characterDraftsMap),
       universes: Object.fromEntries(this.universes),
+      characterAlignment: this.characterAlignmentEngine.exportState(),
       userData,
       deletionTombstones: Array.from(this.deletionTombstones.values()),
     };
@@ -3359,6 +3364,8 @@ export class InMemoryWorldRepository implements WorldRepository {
       confirmedCharacters: data.confirmedCharacters,
       characterDrafts: data.characterDrafts,
       userData: data.userData,
+      universes: data.universes,
+      characterAlignment: data.characterAlignment,
       deletionTombstones: data.deletionTombstones,
     });
   }
@@ -3414,6 +3421,18 @@ export class InMemoryWorldRepository implements WorldRepository {
         if (id && !this.isDeleted('CHARACTER_DRAFT', id, worldId)) byId.set(id, draft);
       }
       this.characterDraftsMap.set(worldId, Array.from(byId.values()));
+    }
+
+    if ((payload as any).universes && typeof (payload as any).universes === 'object') {
+      for (const [universeId, universe] of Object.entries((payload as any).universes)) {
+        if (universeId && !this.isDeleted('STORY_RUN', String((universe as any)?.currentStoryId || ''))) {
+          this.universes.set(universeId, JSON.parse(JSON.stringify(universe)));
+        }
+      }
+    }
+
+    if ((payload as any).characterAlignment) {
+      this.characterAlignmentEngine.importState((payload as any).characterAlignment);
     }
 
     for (const [namespace, values] of Object.entries(payload.userData)) {

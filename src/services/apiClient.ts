@@ -190,6 +190,18 @@ class ApiClient {
     return data;
   }
 
+  public async getNarrativeContextAudit(storyId: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/story-runs/${encodeURIComponent(storyId)}/narrative/context`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data?.errorReason || data?.error || `Narrative context audit failed with HTTP ${res.status}`);
+    }
+    return data;
+  }
+
   public async getOrchestratorCategoryStates(): Promise<any[]> {
     const res = await fetch(`${this.baseUrl}/orchestrator/categories`, {
       method: 'GET',

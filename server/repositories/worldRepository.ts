@@ -31,6 +31,7 @@ import { rulesProfileEngine } from '../domain/rulesProfileEngine';
 import { narrativeProfileEngine } from '../domain/narrativeProfileEngine';
 import { deterministicId, hashStringToSeed } from '../domain/deterministicRng';
 import type { NarrativeProfile } from '../../src/types';
+import { UniverseRuntimeService } from '../domain/universeRuntimeService';
 import type { UniverseCampaignState, UniverseMemoryRecord } from '../domain/universeRuntimeService';
 import { PersistentGameStore } from '../services/persistentGameStore';
 import { UserDataArchiveService, type DeletionTombstone, type UserDataArchive } from '../domain/userDataArchive';
@@ -166,7 +167,9 @@ export interface WorldRepository {
   deleteUserData(namespace: string, key: string): void;
   getUniverse(universeId: string): UniverseCampaignState | null;
   getUniverseForStory(storyId: string): UniverseCampaignState | null;
+  getAllUniverses(): UniverseCampaignState[];
   saveUniverse(universe: UniverseCampaignState): void;
+  deleteUniverse(universeId: string): void;
   saveUniverseMemory(universeId: string, memory: UniverseMemoryRecord): void;
 }
 
@@ -302,6 +305,7 @@ export class InMemoryWorldRepository implements WorldRepository {
     this.persistenceSuppressed = options.disablePersistence === true;
     const persisted = this.persistentStore.load();
     let requiresNarrativeMigration = false;
+    let requiresUniverseMigration = false;
 
     for (const tombstone of persisted.deletionTombstones || []) {
       if (!tombstone?.entityType || !tombstone?.entityId) continue;
@@ -420,6 +424,14 @@ export class InMemoryWorldRepository implements WorldRepository {
       if (persistedRuntime.protagonistAgenda) this.protagonistAgendas.set(storyId, JSON.parse(JSON.stringify(persistedRuntime.protagonistAgenda)));
     }
 
+    for (const [universeId, universe] of this.universes.entries()) {
+      const normalized = UniverseRuntimeService.normalizeUniverseState(this, universe);
+      if (normalized.changed) {
+        this.universes.set(universeId, normalized.universe);
+        requiresUniverseMigration = true;
+      }
+    }
+
     this.geographies.set('default_story', new GeographyGraph());
     this.seedDefaultTemplates();
     this.seedDefaultStory('default_story');
@@ -428,7 +440,7 @@ export class InMemoryWorldRepository implements WorldRepository {
     // after mutation so NPC friendships, trust, affection and role transitions survive restart.
     this.characterAlignmentEngine.setMutationListener(() => this.persistLibrary());
 
-    if (requiresNarrativeMigration) {
+    if (requiresNarrativeMigration || requiresUniverseMigration) {
       this.persistLibrary();
     }
   }
@@ -2730,6 +2742,10 @@ export class InMemoryWorldRepository implements WorldRepository {
     return universe ? JSON.parse(JSON.stringify(universe)) : null;
   }
 
+  public getAllUniverses(): UniverseCampaignState[] {
+    return Array.from(this.universes.values()).map((universe) => JSON.parse(JSON.stringify(universe)));
+  }
+
   public getUniverseForStory(storyId: string): UniverseCampaignState | null {
     const targetStoryId = String(storyId || '');
     for (const universe of this.universes.values()) {
@@ -2741,6 +2757,8 @@ export class InMemoryWorldRepository implements WorldRepository {
   }
 
   public saveUniverse(universe: UniverseCampaignState): void {
+    const normalizedInput = UniverseRuntimeService.normalizeUniverseState(this, universe).universe;
+    universe = normalizedInput;
     const universeId = String(universe?.universeId || '').trim();
     if (!universeId) throw new Error('Cannot save a universe without universeId.');
     const existing = this.universes.get(universeId);
@@ -2757,6 +2775,13 @@ export class InMemoryWorldRepository implements WorldRepository {
       universeElapsedSeconds: Number(universe.universeElapsedSeconds || 0),
     }));
     this.universes.set(universeId, normalized);
+    this.persistLibrary();
+  }
+
+  public deleteUniverse(universeId: string): void {
+    const id = String(universeId || '').trim();
+    if (!id) return;
+    this.universes.delete(id);
     this.persistLibrary();
   }
 
@@ -3325,6 +3350,7 @@ export class InMemoryWorldRepository implements WorldRepository {
 
   public deleteStoryRun(storyId: string): void {
     if (!storyId) return;
+    UniverseRuntimeService.detachStoryRunFromUniverse(this, storyId);
     this.storyRuns.delete(storyId);
     this.playerLifecycles.delete(storyId);
     this.worldClocks.delete(storyId);
@@ -3377,6 +3403,7 @@ export class InMemoryWorldRepository implements WorldRepository {
     const deleted = this.worldTemplates.delete(worldId);
     if (deleted) this.recordDeletion('WORLD', worldId);
     if (deleted) {
+      UniverseRuntimeService.detachWorldFromUniverses(this, worldId);
       this.confirmedCharactersMap.delete(worldId);
       this.characterDraftsMap.delete(worldId);
       this.persistLibrary();

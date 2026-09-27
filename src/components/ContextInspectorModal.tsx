@@ -222,6 +222,14 @@ export const ContextInspectorModal: React.FC<ContextInspectorModalProps> = ({
           >
             Eviction Log ({contextData?.evictedChunkLabels.length ?? 0})
           </button>
+          <button
+            onClick={() => setActiveTab('narrative')}
+            className={`pb-2.5 px-2 border-b-2 font-medium transition ${activeTab === 'narrative'
+              ? 'border-amber-400 text-amber-300'
+              : 'border-transparent text-stone-400 hover:text-stone-200'}`}
+          >
+            Narrative Audit
+          </button>
         </div>
 
         {/* Tab Content */}
@@ -369,6 +377,56 @@ export const ContextInspectorModal: React.FC<ContextInspectorModalProps> = ({
             </div>
           )}
 
+          {activeTab === 'narrative' && (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-violet-300/15 bg-violet-300/5 p-4">
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-violet-200/70">Narrative Continuity</div>
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <div className="rounded-lg border border-white/10 bg-black/15 p-3">
+                    <div className="text-[10px] font-black uppercase text-cyan-100/60">Plot</div>
+                    <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-stone-200">{narrativeAudit?.plot?.summary || 'No plot summary has been committed yet.'}</p>
+                    <div className="mt-2 text-[10px] text-stone-500">Beats: {narrativeAudit?.plot?.beats?.length || 0} · Open threads: {narrativeAudit?.plot?.openThreads?.length || 0}</div>
+                  </div>
+                  <div className="rounded-lg border border-white/10 bg-black/15 p-3">
+                    <div className="text-[10px] font-black uppercase text-cyan-100/60">Plan</div>
+                    <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-stone-200">{narrativeAudit?.plan?.objective || 'No narrative objective has been established yet.'}</p>
+                    <div className="mt-2 text-[10px] text-stone-500">Priority threads: {narrativeAudit?.plan?.priorityThreads?.length || 0}</div>
+                  </div>
+                </div>
+              </div>
+              <div className="rounded-xl border border-cyan-300/15 bg-cyan-300/5 p-4">
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-cyan-100/70">Latest Research Packet</div>
+                {narrativeAudit?.latestResearch ? (
+                  <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap rounded-lg bg-black/20 p-3 text-[10px] leading-5 text-stone-300">{JSON.stringify(narrativeAudit.latestResearch, null, 2)}</pre>
+                ) : (
+                  <p className="mt-2 text-xs text-stone-500">No saved narrative research is available for this run yet.</p>
+                )}
+              </div>
+              <div className="rounded-xl border border-emerald-300/15 bg-emerald-300/5 p-4">
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-emerald-100/70">Exact Narration Context Delivery</div>
+                {narrativeAudit?.latestContextAudit ? (
+                  <>
+                    <div className="mt-2 text-xs text-stone-300">
+                      {narrativeAudit.latestContextAudit.totalTokens} tokens delivered · budget {narrativeAudit.latestContextAudit.hardTokenBudget}
+                    </div>
+                    <div className="mt-3 space-y-1">
+                      {(narrativeAudit.latestContextAudit.includedChunks || []).map((chunk: any) => (
+                        <div key={chunk.label} className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/15 px-3 py-2">
+                          <span className="text-[10px] font-semibold text-stone-200">{chunk.label}</span>
+                          <span className="text-[9px] text-stone-500">{chunk.estimatedTokens}t · {Math.round((chunk.relevanceScore || 0) * 100)}%</span>
+                        </div>
+                      ))}
+                    </div>
+                    {!!narrativeAudit.latestContextAudit.evictedChunkLabels?.length && (
+                      <div className="mt-3 text-[10px] text-amber-200/70">Evicted: {narrativeAudit.latestContextAudit.evictedChunkLabels.join(', ')}</div>
+                    )}
+                  </>
+                ) : (
+                  <p className="mt-2 text-xs text-stone-500">No narration context audit has been saved yet.</p>
+                )}
+              </div>
+            </div>
+          )}
           {activeTab === 'eviction' && (
             <div className="space-y-3">
               {contextData?.evictedChunkLabels && contextData.evictedChunkLabels.length > 0 ? (

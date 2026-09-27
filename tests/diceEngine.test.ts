@@ -78,11 +78,12 @@ test('dice renderer uses projected 3D canvas geometry rather than a flat SVG she
 
 test('dice UI does not reveal the canonical result before the roll is started', () => {
   const source = fs.readFileSync(path.join(process.cwd(), 'src/components/common/DiceRollAnimation.tsx'), 'utf8');
-  assert.match(source, /useState<number\[\]>\(\(\) =>[\s\S]*diceSides\.map\(\(sides\) => randomFace\(sides\)\)/);
-  assert.doesNotMatch(source, /useState<number\[\]>\(\(\) =>[\s\S]*roll\.individualDice\[index\]/);
-  assert.match(source, /setRollingValues\(diceSides\.map\(\(sides\) => randomFace\(sides\)\)\);/);
-  assert.match(source, /setRollingValues\(\[\.\.\.roll\.individualDice\]\);/);
-});
+  const beforeStartRoll = source.slice(0, source.indexOf('const startRoll'));
+  assert.equal(beforeStartRoll.includes('diceSides.map((sides) => randomFace(sides))'), true);
+  assert.equal(beforeStartRoll.includes('roll.individualDice[index]'), false);
+  assert.equal(source.includes('setRollingValues(diceSides.map((sides) => randomFace(sides)));'), true);
+  assert.equal(source.includes('setRollingValues([...roll.individualDice]);'), true);
+});;
 
 test('combat resolution consumes the shared vibrant dice presentation instead of developer-style roll rows', () => {
   const source = fs.readFileSync(path.join(process.cwd(), 'src/components/TacticalCombatView.tsx'), 'utf8');

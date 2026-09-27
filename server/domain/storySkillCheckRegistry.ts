@@ -14,6 +14,8 @@ const KEYWORDS: Record<string, { keywords: string[]; defaultDc: number; requires
 	animal_handling: {
 		keywords: [
 			'calm the horse',
+			'calm the frightened horse',
+			'calm a horse',
 			'handle the beast',
 			'handle the animal',
 			'soothe the animal',

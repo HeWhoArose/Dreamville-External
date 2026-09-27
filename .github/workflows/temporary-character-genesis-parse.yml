@@ -53,6 +53,26 @@ jobs:
             }
             token = scanner.scan();
           }
+          const targetPositions = [158953, 219567];
+          const tokenContexts = targetPositions.map((position) => {
+            const token = ts.getTokenAtPosition(sf, position);
+            const parents = [];
+            let node = token;
+            for (let depth = 0; node && depth < 12; depth += 1, node = node.parent) {
+              parents.push({
+                kind: ts.SyntaxKind[node.kind],
+                pos: node.pos,
+                end: node.end,
+                text: source.slice(node.pos, Math.min(node.end, node.pos + 240)),
+              });
+            }
+            return {
+              position,
+              tokenKind: token ? ts.SyntaxKind[token.kind] : null,
+              tokenText: token ? token.getText(sf) : null,
+              parents,
+            };
+          });
           const diagnostics = sf.parseDiagnostics.map(format);
           const interestingLines = source.split('\\n');
           const windows = diagnostics.map((d) => ({
@@ -62,6 +82,7 @@ jobs:
             parseDiagnostics: diagnostics,
             windows,
             syntaxDiagnostics: sf.getChildren(sf).length,
+            tokenContexts,
             tokens,
           }, null, 2));
 

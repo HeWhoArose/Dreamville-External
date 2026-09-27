@@ -504,6 +504,7 @@ export type ActionRequest =
       worldId?: string;
       worldPremise?: string;
       worldTitle?: string;
+      travelDurationSeconds?: number;
     }
   | {
       type: 'CANCEL_TRAVEL';

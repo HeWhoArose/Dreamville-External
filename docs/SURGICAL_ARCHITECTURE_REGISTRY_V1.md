@@ -90,10 +90,26 @@ Finish the capability and skill boundary first because Story UI, narration and O
 - Full surgical record: `docs/S3_NARRATION_CONTEXT_OOC_SURGICAL_AUDIT_2026-09-27.md`.
 
 ### S4 — AI orchestration consolidation
+**Status:** VERIFIED — RUNTIME TESTED 2026-09-27
+
 Merge model routing, task contracts, context contracts and fallback rules into one active implementation path.
 
+- Central task-contract metadata remains owned by server/domain/aiTaskContracts.ts.
+- Model/task readiness is centralized through evaluateAiTaskReadiness().
+- Provider response validation and bounded fallback are enforced by MultiModelOrchestrator.
+- Typed AI context adapters compose existing canonical projections; they do not replace WorkingContextEngine or NarrativeContinuityEngine.
+- Full surgical record: docs/S4_AI_ORCHESTRATION_CONSOLIDATION_AUDIT_2026-09-27.md.
+
 ### S5 — Persistent multi-world
+**Status:** VERIFIED — RUNTIME TESTED 2026-09-27
+
 Harden universe/world/run identity, cross-world continuity, dormant-world catch-up and long-term memory.
+
+- Universe bindings are normalized at the universe/repository boundary.
+- Story/world deletion detaches stale universe bindings.
+- Travel has a failure-safe archive rollback path.
+- Existing WorldSimulationService remains the dormant-world catch-up authority.
+- Full surgical record: docs/S5_PERSISTENT_MULTIWORLD_SURGICAL_AUDIT_2026-09-27.md.
 
 ### S6 — Spatial world
 Only after the above contracts are stable, implement spatial authority, navigation, LOS, environment and tactical geometry.

@@ -6,35 +6,40 @@ import { WorkingContextResponse, ContextInspectionResponse, PriorityBand } from 
 interface ContextInspectorModalProps {
   isOpen: boolean;
   onClose: () => void;
+  storyId: string;
 }
 
 export const ContextInspectorModal: React.FC<ContextInspectorModalProps> = ({
   isOpen,
   onClose,
+  storyId,
 }) => {
   const [budget, setBudget] = useState<number>(400);
   const [playerAction, setPlayerAction] = useState<string>('Observe surroundings');
   const [contextData, setContextData] = useState<WorkingContextResponse | null>(null);
   const [inspectionData, setInspectionData] = useState<ContextInspectionResponse | null>(null);
+  const [narrativeAudit, setNarrativeAudit] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<'assembled' | 'packet' | 'bands' | 'eviction'>('assembled');
+  const [activeTab, setActiveTab] = useState<'assembled' | 'packet' | 'bands' | 'eviction' | 'narrative'>('assembled');
 
   const fetchContext = async () => {
     setIsLoading(true);
     try {
-      const [ctx, insp] = await Promise.all([
+      const [ctx, insp, audit] = await Promise.all([
         apiClient.assembleContext({
-          storyId: 'default_story',
+          storyId,
           playerAction,
           hardTokenBudget: budget,
         }),
         apiClient.inspectContext({
-          storyId: 'default_story',
+          storyId,
           budget,
         }),
+        apiClient.getNarrativeContextAudit(storyId).catch(() => null),
       ]);
       setContextData(ctx);
       setInspectionData(insp);
+      setNarrativeAudit(audit);
     } catch (err) {
       console.error('Failed to assemble or inspect working context:', err);
     } finally {

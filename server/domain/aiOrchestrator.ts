@@ -8,7 +8,7 @@ import { worldRepository } from '../repositories/worldRepository';
 import { StoryAdaptationPipeline } from './storyAdaptation';
 import { getProviderApiKey } from '../services/providerCredentialService';
 import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
-import { getAiTaskContract } from './aiTaskContracts';
+import { evaluateAiTaskReadiness, getAiTaskContract, validateAiTaskResponse, type AiTaskReadiness } from './aiTaskContracts';
 import { narrativeContinuityEngine } from './narrativeContinuityEngine';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
@@ -3784,6 +3784,19 @@ export class MultiModelOrchestrator {
     }
   }
 
+  public getTaskReadiness(task: TaskId, providerId: string, modelId: string, contextTokens = 0): AiTaskReadiness | undefined {
+    const model = this.getModel(providerId, modelId);
+    if (!model) return undefined;
+    const readiness = evaluateAiTaskReadiness(task, model, contextTokens);
+    if (this.isCircuitBreakerTripped(model.providerId, model.modelId)) {
+      return { ...readiness, state: 'COOLDOWN', reason: 'Circuit breaker is tripped for this model/task route.' };
+    }
+    if (this.isModelCoolingDown(model)) {
+      return { ...readiness, state: 'COOLDOWN', reason: 'Model is in provider cooldown.' };
+    }
+    return readiness;
+  }
+
   public getModel(providerId: string, modelId: string): ModelRegistryRecord | undefined {
     const direct = this.models.get(`${providerId}::${modelId}`);
     if (direct) return direct;
@@ -3897,70 +3910,18 @@ export class MultiModelOrchestrator {
   }
 
   public isCandidateUsable(model: ModelRegistryRecord, task?: TaskId, contextTokens: number = 0): boolean {
-    if (task && !model.roleEligibility.includes(task)) return false;
-    if (model.isEmergencyFloor) {
-      return true;
+    if (!task) {
+      if (model.health === 'DisabledByUser' || model.health === 'Unavailable' || model.health === 'InvalidAuth') return false;
+      if (model.quota === 'Exhausted' || model.accessStatus === 'quota_limited' || model.accessStatus === 'rate_limited') return false;
+      return !this.isCircuitBreakerTripped(model.providerId, model.modelId) && !this.isModelCoolingDown(model);
     }
 
-    if (task) {
-      const contract = getAiTaskContract(task);
-      const capabilities = new Set(model.capabilities || []);
-      const hasExplicitCapabilityMetadata = capabilities.size > 0;
-      const hasExplicitInputMetadata = Array.isArray(model.supportedInputTypes) && model.supportedInputTypes.length > 0;
-      const hasExplicitOutputMetadata = Array.isArray(model.supportedOutputTypes) && model.supportedOutputTypes.length > 0;
-
-      // Legacy/test model records may predate the capability-contract fields. If
-      // they declare task eligibility but no capability metadata, keep them usable.
-      if (hasExplicitCapabilityMetadata) {
-        for (const required of contract.requiredCapabilities) {
-          const satisfied =
-            capabilities.has(required) ||
-            (required === 'text_generation' && (
-              capabilities.has('creative_writing') ||
-              capabilities.has('fast') ||
-              capabilities.has('reasoning') ||
-              capabilities.has('structured_output') ||
-              capabilities.has('deep_reasoning') ||
-              capabilities.has('text')
-            )) ||
-            (required === 'structured_output' && model.hasStructuredOutput === true);
-          if (!satisfied) return false;
-        }
-      }
-
-      if (hasExplicitInputMetadata && contract.requiredInputTypes.some((type) => !model.supportedInputTypes!.includes(type))) {
-        return false;
-      }
-      if (hasExplicitOutputMetadata && contract.requiredOutputTypes.some((type) => !model.supportedOutputTypes!.includes(type))) {
-        return false;
-      }
-
-      if (
-        contract.requiresStructuredOutput &&
-        hasExplicitCapabilityMetadata &&
-        !model.hasStructuredOutput &&
-        !capabilities.has('structured_output')
-      ) {
-        return false;
-      }
+    const readiness = evaluateAiTaskReadiness(task, model, contextTokens);
+    if (!['READY', 'QUOTA_AVAILABLE', 'CONFIGURED', 'CAPABILITY_COMPATIBLE', 'TASK_VERIFIED'].includes(readiness.state)) {
+      return false;
     }
-
-    if (
-      model.health === 'DisabledByUser' ||
-      model.health === 'Unavailable' ||
-      model.health === 'InvalidAuth'
-    ) return false;
-    // A known exhausted quota is not a runnable candidate. Do not let the
-    // selector advertise a model as callable and then discover the quota error
-    // only inside the provider attempt loop.
-    if (
-      model.quota === 'Exhausted' ||
-      model.accessStatus === 'quota_limited' ||
-      model.accessStatus === 'rate_limited'
-    ) return false;
     if (this.isCircuitBreakerTripped(model.providerId, model.modelId)) return false;
     if (this.isModelCoolingDown(model)) return false;
-    if (contextTokens > 0 && model.contextWindow > 0 && contextTokens > model.contextWindow) return false;
     return true;
   }
 
@@ -5600,6 +5561,8 @@ export class MultiModelOrchestrator {
       validateResponse?: (text: string) => TaskResponseValidationResult;
     }
   ): Promise<{
+    const contract = getAiTaskContract(task);
+    const contractValidator = options?.validateResponse || ((text: string) => validateAiTaskResponse(task, text));
     text: string;
     source: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK';
     providerId: string;
@@ -5749,6 +5712,9 @@ export class MultiModelOrchestrator {
     }> = [];
 
     for (let cIdx = 0; cIdx < candidateChain.length; cIdx++) {
+      if (totalAttempts >= (contract.fallbackPolicy?.maxTotalAttempts ?? 5) && !candidateChain[cIdx].isEmergencyFloor) {
+        break;
+      }
       // Before entering the emergency floor, perform one last live-registry
       // recovery pass. This handles stale persisted chains whose remaining
       // configured entries are unusable even though another eligible provider
@@ -5814,8 +5780,8 @@ export class MultiModelOrchestrator {
           throw new Error('Provider returned empty response.');
         }
 
-        if (options?.validateResponse) {
-          const validation = options.validateResponse(providerRes.text);
+        if (contractValidator) {
+          const validation = contractValidator(providerRes.text);
           if (!validation.valid) {
             throw new Error(
               'Task response schema validation failed' +

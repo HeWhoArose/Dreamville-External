@@ -3382,6 +3382,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
               </button>
             </div>
           </div>
+          </div>
         )}
 
         {/* STEP 6: STARTING EQUIPMENT & PAPER DOLL */}

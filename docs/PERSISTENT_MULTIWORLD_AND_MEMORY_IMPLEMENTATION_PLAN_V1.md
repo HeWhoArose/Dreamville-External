@@ -114,6 +114,8 @@ Persistent Story Runs now retain and restore the runtime state required for long
 - knowledge facts;
 - story threads and active effects.
 
+Character relationship/alignment state is also persisted at the campaign root. Relationship mutations automatically trigger persistence, so trust, affection, respect, fear and role transformations are not dependent on the player explicitly requesting a save.
+
 Revisiting a world therefore rebuilds its runtime from its saved state rather than from the world template alone.
 
 ### 3.5 Memory survives process restart

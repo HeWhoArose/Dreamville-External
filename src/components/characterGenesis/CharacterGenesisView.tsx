@@ -2735,6 +2735,8 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 </div>
               )}
             </div>
+            </div>
+
             {/* Capabilities Cards */}
 
             {/* Extensible Custom Attributes & Stats */}

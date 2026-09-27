@@ -747,6 +747,62 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
     // This is idempotent and does not replace the Story Run's canonical world state.
     const universe = UniverseRuntimeService.ensureUniverse(worldRepository, storyId);
 
+    // Explicit cross-world freeform actions ("fly to another planet", "leave this world for X")
+    // are promoted to the same canonical travel path as the structured world-travel request.
+    if (actionRequest.type === 'CUSTOM_ACTION') {
+      const travelText = String(
+        (actionRequest as any).customText ||
+        (actionRequest as any).description ||
+        (actionRequest as any).input ||
+        ''
+      ).trim();
+      const inferredTravel = UniverseRuntimeService.inferCrossWorldTravelIntent(
+        worldRepository,
+        storyId,
+        travelText,
+      );
+
+      if (inferredTravel) {
+        try {
+          const result = await UniverseRuntimeService.travel(worldRepository, {
+            storyId,
+            universeId: universe.universeId,
+            worldId: inferredTravel.worldId,
+            worldPremise: inferredTravel.worldPremise,
+            worldTitle: inferredTravel.worldTitle,
+            trigger: 'PLAYER',
+          });
+          serverMockAuthority.setActiveStoryId(result.storyId);
+          const viewState = serverMockAuthority.getSanitizedViewState(result.storyId);
+          return res.json({
+            success: true,
+            actionId: deterministicId('world_travel_action', universe.universeId, storyId, result.storyId, travelText),
+            requestType: actionRequest.type,
+            status: 'MOCK_ENGINE_COMMITTED',
+            message: result.createdWorld
+              ? 'The interworld journey created a new world and the player arrived there.'
+              : 'The player crossed into the requested world.',
+            authoritativeFeedback: 'Cross-world travel committed through the persistent Universe runtime.',
+            narrativeResponse: result.createdWorld
+              ? `Beyond the boundary of ${worldRepository.getWorldTemplate(String(worldRepository.getStoryRun(storyId)?.worldId || ''))?.title || 'the current world'}, a new world forms around the traveler: ${result.world?.title || 'an unknown world'}.`
+              : `The boundary between worlds gives way, and ${result.world?.title || 'the destination world'} receives the traveler.`,
+            viewState,
+            universe: result.universe,
+            world: result.world,
+            storyId: result.storyId,
+            createdWorld: result.createdWorld,
+            createdSession: result.createdSession,
+          });
+        } catch (error: any) {
+          return res.status(400).json({
+            success: false,
+            code: 'WORLD_TRAVEL_FAILED',
+            errorReason: error?.message || 'World travel failed.',
+          });
+        }
+      }
+    }
+
     if (actionRequest.type === 'WORLD_TRAVEL_REQUEST') {
       if (!actionRequest.worldId && !actionRequest.worldPremise) {
         return res.status(400).json({

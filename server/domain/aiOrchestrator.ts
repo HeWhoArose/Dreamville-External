@@ -4634,8 +4634,8 @@ export class MultiModelOrchestrator {
       return { success: false, error: 'A player action is required for narrative generation.' };
     }
 
-    const hardTokenBudget = params.hardTokenBudget ?? 500;
-    const timeoutMs = params.timeoutMs ?? 5000;
+    const hardTokenBudget = params.hardTokenBudget ?? 950;
+    const timeoutMs = params.timeoutMs ?? 7000;
     const authoritativeOutcome = (params.committedOutcome || '').trim();
     const connectedDirective = (params.continuationDirective || '').trim();
     const styleInstruction = params.styleInstruction || [
@@ -4652,23 +4652,51 @@ export class MultiModelOrchestrator {
       'Do not restate the player action verbatim or quote it back.',
       'Show immediate sensory and physical consequences, NPC reactions, environmental response, or tension when the canonical context supports them.',
       'The response should feel like the next passage of an interactive novel or tabletop GM session, not a paraphrase of the player input.',
-      'Use the current scene plus recent turn history to maintain continuity. The narration should feel like events are unfolding from a larger living situation, with visible consequences, atmosphere, character reactions, unresolved tension, and a sensible opening for what can happen next.',
+      'Use the current scene, researched relevant memories/lore, maintained plot, maintained narrative plan, and recent turn history to maintain continuity. The narration should feel like events are unfolding from a larger living situation, with visible consequences, atmosphere, character reactions, unresolved tension, and a sensible opening for what can happen next.',
       'For ordinary physical action such as walking, approaching, looking, opening, touching, speaking, waiting, or moving, narrate the physical/world response naturally instead of treating the action as a capability request.',
       'Do not repeat the action in sentence form. Transform it into fiction: describe what the character notices, how the environment responds, what changes because of the movement, what remains uncertain, and what catches attention next.',
+      'Prefer concrete scene-specific details over generic atmospheric filler. Reuse established world details only when they are relevant to the current action.',
+      'Vary sentence rhythm, paragraph openings, sensory emphasis, and descriptive verbs. Do not begin successive turns with the same grammatical pattern, the protagonist name, or a generic atmosphere sentence.',
+      'When recent narration contains a distinctive phrase, image, or sentence structure, deliberately avoid repeating it unless the repetition is an intentional in-world motif.',
       'Whenever canonical context supports it, add one forward-looking beat: a visible opportunity, complication, clue, threat, NPC response, environmental change, or decision point. Do not invent a new fact merely to create drama.',
-      'Use 2–4 paragraphs for a normal story turn. A tiny action can be shorter only when the canonical scene genuinely provides no additional consequence; meaningful exploration, discovery, danger, dialogue, or combat should receive enough space to develop.',
+      'Use 2–4 developed paragraphs for a normal story turn. A tiny action can be shorter only when the canonical scene genuinely provides no additional consequence; meaningful exploration, discovery, danger, dialogue, or combat should receive enough space to develop.',
       'Do not add menus, meta-commentary, engine terminology, model names, system-status language, labels, or debug text.',
       'Do not invent hidden facts, NPC knowledge, items, powers, or outcomes that are not supported by canonical context.',
       'Do not propose or perform canonical state changes. The response is presentation only.',
       'Never use phrases such as "the outcome unfolds in the narrative", "the action is committed", "canonical acquisition", "proposed capability", "server authority", or similar implementation language.',
     ].join(' ');
 
+    const worldRepo = this.getWorldRepository();
+    const viewerActorId = worldRepo.getPlayerLifecycle(storyId)?.actorId;
+    const researchQuery = [
+      playerAction,
+      ...(params.recentTurns || []).slice(-2).map((turn) => turn.playerAction),
+    ].filter(Boolean).join(' ');
+    const researchPacket = narrativeContinuityEngine.research(
+      worldRepo,
+      storyId,
+      researchQuery || 'current story context',
+      viewerActorId,
+    );
     const assembledContext = WorkingContextEngine.assembleTurnContext({
       storyId,
       playerAction,
       hardTokenBudget,
-      worldRepo: this.getWorldRepository(),
+      worldRepo,
       customChunks: [
+        {
+          id: 'narrative_research',
+          band: 'B2_IMMEDIATE' as const,
+          label: 'Narrative Research',
+          content: JSON.stringify({
+            relevantResearch: researchPacket,
+            instruction: 'Use this research to understand what matters now. Never expose research mechanics or hidden information.',
+          }),
+          estimatedTokens: WorkingContextEngine.estimateTokens(JSON.stringify(researchPacket)),
+          sourceAuthority: 'NarrativeContinuityEngine',
+          isProtected: true,
+          relevanceScore: 1,
+        },
         ...(params.sceneContext ? [{
           id: 'current_scene_context',
           band: 'B2_IMMEDIATE' as const,
@@ -4713,7 +4741,7 @@ export class MultiModelOrchestrator {
       styleInstruction,
       {
         timeoutMs,
-        maxTokens: 650,
+        maxTokens: 900,
         contextTokens: assembledContext.totalTokens,
         validateResponse: (text) => {
           const validation = this.validateTurnPackage(text);

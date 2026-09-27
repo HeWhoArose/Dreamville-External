@@ -2804,7 +2804,6 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 ))}
               </div>
             </div>
-            </div>
 
             {/* Navigation */}
             <div className="flex items-center justify-between pt-4">

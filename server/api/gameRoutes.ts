@@ -288,7 +288,7 @@ gameRouter.post('/action/ooc', async (req: Request, res: Response) => {
     }
     return res.json({
       success: true,
-      storyId,
+      storyId: toolResult?.data?.storyId || storyId,
       message,
       response: toolResult
         ? (agent.response + (toolResult.success ? '\\n\\n✓ ' : '\\n\\n✗ ') + toolResult.message).trim()

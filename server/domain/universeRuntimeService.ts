@@ -211,7 +211,7 @@ export class UniverseRuntimeService {
 		universe.currentWorldId = ensured.worldId;
 		universe.currentStoryId = targetStoryId;
 		universe.updatedAt = timestamp;
-		universe.travelHistory.push({
+		const travelRecord: UniverseTravelRecord = {
 			id: deterministicId('universe_travel', universe.universeId, sourceRun.worldId, ensured.worldId, targetStoryId, timestamp),
 			fromWorldId: sourceRun.worldId,
 			toWorldId: ensured.worldId,
@@ -220,8 +220,34 @@ export class UniverseRuntimeService {
 			timestamp,
 			mode: ensured.created ? 'WORLD_CREATED' : 'WORLD_TRAVEL',
 			trigger: params.trigger || 'PLAYER',
-		});
+		};
+		universe.travelHistory.push(travelRecord);
 		universe.travelHistory = universe.travelHistory.slice(-200);
+
+		this.storeUniverseMemory(repository, universe.universeId, {
+			id: deterministicId('universe_memory_travel', universe.universeId, travelRecord.id),
+			storyId: targetStoryId,
+			sourceWorldId: ensured.worldId,
+			memoryClass: 'EPISODIC',
+			subjectEntityId: universe.playerIdentity.universeActorId,
+			relatedEntityIds: [],
+			content: ensured.created
+				? 'Entered a newly generated world: ' + (ensured.world.title || ensured.world.worldId) + '.'
+				: 'Traveled from ' + (repository.getWorldTemplate(sourceRun.worldId)?.title || sourceRun.worldId) + ' to ' + (ensured.world.title || ensured.worldId) + '.',
+			importance: 75,
+			confidence: 1,
+			status: 'active',
+			visibility: 'PRIVATE',
+			accessibleToEntityIds: [universe.playerIdentity.universeActorId],
+			isPersistentCritical: true,
+			provenance: 'automatic_universe_travel_memory',
+			sourceEventId: travelRecord.id,
+			validFromTurn: repository.getCanonicalCommandEvents(targetStoryId).length,
+			lastRecalledTurn: repository.getCanonicalCommandEvents(targetStoryId).length,
+			createdAtTimestamp: repository.getWorldClock(targetStoryId).getTimestamp(),
+			lastRecalledTimestamp: repository.getWorldClock(targetStoryId).getTimestamp(),
+			triggerConditionTags: ['world', 'travel', 'planet', (ensured.world.title || ensured.world.worldId).toLowerCase()],
+		});
 
 		repository.saveUniverse(universe);
 		const targetRun = repository.getStoryRun(targetStoryId);

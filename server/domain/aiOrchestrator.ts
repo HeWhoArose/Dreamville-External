@@ -5636,7 +5636,7 @@ export class MultiModelOrchestrator {
       (model) => !model.isEmergencyFloor && Boolean(this.getAdapter(model.providerId))
     ).length;
 
-    if (runnableNonEmergency < 2) {
+    if (!categoryHasManualOverride && runnableNonEmergency < 2) {
       for (const model of usableCandidates) {
         if (candidateChain.some((candidate) => this.modelKey(candidate) === this.modelKey(model))) continue;
         if (!this.getAdapter(model.providerId)) continue;

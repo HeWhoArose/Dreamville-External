@@ -7711,7 +7711,7 @@ gameRouter.get('/story-runs/:storyId/opening', async (req: Request, res: Respons
 gameRouter.post('/story-runs/:storyId/opening', async (req: Request, res: Response) => {
   try {
     const storyId = String(req.params.storyId);
-    const { forceRegenerate, timeoutMs, simulateFailure } = req.body || {};
+    const { forceRegenerate, timeoutMs, simulateFailure, forceModelId } = req.body || {};
 
     const run = worldRepository.getStoryRun(storyId);
     if (!run) {
@@ -7723,6 +7723,7 @@ gameRouter.post('/story-runs/:storyId/opening', async (req: Request, res: Respon
       forceRegenerate: Boolean(forceRegenerate),
       timeoutMs: typeof timeoutMs === 'number' ? timeoutMs : undefined,
       simulateFailure: Boolean(simulateFailure),
+      forceModelId: typeof forceModelId === 'string' ? forceModelId : undefined,
     });
 
     const viewState = serverMockAuthority.getSanitizedViewState(storyId);
@@ -7735,6 +7736,19 @@ gameRouter.post('/story-runs/:storyId/opening', async (req: Request, res: Respon
     });
   } catch (error: any) {
     console.error(`Error generating opening scene for ${req.params.storyId}:`, error);
+    if (error?.code === 'AI_UNAVAILABLE') {
+      return res.status(503).json({
+        success: false,
+        code: 'AI_UNAVAILABLE',
+        category: 'narration',
+        error: error?.message || 'Narration AI is unavailable.',
+        errorReason: error?.message || 'Narration AI is unavailable.',
+        fallbackReason: error?.fallbackReason,
+        attemptsTrail: error?.attemptsTrail || [],
+        storyId: req.params.storyId,
+        recoverable: true,
+      });
+    }
     return res.status(500).json({
       error: error?.message || 'Failed to generate opening scene.',
       storyId: req.params.storyId,

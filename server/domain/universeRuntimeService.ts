@@ -61,10 +61,102 @@ export interface UniverseCampaignState {
 	};
 }
 
+export interface UniverseNormalizationResult {
+	universe: UniverseCampaignState;
+	changed: boolean;
+	errors: string[];
+}
+
 export class UniverseRuntimeService {
+	public static normalizeUniverseState(repository: WorldRepository, source: UniverseCampaignState): UniverseNormalizationResult {
+		const universe = JSON.parse(JSON.stringify(source)) as UniverseCampaignState;
+		const original = JSON.stringify(universe);
+		const errors: string[] = [];
+		universe.universeElapsedSeconds = Math.max(0, Number(universe.universeElapsedSeconds || 0));
+		universe.worldBindings = Array.isArray(universe.worldBindings) ? universe.worldBindings : [];
+		const deduped = new Map<string, UniverseWorldBinding>();
+		for (const rawBinding of universe.worldBindings) {
+			const binding = { ...rawBinding } as UniverseWorldBinding;
+			if (!binding.worldId || !binding.storyId) {
+				errors.push('Removed a malformed universe world binding.');
+				continue;
+			}
+			if (!repository.getWorldTemplate(binding.worldId) || !repository.getStoryRun(binding.storyId)) {
+				errors.push('Removed stale universe binding for world ' + binding.worldId + ' / story ' + binding.storyId + '.');
+				continue;
+			}
+			binding.visitCount = Math.max(1, Math.trunc(Number(binding.visitCount || 1)));
+			binding.pinnedWorldVersion = Math.max(1, Math.trunc(Number(binding.pinnedWorldVersion || 1)));
+			binding.lastSimulatedUniverseSeconds = Math.max(0, Math.min(
+				universe.universeElapsedSeconds,
+				Number(binding.lastSimulatedUniverseSeconds || 0),
+			));
+			binding.status = binding.status === 'CURRENT' || binding.status === 'VISITED' || binding.status === 'DORMANT' ? binding.status : 'VISITED';
+			const existing = deduped.get(binding.worldId);
+			if (!existing || String(binding.lastVisitedAt || '') >= String(existing.lastVisitedAt || '')) {
+				deduped.set(binding.worldId, binding);
+			}
+		}
+		universe.worldBindings = Array.from(deduped.values());
+		if (universe.worldBindings.length === 0) {
+			universe.currentWorldId = '';
+			universe.currentStoryId = '';
+			return { universe, changed: original !== JSON.stringify(universe), errors };
+		}
+		let current = universe.worldBindings.find(
+			(binding) => binding.storyId === universe.currentStoryId && binding.worldId === universe.currentWorldId,
+		);
+		if (!current) current = universe.worldBindings.find((binding) => binding.status === 'CURRENT');
+		if (!current) current = [...universe.worldBindings].sort(
+			(a, b) => String(b.lastVisitedAt || '').localeCompare(String(a.lastVisitedAt || '')),
+		)[0];
+		for (const binding of universe.worldBindings) {
+			if (binding.storyId === current.storyId) binding.status = 'CURRENT';
+			else if (binding.lastSimulatedUniverseSeconds < universe.universeElapsedSeconds) binding.status = 'DORMANT';
+			else binding.status = 'VISITED';
+		}
+		universe.currentWorldId = current.worldId;
+		universe.currentStoryId = current.storyId;
+		return { universe, changed: original !== JSON.stringify(universe), errors };
+	}
+
+	public static detachStoryRunFromUniverse(repository: WorldRepository, storyId: string): boolean {
+		let changed = false;
+		for (const universe of repository.getAllUniverses()) {
+			if (!universe.worldBindings.some((binding) => binding.storyId === storyId)) continue;
+			changed = true;
+			const remaining = universe.worldBindings.filter((binding) => binding.storyId !== storyId);
+			if (remaining.length === 0) {
+				repository.deleteUniverse(universe.universeId);
+				continue;
+			}
+			repository.saveUniverse(this.normalizeUniverseState(repository, { ...universe, worldBindings: remaining }).universe);
+		}
+		return changed;
+	}
+
+	public static detachWorldFromUniverses(repository: WorldRepository, worldId: string): boolean {
+		let changed = false;
+		for (const universe of repository.getAllUniverses()) {
+			if (!universe.worldBindings.some((binding) => binding.worldId === worldId)) continue;
+			changed = true;
+			const remaining = universe.worldBindings.filter((binding) => binding.worldId !== worldId);
+			if (remaining.length === 0) {
+				repository.deleteUniverse(universe.universeId);
+				continue;
+			}
+			repository.saveUniverse(this.normalizeUniverseState(repository, { ...universe, worldBindings: remaining }).universe);
+		}
+		return changed;
+	}
+
 	public static ensureUniverse(repository: WorldRepository, storyId: string, title?: string): UniverseCampaignState {
 		const existing = repository.getUniverseForStory(storyId);
-		if (existing) return existing;
+		if (existing) {
+			const normalized = this.normalizeUniverseState(repository, existing);
+			if (normalized.changed) repository.saveUniverse(normalized.universe);
+			return normalized.universe;
+		}
 
 		const run = repository.getStoryRun(storyId);
 		if (!run?.worldId) throw new Error('Cannot create a universe without an active Story Run and worldId.');
@@ -206,6 +298,9 @@ export class UniverseRuntimeService {
 		const sourceRun = repository.getStoryRun(params.storyId);
 		if (!sourceRun?.worldId) throw new Error('Source Story Run has no worldId.');
 
+		const recoveryArchive = repository.exportUserDataArchive('Universe travel rollback checkpoint');
+
+		try {
 		const ensured = await this.ensureWorldAsync(repository, universe.universeId, {
 			worldId: params.worldId,
 			premise: params.worldPremise,
@@ -358,6 +453,23 @@ export class UniverseRuntimeService {
 			createdWorld: ensured.created,
 			createdSession,
 		};
+		} catch (error) {
+			try {
+				repository.restoreUserDataArchive(recoveryArchive, { mode: 'REPLACE' });
+				const restoredUniverse = repository.getUniverseForStory(params.storyId);
+				for (const binding of restoredUniverse?.worldBindings || []) {
+					repository.seedStory(binding.storyId);
+				}
+			} catch (rollbackError) {
+				throw new Error(
+					'Travel failed and rollback failed: ' +
+					(error instanceof Error ? error.message : String(error)) +
+					' | rollback: ' +
+					(rollbackError instanceof Error ? rollbackError.message : String(rollbackError)),
+				);
+			}
+			throw error;
+		}
 	}
 
 	public static captureAction(

@@ -192,6 +192,17 @@ export class ServerMockAuthority {
     return this.activeStoryId;
   }
 
+  public removeStoryState(storyId: string): void {
+    if (!storyId || storyId === 'default_story') {
+      if (storyId === 'default_story') {
+        this.EXPERIMENTAL_SINGLE_INSTANCE_MOCK_STATE = JSON.parse(JSON.stringify(INITIAL_ENGINE_STATE));
+      }
+      return;
+    }
+    this.dynamicStoryStates.delete(storyId);
+    if (this.activeStoryId === storyId) this.activeStoryId = 'default_story';
+  }
+
   public exportTransactionalState(storyId: string): EngineState {
     return JSON.parse(JSON.stringify(this.getDynamicStoryState(storyId)));
   }

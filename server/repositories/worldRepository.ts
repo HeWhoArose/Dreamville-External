@@ -349,7 +349,7 @@ export class InMemoryWorldRepository implements WorldRepository {
       this.characterDraftsMap.set(worldId, filteredDrafts);
     }
 
-    for (const [universeId, universe] of Object.entries((persisted as any).universes || {})) {
+    for (const [universeId, universe] of Object.entries((persisted as any).universes || {}) as Array<[string, any]>) {
       if (!universeId || !universe || this.isDeleted('STORY_RUN', String(universe.currentStoryId || ''))) continue;
       const normalizedUniverse: any = JSON.parse(JSON.stringify(universe));
       normalizedUniverse.universeElapsedSeconds = Number(normalizedUniverse.universeElapsedSeconds || 0);

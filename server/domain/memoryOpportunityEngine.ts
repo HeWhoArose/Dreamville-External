@@ -91,6 +91,15 @@ export interface DecaySummary {
  */
 export class MemoryOpportunityEngine {
   private memories: Map<string, DurableMemory> = new Map();
+  private mutationListener: (() => void) | null = null;
+
+  public setMutationListener(listener: (() => void) | null): void {
+    this.mutationListener = listener;
+  }
+
+  private notifyMutation(): void {
+    this.mutationListener?.();
+  }
 
   public storeMemory(memory: DurableMemory): void {
     const memoryRecord: DurableMemory = {
@@ -100,6 +109,7 @@ export class MemoryOpportunityEngine {
       status: memory.status || 'active',
     };
     this.memories.set(memoryRecord.id, memoryRecord);
+    this.notifyMutation();
   }
 
   public getMemory(id: string): DurableMemory | undefined {
@@ -136,6 +146,7 @@ export class MemoryOpportunityEngine {
     if (timestamp) {
       mem.lockedAtTimestamp = timestamp;
     }
+    this.notifyMutation();
     return { success: true, memory: { ...mem } };
   }
 
@@ -148,6 +159,7 @@ export class MemoryOpportunityEngine {
     mem.lockedReason = undefined;
     mem.lockedBy = undefined;
     mem.lockedAtTimestamp = undefined;
+    this.notifyMutation();
     return { success: true, memory: { ...mem } };
   }
 
@@ -160,6 +172,7 @@ export class MemoryOpportunityEngine {
       return { success: false, errorReason: `Memory '${id}' is locked and cannot be deleted.` };
     }
     this.memories.delete(id);
+    this.notifyMutation();
     return { success: true };
   }
 
@@ -282,6 +295,9 @@ export class MemoryOpportunityEngine {
       }
     }
 
+    if (matches.length > 0) {
+      this.notifyMutation();
+    }
     return matches;
   }
 
@@ -353,6 +369,9 @@ export class MemoryOpportunityEngine {
       }
     }
 
+    if (summary.decayedCount > 0) {
+      this.notifyMutation();
+    }
     return summary;
   }
 

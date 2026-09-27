@@ -3326,11 +3326,9 @@ export class MultiModelOrchestrator {
     const model = this.models.get(modelKey) || Array.from(this.models.values()).find((candidate) => candidate.modelId === modelKey);
     if (!model) throw new Error('Unknown model "' + modelKey + '".');
 
-    const ineligibleTasks = tasks.filter((task) => !model.roleEligibility.includes(task));
-    if (ineligibleTasks.length > 0) {
-      throw new Error(
-        'Model "' + modelKey + '" is not eligible for every task in category "' + category + '". Missing task eligibility: ' + ineligibleTasks.join(', ') + '.',
-      );
+    const eligible = tasks.some((task) => model.roleEligibility.includes(task));
+    if (!eligible) {
+      throw new Error('Model "' + modelKey + '" is not eligible for any task in category "' + category + '".');
     }
 
     if (model.isEmergencyFloor) {

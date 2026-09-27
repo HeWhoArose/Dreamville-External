@@ -96,7 +96,27 @@ The capture layer currently records:
 
 Inventory changes are detected by comparing the authoritative inventory before and after the command.
 
-### 3.4 Memory survives process restart
+### 3.4 Full Story Run state survives reseeding
+
+Persistent Story Runs now retain and restore the runtime state required for long-lived worlds, including:
+
+- world clock and geography;
+- player lifecycle;
+- NPC lifecycle;
+- inventory;
+- capabilities;
+- progression;
+- entity registry;
+- conditions and combat;
+- durable memories;
+- living-world simulation;
+- chronicle;
+- knowledge facts;
+- story threads and active effects.
+
+Revisiting a world therefore rebuilds its runtime from its saved state rather than from the world template alone.
+
+### 3.5 Memory survives process restart
 
 The Story Run persistence payload now contains the serialized MemoryOpportunityEngine state.
 
@@ -104,7 +124,7 @@ At startup, the repository restores those memories before normal memory retrieva
 
 This is required because a memory that only exists in process memory is not sufficient for a long-running campaign.
 
-### 3.5 Working context
+### 3.6 Working context
 
 WorkingContextEngine now combines:
 
@@ -113,7 +133,7 @@ WorkingContextEngine now combines:
 
 The model therefore receives the relevant memory regardless of whether it originated in the current world or another world.
 
-### 3.6 Narrative research
+### 3.7 Narrative research
 
 NarrativeContinuityEngine research now merges:
 
@@ -122,7 +142,7 @@ NarrativeContinuityEngine research now merges:
 
 This means narration/research is not restricted to the current world's recent turns.
 
-### 3.7 Cross-world travel
+### 3.8 Cross-world travel
 
 Canonical `WORLD_TRAVEL_REQUEST` has been added.
 
@@ -146,7 +166,7 @@ activate destination Story Run
 
 A world can therefore be referenced by existing `worldId` or generated from a natural-language premise.
 
-### 3.8 OOC tool access
+### 3.9 OOC tool access
 
 The OOC tool registry now exposes:
 

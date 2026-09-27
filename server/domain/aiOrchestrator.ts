@@ -6091,33 +6091,10 @@ export class MultiModelOrchestrator {
       }
     }
 
-    // 3. Assign optimal fallback chains for each canonical task
-    const tasksToConfigure: TaskId[] = [
-      'narrative.generate',
-      'world.generate',
-      'character.dialogue',
-      'ooc.respond',
-      'character.extract',
-      'character.capability.propose',
-      'memory.extract',
-      'story.advice',
-      'intent.interpret',
-      'capability.synthesize',
-      'capability.explain',
-      'research.query',
-      'research.world-brief',
-      'summary.scene',
-      'rules.adjudicate',
-      'rules.analyze',
-      'combat.tactics',
-      'tactical.reason',
-      'combat.animation.plan',
-      'narrative.review',
-      'utility.inspect',
-      'speech.generate',
-      'speech.transcribe',
-      'image.generate',
-    ];
+    // 3. Assign optimal fallback chains for every canonical task.
+    // Task membership is derived from the single task-contract registry so a
+    // multi-task category can never silently lose its second/third task here.
+    const tasksToConfigure: TaskId[] = getAllAiTaskContracts().map((contract) => contract.task);
 
     const emergencyKey = 'provider_deterministic_emergency::emergency-fallback-local';
 
@@ -6176,7 +6153,7 @@ export class MultiModelOrchestrator {
       failedModelsCount: failedCount,
       results: testResults,
       configuredChains: this.getAllFallbackChains(),
-      summaryMessage: `AI Auto-Configuration Complete: Tested ${testResults.length} models (${healthyCount} responsive, ${failedCount} unavailable). Configured up to ${maxFallbacks} fallback models per task category.`,
+      summaryMessage: `AI Auto-Configuration Complete: Tested ${testResults.length} models (${healthyCount} responsive, ${failedCount} unavailable). Configured up to ${maxFallbacks} fallback models for each canonical task.`,
     };
   }
 

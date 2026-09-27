@@ -81,7 +81,7 @@ test('ten deterministic audits keep internal simulation out of the Skillbook and
     assert.match(dice, /@3d-dice\/dice-box-threejs/);
     assert.match(dice, /theme_colorset:\s*['"]diceOfRolling['"]/);
     assert.match(dice, /theme_material:\s*['"]plastic['"]/);
-    assert.match(dice, /await box\.init\(\)/);
+    assert.match(dice, /await box\.initialize\(\)/);
     assert.match(dice, /await box\.roll\(notation\)/);
     assert.ok(dice.includes("@${values.join(',')}"));
     assert.match(dice, /setRevealed\(true\)/);

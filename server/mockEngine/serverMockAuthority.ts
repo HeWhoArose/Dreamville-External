@@ -20,6 +20,7 @@ import { worldSimulationService } from '../simulation/worldSimulationService';
 import { PlayerLifecycleState } from '../domain/playerLifecycleState';
 import { storyCheckConsequenceEngine } from '../domain/storyCheckConsequenceEngine';
 import { storyCheckChallengeResolver } from '../domain/storyCheckChallengeResolver';
+import { storyCheckAuthority } from '../domain/storyCheckAuthority';
 import { rulesProfileEngine } from '../domain/rulesProfileEngine';
 import { deterministicId, formatCanonicalTimestamp } from '../domain/deterministicRng';
 import { HistoricalChronicleEngine } from '../domain/historicalChronicleEngine';
@@ -625,19 +626,14 @@ export class ServerMockAuthority {
       capabilities: capabilityEngine.getEffectiveActorCapabilities(actorId),
     });
 
-    const storyCheckEngine = worldRepository.getStoryCheckEngine(targetStoryId);
-    const storyCheck = storyCheckEngine.resolve(
-      targetStoryId,
-      String(freeformText),
-      {
-        coreStats: run?.characterCoreStats || run?.protagonist?.coreStats,
-        skills: run?.characterSkills || run?.protagonist?.skills,
-        conditionState: conditionEngine.exportActorState(actorId),
-        sceneText,
-      },
-      authoredChallenge || undefined,
-      rulesProfile
-    );
+    const storyCheck = storyCheckAuthority.resolve(worldRepository, {
+      storyId: targetStoryId,
+      actorId,
+      actionText: String(freeformText),
+      sceneText,
+      challenge: authoredChallenge || undefined,
+      rulesProfile,
+    });
 
     let committedOutcome = '';
     if (storyCheck) {

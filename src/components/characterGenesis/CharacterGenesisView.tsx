@@ -2619,8 +2619,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                     </button>
                   </div>
                 </div>
-              )}
-            </div>
+
 
             {/* AI Additional Skill Discovery Review */}
             <div
@@ -2732,6 +2731,8 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 <div className="text-[10px] text-neutral-500">
                   Press <span className="text-indigo-300 font-medium">Add More Skills</span> to generate proposals.
                 </div>
+              )}
+            </div>
               )}
             </div>
 

@@ -1,581 +1,189 @@
 # DreamBook — Persistent Multi-World & Long-Term Memory Implementation Plan
-## Version 1.0 — ACTIVE
+## Version 2.0 — Surgical Persistence Contract
 
-Status: **IMPLEMENTATION IN PROGRESS**
+**Status:** ACTIVE
+**Scope owner:** universe identity, world/run binding, cross-world travel, portable player state, world-local state and durable memory continuity.
+**Does not own:** AI routing, spatial simulation, capability rules, or player UI.
 
-Purpose: establish the permanent architecture for a DreamBook campaign that can span multiple independent worlds/planets while preserving one player identity, durable memories, inventory/progression, world-local NPCs, world-local history, and return continuity across long absences.
+## 1. Canonical model
 
-## 1. Target experience
-
-A player may exist as a universe-level traveler.
-
-Example:
-
-1. Arrive on World A.
-2. Spend hundreds of turns there.
-3. Build friendships, enemies, quests, inventory, reputation and memories.
-4. Leave for World B.
-5. Spend hundreds more turns there.
-6. Later return to World A.
-7. DreamBook restores World A's own Story Run and world-local state rather than generating a new copy.
-8. NPCs and factions can react based on their persisted relationship/history.
-9. The player does not need to tell the AI to save an item, relationship, event, or travel memory.
-
-The canonical rule is:
-
-**Game systems save state automatically. AI reads authorized saved state. AI does not act as the database.**
-
-## 2. Architecture
-
-```
 UNIVERSE
-  |
-  +-- Player Identity
-  |     +-- persistent character identity
-  |     +-- portable progression/capabilities
-  |     +-- portable inventory
-  |     +-- universe memories
-  |
-  +-- World A
-  |     +-- Story Run A
-  |     +-- world-local NPCs
-  |     +-- relationships
-  |     +-- quests
-  |     +-- chronology
-  |     +-- memories
-  |
-  +-- World B
-  |     +-- Story Run B
-  |     +-- world-local state
-  |
-  +-- World C
-        +-- Story Run C
-```
+  ├─ persistent player identity
+  ├─ portable progression/capabilities
+  ├─ portable inventory
+  ├─ universe memories
+  └─ WORLD BINDINGS
+       ├─ World A → Story Run A
+       ├─ World B → Story Run B
+       └─ World C → Story Run C
 
-WorldRepository remains authoritative for each world. UniverseRuntimeService owns only cross-world identity, travel, portable player state, and universe-level continuity.
+WorldRepository remains authoritative for world-local state.
+UniverseRuntimeService owns cross-world identity and travel coordination only.
 
-## 3. Implemented now
+## 2. Portable state
 
-### 3.1 Universe persistence
+Portable:
+- player identity;
+- universe actor identity;
+- progression that is explicitly portable;
+- learned capabilities that are explicitly portable;
+- portable inventory;
+- persistent player memories;
+- travel history.
 
-A new `UniverseCampaignState` stores:
+World-local:
+- geography;
+- NPC population and state;
+- local relationships;
+- quests and story threads;
+- local chronology;
+- local environmental state;
+- local factions/economy;
+- world-local memories;
+- world-specific rules and state.
 
-- universeId
-- title
-- persistent player identity
-- current world/story
-- world bindings
-- travel history
-- universe memories
-- portable player state
+Portable state must never replace world-local state.
 
-Universe data is included in the persistent root without requiring a persistence version bump because the persistence migration contract preserves unknown root fields.
+## 3. Existing-world return
 
-### 3.2 Lazy universe activation
+Return flow:
 
-Every normal gameplay action now ensures that the active Story Run belongs to a Universe.
+Travel request
+ ↓
+save current canonical world
+ ↓
+UniverseRuntimeService resolves destination binding
+ ↓
+reuse existing Story Run
+ ↓
+restore world-local state
+ ↓
+apply only permitted portable player state
+ ↓
+activate destination run
+ ↓
+retrieve relevant continuity
 
-This is idempotent.
+A return to World A must not synthesize World A again.
 
-### 3.3 Automatic continuity capture
+## 4. New-world creation
 
-After a successful canonical action, DreamBook automatically records cross-world continuity information.
+New worlds continue to use the existing WorldTemplate/WorldRun and WorldSynthesis architecture.
 
-The player does not need to say:
+Flow:
 
-- save this item;
-- remember this event;
-- remember that I helped this person.
+premise
+ ↓
+world synthesis
+ ↓
+WorldTemplate
+ ↓
+persistent world binding
+ ↓
+Story Run
 
-The capture layer currently records:
+This document does not redefine WorldTemplate or WorldRun schemas owned by the existing world repository.
 
-- significant action attempts/outcomes;
-- item gains;
-- inventory losses;
-- world travel.
+## 5. Memory architecture
 
-Inventory changes are detected by comparing the authoritative inventory before and after the command.
+Use the existing MemoryOpportunityEngine and NarrativeContinuityEngine.
 
-### 3.4 Full Story Run state survives reseeding
+Memory layers:
+- world-local durable memory;
+- actor-scoped knowledge;
+- universe-level player memory;
+- causal/provenance evidence where required.
 
-Persistent Story Runs now retain and restore the runtime state required for long-lived worlds, including:
+Memory is retrieved through relevance and epistemic authorization. The narrator is never responsible for manually remembering everything.
 
-- world clock and geography;
-- player lifecycle;
-- NPC lifecycle;
-- inventory;
-- capabilities;
-- progression;
-- entity registry;
-- conditions and combat;
+AI may propose a memory candidate only through the existing validation boundary:
+
+AI candidate
+ ↓
+memory validation
+ ↓
+durable memory
+ ↓
+future retrieval
+
+## 6. Narration connection
+
+Narration consumes retrieved continuity through WorkingContextEngine and NarrativeContinuityEngine.
+
+This document defines what must remain available; the AI Orchestration specification defines how that context is packaged for a model.
+
+Do not duplicate the narration context builder here.
+
+## 7. Dormant-world simulation
+
+The current architecture supports catch-up simulation when returning to a world.
+
+Required behavior:
+1. record the last simulated universe/world time;
+2. calculate elapsed time while inactive;
+3. restore the existing Story Run;
+4. advance dormant simulation through the existing WorldSimulationService;
+5. persist resulting state;
+6. apply portable player state;
+7. return the player to the restored world.
+
+This is catch-up simulation, not a continuously running off-screen server.
+
+## 8. Future multi-scale simulation
+
+Future resolution tiers may include:
+- ACTIVE;
+- NEARBY;
+- DISTANT;
+- OFF_SCREEN/HISTORICAL.
+
+The spatial document owns spatial resolution. This document only defines the persistence and world-binding requirement.
+
+## 9. Restart and persistence requirements
+
+After process restart, the system must restore:
+- universe identity;
+- current world binding;
+- Story Run binding;
+- player identity;
+- portable state;
+- world-local canonical state;
 - durable memories;
-- living-world simulation;
-- chronicle;
-- knowledge facts;
-- story threads and active effects.
+- relevant relationship/chronicle state.
 
-Character relationship/alignment state is also persisted at the campaign root. Relationship mutations automatically trigger persistence, so trust, affection, respect, fear and role transformations are not dependent on the player explicitly requesting a save.
+Local container files are acceptable for development/test where already supported. Production durability remains a deployment concern and must use the project's durable persistence target.
 
-Revisiting a world therefore rebuilds its runtime from its saved state rather than from the world template alone.
+## 10. Acceptance scenarios
 
-### 3.5 Memory survives process restart
+### Item continuity
+Acquire item → leave world → restart → return → item remains in canonical inventory.
 
-The Story Run persistence payload now contains the serialized MemoryOpportunityEngine state.
+### NPC continuity
+Change relationship → leave world → spend time elsewhere → return → same NPC/world state is restored.
 
-At startup, the repository restores those memories before normal memory retrieval begins.
+### Cross-world continuity
+World A → World B → World A must reuse World A's existing Story Run.
 
-This is required because a memory that only exists in process memory is not sufficient for a long-running campaign.
+### New world
+Premise → WorldTemplate → Story Run → travel into world while retaining universe identity.
 
-### 3.6 Working context
+### Long absence
+Leave World A → advance time elsewhere → return → dormant catch-up occurs without generating a new world.
 
-WorkingContextEngine now combines:
+## 11. Completion gate
 
-- current-world memories;
-- universe-level player memories.
+VERIFY only after runtime tests prove:
+- world binding reuse;
+- player identity stability;
+- portable inventory/progression correctness;
+- world-local NPC continuity;
+- memory persistence after restart;
+- cross-world travel;
+- dormant-world catch-up;
+- failure-safe restoration.
 
-The model therefore receives the relevant memory regardless of whether it originated in the current world or another world.
+Spatial, AI and capability tests remain in their owning documents.
 
-### 3.7 Narrative research
+## 12. Document boundary
 
-NarrativeContinuityEngine research now merges:
-
-- world-local durable memories;
-- universe-level durable memories.
-
-This means narration/research is not restricted to the current world's recent turns.
-
-### 3.8 Cross-world travel
-
-Canonical `WORLD_TRAVEL_REQUEST` has been added.
-
-API and runtime support:
-
-```
-current Story Run
-   |
-UniverseRuntimeService.travel()
-   |
-save portable player state
-   |
-resolve existing world OR synthesize a new world
-   |
-reuse existing Story Run OR create one
-   |
-restore portable player state
-   |
-activate destination Story Run
-```
-
-A world can therefore be referenced by existing `worldId` or generated from a natural-language premise.
-
-### 3.9 OOC tool access
-
-### 3.10 Automatic AI continuity candidates
-
-The narrative turn contract may return structured `memoryCandidates`.
-
-These are automatically persisted by the server into durable player memory and universe memory after the turn is recorded. The player does not need to ask the narrator to remember them.
-
-The rule remains:
-
-```
-AI proposes continuity candidate
-        ↓
-Memory validator / canonical boundary
-        ↓
-Durable Memory
-        ↓
-Future Working Context
-        ↓
-Narration / dialogue
-```
-
-AI memory candidates never mutate canonical inventory, combat, relationships, progression or world facts by themselves.
-
-### 3.11 NPC-focused long-term retrieval
-
-NarrativeContinuityEngine now performs entity-linked memory retrieval when the player query explicitly references a known NPC name or alias.
-
-This allows an old NPC memory to be recalled even when the stored memory text does not repeat the NPC's name, provided the memory is epistemically visible to the querying actor.
-
-Example:
-
-```
-Player: "I greet Mira again."
-        ↓
-Entity registry resolves Mira
-        ↓
-Retrieve memories linked to Mira
-        ↓
-Merge with normal semantic/keyword retrieval
-        ↓
-Working Context
-        ↓
-NPC-aware narration
-```
-
-### 3.12 Automatic memory persistence
-
-MemoryOpportunityEngine mutations now trigger repository persistence outside an active canonical transaction.
-
-Canonical transactions remain authoritative and are persisted at their normal commit boundary.
-
-This prevents a memory from remaining only in process memory when it was created outside a command transaction, and prevents an uncommitted transaction from leaking partially committed memory to durable storage.
-
-### 3.13 Known-world travel resolution
-
-Cross-world travel intent now recognizes a known world title directly when paired with a travel verb.
-
-For example:
-
-```
-"I fly to Aether Prime."
-```
-resolves to an existing world titled `Aether Prime`.
-
-Unknown destinations still require an explicit world/planet/dimension/realm marker before DreamBook treats the action as cross-world travel.
-
-The OOC tool registry now exposes:
-
-`travel_to_world`
-
-The tool may:
-
-- travel to an existing world;
-- create a new world from a premise;
-- return the resulting universe/world/story information.
-
-## 4. Portable versus world-local state
-
-This distinction is mandatory.
-
-### Universe-level / portable
-
-- player identity
-- persistent universe actor identity
-- player inventory snapshot
-- player capabilities/learned skill instances
-- player progression state
-- persistent player memories
-- travel history
-
-### World-local
-
-- world geography
-- NPC population
-- NPC memory
-- local relationships
-- local faction state
-- quests/threads
-- world events
-- local economy
-- local chronology
-- local environmental state
-- world-specific rules
-
-The implementation must not replace a world with the player's portable snapshot.
-
-## 5. Long-term NPC memory
-
-NPC continuity is split into two layers:
-
-### NPC/world memory
-
-The active Story Run owns NPC memories and relationships.
-
-These are retrieved through:
-
-- MemoryOpportunityEngine
-- DynamicCharacterAgencyEngine
-- NarrativeContinuityEngine
-- WorkingContextEngine
-
-### Universe memory
-
-The player retains important cross-world memories, such as:
-
-- people helped;
-- major discoveries;
-- important items;
-- places visited;
-- world travel;
-- significant causal events.
-
-This prevents universe travel from destroying the player's personal history.
-
-## 6. Automatic state ownership
-
-The canonical systems remain authoritative.
-
-```
-PLAYER ACTION
-   |
-Canonical Command Engine
-   |
-Canonical state mutation
-   |
-+-------------------------+
-| Inventory               |
-| Character               |
-| Capability              |
-| Progression             |
-| Relationships            |
-| World / NPC state       |
-| Chronicle / events      |
-+-------------------------+
-   |
-Automatic continuity capture
-   |
-Memory / narrative projections
-   |
-AI working context
-   |
-Narration
-```
-
-The AI must not be responsible for deciding that an item was acquired merely because it narrated receiving one.
-
-## 7. Memory priority
-
-Persistent memories use the existing MemoryOpportunityEngine model.
-
-Important memory classes include:
-
-- PERSISTENT_IDENTITY
-- EPISODIC
-- ATOMIC_FACT
-- CAUSAL
-- CAPABILITY
-- SOURCE_CANON
-
-Persistent-critical memories are protected from ordinary decay.
-
-Universe memories currently have a bounded campaign store and should be promoted to persistent-critical only when they represent facts the player must reliably retain.
-
-## 8. Existing-world return
-
-When the player revisits a world:
-
-1. UniverseRuntimeService finds the world binding.
-2. The previously created Story Run is reused.
-3. The world-local Story Run is restored.
-4. Portable player state is applied.
-5. Universe history remains available.
-6. Working context retrieves relevant memories.
-7. NPC/relationship state is read from the restored world.
-
-The system therefore does not intentionally generate a fresh world copy each time.
-
-## 9. New-world generation
-
-A new world may be created from:
-
-- a direct worldId;
-- a natural-language premise.
-
-The world synthesis pipeline remains authoritative for world generation. The generated world is saved as a persistent WorldTemplate and receives a persistent Story Run when the player enters it.
-
-## 10. Remaining implementation phases
-
-### Phase A — Cross-world action UX
-Provide player-facing world travel UI, destination picker, generated-world confirmation, and seamless active-story switching.
-
-### Phase B — Autonomous dormant-world simulation
-
-**Initial catch-up implementation: ACTIVE**
-
-UniverseRuntimeService now maintains a universe-level elapsed-time counter and records the last simulated universe time for each world binding.
-
-When the player returns to an existing world:
-
-1. DreamBook calculates how much universe time elapsed while that world was inactive.
-2. The existing Story Run is restored.
-3. WorldSimulationService advances the dormant world by that elapsed duration.
-4. The resulting world state is persisted.
-5. Portable player state is then rehydrated.
-
-This establishes the core return-after-long-absence behavior without regenerating the world.
-
-```
-World A active
-   |
-leave
-   |
-World B advances
-   |
-universe elapsed time increases
-   |
-return World A
-   |
-elapsed gap calculated
-   |
-WorldSimulationService catches World A up
-   |
-same Story Run continues
-```
-
-The current implementation is a **catch-up simulation**, not yet a continuously running off-screen universe server.
-
-### Phase C — Long absence / multi-scale simulation
-
-Use:
-
-- ACTIVE simulation near the player;
-- NEARBY simulation;
-- DISTANT strategic simulation;
-- OFF_SCREEN / historical simulation.
-
-Do not simulate every NPC every frame.
-
-### Phase D — Generational simulation
-
-For literal decades/generations:
-
-- aging;
-- births;
-- deaths;
-- succession;
-- family trees;
-- faction leadership changes;
-- settlement evolution;
-- inheritance;
-- historical eras.
-
-This is **not yet complete** and must not be claimed as implemented merely because persistence and time exist.
-
-### Phase E — Production durable storage
-
-The current repository persists to the existing PersistentGameStore.
-
-For production-scale campaigns, the final deployment should move canonical campaign/universe state to durable external storage rather than relying exclusively on container-local files.
-
-## 11. Narration contract
-
-Narration must receive authoritative continuity context.
-
-The AI should be able to retrieve:
-
-- current scene;
-- current world time;
-- character state;
-- inventory;
-- relationships;
-- relevant local memory;
-- relevant universe memory;
-- quests;
-- unresolved threads;
-- world momentum;
-- canonical consequences.
-
-The AI should not be told to "remember everything."
-
-The memory/query systems should decide what relevant saved information to provide.
-
-## 12. Required acceptance scenarios
-
-### Scenario 1 — Item persistence
-
-```
-Player finds ancient ring
- ↓
-Canonical inventory receives ring
- ↓
-Automatic continuity capture records acquisition
- ↓
-Narration describes acquisition
- ↓
-No player instruction to save is required
- ↓
-Restart
- ↓
-Ring remains in canonical inventory
-```
-
-### Scenario 2 — NPC return
-
-```
-Player meets Sarah on World A
- ↓
-Relationship changes
- ↓
-Important memory is stored
- ↓
-Leave World A
- ↓
-Spend hundreds of turns elsewhere
- ↓
-Return to World A
- ↓
-Same Story Run
- ↓
-Sarah's canonical relationship/memory state is retrieved
- ↓
-Narration can reference the prior relationship when relevant
-```
-
-### Scenario 3 — New world
-
-```
-Player requests a new world
- ↓
-UniverseRuntimeService
- ↓
-World synthesis
- ↓
-WorldTemplate persisted
- ↓
-Story Run created
- ↓
-Player enters new world
- ↓
-Universe identity retained
-```
-
-### Scenario 4 — Return to old world
-
-```
-World A → World B → World A
- ↓
-World A Story Run ID is reused
- ↓
-World B has its own Story Run
- ↓
-Player portable state is restored
- ↓
-World A history remains intact
-```
-
-## 13. Acceptance rule
-
-The multi-world system is not final until:
-
-- world travel works;
-- generated worlds persist;
-- existing worlds reuse their Story Run;
-- player identity remains stable;
-- inventory remains correct;
-- skills/progression remain correct;
-- world-local NPC memory remains correct;
-- universe memory survives restart;
-- WorkingContext retrieves old relevant memories;
-- Narration can use retrieved continuity;
-- dormant-world simulation works;
-- long-absence stress tests pass;
-- production durable storage is validated.
-
-## 14. Architectural rule for future AI sessions
-
-Before modifying this system:
-
-1. Read this document.
-2. Read `docs/AI_ORCHESTRATION_MODEL_INTELLIGENCE_SPEC_V1.md`.
-3. Read `docs/AI_ORCHESTRATION_IMPLEMENTATION_PLAN_V1.md`.
-4. Read `docs/SPATIAL_WORLD_SIMULATION_MASTER_SPEC_V1.md`.
-5. Audit current UniverseRuntimeService, WorldRepository, MemoryOpportunityEngine, WorkingContextEngine and NarrativeContinuityEngine.
-6. Never replace canonical world state with AI-generated prose.
-7. Never require the player to manually instruct the system to save canonical consequences.
-8. Preserve world-local state when the player travels away.
-9. Preserve universe-level player identity across worlds.
-10. Do not call the architecture complete until long-absence and restart tests pass.
-11. Treat literal multi-generational population simulation as unfinished until Phase D acceptance tests exist.
-12. Treat external production durability as unfinished until the final durable storage migration is validated.
+This document replaces the previous broad multi-world plan as the active implementation contract. Duplicate AI orchestration, spatial simulation, capability and UI roadmaps have been removed from its scope.

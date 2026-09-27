@@ -274,6 +274,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
   const [narrationModelError, setNarrationModelError] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const actionInputRef = useRef<HTMLInputElement | null>(null);
 
   const startRecording = async () => {
     setTranscriptionError(null);
@@ -405,6 +406,10 @@ export const StoryView: React.FC<StoryViewProps> = ({
     setTypedAction((current) => mergeSuggestedActionText(current, cleanSuggestion));
     setSuggestionsOpen(false);
     setSceneMenuOpen(false);
+    window.requestAnimationFrame(() => {
+      actionInputRef.current?.focus();
+      actionInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
     triggerHaptic('light');
     playSfx('ui.click', 'LOW', 0.35);
   };
@@ -1099,6 +1104,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
           </button>
 
           <input
+            ref={actionInputRef}
             type="text"
             value={typedAction}
             onChange={(event) => setTypedAction(event.target.value)}

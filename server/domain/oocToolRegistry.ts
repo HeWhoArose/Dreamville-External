@@ -2,6 +2,7 @@ import type { InMemoryWorldRepository } from '../repositories/worldRepository';
 import { deterministicId } from './deterministicRng';
 import { narrativeContinuityEngine } from './narrativeContinuityEngine';
 import { canonicalCommandEngine, type CanonicalCommandType } from './canonicalCommandEngine';
+import { UniverseRuntimeService } from './universeRuntimeService';
 
 export type OocToolMode = 'READ' | 'MUTATE';
 
@@ -116,6 +117,12 @@ const TOOL_DEFINITIONS: OocToolDefinition[] = [
 		description: 'Advance canonical world time for a bounded interval. This may trigger world simulation.',
 		mode: 'MUTATE',
 		input: { seconds: 'positive number <= 86400' },
+	},
+	{
+		name: 'travel_to_world',
+		description: 'Travel the persistent player identity to an existing world or generate a new world from a natural-language premise. The current world is saved before departure.',
+		mode: 'MUTATE',
+		input: { worldId: 'optional existing world id', worldPremise: 'optional new world premise', worldTitle: 'optional new world title' },
 	},
 ];
 
@@ -362,6 +369,32 @@ export class OocToolRegistry {
 						payload: { seconds },
 						sequence: params.sequence,
 					});
+				}
+
+				case 'travel_to_world': {
+					const worldId = typeof args.worldId === 'string' && args.worldId.trim() ? args.worldId.trim() : undefined;
+					const worldPremise = typeof args.worldPremise === 'string' && args.worldPremise.trim() ? args.worldPremise.trim() : undefined;
+					const worldTitle = typeof args.worldTitle === 'string' && args.worldTitle.trim() ? args.worldTitle.trim() : undefined;
+					if (!worldId && !worldPremise) {
+						return { name: call.name, success: false, message: 'Provide worldId for an existing world or worldPremise to generate a new one.' };
+					}
+					const universe = UniverseRuntimeService.ensureUniverse(repository, storyId);
+					const result = await UniverseRuntimeService.travel(repository, {
+						storyId,
+						universeId: universe.universeId,
+						worldId,
+						worldPremise,
+						worldTitle,
+						trigger: 'AI_TOOL',
+					});
+					return {
+						name: call.name,
+						success: true,
+						message: result.createdWorld
+							? 'A new world was generated and the player arrived there.'
+							: 'The player traveled to the requested world.',
+						data: result,
+					};
 				}
 
 				default:

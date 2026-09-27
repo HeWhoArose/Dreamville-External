@@ -620,13 +620,44 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
               <div className="text-[10px] uppercase tracking-wider font-mono text-violet-300">Mechanical Resolution</div>
               <div className="mt-1 text-sm font-semibold text-stone-100">{combatState.lastResolution.actionLabel}</div>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                {combatState.lastResolution.rolls.map((roll, index) => (
-                  <div key={roll.label + index} className="rounded-lg border border-stone-800 bg-stone-950/50 px-3 py-2">
-                    <div className="text-[10px] uppercase font-mono text-stone-500">{roll.label}</div>
-                    <div className="mt-1 text-lg font-bold text-amber-300">{roll.total ?? '—'}</div>
-                    {roll.roll?.individualDice?.length ? <div className="text-[10px] font-mono text-stone-500">dice: {roll.roll.individualDice.join(', ')}</div> : null}
-                  </div>
-                ))}
+                {combatState.lastResolution.rolls.map((roll, index) => {
+                  const primaryTarget = combatState.lastResolution?.targetIds?.[0]
+                    ? combatState.participants.find((participant) => participant.id === combatState.lastResolution?.targetIds?.[0])
+                    : undefined;
+                  const isDamageRoll = roll.kind === 'DAMAGE';
+                  const isAttackLike = roll.kind === 'ATTACK' || roll.kind === 'SAVE' || roll.kind === 'CHECK';
+                  return (
+                    <DiceRollAnimation
+                      key={roll.label + index}
+                      roll={roll.roll || {
+                        rollId: `resolution-${combatState.lastResolution?.id}-${index}`,
+                        rulesetVersion: combatState.rulesProfile?.id || 'unknown',
+                        formula: '1d20',
+                        diceTerms: [{ count: 1, sides: 20 }],
+                        individualDice: [roll.total ?? 1],
+                        modifier: 0,
+                        total: roll.total ?? 1,
+                        isCriticalSuccess: false,
+                        isCriticalFailure: false,
+                        timestamp: Date.now(),
+                      }}
+                      title={roll.label}
+                      subtitle={roll.roll?.formula || (isDamageRoll ? 'Damage' : roll.kind)}
+                      defenseLabel={isDamageRoll ? 'TARGET' : 'ARMOR CLASS'}
+                      defenseValue={primaryTarget?.armorClass ?? undefined}
+                      outcome={
+                        isDamageRoll
+                          ? 'DAMAGE'
+                          : combatState.lastResolution?.success
+                            ? (combatState.lastResolution?.hits === false ? 'FAILURE' : 'SUCCESS')
+                            : 'FAILURE'
+                      }
+                      resultSuffix={isDamageRoll ? (primaryTarget?.name ? `Damage to ${primaryTarget.name}` : 'Damage') : ''}
+                      autoReveal
+                      showRollButton={false}
+                    />
+                  );
+                })}
               </div>
               <div className="mt-3 text-xs text-stone-300">{combatState.lastResolution.mechanicalSummary}</div>
               {combatState.lastResolution.targetHp?.map((hp) => (

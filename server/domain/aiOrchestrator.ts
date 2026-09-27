@@ -4173,24 +4173,25 @@ export class MultiModelOrchestrator {
       return override && roles && roles.includes(task);
     });
 
-    if (customChainKeys && customChainKeys.length > 0 && !hasActiveManualOverrideForTask) {
+    if (customChainKeys && customChainKeys.length > 0) {
       // An explicit task route is authoritative. The first currently usable
       // model in the configured chain is the primary; later usable entries
       // remain in the exact configured order, followed by the deterministic
-      // emergency floor. Do not replace the configured primary with a
-      // score-based model merely because another model is globally eligible.
+      // emergency floor. Do not replace the configured route with an
+      // unrelated globally eligible model.
       const configuredModels = customChainKeys
         .map(findConfiguredModel)
         .filter((m): m is ModelRegistryRecord => Boolean(m))
         .filter((m) => !m.isEmergencyFloor)
         .filter((m) => isUsableCandidate(m));
 
+      const emergency = Array.from(this.models.values()).find(
+        (m) => m.isEmergencyFloor && m.roleEligibility.includes(task),
+      );
+
       if (configuredModels.length > 0) {
         const primary = configuredModels[0];
         const fallbackModels = configuredModels.slice(1);
-        const emergency = Array.from(this.models.values()).find(
-          (m) => m.isEmergencyFloor && m.roleEligibility.includes(task),
-        );
 
         if (
           emergency &&
@@ -4204,6 +4205,15 @@ export class MultiModelOrchestrator {
           selectionReason: "Configured task route selected '" + primary.modelId + "' as the primary model; failover preserves the configured route order.",
           selectionScore: primary.userPriority,
           fallbacks: fallbackModels,
+        };
+      }
+
+      if (emergency) {
+        return {
+          selectedModel: emergency,
+          selectionReason: 'Configured task route contains no currently usable AI model; using deterministic emergency floor without selecting an unrelated model.',
+          selectionScore: emergency.userPriority,
+          fallbacks: [],
         };
       }
     }

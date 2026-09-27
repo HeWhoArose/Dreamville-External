@@ -2031,6 +2031,7 @@ export class MultiModelOrchestrator {
     this.seedDefaultAdapters();
     this.seedDefaultPins();
     this.loadPersistedConfig();
+    this.normalizePinnedTaskFallbackRoutes();
     this.normalizeGeneralTextTaskEligibility();
   }
 
@@ -2084,6 +2085,42 @@ export class MultiModelOrchestrator {
       }
     } catch (e) {
       // Ignore load errors
+    }
+  }
+
+  /**
+   * Keeps persisted task routes structurally consistent with their configured
+   * primary model. A pin is the route's first model; deterministic emergency
+   * remains the terminal floor.
+   */
+  private normalizePinnedTaskFallbackRoutes(): void {
+    const emergencyKey = 'provider_deterministic_emergency::emergency-fallback-local';
+    let changed = false;
+
+    for (const [task, pinnedKey] of this.taskPinnedModels.entries()) {
+      if (!pinnedKey) continue;
+
+      const currentChain = this.taskFallbackChains.get(task) || [];
+      const aiFallbacks = currentChain.filter(
+        (key) => key !== pinnedKey && key !== emergencyKey,
+      );
+      const normalizedChain = Array.from(new Set([
+        pinnedKey,
+        ...aiFallbacks,
+        emergencyKey,
+      ]));
+
+      if (
+        currentChain.length !== normalizedChain.length ||
+        currentChain.some((key, index) => key !== normalizedChain[index])
+      ) {
+        this.taskFallbackChains.set(task, normalizedChain);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      this.savePersistedConfig();
     }
   }
 

@@ -617,9 +617,9 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
           ) : null}
 
           {combatState.lastResolution && (
-            <div className="p-4 rounded-xl border border-violet-700/40 bg-violet-950/20">
-              <div className="text-[10px] uppercase tracking-wider font-mono text-violet-300">Mechanical Resolution</div>
-              <div className="mt-1 text-sm font-semibold text-stone-100">{combatState.lastResolution.actionLabel}</div>
+            <div className="relative overflow-hidden rounded-3xl border border-amber-300/35 bg-[#100b2f] p-4 shadow-[0_18px_65px_rgba(18,13,60,0.48)] sm:p-5">
+              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-100/75">Combat Resolution</div>
+              <div className="mt-1 text-lg font-black text-white">{combatState.lastResolution.actionLabel}</div>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
                 {combatState.lastResolution.rolls.map((roll, index) => {
                   const primaryTarget = combatState.lastResolution?.targetIds?.[0]
@@ -658,16 +658,19 @@ export const TacticalCombatView: React.FC<TacticalCombatViewProps> = ({ onRefres
                     />
                   );
                 })}             </div>
-              <div className="mt-3 text-xs text-stone-300">{combatState.lastResolution.mechanicalSummary}</div>
+              <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm leading-6 text-violet-50/85">{combatState.lastResolution.mechanicalSummary}</div>
               {combatState.lastResolution.targetHp?.map((hp) => (
                 <div key={hp.targetId} className="mt-3">
                   <div className="flex justify-between text-[10px] font-mono text-stone-400"><span>{hp.targetId}</span><span>{hp.hpCurrent}/{hp.hpMax} HP</span></div>
-                  <div className="mt-1 h-2 rounded-full bg-stone-800 overflow-hidden">
-                    <div className="h-full bg-red-500" style={{ width: Math.max(0, Math.min(100, (hp.hpCurrent / Math.max(1, hp.hpMax)) * 100)) + '%' }} />
+                  <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-white/10">
+                    <div className="h-full rounded-full bg-gradient-to-r from-orange-400 via-red-400 to-fuchsia-400" style={{ width: Math.max(0, Math.min(100, (hp.hpCurrent / Math.max(1, hp.hpMax)) * 100)) + '%' }} />
                   </div>
                 </div>
               ))}
-              <div className="mt-4 border-t border-stone-800 pt-3 text-sm leading-6 text-stone-200">{combatState.lastResolution.narrativeResponse}</div>
+              <div className="mt-4 rounded-2xl border border-violet-200/15 bg-violet-300/5 px-4 py-4">
+                <div className="text-[9px] font-black uppercase tracking-[0.18em] text-violet-100/55">What happened</div>
+                <div className="mt-1 font-serif text-sm leading-7 text-violet-50">{combatState.lastResolution.narrativeResponse}</div>
+              </div>
             </div>
           )}
 

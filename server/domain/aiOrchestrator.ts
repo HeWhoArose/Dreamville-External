@@ -4137,33 +4137,37 @@ export class MultiModelOrchestrator {
     });
 
     if (customChainKeys && customChainKeys.length > 0 && !hasActiveManualOverrideForTask) {
-      // The configured chain controls failover order. Without an explicit pin or
-      // category override, primary selection remains score-based.
+      // An explicit task route is authoritative. The first currently usable
+      // model in the configured chain is the primary; later usable entries
+      // remain in the exact configured order, followed by the deterministic
+      // emergency floor. Do not replace the configured primary with a
+      // score-based model merely because another model is globally eligible.
       const configuredModels = customChainKeys
         .map(findConfiguredModel)
         .filter((m): m is ModelRegistryRecord => Boolean(m))
+        .filter((m) => !m.isEmergencyFloor)
         .filter((m) => isUsableCandidate(m));
 
       if (configuredModels.length > 0) {
-        const primary = eligible
-          .filter((model) => !model.isEmergencyFloor)
-          .sort((a, b) => {
-            const scoreA = a.userPriority + (a.health === 'Healthy' ? 50 : 0);
-            const scoreB = b.userPriority + (b.health === 'Healthy' ? 50 : 0);
-            if (scoreB !== scoreA) return scoreB - scoreA;
-            return a.modelId.localeCompare(b.modelId);
-          })[0];
+        const primary = configuredModels[0];
+        const fallbackModels = configuredModels.slice(1);
+        const emergency = Array.from(this.models.values()).find(
+          (m) => m.isEmergencyFloor && m.roleEligibility.includes(task),
+        );
 
-        if (primary) {
-          const primaryKey = this.modelKey(primary);
-          const fallbackModels = configuredModels.filter((model) => this.modelKey(model) !== primaryKey);
-          return {
-            selectedModel: primary,
-            selectionReason: "Normal task selection chose '" + primary.modelId + "'; configured fallback chain controls failover order.",
-            selectionScore: primary.userPriority,
-            fallbacks: fallbackModels,
-          };
+        if (
+          emergency &&
+          !fallbackModels.some((m) => this.modelKey(m) === this.modelKey(emergency))
+        ) {
+          fallbackModels.push(emergency);
         }
+
+        return {
+          selectedModel: primary,
+          selectionReason: "Configured task route selected '" + primary.modelId + "' as the primary model; failover preserves the configured route order.",
+          selectionScore: primary.userPriority,
+          fallbacks: fallbackModels,
+        };
       }
     }
 
@@ -5641,9 +5645,11 @@ export class MultiModelOrchestrator {
     const selectedCandidates: ModelRegistryRecord[] = [selection.selectedModel, ...selection.fallbacks];
     const candidateKeys = new Set(selectedCandidates.map((model) => this.modelKey(model)));
     const categoryHasManualOverride = Boolean(this.categoryOverrides.get(this.getTaskCategory(task)));
+    const hasConfiguredTaskChain = this.taskFallbackChains.has(task);
 
-    // Recover from stale or underspecified persisted chains. Discovery, quota, credentials,
-    // lifecycle changes, and task eligibility can invalidate a saved chain between requests.
+    // Only tasks without an explicit configured route may use adaptive
+    // discovery-based recovery. Configured task routes are authoritative and
+    // must not be expanded with unrelated eligible models at runtime.
     const usableCandidates = Array.from(this.models.values())
       .filter((model) => !candidateKeys.has(this.modelKey(model)))
       .filter((model) => !model.isEmergencyFloor)
@@ -5668,7 +5674,7 @@ export class MultiModelOrchestrator {
         this.isCandidateUsable(candidate, task, contextTokens)
     ).length;
 
-    if (!categoryHasManualOverride && runnableNonEmergencyCount < 2) {
+    if (!categoryHasManualOverride && !hasConfiguredTaskChain && runnableNonEmergencyCount < 2) {
       for (const model of usableCandidates) {
         if (candidateKeys.has(this.modelKey(model))) continue;
         if (!model.roleEligibility.includes(task)) continue;
@@ -5715,12 +5721,12 @@ export class MultiModelOrchestrator {
       if (totalAttempts >= (contract.fallbackPolicy?.maxTotalAttempts ?? 5) && !candidateChain[cIdx].isEmergencyFloor) {
         break;
       }
-      // Before entering the emergency floor, perform one last live-registry
-      // recovery pass. This handles stale persisted chains whose remaining
-      // configured entries are unusable even though another eligible provider
-      // is currently runnable.
+      // For adaptive tasks only, try one final live-registry recovery
+      // candidate before the emergency floor. Explicit configured routes skip
+      // this escape hatch so their order remains authoritative.
       if (
         !categoryHasManualOverride &&
+        !hasConfiguredTaskChain &&
         cIdx === candidateChain.length - 2 &&
         !candidateChain[cIdx].isEmergencyFloor &&
         candidateChain[cIdx + 1]?.isEmergencyFloor

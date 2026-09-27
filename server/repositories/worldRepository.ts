@@ -2954,6 +2954,15 @@ export class InMemoryWorldRepository implements WorldRepository {
         capabilities: capabilityEngine.exportState(),
       };
     }
+
+    const memoryEngine = this.memoryEngines.get(canonicalRun.storyId);
+    if (memoryEngine) {
+      canonicalRun.runtimeState = {
+        ...(canonicalRun.runtimeState || {}),
+        memory: memoryEngine.exportState(),
+      };
+    }
+
     this.storyRuns.set(canonicalRun.storyId, canonicalRun);
     if (canonicalRun?.protagonist) {
       const actorId = this.getPlayerLifecycle(canonicalRun.storyId)?.actorId || canonicalRun.protagonist.characterId || `player_actor_${canonicalRun.storyId}`;

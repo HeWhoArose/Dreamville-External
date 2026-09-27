@@ -383,6 +383,12 @@ export class InMemoryWorldRepository implements WorldRepository {
         requiresNarrativeMigration = true;
       }
       this.storyRuns.set(storyId, migratedRun);
+
+      // Memory is canonical continuity state, not disposable prompt context.
+      // Restore it during repository startup so NPC/player memories survive deployment restarts.
+      if ((migratedRun as any)?.runtimeState?.memory) {
+        this.getMemoryEngine(storyId).importState((migratedRun as any).runtimeState.memory);
+      }
     }
 
     this.geographies.set('default_story', new GeographyGraph());
@@ -2592,6 +2598,7 @@ export class InMemoryWorldRepository implements WorldRepository {
         ...(this.characterProgressionEngines.has(storyId) ? { progression: this.characterProgressionEngines.get(storyId)!.exportState() } : {}),
         ...(this.inventoryEngines.has(storyId) ? { inventory: this.inventoryEngines.get(storyId)!.exportState() } : {}),
         ...(this.entityRegistries.has(storyId) ? { entities: this.entityRegistries.get(storyId)!.exportState() } : {}),
+        ...(this.memoryEngines.has(storyId) ? { memory: this.memoryEngines.get(storyId)!.exportState() } : {}),
       };
       if (Object.keys(runtimeState).length > 0) run.runtimeState = runtimeState;
     }

@@ -2709,7 +2709,6 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                   </div>
                 ) : null}
               </div>
-            </div>
 
             {/* Capabilities Cards */}
             <div className="space-y-3">

@@ -8,7 +8,7 @@ import { worldRepository } from '../repositories/worldRepository';
 import { StoryAdaptationPipeline } from './storyAdaptation';
 import { getProviderApiKey } from '../services/providerCredentialService';
 import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
-import { evaluateAiTaskReadiness, getAiTaskContract, validateAiTaskResponse, type AiTaskReadiness } from './aiTaskContracts';
+import { evaluateAiTaskReadiness, getAiTaskContract, getAiTasksByCategory, validateAiTaskResponse, type AiTaskReadiness } from './aiTaskContracts';
 import { narrativeContinuityEngine } from './narrativeContinuityEngine';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
@@ -156,12 +156,20 @@ export interface UsageLedgerEntry {
   failureType?: 'TIMEOUT' | '429' | '5XX' | 'AUTH' | 'UNAVAILABLE' | 'MALFORMED' | 'OTHER';
 }
 
+export interface TaskRuntimeRouteState {
+  task: TaskId;
+  activeModelKey?: string;
+  mode: 'AUTO' | 'TASK_PINNED' | 'CATEGORY_MANUAL';
+  fallbackChain: string[];
+}
+
 export interface CategoryRuntimeState {
   category: AiTaskCategory;
   tasks: TaskId[];
   activeModelKey?: string;
   mode: 'AUTO' | 'MANUAL';
   fallbackChain: string[];
+  taskRoutes: TaskRuntimeRouteState[];
 }
 
 export interface DiscoveredModelMetadata {
@@ -2229,27 +2237,43 @@ export class MultiModelOrchestrator {
   }
 
   private getCategoryTasks(category: AiTaskCategory): TaskId[] {
-    const mapping: Record<AiTaskCategory, TaskId[]> = {
-      narration: ['narrative.generate', 'narrative.review'],
-      dialogue: ['character.dialogue'],
-      summarization: ['summary.scene'],
-      world_generation: ['world.generate'],
-      character_genesis: ['character.extract'],
-      memory: ['memory.extract'],
-      research: ['research.query'],
-      research_world_brief: ['research.world-brief'],
-      utility: ['utility.inspect'],
-      intent_interpretation: ['intent.interpret'],
-      capability_synthesis: ['character.capability.propose', 'capability.synthesize'],
-      capability_explanation: ['capability.explain'],
-      tactical_reasoning: ['combat.tactics', 'tactical.reason', 'combat.animation.plan'],
-      gameplay_advice: ['story.advice', 'ooc.respond'],
-      rules: ['rules.adjudicate'],
-      rule_analysis: ['rules.analyze'],
-      speech: ['speech.generate', 'speech.transcribe'],
-      image: ['image.generate'],
+    return getAiTasksByCategory(category);
+  }
+
+  private getTaskRuntimeRoute(task: TaskId): TaskRuntimeRouteState {
+    const category = this.resolveTaskCategory(task);
+    const categoryOverrideKey = this.categoryOverrides.get(category);
+    const fallbackChain = this.getFallbackChain(task);
+
+    if (categoryOverrideKey) {
+      const categoryOverrideModel = this.models.get(categoryOverrideKey)
+        || Array.from(this.models.values()).find((model) => this.modelKey(model) === categoryOverrideKey || model.modelId === categoryOverrideKey);
+      if (categoryOverrideModel?.roleEligibility.includes(task)) {
+        return {
+          task,
+          activeModelKey: categoryOverrideKey,
+          mode: 'CATEGORY_MANUAL',
+          fallbackChain,
+        };
+      }
+    }
+
+    const pinnedKey = this.taskPinnedModels.get(task);
+    if (pinnedKey) {
+      return {
+        task,
+        activeModelKey: pinnedKey,
+        mode: 'TASK_PINNED',
+        fallbackChain,
+      };
+    }
+
+    return {
+      task,
+      activeModelKey: fallbackChain[0],
+      mode: 'AUTO',
+      fallbackChain,
     };
-    return mapping[category] || [];
   }
 
   private modelKey(model: ModelRegistryRecord): string {
@@ -3302,9 +3326,11 @@ export class MultiModelOrchestrator {
     const model = this.models.get(modelKey) || Array.from(this.models.values()).find((candidate) => candidate.modelId === modelKey);
     if (!model) throw new Error('Unknown model "' + modelKey + '".');
 
-    const eligible = tasks.some((task) => model.roleEligibility.includes(task));
-    if (!eligible) {
-      throw new Error('Model "' + modelKey + '" is not eligible for category "' + category + '".');
+    const ineligibleTasks = tasks.filter((task) => !model.roleEligibility.includes(task));
+    if (ineligibleTasks.length > 0) {
+      throw new Error(
+        'Model "' + modelKey + '" is not eligible for every task in category "' + category + '". Missing task eligibility: ' + ineligibleTasks.join(', ') + '.',
+      );
     }
 
     if (model.isEmergencyFloor) {
@@ -3320,38 +3346,27 @@ export class MultiModelOrchestrator {
   }
 
   public getCategoryRuntimeStates(): CategoryRuntimeState[] {
-    const categories: AiTaskCategory[] = [
-      'narration',
-      'dialogue',
-      'summarization',
-      'world_generation',
-      'character_genesis',
-      'memory',
-      'research',
-      'research_world_brief',
-      'utility',
-      'intent_interpretation',
-      'capability_synthesis',
-      'capability_explanation',
-      'tactical_reasoning',
-      'gameplay_advice',
-      'rules',
-      'rule_analysis',
-      'speech',
-      'image',
-    ];
+    const categories = Array.from(
+      new Set(getAllAiTaskContracts().map((contract) => contract.category)),
+    ) as AiTaskCategory[];
+
     return categories.map((category) => {
       const tasks = this.getCategoryTasks(category);
-      const activeModelKey =
-        this.categoryOverrides.get(category)
-        || this.taskPinnedModels.get(tasks[0])
-        || this.getFallbackChain(tasks[0])[0];
+      const taskRoutes = tasks.map((task) => this.getTaskRuntimeRoute(task));
+      const activeKeys = Array.from(new Set(taskRoutes.map((route) => route.activeModelKey).filter(Boolean)));
+      const fallbackChains = taskRoutes.map((route) => JSON.stringify(route.fallbackChain));
+      const commonFallbackChain =
+        fallbackChains.length > 0 && fallbackChains.every((chain) => chain === fallbackChains[0])
+          ? taskRoutes[0].fallbackChain
+          : [];
+
       return {
         category,
         tasks,
-        activeModelKey,
+        activeModelKey: activeKeys.length === 1 ? activeKeys[0] : undefined,
         mode: this.categoryOverrides.has(category) ? 'MANUAL' : 'AUTO',
-        fallbackChain: this.getFallbackChain(tasks[0]),
+        fallbackChain: commonFallbackChain,
+        taskRoutes,
       };
     });
   }
@@ -4041,7 +4056,7 @@ export class MultiModelOrchestrator {
 
         return {
           selectedModel: overridden,
-          selectionReason: 'Category-scoped manual override for ' + category + '; using the narration category fallback route.',
+          selectionReason: 'Category-scoped manual override for ' + category + '; using the requested task's configured fallback route.',
           selectionScore: overridden.userPriority + 1000,
           fallbacks: configuredFallbacks,
         };

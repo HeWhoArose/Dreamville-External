@@ -14,6 +14,11 @@ export interface UserDataArchivePayload {
   confirmedCharacters: Record<string, any>;
   characterDrafts: Record<string, any>;
   userData: Record<string, Record<string, any>>;
+  universes?: Record<string, any>;
+  characterAlignment?: {
+    profiles?: any[];
+    relationships?: any[];
+  };
   deletionTombstones: DeletionTombstone[];
 }
 

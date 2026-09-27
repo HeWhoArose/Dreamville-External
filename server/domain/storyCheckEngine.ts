@@ -13,6 +13,7 @@ import { LocalDiceEngine } from './combatEngine';
 import { rulesProfileEngine } from './rulesProfileEngine';
 import { resolveSkillCheckFormula, normalizeDiceFormula } from '../../src/data/rulesDice';
 import type { RulesProfile } from '../../src/types';
+import { getAllStorySkillCheckDefinitions, getStorySkillCheckDefinition } from './storySkillCheckRegistry';
 
 interface StoryCheckCharacter {
   coreStats?: CharacterCoreStats;
@@ -21,94 +22,15 @@ interface StoryCheckCharacter {
   sceneText?: string;
 }
 
-interface CheckProfile {
-  skill: string;
-  ability: StoryCheckAbility;
-  keywords: string[];
-  dc: number;
-  reason: string;
-  requiresSight?: boolean;
-}
-
-interface SaveProfile {
-  ability: StoryCheckAbility;
-  explicitKeywords: string[];
-  sceneHazards: string[];
-  actionTriggers: string[];
-  dc: number;
-  reason: string;
-  triggerReason: string;
-}
-
-
-const SAVE_PROFILES: SaveProfile[] = [
-  {
-    ability: 'Dexterity',
-    explicitKeywords: ['dodge', 'duck', 'evade', 'avoid the blast', 'leap clear', 'jump clear', 'roll away', 'get out of the way'],
-    sceneHazards: ['collapsing', 'collapse', 'falling debris', 'explosion', 'blast', 'trap', 'fall', 'cave-in'],
-    actionTriggers: ['open', 'touch', 'step', 'walk', 'move', 'enter', 'pull', 'push'],
-    dc: 13,
-    reason: 'Reacting quickly to avoid a physical hazard.',
-    triggerReason: 'The scene contains a sudden physical hazard that requires a reflexive response.',
-  },
-  {
-    ability: 'Constitution',
-    explicitKeywords: ['resist poison', 'fight the poison', 'withstand the toxin', 'endure the fumes', 'hold my breath', 'breathe the gas', 'resist the disease', 'fight the venom'],
-    sceneHazards: ['poison gas', 'toxic gas', 'fumes', 'venom', 'poison', 'disease', 'toxin', 'smoke'],
-    actionTriggers: ['breathe', 'inhale', 'enter', 'walk', 'remain', 'endure'],
-    dc: 13,
-    reason: 'Withstanding a harmful physical or biological effect.',
-    triggerReason: 'The scene exposes the character to a harmful physical or biological threat.',
-  },
-  {
-    ability: 'Wisdom',
-    explicitKeywords: ['resist fear', 'resist being charmed', 'resist the charm', 'resist the voice', 'resist possession', 'shake off the fear', 'fight the compulsion'],
-    sceneHazards: ['terror', 'fear', 'dread', 'charm', 'compulsion', 'possession', 'supernatural voice'],
-    actionTriggers: ['look', 'listen', 'hear', 'enter', 'approach', 'touch'],
-    dc: 14,
-    reason: 'Resisting a mental or supernatural influence.',
-    triggerReason: 'The scene exerts a mental or supernatural influence that calls for resistance.',
-  },
-  {
-    ability: 'Intelligence',
-    explicitKeywords: ['resist the illusion', 'see through the illusion', 'break the illusion', 'resist the mind trick'],
-    sceneHazards: ['illusion', 'mind trick', 'mental puzzle', 'memory attack'],
-    actionTriggers: ['look', 'inspect', 'observe', 'touch'],
-    dc: 14,
-    reason: 'Resisting or recognizing a hostile mental distortion.',
-    triggerReason: 'The scene contains a mental distortion that threatens to mislead or overwhelm the character.',
-  },
-  {
-    ability: 'Charisma',
-    explicitKeywords: ['resist banishment', 'resist possession', 'resist being displaced', 'assert my identity'],
-    sceneHazards: ['banishment', 'possession', 'planar pull', 'soul pull'],
-    actionTriggers: ['enter', 'touch', 'approach', 'resist'],
-    dc: 15,
-    reason: 'Resisting a force that attempts to displace or possess the character.',
-    triggerReason: 'The scene contains a force attempting to displace, bind, or possess the character.',
-  },
-];
-
-const CHECK_PROFILES: CheckProfile[] = [
-  { skill: 'Perception', ability: 'Wisdom', keywords: ['look around', 'look', 'observe', 'notice', 'spot', 'scan', 'search', 'survey', 'watch', 'listen', 'hear', 'detect'], dc: 12, reason: 'Noticing something uncertain in the current scene.', requiresSight: true },
-  { skill: 'Investigation', ability: 'Intelligence', keywords: ['investigate', 'examine', 'inspect', 'analyze', 'study', 'deduce', 'figure out', 'search the room'], dc: 12, reason: 'Reasoning from physical evidence or clues.' },
-  { skill: 'Survival', ability: 'Wisdom', keywords: ['track', 'tracks', 'footprints', 'trail', 'forage', 'navigate', 'survive', 'follow the trail'], dc: 12, reason: 'Reading tracks, terrain, or environmental signs.' },
-  { skill: 'Stealth', ability: 'Dexterity', keywords: ['sneak', 'hide', 'conceal', 'move quietly', 'stay hidden', 'creep'], dc: 12, reason: 'Avoiding notice while moving or acting.' },
-  { skill: 'Athletics', ability: 'Strength', keywords: ['climb', 'jump', 'swim', 'grapple', 'force open', 'break open', 'lift', 'push', 'pull'], dc: 13, reason: 'Applying physical force or athletic skill.' },
-  { skill: 'Acrobatics', ability: 'Dexterity', keywords: ['balance', 'acrobat', 'dodge', 'tumble', 'flip', 'squeeze'], dc: 13, reason: 'Maintaining balance, agility, or controlled movement.' },
-  { skill: 'Arcana', ability: 'Intelligence', keywords: ['arcane', 'magic', 'rune', 'spell', 'ritual', 'enchantment', 'magical', 'arcana'], dc: 13, reason: 'Understanding magical phenomena or lore.' },
-  { skill: 'Medicine', ability: 'Wisdom', keywords: ['treat', 'stabilize', 'diagnose', 'first aid', 'medicine', 'wound'], dc: 12, reason: 'Diagnosing or treating a physical condition.' },
-  { skill: 'Nature', ability: 'Intelligence', keywords: ['plant', 'flora', 'fauna', 'animal', 'beast', 'natural', 'nature'], dc: 12, reason: 'Recognizing natural phenomena or creatures.' },
-  { skill: 'History', ability: 'Intelligence', keywords: ['history', 'historical', 'ancient', 'remember', 'records', 'ruins'], dc: 13, reason: 'Recalling historical or cultural knowledge.' },
-  { skill: 'Religion', ability: 'Intelligence', keywords: ['religion', 'deity', 'god', 'temple', 'holy', 'sacred', 'divine'], dc: 13, reason: 'Recognizing religious or divine knowledge.' },
-  { skill: 'Persuasion', ability: 'Charisma', keywords: ['persuade', 'convince', 'negotiate', 'bargain', 'reason with'], dc: 12, reason: 'Influencing someone through honest persuasion.' },
-  { skill: 'Deception', ability: 'Charisma', keywords: ['lie', 'deceive', 'mislead', 'bluff', 'pretend', 'disguise'], dc: 13, reason: 'Convincing others of something untrue or misleading.' },
-  { skill: 'Insight', ability: 'Wisdom', keywords: ['read them', 'read him', 'read her', 'read the room', 'detect lie', 'detect lies', 'motive', 'motives', 'intuition', 'sense their intent', 'sense his intent', 'sense her intent', 'insight'], dc: 12, reason: 'Reading a creature\'s intentions, emotional state, or deception.' },
-  { skill: 'Intimidation', ability: 'Charisma', keywords: ['intimidate', 'threaten', 'coerce', 'scare'], dc: 12, reason: 'Using pressure or threat to influence someone.' },
-  { skill: 'Performance', ability: 'Charisma', keywords: ['perform', 'performance', 'sing', 'dance', 'act', 'play music', 'play an instrument', 'entertain', 'entertaining', 'recite', 'stage'], dc: 12, reason: 'Using artistic or theatrical performance to influence the scene.' },
-  { skill: 'Animal Handling', ability: 'Wisdom', keywords: ['calm the horse', 'handle the beast', 'handle the animal', 'soothe the animal', 'calm the animal'], dc: 11, reason: 'Handling or calming an animal.' },
-  { skill: 'Sleight of Hand', ability: 'Dexterity', keywords: ['pickpocket', 'palming', 'sleight', 'lift the coin', 'conceal the item'], dc: 13, reason: 'Performing precise manual manipulation unnoticed.' },
-];
+const CHECK_PROFILES = getAllStorySkillCheckDefinitions().map((definition) => ({
+  skill: definition.name,
+  skillId: definition.id,
+  ability: definition.governingAbility,
+  keywords: definition.keywords,
+  dc: definition.defaultDc,
+  reason: definition.description,
+  requiresSight: definition.requiresSight,
+}));
 
 function modifier(score: number): number {
   return Math.floor((score - 10) / 2);
@@ -136,7 +58,10 @@ function proficiencyLevel(
   skillName: string
 ): 'NONE' | 'PROFICIENT' | 'EXPERTISE' {
   const wanted = skillName.toLowerCase();
-  const found = (skills || []).find((skill) => skill.name.toLowerCase() === wanted);
+  const found = (skills || []).find((skill) =>
+    skill.name.toLowerCase() === wanted ||
+    skill.id.toLowerCase() === wanted
+  );
   if (!found) return 'NONE';
   return found.proficiency || (found.isExpertise ? 'EXPERTISE' : found.isProficient ? 'PROFICIENT' : 'NONE');
 }
@@ -271,8 +196,11 @@ export class StoryCheckEngine {
     const profile = saveSelection ? null : this.pickProfile(text);
     if (!saveSelection && !profile) return null;
 
+    const explicitSkillDefinition = !saveSelection && challenge?.skill
+      ? getStorySkillCheckDefinition(String(challenge.skill))
+      : undefined;
     const testType: StoryTestType = challenge?.testType || (saveSelection ? 'SAVING_THROW' : 'ABILITY_CHECK');
-    const ability: StoryCheckAbility = ((challenge?.ability as StoryCheckAbility | undefined) || (saveSelection ? saveSelection.profile.ability : profile?.ability) || 'STR') as StoryCheckAbility;
+    const ability: StoryCheckAbility = ((challenge?.ability as StoryCheckAbility | undefined) || (saveSelection ? saveSelection.profile.ability : explicitSkillDefinition?.governingAbility || profile?.ability) || 'STR') as StoryCheckAbility;
     const skillName = challenge?.skill || (saveSelection ? 'Saving Throw' : profile!.skill);
     const authoredSkill = !saveSelection
       ? (character.skills || []).find((skill) => skill.name.toLowerCase() === String(skillName).toLowerCase())
@@ -503,7 +431,7 @@ export class StoryCheckEngine {
     return triggered || null;
   }
 
-  private pickProfile(text: string): CheckProfile | null {
+  private pickProfile(text: string): (typeof CHECK_PROFILES)[number] | null {
     const candidates = CHECK_PROFILES
       .map((profile) => ({
         profile,
@@ -513,7 +441,10 @@ export class StoryCheckEngine {
         ),
       }))
       .filter((entry) => entry.score > 0)
-      .sort((a, b) => b.score - a.score);
+      .sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        return a.profile.skillId.localeCompare(b.profile.skillId);
+      });
     return candidates[0]?.profile || null;
   }
 

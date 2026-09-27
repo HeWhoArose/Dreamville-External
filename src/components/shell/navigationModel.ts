@@ -85,6 +85,15 @@ export const CANONICAL_NAV_ITEMS: CanonicalNavigationItem[] = [
 		desktop: true,
 	},
 	{
+		route: 'ops.importer',
+		label: 'Importer',
+		section: 'OPERATIONS',
+		icon: 'importer',
+		mobilePrimary: false,
+		mobileDrawer: true,
+		desktop: true,
+	},
+	{
 		route: 'ops.archive',
 		label: 'Archive & Export',
 		section: 'OPERATIONS',
@@ -95,7 +104,7 @@ export const CANONICAL_NAV_ITEMS: CanonicalNavigationItem[] = [
 	},
 	{
 		route: 'ops.bible',
-		label: 'Living Bible',
+		label: 'Dream Book',
 		section: 'OPERATIONS',
 		icon: 'bible',
 		mobilePrimary: false,

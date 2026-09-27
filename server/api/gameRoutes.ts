@@ -225,6 +225,18 @@ gameRouter.post('/action/ooc', async (req: Request, res: Response) => {
       systemInstruction,
       { timeoutMs: 8000, maxTokens: 1200 }
     );
+    if (generated.source === 'DETERMINISTIC_FALLBACK') {
+      return res.status(503).json({
+        success: false,
+        code: 'AI_UNAVAILABLE',
+        task: 'ooc.respond',
+        category: 'utility',
+        errorReason: generated.fallbackReason || 'All configured OOC AI models failed. Deterministic fallback was withheld.',
+        attemptsTrail: generated.attemptsTrail,
+        providerId: generated.providerId,
+        modelId: generated.modelId,
+      });
+    }
     if (!generated.text) {
       return res.status(503).json({ success: false, errorReason: generated.fallbackReason || 'OOC assistant could not produce a response.' });
     }
@@ -287,6 +299,134 @@ gameRouter.post('/action/ooc/tool', async (req: Request, res: Response) => {
 	} catch (error: any) {
 		return res.status(500).json({ success: false, errorReason: error?.message || 'OOC tool execution failed.' });
 	}
+});
+
+/**
+ * POST /api/game/action/narrate/regenerate
+ * Regenerates presentation for an already-committed action without mutating canonical mechanics.
+ */
+gameRouter.post('/action/narrate/regenerate', async (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    const actionId = String(req.body?.actionId || '').trim();
+    const forceModelId = typeof req.body?.forceModelId === 'string' ? req.body.forceModelId.trim() : undefined;
+    const editInstruction = typeof req.body?.editInstruction === 'string' ? req.body.editInstruction.trim() : '';
+    if (!actionId) return res.status(400).json({ success: false, errorReason: 'actionId is required.' });
+
+    const state = serverMockAuthority.getDynamicStoryState(storyId);
+    const action = state.actionHistory.find((entry: any) => entry.id === actionId);
+    if (!action) return res.status(404).json({ success: false, code: 'ACTION_NOT_FOUND', errorReason: 'Committed action was not found in the active Story Run.' });
+
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const run = worldRepository.getStoryRun(storyId);
+    const locationId = player?.locationId || run?.currentLocationId;
+    const location = locationId ? worldRepository.getGeographyGraph(storyId).getNode(locationId) : undefined;
+    const recentTurns = state.actionHistory
+      .filter((entry: any) => entry.id !== actionId && Boolean(entry.narrativeResponse || entry.description))
+      .slice(-8)
+      .reverse()
+      .map((entry: any) => ({
+        playerAction: entry.description,
+        narration: entry.narrativeResponse || entry.authoritativeFeedback || '',
+        worldTime: entry.timestamp,
+      }));
+
+    const checkOutcome = action.checkResult
+      ? `${action.checkResult.testType === 'SAVING_THROW' ? action.checkResult.ability + ' saving throw' : action.checkResult.skill + ' check'} ${action.checkResult.success ? 'succeeded' : 'failed'}.${action.checkResult.consequence?.summary ? ' ' + action.checkResult.consequence.summary : ''}`
+      : action.authoritativeFeedback || 'The canonical action was resolved by the game engine.';
+    const presentationDirective = [
+      'Regenerate only the presentation of this already-committed action.',
+      'Do not change mechanics, canonical facts, target state, or consequences.',
+      editInstruction ? 'Player edit instruction: ' + editInstruction : '',
+    ].filter(Boolean).join(' ');
+
+    const generated = await worldRepository.getAiOrchestrator().generateNarrativeOnly({
+      storyId,
+      playerAction: action.description,
+      committedOutcome: checkOutcome,
+      forceModelId,
+      hardTokenBudget: 1100,
+      timeoutMs: 9000,
+      maxRetries: 1,
+      recentTurns,
+      sceneContext: [
+        run?.startingSituation?.summary,
+        run?.startingSituation?.hook,
+        location?.name,
+        location?.description,
+        location?.ambientSensory,
+      ].filter(Boolean).join(' '),
+      continuationDirective: presentationDirective,
+    } as any);
+
+    if (!generated.success || !generated.turnPackage?.narrative?.length) {
+      const errorPayload = {
+        success: false,
+        code: generated.source === 'DETERMINISTIC_FALLBACK' ? 'AI_UNAVAILABLE' : 'NARRATION_REGENERATION_FAILED',
+        errorReason: generated.error || 'The narration model did not return a usable response.',
+        providerId: generated.providerId,
+        modelId: generated.modelId,
+        fallbackReason: generated.fallbackReason,
+        attemptsTrail: generated.attemptsTrail || [],
+      };
+      action.narrativeResponse = undefined;
+      action.narrativeError = errorPayload;
+      action.narrativeGeneration = {
+        source: generated.source,
+        providerId: generated.providerId,
+        modelId: generated.modelId,
+        regenerated: true,
+      };
+      return res.status(503).json(errorPayload);
+    }
+
+    action.narrativeResponse = generated.turnPackage.narrative.join('\n\n').trim();
+    action.narrativeError = undefined;
+    action.narrativeGeneration = {
+      source: generated.source,
+      providerId: generated.providerId,
+      modelId: generated.modelId,
+      regenerated: true,
+    };
+
+    const savedRun = worldRepository.getStoryRun(storyId);
+    if (savedRun) {
+      const history = Array.isArray(savedRun.runtimeState?.narrativeContextHistory) ? savedRun.runtimeState.narrativeContextHistory : [];
+      savedRun.runtimeState = {
+        ...(savedRun.runtimeState || {}),
+        narrativeContextHistory: [
+          ...history,
+          {
+            actionId,
+            playerAction: action.description,
+            regeneration: true,
+            editInstruction: editInstruction || null,
+            research: generated.researchPacket || null,
+            narration: {
+              response: action.narrativeResponse,
+              modelId: generated.modelId,
+              providerId: generated.providerId,
+              source: generated.source,
+            },
+            capturedAt: formatCanonicalTimestamp(worldRepository.getWorldClock(storyId).getTimestamp()),
+          },
+        ].slice(-24),
+      };
+      worldRepository.saveStoryRun(savedRun);
+    }
+
+    return res.json({
+      success: true,
+      storyId,
+      actionId,
+      narrativeResponse: action.narrativeResponse,
+      narrativeGeneration: action.narrativeGeneration,
+      viewState: serverMockAuthority.getSanitizedViewState(storyId),
+    });
+  } catch (error: any) {
+    console.error('[Narration Regeneration] Failed:', error);
+    return res.status(500).json({ success: false, code: 'NARRATION_REGENERATION_FAILED', errorReason: error?.message || 'Failed to regenerate narration.' });
+  }
 });
 
 gameRouter.post('/action/advice', async (req: Request, res: Response) => {
@@ -6761,6 +6901,19 @@ gameRouter.post('/orchestrator/category', async (req: Request, res: Response) =>
 });
 
 /**
+ * GET /api/game/orchestrator/categories
+ * Returns the current category-level routing state used by the player-facing model picker.
+ */
+gameRouter.get('/orchestrator/categories', async (_req: Request, res: Response) => {
+  try {
+    const orchestrator = worldRepository.getAiOrchestrator();
+    res.json({ success: true, categories: orchestrator.getCategoryRuntimeStates() });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to retrieve AI category states.' });
+  }
+});
+
+/**
  * POST /api/game/orchestrator/health
  * Updates health status of a model in the registry (e.g., to test circuit breakers or degradation).
  */
@@ -7702,6 +7855,17 @@ gameRouter.post('/worlds/:worldId/characters/progression-infer', async (req: Req
     return res.json({ success: true, ...result });
   } catch (error: any) {
     console.error('Error inferring character progression:', error);
+    if (error?.code === 'AI_UNAVAILABLE') {
+      return res.status(503).json({
+        success: false,
+        code: 'AI_UNAVAILABLE',
+        task: 'narrative.generate',
+        category: 'character_genesis',
+        errorReason: error?.message || 'AI progression inference is currently unavailable.',
+        attemptsTrail: Array.isArray(error?.attemptsTrail) ? error.attemptsTrail : [],
+        fallbackReason: error?.fallbackReason,
+      });
+    }
     return res.status(500).json({ success: false, errorReason: error?.message || 'Failed to infer progression.' });
   }
 });

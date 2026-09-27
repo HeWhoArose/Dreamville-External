@@ -372,6 +372,7 @@ gameRouter.post('/action/narrate/regenerate', async (req: Request, res: Response
       const errorPayload = {
         success: false,
         code: generated.source === 'DETERMINISTIC_FALLBACK' ? 'AI_UNAVAILABLE' : 'NARRATION_REGENERATION_FAILED',
+        message: generated.error || 'The narration model did not return a usable response.',
         errorReason: generated.error || 'The narration model did not return a usable response.',
         providerId: generated.providerId,
         modelId: generated.modelId,

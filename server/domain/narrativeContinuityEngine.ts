@@ -41,6 +41,7 @@ export interface NarrativeResearchPacket {
     plot: string;
     plan: string;
     worldMomentum: string;
+    researchEvidence: string;
     causalProvenance: string;
   };
   epistemicallyBoundTo?: string;
@@ -97,16 +98,6 @@ export class NarrativeContinuityEngine {
         : [],
       plot: state.plot,
       plan: state.plan,
-      usageGuidance: {
-        knowledgeFacts: 'Use only for established world facts the player is authorized to know; ground exposition and avoid inventing lore.',
-        memories: 'Use to maintain character continuity, prior experiences, promises, discoveries, and consequences; select only memories relevant to the current action.',
-        storyThreads: 'Use to keep unresolved situations alive and to recognize consequences or opportunities already established in the story.',
-        relationships: 'Use to shape believable NPC reactions, trust, tension, familiarity, and social consequences when those relationships are relevant.',
-        plot: 'Use as the durable compressed history of what has actually happened; prevent contradictions and repeated openings without forcing a predefined route.',
-        plan: 'Use only as the current-turn narrative focus: decide what deserves attention next, what tension can develop, and what can be surfaced now; never force the player into the plan.',
-        worldMomentum: 'Use as pressure and unresolved signal context for forward motion; never invent an event merely to satisfy momentum.',
-        causalProvenance: 'Use to preserve cause-and-effect chains and explain consequences without exposing internal research machinery.',
-      },
       epistemicallyBoundTo: viewerActorId,
       worldMomentum: worldMomentumEngine.getState(repository, storyId),
       researchEvidence: researchEvidencePipeline.getEvidenceForStory(storyId),

@@ -9,6 +9,8 @@ test('Narration, action-routing, suggestions, portrait prompts, and scene prompt
 	const advisor = read('server/services/storyActionAdvisor.ts');
 	const authority = read('server/mockEngine/serverMockAuthority.ts');
 	const orchestrator = read('server/domain/aiOrchestrator.ts');
+	const continuity = read('server/domain/narrativeContinuityEngine.ts');
+	const combat = read('src/components/TacticalCombatView.tsx');
 	const comic = read('server/services/comicSceneGenerator.ts');
 	const routes = read('server/api/gameRoutes.ts');
 	const story = read('src/components/StoryView.tsx');
@@ -28,6 +30,18 @@ test('Narration, action-routing, suggestions, portrait prompts, and scene prompt
 		assert.match(orchestrator, /immersive tabletop-RPG narrator response/, `pass ${pass}: immersive narration contract missing`);
 		assert.match(orchestrator, /Do not tell the player what they attempted/, `pass ${pass}: attempted-action prohibition missing`);
 		assert.match(orchestrator, /Never use phrases such as "the outcome unfolds in the narrative"/, `pass ${pass}: implementation-language prohibition missing`);
+		assert.match(orchestrator, /Narrative Research/, `pass ${pass}: pre-narration research context missing`);
+		assert.match(orchestrator, /narrativeContinuityEngine\.research/, `pass ${pass}: continuity research is not connected to narration`);
+		assert.match(orchestrator, /maxTokens: 900/, `pass ${pass}: narration output budget remains too constrained`);
+		assert.match(orchestrator, /Vary sentence rhythm, paragraph openings, sensory emphasis/, `pass ${pass}: narrative diversity contract missing`);
+		assert.match(continuity, /NarrativeResearchPacket/, `pass ${pass}: narrative research packet contract missing`);
+		assert.match(continuity, /plot: state\.plot/, `pass ${pass}: plot is not returned through narrative research`);
+		assert.match(continuity, /plan: state\.plan/, `pass ${pass}: plan is not returned through narrative research`);
+		assert.match(authority, /narrativeContinuityEngine\.recordTurn/, `pass ${pass}: committed freeform turns are not returned to continuity`);
+		assert.match(authority, /narrativeTurnPackage/, `pass ${pass}: validated\/fallback narrative package is not retained for continuity`);
+		assert.match(authority, /narrativeContinuityEngine\.getState/, `pass ${pass}: fallback narration is not continuity-aware`);
+		assert.match(combat, /DiceRollAnimation/, `pass ${pass}: combat resolution is disconnected from shared dice presentation`);
+		assert.match(combat, /What happened/, `pass ${pass}: combat narrative presentation hierarchy missing`);
 
 		assert.match(comic, /CURRENT SCENE VISUAL BRIEF/, `pass ${pass}: visual brief missing`);
 		assert.match(comic, /context\.currentSituation/, `pass ${pass}: current situation disconnected`);

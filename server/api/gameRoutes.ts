@@ -255,12 +255,34 @@ gameRouter.post('/action/ooc', async (req: Request, res: Response) => {
     const agent = parseOocToolResponse(generated.text);
     let toolResult: any = undefined;
     if (agent.toolCall?.name) {
+      const beforeOocInventoryState = worldRepository.getInventoryEngine(storyId).exportState();
       toolResult = await oocToolRegistry.execute(worldRepository, {
         storyId,
         actorId: worldRepository.getPlayerLifecycle(storyId)?.actorId || `player_actor_${storyId}`,
         call: agent.toolCall,
         sequence: worldRepository.getCanonicalCommandEvents(storyId).length + 1,
       });
+
+      if (toolResult?.success) {
+        try {
+          if (toolResult.name === 'travel_to_world' && toolResult.data?.storyId) {
+            serverMockAuthority.setActiveStoryId(String(toolResult.data.storyId));
+          } else {
+            UniverseRuntimeService.ensureUniverse(worldRepository, storyId);
+            UniverseRuntimeService.captureAction(worldRepository, {
+              storyId,
+              actionType: 'OOC_TOOL',
+              actionText: agent.toolCall.name,
+              commandId: toolResult.commandId,
+              authoritativeFeedback: toolResult.message,
+              narrativeResponse: agent.response,
+              beforeInventoryState: beforeOocInventoryState,
+            });
+          }
+        } catch (memoryError) {
+          console.warn('[UniverseRuntime] OOC continuity capture failed:', memoryError);
+        }
+      }
     }
     return res.json({
       success: true,

@@ -1636,38 +1636,6 @@ export class TacticalCombatEngine {
       return { success: false, errorReason: `Actor is blocked from movement by an active condition (${activeReason}).` };
     }
 
-    // DEF-CH8-03: Enforce canonical map boundaries if configured
-    if (this.mapBounds) {
-      if (
-        targetX < this.mapBounds.minX ||
-        targetX > this.mapBounds.maxX ||
-        targetY < this.mapBounds.minY ||
-        targetY > this.mapBounds.maxY
-      ) {
-        return {
-          success: false,
-          errorReason: `Target coordinates (${targetX}, ${targetY}) exceed map boundaries [${this.mapBounds.minX}..${this.mapBounds.maxX}, ${this.mapBounds.minY}..${this.mapBounds.maxY}].`,
-        };
-      }
-    }
-
-    // DEF-CH8-03: Enforce impassable obstacles
-    for (const obs of this.obstacles) {
-      if (obs.x === targetX && obs.y === targetY && obs.isImpassable !== false) {
-        return {
-          success: false,
-          errorReason: `Target cell (${targetX}, ${targetY}) is blocked by an impassable obstacle.`,
-        };
-      }
-    }
-
-    // Check occupied cells
-    for (const other of this.participants.values()) {
-      if (other.id !== actorId && !other.isDead && other.x === targetX && other.y === targetY) {
-        return { success: false, errorReason: 'Target cell is occupied by another participant.' };
-      }
-    }
-
     const distance = Math.hypot(targetX - actor.x, targetY - actor.y);
     const remainingSpeed = this.actionEconomy.get(actorId)?.movementRemainingCells ?? 0;
     if (distance > remainingSpeed + 1e-9) {

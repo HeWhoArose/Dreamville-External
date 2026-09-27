@@ -49,7 +49,7 @@ test('S4 contract registry covers every runtime task with explicit derived archi
 });
 
 test('S4 readiness rejects incompatible models before provider execution', () => {
-	const model = makeModel('test_provider', 'bad-tactical', 'combat.tactics', ['text_generation']);
+	const model = { ...makeModel('test_provider', 'bad-tactical', 'combat.tactics', ['text_generation']), hasStructuredOutput: false };
 	const readiness = evaluateAiTaskReadiness('combat.tactics', model, 100);
 	assert.equal(readiness.state, 'REJECTED');
 	assert.match(readiness.reason, /Structured output|capability/i);
@@ -68,12 +68,12 @@ test('S4 orchestrator falls through a schema-invalid model using the central tas
 	const fallback = makeModel('provider_fallback_test', 'fallback-tactical', 'combat.tactics', ['text_generation', 'structured_output']);
 	orchestrator.registerModel(primary);
 	orchestrator.registerModel(fallback);
-	orchestrator.registerAdapter(new DeterministicMockAdapter('provider_primary_test', {
-		cannedResponses: { 'combat.tactics': 'not json' },
-	}));
-	orchestrator.registerAdapter(new DeterministicMockAdapter('provider_fallback_test', {
-		cannedResponses: { 'combat.tactics': '{"plan":"fallback"}' },
-	}));
+	const primaryAdapter = new DeterministicMockAdapter('provider_primary_test');
+	primaryAdapter.cannedResponses.set('combat.tactics', 'not json');
+	const fallbackAdapter = new DeterministicMockAdapter('provider_fallback_test');
+	fallbackAdapter.cannedResponses.set('combat.tactics', '{"plan":"fallback"}');
+	orchestrator.registerAdapter(primaryAdapter);
+	orchestrator.registerAdapter(fallbackAdapter);
 	orchestrator.setFallbackChain('combat.tactics', ['provider_fallback_test::fallback-tactical']);
 
 	const result = await orchestrator.executeTaskGeneration(

@@ -145,6 +145,7 @@ test('Universe runtime preserves identity, creates worlds, returns to old worlds
 		storyId: created.storyId,
 		universeId: universe.universeId,
 		worldId: worldB.worldId,
+		travelDurationSeconds: 3600,
 		trigger: 'PLAYER',
 	});
 	assert.equal(travelToB.createdWorld, false);

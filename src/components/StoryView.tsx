@@ -1034,6 +1034,22 @@ export const StoryView: React.FC<StoryViewProps> = ({
                 </button>
                 {narrationPickerOpen && (
                   <div className="mt-1 rounded-xl border border-cyan-200/10 bg-black/20 p-1">
+                    {narrationCategoryState?.fallbackChain?.length ? (
+                      <div className="px-3 py-2 border-b border-white/[0.05]">
+                        <div className="text-[9px] font-black uppercase tracking-[0.16em] text-cyan-100/55">Narration fallback route</div>
+                        <div className="mt-1 flex flex-wrap gap-1.5">
+                          {narrationCategoryState.fallbackChain.slice(0, 5).map((key: string, index: number) => {
+                            const model = narrationModels.find((candidate: any) => `${candidate.providerId}::${candidate.modelId}` === key || candidate.modelId === key);
+                            return (
+                              <span key={key} className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-1 text-[9px] text-stone-400">
+                                {index === 0 ? 'Primary' : `Fallback ${index}`} · {model?.displayName || key.split('::').pop()}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null}
+
                     <button type="button" onClick={() => selectNarrationModel(null)} className="flex w-full items-center rounded-lg px-3 py-2.5 text-left text-xs text-stone-300 hover:bg-white/[0.04]">
                       <span className="flex-1">Automatic routing</span>
                       {!narrationCategoryState?.activeModelKey && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />}

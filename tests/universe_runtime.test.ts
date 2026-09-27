@@ -288,8 +288,6 @@ test('Universe and world/NPC continuity survive repository restart', () => {
 			lastRecalledTurn: 1,
 			triggerConditionTags: ['mira', 'observatory', 'rescue'],
 		});
-		repo1.saveStoryRun(repo1.getStoryRun(created.storyId));
-
 		const repo2 = new InMemoryWorldRepository();
 		assert.equal(repo2.getUniverseForStory(created.storyId)?.universeId, universe.universeId);
 		assert.equal(repo2.getNpcLifecycle(created.storyId, 'npc_restart_friend')?.name, 'Mira');

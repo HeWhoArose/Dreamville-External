@@ -229,7 +229,12 @@ export class OpeningSceneService {
 		const { world, character, location, time } = facts;
 		const narrativeMode = facts.world.narrativeProfile?.mode || 'PROTAGONIST';
 		const p1 = `${time.formattedHeader}. ${character.name} stands within ${location.name}. ${location.ambientSensory || location.description}`;
-		const p2 = `${character.startingSituation || 'The immediate situation is unsettled.'} The world around you is not waiting for permission to move; the first sign of that movement is already present in the scene.`;
+		const characterContext = [
+			character.background,
+			character.role ? 'Role: ' + character.role : '',
+			character.capabilities?.slice(0, 3).join(', '),
+		].filter(Boolean).join(' ');
+		const p2 = `${character.startingSituation || 'The immediate situation is unsettled.'} ${characterContext ? characterContext + ' ' : ''}The world around you is not waiting for permission to move; the first sign of that movement is already present in the scene.`;
 		const p3 = narrativeMode === 'SIDE_CHARACTER'
 			? 'Beyond the immediate moment, other actors continue their own purposes elsewhere.'
 			: narrativeMode === 'FREE_ROAM'

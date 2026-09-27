@@ -35,6 +35,7 @@ export const StoryLibraryView: React.FC<StoryLibraryViewProps> = ({
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedGenre, setSelectedGenre] = useState<string>('all');
+  const [deletingStoryId, setDeletingStoryId] = useState<string | null>(null);
 
   // Extract unique genres for filter chips
   const genres = useMemo(() => {
@@ -275,10 +276,17 @@ export const StoryLibraryView: React.FC<StoryLibraryViewProps> = ({
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={(e) => {
+                      onClick={async (e) => {
                         e.stopPropagation();
-                        onDeleteStory(story);
+                        if (!onDeleteStory || deletingStoryId) return;
+                        setDeletingStoryId(story.storyId);
+                        try {
+                          await onDeleteStory(story);
+                        } finally {
+                          setDeletingStoryId(null);
+                        }
                       }}
+                      disabled={deletingStoryId === story.storyId}
                       className="min-h-[30px] p-1.5 text-rose-300 hover:bg-rose-500/10"
                       title="Delete Story Run"
                       aria-label={`Delete ${story.title}`}

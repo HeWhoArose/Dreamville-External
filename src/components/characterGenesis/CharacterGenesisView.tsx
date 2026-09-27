@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Sparkles,
   User,
@@ -177,6 +177,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
   const [additionalSkillSuggestions, setAdditionalSkillSuggestions] = useState<CharacterSkill[]>([]);
   const [isSuggestingMoreSkills, setIsSuggestingMoreSkills] = useState<boolean>(false);
   const [additionalSkillsError, setAdditionalSkillsError] = useState<string | null>(null);
+  const additionalSkillsReviewRef = useRef<HTMLDivElement | null>(null);
 
   // Custom attribute proposal state
   const [customAttributeConcept, setCustomAttributeConcept] = useState<string>('');
@@ -1001,6 +1002,17 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
       setIsSuggestingMoreSkills(false);
     }
   };
+
+  useEffect(() => {
+    if (additionalSkillSuggestions.length > 0) {
+      window.requestAnimationFrame(() => {
+        additionalSkillsReviewRef.current?.scrollIntoView({
+          behavior: 'smooth',
+          block: 'center',
+        });
+      });
+    }
+  }, [additionalSkillSuggestions.length]);
 
   const handleAcceptAdditionalSkill = (skill: CharacterSkill) => {
     if (!draft) return;
@@ -2523,8 +2535,17 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                   <button
                     id="btn-add-more-skills"
                     type="button"
-                    onClick={handleSuggestAdditionalSkills}
-                    disabled={isSuggestingMoreSkills || additionalSkillSuggestions.length > 0}
+                    onClick={() => {
+                      if (additionalSkillSuggestions.length > 0) {
+                        additionalSkillsReviewRef.current?.scrollIntoView({
+                          behavior: 'smooth',
+                          block: 'center',
+                        });
+                        return;
+                      }
+                      void handleSuggestAdditionalSkills();
+                    }}
+                    disabled={isSuggestingMoreSkills}
                     className="w-full sm:w-auto justify-center shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-indigo-700/80 disabled:opacity-50 text-xs text-indigo-200 font-semibold transition-colors"
                   >
                     {isSuggestingMoreSkills ? (
@@ -2536,7 +2557,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                       {isSuggestingMoreSkills
                         ? 'Discovering Skills...'
                         : additionalSkillSuggestions.length > 0
-                        ? 'Review Suggestions First'
+                        ? 'View Suggestions (' + additionalSkillSuggestions.length + ')'
                         : 'Add More Skills'}
                     </span>
                   </button>
@@ -2602,7 +2623,10 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
             </div>
 
             {/* AI Additional Skill Discovery Review */}
-            <div className="p-4 rounded-xl bg-indigo-950/40 border border-indigo-800/60 space-y-3">
+            <div
+              ref={additionalSkillsReviewRef}
+              className="p-4 rounded-xl bg-indigo-950/40 border border-indigo-800/60 space-y-3 scroll-mt-24"
+            >
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-xs font-semibold text-indigo-200 flex items-center gap-1.5">

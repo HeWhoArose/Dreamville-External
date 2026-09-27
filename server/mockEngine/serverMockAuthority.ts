@@ -26,6 +26,7 @@ import { HistoricalChronicleEngine } from '../domain/historicalChronicleEngine';
 import { storyActionAdvisor } from '../services/storyActionAdvisor';
 import { combatEncounterService } from '../domain/combatEncounterService';
 import { CapabilitySimulationEngine } from '../domain/capabilitySimulationEngine';
+import { narrativeContinuityEngine } from '../domain/narrativeContinuityEngine';
 
 /**
  * ServerMockAuthority
@@ -754,6 +755,28 @@ export class ServerMockAuthority {
       }
     }
 
+    // Feed the committed turn back into the continuity loop so future research,
+    // plot, plan, memory retrieval, and narration see what actually happened.
+    narrativeContinuityEngine.recordTurn(worldRepository, {
+      storyId: targetStoryId,
+      turnId: baseResult.actionId,
+      playerAction: String(freeformText),
+      turnPackage: generated?.turnPackage || {
+        narrative: [narrativeResponse],
+        dialogue: [],
+        events: [
+          storyCheck
+            ? (storyCheck.success ? 'STORY_CHECK_SUCCEEDED' : 'STORY_CHECK_FAILED')
+            : 'STORY_ACTION_RESOLVED',
+        ],
+        stateChanges: [],
+        memoryCandidates: storyCheck?.consequence?.summary
+          ? [storyCheck.consequence.summary]
+          : [],
+        audioCues: [],
+      },
+    });
+
     return {
       ...baseResult,
       message: narrativeResponse,
@@ -789,40 +812,70 @@ export class ServerMockAuthority {
       .find((node) => node.id === player?.locationId || node.id === run?.currentLocationId);
     const atmosphere = location?.ambientSensory || location?.description || 'The surroundings remain still.';
     const normalized = actionText.toLowerCase();
+    const continuity = narrativeContinuityEngine.getState(worldRepository, storyId);
+    const recentBeat = continuity.plot.beats.at(-1)?.text || continuity.plot.summary;
+    const openThread = continuity.plot.openThreads.at(-1) || continuity.plan.priorityThreads.at(-1) || '';
+
+    const cleanThread = openThread
+      .replace(/^Respond coherently to:\s*/i, '')
+      .replace(/^Follow consequence of\s*/i, '')
+      .trim();
+
+    const sceneAnchor = recentBeat && recentBeat.length > 30
+      ? recentBeat
+      : atmosphere;
 
     if (/\b(inhale|breathe|breath|take a breath)\b/.test(normalized)) {
-      return `${actorName} draws a slow breath. ${atmosphere}`;
+      return `${actorName} draws a slow breath and lets the moment settle around them. ${sceneAnchor}
+
+The pause gives the scene room to speak for itself. ${atmosphere}`;
     }
 
     if (/\b(look|observe|inspect|search|scan|survey|examine|notice)\b/.test(normalized)) {
-      return `${actorName} studies the scene carefully, letting the smallest details come into focus. ${atmosphere}`;
+      return `${actorName} studies the scene rather than rushing past it. ${sceneAnchor}
+
+Details separate themselves from the larger shape of the place: textures, distance, movement, and the small changes that would be easy to miss at a glance. ${atmosphere}${cleanThread ? `\n\nThe attention leaves ${cleanThread.toLowerCase().startsWith('the ') ? cleanThread : 'that thread'} unresolved, but more of the situation is now visible.` : ''}`;
     }
 
     if (/\b(listen|hear|listen for)\b/.test(normalized)) {
-      return `${actorName} falls still and listens. ${atmosphere}`;
+      return `${actorName} falls still and listens. ${sceneAnchor}
+
+What reaches them is not yet a clear answer, only the character of the surrounding silence and whatever movement the place permits through it. ${atmosphere}`;
     }
 
     if (/\b(walk|move|step|approach|head|go|travel)\b/.test(normalized)) {
       const targetMatch = actionText.match(/\b(?:toward|towards|to|into|through|around)\s+(.+?)(?:[.!?]|$)/i);
       const destination = targetMatch?.[1]?.trim();
       return destination
-        ? `${actorName} moves toward ${destination}. Each step draws the surroundings into sharper focus: ${atmosphere.toLowerCase()} The approach leaves the scene poised for whatever waits ahead.`
-        : `${actorName} moves forward, changing position within the scene. ${atmosphere} The new vantage point leaves more of the surroundings open to notice.`;
+        ? `${actorName} moves toward ${destination}, and the old vantage point gives way to a new one. ${atmosphere}
+
+The scene changes by degrees as the distance closes; what was once peripheral becomes immediate. ${cleanThread ? `The unresolved thread of ${cleanThread.toLowerCase()} remains ahead.` : 'Nothing announces itself yet, leaving the next few steps deliberately uncertain.'}`
+        : `${actorName} moves forward, changing position within the scene. ${atmosphere}
+
+The new vantage point exposes details that were hidden by distance, while the situation around them remains active and unresolved.`;
     }
 
     if (/\b(open|close|unlock|enter|leave|follow|touch|pick up|take|grasp|hold)\b/.test(normalized)) {
-      return `${actorName} follows through, and the world responds to the movement. ${atmosphere}`;
+      return `${actorName} follows through on the decision. The movement is small, but it changes the immediate shape of the scene. ${atmosphere}
+
+For a moment nothing answers except the physical world itself; then the consequences of the choice begin to settle into place.`;
     }
 
     if (/\b(ask|say|speak|talk|tell|answer|reply)\b/.test(normalized)) {
-      return `${actorName} speaks, breaking the stillness of the moment. ${atmosphere}`;
+      return `${actorName} speaks, breaking the stillness of the moment. ${atmosphere}
+
+The words hang in the scene long enough to demand an answer, a reaction, or at least a change in how the surrounding silence is perceived.`;
     }
 
     if (committedOutcome && !/attempted action|outcome unfolds|canonical|capability|server authority|proposed novel/i.test(committedOutcome)) {
-      return `${atmosphere} ${actorName} remains alert to what follows.`;
+      return `${sceneAnchor} ${actorName} remains alert to what follows.
+
+The immediate moment settles without closing the wider situation. ${cleanThread ? `The unresolved thread of ${cleanThread.toLowerCase()} remains in play.` : ''}`;
     }
 
-    return `${actorName} follows through on the decision. ${atmosphere} The moment settles just enough for the next detail, reaction, or opportunity to emerge.`;
+    return `${actorName} follows through on the decision. ${sceneAnchor}
+
+The moment does not end so much as shift, leaving the scene open to whatever the current situation already supports next.`;
   }
 
 

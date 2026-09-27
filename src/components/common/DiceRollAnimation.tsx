@@ -7,6 +7,14 @@ interface DiceRollAnimationProps {
 	roll: RollRecord;
 	onComplete?: () => void;
 	className?: string;
+	title?: string;
+	subtitle?: string;
+	defenseLabel?: string;
+	defenseValue?: number | string;
+	outcome?: string;
+	resultSuffix?: string;
+	showRollButton?: boolean;
+	autoReveal?: boolean;
 }
 
 export type DieVisualType = 'D4' | 'D6' | 'D8' | 'D10' | 'D12' | 'D20' | 'D100' | 'GENERIC';
@@ -75,6 +83,14 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 	roll,
 	onComplete,
 	className = '',
+	title,
+	subtitle,
+	defenseLabel,
+	defenseValue,
+	outcome,
+	resultSuffix,
+	showRollButton = true,
+	autoReveal = false,
 }) => {
 	const { playSfx, triggerHaptic } = useAudioHaptic();
 	const containerId = useId().replace(/:/g, '');
@@ -84,6 +100,7 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 	const [isRolling, setIsRolling] = useState(false);
 	const [revealed, setRevealed] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const autoRollStartedRef = useRef(false);
 
 	const diceSides = useMemo(() => expandDiceTerms(roll), [roll]);
 	const diceGroups = useMemo(() => expandDiceGroups(roll), [roll]);
@@ -216,38 +233,50 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 		}
 	};
 
+	useEffect(() => {
+		if (autoReveal && !isInitializing && !autoRollStartedRef.current && !isRolling && !revealed) {
+			autoRollStartedRef.current = true;
+			void startRoll();
+		}
+	}, [autoReveal, isInitializing, isRolling, revealed]);
+
 	const modifier = roll.modifier || 0;
 	const modifierLabel = modifier > 0 ? `+${modifier}` : String(modifier);
 	const diceTotal = roll.individualDice.reduce((sum, value) => sum + value, 0);
 	const total = roll.total;
 	const tone = resultTone(roll);
+	const headerTitle = title || 'Physical Dice';
+	const headerSubtitle = subtitle || roll.formula;
+	const buttonVisible = showRollButton !== false;
 
 	return (
 		<div className={`overflow-hidden rounded-3xl border border-white/10 bg-[#090616]/95 ${className}`}>
 			<div className="flex items-center justify-between gap-3 border-b border-white/8 bg-gradient-to-r from-violet-500/10 via-fuchsia-500/8 to-sky-500/8 px-4 py-3">
-				<div className="flex items-center gap-2.5">
+				<div className="flex min-w-0 items-center gap-2.5">
 					<div className="rounded-xl border border-violet-300/15 bg-violet-400/10 p-2 text-violet-100">
 						<Dices className="h-4 w-4" />
 					</div>
-					<div>
-						<p className="text-[10px] font-bold uppercase tracking-[0.18em] text-violet-200/60">Physical Dice</p>
-						<p className="mt-0.5 text-xs font-semibold text-white">{roll.formula}</p>
+					<div className="min-w-0">
+						<p className="truncate text-[10px] font-bold uppercase tracking-[0.18em] text-violet-200/60">{headerTitle}</p>
+						<p className="mt-0.5 truncate text-xs font-semibold text-white">{headerSubtitle}</p>
 					</div>
 				</div>
 
-				<button
-					type="button"
-					onClick={startRoll}
-					disabled={isInitializing || isRolling || revealed}
-					className="inline-flex items-center gap-1.5 rounded-xl border border-fuchsia-300/20 bg-gradient-to-r from-violet-400/15 to-fuchsia-400/15 px-3 py-1.5 text-xs font-semibold text-violet-50 transition hover:from-violet-400/25 hover:to-fuchsia-400/25 disabled:cursor-wait disabled:opacity-45"
-				>
-					{isInitializing || isRolling ? (
-						<Loader2 className="h-3.5 w-3.5 animate-spin" />
-					) : (
-						<RotateCw className="h-3.5 w-3.5" />
-					)}
-					{isInitializing ? 'Loading…' : isRolling ? 'Rolling…' : revealed ? 'Rolled' : 'Roll'}
-				</button>
+				{buttonVisible && (
+					<button
+						type="button"
+						onClick={startRoll}
+						disabled={isInitializing || isRolling || revealed}
+						className="inline-flex items-center gap-1.5 rounded-xl border border-fuchsia-300/20 bg-gradient-to-r from-violet-400/15 to-fuchsia-400/15 px-3 py-1.5 text-xs font-semibold text-violet-50 transition hover:from-violet-400/25 hover:to-fuchsia-400/25 disabled:cursor-wait disabled:opacity-45"
+					>
+						{isInitializing || isRolling ? (
+							<Loader2 className="h-3.5 w-3.5 animate-spin" />
+						) : (
+							<RotateCw className="h-3.5 w-3.5" />
+						)}
+						{isInitializing ? 'Loading…' : isRolling ? 'Rolling…' : revealed ? 'Rolled' : 'Roll'}
+					</button>
+				)}
 			</div>
 
 			<div
@@ -267,6 +296,25 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 				))}
 			</div>
 
+			{(defenseLabel || defenseValue !== undefined || outcome) && (
+				<div className="grid grid-cols-3 gap-2 border-t border-white/8 bg-black/15 px-4 py-3 text-center">
+					{defenseLabel && (
+						<div>
+							<p className="text-[9px] font-bold uppercase tracking-[0.18em] text-stone-500">{defenseLabel}</p>
+							<p className="mt-0.5 text-sm font-black text-white">{defenseValue ?? '—'}</p>
+						</div>
+					)}
+					<div>
+						<p className="text-[9px] font-bold uppercase tracking-[0.18em] text-stone-500">Outcome</p>
+						<p className="mt-0.5 text-sm font-black text-white">{outcome || (revealed ? 'RESULT' : 'READY')}</p>
+					</div>
+					<div>
+						<p className="text-[9px] font-bold uppercase tracking-[0.18em] text-stone-500">Formula</p>
+						<p className="mt-0.5 text-sm font-black text-white">{roll.formula}</p>
+					</div>
+				</div>
+			)}
+
 			<div className={`mx-auto max-w-sm border-t border-white/8 px-4 py-4 text-center ${tone}`}>
 				<p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-70">
 					{roll.isCriticalSuccess
@@ -284,6 +332,7 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 							{diceTotal}
 							{modifier !== 0 ? ` ${modifierLabel}` : ''}
 							{modifier !== 0 ? ` = ${total}` : ''}
+							{resultSuffix ? ` ${resultSuffix}` : ''}
 						</p>
 					</>
 				) : (

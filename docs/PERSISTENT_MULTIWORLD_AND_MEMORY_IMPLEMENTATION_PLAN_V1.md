@@ -170,6 +170,71 @@ A world can therefore be referenced by existing `worldId` or generated from a na
 
 ### 3.9 OOC tool access
 
+### 3.10 Automatic AI continuity candidates
+
+The narrative turn contract may return structured `memoryCandidates`.
+
+These are automatically persisted by the server into durable player memory and universe memory after the turn is recorded. The player does not need to ask the narrator to remember them.
+
+The rule remains:
+
+```
+AI proposes continuity candidate
+        ↓
+Memory validator / canonical boundary
+        ↓
+Durable Memory
+        ↓
+Future Working Context
+        ↓
+Narration / dialogue
+```
+
+AI memory candidates never mutate canonical inventory, combat, relationships, progression or world facts by themselves.
+
+### 3.11 NPC-focused long-term retrieval
+
+NarrativeContinuityEngine now performs entity-linked memory retrieval when the player query explicitly references a known NPC name or alias.
+
+This allows an old NPC memory to be recalled even when the stored memory text does not repeat the NPC's name, provided the memory is epistemically visible to the querying actor.
+
+Example:
+
+```
+Player: "I greet Mira again."
+        ↓
+Entity registry resolves Mira
+        ↓
+Retrieve memories linked to Mira
+        ↓
+Merge with normal semantic/keyword retrieval
+        ↓
+Working Context
+        ↓
+NPC-aware narration
+```
+
+### 3.12 Automatic memory persistence
+
+MemoryOpportunityEngine mutations now trigger repository persistence outside an active canonical transaction.
+
+Canonical transactions remain authoritative and are persisted at their normal commit boundary.
+
+This prevents a memory from remaining only in process memory when it was created outside a command transaction, and prevents an uncommitted transaction from leaking partially committed memory to durable storage.
+
+### 3.13 Known-world travel resolution
+
+Cross-world travel intent now recognizes a known world title directly when paired with a travel verb.
+
+For example:
+
+```
+"I fly to Aether Prime."
+```
+resolves to an existing world titled `Aether Prime`.
+
+Unknown destinations still require an explicit world/planet/dimension/realm marker before DreamBook treats the action as cross-world travel.
+
 The OOC tool registry now exposes:
 
 `travel_to_world`
@@ -512,3 +577,5 @@ Before modifying this system:
 8. Preserve world-local state when the player travels away.
 9. Preserve universe-level player identity across worlds.
 10. Do not call the architecture complete until long-absence and restart tests pass.
+11. Treat literal multi-generational population simulation as unfinished until Phase D acceptance tests exist.
+12. Treat external production durability as unfinished until the final durable storage migration is validated.

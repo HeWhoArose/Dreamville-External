@@ -65,6 +65,29 @@ test('S6 spatial authority and integrations survive ten surgical audit passes', 
 		);
 		assert.equal(cover.level, 'TOTAL', `Pass ${pass}: cover query disagreed with blocking geometry`);
 
+		const gridPath = resolveSpatialGridMovementPath(
+			'actor',
+			{ x: 0, y: 0 },
+			{ x: 3, y: 3 },
+			{ minX: -10, maxX: 10, minY: -10, maxY: 10 },
+			[{ x: 1, y: 1, isImpassable: true }],
+			[],
+			[],
+		);
+		assert.equal(gridPath, undefined, `Pass ${pass}: tactical grid path crossed an impassable blocker`);
+
+		const clearGridPath = resolveSpatialGridMovementPath(
+			'actor',
+			{ x: 0, y: 0 },
+			{ x: 3, y: 2 },
+			{ minX: -10, maxX: 10, minY: -10, maxY: 10 },
+			[],
+			[{ type: 'ice_patch', x: 2, y: 1, radiusCells: 2 }],
+			[],
+		);
+		assert.ok(clearGridPath, `Pass ${pass}: tactical grid path was not resolved by spatial authority`);
+		assert.ok(calculateSpatialGridMovementCost(clearGridPath!, [{ type: 'ice_patch', x: 2, y: 1, radiusCells: 2 }]) > 0);
+
 		let spatialAuthorityCalls = 0;
 		const originalGetSpatialAuthority = repo.getSpatialAuthority.bind(repo);
 		(repo as any).getSpatialAuthority = (id: string) => {

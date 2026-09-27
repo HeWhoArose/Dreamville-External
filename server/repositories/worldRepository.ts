@@ -568,12 +568,14 @@ export class InMemoryWorldRepository implements WorldRepository {
           // This prevents a revisit/restart from replacing remembered NPCs, inventory,
           // relationships, memories or world chronology with fresh defaults.
           const persistedRuntime = (persistedRun as any)?.runtimeState || {};
+          const currentPlayerLifecycle = this.getPlayerLifecycle(storyId);
+
           this.restoreCanonicalStateSnapshot({
             storyId,
             worldClock: persistedRuntime.worldClock,
             geography: persistedRuntime.geography,
             worldFacts: persistedRuntime.knowledgeFacts || [],
-            player: persistedRuntime.playerLifecycle,
+            player: persistedRuntime.playerLifecycle || currentPlayerLifecycle?.toJSON(),
             npcs: {
               lifecycles: persistedRuntime.npcLifecycles || [],
             },

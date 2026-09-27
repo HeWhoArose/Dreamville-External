@@ -6,6 +6,7 @@ import {
 import { PlayerLifecycleState } from '../domain/playerLifecycleState';
 import { WorldClock } from '../domain/worldClock';
 import { GeographyGraph } from '../domain/geographyGraph';
+import { SpatialAuthority } from '../domain/spatialAuthority';
 import { HistoricalChronicleEngine } from '../domain/historicalChronicleEngine';
 import { InventoryItemEngine, EquipmentSlot, ItemCategory } from '../domain/inventoryItem';
 import { CapabilityEngine, CapabilityDefinition } from '../domain/capabilityEngine';
@@ -58,6 +59,7 @@ export interface WorldRepository {
   getActiveJourney(storyId: string): TravelJourney | null;
   getWorldClock(storyId: string): WorldClock;
   getGeographyGraph(storyId?: string): GeographyGraph;
+  getSpatialAuthority(storyId: string): SpatialAuthority;
   seedStory(storyId: string): void;
   getStoryThreads(storyId: string): any[];
   saveStoryThread(thread: any): void;
@@ -1577,6 +1579,12 @@ export class InMemoryWorldRepository implements WorldRepository {
       this.geographies.set(storyId, geo);
     }
     return geo;
+  }
+
+  public getSpatialAuthority(storyId: string): SpatialAuthority {
+    const run = this.getStoryRun(storyId);
+    const worldTemplate = run?.worldId ? this.getWorldTemplate(run.worldId) : undefined;
+    return new SpatialAuthority(this.getGeographyGraph(storyId), worldTemplate);
   }
 
   public getGeography(storyId = 'default_story'): GeographyGraph {

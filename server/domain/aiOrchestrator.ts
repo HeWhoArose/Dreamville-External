@@ -1908,6 +1908,85 @@ export class DomainAdjudicationBridge {
   }
 }
 
+
+/**
+ * Persists AI-selected continuity candidates as non-critical episodic memories.
+ * Canonical gameplay state remains authoritative; these records preserve
+ * narrative continuity without allowing AI prose to mutate gameplay state.
+ */
+export function persistTurnMemoryCandidates(
+  repository: WorldRepository,
+  storyId: string,
+  turnId: string,
+  candidates: string[] | undefined,
+): number {
+  if (!Array.isArray(candidates) || candidates.length === 0) return 0;
+
+  const player = repository.getPlayerLifecycle(storyId);
+  if (!player) return 0;
+
+  const memoryEngine = repository.getMemoryEngine(storyId);
+  const clock = repository.getWorldClock(storyId);
+  const timestamp = clock.getTimestamp();
+  const currentTurn = repository.getCanonicalCommandEvents(storyId).length;
+  const normalizedCandidates = Array.from(
+    new Map(
+      candidates
+        .map((candidate) => String(candidate || '').trim())
+        .filter((candidate) => candidate.length >= 8)
+        .map((candidate) => [candidate.toLowerCase(), candidate]),
+    ).values(),
+  ).slice(0, 8);
+
+  let stored = 0;
+
+  for (const candidate of normalizedCandidates) {
+    const memoryId = deterministicId(
+      'ai_turn_memory_candidate',
+      storyId,
+      turnId,
+      candidate,
+    );
+
+    if (memoryEngine.getMemory(memoryId)) continue;
+
+    const triggerConditionTags = [
+      'ai_turn_memory',
+      ...candidate
+        .toLowerCase()
+        .split(/\W+/)
+        .filter((token) => token.length >= 3)
+        .slice(0, 8),
+    ];
+
+    memoryEngine.storeMemory({
+      id: memoryId,
+      storyId,
+      memoryClass: 'EPISODIC',
+      subjectEntityId: player.actorId,
+      relatedEntityIds: [],
+      content: candidate,
+      importance: 55,
+      confidence: 0.75,
+      status: 'active',
+      visibility: 'PRIVATE',
+      accessibleToEntityIds: [player.actorId],
+      isPersistentCritical: false,
+      provenance: 'automatic_ai_turn_memory_candidate',
+      sourceEventId: turnId,
+      validFromTurn: currentTurn,
+      lastRecalledTurn: currentTurn,
+      createdAtTimestamp: timestamp,
+      lastRecalledTimestamp: timestamp,
+      triggerConditionTags,
+    });
+
+    stored += 1;
+  }
+
+  return stored;
+}
+
 /**
  * MultiModelOrchestrator
  * Implements DreamBook Challenge 12 & V6.0–V6.53.
@@ -5256,6 +5335,12 @@ export class MultiModelOrchestrator {
               playerAction: params.playerAction,
               turnPackage: validation.turnPackage,
             });
+            persistTurnMemoryCandidates(
+              repo,
+              storyId,
+              turnId,
+              validation.turnPackage.memoryCandidates,
+            );
 
             return {
               success: true,

@@ -75,3 +75,19 @@ test('dice renderer uses projected 3D canvas geometry rather than a flat SVG she
   assert.match(source, /rotate\(/);
   assert.doesNotMatch(source, /const DieFace/);
 });
+
+test('dice UI does not reveal the canonical result before the roll is started', () => {
+  const source = fs.readFileSync(path.join(process.cwd(), 'src/components/common/DiceRollAnimation.tsx'), 'utf8');
+  assert.match(source, /useState<number\[\]>\(\(\) =>[\s\S]*diceSides\.map\(\(sides\) => randomFace\(sides\)\)/);
+  assert.doesNotMatch(source, /useState<number\[\]>\(\(\) =>[\s\S]*roll\.individualDice\[index\]/);
+  assert.match(source, /setRollingValues\(diceSides\.map\(\(sides\) => randomFace\(sides\)\)\);/);
+  assert.match(source, /setRollingValues\(\[\.\.\.roll\.individualDice\]\);/);
+});
+
+test('combat resolution consumes the shared vibrant dice presentation instead of developer-style roll rows', () => {
+  const source = fs.readFileSync(path.join(process.cwd(), 'src/components/TacticalCombatView.tsx'), 'utf8');
+  assert.match(source, /DiceRollAnimation/);
+  assert.match(source, /bg-\[#100b2f\]/);
+  assert.match(source, /What happened/);
+  assert.match(source, /bg-gradient-to-r from-orange-400 via-red-400 to-fuchsia-400/);
+});

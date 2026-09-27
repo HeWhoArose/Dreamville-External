@@ -35,39 +35,66 @@ function makeNarrationModel(
 	};
 }
 
-test('S4 category routes are bound to their owning task and start at the task pin before deterministic recovery', () => {
+test('S4 category routes enumerate and preserve route semantics for every owning task', () => {
 	const orchestrator = new MultiModelOrchestrator();
 	const states = orchestrator.getCategoryRuntimeStates();
 
-	for (const state of states) {
-		const firstTask = state.tasks[0];
-		assert.ok(firstTask, 'Category has no owning task: ' + state.category);
+	for (let pass = 0; pass < 10; pass++) {
+		const contracts = getAllAiTaskContracts();
+		const expectedByCategory = new Map<string, string[]>();
 
-		const configuredRoute = orchestrator.getFallbackChain(firstTask);
-		assert.deepEqual(state.fallbackChain, configuredRoute, state.category);
-		assert.ok(configuredRoute.length > 0, 'Empty route: ' + state.category);
-		assert.equal(configuredRoute.at(-1), emergencyKey, 'Route must terminate at deterministic recovery: ' + state.category);
+		for (const contract of contracts) {
+			const list = expectedByCategory.get(contract.category) || [];
+			list.push(contract.task);
+			expectedByCategory.set(contract.category, list);
+		}
 
-		const pinned = orchestrator.getPinnedModelForTask(firstTask);
-		if (!state.mode || state.mode === 'AUTO') {
-			if (pinned) {
-				assert.equal(
-					configuredRoute[0],
-					pinned,
-					'Configured primary must match the task pin for ' + state.category,
+		for (const state of states) {
+			const expectedTasks = expectedByCategory.get(state.category) || [];
+			assert.deepEqual(
+				state.tasks,
+				expectedTasks,
+				'Category-to-task mapping drifted for ' + state.category,
+			);
+			assert.equal(
+				state.taskRoutes.length,
+				state.tasks.length,
+				'Every category task must have its own route state: ' + state.category,
+			);
+
+			for (const task of state.tasks) {
+				const route = state.taskRoutes.find((entry) => entry.task === task);
+				assert.ok(route, 'Missing route state for ' + task);
+
+				const configuredRoute = orchestrator.getFallbackChain(task);
+				assert.deepEqual(
+					route?.fallbackChain,
+					configuredRoute,
+					'Category state must expose the owning task route, not only the first task route: ' + task,
 				);
+				assert.ok(configuredRoute.length > 0, 'Empty route: ' + task);
 				assert.equal(
-					state.activeModelKey,
-					pinned,
-					'Category AUTO state must expose its task pin as active primary for ' + state.category,
+					configuredRoute.at(-1),
+					emergencyKey,
+					'Route must terminate at deterministic recovery: ' + task,
 				);
+
+				const categoryOverride = orchestrator.getCategoryModelOverride(state.category);
+				const pinned = orchestrator.getPinnedModelForTask(task);
+
+				if (categoryOverride) {
+					assert.equal(route?.activeModelKey, categoryOverride, 'Category override must apply to every eligible task: ' + task);
+					assert.equal(route?.mode, 'CATEGORY_MANUAL');
+				} else if (pinned) {
+					assert.equal(route?.activeModelKey, pinned, 'Task pin must remain task-scoped: ' + task);
+					assert.equal(route?.mode, 'TASK_PINNED');
+				} else {
+					assert.equal(route?.activeModelKey, configuredRoute[0], 'AUTO task route must start at its own configured route: ' + task);
+					assert.equal(route?.mode, 'AUTO');
+				}
 			}
 		}
 	}
-
-	const narration = states.find((entry) => entry.category === 'narration');
-	assert.ok(narration);
-	assert.equal(narration?.tasks[0], 'narrative.generate');
 });
 
 test('S4 configured task route is authoritative for primary selection, even against a higher-scoring unrelated eligible model', () => {
@@ -147,4 +174,82 @@ test('S4 configured route reaches only its ordered fallbacks before deterministi
 	]);
 	assert.equal(attempted.includes('unrelated-healthy'), false);
 	assert.equal(result.source, 'DETERMINISTIC_FALLBACK');
+});
+
+
+test('S4 multi-task category override must be eligible for every task in the category', () => {
+	const orchestrator = new MultiModelOrchestrator();
+	const speechTasks = orchestrator.getCategoryRuntimeStates().find((state) => state.category === 'speech')?.tasks || [];
+	assert.deepEqual(speechTasks, ['speech.generate', 'speech.transcribe']);
+
+	orchestrator.registerModel({
+		providerId: 'category_partial',
+		modelId: 'partial-speech',
+		displayName: 'Partial Speech Test Model',
+		pool: 'speech',
+		capabilities: ['speech_synthesis', 'text_generation'],
+		contextWindow: 32768,
+		health: 'Healthy',
+		quota: 'Healthy',
+		latencyMs: 10,
+		userPriority: 100,
+		roleEligibility: ['speech.generate'],
+		supportedInputTypes: ['text'],
+		supportedOutputTypes: ['audio'],
+		fallbackEligibility: true,
+		isEmergencyFloor: false,
+		accessStatus: 'accessible',
+		lifecycleState: 'active',
+	});
+
+	assert.throws(
+		() => orchestrator.setCategoryModelOverride('speech', 'category_partial::partial-speech'),
+		/missing task eligibility: speech\.transcribe/i,
+	);
+});
+
+test('S4 valid category override is applied to every task in a multi-task category', () => {
+	const orchestrator = new MultiModelOrchestrator();
+	const category = 'gameplay_advice' as const;
+	const tasks = orchestrator.getCategoryRuntimeStates().find((state) => state.category === category)?.tasks || [];
+	assert.deepEqual(tasks, ['story.advice', 'ooc.respond']);
+
+	orchestrator.registerModel({
+		providerId: 'category_shared',
+		modelId: 'shared-gameplay-advice',
+		displayName: 'Shared Gameplay Advice Test Model',
+		pool: 'fast',
+		capabilities: ['text_generation', 'fast', 'reasoning', 'structured_output'],
+		contextWindow: 32768,
+		health: 'Healthy',
+		quota: 'Healthy',
+		latencyMs: 10,
+		userPriority: 500,
+		roleEligibility: tasks,
+		supportedInputTypes: ['text'],
+		supportedOutputTypes: ['text', 'json'],
+		hasStructuredOutput: true,
+		fallbackEligibility: true,
+		isEmergencyFloor: false,
+		accessStatus: 'accessible',
+		lifecycleState: 'active',
+	});
+
+	orchestrator.setCategoryModelOverride(category, 'category_shared::shared-gameplay-advice');
+
+	for (let pass = 0; pass < 10; pass++) {
+		const state = orchestrator.getCategoryRuntimeStates().find((entry) => entry.category === category);
+		assert.ok(state);
+		assert.equal(state?.mode, 'MANUAL');
+		assert.equal(state?.activeModelKey, 'category_shared::shared-gameplay-advice');
+
+		for (const task of tasks) {
+			const route = state?.taskRoutes.find((entry) => entry.task === task);
+			assert.equal(route?.activeModelKey, 'category_shared::shared-gameplay-advice');
+			assert.equal(route?.mode, 'CATEGORY_MANUAL');
+
+			const selection = orchestrator.selectBestModel(task);
+			assert.equal(selection.selectedModel.modelId, 'shared-gameplay-advice', 'Category override did not reach task ' + task);
+		}
+	}
 });

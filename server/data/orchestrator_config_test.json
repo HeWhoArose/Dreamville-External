@@ -4,6 +4,7 @@
     "world.generate": "google_gemini::gemini-3.5-flash",
     "character.dialogue": "google_gemini::gemini-3.5-flash",
     "story.advice": "google_gemini::gemini-3.5-flash",
+    "character.extract": "google_gemini::gemini-3.5-flash-lite",
     "memory.extract": "google_gemini::gemini-3.5-flash",
     "character.capability.propose": "google_gemini::gemini-3.5-flash",
     "intent.interpret": "google_gemini::gemini-3.5-flash-lite",
@@ -23,7 +24,8 @@
     "narrative.generate": [
       "provider_primary_failing::primary-fail-m1",
       "provider_secondary_failing::secondary-fail-m2",
-      "provider_tertiary_success::tertiary-success-m3"
+      "provider_tertiary_success::tertiary-success-m3",
+      "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "character.dialogue": [
       "google_gemini::gemini-3.5-flash",
@@ -103,6 +105,12 @@
       "google_gemini::gemini-3.5-flash-lite",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
+    "world.generate": [
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
+      "provider_deterministic_emergency::emergency-fallback-local"
+    ],
     "combat.tactics": [
       "google_gemini::gemini-3.5-flash",
       "google_gemini::gemini-3.8-flash",
@@ -131,6 +139,18 @@
       "google_gemini::gemini-3.5-flash",
       "google_gemini::gemini-3.8-flash",
       "google_gemini::gemini-3.5-flash-lite",
+      "provider_deterministic_emergency::emergency-fallback-local"
+    ],
+    "speech.generate": [
+      "provider_mock_speech::mock-speech-v1",
+      "provider_deterministic_emergency::emergency-fallback-local"
+    ],
+    "speech.transcribe": [
+      "provider_mock_stt::mock-stt-v1",
+      "provider_deterministic_emergency::emergency-fallback-local"
+    ],
+    "image.generate": [
+      "google_imagen::imagen-3.0-generate-002",
       "provider_deterministic_emergency::emergency-fallback-local"
     ]
   },
@@ -178,7 +198,13 @@
       "fallbackEligibility": true,
       "accessStatus": "not_configured",
       "lifecycleState": "active",
-      "isEmergencyFloor": false
+      "isEmergencyFloor": false,
+      "supportedInputTypes": [
+        "text"
+      ],
+      "supportedOutputTypes": [
+        "text"
+      ]
     },
     {
       "providerId": "openrouter",
@@ -221,7 +247,13 @@
       "fallbackEligibility": true,
       "accessStatus": "not_configured",
       "lifecycleState": "active",
-      "isEmergencyFloor": false
+      "isEmergencyFloor": false,
+      "supportedInputTypes": [
+        "text"
+      ],
+      "supportedOutputTypes": [
+        "text"
+      ]
     },
     {
       "providerId": "openrouter",
@@ -264,7 +296,13 @@
       "fallbackEligibility": true,
       "accessStatus": "not_configured",
       "lifecycleState": "active",
-      "isEmergencyFloor": false
+      "isEmergencyFloor": false,
+      "supportedInputTypes": [
+        "text"
+      ],
+      "supportedOutputTypes": [
+        "text"
+      ]
     },
     {
       "providerId": "openrouter",
@@ -307,7 +345,13 @@
       "fallbackEligibility": true,
       "accessStatus": "not_configured",
       "lifecycleState": "active",
-      "isEmergencyFloor": false
+      "isEmergencyFloor": false,
+      "supportedInputTypes": [
+        "text"
+      ],
+      "supportedOutputTypes": [
+        "text"
+      ]
     },
     {
       "providerId": "openrouter",
@@ -350,7 +394,13 @@
       "fallbackEligibility": true,
       "accessStatus": "not_configured",
       "lifecycleState": "active",
-      "isEmergencyFloor": false
+      "isEmergencyFloor": false,
+      "supportedInputTypes": [
+        "text"
+      ],
+      "supportedOutputTypes": [
+        "text"
+      ]
     },
     {
       "providerId": "openrouter",
@@ -393,7 +443,13 @@
       "fallbackEligibility": true,
       "accessStatus": "not_configured",
       "lifecycleState": "active",
-      "isEmergencyFloor": false
+      "isEmergencyFloor": false,
+      "supportedInputTypes": [
+        "text"
+      ],
+      "supportedOutputTypes": [
+        "text"
+      ]
     },
     {
       "providerId": "openrouter",
@@ -436,7 +492,13 @@
       "fallbackEligibility": true,
       "accessStatus": "not_configured",
       "lifecycleState": "active",
-      "isEmergencyFloor": false
+      "isEmergencyFloor": false,
+      "supportedInputTypes": [
+        "text"
+      ],
+      "supportedOutputTypes": [
+        "text"
+      ]
     },
     {
       "providerId": "openrouter",
@@ -479,7 +541,13 @@
       "fallbackEligibility": true,
       "accessStatus": "not_configured",
       "lifecycleState": "active",
-      "isEmergencyFloor": false
+      "isEmergencyFloor": false,
+      "supportedInputTypes": [
+        "text"
+      ],
+      "supportedOutputTypes": [
+        "text"
+      ]
     },
     {
       "providerId": "openrouter",
@@ -522,7 +590,13 @@
       "fallbackEligibility": true,
       "accessStatus": "not_configured",
       "lifecycleState": "active",
-      "isEmergencyFloor": false
+      "isEmergencyFloor": false,
+      "supportedInputTypes": [
+        "text"
+      ],
+      "supportedOutputTypes": [
+        "text"
+      ]
     },
     {
       "providerId": "openrouter",
@@ -565,7 +639,13 @@
       "fallbackEligibility": true,
       "accessStatus": "not_configured",
       "lifecycleState": "active",
-      "isEmergencyFloor": false
+      "isEmergencyFloor": false,
+      "supportedInputTypes": [
+        "text"
+      ],
+      "supportedOutputTypes": [
+        "text"
+      ]
     },
     {
       "providerId": "openrouter",
@@ -608,7 +688,13 @@
       "fallbackEligibility": true,
       "accessStatus": "not_configured",
       "lifecycleState": "active",
-      "isEmergencyFloor": false
+      "isEmergencyFloor": false,
+      "supportedInputTypes": [
+        "text"
+      ],
+      "supportedOutputTypes": [
+        "text"
+      ]
     },
     {
       "providerId": "openai",
@@ -617,7 +703,8 @@
       "pool": "creative",
       "capabilities": [
         "creative_writing",
-        "fast"
+        "fast",
+        "text_generation"
       ],
       "contextWindow": 128000,
       "health": "InvalidAuth",
@@ -648,7 +735,13 @@
       ],
       "accessStatus": "not_configured",
       "lifecycleState": "active",
-      "isEmergencyFloor": false
+      "isEmergencyFloor": false,
+      "supportedInputTypes": [
+        "text"
+      ],
+      "supportedOutputTypes": [
+        "text"
+      ]
     },
     {
       "providerId": "anthropic",
@@ -657,7 +750,8 @@
       "pool": "creative",
       "capabilities": [
         "creative_writing",
-        "long_context"
+        "long_context",
+        "text_generation"
       ],
       "contextWindow": 200000,
       "health": "InvalidAuth",
@@ -688,7 +782,13 @@
       ],
       "accessStatus": "not_configured",
       "lifecycleState": "active",
-      "isEmergencyFloor": false
+      "isEmergencyFloor": false,
+      "supportedInputTypes": [
+        "text"
+      ],
+      "supportedOutputTypes": [
+        "text"
+      ]
     }
   ]
 }

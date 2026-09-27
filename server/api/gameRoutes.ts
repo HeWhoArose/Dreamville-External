@@ -6751,6 +6751,8 @@ gameRouter.post('/orchestrator/turn', async (req: Request, res: Response) => {
     const orchestrator = worldRepository.getAiOrchestrator();
 
     const commandId = idempotencyKey || deterministicId('cmd_route', storyId, "/orchestrator/turn", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+    const beforeOrchestratorInventoryState = worldRepository.getInventoryEngine(String(storyId)).exportState();
+    const beforeOrchestratorWorldElapsedSeconds = worldRepository.getWorldClock(String(storyId)).getTimestamp().totalElapsedSeconds;
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
       {
@@ -6802,6 +6804,25 @@ gameRouter.post('/orchestrator/turn', async (req: Request, res: Response) => {
     }
 
     const turnResult = commandResult.data as any;
+
+    // AI-orchestrated turns are canonical gameplay too. Capture important consequences
+    // automatically so the player never has to instruct DreamBook to remember them.
+    try {
+      UniverseRuntimeService.ensureUniverse(worldRepository, String(storyId));
+      UniverseRuntimeService.captureAction(worldRepository, {
+        storyId: String(storyId),
+        actionType: 'AI_TURN',
+        actionText: String(playerAction),
+        commandId: commandResult.commandId,
+        authoritativeFeedback: turnResult?.mechanicalResolution?.mechanicalSummary || turnResult?.summary || turnResult?.error,
+        narrativeResponse: turnResult?.turnPackage?.narrative?.join('\n\n'),
+        beforeInventoryState: beforeOrchestratorInventoryState,
+        beforeWorldElapsedSeconds: beforeOrchestratorWorldElapsedSeconds,
+      });
+    } catch (memoryError) {
+      console.warn('[UniverseRuntime] AI-turn continuity capture failed:', memoryError);
+    }
+
     if (turnResult.telemetry?.idempotencyReplayed) {
       res.setHeader('X-Idempotent-Replay', 'true');
     }

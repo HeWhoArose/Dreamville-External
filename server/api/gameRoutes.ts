@@ -265,6 +265,15 @@ gameRouter.post('/action/ooc', async (req: Request, res: Response) => {
     });
   } catch (error: any) {
     console.error('[OOC] Failed to answer OOC request:', error);
+    if (/model|AI|provider|quota|available|configured/i.test(String(error?.message || ''))) {
+      return res.status(503).json({
+        success: false,
+        code: 'AI_UNAVAILABLE',
+        task: 'ooc.respond',
+        category: 'gameplay_advice',
+        errorReason: error?.message || 'No OOC AI model is currently available.',
+      });
+    }
     return res.status(500).json({ success: false, errorReason: error?.message || 'Failed to answer OOC request.' });
   }
 });

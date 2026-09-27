@@ -62,6 +62,7 @@ export class WorldSimulationService {
     }
 
     const geography = this.worldRepo.getGeographyGraph(storyId);
+    const spatial = this.worldRepo.getSpatialAuthority(storyId);
     const destNode = geography.getNode(destinationLocationId);
     if (!destNode) {
       return { success: false, message: `Destination ${destinationLocationId} does not exist.` };
@@ -78,11 +79,11 @@ export class WorldSimulationService {
       return { success: false, message: `Destination ${destNode.name} is currently inaccessible.` };
     }
 
-    const pathResult = geography.findPath(player.locationId, destinationLocationId, mode);
+    const pathResult = spatial.findPath(player.locationId, destinationLocationId, mode);
     if (!pathResult.found) {
       return {
         success: false,
-        message: `No traversable route found between ${player.locationId} and ${destNode.name}.`,
+        message: pathResult.reason || `No traversable route found between ${player.locationId} and ${destNode.name}.`,
       };
     }
 

@@ -2495,28 +2495,52 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
               <p className="text-xs text-neutral-400">
                 Propose a unique supernatural power, combat technique, or domain mastery. The engine will synthesize a structured capability schema and derive complementary techniques linked by lineage.
               </p>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 min-w-0">
                 <input
                   type="text"
                   id="input-custom-capability"
                   value={customCapInput}
                   onChange={(e) => setCustomCapInput(e.target.value)}
                   placeholder="E.g., Shadow Manipulation, Chrono-Stutter, Blood Siphon..."
-                  className="flex-1 px-3 py-2 rounded-lg bg-neutral-900 border border-neutral-700 text-sm text-white focus:outline-none focus:border-indigo-500"
+                  className="min-w-0 w-full flex-1 px-3 py-2 rounded-lg bg-neutral-900 border border-neutral-700 text-sm text-white focus:outline-none focus:border-indigo-500"
                 />
-                <button
-                  id="btn-propose-capability"
-                  onClick={handleProposeCustomCapability}
-                  disabled={isProposingCap || !customCapInput.trim()}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-xs font-medium text-white transition-colors"
-                >
-                  {isProposingCap ? (
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Plus className="w-3.5 h-3.5" />
-                  )}
-                  <span>Synthesize Capability</span>
-                </button>
+
+                <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto sm:shrink-0">
+                  <button
+                    id="btn-propose-capability"
+                    onClick={handleProposeCustomCapability}
+                    disabled={isProposingCap || !customCapInput.trim()}
+                    className="w-full sm:w-auto justify-center shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-xs font-medium text-white transition-colors"
+                  >
+                    {isProposingCap ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Plus className="w-3.5 h-3.5" />
+                    )}
+                    <span>Synthesize Capability</span>
+                  </button>
+
+                  <button
+                    id="btn-add-more-skills"
+                    type="button"
+                    onClick={handleSuggestAdditionalSkills}
+                    disabled={isSuggestingMoreSkills || additionalSkillSuggestions.length > 0}
+                    className="w-full sm:w-auto justify-center shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-indigo-700/80 disabled:opacity-50 text-xs text-indigo-200 font-semibold transition-colors"
+                  >
+                    {isSuggestingMoreSkills ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-3.5 h-3.5" />
+                    )}
+                    <span>
+                      {isSuggestingMoreSkills
+                        ? 'Discovering Skills...'
+                        : additionalSkillSuggestions.length > 0
+                        ? 'Review Suggestions First'
+                        : 'Add More Skills'}
+                    </span>
+                  </button>
+                </div>
               </div>
               {capProposalError && (
                 <div className="text-xs text-red-400">{capProposalError}</div>
@@ -2557,17 +2581,17 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                     </div>
                   )}
 
-                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-indigo-900">
+                  <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 pt-2 border-t border-indigo-900">
                     <button
                       onClick={handleRejectCapProposal}
-                      className="px-3 py-1.5 rounded bg-neutral-900 border border-neutral-700 text-xs text-neutral-300 hover:text-white"
+                      className="w-full sm:w-auto justify-center px-3 py-1.5 rounded bg-neutral-900 border border-neutral-700 text-xs text-neutral-300 hover:text-white"
                     >
                       Reject
                     </button>
                     <button
                       id="btn-accept-capability"
                       onClick={handleAcceptCapProposal}
-                      className="px-4 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white flex items-center gap-1.5"
+                      className="w-full sm:w-auto justify-center px-4 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-xs font-semibold text-white flex items-center gap-1.5"
                     >
                       <Check className="w-4 h-4" />
                       <span>Accept & Add Capability</span>
@@ -3015,22 +3039,8 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                   </span>
                 </div>
 
-                <button
-                  id="btn-add-more-skills"
-                  onClick={handleSuggestAdditionalSkills}
-                  disabled={isSuggestingMoreSkills || additionalSkillSuggestions.length > 0}
-                  className="w-full sm:w-auto px-4 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-xs text-white font-semibold flex items-center justify-center gap-1.5 shadow-sm"
-                >
-                  {isSuggestingMoreSkills ? (
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Sparkles className="w-3.5 h-3.5" />
-                  )}
-                  <span>{isSuggestingMoreSkills ? 'Discovering Skills...' : additionalSkillSuggestions.length > 0 ? 'Review Suggestions First' : 'Add More Skills'}</span>
-                </button>
-
                 <div className="text-[10px] text-neutral-500">
-                  Nothing is added automatically. Review and accept each suggestion below.
+                  Use the <span className="text-indigo-300 font-medium">Add More Skills</span> button above to ask the AI for additional skills. Nothing is added automatically; review and accept each suggestion below.
                 </div>
 
                 {additionalSkillsError && (

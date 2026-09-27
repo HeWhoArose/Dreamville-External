@@ -306,6 +306,7 @@ export class UniverseRuntimeService {
 			authoritativeFeedback?: string;
 			narrativeResponse?: string;
 			beforeInventoryState?: any;
+			beforeWorldElapsedSeconds?: number;
 		},
 	): UniverseCampaignState | null {
 		const universe = repository.getUniverseForStory(params.storyId);
@@ -317,6 +318,10 @@ export class UniverseRuntimeService {
 		const worldId = run?.worldId;
 		const clock = repository.getWorldClock(params.storyId);
 		const timestamp = formatCanonicalTimestamp(clock.getTimestamp());
+		const beforeWorldElapsed = Number(params.beforeWorldElapsedSeconds ?? clock.getTimestamp().totalElapsedSeconds);
+		const afterWorldElapsed = clock.getTimestamp().totalElapsedSeconds;
+		const elapsedDelta = Math.max(0, afterWorldElapsed - beforeWorldElapsed);
+		universe.universeElapsedSeconds = Number(universe.universeElapsedSeconds || 0) + elapsedDelta;
 		const beforeItems = new Map<string, any>(
 			Array.isArray(params.beforeInventoryState?.itemInstances)
 				? params.beforeInventoryState.itemInstances.map((item: any) => [String(item.id), item])
@@ -413,6 +418,17 @@ export class UniverseRuntimeService {
 				triggerConditionTags: ['inventory', 'item', 'lost'],
 			});
 		}
+
+		const currentBinding = universe.worldBindings.find((binding) => binding.storyId === params.storyId);
+		if (currentBinding) {
+			currentBinding.lastVisitedAt = timestamp;
+			currentBinding.status = 'CURRENT';
+			currentBinding.lastSimulatedUniverseSeconds = universe.universeElapsedSeconds;
+		}
+		universe.currentWorldId = String(worldId || universe.currentWorldId);
+		universe.currentStoryId = params.storyId;
+		universe.updatedAt = timestamp;
+		repository.saveUniverse(universe);
 
 		this.syncPortablePlayerState(repository, universe.universeId, params.storyId);
 		return repository.getUniverse(universe.universeId);

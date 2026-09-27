@@ -137,3 +137,60 @@ test('routine actions remain narration-only when no skill trigger or authored ch
 	);
 	assert.equal(result, null);
 });
+
+
+test('story check authority rejects non-active actor and reads the canonical actor state', () => {
+	const { storyCheckAuthority } = require('../server/domain/storyCheckAuthority');
+	const engine = new StoryCheckEngine();
+	const run = {
+		characterCoreStats: {
+			level: 1,
+			strength: 10,
+			dexterity: 10,
+			constitution: 10,
+			intelligence: 10,
+			wisdom: 14,
+			charisma: 10,
+		},
+		characterSkills: [
+			{
+				id: 'insight',
+				name: 'Insight',
+				proficiency: 'PROFICIENT',
+				isProficient: true,
+				isExpertise: false,
+				governingAbility: 'Wisdom',
+			},
+		],
+		protagonist: undefined,
+	};
+
+	const repository = {
+		getPlayerLifecycle: () => ({ actorId: 'player-1' }),
+		getStoryRun: () => run,
+		getConditionEngine: () => ({
+			exportActorState: () => undefined,
+		}),
+		getRulesProfile: () => undefined,
+		getStoryCheckEngine: () => engine,
+	} as any;
+
+	assert.equal(
+		storyCheckAuthority.resolve(repository, {
+			storyId: 'story-authority',
+			actorId: 'other-actor',
+			actionText: 'I read his motives.',
+		}),
+		null,
+	);
+
+	const result = storyCheckAuthority.resolve(repository, {
+		storyId: 'story-authority',
+		actorId: 'player-1',
+		actionText: 'I read his motives.',
+	});
+
+	assert.ok(result);
+	assert.equal(result!.skill, 'Insight');
+	assert.equal(result!.ability, 'Wisdom');
+});

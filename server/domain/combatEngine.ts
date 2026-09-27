@@ -6,6 +6,7 @@ import {
   calculateSpatialGridMovementCost,
   type SpatialObstacle,
 } from './spatialAuthority';
+import { resolveSpatialLineOfSight, type SpatialObstacle } from './spatialAuthority';
 import { PendingActivationState } from './capabilityEngine';
 import { ConditionEngine } from './conditionEngine';
 import { CombatActionEconomy, CombatTurnResourceSnapshot, ReadyTriggerType } from './combatActionEconomy';
@@ -1743,6 +1744,12 @@ export class TacticalCombatEngine {
     return { success: true };
   }
 
+  private isPathCellBlocked(x: number, y: number): boolean {
+    if (this.mapBounds && (x < this.mapBounds.minX || x > this.mapBounds.maxX || y < this.mapBounds.minY || y > this.mapBounds.maxY)) return true;
+    if (this.obstacles.some((obs) => obs.x === x && obs.y === y && obs.isImpassable !== false)) return true;
+    return this.hazards.some((hazard) => hazard.type === 'barricade' && hazard.x === x && hazard.y === y);
+  }
+
   private releaseInvalidGrapples(): void {
     for (const target of this.participants.values()) {
       if (!target.grappledBy || !target.conditions.includes('Grappled')) continue;
@@ -1760,6 +1767,197 @@ export class TacticalCombatEngine {
     }
   }
 
+  private calculateMovementPath(actorId: string, fromX: number, fromY: number, targetX: number, targetY: number): { x: number; y: number }[] | undefined {
+    const steps = Math.max(Math.abs(targetX - fromX), Math.abs(targetY - fromY));
+    if (steps === 0) return [{ x: fromX, y: fromY }];
+
+    const path: { x: number; y: number }[] = [{ x: fromX, y: fromY }];
+    for (let i = 1; i <= steps; i++) {
+      const x = Math.round(fromX + ((targetX - fromX) * i) / steps);
+      const y = Math.round(fromY + ((targetY - fromY) * i) / steps);
+      if (this.mapBounds && (x < this.mapBounds.minX || x > this.mapBounds.maxX || y < this.mapBounds.minY || y > this.mapBounds.maxY)) {
+        return undefined;
+      }
+      const obstacle = this.obstacles.find((obs) => obs.x === x && obs.y === y && obs.isImpassable !== false);
+      if (obstacle) return undefined;
+
+      const barricade = this.hazards.find((hazard) =>
+        hazard.type === 'barricade' &&
+        hazard.x === x &&
+        hazard.y === y
+      );
+      if (barricade) return undefined;
+
+      const previous = path[path.length - 1];
+      const diagonal = previous.x !== x && previous.y !== y;
+      if (diagonal) {
+        const cornerBlocked =
+          this.isPathCellBlocked(previous.x, y) ||
+          this.isPathCellBlocked(x, previous.y);
+        if (cornerBlocked) return undefined;
+      }
+
+      if (Array.from(this.participants.values()).some((participant) =>
+        participant.id !== actorId &&
+        !participant.isDead &&
+        participant.x === x &&
+        participant.y === y
+      )) {
+        return undefined;
+      }
+
+      path.push({ x, y });
+    }
+    return path;
+  }
+
+  private calculateMovementCost(path: { x: number; y: number }[]): number {
+    let cost = 0;
+    for (let i = 1; i < path.length; i++) {
+      const previous = path[i - 1];
+      const current = path[i];
+      const diagonal = previous.x !== current.x && previous.y !== current.y;
+      const base = diagonal ? Math.SQRT2 : 1;
+      const difficult = this.hazards.some((hazard) =>
+        hazard.type === 'ice_patch' &&
+        Math.hypot(current.x - hazard.x, current.y - hazard.y) <= hazard.radiusCells
+      );
+      cost += difficult ? base * 2 : base;
+    }
+    return cost;
+  }
+
+  private resolveOpportunityReactions(actorId: string, threats: BattlefieldParticipant[]): void {
+    this.reactionEngine.resolve(
+      {
+        type: 'ACTOR_MOVED',
+        actorId,
+        targetId: actorId,
+        metadata: { reason: 'Target left reach without Disengaging.' },
+      },
+      threats.map((attacker) => ({
+        reactionId: `opportunity:${attacker.id}:${actorId}`,
+        actorId: attacker.id,
+        priority: 0,
+        triggerType: 'ACTOR_MOVED' as const,
+        targetId: actorId,
+        canResolve: () => Boolean(this.actionEconomy.get(attacker.id)?.reactionAvailable),
+        resolve: () => this.executeOpportunityAttack(attacker.id, actorId),
+      }))
+    );
+  }
+
+  private resolveReadyTriggers(event: {
+    type: ReadyTriggerType;
+    actorId: string;
+    targetId?: string;
+    from?: { x: number; y: number };
+    to?: { x: number; y: number };
+  }): void {
+    this.reactionEngine.resolve(
+      {
+        type: event.type,
+        actorId: event.actorId,
+        targetId: event.targetId,
+        from: event.from,
+        to: event.to,
+      },
+      Array.from(this.participants.values()).map((participant) => {
+        const ready = this.actionEconomy.getReadyAction(participant.id);
+        return {
+          reactionId: `ready:${participant.id}:${event.type}:${event.actorId}`,
+          actorId: participant.id,
+          priority: 0,
+          triggerType: event.type,
+          triggerActorId: ready?.triggerActorId,
+          targetId: ready?.targetId,
+          matches: (reactionEvent) => {
+            const currentReady = this.actionEconomy.getReadyAction(participant.id);
+            if (!currentReady || currentReady.triggerType !== reactionEvent.type) return false;
+            if (currentReady.triggerActorId && currentReady.triggerActorId !== reactionEvent.actorId) return false;
+            if (currentReady.targetId && reactionEvent.targetId &&
+              currentReady.targetId !== reactionEvent.targetId &&
+              currentReady.targetId !== reactionEvent.actorId) return false;
+            return true;
+          },
+          canResolve: () => {
+            const currentReady = this.actionEconomy.getReadyAction(participant.id);
+            const currentParticipant = this.participants.get(participant.id);
+            return Boolean(
+              currentReady &&
+              currentReady.triggerType === event.type &&
+              !currentParticipant?.isDead &&
+              (currentParticipant?.hpCurrent ?? 0) > 0 &&
+              !currentParticipant?.conditions.includes('Unconscious')
+            );
+          },
+          resolve: () => {
+            const currentReady = this.actionEconomy.getReadyAction(participant.id);
+            if (!currentReady) {
+              return { triggered: false, hits: false, damage: 0, targetDied: false };
+            }
+
+            const reaction = this.actionEconomy.consumeReadyReaction(participant.id);
+            if (!reaction.success) {
+              return { triggered: false, hits: false, damage: 0, targetDied: false };
+            }
+
+            const targetId = currentReady.targetId || event.actorId;
+            if (currentReady.actionType !== 'ATTACK' || !this.participants.has(targetId)) {
+              return { triggered: true, hits: false, damage: 0, targetDied: false };
+            }
+
+            const result = this.resolveReactionAttack(participant.id, targetId);
+            this.eventLog.push({
+              turnNumber: this.currentRound,
+              actorId: participant.id,
+              targetId,
+              actionType: 'ATTACK',
+              headline: result.hits
+                ? `${this.participants.get(participant.id)?.name || participant.id} triggered Ready Action against ${this.participants.get(targetId)?.name || targetId}.`
+                : `${this.participants.get(participant.id)?.name || participant.id} triggered Ready Action and missed.`,
+              damageInflicted: result.damage,
+              rollRecord: result.roll,
+              metadata: { reaction: true, reason: 'Ready Action trigger.' },
+            });
+
+            return { triggered: true, ...result };
+          },
+        };
+      })
+    );
+  }
+  private resolveReactionAttack(attackerId: string, targetId: string): { hits: boolean; damage: number; targetDied: boolean; roll?: RollRecord; isCritical: boolean } {
+    const attacker = this.participants.get(attackerId);
+    const target = this.participants.get(targetId);
+    if (!attacker || !target || attacker.isDead || target.isDead) {
+      return { hits: false, damage: 0, targetDied: target?.isDead ?? false, isCritical: false };
+    }
+    this.processConditionCombatEvent(attackerId, 'ON_REACTION', 'reaction');
+    const resolution = this.resolveStandardAttack(attacker, target);
+    if (resolution.blocked || !resolution.roll) {
+      return { hits: false, damage: 0, targetDied: target.isDead, isCritical: false };
+    }
+    const attackResult = resolution.roll;
+    let damage = 0;
+    let targetDied = false;
+    if (attackResult.hits) {
+      const damageResult = this.ruleset.resolveDamage(attacker.damageFormula, attackResult.isCritical, this.diceEngine);
+      const resolved = this.applyCombatDamage(target, damageResult.totalDamage, attacker.damageType || 'slashing', attackResult.isCritical);
+      damage = resolved.damage;
+      targetDied = resolved.targetDied;
+    }
+    return { hits: attackResult.hits, damage, targetDied, roll: attackResult.roll, isCritical: attackResult.isCritical };
+  }
+
+  private getCoverBonus(target: BattlefieldParticipant): number {
+    switch (target.cover) {
+      case 'HALF': return 2;
+      case 'THREE_QUARTERS': return 5;
+      case 'TOTAL': return 0;
+      default: return 0;
+    }
+  }
 
   public getCoverLevel(targetId: string): CoverLevel {
     return this.participants.get(targetId)?.cover || 'NONE';
@@ -1926,6 +2124,25 @@ export class TacticalCombatEngine {
     options?: { advantage?: boolean; disadvantage?: boolean; attackFormula?: string }
   ): { blocked: boolean; roll?: { roll: RollRecord; hits: boolean; isCritical: boolean } } {
     if (target.cover === 'TOTAL') return { blocked: true };
+
+    const spatialObstacles: SpatialObstacle[] = this.obstacles.map((obstacle, index) => ({
+      id: `combat_obstacle_${index + 1}_${obstacle.x}_${obstacle.y}`,
+      minX: obstacle.x,
+      maxX: obstacle.x,
+      minY: obstacle.y,
+      maxY: obstacle.y,
+      blocksMovement: obstacle.isImpassable !== false,
+      blocksSight: obstacle.isImpassable !== false,
+      cover: 'TOTAL',
+    }));
+    const spatialLine = resolveSpatialLineOfSight(
+      { x: attacker.x, y: attacker.y },
+      { x: target.x, y: target.y },
+      spatialObstacles,
+    );
+    if (!spatialLine.clear) {
+      return { blocked: true };
+    }
 
     const spatialObstacles: SpatialObstacle[] = this.obstacles.map((obstacle, index) => ({
       id: `combat_obstacle_${index + 1}_${obstacle.x}_${obstacle.y}`,

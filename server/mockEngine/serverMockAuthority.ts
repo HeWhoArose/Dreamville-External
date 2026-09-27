@@ -684,13 +684,16 @@ export class ServerMockAuthority {
 
     let narrativeResponse = '';
     let narrativeTurnPackage: import('../domain/aiOrchestrator').StructuredTurnPackage | undefined;
+    let narrativeError: import('../../src/types').ActionLog['narrativeError'];
+    let narrativeGeneration: import('../../src/types').ActionLog['narrativeGeneration'];
+    let narrativeResearchPacket: any;
     try {
       const narrator = worldRepository.getAiOrchestrator();
       const generated = await narrator.generateNarrativeOnly({
         storyId: targetStoryId,
         playerAction: String(freeformText),
         committedOutcome,
-        hardTokenBudget: 650,
+        hardTokenBudget: 1100,
         timeoutMs: 7000,
         maxRetries: 1,
         recentTurns: this.getDynamicStoryState(targetStoryId).actionHistory
@@ -714,24 +717,35 @@ export class ServerMockAuthority {
           : undefined,
       } as any);
 
+      narrativeResearchPacket = generated.researchPacket;
+      narrativeGeneration = {
+        source: generated.source,
+        providerId: generated.providerId,
+        modelId: generated.modelId,
+        regenerated: false,
+      };
       if (
         generated.success &&
         generated.turnPackage?.narrative?.length &&
-        generated.providerId !== 'provider_deterministic_emergency'
+        generated.source !== 'DETERMINISTIC_FALLBACK'
       ) {
         narrativeTurnPackage = generated.turnPackage;
         narrativeResponse = generated.turnPackage.narrative.join('\n\n').trim();
+      } else {
+        narrativeError = {
+          code: 'NARRATION_AI_UNAVAILABLE',
+          message: generated.error || 'The narration model did not return a usable AI response.',
+          providerId: generated.providerId,
+          modelId: generated.modelId,
+          fallbackReason: generated.fallbackReason,
+          attemptsTrail: generated.attemptsTrail,
+        };
       }
-    } catch (error) {
-      console.warn('[ServerMockAuthority] Narrative presentation fallback:', error);
-    }
-
-    if (!narrativeResponse) {
-      narrativeResponse = this.synthesizeFreeformActionFallback(
-        targetStoryId,
-        String(freeformText),
-        committedOutcome
-      );
+    } catch (error: any) {
+      narrativeError = {
+        code: 'NARRATION_GENERATION_FAILED',
+        message: error?.message || String(error),
+      };
     }
 
     const state = this.getDynamicStoryState(targetStoryId);
@@ -742,7 +756,9 @@ export class ServerMockAuthority {
     );
 
     if (actionLog) {
-      actionLog.narrativeResponse = narrativeResponse;
+      actionLog.narrativeResponse = narrativeResponse || undefined;
+      actionLog.narrativeError = narrativeError;
+      actionLog.narrativeGeneration = narrativeGeneration;
       if (storyCheck) {
         actionLog.checkResult = storyCheck;
       }
@@ -764,7 +780,7 @@ export class ServerMockAuthority {
       turnId: baseResult.actionId,
       playerAction: String(freeformText),
       turnPackage: narrativeTurnPackage || {
-        narrative: [narrativeResponse],
+        narrative: narrativeResponse ? [narrativeResponse] : [],
         dialogue: [],
         events: [
           storyCheck
@@ -779,10 +795,38 @@ export class ServerMockAuthority {
       },
     });
 
+    const persistedRun = worldRepository.getStoryRun(targetStoryId);
+    if (persistedRun) {
+      const existingHistory = Array.isArray(persistedRun.runtimeState?.narrativeContextHistory)
+        ? persistedRun.runtimeState.narrativeContextHistory
+        : [];
+      persistedRun.runtimeState = {
+        ...(persistedRun.runtimeState || {}),
+        narrativeContextHistory: [
+          ...existingHistory,
+          {
+            actionId: baseResult.actionId,
+            playerAction: String(freeformText),
+            committedOutcome,
+            research: narrativeResearchPacket || null,
+            narration: {
+              response: narrativeResponse || null,
+              error: narrativeError || null,
+              generation: narrativeGeneration || null,
+            },
+            capturedAt: formatCanonicalTimestamp(worldRepository.getWorldClock(targetStoryId).getTimestamp()),
+          },
+        ].slice(-24),
+      };
+      worldRepository.saveStoryRun(persistedRun);
+    }
+
     return {
       ...baseResult,
-      message: narrativeResponse,
-      narrativeResponse,
+      message: narrativeResponse || baseResult.message || 'Action resolved; narration is currently unavailable.',
+      narrativeResponse: narrativeResponse || undefined,
+      narrativeError,
+      narrativeGeneration,
       checkResult: storyCheck || undefined,
       actionAdvice: actionTips.length > 0
         ? {

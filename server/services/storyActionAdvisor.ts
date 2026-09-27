@@ -1098,7 +1098,34 @@ export class StoryActionAdvisor {
 			// Deterministic suggestions remain the guaranteed fallback.
 		}
 
-		return deterministicTips.length > 0 ? deterministicTips : genericTips;
+		const baselineTips: ActionTip[] = [
+			{
+				id: deterministicId('baseline_scene_tip', storyId, actorId, locationLabel, 'listen'),
+				title: 'Listen for change',
+				description: 'Pause long enough to catch movement, distant sounds, reactions, or changes around ' + locationLabel + '.',
+				intent: 'LISTEN',
+				actionText: 'I stop and listen carefully around ' + locationLabel + ' for anything unusual.',
+				source: 'DETERMINISTIC',
+			},
+			{
+				id: deterministicId('baseline_scene_tip', storyId, actorId, locationLabel, 'vantage'),
+				title: 'Change your vantage',
+				description: 'Move slightly within ' + locationLabel + ' to reveal angles, paths, cover, or details hidden by your current position.',
+				intent: 'REPOSITION',
+				actionText: 'I move to a better vantage point in ' + locationLabel + ' and reassess the scene.',
+				source: 'DETERMINISTIC',
+			},
+			{
+				id: deterministicId('baseline_scene_tip', storyId, actorId, locationLabel, 'interact'),
+				title: 'Test the environment',
+				description: 'Interact with something physically present in ' + locationLabel + ' rather than waiting for a new menu option.',
+				intent: 'ENVIRONMENT_INTERACTION',
+				actionText: 'I test the nearest safe environmental detail in ' + locationLabel + ' for a response.',
+				source: 'DETERMINISTIC',
+			},
+		];
+		const guaranteedTips = [...deterministicTips, ...baselineTips];
+		return guaranteedTips.length > 0 ? guaranteedTips.slice(0, 4) : genericTips;
 	}
 }
 

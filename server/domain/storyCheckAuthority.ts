@@ -57,7 +57,7 @@ export class StoryCheckAuthority {
 			request.actionText,
 			character,
 			request.challenge,
-			rulesProfile,
+			rulesProfile: rulesProfile ?? undefined,
 		);
 	}
 }

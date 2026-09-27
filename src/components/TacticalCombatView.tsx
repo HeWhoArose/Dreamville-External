@@ -10,6 +10,7 @@ import {
 } from '../types';
 import { apiClient } from '../services/apiClient';
 import { CombatAnimationLayer } from './combat/CombatAnimationLayer';
+import { DiceRollAnimation } from './common/DiceRollAnimation';
 import {
   Swords,
   Shield,

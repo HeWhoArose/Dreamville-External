@@ -424,6 +424,10 @@ export class InMemoryWorldRepository implements WorldRepository {
     this.seedDefaultTemplates();
     this.seedDefaultStory('default_story');
 
+    // Relationship/alignment changes are canonical state too. Persist them automatically
+    // after mutation so NPC friendships, trust, affection and role transitions survive restart.
+    this.characterAlignmentEngine.setMutationListener(() => this.persistLibrary());
+
     if (requiresNarrativeMigration) {
       this.persistLibrary();
     }

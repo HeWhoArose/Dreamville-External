@@ -543,7 +543,7 @@ export class InMemoryWorldRepository implements WorldRepository {
 
         const rebuiltRun = this.getStoryRun(storyId);
         if (rebuiltRun) {
-          this.storyRuns.set(storyId, {
+          const mergedRun = {
             ...rebuiltRun,
             ...persistedRun,
             storyId,
@@ -553,7 +553,43 @@ export class InMemoryWorldRepository implements WorldRepository {
             dndRulesMode: rebuiltRun.dndRulesMode,
             ruleset: rebuiltRun.ruleset,
             rulesProfile: rebuiltRun.rulesProfile,
-          });
+          };
+          this.storyRuns.set(storyId, mergedRun);
+
+          // Rehydrate the complete per-world runtime after rebuilding the Story Run.
+          // This prevents a revisit/restart from replacing remembered NPCs, inventory,
+          // relationships, memories or world chronology with fresh defaults.
+          const persistedRuntime = (persistedRun as any)?.runtimeState || {};
+          this.restoreCanonicalStateSnapshot({
+            storyId,
+            worldClock: persistedRuntime.worldClock,
+            geography: persistedRuntime.geography,
+            worldFacts: persistedRuntime.knowledgeFacts || [],
+            player: persistedRuntime.playerLifecycle,
+            npcs: {
+              lifecycles: persistedRuntime.npcLifecycles || [],
+            },
+            inventory: persistedRuntime.inventory,
+            capabilities: persistedRuntime.capabilities,
+            progression: persistedRuntime.progression,
+            entities: persistedRuntime.entities,
+            conditions: persistedRuntime.conditions,
+            combat: persistedRuntime.combat,
+            rest: persistedRuntime.rest,
+            storyChecks: persistedRuntime.storyChecks,
+            memories: persistedRuntime.memory,
+            livingWorld: persistedRuntime.livingWorld,
+            chronicle: persistedRuntime.chronicle,
+            narrativeHistory: persistedRuntime.narrativeHistory,
+            adaptation: {
+              ch16Run: mergedRun,
+              ch16Threads: persistedRuntime.storyThreads || [],
+              ch16ActiveEffects: persistedRuntime.activeEffects || [],
+              ch16WorldFacts: persistedRuntime.worldFacts || [],
+              ch16Agenda: persistedRuntime.protagonistAgenda,
+            },
+          }, { persist: false });
+
           this.persistLibrary();
         }
         return;

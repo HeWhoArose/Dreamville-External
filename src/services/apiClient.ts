@@ -2477,6 +2477,36 @@ class ApiClient {
     return await res.json();
   }
 
+  public async suggestAdditionalCharacterSkills(
+    worldId: string,
+    payload: {
+      characterConcept: string;
+      existingSkills: import('../types').CharacterSkill[];
+      characterContext?: {
+        name?: string;
+        species?: string;
+        role?: string;
+        profession?: string;
+        background?: string;
+        personality?: string[];
+        motivations?: string[];
+        capabilities?: string[];
+      };
+      desiredCount?: number;
+    },
+  ): Promise<{ success: boolean; skills: import('../types').CharacterSkill[] }> {
+    const res = await fetch(`${this.baseUrl}/worlds/${encodeURIComponent(worldId)}/characters/additional-skills`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      throw new Error(data?.errorReason || data?.error || `Failed to suggest additional skills: HTTP ${res.status}`);
+    }
+    return data;
+  }
+
   public async proposeCustomEquipment(
     worldId: string,
     itemName: string,

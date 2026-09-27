@@ -7,6 +7,7 @@ import { InMemoryWorldRepository } from '../server/repositories/worldRepository'
 import { PlayerLifecycleState } from '../server/domain/playerLifecycleState';
 import { UniverseRuntimeService } from '../server/domain/universeRuntimeService';
 import { WorkingContextEngine } from '../server/domain/workingContextEngine';
+import { narrativeContinuityEngine } from '../server/domain/narrativeContinuityEngine';
 import { persistTurnMemoryCandidates } from '../server/domain/aiOrchestrator';
 import { worldSynthesisService } from '../server/services/worldSynthesisService';
 import { WorldSimulationService } from '../server/simulation/worldSimulationService';
@@ -409,6 +410,60 @@ test('Structured AI memory candidates are saved automatically to world and unive
 		10,
 	);
 	assert.ok(universeMemories.some((memory) => memory.content.includes('northern gate')));
+});
+
+test('Narrative research retrieves entity-linked NPC memories even when memory text omits the NPC name', () => {
+	const repo = new InMemoryWorldRepository({ disablePersistence: true });
+	const world = makeWorld('world_npc_memory_focus', 'NPC Memory World');
+	repo.saveWorldTemplate(world);
+
+	const created = repo.createStoryRunFromConfirmedCharacter({
+		worldId: world.worldId,
+		confirmedCharacter: makeCharacter(world.worldId),
+		storyId: 'story_npc_memory_focus',
+	});
+	const playerActorId = repo.getPlayerLifecycle(created.storyId)!.actorId;
+	const npc = repo.getEntityRegistry(created.storyId).upsert({
+		id: 'npc_mira_memory_focus',
+		worldId: world.worldId,
+		name: 'Mira',
+		kind: 'NPC',
+		isTemplate: false,
+		identity: {
+			aliases: ['Keeper Mira'],
+		},
+	});
+
+	repo.getMemoryEngine(created.storyId).storeMemory({
+		id: 'mira_shared_memory',
+		storyId: created.storyId,
+		memoryClass: 'EPISODIC',
+		subjectEntityId: npc.id,
+		relatedEntityIds: [playerActorId],
+		content: 'The traveler rescued someone from the collapsing observatory.',
+		importance: 95,
+		confidence: 1,
+		status: 'active',
+		visibility: 'SHARED',
+		accessibleToEntityIds: [playerActorId, npc.id],
+		isPersistentCritical: true,
+		provenance: 'npc_memory_test',
+		validFromTurn: 1,
+		lastRecalledTurn: 1,
+		triggerConditionTags: ['rescue', 'observatory'],
+	});
+
+	const packet = narrativeContinuityEngine.research(
+		repo,
+		created.storyId,
+		'I greet Mira at the tavern.',
+		playerActorId,
+		{ persist: false },
+	);
+
+	assert.ok(
+		packet.memories.some((memory: any) => memory.id === 'mira_shared_memory'),
+	);
 });
 
 test('Universe travel intent only activates for explicit cross-world language', () => {

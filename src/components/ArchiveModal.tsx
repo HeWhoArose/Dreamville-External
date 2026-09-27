@@ -18,12 +18,14 @@ import { apiClient } from '../services/apiClient';
 interface ArchiveModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onRestoreSuccess: () => void;
+  storyId: string;
+  onRestoreSuccess: (restoredStoryId?: string) => void;
 }
 
 export const ArchiveModal: React.FC<ArchiveModalProps> = ({
   isOpen,
   onClose,
+  storyId,
   onRestoreSuccess,
 }) => {
   const [activeSubTab, setActiveSubTab] = useState<'export' | 'import' | 'assets'>('export');
@@ -47,7 +49,7 @@ export const ArchiveModal: React.FC<ArchiveModalProps> = ({
   const fetchExport = async () => {
     setIsExporting(true);
     try {
-      const data = await apiClient.exportArchive({ title: 'Dreamville Active Campaign' });
+      const data = await apiClient.exportArchive({ storyId, title: 'Dreamville Active Campaign' });
       setExportedArchive(data);
     } catch (err: any) {
       console.error('Failed to export campaign archive:', err);
@@ -127,10 +129,10 @@ export const ArchiveModal: React.FC<ArchiveModalProps> = ({
     setRestoreError(null);
     try {
       const parsed = JSON.parse(importInput);
-      const res = await apiClient.importArchive(parsed);
+      const res = await apiClient.importArchive(parsed, storyId);
       if (res.success) {
         setRestoreMessage(`Campaign '${res.campaignId || 'restored'}' successfully restored into canonical repository.`);
-        onRestoreSuccess();
+        onRestoreSuccess(res.campaignId?.startsWith('campaign_') ? res.campaignId.slice('campaign_'.length) : res.campaignId);
       } else {
         setRestoreError(res.errorReason || 'Restore failed.');
       }

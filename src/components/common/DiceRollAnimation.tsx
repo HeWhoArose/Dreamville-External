@@ -48,11 +48,14 @@ function expandDiceTerms(roll: RollRecord): number[] {
 	});
 }
 
-function expandDiceGroups(roll: RollRecord): Array<{ count: number; sides: number; values: number[] }> {
+function expandDiceGroups(
+	roll: Pick<RollRecord, 'diceTerms' | 'formula'>,
+	individualDice: number[],
+): Array<{ count: number; sides: number; values: number[] }> {
 	if (roll.diceTerms?.length) {
 		let offset = 0;
 		return roll.diceTerms.map((term) => {
-			const values = roll.individualDice.slice(offset, offset + term.count);
+			const values = individualDice.slice(offset, offset + term.count);
 			offset += term.count;
 			return {
 				count: term.count,
@@ -65,7 +68,7 @@ function expandDiceGroups(roll: RollRecord): Array<{ count: number; sides: numbe
 	return [{
 		count: 1,
 		sides: 20,
-		values: [roll.individualDice[0] || 1],
+		values: [individualDice[0] || 1],
 	}];
 }
 
@@ -103,7 +106,6 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 	const autoRollStartedRef = useRef(false);
 
 	const diceSides = useMemo(() => expandDiceTerms(roll), [roll]);
-	const diceGroups = useMemo(() => expandDiceGroups(roll), [roll]);
 
 	const formulaWithoutModifier = useMemo(() => {
 		const formula = roll.formula.replace(/[+-]\d+$/, '');
@@ -184,7 +186,7 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 		try {
 			const box = await initializeDiceBox();
 			const predeterminedValues = [...roll.individualDice];
-			const groups = [...diceGroups];
+			const groups = expandDiceGroups(roll, predeterminedValues);
 
 			// The upstream engine is physically simulated, but it also supports
 			// deterministic landed faces through the @value,value notation.

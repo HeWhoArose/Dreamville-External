@@ -2075,7 +2075,7 @@ export class InMemoryWorldRepository implements WorldRepository {
   }
 
   private persistMemoryState(storyId: string): void {
-    if (this.persistenceSuppressed) return;
+    if (this.persistenceSuppressed || this.isCanonicalCommandTransactionActive()) return;
     const run = this.storyRuns.get(storyId);
     const engine = this.memoryEngines.get(storyId);
     if (!run || !engine) return;

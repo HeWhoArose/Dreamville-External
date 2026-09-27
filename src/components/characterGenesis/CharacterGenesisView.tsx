@@ -2621,7 +2621,9 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 </div>
 
 
-            {/* AI Additional Skill Discovery Review */}
+              )}
+
+                        {/* AI Additional Skill Discovery Review */}
             <div
               ref={additionalSkillsReviewRef}
               className="p-4 rounded-xl bg-indigo-950/40 border border-indigo-800/60 space-y-3 scroll-mt-24"
@@ -2733,9 +2735,6 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 </div>
               )}
             </div>
-              )}
-            </div>
-
             {/* Capabilities Cards */}
 
             {/* Extensible Custom Attributes & Stats */}

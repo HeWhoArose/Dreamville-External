@@ -33,6 +33,7 @@ import { mediaAdapterService } from '../services/mediaAdapterService';
 import { buildComicScenePrompt, ComicSceneContext } from '../services/comicSceneGenerator';
 import { projectPlayerCapabilities } from './playerCapabilityProjection';
 import { oocToolRegistry, type OocToolCall } from '../domain/oocToolRegistry';
+import { UniverseRuntimeService } from '../domain/universeRuntimeService';
 
 export const gameRouter = Router();
 import { sensoryRouter } from './sensoryRoutes';
@@ -718,6 +719,10 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
     }
 
     const storyId = (actionRequest as any).storyId as string;
+    // Lazily bind every active Story Run to a persistent Universe identity.
+    // This is idempotent and does not replace the Story Run's canonical world state.
+    UniverseRuntimeService.ensureUniverse(worldRepository, storyId);
+    const beforeInventoryState = worldRepository.getInventoryEngine(storyId).exportState();
     let preflightAdvice: any = null;
     if (actionRequest.type === 'CUSTOM_ACTION' && !(actionRequest as any).bypassCapabilityAdvisor) {
       const actionText = String(
@@ -841,6 +846,32 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
         error: commandResult.errorReason,
       });
     }
+
+    // Automatically record durable cross-world memories from the authoritative outcome.
+    // The player never needs to tell the system to "save" an acquired item or important action.
+    try {
+      const actionData: any = commandResult.data;
+      UniverseRuntimeService.captureAction(worldRepository, {
+        storyId,
+        actionType: canonicalActionType,
+        actionText: String(
+          (actionRequest as any).actionText ||
+          (actionRequest as any).customText ||
+          (actionRequest as any).description ||
+          (actionRequest as any).input ||
+          actionRequest.type
+        ),
+        commandId: commandResult.commandId,
+        authoritativeFeedback: actionData?.authoritativeFeedback || actionData?.message,
+        narrativeResponse: actionData?.narrativeResponse,
+        beforeInventoryState,
+      });
+    } catch (memoryError) {
+      // Memory capture is a derived continuity layer. Never roll back a successful canonical action
+      // because a non-authoritative memory projection failed.
+      console.warn('[UniverseRuntime] Automatic continuity capture failed:', memoryError);
+    }
+
     res.json(commandResult.data);
   } catch (error) {
     console.error('Error processing authoritative action request:', error);
@@ -7481,6 +7512,92 @@ gameRouter.delete('/worlds/:worldId', async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, errorReason: error?.message || 'Failed to delete world.' });
   }
 });
+/**
+ * GET /api/game/universe/current
+ * Returns the persistent universe associated with the active Story Run.
+ */
+gameRouter.get('/universe/current', async (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    const universe = UniverseRuntimeService.ensureUniverse(worldRepository, storyId);
+    return res.json({ success: true, universe });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, errorReason: error?.message || 'Failed to load the current universe.' });
+  }
+});
+
+/**
+ * GET /api/game/universe/:universeId
+ * Returns a persistent multi-world campaign state.
+ */
+gameRouter.get('/universe/:universeId', async (req: Request, res: Response) => {
+  try {
+    const universe = worldRepository.getUniverse(String(req.params.universeId || ''));
+    if (!universe) return res.status(404).json({ success: false, errorReason: 'Universe not found.' });
+    return res.json({ success: true, universe });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, errorReason: error?.message || 'Failed to load universe.' });
+  }
+});
+
+/**
+ * GET /api/game/universe/:universeId/memories
+ * Returns the persistent player-visible memories that can inform future narration.
+ */
+gameRouter.get('/universe/:universeId/memories', async (req: Request, res: Response) => {
+  try {
+    const universe = worldRepository.getUniverse(String(req.params.universeId || ''));
+    if (!universe) return res.status(404).json({ success: false, errorReason: 'Universe not found.' });
+
+    const storyId = universe.currentStoryId;
+    const query = typeof req.query.query === 'string' ? req.query.query : '';
+    const keywords = query.toLowerCase().split(/\W+/).filter((token) => token.length >= 3).slice(0, 12);
+    const memories = UniverseRuntimeService.getRelevantUniverseMemories(
+      worldRepository,
+      storyId,
+      universe.playerIdentity.universeActorId,
+      keywords,
+      50,
+    );
+    return res.json({ success: true, universeId: universe.universeId, memories });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, errorReason: error?.message || 'Failed to retrieve universe memories.' });
+  }
+});
+
+/**
+ * POST /api/game/universe/:universeId/travel
+ * Travels the persistent player identity to an existing world or generates a new world from a premise.
+ */
+gameRouter.post('/universe/:universeId/travel', async (req: Request, res: Response) => {
+  try {
+    const universeId = String(req.params.universeId || '').trim();
+    const current = worldRepository.getUniverse(universeId);
+    if (!current) return res.status(404).json({ success: false, errorReason: 'Universe not found.' });
+
+    const result = await UniverseRuntimeService.travel(worldRepository, {
+      storyId: current.currentStoryId,
+      universeId,
+      worldId: typeof req.body?.worldId === 'string' ? req.body.worldId : undefined,
+      worldPremise: typeof req.body?.worldPremise === 'string' ? req.body.worldPremise : undefined,
+      worldTitle: typeof req.body?.worldTitle === 'string' ? req.body.worldTitle : undefined,
+      trigger: 'PLAYER',
+    });
+
+    serverMockAuthority.setActiveStoryId(result.storyId);
+    return res.json({
+      success: true,
+      ...result,
+    });
+  } catch (error: any) {
+    console.error('[UniverseRuntime] Travel failed:', error);
+    return res.status(400).json({
+      success: false,
+      errorReason: error?.message || 'World travel failed.',
+    });
+  }
+});
+
 gameRouter.get('/story-runs', async (_req: Request, res: Response) => {
   try {
     const runs = worldRepository.getAllStoryRuns();

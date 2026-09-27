@@ -256,6 +256,7 @@ gameRouter.post('/action/ooc', async (req: Request, res: Response) => {
     let toolResult: any = undefined;
     if (agent.toolCall?.name) {
       const beforeOocInventoryState = worldRepository.getInventoryEngine(storyId).exportState();
+      const beforeOocWorldElapsedSeconds = worldRepository.getWorldClock(storyId).getTimestamp().totalElapsedSeconds;
       toolResult = await oocToolRegistry.execute(worldRepository, {
         storyId,
         actorId: worldRepository.getPlayerLifecycle(storyId)?.actorId || `player_actor_${storyId}`,
@@ -277,6 +278,7 @@ gameRouter.post('/action/ooc', async (req: Request, res: Response) => {
               authoritativeFeedback: toolResult.message,
               narrativeResponse: agent.response,
               beforeInventoryState: beforeOocInventoryState,
+              beforeWorldElapsedSeconds: beforeOocWorldElapsedSeconds,
             });
           }
         } catch (memoryError) {
@@ -761,6 +763,7 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
           worldId: actionRequest.worldId,
           worldPremise: actionRequest.worldPremise,
           worldTitle: actionRequest.worldTitle,
+          travelDurationSeconds: actionRequest.travelDurationSeconds,
           trigger: 'PLAYER',
         });
         serverMockAuthority.setActiveStoryId(result.storyId);
@@ -792,6 +795,7 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
     }
 
     const beforeInventoryState = worldRepository.getInventoryEngine(storyId).exportState();
+    const beforeWorldElapsedSeconds = worldRepository.getWorldClock(storyId).getTimestamp().totalElapsedSeconds;
     let preflightAdvice: any = null;
     if (actionRequest.type === 'CUSTOM_ACTION' && !(actionRequest as any).bypassCapabilityAdvisor) {
       const actionText = String(
@@ -934,6 +938,7 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
         authoritativeFeedback: actionData?.authoritativeFeedback || actionData?.message,
         narrativeResponse: actionData?.narrativeResponse,
         beforeInventoryState,
+        beforeWorldElapsedSeconds,
       });
     } catch (memoryError) {
       // Memory capture is a derived continuity layer. Never roll back a successful canonical action
@@ -7650,6 +7655,7 @@ gameRouter.post('/universe/:universeId/travel', async (req: Request, res: Respon
       worldId: typeof req.body?.worldId === 'string' ? req.body.worldId : undefined,
       worldPremise: typeof req.body?.worldPremise === 'string' ? req.body.worldPremise : undefined,
       worldTitle: typeof req.body?.worldTitle === 'string' ? req.body.worldTitle : undefined,
+      travelDurationSeconds: typeof req.body?.travelDurationSeconds === 'number' ? req.body.travelDurationSeconds : undefined,
       trigger: 'PLAYER',
     });
 

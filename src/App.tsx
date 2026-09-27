@@ -633,32 +633,29 @@ export const App: React.FC = () => {
 
   const activeRunFromLibrary = storyLibraryStories.find((story) => story.storyId === activeStoryId || story.runId === activeStoryId);
 
-  const activeStorySummary: StorySummary | null = viewState
+  // Dashboard must represent a real persisted Story Run. The legacy default_story
+  // is an engine bootstrap state, not a user chronicle, so it is never fabricated into
+  // the library/dashboard when no persisted run matches it.
+  const activeStorySummary: StorySummary | null = activeRunFromLibrary
     ? {
-        storyId: activeStoryId,
-        runId: activeRunFromLibrary?.runId || activeStoryId,
-        title: viewState.openingScene?.worldName
-          ? `Chronicle of ${viewState.openingScene.worldName}`
-          : activeLocation
-          ? `Chronicle of ${activeLocation.name}`
-          : 'The Awakening Chronicle',
-        worldName: viewState.openingScene?.worldName || activeLocation?.region || 'Living Realm',
-        genre: activeRunFromLibrary?.genre || 'Dynamic Adventure',
-        storyMode: activeRunFromLibrary?.storyMode,
-        dndRulesMode: activeRunFromLibrary?.dndRulesMode,
-        imageUrl: activeRunFromLibrary?.imageUrl,
-        imageMetadata: activeRunFromLibrary?.imageMetadata,
-        visualIdentity: activeRunFromLibrary?.visualIdentity,
-        characterName: viewState.protagonist?.name || viewState.characters?.[0]?.name || 'Protagonist',
-        currentLocation: activeLocation?.name || 'Sanctum Gateway',
-        turnCount: viewState.actionHistory?.length || 1,
-        lastPlayed: 'Active Session',
-        excerpt:
-          viewState.openingScene?.narrativeText?.slice(0, 120) ||
-          viewState.activeDialogue?.text ||
-          'The shadows lengthen across the ancient stone archways...',
+        storyId: activeRunFromLibrary.storyId,
+        runId: activeRunFromLibrary.runId,
+        title: activeRunFromLibrary.title,
+        worldName: activeRunFromLibrary.worldName,
+        worldId: activeRunFromLibrary.worldId,
+        genre: activeRunFromLibrary.genre,
+        imageUrl: activeRunFromLibrary.imageUrl,
+        imageMetadata: activeRunFromLibrary.imageMetadata,
+        visualIdentity: activeRunFromLibrary.visualIdentity,
+        characterName: activeRunFromLibrary.characterName,
+        currentLocation: activeRunFromLibrary.currentLocation,
+        turnCount: activeRunFromLibrary.turnCount,
+        lastPlayed: activeRunFromLibrary.lastPlayed,
+        excerpt: activeRunFromLibrary.excerpt,
+        storyMode: activeRunFromLibrary.storyMode,
+        dndRulesMode: activeRunFromLibrary.dndRulesMode,
       }
-    : null; 
+    : null;
 
 
   const isPlayRoute = currentRoute.startsWith('play.');
@@ -892,16 +889,12 @@ export const App: React.FC = () => {
               onNewStory={() => setCurrentRoute('create')}
               onBranchStory={() => setIsStoryLibraryModalOpen(true)}
               onDeleteStory={async (story) => {
-                const confirmation = window.prompt(
-                  `This permanently deletes "${story.title}" and its entire Story Run state. This cannot be undone.\n\nType the exact Story Run title to confirm:`
+                const confirmed = window.confirm(
+                  `Delete "${story.title}" permanently? This removes the entire Story Run state and cannot be undone.`
                 );
-                if (confirmation === null) return;
-                if (confirmation !== story.title) {
-                  window.alert('Deletion cancelled: the confirmation text did not exactly match the Story Run title.');
-                  return;
-                }
+                if (!confirmed) return;
                 try {
-                  await apiClient.deleteStoryRun(story.storyId, confirmation);
+                  await apiClient.deleteStoryRun(story.storyId, story.title);
                   if (activeStoryId === story.storyId) {
                     apiClient.setActiveStoryId('default_story');
                     setActiveStoryId('default_story');
@@ -982,16 +975,14 @@ export const App: React.FC = () => {
                 fetchStoryLibrary();
               }}
               onDeleteWorld={async (world) => {
-                const confirmation = window.prompt(
-                  `This permanently deletes "${world.title}", every Story Run attached to it, and the world's canonical data. This cannot be undone.\n\nType the exact world title to confirm:`
+                const confirmed = window.confirm(
+                  `Delete "${world.title}" and every Story Run attached to it? This cannot be undone.`
                 );
-                if (confirmation === null) return;
-                if (confirmation !== world.title) {
-                  window.alert('Deletion cancelled: the confirmation text did not exactly match the world title.');
-                  return;
-                }
+                if (!confirmed) return;
                 try {
-                  await apiClient.deleteWorld(world.worldId, confirmation);
+                  await apiClient.deleteWorld(world.worldId, world.title);
+                  setWorldTemplates((current) => current.filter((entry) => entry.worldId !== world.worldId));
+                  setStoryLibraryStories((current) => current.filter((story) => story.worldId !== world.worldId));
                   await fetchStoryLibrary();
                   await fetchAuxiliaryData();
                   const deletingActiveWorld = activeStoryId

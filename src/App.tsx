@@ -52,6 +52,31 @@ function readPersistedActiveStoryId(): string {
   }
 }
 
+function requestExactDeletionConfirmation(entityType: 'Story Run' | 'World', title: string): boolean {
+  const expectedTitle = title.trim();
+  if (!expectedTitle) return false;
+
+  const entered = window.prompt(
+    [
+      `Delete this ${entityType} permanently?`,
+      '',
+      `This will remove the canonical ${entityType} and its associated persisted state.`,
+      'This action cannot be undone.',
+      '',
+      `Type the exact title to confirm:`,
+      expectedTitle,
+    ].join('\\n'),
+  );
+
+  if (entered === null) return false;
+  if (entered !== expectedTitle) {
+    window.alert(`Deletion cancelled. The exact ${entityType} title was not entered.`);
+    return false;
+  }
+
+  return true;
+}
+
 
 import { apiClient } from './services/apiClient';
 import {
@@ -899,18 +924,46 @@ export const App: React.FC = () => {
               onNewStory={() => setCurrentRoute('create')}
               onBranchStory={() => setIsStoryLibraryModalOpen(true)}
               onDeleteStory={async (story) => {
-                const confirmed = window.confirm(
-                  `Delete "${story.title}" permanently? This removes the entire Story Run state and cannot be undone.`
-                );
+                const confirmed = requestExactDeletionConfirmation('Story Run', story.title);
                 if (!confirmed) return;
+
                 try {
                   await apiClient.deleteStoryRun(story.storyId, story.title);
+
+                  const remainingRuns = await apiClient.getStoryRuns();
+                  setStoryLibraryStories(remainingRuns.map((run) => ({
+                    storyId: run.storyId,
+                    runId: run.runId || run.storyId,
+                    title: run.title || run.storyTitle || 'Untitled Story',
+                    worldName: run.worldName || run.worldTitle || 'Unknown World',
+                    worldId: run.worldId,
+                    genre: run.genre || 'Dynamic Adventure',
+                    imageUrl: run.imageAsset,
+                    imageMetadata: run.imageMetadata,
+                    visualIdentity: run.visualIdentity,
+                    characterName: run.characterName,
+                    currentLocation: run.currentLocation,
+                    turnCount: run.turnCount,
+                    lastPlayed: run.lastPlayed,
+                    excerpt: run.excerpt,
+                    storyMode: run.storyMode,
+                    dndRulesMode: run.dndRulesMode,
+                  })));
+
                   if (activeStoryId === story.storyId) {
-                    apiClient.setActiveStoryId('default_story');
-                    setActiveStoryId('default_story');
-                    await initializeApp('default_story');
+                    const nextRun = remainingRuns[0];
+                    if (nextRun?.storyId) {
+                      apiClient.setActiveStoryId(nextRun.storyId);
+                      setActiveStoryId(nextRun.storyId);
+                      setCurrentRoute('dashboard');
+                      await initializeApp(nextRun.storyId);
+                    } else {
+                      apiClient.setActiveStoryId('default_story');
+                      setActiveStoryId('default_story');
+                      setCurrentRoute('dashboard');
+                      await initializeApp('default_story');
+                    }
                   }
-                  await fetchStoryLibrary();
                 } catch (error: any) {
                   window.alert(error?.message || 'Failed to delete Story Run.');
                   throw error;
@@ -985,22 +1038,42 @@ export const App: React.FC = () => {
                 fetchStoryLibrary();
               }}
               onDeleteWorld={async (world) => {
-                const confirmed = window.confirm(
-                  `Delete "${world.title}" and every Story Run attached to it? This cannot be undone.`
-                );
+                const confirmed = requestExactDeletionConfirmation('World', world.title);
                 if (!confirmed) return;
+
                 try {
                   await apiClient.deleteWorld(world.worldId, world.title);
                   setWorldTemplates((current) => current.filter((entry) => entry.worldId !== world.worldId));
-                  setStoryLibraryStories((current) => current.filter((story) => story.worldId !== world.worldId));
-                  await fetchStoryLibrary();
+
+                  const remainingRuns = await apiClient.getStoryRuns();
+                  setStoryLibraryStories(remainingRuns.map((run) => ({
+                    storyId: run.storyId,
+                    runId: run.runId || run.storyId,
+                    title: run.title || run.storyTitle || 'Untitled Story',
+                    worldName: run.worldName || run.worldTitle || 'Unknown World',
+                    worldId: run.worldId,
+                    genre: run.genre || 'Dynamic Adventure',
+                    imageUrl: run.imageAsset,
+                    imageMetadata: run.imageMetadata,
+                    visualIdentity: run.visualIdentity,
+                    characterName: run.characterName,
+                    currentLocation: run.currentLocation,
+                    turnCount: run.turnCount,
+                    lastPlayed: run.lastPlayed,
+                    excerpt: run.excerpt,
+                    storyMode: run.storyMode,
+                    dndRulesMode: run.dndRulesMode,
+                  })));
+
                   await fetchAuxiliaryData();
+
                   const deletingActiveWorld = activeStoryId
-                    ? storyLibraryStories.some((story) => story.storyId === activeStoryId && story.worldId === world.worldId)
+                    ? (await apiClient.getStoryRuns()).some((story) => story.storyId === activeStoryId && story.worldId === world.worldId)
                     : false;
+
                   if (deletingActiveWorld) {
-                    const nextRun = storyLibraryStories.find((story) => story.worldId !== world.worldId);
-                    if (nextRun) {
+                    const nextRun = remainingRuns[0];
+                    if (nextRun?.storyId) {
                       apiClient.setActiveStoryId(nextRun.storyId);
                       setActiveStoryId(nextRun.storyId);
                       setCurrentRoute('dashboard');

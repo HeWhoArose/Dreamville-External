@@ -4677,6 +4677,7 @@ export class MultiModelOrchestrator {
       storyId,
       researchQuery || 'current story context',
       viewerActorId,
+      { persist: false },
     );
     const assembledContext = WorkingContextEngine.assembleTurnContext({
       storyId,

@@ -1,4 +1,59 @@
-import type { AiTaskCategory, TaskId } from './aiOrchestrator';
+import type { AiTaskCategory, TaskId, ModelRegistryRecord } from './aiOrchestrator';
+
+export type AiTaskContextContract =
+	| 'CANONICAL_STATE'
+	| 'CHARACTER'
+	| 'WORLD'
+	| 'RULES'
+	| 'COMBAT'
+	| 'NARRATIVE'
+	| 'MEMORY'
+	| 'RESEARCH'
+	| 'EPISTEMIC'
+	| 'OOC'
+	| 'TACTICAL'
+	| 'GENERATION'
+	| 'MEDIA';
+
+export type AiTaskToolMode = 'READ' | 'MUTATE';
+
+export type AiTaskValidatorKind =
+	| 'NONE'
+	| 'JSON_OBJECT'
+	| 'JSON_ARRAY'
+	| 'TEXT_OR_JSON_OBJECT';
+
+export type AiTaskReadinessState =
+	| 'DISCOVERED'
+	| 'CLASSIFIED'
+	| 'CAPABILITY_COMPATIBLE'
+	| 'CONFIGURED'
+	| 'QUOTA_AVAILABLE'
+	| 'TASK_VERIFIED'
+	| 'READY'
+	| 'THROTTLED'
+	| 'COOLDOWN'
+	| 'UNAVAILABLE'
+	| 'REJECTED'
+	| 'UNKNOWN';
+
+export interface AiTaskFallbackPolicy {
+	maxPrimaryAttempts: number;
+	maxTotalAttempts: number;
+	allowEmergencyFloor: boolean;
+	retryableFailures: Array<'TIMEOUT' | '429' | '5XX' | 'AUTH' | 'UNAVAILABLE' | 'MALFORMED' | 'OTHER'>;
+}
+
+export interface AiTaskReadiness {
+	task: TaskId;
+	modelId: string;
+	providerId: string;
+	state: AiTaskReadinessState;
+	reason: string;
+	capabilityCompatible: boolean;
+	contextCompatible: boolean;
+	quotaAvailable: boolean;
+}
 
 export interface AiTaskContract {
 	task: TaskId;
@@ -11,6 +66,11 @@ export interface AiTaskContract {
 	preferredPools: string[];
 	defaultTimeoutMs: number;
 	defaultMaxTokens: number;
+	contextContracts?: AiTaskContextContract[];
+	requiredToolModes?: AiTaskToolMode[];
+	validatorKind?: AiTaskValidatorKind;
+	fallbackPolicy?: AiTaskFallbackPolicy;
+	downstreamConsumer?: string;
 }
 
 const OOC_CONTRACT: AiTaskContract = {
@@ -307,10 +367,159 @@ const CONTRACTS: Record<TaskId, AiTaskContract> = {
 	},
 };
 
+function contextContractsFor(task: TaskId, category: AiTaskCategory): AiTaskContextContract[] {
+	const byTask: Partial<Record<TaskId, AiTaskContextContract[]>> = {
+		'narrative.generate': ['CANONICAL_STATE', 'NARRATIVE', 'CHARACTER', 'WORLD', 'RULES', 'MEMORY', 'EPISTEMIC'],
+		'character.dialogue': ['CANONICAL_STATE', 'CHARACTER', 'WORLD', 'MEMORY', 'EPISTEMIC', 'NARRATIVE'],
+		'ooc.respond': ['CANONICAL_STATE', 'CHARACTER', 'WORLD', 'RULES', 'MEMORY', 'EPISTEMIC', 'OOC'],
+		'character.extract': ['GENERATION', 'CHARACTER', 'WORLD'],
+		'memory.extract': ['CANONICAL_STATE', 'NARRATIVE', 'MEMORY', 'EPISTEMIC'],
+		'character.capability.propose': ['CHARACTER', 'WORLD', 'RULES', 'RESEARCH'],
+		'story.advice': ['CANONICAL_STATE', 'CHARACTER', 'WORLD', 'RULES', 'EPISTEMIC'],
+		'rules.adjudicate': ['CANONICAL_STATE', 'CHARACTER', 'RULES', 'EPISTEMIC'],
+		'rules.analyze': ['CANONICAL_STATE', 'CHARACTER', 'WORLD', 'RULES', 'EPISTEMIC'],
+		'summary.scene': ['CANONICAL_STATE', 'NARRATIVE', 'CHARACTER', 'WORLD', 'MEMORY'],
+		'world.generate': ['GENERATION', 'WORLD', 'RULES'],
+		'speech.generate': ['CANONICAL_STATE', 'CHARACTER', 'NARRATIVE'],
+		'speech.transcribe': ['CANONICAL_STATE'],
+		'combat.tactics': ['CANONICAL_STATE', 'CHARACTER', 'COMBAT', 'TACTICAL', 'EPISTEMIC', 'RULES'],
+		'tactical.reason': ['CANONICAL_STATE', 'CHARACTER', 'COMBAT', 'TACTICAL', 'EPISTEMIC', 'RULES'],
+		'combat.animation.plan': ['COMBAT', 'TACTICAL', 'NARRATIVE'],
+		'capability.explain': ['CANONICAL_STATE', 'CHARACTER', 'RULES', 'EPISTEMIC'],
+		'intent.interpret': ['CHARACTER', 'WORLD', 'NARRATIVE'],
+		'capability.synthesize': ['CHARACTER', 'WORLD', 'RULES', 'RESEARCH'],
+		'research.query': ['WORLD', 'RESEARCH', 'MEMORY', 'EPISTEMIC'],
+		'research.world-brief': ['WORLD', 'RESEARCH', 'MEMORY', 'EPISTEMIC'],
+		'narrative.review': ['CANONICAL_STATE', 'NARRATIVE', 'WORLD', 'RULES', 'EPISTEMIC'],
+		'utility.inspect': ['CANONICAL_STATE'],
+		'image.generate': ['GENERATION', 'MEDIA'],
+	};
+	return [...(byTask[task] || []), ...(category === 'tactical_reasoning' ? ['TACTICAL' as AiTaskContextContract] : [])];
+}
+
+function toolModesFor(task: TaskId): AiTaskToolMode[] {
+	return task === 'ooc.respond' ? ['READ', 'MUTATE'] : [];
+}
+
+function fallbackPolicyFor(task: TaskId, category: AiTaskCategory): AiTaskFallbackPolicy {
+	const fastTask = task === 'intent.interpret' || task === 'story.advice' || task === 'capability.explain' || task === 'utility.inspect';
+	return {
+		maxPrimaryAttempts: fastTask ? 2 : category === 'speech' || category === 'image' ? 2 : 3,
+		maxTotalAttempts: fastTask ? 4 : category === 'speech' || category === 'image' ? 4 : 5,
+		allowEmergencyFloor: true,
+		retryableFailures: ['TIMEOUT', '429', '5XX', 'AUTH', 'UNAVAILABLE', 'MALFORMED', 'OTHER'],
+	};
+}
+
+function validatorKindFor(task: TaskId): AiTaskValidatorKind {
+	if (task === 'combat.tactics') return 'JSON_OBJECT';
+	return 'NONE';
+}
+
+function downstreamConsumerFor(category: AiTaskCategory): string {
+	if (category === 'narration') return 'Narration presentation pipeline';
+	if (category === 'tactical_reasoning') return 'Deterministic tactical adjudication';
+	if (category === 'rules' || category === 'rule_analysis') return 'Canonical rules authority';
+	if (category === 'memory') return 'MemoryOpportunityEngine / NarrativeContinuityEngine';
+	if (category === 'gameplay_advice') return 'Player-facing advice/OOC presentation';
+	if (category === 'world_generation') return 'World synthesis / WorldRepository';
+	return 'Task-specific authoritative consumer';
+}
+
 export function getAiTaskContract(task: TaskId): AiTaskContract {
-	return CONTRACTS[task];
+	const base = CONTRACTS[task];
+	if (!base) throw new Error('Unknown AI task contract: ' + task);
+	return {
+		...base,
+		contextContracts: base.contextContracts || contextContractsFor(task, base.category),
+		requiredToolModes: base.requiredToolModes || toolModesFor(task),
+		validatorKind: base.validatorKind || validatorKindFor(task),
+		fallbackPolicy: base.fallbackPolicy || fallbackPolicyFor(task, base.category),
+		downstreamConsumer: base.downstreamConsumer || downstreamConsumerFor(base.category),
+	};
 }
 
 export function getAllAiTaskContracts(): AiTaskContract[] {
-	return Object.values(CONTRACTS);
+	return Object.keys(CONTRACTS).map((task) => getAiTaskContract(task as TaskId));
+}
+
+export function validateAiTaskResponse(task: TaskId, text: string): { valid: boolean; errorReason?: string } {
+	const contract = getAiTaskContract(task);
+	const kind = contract.validatorKind || 'NONE';
+	if (kind === 'NONE') return { valid: Boolean(String(text || '').trim()) };
+
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(String(text || '').trim());
+	} catch {
+		return { valid: false, errorReason: 'Task contract requires valid JSON output.' };
+	}
+
+	if (kind === 'JSON_OBJECT' && (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))) {
+		return { valid: false, errorReason: 'Task contract requires a JSON object.' };
+	}
+	if (kind === 'JSON_ARRAY' && !Array.isArray(parsed)) {
+		return { valid: false, errorReason: 'Task contract requires a JSON array.' };
+	}
+	if (kind === 'TEXT_OR_JSON_OBJECT' && parsed !== undefined && parsed !== null && typeof parsed !== 'object' && typeof parsed !== 'string') {
+		return { valid: false, errorReason: 'Task contract requires text or a JSON object.' };
+	}
+	return { valid: true };
+}
+
+export function evaluateAiTaskReadiness(
+	task: TaskId,
+	model: ModelRegistryRecord,
+	contextTokens = 0,
+): AiTaskReadiness {
+	const contract = getAiTaskContract(task);
+	if (!model.roleEligibility.includes(task)) {
+		return { task, modelId: model.modelId, providerId: model.providerId, state: 'REJECTED', reason: 'Model is not eligible for the requested task.', capabilityCompatible: false, contextCompatible: true, quotaAvailable: true };
+	}
+	if (model.isEmergencyFloor) {
+		return { task, modelId: model.modelId, providerId: model.providerId, state: 'READY', reason: 'Deterministic emergency floor is available as the final safety path.', capabilityCompatible: true, contextCompatible: true, quotaAvailable: true };
+	}
+	if (model.health === 'DisabledByUser' || model.health === 'Unavailable' || model.health === 'InvalidAuth') {
+		return { task, modelId: model.modelId, providerId: model.providerId, state: 'UNAVAILABLE', reason: 'Model health state does not permit execution.', capabilityCompatible: false, contextCompatible: true, quotaAvailable: false };
+	}
+	if (model.health === 'Throttled') {
+		return { task, modelId: model.modelId, providerId: model.providerId, state: 'THROTTLED', reason: 'Provider health is throttled.', capabilityCompatible: true, contextCompatible: true, quotaAvailable: false };
+	}
+	if (model.accessStatus === 'not_configured') {
+		return { task, modelId: model.modelId, providerId: model.providerId, state: 'UNAVAILABLE', reason: 'Provider/model is not configured.', capabilityCompatible: false, contextCompatible: true, quotaAvailable: false };
+	}
+	if (model.quota === 'Exhausted' || model.accessStatus === 'quota_limited' || model.accessStatus === 'rate_limited') {
+		return { task, modelId: model.modelId, providerId: model.providerId, state: 'UNAVAILABLE', reason: 'Model quota or access is exhausted/limited.', capabilityCompatible: true, contextCompatible: true, quotaAvailable: false };
+	}
+	if (model.contextWindow > 0 && contextTokens > model.contextWindow) {
+		return { task, modelId: model.modelId, providerId: model.providerId, state: 'REJECTED', reason: 'Requested context exceeds the model context window.', capabilityCompatible: true, contextCompatible: false, quotaAvailable: true };
+	}
+	if (model.health === 'Healthy' && model.quota !== 'Unknown' && model.quota !== 'Exhausted' && model.quota !== 'Low' && model.quota !== 'NearExhaustion') {
+		// fall through after capability checks below
+	}
+
+	const capabilities = new Set(model.capabilities || []);
+	if (capabilities.size > 0) {
+		for (const required of contract.requiredCapabilities) {
+			const satisfied = capabilities.has(required)
+				|| (required === 'text_generation' && ['creative_writing', 'fast', 'reasoning', 'structured_output', 'deep_reasoning', 'text'].some((value) => capabilities.has(value)))
+			|| (required === 'structured_output' && model.hasStructuredOutput === true);
+			if (!satisfied) {
+				return { task, modelId: model.modelId, providerId: model.providerId, state: 'REJECTED', reason: 'Model lacks a required task capability: ' + required, capabilityCompatible: false, contextCompatible: true, quotaAvailable: true };
+			}
+		}
+	}
+	if (Array.isArray(model.supportedInputTypes) && model.supportedInputTypes.length > 0 && contract.requiredInputTypes.some((type) => !model.supportedInputTypes!.includes(type))) {
+		return { task, modelId: model.modelId, providerId: model.providerId, state: 'REJECTED', reason: 'Model input modality is incompatible with the task contract.', capabilityCompatible: false, contextCompatible: true, quotaAvailable: true };
+	}
+	if (Array.isArray(model.supportedOutputTypes) && model.supportedOutputTypes.length > 0 && contract.requiredOutputTypes.some((type) => !model.supportedOutputTypes!.includes(type))) {
+		return { task, modelId: model.modelId, providerId: model.providerId, state: 'REJECTED', reason: 'Model output modality is incompatible with the task contract.', capabilityCompatible: false, contextCompatible: true, quotaAvailable: true };
+	}
+	if (contract.requiresStructuredOutput && capabilities.size > 0 && !model.hasStructuredOutput && !capabilities.has('structured_output')) {
+		return { task, modelId: model.modelId, providerId: model.providerId, state: 'REJECTED', reason: 'Structured output is required by the task contract.', capabilityCompatible: false, contextCompatible: true, quotaAvailable: true };
+	}
+	if (model.quota === 'Low' || model.quota === 'NearExhaustion') {
+		return { task, modelId: model.modelId, providerId: model.providerId, state: 'QUOTA_AVAILABLE', reason: 'Model remains runnable but quota headroom is limited.', capabilityCompatible: true, contextCompatible: true, quotaAvailable: true };
+	}
+	return { task, modelId: model.modelId, providerId: model.providerId, state: 'READY', reason: 'Model satisfies task capability, modality, health, quota and context requirements.', capabilityCompatible: true, contextCompatible: true, quotaAvailable: true };
 }

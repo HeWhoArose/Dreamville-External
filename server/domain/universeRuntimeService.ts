@@ -11,6 +11,7 @@ export interface UniverseWorldBinding {
 	visitCount: number;
 	pinnedWorldVersion: number;
 	status: 'CURRENT' | 'VISITED' | 'DORMANT';
+	lastSimulatedUniverseSeconds: number;
 }
 
 export interface UniverseTravelRecord {
@@ -43,6 +44,7 @@ export interface UniverseCampaignState {
 	worldBindings: UniverseWorldBinding[];
 	travelHistory: UniverseTravelRecord[];
 	memories: UniverseMemoryRecord[];
+	universeElapsedSeconds: number;
 	createdAt: string;
 	updatedAt: string;
 	portablePlayerState?: {
@@ -91,9 +93,11 @@ export class UniverseRuntimeService {
 				visitCount: 1,
 				pinnedWorldVersion: Number(run.worldVersion || repository.getWorldTemplate(run.worldId)?.worldManifestVersion || 1),
 				status: 'CURRENT',
+				lastSimulatedUniverseSeconds: 0,
 			}],
 			travelHistory: [],
 			memories: [],
+			universeElapsedSeconds: 0,
 			createdAt: timestamp,
 			updatedAt: timestamp,
 		};

@@ -1118,6 +1118,7 @@ export const App: React.FC = () => {
       <ContextInspectorModal
         isOpen={isContextModalOpen}
         onClose={() => setIsContextModalOpen(false)}
+        storyId={activeStoryId}
       />
       <DeveloperDiagnosticsModal
         isOpen={isDeveloperDiagnosticsOpen}

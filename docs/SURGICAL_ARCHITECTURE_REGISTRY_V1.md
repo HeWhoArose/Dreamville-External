@@ -77,7 +77,17 @@ Finish the capability and skill boundary first because Story UI, narration and O
 - Browser-only WebGL visual inspection of the 3D dice renderer remains a client-side manual check; it is not claimed as automated.
 
 ### S3 — Narration context and OOC architecture
-Connect the existing WorkingContext, continuity, knowledge and canonical tools without creating a second AI authority.
+**Status:** VERIFIED — RUNTIME TESTED 2026-09-27
+- Existing WorkingContextEngine remains the single context-assembly authority.
+- NarrativeContinuityEngine research remains the internal continuity source for narration.
+- Player-facing OOC research now uses an explicit authorized projection instead of raw planner/evidence/relationship internals.
+- OOC tool execution enforces the canonical active-player actor and validates required arguments.
+- OOC combat reads use the canonical actor-scoped combat projection.
+- The OOC route injects the canonical tool registry into model context and explicitly distinguishes READ from MUTATE tool intent.
+- Detailed world-bible lore is no longer copied directly into working context; it is projected through authorized world knowledge.
+- Dedicated 11-pass S3 audit added.
+- Final verification on commit `b2d3ea6d2bbbf245d7b02091a636fdfc6c505138`: 1002/1002 tests passed, lint/typecheck passed, production build passed, both verification workflows passed.
+- Full surgical record: `docs/S3_NARRATION_CONTEXT_OOC_SURGICAL_AUDIT_2026-09-27.md`.
 
 ### S4 — AI orchestration consolidation
 Merge model routing, task contracts, context contracts and fallback rules into one active implementation path.

@@ -4699,6 +4699,17 @@ export class MultiModelOrchestrator {
     modelId?: string;
     providerId?: string;
     error?: string;
+    source?: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK';
+    fallbackReason?: string;
+    attemptsTrail?: Array<{
+      providerId: string;
+      modelId: string;
+      displayName?: string;
+      status: 'SUCCESS' | 'FAILED';
+      latencyMs: number;
+      error?: string;
+    }>;
+    researchPacket?: ReturnType<typeof narrativeContinuityEngine.research>;
   }> {
     const storyId = params.storyId || 'default_story';
     const playerAction = (params.playerAction || '').trim();
@@ -4825,12 +4836,16 @@ export class MultiModelOrchestrator {
       },
     );
 
-    if (generated.source === 'DETERMINISTIC_FALLBACK' && !generated.text) {
+    if (generated.source === 'DETERMINISTIC_FALLBACK') {
       return {
         success: false,
         providerId: generated.providerId,
         modelId: generated.modelId,
-        error: generated.fallbackReason || 'Deterministic narrative fallback produced no text.',
+        source: generated.source,
+        fallbackReason: generated.fallbackReason,
+        attemptsTrail: generated.attemptsTrail,
+        researchPacket,
+        error: generated.fallbackReason || 'All AI narration models failed; deterministic emergency fallback was withheld from player-facing narration.',
       };
     }
 
@@ -4840,6 +4855,10 @@ export class MultiModelOrchestrator {
         success: false,
         providerId: generated.providerId,
         modelId: generated.modelId,
+        source: generated.source,
+        fallbackReason: generated.fallbackReason,
+        attemptsTrail: generated.attemptsTrail,
+        researchPacket,
         error: validation.errorReason || 'Narrative response failed structured validation.',
       };
     }
@@ -4852,6 +4871,10 @@ export class MultiModelOrchestrator {
       },
       modelId: generated.modelId,
       providerId: generated.providerId,
+      source: generated.source,
+      fallbackReason: generated.fallbackReason,
+      attemptsTrail: generated.attemptsTrail,
+      researchPacket,
     };
   }
 

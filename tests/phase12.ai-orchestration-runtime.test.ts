@@ -423,3 +423,33 @@ test('Phase 12: a cooling model is excluded from normal selection', () => {
 	const selection = orchestrator.selectBestModel('narrative.generate', { contextTokens: 100 });
 	assert.notEqual(selection.selectedModel.modelId, 'cooling-model');
 });
+
+test('Phase 12 regression: creative narration accepts valid prose without forcing deterministic fallback', () => {
+	const orchestrator = createTestOrchestrator();
+	const prose = 'The lanterns along the flooded corridor shiver as the pressure seals breathe in sequence. Beyond the rusted arch, cold blue light spills across the water and catches on the protagonist\\'s gloves. Somewhere behind the bulkhead, something heavy shifts, then becomes still again.';
+
+	const validation = orchestrator.validateTurnPackage(prose, { allowPlainTextNarration: true });
+
+	assert.equal(validation.valid, true);
+	assert.deepEqual(validation.turnPackage?.narrative, [prose]);
+	assert.deepEqual(validation.turnPackage?.stateChanges, []);
+	assert.deepEqual(validation.turnPackage?.events, []);
+});
+
+test('Phase 12 regression: fenced JSON narration is normalized before validation', () => {
+	const orchestrator = createTestOrchestrator();
+	const raw = ['```json', JSON.stringify({
+		narrative: ['The chamber falls silent as the submerged mechanism begins to turn.'],
+		dialogue: [],
+		events: ['MECHANISM_MOVES'],
+		stateChanges: [],
+		memoryCandidates: [],
+		audioCues: [],
+	}), '```'].join('\\n');
+
+	const validation = orchestrator.validateTurnPackage(raw, { allowPlainTextNarration: true });
+
+	assert.equal(validation.valid, true);
+	assert.equal(validation.turnPackage?.narrative[0], 'The chamber falls silent as the submerged mechanism begins to turn.');
+	assert.deepEqual(validation.turnPackage?.events, ['MECHANISM_MOVES']);
+});

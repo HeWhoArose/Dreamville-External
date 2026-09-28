@@ -6221,8 +6221,120 @@ export class MultiModelOrchestrator {
    * task-specific preflight model intelligence layer will replace the
    * generic provider probe in the next orchestration specification pass.
    */
+
+  private getAutoArrangeCanary(task: TaskId): {
+    prompt: string;
+    timeoutMs: number;
+    maxTokens: number;
+    validate: (result: ProviderGenerateResult) => { valid: boolean; reason?: string };
+    verificationMode: 'TASK_CANARY' | 'CAPABILITY_ONLY';
+  } {
+    const contract = getAiTaskContract(task);
+
+    if (task === 'image.generate') {
+      return {
+        prompt: 'Generate one minimal test image for DreamBook model readiness verification.',
+        timeoutMs: contract.defaultTimeoutMs,
+        maxTokens: contract.defaultMaxTokens,
+        verificationMode: 'CAPABILITY_ONLY',
+        validate: (result) => ({
+          valid: Boolean(result.rawResponse || result.text || result.audioBase64),
+          reason: 'Image provider verification is limited to adapter response evidence in the current provider contract.',
+        }),
+      };
+    }
+
+    const parseJsonObject = (text: string): any | null => {
+      try {
+        const normalized = String(text || '')
+          .trim()
+          .replace(/^\u0060\u0060\u0060(?:json)?\s*/i, '')
+          .replace(/\s*\u0060\u0060\u0060$/i, '')
+          .trim();
+        const parsed = JSON.parse(normalized);
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+      } catch {
+        return null;
+      }
+    };
+
+    let prompt = 'DreamBook task readiness canary. Return the smallest valid response for this task. Do not mutate state.';
+    let validate: (result: ProviderGenerateResult) => { valid: boolean; reason?: string } = (result) => ({
+      valid: Boolean(String(result.text || '').trim()),
+      reason: 'Provider returned an empty task response.',
+    });
+
+    switch (task) {
+      case 'narrative.generate':
+      case 'character.dialogue':
+      case 'summary.scene':
+      case 'world.generate':
+      case 'memory.extract':
+      case 'story.advice':
+      case 'capability.explain':
+      case 'research.query':
+      case 'research.world-brief':
+      case 'rules.adjudicate':
+      case 'rules.analyze':
+      case 'tactical.reason':
+      case 'combat.animation.plan':
+      case 'narrative.review':
+      case 'utility.inspect':
+      case 'ooc.respond':
+        prompt = 'DreamBook task readiness canary. Return a concise valid response for this task. Do not mutate state.';
+        break;
+      case 'character.extract':
+      case 'character.capability.propose':
+      case 'capability.synthesize':
+      case 'intent.interpret':
+        prompt = 'DreamBook structured task readiness canary. Return a minimal valid JSON object for this task. Do not mutate state.';
+        validate = (result) => {
+          const parsed = parseJsonObject(result.text);
+          if (!parsed) return { valid: false, reason: 'Provider did not return a JSON object.' };
+          if (task === 'character.extract' && !parsed.identity && !parsed.role && !parsed.background && !parsed.name) {
+            return { valid: false, reason: 'Character extraction response lacks recognizable character fields.' };
+          }
+          if (task !== 'character.extract' && typeof parsed.name !== 'string' && typeof parsed.intent !== 'string' && typeof parsed.baseAction !== 'string') {
+            return { valid: false, reason: 'Structured task response lacks a recognizable task field.' };
+          }
+          return { valid: true };
+        };
+        break;
+      case 'combat.tactics':
+        prompt = 'DreamBook tactical readiness canary. Return one minimal JSON object containing a tactical plan. Do not mutate state.';
+        validate = (result) => {
+          const validation = validateAiTaskResponse(task, result.text);
+          return validation.valid
+            ? { valid: true }
+            : { valid: false, reason: validation.errorReason || 'Tactical response failed the task contract.' };
+        };
+        break;
+      case 'speech.generate':
+        prompt = 'DreamBook speech readiness canary. Generate the smallest possible speech response.';
+        validate = (result) => ({
+          valid: Boolean(result.audioBase64 || String(result.text || '').trim()),
+          reason: 'Speech provider returned neither audio evidence nor text.',
+        });
+        break;
+      case 'speech.transcribe':
+        prompt = 'DreamBook transcription readiness canary. Return the smallest possible transcription.';
+        break;
+      default:
+        break;
+    }
+
+    return {
+      prompt,
+      timeoutMs: Math.min(contract.defaultTimeoutMs, 10000),
+      maxTokens: Math.min(contract.defaultMaxTokens, 800),
+      validate,
+      verificationMode: 'TASK_CANARY',
+    };
+  }
+
   public async autoConfigureFallbacks(options?: {
     maxFallbacksPerCategory?: number;
+    concurrency?: number;
   }): Promise<{
     success: boolean;
     timestamp: number;
@@ -6233,130 +6345,346 @@ export class MultiModelOrchestrator {
       providerId: string;
       modelId: string;
       displayName: string;
-      status: 'READY' | 'FAILED' | 'UNAVAILABLE' | 'NOT_CONFIGURED';
+      status: 'READY' | 'FAILED' | 'UNAVAILABLE' | 'NOT_CONFIGURED' | 'SKIPPED';
       latencyMs?: number;
       errorReason?: string;
+      billingState?: BillingState;
+      quotaState?: QuotaState;
+      quotaSource?: QuotaEvidenceSource;
+      verifiedTasks?: TaskId[];
+      verificationMode?: 'TASK_CANARY' | 'CAPABILITY_ONLY' | 'METADATA_ONLY';
     }>;
     configuredChains: Record<string, string[]>;
     summaryMessage: string;
   }> {
     const maxFallbacks = Math.max(2, Math.min(6, options?.maxFallbacksPerCategory ?? 4));
+    const concurrency = Math.max(1, Math.min(6, Math.trunc(options?.concurrency ?? 4)));
 
-    // 1. Force discovery refresh from all adapters
     await this.discoverAndRegisterModels({ forceRefresh: true });
 
     const allModels = this.getAllModels().filter(
-      (m) => !m.isEmergencyFloor && m.health !== 'DisabledByUser'
+      (model) => !model.isEmergencyFloor && model.health !== 'DisabledByUser',
     );
 
-    const testResults: Array<{
+    const representativeTasksByModel = new Map<string, TaskId[]>();
+    for (const model of allModels) {
+      const tasks = getAllAiTaskContracts()
+        .map((contract) => contract.task)
+        .filter((task) => model.roleEligibility.includes(task));
+      const seenCategories = new Set<AiTaskCategory>();
+      const selectedTasks: TaskId[] = [];
+      for (const task of tasks) {
+        const category = this.getTaskCategory(task);
+        if (seenCategories.has(category)) continue;
+        seenCategories.add(category);
+        selectedTasks.push(task);
+        if (selectedTasks.length >= 6) break;
+      }
+      representativeTasksByModel.set(this.modelKey(model), selectedTasks);
+    }
+
+    type TaskCanaryResult = {
+      task: TaskId;
+      success: boolean;
+      latencyMs: number;
+      reason?: string;
+      verificationMode: 'TASK_CANARY' | 'CAPABILITY_ONLY';
+    };
+
+    const runCanary = async (model: ModelRegistryRecord, task: TaskId): Promise<TaskCanaryResult> => {
+      const preflight = this.getTaskCandidatePreflight(
+        task,
+        model.providerId,
+        model.modelId,
+        0,
+        getAiTaskContract(task).defaultMaxTokens,
+      );
+      if (!preflight?.eligible) {
+        return {
+          task,
+          success: false,
+          latencyMs: 0,
+          reason: preflight?.reason || 'Task preflight rejected this candidate.',
+          verificationMode: 'TASK_CANARY',
+        };
+      }
+
+      const adapter = this.getAdapter(model.providerId);
+      if (!adapter) {
+        return {
+          task,
+          success: false,
+          latencyMs: 0,
+          reason: 'No provider adapter is available for this model.',
+          verificationMode: 'TASK_CANARY',
+        };
+      }
+
+      const canary = this.getAutoArrangeCanary(task);
+      if (canary.verificationMode === 'CAPABILITY_ONLY') {
+        return {
+          task,
+          success: true,
+          latencyMs: 0,
+          verificationMode: 'CAPABILITY_ONLY',
+          reason: 'Adapter contract is present; media provider verification remains capability-only.',
+        };
+      }
+
+      const startedAt = Date.now();
+      try {
+        const abortController = new AbortController();
+        const timer = setTimeout(() => abortController.abort(), canary.timeoutMs);
+        let providerResult: ProviderGenerateResult;
+        try {
+          providerResult = await adapter.generate(task, canary.prompt, {
+            timeoutMs: canary.timeoutMs,
+            abortSignal: abortController.signal,
+            modelId: model.modelId,
+            maxTokens: canary.maxTokens,
+          });
+        } finally {
+          clearTimeout(timer);
+        }
+
+        const validation = canary.validate(providerResult);
+        const latencyMs = Math.max(1, Date.now() - startedAt);
+        if (!validation.valid) {
+          return {
+            task,
+            success: false,
+            latencyMs,
+            reason: validation.reason || 'Task canary response failed validation.',
+            verificationMode: canary.verificationMode,
+          };
+        }
+
+        model.latencyMs = latencyMs;
+        model.health = 'Healthy';
+        model.accessStatus = 'accessible';
+        return {
+          task,
+          success: true,
+          latencyMs,
+          verificationMode: canary.verificationMode,
+        };
+      } catch (error: any) {
+        const message = String(error?.message || error);
+        const lower = message.toLowerCase();
+        if (lower.includes('429') || lower.includes('quota') || lower.includes('resource exhausted') || lower.includes('rate limit')) {
+          model.health = 'Throttled';
+          model.quota = 'Exhausted';
+          model.accessStatus = 'quota_limited';
+          model.quotaEvidenceSource = 'PROVIDER';
+        } else if (lower.includes('401') || lower.includes('403') || lower.includes('api key') || lower.includes('authentication')) {
+          model.health = 'InvalidAuth';
+          model.accessStatus = 'not_configured';
+        } else if (lower.includes('404') || lower.includes('not found') || lower.includes('unavailable')) {
+          model.health = 'Unavailable';
+          model.accessStatus = 'unavailable';
+        } else {
+          model.health = 'Degraded';
+        }
+
+        return {
+          task,
+          success: false,
+          latencyMs: Math.max(1, Date.now() - startedAt),
+          reason: message,
+          verificationMode: canary.verificationMode,
+        };
+      }
+    };
+
+    const results: Array<{
       providerId: string;
       modelId: string;
       displayName: string;
-      status: 'READY' | 'FAILED' | 'UNAVAILABLE' | 'NOT_CONFIGURED';
+      status: 'READY' | 'FAILED' | 'UNAVAILABLE' | 'NOT_CONFIGURED' | 'SKIPPED';
       latencyMs?: number;
       errorReason?: string;
+      billingState?: BillingState;
+      quotaState?: QuotaState;
+      quotaSource?: QuotaEvidenceSource;
+      verifiedTasks?: TaskId[];
+      verificationMode?: 'TASK_CANARY' | 'CAPABILITY_ONLY' | 'METADATA_ONLY';
     }> = [];
 
-    const healthyModels: ModelRegistryRecord[] = [];
+    let cursor = 0;
+    const worker = async () => {
+      while (true) {
+        const index = cursor++;
+        if (index >= allModels.length) return;
+        const model = allModels[index];
+        const runtime = this.ensureRuntimeStatus(model);
+        const tasks = representativeTasksByModel.get(this.modelKey(model)) || [];
+        const preflightTask = tasks[0] || model.roleEligibility[0];
+        const preflight = preflightTask
+          ? this.getTaskCandidatePreflight(
+              preflightTask,
+              model.providerId,
+              model.modelId,
+              0,
+              getAiTaskContract(preflightTask).defaultMaxTokens,
+            )
+          : undefined;
 
-    // 2. Ping / benchmark all registered models
-    for (const model of allModels) {
-      try {
-        const res = await this.testModel(model.providerId, model.modelId);
-        if (res.success && res.status === 'READY') {
-          healthyModels.push(model);
-          testResults.push({
+        if (!preflight || !preflight.eligible) {
+          results[index] = {
             providerId: model.providerId,
             modelId: model.modelId,
             displayName: model.displayName || model.modelId,
-            status: 'READY',
-            latencyMs: res.latencyMs,
-          });
-        } else {
-          testResults.push({
-            providerId: model.providerId,
-            modelId: model.modelId,
-            displayName: model.displayName || model.modelId,
-            status: res.status as any,
-            latencyMs: res.latencyMs,
-            errorReason: res.message,
-          });
+            status: 'SKIPPED',
+            errorReason: preflight?.reason || 'Model has no eligible DreamBook task.',
+            billingState: model.billingState || 'UNKNOWN',
+            quotaState: model.quota,
+            quotaSource: model.quotaEvidenceSource || 'UNKNOWN',
+            verificationMode: 'METADATA_ONLY',
+          };
+          return;
         }
-      } catch (err: any) {
-        testResults.push({
+
+        if (model.quota === 'Exhausted' || model.accessStatus === 'quota_limited' || model.accessStatus === 'rate_limited') {
+          results[index] = {
+            providerId: model.providerId,
+            modelId: model.modelId,
+            displayName: model.displayName || model.modelId,
+            status: 'SKIPPED',
+            errorReason: 'Provider-reported quota/rate-limit exhaustion.',
+            billingState: model.billingState || 'UNKNOWN',
+            quotaState: model.quota,
+            quotaSource: model.quotaEvidenceSource || 'UNKNOWN',
+            verificationMode: 'METADATA_ONLY',
+          };
+          return;
+        }
+
+        const taskResults = await Promise.all(tasks.map((task) => runCanary(model, task)));
+        const verifiedTasks = taskResults.filter((entry) => entry.success).map((entry) => entry.task);
+        const failedTask = taskResults.find((entry) => !entry.success);
+
+        const averageLatency = verifiedTasks.length
+          ? Math.round(
+              taskResults
+                .filter((entry) => entry.success)
+                .reduce((sum, entry) => sum + entry.latencyMs, 0) / verifiedTasks.length,
+            )
+          : runtime.averageLatencyMs || model.latencyMs || 0;
+
+        const status: 'READY' | 'FAILED' | 'UNAVAILABLE' | 'NOT_CONFIGURED' =
+          verifiedTasks.length > 0
+            ? 'READY'
+            : model.health === 'InvalidAuth'
+              ? 'NOT_CONFIGURED'
+              : model.health === 'Unavailable'
+                ? 'UNAVAILABLE'
+                : 'FAILED';
+
+        results[index] = {
           providerId: model.providerId,
           modelId: model.modelId,
           displayName: model.displayName || model.modelId,
-          status: 'FAILED',
-          errorReason: err?.message || String(err),
-        });
+          status,
+          latencyMs: averageLatency,
+          errorReason: failedTask?.reason,
+          billingState: model.billingState || 'UNKNOWN',
+          quotaState: model.quota,
+          quotaSource: model.quotaEvidenceSource || 'UNKNOWN',
+          verifiedTasks,
+          verificationMode: tasks.some(
+            (task) => this.getAutoArrangeCanary(task).verificationMode === 'TASK_CANARY',
+          )
+            ? 'TASK_CANARY'
+            : 'CAPABILITY_ONLY',
+        };
       }
-    }
+    };
 
-    // 3. Assign optimal fallback chains for every canonical task.
-    // Task membership is derived from the single task-contract registry so a
-    // multi-task category can never silently lose its second/third task here.
+    await Promise.all(
+      Array.from(
+        { length: Math.min(concurrency, Math.max(1, allModels.length)) },
+        () => worker(),
+      ),
+    );
+
+    const healthyModels = allModels.filter((model) => {
+      const result = results.find(
+        (entry) => entry.providerId === model.providerId && entry.modelId === model.modelId,
+      );
+      return result?.status === 'READY';
+    });
+
     const tasksToConfigure: TaskId[] = getAllAiTaskContracts().map((contract) => contract.task);
-
     const emergencyKey = 'provider_deterministic_emergency::emergency-fallback-local';
 
     for (const task of tasksToConfigure) {
-      const eligibleHealthy = healthyModels
-        .filter((m) => m.roleEligibility.includes(task))
+      const category = this.getTaskCategory(task);
+      if (this.categoryOverrides.has(category) || this.taskPinnedModels.has(task)) {
+        continue;
+      }
+
+      const eligibleReady = healthyModels
+        .filter((model) => model.roleEligibility.includes(task))
+        .filter((model) => {
+          const readiness = this.getTaskCandidatePreflight(
+            task,
+            model.providerId,
+            model.modelId,
+            0,
+            getAiTaskContract(task).defaultMaxTokens,
+          );
+          return Boolean(readiness?.eligible);
+        })
         .sort((a, b) => {
-          let scoreA = a.userPriority - (a.latencyMs || 500) / 10;
-          let scoreB = b.userPriority - (b.latencyMs || 500) / 10;
-          if (task === 'narrative.generate' || task === 'world.generate' || task === 'character.dialogue' || task === 'narrative.review') {
-            if (a.pool === 'creative' || a.pool === 'reasoning') scoreA += 50;
-            if (b.pool === 'creative' || b.pool === 'reasoning') scoreB += 50;
-          } else if (
-            task === 'intent.interpret' ||
-            task === 'capability.explain' ||
-            task === 'story.advice' ||
-            task === 'memory.extract' ||
-            task === 'character.extract'
-          ) {
-            if (a.pool === 'fast') scoreA += 40;
-            if (b.pool === 'fast') scoreB += 40;
-          } else if (
-            task === 'capability.synthesize' ||
-            task === 'research.query' ||
-            task === 'research.world-brief' ||
-            task === 'rules.adjudicate' ||
-            task === 'rules.analyze' ||
-            task === 'combat.tactics' ||
-            task === 'tactical.reason'
-          ) {
-            if (a.pool === 'reasoning' || a.pool === 'long_context') scoreA += 45;
-            if (b.pool === 'reasoning' || b.pool === 'long_context') scoreB += 45;
-          }
-          return scoreB - scoreA;
+          const scoreA =
+            a.userPriority +
+            (a.health === 'Healthy' ? 50 : 0) +
+            (a.quota === 'Healthy' ? 30 : a.quota === 'Low' ? 10 : 0) -
+            Math.min(20, (a.latencyMs || 500) / 100);
+          const scoreB =
+            b.userPriority +
+            (b.health === 'Healthy' ? 50 : 0) +
+            (b.quota === 'Healthy' ? 30 : b.quota === 'Low' ? 10 : 0) -
+            Math.min(20, (b.latencyMs || 500) / 100);
+          return scoreB - scoreA ||
+            (a.providerId + '::' + a.modelId).localeCompare(b.providerId + '::' + b.modelId);
         });
 
-      const topKeys = eligibleHealthy.slice(0, maxFallbacks).map((m) => `${m.providerId}::${m.modelId}`);
-      const chain = topKeys.length > 0 ? [...topKeys, emergencyKey] : [emergencyKey];
-      this.taskFallbackChains.set(task, chain);
+      const topKeys = eligibleReady
+        .filter((model) => model.fallbackEligibility !== false)
+        .slice(0, maxFallbacks)
+        .map((model) => this.modelKey(model));
 
-      if (topKeys[0]) {
-        this.taskPinnedModels.set(task, topKeys[0]);
-      }
+      const previous = this.taskFallbackChains.get(task);
+      const chain =
+        topKeys.length > 0
+          ? [...topKeys, emergencyKey]
+          : previous && previous.length > 0
+            ? previous
+            : [emergencyKey];
+
+      this.taskFallbackChains.set(task, chain);
     }
 
     this.savePersistedConfig();
 
-    const healthyCount = healthyModels.length;
-    const failedCount = testResults.filter((r) => r.status !== 'READY').length;
+    const readyCount = results.filter((result) => result.status === 'READY').length;
+    const failedCount = results.filter((result) => result.status !== 'READY').length;
 
     return {
       success: true,
       timestamp: Date.now(),
-      totalModelsTested: testResults.length,
-      healthyModelsCount: healthyCount,
+      totalModelsTested: results.length,
+      healthyModelsCount: readyCount,
       failedModelsCount: failedCount,
-      results: testResults,
+      results,
       configuredChains: this.getAllFallbackChains(),
-      summaryMessage: `AI Auto-Configuration Complete: Tested ${testResults.length} models (${healthyCount} responsive, ${failedCount} unavailable). Configured up to ${maxFallbacks} fallback models for each canonical task.`,
+      summaryMessage:
+        'AI Auto-Configuration Complete: verified task-aware model readiness with bounded concurrency (' +
+        concurrency +
+        '). Configured up to ' +
+        maxFallbacks +
+        ' fallbacks per task while preserving manual category overrides and task pins.',
     };
   }
 

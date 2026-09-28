@@ -1425,6 +1425,29 @@ class ApiClient {
   }
 
   /**
+   * Phase 12A+: Read-only task candidate preflight.
+   * POST /api/game/orchestrator/preflight
+   */
+  public async preflightOrchestratorModel(params: {
+    task: string;
+    providerId: string;
+    modelId: string;
+    contextTokens?: number;
+    reservedOutputTokens?: number;
+  }): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/preflight`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data?.errorReason || `Failed to preflight model: HTTP ${res.status}`);
+    }
+    return data;
+  }
+
+  /**
    * Challenge 12: Select best model for task & preview routing explanation.
    * POST /api/game/orchestrator/select
    */
@@ -1878,7 +1901,7 @@ class ApiClient {
    * and automatically configures up to 4 fallback models per task category.
    * POST /api/game/orchestrator/auto-configure-fallbacks
    */
-  public async autoConfigureFallbacks(params?: { maxFallbacksPerCategory?: number }): Promise<{
+  public async autoConfigureFallbacks(params?: { maxFallbacksPerCategory?: number; concurrency?: number }): Promise<{
     success: boolean;
     timestamp: number;
     totalModelsTested: number;

@@ -170,20 +170,22 @@ test('Phase 16 action advisor: an unknown capability request does not silently g
 	const storyId = 'phase16_advisor_novel_unknown';
 	seedRun(repository, storyId, 'Dark Mage');
 
+	const actorId = repository.getPlayerLifecycle(storyId)?.actorId || 'player_actor_' + storyId;
+	const capabilityEngine = repository.getCapabilityEngine(storyId);
+	const learnedBefore = capabilityEngine.getActorSkillInstances(actorId).map((instance) => instance.capabilityId).sort();
+
 	const advisor = new StoryActionAdvisor(repository);
 	const advice = await advisor.advise(storyId, 'I invent an entirely new forbidden star technique');
 
 	assert.notEqual(advice.mode, 'EXECUTE_EXISTING');
 	assert.equal(advice.canExecuteNow, false);
 	assert.ok(advice.simulation || advice.proposal);
-	const actorId = repository.getPlayerLifecycle(storyId)?.actorId || 'player_actor_' + storyId;
-	const capabilityEngine = repository.getCapabilityEngine(storyId);
-	assert.equal(
-		capabilityEngine.hasLearnedCapability(
-			actorId,
-			Array.from(capabilityEngine.getAllCapabilities()).find((capability) => capability.name.includes('Star Curse'))?.id || 'cap_nonexistent_star_curse',
-		),
-		false,
+
+	const learnedAfter = capabilityEngine.getActorSkillInstances(actorId).map((instance) => instance.capabilityId).sort();
+	assert.deepEqual(
+		learnedAfter,
+		learnedBefore,
+		'Advisory interpretation/proposal must not grant a canonical SkillInstance.',
 	);
 });
  

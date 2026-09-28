@@ -7408,12 +7408,13 @@ gameRouter.post('/orchestrator/fallback', async (req: Request, res: Response) =>
  */
 gameRouter.post('/orchestrator/auto-configure-fallbacks', async (req: Request, res: Response) => {
   try {
-    const { maxFallbacksPerCategory, concurrency } = req.body || {};
+    const { maxFallbacksPerCategory, concurrency, includeFreeModels } = req.body || {};
     const { worldRepository } = await import('../repositories/worldRepository');
     const orchestrator = worldRepository.getAiOrchestrator();
     const result = await orchestrator.autoConfigureFallbacks({
       maxFallbacksPerCategory: typeof maxFallbacksPerCategory === 'number' ? maxFallbacksPerCategory : undefined,
       concurrency: typeof concurrency === 'number' ? concurrency : undefined,
+      includeFreeModels: includeFreeModels === true,
     });
     res.json(result);
   } catch (error: any) {

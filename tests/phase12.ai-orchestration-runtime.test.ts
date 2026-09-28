@@ -8,6 +8,7 @@ import {
 } from '../server/domain/aiOrchestrator';
 import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
 import { WorkingContextEngine } from '../server/domain/workingContextEngine';
+import { evaluateAiTaskCandidatePreflight } from '../server/domain/aiTaskContracts';
 import type { KnowledgeFact } from '../server/domain/types';
 
 function createTestOrchestrator(repository?: InMemoryWorldRepository): MultiModelOrchestrator {
@@ -452,4 +453,96 @@ test('Phase 12 regression: fenced JSON narration is normalized before validation
 	assert.equal(validation.valid, true);
 	assert.equal(validation.turnPackage?.narrative[0], 'The chamber falls silent as the submerged mechanism begins to turn.');
 	assert.deepEqual(validation.turnPackage?.events, ['MECHANISM_MOVES']);
+});
+
+
+test('Phase 12 audit: task candidate preflight is side-effect-free and reports known capacity constraints', () => {
+	const orchestrator = createTestOrchestrator();
+	const candidate = model('phase12_preflight_provider', 'preflight-model', ['character.extract']);
+	candidate.outputTokenLimit = 1000;
+	orchestrator.registerModel(candidate);
+
+	const before = JSON.stringify({
+		model: orchestrator.getModel('phase12_preflight_provider', 'preflight-model'),
+		chains: orchestrator.getAllFallbackChains(),
+	});
+
+	const result = evaluateAiTaskCandidatePreflight(
+		'character.extract',
+		candidate,
+		100,
+		900,
+	);
+
+	assert.equal(result.eligible, true);
+	assert.equal(result.state, 'READY');
+	assert.equal(result.contextTokens, 100);
+	assert.equal(result.reservedOutputTokens, 900);
+	assert.equal(result.outputCapacityKnown, true);
+	assert.equal(result.taskContractVerified, true);
+
+	const after = JSON.stringify({
+		model: orchestrator.getModel('phase12_preflight_provider', 'preflight-model'),
+		chains: orchestrator.getAllFallbackChains(),
+	});
+	assert.equal(after, before);
+});
+
+test('Phase 12 audit: task candidate preflight rejects context plus reserved output overflow without mutating routing state', () => {
+	const orchestrator = createTestOrchestrator();
+	const candidate = model('phase12_preflight_capacity', 'capacity-model', ['character.extract']);
+	candidate.contextWindow = 1000;
+	candidate.outputTokenLimit = 900;
+	orchestrator.registerModel(candidate);
+
+	const before = JSON.stringify(orchestrator.getAllFallbackChains());
+	const result = evaluateAiTaskCandidatePreflight(
+		'character.extract',
+		candidate,
+		600,
+		500,
+	);
+
+	assert.equal(result.eligible, false);
+	assert.equal(result.state, 'REJECTED');
+	assert.match(result.reason, /context window/i);
+	assert.equal(result.contextCapacityKnown, true);
+	assert.equal(result.outputCapacityKnown, true);
+	assert.equal(JSON.stringify(orchestrator.getAllFallbackChains()), before);
+});
+
+test('Phase 12 audit: task candidate preflight rejects reserved output above a known model output limit', () => {
+	const candidate = model('phase12_preflight_output', 'output-limited-model', ['character.extract']);
+	candidate.contextWindow = 10000;
+	candidate.outputTokenLimit = 500;
+
+	const result = evaluateAiTaskCandidatePreflight(
+		'character.extract',
+		candidate,
+		100,
+		501,
+	);
+
+	assert.equal(result.eligible, false);
+	assert.equal(result.state, 'REJECTED');
+	assert.match(result.reason, /output token limit/i);
+});
+
+test('Phase 12 audit: task candidate preflight preserves UNKNOWN metadata instead of guessing', () => {
+	const candidate = model('phase12_preflight_unknown', 'unknown-capacity-model', ['character.extract']);
+	candidate.contextWindow = 0;
+	candidate.outputTokenLimit = undefined;
+
+	const result = evaluateAiTaskCandidatePreflight(
+		'character.extract',
+		candidate,
+		500000,
+		500000,
+	);
+
+	assert.equal(result.eligible, true);
+	assert.equal(result.state, 'READY');
+	assert.equal(result.contextCapacityKnown, false);
+	assert.equal(result.outputCapacityKnown, false);
+	assert.equal(result.taskContractVerified, true);
 });

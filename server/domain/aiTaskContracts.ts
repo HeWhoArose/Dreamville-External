@@ -547,7 +547,7 @@ export interface AiTaskCandidatePreflight {
 	reservedOutputTokens: number;
 	contextCapacityKnown: boolean;
 	outputCapacityKnown: boolean;
-	taskContractVerified: boolean;
+	taskContractCompatible: boolean;
 }
 
 /**
@@ -588,7 +588,7 @@ export function evaluateAiTaskCandidatePreflight(
 			reservedOutputTokens: safeReservedOutputTokens,
 			contextCapacityKnown: model.contextWindow > 0,
 			outputCapacityKnown: Number.isFinite(model.outputTokenLimit) && (model.outputTokenLimit || 0) > 0,
-			taskContractVerified: false,
+			taskContractCompatible: false,
 		};
 	}
 
@@ -605,7 +605,7 @@ export function evaluateAiTaskCandidatePreflight(
 			reservedOutputTokens: safeReservedOutputTokens,
 			contextCapacityKnown: model.contextWindow > 0,
 			outputCapacityKnown: Number.isFinite(model.outputTokenLimit) && (model.outputTokenLimit || 0) > 0,
-			taskContractVerified: false,
+			taskContractCompatible: false,
 		};
 	}
 
@@ -625,7 +625,7 @@ export function evaluateAiTaskCandidatePreflight(
 			reservedOutputTokens: safeReservedOutputTokens,
 			contextCapacityKnown: model.contextWindow > 0,
 			outputCapacityKnown: Number.isFinite(model.outputTokenLimit) && (model.outputTokenLimit || 0) > 0,
-			taskContractVerified: false,
+			taskContractCompatible: false,
 		};
 	}
 
@@ -646,7 +646,7 @@ export function evaluateAiTaskCandidatePreflight(
 			reservedOutputTokens: safeReservedOutputTokens,
 			contextCapacityKnown: true,
 			outputCapacityKnown: Number.isFinite(model.outputTokenLimit) && (model.outputTokenLimit || 0) > 0,
-			taskContractVerified: false,
+			taskContractCompatible: false,
 		};
 	}
 
@@ -670,7 +670,7 @@ export function evaluateAiTaskCandidatePreflight(
 			reservedOutputTokens: safeReservedOutputTokens,
 			contextCapacityKnown,
 			outputCapacityKnown: true,
-			taskContractVerified: false,
+			taskContractCompatible: false,
 		};
 	}
 
@@ -688,6 +688,6 @@ export function evaluateAiTaskCandidatePreflight(
 		reservedOutputTokens: safeReservedOutputTokens,
 		contextCapacityKnown,
 		outputCapacityKnown,
-		taskContractVerified: true,
+		taskContractCompatible: true,
 	};
 }

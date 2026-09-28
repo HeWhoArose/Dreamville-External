@@ -593,16 +593,14 @@ export class CapabilitySimulationEngine {
     const text = normalize(actionText);
     if (!text) return false;
 
+    const explicitCapabilityVerb = /\b(cast|activate|invoke|channel|conjure|summon|trigger|release|wield)\b/;
+    const directCapabilityVerb = /\b(teleport|teleported|blink|warped|warp|levitate|fly|rewind|accelerate|transform|transmute|conjure|summon)\b/;
+    const capabilityNoun = /\b(spell|skill|technique|ability|power|magic|sorcery|sorcerous|arcane|mana|spellcasting|pyromancy|firebending|waterbending|earthbending|airbending|bending technique|chronomancy|temporal|dimensional|reality manipulation|spatial magic|lightning|thunderbolt|fireball|shadow step)\b/;
     return (
-      /\b(cast|spell|spells|skill|technique|ability|power|invoke|channel|conjure|summon)\b/.test(text) ||
-      /\b(teleport|teleportation|blink|warp|portal|lightning|thunderbolt|fireball|pyromancy|shadow step)\b/.test(text) ||
-      /\b(time manipulation|stop time|rewind time|accelerate time|temporal|chronomancy)\b/.test(text) ||
-      /\b(dimension|dimensional|tear reality|reality manipulation|spatial magic)\b/.test(text) ||
-      /\b(magic|sorcery|sorcerous|arcane|mana|spellcasting)\b/.test(text) ||
-      /\b(firebending|waterbending|earthbending|airbending|bending technique)\b/.test(text) ||
-      /\b(split the world|split the realm|sever the world|tear the world|shatter reality)\b/.test(text)
-    );
-  }
+      (explicitCapabilityVerb.test(text) && capabilityNoun.test(text)) ||
+      directCapabilityVerb.test(text) ||
+      /\b(time manipulation|stop time|rewind time|accelerate time|tear reality|split the world|split the realm|sever the world|shatter reality)\b/.test(text)
+    );  }
 
   public simulate(actionText: string, context: CapabilitySimulationContext, candidateCapability?: CapabilityDefinition): CapabilitySimulationResult {
     const normalizedAction = normalize(actionText);

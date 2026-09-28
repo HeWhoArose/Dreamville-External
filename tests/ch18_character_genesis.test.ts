@@ -72,7 +72,34 @@ test('Character Creation Slice 2 — Character Genesis Forensic Verification', a
     return {
       executeTaskGeneration: async (task: string, prompt: string, systemInstruction?: string, options?: any) => {
         const lowerPrompt = prompt.toLowerCase();
-        
+
+        if (task === 'character.capability.propose') {
+          return {
+            text: JSON.stringify({
+              name: 'Chrono-Stutter Phase Shift',
+              category: 'Magic',
+              activationMode: 'immediate',
+              powerTier: 'Moderate',
+              baseEnergyCost: 12,
+              baseStrainCost: 4,
+              description: 'A short temporal displacement through a fractured phase state.',
+              techniques: [
+                {
+                  name: 'Temporal Flicker',
+                  description: 'Briefly phase out of normal time.',
+                  activationType: 'Action',
+                  energyCost: 8,
+                  cooldownTurns: 1,
+                },
+              ],
+            }),
+            source: 'AI_PRIMARY',
+            providerId: 'google_gemini',
+            modelId: 'gemini-3.5-flash',
+            attempts: 1,
+          };
+        }
+
         let name = 'Lorien';
         if (lowerPrompt.includes('torvin')) {
           name = 'Torvin';

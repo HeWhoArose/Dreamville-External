@@ -818,6 +818,7 @@ test('Phase 12 regression: Character Genesis can expand a configured route with 
 	orchestrator.registerModel(model('phase12_ai_recovery', 'recovery-character-extract', ['character.extract']));
 	orchestrator.setFallbackChain('character.extract', [
 		'phase12_configured_primary::configured-character-extract',
+		'phase12_ai_recovery::recovery-character-extract',
 		'provider_deterministic_emergency::emergency-fallback-local',
 	]);
 	orchestrator.pinModelForTask('character.extract', 'phase12_configured_primary::configured-character-extract');

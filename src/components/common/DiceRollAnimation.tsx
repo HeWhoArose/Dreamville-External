@@ -117,6 +117,7 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 	const [isRolling, setIsRolling] = useState(false);
 	const [revealed, setRevealed] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const [useCssFallback, setUseCssFallback] = useState(false);
 	const autoRollStartedRef = useRef(false);
 
 	const diceSides = useMemo(() => expandDiceTerms(roll), [roll]);
@@ -133,28 +134,41 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 		initializationRef.current = (async () => {
 			const module = await import('@3d-dice/dice-box-threejs');
 			const DiceBox = module.default;
-			const box = new DiceBox(`#${containerId}`, {
-				assetPath: '/assets/dice-box/',
-				framerate: 1 / 60,
-				sounds: false,
-				volume: 0,
-				shadows: true,
-				theme_surface: 'green-felt',
-				theme_colorset: 'diceOfRolling',
-				theme_material: 'plastic',
-				gravity_multiplier: 400,
-				light_intensity: 0.78,
-				baseScale: 80,
-				strength: 1.2,
-			});
-			await box.initialize();
-			diceBoxRef.current = box;
-			setIsInitializing(false);
-			return box;
+			try {
+				const box = new DiceBox(`#${containerId}`, {
+					assetPath: '/assets/dice-box/',
+					framerate: 1 / 60,
+					sounds: false,
+					volume: 0,
+					shadows: true,
+					theme_surface: 'green-felt',
+					theme_colorset: 'white',
+					theme_material: 'plastic',
+					gravity_multiplier: 400,
+					light_intensity: 0.78,
+					baseScale: 92,
+					strength: 1.15,
+				});
+				await box.initialize();
+				diceBoxRef.current = box;
+				setIsInitializing(false);
+				setUseCssFallback(false);
+				return box;
+			} catch (primaryError) {
+				// The engine is still the authoritative visual dice system, but a missing
+				// theme asset must never leave the player with a broken roll card.
+				console.warn('[DiceRollAnimation] 3D theme initialization failed; using CSS presentation fallback.', primaryError);
+				setUseCssFallback(true);
+				setError(null);
+				setIsInitializing(false);
+				return null;
+			}
 		})().catch((err) => {
 			initializationRef.current = null;
 			setIsInitializing(false);
-			throw err;
+			setUseCssFallback(true);
+			setError(null);
+			return null;
 		});
 
 		return initializationRef.current;
@@ -201,7 +215,10 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 
 		try {
 			const box = await initializeDiceBox();
-			if (!roll.individualDice.length) {
+
+			if (!box || useCssFallback) {
+				await new Promise((resolve) => setTimeout(resolve, 1150));
+			} else if (!roll.individualDice.length) {
 				await box.roll(formulaWithoutModifier);
 			} else {
 				const predeterminedValues = [...roll.individualDice];
@@ -301,14 +318,31 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 
 			<div
 				id={containerId}
-				className="relative h-56 overflow-hidden bg-[radial-gradient(circle_at_50%_35%,rgba(167,139,250,0.16),transparent_45%),linear-gradient(135deg,#120d24,#07131a)]"
+				className="relative h-64 overflow-hidden bg-[radial-gradient(circle_at_50%_28%,rgba(255,255,255,0.12),transparent_22%),radial-gradient(circle_at_50%_40%,rgba(52,104,76,0.34),transparent_62%),linear-gradient(180deg,#173625 0%,#0b2116 100%)]"
 				aria-label={`3D physical dice table for ${roll.formula}`}
-			/>
+			>
+				{useCssFallback && (
+					<div className="absolute inset-0 flex items-center justify-center">
+						<div className={`relative flex h-28 w-28 items-center justify-center rounded-[24px] border-2 border-white/30 bg-gradient-to-br from-white via-stone-100 to-stone-300 text-5xl font-black text-stone-900 shadow-[0_24px_55px_rgba(0,0,0,0.45)] ${isRolling ? 'animate-[dice-throw_1150ms_cubic-bezier(.2,.8,.25,1)]' : ''}`}>
+							<span>{revealed ? (roll.individualDice[0] ?? total) : 'D20'}</span>
+							<div className="absolute inset-[6px] rounded-[18px] border border-stone-400/30" />
+						</div>
+					</div>
+				)}
+				<div className="pointer-events-none absolute inset-x-5 bottom-4 h-10 rounded-[50%] bg-black/30 blur-xl" />
+				{!revealed && !isRolling && (
+					<div className="pointer-events-none absolute inset-0 flex items-end justify-center pb-5">
+						<span className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-[9px] font-bold uppercase tracking-[0.22em] text-white/60 backdrop-blur-sm">
+							{isInitializing ? 'Preparing the table…' : 'Tap Roll to throw'}
+						</span>
+					</div>
+				)}
+			</div>
 
 			<div className="grid grid-cols-2 gap-2 border-t border-white/8 bg-black/20 px-4 py-3 sm:grid-cols-4">
 				{diceSides.slice(0, 8).map((sides, index) => (
 					<div key={`${roll.rollId}-${index}`} className="rounded-xl border border-white/8 bg-white/[0.03] px-2.5 py-2 text-center">
-						<p className="text-[9px] font-bold uppercase tracking-[0.18em] text-stone-500">D{sides}</p>
+						<p className="text-[9px] font-bold uppercase tracking-[0.18em] text-stone-400">D{sides}</p>
 						<p className={`mt-0.5 text-lg font-black ${revealed ? 'text-white' : 'text-stone-600'}`}>
 							{revealed ? roll.individualDice[index] ?? '—' : '•'}
 						</p>
@@ -360,11 +394,21 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 				)}
 			</div>
 
-			{error && (
+			{error && !useCssFallback && (
 				<div className="border-t border-rose-400/10 bg-rose-400/5 px-4 py-3 text-xs text-rose-200">
 					{error}
 				</div>
 			)}
+
+<style>{`
+			@keyframes dice-throw {
+				0% { transform: translate3d(-36px,-22px,0) rotate(-24deg) scale(.72); }
+				25% { transform: translate3d(26px,-48px,0) rotate(120deg) scale(.9); }
+				55% { transform: translate3d(-12px,-8px,0) rotate(255deg) scale(1.02); }
+				78% { transform: translate3d(8px,6px,0) rotate(330deg) scale(.98); }
+				100% { transform: translate3d(0,0,0) rotate(360deg) scale(1); }
+			}
+		`}</style>
 		</div>
 	);
 };

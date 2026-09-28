@@ -2414,9 +2414,12 @@ class ApiClient {
         payload?.error || `Failed to extract character draft: HTTP ${res.status}`
       );
       error.code = payload?.code;
+      error.status = res.status;
       error.requiresDeterministicConfirmation = payload?.requiresDeterministicConfirmation === true;
       error.reason = payload?.reason;
+      error.fallbackReason = payload?.fallbackReason;
       error.attemptsTrail = Array.isArray(payload?.attemptsTrail) ? payload.attemptsTrail : [];
+      error.preflightSkipped = Array.isArray(payload?.preflightSkipped) ? payload.preflightSkipped : [];
       throw error;
     }
 

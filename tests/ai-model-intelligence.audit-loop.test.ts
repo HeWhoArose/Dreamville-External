@@ -164,10 +164,20 @@ test('AI model intelligence audit: auto-arrange never assigns an unverified task
 		'narrative.review',
 		JSON.stringify({ review: 'Verified review canary.' }),
 	);
-	adapter.cannedResponses.set(
-		'summary.scene',
-		JSON.stringify({ unexpected: 'Wrong summary task shape.' }),
-	);
+	const baseGenerate = adapter.generate.bind(adapter);
+	adapter.generate = async (task, prompt, options) => {
+		if (task === 'summary.scene') {
+			return {
+				text: '',
+				latencyMs: adapter.simulatedLatencyMs,
+				inputTokens: Math.ceil(prompt.length / 4),
+				outputTokens: 0,
+				modelId: 'mock-model',
+				providerId: adapter.providerId,
+			};
+		}
+		return baseGenerate(task, prompt, options);
+	};
 
 	orchestrator.registerAdapter(adapter);
 	orchestrator.registerModel(

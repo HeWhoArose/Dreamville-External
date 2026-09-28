@@ -489,6 +489,8 @@ Rules:
           {
             timeoutMs: 20000,
             maxTokens: 4096,
+            allowAdaptiveAiRecovery: true,
+            allowDeterministicFallback: false,
             validateResponse: (text) => {
               const parsed = this.parseJsonFromAiResponse(text);
               if (!parsed || !this.isValidCharacterExtractionShape(parsed)) {
@@ -1337,6 +1339,8 @@ IMPORTANT:
         'Return only the requested structured custom capability JSON.',
         {
           timeoutMs: 12000,
+          allowAdaptiveAiRecovery: true,
+          allowDeterministicFallback: false,
           validateResponse: (text) => {
             const parsed = this.parseJsonFromAiResponse(text);
             return parsed && typeof parsed.name === 'string' && Array.isArray(parsed.techniques)
@@ -1363,8 +1367,9 @@ IMPORTANT:
     }
 
     if (!proposal || !proposal.name) {
-      proposal = this.proceduralCustomCapability(concept);
-      generatedProvenance = 'DETERMINISTIC_FALLBACK';
+      throw this.buildAiUnavailableError(
+        'AI custom capability generation returned no usable proposal. Deterministic fallback was withheld.',
+      );
     }
 
     const rawEffect = proposal?.effectDefinition && typeof proposal.effectDefinition === 'object' ? proposal.effectDefinition : {};
@@ -1524,7 +1529,11 @@ OUTPUT STRICT JSON:
       const response = await worldRepository.getAiOrchestrator().executeTaskGeneration(
         'character.extract',
         prompt,
-        'Return only the requested progression selection JSON.'
+        'Return only the requested progression selection JSON.',
+        {
+          allowAdaptiveAiRecovery: true,
+          allowDeterministicFallback: false,
+        },
       );
       if (response.source === 'DETERMINISTIC_FALLBACK') {
         const error: any = new Error(
@@ -1775,7 +1784,11 @@ Provide at least one useful feature.
       const response = await worldRepository.getAiOrchestrator().executeTaskGeneration(
         'character.extract',
         prompt,
-        'Return only the requested custom progression module JSON.'
+        'Return only the requested custom progression module JSON.',
+        {
+          allowAdaptiveAiRecovery: true,
+          allowDeterministicFallback: false,
+        },
       );
       if (response.source === 'DETERMINISTIC_FALLBACK') {
         const error: any = new Error(
@@ -1981,7 +1994,11 @@ IMPORTANT:
       const response = await orchestrator.executeTaskGeneration(
         'narrative.generate',
         prompt,
-        'Return only the requested structured custom feat JSON.'
+        'Return only the requested structured custom feat JSON.',
+        {
+          allowAdaptiveAiRecovery: true,
+          allowDeterministicFallback: false,
+        },
       );
       if (response.source === 'DETERMINISTIC_FALLBACK') {
         throw this.buildAiUnavailableError(
@@ -1998,24 +2015,9 @@ IMPORTANT:
     }
 
     if (!proposal || !proposal.name) {
-      proposal = {
-        name: featName || 'Custom Feat',
-        description: concept || `Mastery associated with ${featName}.`,
-        prerequisites: [],
-        tags: ['Custom', 'Feat'],
-        effects: [
-          {
-            type: 'PASSIVE_TRAIT',
-            target: featName,
-            scope: 'GENERAL',
-            modifier: 1,
-            value: true,
-            condition: 'Always active',
-            description: `Grants benefits of ${featName}.`,
-          },
-        ],
-      };
-      generatedProvenance = 'DETERMINISTIC_FALLBACK';
+      throw this.buildAiUnavailableError(
+        'AI custom feat generation returned no usable proposal. Deterministic fallback was withheld.',
+      );
     }
 
     const feat: CharacterFeat = {
@@ -2083,7 +2085,11 @@ IMPORTANT: Provide sensible starting default value, optional min/max, clear desc
       const response = await orchestrator.executeTaskGeneration(
         'narrative.generate',
         prompt,
-        'Return only the requested structured stat definition JSON.'
+        'Return only the requested structured stat definition JSON.',
+        {
+          allowAdaptiveAiRecovery: true,
+          allowDeterministicFallback: false,
+        },
       );
       if (response.source === 'DETERMINISTIC_FALLBACK') {
         throw this.buildAiUnavailableError(
@@ -2100,17 +2106,9 @@ IMPORTANT: Provide sensible starting default value, optional min/max, clear desc
     }
 
     if (!proposal || !proposal.name) {
-      proposal = {
-        name,
-        value: 10,
-        baseValue: 10,
-        min: 0,
-        max: 100,
-        description: concept,
-        mechanicalRole: 'Custom stat defining character capability.',
-        worldCompatibility: 'Compatible with world rules.',
-      };
-      generatedProvenance = 'DETERMINISTIC_FALLBACK';
+      throw this.buildAiUnavailableError(
+        'AI custom attribute generation returned no usable proposal. Deterministic fallback was withheld.',
+      );
     }
 
     return {
@@ -2178,7 +2176,11 @@ IMPORTANT:
       const response = await orchestrator.executeTaskGeneration(
         'narrative.generate',
         prompt,
-        'Return only the requested structured custom skill JSON.'
+        'Return only the requested structured custom skill JSON.',
+        {
+          allowAdaptiveAiRecovery: true,
+          allowDeterministicFallback: false,
+        },
       );
       if (response.source === 'DETERMINISTIC_FALLBACK') {
         throw this.buildAiUnavailableError(
@@ -2195,15 +2197,9 @@ IMPORTANT:
     }
 
     if (!proposal || !proposal.name) {
-      proposal = {
-        name: skillName,
-        governingAbility: 'Dexterity',
-        description: concept,
-        mechanicalDescription: `Specialized skill proficiency derived from ${concept}.`,
-        tags: ['Custom', 'Skill'],
-        worldCompatibility: 'Fits world setting.',
-      };
-      generatedProvenance = 'DETERMINISTIC_FALLBACK';
+      throw this.buildAiUnavailableError(
+        'AI custom skill generation returned no usable proposal. Deterministic fallback was withheld.',
+      );
     }
 
     return {
@@ -2306,6 +2302,10 @@ OUTPUT STRICT JSON:
         'narrative.generate',
         prompt,
         'Return only the requested JSON object containing the additional skill proposals.',
+        {
+          allowAdaptiveAiRecovery: true,
+          allowDeterministicFallback: false,
+        },
       );
 
       if (response.source === 'DETERMINISTIC_FALLBACK') {
@@ -2448,8 +2448,18 @@ OUTPUT STRICT JSON:
       const response = await worldRepository.getAiOrchestrator().executeTaskGeneration(
         'narrative.generate',
         prompt,
-        'Return only the requested current condition state JSON.'
+        'Return only the requested current condition state JSON.',
+        {
+          allowAdaptiveAiRecovery: true,
+          allowDeterministicFallback: false,
+        },
       );
+      if (response.source === 'DETERMINISTIC_FALLBACK') {
+        throw this.buildAiUnavailableError(
+          response.fallbackReason || 'AI starting-condition inference is unavailable; deterministic fallback was withheld.',
+          response,
+        );
+      }
       if (response.text) raw = this.parseJsonFromAiResponse(response.text);
     } catch (error) {
       console.warn('[CharacterGenesisService] Starting condition inference failed; using safe baseline.', error);
@@ -2554,7 +2564,11 @@ IMPORTANT: Select an appropriate category and paper-doll slot. If the item is a 
       const response = await orchestrator.executeTaskGeneration(
         'narrative.generate',
         prompt,
-        'Return only the requested structured custom equipment JSON.'
+        'Return only the requested structured custom equipment JSON.',
+        {
+          allowAdaptiveAiRecovery: true,
+          allowDeterministicFallback: false,
+        },
       );
       if (response.source === 'DETERMINISTIC_FALLBACK') {
         throw this.buildAiUnavailableError(
@@ -2571,17 +2585,9 @@ IMPORTANT: Select an appropriate category and paper-doll slot. If the item is a 
     }
 
     if (!proposal || !proposal.name) {
-      proposal = {
-        name: itemName,
-        category: 'Weapon',
-        slot: 'mainHand',
-        description: concept,
-        rarity: 'Uncommon',
-        quantity: 1,
-        properties: { Special: concept },
-        effects: [],
-      };
-      generatedProvenance = 'DETERMINISTIC_FALLBACK';
+      throw this.buildAiUnavailableError(
+        'AI custom equipment generation returned no usable proposal. Deterministic fallback was withheld.',
+      );
     }
 
     const finalCategory = proposal.category || 'Weapon';

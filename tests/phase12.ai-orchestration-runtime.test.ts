@@ -479,7 +479,7 @@ test('Phase 12 audit: task candidate preflight is side-effect-free and reports k
 	assert.equal(result.contextTokens, 100);
 	assert.equal(result.reservedOutputTokens, 900);
 	assert.equal(result.outputCapacityKnown, true);
-	assert.equal(result.taskContractVerified, true);
+	assert.equal(result.taskContractCompatible, true);
 
 	const after = JSON.stringify({
 		model: orchestrator.getModel('phase12_preflight_provider', 'preflight-model'),
@@ -544,5 +544,5 @@ test('Phase 12 audit: task candidate preflight preserves UNKNOWN metadata instea
 	assert.equal(result.state, 'READY');
 	assert.equal(result.contextCapacityKnown, false);
 	assert.equal(result.outputCapacityKnown, false);
-	assert.equal(result.taskContractVerified, true);
+	assert.equal(result.taskContractCompatible, true);
 });

@@ -698,7 +698,7 @@ test('Phase 12 audit: task-aware auto arrange verifies an actual task response a
 	assert.equal(result.results.find((entry) => entry.modelId === 'auto-ready')?.status, 'READY');
 	assert.deepEqual(orchestrator.getFallbackChain('narrative.review').slice(0, 1), ['phase12_auto_arrange_provider::auto-ready']);
 	assert.ok(result.results.find((entry) => entry.modelId === 'auto-ready')?.verifiedTasks?.includes('narrative.review'));
-	assert.equal(originalGetAllModels.length > 0, true);
+	assert.equal(originalGetAllModels().length > 0, true);
 });
 
 

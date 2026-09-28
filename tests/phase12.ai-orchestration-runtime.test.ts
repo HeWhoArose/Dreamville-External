@@ -426,7 +426,7 @@ test('Phase 12: a cooling model is excluded from normal selection', () => {
 
 test('Phase 12 regression: creative narration accepts valid prose without forcing deterministic fallback', () => {
 	const orchestrator = createTestOrchestrator();
-	const prose = 'The lanterns along the flooded corridor shiver as the pressure seals breathe in sequence. Beyond the rusted arch, cold blue light spills across the water and catches on the protagonist\\'s gloves. Somewhere behind the bulkhead, something heavy shifts, then becomes still again.';
+	const prose = "The lanterns along the flooded corridor shiver as the pressure seals breathe in sequence. Beyond the rusted arch, cold blue light spills across the water and catches on the protagonist's gloves. Somewhere behind the bulkhead, something heavy shifts, then becomes still again.";
 
 	const validation = orchestrator.validateTurnPackage(prose, { allowPlainTextNarration: true });
 

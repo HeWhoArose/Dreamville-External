@@ -5928,6 +5928,18 @@ export class MultiModelOrchestrator {
       contextTokens?: number;
       forceModelId?: string;
       validateResponse?: (text: string) => TaskResponseValidationResult;
+      /**
+       * When true, a configured task route may be expanded with additional eligible AI models
+       * before the deterministic emergency floor is considered. This is opt-in so existing
+       * manual/configured routes keep their current semantics unless a caller explicitly asks
+       * for AI-only recovery.
+       */
+      allowAdaptiveAiRecovery?: boolean;
+      /**
+       * When false, never execute the deterministic emergency provider. Instead surface
+       * AI_UNAVAILABLE after the AI candidate chain has been exhausted.
+       */
+      allowDeterministicFallback?: boolean;
     }
   ): Promise<{
     text: string;
@@ -5954,6 +5966,8 @@ export class MultiModelOrchestrator {
   }> {
     const contract = getAiTaskContract(task);
     const contractValidator = options?.validateResponse || ((text: string) => validateAiTaskResponse(task, text));
+    const allowAdaptiveAiRecovery = options?.allowAdaptiveAiRecovery === true;
+    const allowDeterministicFallback = options?.allowDeterministicFallback !== false;
     this.refreshAllProviderModelStatuses();
     const timeoutMs = options?.timeoutMs || 35000;
     const contextTokens = options?.contextTokens ?? 0;
@@ -6091,7 +6105,7 @@ export class MultiModelOrchestrator {
         this.isCandidateUsable(candidate, task, contextTokens)
     ).length;
 
-    if (!categoryHasManualOverride && !hasConfiguredTaskChain && runnableNonEmergencyCount < 2) {
+    if (!categoryHasManualOverride && (!hasConfiguredTaskChain || allowAdaptiveAiRecovery) && runnableNonEmergencyCount < 2) {
       for (const model of usableCandidates) {
         if (candidateKeys.has(this.modelKey(model))) continue;
         if (!model.roleEligibility.includes(task)) continue;
@@ -6125,13 +6139,19 @@ export class MultiModelOrchestrator {
       (model) => !model.isEmergencyFloor && Boolean(this.getAdapter(model.providerId))
     ).length;
 
-    if (!categoryHasManualOverride && runnableNonEmergency < 2) {
+    if (!categoryHasManualOverride && allowAdaptiveAiRecovery && runnableNonEmergency < 2) {
       for (const model of usableCandidates) {
         if (candidateChain.some((candidate) => this.modelKey(candidate) === this.modelKey(model))) continue;
         if (!this.getAdapter(model.providerId)) continue;
         candidateChain.push(model);
         if (candidateChain.filter((candidate) => !candidate.isEmergencyFloor && Boolean(this.getAdapter(candidate.providerId))).length >= 4) break;
       }
+    }
+
+    if (allowAdaptiveAiRecovery) {
+      const aiCandidates = candidateChain.filter((candidate) => !candidate.isEmergencyFloor);
+      const emergencyCandidates = candidateChain.filter((candidate) => candidate.isEmergencyFloor);
+      candidateChain = [...aiCandidates, ...emergencyCandidates];
     }
 
     let totalAttempts = 0;
@@ -6154,7 +6174,7 @@ export class MultiModelOrchestrator {
       // this escape hatch so their order remains authoritative.
       if (
         !categoryHasManualOverride &&
-        !hasConfiguredTaskChain &&
+        (!hasConfiguredTaskChain || allowAdaptiveAiRecovery) &&
         cIdx === candidateChain.length - 2 &&
         !candidateChain[cIdx].isEmergencyFloor &&
         candidateChain[cIdx + 1]?.isEmergencyFloor
@@ -6316,6 +6336,17 @@ export class MultiModelOrchestrator {
       isEmergencyFloor: true,
       fallbackEligibility: true,
     };
+
+    if (!allowDeterministicFallback) {
+      const error: any = new Error(
+        `All AI candidates were exhausted for task '${task}'. Deterministic emergency fallback was withheld.`
+      );
+      error.code = 'AI_UNAVAILABLE';
+      error.fallbackReason = error.message;
+      error.attemptsTrail = attemptsTrail;
+      error.preflightSkipped = preflightSkipped;
+      throw error;
+    }
 
     const emergencyAdapter = this.getAdapter(emergency.providerId);
     if (emergencyAdapter) {
@@ -6569,9 +6600,16 @@ export class MultiModelOrchestrator {
     };
   }
 
+  public static isFreeModelCandidate(model: ModelRegistryRecord): boolean {
+    const label = [model.modelId, model.displayName, model.description].filter(Boolean).join(' ');
+    const namedFree = /(?:^|[\\s_:/.-])free(?:$|[\\s_:/.-])/i.test(label);
+    return model.billingState === 'FREE' || model.isPaidModel === false || namedFree;
+  }
+
   public async autoConfigureFallbacks(options?: {
     maxFallbacksPerCategory?: number;
     concurrency?: number;
+    includeFreeModels?: boolean;
   }): Promise<{
     success: boolean;
     timestamp: number;
@@ -6597,6 +6635,7 @@ export class MultiModelOrchestrator {
   }> {
     const maxFallbacks = Math.max(2, Math.min(6, options?.maxFallbacksPerCategory ?? 4));
     const concurrency = Math.max(1, Math.min(6, Math.trunc(options?.concurrency ?? 4)));
+    const includeFreeModels = options?.includeFreeModels === true;
 
     await this.discoverAndRegisterModels({ forceRefresh: true });
     await this.refreshProviderQuotaSnapshots();
@@ -6920,6 +6959,12 @@ export class MultiModelOrchestrator {
             (a.providerId + '::' + a.modelId).localeCompare(b.providerId + '::' + b.modelId);
         });
 
+      if (includeFreeModels) {
+        const freeReady = eligibleReady.filter((model) => MultiModelOrchestrator.isFreeModelCandidate(model));
+        const paidReady = eligibleReady.filter((model) => !MultiModelOrchestrator.isFreeModelCandidate(model));
+        eligibleReady.splice(0, eligibleReady.length, ...freeReady, ...paidReady);
+      }
+
       const topKeys = eligibleReady
         .filter((model) => model.fallbackEligibility !== false)
         .slice(0, maxFallbacks)
@@ -6954,7 +6999,8 @@ export class MultiModelOrchestrator {
         concurrency +
         '). Configured up to ' +
         maxFallbacks +
-        ' fallbacks per task while preserving manual category overrides and task pins.',
+        ' fallbacks per task while preserving manual category overrides and task pins.' +
+        (includeFreeModels ? ' Free/explicitly-free model candidates were prioritized where eligible.' : ''),
     };
   }
 

@@ -142,6 +142,7 @@ export interface ModelRuntimeStatus {
     value?: number;
     exact: boolean;
     source: 'PROVIDER' | 'ESTIMATE' | 'UNKNOWN';
+    unit?: 'CREDITS' | 'TOKENS' | 'REQUESTS' | 'UNKNOWN';
   };
 }
 
@@ -2448,12 +2449,14 @@ export class MultiModelOrchestrator {
         value: remaining,
         exact: false,
         source: 'ESTIMATE',
+        unit: 'TOKENS',
       };
       model.quotaEvidenceSource = 'ESTIMATE';
     } else if (!status.headroom || status.headroom.source === 'UNKNOWN') {
       status.headroom = {
         exact: false,
         source: 'UNKNOWN',
+        unit: 'UNKNOWN',
       };
     }
 
@@ -2512,6 +2515,7 @@ export class MultiModelOrchestrator {
         value: 0,
         exact: true,
         source: 'PROVIDER',
+        unit: 'UNKNOWN',
       };
       model.quotaEvidenceSource = 'PROVIDER';
     }
@@ -6427,6 +6431,7 @@ export class MultiModelOrchestrator {
             runtime.headroom = {
               exact: false,
               source: 'UNKNOWN',
+              unit: 'UNKNOWN',
             };
           }
           if (model.quotaEvidenceSource !== 'PROVIDER') {

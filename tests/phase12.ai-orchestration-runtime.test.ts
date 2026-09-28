@@ -546,3 +546,92 @@ test('Phase 12 audit: task candidate preflight preserves UNKNOWN metadata instea
 	assert.equal(result.outputCapacityKnown, false);
 	assert.equal(result.taskContractCompatible, true);
 });
+
+
+test('Phase 12 audit: execution preflight skips a candidate whose context plus reserved output exceeds capacity', async () => {
+	const orchestrator = createTestOrchestrator();
+	const tooSmall = new DeterministicMockAdapter('phase12_capacity_fail');
+	const healthy = new DeterministicMockAdapter('phase12_capacity_ok');
+
+	orchestrator.registerAdapter(tooSmall);
+	orchestrator.registerAdapter(healthy);
+	const primary = model('phase12_capacity_fail', 'too-small', ['narrative.generate']);
+	primary.contextWindow = 100;
+	primary.outputTokenLimit = 100;
+	const fallback = model('phase12_capacity_ok', 'capacity-ok', ['narrative.generate']);
+	fallback.contextWindow = 10000;
+	fallback.outputTokenLimit = 2000;
+	orchestrator.registerModel(primary);
+	orchestrator.registerModel(fallback);
+
+	orchestrator.setFallbackChain('narrative.generate', [
+		'phase12_capacity_fail::too-small',
+		'phase12_capacity_ok::capacity-ok',
+		'provider_deterministic_emergency::emergency-fallback-local',
+	]);
+	orchestrator.pinModelForTask('narrative.generate', 'phase12_capacity_fail::too-small');
+
+	const result = await orchestrator.executeTaskGeneration(
+		'narrative.generate',
+		'capacity preflight test',
+		undefined,
+		{ contextTokens: 80, maxTokens: 40, timeoutMs: 100 },
+	);
+
+	assert.equal(result.modelId, 'capacity-ok');
+	assert.equal(result.source, 'AI_FALLBACK');
+	assert.equal(healthy.callHistory.length, 1);
+	assert.equal(tooSmall.callHistory.length, 0);
+});
+
+test('Phase 12 audit: task-contract failure advances to the next fallback model instead of stopping at first provider response', async () => {
+	const orchestrator = createTestOrchestrator();
+	const invalid = new DeterministicMockAdapter('phase12_contract_invalid');
+	const valid = new DeterministicMockAdapter('phase12_contract_valid');
+
+	invalid.cannedResponses.set('narrative.generate', JSON.stringify({
+		response: 'wrong task shape',
+	}));
+	valid.cannedResponses.set('narrative.generate', JSON.stringify({
+		narrative: ['The fallback model produced a valid narrative.'],
+		dialogue: [],
+		events: [],
+		stateChanges: [],
+		memoryCandidates: [],
+		audioCues: [],
+	}));
+
+	orchestrator.registerAdapter(invalid);
+	orchestrator.registerAdapter(valid);
+	orchestrator.registerModel(model('phase12_contract_invalid', 'invalid-contract', ['narrative.generate']));
+	orchestrator.registerModel(model('phase12_contract_valid', 'valid-contract', ['narrative.generate']));
+
+	orchestrator.setFallbackChain('narrative.generate', [
+		'phase12_contract_invalid::invalid-contract',
+		'phase12_contract_valid::valid-contract',
+		'provider_deterministic_emergency::emergency-fallback-local',
+	]);
+	orchestrator.pinModelForTask('narrative.generate', 'phase12_contract_invalid::invalid-contract');
+
+	const result = await orchestrator.executeTaskGeneration(
+		'narrative.generate',
+		'semantic fallback test',
+		undefined,
+		{
+			timeoutMs: 100,
+			validateResponse: (text) => {
+				const validation = orchestrator.validateTurnPackage(text, { allowPlainTextNarration: false });
+				return validation.valid
+					? { valid: true }
+					: { valid: false, errorReason: validation.errorReason };
+			},
+		},
+	);
+
+	assert.equal(result.source, 'AI_FALLBACK');
+	assert.equal(result.modelId, 'valid-contract');
+	assert.equal(invalid.callHistory.length, 1);
+	assert.equal(valid.callHistory.length, 1);
+	assert.equal(result.attemptsTrail[0]?.status, 'FAILED');
+	assert.match(result.attemptsTrail[0]?.error || '', /validation/i);
+});

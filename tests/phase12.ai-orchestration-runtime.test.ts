@@ -735,6 +735,7 @@ test('Phase 12 audit: provider quota evidence overrides unknown model headroom w
 	assert.equal(runtime?.headroom?.exact, true);
 	assert.equal(runtime?.headroom?.source, 'PROVIDER');
 	assert.equal(runtime?.headroom?.value, 7);
+	assert.equal(runtime?.headroom?.unit, 'CREDITS');
 
 	const otherRuntime = orchestrator.getModelRuntimeStatus().find((entry) => entry.modelId === 'other-model');
 	assert.ok(otherRuntime);

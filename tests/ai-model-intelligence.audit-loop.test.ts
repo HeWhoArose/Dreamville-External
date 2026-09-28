@@ -155,3 +155,53 @@ test('AI model intelligence audit loop preserves ordered fallback and only advan
 		assert.equal(result.attemptsTrail[1]?.status, 'SUCCESS');
 	}
 });
+
+
+test('AI model intelligence audit: auto-arrange never assigns an unverified task from a model that only passed another task canary', async () => {
+	const orchestrator = new MultiModelOrchestrator();
+	const adapter = new DeterministicMockAdapter('audit_partial_verification');
+	adapter.cannedResponses.set(
+		'narrative.review',
+		JSON.stringify({ review: 'Verified review canary.' }),
+	);
+	adapter.cannedResponses.set(
+		'summary.scene',
+		JSON.stringify({ unexpected: 'Wrong summary task shape.' }),
+	);
+
+	orchestrator.registerAdapter(adapter);
+	orchestrator.registerModel(
+		createAuditModel(
+			'audit_partial_verification',
+			'partial-verification',
+			['narrative.review', 'summary.scene'],
+		),
+	);
+
+	for (let pass = 0; pass < 10; pass++) {
+		const result = await orchestrator.autoConfigureFallbacks({
+			maxFallbacksPerCategory: 2,
+			concurrency: 2,
+		});
+
+		const modelResult = result.results.find((entry) => entry.modelId === 'partial-verification');
+		assert.ok(modelResult);
+		assert.equal(modelResult?.status, 'READY');
+		assert.ok(modelResult?.verifiedTasks?.includes('narrative.review'));
+		assert.equal(modelResult?.verifiedTasks?.includes('summary.scene'), false);
+		assert.ok(
+			modelResult?.failedTasks?.some((entry) => entry.task === 'summary.scene'),
+			'The failed task must remain visible in Auto Arrange diagnostics.',
+		);
+
+		assert.ok(
+			orchestrator.getFallbackChain('narrative.review').includes('audit_partial_verification::partial-verification'),
+			'Verified task should receive the model in its automatic route.',
+		);
+		assert.equal(
+			orchestrator.getFallbackChain('summary.scene').includes('audit_partial_verification::partial-verification'),
+			false,
+			'Unverified task must not receive a model merely because another task in the model passed.',
+		);
+	}
+});

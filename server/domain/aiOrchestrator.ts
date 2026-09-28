@@ -6252,6 +6252,7 @@ export class MultiModelOrchestrator {
         let providerRes: ProviderGenerateResult;
         try {
           providerRes = await adapter.generate(task, prompt, {
+            allowDeterministicFallback,
             timeoutMs,
             maxTokens: options?.maxTokens,
             abortSignal: abortController.signal,

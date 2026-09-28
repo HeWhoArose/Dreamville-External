@@ -700,3 +700,43 @@ test('Phase 12 audit: task-aware auto arrange verifies an actual task response a
 	assert.ok(result.results.find((entry) => entry.modelId === 'auto-ready')?.verifiedTasks?.includes('narrative.review'));
 	assert.equal(originalGetAllModels.length > 0, true);
 });
+
+
+test('Phase 12 audit: provider quota evidence overrides unknown model headroom without touching unrelated providers', async () => {
+	const orchestrator = createTestOrchestrator();
+
+	const providerWithQuota = new DeterministicMockAdapter('phase12_quota_provider') as DeterministicMockAdapter & {
+		getQuotaStatus?: () => Promise<any>;
+	};
+	providerWithQuota.getQuotaStatus = async () => ({
+		providerId: 'phase12_quota_provider',
+		available: true,
+		source: 'PROVIDER',
+		exact: true,
+		remaining: 7,
+		limit: 25,
+		reset: 'daily',
+		billingState: 'ACCOUNT_DEPENDENT',
+	});
+
+	const otherProvider = new DeterministicMockAdapter('phase12_other_provider');
+	orchestrator.registerAdapter(providerWithQuota);
+	orchestrator.registerAdapter(otherProvider);
+
+	const quotaModel = model('phase12_quota_provider', 'quota-model', ['narrative.generate']);
+	const otherModel = model('phase12_other_provider', 'other-model', ['narrative.generate']);
+	orchestrator.registerModel(quotaModel);
+	orchestrator.registerModel(otherModel);
+
+	(await (orchestrator as any).refreshProviderQuotaSnapshots()) as any;
+
+	const runtime = orchestrator.getModelRuntimeStatus().find((entry) => entry.modelId === 'quota-model');
+	assert.ok(runtime);
+	assert.equal(runtime?.headroom?.exact, true);
+	assert.equal(runtime?.headroom?.source, 'PROVIDER');
+	assert.equal(runtime?.headroom?.value, 7);
+
+	const otherRuntime = orchestrator.getModelRuntimeStatus().find((entry) => entry.modelId === 'other-model');
+	assert.ok(otherRuntime);
+	assert.equal(otherRuntime?.headroom?.source, 'UNKNOWN');
+});

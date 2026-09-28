@@ -106,7 +106,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         <Button
           variant="subtle"
           size="sm"
-          onClick={() => onNavigate('engine.settings')}
+          onClick={() => onNavigate('settings')}
           className="p-2 min-h-[32px]"
           aria-label="Settings"
         >

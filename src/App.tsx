@@ -1127,7 +1127,7 @@ export const App: React.FC = () => {
                   ? 'MODELS'
                   : currentRoute === 'engine.voice' || currentRoute === 'engine.audio'
                   ? 'AUDIO'
-                  : 'MODELS'
+                  : 'GENERAL'
               }
               onOpenAdvancedRouting={() => setIsRoutingModalOpen(true)}
               onOpenLivingBible={() => setIsLivingBibleModalOpen(true)}

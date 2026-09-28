@@ -2337,7 +2337,7 @@ OUTPUT STRICT JSON:
     let raw: any = null;
     try {
       const response = await worldRepository.getAiOrchestrator().executeTaskGeneration(
-        'narrative.generate',
+        'character.extract',
         prompt,
         'Return only the requested JSON object containing the additional skill proposals.',
         {

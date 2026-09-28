@@ -39,6 +39,30 @@ export type TaskId =
   | 'utility.inspect'
   | 'image.generate';
 
+export const ALL_GENERAL_TEXT_ROLES: TaskId[] = [
+  'narrative.generate',
+  'character.dialogue',
+  'ooc.respond',
+  'character.extract',
+  'memory.extract',
+  'character.capability.propose',
+  'story.advice',
+  'intent.interpret',
+  'capability.synthesize',
+  'capability.explain',
+  'research.query',
+  'research.world-brief',
+  'rules.adjudicate',
+  'rules.analyze',
+  'summary.scene',
+  'world.generate',
+  'combat.tactics',
+  'tactical.reason',
+  'combat.animation.plan',
+  'narrative.review',
+  'utility.inspect',
+];
+
 export type HealthState = 'Healthy' | 'Degraded' | 'Throttled' | 'Unavailable' | 'InvalidAuth' | 'DisabledByUser';
 export type QuotaState = 'Healthy' | 'Low' | 'NearExhaustion' | 'Exhausted' | 'Unknown';
 export type BillingState = 'FREE' | 'PAID' | 'ACCOUNT_DEPENDENT' | 'UNKNOWN';
@@ -955,18 +979,7 @@ export function classifyDiscoveredModel(
       quota: 'Healthy',
       latencyMs: 600,
       userPriority: 75,
-      roleEligibility: [
-        'narrative.generate',
-        'character.dialogue',
-        'ooc.respond',
-        'character.extract',
-        'character.extract',
-        'character.extract',
-        'memory.extract',
-        'summary.scene',
-        'rules.adjudicate',
-        'utility.inspect',
-      ],
+      roleEligibility: [...ALL_GENERAL_TEXT_ROLES],
       outputTokenLimit: discovered.outputTokenLimit,
       supportedInputTypes: ['text', 'image', 'audio', 'video'],
       supportedOutputTypes: ['text', 'json'],
@@ -1003,44 +1016,36 @@ export function classifyDiscoveredModel(
   }
 
   let pool: ModelPool = 'creative';
-  let roleEligibility: TaskId[] = [
-    'narrative.generate',
-    'character.dialogue',
-    'ooc.respond',
-    'memory.extract',
-    'summary.scene',
-    'rules.adjudicate',
-    'utility.inspect',
-  ];
+  let roleEligibility: TaskId[] = [...ALL_GENERAL_TEXT_ROLES];
   let userPriority = 80;
   let latencyMs = 500;
 
   if (lowerId.includes('critic')) {
     pool = 'reasoning';
-    roleEligibility = ['narrative.review', 'rules.adjudicate', 'summary.scene'];
+    roleEligibility = ['narrative.review', 'rules.adjudicate', 'summary.scene', 'rules.analyze'];
     userPriority = 85;
     latencyMs = 400;
   } else if (lowerId.includes('flash-lite') || lowerId.includes('lite')) {
     pool = 'fast';
-    roleEligibility = ['character.dialogue', 'ooc.respond', 'memory.extract', 'rules.adjudicate', 'utility.inspect'];
+    roleEligibility = [...ALL_GENERAL_TEXT_ROLES];
     userPriority = 95;
     latencyMs = 150;
     capabilities.push('low_latency', 'cost_efficient');
   } else if (lowerId.includes('flash')) {
     pool = 'fast';
-    roleEligibility = ['character.dialogue', 'ooc.respond', 'memory.extract', 'rules.adjudicate', 'utility.inspect', 'narrative.generate'];
+    roleEligibility = [...ALL_GENERAL_TEXT_ROLES];
     userPriority = 90;
     latencyMs = 250;
     capabilities.push('fast_utility');
   } else if (lowerId.includes('pro')) {
     pool = 'creative';
-    roleEligibility = ['narrative.generate', 'summary.scene', 'character.dialogue', 'ooc.respond'];
+    roleEligibility = [...ALL_GENERAL_TEXT_ROLES];
     userPriority = 100;
     latencyMs = 800;
     capabilities.push('creative_writing', 'deep_reasoning');
   } else if (lowerId.includes('long')) {
     pool = 'long_context';
-    roleEligibility = ['summary.scene', 'memory.extract'];
+    roleEligibility = ['summary.scene', 'memory.extract', 'research.query', 'research.world-brief'];
     userPriority = 85;
     latencyMs = 900;
   }
@@ -1645,7 +1650,7 @@ export class GoogleGeminiAdapter implements IProviderAdapter {
           httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
         });
 
-        const targetModel = options?.modelId || 'gemini-2.5-flash';
+        const targetModel = options?.modelId || 'gemini-3.5-flash';
         const defaultSystemPrompt = `PROMPT_VERSION: ${DREAMBOOK_PROMPT_VERSION}
 You are the Dreamville canonical narrator. Produce ONLY a valid JSON turn package matching this exact schema:
 {
@@ -1864,10 +1869,32 @@ Do not enclose in markdown ticks, output pure JSON.`;
   public getFallbackCatalog(): DiscoveredModelMetadata[] {
     return [
       {
-        id: 'gemini-2.5-pro',
-        rawName: 'models/gemini-2.5-pro',
-        displayName: 'Gemini 2.5 Pro (Primary Narrator)',
-        description: 'Flagship reasoning and narrative generation model',
+        id: 'gemini-3.5-flash',
+        rawName: 'models/gemini-3.5-flash',
+        displayName: 'Gemini 3.5 Flash (Primary Live Text Engine)',
+        description: 'High-speed primary live text engine and dialogue model',
+        inputTokenLimit: 1048576,
+        outputTokenLimit: 65536,
+        supportedActions: ['generateContent', 'countTokens'],
+        isAccessible: true,
+        lifecycleState: 'active',
+      },
+      {
+        id: 'gemini-3.8-flash',
+        rawName: 'models/gemini-3.8-flash',
+        displayName: 'Gemini 3.8 Flash (Fallback Text Model)',
+        description: 'High-speed creative and extraction model',
+        inputTokenLimit: 1048576,
+        outputTokenLimit: 65536,
+        supportedActions: ['generateContent', 'countTokens'],
+        isAccessible: true,
+        lifecycleState: 'active',
+      },
+      {
+        id: 'gemini-3.5-flash-lite',
+        rawName: 'models/gemini-3.5-flash-lite',
+        displayName: 'Gemini 3.5 Flash Lite (Fast Utility)',
+        description: 'Ultra-fast utility and extraction model',
         inputTokenLimit: 1048576,
         outputTokenLimit: 65536,
         supportedActions: ['generateContent', 'countTokens'],
@@ -1877,21 +1904,10 @@ Do not enclose in markdown ticks, output pure JSON.`;
       {
         id: 'gemini-2.5-flash',
         rawName: 'models/gemini-2.5-flash',
-        displayName: 'Gemini 2.5 Flash (Fast Utility)',
-        description: 'High-speed utility and dialogue model',
+        displayName: 'Gemini 2.5 Flash',
+        description: 'High-speed utility model',
         inputTokenLimit: 1048576,
         outputTokenLimit: 65536,
-        supportedActions: ['generateContent', 'countTokens'],
-        isAccessible: true,
-        lifecycleState: 'active',
-      },
-      {
-        id: 'gemini-1.5-pro-long',
-        rawName: 'models/gemini-1.5-pro-long',
-        displayName: 'Gemini 1.5 Pro (Long-Context Specialist)',
-        description: 'Specialized 2M token context window model',
-        inputTokenLimit: 2000000,
-        outputTokenLimit: 8192,
         supportedActions: ['generateContent', 'countTokens'],
         isAccessible: true,
         lifecycleState: 'active',
@@ -2763,18 +2779,7 @@ export class MultiModelOrchestrator {
       quota: 'Healthy',
       latencyMs: 250,
       userPriority: 125,
-      roleEligibility: [
-        'narrative.generate',
-        'character.dialogue',
-        'ooc.respond',
-        'memory.extract',
-        'character.extract',
-        'character.extract',
-        'character.extract',
-        'summary.scene',
-        'rules.adjudicate',
-        'utility.inspect',
-      ],
+      roleEligibility: [...ALL_GENERAL_TEXT_ROLES],
       fallbackEligibility: true,
       accessStatus: 'accessible',
       lifecycleState: 'active',
@@ -2793,15 +2798,7 @@ export class MultiModelOrchestrator {
       quota: 'Healthy',
       latencyMs: 250,
       userPriority: 115,
-      roleEligibility: [
-        'narrative.generate',
-        'character.dialogue',
-        'ooc.respond',
-        'memory.extract',
-        'summary.scene',
-        'rules.adjudicate',
-        'utility.inspect',
-      ],
+      roleEligibility: [...ALL_GENERAL_TEXT_ROLES],
       fallbackEligibility: true,
       accessStatus: 'accessible',
       lifecycleState: 'active',
@@ -2820,15 +2817,7 @@ export class MultiModelOrchestrator {
       quota: 'Healthy',
       latencyMs: 200,
       userPriority: 110,
-      roleEligibility: [
-        'narrative.generate',
-        'character.dialogue',
-        'ooc.respond',
-        'memory.extract',
-        'summary.scene',
-        'rules.adjudicate',
-        'utility.inspect',
-      ],
+      roleEligibility: [...ALL_GENERAL_TEXT_ROLES],
       fallbackEligibility: true,
       accessStatus: 'accessible',
       lifecycleState: 'active',
@@ -2847,15 +2836,7 @@ export class MultiModelOrchestrator {
       quota: 'Exhausted',
       latencyMs: 250,
       userPriority: 100,
-      roleEligibility: [
-        'narrative.generate',
-        'character.dialogue',
-        'ooc.respond',
-        'memory.extract',
-        'summary.scene',
-        'rules.adjudicate',
-        'utility.inspect',
-      ],
+      roleEligibility: [...ALL_GENERAL_TEXT_ROLES],
       fallbackEligibility: true,
       accessStatus: 'quota_limited',
       lifecycleState: 'active',

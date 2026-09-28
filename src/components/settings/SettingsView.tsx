@@ -122,10 +122,11 @@ const TASK_ID_MAP: Record<string, string> = {
   ruleAnalysis: 'rules.analyze',
   tacticalReasoning: 'tactical.reason',
   worldGeneration: 'world.generate',
+  characterCapabilityProposal: 'character.capability.propose',
 };
 
 export const SettingsView: React.FC<SettingsViewProps> = ({
-  initialTab = 'MODELS',
+  initialTab = 'GENERAL',
   onOpenAdvancedRouting,
   onOpenLivingBible,
   onOpenEpistemicInspector,
@@ -134,6 +135,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   className = '',
 }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
   const { settings, updateSettings, isMuted, toggleMute } = useAudioHaptic();
 
   // Provider Key Form State

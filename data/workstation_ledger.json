@@ -2907,6 +2907,26 @@
           "recordedAt": "2026-09-27T22:05:58.863Z",
           "valid": true,
           "trustedProvenance": false
+        },
+        {
+          "evidenceId": "ev_1790621685730_811",
+          "requirementId": "CH16.WORLD.LIBRARY",
+          "evidenceType": "UNIT_TEST",
+          "sourceReference": "tests/ch16_behavioral_verification.test.ts",
+          "description": "Verified world creation and retrieval tests pass",
+          "recordedAt": "2026-09-28T18:54:45.730Z",
+          "valid": true,
+          "trustedProvenance": false
+        },
+        {
+          "evidenceId": "ev_1790621970534_861",
+          "requirementId": "CH16.WORLD.LIBRARY",
+          "evidenceType": "UNIT_TEST",
+          "sourceReference": "tests/ch16_behavioral_verification.test.ts",
+          "description": "Verified world creation and retrieval tests pass",
+          "recordedAt": "2026-09-28T18:59:30.534Z",
+          "valid": true,
+          "trustedProvenance": false
         }
       ]
     },

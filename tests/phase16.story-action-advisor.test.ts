@@ -175,7 +175,7 @@ test('Phase 16 action advisor: an unknown capability request does not silently g
 	const learnedBefore = capabilityEngine.getActorSkillInstances(actorId).map((instance) => instance.capabilityId).sort();
 
 	const advisor = new StoryActionAdvisor(repository);
-	const advice = await advisor.advise(storyId, 'I invent an entirely new forbidden star technique');
+	const advice = await advisor.advise(storyId, 'I cast an entirely new forbidden star technique');
 
 	assert.notEqual(advice.mode, 'EXECUTE_EXISTING');
 	assert.equal(advice.canExecuteNow, false);

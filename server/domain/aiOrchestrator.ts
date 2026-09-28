@@ -41,6 +41,9 @@ export type TaskId =
 
 export type HealthState = 'Healthy' | 'Degraded' | 'Throttled' | 'Unavailable' | 'InvalidAuth' | 'DisabledByUser';
 export type QuotaState = 'Healthy' | 'Low' | 'NearExhaustion' | 'Exhausted' | 'Unknown';
+export type BillingState = 'FREE' | 'PAID' | 'ACCOUNT_DEPENDENT' | 'UNKNOWN';
+export type BillingEvidenceSource = 'PROVIDER' | 'CONFIGURATION' | 'UNKNOWN';
+export type QuotaEvidenceSource = 'PROVIDER' | 'OBSERVED' | 'ESTIMATE' | 'UNKNOWN';
 export type ModelPool =
   | 'creative'
   | 'utility'
@@ -77,6 +80,9 @@ export interface ModelRegistryRecord {
   lifecycleState?: 'active' | 'preview' | 'experimental' | 'deprecated' | 'discontinued';
   accessStatus?: 'accessible' | 'unavailable' | 'quota_limited' | 'rate_limited' | 'configured' | 'not_configured';
   isPaidModel?: boolean;
+  billingState?: BillingState;
+  billingEvidenceSource?: BillingEvidenceSource;
+  quotaEvidenceSource?: QuotaEvidenceSource;
   description?: string;
 }
 
@@ -2335,6 +2341,23 @@ export class MultiModelOrchestrator {
     status.cooldownUntil = undefined;
     status.status = 'Healthy';
     status.operationalStatus = 'AVAILABLE';
+    if (model.quota === 'Exhausted') {
+      model.quota = 'Healthy';
+    }
+    if (status.configuredLimits?.tokensPerDay && status.configuredLimits.tokensPerDay > 0) {
+      const remaining = Math.max(0, status.configuredLimits.tokensPerDay - status.observedTokens.total);
+      status.headroom = {
+        value: remaining,
+        exact: false,
+        source: 'ESTIMATE',
+      };
+      model.quotaEvidenceSource = 'ESTIMATE';
+    } else if (!status.headroom || status.headroom.source === 'UNKNOWN') {
+      status.headroom = {
+        exact: false,
+        source: 'UNKNOWN',
+      };
+    }
     const inputTokens = Number(result.inputTokens || 0);
     const outputTokens = Number(result.outputTokens || 0);
     const reasoningTokens = Number(result.reasoningTokens || 0);
@@ -2389,7 +2412,15 @@ export class MultiModelOrchestrator {
     status.lastLatencyMs = latencyMs;
     status.lastFailureAt = Date.now();
     status.lastFailureReason = String((error as any)?.message || error).slice(0, 300);
-    if (failureType === '429') status.rateLimit429Count += 1;
+    if (failureType === '429') {
+      status.rateLimit429Count += 1;
+      status.headroom = {
+        value: 0,
+        exact: true,
+        source: 'PROVIDER',
+      };
+      model.quotaEvidenceSource = 'PROVIDER';
+    }
     if (failureType === '5XX') status.serverError5xxCount += 1;
     if (failureType === 'TIMEOUT') status.timeoutCount += 1;
     if (failureType === '429' || failureType === '5XX' || failureType === 'TIMEOUT') {
@@ -3774,6 +3805,25 @@ export class MultiModelOrchestrator {
   public registerModel(record: ModelRegistryRecord): void {
     const effective = this.applyManualOverridesToRecord(record);
     if (!effective) return;
+
+    if (!effective.billingState) {
+      if (effective.isPaidModel === true) {
+        effective.billingState = 'PAID';
+        effective.billingEvidenceSource = 'PROVIDER';
+      } else if (effective.isPaidModel === false) {
+        effective.billingState = 'FREE';
+        effective.billingEvidenceSource = 'PROVIDER';
+      } else {
+        effective.billingState = 'UNKNOWN';
+        effective.billingEvidenceSource = 'UNKNOWN';
+      }
+    }
+    if (!effective.billingEvidenceSource) {
+      effective.billingEvidenceSource = 'UNKNOWN';
+    }
+    if (!effective.quotaEvidenceSource) {
+      effective.quotaEvidenceSource = 'UNKNOWN';
+    }
 
     // Normalize legacy registry shapes used by older providers/tests without
     // weakening the canonical model contract for modern records.

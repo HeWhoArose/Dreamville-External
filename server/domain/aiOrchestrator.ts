@@ -1527,7 +1527,9 @@ export class GoogleGeminiAdapter implements IProviderAdapter {
           thinking: m.thinking,
           isAccessible: true,
           lifecycleState: modelId.includes('deprecated') ? 'deprecated' : (modelId.includes('preview') ? 'preview' : 'active'),
-          isPaidModel: false,
+          // Google model discovery does not provide billing-plan evidence here.
+          // Do not mislabel the model as free; register billing as UNKNOWN.
+          isPaidModel: undefined,
         });
       }
 

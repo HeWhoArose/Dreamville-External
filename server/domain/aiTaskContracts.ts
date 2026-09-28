@@ -525,3 +525,169 @@ export function evaluateAiTaskReadiness(
 	}
 	return { task, modelId: model.modelId, providerId: model.providerId, state: 'READY', reason: 'Model satisfies task capability, modality, health, quota and context requirements.', capabilityCompatible: true, contextCompatible: true, quotaAvailable: true };
 }
+
+
+export type AiTaskCandidatePreflightState =
+	| 'READY'
+	| 'REJECTED'
+	| 'COOLDOWN'
+	| 'THROTTLED'
+	| 'UNAVAILABLE'
+	| 'UNKNOWN';
+
+export interface AiTaskCandidatePreflight {
+	task: TaskId;
+	providerId: string;
+	modelId: string;
+	state: AiTaskCandidatePreflightState;
+	eligible: boolean;
+	reason: string;
+	readiness: AiTaskReadiness;
+	contextTokens: number;
+	reservedOutputTokens: number;
+	contextCapacityKnown: boolean;
+	outputCapacityKnown: boolean;
+	taskContractVerified: boolean;
+}
+
+/**
+ * Side-effect-free task candidate preflight.
+ *
+ * This is intentionally additive to the existing routing logic. It does not
+ * mutate model health, quota, pins, fallback chains, or provider state.
+ *
+ * Known metadata is treated as a hard constraint only when the registry
+ * explicitly provides it. Missing metadata remains UNKNOWN rather than being
+ * guessed. This lets later Auto Arrange work build on a truthful preflight
+ * result without changing current production routing behavior.
+ */
+export function evaluateAiTaskCandidatePreflight(
+	task: TaskId,
+	model: ModelRegistryRecord,
+	contextTokens = 0,
+	reservedOutputTokens?: number,
+): AiTaskCandidatePreflight {
+	const contract = getAiTaskContract(task);
+	const safeContextTokens = Math.max(0, Math.trunc(contextTokens));
+	const safeReservedOutputTokens = Math.max(
+		0,
+		Math.trunc(reservedOutputTokens ?? contract.defaultMaxTokens),
+	);
+	const readiness = evaluateAiTaskReadiness(task, model, safeContextTokens);
+
+	if (readiness.state === 'COOLDOWN') {
+		return {
+			task,
+			providerId: model.providerId,
+			modelId: model.modelId,
+			state: 'COOLDOWN',
+			eligible: false,
+			reason: readiness.reason,
+			readiness,
+			contextTokens: safeContextTokens,
+			reservedOutputTokens: safeReservedOutputTokens,
+			contextCapacityKnown: model.contextWindow > 0,
+			outputCapacityKnown: Number.isFinite(model.outputTokenLimit) && (model.outputTokenLimit || 0) > 0,
+			taskContractVerified: false,
+		};
+	}
+
+	if (readiness.state === 'THROTTLED') {
+		return {
+			task,
+			providerId: model.providerId,
+			modelId: model.modelId,
+			state: 'THROTTLED',
+			eligible: false,
+			reason: readiness.reason,
+			readiness,
+			contextTokens: safeContextTokens,
+			reservedOutputTokens: safeReservedOutputTokens,
+			contextCapacityKnown: model.contextWindow > 0,
+			outputCapacityKnown: Number.isFinite(model.outputTokenLimit) && (model.outputTokenLimit || 0) > 0,
+			taskContractVerified: false,
+		};
+	}
+
+	if (
+		readiness.state === 'UNAVAILABLE' ||
+		readiness.state === 'REJECTED'
+	) {
+		return {
+			task,
+			providerId: model.providerId,
+			modelId: model.modelId,
+			state: readiness.state,
+			eligible: false,
+			reason: readiness.reason,
+			readiness,
+			contextTokens: safeContextTokens,
+			reservedOutputTokens: safeReservedOutputTokens,
+			contextCapacityKnown: model.contextWindow > 0,
+			outputCapacityKnown: Number.isFinite(model.outputTokenLimit) && (model.outputTokenLimit || 0) > 0,
+			taskContractVerified: false,
+		};
+	}
+
+	const contextCapacityKnown = model.contextWindow > 0;
+	if (
+		contextCapacityKnown &&
+		safeContextTokens + safeReservedOutputTokens > model.contextWindow
+	) {
+		return {
+			task,
+			providerId: model.providerId,
+			modelId: model.modelId,
+			state: 'REJECTED',
+			eligible: false,
+			reason: 'Requested context plus reserved output exceeds the model context window.',
+			readiness,
+			contextTokens: safeContextTokens,
+			reservedOutputTokens: safeReservedOutputTokens,
+			contextCapacityKnown: true,
+			outputCapacityKnown: Number.isFinite(model.outputTokenLimit) && (model.outputTokenLimit || 0) > 0,
+			taskContractVerified: false,
+		};
+	}
+
+	const outputCapacityKnown =
+		Number.isFinite(model.outputTokenLimit) &&
+		(model.outputTokenLimit || 0) > 0;
+
+	if (
+		outputCapacityKnown &&
+		safeReservedOutputTokens > (model.outputTokenLimit || 0)
+	) {
+		return {
+			task,
+			providerId: model.providerId,
+			modelId: model.modelId,
+			state: 'REJECTED',
+			eligible: false,
+			reason: 'Reserved output exceeds the model output token limit.',
+			readiness,
+			contextTokens: safeContextTokens,
+			reservedOutputTokens: safeReservedOutputTokens,
+			contextCapacityKnown,
+			outputCapacityKnown: true,
+			taskContractVerified: false,
+		};
+	}
+
+	return {
+		task,
+		providerId: model.providerId,
+		modelId: model.modelId,
+		state: readiness.state === 'QUOTA_AVAILABLE' ? 'READY' : 'READY',
+		eligible: true,
+		reason: readiness.state === 'QUOTA_AVAILABLE'
+			? 'Model is task-compatible and within known capacity limits; quota headroom is limited.'
+			: 'Model is task-compatible and within known capacity limits.',
+		readiness,
+		contextTokens: safeContextTokens,
+		reservedOutputTokens: safeReservedOutputTokens,
+		contextCapacityKnown,
+		outputCapacityKnown,
+		taskContractVerified: true,
+	};
+}

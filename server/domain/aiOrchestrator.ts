@@ -340,11 +340,24 @@ export interface TaskResponseValidationResult {
   errorReason?: string;
 }
 
+export interface ProviderQuotaSnapshot {
+  providerId: string;
+  available: boolean;
+  source: 'PROVIDER' | 'UNKNOWN';
+  exact: boolean;
+  remaining?: number;
+  limit?: number;
+  reset?: string;
+  billingState?: BillingState;
+  message?: string;
+}
+
 export interface IProviderAdapter {
   providerId: string;
   generate(task: TaskId, prompt: string, options?: ProviderGenerateOptions): Promise<ProviderGenerateResult>;
   validateCredentials(): Promise<boolean>;
   discoverModels?(): Promise<DiscoveredModelMetadata[]>;
+  getQuotaStatus?(): Promise<ProviderQuotaSnapshot>;
   isDiscoverySupported?(): boolean;
   getProviderStatus?(): { configured: boolean; message: string };
 }
@@ -1264,6 +1277,69 @@ export class OpenRouterAdapter implements IProviderAdapter {
         };
       })
       .filter(Boolean) as DiscoveredModelMetadata[];
+  }
+
+  public async getQuotaStatus(): Promise<ProviderQuotaSnapshot> {
+    const apiKey = this.getApiKey();
+    if (!apiKey) {
+      return {
+        providerId: this.providerId,
+        available: false,
+        source: 'UNKNOWN',
+        exact: false,
+        billingState: 'UNKNOWN',
+        message: 'OpenRouter API key is not configured.',
+      };
+    }
+
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/key', {
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          Accept: 'application/json',
+        },
+      });
+      const payload: any = await response.json().catch(() => null);
+      if (!response.ok || !payload?.data) {
+        return {
+          providerId: this.providerId,
+          available: false,
+          source: 'UNKNOWN',
+          exact: false,
+          billingState: 'UNKNOWN',
+          message: `OpenRouter key quota lookup failed (HTTP ${response.status}).`,
+        };
+      }
+
+      const data = payload.data;
+      const remaining = Number(data.limit_remaining);
+      const limit = Number(data.limit);
+      const hasRemaining = Number.isFinite(remaining);
+      const hasLimit = Number.isFinite(limit);
+
+      return {
+        providerId: this.providerId,
+        available: true,
+        source: 'PROVIDER',
+        exact: hasRemaining,
+        remaining: hasRemaining ? remaining : undefined,
+        limit: hasLimit ? limit : undefined,
+        reset: typeof data.limit_reset === 'string' ? data.limit_reset : undefined,
+        billingState: data.is_free_tier === true ? 'FREE' : 'ACCOUNT_DEPENDENT',
+        message: hasRemaining
+          ? `Provider reports ${remaining} credits remaining.`
+          : 'Provider returned key metadata without an exact remaining-credit value.',
+      };
+    } catch (error: any) {
+      return {
+        providerId: this.providerId,
+        available: false,
+        source: 'UNKNOWN',
+        exact: false,
+        billingState: 'UNKNOWN',
+        message: error?.message || 'OpenRouter key quota lookup failed.',
+      };
+    }
   }
 
   public async generate(
@@ -6306,6 +6382,66 @@ export class MultiModelOrchestrator {
    * generic provider probe in the next orchestration specification pass.
    */
 
+  private async refreshProviderQuotaSnapshots(): Promise<ProviderQuotaSnapshot[]> {
+    const snapshots: ProviderQuotaSnapshot[] = [];
+    for (const adapter of this.getAllAdapters()) {
+      if (typeof adapter.getQuotaStatus !== 'function') continue;
+      try {
+        snapshots.push(await adapter.getQuotaStatus());
+      } catch (error: any) {
+        snapshots.push({
+          providerId: adapter.providerId,
+          available: false,
+          source: 'UNKNOWN',
+          exact: false,
+          billingState: 'UNKNOWN',
+          message: error?.message || 'Provider quota lookup failed.',
+        });
+      }
+    }
+
+    for (const snapshot of snapshots) {
+      for (const model of this.models.values()) {
+        if (model.providerId !== snapshot.providerId) continue;
+
+        if (snapshot.available && snapshot.exact) {
+          const runtime = this.ensureRuntimeStatus(model);
+          runtime.headroom = {
+            value: Math.max(0, Number(snapshot.remaining || 0)),
+            exact: true,
+            source: 'PROVIDER',
+          };
+          model.quotaEvidenceSource = 'PROVIDER';
+          if (Number(snapshot.remaining || 0) <= 0) {
+            model.quota = 'Exhausted';
+            model.accessStatus = 'quota_limited';
+          } else if (model.quota === 'Exhausted' || model.accessStatus === 'quota_limited') {
+            model.quota = 'Healthy';
+            model.accessStatus = 'accessible';
+          }
+        } else if (snapshot.source === 'UNKNOWN') {
+          const runtime = this.ensureRuntimeStatus(model);
+          if (!runtime.headroom || runtime.headroom.source === 'UNKNOWN') {
+            runtime.headroom = {
+              exact: false,
+              source: 'UNKNOWN',
+            };
+          }
+          if (model.quotaEvidenceSource !== 'PROVIDER') {
+            model.quotaEvidenceSource = 'UNKNOWN';
+          }
+        }
+
+        if (snapshot.billingState === 'FREE') {
+          model.billingState = model.isPaidModel === true ? 'PAID' : 'FREE';
+          model.billingEvidenceSource = model.isPaidModel === true ? 'PROVIDER' : 'PROVIDER';
+        }
+      }
+    }
+
+    return snapshots;
+  }
+
   private getAutoArrangeCanary(task: TaskId): {
     prompt: string;
     timeoutMs: number;
@@ -6445,6 +6581,7 @@ export class MultiModelOrchestrator {
     const concurrency = Math.max(1, Math.min(6, Math.trunc(options?.concurrency ?? 4)));
 
     await this.discoverAndRegisterModels({ forceRefresh: true });
+    await this.refreshProviderQuotaSnapshots();
 
     const canonicalProviderId = (providerId: string): string => {
       if (providerId === 'provider_google_gemini') return 'google_gemini';

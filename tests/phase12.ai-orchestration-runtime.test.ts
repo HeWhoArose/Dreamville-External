@@ -741,3 +741,65 @@ test('Phase 12 audit: provider quota evidence overrides unknown model headroom w
 	assert.ok(otherRuntime);
 	assert.equal(otherRuntime?.headroom?.source, 'UNKNOWN');
 });
+
+
+test('Phase 12 audit: Character Genesis semantic validation advances to the next model when the first response is structurally unusable', async () => {
+	const orchestrator = createTestOrchestrator();
+	const invalid = new DeterministicMockAdapter('phase12_genesis_invalid');
+	const valid = new DeterministicMockAdapter('phase12_genesis_valid');
+
+	invalid.cannedResponses.set('character.extract', JSON.stringify({
+		response: 'This is not a Character Genesis draft.',
+	}));
+	valid.cannedResponses.set('character.extract', JSON.stringify({
+		identity: { name: 'Fallback Hero' },
+		role: { profession: 'Scout' },
+		background: { history: 'Returned by fallback.' },
+	}));
+
+	orchestrator.registerAdapter(invalid);
+	orchestrator.registerAdapter(valid);
+	orchestrator.registerModel(model('phase12_genesis_invalid', 'genesis-invalid', ['character.extract']));
+	orchestrator.registerModel(model('phase12_genesis_valid', 'genesis-valid', ['character.extract']));
+	orchestrator.setFallbackChain('character.extract', [
+		'phase12_genesis_invalid::genesis-invalid',
+		'phase12_genesis_valid::genesis-valid',
+		'provider_deterministic_emergency::emergency-fallback-local',
+	]);
+	orchestrator.pinModelForTask('character.extract', 'phase12_genesis_invalid::genesis-invalid');
+
+	const result = await orchestrator.executeTaskGeneration(
+		'character.extract',
+		'Create a character from a cautious frontier scout concept.',
+		'Return only the requested structured Character Genesis JSON.',
+		{
+			timeoutMs: 100,
+			validateResponse: (text) => {
+				let parsed: any = null;
+				try {
+					parsed = JSON.parse(text);
+				} catch {
+					return { valid: false, errorReason: 'Character Genesis JSON could not be parsed.' };
+				}
+				const validShape = Boolean(
+					parsed &&
+					typeof parsed === 'object' &&
+					parsed.identity &&
+					parsed.role &&
+					parsed.background,
+				);
+				return validShape
+					? { valid: true }
+					: { valid: false, errorReason: 'Character Genesis response is missing required semantic sections.' };
+			},
+		},
+	);
+
+	assert.equal(result.source, 'AI_FALLBACK');
+	assert.equal(result.modelId, 'genesis-valid');
+	assert.equal(result.attemptsTrail[0]?.modelId, 'genesis-invalid');
+	assert.equal(result.attemptsTrail[0]?.status, 'FAILED');
+	assert.match(result.attemptsTrail[0]?.error || '', /Character Genesis/i);
+	assert.equal(result.attemptsTrail[1]?.modelId, 'genesis-valid');
+	assert.equal(result.attemptsTrail[1]?.status, 'SUCCESS');
+});

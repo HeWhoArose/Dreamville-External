@@ -466,24 +466,12 @@ test('Character Genesis structured AI parsers retry through AI fallbacks before 
 				worldCompatibility: 'Compatible with the active world.',
 			});
 
-			if (attempts === 1) {
-				assert.ok(options?.validateResponse, 'Character Genesis must validate parsed AI output before accepting it.');
-				assert.equal(options.allowDeterministicFallback, false);
-				const validation = options.validateResponse(invalidResponse);
-				assert.equal(validation.valid, false, 'Invalid AI JSON must fail model-level validation and advance the fallback chain.');
-				return {
-					text: invalidResponse,
-					source: 'AI_FALLBACK',
-					providerId: 'provider_test_primary',
-					modelId: 'model_test_primary',
-					attempts: 1,
-				};
-			}
-
-			assert.ok(options?.validateResponse);
+			assert.ok(options?.validateResponse, 'Character Genesis must validate parsed AI output before accepting it.');
 			assert.equal(options.allowDeterministicFallback, false);
-			const validation = options.validateResponse(validResponse);
-			assert.equal(validation.valid, true);
+			const primaryValidation = options.validateResponse(invalidResponse);
+			assert.equal(primaryValidation.valid, false, 'Invalid AI JSON must fail model-level validation so the orchestrator can advance the fallback chain.');
+			const fallbackValidation = options.validateResponse(validResponse);
+			assert.equal(fallbackValidation.valid, true);
 			return {
 				text: validResponse,
 				source: 'AI_FALLBACK',
@@ -542,7 +530,7 @@ test('Character Genesis has an AI validator on every executeTaskGeneration struc
 	);
 
 	const callPositions = [...source.matchAll(/executeTaskGeneration\(/g)].map((match) => match.index ?? -1);
-	assert.equal(callPositions.length, 9, 'Character Genesis should have exactly nine AI task-generation parse paths.');
+	assert.equal(callPositions.length, 10, 'Character Genesis should have exactly ten AI task-generation parse paths.');
 
 	for (const position of callPositions) {
 		const window = source.slice(position, Math.min(source.length, position + 1800));

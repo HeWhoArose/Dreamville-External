@@ -6167,7 +6167,16 @@ export class MultiModelOrchestrator {
           .filter((model) => Boolean(this.getAdapter(model.providerId)))
           .filter((model) => model.health !== 'Unavailable' && model.health !== 'DisabledByUser' && model.health !== 'InvalidAuth')
           .filter((model) => model.quota !== 'Exhausted' && model.accessStatus !== 'quota_limited' && model.accessStatus !== 'rate_limited')
-          .filter((model) => contextTokens <= 0 || model.contextWindow <= 0 || contextTokens <= model.contextWindow)
+          .filter((model) => {
+            const preflight = this.getTaskCandidatePreflight(
+              task,
+              model.providerId,
+              model.modelId,
+              contextTokens,
+              options?.maxTokens,
+            );
+            return Boolean(preflight?.eligible);
+          })
           .sort((a, b) => b.userPriority - a.userPriority || this.modelKey(a).localeCompare(this.modelKey(b)))[0];
 
         if (lateRecovery) {

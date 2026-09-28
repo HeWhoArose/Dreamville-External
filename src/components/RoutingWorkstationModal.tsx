@@ -45,6 +45,8 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
   const [checkpoints, setCheckpoints] = useState<any[]>([]);
   const [overrides, setOverrides] = useState<any[]>([]);
   const [phase12Operations, setPhase12Operations] = useState<any>(null);
+  const [autoArrangeResult, setAutoArrangeResult] = useState<any>(null);
+  const [autoArrangeLoading, setAutoArrangeLoading] = useState(false);
 
   // Test Routing state
   const [testTask, setTestTask] = useState('narrative.generate');
@@ -101,6 +103,24 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
       await loadData();
     } catch (err: any) {
       setError(err?.message || 'Failed to update AI category model.');
+    }
+  };
+
+  // Run task-aware model discovery, readiness verification and fallback arrangement.
+  const handleAutoArrange = async () => {
+    setAutoArrangeLoading(true);
+    setError(null);
+    try {
+      const result = await apiClient.autoConfigureFallbacks({
+        maxFallbacksPerCategory: 4,
+        concurrency: 4,
+      });
+      setAutoArrangeResult(result);
+      await loadData();
+    } catch (err: any) {
+      setError(err?.message || 'AI auto-arrange failed');
+    } finally {
+      setAutoArrangeLoading(false);
     }
   };
 
@@ -196,6 +216,16 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
             </div>
 
             <div className="flex items-center space-x-2">
+              <button
+                id="routing-auto-arrange-btn"
+                onClick={() => void handleAutoArrange()}
+                disabled={autoArrangeLoading || loading}
+                className="px-3 py-1.5 rounded-md bg-amber-500/15 border border-amber-500/30 hover:bg-amber-500/25 text-amber-300 text-[11px] font-mono transition flex items-center gap-2"
+                title="Discover models, verify task readiness, check known quota/billing evidence, and rebuild automatic fallback routes"
+              >
+                <Sparkles className={`w-3.5 h-3.5 ${autoArrangeLoading ? 'animate-spin' : ''}`} />
+                <span>{autoArrangeLoading ? 'Arranging…' : 'Auto Arrange'}</span>
+              </button>
               <button
                 id="routing-refresh-btn"
                 onClick={async () => {
@@ -338,14 +368,74 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
                       {models.length} Models Available
                     </span>
                   </h3>
-                  <button
-                    onClick={() => apiClient.discoverOrchestratorModels(true).then(loadData)}
-                    className="flex items-center space-x-1 px-2.5 py-1 text-xs rounded bg-stone-800 hover:bg-stone-700 text-stone-300 transition"
-                  >
-                    <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                    <span>Discover Models</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => apiClient.discoverOrchestratorModels(true).then(loadData)}
+                      className="flex items-center space-x-1 px-2.5 py-1 text-xs rounded bg-stone-800 hover:bg-stone-700 text-stone-300 transition"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5 text-sky-400" />
+                      <span>Discover Models</span>
+                    </button>
+                    <button
+                      onClick={() => void handleAutoArrange()}
+                      disabled={autoArrangeLoading}
+                      className="flex items-center space-x-1 px-2.5 py-1 text-xs rounded bg-amber-950/60 hover:bg-amber-900/70 text-amber-300 border border-amber-800/50 transition disabled:opacity-50"
+                    >
+                      <Sparkles className={`w-3.5 h-3.5 ${autoArrangeLoading ? 'animate-spin' : ''}`} />
+                      <span>{autoArrangeLoading ? 'Verifying…' : 'Discover & Arrange'}</span>
+                    </button>
+                  </div>
                 </div>
+
+                {autoArrangeResult && (
+                  <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <h4 className="text-xs font-semibold text-amber-300 flex items-center gap-2">
+                          <ShieldCheck className="w-3.5 h-3.5" />
+                          Task-aware Auto Arrange
+                        </h4>
+                        <p className="text-[10px] text-stone-500 font-mono mt-1">
+                          {autoArrangeResult.summaryMessage || 'Latest task readiness arrangement result.'}
+                        </p>
+                      </div>
+                      <div className="text-right text-[10px] font-mono text-stone-400">
+                        <div>{autoArrangeResult.healthyModelsCount || 0} ready</div>
+                        <div>{autoArrangeResult.failedModelsCount || 0} skipped/failed</div>
+                      </div>
+                    </div>
+                    <div className="max-h-56 overflow-y-auto rounded-lg border border-stone-800">
+                      <table className="w-full text-left text-[10px] font-mono">
+                        <thead className="bg-stone-950/70 text-stone-500">
+                          <tr>
+                            <th className="p-2">Model</th>
+                            <th className="p-2">Status</th>
+                            <th className="p-2">Billing</th>
+                            <th className="p-2">Quota</th>
+                            <th className="p-2">Verified Tasks</th>
+                            <th className="p-2">Why</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-stone-800/60">
+                          {(autoArrangeResult.results || []).map((result: any) => (
+                            <tr key={`${result.providerId}::${result.modelId}`}>
+                              <td className="p-2 text-stone-200">{result.displayName}</td>
+                              <td className="p-2">
+                                <span className={result.status === 'READY' ? 'text-emerald-300' : result.status === 'SKIPPED' ? 'text-amber-300' : 'text-rose-300'}>
+                                  {result.status}
+                                </span>
+                              </td>
+                              <td className="p-2 text-stone-400">{result.billingState || 'UNKNOWN'}</td>
+                              <td className="p-2 text-stone-400">{result.quotaState || 'UNKNOWN'} <span className="text-stone-600">({result.quotaSource || 'UNKNOWN'})</span></td>
+                              <td className="p-2 text-stone-400">{(result.verifiedTasks || []).slice(0, 4).join(', ') || '—'}</td>
+                              <td className="p-2 text-stone-500 max-w-[280px] truncate" title={result.errorReason || ''}>{result.errorReason || 'Verified'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
 
                 <div className="border border-stone-800 rounded-lg overflow-hidden">
                   <table className="w-full text-left text-xs border-collapse">
@@ -357,6 +447,8 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
                         <th className="p-3">Roles</th>
                         <th className="p-3">Context Window</th>
                         <th className="p-3">Avg Latency</th>
+                        <th className="p-3">Billing</th>
+                        <th className="p-3">Quota</th>
                         <th className="p-3">Health</th>
                         <th className="p-3 text-right">Actions</th>
                       </tr>
@@ -397,7 +489,25 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
                               {m.contextWindow ? m.contextWindow.toLocaleString() : '8,192'} tok
                             </td>
                             <td className="p-3 text-stone-400">
-                              {m.typicalLatencyMs ? `${m.typicalLatencyMs}ms` : '350ms'}
+                              {m.typicalLatencyMs || m.runtime?.averageLatencyMs
+                                ? `${m.typicalLatencyMs || m.runtime?.averageLatencyMs}ms`
+                                : '—'}
+                            </td>
+                            <td className="p-3 text-[10px] font-mono">
+                              <span className={m.billingState === 'PAID' ? 'text-amber-300' : m.billingState === 'FREE' ? 'text-emerald-300' : 'text-stone-400'}>
+                                {m.billingState || 'UNKNOWN'}
+                              </span>
+                              {m.billingEvidenceSource && m.billingEvidenceSource !== 'UNKNOWN' && (
+                                <div className="text-[9px] text-stone-600">{m.billingEvidenceSource}</div>
+                              )}
+                            </td>
+                            <td className="p-3 text-[10px] font-mono">
+                              <span className={m.quota === 'Exhausted' ? 'text-rose-300' : m.quota === 'Low' || m.quota === 'NearExhaustion' ? 'text-amber-300' : 'text-stone-300'}>
+                                {m.quota || 'Unknown'}
+                              </span>
+                              {m.quotaEvidenceSource && m.quotaEvidenceSource !== 'UNKNOWN' && (
+                                <div className="text-[9px] text-stone-600">{m.quotaEvidenceSource}</div>
+                              )}
                             </td>
                             <td className="p-3">
                               <span

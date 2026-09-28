@@ -1533,6 +1533,20 @@ OUTPUT STRICT JSON:
         {
           allowAdaptiveAiRecovery: true,
           allowDeterministicFallback: false,
+          validateResponse: (text) => {
+            const parsed = this.parseJsonFromAiResponse(text);
+            return parsed && typeof parsed === 'object' && (
+              Object.prototype.hasOwnProperty.call(parsed, 'classId') ||
+              Object.prototype.hasOwnProperty.call(parsed, 'subclassId') ||
+              Object.prototype.hasOwnProperty.call(parsed, 'speciesId') ||
+              Object.prototype.hasOwnProperty.call(parsed, 'customClass') ||
+              Object.prototype.hasOwnProperty.call(parsed, 'customSubclass') ||
+              Object.prototype.hasOwnProperty.call(parsed, 'customSpecies') ||
+              typeof parsed.reasoning === 'string'
+            )
+              ? { valid: true }
+              : { valid: false, errorReason: 'Progression selection response was not valid structured JSON.' };
+          },
         },
       );
       if (response.source === 'DETERMINISTIC_FALLBACK') {
@@ -1788,6 +1802,12 @@ Provide at least one useful feature.
         {
           allowAdaptiveAiRecovery: true,
           allowDeterministicFallback: false,
+          validateResponse: (text) => {
+            const parsed = this.parseJsonFromAiResponse(text);
+            return parsed && typeof parsed.name === 'string' && Array.isArray(parsed.features)
+              ? { valid: true }
+              : { valid: false, errorReason: 'Custom progression response must contain a name and features array.' };
+          },
         },
       );
       if (response.source === 'DETERMINISTIC_FALLBACK') {
@@ -1998,11 +2018,17 @@ IMPORTANT:
         {
           allowAdaptiveAiRecovery: true,
           allowDeterministicFallback: false,
+          validateResponse: (text) => {
+            const parsed = this.parseJsonFromAiResponse(text);
+            return parsed && typeof parsed.name === 'string' && typeof parsed.description === 'string'
+              ? { valid: true }
+              : { valid: false, errorReason: 'Custom feat response must contain a name and description.' };
+          },
         },
       );
       if (response.source === 'DETERMINISTIC_FALLBACK') {
         throw this.buildAiUnavailableError(
-          response.fallbackReason || 'AI custom capability generation is unavailable; deterministic fallback was withheld.',
+          response.fallbackReason || 'AI custom feat generation is unavailable; deterministic fallback was withheld.',
           response,
         );
       }
@@ -2089,11 +2115,17 @@ IMPORTANT: Provide sensible starting default value, optional min/max, clear desc
         {
           allowAdaptiveAiRecovery: true,
           allowDeterministicFallback: false,
+          validateResponse: (text) => {
+            const parsed = this.parseJsonFromAiResponse(text);
+            return parsed && typeof parsed.name === 'string' && typeof parsed.description === 'string'
+              ? { valid: true }
+              : { valid: false, errorReason: 'Custom attribute response must contain a name and description.' };
+          },
         },
       );
       if (response.source === 'DETERMINISTIC_FALLBACK') {
         throw this.buildAiUnavailableError(
-          response.fallbackReason || 'AI custom capability generation is unavailable; deterministic fallback was withheld.',
+          response.fallbackReason || 'AI custom attribute generation is unavailable; deterministic fallback was withheld.',
           response,
         );
       }
@@ -2180,11 +2212,17 @@ IMPORTANT:
         {
           allowAdaptiveAiRecovery: true,
           allowDeterministicFallback: false,
+          validateResponse: (text) => {
+            const parsed = this.parseJsonFromAiResponse(text);
+            return parsed && typeof parsed.name === 'string' && typeof parsed.description === 'string'
+              ? { valid: true }
+              : { valid: false, errorReason: 'Custom skill response must contain a name and description.' };
+          },
         },
       );
       if (response.source === 'DETERMINISTIC_FALLBACK') {
         throw this.buildAiUnavailableError(
-          response.fallbackReason || 'AI custom capability generation is unavailable; deterministic fallback was withheld.',
+          response.fallbackReason || 'AI custom skill generation is unavailable; deterministic fallback was withheld.',
           response,
         );
       }
@@ -2305,6 +2343,13 @@ OUTPUT STRICT JSON:
         {
           allowAdaptiveAiRecovery: true,
           allowDeterministicFallback: false,
+          validateResponse: (text) => {
+            const parsed = this.parseJsonFromAiResponse(text);
+            const skills = Array.isArray(parsed) ? parsed : parsed?.skills;
+            return Array.isArray(skills)
+              ? { valid: true }
+              : { valid: false, errorReason: 'Additional skill discovery must return a skills array.' };
+          },
         },
       );
 
@@ -2452,6 +2497,12 @@ OUTPUT STRICT JSON:
         {
           allowAdaptiveAiRecovery: true,
           allowDeterministicFallback: false,
+          validateResponse: (text) => {
+            const parsed = this.parseJsonFromAiResponse(text);
+            return parsed && typeof parsed === 'object' && Array.isArray(parsed.instances)
+              ? { valid: true }
+              : { valid: false, errorReason: 'Starting condition response must contain an instances array.' };
+          },
         },
       );
       if (response.source === 'DETERMINISTIC_FALLBACK') {
@@ -2568,11 +2619,17 @@ IMPORTANT: Select an appropriate category and paper-doll slot. If the item is a 
         {
           allowAdaptiveAiRecovery: true,
           allowDeterministicFallback: false,
+          validateResponse: (text) => {
+            const parsed = this.parseJsonFromAiResponse(text);
+            return parsed && typeof parsed.name === 'string' && typeof parsed.description === 'string'
+              ? { valid: true }
+              : { valid: false, errorReason: 'Custom equipment response must contain a name and description.' };
+          },
         },
       );
       if (response.source === 'DETERMINISTIC_FALLBACK') {
         throw this.buildAiUnavailableError(
-          response.fallbackReason || 'AI custom capability generation is unavailable; deterministic fallback was withheld.',
+          response.fallbackReason || 'AI custom equipment generation is unavailable; deterministic fallback was withheld.',
           response,
         );
       }

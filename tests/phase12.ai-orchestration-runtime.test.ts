@@ -635,3 +635,68 @@ test('Phase 12 audit: task-contract failure advances to the next fallback model 
 	assert.equal(result.attemptsTrail[0]?.status, 'FAILED');
 	assert.match(result.attemptsTrail[0]?.error || '', /validation/i);
 });
+
+
+test('Phase 12 audit: billing metadata is explicit and missing billing data remains UNKNOWN', () => {
+	const orchestrator = createTestOrchestrator();
+	const freeModel = model('phase12_billing_free', 'free-model', ['narrative.generate']);
+	freeModel.isPaidModel = false;
+	const paidModel = model('phase12_billing_paid', 'paid-model', ['narrative.generate']);
+	paidModel.isPaidModel = true;
+	const unknownModel = model('phase12_billing_unknown', 'unknown-model', ['narrative.generate']);
+
+	orchestrator.registerModel(freeModel);
+	orchestrator.registerModel(paidModel);
+	orchestrator.registerModel(unknownModel);
+
+	assert.equal(orchestrator.getModel('phase12_billing_free', 'free-model')?.billingState, 'FREE');
+	assert.equal(orchestrator.getModel('phase12_billing_paid', 'paid-model')?.billingState, 'PAID');
+	assert.equal(orchestrator.getModel('phase12_billing_unknown', 'unknown-model')?.billingState, 'UNKNOWN');
+});
+
+test('Phase 12 audit: task-aware auto arrange verifies an actual task response and rewrites only eligible automatic task routes', async () => {
+	const orchestrator = createTestOrchestrator();
+	const emergency = orchestrator.getModel('provider_deterministic_emergency', 'emergency-fallback-local')!;
+
+	const adapter = new DeterministicMockAdapter('phase12_auto_arrange_provider');
+	adapter.cannedResponses.set(
+		'narrative.review',
+		JSON.stringify({ review: 'The task canary returned a usable review.' }),
+	);
+	orchestrator.registerAdapter(adapter);
+
+	const readyModel: ModelRegistryRecord = {
+		providerId: 'phase12_auto_arrange_provider',
+		modelId: 'auto-ready',
+		displayName: 'Auto Ready',
+		pool: 'review',
+		capabilities: ['text_generation', 'reasoning', 'structured_output'],
+		contextWindow: 32768,
+		outputTokenLimit: 2000,
+		health: 'Healthy',
+		quota: 'Healthy',
+		latencyMs: 5,
+		userPriority: 200,
+		roleEligibility: ['narrative.review'],
+		fallbackEligibility: true,
+		accessStatus: 'accessible',
+		lifecycleState: 'active',
+		isEmergencyFloor: false,
+	};
+	orchestrator.registerModel(readyModel);
+
+	const originalGetAllModels = orchestrator.getAllModels.bind(orchestrator);
+	(orchestrator as any).getAllModels = () => [readyModel, emergency];
+	(orchestrator as any).discoverAndRegisterModels = async () => orchestrator.getLastDiscoverySummary();
+
+	const result = await orchestrator.autoConfigureFallbacks({
+		maxFallbacksPerCategory: 2,
+		concurrency: 2,
+	});
+
+	assert.equal(result.success, true);
+	assert.equal(result.results.find((entry) => entry.modelId === 'auto-ready')?.status, 'READY');
+	assert.deepEqual(orchestrator.getFallbackChain('narrative.review').slice(0, 1), ['phase12_auto_arrange_provider::auto-ready']);
+	assert.ok(result.results.find((entry) => entry.modelId === 'auto-ready')?.verifiedTasks?.includes('narrative.review'));
+	assert.equal(originalGetAllModels.length > 0, true);
+});

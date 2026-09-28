@@ -434,3 +434,119 @@ test('Character Genesis forwards AI-only fallback policy to the orchestrator', a
 		repository.getAiOrchestrator = original;
 	}
 });
+
+
+test('Character Genesis structured AI parsers retry through AI fallbacks before any deterministic option', async () => {
+	const repository = worldRepository as any;
+	const original = repository.getAiOrchestrator;
+	let attempts = 0;
+	let receivedOptions: any = null;
+
+	repository.getAiOrchestrator = () => ({
+		executeTaskGeneration: async (
+			_task: string,
+			_prompt: string,
+			_systemInstruction: string,
+			options: any,
+		) => {
+			receivedOptions = options;
+			attempts += 1;
+
+			const invalidResponse = 'This is not JSON and should force an AI fallback retry.';
+			const validResponse = JSON.stringify({
+				name: 'Sanity',
+				value: 7,
+				baseValue: 7,
+				min: 0,
+				max: 100,
+				description: 'Mental stability under supernatural pressure.',
+				mechanicalRole: 'Tracks psychological strain and resilience.',
+				worldCompatibility: 'Compatible with the active world.',
+			});
+
+			if (attempts === 1) {
+				assert.ok(options?.validateResponse, 'Character Genesis must validate parsed AI output before accepting it.');
+				assert.equal(options.allowDeterministicFallback, false);
+				const validation = options.validateResponse(invalidResponse);
+				assert.equal(validation.valid, false, 'Invalid AI JSON must fail model-level validation and advance the fallback chain.');
+				return {
+					text: invalidResponse,
+					source: 'AI_FALLBACK',
+					providerId: 'provider_test_primary',
+					modelId: 'model_test_primary',
+					attempts: 1,
+				};
+			}
+
+			assert.ok(options?.validateResponse);
+			assert.equal(options.allowDeterministicFallback, false);
+			const validation = options.validateResponse(validResponse);
+			assert.equal(validation.valid, true);
+			return {
+				text: validResponse,
+				source: 'AI_FALLBACK',
+				providerId: 'provider_test_fallback',
+				modelId: 'model_test_fallback',
+				attempts: 2,
+				attemptsTrail: [
+					{
+						providerId: 'provider_test_primary',
+						modelId: 'model_test_primary',
+						status: 'FAILED',
+						latencyMs: 5,
+						error: 'Invalid structured JSON.',
+					},
+					{
+						providerId: 'provider_test_fallback',
+						modelId: 'model_test_fallback',
+						status: 'SUCCESS',
+						latencyMs: 5,
+					},
+				],
+			};
+		},
+	} as any);
+
+	try {
+		const result = await characterGenesisService.proposeCustomAttribute(
+			{
+				worldId: testWorld.worldId,
+				attributeName: 'Sanity',
+				attributeConcept: 'Mental stability under supernatural pressure.',
+				category: 'world_stat',
+				characterContext: {
+					role: 'Mage',
+					species: 'Human',
+					background: 'Studies dangerous anomalies.',
+				},
+			},
+			testWorld,
+		);
+
+		assert.equal(result.name, 'Sanity');
+		assert.equal(result.provenance, 'AI_GENERATED');
+		assert.equal(attempts, 2, 'The second AI model must be reached after the first model returns invalid JSON.');
+		assert.equal(receivedOptions?.allowAdaptiveAiRecovery, true);
+		assert.equal(receivedOptions?.allowDeterministicFallback, false);
+	} finally {
+		repository.getAiOrchestrator = original;
+	}
+});
+
+test('Character Genesis has an AI validator on every executeTaskGeneration structured parse path', () => {
+	const fs = require('node:fs') as typeof import('node:fs');
+	const path = require('node:path') as typeof import('node:path');
+	const source = fs.readFileSync(
+		path.join(process.cwd(), 'server/services/characterGenesisService.ts'),
+		'utf8',
+	);
+
+	const callPositions = [...source.matchAll(/executeTaskGeneration\\(/g)].map((match) => match.index ?? -1);
+	assert.equal(callPositions.length, 9, 'Character Genesis should have exactly nine AI task-generation parse paths.');
+
+	for (const position of callPositions) {
+		const window = source.slice(position, Math.min(source.length, position + 1800));
+		assert.match(window, /allowDeterministicFallback:\\s*false/);
+		assert.match(window, /validateResponse:\\s*\\(text\\)/);
+	}
+});

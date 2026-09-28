@@ -177,6 +177,14 @@ test('AI model intelligence audit: auto-arrange never assigns an unverified task
 			['narrative.review', 'summary.scene'],
 		),
 	);
+	const partialModel = orchestrator.getModel('audit_partial_verification', 'partial-verification')!;
+	const emergency = orchestrator.getModel(
+		'provider_deterministic_emergency',
+		'emergency-fallback-local',
+	)!;
+	(orchestrator as any).discoverAndRegisterModels = async () => orchestrator.getLastDiscoverySummary();
+	(orchestrator as any).refreshProviderQuotaSnapshots = async () => [];
+	(orchestrator as any).getAllModels = () => [partialModel, emergency];
 
 	for (let pass = 0; pass < 10; pass++) {
 		const result = await orchestrator.autoConfigureFallbacks({

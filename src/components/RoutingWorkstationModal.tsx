@@ -874,7 +874,16 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
                               ? `Cooldown until ${new Date(runtime.cooldownUntil).toLocaleTimeString()}`
                               : 'No cooldown'}
                           </span>
-                          <span>Headroom: {runtime.headroom?.exact ? 'Exact' : runtime.headroom?.source === 'ESTIMATE' ? 'Estimated' : 'Unknown'}</span>
+                          <span>
+                            Headroom:{' '}
+                            {runtime.headroom?.value != null
+                              ? `${Number(runtime.headroom.value).toLocaleString()} ${runtime.headroom?.source === 'PROVIDER' ? 'provider' : 'estimated'}`
+                              : runtime.headroom?.exact
+                                ? 'Exact'
+                                : runtime.headroom?.source === 'ESTIMATE'
+                                  ? 'Estimated'
+                                  : 'Unknown'}
+                          </span>
                         </div>
                       </div>
                     ))}

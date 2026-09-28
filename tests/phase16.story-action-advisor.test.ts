@@ -303,3 +303,31 @@ test('Phase 16 regression: suggestion text is inserted into the composer and not
 		'I draw my sword. I move toward the structure.'
 	);
 });
+
+
+test('Phase 16 regression: opening-scene nouns do not become capability intent during ordinary inspection', async () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'phase16_opening_scene_inspection';
+	seedRun(repository, storyId, 'Archivist');
+	const advisor = new StoryActionAdvisor(repository);
+	const advice = await advisor.advise(storyId, 'I inspect the unexplored portal in the threshold', {
+		locationName: 'Sunken Spire - Threshold Ward',
+		locationDescription: 'An unexplored portal reveals passages into a pre-cataclysm repository.',
+		startingSituation: 'The portal is visible from the threshold.',
+	});
+	assert.equal(advice.mode, 'NORMAL_ACTION');
+	assert.equal(advice.canExecuteNow, true);
+	assert.equal(advice.proposal, undefined);
+	assert.equal(advice.simulation, undefined);
+});
+
+test('Phase 16 regression: explicit capability intent remains eligible for capability adjudication', async () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'phase16_explicit_capability_intent';
+	seedRun(repository, storyId, 'Wizard');
+	const advisor = new StoryActionAdvisor(repository);
+	const advice = await advisor.advise(storyId, 'I cast Fireball');
+	assert.notEqual(advice.mode, 'NORMAL_ACTION');
+	assert.equal(advice.canExecuteNow, false);
+	assert.ok(advice.simulation || advice.proposal);
+});

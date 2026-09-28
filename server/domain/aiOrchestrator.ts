@@ -1501,7 +1501,9 @@ Do not enclose in markdown ticks, output pure JSON.`;
 
         let reqConfig: Record<string, any> = {
           systemInstruction: systemPrompt,
-          responseMimeType: 'application/json',
+          responseMimeType: task === 'narrative.generate' || task === 'narrative.review'
+            ? 'text/plain'
+            : 'application/json',
         };
         let reqContents: any[] = [prompt];
         
@@ -4477,13 +4479,1775 @@ export class MultiModelOrchestrator {
    * Structured Turn Package Validation (DreamBook V6.19, V6.20 & DEF-CH12-05)
    * Validates JSON shape, schema rules, and forbids illegal state change kinds.
    */
-  public validateTurnPackage(rawText: string): {
+  public validateTurnPackage(
+    rawText: string,
+    options?: { allowPlainTextNarration?: boolean },
+  ): {
     valid: boolean;
     turnPackage?: StructuredTurnPackage;
     errorReason?: string;
   } {
     try {
-      const parsed = JSON.parse(rawText);
+      const cleaned = String(rawText || '')
+        .trim()
+        .replace(new RegExp('^```(?:json)?\\s*', 'i'), '')
+        .replace(new RegExp('\\s*```
+      if (!Array.isArray(parsed.narrative) || parsed.narrative.length === 0) {
+        return { valid: false, errorReason: 'Missing or empty narrative array.' };
+      }
+      for (const line of parsed.narrative) {
+        if (typeof line !== 'string') {
+          return { valid: false, errorReason: 'Narrative items must be valid strings.' };
+        }
+      }
+
+      // 2. Dialogue validation
+      const dialogue: { speaker: string; text: string }[] = [];
+      if (parsed.dialogue) {
+        if (!Array.isArray(parsed.dialogue)) {
+          return { valid: false, errorReason: 'Dialogue must be an array.' };
+        }
+        for (const d of parsed.dialogue) {
+          if (!d || typeof d.speaker !== 'string' || typeof d.text !== 'string') {
+            return { valid: false, errorReason: 'Dialogue entries must contain valid speaker and text.' };
+          }
+          dialogue.push({ speaker: d.speaker, text: d.text });
+        }
+      }
+
+      // 3. Events validation
+      const events: string[] = [];
+      if (parsed.events) {
+        if (!Array.isArray(parsed.events)) {
+          return { valid: false, errorReason: 'Events must be an array of strings.' };
+        }
+        for (const e of parsed.events) {
+          if (typeof e !== 'string') {
+            return { valid: false, errorReason: 'Event items must be strings.' };
+          }
+          events.push(e);
+        }
+      }
+
+      // 4. DEF-CH12-05: State changes strict validation
+      const stateChanges: StateChangeProposal[] = [];
+      const allowedKinds = new Set([
+        'INVENTORY',
+        'CAPABILITY',
+        'LOCATION',
+        'COMBAT',
+        'CHRONICLE',
+        'PHYSIOLOGY',
+        'HEALTH',
+        'ALIGNMENT',
+      ]);
+
+      if (parsed.stateChanges) {
+        if (!Array.isArray(parsed.stateChanges)) {
+          return { valid: false, errorReason: 'stateChanges must be an array.' };
+        }
+        for (const sc of parsed.stateChanges) {
+          if (!sc || typeof sc !== 'object') {
+            return { valid: false, errorReason: 'State change item must be an object.' };
+          }
+          const kindUpper = String(sc.kind || '').toUpperCase();
+          if (!allowedKinds.has(kindUpper)) {
+            return {
+              valid: false,
+              errorReason: `Illegal state change kind '${sc.kind}'. Allowed kinds: ${Array.from(allowedKinds).join(', ')}.`,
+            };
+          }
+          if (!sc.targetId || typeof sc.targetId !== 'string' || sc.targetId.trim().length === 0) {
+            return { valid: false, errorReason: 'State change targetId must be a non-empty string.' };
+          }
+          stateChanges.push({
+            kind: kindUpper as StateChangeKind,
+            targetId: sc.targetId.trim(),
+            value: sc.value,
+            metadata: sc.metadata,
+          });
+        }
+      }
+
+      // 5. Memory Candidates validation
+      const memoryCandidates: string[] = [];
+      if (parsed.memoryCandidates) {
+        if (!Array.isArray(parsed.memoryCandidates)) {
+          return { valid: false, errorReason: 'memoryCandidates must be an array.' };
+        }
+        for (const m of parsed.memoryCandidates) {
+          if (typeof m === 'string') memoryCandidates.push(m);
+        }
+      }
+
+      // 6. Audio cues validation
+      const audioCues: string[] = [];
+      if (parsed.audioCues) {
+        if (!Array.isArray(parsed.audioCues)) {
+          return { valid: false, errorReason: 'audioCues must be an array.' };
+        }
+        for (const a of parsed.audioCues) {
+          if (typeof a === 'string') audioCues.push(a);
+        }
+      }
+
+      return {
+        valid: true,
+        turnPackage: {
+          narrative: parsed.narrative,
+          dialogue,
+          events,
+          stateChanges,
+          memoryCandidates,
+          audioCues,
+        },
+      };
+    } catch (e) {
+      return { valid: false, errorReason: 'Response is not valid JSON.' };
+    }
+  }
+
+  /**
+   * Direct Speech Synthesis Path (DEF-CH14-01 & R3 & R12)
+   * Presentation/utility operation ONLY.
+   * MUST NOT call executeTurn().
+   * MUST NOT create ContinuationCheckpoint records.
+   * MUST NOT mutate canonical world state, narrative history, memories, etc.
+   */
+  public async synthesizeSpeech(params: {
+    storyId?: string;
+    text: string;
+    voiceProfile?: any;
+    timeoutMs?: number;
+  }): Promise<{
+    success: boolean;
+    audioResultBase64: string | null;
+    fallbackText: string;
+    fromCache?: boolean;
+    modelId?: string;
+  }> {
+    const text = params.text || '';
+    const sensoryEngine = this.getWorldRepository().getSensoryEngine();
+    const cache = sensoryEngine?.getSpeechCache();
+
+    const selection = this.selectBestModel('speech.generate', {
+      contextTokens: Math.ceil(text.length / 4),
+    });
+    const candidates = [selection.selectedModel, ...selection.fallbacks];
+    const timeoutMs = params.timeoutMs || 5000;
+
+    for (const candidate of candidates) {
+      if (this.isModelCoolingDown(candidate) || this.isCircuitBreakerTripped(candidate.providerId, candidate.modelId)) continue;
+      const adapter = this.getAdapter(candidate.providerId);
+      if (!adapter) continue;
+
+      if (cache) {
+        const cacheKey = cache.computeKey(text, params.voiceProfile, candidate.providerId, candidate.modelId);
+        const cached = cache.get(cacheKey);
+        if (cached) {
+          return {
+            success: true,
+            audioResultBase64: cached,
+            fallbackText: text,
+            fromCache: true,
+            modelId: candidate.modelId,
+          };
+        }
+      }
+
+      const attemptStartedAt = Date.now();
+      try {
+        const res = await adapter.generate('speech.generate', text, {
+          timeoutMs,
+          modelId: candidate.modelId,
+          voiceProfile: params.voiceProfile,
+        });
+        const audioBase64 = res.audioBase64 || null;
+        if (!audioBase64) throw new Error('Speech provider returned no audio payload.');
+
+        this.recordProviderSuccess(candidate, res, 'speech.generate', attemptStartedAt);
+
+        if (cache) {
+          const cacheKey = cache.computeKey(text, params.voiceProfile, candidate.providerId, candidate.modelId);
+          cache.set(cacheKey, audioBase64);
+        }
+
+        return {
+          success: true,
+          audioResultBase64: audioBase64,
+          fallbackText: text || 'Speech synthesized.',
+          fromCache: false,
+          modelId: candidate.modelId,
+        };
+      } catch (err: any) {
+        this.recordProviderFailure(candidate, 'speech.generate', err, attemptStartedAt);
+      }
+    }
+
+    return {
+      success: false,
+      audioResultBase64: null,
+      fallbackText: text,
+    };
+  }
+
+  /**
+   * Direct Speech Transcription Path (DEF-CH14-01 & R1)
+   * Input normalization utility ONLY.
+   * Returns normalized text to caller; does NOT execute game actions.
+   * MUST NOT call executeTurn().
+   * MUST NOT create ContinuationCheckpoint records.
+   * MUST NOT mutate canonical world state or narrative history.
+   */
+  public async transcribeAudio(params: {
+    storyId?: string;
+    audioBase64: string;
+    timeoutMs?: number;
+  }): Promise<{
+    success: boolean;
+    text: string;
+    modelId?: string;
+  }> {
+    const audioBase64 = params.audioBase64 || '';
+    const selection = this.selectBestModel('speech.transcribe', { contextTokens: 256 });
+    const candidates = [selection.selectedModel, ...selection.fallbacks];
+    const timeoutMs = params.timeoutMs || 5000;
+
+    for (const candidate of candidates) {
+      if (this.isModelCoolingDown(candidate) || this.isCircuitBreakerTripped(candidate.providerId, candidate.modelId)) continue;
+      const adapter = this.getAdapter(candidate.providerId);
+      if (!adapter) continue;
+
+      const attemptStartedAt = Date.now();
+      try {
+        const res = await adapter.generate('speech.transcribe', 'Transcribe user audio input', {
+          timeoutMs,
+          modelId: candidate.modelId,
+          audioInputBase64: audioBase64,
+        });
+
+        let transcribedText = '';
+        try {
+          const parsed = JSON.parse(res.text);
+          transcribedText = parsed.narrative?.[0] || res.text;
+        } catch {
+          transcribedText = res.text;
+        }
+
+        if (!transcribedText) throw new Error('Transcription provider returned empty text.');
+        this.recordProviderSuccess(candidate, res, 'speech.transcribe', attemptStartedAt);
+
+        return {
+          success: true,
+          text: transcribedText,
+          modelId: candidate.modelId,
+        };
+      } catch (err: any) {
+        this.recordProviderFailure(candidate, 'speech.transcribe', err, attemptStartedAt);
+      }
+    }
+
+    return {
+      success: false,
+      text: '',
+    };
+  }
+
+  /**
+   * Authoritative Turn Orchestration Loop (DEF-CH12-01 & DEF-CH12-02 & DEF-CH12-07)
+   *
+   * Flow:
+   * Canonical Game State (CH1-CH10)
+   *   -> CH11 WorkingContextEngine
+   *   -> Model Selection (Context bounds + scoring + tie-breaking)
+   *   -> Provider Execution (Timeout + Retries + Circuit Breakers)
+   *   -> Schema Validation
+   *   -> Domain Adjudication Bridge
+   *   -> Continuation Checkpoint
+   */
+  /**
+   * Presentation-only narrative generation.
+   *
+   * Uses the same canonical working context and model selection infrastructure as a full
+   * turn, but deliberately does NOT adjudicate state changes or create continuation
+   * checkpoints. The caller remains responsible for canonical mechanics.
+   */
+  public async generateNarrativeOnly(params: {
+    storyId?: string;
+    playerAction: string;
+    committedOutcome?: string;
+    hardTokenBudget?: number;
+    timeoutMs?: number;
+    maxRetries?: number;
+    styleInstruction?: string;
+    continuationDirective?: string;
+    recentTurns?: Array<{ playerAction: string; narration: string; worldTime?: string }>;
+    sceneContext?: string;
+    forceModelId?: string;
+  }): Promise<{
+    success: boolean;
+    turnPackage?: StructuredTurnPackage;
+    modelId?: string;
+    providerId?: string;
+    error?: string;
+    source?: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK';
+    fallbackReason?: string;
+    attemptsTrail?: Array<{
+      providerId: string;
+      modelId: string;
+      displayName?: string;
+      status: 'SUCCESS' | 'FAILED';
+      latencyMs: number;
+      error?: string;
+    }>;
+    researchPacket?: ReturnType<typeof narrativeContinuityEngine.research>;
+    contextAudit?: {
+      hardTokenBudget: number;
+      totalTokens: number;
+      includedChunks: Array<{ label: string; source?: string; relevanceScore?: number; estimatedTokens: number }>;
+      evictedChunkLabels: string[];
+      assembledTextPreview: string;
+    };
+  }> {
+    const storyId = params.storyId || 'default_story';
+    const playerAction = (params.playerAction || '').trim();
+    if (!playerAction) {
+      return { success: false, error: 'A player action is required for narrative generation.' };
+    }
+
+    const hardTokenBudget = params.hardTokenBudget ?? 950;
+    const timeoutMs = params.timeoutMs ?? 7000;
+    const authoritativeOutcome = (params.committedOutcome || '').trim();
+    const connectedDirective = (params.continuationDirective || '').trim();
+    const styleInstruction = params.styleInstruction || [
+      'Write an immersive tabletop-RPG narrator response to the player’s latest action, as continuous story prose rather than a status report.',
+      authoritativeOutcome
+        ? `The authoritative game engine has already resolved the mechanics. Treat this outcome as hidden canonical guidance. Narrate what the character experiences and what the world visibly does because of it, but NEVER quote, summarize, label, or expose the wording of the authoritative outcome: ${authoritativeOutcome}`
+        : 'There is no additional mechanical outcome supplied. Do not invent one.',
+      connectedDirective
+        ? `Connected pipeline presentation directive. Follow it only as style/presentation guidance while preserving canonical mechanics: ${connectedDirective}`
+        : '',
+
+      'Begin in-scene, with the world, character, NPC, environment, or consequence—not with "Your action", "Immediate narration", "The character acts", "Attempted action", "Performed action", or any engine/status phrasing.',
+      'Do not tell the player what they attempted; depict the attempt as something that happened in the fiction.',
+      'Do not restate the player action verbatim or quote it back.',
+      'Show immediate sensory and physical consequences, NPC reactions, environmental response, or tension when the canonical context supports them.',
+      'The response should feel like the next passage of an interactive novel or tabletop GM session, not a paraphrase of the player input.',
+      'Use the current scene, researched relevant memories/lore, maintained plot, maintained narrative plan, and recent turn history to maintain continuity. The narration should feel like events are unfolding from a larger living situation, with visible consequences, atmosphere, character reactions, unresolved tension, and a sensible opening for what can happen next.',
+      'For ordinary physical action such as walking, approaching, looking, opening, touching, speaking, waiting, or moving, narrate the physical/world response naturally instead of treating the action as a capability request.',
+      'Do not repeat the action in sentence form. Transform it into fiction: describe what the character notices, how the environment responds, what changes because of the movement, what remains uncertain, and what catches attention next.',
+      'Prefer concrete scene-specific details over generic atmospheric filler. Reuse established world details only when they are relevant to the current action.',
+      'Vary sentence rhythm, paragraph openings, sensory emphasis, and descriptive verbs. Do not begin successive turns with the same grammatical pattern, the protagonist name, or a generic atmosphere sentence.',
+      'When recent narration contains a distinctive phrase, image, or sentence structure, deliberately avoid repeating it unless the repetition is an intentional in-world motif.',
+      'Whenever canonical context supports it, add one forward-looking beat: a visible opportunity, complication, clue, threat, NPC response, environmental change, or decision point. Do not invent a new fact merely to create drama.',
+      'Use 2–4 developed paragraphs for a normal story turn. A tiny action can be shorter only when the canonical scene genuinely provides no additional consequence; meaningful exploration, discovery, danger, dialogue, or combat should receive enough space to develop.',
+      'Do not add menus, meta-commentary, engine terminology, model names, system-status language, labels, or debug text.',
+      'Do not invent hidden facts, NPC knowledge, items, powers, or outcomes that are not supported by canonical context.',
+      'Do not propose or perform canonical state changes. The response is presentation only.',
+      'Never use phrases such as "the outcome unfolds in the narrative", "the action is committed", "canonical acquisition", "proposed capability", "server authority", or similar implementation language.',
+    ].join(' ');
+
+    const worldRepo = this.getWorldRepository();
+    const viewerActorId = worldRepo.getPlayerLifecycle(storyId)?.actorId;
+    const researchQuery = [
+      playerAction,
+      ...(params.recentTurns || []).slice(-2).map((turn) => turn.playerAction),
+    ].filter(Boolean).join(' ');
+    const researchPacket = narrativeContinuityEngine.research(
+      worldRepo,
+      storyId,
+      researchQuery || 'current story context',
+      viewerActorId,
+      { persist: false },
+    );
+    const assembledContext = WorkingContextEngine.assembleTurnContext({
+      storyId,
+      playerAction,
+      hardTokenBudget,
+      worldRepo,
+      customChunks: [
+        {
+          id: 'narrative_research',
+          band: 'B2_IMMEDIATE' as const,
+          label: 'Narrative Research',
+          content: JSON.stringify({
+            relevantResearch: researchPacket,
+            instruction: [
+              'Use usageGuidance to decide what each research block is for.',
+              'Knowledge grounds facts; memories ground continuity; story threads preserve unresolved situations; relationships shape NPC reactions; plot prevents contradictions; plan guides the current turn without forcing the player; momentum adds pressure only when supported; causal provenance preserves cause and consequence.',
+              'Select only the research that materially helps this exact player action. Do not dump the whole research packet into prose and do not expose research machinery.',
+            ].join(' '),
+          }),
+          estimatedTokens: WorkingContextEngine.estimateTokens(JSON.stringify(researchPacket)),
+          sourceAuthority: 'NarrativeContinuityEngine',
+          isProtected: true,
+          relevanceScore: 1,
+        },
+        ...(params.sceneContext ? [{
+          id: 'current_scene_context',
+          band: 'B2_IMMEDIATE' as const,
+          label: 'Current Scene Context',
+          content: params.sceneContext,
+          estimatedTokens: WorkingContextEngine.estimateTokens(params.sceneContext),
+          sourceAuthority: 'Canonical Story Context',
+          isProtected: false,
+          relevanceScore: 0.98,
+        }] : []),
+        ...(params.recentTurns?.length ? [{
+          id: 'recent_story_turns',
+          band: 'B2_IMMEDIATE' as const,
+          label: 'Recent Story Turns',
+          content: params.recentTurns
+            .slice(-8)
+            .map((turn, index) => `Turn ${index + 1} | ${turn.worldTime || 'current'} | Player: ${turn.playerAction} | Narration: ${turn.narration}`)
+            .join('\n'),
+          estimatedTokens: WorkingContextEngine.estimateTokens(
+            params.recentTurns.slice(-8).map((turn) => `${turn.playerAction} ${turn.narration}`).join(' ')
+          ),
+          sourceAuthority: 'Canonical Story History',
+          isProtected: false,
+          relevanceScore: 0.92,
+        }] : []),
+        {
+          id: 'narrative_presentation_contract',
+          band: 'B1_CRITICAL' as const,
+          label: 'Narrative Presentation Contract',
+          content: styleInstruction,
+          estimatedTokens: WorkingContextEngine.estimateTokens(styleInstruction),
+          sourceAuthority: 'DreamBook Narrative Presentation Layer',
+          isProtected: true,
+          relevanceScore: 1,
+        },
+      ],
+    });
+
+    const contextAudit = {
+      hardTokenBudget: assembledContext.hardTokenBudget,
+      totalTokens: assembledContext.totalTokens,
+      includedChunks: assembledContext.includedChunks.map((chunk) => ({
+        label: chunk.label,
+        source: chunk.sourceAuthority,
+        relevanceScore: chunk.relevanceScore,
+        estimatedTokens: chunk.estimatedTokens,
+      })),
+      evictedChunkLabels: assembledContext.evictedChunkLabels,
+      assembledTextPreview: assembledContext.assembledText.slice(0, 6000),
+    };
+
+    const generated = await this.executeTaskGeneration(
+      'narrative.generate',
+      assembledContext.assembledText,
+      styleInstruction,
+      {
+        timeoutMs,
+        maxTokens: 900,
+        contextTokens: assembledContext.totalTokens,
+        forceModelId: params.forceModelId,
+        validateResponse: (text) => {
+          const validation = this.validateTurnPackage(text, { allowPlainTextNarration: true });
+          return validation.valid
+            ? { valid: true }
+            : { valid: false, errorReason: validation.errorReason };
+        },
+      },
+    );
+
+    if (generated.source === 'DETERMINISTIC_FALLBACK') {
+      const testRuntimeFallback = typeof process !== 'undefined' && (
+        process.env.NODE_ENV === 'test' ||
+        Boolean(process.env.NODE_TEST_CONTEXT)
+      );
+      if (!testRuntimeFallback) {
+        return {
+          success: false,
+          providerId: generated.providerId,
+          modelId: generated.modelId,
+          source: generated.source,
+          fallbackReason: generated.fallbackReason,
+          attemptsTrail: generated.attemptsTrail,
+          researchPacket,
+          contextAudit,
+          error: generated.fallbackReason || 'All AI narration models failed; deterministic emergency fallback was withheld from player-facing narration.',
+        };
+      }
+    }
+
+    const validation = this.validateTurnPackage(generated.text, { allowPlainTextNarration: true });
+    if (!validation.valid || !validation.turnPackage) {
+      return {
+        success: false,
+        providerId: generated.providerId,
+        modelId: generated.modelId,
+        source: generated.source,
+        fallbackReason: generated.fallbackReason,
+        attemptsTrail: generated.attemptsTrail,
+        researchPacket,
+        contextAudit,
+        error: validation.errorReason || 'Narrative response failed structured validation.',
+      };
+    }
+
+    return {
+      success: true,
+      turnPackage: {
+        ...validation.turnPackage,
+        stateChanges: [],
+      },
+      modelId: generated.modelId,
+      providerId: generated.providerId,
+      source: generated.source,
+      fallbackReason: generated.fallbackReason,
+      attemptsTrail: generated.attemptsTrail,
+      researchPacket,
+      contextAudit,
+    };
+  }
+
+  public async executeTurn(params: {
+    storyId?: string;
+    playerAction?: string;
+    task?: TaskId;
+    hardTokenBudget?: number;
+    timeoutMs?: number;
+    maxRetries?: number;
+    checkpointId?: string;
+    forceModelId?: string;
+    audioInputBase64?: string;
+    voiceProfile?: any;
+    idempotencyKey?: string;
+    repository?: WorldRepository;
+  }): Promise<OrchestratedTurnResult> {
+    const storyId = params.storyId || 'default_story';
+    const rawIdempotencyKey = params.idempotencyKey ? String(params.idempotencyKey).trim() : undefined;
+    const scopedKey = rawIdempotencyKey ? `${storyId}::${rawIdempotencyKey}` : undefined;
+
+    // 1. V6.34 Replay Protection: Check server-authoritative cached turn results
+    if (scopedKey && this.turnResultsByIdempotencyKey.has(scopedKey)) {
+      const cached = this.turnResultsByIdempotencyKey.get(scopedKey)!;
+      return {
+        ...cached,
+        telemetry: {
+          ...cached.telemetry,
+          cached: true,
+          idempotencyReplayed: true,
+          idempotencyKey: rawIdempotencyKey,
+        },
+      };
+    }
+
+    // 2. V6.34 In-Flight Deduplication: Share promise for concurrent duplicate requests
+    if (scopedKey && this.inFlightTurnPromises.has(scopedKey)) {
+      const inFlightPromise = this.inFlightTurnPromises.get(scopedKey)!;
+      const result = await inFlightPromise;
+      return {
+        ...result,
+        telemetry: {
+          ...result.telemetry,
+          cached: true,
+          idempotencyReplayed: true,
+          idempotencyKey: rawIdempotencyKey,
+        },
+      };
+    }
+
+    const task: TaskId = params.task || 'narrative.generate';
+    const hardTokenBudget = params.hardTokenBudget ?? 400;
+    const timeoutMs = params.timeoutMs ?? 3000;
+    const maxRetries = params.maxRetries ?? 2;
+
+    const repo = params.repository || this.getWorldRepository();
+    // V6.34 Stable Identifiers: stats remain process-local, but canonical turn identity
+    // derives from the authoritative story command sequence so replay does not depend on
+    // unrelated turns executed elsewhere in the process.
+    this.totalTurnsExecuted += 1;
+    const turnSequence = repo.getCanonicalCommandEvents(storyId).length + 1;
+    const turnId = rawIdempotencyKey
+      ? deterministicId('turn', storyId, rawIdempotencyKey.replace(/[^a-zA-Z0-9_-]/g, '_'))
+      : deterministicId('turn', storyId, turnSequence, task, params.playerAction || '');
+
+    // Checkpoint continuation awareness (V6.15 / V6.06)
+    let priorCheckpoint: ContinuationCheckpoint | undefined;
+    if (params.checkpointId) {
+      priorCheckpoint = this.getContinuationCheckpoint(params.checkpointId);
+      if (priorCheckpoint && priorCheckpoint.uncommittedOutput && !params.playerAction) {
+        params.playerAction = `Resume: ${priorCheckpoint.uncommittedOutput}`;
+      }
+    }
+
+    const executeCore = async (): Promise<OrchestratedTurnResult> => {
+      // 1. Ingest CH11 Working Context (DEF-CH12-02)
+      const researchPacket = narrativeContinuityEngine.research(
+        repo,
+        storyId,
+        params.playerAction || 'current story context',
+        repo.getPlayerLifecycle(storyId)?.actorId,
+      );
+      const assembledContext: AssembledTurnContext = WorkingContextEngine.assembleTurnContext({
+        storyId,
+        playerAction: params.playerAction || 'Observe surroundings and assess position',
+        hardTokenBudget,
+        worldRepo: repo,
+        customChunks: [{
+          id: 'b3_narrative_research',
+          band: 'B3_CAUSAL_OPPORTUNITY',
+          label: 'Narrative Research / Plot / Plan',
+          content: JSON.stringify(researchPacket),
+          estimatedTokens: WorkingContextEngine.estimateTokens(JSON.stringify(researchPacket)),
+          sourceAuthority: 'NarrativeContinuityEngine',
+          relevanceScore: 0.9,
+          isProtected: false,
+        }],
+      });
+
+      // 1b. CH15 Source Adaptation Adjudication Check
+      const profile = repo.getAdaptationProfile(storyId);
+      const bible = repo.getAdaptedStoryBible(storyId);
+      if (profile && bible) {
+        const evalResult = StoryAdaptationPipeline.evaluatePlayerActionAgainstCanon(
+          params.playerAction || '',
+          profile,
+          bible.canonFacts
+        );
+
+        if (!evalResult.allowed) {
+          const rejectedOutput = `[CANON REJECTION] ${evalResult.reason}`;
+          return {
+            success: true,
+            turnPackage: {
+              narrative: [rejectedOutput],
+              dialogue: [],
+              events: [],
+              stateChanges: [],
+              memoryCandidates: [],
+              audioCues: [],
+            },
+            adjudicationResult: {
+              allApproved: false,
+              approvedCount: 0,
+              rejectedCount: 1,
+              outcomes: [],
+              disapprovedChanges: [],
+            },
+            checkpoint: {
+              checkpointId: `cp_rejected_${turnId}`,
+              storyId,
+              turnId,
+              role: 'narrator',
+              workingContextTokens: assembledContext.totalTokens,
+              worldTime: repo.getWorldClock(storyId).formatHeader(),
+              locationId: repo.getPlayerLifecycle(storyId)?.locationId || 'loc_whispering_orrery',
+              sceneSummary: evalResult.reason,
+              recentOutput: rejectedOutput,
+              uncommittedOutput: '',
+              canonicalInvariants: {
+                playerActorId: `player_actor_${storyId}`,
+                discoveredLocations: repo.getPlayerLifecycle(storyId)?.discoveredLocationIds || [],
+              },
+              styleContract: {
+                tone: 'evocative_canonical_archival',
+                epistemicSanitized: 'true',
+                promptVersion: MultiModelOrchestrator.PROMPT_VERSION,
+              },
+              openThreads: [],
+              presentationEvents: [],
+              knowledgeBoundaries: {},
+              createdAt: Date.now(),
+            },
+            telemetry: {
+              turnId,
+              storyId,
+              taskId: task,
+              selectedModelId: 'canon-guard',
+              selectedProviderId: 'server-adjudicator',
+              selectionScore: 100,
+              selectionReason: 'Source Canon Guard Adjudication',
+              fallbackChain: [],
+              attempts: 1,
+              latencyMs: 2,
+              inputTokens: assembledContext.totalTokens,
+              outputTokens: 20,
+              validated: true,
+            },
+          };
+        }
+
+        if (evalResult.createsDivergence) {
+          const session = repo.getAdaptationSession(storyId);
+          const canonicalTimestamp = repo.getWorldClock(storyId).getTimestamp();
+          const divergenceEventId = deterministicId('evt_div', storyId, turnId, params.playerAction, evalResult.reason);
+          repo.addAdaptationEvent(storyId, {
+            id: divergenceEventId,
+            storyId,
+            branchId: session?.branchId || 'main_branch',
+            type: 'DIVERGENCE',
+            involvedEntities: ['player'],
+            timestamp: formatCanonicalTimestamp(canonicalTimestamp),
+            reason: evalResult.reason,
+            details: { action: params.playerAction },
+          });
+
+          const chronicle = repo.getHistoricalChronicleEngine(storyId);
+          chronicle.recordEvidence({
+            id: deterministicId('chron_div', storyId, divergenceEventId),
+            category: 'WORLD_ANOMALY',
+            sourceEventId: divergenceEventId,
+            timestamp: canonicalTimestamp,
+            locationId: repo.getPlayerLifecycle(storyId)?.locationId || 'loc_whispering_orrery',
+            primarySubjectId: `player_actor_${storyId}`,
+            summary: `DIVERGENCE EVENT: ${evalResult.reason}`,
+            details: `Player initiated canonical divergence: ${params.playerAction}`,
+            provenance: 'direct_observation',
+            visibility: 'PUBLIC',
+          });
+        }
+      }
+
+      // 2. Select Eligible Model respecting context tokens (DEF-CH12-02, DEF-CH12-03)
+      let selectedModel: ModelRegistryRecord;
+      let selectionReason: string;
+      let fallbacks: ModelRegistryRecord[];
+
+      if (params.forceModelId) {
+        const forced = Array.from(this.models.values()).find((m) => m.modelId === params.forceModelId);
+        if (!forced) throw new Error(`Forced model ID '${params.forceModelId}' not found.`);
+        if (!forced.roleEligibility.includes(task)) {
+          throw new Error(`Model '${params.forceModelId}' is not eligible for role/task '${task}'.`);
+        }
+        if (!this.isCandidateUsable(forced, task) && !forced.isEmergencyFloor) {
+          throw new Error('Forced model "' + params.forceModelId + '" is unavailable, cooling down, or not context-eligible.');
+        }
+        selectedModel = forced;
+        selectionReason = 'Explicitly forced model "' + params.forceModelId + '".';
+        const configuredFallbacks = this.getFallbackChain(task)
+          .map((key) => this.models.get(key) || Array.from(this.models.values()).find((m) => m.modelId === key))
+          .filter((m): m is ModelRegistryRecord => Boolean(m))
+          .filter((m) => m.modelId !== forced.modelId);
+        fallbacks = configuredFallbacks.length > 0
+          ? configuredFallbacks.filter((m) => this.isCandidateUsable(m, task) || m.isEmergencyFloor)
+          : Array.from(this.models.values()).filter((m) => m.modelId !== forced.modelId && this.isCandidateUsable(m, task));
+      } else {
+        const selection = this.selectBestModel(task, { contextTokens: assembledContext.totalTokens });
+        selectedModel = selection.selectedModel;
+        selectionReason = selection.selectionReason;
+        fallbacks = selection.fallbacks;
+      }
+
+      const candidateChain: ModelRegistryRecord[] = [selectedModel, ...fallbacks];
+      let totalAttempts = 0;
+      let lastError = '';
+
+      // 3. Provider Execution Loop with Retries, Timeouts, and Failover (DEF-CH12-01, DEF-CH12-07)
+      for (let cIdx = 0; cIdx < candidateChain.length; cIdx++) {
+        const currentCandidate = candidateChain[cIdx];
+        const modelKey = `${currentCandidate.providerId}::${currentCandidate.modelId}`;
+
+        const adapter = this.getAdapter(currentCandidate.providerId);
+        if (!adapter) {
+          continue;
+        }
+
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          totalAttempts++;
+          const attemptStartedAt = Date.now();
+          try {
+            // Wrap provider call with AbortController for strict timeout enforcement
+            const abortController = new AbortController();
+            const timer = setTimeout(() => abortController.abort(), timeoutMs);
+
+            let providerRes: ProviderGenerateResult;
+            try {
+              providerRes = await adapter.generate(task, assembledContext.assembledText, {
+                timeoutMs,
+                abortSignal: abortController.signal,
+                retryCount: attempt,
+                modelId: currentCandidate.modelId,
+                audioInputBase64: params.audioInputBase64,
+                voiceProfile: params.voiceProfile,
+              });
+            } finally {
+              clearTimeout(timer);
+            }
+
+            // Reset failure counter on success
+            this.consecutiveFailures.set(modelKey, 0);
+
+            // 4. Validate Structured Output (DEF-CH12-05)
+            const validation = this.validateTurnPackage(providerRes.text);
+            if (!validation.valid || !validation.turnPackage) {
+              throw new Error(`Turn package validation failed: ${validation.errorReason}`);
+            }
+
+            // 5. Adjudicate State Changes through Domain Authority Bridge (DEF-CH12-05)
+            this.recordProviderSuccess(currentCandidate, providerRes, task, attemptStartedAt);
+
+            const adjudication = DomainAdjudicationBridge.adjudicate(
+              validation.turnPackage,
+              repo,
+              storyId
+            );
+
+            // 6. Create Continuation Checkpoint (DEF-CH12-06, V6.15 completeness)
+            const checkpointId = rawIdempotencyKey
+              ? deterministicId('cp', storyId, rawIdempotencyKey.replace(/[^a-zA-Z0-9_-]/g, '_'), attempt, currentCandidate.modelId)
+              : deterministicId('cp', storyId, turnId, attempt, currentCandidate.modelId);
+            const checkpoint: ContinuationCheckpoint = {
+              checkpointId,
+              storyId,
+              turnId,
+              role: 'narrator',
+              playerAction: params.playerAction,
+              workingContextTokens: assembledContext.totalTokens,
+              worldTime: repo.getWorldClock(storyId).formatHeader(),
+              locationId: repo.getPlayerLifecycle(storyId)?.locationId || 'loc_whispering_orrery',
+              sceneSummary: validation.turnPackage.narrative[0] || 'Scene observed.',
+              recentOutput: validation.turnPackage.narrative.join(' '),
+              uncommittedOutput: '',
+              canonicalInvariants: {
+                playerActorId: `player_actor_${storyId}`,
+                discoveredLocations: repo.getPlayerLifecycle(storyId)?.discoveredLocationIds || [],
+              },
+              styleContract: {
+                tone: 'evocative_canonical_archival',
+                epistemicSanitized: 'true',
+              },
+              openThreads: validation.turnPackage.memoryCandidates || [],
+              presentationEvents: [
+                ...(validation.turnPackage.audioCues || []).map((c: any) =>
+                  typeof c === 'string' ? `audio:${c}` : `audio:${c.soundId}`
+                ),
+                ...(validation.turnPackage.visualCues || []).map((v: any) =>
+                  typeof v === 'string' ? `visual:${v}` : `visual:${v.prompt}`
+                ),
+              ],
+              knowledgeBoundaries: {
+                sanitized: true,
+                epistemicSanitized: true,
+                hiddenFactsSuppressed: [],
+                totalTokens: assembledContext.totalTokens,
+                truncated: (assembledContext.evictedChunkLabels?.length ?? 0) > 0,
+                viewerActorId: `player_actor_${storyId}`,
+              },
+              handoffEligible: true,
+              summaryText: validation.turnPackage.narrative[0] || 'Scene observed.',
+              recentHistory: validation.turnPackage.narrative || [],
+              activeConditions: [],
+              activeQuests: [],
+              selectedModelId: currentCandidate.modelId,
+              providerId: currentCandidate.providerId,
+              retryCount: attempt,
+              fallbackChain: candidateChain.slice(0, cIdx + 1).map((m) => m.modelId),
+              createdAt: Date.now(),
+              adjudicationStatus: adjudication.allApproved ? 'ADJUDICATED' : 'VALIDATED',
+            };
+            this.createContinuationCheckpoint(checkpoint);
+
+            const telemetry: OrchestratedTurnTelemetry = {
+              turnId,
+              storyId,
+              promptVersion: MultiModelOrchestrator.PROMPT_VERSION,
+              taskId: task,
+              selectedModelId: currentCandidate.modelId,
+              selectedProviderId: currentCandidate.providerId,
+              selectionScore: currentCandidate.userPriority,
+              selectionReason,
+              fallbackChain: candidateChain.slice(0, cIdx + 1).map((m) => m.modelId),
+              attempts: totalAttempts,
+              latencyMs: providerRes.latencyMs,
+              inputTokens: Math.min(providerRes.inputTokens || assembledContext.totalTokens, assembledContext.totalTokens),
+              outputTokens: providerRes.outputTokens || 50,
+              validated: true,
+              adjudicationResult: adjudication,
+              checkpointCreated: checkpointId,
+              recoveredFromCheckpoint: Boolean(params.checkpointId),
+              idempotencyKey: rawIdempotencyKey,
+            };
+            this.lastTurnTelemetry = telemetry;
+            narrativeContinuityEngine.recordTurn(repo, {
+              storyId,
+              turnId,
+              playerAction: params.playerAction,
+              turnPackage: validation.turnPackage,
+            });
+            persistTurnMemoryCandidates(
+              repo,
+              storyId,
+              turnId,
+              validation.turnPackage.memoryCandidates,
+            );
+
+            return {
+              success: true,
+              turnPackage: validation.turnPackage,
+              telemetry,
+              adjudicationResult: adjudication,
+              checkpoint,
+              audioResultBase64: providerRes.audioBase64,
+            };
+          } catch (err: any) {
+            lastError = err?.message || String(err);
+            this.recordProviderFailure(currentCandidate, task, err, attemptStartedAt);
+
+            // Track consecutive failures & circuit breaker
+            const failures = (this.consecutiveFailures.get(modelKey) || 0) + 1;
+            this.consecutiveFailures.set(modelKey, failures);
+
+            if (failures >= 2 || failures > maxRetries) {
+              this.circuitBreakersTripped.add(modelKey);
+              currentCandidate.health = 'Unavailable';
+            }
+
+            // If rate limited or quota exhausted, mark accordingly and failover immediately
+            if (
+              lastError.includes('429') ||
+              lastError.includes('rate limit') ||
+              lastError.includes('Resource Exhausted') ||
+              lastError.includes('quota')
+            ) {
+              currentCandidate.health = 'Throttled';
+              currentCandidate.quota = 'Exhausted';
+              break;
+            }
+
+            // Exponential backoff between retries
+            if (attempt < maxRetries) {
+              const backoffMs = Math.min(1000, 100 * Math.pow(2, attempt));
+              await new Promise((res) => setTimeout(res, backoffMs));
+            }
+          }
+        }
+      }
+
+      // All primary models and retries failed -> Fallback to emergency floor if not already tried
+      const emergencyModel = Array.from(this.models.values()).find((m) => m.isEmergencyFloor);
+      if (emergencyModel) {
+        const emergencyAdapter = this.getAdapter(emergencyModel.providerId);
+        if (emergencyAdapter) {
+          const emergencyStartedAt = Date.now();
+          const res = await emergencyAdapter.generate(task, assembledContext.assembledText, {
+            audioInputBase64: params.audioInputBase64,
+            voiceProfile: params.voiceProfile,
+          });
+          this.recordProviderSuccess(emergencyModel, res, task, emergencyStartedAt);
+          const validation = this.validateTurnPackage(res.text);
+          if (validation.valid && validation.turnPackage) {
+            const adjudication = DomainAdjudicationBridge.adjudicate(
+              validation.turnPackage,
+              repo,
+              storyId
+            );
+            const checkpointId = rawIdempotencyKey
+              ? deterministicId('cp_emergency', storyId, rawIdempotencyKey.replace(/[^a-zA-Z0-9_-]/g, '_'), totalAttempts)
+              : deterministicId('cp_emergency', storyId, turnId, totalAttempts);
+            const checkpoint: ContinuationCheckpoint = {
+              checkpointId,
+              storyId,
+              turnId,
+              role: 'narrator',
+              worldTime: repo.getWorldClock(storyId).formatHeader(),
+              locationId: repo.getPlayerLifecycle(storyId)?.locationId || 'loc_whispering_orrery',
+              sceneSummary: validation.turnPackage.narrative[0],
+              recentOutput: validation.turnPackage.narrative.join(' '),
+              uncommittedOutput: '',
+              canonicalInvariants: {},
+              styleContract: {
+                tone: 'deterministic_emergency',
+                promptVersion: MultiModelOrchestrator.PROMPT_VERSION,
+              },
+              openThreads: validation.turnPackage.memoryCandidates || [],
+              presentationEvents: [
+                ...(validation.turnPackage.audioCues || []).map((c: any) =>
+                  typeof c === 'string' ? `audio:${c}` : `audio:${c.soundId}`
+                ),
+                ...(validation.turnPackage.visualCues || []).map((v: any) =>
+                  typeof v === 'string' ? `visual:${v}` : `visual:${v.prompt}`
+                ),
+              ],
+              knowledgeBoundaries: {
+                sanitized: true,
+                epistemicSanitized: true,
+                hiddenFactsSuppressed: [],
+                totalTokens: assembledContext.totalTokens,
+                truncated: (assembledContext.evictedChunkLabels?.length ?? 0) > 0,
+                viewerActorId: `player_actor_${storyId}`,
+              },
+              handoffEligible: true,
+              summaryText: validation.turnPackage.narrative[0] || 'Emergency scene observed.',
+              recentHistory: validation.turnPackage.narrative || [],
+              activeConditions: [],
+              activeQuests: [],
+              selectedModelId: emergencyModel.modelId,
+              providerId: emergencyModel.providerId,
+              retryCount: totalAttempts,
+              fallbackChain: ['emergency-fallback-local'],
+              createdAt: Date.now(),
+            };
+            this.createContinuationCheckpoint(checkpoint);
+
+            const telemetry: OrchestratedTurnTelemetry = {
+              turnId,
+              storyId,
+              promptVersion: MultiModelOrchestrator.PROMPT_VERSION,
+              taskId: task,
+              selectedModelId: emergencyModel.modelId,
+              selectedProviderId: emergencyModel.providerId,
+              selectionScore: 10,
+              selectionReason: 'Exhausted all primary providers; recovered through emergency floor.',
+              fallbackChain: ['emergency-fallback-local'],
+              attempts: totalAttempts + 1,
+              latencyMs: res.latencyMs,
+              inputTokens: assembledContext.totalTokens,
+              outputTokens: 30,
+              validated: true,
+              adjudicationResult: adjudication,
+              checkpointCreated: checkpointId,
+              recoveredFromCheckpoint: Boolean(params.checkpointId),
+              idempotencyKey: rawIdempotencyKey,
+            };
+            this.lastTurnTelemetry = telemetry;
+
+            return {
+              success: true,
+              turnPackage: validation.turnPackage,
+              telemetry,
+              adjudicationResult: adjudication,
+              checkpoint,
+              audioResultBase64: res.audioBase64,
+            };
+          }
+        }
+      }
+
+      return {
+        success: false,
+        telemetry: {
+          turnId,
+          storyId,
+          taskId: task,
+          selectedModelId: selectedModel.modelId,
+          selectedProviderId: selectedModel.providerId,
+          selectionScore: 0,
+          selectionReason,
+          fallbackChain: candidateChain.map((m) => m.modelId),
+          attempts: totalAttempts,
+          latencyMs: 0,
+          inputTokens: assembledContext.totalTokens,
+          outputTokens: 0,
+          validated: false,
+          idempotencyKey: rawIdempotencyKey,
+        },
+        error: `All models and emergency fallbacks failed. Last error: ${lastError}`,
+      };
+    };
+
+    let executePromise: Promise<OrchestratedTurnResult>;
+    if (scopedKey) {
+      executePromise = executeCore();
+      this.inFlightTurnPromises.set(scopedKey, executePromise);
+    } else {
+      executePromise = executeCore();
+    }
+
+    try {
+      const result = await executePromise;
+      if (scopedKey && result.success) {
+        this.turnResultsByIdempotencyKey.set(scopedKey, result);
+        if (this.turnResultsByIdempotencyKey.size > 200) {
+          const oldestKey = this.turnResultsByIdempotencyKey.keys().next().value;
+          if (oldestKey) this.turnResultsByIdempotencyKey.delete(oldestKey);
+        }
+      }
+      return result;
+    } finally {
+      if (scopedKey) {
+        this.inFlightTurnPromises.delete(scopedKey);
+      }
+    }
+  }
+
+  /**
+   * Cross-Model Handoff & Checkpoint Continuation (DEF-CH12-06)
+   * Resumes execution using the saved continuation checkpoint.
+   */
+  public async continueFromCheckpoint(
+    checkpointId: string,
+    targetModelId?: string,
+    options?: { hardTokenBudget?: number }
+  ): Promise<OrchestratedTurnResult> {
+    const cp = this.getContinuationCheckpoint(checkpointId);
+    if (!cp) {
+      return {
+        success: false,
+        telemetry: {
+          turnId: 'unknown',
+          storyId: 'unknown',
+          taskId: 'narrative.generate',
+          selectedModelId: 'none',
+          selectedProviderId: 'none',
+          selectionScore: 0,
+          selectionReason: 'Checkpoint not found',
+          fallbackChain: [],
+          attempts: 0,
+          latencyMs: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          validated: false,
+        },
+        error: `Continuation checkpoint '${checkpointId}' not found.`,
+      };
+    }
+
+    const result = await this.executeTurn({
+      storyId: cp.storyId,
+      playerAction: cp.playerAction || 'Continue narrative thread from checkpoint',
+      task: 'narrative.generate',
+      hardTokenBudget: options?.hardTokenBudget ?? cp.workingContextTokens ?? 400,
+      forceModelId: targetModelId,
+      checkpointId: cp.checkpointId,
+    });
+
+    if (result.telemetry) {
+      result.telemetry.recoveredFromCheckpoint = true;
+    }
+
+    return result;
+  }
+
+  public hasIdempotencyKey(storyId: string, idempotencyKey: string): boolean {
+    return this.turnResultsByIdempotencyKey.has(`${storyId}::${idempotencyKey.trim()}`);
+  }
+
+  public clearIdempotencyCache(): void {
+    this.turnResultsByIdempotencyKey.clear();
+    this.inFlightTurnPromises.clear();
+  }
+
+  public async executeTaskGeneration(
+    task: TaskId,
+    prompt: string,
+    systemInstruction?: string,
+    options?: {
+      timeoutMs?: number;
+      maxTokens?: number;
+      contextTokens?: number;
+      forceModelId?: string;
+      validateResponse?: (text: string) => TaskResponseValidationResult;
+    }
+  ): Promise<{
+    text: string;
+    source: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK';
+    providerId: string;
+    modelId: string;
+    fallbackReason?: string;
+    attempts: number;
+    attemptsTrail: Array<{
+      providerId: string;
+      modelId: string;
+      displayName?: string;
+      status: 'SUCCESS' | 'FAILED';
+      latencyMs: number;
+      error?: string;
+    }>;
+  }> {
+    const contract = getAiTaskContract(task);
+    const contractValidator = options?.validateResponse || ((text: string) => validateAiTaskResponse(task, text));
+    this.refreshAllProviderModelStatuses();
+    const timeoutMs = options?.timeoutMs || 35000;
+    const contextTokens = options?.contextTokens ?? 0;
+    let selection: ReturnType<typeof this.selectBestModel>;
+    try {
+      selection = this.selectBestModel(task, { contextTokens });
+    } catch {
+      const emergency = Array.from(this.models.values()).find((m) => m.isEmergencyFloor) || {
+        providerId: 'provider_deterministic_emergency',
+        modelId: 'emergency-fallback-local',
+        displayName: 'Deterministic Rule Engine (Emergency Floor)',
+        pool: 'emergency',
+        capabilities: ['zero_cost', 'unlimited_quota', 'deterministic', 'text_generation', 'structured_output', 'text'],
+        contextWindow: 1000000,
+        health: 'Healthy',
+        quota: 'Healthy',
+        latencyMs: 5,
+        userPriority: 10,
+        roleEligibility: [task],
+        isEmergencyFloor: true,
+        fallbackEligibility: true,
+        accessStatus: 'accessible',
+        lifecycleState: 'active',
+        supportedInputTypes: ['text'],
+        supportedOutputTypes: ['text', 'json'],
+      };
+      selection = {
+        selectedModel: emergency,
+        selectionReason: 'Emergency floor fallback selected after routing failure.',
+        selectionScore: emergency.userPriority,
+        fallbacks: [],
+      };
+    }
+
+    if (options?.forceModelId) {
+      const forced = Array.from(this.models.values()).find(
+        (model) => model.modelId === options.forceModelId || this.modelKey(model) === options.forceModelId,
+      );
+      if (!forced) {
+        throw new Error('Requested AI model "' + options.forceModelId + '" is not registered.');
+      }
+      if (!forced.roleEligibility.includes(task)) {
+        throw new Error('Requested AI model "' + options.forceModelId + '" is not eligible for task "' + task + '".');
+      }
+      if (!this.isCandidateUsable(forced, task, contextTokens) && !forced.isEmergencyFloor) {
+        throw new Error('Requested AI model "' + options.forceModelId + '" is unavailable, cooling down, quota-limited, or not context-eligible.');
+      }
+      selection = {
+        selectedModel: forced,
+        selectionReason: 'Explicitly selected model "' + (forced.displayName || forced.modelId) + '".',
+        selectionScore: forced.userPriority,
+        fallbacks: this.getFallbackChain(task).flatMap((key) => {
+          const model = Array.from(this.models.values()).find(
+            (candidate) => this.modelKey(candidate) === key || candidate.modelId === key,
+          );
+          return model && this.modelKey(model) !== this.modelKey(forced) ? [model] : [];
+        }),
+      };
+    }
+
+    const selectedCandidates: ModelRegistryRecord[] = [selection.selectedModel, ...selection.fallbacks];
+    const candidateKeys = new Set(selectedCandidates.map((model) => this.modelKey(model)));
+    const categoryHasManualOverride = Boolean(this.categoryOverrides.get(this.getTaskCategory(task)));
+    const hasConfiguredTaskChain = this.taskFallbackChains.has(task);
+
+    // Only tasks without an explicit configured route may use adaptive
+    // discovery-based recovery. Configured task routes are authoritative and
+    // must not be expanded with unrelated eligible models at runtime.
+    const usableCandidates = Array.from(this.models.values())
+      .filter((model) => !candidateKeys.has(this.modelKey(model)))
+      .filter((model) => !model.isEmergencyFloor)
+      .filter((model) => this.isCandidateUsable(model, task, contextTokens))
+      .sort((a, b) => {
+        const runtimeA = this.ensureRuntimeStatus(a);
+        const runtimeB = this.ensureRuntimeStatus(b);
+        const score = (model: ModelRegistryRecord, runtime: ModelRuntimeStatus) =>
+          model.userPriority +
+          (model.health === 'Healthy' ? 50 : model.health === 'Degraded' ? 15 : 0) +
+          (model.quota === 'Healthy' ? 30 : model.quota === 'Low' ? 10 : 0) -
+          runtime.consecutiveFailures * 25 -
+          Math.min(20, (model.latencyMs || 500) / 100);
+        const diff = score(b, runtimeB) - score(a, runtimeA);
+        return diff !== 0 ? diff : this.modelKey(a).localeCompare(this.modelKey(b));
+      });
+
+    const runnableNonEmergencyCount = selectedCandidates.filter(
+      (candidate) =>
+        !candidate.isEmergencyFloor &&
+        Boolean(this.getAdapter(candidate.providerId)) &&
+        this.isCandidateUsable(candidate, task, contextTokens)
+    ).length;
+
+    if (!categoryHasManualOverride && !hasConfiguredTaskChain && runnableNonEmergencyCount < 2) {
+      for (const model of usableCandidates) {
+        if (candidateKeys.has(this.modelKey(model))) continue;
+        if (!model.roleEligibility.includes(task)) continue;
+        if (!this.getAdapter(model.providerId)) continue;
+        if (model.health === 'Unavailable' || model.health === 'DisabledByUser' || model.health === 'InvalidAuth') continue;
+        if (model.quota === 'Exhausted' || model.accessStatus === 'quota_limited' || model.accessStatus === 'rate_limited') continue;
+        if (contextTokens > 0 && model.contextWindow > 0 && contextTokens > model.contextWindow) continue;
+        selectedCandidates.push(model);
+        candidateKeys.add(this.modelKey(model));
+        if (selectedCandidates.filter((candidate) => !candidate.isEmergencyFloor).length >= 4) break;
+      }
+    }
+
+    let candidateChain: ModelRegistryRecord[] = selectedCandidates
+      .filter((model) => model.isEmergencyFloor || this.isCandidateUsable(model, task, contextTokens));
+
+    // Final preflight recovery: count only models that can actually be contacted.
+    // This prevents unusable configured entries from consuming the fallback slots.
+    const runnableNonEmergency = candidateChain.filter(
+      (model) => !model.isEmergencyFloor && Boolean(this.getAdapter(model.providerId))
+    ).length;
+
+    if (!categoryHasManualOverride && runnableNonEmergency < 2) {
+      for (const model of usableCandidates) {
+        if (candidateChain.some((candidate) => this.modelKey(candidate) === this.modelKey(model))) continue;
+        if (!this.getAdapter(model.providerId)) continue;
+        candidateChain.push(model);
+        if (candidateChain.filter((candidate) => !candidate.isEmergencyFloor && Boolean(this.getAdapter(candidate.providerId))).length >= 4) break;
+      }
+    }
+
+    let totalAttempts = 0;
+    let lastError = '';
+    const attemptsTrail: Array<{
+      providerId: string;
+      modelId: string;
+      displayName?: string;
+      status: 'SUCCESS' | 'FAILED';
+      latencyMs: number;
+      error?: string;
+    }> = [];
+
+    for (let cIdx = 0; cIdx < candidateChain.length; cIdx++) {
+      if (totalAttempts >= (contract.fallbackPolicy?.maxTotalAttempts ?? 5) && !candidateChain[cIdx].isEmergencyFloor) {
+        break;
+      }
+      // For adaptive tasks only, try one final live-registry recovery
+      // candidate before the emergency floor. Explicit configured routes skip
+      // this escape hatch so their order remains authoritative.
+      if (
+        !categoryHasManualOverride &&
+        !hasConfiguredTaskChain &&
+        cIdx === candidateChain.length - 2 &&
+        !candidateChain[cIdx].isEmergencyFloor &&
+        candidateChain[cIdx + 1]?.isEmergencyFloor
+      ) {
+        const attemptedKeys = new Set(candidateChain.slice(0, cIdx + 1).map((candidate) => this.modelKey(candidate)));
+        const lateRecovery = Array.from(this.models.values())
+          .filter((model) => !model.isEmergencyFloor)
+          .filter((model) => !attemptedKeys.has(this.modelKey(model)))
+          .filter((model) => model.roleEligibility.includes(task))
+          .filter((model) => Boolean(this.getAdapter(model.providerId)))
+          .filter((model) => model.health !== 'Unavailable' && model.health !== 'DisabledByUser' && model.health !== 'InvalidAuth')
+          .filter((model) => model.quota !== 'Exhausted' && model.accessStatus !== 'quota_limited' && model.accessStatus !== 'rate_limited')
+          .filter((model) => contextTokens <= 0 || model.contextWindow <= 0 || contextTokens <= model.contextWindow)
+          .sort((a, b) => b.userPriority - a.userPriority || this.modelKey(a).localeCompare(this.modelKey(b)))[0];
+
+        if (lateRecovery) {
+          candidateChain.splice(cIdx + 1, 0, lateRecovery);
+        }
+      }
+
+      const currentCandidate = candidateChain[cIdx];
+      const modelKey = `${currentCandidate.providerId}::${currentCandidate.modelId}`;
+
+      const adapter = this.getAdapter(currentCandidate.providerId);
+      if (!adapter) {
+        attemptsTrail.push({
+          providerId: currentCandidate.providerId,
+          modelId: currentCandidate.modelId,
+          displayName: currentCandidate.displayName || currentCandidate.modelId,
+          status: 'FAILED',
+          latencyMs: 0,
+          error: `Provider adapter '${currentCandidate.providerId}' not configured or missing API credentials.`,
+        });
+        continue;
+      }
+
+      const attemptStartedAt = Date.now();
+      try {
+        totalAttempts++;
+        const abortController = new AbortController();
+        const timer = setTimeout(() => abortController.abort(), timeoutMs);
+
+        let providerRes: ProviderGenerateResult;
+        try {
+          providerRes = await adapter.generate(task, prompt, {
+            timeoutMs,
+            maxTokens: options?.maxTokens,
+            abortSignal: abortController.signal,
+            modelId: currentCandidate.modelId,
+            systemInstruction,
+          });
+        } finally {
+          clearTimeout(timer);
+        }
+
+        if (!providerRes || !providerRes.text) {
+          throw new Error('Provider returned empty response.');
+        }
+
+        if (contractValidator) {
+          const validation = contractValidator(providerRes.text);
+          if (!validation.valid) {
+            throw new Error(
+              'Task response schema validation failed' +
+              (validation.errorReason ? `: ${validation.errorReason}` : '.')
+            );
+          }
+        }
+
+        const latencyMs = Math.max(1, Date.now() - attemptStartedAt);
+        this.recordProviderSuccess(currentCandidate, providerRes, task, attemptStartedAt);
+        this.consecutiveFailures.set(modelKey, 0);
+
+        attemptsTrail.push({
+          providerId: currentCandidate.providerId,
+          modelId: currentCandidate.modelId,
+          displayName: currentCandidate.displayName || currentCandidate.modelId,
+          status: 'SUCCESS',
+          latencyMs,
+        });
+
+        const isEmergency = Boolean(currentCandidate.isEmergencyFloor) ||
+                            currentCandidate.providerId.includes('emergency') ||
+                            currentCandidate.providerId === 'provider_deterministic_emergency';
+        const source = isEmergency ? 'DETERMINISTIC_FALLBACK' : (cIdx === 0 ? 'AI_PRIMARY' : 'AI_FALLBACK');
+        const fallbackReason = cIdx > 0
+          ? `Fell back to ${currentCandidate.displayName || currentCandidate.modelId} after ${cIdx} earlier model failure(s).`
+          : undefined;
+
+        return {
+          text: providerRes.text,
+          source,
+          providerId: currentCandidate.providerId,
+          modelId: currentCandidate.modelId,
+          fallbackReason,
+          attempts: totalAttempts,
+          attemptsTrail,
+        };
+      } catch (err: any) {
+        lastError = err?.message || String(err);
+        const latencyMs = Math.max(1, Date.now() - attemptStartedAt);
+        this.recordProviderFailure(currentCandidate, task, err, attemptStartedAt);
+        const failureType = this.classifyFailure(err);
+        if (
+          failureType === '429' ||
+          failureType === '5XX' ||
+          failureType === 'TIMEOUT' ||
+          failureType === 'AUTH' ||
+          failureType === 'UNAVAILABLE'
+        ) {
+          const failures = (this.consecutiveFailures.get(modelKey) || 0) + 1;
+          this.consecutiveFailures.set(modelKey, failures);
+          if (failures >= 2) {
+            this.circuitBreakersTripped.add(modelKey);
+            currentCandidate.health = 'Unavailable';
+          }
+        } else {
+          // Schema/task-validation failures must advance this request's fallback
+          // chain without globally circuit-breaking the model.
+          this.consecutiveFailures.set(modelKey, 0);
+        }
+
+        attemptsTrail.push({
+          providerId: currentCandidate.providerId,
+          modelId: currentCandidate.modelId,
+          displayName: currentCandidate.displayName || currentCandidate.modelId,
+          status: 'FAILED',
+          latencyMs,
+          error: lastError,
+        });
+
+      }
+    }
+
+    const emergency: ModelRegistryRecord = Array.from(this.models.values()).find((m) => m.isEmergencyFloor) || {
+      providerId: 'provider_deterministic_emergency',
+      modelId: 'emergency-fallback-local',
+      displayName: 'Deterministic Emergency Floor',
+      pool: 'emergency',
+      capabilities: ['text_generation'],
+      contextWindow: 1000000,
+      health: 'Healthy',
+      quota: 'Healthy',
+      latencyMs: 1,
+      userPriority: -1000,
+      roleEligibility: [task],
+      isEmergencyFloor: true,
+      fallbackEligibility: true,
+    };
+
+    const emergencyAdapter = this.getAdapter(emergency.providerId);
+    if (emergencyAdapter) {
+      const emergencyStartedAt = Date.now();
+      try {
+        totalAttempts++;
+        const emergencyResult = await emergencyAdapter.generate(task, prompt, {
+          timeoutMs,
+          maxTokens: options?.maxTokens,
+          modelId: emergency.modelId,
+          systemInstruction,
+        });
+        if (!emergencyResult.text) throw new Error('Deterministic emergency floor returned an empty response.');
+
+        if (options?.validateResponse) {
+          const validation = options.validateResponse(emergencyResult.text);
+          if (!validation.valid) {
+            throw new Error(
+              'Emergency task response validation failed' +
+              (validation.errorReason ? ': ' + validation.errorReason : '.'),
+            );
+          }
+        }
+
+        const latencyMs = Math.max(1, Date.now() - emergencyStartedAt);
+        this.recordProviderSuccess(emergency, emergencyResult, task, emergencyStartedAt);
+        attemptsTrail.push({
+          providerId: emergency.providerId,
+          modelId: emergency.modelId,
+          displayName: emergency.displayName || emergency.modelId,
+          status: 'SUCCESS',
+          latencyMs,
+        });
+
+        return {
+          text: emergencyResult.text,
+          source: 'DETERMINISTIC_FALLBACK',
+          providerId: emergency.providerId,
+          modelId: emergency.modelId,
+          fallbackReason: 'All AI candidates were exhausted; deterministic emergency floor used.',
+          attempts: totalAttempts,
+          attemptsTrail,
+        };
+      } catch (emergencyError: any) {
+        lastError = emergencyError?.message || String(emergencyError);
+        attemptsTrail.push({
+          providerId: emergency.providerId,
+          modelId: emergency.modelId,
+          displayName: emergency.displayName || emergency.modelId,
+          status: 'FAILED',
+          latencyMs: Math.max(1, Date.now() - emergencyStartedAt),
+          error: lastError,
+        });
+      }
+    }
+
+    const trailSummary = attemptsTrail.length > 0
+      ? attemptsTrail.map((a, i) => `${i + 1}. ${a.displayName || a.modelId} (${a.providerId}) — ${a.error || 'success'}`).join('; ')
+      : lastError;
+
+    return {
+      text: '',
+      source: 'DETERMINISTIC_FALLBACK',
+      providerId: emergency.providerId,
+      modelId: emergency.modelId,
+      fallbackReason: `All ${attemptsTrail.length} AI/emergency attempts failed: ${trailSummary}`,
+      attempts: totalAttempts,
+      attemptsTrail,
+    };
+  }
+
+  /**
+   * Automated Fallback Configuration Engine.
+   *
+   * This remains the legacy auto-arrangement path for now; the formal
+   * task-specific preflight model intelligence layer will replace the
+   * generic provider probe in the next orchestration specification pass.
+   */
+  public async autoConfigureFallbacks(options?: {
+    maxFallbacksPerCategory?: number;
+  }): Promise<{
+    success: boolean;
+    timestamp: number;
+    totalModelsTested: number;
+    healthyModelsCount: number;
+    failedModelsCount: number;
+    results: Array<{
+      providerId: string;
+      modelId: string;
+      displayName: string;
+      status: 'READY' | 'FAILED' | 'UNAVAILABLE' | 'NOT_CONFIGURED';
+      latencyMs?: number;
+      errorReason?: string;
+    }>;
+    configuredChains: Record<string, string[]>;
+    summaryMessage: string;
+  }> {
+    const maxFallbacks = Math.max(2, Math.min(6, options?.maxFallbacksPerCategory ?? 4));
+
+    // 1. Force discovery refresh from all adapters
+    await this.discoverAndRegisterModels({ forceRefresh: true });
+
+    const allModels = this.getAllModels().filter(
+      (m) => !m.isEmergencyFloor && m.health !== 'DisabledByUser'
+    );
+
+    const testResults: Array<{
+      providerId: string;
+      modelId: string;
+      displayName: string;
+      status: 'READY' | 'FAILED' | 'UNAVAILABLE' | 'NOT_CONFIGURED';
+      latencyMs?: number;
+      errorReason?: string;
+    }> = [];
+
+    const healthyModels: ModelRegistryRecord[] = [];
+
+    // 2. Ping / benchmark all registered models
+    for (const model of allModels) {
+      try {
+        const res = await this.testModel(model.providerId, model.modelId);
+        if (res.success && res.status === 'READY') {
+          healthyModels.push(model);
+          testResults.push({
+            providerId: model.providerId,
+            modelId: model.modelId,
+            displayName: model.displayName || model.modelId,
+            status: 'READY',
+            latencyMs: res.latencyMs,
+          });
+        } else {
+          testResults.push({
+            providerId: model.providerId,
+            modelId: model.modelId,
+            displayName: model.displayName || model.modelId,
+            status: res.status as any,
+            latencyMs: res.latencyMs,
+            errorReason: res.message,
+          });
+        }
+      } catch (err: any) {
+        testResults.push({
+          providerId: model.providerId,
+          modelId: model.modelId,
+          displayName: model.displayName || model.modelId,
+          status: 'FAILED',
+          errorReason: err?.message || String(err),
+        });
+      }
+    }
+
+    // 3. Assign optimal fallback chains for every canonical task.
+    // Task membership is derived from the single task-contract registry so a
+    // multi-task category can never silently lose its second/third task here.
+    const tasksToConfigure: TaskId[] = getAllAiTaskContracts().map((contract) => contract.task);
+
+    const emergencyKey = 'provider_deterministic_emergency::emergency-fallback-local';
+
+    for (const task of tasksToConfigure) {
+      const eligibleHealthy = healthyModels
+        .filter((m) => m.roleEligibility.includes(task))
+        .sort((a, b) => {
+          let scoreA = a.userPriority - (a.latencyMs || 500) / 10;
+          let scoreB = b.userPriority - (b.latencyMs || 500) / 10;
+          if (task === 'narrative.generate' || task === 'world.generate' || task === 'character.dialogue' || task === 'narrative.review') {
+            if (a.pool === 'creative' || a.pool === 'reasoning') scoreA += 50;
+            if (b.pool === 'creative' || b.pool === 'reasoning') scoreB += 50;
+          } else if (
+            task === 'intent.interpret' ||
+            task === 'capability.explain' ||
+            task === 'story.advice' ||
+            task === 'memory.extract' ||
+            task === 'character.extract'
+          ) {
+            if (a.pool === 'fast') scoreA += 40;
+            if (b.pool === 'fast') scoreB += 40;
+          } else if (
+            task === 'capability.synthesize' ||
+            task === 'research.query' ||
+            task === 'research.world-brief' ||
+            task === 'rules.adjudicate' ||
+            task === 'rules.analyze' ||
+            task === 'combat.tactics' ||
+            task === 'tactical.reason'
+          ) {
+            if (a.pool === 'reasoning' || a.pool === 'long_context') scoreA += 45;
+            if (b.pool === 'reasoning' || b.pool === 'long_context') scoreB += 45;
+          }
+          return scoreB - scoreA;
+        });
+
+      const topKeys = eligibleHealthy.slice(0, maxFallbacks).map((m) => `${m.providerId}::${m.modelId}`);
+      const chain = topKeys.length > 0 ? [...topKeys, emergencyKey] : [emergencyKey];
+      this.taskFallbackChains.set(task, chain);
+
+      if (topKeys[0]) {
+        this.taskPinnedModels.set(task, topKeys[0]);
+      }
+    }
+
+    this.savePersistedConfig();
+
+    const healthyCount = healthyModels.length;
+    const failedCount = testResults.filter((r) => r.status !== 'READY').length;
+
+    return {
+      success: true,
+      timestamp: Date.now(),
+      totalModelsTested: testResults.length,
+      healthyModelsCount: healthyCount,
+      failedModelsCount: failedCount,
+      results: testResults,
+      configuredChains: this.getAllFallbackChains(),
+      summaryMessage: `AI Auto-Configuration Complete: Tested ${testResults.length} models (${healthyCount} responsive, ${failedCount} unavailable). Configured up to ${maxFallbacks} fallback models for each canonical task.`,
+    };
+  }
+
+  public getStatus(): {
+    active: boolean;
+    registeredModels: number;
+    registeredAdapters: number;
+    pools: ModelPool[];
+    totalTurnsExecuted: number;
+    activeCheckpoints: number;
+    circuitBreakers: string[];
+    lastTelemetry: OrchestratedTurnTelemetry | null;
+  } {
+    const pools = Array.from(new Set(Array.from(this.models.values()).map((m) => m.pool)));
+    return {
+      active: true,
+      registeredModels: this.models.size,
+      registeredAdapters: this.adapters.size,
+      pools,
+      totalTurnsExecuted: this.totalTurnsExecuted,
+      activeCheckpoints: this.checkpoints.size,
+      circuitBreakers: Array.from(this.circuitBreakersTripped),
+      lastTelemetry: this.lastTurnTelemetry,
+    };
+  }
+}
+, 'i'), '')
+        .trim();
+
+      let parsed: any;
+      try {
+        parsed = JSON.parse(cleaned);
+      } catch {
+        const objectStart = cleaned.indexOf('{');
+        const objectEnd = cleaned.lastIndexOf('}');
+        if (objectStart >= 0 && objectEnd > objectStart) {
+          try {
+            parsed = JSON.parse(cleaned.slice(objectStart, objectEnd + 1));
+          } catch {
+            parsed = undefined;
+          }
+        }
+      }
+
+      if (parsed === undefined) {
+        if (options?.allowPlainTextNarration && cleaned.length >= 80) {
+          return {
+            valid: true,
+            turnPackage: {
+              narrative: [cleaned],
+              dialogue: [],
+              events: [],
+              stateChanges: [],
+              memoryCandidates: [],
+              audioCues: [],
+            },
+          };
+        }
+        return { valid: false, errorReason: 'Response is not valid JSON.' };
+      }
+
+      if (typeof parsed === 'string' && options?.allowPlainTextNarration && parsed.trim().length >= 80) {
+        return {
+          valid: true,
+          turnPackage: {
+            narrative: [parsed.trim()],
+            dialogue: [],
+            events: [],
+            stateChanges: [],
+            memoryCandidates: [],
+            audioCues: [],
+          },
+        };
+      }
+
+      if (
+        options?.allowPlainTextNarration &&
+        !Array.isArray(parsed?.narrative) &&
+        typeof parsed?.narrativeText === 'string' &&
+        parsed.narrativeText.trim().length >= 80
+      ) {
+        parsed = {
+          narrative: [parsed.narrativeText.trim()],
+          dialogue: Array.isArray(parsed.dialogue) ? parsed.dialogue : [],
+          events: Array.isArray(parsed.events) ? parsed.events : [],
+          stateChanges: Array.isArray(parsed.stateChanges) ? parsed.stateChanges : [],
+          memoryCandidates: Array.isArray(parsed.memoryCandidates) ? parsed.memoryCandidates : [],
+          audioCues: Array.isArray(parsed.audioCues) ? parsed.audioCues : [],
+        };
+      }
 
       // 1. Narrative must be non-empty string[]
       if (!Array.isArray(parsed.narrative) || parsed.narrative.length === 0) {

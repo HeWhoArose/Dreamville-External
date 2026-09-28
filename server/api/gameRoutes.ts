@@ -6773,6 +6773,58 @@ gameRouter.get('/orchestrator/models', async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/game/orchestrator/preflight
+ * Evaluates one model against one exact task contract without contacting the provider.
+ * This is a read-only eligibility check; it never mutates routing or canonical story state.
+ */
+gameRouter.post('/orchestrator/preflight', async (req: Request, res: Response) => {
+  try {
+    const task = String(req.body?.task || 'narrative.generate') as import('../domain/aiOrchestrator').TaskId;
+    const providerId = String(req.body?.providerId || '');
+    const modelId = String(req.body?.modelId || '');
+    const contextTokens = Math.max(0, Number(req.body?.contextTokens || 0));
+    const reservedOutputTokens =
+      req.body?.reservedOutputTokens == null
+        ? undefined
+        : Math.max(0, Number(req.body.reservedOutputTokens));
+
+    if (!providerId || !modelId) {
+      return res.status(400).json({
+        success: false,
+        errorReason: 'providerId and modelId are required.',
+      });
+    }
+
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const orchestrator = worldRepository.getAiOrchestrator();
+    const preflight = orchestrator.getTaskCandidatePreflight(
+      task,
+      providerId,
+      modelId,
+      contextTokens,
+      reservedOutputTokens,
+    );
+
+    if (!preflight) {
+      return res.status(404).json({
+        success: false,
+        errorReason: 'The requested model is not registered.',
+      });
+    }
+
+    res.json({
+      success: true,
+      preflight,
+    });
+  } catch (error: any) {
+    res.status(400).json({
+      success: false,
+      errorReason: error?.message || 'Task candidate preflight failed.',
+    });
+  }
+});
+
+/**
  * POST /api/game/orchestrator/select
  * Deterministically routes a task to the best eligible model respecting context window,
  * priority tier, and health status (DEF-CH12-03, DEF-CH12-04).
@@ -7351,16 +7403,17 @@ gameRouter.post('/orchestrator/fallback', async (req: Request, res: Response) =>
 
 /**
  * POST /api/game/orchestrator/auto-configure-fallbacks
- * Pings all available models across providers, benchmarks response health/latency,
- * and automatically assigns optimal fallback chains (up to 4 models) for all categories.
+ * Discovers models, performs task-aware readiness canaries, checks known quota/billing
+ * evidence, and automatically assigns deterministic per-task fallback chains.
  */
 gameRouter.post('/orchestrator/auto-configure-fallbacks', async (req: Request, res: Response) => {
   try {
-    const { maxFallbacksPerCategory } = req.body || {};
+    const { maxFallbacksPerCategory, concurrency } = req.body || {};
     const { worldRepository } = await import('../repositories/worldRepository');
     const orchestrator = worldRepository.getAiOrchestrator();
     const result = await orchestrator.autoConfigureFallbacks({
       maxFallbacksPerCategory: typeof maxFallbacksPerCategory === 'number' ? maxFallbacksPerCategory : undefined,
+      concurrency: typeof concurrency === 'number' ? concurrency : undefined,
     });
     res.json(result);
   } catch (error: any) {

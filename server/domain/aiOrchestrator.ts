@@ -7026,10 +7026,23 @@ export class MultiModelOrchestrator {
         eligibleReady.splice(0, eligibleReady.length, ...freeReady, ...paidReady);
       }
 
-      const topKeys = eligibleReady
-        .filter((model) => model.fallbackEligibility !== false)
-        .slice(0, maxFallbacks)
-        .map((model) => this.modelKey(model));
+      const eligibleFallbackModels = eligibleReady
+        .filter((model) => model.fallbackEligibility !== false);
+
+      const freeModels = includeFreeModels
+        ? eligibleFallbackModels.filter((model) => MultiModelOrchestrator.isFreeModelCandidate(model))
+        : [];
+
+      const paidOrUnclassifiedModels = includeFreeModels
+        ? eligibleFallbackModels.filter((model) => !MultiModelOrchestrator.isFreeModelCandidate(model))
+        : eligibleFallbackModels;
+
+      const orderedFallbackModels = [
+        ...freeModels,
+        ...paidOrUnclassifiedModels,
+      ].slice(0, maxFallbacks);
+
+      const topKeys = orderedFallbackModels.map((model) => this.modelKey(model));
 
       const previous = this.taskFallbackChains.get(task);
       const chain =

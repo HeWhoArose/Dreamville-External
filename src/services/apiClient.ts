@@ -1901,7 +1901,7 @@ class ApiClient {
    * automatically configures fallback chains without overwriting manual pins.
    * POST /api/game/orchestrator/auto-configure-fallbacks
    */
-  public async autoConfigureFallbacks(params?: { maxFallbacksPerCategory?: number; concurrency?: number }): Promise<{
+  public async autoConfigureFallbacks(params?: { maxFallbacksPerCategory?: number; concurrency?: number; includeFreeModels?: boolean }): Promise<{
     success: boolean;
     timestamp: number;
     totalModelsTested: number;

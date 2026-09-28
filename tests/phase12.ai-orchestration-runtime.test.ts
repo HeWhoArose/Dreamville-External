@@ -806,6 +806,7 @@ test('Phase 12 audit: Character Genesis semantic validation advances to the next
 
 test('Phase 12 regression: Character Genesis can expand a configured route with additional AI recovery models before the deterministic floor', async () => {
 	const orchestrator = createTestOrchestrator();
+	(orchestrator as any).taskPinnedModels.delete('character.extract');
 	const primary = new DeterministicMockAdapter('phase12_configured_primary');
 	primary.failureMode = '500';
 	primary.maxFailuresBeforeSuccess = 1;
@@ -820,6 +821,7 @@ test('Phase 12 regression: Character Genesis can expand a configured route with 
 		'provider_deterministic_emergency::emergency-fallback-local',
 	]);
 	orchestrator.pinModelForTask('character.extract', 'phase12_configured_primary::configured-character-extract');
+	(orchestrator as any).taskPinnedModels.delete('character.extract');
 
 	const result = await orchestrator.executeTaskGeneration(
 		'character.extract',
@@ -841,6 +843,7 @@ test('Phase 12 regression: Character Genesis can expand a configured route with 
 
 test('Phase 12 regression: deterministic fallback can be explicitly withheld after all AI candidates fail', async () => {
 	const orchestrator = createTestOrchestrator();
+	(orchestrator as any).taskPinnedModels.delete('character.extract');
 	const failing = new DeterministicMockAdapter('phase12_all_ai_failed');
 	failing.failureMode = '500';
 	failing.maxFailuresBeforeSuccess = 1;
@@ -852,6 +855,7 @@ test('Phase 12 regression: deterministic fallback can be explicitly withheld aft
 		'provider_deterministic_emergency::emergency-fallback-local',
 	]);
 	orchestrator.pinModelForTask('character.extract', 'phase12_all_ai_failed::all-ai-failed');
+	(orchestrator as any).taskPinnedModels.delete('character.extract');
 
 	await assert.rejects(
 		() => orchestrator.executeTaskGeneration(

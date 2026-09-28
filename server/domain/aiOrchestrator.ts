@@ -4324,22 +4324,40 @@ export class MultiModelOrchestrator {
       }
 
       if (emergency) {
-        const capacityRecovery = eligible
-          .filter((model) => !model.isEmergencyFloor)
-          .filter((model) => isUsableCandidate(model))
-          .sort((a, b) => {
-            const scoreA = a.userPriority + (a.health === 'Healthy' ? 50 : 0) + (a.quota === 'Healthy' ? 30 : 0) - Math.min(20, (a.latencyMs || 500) / 100);
-            const scoreB = b.userPriority + (b.health === 'Healthy' ? 50 : 0) + (b.quota === 'Healthy' ? 30 : 0) - Math.min(20, (b.latencyMs || 500) / 100);
-            return scoreB - scoreA || (a.modelId + '::' + a.providerId).localeCompare(b.modelId + '::' + b.providerId);
-          })[0];
+        const configuredRouteModels = (customChainKeys || [])
+          .map(findConfiguredModel)
+          .filter((model): model is ModelRegistryRecord => Boolean(model));
 
-        if (capacityRecovery) {
-          return {
-            selectedModel: capacityRecovery,
-            selectionReason: 'Configured route contains no usable AI model for the requested capacity; adaptive safety recovery selected a task-compatible model before using the emergency floor.',
-            selectionScore: capacityRecovery.userPriority,
-            fallbacks: [emergency],
-          };
+        const capacityBlockedRoute = configuredRouteModels.some((model) => {
+          const preflight = this.getTaskCandidatePreflight(
+            task,
+            model.providerId,
+            model.modelId,
+            contextTokens,
+            0,
+          );
+          return preflight?.state === 'REJECTED' &&
+            /context window|output token limit/i.test(preflight.reason);
+        });
+
+        if (capacityBlockedRoute) {
+          const capacityRecovery = eligible
+            .filter((model) => !model.isEmergencyFloor)
+            .filter((model) => isUsableCandidate(model))
+            .sort((a, b) => {
+              const scoreA = a.userPriority + (a.health === 'Healthy' ? 50 : 0) + (a.quota === 'Healthy' ? 30 : 0) - Math.min(20, (a.latencyMs || 500) / 100);
+              const scoreB = b.userPriority + (b.health === 'Healthy' ? 50 : 0) + (b.quota === 'Healthy' ? 30 : 0) - Math.min(20, (b.latencyMs || 500) / 100);
+              return scoreB - scoreA || (a.modelId + '::' + a.providerId).localeCompare(b.modelId + '::' + b.providerId);
+            })[0];
+
+          if (capacityRecovery) {
+            return {
+              selectedModel: capacityRecovery,
+              selectionReason: 'Configured route contains no model with sufficient known capacity; adaptive capacity recovery selected a task-compatible model before using the emergency floor.',
+              selectionScore: capacityRecovery.userPriority,
+              fallbacks: [emergency],
+            };
+          }
         }
 
         return {

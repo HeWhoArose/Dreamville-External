@@ -378,3 +378,59 @@ test('Character Genesis extraction hardening', async (t) => {
     }
   });
 });
+
+test('Character Genesis forwards AI-only fallback policy to the orchestrator', async () => {
+	const repository = worldRepository as any;
+	const original = repository.getAiOrchestrator;
+	let receivedOptions: any = null;
+
+	repository.getAiOrchestrator = () => ({
+		executeTaskGeneration: async (
+			_task: string,
+			_prompt: string,
+			_systemInstruction: string,
+			options: any,
+		) => {
+			receivedOptions = options;
+			return {
+				text: '```json\\n' + makeAiCharacterResponse() + '\\n```',
+				source: 'AI_FALLBACK',
+				providerId: 'provider_test_fallback',
+				modelId: 'model_test_fallback',
+				attempts: 2,
+				attemptsTrail: [
+					{
+						providerId: 'provider_test_primary',
+						modelId: 'model_test_primary',
+						status: 'FAILED',
+						latencyMs: 10,
+						error: 'Primary model failed.',
+					},
+					{
+						providerId: 'provider_test_fallback',
+						modelId: 'model_test_fallback',
+						status: 'SUCCESS',
+						latencyMs: 20,
+					},
+				],
+			};
+		},
+	});
+
+	try {
+		const draft = await characterGenesisService.extractCharacterDraft(
+			{
+				naturalLanguageConcept: 'a Soul Reaper displaced into an apocalyptic world',
+				worldId: testWorld.worldId,
+			},
+			testWorld,
+		);
+
+		assert.equal(receivedOptions?.allowAdaptiveAiRecovery, true);
+		assert.equal(receivedOptions?.allowDeterministicFallback, false);
+		assert.equal(draft.aiExtractionSummary?.generationSource, 'AI_FALLBACK');
+		assert.equal(draft.aiExtractionSummary?.activeModel, 'model_test_fallback');
+	} finally {
+		repository.getAiOrchestrator = original;
+	}
+});

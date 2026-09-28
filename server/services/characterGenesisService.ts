@@ -657,7 +657,7 @@ Rules:
                 outcomePayload: raw.outcomePayload && typeof raw.outcomePayload === 'object' ? raw.outcomePayload : undefined,
                 visualStyle: typeof raw.visualStyle === 'string' ? raw.visualStyle : undefined,
                 provenance: generatedProvenance,
-                aiGenerated: generatedProvenance !== 'DETERMINISTIC_FALLBACK',
+                aiGenerated: true,
               };
             })(),
             provenance: generatedProvenance,

@@ -1470,7 +1470,21 @@ export class OpenRouterAdapter implements IProviderAdapter {
       }
 
       if (!extracted.text) {
-        throw new Error(extracted.failureReason || 'OpenRouter returned no usable assistant content.');
+        const diagnosticError = new Error(
+          extracted.failureReason || 'OpenRouter returned no usable assistant content.',
+        ) as Error & {
+          providerDiagnostic?: {
+            providerId: string;
+            modelId: string;
+            rawResponse: unknown;
+          };
+        };
+        diagnosticError.providerDiagnostic = {
+          providerId: this.providerId,
+          modelId: String(payload?.model || options?.modelId || 'openrouter/free'),
+          rawResponse: payload,
+        };
+        throw diagnosticError;
       }
 
       const text = extracted.text;
@@ -3623,6 +3637,7 @@ export class MultiModelOrchestrator {
     latencyMs: number;
     message: string;
     testedAt: number;
+    diagnosticPayload?: unknown;
   }> {
     const key = `${providerId}::${modelId}`;
     const model = this.models.get(key) || Array.from(this.models.values()).find((m) => m.modelId === modelId);
@@ -3878,6 +3893,7 @@ export class MultiModelOrchestrator {
           latencyMs,
           message: `OpenRouter model test failed: ${errMsg}`,
           testedAt: Date.now(),
+          diagnosticPayload: err?.providerDiagnostic?.rawResponse,
         };
       }
     }
@@ -6719,7 +6735,8 @@ export class MultiModelOrchestrator {
       quotaState?: QuotaState;
       quotaSource?: QuotaEvidenceSource;
       verifiedTasks?: TaskId[];
-      failedTasks?: Array<{ task: TaskId; reason: string }>;
+      failedTasks?: Array<{ task: TaskId; reason: string; diagnosticPayload?: unknown }>;
+      diagnosticPayload?: unknown;
       verificationMode?: 'TASK_CANARY' | 'CAPABILITY_ONLY' | 'METADATA_ONLY';
     }>;
     configuredChains: Record<string, string[]>;
@@ -6771,6 +6788,7 @@ export class MultiModelOrchestrator {
       success: boolean;
       latencyMs: number;
       reason?: string;
+      diagnosticPayload?: unknown;
       verificationMode: 'TASK_CANARY' | 'CAPABILITY_ONLY';
     };
 
@@ -6884,6 +6902,7 @@ export class MultiModelOrchestrator {
           success: false,
           latencyMs: Math.max(1, Date.now() - startedAt),
           reason: message,
+          diagnosticPayload: error?.providerDiagnostic?.rawResponse,
           verificationMode: canary.verificationMode,
         };
       }
@@ -6957,7 +6976,11 @@ export class MultiModelOrchestrator {
         const verifiedTasks = taskResults.filter((entry) => entry.success).map((entry) => entry.task);
         const failedTasks = taskResults
           .filter((entry) => !entry.success)
-          .map((entry) => ({ task: entry.task, reason: entry.reason || 'Task canary failed.' }));
+          .map((entry) => ({
+            task: entry.task,
+            reason: entry.reason || 'Task canary failed.',
+            diagnosticPayload: entry.diagnosticPayload,
+          }));
         const failedTask = failedTasks[0];
 
         const averageLatency = verifiedTasks.length
@@ -6985,6 +7008,7 @@ export class MultiModelOrchestrator {
           latencyMs: averageLatency,
           errorReason: failedTask?.reason,
           failedTasks,
+          diagnosticPayload: failedTask?.diagnosticPayload,
           billingState: model.billingState || 'UNKNOWN',
           quotaState: model.quota,
           quotaSource: model.quotaEvidenceSource || 'UNKNOWN',

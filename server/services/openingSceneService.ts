@@ -264,30 +264,10 @@ export class OpeningSceneService {
 	}
 
 	public static synthesizeDeterministicOpening(
-	private static deriveOpeningEvents(
-		narrativeText: string,
-		storyId: string,
-		facts: AssembledOpeningContext['rawOpeningFacts'],
-	): StructuredNarrativeEvent[] {
-		const paragraphs = narrativeText.split(/\n\s*\n/).map((part) => part.trim()).filter(Boolean).slice(0, 4);
-		const events: StructuredNarrativeEvent[] = [
-			{ id: `evt_open_${storyId}_location`, type: 'location', text: `${facts.location.name} — ${facts.location.region}`, timestamp: facts.time.formattedHeader },
-			{ id: `evt_open_${storyId}_situation`, type: 'normal', text: facts.character.startingSituation || 'The immediate situation is unsettled.', timestamp: facts.time.formattedHeader },
-		];
-		for (const [index, paragraph] of paragraphs.entries()) {
-			events.push({
-				id: `evt_open_${storyId}_p${index}`,
-				type: index === paragraphs.length - 1 ? 'hook' : 'normal',
-				text: paragraph.slice(0, 320),
-				timestamp: facts.time.formattedHeader,
-			});
-		}
-		return events.slice(0, 6);
-	}
 		facts: AssembledOpeningContext['rawOpeningFacts'],
 		storyId: string,
 	): { narrativeText: string; structuredEvents: StructuredNarrativeEvent[] } {
-		const { world, character, location, time } = facts;
+		const { character, location, time } = facts;
 		const narrativeMode = facts.world.narrativeProfile?.mode || 'PROTAGONIST';
 		const p1 = `${time.formattedHeader}. ${character.name} stands within ${location.name}. ${location.ambientSensory || location.description}`;
 		const characterContext = [
@@ -312,6 +292,26 @@ export class OpeningSceneService {
 		};
 	}
 
+	private static deriveOpeningEvents(
+		narrativeText: string,
+		storyId: string,
+		facts: AssembledOpeningContext['rawOpeningFacts'],
+	): StructuredNarrativeEvent[] {
+		const paragraphs = narrativeText.split(/\n\s*\n/).map((part) => part.trim()).filter(Boolean).slice(0, 4);
+		const events: StructuredNarrativeEvent[] = [
+			{ id: `evt_open_${storyId}_location`, type: 'location', text: `${facts.location.name} — ${facts.location.region}`, timestamp: facts.time.formattedHeader },
+			{ id: `evt_open_${storyId}_situation`, type: 'normal', text: facts.character.startingSituation || 'The immediate situation is unsettled.', timestamp: facts.time.formattedHeader },
+		];
+		for (const [index, paragraph] of paragraphs.entries()) {
+			events.push({
+				id: `evt_open_${storyId}_p${index}`,
+				type: index === paragraphs.length - 1 ? 'hook' : 'normal',
+				text: paragraph.slice(0, 320),
+				timestamp: facts.time.formattedHeader,
+			});
+		}
+		return events.slice(0, 6);
+	}
 	private static sanitizeNarrativeText(text: string): string {
 		return String(text || '')
 			.replace(/\b(?:Visual|Sounds|Scent|Tactile)\s*:\s*[^.\n]+[.]?/gi, '')

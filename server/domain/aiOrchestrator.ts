@@ -322,6 +322,7 @@ export interface ProviderGenerateOptions {
   retryCount?: number;
   modelId?: string;
   systemInstruction?: string;
+  reasoningEffort?: 'xhigh' | 'high' | 'medium' | 'low' | 'minimal' | 'none';
 }
 
 export interface ProviderGenerateResult {
@@ -1365,7 +1366,10 @@ export class OpenRouterAdapter implements IProviderAdapter {
       ? AbortSignal.any([controller.signal, options.abortSignal])
       : controller.signal;
 
-    try {
+    const requestedMaxTokens = Math.max(256, Number(options?.maxTokens || 4096));
+    const boundedMaxTokens = Math.min(requestedMaxTokens, 8192);
+
+    const buildBody = (recoveryAttempt: boolean): Record<string, unknown> => {
       const body: Record<string, unknown> = {
         model: options?.modelId || 'openrouter/free',
         messages: [
@@ -1375,10 +1379,22 @@ export class OpenRouterAdapter implements IProviderAdapter {
           { role: 'user', content: prompt },
         ],
         stream: false,
+        max_tokens: recoveryAttempt
+          ? Math.min(Math.max(boundedMaxTokens, 6144) * 2, 16384)
+          : boundedMaxTokens,
       };
 
-      body.max_tokens = Math.min(Number(options?.maxTokens || 4096), 4096);
+      if (recoveryAttempt) {
+        body.reasoning = { effort: 'none' };
+      } else if (options?.reasoningEffort) {
+        body.reasoning = { effort: options.reasoningEffort };
+      }
 
+      return body;
+    };
+
+    const sendRequest = async (recoveryAttempt: boolean): Promise<any> => {
+      const body = buildBody(recoveryAttempt);
       const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
         method: 'POST',
         signal,
@@ -1391,11 +1407,20 @@ export class OpenRouterAdapter implements IProviderAdapter {
         body: JSON.stringify(body),
       });
 
-      const payload: any = await response.json().catch(() => null);
+      const rawBody = await response.text().catch(() => '');
+      let payload: any = null;
+
+      try {
+        payload = rawBody ? JSON.parse(rawBody) : null;
+      } catch {
+        payload = null;
+      }
+
       if (!response.ok) {
         const message =
           payload?.error?.message ||
           payload?.error ||
+          rawBody.slice(0, 500) ||
           `OpenRouter request failed with HTTP ${response.status}`;
         throw new Error(String(message));
       }
@@ -1410,11 +1435,37 @@ export class OpenRouterAdapter implements IProviderAdapter {
         throw new Error(String(choice.error.message || JSON.stringify(choice.error)));
       }
 
-      const extracted = extractOpenRouterAssistantText(payload);
+      return payload;
+    };
+
+    try {
+      let payload = await sendRequest(false);
+      let extracted = extractOpenRouterAssistantText(payload);
+
       if (!extracted.text) {
-        throw new Error(
-          extracted.failureReason || 'OpenRouter returned no usable assistant content.'
+        const choice = payload?.choices?.[0];
+        const finishReason = String(choice?.finish_reason || '').trim();
+        const hasChoices = Array.isArray(payload?.choices) && payload.choices.length > 0;
+        const message = choice?.message;
+        const hadReasoning = Boolean(
+          (typeof message?.reasoning === 'string' && message.reasoning.trim()) ||
+          (typeof message?.thought === 'string' && message.thought.trim()) ||
+          (Array.isArray(message?.reasoning_details) && message.reasoning_details.length > 0)
         );
+
+        // A successful HTTP response with no assistant text can happen when a
+        // reasoning model consumes the completion budget on thinking or when a
+        // provider returns an empty/length-truncated message. Give that same
+        // model one bounded recovery attempt before the orchestrator advances
+        // to its normal fallback chain.
+        if (hasChoices || hadReasoning || finishReason === 'length' || finishReason === 'max_tokens') {
+          payload = await sendRequest(true);
+          extracted = extractOpenRouterAssistantText(payload);
+        }
+      }
+
+      if (!extracted.text) {
+        throw new Error(extracted.failureReason || 'OpenRouter returned no usable assistant content.');
       }
 
       const text = extracted.text;
@@ -1434,6 +1485,7 @@ export class OpenRouterAdapter implements IProviderAdapter {
     } finally {
       if (timeout) clearTimeout(timeout);
     }
+  }
   }
 }
 

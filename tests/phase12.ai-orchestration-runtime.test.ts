@@ -803,3 +803,97 @@ test('Phase 12 audit: Character Genesis semantic validation advances to the next
 	assert.equal(result.attemptsTrail[1]?.modelId, 'genesis-valid');
 	assert.equal(result.attemptsTrail[1]?.status, 'SUCCESS');
 });
+
+test('Phase 12 regression: Character Genesis can expand a configured route with additional AI recovery models before the deterministic floor', async () => {
+	const orchestrator = createTestOrchestrator();
+	const primary = new DeterministicMockAdapter('phase12_configured_primary');
+	primary.failureMode = '500';
+	primary.maxFailuresBeforeSuccess = 1;
+	const aiRecovery = new DeterministicMockAdapter('phase12_ai_recovery');
+
+	orchestrator.registerAdapter(primary);
+	orchestrator.registerAdapter(aiRecovery);
+	orchestrator.registerModel(model('phase12_configured_primary', 'configured-character-extract', ['character.extract']));
+	orchestrator.registerModel(model('phase12_ai_recovery', 'recovery-character-extract', ['character.extract']));
+	orchestrator.setFallbackChain('character.extract', [
+		'phase12_configured_primary::configured-character-extract',
+		'provider_deterministic_emergency::emergency-fallback-local',
+	]);
+	orchestrator.pinModelForTask('character.extract', 'phase12_configured_primary::configured-character-extract');
+
+	const result = await orchestrator.executeTaskGeneration(
+		'character.extract',
+		'Extract this character into structured Character Genesis data.',
+		'Return JSON.',
+		{
+			allowAdaptiveAiRecovery: true,
+			allowDeterministicFallback: false,
+			validateResponse: () => ({ valid: true }),
+		},
+	);
+
+	assert.equal(result.source, 'AI_FALLBACK');
+	assert.equal(result.modelId, 'recovery-character-extract');
+	assert.equal(result.attemptsTrail[0].status, 'FAILED');
+	assert.equal(result.attemptsTrail.some((attempt) => attempt.modelId === 'recovery-character-extract' && attempt.status === 'SUCCESS'), true);
+	assert.equal(result.attemptsTrail.some((attempt) => attempt.modelId === 'emergency-fallback-local'), false);
+});
+
+test('Phase 12 regression: deterministic fallback can be explicitly withheld after all AI candidates fail', async () => {
+	const orchestrator = createTestOrchestrator();
+	const failing = new DeterministicMockAdapter('phase12_all_ai_failed');
+	failing.failureMode = '500';
+	failing.maxFailuresBeforeSuccess = 1;
+
+	orchestrator.registerAdapter(failing);
+	orchestrator.registerModel(model('phase12_all_ai_failed', 'all-ai-failed', ['character.extract']));
+	orchestrator.setFallbackChain('character.extract', [
+		'phase12_all_ai_failed::all-ai-failed',
+		'provider_deterministic_emergency::emergency-fallback-local',
+	]);
+	orchestrator.pinModelForTask('character.extract', 'phase12_all_ai_failed::all-ai-failed');
+
+	await assert.rejects(
+		() => orchestrator.executeTaskGeneration(
+			'character.extract',
+			'Extract this character.',
+			'Return JSON.',
+			{
+				allowAdaptiveAiRecovery: true,
+				allowDeterministicFallback: false,
+				validateResponse: () => ({ valid: true }),
+			},
+		),
+		(error: any) => {
+			assert.equal(error?.code, 'AI_UNAVAILABLE');
+			assert.equal(Array.isArray(error?.attemptsTrail), true);
+			assert.equal(error?.attemptsTrail.some((attempt: any) => attempt.modelId === 'emergency-fallback-local'), false);
+			return true;
+		},
+	);
+});
+
+test('Phase 12 regression: free-model auto-arrange detection recognizes billing-free models and names containing free', () => {
+	assert.equal(
+		MultiModelOrchestrator.isFreeModelCandidate({
+			...model('provider_free', 'model-billing-free', ['character.extract']),
+			billingState: 'FREE',
+		}),
+		true,
+	);
+	assert.equal(
+		MultiModelOrchestrator.isFreeModelCandidate({
+			...model('provider_named_free', 'provider/model-free', ['character.extract']),
+			billingState: 'UNKNOWN',
+		}),
+		true,
+	);
+	assert.equal(
+		MultiModelOrchestrator.isFreeModelCandidate({
+			...model('provider_paid', 'provider/model-paid', ['character.extract']),
+			billingState: 'PAID',
+			isPaidModel: true,
+		}),
+		false,
+	);
+});

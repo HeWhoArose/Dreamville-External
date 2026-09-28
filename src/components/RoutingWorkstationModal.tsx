@@ -47,6 +47,7 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
   const [phase12Operations, setPhase12Operations] = useState<any>(null);
   const [autoArrangeResult, setAutoArrangeResult] = useState<any>(null);
   const [autoArrangeLoading, setAutoArrangeLoading] = useState(false);
+  const [includeFreeModels, setIncludeFreeModels] = useState(false);
 
   // Test Routing state
   const [testTask, setTestTask] = useState('narrative.generate');
@@ -114,6 +115,7 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
       const result = await apiClient.autoConfigureFallbacks({
         maxFallbacksPerCategory: 4,
         concurrency: 4,
+        includeFreeModels,
       });
       setAutoArrangeResult(result);
       await loadData();
@@ -226,6 +228,17 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
                 <Sparkles className={`w-3.5 h-3.5 ${autoArrangeLoading ? 'animate-spin' : ''}`} />
                 <span>{autoArrangeLoading ? 'Arranging…' : 'Auto Arrange'}</span>
               </button>
+              <label className="flex items-center gap-2 rounded-md border border-emerald-900/50 bg-emerald-950/20 px-2.5 py-1.5 text-[10px] text-emerald-200/90 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={includeFreeModels}
+                  onChange={(event) => setIncludeFreeModels(event.target.checked)}
+                  className="h-3 w-3 accent-emerald-500"
+                />
+                <span title="Prioritize models verified for this task/category that are explicitly free, marked FREE by billing metadata, or contain 'free' in their model name.">
+                  Include free models
+                </span>
+              </label>
               <button
                 id="routing-refresh-btn"
                 onClick={async () => {
@@ -384,6 +397,15 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
                       <Sparkles className={`w-3.5 h-3.5 ${autoArrangeLoading ? 'animate-spin' : ''}`} />
                       <span>{autoArrangeLoading ? 'Verifying…' : 'Discover & Arrange'}</span>
                     </button>
+                    <label className="flex items-center gap-2 rounded px-2 py-1 text-[10px] text-emerald-200/90 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={includeFreeModels}
+                        onChange={(event) => setIncludeFreeModels(event.target.checked)}
+                        className="h-3 w-3 accent-emerald-500"
+                      />
+                      <span>Free first</span>
+                    </label>
                   </div>
                 </div>
 

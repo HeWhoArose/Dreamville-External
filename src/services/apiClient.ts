@@ -1897,8 +1897,8 @@ class ApiClient {
   }
 
   /**
-   * Pings all available models across providers, benchmarks response health/latency,
-   * and automatically configures up to 4 fallback models per task category.
+   * Discovers models, verifies task-aware readiness with bounded canaries, and
+   * automatically configures fallback chains without overwriting manual pins.
    * POST /api/game/orchestrator/auto-configure-fallbacks
    */
   public async autoConfigureFallbacks(params?: { maxFallbacksPerCategory?: number; concurrency?: number }): Promise<{

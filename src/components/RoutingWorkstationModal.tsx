@@ -18,6 +18,8 @@ import {
   Clock,
   Sparkles,
   Info,
+  Clipboard,
+  Check,
 } from 'lucide-react';
 import { apiClient } from '../services/apiClient';
 
@@ -48,6 +50,11 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
   const [autoArrangeResult, setAutoArrangeResult] = useState<any>(null);
   const [autoArrangeLoading, setAutoArrangeLoading] = useState(false);
   const [includeFreeModels, setIncludeFreeModels] = useState(false);
+  const [diagnosticPopup, setDiagnosticPopup] = useState<{
+    title: string;
+    payload: unknown;
+  } | null>(null);
+  const [diagnosticCopied, setDiagnosticCopied] = useState(false);
 
   // Test Routing state
   const [testTask, setTestTask] = useState('narrative.generate');
@@ -161,6 +168,29 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
   };
 
   // Pin / Unpin model for task
+  const formatDiagnosticPayload = (payload: unknown): string => {
+    if (typeof payload === 'string') return payload;
+    try {
+      return JSON.stringify(payload, null, 2);
+    } catch {
+      return String(payload ?? '');
+    }
+  };
+
+  const showDiagnosticPopup = (title: string, payload: unknown) => {
+    if (payload == null) return;
+    setDiagnosticCopied(false);
+    setDiagnosticPopup({ title, payload });
+  };
+
+  const showDiagnosticPopupFromSelection = (title: string, payload: unknown) => {
+    const selectedText = typeof window !== 'undefined'
+      ? window.getSelection()?.toString().trim()
+      : '';
+    if (!selectedText || payload == null) return;
+    showDiagnosticPopup(title, payload);
+  };
+
   const handlePinModel = async () => {
     try {
       setPinMessage(null);
@@ -365,9 +395,15 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
           {/* Content Area */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4">
             {error && (
-              <div className="flex items-center space-x-2 p-3 text-xs bg-rose-950/40 border border-rose-800 text-rose-300 rounded-lg">
+              <div
+                className="flex items-center space-x-2 p-3 text-xs bg-rose-950/40 border border-rose-800 text-rose-300 rounded-lg"
+                onMouseUp={() => {
+                  const diagnostic = autoArrangeResult?.results?.find((entry: any) => entry.diagnosticPayload)?.diagnosticPayload;
+                  showDiagnosticPopupFromSelection('OpenRouter full provider response', diagnostic);
+                }}
+              >
                 <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                <span>{error}</span>
+                <span className="select-text cursor-text">{error}</span>
               </div>
             )}
 
@@ -455,12 +491,41 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
                                   <span className="text-stone-600"> +{(result.verifiedTasks || []).length - 4}</span>
                                 )}
                               </td>
-                              <td className="p-2 text-stone-500 max-w-[320px]" title={result.errorReason || ''}>
-                                <div className="truncate">{result.errorReason || 'Verified'}</div>
+                              <td className="p-2 text-stone-500 max-w-[320px]">
+                                <div
+                                  className="truncate select-text cursor-text"
+                                  title={result.errorReason || ''}
+                                  onMouseUp={() => showDiagnosticPopupFromSelection(
+                                    `${result.displayName || result.modelId} — full OpenRouter response`,
+                                    result.diagnosticPayload || result.failedTasks?.find((failure: any) => failure.diagnosticPayload)?.diagnosticPayload,
+                                  )}
+                                >
+                                  {result.errorReason || 'Verified'}
+                                </div>
+                                {result.diagnosticPayload && (
+                                  <button
+                                    type="button"
+                                    onClick={() => showDiagnosticPopup(
+                                      `${result.displayName || result.modelId} — full OpenRouter response`,
+                                      result.diagnosticPayload,
+                                    )}
+                                    className="mt-1 rounded border border-stone-700 px-1.5 py-0.5 text-[9px] text-amber-300 hover:bg-stone-800"
+                                  >
+                                    Inspect full response
+                                  </button>
+                                )}
                                 {Array.isArray(result.failedTasks) && result.failedTasks.length > 0 && (
                                   <div className="mt-1 text-[9px] text-rose-400/80 space-y-0.5">
                                     {result.failedTasks.slice(0, 3).map((failure: any) => (
-                                      <div key={failure.task} className="truncate" title={failure.reason}>
+                                      <div
+                                        key={failure.task}
+                                        className="truncate select-text cursor-text"
+                                        title={failure.reason}
+                                        onMouseUp={() => showDiagnosticPopupFromSelection(
+                                          `${result.displayName || result.modelId} · ${failure.task} — full OpenRouter response`,
+                                          failure.diagnosticPayload,
+                                        )}
+                                      >
                                         {failure.task}: {failure.reason}
                                       </div>
                                     ))}
@@ -1024,6 +1089,57 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
               Close
             </button>
           </div>
+        {diagnosticPopup && (
+          <div
+            className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) setDiagnosticPopup(null);
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.97 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="flex max-h-[86vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-amber-500/30 bg-stone-950 shadow-2xl"
+            >
+              <div className="flex items-center justify-between border-b border-stone-800 px-4 py-3">
+                <div>
+                  <div className="text-xs font-semibold text-amber-300">Full provider response</div>
+                  <div className="mt-0.5 text-[10px] font-mono text-stone-500">{diagnosticPopup.title}</div>
+                  <div className="mt-1 text-[9px] text-stone-600">Select the response normally, or use Copy full response.</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(formatDiagnosticPayload(diagnosticPopup.payload));
+                        setDiagnosticCopied(true);
+                        window.setTimeout(() => setDiagnosticCopied(false), 1500);
+                      } catch {
+                        setDiagnosticCopied(false);
+                      }
+                    }}
+                    className="flex items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-[10px] text-emerald-300 hover:bg-emerald-500/20"
+                  >
+                    {diagnosticCopied ? <Check className="h-3.5 w-3.5" /> : <Clipboard className="h-3.5 w-3.5" />}
+                    {diagnosticCopied ? 'Copied' : 'Copy full response'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDiagnosticPopup(null)}
+                    className="rounded-md border border-stone-700 px-2.5 py-1.5 text-[10px] text-stone-300 hover:bg-stone-800"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+              <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words p-4 text-[10px] leading-relaxed font-mono text-stone-300 select-text">
+                {formatDiagnosticPayload(diagnosticPopup.payload)}
+              </pre>
+            </motion.div>
+          </div>
+        )}
+
         </motion.div>
       </div>
     </AnimatePresence>

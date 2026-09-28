@@ -6416,6 +6416,7 @@ export class MultiModelOrchestrator {
             value: Math.max(0, Number(snapshot.remaining || 0)),
             exact: true,
             source: 'PROVIDER',
+            unit: 'CREDITS',
           };
           model.quotaEvidenceSource = 'PROVIDER';
           if (Number(snapshot.remaining || 0) <= 0) {

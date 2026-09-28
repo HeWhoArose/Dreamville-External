@@ -6580,6 +6580,7 @@ export class MultiModelOrchestrator {
       quotaState?: QuotaState;
       quotaSource?: QuotaEvidenceSource;
       verifiedTasks?: TaskId[];
+      failedTasks?: Array<{ task: TaskId; reason: string }>;
       verificationMode?: 'TASK_CANARY' | 'CAPABILITY_ONLY' | 'METADATA_ONLY';
     }>;
     configuredChains: Record<string, string[]>;
@@ -6812,7 +6813,10 @@ export class MultiModelOrchestrator {
 
         const taskResults = await Promise.all(tasks.map((task) => runCanary(model, task)));
         const verifiedTasks = taskResults.filter((entry) => entry.success).map((entry) => entry.task);
-        const failedTask = taskResults.find((entry) => !entry.success);
+        const failedTasks = taskResults
+          .filter((entry) => !entry.success)
+          .map((entry) => ({ task: entry.task, reason: entry.reason || 'Task canary failed.' }));
+        const failedTask = failedTasks[0];
 
         const averageLatency = verifiedTasks.length
           ? Math.round(
@@ -6838,6 +6842,7 @@ export class MultiModelOrchestrator {
           status,
           latencyMs: averageLatency,
           errorReason: failedTask?.reason,
+          failedTasks,
           billingState: model.billingState || 'UNKNOWN',
           quotaState: model.quota,
           quotaSource: model.quotaEvidenceSource || 'UNKNOWN',
@@ -6877,6 +6882,10 @@ export class MultiModelOrchestrator {
       const eligibleReady = healthyModels
         .filter((model) => model.roleEligibility.includes(task))
         .filter((model) => {
+          const verification = results.find(
+            (entry) => entry.providerId === model.providerId && entry.modelId === model.modelId,
+          );
+          if (!verification?.verifiedTasks?.includes(task)) return false;
           const readiness = this.getTaskCandidatePreflight(
             task,
             model.providerId,

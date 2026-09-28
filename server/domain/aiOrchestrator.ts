@@ -6627,7 +6627,7 @@ export class MultiModelOrchestrator {
 
   public static isFreeModelCandidate(model: ModelRegistryRecord): boolean {
     const label = [model.modelId, model.displayName, model.description].filter(Boolean).join(' ');
-    const namedFree = /(?:^|[\s_:/.-])free(?:$|[\s_:/.-])/i.test(label);
+    const namedFree = /free/i.test(label);
     return model.billingState === 'FREE' || model.isPaidModel === false || namedFree;
   }
 

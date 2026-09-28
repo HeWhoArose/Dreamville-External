@@ -5758,6 +5758,13 @@ export class MultiModelOrchestrator {
       latencyMs: number;
       error?: string;
     }>;
+    preflightSkipped?: Array<{
+      providerId: string;
+      modelId: string;
+      displayName?: string;
+      state: string;
+      reason: string;
+    }>;
   }> {
     const contract = getAiTaskContract(task);
     const contractValidator = options?.validateResponse || ((text: string) => validateAiTaskResponse(task, text));
@@ -5822,6 +5829,34 @@ export class MultiModelOrchestrator {
     }
 
     const selectedCandidates: ModelRegistryRecord[] = [selection.selectedModel, ...selection.fallbacks];
+    const preflightSkipped: Array<{
+      providerId: string;
+      modelId: string;
+      displayName?: string;
+      state: string;
+      reason: string;
+    }> = [];
+
+    for (const candidate of selectedCandidates) {
+      if (candidate.isEmergencyFloor) continue;
+      const preflight = this.getTaskCandidatePreflight(
+        task,
+        candidate.providerId,
+        candidate.modelId,
+        contextTokens,
+        options?.maxTokens,
+      );
+      if (preflight && !preflight.eligible) {
+        preflightSkipped.push({
+          providerId: candidate.providerId,
+          modelId: candidate.modelId,
+          displayName: candidate.displayName || candidate.modelId,
+          state: preflight.state,
+          reason: preflight.reason,
+        });
+      }
+    }
+
     const candidateKeys = new Set(selectedCandidates.map((model) => this.modelKey(model)));
     const categoryHasManualOverride = Boolean(this.categoryOverrides.get(this.getTaskCategory(task)));
     const hasConfiguredTaskChain = this.taskFallbackChains.has(task);
@@ -6003,6 +6038,7 @@ export class MultiModelOrchestrator {
           fallbackReason,
           attempts: totalAttempts,
           attemptsTrail,
+          preflightSkipped,
         };
       } catch (err: any) {
         lastError = err?.message || String(err);
@@ -6097,6 +6133,7 @@ export class MultiModelOrchestrator {
           fallbackReason: 'All AI candidates were exhausted; deterministic emergency floor used.',
           attempts: totalAttempts,
           attemptsTrail,
+          preflightSkipped,
         };
       } catch (emergencyError: any) {
         lastError = emergencyError?.message || String(emergencyError);
@@ -6123,6 +6160,7 @@ export class MultiModelOrchestrator {
       fallbackReason: `All ${attemptsTrail.length} AI/emergency attempts failed: ${trailSummary}`,
       attempts: totalAttempts,
       attemptsTrail,
+      preflightSkipped,
     };
   }
 

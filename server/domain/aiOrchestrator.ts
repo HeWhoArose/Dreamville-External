@@ -159,6 +159,7 @@ export interface UsageLedgerEntry {
   cachedTokens: number;
   toolTokens: number;
   totalTokens: number;
+  purpose?: 'GAMEPLAY' | 'CANARY' | 'CONNECTIVITY_PROBE';
   failureType?: 'TIMEOUT' | '429' | '5XX' | 'AUTH' | 'UNAVAILABLE' | 'MALFORMED' | 'OTHER';
 }
 
@@ -2327,7 +2328,13 @@ export class MultiModelOrchestrator {
     return typeof cooldownUntil === 'number' && cooldownUntil > Date.now();
   }
 
-  private recordProviderSuccess(model: ModelRegistryRecord, result: ProviderGenerateResult, task: TaskId, startedAt: number): void {
+  private recordProviderSuccess(
+    model: ModelRegistryRecord,
+    result: ProviderGenerateResult,
+    task: TaskId,
+    startedAt: number,
+    purpose: UsageLedgerEntry['purpose'] = 'GAMEPLAY',
+  ): void {
     const status = this.ensureRuntimeStatus(model);
     const latencyMs = Math.max(1, result.latencyMs || Date.now() - startedAt);
     status.requests += 1;
@@ -2344,6 +2351,19 @@ export class MultiModelOrchestrator {
     if (model.quota === 'Exhausted') {
       model.quota = 'Healthy';
     }
+    const inputTokens = Number(result.inputTokens || 0);
+    const outputTokens = Number(result.outputTokens || 0);
+    const reasoningTokens = Number(result.reasoningTokens || 0);
+    const cachedTokens = Number(result.cachedTokens || 0);
+    const toolTokens = Number(result.toolTokens || 0);
+    const totalTokens = inputTokens + outputTokens + reasoningTokens + cachedTokens + toolTokens;
+    status.observedTokens.input += inputTokens;
+    status.observedTokens.output += outputTokens;
+    status.observedTokens.reasoning += reasoningTokens;
+    status.observedTokens.cached += cachedTokens;
+    status.observedTokens.tool += toolTokens;
+    status.observedTokens.total += totalTokens;
+
     if (status.configuredLimits?.tokensPerDay && status.configuredLimits.tokensPerDay > 0) {
       const remaining = Math.max(0, status.configuredLimits.tokensPerDay - status.observedTokens.total);
       status.headroom = {
@@ -2358,18 +2378,7 @@ export class MultiModelOrchestrator {
         source: 'UNKNOWN',
       };
     }
-    const inputTokens = Number(result.inputTokens || 0);
-    const outputTokens = Number(result.outputTokens || 0);
-    const reasoningTokens = Number(result.reasoningTokens || 0);
-    const cachedTokens = Number(result.cachedTokens || 0);
-    const toolTokens = Number(result.toolTokens || 0);
-    const totalTokens = inputTokens + outputTokens + reasoningTokens + cachedTokens + toolTokens;
-    status.observedTokens.input += inputTokens;
-    status.observedTokens.output += outputTokens;
-    status.observedTokens.reasoning += reasoningTokens;
-    status.observedTokens.cached += cachedTokens;
-    status.observedTokens.tool += toolTokens;
-    status.observedTokens.total += totalTokens;
+
     model.health = 'Healthy';
     model.latencyMs = latencyMs;
 
@@ -2387,6 +2396,7 @@ export class MultiModelOrchestrator {
       cachedTokens,
       toolTokens,
       totalTokens,
+      purpose,
     });
     if (this.usageLedger.length > 500) this.usageLedger.splice(0, this.usageLedger.length - 500);
   }
@@ -2402,7 +2412,13 @@ export class MultiModelOrchestrator {
     return 'OTHER';
   }
 
-  private recordProviderFailure(model: ModelRegistryRecord, task: TaskId, error: unknown, startedAt: number): void {
+  private recordProviderFailure(
+    model: ModelRegistryRecord,
+    task: TaskId,
+    error: unknown,
+    startedAt: number,
+    purpose: UsageLedgerEntry['purpose'] = 'GAMEPLAY',
+  ): void {
     const status = this.ensureRuntimeStatus(model);
     const latencyMs = Math.max(1, Date.now() - startedAt);
     const failureType = this.classifyFailure(error);
@@ -2469,6 +2485,7 @@ export class MultiModelOrchestrator {
       cachedTokens: 0,
       toolTokens: 0,
       totalTokens: 0,
+      purpose,
       failureType,
     });
     if (this.usageLedger.length > 500) this.usageLedger.splice(0, this.usageLedger.length - 500);
@@ -6429,9 +6446,22 @@ export class MultiModelOrchestrator {
 
     await this.discoverAndRegisterModels({ forceRefresh: true });
 
-    const allModels = this.getAllModels().filter(
-      (model) => !model.isEmergencyFloor && model.health !== 'DisabledByUser',
-    );
+    const canonicalProviderId = (providerId: string): string => {
+      if (providerId === 'provider_google_gemini') return 'google_gemini';
+      if (providerId === 'provider_local_emergency') return 'provider_deterministic_emergency';
+      return providerId;
+    };
+
+    const dedupedModels = new Map<string, ModelRegistryRecord>();
+    for (const model of this.getAllModels()) {
+      if (model.isEmergencyFloor || model.health === 'DisabledByUser') continue;
+      const canonicalKey = canonicalProviderId(model.providerId) + '::' + model.modelId;
+      const existing = dedupedModels.get(canonicalKey);
+      if (!existing || model.userPriority > existing.userPriority) {
+        dedupedModels.set(canonicalKey, model);
+      }
+    }
+    const allModels = Array.from(dedupedModels.values());
 
     const representativeTasksByModel = new Map<string, TaskId[]>();
     for (const model of allModels) {
@@ -6517,6 +6547,13 @@ export class MultiModelOrchestrator {
         const validation = canary.validate(providerResult);
         const latencyMs = Math.max(1, Date.now() - startedAt);
         if (!validation.valid) {
+          this.recordProviderFailure(
+            model,
+            task,
+            new Error(validation.reason || 'Task canary response failed validation.'),
+            startedAt,
+            'CANARY',
+          );
           return {
             task,
             success: false,
@@ -6526,6 +6563,7 @@ export class MultiModelOrchestrator {
           };
         }
 
+        this.recordProviderSuccess(model, providerResult, task, startedAt, 'CANARY');
         model.latencyMs = latencyMs;
         model.health = 'Healthy';
         model.accessStatus = 'accessible';
@@ -6553,6 +6591,7 @@ export class MultiModelOrchestrator {
           model.health = 'Degraded';
         }
 
+        this.recordProviderFailure(model, task, error, startedAt, 'CANARY');
         return {
           task,
           success: false,

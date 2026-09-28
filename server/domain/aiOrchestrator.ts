@@ -1486,7 +1486,6 @@ export class OpenRouterAdapter implements IProviderAdapter {
       if (timeout) clearTimeout(timeout);
     }
   }
-  }
 }
 
 /**

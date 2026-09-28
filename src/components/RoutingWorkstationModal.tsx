@@ -427,8 +427,27 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
                               </td>
                               <td className="p-2 text-stone-400">{result.billingState || 'UNKNOWN'}</td>
                               <td className="p-2 text-stone-400">{result.quotaState || 'UNKNOWN'} <span className="text-stone-600">({result.quotaSource || 'UNKNOWN'})</span></td>
-                              <td className="p-2 text-stone-400">{(result.verifiedTasks || []).slice(0, 4).join(', ') || '—'}</td>
-                              <td className="p-2 text-stone-500 max-w-[280px] truncate" title={result.errorReason || ''}>{result.errorReason || 'Verified'}</td>
+                              <td className="p-2 text-stone-400">
+                                {(result.verifiedTasks || []).slice(0, 4).join(', ') || '—'}
+                                {(result.verifiedTasks || []).length > 4 && (
+                                  <span className="text-stone-600"> +{(result.verifiedTasks || []).length - 4}</span>
+                                )}
+                              </td>
+                              <td className="p-2 text-stone-500 max-w-[320px]" title={result.errorReason || ''}>
+                                <div className="truncate">{result.errorReason || 'Verified'}</div>
+                                {Array.isArray(result.failedTasks) && result.failedTasks.length > 0 && (
+                                  <div className="mt-1 text-[9px] text-rose-400/80 space-y-0.5">
+                                    {result.failedTasks.slice(0, 3).map((failure: any) => (
+                                      <div key={failure.task} className="truncate" title={failure.reason}>
+                                        {failure.task}: {failure.reason}
+                                      </div>
+                                    ))}
+                                    {result.failedTasks.length > 3 && (
+                                      <div className="text-stone-600">+{result.failedTasks.length - 3} more task failures</div>
+                                    )}
+                                  </div>
+                                )}
+                              </td>
                             </tr>
                           ))}
                         </tbody>

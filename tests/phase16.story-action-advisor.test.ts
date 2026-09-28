@@ -176,11 +176,14 @@ test('Phase 16 action advisor: an unknown capability request does not silently g
 	assert.notEqual(advice.mode, 'EXECUTE_EXISTING');
 	assert.equal(advice.canExecuteNow, false);
 	assert.ok(advice.simulation || advice.proposal);
+	const actorId = repository.getPlayerLifecycle(storyId)?.actorId || 'player_actor_' + storyId;
+	const capabilityEngine = repository.getCapabilityEngine(storyId);
 	assert.equal(
-		repository.getEffectiveActorCapabilities(
-			repository.getPlayerLifecycle(storyId)?.actorId || 'player_actor_' + storyId
-		).some((capability) => capability.name.includes('Star Curse')),
-		false
+		capabilityEngine.hasLearnedCapability(
+			actorId,
+			Array.from(capabilityEngine.getAllCapabilities()).find((capability) => capability.name.includes('Star Curse'))?.id || 'cap_nonexistent_star_curse',
+		),
+		false,
 	);
 });
  

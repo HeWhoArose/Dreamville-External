@@ -8,7 +8,7 @@ import { worldRepository } from '../repositories/worldRepository';
 import { StoryAdaptationPipeline } from './storyAdaptation';
 import { getProviderApiKey } from '../services/providerCredentialService';
 import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
-import { evaluateAiTaskReadiness, getAiTaskContract, getAiTasksByCategory, getAllAiTaskContracts, validateAiTaskResponse, type AiTaskReadiness } from './aiTaskContracts';
+import { evaluateAiTaskCandidatePreflight, evaluateAiTaskReadiness, getAiTaskContract, getAiTasksByCategory, getAllAiTaskContracts, validateAiTaskResponse, type AiTaskCandidatePreflight, type AiTaskReadiness } from './aiTaskContracts';
 import { narrativeContinuityEngine } from './narrativeContinuityEngine';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
@@ -3849,6 +3849,44 @@ export class MultiModelOrchestrator {
     return readiness;
   }
 
+  public getTaskCandidatePreflight(
+    task: TaskId,
+    providerId: string,
+    modelId: string,
+    contextTokens = 0,
+    reservedOutputTokens?: number,
+  ): AiTaskCandidatePreflight | undefined {
+    const model = this.getModel(providerId, modelId);
+    if (!model) return undefined;
+
+    const preflight = evaluateAiTaskCandidatePreflight(
+      task,
+      model,
+      contextTokens,
+      reservedOutputTokens,
+    );
+
+    if (this.isCircuitBreakerTripped(model.providerId, model.modelId)) {
+      return {
+        ...preflight,
+        state: 'COOLDOWN',
+        eligible: false,
+        reason: 'Circuit breaker is tripped for this model/task route.',
+      };
+    }
+
+    if (this.isModelCoolingDown(model)) {
+      return {
+        ...preflight,
+        state: 'COOLDOWN',
+        eligible: false,
+        reason: 'Model is in provider cooldown.',
+      };
+    }
+
+    return preflight;
+  }
+
   public getModel(providerId: string, modelId: string): ModelRegistryRecord | undefined {
     const direct = this.models.get(`${providerId}::${modelId}`);
     if (direct) return direct;
@@ -3972,6 +4010,15 @@ export class MultiModelOrchestrator {
     if (!['READY', 'QUOTA_AVAILABLE', 'CONFIGURED', 'CAPABILITY_COMPATIBLE', 'TASK_VERIFIED'].includes(readiness.state)) {
       return false;
     }
+
+    const preflight = this.getTaskCandidatePreflight(
+      task,
+      model.providerId,
+      model.modelId,
+      contextTokens,
+    );
+    if (!preflight?.eligible) return false;
+
     if (this.isCircuitBreakerTripped(model.providerId, model.modelId)) return false;
     if (this.isModelCoolingDown(model)) return false;
     return true;

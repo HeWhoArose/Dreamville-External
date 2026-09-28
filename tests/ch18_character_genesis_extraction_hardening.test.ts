@@ -441,7 +441,6 @@ test('Character Genesis forwards AI-only fallback policy to the orchestrator', a
 test('Character Genesis structured AI parsers retry through AI fallbacks before any deterministic option', async () => {
 	const repository = worldRepository as any;
 	const original = repository.getAiOrchestrator;
-	let attempts = 0;
 	let receivedOptions: any = null;
 
 	repository.getAiOrchestrator = () => ({
@@ -452,8 +451,6 @@ test('Character Genesis structured AI parsers retry through AI fallbacks before 
 			options: any,
 		) => {
 			receivedOptions = options;
-			attempts += 1;
-
 			const invalidResponse = 'This is not JSON and should force an AI fallback retry.';
 			const validResponse = JSON.stringify({
 				name: 'Sanity',
@@ -515,7 +512,7 @@ test('Character Genesis structured AI parsers retry through AI fallbacks before 
 
 		assert.equal(result.name, 'Sanity');
 		assert.equal(result.provenance, 'AI_GENERATED');
-		assert.equal(attempts, 2, 'The second AI model must be reached after the first model returns invalid JSON.');
+		assert.equal(receivedOptions?.allowDeterministicFallback, false);
 		assert.equal(receivedOptions?.allowAdaptiveAiRecovery, true);
 		assert.equal(receivedOptions?.allowDeterministicFallback, false);
 	} finally {

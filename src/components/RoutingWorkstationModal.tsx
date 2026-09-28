@@ -877,7 +877,7 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
                           <span>
                             Headroom:{' '}
                             {runtime.headroom?.value != null
-                              ? `${Number(runtime.headroom.value).toLocaleString()} ${runtime.headroom?.source === 'PROVIDER' ? 'provider' : 'estimated'}`
+                              ? `${Number(runtime.headroom.value).toLocaleString()} ${runtime.headroom?.unit || 'units'}`
                               : runtime.headroom?.exact
                                 ? 'Exact'
                                 : runtime.headroom?.source === 'ESTIMATE'

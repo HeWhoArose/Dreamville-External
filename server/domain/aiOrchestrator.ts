@@ -311,6 +311,8 @@ export interface StructuredTurnPackage {
 }
 
 export interface ProviderGenerateOptions {
+  /** Prevent provider adapters from substituting local/mock generation for a missing AI credential. */
+  allowDeterministicFallback?: boolean;
   audioInputBase64?: string;
   voiceProfile?: any;
   timeoutMs?: number;
@@ -1472,7 +1474,10 @@ export class GoogleGeminiAdapter implements IProviderAdapter {
   }
 
   public getProviderStatus(): { configured: boolean; message: string } {
-    const hasKey = typeof process !== 'undefined' && Boolean(process.env?.GEMINI_API_KEY);
+    const hasKey = Boolean(
+      (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) ||
+      getProviderApiKey('google_gemini'),
+    );
     if (!hasKey) {
       return { configured: false, message: 'GEMINI_API_KEY environment variable is not configured.' };
     }
@@ -1483,7 +1488,10 @@ export class GoogleGeminiAdapter implements IProviderAdapter {
     if (this.failureMode === 'error' || this.failureMode === 'quota') {
       return false;
     }
-    return typeof process !== 'undefined' && Boolean(process.env?.GEMINI_API_KEY);
+    return Boolean(
+      (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) ||
+      getProviderApiKey('google_gemini'),
+    );
   }
 
   /**
@@ -1494,7 +1502,9 @@ export class GoogleGeminiAdapter implements IProviderAdapter {
       return this.mockDiscoveredCatalog;
     }
 
-    const apiKey = typeof process !== 'undefined' ? process.env?.GEMINI_API_KEY : undefined;
+    const apiKey =
+      (typeof process !== 'undefined' ? process.env?.GEMINI_API_KEY : undefined) ||
+      getProviderApiKey('google_gemini');
     if (!apiKey || this.isMockOnly) {
       return this.getFallbackCatalog();
     }
@@ -1563,6 +1573,19 @@ export class GoogleGeminiAdapter implements IProviderAdapter {
     const start = Date.now();
     const apiKey = (typeof process !== 'undefined' ? process.env?.GEMINI_API_KEY : undefined) || getProviderApiKey('google_gemini');
     const canExecuteLive = Boolean(apiKey) && !this.isMockOnly;
+
+    if (!canExecuteLive) {
+      const testRuntime =
+        typeof process !== 'undefined' &&
+        (process.env.NODE_ENV === 'test' || Boolean(process.env.NODE_TEST_CONTEXT));
+      const canUseOfflineMock =
+        options?.allowDeterministicFallback !== false &&
+        (this.isMockOnly || testRuntime);
+
+      if (!canUseOfflineMock) {
+        throw new Error('GEMINI_API_KEY is not configured for Google Gemini AI execution.');
+      }
+    }
 
     if (canExecuteLive) {
       try {
@@ -6354,6 +6377,7 @@ export class MultiModelOrchestrator {
       try {
         totalAttempts++;
         const emergencyResult = await emergencyAdapter.generate(task, prompt, {
+          allowDeterministicFallback: true,
           timeoutMs,
           maxTokens: options?.maxTokens,
           modelId: emergency.modelId,
@@ -6733,6 +6757,7 @@ export class MultiModelOrchestrator {
             abortSignal: abortController.signal,
             modelId: model.modelId,
             maxTokens: canary.maxTokens,
+            allowDeterministicFallback: false,
           });
         } finally {
           clearTimeout(timer);

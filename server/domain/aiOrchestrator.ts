@@ -6077,6 +6077,26 @@ export class MultiModelOrchestrator {
       reason: string;
     }> = [];
 
+    const configuredRouteKeys = this.getFallbackChain(task)
+      .filter((key) => key && !key.includes('emergency-fallback-local'));
+
+    const registeredRouteKeys = new Set(selectedCandidates.map((candidate) => this.modelKey(candidate)));
+    const unresolvedConfiguredKeys = configuredRouteKeys.filter((key) => !registeredRouteKeys.has(key));
+
+    for (const key of unresolvedConfiguredKeys) {
+      const separatorIndex = key.indexOf('::');
+      const providerId = separatorIndex >= 0 ? key.slice(0, separatorIndex) : 'unknown';
+      const modelId = separatorIndex >= 0 ? key.slice(separatorIndex + 2) : key;
+      const routeError = 'Configured fallback model is not registered/discoverable in the current runtime.';
+      preflightSkipped.push({
+        providerId,
+        modelId,
+        displayName: modelId,
+        state: 'NOT_REGISTERED',
+        reason: routeError,
+      });
+    }
+
     for (const candidate of selectedCandidates) {
       if (candidate.isEmergencyFloor) continue;
       const preflight = this.getTaskCandidatePreflight(
@@ -6367,7 +6387,22 @@ export class MultiModelOrchestrator {
       );
       error.code = 'AI_UNAVAILABLE';
       error.fallbackReason = error.message;
-      error.attemptsTrail = attemptsTrail;
+      error.attemptsTrail = [
+        ...unresolvedConfiguredKeys.map((key) => {
+          const separatorIndex = key.indexOf('::');
+          const providerId = separatorIndex >= 0 ? key.slice(0, separatorIndex) : 'unknown';
+          const modelId = separatorIndex >= 0 ? key.slice(separatorIndex + 2) : key;
+          return {
+            providerId,
+            modelId,
+            displayName: modelId,
+            status: 'FAILED' as const,
+            latencyMs: 0,
+            error: 'Configured model was not registered/discoverable in the current runtime.',
+          };
+        }),
+        ...attemptsTrail,
+      ];
       error.preflightSkipped = preflightSkipped;
       throw error;
     }

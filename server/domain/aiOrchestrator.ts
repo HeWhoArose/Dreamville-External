@@ -4324,9 +4324,27 @@ export class MultiModelOrchestrator {
       }
 
       if (emergency) {
+        const capacityRecovery = eligible
+          .filter((model) => !model.isEmergencyFloor)
+          .filter((model) => isUsableCandidate(model))
+          .sort((a, b) => {
+            const scoreA = a.userPriority + (a.health === 'Healthy' ? 50 : 0) + (a.quota === 'Healthy' ? 30 : 0) - Math.min(20, (a.latencyMs || 500) / 100);
+            const scoreB = b.userPriority + (b.health === 'Healthy' ? 50 : 0) + (b.quota === 'Healthy' ? 30 : 0) - Math.min(20, (b.latencyMs || 500) / 100);
+            return scoreB - scoreA || (a.modelId + '::' + a.providerId).localeCompare(b.modelId + '::' + b.providerId);
+          })[0];
+
+        if (capacityRecovery) {
+          return {
+            selectedModel: capacityRecovery,
+            selectionReason: 'Configured route contains no usable AI model for the requested capacity; adaptive safety recovery selected a task-compatible model before using the emergency floor.',
+            selectionScore: capacityRecovery.userPriority,
+            fallbacks: [emergency],
+          };
+        }
+
         return {
           selectedModel: emergency,
-          selectionReason: 'Configured task route contains no currently usable AI model; using deterministic emergency floor without selecting an unrelated model.',
+          selectionReason: 'Configured task route contains no currently usable AI model; using deterministic emergency floor.',
           selectionScore: emergency.userPriority,
           fallbacks: [],
         };
@@ -5895,6 +5913,7 @@ export class MultiModelOrchestrator {
       };
     }
 
+    const selectedModelKey = this.modelKey(selection.selectedModel);
     const selectedCandidates: ModelRegistryRecord[] = [selection.selectedModel, ...selection.fallbacks];
     const preflightSkipped: Array<{
       providerId: string;
@@ -6103,9 +6122,11 @@ export class MultiModelOrchestrator {
         const isEmergency = Boolean(currentCandidate.isEmergencyFloor) ||
                             currentCandidate.providerId.includes('emergency') ||
                             currentCandidate.providerId === 'provider_deterministic_emergency';
-        const source = isEmergency ? 'DETERMINISTIC_FALLBACK' : (cIdx === 0 ? 'AI_PRIMARY' : 'AI_FALLBACK');
-        const fallbackReason = cIdx > 0
-          ? `Fell back to ${currentCandidate.displayName || currentCandidate.modelId} after ${cIdx} earlier model failure(s).`
+        const isPrimarySelection = this.modelKey(currentCandidate) === selectedModelKey;
+        const source = isEmergency ? 'DETERMINISTIC_FALLBACK' : (isPrimarySelection ? 'AI_PRIMARY' : 'AI_FALLBACK');
+        const fallbackCount = attemptsTrail.filter((entry) => entry.status === 'FAILED').length;
+        const fallbackReason = !isPrimarySelection
+          ? `Fell back to ${currentCandidate.displayName || currentCandidate.modelId} after ${fallbackCount} earlier model failure/skip event(s).`
           : undefined;
 
         return {

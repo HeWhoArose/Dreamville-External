@@ -305,7 +305,7 @@ export class OpeningSceneService {
 		for (const [index, paragraph] of paragraphs.entries()) {
 			events.push({
 				id: `evt_open_${storyId}_p${index}`,
-				type: index === paragraphs.length - 1 ? 'hook' : 'normal',
+				type: 'normal',
 				text: paragraph.slice(0, 320),
 				timestamp: facts.time.formattedHeader,
 			});

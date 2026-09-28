@@ -691,7 +691,7 @@ Rules:
             damageFormula: '1d4',
             damageType: 'force',
             provenance: generatedProvenance,
-            aiGenerated: generatedProvenance !== 'DETERMINISTIC_FALLBACK',
+            aiGenerated: true,
           },
           provenance: generatedProvenance,
         },
@@ -1421,7 +1421,7 @@ IMPORTANT:
       outcomeReason: typeof rawEffect.outcomeReason === 'string' ? rawEffect.outcomeReason : undefined,
       outcomePayload: rawEffect.outcomePayload && typeof rawEffect.outcomePayload === 'object' ? rawEffect.outcomePayload : undefined,
       provenance: 'CHARACTER_GENESIS',
-      aiGenerated: generatedProvenance !== 'DETERMINISTIC_FALLBACK',
+      aiGenerated: true,
     };
 
     const generatedSkills: GeneratedTechnique[] = (proposal.techniques || []).map((t: any, idx: number) => ({

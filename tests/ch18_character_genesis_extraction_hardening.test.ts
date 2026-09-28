@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { characterGenesisService } from '../server/services/characterGenesisService';
 import { worldRepository } from '../server/repositories/worldRepository';
 import { WorldTemplate } from '../src/types';
@@ -534,19 +536,17 @@ test('Character Genesis structured AI parsers retry through AI fallbacks before 
 });
 
 test('Character Genesis has an AI validator on every executeTaskGeneration structured parse path', () => {
-	const fs = require('node:fs') as typeof import('node:fs');
-	const path = require('node:path') as typeof import('node:path');
 	const source = fs.readFileSync(
 		path.join(process.cwd(), 'server/services/characterGenesisService.ts'),
 		'utf8',
 	);
 
-	const callPositions = [...source.matchAll(/executeTaskGeneration\\(/g)].map((match) => match.index ?? -1);
+	const callPositions = [...source.matchAll(/executeTaskGeneration\(/g)].map((match) => match.index ?? -1);
 	assert.equal(callPositions.length, 9, 'Character Genesis should have exactly nine AI task-generation parse paths.');
 
 	for (const position of callPositions) {
 		const window = source.slice(position, Math.min(source.length, position + 1800));
-		assert.match(window, /allowDeterministicFallback:\\s*false/);
-		assert.match(window, /validateResponse:\\s*\\(text\\)/);
+		assert.match(window, /allowDeterministicFallback:\s*false/);
+		assert.match(window, /validateResponse:\s*\(text\)/);
 	}
 });

@@ -339,22 +339,6 @@ export class StoryActionAdvisor {
 
 		const cleanAction = String(actionText || '').trim();
 		const ordinaryActionPattern = /^(?:i|we|the character|my character)\s+(?:walk|walks|move|moves|step|steps|approach|approaches|go|goes|head|heads|travel|travels|look|looks|observe|observes|inspect|inspects|search|searches|listen|listens|wait|waits|rest|rests|sit|sits|stand|stands|touch|touches|pick up|picks up|take|takes|open|opens|close|closes|enter|enters|leave|leaves|follow|follows|speak|speaks|talk|talks|ask|asks|say|says)\b/i;
-		const explicitCapabilityIntent = new CapabilitySimulationEngine().isCapabilityLikeRequest(cleanAction);
-		const looksLikeExplicitCapabilityCommand = /\b(use|cast|activate|invoke|trigger|channel|release)\b/i.test(cleanAction)
-			|| capabilityEngineActionNameHint(cleanAction, this.repository.getCapabilityEngine(storyId).getEffectiveActorCapabilities(
-				actorId,
-				this.repository.getInventoryEngine(storyId),
-			).map((capability) => capability.name));
-		if (cleanAction && ordinaryActionPattern.test(cleanAction) && !looksLikeExplicitCapabilityCommand) {
-			const tips = await this.generateTips(storyId, actorId, cleanAction, [], canonicalSceneContext);
-			return {
-				mode: 'NORMAL_ACTION',
-				actionText: cleanAction,
-				actorId,
-				tips,
-				canExecuteNow: true,
-			};
-		}
 		const capabilityEngine = this.repository.getCapabilityEngine(storyId);
 		const actorCapabilities = capabilityEngine.getEffectiveActorCapabilities(
 			actorId,
@@ -369,19 +353,44 @@ export class StoryActionAdvisor {
 			...((world?.capabilities || []) as CapabilityDefinition[]),
 		];
 		const simulator = new CapabilitySimulationEngine();
-		const capabilityLikeRequest = simulator.isCapabilityLikeRequest(actionText);
-		// Closed AI action pipeline: only capability-like requests enter the multi-model
-		// interpretation/research/synthesis/rules/tactics flow. Ordinary narrative actions
-		// retain the lightweight path and cannot be turned into powers accidentally.
-		const aiPipeline = capabilityLikeRequest
-			? await new UnifiedAiActionOrchestrator(this.repository).resolveAction(storyId, actionText, {
+
+		// Intent classification is deliberately performed before the mundane-action
+		// shortcut. The LLM sees the canonical opening/scene context and decides whether
+		// the player is actually attempting a capability. Deterministic keyword matching
+		// is retained only as the explicit fallback when intent interpretation is unavailable.
+		const looksLikeExplicitCapabilityCommand = /\b(use|cast|activate|invoke|trigger|channel|release)\b/i.test(cleanAction)
+			|| capabilityEngineActionNameHint(cleanAction, actorCapabilities.map((capability) => capability.name));
+		const aiPipeline = cleanAction
+			? await new UnifiedAiActionOrchestrator(this.repository).resolveAction(storyId, cleanAction, {
 				locationName: canonicalSceneContext.locationName,
+				locationRegion: canonicalSceneContext.locationRegion,
 				locationDescription: canonicalSceneContext.locationDescription,
+				worldTime: canonicalSceneContext.worldTime,
+				openingNarrative: canonicalSceneContext.openingNarrative,
 				startingSituation: canonicalSceneContext.startingSituation,
+				activeDialogue: canonicalSceneContext.activeDialogue,
 				recentActions: canonicalSceneContext.recentActions,
 			})
 			: undefined;
 
+		const worldMatch = worldCapabilities
+			.filter((capability) => capabilityMatchesAction(capability, normalizedAction))
+			.sort((a, b) => normalize(b.name).length - normalize(a.name).length)[0];
+		const registryMatch = aiPipeline?.capabilityIntent
+			? allCapabilities
+				.filter((capability) => capabilityMatchesAction(capability, normalizedAction))
+				.sort((a, b) => normalize(b.name).length - normalize(a.name).length)[0]
+			: undefined;
+
+		const capabilityLikeRequest =
+			Boolean(worldMatch) ||
+			Boolean(registryMatch) ||
+			Boolean(aiPipeline?.capabilityIntent) ||
+			Boolean(looksLikeExplicitCapabilityCommand) ||
+			Boolean(
+				aiPipeline?.intent?.source === 'DETERMINISTIC_FALLBACK' &&
+				simulator.isCapabilityLikeRequest(cleanAction)
+			);
 
 		const tips = await this.generateTips(
 			storyId,
@@ -400,9 +409,6 @@ export class StoryActionAdvisor {
 			.filter((capability) => capabilityMatchesAction(capability, normalizedAction))
 			.sort((a, b) => normalize(b.name).length - normalize(a.name).length)[0];
 
-		// A learned capability remains owned even when current vessel/resource gates
-		// make it temporarily ineffective. The canonical execution path is responsible
-		// for rejecting that execution; ownership must never be mistaken for absence.
 		if (learnedMatch) {
 			return {
 				mode: 'EXECUTE_EXISTING',
@@ -428,17 +434,23 @@ export class StoryActionAdvisor {
 		}
 
 		// An unlearned capability may come from the authored current world or from the
-		// internal registry as a candidate, but only after the request is clearly a
-		// capability request and before any proposal is synthesized.
-		const worldMatch = worldCapabilities
-			.filter((capability) => capabilityMatchesAction(capability, normalizedAction))
-			.sort((a, b) => normalize(b.name).length - normalize(a.name).length)[0];
-		const registryMatch = capabilityLikeRequest
-			? allCapabilities
-				.filter((capability) => capabilityMatchesAction(capability, normalizedAction))
-				.sort((a, b) => normalize(b.name).length - normalize(a.name).length)[0]
-			: undefined;
+		// internal registry as a candidate, but only after intent has established that
+		// this is actually a capability request.
 		let candidate = worldMatch || registryMatch || aiPipeline?.capability;
+
+		if (!candidate && !capabilityLikeRequest) {
+			// The LLM classified this as an ordinary narrative action. This is the
+			// normal path even when the prose contains words such as "portal", "power",
+			// or other scene terms that are not an attempted capability.
+			return {
+				mode: 'NORMAL_ACTION',
+				actionText: cleanAction,
+				actorId,
+				tips,
+				canExecuteNow: true,
+				aiPipeline,
+			};
+		}
 
 		if (!candidate) {
 			const preview = capabilityEngine.interpretFreeformAction({
@@ -449,16 +461,6 @@ export class StoryActionAdvisor {
 
 			if (capabilityLikeRequest && preview.interpretationType === 'NOVEL_CAPABILITY_PROPOSAL' && preview.proposedCapability) {
 				candidate = preview.proposedCapability;
-			} else if (!capabilityLikeRequest) {
-				// Ordinary freeform actions stay on the normal narrative/action path.
-				return {
-					mode: 'NORMAL_ACTION',
-					actionText,
-					actorId,
-					tips,
-					canExecuteNow: true,
-					aiPipeline,
-				};
 			}
 		}
 

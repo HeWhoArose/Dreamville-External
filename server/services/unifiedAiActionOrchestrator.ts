@@ -10,6 +10,7 @@ export interface UnifiedActionPipelineResult {
 	research: { required: boolean; brief: string; facts: string[]; source: 'AI' | 'DETERMINISTIC_FALLBACK' | 'NOT_REQUIRED' };
 	capability?: CapabilityDefinition;
 	alternativeCapability?: CapabilityDefinition;
+	capabilityIntent: boolean;
 	simulation: CapabilitySimulationResult;
 	rules: { status: 'PASS' | 'BLOCK' | 'REVIEW'; reason: string; source: 'DETERMINISTIC' | 'AI_ASSISTED' };
 	explanation: string;
@@ -61,14 +62,27 @@ export class UnifiedAiActionOrchestrator {
 		const simulator = new CapabilitySimulationEngine();
 		const telemetry: UnifiedActionPipelineResult['telemetry'] = [];
 		let intent = deterministicIntent(cleanAction);
+		let capabilityIntent = false;
 		try {
 			const result = await this.runTask('intent.interpret', JSON.stringify({ action: cleanAction, character: run?.protagonist?.identity?.name, scene: sceneContext || {} }), 'Return ONLY JSON: {"baseAction":"...","intent":"...","requestedEffects":[],"modifiers":[],"target":"","confidence":0..1}. Do not adjudicate mechanics.', { timeoutMs: 4500, maxTokens: 700, validateResponse: (text: string) => { const p=json<any>(text); return p && typeof p.baseAction==='string' && typeof p.intent==='string' ? {valid:true}:{valid:false,errorReason:'Invalid intent schema.'}; } });
 			const p=json<any>(result.text);
 			if(p) intent={ baseAction:p.baseAction, intent:p.intent, requestedEffects:Array.isArray(p.requestedEffects)?p.requestedEffects.map(String):[], modifiers:Array.isArray(p.modifiers)?p.modifiers.map(String):[], target:typeof p.target==='string'?p.target:undefined, confidence:Number.isFinite(p.confidence)?Math.max(0,Math.min(1,p.confidence)):0.8, source:result.source==='DETERMINISTIC_FALLBACK'?'DETERMINISTIC_FALLBACK':'AI' };
+			capabilityIntent = result.source === 'DETERMINISTIC_FALLBACK'
+				? simulator.isCapabilityLikeRequest(cleanAction)
+				: (
+					Array.isArray(intent.requestedEffects) &&
+					intent.requestedEffects.length > 0
+					&& !['MOVE', 'INTERACT', 'DIALOGUE', 'OBSERVE', 'SEARCH', 'TRAVEL'].includes(String(intent.baseAction || '').toUpperCase())
+				);
 			telemetry.push({task:'intent.interpret',modelId:result.modelId,providerId:result.providerId,source:result.source,attempts:result.attempts});
-		} catch {}
+		} catch {
+			capabilityIntent = simulator.isCapabilityLikeRequest(cleanAction);
+		}
 		const candidate = owned.find((cap) => typeof cap?.name === 'string' && cleanAction.toLowerCase().includes(cap.name.toLowerCase())) || capabilityCandidateFromWorld(world, cleanAction);
-		const capabilityLike = simulator.isCapabilityLikeRequest(cleanAction, candidate);
+		// Explicit ownership/canonical world matches always enter capability resolution.
+		// Otherwise, the LLM intent interpretation is the primary classifier. The
+		// deterministic capability regex is only the fallback when intent AI fails.
+		const capabilityLike = Boolean(candidate) || capabilityIntent;
 		let research: UnifiedActionPipelineResult['research'] = {required:false,brief:'',facts:[],source:'NOT_REQUIRED'};
 		if (capabilityLike && !candidate || /research|study|investigate|ancient|lore|unknown|how does|is it possible/i.test(cleanAction)) {
 			research={required:true,brief:'Research remains advisory evidence until explicitly qualified and promoted.',facts:[],source:'DETERMINISTIC_FALLBACK'};
@@ -215,6 +229,7 @@ export class UnifiedAiActionOrchestrator {
 		return {
 			actionText:cleanAction,
 			intent,
+			capabilityIntent,
 			research,
 			capability:finalCandidate,
 			alternativeCapability,

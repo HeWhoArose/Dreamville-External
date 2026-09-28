@@ -4491,7 +4491,72 @@ export class MultiModelOrchestrator {
       const cleaned = String(rawText || '')
         .trim()
         .replace(new RegExp('^```(?:json)?\\s*', 'i'), '')
-        .replace(new RegExp('\\s*```
+        .replace(new RegExp('\\s*```$', 'i'), '')
+        .trim();
+
+      let parsed: any;
+      try {
+        parsed = JSON.parse(cleaned);
+      } catch {
+        const objectStart = cleaned.indexOf('{');
+        const objectEnd = cleaned.lastIndexOf('}');
+        if (objectStart >= 0 && objectEnd > objectStart) {
+          try {
+            parsed = JSON.parse(cleaned.slice(objectStart, objectEnd + 1));
+          } catch {
+            parsed = undefined;
+          }
+        }
+      }
+
+      if (parsed === undefined) {
+        if (options?.allowPlainTextNarration && cleaned.length >= 80) {
+          return {
+            valid: true,
+            turnPackage: {
+              narrative: [cleaned],
+              dialogue: [],
+              events: [],
+              stateChanges: [],
+              memoryCandidates: [],
+              audioCues: [],
+            },
+          };
+        }
+        return { valid: false, errorReason: 'Response is not valid JSON.' };
+      }
+
+      if (typeof parsed === 'string' && options?.allowPlainTextNarration && parsed.trim().length >= 80) {
+        return {
+          valid: true,
+          turnPackage: {
+            narrative: [parsed.trim()],
+            dialogue: [],
+            events: [],
+            stateChanges: [],
+            memoryCandidates: [],
+            audioCues: [],
+          },
+        };
+      }
+
+      if (
+        options?.allowPlainTextNarration &&
+        !Array.isArray(parsed?.narrative) &&
+        typeof parsed?.narrativeText === 'string' &&
+        parsed.narrativeText.trim().length >= 80
+      ) {
+        parsed = {
+          narrative: [parsed.narrativeText.trim()],
+          dialogue: Array.isArray(parsed.dialogue) ? parsed.dialogue : [],
+          events: Array.isArray(parsed.events) ? parsed.events : [],
+          stateChanges: Array.isArray(parsed.stateChanges) ? parsed.stateChanges : [],
+          memoryCandidates: Array.isArray(parsed.memoryCandidates) ? parsed.memoryCandidates : [],
+          audioCues: Array.isArray(parsed.audioCues) ? parsed.audioCues : [],
+        };
+      }
+
+      // 1. Narrative must be non-empty string[]
       if (!Array.isArray(parsed.narrative) || parsed.narrative.length === 0) {
         return { valid: false, errorReason: 'Missing or empty narrative array.' };
       }
@@ -4529,7 +4594,7 @@ export class MultiModelOrchestrator {
         }
       }
 
-      // 4. DEF-CH12-05: State changes strict validation
+      // 4. State changes remain strictly validated even when prose fallback is allowed.
       const stateChanges: StateChangeProposal[] = [];
       const allowedKinds = new Set([
         'INVENTORY',
@@ -4602,11 +4667,10 @@ export class MultiModelOrchestrator {
           audioCues,
         },
       };
-    } catch (e) {
+    } catch {
       return { valid: false, errorReason: 'Response is not valid JSON.' };
     }
   }
-
   /**
    * Direct Speech Synthesis Path (DEF-CH14-01 & R3 & R12)
    * Presentation/utility operation ONLY.

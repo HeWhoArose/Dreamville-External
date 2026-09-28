@@ -1,6 +1,6 @@
 {
   "pins": {
-    "narrative.generate": "provider_primary_failing::primary-fail-m1",
+    "narrative.generate": "route_primary_fail::route-primary-fail",
     "world.generate": "google_gemini::gemini-3.5-flash",
     "character.dialogue": "google_gemini::gemini-3.5-flash",
     "ooc.respond": "google_gemini::gemini-3.5-flash",
@@ -23,9 +23,9 @@
   },
   "fallbackChains": {
     "narrative.generate": [
-      "provider_primary_failing::primary-fail-m1",
-      "provider_secondary_failing::secondary-fail-m2",
-      "provider_tertiary_success::tertiary-success-m3",
+      "route_primary_fail::route-primary-fail",
+      "route_secondary_fail::route-secondary-fail",
+      "route_tertiary_fail::route-tertiary-fail",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "character.dialogue": [
@@ -41,9 +41,9 @@
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "character.extract": [
+      "google_gemini::gemini-3.5-flash-lite",
       "google_gemini::gemini-3.5-flash",
       "google_gemini::gemini-3.8-flash",
-      "google_gemini::gemini-3.5-flash-lite",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "memory.extract": [
@@ -65,9 +65,9 @@
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "intent.interpret": [
+      "google_gemini::gemini-3.5-flash-lite",
       "google_gemini::gemini-3.5-flash",
       "google_gemini::gemini-3.8-flash",
-      "google_gemini::gemini-3.5-flash-lite",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "capability.synthesize": [
@@ -77,9 +77,9 @@
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "capability.explain": [
+      "google_gemini::gemini-3.5-flash-lite",
       "google_gemini::gemini-3.5-flash",
       "google_gemini::gemini-3.8-flash",
-      "google_gemini::gemini-3.5-flash-lite",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "research.query": [
@@ -119,9 +119,7 @@
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "combat.tactics": [
-      "google_gemini::gemini-3.5-flash",
-      "google_gemini::gemini-3.8-flash",
-      "google_gemini::gemini-3.5-flash-lite",
+      "provider_fallback_test::fallback-tactical",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "tactical.reason": [
@@ -161,7 +159,10 @@
       "provider_deterministic_emergency::emergency-fallback-local"
     ]
   },
-  "categoryOverrides": {},
+  "categoryOverrides": {
+    "speech": "category_partial::partial-speech",
+    "gameplay_advice": "category_shared::shared-gameplay-advice"
+  },
   "overrides": [],
   "customModels": [
     {

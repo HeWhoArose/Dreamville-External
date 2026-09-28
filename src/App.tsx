@@ -151,12 +151,12 @@ export const App: React.FC = () => {
     apiClient.setActiveStoryId(activeStoryId);
   }, [activeStoryId]);
 
-  const fetchStoryLibrary = async () => {
+  const fetchStoryLibrary = async (isBootstrap = false) => {
     setIsLoadingStoryLibrary(true);
     setStoryLibraryError(null);
     try {
       const runs = await apiClient.getStoryRuns();
-      const summaries: StorySummary[] = runs.map((run: any) => ({
+      const summaries: StorySummary[] = Array.isArray(runs) ? runs.map((run: any) => ({
         storyId: run.storyId,
         runId: run.runId || run.storyId,
         title: run.title || run.storyTitle || 'Untitled Story',
@@ -171,34 +171,46 @@ export const App: React.FC = () => {
         turnCount: run.turnCount || 0,
         lastPlayed: run.lastPlayed || run.updatedAt || run.createdAt || 'Never',
         excerpt: run.excerpt || '',
-      }));
+      })) : [];
 
       setStoryLibraryStories(summaries);
 
-      const activeSummary = summaries.find(
-        (story) => story.storyId === activeStoryId || story.runId === activeStoryId,
-      );
-      const shouldAdoptLatestRun =
-        summaries.length > 0 &&
-        (!activeSummary || activeStoryId === 'default_story');
+      if (isBootstrap) {
+        const activeSummary = summaries.find(
+          (story) => story.storyId === activeStoryId || story.runId === activeStoryId,
+        );
+        const shouldAdoptLatestRun =
+          summaries.length > 0 &&
+          (!activeSummary || activeStoryId === 'default_story');
 
-      if (shouldAdoptLatestRun) {
-        const latest = summaries[0];
-        apiClient.setActiveStoryId(latest.storyId);
-        setActiveStoryId(latest.storyId);
-        await initializeApp(latest.storyId);
-      } else if (activeStoryId !== 'default_story' && !activeSummary) {
-        apiClient.setActiveStoryId('default_story');
-        setActiveStoryId('default_story');
-        setCurrentRoute((route) => route === 'play.story' ? 'dashboard' : route);
-        await initializeApp('default_story');
-      } else if (summaries.length === 0 && activeStoryId === 'default_story') {
-        // No persisted user run exists. Bootstrap the engine only after the library
-        // has confirmed that there is nothing real to display on the dashboard.
-        await initializeApp('default_story');
+        if (shouldAdoptLatestRun) {
+          const latest = summaries[0];
+          apiClient.setActiveStoryId(latest.storyId);
+          setActiveStoryId(latest.storyId);
+          await initializeApp(latest.storyId);
+        } else if (activeSummary) {
+          apiClient.setActiveStoryId(activeSummary.storyId);
+          await initializeApp(activeSummary.storyId);
+        } else if (activeStoryId !== 'default_story' && !activeSummary) {
+          apiClient.setActiveStoryId('default_story');
+          setActiveStoryId('default_story');
+          setCurrentRoute((route) => route === 'play.story' ? 'dashboard' : route);
+          await initializeApp('default_story');
+        } else {
+          await initializeApp('default_story');
+        }
       }
     } catch (err: any) {
+      console.error('Failed to load story library on bootstrap:', err);
       setStoryLibraryError(err?.message || 'Failed to load persisted Story Runs.');
+      if (isBootstrap) {
+        try {
+          await initializeApp(activeStoryId || 'default_story');
+        } catch (initErr: any) {
+          setNetworkError(initErr?.message || 'Unable to connect to the DreamBook story service.');
+          setSplashStatus('error');
+        }
+      }
     } finally {
       setIsLoadingStoryLibrary(false);
     }
@@ -328,14 +340,13 @@ export const App: React.FC = () => {
   };
 
   useEffect(() => {
-    // Library-first bootstrap prevents the dashboard from briefly treating the
-    // legacy default_story seed as the player's latest campaign.
-    fetchStoryLibrary();
+    // Initial library bootstrap guarantees active story resolution and engine startup
+    fetchStoryLibrary(true);
   }, []);
 
   useEffect(() => {
     if (bootPhase === 'ready') {
-      fetchStoryLibrary();
+      fetchStoryLibrary(false);
     }
   }, [bootPhase]);
 
@@ -637,7 +648,7 @@ export const App: React.FC = () => {
       <SplashScreen
         status={splashStatus}
         errorMessage={networkError || undefined}
-        onRetry={initializeApp}
+        onRetry={() => fetchStoryLibrary(true)}
         onContinue={() => {
           const done = localStorage.getItem(ONBOARDING_STORAGE_KEY);
           setBootPhase(done ? 'ready' : 'onboarding');

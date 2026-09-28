@@ -4066,6 +4066,7 @@ export class MultiModelOrchestrator {
       model.providerId,
       model.modelId,
       contextTokens,
+      0,
     );
     if (!preflight?.eligible) return false;
 
@@ -5862,8 +5863,24 @@ export class MultiModelOrchestrator {
       if (!forced.roleEligibility.includes(task)) {
         throw new Error('Requested AI model "' + options.forceModelId + '" is not eligible for task "' + task + '".');
       }
-      if (!this.isCandidateUsable(forced, task, contextTokens) && !forced.isEmergencyFloor) {
-        throw new Error('Requested AI model "' + options.forceModelId + '" is unavailable, cooling down, quota-limited, or not context-eligible.');
+      const forcedPreflight = this.getTaskCandidatePreflight(
+        task,
+        forced.providerId,
+        forced.modelId,
+        contextTokens,
+        options?.maxTokens,
+      );
+      if (
+        !this.isCandidateUsable(forced, task, contextTokens) ||
+        (forcedPreflight && !forcedPreflight.eligible)
+      ) {
+        if (!forced.isEmergencyFloor) {
+          throw new Error(
+            'Requested AI model "' +
+            options.forceModelId +
+            '" is unavailable, cooling down, quota-limited, not context-eligible, or cannot satisfy the requested output capacity.',
+          );
+        }
       }
       selection = {
         selectedModel: forced,
@@ -5953,7 +5970,18 @@ export class MultiModelOrchestrator {
     }
 
     let candidateChain: ModelRegistryRecord[] = selectedCandidates
-      .filter((model) => model.isEmergencyFloor || this.isCandidateUsable(model, task, contextTokens));
+      .filter((model) => {
+        if (model.isEmergencyFloor) return true;
+        if (!this.isCandidateUsable(model, task, contextTokens)) return false;
+        const preflight = this.getTaskCandidatePreflight(
+          task,
+          model.providerId,
+          model.modelId,
+          contextTokens,
+          options?.maxTokens,
+        );
+        return Boolean(preflight?.eligible);
+      });
 
     // Final preflight recovery: count only models that can actually be contacted.
     // This prevents unusable configured entries from consuming the fallback slots.

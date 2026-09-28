@@ -64,16 +64,12 @@ export class UnifiedAiActionOrchestrator {
 		let intent = deterministicIntent(cleanAction);
 		let capabilityIntent = false;
 		try {
-			const result = await this.runTask('intent.interpret', JSON.stringify({ action: cleanAction, character: run?.protagonist?.identity?.name, scene: sceneContext || {} }), 'Return ONLY JSON: {"baseAction":"...","intent":"...","requestedEffects":[],"modifiers":[],"target":"","confidence":0..1}. Do not adjudicate mechanics.', { timeoutMs: 4500, maxTokens: 700, validateResponse: (text: string) => { const p=json<any>(text); return p && typeof p.baseAction==='string' && typeof p.intent==='string' ? {valid:true}:{valid:false,errorReason:'Invalid intent schema.'}; } });
+			const result = await this.runTask('intent.interpret', JSON.stringify({ action: cleanAction, character: run?.protagonist?.identity?.name, scene: sceneContext || {} }), 'Return ONLY JSON: {"baseAction":"...","intent":"...","capabilityIntent":true|false,"requestedEffects":[],"modifiers":[],"target":"","confidence":0..1}. capabilityIntent=true only when the player is actually attempting to use, invoke, activate, or achieve a supernatural/structured capability; ordinary movement, inspection, dialogue, searching, opening, touching, or other mundane narrative actions must be false. Do not adjudicate mechanics.', { timeoutMs: 4500, maxTokens: 700, validateResponse: (text: string) => { const p=json<any>(text); return p && typeof p.baseAction==='string' && typeof p.intent==='string' ? {valid:true}:{valid:false,errorReason:'Invalid intent schema.'}; } });
 			const p=json<any>(result.text);
 			if(p) intent={ baseAction:p.baseAction, intent:p.intent, requestedEffects:Array.isArray(p.requestedEffects)?p.requestedEffects.map(String):[], modifiers:Array.isArray(p.modifiers)?p.modifiers.map(String):[], target:typeof p.target==='string'?p.target:undefined, confidence:Number.isFinite(p.confidence)?Math.max(0,Math.min(1,p.confidence)):0.8, source:result.source==='DETERMINISTIC_FALLBACK'?'DETERMINISTIC_FALLBACK':'AI' };
 			capabilityIntent = result.source === 'DETERMINISTIC_FALLBACK'
 				? simulator.isCapabilityLikeRequest(cleanAction)
-				: (
-					Array.isArray(intent.requestedEffects) &&
-					intent.requestedEffects.length > 0
-					&& !['MOVE', 'INTERACT', 'DIALOGUE', 'OBSERVE', 'SEARCH', 'TRAVEL'].includes(String(intent.baseAction || '').toUpperCase())
-				);
+				: Boolean(p?.capabilityIntent);
 			telemetry.push({task:'intent.interpret',modelId:result.modelId,providerId:result.providerId,source:result.source,attempts:result.attempts});
 		} catch {
 			capabilityIntent = simulator.isCapabilityLikeRequest(cleanAction);

@@ -8219,14 +8219,16 @@ gameRouter.post('/worlds/:worldId/characters/extract', async (req: Request, res:
 
     res.json({ success: true, draft });
   } catch (error: any) {
-    if (error?.code === 'AI_UNAVAILABLE' && error?.requiresDeterministicConfirmation) {
+    if (error?.code === 'AI_UNAVAILABLE') {
       console.info('[Character Genesis] AI extraction unavailable, prompting player for deterministic fallback confirmation:', error?.message);
       return res.status(422).json({
         error: error?.message || 'AI character extraction is currently unavailable.',
         code: 'AI_UNAVAILABLE',
-        requiresDeterministicConfirmation: true,
+        requiresDeterministicConfirmation: error?.requiresDeterministicConfirmation !== false,
         reason: error?.message || 'AI providers did not return a usable character extraction.',
+        fallbackReason: error?.fallbackReason,
         attemptsTrail: Array.isArray(error?.attemptsTrail) ? error.attemptsTrail : [],
+        preflightSkipped: Array.isArray(error?.preflightSkipped) ? error.preflightSkipped : [],
       });
     }
     console.error('Error extracting character draft:', error);

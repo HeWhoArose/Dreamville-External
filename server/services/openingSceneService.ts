@@ -8,7 +8,44 @@ function parseLooseOpeningResponse(rawText: string): { narrativeText: string; st
 	const cleaned = String(rawText || '')
 		.trim()
 		.replace(new RegExp('^```(?:json)?\\s*', 'i'), '')
-		.replace(new RegExp('\\s*```
+		.replace(new RegExp('\\s*```$', 'i'), '')
+		.trim();
+	if (!cleaned) return null;
+
+	let parsed: any;
+	try {
+		parsed = JSON.parse(cleaned);
+	} catch {
+		const objectStart = cleaned.indexOf('{');
+		const objectEnd = cleaned.lastIndexOf('}');
+		if (objectStart >= 0 && objectEnd > objectStart) {
+			try {
+				parsed = JSON.parse(cleaned.slice(objectStart, objectEnd + 1));
+			} catch {
+				parsed = undefined;
+			}
+		}
+	}
+
+	if (typeof parsed === 'string') return cleanedNarrativeOpening(parsed);
+	if (parsed && typeof parsed === 'object' && typeof parsed.narrativeText === 'string') {
+		const narrative = parsed.narrativeText.trim();
+		if (narrative.length >= 120) {
+			return {
+				narrativeText: narrative,
+				structuredEvents: Array.isArray(parsed.structuredEvents) ? parsed.structuredEvents : [],
+			};
+		}
+	}
+
+	return cleanedNarrativeOpening(cleaned);
+}
+
+function cleanedNarrativeOpening(text: string): { narrativeText: string; structuredEvents: any[] } | null {
+	const narrativeText = String(text || '').trim();
+	if (narrativeText.length < 120) return null;
+	return { narrativeText, structuredEvents: [] };
+}
 export interface GenerateOpeningSceneOptions {
 	storyId: string;
 	forceRegenerate?: boolean;

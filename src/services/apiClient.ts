@@ -1914,6 +1914,8 @@ class ApiClient {
       status: 'READY' | 'FAILED' | 'UNAVAILABLE' | 'NOT_CONFIGURED';
       latencyMs?: number;
       errorReason?: string;
+      diagnosticPayload?: unknown;
+      failedTasks?: Array<{ task: string; reason: string; diagnosticPayload?: unknown }>;
     }>;
     configuredChains: Record<string, string[]>;
     summaryMessage: string;

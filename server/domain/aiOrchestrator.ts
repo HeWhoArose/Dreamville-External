@@ -6919,7 +6919,8 @@ export class MultiModelOrchestrator {
       quotaState?: QuotaState;
       quotaSource?: QuotaEvidenceSource;
       verifiedTasks?: TaskId[];
-      failedTasks?: Array<{ task: TaskId; reason: string }>;
+      failedTasks?: Array<{ task: TaskId; reason: string; diagnosticPayload?: unknown }>;
+      diagnosticPayload?: unknown;
       verificationMode?: 'TASK_CANARY' | 'CAPABILITY_ONLY' | 'METADATA_ONLY';
     }> = [];
 

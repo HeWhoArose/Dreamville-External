@@ -28,7 +28,10 @@ function parseLooseOpeningResponse(rawText: string): { narrativeText: string; st
 	}
 
 	if (typeof parsed === 'string') return cleanedNarrativeOpening(parsed);
-	if (parsed && typeof parsed === 'object' && typeof parsed.narrativeText === 'string') {
+	if (parsed && typeof parsed === 'object') {
+		if (typeof parsed.narrativeText !== 'string') {
+			return null;
+		}
 		const narrative = parsed.narrativeText.trim();
 		if (narrative.length >= 120) {
 			return {
@@ -36,6 +39,7 @@ function parseLooseOpeningResponse(rawText: string): { narrativeText: string; st
 				structuredEvents: Array.isArray(parsed.structuredEvents) ? parsed.structuredEvents : [],
 			};
 		}
+		return null;
 	}
 
 	return cleanedNarrativeOpening(cleaned);

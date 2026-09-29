@@ -770,6 +770,7 @@ export const App: React.FC = () => {
         <CharacterSurface
           protagonist={viewState.protagonist}
           powerState={powerState}
+          characterSkills={viewState.protagonist?.skills || []}
           learnedCapabilities={learnedCapabilities}
           skillInstances={skillInstances}
           equipment={viewState.equipment}

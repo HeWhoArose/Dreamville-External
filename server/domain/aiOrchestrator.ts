@@ -2987,6 +2987,7 @@ export class MultiModelOrchestrator {
   ): void {
     const status = this.ensureRuntimeStatus(model);
     const latencyMs = Math.max(1, Date.now() - startedAt);
+    const errorMessage = String((error as any)?.message || error);
     const failureType = this.classifyFailure(error);
     status.requests += 1;
     status.failureCount += 1;
@@ -3035,7 +3036,15 @@ export class MultiModelOrchestrator {
               ? 'COOLDOWN'
               : 'UNAVAILABLE';
       model.health = status.status;
-      if (failureType === '429') model.quota = 'Exhausted';
+      if (failureType === '429') {
+        // A 429 may be a transient RPM/TPM throttle rather than a depleted daily
+        // quota. The cooldown window is authoritative for transient throttles;
+        // provider quota refresh can still mark the model Exhausted when the
+        // provider reports true quota depletion.
+        model.quota = /quota|resource exhausted/i.test(errorMessage) && !/rate limit|too many requests/i.test(errorMessage)
+          ? 'Exhausted'
+          : 'Low';
+      }
     }
 
     this.usageLedger.push({
@@ -6613,18 +6622,42 @@ export class MultiModelOrchestrator {
         if (!forced.roleEligibility.includes(task)) {
           throw new Error(`Model '${params.forceModelId}' is not eligible for role/task '${task}'.`);
         }
-        if (!this.isCandidateUsable(forced, task) && !forced.isEmergencyFloor) {
-          throw new Error('Forced model "' + params.forceModelId + '" is unavailable, cooling down, or not context-eligible.');
-        }
-        selectedModel = forced;
-        selectionReason = 'Explicitly forced model "' + params.forceModelId + '".';
-        const configuredFallbacks = this.getFallbackChain(task)
-          .map((key) => this.models.get(key) || Array.from(this.models.values()).find((m) => m.modelId === key))
-          .filter((m): m is ModelRegistryRecord => Boolean(m))
-          .filter((m) => m.modelId !== forced.modelId);
-        fallbacks = configuredFallbacks.length > 0
-          ? configuredFallbacks.filter((m) => this.isCandidateUsable(m, task) || m.isEmergencyFloor)
-          : Array.from(this.models.values()).filter((m) => m.modelId !== forced.modelId && this.isCandidateUsable(m, task));
+        const forcedPreflight = this.getTaskCandidatePreflight(
+          task,
+          forced.providerId,
+          forced.modelId,
+          assembledContext.totalTokens,
+          hardTokenBudget,
+        );
+        const forcedUsable = forced.isEmergencyFloor || (
+          this.isCandidateUsable(forced, task, assembledContext.totalTokens) &&
+          (!forcedPreflight || forcedPreflight.eligible)
+        );
+
+        if (!forcedUsable) {
+          const fallbackSelection = this.selectBestModel(task, { contextTokens: assembledContext.totalTokens });
+          selectedModel = fallbackSelection.selectedModel;
+          selectionReason = 'Requested model "' + params.forceModelId + '" was unavailable at preflight; using the configured fallback route instead.';
+          fallbacks = fallbackSelection.fallbacks;
+        } else {
+          selectedModel = forced;
+          selectionReason = 'Explicitly preferred model "' + params.forceModelId + '" with configured failover enabled.';
+          const configuredFallbacks = this.getFallbackChain(task)
+            .map((key) => this.models.get(key) || Array.from(this.models.values()).find((m) => m.modelId === key))
+            .filter((m): m is ModelRegistryRecord => Boolean(m))
+            .filter((m) => this.modelKey(m) !== this.modelKey(forced))
+            .filter((m) => {
+              if (m.isEmergencyFloor) return true;
+              const preflight = this.getTaskCandidatePreflight(
+                task,
+                m.providerId,
+                m.modelId,
+                assembledContext.totalTokens,
+                hardTokenBudget,
+              );
+              return this.isCandidateUsable(m, task, assembledContext.totalTokens) && Boolean(preflight?.eligible);
+            });
+          fallbacks = configuredFallbacks;
       } else {
         const selection = this.selectBestModel(task, { contextTokens: assembledContext.totalTokens });
         selectedModel = selection.selectedModel;
@@ -7142,21 +7175,30 @@ export class MultiModelOrchestrator {
         contextTokens,
         options?.maxTokens,
       );
-      if (
-        !this.isCandidateUsable(forced, task, contextTokens) ||
-        (forcedPreflight && !forcedPreflight.eligible)
-      ) {
-        if (!forced.isEmergencyFloor) {
-          throw new Error(
-            'Requested AI model "' +
-            options.forceModelId +
-            '" is unavailable, cooling down, quota-limited, not context-eligible, or cannot satisfy the requested output capacity.',
-          );
-        }
+      const forcedUsable = forced.isEmergencyFloor || (
+        this.isCandidateUsable(forced, task, contextTokens) &&
+        (!forcedPreflight || forcedPreflight.eligible)
+      );
+
+      if (forcedUsable) {
+        selection = {
+          selectedModel: forced,
+          selectionReason: 'Explicitly selected model "' + (forced.displayName || forced.modelId) + '" as the preferred primary; configured fallbacks remain active.',
+          selectionScore: forced.userPriority,
+          fallbacks: this.getFallbackChain(task).flatMap((key) => {
+            const model = Array.from(this.models.values()).find(
+              (candidate) => this.modelKey(candidate) === key || candidate.modelId === key,
+            );
+            return model && this.modelKey(model) !== this.modelKey(forced) ? [model] : [];
+          }),
+        };
+      } else {
+        const fallbackSelection = this.selectBestModel(task, { contextTokens });
+        selection = {
+          ...fallbackSelection,
+          selectionReason: 'Requested model "' + options.forceModelId + '" was unavailable at preflight; using the configured fallback route instead.',
+        };
       }
-      selection = {
-        selectedModel: forced,
-        selectionReason: 'Explicitly selected model "' + (forced.displayName || forced.modelId) + '".',
         selectionScore: forced.userPriority,
         fallbacks: this.getFallbackChain(task).flatMap((key) => {
           const model = Array.from(this.models.values()).find(

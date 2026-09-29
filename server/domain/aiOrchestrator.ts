@@ -5980,6 +5980,66 @@ export class MultiModelOrchestrator {
    *   -> Continuation Checkpoint
    */
   /**
+   * Deterministic presentation continuity guard.
+   *
+   * AI narration may vary freely in wording, but it must retain at least one
+   * distinctive lexical anchor from the player's current canonical location.
+   * This prevents a fallback model from silently relocating the player to an
+   * invented room, biome, building, or scene when canonical location state did
+   * not change.
+   */
+  private validateNarrativeSceneContinuity(
+    narration: string,
+    repository: WorldRepository,
+    storyId: string,
+  ): { valid: boolean; errorReason?: string } {
+    const player = repository.getPlayerLifecycle(storyId);
+    const run = repository.getStoryRun(storyId);
+    const locationId = player?.locationId || run?.currentLocationId || run?.startingLocationId;
+    if (!locationId) return { valid: true };
+
+    const location = repository.getGeographyGraph(storyId).getNode(locationId);
+    if (!location) return { valid: true };
+
+    const stopWords = new Set([
+      'about', 'after', 'again', 'along', 'among', 'around', 'because', 'before',
+      'being', 'could', 'every', 'first', 'from', 'have', 'into', 'might', 'other',
+      'should', 'some', 'their', 'there', 'these', 'those', 'through', 'under',
+      'until', 'where', 'which', 'while', 'within', 'would', 'your', 'world',
+      'current', 'location', 'place', 'area', 'room', 'space', 'stone', 'dark',
+      'light', 'floor', 'wall', 'walls', 'air', 'water', 'door', 'path',
+    ]);
+
+    const tokenize = (value: unknown): string[] =>
+      Array.from(new Set(
+        String(value || '')
+          .toLowerCase()
+          .split(/[^a-z0-9]+/)
+          .filter((token) => token.length >= 5 && !stopWords.has(token)),
+      ));
+
+    const nameTokens = tokenize(location.name);
+    const sceneTokens = tokenize([
+      location.name,
+      location.regionId,
+      location.description,
+      location.ambientSensory,
+    ].filter(Boolean).join(' '));
+    const narrationTokens = new Set(tokenize(narration));
+    const nameMatch = nameTokens.some((token) => narrationTokens.has(token));
+    const sceneMatch = sceneTokens.some((token) => narrationTokens.has(token));
+
+    if (nameTokens.length > 0 && sceneTokens.length > 0 && !nameMatch && !sceneMatch) {
+      return {
+        valid: false,
+        errorReason: `Narration continuity guard rejected output: no distinctive lexical anchor for canonical location "${location.name}".`,
+      };
+    }
+
+    return { valid: true };
+  }
+
+  /**
    * Presentation-only narrative generation.
    *
    * Uses the same canonical working context and model selection infrastructure as a full
@@ -6033,6 +6093,28 @@ export class MultiModelOrchestrator {
     const timeoutMs = params.timeoutMs ?? 7000;
     const authoritativeOutcome = (params.committedOutcome || '').trim();
     const connectedDirective = (params.continuationDirective || '').trim();
+
+    const canonicalPlayer = worldRepo.getPlayerLifecycle(storyId);
+    const canonicalRun = worldRepo.getStoryRun(storyId);
+    const canonicalLocationId =
+      canonicalPlayer?.locationId ||
+      canonicalRun?.currentLocationId ||
+      canonicalRun?.startingLocationId ||
+      '';
+    const canonicalLocation = canonicalLocationId
+      ? worldRepo.getGeographyGraph(storyId).getNode(canonicalLocationId)
+      : undefined;
+    const canonicalSceneAnchor = canonicalLocation
+      ? [
+          `Location ID: ${canonicalLocation.id}`,
+          `Location name: ${canonicalLocation.name}`,
+          canonicalLocation.regionId ? `Region: ${canonicalLocation.regionId}` : '',
+          canonicalLocation.description ? `Canonical description: ${canonicalLocation.description}` : '',
+          canonicalLocation.ambientSensory ? `Canonical ambient/sensory cues: ${canonicalLocation.ambientSensory}` : '',
+          'Continuity rule: remain within this canonical location unless the canonical game state has already committed a location change for this turn. A failed check, fallback model, or narration request never authorizes an uncommitted relocation.',
+        ].filter(Boolean).join('\\n')
+      : 'Canonical location is unavailable; do not invent a location change.';
+
     const styleInstruction = params.styleInstruction || [
       'Write an immersive tabletop-RPG narrator response to the player’s latest action, as continuous story prose rather than a status report.',
       authoritativeOutcome
@@ -6048,6 +6130,7 @@ export class MultiModelOrchestrator {
       'Show immediate sensory and physical consequences, NPC reactions, environmental response, or tension when the canonical context supports them.',
       'The response should feel like the next passage of an interactive novel or tabletop GM session, not a paraphrase of the player input.',
       'Use the current scene, researched relevant memories/lore, maintained plot, maintained narrative plan, and recent turn history to maintain continuity. The narration should feel like events are unfolding from a larger living situation, with visible consequences, atmosphere, character reactions, unresolved tension, and a sensible opening for what can happen next.',
+      'The canonical current-location anchor is authoritative. Never move the protagonist into a different room, building, biome, region, climate, or setting merely because the fallback model lacks context. A player action may describe movement within the current location, but only canonical game state may commit an actual location transition.',
       'For ordinary physical action such as walking, approaching, looking, opening, touching, speaking, waiting, or moving, narrate the physical/world response naturally instead of treating the action as a capability request.',
       'Do not repeat the action in sentence form. Transform it into fiction: describe what the character notices, how the environment responds, what changes because of the movement, what remains uncertain, and what catches attention next.',
       'Prefer concrete scene-specific details over generic atmospheric filler. Reuse established world details only when they are relevant to the current action.',
@@ -6081,6 +6164,16 @@ export class MultiModelOrchestrator {
       worldRepo,
       customChunks: [
         {
+          id: 'canonical_scene_anchor',
+          band: 'B1_CRITICAL' as const,
+          label: 'Canonical Current Scene Anchor',
+          content: canonicalSceneAnchor,
+          estimatedTokens: WorkingContextEngine.estimateTokens(canonicalSceneAnchor),
+          sourceAuthority: 'WorldRepository canonical location state',
+          isProtected: true,
+          relevanceScore: 1,
+        },
+        {
           id: 'narrative_research',
           band: 'B2_IMMEDIATE' as const,
           label: 'Narrative Research',
@@ -6104,23 +6197,23 @@ export class MultiModelOrchestrator {
           content: params.sceneContext,
           estimatedTokens: WorkingContextEngine.estimateTokens(params.sceneContext),
           sourceAuthority: 'Canonical Story Context',
-          isProtected: false,
-          relevanceScore: 0.98,
+          isProtected: true,
+          relevanceScore: 1,
         }] : []),
         ...(params.recentTurns?.length ? [{
           id: 'recent_story_turns',
           band: 'B2_IMMEDIATE' as const,
           label: 'Recent Story Turns',
           content: params.recentTurns
-            .slice(-8)
+            .slice(-4)
             .map((turn, index) => `Turn ${index + 1} | ${turn.worldTime || 'current'} | Player: ${turn.playerAction} | Narration: ${turn.narration}`)
             .join('\n'),
           estimatedTokens: WorkingContextEngine.estimateTokens(
-            params.recentTurns.slice(-8).map((turn) => `${turn.playerAction} ${turn.narration}`).join(' ')
+            params.recentTurns.slice(-4).map((turn) => `${turn.playerAction} ${turn.narration}`).join(' ')
           ),
           sourceAuthority: 'Canonical Story History',
-          isProtected: false,
-          relevanceScore: 0.92,
+          isProtected: true,
+          relevanceScore: 1,
         }] : []),
         {
           id: 'narrative_presentation_contract',
@@ -6159,9 +6252,17 @@ export class MultiModelOrchestrator {
         forceModelId: params.forceModelId,
         validateResponse: (text) => {
           const validation = this.validateTurnPackage(text, { allowPlainTextNarration: true });
-          return validation.valid
+          if (!validation.valid || !validation.turnPackage) {
+            return { valid: false, errorReason: validation.errorReason };
+          }
+          const continuity = this.validateNarrativeSceneContinuity(
+            validation.turnPackage.narrative.join(' '),
+            worldRepo,
+            storyId,
+          );
+          return continuity.valid
             ? { valid: true }
-            : { valid: false, errorReason: validation.errorReason };
+            : { valid: false, errorReason: continuity.errorReason };
         },
       },
     );
@@ -6491,6 +6592,14 @@ export class MultiModelOrchestrator {
             const validation = this.validateTurnPackage(providerRes.text);
             if (!validation.valid || !validation.turnPackage) {
               throw new Error(`Turn package validation failed: ${validation.errorReason}`);
+            }
+            const continuity = this.validateNarrativeSceneContinuity(
+              validation.turnPackage.narrative.join(' '),
+              repo,
+              storyId,
+            );
+            if (!continuity.valid) {
+              throw new Error(continuity.errorReason || 'Narration scene continuity validation failed.');
             }
 
             // 5. Adjudicate State Changes through Domain Authority Bridge (DEF-CH12-05)

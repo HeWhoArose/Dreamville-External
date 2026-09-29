@@ -40,7 +40,7 @@ export function deriveNarrationContextNeeds(params: {
 	].join(' ');
 
 	const includeHealth = HAZARD_OR_HEALTH_PATTERN.test(source);
-	const includeInventory = INVENTORY_PATTERN.test(source);
+	const includeInventory = /\b(show|check|list|what(?:'s| is) in|my inventory|my equipment|inventory contents|equipment contents)\b/i.test(source) && INVENTORY_PATTERN.test(source);
 	const includeCapabilities = CAPABILITY_PATTERN.test(source);
 	const includeLore = LORE_PATTERN.test(source);
 	const includeQuests = QUEST_PATTERN.test(source);

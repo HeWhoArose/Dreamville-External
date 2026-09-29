@@ -3,7 +3,7 @@ import type { CapabilityDefinition } from '../domain/capabilityEngine';
 import { CapabilitySimulationEngine, type CapabilitySimulationResult } from '../domain/capabilitySimulationEngine';
 import type { TaskId } from '../domain/aiOrchestrator';
 import { getAiTaskContract } from '../domain/aiTaskContracts';
-import { AiCallBudget, inferAiCallPolicyMode } from '../domain/aiCallPolicy';
+import { AiCallBudget, decideAiHelperNeed } from '../domain/aiCallPolicy';
 import { WorkingContextEngine } from '../domain/workingContextEngine';
 
 export interface ActionResolutionHint {
@@ -28,6 +28,7 @@ export interface UnifiedActionPipelineResult {
 	narrationDirective: string;
 	telemetry: Array<{ task: TaskId; modelId: string; providerId: string; source: string; attempts: number }>;
 	aiCallPolicy: ReturnType<AiCallBudget['snapshot']>;
+	helperDecision: { strategy: string; reason: string };
 }
 
 function json<T>(text: string): T | null { try { const value = JSON.parse(text); return value && typeof value === 'object' ? value as T : null; } catch { return null; } }
@@ -97,12 +98,19 @@ export class UnifiedAiActionOrchestrator {
 		const shouldAskIntentModel =
 			!preCandidate &&
 			(explicitCapabilitySyntax || checkOrHazardRequested || (itemUseRequested && !itemMatch));
-		const aiCallPolicyMode = inferAiCallPolicyMode({
+		const ambiguousLanguage =
+			/\b(that|this|it|something|somehow|maybe|try something|figure it out|do something)\b/i.test(cleanAction) &&
+			!preCandidate &&
+			!itemMatch;
+		const helperDecision = decideAiHelperNeed({
 			hasCanonicalCapability: Boolean(preCandidate),
 			itemKnown: Boolean(itemMatch),
 			requiresCheckOrHazardInterpretation: checkOrHazardRequested,
 			explicitCapabilitySyntax,
+			unknownUseTarget: itemUseRequested && !itemMatch,
+			ambiguousLanguage,
 		});
+		const aiCallPolicyMode = helperDecision.mode;
 		const aiCallBudget = new AiCallBudget(aiCallPolicyMode);
 		let intent = deterministicIntent(cleanAction);
 		let capabilityIntent = Boolean(preCandidate);
@@ -289,6 +297,10 @@ export class UnifiedAiActionOrchestrator {
 				: ('Explain the canonical rejection/block without inventing success. '+explanation+'. Research context: '+research.brief+'. Rule analysis context: '+ruleAnalysis+'.'+tacticalDirective),
 			telemetry,
 			aiCallPolicy: aiCallBudget.snapshot(),
+			helperDecision: {
+				strategy: helperDecision.strategy,
+				reason: helperDecision.reason,
+			},
 		};
 	}
 }

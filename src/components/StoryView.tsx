@@ -611,12 +611,10 @@ export const StoryView: React.FC<StoryViewProps> = ({
       const result = await apiClient.regenerateNarration({
         storyId,
         actionId: entry.id,
-        // AUTO must remain on the orchestrator's configured narration route.
-        // Only a MANUAL category override should force a specific model.
-        forceModelId:
-          narrationCategoryState?.mode === 'MANUAL'
-            ? narrationCategoryState.activeModelKey || undefined
-            : undefined,
+        // The narration picker is already a category-level preference. Do not send
+        // the same selection again as a hard forceModelId override; the orchestrator
+        // owns failover and will move to the next configured model when the preferred
+        // provider is exhausted, cooling down, context-ineligible, or otherwise unavailable.
         editInstruction: editInstruction.trim() || undefined,
       });
       onNarrationUpdated?.(result.viewState);

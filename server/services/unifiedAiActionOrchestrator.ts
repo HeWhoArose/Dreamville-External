@@ -113,6 +113,9 @@ export class UnifiedAiActionOrchestrator {
 		} catch {
 			capabilityIntent = Boolean(preCandidate) || simulator.isCapabilityLikeRequest(cleanAction);
 		}
+		} else {
+			capabilityIntent = Boolean(preCandidate);
+		}
 		const candidate = preCandidate;
 		// Explicit ownership/canonical world matches always enter capability resolution.
 		// Otherwise, the LLM intent interpretation is the primary classifier. The

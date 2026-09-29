@@ -103,17 +103,38 @@ export class StoryCheckChallengeResolver {
     }
 
     const action = normalize(context.actionText);
-    const scene = normalize(context.sceneText || '');
     const ranked = candidates
       .map((challenge) => {
-        const matches = challenge.keywords.filter((keyword: string) => {
+        // Authored challenges are action-scoped. Scene prose may explain why a
+        // challenge exists, but it must not activate an unrelated challenge merely
+        // because its keyword appears somewhere in the scene.
+        const actionMatches = challenge.keywords.filter((keyword: string) => {
           const needle = normalize(keyword);
-          return needle && (action.includes(needle) || scene.includes(needle));
+          return needle && action.includes(needle);
         });
-        return { challenge, score: matches.reduce((sum: number, keyword: string) => sum + normalize(keyword).length + 1, 0), matchCount: matches.length };
+        const specificMatches = actionMatches.filter((keyword: string) => {
+          const needle = normalize(keyword);
+          return needle.length >= 4;
+        });
+
+        return {
+          challenge,
+          matches: actionMatches,
+          score: actionMatches.reduce((sum: number, keyword: string) => sum + normalize(keyword).length + 1, 0),
+          matchCount: actionMatches.length,
+          specificMatchCount: specificMatches.length,
+        };
       })
       .filter((entry) => entry.matchCount > 0)
-      .sort((a, b) => b.score - a.score);
+      // Generic verbs alone are not enough to activate a specific authored puzzle
+      // or challenge. An explicit object/term match is required.
+      .filter((entry) => entry.specificMatchCount > 0 || entry.matches.some((keyword: string) => normalize(keyword).length >= 6))
+      .sort((a, b) => {
+        if (b.specificMatchCount !== a.specificMatchCount) {
+          return b.specificMatchCount - a.specificMatchCount;
+        }
+        return b.score - a.score;
+      });
 
     return ranked[0]?.challenge || null;
   }

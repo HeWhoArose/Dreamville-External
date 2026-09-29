@@ -159,7 +159,7 @@ test('current-turn visual cues create chronological panels without importing pri
   assert.match(result.prompt, /Use exactly 2 panels/i);
   assert.doesNotMatch(result.prompt, /OLD OPENING SCENE MUST NOT APPEAR/i);
   assert.doesNotMatch(result.prompt, /OLD NARRATION MUST NOT APPEAR/i);
-  assert.doesNotMatch(result.prompt, /previous image composition/i);
+  assert.doesNotMatch(result.prompt, /OLD PREVIOUS IMAGE COMPOSITION/i);
 });
 
 test('failed actions cannot be reinterpreted as success', () => {

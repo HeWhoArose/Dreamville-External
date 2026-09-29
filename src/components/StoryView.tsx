@@ -1274,15 +1274,16 @@ export const StoryView: React.FC<StoryViewProps> = ({
                 setDiceSettingsOpen(false);
                 setSceneError(null);
               }}
-              className="flex h-11 w-11 items-center justify-center rounded-xl border border-violet-400/15 bg-violet-500/10 text-violet-200 transition hover:bg-violet-500/15"
-              aria-label="Open story tools"
-              title="Story tools"
+              className="flex h-11 items-center gap-1.5 rounded-xl border border-violet-400/15 bg-violet-500/10 px-3 text-violet-200 transition hover:bg-violet-500/15"
+              aria-label="Open More story tools"
+              title="More"
             >
               <Plus className="h-5 w-5" />
+              <span className="text-xs font-semibold">More</span>
             </button>
 
             {sceneMenuOpen && (
-              <div className="absolute bottom-14 left-0 z-50 w-72 rounded-2xl border border-white/10 bg-[#110b1d] p-2 shadow-2xl">
+              <div className="absolute bottom-14 left-0 z-50 max-h-[min(72vh,40rem)] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-white/10 bg-[#110b1d] p-2 shadow-2xl">
                 <button
                   type="button"
                   onClick={() => setSuggestionsOpen((value) => !value)}
@@ -1311,29 +1312,79 @@ export const StoryView: React.FC<StoryViewProps> = ({
                 </button>
 
                 {diceSettingsOpen && (
-                  <div className="mt-1 rounded-xl border border-amber-200/10 bg-black/20 p-1">
-                    {DICE_THEME_PRESETS.map((theme) => {
-                      const active = settings.diceTheme === theme.id;
-                      return (
-                        <button
-                          key={theme.id}
-                          type="button"
-                          onClick={() => void updateSettings({ diceTheme: theme.id })}
-                          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-white/[0.04]"
-                          aria-pressed={active}
-                        >
-                          <span
-                            className="h-7 w-7 shrink-0 rounded-lg border border-white/10 shadow-inner"
-                            style={{ background: theme.customColorset.background }}
-                          />
-                          <span className="min-w-0 flex-1">
-                            <span className="block text-xs font-semibold text-stone-200">{theme.label}</span>
-                            <span className="mt-0.5 block text-[9px] leading-4 text-stone-600">{theme.description}</span>
-                          </span>
-                          {active && <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-300" />}
-                        </button>
-                      );
-                    })}
+                  <div className="mt-1 rounded-xl border border-amber-200/10 bg-black/20 p-2">
+                    <div className="mb-2 rounded-lg border border-white/6 bg-white/[0.02] px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <Dices className="h-3.5 w-3.5 text-amber-300" />
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-black uppercase tracking-[0.16em] text-amber-100/70">Dice appearance</p>
+                          <p className="mt-0.5 text-[9px] leading-4 text-stone-600">Choose physical 3D dice or lightweight 2D illustrated dice.</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-1 rounded-lg border border-white/6 bg-black/20 p-1">
+                      {(['3D', '2D'] as const).map((mode) => {
+                        const active = DICE_THEME_PRESETS.find((theme) => theme.id === settings.diceTheme)?.mode === mode;
+                        return (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() => {
+                              const firstTheme = DICE_THEME_PRESETS.find((theme) => theme.mode === mode);
+                              if (firstTheme) void updateSettings({ diceTheme: firstTheme.id });
+                            }}
+                            className={"rounded-md px-3 py-2 text-[10px] font-bold uppercase tracking-[0.12em] transition " + (active ? 'bg-amber-300 text-[#24170a]' : 'text-stone-500 hover:bg-white/[0.04] hover:text-stone-200')}
+                            aria-pressed={active}
+                          >
+                            {mode === '3D' ? '3D Physical' : '2D Illustrated'}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className="mt-2 space-y-1">
+                      {(['3D', '2D'] as const).map((mode) => {
+                        const themes = DICE_THEME_PRESETS.filter((theme) => theme.mode === mode);
+                        const modeActive = themes.some((theme) => theme.id === settings.diceTheme);
+                        return (
+                          <div key={mode} className={modeActive ? '' : 'hidden'}>
+                            <div className="px-2 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-stone-600">
+                              {mode === '3D' ? '3D Physical Dice' : '2D Illustrated Dice'}
+                            </div>
+                            {themes.map((theme) => {
+                              const active = settings.diceTheme === theme.id;
+                              return (
+                                <button
+                                  key={theme.id}
+                                  type="button"
+                                  onClick={() => void updateSettings({ diceTheme: theme.id })}
+                                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-white/[0.04]"
+                                  aria-pressed={active}
+                                >
+                                  <span
+                                    className="relative h-8 w-8 shrink-0 overflow-hidden rounded-lg border border-white/10 shadow-inner"
+                                    style={{ background: theme.previewTable }}
+                                  >
+                                    <span
+                                      className="absolute left-1/2 top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-md border text-[8px] font-black"
+                                      style={{ background: theme.customColorset.background, color: theme.customColorset.foreground, borderColor: theme.customColorset.outline }}
+                                    >
+                                      {mode === '2D' ? '2D' : '3D'}
+                                    </span>
+                                  </span>
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block text-xs font-semibold text-stone-200">{theme.label}</span>
+                                    <span className="mt-0.5 block text-[9px] leading-4 text-stone-500">{theme.description}</span>
+                                  </span>
+                                  {active && <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-300" />}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
 

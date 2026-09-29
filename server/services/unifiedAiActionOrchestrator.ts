@@ -4,9 +4,16 @@ import { CapabilitySimulationEngine, type CapabilitySimulationResult } from '../
 import type { TaskId } from '../domain/aiOrchestrator';
 import { getAiTaskContract } from '../domain/aiTaskContracts';
 
+export interface ActionResolutionHint {
+	item?: { requested: boolean; itemName?: string; amount?: number };
+	check?: { kind: 'ABILITY_CHECK' | 'SAVING_THROW' | 'NONE'; skillId?: string; ability?: string };
+	hazard?: { type: 'FALL' | 'TRAP' | 'DEBRIS' | 'POISON' | 'FIRE' | 'OTHER'; distanceFeet?: number };
+}
+
 export interface UnifiedActionPipelineResult {
 	actionText: string;
 	intent: { baseAction: string; intent: string; requestedEffects: string[]; modifiers: string[]; target?: string; confidence: number; source: 'AI' | 'DETERMINISTIC_FALLBACK' };
+	resolutionHint?: ActionResolutionHint;
 	research: { required: boolean; brief: string; facts: string[]; source: 'AI' | 'DETERMINISTIC_FALLBACK' | 'NOT_REQUIRED' };
 	capability?: CapabilityDefinition;
 	alternativeCapability?: CapabilityDefinition;
@@ -58,29 +65,61 @@ export class UnifiedAiActionOrchestrator {
 		const actorId = player?.actorId || run?.protagonist?.characterId || ('player_actor_' + storyId);
 		const world = run?.worldId ? this.repository.getWorldTemplate(run.worldId) : undefined;
 		const capabilityEngine = this.repository.getCapabilityEngine(storyId);
-		const owned = capabilityEngine.getEffectiveActorCapabilities(actorId, this.repository.getInventoryEngine(storyId));
+		const inventoryEngine = this.repository.getInventoryEngine(storyId);
+		const owned = capabilityEngine.getEffectiveActorCapabilities(actorId, inventoryEngine);
 		const simulator = new CapabilitySimulationEngine();
 		const telemetry: UnifiedActionPipelineResult['telemetry'] = [];
+		const normalizedAction = cleanAction.toLowerCase();
+		const itemMatch = inventoryEngine.getActorInventory(actorId)
+			.map((item) => ({ item, score: normalizedAction.includes(String(item.name || '').toLowerCase()) ? String(item.name || '').length : 0 }))
+			.filter((entry) => entry.score > 0)
+			.sort((a, b) => b.score - a.score)[0]?.item;
+		const itemUseRequested = /\\b(use|consume|drink|eat|apply|read|activate)\\b/i.test(cleanAction);
+		const checkOrHazardRequested = /\\b(hide|sneak|search|inspect|investigate|climb|jump|dodge|evade|resist|persuade|deceive|intimidate|swim|fall|fell|falling|trap|poison|gas|fumes|debris|collapse)\\b/i.test(cleanAction);
+		const preCandidate =
+			owned.find((cap) => typeof cap?.name === 'string' && normalizedAction.includes(cap.name.toLowerCase())) ||
+			capabilityCandidateFromWorld(world, cleanAction);
+		const shouldAskIntentModel =
+			Boolean(preCandidate) ||
+			/\\b(cast|activate|invoke|channel|release)\\b/i.test(cleanAction) ||
+			(/\\buse\\b/i.test(cleanAction) && !itemMatch) ||
+			checkOrHazardRequested ||
+			(itemUseRequested && !itemMatch);
 		let intent = deterministicIntent(cleanAction);
-		let capabilityIntent = false;
-		try {
-			const result = await this.runTask('intent.interpret', JSON.stringify({ action: cleanAction, character: run?.protagonist?.identity?.name, scene: sceneContext || {} }), 'Return ONLY JSON: {"baseAction":"...","intent":"...","capabilityIntent":true|false,"requestedEffects":[],"modifiers":[],"target":"","confidence":0..1}. capabilityIntent=true only when the player is actually attempting to use, invoke, activate, or achieve a supernatural/structured capability; ordinary movement, inspection, dialogue, searching, opening, touching, or other mundane narrative actions must be false. Do not adjudicate mechanics.', { timeoutMs: 4500, maxTokens: 700, validateResponse: (text: string) => { const p=json<any>(text); return p && typeof p.baseAction==='string' && typeof p.intent==='string' ? {valid:true}:{valid:false,errorReason:'Invalid intent schema.'}; } });
-			const p=json<any>(result.text);
-			if(p) intent={ baseAction:p.baseAction, intent:p.intent, requestedEffects:Array.isArray(p.requestedEffects)?p.requestedEffects.map(String):[], modifiers:Array.isArray(p.modifiers)?p.modifiers.map(String):[], target:typeof p.target==='string'?p.target:undefined, confidence:Number.isFinite(p.confidence)?Math.max(0,Math.min(1,p.confidence)):0.8, source:result.source==='DETERMINISTIC_FALLBACK'?'DETERMINISTIC_FALLBACK':'AI' };
-			capabilityIntent = result.source === 'DETERMINISTIC_FALLBACK'
-				? simulator.isCapabilityLikeRequest(cleanAction)
-				: Boolean(p?.capabilityIntent);
-			telemetry.push({task:'intent.interpret',modelId:result.modelId,providerId:result.providerId,source:result.source,attempts:result.attempts});
+		let capabilityIntent = Boolean(preCandidate);
+		let resolutionHint: ActionResolutionHint | undefined;
+		if (shouldAskIntentModel) {
+			try {
+				const result = await this.runTask(
+					'intent.interpret',
+					JSON.stringify({ action: cleanAction, character: run?.protagonist?.identity?.name, scene: sceneContext || {}, knownItem: itemMatch ? { name: itemMatch.name, quantity: itemMatch.quantity, charges: itemMatch.charges } : undefined }),
+					'Return ONLY JSON: {"baseAction":"...","intent":"...","capabilityIntent":true|false,"requestedEffects":[],"modifiers":[],"target":"","confidence":0..1,"resolutionHint":{"item":{"requested":true,"itemName":"","amount":1},"check":{"kind":"ABILITY_CHECK|SAVING_THROW|NONE","skillId":"","ability":""},"hazard":{"type":"FALL|TRAP|DEBRIS|POISON|FIRE|OTHER","distanceFeet":0}}}. Use hints only to identify what the canonical engine should resolve. Never invent ownership, HP, damage, DC, dice, costs, or success. Hazard distance is valid only when explicitly stated in action or scene.',
+					{ timeoutMs: 4500, maxTokens: 450, validateResponse: (text: string) => { const p = json<any>(text); return p && typeof p.baseAction === 'string' && typeof p.intent === 'string' ? { valid: true } : { valid: false, errorReason: 'Invalid intent schema.' }; } }
+				);
+			const p = json<any>(result.text);
+			if (p) {
+				intent = { baseAction: p.baseAction, intent: p.intent, requestedEffects: Array.isArray(p.requestedEffects) ? p.requestedEffects.map(String) : [], modifiers: Array.isArray(p.modifiers) ? p.modifiers.map(String) : [], target: typeof p.target === 'string' ? p.target : undefined, confidence: Number.isFinite(p.confidence) ? Math.max(0, Math.min(1, p.confidence)) : 0.8, source: result.source === 'DETERMINISTIC_FALLBACK' ? 'DETERMINISTIC_FALLBACK' : 'AI' };
+				const hint = p.resolutionHint;
+				if (hint && typeof hint === 'object') {
+					resolutionHint = {
+						item: hint.item && typeof hint.item === 'object' && hint.item.requested ? { requested: true, itemName: typeof hint.item.itemName === 'string' ? hint.item.itemName : undefined, amount: Number.isFinite(Number(hint.item.amount)) ? Math.max(1, Math.trunc(Number(hint.item.amount))) : undefined } : undefined,
+						check: hint.check && typeof hint.check === 'object' && ['ABILITY_CHECK', 'SAVING_THROW', 'NONE'].includes(String(hint.check.kind)) ? { kind: hint.check.kind, skillId: typeof hint.check.skillId === 'string' ? hint.check.skillId : undefined, ability: typeof hint.check.ability === 'string' ? hint.check.ability : undefined } : undefined,
+						hazard: hint.hazard && typeof hint.hazard === 'object' && ['FALL', 'TRAP', 'DEBRIS', 'POISON', 'FIRE', 'OTHER'].includes(String(hint.hazard.type)) ? { type: hint.hazard.type, distanceFeet: Number.isFinite(Number(hint.hazard.distanceFeet)) ? Math.max(0, Number(hint.hazard.distanceFeet)) : undefined } : undefined,
+					};
+				}
+			}
+			capabilityIntent = result.source === 'DETERMINISTIC_FALLBACK' ? simulator.isCapabilityLikeRequest(cleanAction) : Boolean(p?.capabilityIntent);
+			telemetry.push({ task: 'intent.interpret', modelId: result.modelId, providerId: result.providerId, source: result.source, attempts: result.attempts });
 		} catch {
-			capabilityIntent = simulator.isCapabilityLikeRequest(cleanAction);
+			capabilityIntent = Boolean(preCandidate) || simulator.isCapabilityLikeRequest(cleanAction);
 		}
-		const candidate = owned.find((cap) => typeof cap?.name === 'string' && cleanAction.toLowerCase().includes(cap.name.toLowerCase())) || capabilityCandidateFromWorld(world, cleanAction);
+		const candidate = preCandidate;
 		// Explicit ownership/canonical world matches always enter capability resolution.
 		// Otherwise, the LLM intent interpretation is the primary classifier. The
 		// deterministic capability regex is only the fallback when intent AI fails.
 		const capabilityLike = Boolean(candidate) || capabilityIntent;
 		let research: UnifiedActionPipelineResult['research'] = {required:false,brief:'',facts:[],source:'NOT_REQUIRED'};
-		if (capabilityLike && !candidate || /research|study|investigate|ancient|lore|unknown|how does|is it possible/i.test(cleanAction)) {
+		if (capabilityLike && !candidate) {
 			research={required:true,brief:'Research remains advisory evidence until explicitly qualified and promoted.',facts:[],source:'DETERMINISTIC_FALLBACK'};
 			try {
 				const result=await this.runTask('research.query',JSON.stringify({query:cleanAction,world:{title:world?.title,description:world?.description,rules:world?.worldRules||world?.customRules||[]},instruction:'Advisory only; do not mutate canon.'}),'Return ONLY JSON: {"brief":"...","facts":["..."]}. Never claim generated facts are canonical.',{timeoutMs:8000,maxTokens:1200,validateResponse:(text:string)=>{const p=json<any>(text);return p&&typeof p.brief==='string'&&Array.isArray(p.facts)?{valid:true}:{valid:false,errorReason:'Invalid research schema.'};}});
@@ -225,6 +264,7 @@ export class UnifiedAiActionOrchestrator {
 		return {
 			actionText:cleanAction,
 			intent,
+			resolutionHint,
 			capabilityIntent,
 			research,
 			capability:finalCandidate,

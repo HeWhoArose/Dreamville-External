@@ -154,6 +154,8 @@ export function buildComicScenePrompt(context: ComicSceneContext): ComicScenePro
     "Do not recreate the previous image or reuse its composition.",
     "Story continuity may preserve character identity and physical location, but the current action determines the composition.",
     "",
+    "CURRENT SCENE VISUAL BRIEF",
+    "The following is the exact current visual moment. It is the only story moment that may be depicted.",
     "EXACT CURRENT VISUAL MOMENT",
     "Primary action: " + visualMoment.primaryAction,
     "Location: " + visualMoment.location + ".",

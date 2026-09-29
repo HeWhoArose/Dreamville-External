@@ -224,6 +224,9 @@ export class StoryCheckEngine {
       ? getStorySkillCheckDefinition(String(hintedCheck.skillId))
       : undefined;
     const inferredSaveSelection = this.pickSaveProfile(text, sceneText);
+    const hintedSaveProfile = hintedCheck?.kind === 'SAVING_THROW' && hintedAbility
+      ? SAVE_PROFILES.find((profile) => profile.ability === hintedAbility)
+      : undefined;
     let saveSelection = challenge?.savingThrowAbility
       ? {
           profile: {
@@ -234,6 +237,17 @@ export class StoryCheckEngine {
             dc: challenge.difficultyClass,
             reason: challenge.reason || challenge.label,
             triggerReason: challenge.triggerReason || ('Authored challenge: ' + challenge.label + '.'),
+          },
+          worldTriggered: true,
+        }
+      : hintedSaveProfile
+      ? {
+          profile: {
+            ...hintedSaveProfile,
+            ability: hintedSaveProfile.ability,
+            dc: hintedSaveProfile.dc,
+            reason: hintedSaveProfile.reason,
+            triggerReason: 'Action-resolution hint identified a saving-throw-shaped hazard; canonical save profile supplied the mechanics.',
           },
           worldTriggered: true,
         }

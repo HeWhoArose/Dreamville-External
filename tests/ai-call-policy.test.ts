@@ -147,7 +147,7 @@ test('helper callers use the task-specific routes and each primary route model i
 	const orchestrator = new MultiModelOrchestrator();
 
 	const states = orchestrator.getCategoryRuntimeStates();
-	const findRoute = (task: string) => {
+	const findRoute = (task: 'intent.interpret' | 'capability.synthesize') => {
 		const category = states.find((state) => state.tasks.includes(task));
 		assert.ok(category, `Missing runtime category for ${task}`);
 		const route = category.taskRoutes.find((entry) => entry.task === task);
@@ -157,11 +157,11 @@ test('helper callers use the task-specific routes and each primary route model i
 
 	const intentRoute = findRoute('intent.interpret');
 	assert.equal(intentRoute.fallbackChain[0], 'google_gemini::gemini-3.5-flash-lite');
-	assert.equal(intentRoute.fallbackChain.at(-1), 'provider_deterministic_emergency::emergency-fallback-local');
+	assert.equal(intentRoute.fallbackChain[intentRoute.fallbackChain.length - 1], 'provider_deterministic_emergency::emergency-fallback-local');
 
 	const capabilityRoute = findRoute('capability.synthesize');
 	assert.equal(capabilityRoute.fallbackChain[0], 'groq::openai/gpt-oss-120b');
-	assert.equal(capabilityRoute.fallbackChain.at(-1), 'provider_deterministic_emergency::emergency-fallback-local');
+	assert.equal(capabilityRoute.fallbackChain[capabilityRoute.fallbackChain.length - 1], 'provider_deterministic_emergency::emergency-fallback-local');
 
 	for (const task of ['intent.interpret', 'capability.synthesize'] as const) {
 		const contract = getAiTaskContract(task);

@@ -886,7 +886,7 @@ export const App: React.FC = () => {
           currentRoute={currentRoute}
           onNavigate={handleNavigate}
           onExitToLibrary={() => setCurrentRoute('story-library')}
-          onOpenSettings={() => setIsAudioSettingsOpen(true)}
+          onOpenSettings={() => setCurrentRoute('settings')}
         >
           {renderPlayContent()}
         </StoryContextShell>

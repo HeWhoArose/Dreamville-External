@@ -23,7 +23,7 @@ test('interpretation mode allows one required interpretation and a second repair
 
 	const premature = budget.authorize('intent.interpret', 350, 'SEMANTIC_REPAIR');
 	assert.equal(premature.allowed, true);
-	assert.equal(premature.maxTokens, 400);
+	assert.equal(premature.maxTokens, 350);
 
 	const third = budget.authorize('intent.interpret', 350, 'SEMANTIC_REPAIR');
 	assert.equal(third.allowed, false);

@@ -6201,7 +6201,7 @@ export class MultiModelOrchestrator {
       return { success: false, error: 'A player action is required for narrative generation.' };
     }
 
-    const hardTokenBudget = params.hardTokenBudget ?? 950;
+    const hardTokenBudget = params.hardTokenBudget ?? 700;
     const timeoutMs = params.timeoutMs ?? 7000;
     const authoritativeOutcome = (params.committedOutcome || '').trim();
     const connectedDirective = (params.continuationDirective || '').trim();
@@ -6229,34 +6229,20 @@ export class MultiModelOrchestrator {
       : 'Canonical location is unavailable; do not invent a location change.';
 
     const styleInstruction = params.styleInstruction || [
-      'Write an immersive tabletop-RPG narrator response to the player’s latest action, as continuous story prose rather than a status report.',
+      'Write immersive tabletop-RPG prose for the latest player action.',
+      'Canonical mechanics are authoritative. Never invent or expose mechanics, model names, internal identifiers, DCs, dice, state fields, or engine terminology.',
       authoritativeOutcome
-        ? `The authoritative game engine has already resolved the mechanics. Treat this outcome as hidden canonical guidance. Narrate what the character experiences and what the world visibly does because of it, but NEVER quote, summarize, label, or expose the wording of the authoritative outcome: ${authoritativeOutcome}`
-        : 'There is no additional mechanical outcome supplied. Do not invent one.',
-      connectedDirective
-        ? `Connected pipeline presentation directive. Follow it only as style/presentation guidance while preserving canonical mechanics: ${connectedDirective}`
-        : '',
-
-      'Begin in-scene, with the world, character, NPC, environment, or consequence—not with "Your action", "Immediate narration", "The character acts", "Attempted action", "Performed action", or any engine/status phrasing.',
-      'Do not tell the player what they attempted; depict the attempt as something that happened in the fiction.',
-      'Do not restate the player action verbatim or quote it back.',
-      'Show immediate sensory and physical consequences, NPC reactions, environmental response, or tension when the canonical context supports them.',
-      'The response should feel like the next passage of an interactive novel or tabletop GM session, not a paraphrase of the player input.',
-      'Use the current scene, researched relevant memories/lore, maintained plot, maintained narrative plan, and recent turn history to maintain continuity. The narration should feel like events are unfolding from a larger living situation, with visible consequences, atmosphere, character reactions, unresolved tension, and a sensible opening for what can happen next.',
-      'The canonical current-location anchor is authoritative. Never move the protagonist into a different room, building, biome, region, climate, or setting merely because the fallback model lacks context. A player action may describe movement within the current location, but only canonical game state may commit an actual location transition.',
-      'For ordinary physical action such as walking, approaching, looking, opening, touching, speaking, waiting, or moving, narrate the physical/world response naturally instead of treating the action as a capability request.',
-      'Do not repeat the action in sentence form. Transform it into fiction: describe what the character notices, how the environment responds, what changes because of the movement, what remains uncertain, and what catches attention next.',
-      'Prefer concrete scene-specific details over generic atmospheric filler. Reuse established world details only when they are relevant to the current action.',
-      'Vary sentence rhythm, paragraph openings, sensory emphasis, and descriptive verbs. Do not begin successive turns with the same grammatical pattern, the protagonist name, or a generic atmosphere sentence.',
-      'When recent narration contains a distinctive phrase, image, or sentence structure, deliberately avoid repeating it unless the repetition is an intentional in-world motif.',
-      'Whenever canonical context supports it, add one forward-looking beat: a visible opportunity, complication, clue, threat, NPC response, environmental change, or decision point. Do not invent a new fact merely to create drama.',
-      'Use 2–4 developed paragraphs for a normal story turn. A tiny action can be shorter only when the canonical scene genuinely provides no additional consequence; meaningful exploration, discovery, danger, dialogue, or combat should receive enough space to develop.',
-      'When this turn contains multiple visually distinct causal beats, also populate visualCues with 1–4 concise chronological beats for scene art. Each visual cue must describe only an event already supported by the current turn, must remain in the same location unless canonical state changed it, and must not invent setup, aftermath, or future events. If the turn is one frozen visual moment, use one visual cue.',
-      'Do not add menus, meta-commentary, engine terminology, model names, system-status language, labels, or debug text.',
-      'Do not invent hidden facts, NPC knowledge, items, powers, or outcomes that are not supported by canonical context.',
-      'Do not propose or perform canonical state changes. The response is presentation only.',
-      'Never use phrases such as "the outcome unfolds in the narrative", "the action is committed", "canonical acquisition", "proposed capability", "server authority", or similar implementation language.',
-    ].join(' ');
+        ? 'A canonical outcome has already been resolved. Describe only the observable experience and immediate consequences supported by it.'
+        : 'No canonical mechanical outcome was supplied. Describe only the attempt and observable scene response; do not decide hidden success or failure.',
+      connectedDirective ? 'Follow the connected presentation directive only as style guidance; never override canonical state.' : '',
+      'Stay in the canonical current location unless a committed location change is supplied.',
+      'Do not invent characters, items, abilities, environmental objects, causal explanations, or knowledge outside the supplied context.',
+      'Respect CHECK_PENDING or unresolved actions: show the attempt, not the result.',
+      'Use concrete established sensory details and vary wording without repeating recent turns.',
+      'Normally write 2–3 paragraphs. For a tiny action, one concise paragraph is enough.',
+      'Populate visualCues with only current-turn visual beats; one frozen moment uses one cue, distinct immediate beats may use up to three.',
+      'No menus, captions, meta-commentary, status labels, or debug text.',
+    ].filter(Boolean).join(' ');
 
     const viewerActorId = worldRepo.getPlayerLifecycle(storyId)?.actorId;
     const researchQuery = [
@@ -6286,43 +6272,16 @@ export class MultiModelOrchestrator {
           isProtected: true,
           relevanceScore: 1,
         },
-        {
-          id: 'narrative_research',
-          band: 'B2_IMMEDIATE' as const,
-          label: 'Narrative Research',
-          content: JSON.stringify({
-            relevantResearch: researchPacket,
-            instruction: [
-              'Use usageGuidance to decide what each research block is for.',
-              'Knowledge grounds facts; memories ground continuity; story threads preserve unresolved situations; relationships shape NPC reactions; plot prevents contradictions; plan guides the current turn without forcing the player; momentum adds pressure only when supported; causal provenance preserves cause and consequence.',
-              'Select only the research that materially helps this exact player action. Do not dump the whole research packet into prose and do not expose research machinery.',
-            ].join(' '),
-          }),
-          estimatedTokens: WorkingContextEngine.estimateTokens(JSON.stringify(researchPacket)),
-          sourceAuthority: 'NarrativeContinuityEngine',
-          isProtected: true,
-          relevanceScore: 1,
-        },
-        ...(params.sceneContext ? [{
-          id: 'current_scene_context',
-          band: 'B2_IMMEDIATE' as const,
-          label: 'Current Scene Context',
-          content: params.sceneContext,
-          estimatedTokens: WorkingContextEngine.estimateTokens(params.sceneContext),
-          sourceAuthority: 'Canonical Story Context',
-          isProtected: true,
-          relevanceScore: 1,
-        }] : []),
         ...(params.recentTurns?.length ? [{
           id: 'recent_story_turns',
           band: 'B2_IMMEDIATE' as const,
           label: 'Recent Story Turns',
           content: params.recentTurns
-            .slice(-4)
+            .slice(-2)
             .map((turn, index) => `Turn ${index + 1} | ${turn.worldTime || 'current'} | Player: ${turn.playerAction} | Narration: ${turn.narration}`)
             .join('\n'),
           estimatedTokens: WorkingContextEngine.estimateTokens(
-            params.recentTurns.slice(-4).map((turn) => `${turn.playerAction} ${turn.narration}`).join(' ')
+            params.recentTurns.slice(-2).map((turn) => `${turn.playerAction} ${turn.narration}`).join(' ')
           ),
           sourceAuthority: 'Canonical Story History',
           isProtected: true,
@@ -6360,7 +6319,7 @@ export class MultiModelOrchestrator {
       styleInstruction,
       {
         timeoutMs,
-        maxTokens: 900,
+        maxTokens: 650,
         contextTokens: assembledContext.totalTokens,
         forceModelId: params.forceModelId,
         canonicalLocationName: canonicalLocation?.name,

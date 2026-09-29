@@ -139,7 +139,7 @@ test('configured routes do not fall directly to the deterministic floor when ear
       unavailableKeys: [
         'google_gemini::gemini-3.5-flash-lite',
       ],
-      expectedFallback: 'groq::qwen/qwen3.8-27b',
+      expectedFallback: 'google_gemini::gemini-3.5-flash',
     },
   ];
 

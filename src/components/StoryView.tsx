@@ -254,6 +254,49 @@ export const StoryView: React.FC<StoryViewProps> = ({
   const [isProcessingOoc, setIsProcessingOoc] = useState(false);
   const [revealedCheckIds, setRevealedCheckIds] = useState<Record<string, boolean>>({});
   const [visibleTurnCount, setVisibleTurnCount] = useState(12);
+
+  const checkRevealStorageKey = storyId ? `dreamville:revealed-checks:${storyId}` : null;
+  const checkIdsForPersistence = actionHistory
+    .filter((entry) => Boolean(entry.checkResult))
+    .map((entry) => entry.id)
+    .join('|');
+
+  useEffect(() => {
+    if (!checkRevealStorageKey) {
+      setRevealedCheckIds({});
+      return;
+    }
+
+    try {
+      const raw = window.sessionStorage.getItem(checkRevealStorageKey);
+      const parsed = raw ? JSON.parse(raw) : {};
+      const validIds = new Set(
+        actionHistory
+          .filter((entry) => Boolean(entry.checkResult))
+          .map((entry) => entry.id),
+      );
+      const restored = Object.fromEntries(
+        Object.entries(parsed || {}).filter(([id, revealed]) => validIds.has(id) && revealed === true),
+      ) as Record<string, boolean>;
+      setRevealedCheckIds(restored);
+    } catch {
+      setRevealedCheckIds({});
+    }
+  }, [checkRevealStorageKey, checkIdsForPersistence]);
+
+  const revealCheck = useCallback((actionId: string) => {
+    setRevealedCheckIds((current) => {
+      const next = { ...current, [actionId]: true };
+      if (checkRevealStorageKey) {
+        try {
+          window.sessionStorage.setItem(checkRevealStorageKey, JSON.stringify(next));
+        } catch {
+          // Session storage is optional; the in-memory state remains authoritative for this mount.
+        }
+      }
+      return next;
+    });
+  }, [checkRevealStorageKey]);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
@@ -1034,7 +1077,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
                       <StoryCheckCard
                         check={entry.checkResult}
                         revealed={Boolean(revealedCheckIds[entry.id])}
-                        onReveal={() => setRevealedCheckIds((current) => ({ ...current, [entry.id]: true }))}
+                        onReveal={() => revealCheck(entry.id)}
                       />
                     </div>
                   )}

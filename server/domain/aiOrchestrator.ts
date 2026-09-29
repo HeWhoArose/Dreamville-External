@@ -7094,6 +7094,7 @@ export class MultiModelOrchestrator {
     const timeoutMs = options?.timeoutMs || 35000;
     const contextTokens = options?.contextTokens ?? 0;
     let selection: ReturnType<typeof this.selectBestModel>;
+    let selectionWasForcedFallback = false;
     try {
       selection = this.selectBestModel(task, { contextTokens });
     } catch {
@@ -7133,6 +7134,7 @@ export class MultiModelOrchestrator {
       // Stale UI state, provider discovery changes, quota exhaustion, cooldown,
       // context limits, and task-eligibility changes must all remain recoverable.
       if (!forced || !forced.roleEligibility.includes(task)) {
+        selectionWasForcedFallback = true;
         const fallbackSelection = this.selectBestModel(task, { contextTokens });
         selection = {
           ...fallbackSelection,
@@ -7178,6 +7180,7 @@ export class MultiModelOrchestrator {
             }),
           };
         } else {
+          selectionWasForcedFallback = true;
           const fallbackSelection = this.selectBestModel(task, { contextTokens });
           selection = {
             ...fallbackSelection,
@@ -7386,7 +7389,7 @@ export class MultiModelOrchestrator {
       const attemptStartedAt = Date.now();
       const operationSource: ActiveModelOperation['source'] = currentCandidate.isEmergencyFloor
         ? 'DETERMINISTIC_FALLBACK'
-        : (this.modelKey(currentCandidate) === selectedModelKey ? 'AI_PRIMARY' : 'AI_FALLBACK');
+        : (this.modelKey(currentCandidate) === selectedModelKey && !selectionWasForcedFallback ? 'AI_PRIMARY' : 'AI_FALLBACK');
       const operationId = this.beginModelOperation(task, currentCandidate, totalAttempts + 1, operationSource);
       try {
         totalAttempts++;
@@ -7438,7 +7441,7 @@ export class MultiModelOrchestrator {
         const isEmergency = Boolean(currentCandidate.isEmergencyFloor) ||
                             currentCandidate.providerId.includes('emergency') ||
                             currentCandidate.providerId === 'provider_deterministic_emergency';
-        const isPrimarySelection = this.modelKey(currentCandidate) === selectedModelKey;
+        const isPrimarySelection = this.modelKey(currentCandidate) === selectedModelKey && !selectionWasForcedFallback;
         const source = isEmergency ? 'DETERMINISTIC_FALLBACK' : (isPrimarySelection ? 'AI_PRIMARY' : 'AI_FALLBACK');
         const fallbackCount = attemptsTrail.filter((entry) => entry.status === 'FAILED').length;
         const fallbackReason = !isPrimarySelection

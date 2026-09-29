@@ -112,6 +112,7 @@ const StoryCheckCard: React.FC<{
 			defenseValue={check.difficultyClass}
 			outcome={revealed ? (check.success ? 'SUCCESS' : 'FAILURE') : 'NEUTRAL'}
 			showRollButton
+			revealedOverride={revealed}
 		/>
     </div>
 
@@ -1085,7 +1086,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
                   )}
 
                   {/* Narrator Message: RIGHT-ALIGNED like groupchat with Model Attribution */}
-                  {(narration || entry.narrativeError) && (
+                  {((!entry.checkResult || Boolean(revealedCheckIds[entry.id])) && (narration || entry.narrativeError)) && (
                     <div className="flex items-start justify-end gap-2.5 sm:gap-3">
                       <div className="max-w-[90%] sm:max-w-[82%] rounded-2xl rounded-tr-sm border border-violet-400/25 bg-gradient-to-br from-violet-950/40 via-stone-900/95 to-[#0e0a1a] px-4 py-3.5 sm:px-5 sm:py-4 shadow-[0_12px_36px_rgba(124,58,237,0.12)]">
                         <div className="mb-2 flex flex-wrap items-center justify-between gap-2 border-b border-violet-500/15 pb-2">

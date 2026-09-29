@@ -308,7 +308,7 @@ test('stale force-model preferences also recover through the configured narratio
   );
 
   assert.equal(result.modelId, 'secondary');
-  assert.equal(result.source, 'AI_PRIMARY');
+  assert.equal(result.source, 'AI_FALLBACK');
   assert.equal(result.attemptsTrail.some((entry) => entry.modelId === 'emergency-fallback-local'), false);
 });
 

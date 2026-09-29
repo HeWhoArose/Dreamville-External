@@ -1375,6 +1375,8 @@ export interface ContextChunk {
   label: string;
   content: string;
   estimatedTokens: number;
+  blockType?: 'INSTRUCTION' | 'MEMORY' | 'ENTITY' | 'LORE' | 'MISC';
+  blockStatus?: 'ACTIVE' | 'IDLE' | 'ARCHIVED';
   sourceAuthority?: string;
   relevanceScore?: number;
   epistemicVisibility?: 'PUBLIC' | 'SHARED' | 'PRIVATE';
@@ -1404,6 +1406,8 @@ export interface WorkingContextResponse {
   totalTokens: number;
   hardTokenBudget: number;
   includedChunks: ContextChunk[];
+  idleChunks: ContextChunk[];
+  archivedChunks: ContextChunk[];
   evictedChunkLabels: string[];
   evictionReasons: Record<string, string>;
   epistemicallySanitized: boolean;
@@ -1433,6 +1437,25 @@ export interface ContextInspectionResponse {
     estimatedTokens: number;
     sourceAuthority?: string;
     isProtected?: boolean;
+    blockStatus?: 'ACTIVE' | 'IDLE' | 'ARCHIVED';
+  }>;
+  idleChunks: Array<{
+    id?: string;
+    band: PriorityBand;
+    label: string;
+    estimatedTokens: number;
+    sourceAuthority?: string;
+    isProtected?: boolean;
+    blockStatus?: 'ACTIVE' | 'IDLE' | 'ARCHIVED';
+  }>;
+  archivedChunks: Array<{
+    id?: string;
+    band: PriorityBand;
+    label: string;
+    estimatedTokens: number;
+    sourceAuthority?: string;
+    isProtected?: boolean;
+    blockStatus?: 'ACTIVE' | 'IDLE' | 'ARCHIVED';
   }>;
   evictedChunkLabels: string[];
   evictionReasons: Record<string, string>;

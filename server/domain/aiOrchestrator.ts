@@ -411,6 +411,7 @@ export interface ProviderGenerateOptions {
   retryCount?: number;
   modelId?: string;
   systemInstruction?: string;
+  canonicalLocationName?: string;
   reasoningEffort?: 'xhigh' | 'high' | 'medium' | 'low' | 'minimal' | 'none';
 }
 
@@ -517,10 +518,12 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
     const start = Date.now();
     let text: string;
 
-    const canonicalLocationName = (() => {
-      const match = String(prompt || '').match(/LOCATION NAME:\s*([^\\n]+)/i);
-      return match?.[1]?.trim() || 'the current location';
-    })();
+    const canonicalLocationName =
+      options?.canonicalLocationName?.trim() ||
+      (() => {
+        const match = String(prompt || '').match(/LOCATION NAME:\s*([^\\n]+)/i);
+        return match?.[1]?.trim() || 'the current location';
+      })();
 
     switch (task) {
       case 'character.dialogue':
@@ -6264,6 +6267,7 @@ export class MultiModelOrchestrator {
         maxTokens: 900,
         contextTokens: assembledContext.totalTokens,
         forceModelId: params.forceModelId,
+        canonicalLocationName: canonicalLocation?.name,
         validateResponse: (text) => {
           const validation = this.validateTurnPackage(text, { allowPlainTextNarration: true });
           if (!validation.valid || !validation.turnPackage) {
@@ -6764,9 +6768,17 @@ export class MultiModelOrchestrator {
         const emergencyAdapter = this.getAdapter(emergencyModel.providerId);
         if (emergencyAdapter) {
           const emergencyStartedAt = Date.now();
+          const emergencyLocationId =
+            repo.getPlayerLifecycle(storyId)?.locationId ||
+            repo.getStoryRun(storyId)?.currentLocationId ||
+            repo.getStoryRun(storyId)?.startingLocationId;
+          const emergencyLocation = emergencyLocationId
+            ? repo.getGeographyGraph(storyId).getNode(emergencyLocationId)
+            : undefined;
           const res = await emergencyAdapter.generate(task, assembledContext.assembledText, {
             audioInputBase64: params.audioInputBase64,
             voiceProfile: params.voiceProfile,
+            canonicalLocationName: emergencyLocation?.name,
           });
           this.recordProviderSuccess(emergencyModel, res, task, emergencyStartedAt);
           const validation = this.validateTurnPackage(res.text);
@@ -6784,6 +6796,7 @@ export class MultiModelOrchestrator {
               storyId,
               turnId,
               role: 'narrator',
+              workingContextTokens: assembledContext.totalTokens,
               worldTime: repo.getWorldClock(storyId).formatHeader(),
               locationId: repo.getPlayerLifecycle(storyId)?.locationId || 'loc_whispering_orrery',
               sceneSummary: validation.turnPackage.narrative[0],
@@ -7303,6 +7316,7 @@ export class MultiModelOrchestrator {
             abortSignal: abortController.signal,
             modelId: currentCandidate.modelId,
             systemInstruction,
+            canonicalLocationName: options?.canonicalLocationName,
           });
         } finally {
           clearTimeout(timer);
@@ -7445,6 +7459,7 @@ export class MultiModelOrchestrator {
           maxTokens: options?.maxTokens,
           modelId: emergency.modelId,
           systemInstruction,
+          canonicalLocationName: options?.canonicalLocationName,
         });
         if (!emergencyResult.text) throw new Error('Deterministic emergency floor returned an empty response.');
 

@@ -16,7 +16,7 @@ const expectedStarts: Record<string, string> = {
   utility: 'google_gemini::gemini-3.5-flash-lite',
   rules: 'groq::openai/gpt-oss-120b',
   rule_analysis: 'groq::openai/gpt-oss-120b',
-  tactical_reasoning: 'groq::qwen/qwen3.8-27b',
+  tactical_reasoning: 'groq::openai/gpt-oss-120b',
   capability_synthesis: 'groq::openai/gpt-oss-120b',
   world_generation: 'groq::qwen/qwen3.8-27b',
   research: 'groq::openai/gpt-oss-120b',
@@ -57,7 +57,10 @@ test('task routes follow the documented category arrangement and never use openr
     }
 
     assert.ok(route.length >= 2, 'Route is too short for ' + contract.task);
-    assert.equal(route[0], expectedStarts[contract.category], 'Unexpected primary for ' + contract.task);
+    const expectedPrimary = contract.task === 'combat.animation.plan'
+      ? 'groq::qwen/qwen3.8-27b'
+      : expectedStarts[contract.category];
+    assert.equal(route[0], expectedPrimary, 'Unexpected primary for ' + contract.task);
     assert.equal(route.at(-1), emergency, 'Route must end in deterministic recovery: ' + contract.task);
     assert.equal(route.includes('openrouter::openrouter/free'), false);
   }

@@ -25,12 +25,12 @@ test('hazard narration requests health context', () => {
 	assert.equal(needs.includeHealth, true);
 });
 
-test('item interaction requests inventory context without requiring broad lore', () => {
+test('item interaction does not require full inventory unless explicitly queried', () => {
 	const needs = deriveNarrationContextNeeds({
 		actionText: 'I take the ancient scroll and hide.',
 	});
 
-	assert.equal(needs.includeInventory, true);
+	assert.equal(needs.includeInventory, false);
 	assert.equal(needs.includeLore, true);
 	assert.equal(needs.includeHealth, false);
 });

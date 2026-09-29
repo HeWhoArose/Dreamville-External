@@ -15,6 +15,14 @@ import type { RulesProfile, StoryCheckChallenge, StoryCheckResult } from '../../
  * - Delegates pure dice/check resolution to StoryCheckEngine.
  * - Never calls AI, narration, persistence writers, or UI code.
  */
+export interface StoryCheckResolutionHint {
+	check?: {
+		kind: 'ABILITY_CHECK' | 'SAVING_THROW' | 'NONE';
+		skillId?: string;
+		ability?: string;
+	};
+}
+
 export interface StoryCheckAuthorityRequest {
 	storyId: string;
 	actorId: string;
@@ -22,6 +30,7 @@ export interface StoryCheckAuthorityRequest {
 	sceneText?: string;
 	challenge?: StoryCheckChallenge;
 	rulesProfile?: RulesProfile;
+	resolutionHint?: StoryCheckResolutionHint;
 }
 
 export class StoryCheckAuthority {
@@ -58,6 +67,7 @@ export class StoryCheckAuthority {
 			character,
 			request.challenge,
 			rulesProfile ?? undefined,
+			request.resolutionHint,
 		);
 	}
 }

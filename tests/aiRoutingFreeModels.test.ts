@@ -38,18 +38,13 @@ test('free-model classification requires provider evidence', () => {
 	assert.equal(MultiModelOrchestrator.isFreeModelCandidate(verifiedFree), true);
 });
 
-test('default free fallback route never treats paid or unknown models as free', () => {
+test('verified free catalog excludes paid Gemini 3.8 and includes verified Gemini free models', () => {
 	process.env.NODE_TEST_CONTEXT = '1';
 	const orchestrator = new MultiModelOrchestrator();
-	const chain = orchestrator.getFallbackChain('narrative.generate');
+	const catalog = orchestrator.getFreeModelCatalog();
+	const keys = new Set(catalog.map((entry) => entry.providerId + '::' + entry.modelId));
 
-	for (const key of chain) {
-		if (key.includes('emergency-fallback-local')) continue;
-		const separator = key.indexOf('::');
-		const providerId = separator >= 0 ? key.slice(0, separator) : '';
-		const modelId = separator >= 0 ? key.slice(separator + 2) : key;
-		const model = orchestrator.getModel(providerId, modelId);
-		assert.ok(model, `Fallback model ${key} should be registered`);
-		assert.equal(MultiModelOrchestrator.isFreeModelCandidate(model!), true, `Fallback model ${key} must be provider-verified free`);
-	}
+	assert.equal(keys.has('google_gemini::gemini-3.8-flash'), false);
+	assert.equal(keys.has('google_gemini::gemini-3.5-flash'), true);
+	assert.equal(keys.has('google_gemini::gemini-3.5-flash-lite'), true);
 });

@@ -80,7 +80,7 @@ test('ten deterministic audits keep internal simulation out of the Skillbook and
     assert.equal(routes.slice(interpretStart, interpretStart + 1200).includes("x-dreamville-internal-ai"), true);
     assert.match(dice, /@3d-dice\/dice-box-threejs/);
     assert.match(dice, /theme_colorset:\s*['"]white['"]/);
-    assert.match(dice, /theme_material:\s*['"]plastic['"]/);
+    assert.match(dice, /theme_material:\s*diceTheme\.material/);
     assert.match(dice, /await box\.initialize\(\)/);
     assert.match(dice, /await box\.roll\(notation\)/);
     assert.ok(dice.includes("@${values.join(',')}"));

@@ -406,6 +406,7 @@ export interface ProtagonistProfile {
   portraitUrl?: string;
   portraitEmoji?: string;
   conditionState?: CharacterStartingConditionState;
+  skills?: CharacterSkill[];
 }
 
 /**

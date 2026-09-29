@@ -1909,6 +1909,10 @@ export class InMemoryWorldRepository implements WorldRepository {
     let engine = this.storyCheckEngines.get(storyId);
     if (!engine) {
       engine = new StoryCheckEngine();
+      const persisted = this.getStoryRun(storyId)?.runtimeState?.storyChecks;
+      if (persisted) {
+        engine.importState(persisted);
+      }
       this.storyCheckEngines.set(storyId, engine);
     }
     return engine;

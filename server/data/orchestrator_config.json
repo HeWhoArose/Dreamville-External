@@ -33,6 +33,7 @@
       "google_gemini::gemini-3.5-flash",
       "google_gemini::gemini-3.8-flash",
       "google_gemini::gemini-3.5-flash-lite",
+      "openrouter::openrouter/free",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "character.dialogue": [

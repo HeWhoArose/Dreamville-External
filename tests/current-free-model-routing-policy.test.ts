@@ -183,4 +183,131 @@ test('fallback execution reaches a later AI tier before deterministic recovery',
     false,
   );
 });
-;
+
+
+test('manual narration preference falls back when the selected model is quota-exhausted', async () => {
+  const orchestrator = new MultiModelOrchestrator();
+  const primaryProvider = 'audit_manual_preference_primary';
+  const secondaryProvider = 'audit_manual_preference_secondary';
+  const primaryAdapter = new DeterministicMockAdapter(primaryProvider);
+  const secondaryAdapter = new DeterministicMockAdapter(secondaryProvider);
+
+  secondaryAdapter.cannedResponses.set(
+    'narrative.generate',
+    JSON.stringify({
+      narrative: ['The configured secondary AI tier successfully produced the narration.'],
+      dialogue: [],
+      events: [],
+      stateChanges: [],
+      memoryCandidates: [],
+      audioCues: [],
+    }),
+  );
+
+  const makeModel = (providerId: string, modelId: string, quota: ModelRegistryRecord['quota'] = 'Healthy'): ModelRegistryRecord => ({
+    providerId,
+    modelId,
+    displayName: modelId,
+    pool: 'creative',
+    capabilities: ['text_generation', 'creative_writing', 'structured_output'],
+    contextWindow: 131072,
+    health: 'Healthy',
+    quota,
+    latencyMs: 10,
+    userPriority: 100,
+    roleEligibility: ['narrative.generate'],
+    fallbackEligibility: true,
+    accessStatus: quota === 'Exhausted' ? 'quota_limited' : 'accessible',
+    lifecycleState: 'active',
+    isEmergencyFloor: false,
+  });
+
+  orchestrator.registerAdapter(primaryAdapter);
+  orchestrator.registerAdapter(secondaryAdapter);
+  orchestrator.registerModel(makeModel(primaryProvider, 'primary', 'Exhausted'));
+  orchestrator.registerModel(makeModel(secondaryProvider, 'secondary'));
+
+  orchestrator.setFallbackChain('narrative.generate', [
+    primaryProvider + '::primary',
+    secondaryProvider + '::secondary',
+    emergency,
+  ]);
+  orchestrator.setCategoryModelOverride('narration', primaryProvider + '::primary');
+
+  const result = await orchestrator.executeTaskGeneration(
+    'narrative.generate',
+    'Verify that a manually selected but exhausted narrator falls through to the next configured AI tier.',
+    undefined,
+    { allowDeterministicFallback: true, timeoutMs: 1000 },
+  );
+
+  assert.equal(result.modelId, 'secondary');
+  assert.equal(result.source, 'AI_FALLBACK');
+  assert.deepEqual(result.attemptsTrail.map((entry) => entry.modelId), ['secondary']);
+  assert.equal(result.attemptsTrail.some((entry) => entry.modelId === 'emergency-fallback-local'), false);
+});
+
+test('stale force-model preferences also recover through the configured narration chain', async () => {
+  const orchestrator = new MultiModelOrchestrator();
+  const primaryProvider = 'audit_stale_force_primary';
+  const secondaryProvider = 'audit_stale_force_secondary';
+  const primaryAdapter = new DeterministicMockAdapter(primaryProvider);
+  const secondaryAdapter = new DeterministicMockAdapter(secondaryProvider);
+
+  secondaryAdapter.cannedResponses.set(
+    'narrative.generate',
+    JSON.stringify({
+      narrative: ['The fallback model recovered the narration request.'],
+      dialogue: [],
+      events: [],
+      stateChanges: [],
+      memoryCandidates: [],
+      audioCues: [],
+    }),
+  );
+
+  const makeModel = (providerId: string, modelId: string, quota: ModelRegistryRecord['quota'] = 'Healthy'): ModelRegistryRecord => ({
+    providerId,
+    modelId,
+    displayName: modelId,
+    pool: 'creative',
+    capabilities: ['text_generation', 'creative_writing', 'structured_output'],
+    contextWindow: 131072,
+    health: 'Healthy',
+    quota,
+    latencyMs: 10,
+    userPriority: 100,
+    roleEligibility: ['narrative.generate'],
+    fallbackEligibility: true,
+    accessStatus: quota === 'Exhausted' ? 'quota_limited' : 'accessible',
+    lifecycleState: 'active',
+    isEmergencyFloor: false,
+  });
+
+  orchestrator.registerAdapter(primaryAdapter);
+  orchestrator.registerAdapter(secondaryAdapter);
+  orchestrator.registerModel(makeModel(primaryProvider, 'primary', 'Exhausted'));
+  orchestrator.registerModel(makeModel(secondaryProvider, 'secondary'));
+  orchestrator.setFallbackChain('narrative.generate', [
+    primaryProvider + '::primary',
+    secondaryProvider + '::secondary',
+    emergency,
+  ]);
+  orchestrator.setCategoryModelOverride('narration', primaryProvider + '::primary');
+
+  const result = await orchestrator.executeTaskGeneration(
+    'narrative.generate',
+    'Verify stale manual force preferences do not become hard failures.',
+    undefined,
+    {
+      forceModelId: primaryProvider + '::primary',
+      allowDeterministicFallback: true,
+      timeoutMs: 1000,
+    },
+  );
+
+  assert.equal(result.modelId, 'secondary');
+  assert.equal(result.source, 'AI_FALLBACK');
+  assert.equal(result.attemptsTrail.some((entry) => entry.modelId === 'emergency-fallback-local'), false);
+});
+

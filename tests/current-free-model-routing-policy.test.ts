@@ -16,7 +16,7 @@ const expectedStarts: Record<string, string> = {
   utility: 'google_gemini::gemini-3.5-flash-lite',
   rules: 'groq::openai/gpt-oss-120b',
   rule_analysis: 'groq::openai/gpt-oss-120b',
-  tactical_reasoning: 'groq::openai/gpt-oss-120b',
+  tactical_reasoning: 'groq::qwen/qwen3.8-27b',
   capability_synthesis: 'groq::openai/gpt-oss-120b',
   world_generation: 'groq::qwen/qwen3.8-27b',
   research: 'groq::openai/gpt-oss-120b',

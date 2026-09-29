@@ -6093,6 +6093,7 @@ export class MultiModelOrchestrator {
     const timeoutMs = params.timeoutMs ?? 7000;
     const authoritativeOutcome = (params.committedOutcome || '').trim();
     const connectedDirective = (params.continuationDirective || '').trim();
+    const worldRepo = this.getWorldRepository();
 
     const canonicalPlayer = worldRepo.getPlayerLifecycle(storyId);
     const canonicalRun = worldRepo.getStoryRun(storyId);
@@ -6144,7 +6145,6 @@ export class MultiModelOrchestrator {
       'Never use phrases such as "the outcome unfolds in the narrative", "the action is committed", "canonical acquisition", "proposed capability", "server authority", or similar implementation language.',
     ].join(' ');
 
-    const worldRepo = this.getWorldRepository();
     const viewerActorId = worldRepo.getPlayerLifecycle(storyId)?.actorId;
     const researchQuery = [
       playerAction,

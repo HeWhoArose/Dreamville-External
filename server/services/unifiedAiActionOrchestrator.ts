@@ -26,7 +26,7 @@ export interface UnifiedActionPipelineResult {
 	ruleAnalysis?: string;
 	tacticalContext?: { required: boolean; plan?: string; source: 'AI' | 'DETERMINISTIC_FALLBACK' | 'NOT_REQUIRED' };
 	narrationDirective: string;
-	telemetry: Array<{ task: TaskId; modelId: string; providerId: string; source: string; attempts: number }>;
+	telemetry: Array<{ task: TaskId; helperRole?: AiHelperRole; modelId: string; providerId: string; source: string; attempts: number }>;
 	aiCallPolicy: ReturnType<AiCallBudget['snapshot']>;
 	helperDecision: { strategy: string; reason: string };
 }
@@ -100,10 +100,13 @@ export class UnifiedAiActionOrchestrator {
 			/\b(that|this|it|something|somehow|maybe|try something|figure it out|do something)\b/i.test(cleanAction) &&
 			!preCandidate &&
 			!itemMatch;
-		const compoundAction = /\b(then|after that|and then|followed by|while)\b|[,;]\s*(?:then|and|while)\b/i.test(cleanAction) && /\b(and|then|after|while|followed by)\b/i.test(cleanAction);
-		const shouldAskIntentModel =
+		const compoundAction = /\b(then|after that|and then|followed by|while)\b|[,;]\s*(?:then|and|while)\b/i.test(cleanAction);
+		const semanticNoveltyRequested =
 			!preCandidate &&
-			(explicitCapabilitySyntax || checkOrHazardRequested || (itemUseRequested && !itemMatch) || ambiguousLanguage || compoundAction);
+			(
+				simulator.isCapabilityLikeRequest(cleanAction) ||
+				(compoundAction && /\b(create|make|turn|combine|shape|freeze|burn|break|seal|open|enhance|alter|manipulate)\b/i.test(cleanAction))
+			);
 		const helperDecision = decideAiHelperNeed({
 			hasCanonicalCapability: Boolean(preCandidate),
 			itemKnown: Boolean(itemMatch),
@@ -112,39 +115,88 @@ export class UnifiedAiActionOrchestrator {
 			unknownUseTarget: itemUseRequested && !itemMatch,
 			ambiguousLanguage,
 			compoundAction,
+			semanticNoveltyRequested,
 		});
-		const aiCallPolicyMode = helperDecision.mode;
-		const aiCallBudget = new AiCallBudget(aiCallPolicyMode);
+		const aiCallBudget = new AiCallBudget(helperDecision.mode);
 		let intent = deterministicIntent(cleanAction);
 		let capabilityIntent = Boolean(preCandidate);
 		let resolutionHint: ActionResolutionHint | undefined;
-		if (shouldAskIntentModel) {
-			try {
-				const result = await this.runTask(
-					'intent.interpret',
-					JSON.stringify({ action: cleanAction, character: run?.protagonist?.identity?.name, scene: sceneContext || {}, knownItem: itemMatch ? { name: itemMatch.name, quantity: itemMatch.quantity, charges: itemMatch.charges } : undefined }),
-					'Return ONLY JSON: {"baseAction":"...","intent":"...","capabilityIntent":true|false,"requestedEffects":[],"modifiers":[],"target":"","confidence":0..1,"resolutionHint":{"item":{"requested":true,"itemName":"","amount":1},"check":{"kind":"ABILITY_CHECK|SAVING_THROW|NONE","skillId":"","ability":""},"hazard":{"type":"FALL|TRAP|DEBRIS|POISON|FIRE|OTHER","distanceFeet":0}}}. Use hints only to identify what the canonical engine should resolve. Never invent ownership, HP, damage, DC, dice, costs, or success. Hazard distance is valid only when explicitly stated in action or scene.',
-					{ timeoutMs: 4500, maxTokens: 350, validateResponse: (text: string) => { const p = json<any>(text); return p && typeof p.baseAction === 'string' && typeof p.intent === 'string' ? { valid: true } : { valid: false, errorReason: 'Invalid intent schema.' }; } },
-					aiCallBudget,
-					'INTENT_INTERPRET',
-				);
+
+		const applyIntentResult = (result: { text: string; source: string }) => {
 			const p = json<any>(result.text);
 			if (p) {
-				intent = { baseAction: p.baseAction, intent: p.intent, requestedEffects: Array.isArray(p.requestedEffects) ? p.requestedEffects.map(String) : [], modifiers: Array.isArray(p.modifiers) ? p.modifiers.map(String) : [], target: typeof p.target === 'string' ? p.target : undefined, confidence: Number.isFinite(p.confidence) ? Math.max(0, Math.min(1, p.confidence)) : 0.8, source: result.source === 'DETERMINISTIC_FALLBACK' ? 'DETERMINISTIC_FALLBACK' : 'AI' };
+				intent = {
+					baseAction: p.baseAction,
+					intent: p.intent,
+					requestedEffects: Array.isArray(p.requestedEffects) ? p.requestedEffects.map(String) : [],
+					modifiers: Array.isArray(p.modifiers) ? p.modifiers.map(String) : [],
+					target: typeof p.target === 'string' ? p.target : undefined,
+					confidence: Number.isFinite(p.confidence) ? Math.max(0, Math.min(1, p.confidence)) : 0.8,
+					source: result.source === 'DETERMINISTIC_FALLBACK' ? 'DETERMINISTIC_FALLBACK' : 'AI',
+				};
 				const hint = p.resolutionHint;
 				if (hint && typeof hint === 'object') {
 					resolutionHint = {
-						item: hint.item && typeof hint.item === 'object' && hint.item.requested ? { requested: true, itemName: typeof hint.item.itemName === 'string' ? hint.item.itemName : undefined, amount: Number.isFinite(Number(hint.item.amount)) ? Math.max(1, Math.trunc(Number(hint.item.amount))) : undefined } : undefined,
-						check: hint.check && typeof hint.check === 'object' && ['ABILITY_CHECK', 'SAVING_THROW', 'NONE'].includes(String(hint.check.kind)) ? { kind: hint.check.kind, skillId: typeof hint.check.skillId === 'string' ? hint.check.skillId : undefined, ability: typeof hint.check.ability === 'string' ? hint.check.ability : undefined } : undefined,
-						hazard: hint.hazard && typeof hint.hazard === 'object' && ['FALL', 'TRAP', 'DEBRIS', 'POISON', 'FIRE', 'OTHER'].includes(String(hint.hazard.type)) ? { type: hint.hazard.type, distanceFeet: Number.isFinite(Number(hint.hazard.distanceFeet)) ? Math.max(0, Number(hint.hazard.distanceFeet)) : undefined } : undefined,
+						item: hint.item && typeof hint.item === 'object' && hint.item.requested
+							? { requested: true, itemName: typeof hint.item.itemName === 'string' ? hint.item.itemName : undefined, amount: Number.isFinite(Number(hint.item.amount)) ? Math.max(1, Math.trunc(Number(hint.item.amount))) : undefined }
+							: undefined,
+						check: hint.check && typeof hint.check === 'object' && ['ABILITY_CHECK', 'SAVING_THROW', 'NONE'].includes(String(hint.check.kind))
+							? { kind: hint.check.kind, skillId: typeof hint.check.skillId === 'string' ? hint.check.skillId : undefined, ability: typeof hint.check.ability === 'string' ? hint.check.ability : undefined }
+							: undefined,
+						hazard: hint.hazard && typeof hint.hazard === 'object' && ['FALL', 'TRAP', 'DEBRIS', 'POISON', 'FIRE', 'OTHER'].includes(String(hint.hazard.type))
+							? { type: hint.hazard.type, distanceFeet: Number.isFinite(Number(hint.hazard.distanceFeet)) ? Math.max(0, Number(hint.hazard.distanceFeet)) : undefined }
+							: undefined,
 					};
 				}
 			}
-			capabilityIntent = result.source === 'DETERMINISTIC_FALLBACK' ? simulator.isCapabilityLikeRequest(cleanAction) : Boolean(p?.capabilityIntent);
-			telemetry.push({ task: 'intent.interpret', modelId: result.modelId, providerId: result.providerId, source: result.source, attempts: result.attempts });
-		} catch {
-			capabilityIntent = Boolean(preCandidate) || simulator.isCapabilityLikeRequest(cleanAction);
-		}
+			return p;
+		};
+
+		const runIntentHelper = async (role: AiHelperRole, purpose: string, extraContext: Record<string, unknown> = {}) => {
+			const result = await this.runTask(
+				'intent.interpret',
+				JSON.stringify({
+					action: cleanAction,
+					purpose,
+					character: run?.protagonist?.identity?.name,
+					scene: sceneContext || {},
+					knownItem: itemMatch ? { name: itemMatch.name, quantity: itemMatch.quantity, charges: itemMatch.charges } : undefined,
+					...extraContext,
+				}),
+				'RETURN ONLY JSON: {"baseAction":"...","intent":"...","capabilityIntent":true|false,"requestedEffects":[],"modifiers":[],"target":"","confidence":0..1,"resolutionHint":{"item":{"requested":true,"itemName":"","amount":1},"check":{"kind":"ABILITY_CHECK|SAVING_THROW|NONE","skillId":"","ability":""},"hazard":{"type":"FALL|TRAP|DEBRIS|POISON|FIRE|OTHER","distanceFeet":0}}}. Use hints only to identify what the canonical engine should resolve. Never invent ownership, HP, damage, DC, dice, costs, or success. Hazard distance is valid only when explicitly stated in action or scene. For repair, correct only the semantic interpretation using the supplied canonical validation result.',
+				{ timeoutMs: role === 'SEMANTIC_REPAIR' ? 5000 : 4500, maxTokens: 350, validateResponse: (text: string) => { const p = json<any>(text); return p && typeof p.baseAction === 'string' && typeof p.intent === 'string' ? { valid: true } : { valid: false, errorReason: 'Invalid intent schema.' }; } },
+				aiCallBudget,
+				role,
+			);
+			const parsed = applyIntentResult(result);
+			telemetry.push({ task: 'intent.interpret', helperRole: role, modelId: result.modelId, providerId: result.providerId, source: result.source, attempts: result.attempts });
+			return { result, parsed };
+		};
+
+		if (helperDecision.strategy !== 'NONE') {
+			try {
+				const initial = await runIntentHelper('INTENT_INTERPRET', 'INITIAL_INTERPRETATION');
+				if (helperDecision.strategy === 'INTERPRET_SYNTHESIZE_AND_REPAIR') {
+					capabilityIntent = true;
+				} else {
+					capabilityIntent = initial.result.source === 'DETERMINISTIC_FALLBACK'
+						? simulator.isCapabilityLikeRequest(cleanAction)
+						: Boolean(initial.parsed?.capabilityIntent);
+					const firstInterpretationNeedsRepair =
+						intent.confidence < 0.65 ||
+						(checkOrHazardRequested && !resolutionHint?.check && !resolutionHint?.hazard);
+					if (firstInterpretationNeedsRepair) {
+						await runIntentHelper('SEMANTIC_REPAIR', 'SEMANTIC_REPAIR', {
+							previousInterpretation: intent,
+						previousResolutionHint: resolutionHint,
+						});
+					}
+				}
+			} catch {
+				capabilityIntent = helperDecision.strategy === 'INTERPRET_SYNTHESIZE_AND_REPAIR'
+					? true
+					: Boolean(preCandidate) || simulator.isCapabilityLikeRequest(cleanAction);
+			}
 		} else {
 			capabilityIntent = Boolean(preCandidate);
 		}
@@ -171,7 +223,7 @@ export class UnifiedAiActionOrchestrator {
 			};
 		}
 		let synthesized: CapabilityDefinition | undefined;
-		if (capabilityLike && !candidate && capabilityIntent && intent.source === 'AI') {
+		if (capabilityLike && !candidate && capabilityIntent && helperDecision.strategy === 'INTERPRET_SYNTHESIZE_AND_REPAIR') {
 			try {
 				const result = await this.runTask(
 					'capability.synthesize',
@@ -209,10 +261,12 @@ export class UnifiedAiActionOrchestrator {
 		const customRules=world?new (await import('../domain/customRuleEngine')).CustomRuleEngine().getRules(this.repository as any,storyId):[];
 		let simulation=simulator.simulate(cleanAction,{actorId,character:run?.protagonist,world:world||{title:'Current World',dndRulesMode:rulesProfile?.mode||'FULL_DND'},rulesProfile,progressionPolicy,progressionState:{...progressionState,maxCharacterLevel:progressionPolicy.maxLevel},customRules,powerState:capabilityEngine.getPowerState(actorId),ownedCapabilities:owned,skillInstances:capabilityEngine.getActorSkillInstances(actorId),allWorldCapabilities:[...((world?.canonicalCapabilities||[]) as CapabilityDefinition[]),...((world?.capabilities||[]) as CapabilityDefinition[])],environment:{}},finalCandidate);
 		let alternativeCapability: CapabilityDefinition | undefined;
+		const repairableStatuses = new Set(['UNSUPPORTED_REQUEST', 'CURRENTLY_BLOCKED', 'CHARACTER_INCOMPATIBLE', 'ALTERNATE_ROUTE']);
 		if (
-			capabilityLike &&
+			helperDecision.strategy === 'INTERPRET_SYNTHESIZE_AND_REPAIR' &&
+			!candidate &&
 			synthesized &&
-			(simulation.status === 'UNSUPPORTED_REQUEST' || simulation.status === 'CURRENTLY_BLOCKED')
+			repairableStatuses.has(simulation.status)
 		) {
 			try {
 				const result = await this.runTask(
@@ -227,7 +281,7 @@ export class UnifiedAiActionOrchestrator {
 						character: run?.protagonist,
 						world,
 					}),
-					'Return ONLY JSON describing one repaired capability proposal. Preserve the player intent, but correct the failed mechanism. Proposal only; never invent ownership, success, HP, damage, DC, dice, or resource outcomes.',
+					'RETURN ONLY JSON describing one repaired capability proposal. Preserve the player intent, but correct the failed mechanism. Proposal only; never invent ownership, success, HP, damage, DC, dice, or resource outcomes.',
 					{
 						timeoutMs: 10000,
 						maxTokens: 850,
@@ -244,21 +298,22 @@ export class UnifiedAiActionOrchestrator {
 				const p = json<any>(result.text);
 				if (p) {
 					const repaired = { ...p, id: 'proposal_repair_' + storyId + '_' + actorId, provenance: 'AI_GENERATED' } as CapabilityDefinition;
-					const repairedSimulation = simulator.simulate(cleanAction,{actorId,character:run?.protagonist,world:world||{title:'Current World',dndRulesMode:rulesProfile?.mode||'FULL_DND'},rulesProfile,progressionPolicy,progressionState:{...progressionState,maxCharacterLevel:progressionPolicy.maxLevel},customRules,powerState:capabilityEngine.getPowerState(actorId),ownedCapabilities:owned,skillInstances:capabilityEngine.getActorSkillInstances(actorId),allWorldCapabilities:[...((world?.canonicalCapabilities||[]) as CapabilityDefinition[]),...((world?.capabilities||[]) as CapabilityDefinition[])],environment:{}},repaired);
-					if (repairedSimulation.status !== 'UNSUPPORTED_REQUEST' && repairedSimulation.status !== 'CURRENTLY_BLOCKED') {
+					const repairedSimulation = simulator.simulate(cleanAction, { actorId, character: run?.protagonist, world: world || { title: 'Current World', dndRulesMode: rulesProfile?.mode || 'FULL_DND' }, rulesProfile, progressionPolicy, progressionState: { ...progressionState, maxCharacterLevel: progressionPolicy.maxLevel }, customRules, powerState: capabilityEngine.getPowerState(actorId), ownedCapabilities: owned, skillInstances: capabilityEngine.getActorSkillInstances(actorId), allWorldCapabilities: [...((world?.canonicalCapabilities || []) as CapabilityDefinition[]), ...((world?.capabilities || []) as CapabilityDefinition[])], environment: {} }, repaired);
+					if (!repairableStatuses.has(repairedSimulation.status)) {
 						finalCandidate = repaired;
 						synthesized = repaired;
 						simulation = repairedSimulation;
 					}
 				}
-				telemetry.push({ task: 'capability.synthesize', modelId: result.modelId, providerId: result.providerId, source: result.source, attempts: result.attempts });
+				telemetry.push({ task: 'capability.synthesize', helperRole: 'SEMANTIC_REPAIR', modelId: result.modelId, providerId: result.providerId, source: result.source, attempts: result.attempts });
 			} catch {}
 		}
 
 		if (
-			capabilityLike &&
+			helperDecision.strategy === 'INTERPRET_SYNTHESIZE_AND_REPAIR' &&
+			!candidate &&
 			finalCandidate &&
-			(simulation.status === 'CHARACTER_INCOMPATIBLE' || simulation.status === 'ALTERNATE_ROUTE')
+			repairableStatuses.has(simulation.status)
 		) {
 			try {
 				const result = await this.runTask(
@@ -273,7 +328,7 @@ export class UnifiedAiActionOrchestrator {
 						character: run?.protagonist,
 						world,
 					}),
-					'Return ONLY JSON describing one alternative capability that can achieve a coherent approximation of the requested intent while respecting the character, world, and rules. It must be meaningfully different from the unavailable capability and is a proposal only.',
+					'RETURN ONLY JSON describing one alternative capability that can achieve a coherent approximation of the repaired intent while respecting the character, world, and rules. It must be meaningfully different from the unavailable proposal and is a proposal only.',
 					{
 						timeoutMs: 12000,
 						maxTokens: 850,
@@ -289,19 +344,14 @@ export class UnifiedAiActionOrchestrator {
 				);
 				const p = json<any>(result.text);
 				if (p) {
-					alternativeCapability = {
-						...p,
-						id: 'proposal_alt_' + storyId + '_' + actorId,
-						provenance: 'AI_GENERATED',
-					};
+					alternativeCapability = { ...p, id: 'proposal_alt_' + storyId + '_' + actorId, provenance: 'AI_GENERATED' };
+					const alternativeSimulation = simulator.simulate(cleanAction, { actorId, character: run?.protagonist, world: world || { title: 'Current World', dndRulesMode: rulesProfile?.mode || 'FULL_DND' }, rulesProfile, progressionPolicy, progressionState: { ...progressionState, maxCharacterLevel: progressionPolicy.maxLevel }, customRules, powerState: capabilityEngine.getPowerState(actorId), ownedCapabilities: owned, skillInstances: capabilityEngine.getActorSkillInstances(actorId), allWorldCapabilities: [...((world?.canonicalCapabilities || []) as CapabilityDefinition[]), ...((world?.capabilities || []) as CapabilityDefinition[])], environment: {} }, alternativeCapability);
+					if (!repairableStatuses.has(alternativeSimulation.status)) {
+						finalCandidate = alternativeCapability;
+						simulation = alternativeSimulation;
+					}
 				}
-				telemetry.push({
-					task: 'capability.synthesize',
-					modelId: result.modelId,
-					providerId: result.providerId,
-					source: result.source,
-					attempts: result.attempts,
-				});
+				telemetry.push({ task: 'capability.synthesize', helperRole: 'ALTERNATIVE_SYNTHESIZE', modelId: result.modelId, providerId: result.providerId, source: result.source, attempts: result.attempts });
 			} catch {}
 		}
 

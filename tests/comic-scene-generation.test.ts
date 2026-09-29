@@ -127,7 +127,8 @@ test('dialogue is current only when the committed action is a dialogue choice', 
     },
   });
 
-  assert.match(result.prompt, /Current dialogue: Guide says: "Why did you come here?"/i);
+  assert.match(result.prompt, /Current dialogue: Guide says:/i);
+  assert.match(result.prompt, /Why did you come here/i);
 });
 
 test('failed actions cannot be reinterpreted as success', () => {

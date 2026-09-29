@@ -30,6 +30,7 @@ export const DICE_THEME_PRESETS: readonly DiceThemePreset[] = [
 			texture: '',
 			background: '#eee8dc',
 			foreground: '#2b2520',
+			outline: '#ffffff',
 		},
 	},
 	{
@@ -44,6 +45,7 @@ export const DICE_THEME_PRESETS: readonly DiceThemePreset[] = [
 			texture: '',
 			background: '#4c2a78',
 			foreground: '#f3e8ff',
+			outline: '#1b1028',
 		},
 	},
 	{
@@ -58,6 +60,7 @@ export const DICE_THEME_PRESETS: readonly DiceThemePreset[] = [
 			texture: '',
 			background: '#7f1d1d',
 			foreground: '#ffe4e6',
+			outline: '#22080d',
 		},
 	},
 	{
@@ -72,6 +75,7 @@ export const DICE_THEME_PRESETS: readonly DiceThemePreset[] = [
 			texture: '',
 			background: '#14532d',
 			foreground: '#ecfccb',
+			outline: '#06120b',
 		},
 	},
 	{
@@ -86,6 +90,7 @@ export const DICE_THEME_PRESETS: readonly DiceThemePreset[] = [
 			texture: '',
 			background: '#164e63',
 			foreground: '#e0f2fe',
+			outline: '#06131d',
 		},
 	},
 	{
@@ -100,6 +105,7 @@ export const DICE_THEME_PRESETS: readonly DiceThemePreset[] = [
 			texture: '',
 			background: '#18181b',
 			foreground: '#f6d88b',
+			outline: '#050505',
 		},
 	},
 ];

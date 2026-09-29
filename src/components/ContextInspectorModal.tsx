@@ -178,6 +178,11 @@ export const ContextInspectorModal: React.FC<ContextInspectorModalProps> = ({
               style={{ width: `${budgetPercent}%` }}
             />
           </div>
+          <div className="mt-3 grid grid-cols-3 gap-2 text-[10px] font-mono">
+            <div className="rounded-lg border border-emerald-400/15 bg-emerald-400/5 px-2.5 py-2"><div className="text-emerald-300">ACTIVE</div><div className="mt-0.5 text-stone-300">{contextData?.includedChunks.length ?? 0}</div></div>
+            <div className="rounded-lg border border-amber-400/15 bg-amber-400/5 px-2.5 py-2"><div className="text-amber-300">IDLE</div><div className="mt-0.5 text-stone-300">{contextData?.idleChunks.length ?? 0}</div></div>
+            <div className="rounded-lg border border-stone-400/15 bg-stone-400/5 px-2.5 py-2"><div className="text-stone-300">ARCHIVED</div><div className="mt-0.5 text-stone-400">{contextData?.archivedChunks.length ?? 0}</div></div>
+          </div>
         </div>
 
         {/* Tab Navigation */}
@@ -348,7 +353,7 @@ export const ContextInspectorModal: React.FC<ContextInspectorModalProps> = ({
               </div>
 
               <div className="space-y-2 mt-4">
-                <h4 className="font-mono text-xs text-stone-400">Included Candidate Chunks</h4>
+                <h4 className="font-mono text-xs text-stone-400">Active Context Blocks</h4>
                 <div className="space-y-2">
                   {contextData?.includedChunks.map((chunk, idx) => (
                     <div
@@ -374,6 +379,28 @@ export const ContextInspectorModal: React.FC<ContextInspectorModalProps> = ({
                   ))}
                 </div>
               </div>
+                {(contextData?.idleChunks?.length ?? 0) > 0 && (
+                  <div className="mt-4 space-y-2">
+                    <h4 className="font-mono text-xs text-amber-300">Idle Blocks — available if budget opens</h4>
+                    {contextData?.idleChunks.map((chunk, idx) => (
+                      <div key={idx} className="rounded-xl border border-amber-400/15 bg-amber-400/5 px-3 py-2.5 font-mono text-xs">
+                        <div className="flex items-center justify-between gap-3"><span className="text-stone-200">{chunk.label}</span><span className="text-[10px] text-amber-300">IDLE</span></div>
+                        <div className="mt-1 text-[10px] text-stone-500">~{chunk.estimatedTokens} tokens · {chunk.band}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {(contextData?.archivedChunks?.length ?? 0) > 0 && (
+                  <div className="mt-4 space-y-2">
+                    <h4 className="font-mono text-xs text-stone-500">Archived Blocks</h4>
+                    {contextData?.archivedChunks.map((chunk, idx) => (
+                      <div key={idx} className="rounded-xl border border-stone-800 bg-stone-950 px-3 py-2.5 font-mono text-xs">
+                        <div className="flex items-center justify-between gap-3"><span className="text-stone-400">{chunk.label}</span><span className="text-[10px] text-stone-600">ARCHIVED</span></div>
+                        <div className="mt-1 text-[10px] text-stone-600">~{chunk.estimatedTokens} tokens · {chunk.band}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
             </div>
           )}
 

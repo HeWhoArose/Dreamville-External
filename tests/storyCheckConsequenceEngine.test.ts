@@ -155,3 +155,21 @@ test('challenge resolver selects authored capability and returns null when no au
   const none = resolver.resolve({ actionText: 'I sit quietly.', sceneText: 'A calm room.' });
   assert.equal(none, null);
 });
+  await t.test('authored challenge does not trigger from scene-only keywords on unrelated movement', () => {
+    const challengeResolver = new StoryCheckChallengeResolver();
+    const result = challengeResolver.resolve({
+      actionText: 'I step through the portal.',
+      sceneText: 'A forgotten relic rests beside ancient glyphs.',
+      run: {
+        storyCheckChallenges: [{
+          id: 'decipher_ancient_glyphs',
+          label: 'Decipher Ancient Glyphs',
+          keywords: ['glyph', 'relic', 'inspect', 'decipher'],
+          savingThrowAbility: 'Intelligence',
+          difficultyClass: 12,
+        }],
+      },
+    });
+
+    assert.equal(result, null);
+  });

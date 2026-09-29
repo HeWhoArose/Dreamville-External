@@ -71,7 +71,7 @@ test("dice renderer uses Frank Ali's 3D physics engine rather than a flat SVG sh
   const source = fs.readFileSync(path.join(process.cwd(), 'src/components/common/DiceRollAnimation.tsx'), 'utf8');
   assert.match(source, /@3d-dice\/dice-box-threejs/);
   assert.match(source, /theme_colorset:\s*['"]white['"]/);
-  assert.match(source, /theme_material:\s*['"]plastic['"]/);
+  assert.match(source, /theme_material:\s*diceTheme\.material/);
   assert.match(source, /await box\.initialize\(\)/);
   assert.match(source, /await box\.roll\(notation\)/);
   assert.ok(source.includes("@${values.join(',')}"));

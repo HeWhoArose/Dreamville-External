@@ -1,8 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildComicScenePrompt } from '../server/services/comicSceneGenerator';
+import {
+  buildComicScenePrompt,
+  resolveComicSceneVisualMoment,
+} from '../server/services/comicSceneGenerator';
 
-test('current-scene comic prompt is anchored to the latest turn only', () => {
+test('current-scene comic prompt is an exact single current visual moment', () => {
   const result = buildComicScenePrompt({
     worldTitle: 'The Sunken Spire',
     location: {
@@ -14,57 +17,76 @@ test('current-scene comic prompt is anchored to the latest turn only', () => {
     protagonist: {
       name: 'Unknown Dark Knight',
       role: 'Protagonist',
-      portraitEmoji: '🛡️',
     },
     visibleCharacters: [
       { name: 'The Archivist', role: 'NPC', title: 'Keeper' },
     ],
     latestAction: {
-      description: 'I raise my blade toward the Archivist.',
-      narrativeResponse: 'The blade catches the chamber light as the Archivist steps back.',
+      id: 'act_current',
+      actionType: 'CUSTOM_ACTION',
+      description: 'I take the ancient scroll and hide.',
+      narrativeResponse: 'A sharp scrape echoes as the rusted guardian turns toward the empty plinth and searches the archive.',
       checkResult: {
-        success: true,
-        total: 18,
-        difficultyClass: 14,
-        consequence: { summary: 'The Archivist retreats one step.' },
+        success: false,
+        consequence: { summary: 'The failed decipher attempt yields no usable information.' },
       },
     },
+    currentSituation: 'OLD OPENING SCENE THAT MUST NEVER BE USED FOR THIS TURN.',
+    latestVisibleNarrative: 'OLD NARRATION THAT MUST NEVER BECOME THE CURRENT IMAGE.',
     activeDialogue: {
       speakerName: 'The Archivist',
-      text: 'Wait.',
+      text: 'OLD DIALOGUE FROM AN EARLIER TURN.',
     },
   });
 
-  assert.equal(result.panelCount, 3);
-  assert.equal(result.aspectRatio, '16:9');
-  assert.match(result.prompt, /LATEST \/ IMMEDIATE CURRENT STORY TURN/i);
-  assert.match(result.prompt, /raise my blade/i);
-  assert.match(result.prompt, /Archivist retreats one step/i);
-  assert.match(result.prompt, /CURRENT SCENE VISUAL BRIEF/i);
-  assert.match(result.prompt, /PANEL LOGIC/i);
-  assert.match(result.prompt, /Panel 1: establish the exact current location/i);
-  assert.match(result.prompt, /no flashbacks/i);
-  assert.match(result.prompt, /A failed action must remain visibly failed/i);
-  assert.doesNotMatch(result.prompt, /old opening scene/i);
+  assert.equal(result.panelCount, 1);
+  assert.equal(result.sourceActionId, 'act_current');
+  assert.equal(result.visualMoment.mode, 'CURRENT_TURN');
+  assert.equal(result.visualMoment.primaryAction, 'I take the ancient scroll and hide.');
+  assert.match(result.prompt, /Create ONE standalone comic-book illustration/i);
+  assert.match(result.prompt, /I take the ancient scroll and hide/i);
+  assert.match(result.prompt, /rusted guardian turns toward the empty plinth/i);
+  assert.match(result.prompt, /canonical action failed/i);
+  assert.match(result.prompt, /one comic-book panel/i);
+  assert.doesNotMatch(result.prompt, /OLD OPENING SCENE THAT MUST NEVER BE USED/i);
+  assert.doesNotMatch(result.prompt, /OLD NARRATION THAT MUST NEVER BECOME THE CURRENT IMAGE/i);
+  assert.doesNotMatch(result.prompt, /OLD DIALOGUE FROM AN EARLIER TURN/i);
+  assert.doesNotMatch(result.prompt, /Panel 1: establish the exact current location/i);
+  assert.doesNotMatch(result.prompt, /PANEL LOGIC/i);
 });
 
-test('comic generation context contract does not require dialogue history', () => {
+test('committed turn completely suppresses opening-scene context', () => {
   const result = buildComicScenePrompt({
-    location: { name: 'Current Hall' },
+    location: { name: 'Lower Archive', region: 'Abyssal Trench' },
+    protagonist: { name: 'Ael Drasil', role: 'Relic Researcher' },
+    visibleCharacters: [{ name: 'Archive Guardian' }],
+    latestAction: {
+      id: 'act_hide',
+      description: 'I move behind the broken pillar.',
+      narrativeResponse: 'The guardian scans the plinth while Ael slips behind the pillar.',
+    },
+    currentSituation: 'Initial starting location with first-light atmosphere.',
+    latestVisibleNarrative: 'The first scroll discovery from the opening scene.',
+  });
+
+  assert.equal(result.visualMoment.mode, 'CURRENT_TURN');
+  assert.match(result.prompt, /move behind the broken pillar/i);
+  assert.doesNotMatch(result.prompt, /Initial starting location with first-light atmosphere/i);
+  assert.doesNotMatch(result.prompt, /first scroll discovery from the opening scene/i);
+});
+
+test('opening-state fallback is used only when there is no committed action', () => {
+  const result = resolveComicSceneVisualMoment({
+    location: { name: 'Starting Chamber' },
     protagonist: { name: 'Hero' },
     visibleCharacters: [],
-    latestAction: {
-      description: 'I open the gate.',
-      narrativeResponse: 'The gate groans open.',
-    },
-    activeDialogue: null,
+    latestAction: undefined,
+    currentSituation: 'The hero awakens in the starting chamber.',
   });
 
-  assert.match(result.prompt, /Exact location: Current Hall/i);
-  assert.match(result.prompt, /Immediate action: I open the gate/i);
-  assert.doesNotMatch(result.prompt, /dialogueHistory/i);
+  assert.equal(result.mode, 'OPENING_STATE');
+  assert.match(result.primaryAction, /hero awakens/i);
 });
-
 
 test('stale active dialogue is excluded from non-dialogue current-scene art', () => {
   const result = buildComicScenePrompt({
@@ -73,6 +95,7 @@ test('stale active dialogue is excluded from non-dialogue current-scene art', ()
     protagonist: { name: 'Hero' },
     visibleCharacters: [{ name: 'Guard' }],
     latestAction: {
+      id: 'act_strike',
       actionType: 'CUSTOM_ACTION',
       description: 'I strike the guard.',
       narrativeResponse: 'The guard staggers backward.',
@@ -83,46 +106,47 @@ test('stale active dialogue is excluded from non-dialogue current-scene art', ()
     },
   });
 
-  assert.match(result.prompt, /Immediate action: I strike the guard/i);
-  assert.match(result.prompt, /Latest narrative beat: The guard staggers backward/i);
+  assert.match(result.prompt, /I strike the guard/i);
   assert.doesNotMatch(result.prompt, /This was said on the previous turn/i);
 });
 
+test('dialogue is current only when the committed action is a dialogue choice', () => {
+  const result = buildComicScenePrompt({
+    location: { name: 'Current Hall' },
+    protagonist: { name: 'Hero' },
+    visibleCharacters: [{ name: 'Guide' }],
+    latestAction: {
+      id: 'act_dialogue',
+      actionType: 'DIALOGUE_CHOICE',
+      description: 'I answer the guide.',
+      narrativeResponse: 'The guide listens carefully.',
+    },
+    activeDialogue: {
+      speakerName: 'Guide',
+      text: 'Why did you come here?',
+    },
+  });
 
-test('adaptive panel planning uses fewer panels when the turn has only one visual beat', () => {
-	const result = buildComicScenePrompt({
-		location: { name: 'Abyssal Trench', description: 'A sealed structure rises from the dark water.' },
-		protagonist: { name: 'The Ashen Knight' },
-		visibleCharacters: [],
-		latestAction: {
-			actionType: 'CUSTOM_ACTION',
-			description: 'I move toward the structure.',
-			narrativeResponse: 'The knight approaches the sealed structure.',
-		},
-		activeDialogue: null,
-	});
-
-	assert.equal(result.panelCount, 2);
-	assert.match(result.prompt, /CURRENT SCENE VISUAL BRIEF/i);
-	assert.match(result.prompt, /Panel 2: depict the immediate current action or dialogue beat/i);
-	assert.match(result.prompt, /never invent additional story beats/i);
+  assert.match(result.prompt, /Current dialogue: Guide says: "Why did you come here?"/i);
 });
 
-test('stale dialogue does not enter non-dialogue comic prompts', () => {
-	const result = buildComicScenePrompt({
-		location: { name: 'Current Hall' },
-		protagonist: { name: 'Hero' },
-		visibleCharacters: [{ name: 'Guard' }],
-		latestAction: {
-			actionType: 'CUSTOM_ACTION',
-			description: 'I inspect the gate.',
-			narrativeResponse: 'The gate shows fresh scratches.',
-		},
-		activeDialogue: {
-			speakerName: 'Guard',
-			text: 'This was from the previous turn.',
-		},
-	});
+test('failed actions cannot be reinterpreted as success', () => {
+  const result = buildComicScenePrompt({
+    location: { name: 'Vault' },
+    protagonist: { name: 'Rogue' },
+    visibleCharacters: [{ name: 'Sentinel' }],
+    latestAction: {
+      id: 'act_failed',
+      description: 'I bypass the sentinel.',
+      narrativeResponse: 'The sentinel remains active.',
+      checkResult: {
+        success: false,
+        consequence: { summary: 'The bypass attempt fails and the alarm remains active.' },
+      },
+    },
+  });
 
-	assert.doesNotMatch(result.prompt, /previous turn/i);
+  assert.match(result.prompt, /canonical action failed/i);
+  assert.match(result.prompt, /alarm remains active/i);
+  assert.match(result.prompt, /Never convert the failure into a success/i);
 });

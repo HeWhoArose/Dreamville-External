@@ -10291,13 +10291,20 @@ function buildCurrentComicSceneContext(storyId: string): { context: ComicSceneCo
             : undefined,
         }
       : undefined,
-    currentSituation:
-      state.openingScene?.startingSituation ||
-      state.openingScene?.narrativeText ||
-      worldRepository.getStoryRun(storyId)?.startingSituation?.summary ||
-      worldRepository.getStoryRun(storyId)?.startingSituation?.hook,
-    latestVisibleNarrative: latestAction?.narrativeResponse || state.openingScene?.narrativeText,
-    // Deliberately use active dialogue only; never include dialogueHistory in this context.
+    // A committed turn is authoritative for scene generation. Opening-scene
+    // context is allowed only when there is no committed action yet; otherwise
+    // stale setup text would contaminate the exact current visual moment.
+    currentSituation: latestAction
+      ? undefined
+      : state.openingScene?.startingSituation ||
+        state.openingScene?.narrativeText ||
+        worldRepository.getStoryRun(storyId)?.startingSituation?.summary ||
+        worldRepository.getStoryRun(storyId)?.startingSituation?.hook,
+    latestVisibleNarrative: latestAction
+      ? undefined
+      : state.openingScene?.narrativeText,
+    // Deliberately use active dialogue only; the prompt compiler will include it
+    // only for a committed dialogue action. Never include dialogueHistory here.
     activeDialogue: state.activeDialogue
       ? {
           speakerName: state.activeDialogue.speakerName,

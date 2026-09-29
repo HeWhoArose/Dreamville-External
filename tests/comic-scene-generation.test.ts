@@ -131,6 +131,37 @@ test('dialogue is current only when the committed action is a dialogue choice', 
   assert.match(result.prompt, /Why did you come here/i);
 });
 
+
+test('current-turn visual cues create chronological panels without importing prior scenes', () => {
+  const result = buildComicScenePrompt({
+    location: { name: 'Lower Archive', region: 'Abyssal Trench' },
+    protagonist: { name: 'Ael Drasil', role: 'Relic Researcher' },
+    visibleCharacters: [{ name: 'Archive Guardian' }],
+    latestAction: {
+      id: 'act_dodge',
+      actionType: 'CUSTOM_ACTION',
+      description: 'I survive the attack and move behind cover.',
+      narrativeResponse: 'A fireball screams past Ael\'s head. Ael dives behind the broken basalt pillar.',
+      visualCues: [
+        'A fireball screams past Ael\'s head, lighting the archive in orange as it narrowly misses.',
+        'Ael dives behind the broken basalt pillar for cover.',
+      ],
+    },
+    currentSituation: 'OLD OPENING SCENE MUST NOT APPEAR.',
+    latestVisibleNarrative: 'OLD NARRATION MUST NOT APPEAR.',
+  });
+
+  assert.equal(result.panelCount, 2);
+  assert.match(result.prompt, /Panel 1: depict ONLY this chronological visual beat/i);
+  assert.match(result.prompt, /fireball screams past Ael/i);
+  assert.match(result.prompt, /Panel 2: depict ONLY this chronological visual beat/i);
+  assert.match(result.prompt, /dives behind the broken basalt pillar/i);
+  assert.match(result.prompt, /Use exactly 2 panels/i);
+  assert.doesNotMatch(result.prompt, /OLD OPENING SCENE MUST NOT APPEAR/i);
+  assert.doesNotMatch(result.prompt, /OLD NARRATION MUST NOT APPEAR/i);
+  assert.doesNotMatch(result.prompt, /previous image composition/i);
+});
+
 test('failed actions cannot be reinterpreted as success', () => {
   const result = buildComicScenePrompt({
     location: { name: 'Vault' },

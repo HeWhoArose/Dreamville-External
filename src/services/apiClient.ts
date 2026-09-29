@@ -1446,6 +1446,27 @@ class ApiClient {
     return await res.json();
   }
 
+  public async getVerifiedFreeModels(): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/free-models`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `Failed to get verified free models: HTTP ${res.status}`);
+    return data;
+  }
+
+  public async aiAssignFreeModels(params?: { maxFallbacksPerCategory?: number; concurrency?: number }): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/ai-assign-free-models`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(params || {}),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `Failed to AI-assign free models: HTTP ${res.status}`);
+    return data;
+  }
+
   /**
    * Phase 12A+: Read-only task candidate preflight.
    * POST /api/game/orchestrator/preflight

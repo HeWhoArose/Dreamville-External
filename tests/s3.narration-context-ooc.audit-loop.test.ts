@@ -149,7 +149,7 @@ test('S3 working context does not bypass epistemic knowledge with raw world-bibl
 		storyId,
 		hardTokenBudget: 1800,
 		worldRepo: repository,
-		playerAction: 'What is happening here?',
+		playerAction: 'Inspect the ancient archive and explain what is happening here.',
 	});
 
 	assert.doesNotMatch(context.assembledText, /PRIVATE_CHARACTER|DO_NOT_LEAK_PRIVATE_CHARACTER/);

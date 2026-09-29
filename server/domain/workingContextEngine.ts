@@ -63,6 +63,8 @@ export interface AssembledTurnContext {
   totalTokens: number;
   hardTokenBudget: number;
   includedChunks: ContextChunk[];
+  idleChunks: ContextChunk[];
+  archivedChunks: ContextChunk[];
   evictedChunkLabels: string[];
   evictionReasons: Record<string, string>;
   epistemicallySanitized: boolean;
@@ -900,6 +902,8 @@ export class WorkingContextEngine {
       totalTokens: budgetedResult.totalTokens,
       hardTokenBudget,
       includedChunks: budgetedResult.includedChunks,
+      idleChunks: budgetedResult.idleChunks,
+      archivedChunks: budgetedResult.archivedChunks,
       evictedChunkLabels: budgetedResult.evictedChunkLabels,
       evictionReasons: budgetedResult.evictionReasons,
       epistemicallySanitized: true,

@@ -6664,6 +6664,7 @@ export class MultiModelOrchestrator {
               return this.isCandidateUsable(m, task, assembledContext.totalTokens) && Boolean(preflight?.eligible);
             });
           fallbacks = configuredFallbacks;
+        }
       } else {
         const selection = this.selectBestModel(task, { contextTokens: assembledContext.totalTokens });
         selectedModel = selection.selectedModel;

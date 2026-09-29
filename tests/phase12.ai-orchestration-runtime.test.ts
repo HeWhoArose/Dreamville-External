@@ -1025,3 +1025,73 @@ test('Phase 12: narration scene drift is rejected and falls through to the next 
 	assert.equal(driftRuntime?.failureCount >= 1, true);
 	assert.match(driftRuntime?.lastFailureReason || '', /scene continuity|canonical location/i);
 });
+
+
+test('Phase 12: deterministic emergency narration remains valid for the canonical current location', async () => {
+	const storyId = 'phase12_emergency_scene';
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	repository.seedStory(storyId);
+	const player = repository.getPlayerLifecycle(storyId)!;
+	const location = repository.getGeographyGraph(storyId).getNode(player.locationId);
+	assert.ok(location);
+
+	const orchestrator = createTestOrchestrator(repository);
+	orchestrator.setFallbackChain('narrative.generate', [
+		'provider_deterministic_emergency::emergency-fallback-local',
+	]);
+
+	const result = await orchestrator.generateNarrativeOnly({
+		storyId,
+		playerAction: 'Continue forward.',
+		hardTokenBudget: 1100,
+		maxRetries: 0,
+	});
+
+	assert.equal(result.success, true);
+	assert.equal(result.modelId, 'emergency-fallback-local');
+	assert.equal(result.providerId, 'provider_deterministic_emergency');
+	assert.equal((result.turnPackage?.narrative.join(' ') || '').includes(location!.name), true);
+});
+
+test('Phase 12: Story Run persistence includes the per-story story-check RNG state', () => {
+	const storyId = 'phase12_story_check_persistence';
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	repository.seedStory(storyId);
+	const engine = repository.getStoryCheckEngine(storyId);
+	engine.resolve(
+		storyId,
+		'I investigate the markings on the wall.',
+		{
+			coreStats: {
+				level: 1,
+				strength: 10,
+				dexterity: 10,
+				constitution: 10,
+				intelligence: 16,
+				wisdom: 12,
+				charisma: 10,
+				ac: 10,
+				speed: 30,
+				hitDice: '1d10',
+				hpCurrent: 10,
+				hpMax: 10,
+			},
+			skills: [],
+		},
+	);
+
+	const persistent = (repository as any).buildPersistentData();
+	assert.ok(persistent.storyRuns?.[storyId]?.runtimeState?.storyChecks);
+	assert.equal(
+		persistent.storyRuns[storyId].runtimeState.storyChecks[storyId].rollCounter,
+		engine.exportState()[storyId].rollCounter,
+	);
+});
+
+test('Phase 12: Story narration model picker resolves the exact narrative task route without hiding non-free configured fallbacks', () => {
+	const source = fs.readFileSync(path.join(process.cwd(), 'src/components/StoryView.tsx'), 'utf8');
+	assert.match(source, /taskRoutes/);
+	assert.match(source, /narrative\\.generate/);
+	assert.match(source, /allRegisteredModels/);
+	assert.doesNotMatch(source, /Verified free models only/);
+});

@@ -529,7 +529,7 @@ gameRouter.post('/action/advice', async (req: Request, res: Response) => {
             action.narrativeResponse || action.description || ''
           ).filter(Boolean)
         : [],
-    });
+    }, { allowAiTips: true });
     return res.json({
       success: true,
       storyId,

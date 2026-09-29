@@ -2238,7 +2238,6 @@ Do not enclose in markdown ticks, output pure JSON.`;
       },
     ];
   }
-  }
 }
 
 /**

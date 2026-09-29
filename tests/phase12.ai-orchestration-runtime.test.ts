@@ -1105,3 +1105,84 @@ test('Phase 12: OpenRouter Free is a registered narration fallback model', () =>
 	assert.equal(registered?.fallbackEligibility, true);
 	assert.equal(registered?.isEmergencyFloor, false);
 });
+
+
+test('Phase 12: Run context settings button navigates to the Settings view', () => {
+	const source = fs.readFileSync(path.join(process.cwd(), 'src/App.tsx'), 'utf8');
+	const runContextIndex = source.indexOf('<StoryContextShell');
+	assert.ok(runContextIndex >= 0);
+	const runContextSource = source.slice(runContextIndex, runContextIndex + 7000);
+	assert.match(runContextSource, /onOpenSettings=\{\(\) => setCurrentRoute\('settings'\)\}/);
+});
+
+test('Phase 12: StoryCheckEngine rehydrates persisted RNG state after engine recreation', () => {
+	const storyId = 'phase12_story_check_rehydrate';
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	repository.seedStory(storyId);
+
+	const character = {
+		coreStats: {
+			level: 1,
+			strength: 10,
+			dexterity: 10,
+			constitution: 10,
+			intelligence: 16,
+			wisdom: 12,
+			charisma: 10,
+			ac: 10,
+			speed: 30,
+			hitDice: '1d10',
+			hpCurrent: 10,
+			hpMax: 10,
+		},
+		skills: [],
+	};
+
+	const engine = repository.getStoryCheckEngine(storyId);
+	const first = engine.resolve(storyId, 'I inspect the markings on the wall.', character);
+	assert.ok(first);
+
+	repository.saveStoryRun(repository.getStoryRun(storyId)!);
+	(repository as any).storyCheckEngines.delete(storyId);
+
+	const rehydrated = repository.getStoryCheckEngine(storyId);
+	const second = rehydrated.resolve(storyId, 'I inspect the markings on the wall.', character);
+	assert.ok(second);
+
+	assert.equal(first!.roll.rollId, 'roll_1');
+	assert.equal(second!.roll.rollId, 'roll_2');
+	assert.equal(rehydrated.exportState()[storyId].rollCounter, 2);
+});
+
+test('Phase 12: production narration still exposes the deterministic emergency floor to the player', async () => {
+	const storyId = 'phase12_production_emergency_floor';
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	repository.seedStory(storyId);
+
+	const orchestrator = createTestOrchestrator(repository);
+	orchestrator.setFallbackChain('narrative.generate', [
+		'provider_deterministic_emergency::emergency-fallback-local',
+	]);
+
+	const previousNodeEnv = process.env.NODE_ENV;
+	try {
+		process.env.NODE_ENV = 'production';
+		const result = await orchestrator.generateNarrativeOnly({
+			storyId,
+			playerAction: 'Continue forward.',
+			hardTokenBudget: 1100,
+			maxRetries: 0,
+		});
+
+		assert.equal(result.success, true);
+		assert.equal(result.source, 'DETERMINISTIC_FALLBACK');
+		assert.equal(result.modelId, 'emergency-fallback-local');
+		assert.ok((result.turnPackage?.narrative.join(' ') || '').length > 0);
+	} finally {
+		if (previousNodeEnv === undefined) {
+			delete process.env.NODE_ENV;
+		} else {
+			process.env.NODE_ENV = previousNodeEnv;
+		}
+	}
+});

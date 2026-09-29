@@ -3485,6 +3485,13 @@ export class MultiModelOrchestrator {
     // Seed standard OpenRouter models
     const openrouterConfigured = Boolean(getProviderApiKey('openrouter'));
     const openRouterDefaults = [
+      {
+        id: 'openrouter/free',
+        name: 'OpenRouter Free (Free Router)',
+        pool: 'creative' as ModelPool,
+        window: 128000,
+        freeRouter: true,
+      },
       { id: 'openrouter/auto', name: 'OpenRouter Auto (Best Available)', pool: 'creative' as ModelPool, window: 128000 },
       { id: 'meta-llama/llama-3.3-70b-instruct', name: 'Llama 3.3 70B Instruct', pool: 'creative' as ModelPool, window: 131072 },
       { id: 'deepseek/deepseek-r1', name: 'DeepSeek R1 (Reasoning)', pool: 'reasoning' as ModelPool, window: 64000 },
@@ -3521,6 +3528,9 @@ export class MultiModelOrchestrator {
         fallbackEligibility: true,
         accessStatus: openrouterConfigured ? 'accessible' : 'not_configured',
         lifecycleState: 'active',
+        isPaidModel: (orm as any).freeRouter ? undefined : undefined,
+        freeTierStatus: (orm as any).freeRouter ? 'UNKNOWN' : undefined,
+        freeTierEvidenceSource: (orm as any).freeRouter ? 'UNKNOWN' : undefined,
         isEmergencyFloor: false,
       });
     }

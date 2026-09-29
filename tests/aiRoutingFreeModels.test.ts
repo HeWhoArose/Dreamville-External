@@ -38,13 +38,26 @@ test('free-model classification requires provider evidence', () => {
 	assert.equal(MultiModelOrchestrator.isFreeModelCandidate(verifiedFree), true);
 });
 
-test('verified free catalog excludes paid Gemini 3.8 and includes verified Gemini free models', () => {
+test('verified free catalog includes provider-verified Gemini 3.8 and other Gemini free models', () => {
 	process.env.NODE_TEST_CONTEXT = '1';
 	const orchestrator = new MultiModelOrchestrator();
 	const catalog = orchestrator.getFreeModelCatalog();
 	const keys = new Set(catalog.map((entry) => entry.providerId + '::' + entry.modelId));
 
-	assert.equal(keys.has('google_gemini::gemini-3.8-flash'), false);
+	assert.equal(keys.has('google_gemini::gemini-3.8-flash'), true);
 	assert.equal(keys.has('google_gemini::gemini-3.5-flash'), true);
 	assert.equal(keys.has('google_gemini::gemini-3.5-flash-lite'), true);
+});
+
+
+test('Gemini 3.8 carries the configured project rate limits', () => {
+	process.env.NODE_TEST_CONTEXT = '1';
+	const orchestrator = new MultiModelOrchestrator();
+	const model = orchestrator.getModel('google_gemini', 'gemini-3.8-flash');
+	assert.ok(model);
+	assert.equal(model?.isPaidModel, false);
+	assert.equal(model?.freeTierStatus, 'VERIFIED');
+	assert.equal(model?.freeTierEvidenceSource, 'PROVIDER');
+	assert.equal(model?.configuredLimits?.requestsPerMinute, 60);
+	assert.equal(model?.configuredLimits?.tokensPerMinute, 100000);
 });

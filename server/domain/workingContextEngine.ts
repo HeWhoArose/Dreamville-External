@@ -380,7 +380,7 @@ export class WorkingContextEngine {
     const contextNeeds = deriveNarrationContextNeeds({
       actionText,
       npcTargetId: params.npcTargetId,
-      isInCombat,
+      isInCombat: false,
     });
 
     // 4. Player State & Physiology
@@ -419,6 +419,7 @@ export class WorkingContextEngine {
     const tacticalCombatAllowed = rulesProfile ? rulesProfileEngine.allowsDndTacticalCombat(rulesProfile) : true;
     const combatParticipants = tacticalCombatAllowed ? projectedCombat.participants : [];
     const isInCombat = combatParticipants.length > 0;
+    contextNeeds.includeCombat = contextNeeds.includeCombat || isInCombat;
     if (isInCombat && contextNeeds.includeCombat) {
       const currentActor = projectedCombat.currentActor;
       conditions.push(`Combat Active (Round: ${projectedCombat.currentRound}, Actor: ${currentActor?.name || currentActor?.id || 'None'})`);

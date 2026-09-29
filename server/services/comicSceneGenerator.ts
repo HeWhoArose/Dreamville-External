@@ -21,6 +21,7 @@ export interface ComicSceneContext {
   latestAction?: {
     id?: string;
     actionType?: string;
+    visualCues?: string[];
     description?: string;
     narrativeResponse?: string;
     authoritativeFeedback?: string;
@@ -50,6 +51,7 @@ export interface ComicSceneVisualMoment {
   immediateVisibleResult?: string;
   currentDialogue?: string;
   supportingNarrative?: string;
+  visualBeats?: string[];
   canonicalOutcome?: "SUCCESS" | "FAILURE";
 };
 
@@ -106,6 +108,7 @@ export function resolveComicSceneVisualMoment(context: ComicSceneContext): Comic
       immediateVisibleResult: consequence || narrative || undefined,
       currentDialogue,
       supportingNarrative: narrative || undefined,
+      visualBeats: (latest.visualCues || []).map((cue) => cleanText(cue)).filter(Boolean).slice(0, 4),
       canonicalOutcome:
         typeof latest.checkResult?.success === "boolean"
           ? (latest.checkResult.success ? "SUCCESS" : "FAILURE")
@@ -124,6 +127,7 @@ export function resolveComicSceneVisualMoment(context: ComicSceneContext): Comic
       context.location.region ? "— " + context.location.region : "",
     ].filter(Boolean).join(" "),
     supportingNarrative: openingNarrative || undefined,
+    visualBeats: openingNarrative ? [openingNarrative] : [],
   };
 }
 
@@ -136,9 +140,17 @@ export function buildComicScenePrompt(context: ComicSceneContext): ComicScenePro
     latest?.narrativeResponse || latest?.authoritativeFeedback || context.latestVisibleNarrative
   );
 
+  const visualBeats = visualMoment.visualBeats?.length
+    ? visualMoment.visualBeats
+    : [visualMoment.primaryAction + (visualMoment.immediateVisibleResult ? " " + visualMoment.immediateVisibleResult : "")];
+
   const characterList = visualMoment.visibleCharacters.length
     ? visualMoment.visibleCharacters.map((character) => "- " + character).join("\n")
     : "- No additional visible characters.";
+
+  const panelInstructions = visualBeats.slice(0, 4).map((beat, index) =>
+    "Panel " + (index + 1) + ": depict ONLY this chronological visual beat from the current turn: " + beat
+  );
 
   const outcomeInstruction =
     visualMoment.canonicalOutcome === "FAILURE"
@@ -158,7 +170,9 @@ export function buildComicScenePrompt(context: ComicSceneContext): ComicScenePro
     "",
     "CURRENT SCENE VISUAL BRIEF",
     "The following is the exact current visual moment. It is the only story moment that may be depicted.",
-    "EXACT CURRENT VISUAL MOMENT",
+    "EXACT CURRENT TURN VISUAL SEQUENCE",
+    "The following panels represent only the current committed turn. They are chronological parts of one turn, not prior-scene recap.",
+    ...panelInstructions,
     "Primary action: " + visualMoment.primaryAction,
     "Location: " + visualMoment.location + ".",
     "Visible characters:",
@@ -175,7 +189,9 @@ export function buildComicScenePrompt(context: ComicSceneContext): ComicScenePro
     "COMPOSITION",
     "Choose the camera angle, framing, pose, and character placement specifically for this exact current moment.",
     "Make the primary action visually unmistakable.",
-    "Do not use an establishing panel followed by a different action panel. This is one comic-book panel depicting one current moment.",
+    "Use exactly " + panelInstructions.length + " panel" + (panelInstructions.length === 1 ? "" : "s") + ".",
+    "Every panel must depict one supplied current-turn visual beat and nothing else.",
+    "Do not add panels for setup, recap, or future events.",
     "Do not reuse the previous image composition merely because the location or characters are the same.",
     "",
     "CONTINUITY",
@@ -206,7 +222,7 @@ export function buildComicScenePrompt(context: ComicSceneContext): ComicScenePro
     prompt,
     sourceActionId: latest?.id,
     sourceNarration,
-    panelCount: 1,
+    panelCount: Math.max(1, Math.min(4, visualBeats.length)),
     aspectRatio: "16:9",
     freshnessRule: "Exact current visual moment only; committed-turn state overrides opening/previous-scene context.",
     visualMoment,

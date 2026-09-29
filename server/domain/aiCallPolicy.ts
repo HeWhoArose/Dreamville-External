@@ -212,7 +212,7 @@ export class AiCallBudget {
 	}
 
 	private isRoleCompatibleWithTask(task: string, role: AiHelperRole): boolean {
-		if (role === 'INTENT_INTERPRET') return task === 'intent.interpret';
+		if (role === 'INTENT_INTERPRET' || role === 'SEMANTIC_REPAIR') return task === 'intent.interpret';
 		return task === 'capability.synthesize';
 	}
 

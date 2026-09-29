@@ -49,7 +49,9 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
   const [phase12Operations, setPhase12Operations] = useState<any>(null);
   const [autoArrangeResult, setAutoArrangeResult] = useState<any>(null);
   const [autoArrangeLoading, setAutoArrangeLoading] = useState(false);
-  const [includeFreeModels, setIncludeFreeModels] = useState(false);
+  const [includeFreeModels, setIncludeFreeModels] = useState(true);
+  const [aiFreeAssignLoading, setAiFreeAssignLoading] = useState(false);
+  const [aiFreeAssignResult, setAiFreeAssignResult] = useState<any>(null);
   const [diagnosticPopup, setDiagnosticPopup] = useState<{
     title: string;
     payload: unknown;
@@ -111,6 +113,21 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
       await loadData();
     } catch (err: any) {
       setError(err?.message || 'Failed to update AI category model.');
+    }
+  };
+
+  const handleAiFreeAssign = async () => {
+    setAiFreeAssignLoading(true);
+    setError(null);
+    setAiFreeAssignResult(null);
+    try {
+      const result = await apiClient.aiAssignFreeModels({ maxFallbacksPerCategory: 4, concurrency: 4 });
+      setAiFreeAssignResult(result);
+      await loadData();
+    } catch (err: any) {
+      setError(err?.message || 'AI free-model assignment failed');
+    } finally {
+      setAiFreeAssignLoading(false);
     }
   };
 
@@ -249,6 +266,16 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
 
             <div className="flex items-center space-x-2">
               <button
+                id="routing-ai-free-assign-btn"
+                onClick={() => void handleAiFreeAssign()}
+                disabled={aiFreeAssignLoading || autoArrangeLoading || loading}
+                className="px-3 py-1.5 rounded-md bg-cyan-500/15 border border-cyan-500/30 hover:bg-cyan-500/25 text-cyan-200 text-[11px] font-mono transition flex items-center gap-2"
+                title="Verify free models, use a free Gemini model to classify which categories each model fits, then rebuild free-only fallback routes"
+              >
+                <Sparkles className={`w-3.5 h-3.5 ${aiFreeAssignLoading ? 'animate-spin' : ''}`} />
+                <span>{aiFreeAssignLoading ? 'AI Assigning…' : 'AI Assign Free Models'}</span>
+              </button>
+              <button
                 id="routing-auto-arrange-btn"
                 onClick={() => void handleAutoArrange()}
                 disabled={autoArrangeLoading || loading}
@@ -265,8 +292,8 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
                   onChange={(event) => setIncludeFreeModels(event.target.checked)}
                   className="h-3 w-3 accent-emerald-500"
                 />
-                <span title="Prioritize models verified for this task/category that are explicitly free, marked FREE by billing metadata, or contain 'free' in their model name.">
-                  Include free models
+                <span title="Only provider-verified free-tier models qualify. A model name containing 'free' is not sufficient evidence.">
+                  Free models only
                 </span>
               </label>
               <button
@@ -445,7 +472,18 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
                   </div>
                 </div>
 
-                {autoArrangeResult && (
+                {aiFreeAssignResult && (
+                  <div className="rounded-lg border border-cyan-500/20 bg-cyan-950/10 p-3 text-[10px] text-cyan-100/80">
+                    <div className="font-semibold text-cyan-200">AI Free-Model Assignment</div>
+                    <div className="mt-1">{aiFreeAssignResult.summaryMessage || 'AI routing analysis completed.'}</div>
+                    {aiFreeAssignResult.classifier && (
+                      <div className="mt-1 text-stone-500">Classifier: {aiFreeAssignResult.classifier.displayName} ({aiFreeAssignResult.classifier.providerId})</div>
+                    )}
+                    <div className="mt-1 text-stone-500">{aiFreeAssignResult.freeModels?.length || 0} provider-verified free models passed readiness checks.</div>
+                  </div>
+                )}
+
+               {autoArrangeResult && (
                   <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
                     <div className="flex items-center justify-between gap-3">
                       <div>

@@ -324,6 +324,7 @@ export class StoryActionAdvisor {
 		storyId: string,
 		actionText: string,
 		sceneContext?: StoryActionSceneContext,
+		options?: { allowAiTips?: boolean },
 	): Promise<ActionAdvice> {
 		const player = this.repository.getPlayerLifecycle(storyId);
 		const run = this.repository.getStoryRun(storyId);
@@ -398,6 +399,7 @@ export class StoryActionAdvisor {
 			actionText,
 			actorCapabilities,
 			canonicalSceneContext,
+			options?.allowAiTips ?? false,
 		);
 
 		// Player-owned capabilities always win first. The global registry is never
@@ -936,6 +938,7 @@ export class StoryActionAdvisor {
 		actionText: string,
 		actorCapabilities: EffectiveCapability[],
 		sceneContext?: StoryActionSceneContext,
+		allowAiTips = false,
 	): Promise<ActionTip[]> {
 		const run = this.repository.getStoryRun(storyId);
 		const location = this.repository.getGeographyGraph(storyId)
@@ -1018,91 +1021,94 @@ export class StoryActionAdvisor {
 			source: 'DETERMINISTIC' as const,
 		}));
 
-		try {
-			const actorSummary = [
-				run?.protagonist?.role?.profession,
-				run?.protagonist?.role?.archetype,
-				run?.protagonist?.title,
-				...(run?.protagonist?.personality?.traits || []),
-				...(run?.protagonist?.motivations?.goals || []),
-			].filter(Boolean).join(', ');
-
-			const capabilitySummary = actorCapabilities
-				.slice(0, 18)
-				.map((capability) => `-${capability.name}: ${capability.description}`)
-				.join('\n');
-
-			const currentScene = [
-				sceneContext?.worldTime ? `World time: ${sceneContext.worldTime}` : '',
-				sceneContext?.locationName ? `Current location: ${sceneContext.locationName}` : '',
-				sceneContext?.locationRegion ? `Region: ${sceneContext.locationRegion}` : '',
-				sceneContext?.locationDescription ? `Location description: ${sceneContext.locationDescription}` : '',
-				sceneContext?.startingSituation ? `Starting/current situation: ${sceneContext.startingSituation}` : '',
-				sceneContext?.openingNarrative ? `Recent scene narration: ${sceneContext.openingNarrative}` : '',
-				sceneContext?.activeDialogue ? `Active dialogue: ${sceneContext.activeDialogue}` : '',
-				sceneContext?.recentActions?.length
-					? `Recent player actions:\n${sceneContext.recentActions.map((entry) => '- ' + entry).join('\n')}`
-					: '',
-			].filter(Boolean).join('\n');
-
-			const prompt =
-				`You are the gameplay suggestion assistant for an AI RPG.\n` +
-				`Give the player 2 to 4 actionable possibilities for the current situation.\nEvery suggestion MUST be grounded in a concrete visible scene cue such as location, terrain, danger, anomaly, dialogue, recent consequence, visible object, or environmental condition.\nDo NOT output a generic "use a known ability" suggestion unless the ability is explicitly connected to the current situation and explains why it is useful here.\nWhen the scene contains an active problem, vary suggestions across investigation, social interaction, movement/positioning, environmental interaction, and relevant known abilities when supported by the scene.\n` +
-				`Suggestions should react to the supplied visible scene, not generic RPG advice.\n` +
-				`Use the supplied character capabilities when relevant, but basic physical, social, stealth, environmental, and tactical actions are allowed when the scene supports them.\n` +
-				`Do not invent hidden information, unavailable items, learned abilities, enemies, or guaranteed outcomes.\n` +
-				`If an action would require a capability the character does not have, phrase it as an attempt only if the player could reasonably attempt that action without possessing a special ability.\n` +
-				`Return ONLY JSON: {"tips":[{"title":"short title","description":"one concise explanation","actionText":"what the player could type"}]}.\n\n` +
-				`Character: ${actorSummary || 'unspecified'}\n` +
-				`Current visible scene:\n${currentScene || '- unavailable'}\n\n` +
-				`Current player action: ${actionText || '- none'}\n` +
-				`Known capabilities:\n${capabilitySummary || '- none'}`;
-
-			const orchestrator = this.repository.getAiOrchestrator();
-			const response = await orchestrator.executeTaskGeneration(
-				'story.advice',
-				prompt,
-				'Return only the requested JSON object with 2 to 4 tips.',
-				{
-					timeoutMs: 3500,
-					contextTokens: Math.min(6000, Math.ceil(prompt.length / 4)),
-					validateResponse: (text) => {
-						try {
-							const parsed = JSON.parse(text);
-							return Array.isArray(parsed?.tips) && parsed.tips.length >= 1
-								? { valid: true }
-								: { valid: false, errorReason: 'Advice JSON must contain a non-empty tips array.' };
-						} catch {
-							return { valid: false, errorReason: 'Advice response was not valid JSON.' };
+		if (allowAiTips) {
+					try {
+						const actorSummary = [
+							run?.protagonist?.role?.profession,
+							run?.protagonist?.role?.archetype,
+							run?.protagonist?.title,
+							...(run?.protagonist?.personality?.traits || []),
+							...(run?.protagonist?.motivations?.goals || []),
+						].filter(Boolean).join(', ');
+			
+						const capabilitySummary = actorCapabilities
+							.slice(0, 18)
+							.map((capability) => `-${capability.name}: ${capability.description}`)
+							.join('\n');
+			
+						const currentScene = [
+							sceneContext?.worldTime ? `World time: ${sceneContext.worldTime}` : '',
+							sceneContext?.locationName ? `Current location: ${sceneContext.locationName}` : '',
+							sceneContext?.locationRegion ? `Region: ${sceneContext.locationRegion}` : '',
+							sceneContext?.locationDescription ? `Location description: ${sceneContext.locationDescription}` : '',
+							sceneContext?.startingSituation ? `Starting/current situation: ${sceneContext.startingSituation}` : '',
+							sceneContext?.openingNarrative ? `Recent scene narration: ${sceneContext.openingNarrative}` : '',
+							sceneContext?.activeDialogue ? `Active dialogue: ${sceneContext.activeDialogue}` : '',
+							sceneContext?.recentActions?.length
+								? `Recent player actions:\n${sceneContext.recentActions.map((entry) => '- ' + entry).join('\n')}`
+								: '',
+						].filter(Boolean).join('\n');
+			
+						const prompt =
+							`You are the gameplay suggestion assistant for an AI RPG.\n` +
+							`Give the player 2 to 4 actionable possibilities for the current situation.\nEvery suggestion MUST be grounded in a concrete visible scene cue such as location, terrain, danger, anomaly, dialogue, recent consequence, visible object, or environmental condition.\nDo NOT output a generic "use a known ability" suggestion unless the ability is explicitly connected to the current situation and explains why it is useful here.\nWhen the scene contains an active problem, vary suggestions across investigation, social interaction, movement/positioning, environmental interaction, and relevant known abilities when supported by the scene.\n` +
+							`Suggestions should react to the supplied visible scene, not generic RPG advice.\n` +
+							`Use the supplied character capabilities when relevant, but basic physical, social, stealth, environmental, and tactical actions are allowed when the scene supports them.\n` +
+							`Do not invent hidden information, unavailable items, learned abilities, enemies, or guaranteed outcomes.\n` +
+							`If an action would require a capability the character does not have, phrase it as an attempt only if the player could reasonably attempt that action without possessing a special ability.\n` +
+							`Return ONLY JSON: {"tips":[{"title":"short title","description":"one concise explanation","actionText":"what the player could type"}]}.\n\n` +
+							`Character: ${actorSummary || 'unspecified'}\n` +
+							`Current visible scene:\n${currentScene || '- unavailable'}\n\n` +
+							`Current player action: ${actionText || '- none'}\n` +
+							`Known capabilities:\n${capabilitySummary || '- none'}`;
+			
+						const orchestrator = this.repository.getAiOrchestrator();
+						const response = await orchestrator.executeTaskGeneration(
+							'story.advice',
+							prompt,
+							'Return only the requested JSON object with 2 to 4 tips.',
+							{
+								timeoutMs: 3500,
+								contextTokens: Math.min(6000, Math.ceil(prompt.length / 4)),
+								validateResponse: (text) => {
+									try {
+										const parsed = JSON.parse(text);
+										return Array.isArray(parsed?.tips) && parsed.tips.length >= 1
+											? { valid: true }
+											: { valid: false, errorReason: 'Advice JSON must contain a non-empty tips array.' };
+									} catch {
+										return { valid: false, errorReason: 'Advice response was not valid JSON.' };
+									}
+								},
+							}
+						);
+			
+						const parsed = JSON.parse(response.text);
+						if (Array.isArray(parsed?.tips)) {
+							const aiTips = parsed.tips
+								.filter((tip: any) => tip && typeof tip.title === 'string' && typeof tip.description === 'string' && typeof tip.actionText === 'string')
+								.slice(0, 4)
+								.map((tip: any, index: number) => ({
+									id: deterministicId('ai_action_tip', storyId, actorId, actionText, String(index), tip.title),
+									title: tip.title.trim(),
+									description: tip.description.trim(),
+									intent: tip.actionText.trim(),
+									actionText: tip.actionText.trim(),
+									source: 'AI' as const,
+								}));
+							if (aiTips.length > 0) {
+								const groundedAiTips = aiTips.filter((tip: ActionTip) => {
+									const haystack = normalize(tip.title + ' ' + tip.description + ' ' + tip.actionText);
+									const cueWords = sceneSources.flatMap((cue) => normalize(cue).split(/\s+/)).filter((word) => word.length >= 5);
+									return cueWords.length === 0 || cueWords.some((word) => haystack.includes(word));
+								});
+								if (groundedAiTips.length > 0) return [...groundedAiTips, ...deterministicTips].slice(0, 4);
+							}
 						}
-					},
-				}
-			);
-
-			const parsed = JSON.parse(response.text);
-			if (Array.isArray(parsed?.tips)) {
-				const aiTips = parsed.tips
-					.filter((tip: any) => tip && typeof tip.title === 'string' && typeof tip.description === 'string' && typeof tip.actionText === 'string')
-					.slice(0, 4)
-					.map((tip: any, index: number) => ({
-						id: deterministicId('ai_action_tip', storyId, actorId, actionText, String(index), tip.title),
-						title: tip.title.trim(),
-						description: tip.description.trim(),
-						intent: tip.actionText.trim(),
-						actionText: tip.actionText.trim(),
-						source: 'AI' as const,
-					}));
-				if (aiTips.length > 0) {
-					const groundedAiTips = aiTips.filter((tip: ActionTip) => {
-						const haystack = normalize(tip.title + ' ' + tip.description + ' ' + tip.actionText);
-						const cueWords = sceneSources.flatMap((cue) => normalize(cue).split(/\s+/)).filter((word) => word.length >= 5);
-						return cueWords.length === 0 || cueWords.some((word) => haystack.includes(word));
-					});
-					if (groundedAiTips.length > 0) return [...groundedAiTips, ...deterministicTips].slice(0, 4);
-				}
-			}
-		} catch {
-			// Deterministic suggestions remain the guaranteed fallback.
+					} catch {
+						// Deterministic suggestions remain the guaranteed fallback.
+					}
+			
 		}
 
 		const baselineTips: ActionTip[] = [

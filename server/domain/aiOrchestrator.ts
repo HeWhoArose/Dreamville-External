@@ -7989,7 +7989,7 @@ export class MultiModelOrchestrator {
     maxFallbacksPerCategory?: number;
     concurrency?: number;
   }): Promise<any> {
-    const previousChains = new Map<string, string[]>(Array.from(this.taskFallbackChains.entries()).map(([task, chain]) => [task, [...chain]]));
+    const previousChains = new Map<TaskId, string[]>(Array.from(this.taskFallbackChains.entries()).map(([task, chain]) => [task, [...chain]] as [TaskId, string[]]));
     const maxFallbacks = Math.max(2, Math.min(6, Math.trunc(options?.maxFallbacksPerCategory ?? 4)));
     const verification = await this.autoConfigureFallbacks({ maxFallbacksPerCategory: maxFallbacks, concurrency: options?.concurrency ?? 4, includeFreeModels: true, freeOnly: true });
 

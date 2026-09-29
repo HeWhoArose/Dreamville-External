@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
+import { DEFAULT_DICE_THEME, DiceThemeId } from './common/diceThemes';
 
 export type HapticIntensity = 'off' | 'light' | 'medium' | 'heavy';
 export type NarrationMode = 'auto' | 'dialogue-only' | 'off';
@@ -17,6 +18,7 @@ export interface AudioSettings {
   autoplay: boolean;
   dataSavingMode: boolean;
   hapticIntensity: HapticIntensity;
+  diceTheme: DiceThemeId;
 }
 
 export interface QueuedAudioEvent {
@@ -67,6 +69,7 @@ export const AudioHapticProvider: React.FC<{ children: React.ReactNode }> = ({ c
       autoplay: false,
       dataSavingMode: false,
       hapticIntensity: 'medium',
+      diceTheme: DEFAULT_DICE_THEME,
     };
 
     try {
@@ -89,6 +92,7 @@ export const AudioHapticProvider: React.FC<{ children: React.ReactNode }> = ({ c
           autoplay: typeof parsed.autoplay === 'boolean' ? parsed.autoplay : defaultSettings.autoplay,
           dataSavingMode: typeof parsed.dataSavingMode === 'boolean' ? parsed.dataSavingMode : defaultSettings.dataSavingMode,
           hapticIntensity: parsed.hapticIntensity || defaultSettings.hapticIntensity,
+          diceTheme: typeof parsed.diceTheme === 'string' ? parsed.diceTheme as DiceThemeId : defaultSettings.diceTheme,
         };
       }
     } catch {

@@ -191,7 +191,7 @@ export class WorkingContextEngine {
         const idleChunk = { ...chunk, blockStatus: 'IDLE' as const };
         idle.push(idleChunk);
         evicted.push(`${chunk.label} (${chunk.band})`);
-        evictionReasons[chunk.label] = `Idle: higher-priority band eviction closed this block from the current prompt`;
+        evictionReasons[chunk.label] = `Disallowed from backfilling budget after higher-priority band eviction; block is IDLE.`;
         continue;
       }
 

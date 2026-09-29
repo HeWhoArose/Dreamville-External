@@ -925,3 +925,103 @@ test('Phase 12 regression: narrative fallback chain contains the configured Open
 	assert.ok(Array.isArray(config.fallbackChains?.['narrative.generate']));
 	assert.ok(config.fallbackChains['narrative.generate'].includes('openrouter::openrouter/free'));
 });
+
+
+test('Phase 12: canonical scene anchor is preserved in narration context', async () => {
+	const storyId = 'phase12_scene_anchor';
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	repository.seedStory(storyId);
+	const player = repository.getPlayerLifecycle(storyId)!;
+	const location = repository.getGeographyGraph(storyId).getNode(player.locationId);
+	assert.ok(location);
+
+	const orchestrator = createTestOrchestrator(repository);
+	const observer = new DeterministicMockAdapter('phase12_scene_anchor_provider');
+	observer.cannedResponses.set('narrative.generate', JSON.stringify({
+		narrative: [`The scene remains centered on ${location!.name}, with the immediate surroundings responding to your movement.`],
+		dialogue: [],
+		events: [],
+		stateChanges: [],
+		memoryCandidates: [],
+		audioCues: [],
+	}));
+	orchestrator.registerAdapter(observer);
+	orchestrator.registerModel(model('phase12_scene_anchor_provider', 'scene-anchor-model', ['narrative.generate']));
+	orchestrator.setFallbackChain('narrative.generate', [
+		'phase12_scene_anchor_provider::scene-anchor-model',
+		'provider_deterministic_emergency::emergency-fallback-local',
+	]);
+
+	const result = await orchestrator.generateNarrativeOnly({
+		storyId,
+		playerAction: 'Continue toward the passage.',
+		hardTokenBudget: 1100,
+		maxRetries: 0,
+	});
+
+	assert.equal(result.success, true);
+	const prompt = observer.callHistory[0]?.prompt || '';
+	assert.match(prompt, /CANONICAL CURRENT SCENE ANCHOR/i);
+	assert.equal(prompt.includes(location!.name), true);
+	assert.match(prompt, /canonical game state has already committed a location change/i);
+});
+
+test('Phase 12: narration scene drift is rejected and falls through to the next model', async () => {
+	const storyId = 'phase12_scene_drift';
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	repository.seedStory(storyId);
+	const player = repository.getPlayerLifecycle(storyId)!;
+	const location = repository.getGeographyGraph(storyId).getNode(player.locationId);
+	assert.ok(location);
+
+	const orchestrator = createTestOrchestrator(repository);
+	const drift = new DeterministicMockAdapter('phase12_scene_drift_provider');
+	drift.cannedResponses.set('narrative.generate', JSON.stringify({
+		narrative: ['Dust motes drift through a sunlit fortress courtyard beneath tall clerestory windows as the corridor opens into a completely different stone hall.'],
+		dialogue: [],
+		events: [],
+		stateChanges: [],
+		memoryCandidates: [],
+		audioCues: [],
+	}));
+
+	const recovery = new DeterministicMockAdapter('phase12_scene_recovery_provider');
+	recovery.cannedResponses.set('narrative.generate', JSON.stringify({
+		narrative: [`The surroundings remain rooted in ${location!.name} as the passage draws your attention deeper into the same place.`],
+		dialogue: [],
+		events: [],
+		stateChanges: [],
+		memoryCandidates: [],
+		audioCues: [],
+	}));
+
+	orchestrator.registerAdapter(drift);
+	orchestrator.registerAdapter(recovery);
+	orchestrator.registerModel(model('phase12_scene_drift_provider', 'drift-model', ['narrative.generate']));
+	orchestrator.registerModel(model('phase12_scene_recovery_provider', 'recovery-model', ['narrative.generate']));
+	orchestrator.setFallbackChain('narrative.generate', [
+		'phase12_scene_drift_provider::drift-model',
+		'phase12_scene_recovery_provider::recovery-model',
+		'provider_deterministic_emergency::emergency-fallback-local',
+	]);
+
+	const result = await orchestrator.generateNarrativeOnly({
+		storyId,
+		playerAction: 'Continue toward the passage.',
+		hardTokenBudget: 1100,
+		maxRetries: 0,
+	});
+
+	assert.equal(result.success, true);
+	assert.equal(result.source, 'AI_FALLBACK');
+	assert.equal(result.modelId, 'recovery-model');
+	assert.equal(drift.callHistory.length, 1);
+	assert.equal(recovery.callHistory.length, 1);
+
+	const driftRuntime = orchestrator.getModelRuntimeStatus().find(
+		(entry) => entry.modelId === 'drift-model'
+	);
+	assert.ok(driftRuntime);
+	assert.equal(driftRuntime?.failureCount >= 1, true);
+	assert.match(driftRuntime?.lastFailureReason || '', /scene continuity|canonical location/i);
+});

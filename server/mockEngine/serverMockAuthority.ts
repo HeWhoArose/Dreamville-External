@@ -1032,6 +1032,7 @@ The moment does not end so much as shift, leaving the scene open to whatever the
             description: `Player selected: "${request.label}"`,
             epistemicValidation: 'MOCK_ENGINE_COMMITTED',
             authoritativeFeedback,
+            presentationFeedback,
           };
         } else {
           success = false;
@@ -1274,7 +1275,8 @@ The moment does not end so much as shift, leaving the scene open to whatever the
         const activeLoc =
           worldRepository.getGeographyGraph().getAllNodes().find(n => n.id === state.activeLocationId) || worldRepository.getGeographyGraph().getAllNodes()[0];
         message = `Inspected surroundings at ${activeLoc.name}.`;
-        authoritativeFeedback = `Server emitted ambient sensory narrative: "${activeLoc.ambientSensory}"`;
+        const presentationFeedback = activeLoc.ambientSensory || activeLoc.description || activeLoc.name;
+        authoritativeFeedback = `Server emitted ambient sensory narrative: "${presentationFeedback}"`;
         logEntry = {
           id: actionId,
           timestamp: now,
@@ -1283,6 +1285,7 @@ The moment does not end so much as shift, leaving the scene open to whatever the
           description: `Scanned surrounding environment at ${activeLoc.name}.`,
           epistemicValidation: 'MOCK_ENGINE_COMMITTED',
           authoritativeFeedback,
+          presentationFeedback,
         };
         break;
       }

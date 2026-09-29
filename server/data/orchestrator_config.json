@@ -1,29 +1,7 @@
 {
   "pins": {
-    "narrative.generate": "groq::qwen/qwen3.8-27b",
-    "character.dialogue": "groq::qwen/qwen3.8-27b",
-    "memory.extract": "google_gemini::gemini-3.5-flash-lite",
-    "summary.scene": "google_gemini::gemini-3.5-flash-lite",
-    "rules.adjudicate": "groq::openai/gpt-oss-120b",
-    "utility.inspect": "google_gemini::gemini-3.5-flash-lite",
     "speech.generate": "provider_mock_speech::mock-speech-v1",
-    "image.generate": "google_imagen::imagen-3.0-generate-002",
-    "speech.transcribe": "provider_mock_stt::mock-stt-v1",
-    "world.generate": "groq::qwen/qwen3.8-27b",
-    "intent.interpret": "google_gemini::gemini-3.5-flash-lite",
-    "capability.synthesize": "groq::openai/gpt-oss-120b",
-    "capability.explain": "google_gemini::gemini-3.5-flash-lite",
-    "research.query": "groq::openai/gpt-oss-120b",
-    "research.world-brief": "groq::openai/gpt-oss-120b",
-    "rules.analyze": "groq::openai/gpt-oss-120b",
-    "tactical.reason": "groq::openai/gpt-oss-120b",
-    "character.extract": "google_gemini::gemini-3.5-flash-lite",
-    "combat.tactics": "groq::openai/gpt-oss-120b",
-    "character.capability.propose": "groq::openai/gpt-oss-120b",
-    "ooc.respond": "groq::qwen/qwen3.8-27b",
-    "narrative.review": "groq::qwen/qwen3.8-27b",
-    "combat.animation.plan": "groq::qwen/qwen3.8-27b",
-    "story.advice": "groq::qwen/qwen3.8-27b"
+    "image.generate": "google_imagen::imagen-3.0-generate-002"
   },
   "fallbackChains": {
     "ooc.respond": [

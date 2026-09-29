@@ -2,6 +2,7 @@ import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { RollRecord } from '../../types';
 import { Dices, Loader2, RotateCw } from 'lucide-react';
 import { useAudioHaptic } from '../AudioHapticManager';
+import { getDiceThemePreset } from './diceThemes';
 
 interface DiceRollAnimationProps {
 	roll: RollRecord;
@@ -15,9 +16,14 @@ interface DiceRollAnimationProps {
 	resultSuffix?: string;
 	showRollButton?: boolean;
 	autoReveal?: boolean;
+	revealedOverride?: boolean;
 }
 
 export type DieVisualType = 'D4' | 'D6' | 'D8' | 'D10' | 'D12' | 'D20' | 'D100' | 'GENERIC';
+
+export function resolveDiceRevealState(revealedOverride: boolean | undefined, localRevealed: boolean): boolean {
+	return revealedOverride === true || localRevealed;
+}
 
 export function getDieVisualType(sides: number): DieVisualType {
 	if (sides === 4) return 'D4';
@@ -108,14 +114,16 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 	resultSuffix,
 	showRollButton = true,
 	autoReveal = false,
+	revealedOverride,
 }) => {
-	const { playSfx, triggerHaptic } = useAudioHaptic();
+	const { playSfx, triggerHaptic, settings } = useAudioHaptic();
+	const diceTheme = getDiceThemePreset(settings.diceTheme);
 	const containerId = useId().replace(/:/g, '');
 	const diceBoxRef = useRef<any>(null);
 	const initializationRef = useRef<Promise<any> | null>(null);
 	const [isInitializing, setIsInitializing] = useState(true);
 	const [isRolling, setIsRolling] = useState(false);
-	const [revealed, setRevealed] = useState(false);
+	const [revealed, setRevealed] = useState(Boolean(revealedOverride));
 	const [error, setError] = useState<string | null>(null);
 	const [useCssFallback, setUseCssFallback] = useState(false);
 	const autoRollStartedRef = useRef(false);
@@ -143,7 +151,9 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 					shadows: true,
 					theme_surface: 'green-felt',
 					theme_colorset: 'white',
-					theme_material: 'plastic',
+					theme_customColorset: diceTheme.customColorset,
+					theme_material: diceTheme.material,
+					color_spotlight: diceTheme.spotlight,
 					gravity_multiplier: 400,
 					light_intensity: 0.78,
 					baseScale: 92,
@@ -191,11 +201,15 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 			}
 			diceBoxRef.current = null;
 		};
-	}, []);
+	}, [settings.diceTheme]);
 
 	useEffect(() => {
 		autoRollStartedRef.current = false;
-		setRevealed(false);
+		if (revealedOverride) {
+			setRevealed(true);
+		} else {
+			setRevealed(false);
+		}
 		setError(null);
 		setIsRolling(false);
 		try {
@@ -203,10 +217,12 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 		} catch {
 			// Best-effort visual reset.
 		}
-	}, [roll.rollId]);
+	}, [roll.rollId, revealedOverride, settings.diceTheme]);
+
+	const isRevealed = resolveDiceRevealState(revealedOverride, revealed);
 
 	const startRoll = async () => {
-		if (isRolling || revealed || isInitializing) return;
+		if (isRolling || isRevealed || isInitializing) return;
 
 		setIsRolling(true);
 		setError(null);
@@ -271,11 +287,11 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 	};
 
 	useEffect(() => {
-		if (autoReveal && !isInitializing && !autoRollStartedRef.current && !isRolling && !revealed) {
+		if (autoReveal && !isInitializing && !autoRollStartedRef.current && !isRolling && !isRevealed) {
 			autoRollStartedRef.current = true;
 			void startRoll();
 		}
-	}, [autoReveal, isInitializing, isRolling, revealed]);
+	}, [autoReveal, isInitializing, isRolling, isRevealed]);
 
 	const modifier = roll.modifier || 0;
 	const modifierLabel = modifier > 0 ? `+${modifier}` : String(modifier);
@@ -303,7 +319,7 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 					<button
 						type="button"
 						onClick={startRoll}
-						disabled={isInitializing || isRolling || revealed}
+						disabled={isInitializing || isRolling || isRevealed}
 						className="inline-flex items-center gap-1.5 rounded-xl border border-fuchsia-300/20 bg-gradient-to-r from-violet-400/15 to-fuchsia-400/15 px-3 py-1.5 text-xs font-semibold text-violet-50 transition hover:from-violet-400/25 hover:to-fuchsia-400/25 disabled:cursor-wait disabled:opacity-45"
 					>
 						{isInitializing || isRolling ? (
@@ -311,26 +327,26 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 						) : (
 							<RotateCw className="h-3.5 w-3.5" />
 						)}
-						{isInitializing ? 'Loading…' : isRolling ? 'Rolling…' : revealed ? 'Rolled' : 'Roll'}
+						{isInitializing ? 'Loading…' : isRolling ? 'Rolling…' : isRevealed ? 'Rolled' : 'Roll'}
 					</button>
 				)}
 			</div>
 
 			<div
 				id={containerId}
-				className="relative h-64 overflow-hidden bg-[radial-gradient(circle_at_50%_28%,rgba(255,255,255,0.12),transparent_22%),radial-gradient(circle_at_50%_40%,rgba(52,104,76,0.34),transparent_62%),linear-gradient(180deg,#173625 0%,#0b2116 100%)]"
+				className="relative h-64 overflow-hidden"\n\t\t\t\tstyle={{ background: diceTheme.previewTable }}
 				aria-label={`3D physical dice table for ${roll.formula}`}
 			>
 				{useCssFallback && (
 					<div className="absolute inset-0 flex items-center justify-center">
-						<div className={`relative flex h-28 w-28 items-center justify-center rounded-[24px] border-2 border-white/30 bg-gradient-to-br from-white via-stone-100 to-stone-300 text-5xl font-black text-stone-900 shadow-[0_24px_55px_rgba(0,0,0,0.45)] ${isRolling ? 'animate-[dice-throw_1150ms_cubic-bezier(.2,.8,.25,1)]' : ''}`}>
-							<span>{revealed ? (roll.individualDice[0] ?? total) : 'D20'}</span>
+						<div style={{ background: diceTheme.customColorset.background, color: diceTheme.customColorset.foreground }}\n\t\t\t\t\t\t\tclassName={`relative flex h-28 w-28 items-center justify-center rounded-[24px] border-2 border-white/30 bg-gradient-to-br from-white via-stone-100 to-stone-300 text-5xl font-black text-stone-900 shadow-[0_24px_55px_rgba(0,0,0,0.45)] ${isRolling ? 'animate-[dice-throw_1150ms_cubic-bezier(.2,.8,.25,1)]' : ''}`}>
+							<span>{isRevealed ? (roll.individualDice[0] ?? total) : 'D20'}</span>
 							<div className="absolute inset-[6px] rounded-[18px] border border-stone-400/30" />
 						</div>
 					</div>
 				)}
 				<div className="pointer-events-none absolute inset-x-5 bottom-4 h-10 rounded-[50%] bg-black/30 blur-xl" />
-				{!revealed && !isRolling && (
+				{!isRevealed && !isRolling && (
 					<div className="pointer-events-none absolute inset-0 flex items-end justify-center pb-5">
 						<span className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-[9px] font-bold uppercase tracking-[0.22em] text-white/60 backdrop-blur-sm">
 							{isInitializing ? 'Preparing the table…' : 'Tap Roll to throw'}
@@ -343,8 +359,8 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 				{diceSides.slice(0, 8).map((sides, index) => (
 					<div key={`${roll.rollId}-${index}`} className="rounded-xl border border-white/8 bg-white/[0.03] px-2.5 py-2 text-center">
 						<p className="text-[9px] font-bold uppercase tracking-[0.18em] text-stone-400">D{sides}</p>
-						<p className={`mt-0.5 text-lg font-black ${revealed ? 'text-white' : 'text-stone-600'}`}>
-							{revealed ? roll.individualDice[index] ?? '—' : '•'}
+						<p className={`mt-0.5 text-lg font-black ${isRevealed ? 'text-white' : 'text-stone-600'}`}>
+							{isRevealed ? roll.individualDice[index] ?? '—' : '•'}
 						</p>
 					</div>
 				))}
@@ -360,7 +376,7 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 					)}
 					<div>
 						<p className="text-[9px] font-bold uppercase tracking-[0.18em] text-stone-500">Outcome</p>
-						<p className="mt-0.5 text-sm font-black text-white">{outcome || (revealed ? 'RESULT' : 'READY')}</p>
+						<p className="mt-0.5 text-sm font-black text-white">{outcome || (isRevealed ? 'RESULT' : 'READY')}</p>
 					</div>
 					<div>
 						<p className="text-[9px] font-bold uppercase tracking-[0.18em] text-stone-500">Formula</p>
@@ -379,7 +395,7 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 								? 'Result'
 								: 'Awaiting Roll'}
 				</p>
-				{revealed ? (
+				{isRevealed ? (
 					<>
 						<p className="mt-1 text-4xl font-black tracking-tight">{total}</p>
 						<p className="mt-1 text-[11px] font-medium opacity-75">

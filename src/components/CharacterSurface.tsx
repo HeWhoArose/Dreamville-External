@@ -4,6 +4,8 @@ import { Award, Shield, Sparkles, Zap } from 'lucide-react';
 interface CharacterSurfaceProps {
   protagonist: any;
   powerState: any;
+  /** Character-system skills such as D&D skills, including player-added skills. */
+  characterSkills: any[];
   /** The Skillbook source is actor-owned learned capabilities only. */
   learnedCapabilities: any[];
   skillInstances: any[];
@@ -14,6 +16,7 @@ interface CharacterSurfaceProps {
 export const CharacterSurface: React.FC<CharacterSurfaceProps> = ({
   protagonist,
   powerState,
+  characterSkills,
   learnedCapabilities,
   skillInstances,
   equipment,
@@ -97,6 +100,44 @@ export const CharacterSurface: React.FC<CharacterSurfaceProps> = ({
                     <span>Energy {skill.baseEnergyCost ?? 0}</span>
                     <span>Strain {skill.baseStrainCost ?? 0}</span>
                   </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-3xl border border-sky-400/10 bg-[#0b0813]/95 p-5 shadow-xl">
+        <div className="mb-5 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-sky-300/75">Character skills</p>
+            <h2 className="mt-1 text-xl font-semibold text-white">Skills</h2>
+          </div>
+          <div className="rounded-full border border-sky-400/15 bg-sky-500/10 px-3 py-1 text-xs text-sky-200">
+            {characterSkills.length} known
+          </div>
+        </div>
+        {characterSkills.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.015] p-6 text-center text-sm text-stone-500">
+            No character skills are recorded for this Story Run yet.
+          </div>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            {characterSkills.map((skill: any) => {
+              const proficiency = skill.proficiency || (skill.isExpertise ? 'EXPERTISE' : skill.isProficient ? 'PROFICIENT' : 'NONE');
+              return (
+                <article key={skill.id || skill.name} className="rounded-2xl border border-white/8 bg-white/[0.02] p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="font-semibold text-stone-100">{skill.name}</h3>
+                      <p className="mt-1 text-[11px] uppercase tracking-[0.12em] text-sky-300/70">{skill.governingAbility || 'General'}</p>
+                    </div>
+                    <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] ${proficiency === 'EXPERTISE' ? 'border-amber-400/20 bg-amber-500/10 text-amber-300' : proficiency === 'PROFICIENT' ? 'border-emerald-400/20 bg-emerald-500/10 text-emerald-300' : 'border-white/10 bg-white/[0.03] text-stone-500'}`}>
+                      {proficiency === 'EXPERTISE' ? 'Expertise' : proficiency === 'PROFICIENT' ? 'Proficient' : 'Not proficient'}
+                    </span>
+                  </div>
+                  <p className="mt-3 text-xs leading-relaxed text-stone-400">{skill.description}</p>
+                  {skill.mechanicalDescription && <p className="mt-2 text-[11px] leading-relaxed text-stone-500">{skill.mechanicalDescription}</p>}
                 </article>
               );
             })}

@@ -7194,6 +7194,14 @@ export class MultiModelOrchestrator {
       }
     }
 
+    const preferredRouteKey =
+      options?.forceModelId ||
+      this.taskPinnedModels.get(task) ||
+      this.categoryOverrides.get(this.getTaskCategory(task));
+    if (preferredRouteKey && this.modelKey(selection.selectedModel) !== preferredRouteKey) {
+      selectionWasForcedFallback = true;
+    }
+
     const selectedModelKey = this.modelKey(selection.selectedModel);
     const selectedCandidates: ModelRegistryRecord[] = [selection.selectedModel, ...selection.fallbacks];
     const preflightSkipped: Array<{

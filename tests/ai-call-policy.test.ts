@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { AiCallBudget, decideAiHelperNeed, inferAiCallPolicyMode } from '../server/domain/aiCallPolicy';
 import { WorkingContextEngine } from '../server/domain/workingContextEngine';
-import { MultiModelOrchestrator } from '../server/domain/aiOrchestrator';
+import { DeterministicMockAdapter, MultiModelOrchestrator } from '../server/domain/aiOrchestrator';
 import { getAiTaskContract } from '../server/domain/aiTaskContracts';
 
 test('AI call policy keeps ordinary and canonical mechanics deterministic', () => {
@@ -186,43 +186,43 @@ test('helper callers use the task-specific routes and each primary route model i
 
 test('helper callers execute through the configured task route and adapter before fallback', async () => {
 	const orchestrator = new MultiModelOrchestrator();
-	const intentModel = {
+	const intentModel: ModelRegistryRecord = {
 		providerId: 'audit_intent_primary',
 		modelId: 'intent-primary',
 		displayName: 'Intent Primary',
-		pool: 'fast' as const,
+		pool: 'fast',
 		capabilities: ['text_generation', 'structured_output', 'fast'],
 		contextWindow: 32768,
-		health: 'Healthy' as const,
-		quota: 'Healthy' as const,
+		health: 'Healthy',
+		quota: 'Healthy',
 		latencyMs: 5,
 		userPriority: 100,
-		roleEligibility: ['intent.interpret'] as const,
+		roleEligibility: ['intent.interpret'],
 		fallbackEligibility: true,
 		isEmergencyFloor: false,
-		accessStatus: 'accessible' as const,
-		lifecycleState: 'active' as const,
+		accessStatus: 'accessible',
+		lifecycleState: 'active',
 		supportedInputTypes: ['text'],
 		supportedOutputTypes: ['text', 'json'],
 	};
-	const intentFallback = {
+	const intentFallback: ModelRegistryRecord = {
 		...intentModel,
 		providerId: 'audit_intent_fallback',
 		modelId: 'intent-fallback',
 		userPriority: 90,
 	};
-	const capabilityModel = {
+	const capabilityModel: ModelRegistryRecord = {
 		providerId: 'audit_capability_primary',
 		modelId: 'capability-primary',
 		displayName: 'Capability Primary',
-		pool: 'reasoning' as const,
+		pool: 'reasoning',
 		capabilities: ['text_generation', 'reasoning', 'structured_output'],
 		contextWindow: 32768,
 		health: 'Healthy' as const,
 		quota: 'Healthy' as const,
 		latencyMs: 5,
 		userPriority: 100,
-		roleEligibility: ['capability.synthesize'] as const,
+		roleEligibility: ['capability.synthesize'],
 		fallbackEligibility: true,
 		isEmergencyFloor: false,
 		accessStatus: 'accessible' as const,
@@ -231,9 +231,9 @@ test('helper callers execute through the configured task route and adapter befor
 		supportedOutputTypes: ['text', 'json'],
 		hasStructuredOutput: true,
 	};
-	const intentAdapter = new (await import('../server/domain/aiOrchestrator')).DeterministicMockAdapter('audit_intent_primary');
-	const intentFallbackAdapter = new (await import('../server/domain/aiOrchestrator')).DeterministicMockAdapter('audit_intent_fallback');
-	const capabilityAdapter = new (await import('../server/domain/aiOrchestrator')).DeterministicMockAdapter('audit_capability_primary');
+	const intentAdapter = new DeterministicMockAdapter('audit_intent_primary');
+	const intentFallbackAdapter = new DeterministicMockAdapter('audit_intent_fallback');
+	const capabilityAdapter = new DeterministicMockAdapter('audit_capability_primary');
 
 	orchestrator.registerModel(intentModel);
 	orchestrator.registerModel(intentFallback);

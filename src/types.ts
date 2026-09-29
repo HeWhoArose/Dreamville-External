@@ -366,6 +366,8 @@ export interface ActionLog {
   authoritativeFeedback: string;
   /** Player-facing narrator response, separate from internal/mechanical engine feedback. */
   narrativeResponse?: string;
+  /** Player-facing deterministic presentation text when no AI narration is requested or available. */
+  presentationFeedback?: string;
   narrativeError?: {
     code: string;
     message: string;

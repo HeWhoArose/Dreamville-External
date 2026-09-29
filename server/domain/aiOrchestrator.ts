@@ -3528,9 +3528,6 @@ export class MultiModelOrchestrator {
         fallbackEligibility: true,
         accessStatus: openrouterConfigured ? 'accessible' : 'not_configured',
         lifecycleState: 'active',
-        isPaidModel: (orm as any).freeRouter ? undefined : undefined,
-        freeTierStatus: (orm as any).freeRouter ? 'UNKNOWN' : undefined,
-        freeTierEvidenceSource: (orm as any).freeRouter ? 'UNKNOWN' : undefined,
         isEmergencyFloor: false,
       });
     }

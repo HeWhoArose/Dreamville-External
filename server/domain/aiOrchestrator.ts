@@ -3084,11 +3084,14 @@ export class MultiModelOrchestrator {
       'ooc.respond': ['groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash','openrouter::inclusionai/ling-3.0-flash:free','openrouter::google/gemma-4-31b-it:free','google_gemini::gemini-3.5-flash-lite'],
     };
 
+    // Routes are explicit but intentionally not task-pinned. This preserves the
+    // configured ordering while allowing test/runtime auto-arrangement to recover
+    // or reprioritize eligible models without silently escaping the route.
     for (const [task, chain] of Object.entries(routes) as Array<[TaskId, string[]]>) {
-      this.taskPinnedModels.set(task, chain[0]);
       this.taskFallbackChains.set(task, [...chain, emergencyKey]);
     }
 
+    // Specialty tasks stay explicitly pinned because their adapters are modality-specific.
     this.taskPinnedModels.set('speech.generate', 'provider_mock_speech::mock-speech-v1');
     this.taskPinnedModels.set('image.generate', 'google_imagen::imagen-3.0-generate-002');
     this.taskFallbackChains.set('speech.generate', ['provider_mock_speech::mock-speech-v1', emergencyKey]);

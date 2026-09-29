@@ -80,6 +80,7 @@ export type FreeTierStatus = 'VERIFIED' | 'NOT_FREE' | 'UNKNOWN';
 
 /** Provider-confirmed free-tier Gemini model identifiers. */
 const GOOGLE_VERIFIED_FREE_GEMINI_MODELS = new Set([
+  'gemini-3.8-flash',
   'gemini-3.5-flash',
   'gemini-3.5-flash-lite',
   'gemini-3.1-flash-lite',
@@ -127,6 +128,12 @@ export interface ModelRegistryRecord {
   billingState?: BillingState;
   billingEvidenceSource?: BillingEvidenceSource;
   quotaEvidenceSource?: QuotaEvidenceSource;
+  configuredLimits?: {
+    requestsPerMinute?: number;
+    tokensPerMinute?: number;
+    requestsPerDay?: number;
+    tokensPerDay?: number;
+  };
   freeTierStatus?: FreeTierStatus;
   freeTierEvidenceSource?: BillingEvidenceSource;
   freeTierVerifiedAt?: number;
@@ -2182,8 +2189,8 @@ Do not enclose in markdown ticks, output pure JSON.`;
         supportedActions: ['generateContent', 'countTokens'],
         isAccessible: true,
         lifecycleState: 'active',
-        isPaidModel: true,
-        freeTierStatus: 'NOT_FREE',
+        isPaidModel: false,
+        freeTierStatus: 'VERIFIED',
         freeTierEvidenceSource: 'PROVIDER',
       },
       {
@@ -2863,6 +2870,8 @@ export class MultiModelOrchestrator {
         headroom: { exact: false, source: 'UNKNOWN' },
       };
       this.runtimeStatus.set(key, status);
+    } else if (model.configuredLimits) {
+      status.configuredLimits = { ...model.configuredLimits };
     }
     return status;
   }
@@ -3182,12 +3191,16 @@ export class MultiModelOrchestrator {
       roleEligibility: [...ALL_GENERAL_TEXT_ROLES],
       fallbackEligibility: true,
       accessStatus: 'accessible',
-      isPaidModel: true,
-      billingState: 'PAID',
+      isPaidModel: false,
+      billingState: 'FREE',
       billingEvidenceSource: 'PROVIDER',
-      freeTierStatus: 'NOT_FREE',
+      freeTierStatus: 'VERIFIED',
       freeTierEvidenceSource: 'PROVIDER',
       freeTierVerifiedAt: Date.now(),
+      configuredLimits: {
+        requestsPerMinute: 60,
+        tokensPerMinute: 100000,
+      },
       lifecycleState: 'active',
       isEmergencyFloor: false,
     });

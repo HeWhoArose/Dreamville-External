@@ -242,7 +242,7 @@ test('manual narration preference falls back when the selected model is quota-ex
   );
 
   assert.equal(result.modelId, 'secondary');
-  assert.equal(result.source, 'AI_PRIMARY');
+  assert.equal(result.source, 'AI_FALLBACK');
   assert.ok(result.fallbackReason === undefined || result.fallbackReason.includes('secondary'));
   assert.deepEqual(result.attemptsTrail.map((entry) => entry.modelId), ['secondary']);
   assert.equal(result.attemptsTrail.some((entry) => entry.modelId === 'emergency-fallback-local'), false);

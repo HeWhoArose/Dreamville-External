@@ -3118,19 +3118,12 @@ export class MultiModelOrchestrator {
   }
 
   public getFallbackChain(task: TaskId): string[] {
-    const configured = this.taskFallbackChains.get(task) || [
+    return this.taskFallbackChains.get(task) || [
       'google_gemini::gemini-3.5-flash',
       'google_gemini::gemini-3.8-flash',
       'google_gemini::gemini-3.5-flash-lite',
       'provider_deterministic_emergency::emergency-fallback-local',
     ];
-    const emergencyKey = 'provider_deterministic_emergency::emergency-fallback-local';
-    const freeOnly = configured.filter((key) => {
-      if (key === emergencyKey || key.includes('emergency-fallback-local')) return true;
-      const model = this.models.get(key) || Array.from(this.models.values()).find((candidate) => candidate.modelId === key);
-      return Boolean(model && MultiModelOrchestrator.isFreeModelCandidate(model));
-    });
-    return freeOnly.length > 0 ? Array.from(new Set(freeOnly)) : [emergencyKey];
   }
 
   public getAllFallbackChains(): Record<string, string[]> {
@@ -8005,7 +7998,7 @@ export class MultiModelOrchestrator {
     const freeModels = freeReadyResults.map((entry) => ({ providerId: entry.providerId, modelId: entry.modelId, displayName: entry.displayName, verifiedTasks: entry.verifiedTasks || [], status: entry.status }));
     const classifierCandidates = this.getAllModels()
       .filter((model) => model.providerId === 'google_gemini' && MultiModelOrchestrator.isFreeModelCandidate(model))
-      .filter((model) => model.roleEligibility.includes('utility.inspect'))
+      .filter((model) => model.roleEligibility.includes('utility.inspect' as TaskId))
       .filter((model) => model.health !== 'Unavailable' && model.health !== 'InvalidAuth' && model.quota !== 'Exhausted')
       .sort((a, b) => {
         const preferred = (id: string) => id === 'gemini-3.5-flash-lite' ? 0 : id === 'gemini-3.5-flash' ? 1 : id === 'gemini-2.5-flash-lite' ? 2 : 10;

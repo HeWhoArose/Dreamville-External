@@ -3035,7 +3035,13 @@ export class MultiModelOrchestrator {
             : status.cooldownUntil && status.cooldownUntil > Date.now()
               ? 'COOLDOWN'
               : 'UNAVAILABLE';
-      model.health = status.status;
+
+      // Preserve the model's global health across a transient rate-limit event.
+      // The runtime cooldown is what makes the model temporarily ineligible;
+      // once it expires, a healthy model can re-enter the route automatically.
+      if (failureType !== '429') {
+        model.health = status.status;
+      }
       if (failureType === '429') {
         // A 429 may be a transient RPM/TPM throttle rather than a depleted daily
         // quota. The cooldown window is authoritative for transient throttles;
@@ -6846,8 +6852,8 @@ export class MultiModelOrchestrator {
               lastError.includes('Resource Exhausted') ||
               lastError.includes('quota')
             ) {
-              currentCandidate.health = 'Throttled';
-              currentCandidate.quota = 'Exhausted';
+              // recordProviderFailure() already records the transient throttle and
+              // cooldown. Do not permanently poison model health/quota here.
               break;
             }
 

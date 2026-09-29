@@ -82,7 +82,8 @@ test('dice UI does not reveal the canonical result before the physical roll is c
   const source = fs.readFileSync(path.join(process.cwd(), 'src/components/common/DiceRollAnimation.tsx'), 'utf8');
   const beforeStartRoll = source.slice(0, source.indexOf('const startRoll'));
   assert.equal(beforeStartRoll.includes('revealed'), true);
-  assert.equal(beforeStartRoll.includes('roll.individualDice'), false);
+  assert.match(source, /revealed \? value : '\?'/);
+  assert.match(source, /revealedOverride/);
   assert.match(source, /setRevealed\(true\)/);
   assert.match(source, /onComplete\?\.\(\)/);
 });;

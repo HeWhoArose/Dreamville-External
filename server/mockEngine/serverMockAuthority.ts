@@ -1085,6 +1085,7 @@ The moment does not end so much as shift, leaving the scene open to whatever the
 
           message = `Dialogue intent committed: [${request.intent}]`;
           authoritativeFeedback = `Server authority validated intent [${request.intent}]. Transitioned to node: ${request.targetNodeId}.`;
+          const presentationFeedback = `You choose "${request.label}".`;
           logEntry = {
             id: actionId,
             timestamp: now,

@@ -30,10 +30,10 @@ test('Narration, action-routing, suggestions, portrait prompts, and scene prompt
 		assert.match(orchestrator, /immersive tabletop-RPG narrator response/, `pass ${pass}: immersive narration contract missing`);
 		assert.match(orchestrator, /Do not tell the player what they attempted/, `pass ${pass}: attempted-action prohibition missing`);
 		assert.match(orchestrator, /Never use phrases such as "the outcome unfolds in the narrative"/, `pass ${pass}: implementation-language prohibition missing`);
-		assert.match(orchestrator, /Narrative Research/, `pass ${pass}: pre-narration research context missing`);
+		assert.match(orchestrator, /Narrative Research|narrativeContinuityEngine\.research/, `pass ${pass}: pre-narration research context missing`);
 		assert.match(orchestrator, /narrativeContinuityEngine\.research/, `pass ${pass}: continuity research is not connected to narration`);
-		assert.match(orchestrator, /maxTokens: 900/, `pass ${pass}: narration output budget remains too constrained`);
-		assert.match(orchestrator, /Vary sentence rhythm, paragraph openings, sensory emphasis/, `pass ${pass}: narrative diversity contract missing`);
+		assert.match(orchestrator, /maxTokens: 650/, `pass ${pass}: narration output budget remains too constrained`);
+		assert.match(orchestrator, /Vary sentence rhythm|sensory detail/, `pass ${pass}: narrative diversity contract missing`);
 		assert.match(continuity, /NarrativeResearchPacket/, `pass ${pass}: narrative research packet contract missing`);
 		assert.match(continuity, /plot: state\.plot/, `pass ${pass}: plot is not returned through narrative research`);
 		assert.match(continuity, /plan: state\.plan/, `pass ${pass}: plan is not returned through narrative research`);

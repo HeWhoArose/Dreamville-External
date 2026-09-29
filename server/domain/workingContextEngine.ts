@@ -346,6 +346,13 @@ export class WorkingContextEngine {
     const locationName = locNode ? locNode.name : 'Current Location';
     const timeHeader = clock.getFormattedLocationTimeHeader(locationName, clock.getTimestamp());
 
+    const actionText = params.playerAction || 'Observe surroundings';
+    const contextNeeds = deriveNarrationContextNeeds({
+      actionText,
+      npcTargetId: params.npcTargetId,
+      isInCombat,
+    });
+
     // 4. Player State & Physiology
     const physio = player ? livingSim.getEntityPhysiology(player.actorId) : undefined;
     const injurySummary = contextNeeds.includeHealth && player && player.injuries.length > 0
@@ -423,12 +430,12 @@ export class WorkingContextEngine {
     ].slice(0, 10);
 
     // 9. Latent Opportunities (CH9 Poison-Teeth Exemplar)
-    const actionText = params.playerAction || 'Observe surroundings';
-    const contextNeeds = deriveNarrationContextNeeds({ actionText, npcTargetId: params.npcTargetId, isInCombat });
-    const opportunityMatches = memoryEngine.scanOpportunities({
+    const opportunityMatches = contextNeeds.includeCapabilities
+      ? memoryEngine.scanOpportunities({
       actionText,
       actorId: viewerId,
-    });
+    })
+      : [];
 
     const playerDiscoveredSet = new Set(
       player?.discoveredLocationIds || (storyId === 'default_story' ? ['loc_whispering_orrery', 'loc_lantern_vault', 'loc_glasswood_verge'] : [locId])

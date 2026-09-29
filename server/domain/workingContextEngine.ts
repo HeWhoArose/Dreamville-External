@@ -25,12 +25,18 @@ export interface WorkingContextPacket {
 
 export type PriorityBand = 'B1_CRITICAL' | 'B2_IMMEDIATE' | 'B3_CAUSAL_OPPORTUNITY' | 'B4_EPISODIC' | 'B5_SEMANTIC_LORE';
 
+export type ContextBlockType = 'INSTRUCTION' | 'MEMORY' | 'ENTITY' | 'LORE' | 'MISC';
+export type ContextBlockStatus = 'ACTIVE' | 'IDLE' | 'ARCHIVED';
+
 export interface ContextChunk {
   id?: string;
   band: PriorityBand;
   label: string;
   content: string;
   estimatedTokens: number;
+  blockType?: ContextBlockType;
+  blockStatus?: ContextBlockStatus;
+  expiresAtTurn?: number;
   source?: string;
   sourceAuthority?: string;
   relevanceScore?: number;
@@ -117,7 +123,8 @@ export class WorkingContextEngine {
    */
   public static assembleBudgetedContext(
     chunks: ContextChunk[],
-    hardTokenBudget: number
+    hardTokenBudget: number,
+    currentTurn?: number,
   ): BudgetedContextResult {
     const priorityOrder: Record<PriorityBand, number> = {
       B1_CRITICAL: 1,
@@ -161,6 +168,15 @@ export class WorkingContextEngine {
     for (const chunk of sortedChunks) {
       const bandRank = priorityOrder[chunk.band];
 
+      if (
+        chunk.blockStatus === 'ARCHIVED' ||
+        (currentTurn !== undefined && chunk.expiresAtTurn !== undefined && chunk.expiresAtTurn < currentTurn)
+      ) {
+        evicted.push(`${chunk.label} (${chunk.band})`);
+        evictionReasons[chunk.label] = 'Archived or expired context block';
+        continue;
+      }
+
       // Strict Priority Band Eviction:
       // If a higher priority band suffered eviction, lower priority bands CANNOT backfill into the budget gap.
       if (bandRank >= lowestClosedBand) {
@@ -189,7 +205,7 @@ export class WorkingContextEngine {
       const effectiveTokens = Math.max(prospectiveTokens, declaredWithFraming);
 
       if (effectiveTokens <= hardTokenBudget) {
-        included.push(chunk);
+        included.push({ ...chunk, blockStatus: 'ACTIVE' });
         currentAssembledText = prospectiveText;
         currentDeclaredTokens = declaredWithFraming;
       } else {
@@ -858,9 +874,11 @@ export class WorkingContextEngine {
     }
 
     // Execute budgeted assembly with strict band preservation and framing overhead accounting
+    const currentTurn = repo.getCanonicalCommandEvents(storyId).length + 1;
     const budgetedResult = WorkingContextEngine.assembleBudgetedContext(
       candidateChunks,
-      hardTokenBudget
+      hardTokenBudget,
+      currentTurn,
     );
 
     return {

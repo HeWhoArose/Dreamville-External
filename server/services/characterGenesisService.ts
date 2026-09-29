@@ -2877,6 +2877,7 @@ IMPORTANT: Select an appropriate category and paper-doll slot. If the item is a 
       traits: [...(draft.traits || [])],
       capabilities: draft.capabilities ? draft.capabilities.map((c) => ({ ...c, effects: c.effects ? c.effects.map((effect) => ({ ...effect })) : [] })) : [],
       generatedSkills: draft.generatedSkills ? draft.generatedSkills.map((s) => ({ ...s })) : [],
+      skills: draft.skills ? draft.skills.map((skill) => ({ ...skill, tags: Array.isArray(skill.tags) ? [...skill.tags] : skill.tags, icon: skill.icon ? { ...skill.icon } : skill.icon })) : [],
       feats: draft.feats ? draft.feats.map((feat) => ({ ...feat, effects: feat.effects ? feat.effects.map((effect) => ({ ...effect })) : [] })) : [],
       titles: draft.titles ? draft.titles.map((title) => ({ ...title, effects: title.effects ? title.effects.map((effect) => ({ ...effect })) : [] })) : [],
       startingEquipment: {

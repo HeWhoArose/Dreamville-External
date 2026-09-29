@@ -6,6 +6,7 @@ import {
 	getDiceThemePreset,
 } from '../src/components/common/diceThemes';
 import { resolveDiceRevealState } from '../src/components/common/DiceRollAnimation';
+import { shouldShowNarrationForAction } from '../src/components/StoryView';
 
 test('dice theme presets are stable, unique, and renderable', () => {
 	assert.ok(DICE_THEME_PRESETS.length >= 5);
@@ -29,4 +30,11 @@ test('a persisted reveal override keeps an already-resolved roll revealed', () =
 	assert.equal(resolveDiceRevealState(true, false), true);
 	assert.equal(resolveDiceRevealState(false, true), true);
 	assert.equal(resolveDiceRevealState(undefined, false), false);
+});
+
+
+test('pending checks hold narration until the physical result is revealed', () => {
+	assert.equal(shouldShowNarrationForAction(true, false, true), false);
+	assert.equal(shouldShowNarrationForAction(true, true, true), true);
+	assert.equal(shouldShowNarrationForAction(false, false, true), true);
 });

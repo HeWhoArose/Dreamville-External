@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { AiCallBudget, decideAiHelperNeed, inferAiCallPolicyMode } from '../server/domain/aiCallPolicy';
 import { WorkingContextEngine } from '../server/domain/workingContextEngine';
-import { DeterministicMockAdapter, MultiModelOrchestrator } from '../server/domain/aiOrchestrator';
+import { DeterministicMockAdapter, MultiModelOrchestrator, type ModelRegistryRecord } from '../server/domain/aiOrchestrator';
 import { getAiTaskContract } from '../server/domain/aiTaskContracts';
 
 test('AI call policy keeps ordinary and canonical mechanics deterministic', () => {
@@ -10,30 +10,34 @@ test('AI call policy keeps ordinary and canonical mechanics deterministic', () =
 	assert.equal(inferAiCallPolicyMode({ hasCanonicalCapability: true, explicitCapabilitySyntax: true }), 'DETERMINISTIC_MECHANICS');
 	assert.equal(inferAiCallPolicyMode({ requiresCheckOrHazardInterpretation: true }), 'INTERPRETATION');
 	assert.equal(inferAiCallPolicyMode({ explicitCapabilitySyntax: true }), 'NOVEL_CAPABILITY');
-	assert.equal(inferAiCallPolicyMode({ ambiguousLanguage: true }), 'NARRATION_ONLY');
+	assert.equal(inferAiCallPolicyMode({ ambiguousLanguage: true }), 'INTERPRETATION');
 	assert.equal(inferAiCallPolicyMode({ compoundAction: true }), 'INTERPRETATION');
 	assert.equal(inferAiCallPolicyMode({ itemKnown: true, compoundAction: true }), 'INTERPRETATION');
 });
 
-test('interpretation mode permits exactly one small helper call', () => {
+test('interpretation mode allows one required interpretation and a second repair only when justified', () => {
 	const budget = new AiCallBudget('INTERPRETATION');
 	const first = budget.authorize('intent.interpret', 700, 'INTENT_INTERPRET');
 	assert.equal(first.allowed, true);
 	assert.equal(first.maxTokens, 400);
 
-	const second = budget.authorize('intent.interpret', 350, 'INTENT_INTERPRET');
-	assert.equal(second.allowed, false);
-	assert.match(second.reason, /may only execute once|budget exhausted/i);
+	const premature = budget.authorize('intent.interpret', 350, 'SEMANTIC_REPAIR');
+	assert.equal(premature.allowed, true);
+	assert.equal(premature.maxTokens, 350);
 
-	const forbidden = budget.authorize('rules.analyze', 500, 'INTENT_INTERPRET');
+	const third = budget.authorize('intent.interpret', 350, 'SEMANTIC_REPAIR');
+	assert.equal(third.allowed, false);
+	assert.match(third.reason, /budget exhausted|next authorized stage|permitted yet/i);
+
+	const forbidden = budget.authorize('rules.analyze', 500, 'SEMANTIC_REPAIR');
 	assert.equal(forbidden.allowed, false);
 
 	const snapshot = budget.snapshot();
-	assert.equal(snapshot.helperCallsUsed, 1);
-	assert.equal(snapshot.maxHelperCalls, 1);
-	assert.equal(snapshot.maxHelperOutputTokens, 400);
-	assert.deepEqual(snapshot.usedRoles, ['INTENT_INTERPRET']);
-	assert.equal(snapshot.blockedTasks.length, 2);
+	assert.equal(snapshot.helperCallsUsed, 2);
+	assert.equal(snapshot.maxHelperCalls, 2);
+	assert.equal(snapshot.maxHelperOutputTokens, 800);
+	assert.deepEqual(snapshot.usedRoles, ['INTENT_INTERPRET', 'SEMANTIC_REPAIR']);
+	assert.equal(snapshot.callHistory.filter((entry) => entry.allowed).length, 2);
 });
 
 test('adaptive novel capability mode is bounded at four roles and never defaults to four calls', () => {
@@ -97,7 +101,11 @@ test('helper selection is deliberate: clear actions get none, ambiguity gets one
 	);
 	assert.equal(
 		decideAiHelperNeed({ ambiguousLanguage: true }).maxHelperCalls,
-		1,
+		2,
+	);
+	assert.equal(
+		decideAiHelperNeed({ semanticNoveltyRequested: true }).maxHelperCalls,
+		4,
 	);
 	assert.equal(
 		decideAiHelperNeed({ compoundAction: true }).mode,
@@ -274,6 +282,65 @@ test('helper callers execute through the configured task route and adapter befor
 	assert.equal(capabilityResult.source, 'AI_PRIMARY');
 	assert.deepEqual(capabilityAdapter.callHistory.map((entry) => entry.task), ['capability.synthesize']);
 });
+
+
+test('helper task fallback preserves task authority and reaches the next compatible model before emergency floor', async () => {
+	const orchestrator = new MultiModelOrchestrator();
+	const primary: ModelRegistryRecord = {
+		providerId: 'audit_helper_primary',
+		modelId: 'primary',
+		displayName: 'Helper Primary',
+		pool: 'fast',
+		capabilities: ['text_generation', 'structured_output', 'fast'],
+		contextWindow: 32768,
+		health: 'Healthy',
+		quota: 'Healthy',
+		latencyMs: 5,
+		userPriority: 100,
+		roleEligibility: ['intent.interpret'],
+		fallbackEligibility: true,
+		isEmergencyFloor: false,
+		accessStatus: 'accessible',
+		lifecycleState: 'active',
+		supportedInputTypes: ['text'],
+		supportedOutputTypes: ['text', 'json'],
+	};
+	const fallback: ModelRegistryRecord = {
+		...primary,
+		providerId: 'audit_helper_fallback',
+		modelId: 'fallback',
+		userPriority: 90,
+	};
+	const primaryAdapter = new DeterministicMockAdapter('audit_helper_primary');
+	primaryAdapter.failureMode = '500';
+	primaryAdapter.maxFailuresBeforeSuccess = 1;
+	const fallbackAdapter = new DeterministicMockAdapter('audit_helper_fallback');
+
+	orchestrator.registerModel(primary);
+	orchestrator.registerModel(fallback);
+	orchestrator.registerAdapter(primaryAdapter);
+	orchestrator.registerAdapter(fallbackAdapter);
+	orchestrator.setFallbackChain('intent.interpret', [
+		'audit_helper_primary::primary',
+		'audit_helper_fallback::fallback',
+		'provider_deterministic_emergency::emergency-fallback-local',
+	]);
+
+	const result = await orchestrator.executeTaskGeneration(
+		'intent.interpret',
+		'{"action":"climb the broken stairs"}',
+		'Return a compact intent JSON object.',
+		{ timeoutMs: 2000, maxTokens: 100 },
+	);
+
+	assert.equal(result.providerId, 'audit_helper_fallback');
+	assert.equal(result.modelId, 'fallback');
+	assert.equal(result.source, 'AI_FALLBACK');
+	assert.equal(primaryAdapter.callHistory.length, 1);
+	assert.equal(fallbackAdapter.callHistory.length, 1);
+	assert.deepEqual(fallbackAdapter.callHistory.map((entry) => entry.task), ['intent.interpret']);
+});
+
 
 test('deterministic callers remain blocked from helper-only roles', () => {
 	const budget = new AiCallBudget('DETERMINISTIC_MECHANICS');

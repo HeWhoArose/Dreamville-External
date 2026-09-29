@@ -9,7 +9,6 @@ export type AiCallPolicyMode =
 export type AiHelperStrategy =
 	| 'NONE'
 	| 'INTERPRET_ONCE'
-	| 'INTERPRET_THEN_SYNTHESIZE'
 	| 'INTERPRET_SYNTHESIZE_AND_REPAIR';
 
 export type AiHelperRole =
@@ -31,6 +30,14 @@ export interface AiHelperNeedDecision {
 	maxHelperCalls: number;
 }
 
+export interface AiCallPolicyCallRecord {
+	task: TaskId | string;
+	role?: AiHelperRole;
+	allowed: boolean;
+	reason: string;
+	maxTokens: number;
+}
+
 export interface AiCallPolicySnapshot {
 	mode: AiCallPolicyMode;
 	maxHelperCalls: number;
@@ -41,6 +48,7 @@ export interface AiCallPolicySnapshot {
 	allowedTasks: string[];
 	allowedRoles: AiHelperRole[];
 	usedRoles: AiHelperRole[];
+	callHistory: AiCallPolicyCallRecord[];
 }
 
 const MAX_ADAPTIVE_HELPER_CALLS = 4;
@@ -55,24 +63,28 @@ const MODE_POLICIES: Record<AiCallPolicyMode, {
 	maxHelperOutputTokens: number;
 	allowedTasks: string[];
 	allowedRoles: AiHelperRole[];
+	expectedRoles: AiHelperRole[];
 }> = {
 	NARRATION_ONLY: {
 		maxHelperCalls: 0,
 		maxHelperOutputTokens: 0,
 		allowedTasks: [],
 		allowedRoles: [],
+		expectedRoles: [],
 	},
 	DETERMINISTIC_MECHANICS: {
 		maxHelperCalls: 0,
 		maxHelperOutputTokens: 0,
 		allowedTasks: [],
 		allowedRoles: [],
+		expectedRoles: [],
 	},
 	INTERPRETATION: {
-		maxHelperCalls: 1,
-		maxHelperOutputTokens: 400,
+		maxHelperCalls: 2,
+		maxHelperOutputTokens: 800,
 		allowedTasks: ['intent.interpret'],
-		allowedRoles: ['INTENT_INTERPRET'],
+		allowedRoles: ['INTENT_INTERPRET', 'SEMANTIC_REPAIR'],
+		expectedRoles: ['INTENT_INTERPRET', 'SEMANTIC_REPAIR'],
 	},
 	NOVEL_CAPABILITY: {
 		maxHelperCalls: MAX_ADAPTIVE_HELPER_CALLS,
@@ -84,11 +96,24 @@ const MODE_POLICIES: Record<AiCallPolicyMode, {
 			'SEMANTIC_REPAIR',
 			'ALTERNATIVE_SYNTHESIZE',
 		],
+		expectedRoles: [
+			'INTENT_INTERPRET',
+			'CAPABILITY_SYNTHESIZE',
+			'SEMANTIC_REPAIR',
+			'ALTERNATIVE_SYNTHESIZE',
+		],
 	},
 };
 
-function blocked(reason: string, task: TaskId | string, role: AiHelperRole | undefined, blockedTasks: Array<{ task: TaskId | string; role?: AiHelperRole; reason: string }>): AiCallPolicyDecision {
+function blocked(
+	reason: string,
+	task: TaskId | string,
+	role: AiHelperRole | undefined,
+	blockedTasks: Array<{ task: TaskId | string; role?: AiHelperRole; reason: string }>,
+	callHistory: AiCallPolicyCallRecord[],
+): AiCallPolicyDecision {
 	blockedTasks.push({ task, role, reason });
+	callHistory.push({ task, role, allowed: false, reason, maxTokens: 0 });
 	return { allowed: false, reason, maxTokens: 0 };
 }
 
@@ -100,6 +125,7 @@ export function decideAiHelperNeed(params: {
 	unknownUseTarget?: boolean;
 	ambiguousLanguage?: boolean;
 	compoundAction?: boolean;
+	semanticNoveltyRequested?: boolean;
 }): AiHelperNeedDecision {
 	if (params.hasCanonicalCapability) {
 		return {
@@ -107,6 +133,17 @@ export function decideAiHelperNeed(params: {
 			mode: 'DETERMINISTIC_MECHANICS',
 			reason: 'A canonical capability is already known; deterministic capability execution is authoritative.',
 			maxHelperCalls: 0,
+		};
+	}
+
+	if (params.explicitCapabilitySyntax || params.unknownUseTarget || params.semanticNoveltyRequested) {
+		return {
+			strategy: 'INTERPRET_SYNTHESIZE_AND_REPAIR',
+			mode: 'NOVEL_CAPABILITY',
+			reason: params.compoundAction
+				? 'The action is compound and semantically novel; use the minimum helper stages required and reserve repair/alternative stages only after canonical validation requires them.'
+				: 'The player expressed a capability-like or unresolved use request without a canonical match.',
+			maxHelperCalls: MAX_ADAPTIVE_HELPER_CALLS,
 		};
 	}
 
@@ -119,23 +156,14 @@ export function decideAiHelperNeed(params: {
 		};
 	}
 
-	if (params.explicitCapabilitySyntax || params.unknownUseTarget) {
-		return {
-			strategy: 'INTERPRET_SYNTHESIZE_AND_REPAIR',
-			mode: 'NOVEL_CAPABILITY',
-			reason: 'The player expressed a capability-like or unresolved use request without a canonical match; helper roles may expand only when canonical validation requires repair or an alternative route.',
-			maxHelperCalls: MAX_ADAPTIVE_HELPER_CALLS,
-		};
-	}
-
 	if (params.requiresCheckOrHazardInterpretation || params.ambiguousLanguage || params.compoundAction) {
 		return {
 			strategy: 'INTERPRET_ONCE',
 			mode: 'INTERPRETATION',
 			reason: params.compoundAction
-				? 'The action has multiple semantic stages; one interpretation pass is allowed, while additional helpers require a separately detected novel capability or canonical validation failure.'
-				: 'The action may require a semantic check/hazard interpretation before canonical resolution.',
-			maxHelperCalls: 1,
+				? 'The action has multiple semantic stages; interpretation is available, with one repair pass only if the first interpretation remains insufficient.'
+				: 'The action may require a semantic check/hazard interpretation before canonical resolution; one repair pass is available only if required.',
+			maxHelperCalls: 2,
 		};
 	}
 
@@ -152,21 +180,12 @@ export function inferAiCallPolicyMode(params: {
 	itemKnown?: boolean;
 	requiresCheckOrHazardInterpretation?: boolean;
 	explicitCapabilitySyntax?: boolean;
+	unknownUseTarget?: boolean;
+	ambiguousLanguage?: boolean;
 	compoundAction?: boolean;
+	semanticNoveltyRequested?: boolean;
 }): AiCallPolicyMode {
-	if (params.hasCanonicalCapability || (params.itemKnown && !params.compoundAction)) {
-		return 'DETERMINISTIC_MECHANICS';
-	}
-
-	if (params.explicitCapabilitySyntax && !params.hasCanonicalCapability) {
-		return 'NOVEL_CAPABILITY';
-	}
-
-	if (params.requiresCheckOrHazardInterpretation || params.compoundAction) {
-		return 'INTERPRETATION';
-	}
-
-	return 'NARRATION_ONLY';
+	return decideAiHelperNeed(params).mode;
 }
 
 export class AiCallBudget {
@@ -175,10 +194,12 @@ export class AiCallBudget {
 	private readonly maxHelperOutputTokens: number;
 	private readonly allowedTasks: Set<string>;
 	private readonly allowedRoles: Set<AiHelperRole>;
+	private readonly expectedRoles: AiHelperRole[];
 	private helperCallsUsed = 0;
 	private helperOutputTokensUsed = 0;
 	private readonly blockedTasks: Array<{ task: TaskId | string; role?: AiHelperRole; reason: string }> = [];
 	private readonly usedRoles: AiHelperRole[] = [];
+	private readonly callHistory: AiCallPolicyCallRecord[] = [];
 
 	public constructor(mode: AiCallPolicyMode) {
 		const policy = MODE_POLICIES[mode];
@@ -187,10 +208,18 @@ export class AiCallBudget {
 		this.maxHelperOutputTokens = policy.maxHelperOutputTokens;
 		this.allowedTasks = new Set(policy.allowedTasks);
 		this.allowedRoles = new Set(policy.allowedRoles);
+		this.expectedRoles = [...policy.expectedRoles];
+	}
+
+	private isRoleCompatibleWithTask(task: string, role: AiHelperRole): boolean {
+		if (role === 'INTENT_INTERPRET') return task === 'intent.interpret';
+		if (role === 'SEMANTIC_REPAIR') return task === 'intent.interpret' || task === 'capability.synthesize';
+		return task === 'capability.synthesize';
 	}
 
 	public authorize(task: TaskId | string, requestedMaxTokens: number, role?: AiHelperRole): AiCallPolicyDecision {
 		const normalizedTask = String(task);
+		const expectedRole = this.expectedRoles[this.helperCallsUsed];
 
 		if (this.maxHelperCalls === 0) {
 			return blocked(
@@ -198,6 +227,7 @@ export class AiCallBudget {
 				task,
 				role,
 				this.blockedTasks,
+				this.callHistory,
 			);
 		}
 
@@ -207,6 +237,7 @@ export class AiCallBudget {
 				task,
 				role,
 				this.blockedTasks,
+				this.callHistory,
 			);
 		}
 
@@ -216,6 +247,17 @@ export class AiCallBudget {
 				task,
 				role,
 				this.blockedTasks,
+				this.callHistory,
+			);
+		}
+
+		if (!this.isRoleCompatibleWithTask(normalizedTask, role)) {
+			return blocked(
+				`Task "${normalizedTask}" cannot execute helper role "${role}".`,
+				task,
+				role,
+				this.blockedTasks,
+				this.callHistory,
 			);
 		}
 
@@ -225,48 +267,18 @@ export class AiCallBudget {
 				task,
 				role,
 				this.blockedTasks,
+				this.callHistory,
 			);
 		}
 
-		if (this.usedRoles.includes(role) && role !== 'CAPABILITY_SYNTHESIZE') {
+		if (role !== expectedRole) {
 			return blocked(
-				`Helper role "${role}" may only execute once per action.`,
+				`Helper stage "${role}" is not permitted yet; the next authorized stage is "${expectedRole || 'NONE'}".`,
 				task,
 				role,
 				this.blockedTasks,
+				this.callHistory,
 			);
-		}
-
-		if (role === 'CAPABILITY_SYNTHESIZE') {
-			const hasIntent = this.usedRoles.includes('INTENT_INTERPRET');
-			if (!hasIntent) {
-				return blocked(
-					'Capability synthesis requires a completed intent interpretation first.',
-					task,
-					role,
-					this.blockedTasks,
-				);
-			}
-			if (this.usedRoles.filter((value) => value === 'CAPABILITY_SYNTHESIZE').length >= 1) {
-				return blocked(
-					'Initial capability synthesis is already complete; a second synthesis must be explicitly routed as repair or alternative synthesis.',
-					task,
-					role,
-					this.blockedTasks,
-				);
-			}
-		}
-
-		if (role === 'SEMANTIC_REPAIR' || role === 'ALTERNATIVE_SYNTHESIZE') {
-			const hasSynthesis = this.usedRoles.includes('CAPABILITY_SYNTHESIZE');
-			if (!hasSynthesis) {
-				return blocked(
-					`Helper role "${role}" requires a completed initial capability synthesis first.`,
-					task,
-					role,
-					this.blockedTasks,
-				);
-			}
 		}
 
 		const remainingOutputBudget = this.maxHelperOutputTokens - this.helperOutputTokensUsed;
@@ -276,19 +288,18 @@ export class AiCallBudget {
 				task,
 				role,
 				this.blockedTasks,
+				this.callHistory,
 			);
 		}
 
 		const taskCap = TASK_OUTPUT_CAPS[normalizedTask] ?? remainingOutputBudget;
 		const maxTokens = Math.max(1, Math.min(requestedMaxTokens || taskCap, taskCap, remainingOutputBudget));
+		const reason = `Authorized ${normalizedTask} as ${role} under ${this.mode} policy.`;
 		this.helperCallsUsed += 1;
 		this.helperOutputTokensUsed += maxTokens;
 		this.usedRoles.push(role);
-		return {
-			allowed: true,
-			reason: `Authorized ${normalizedTask} as ${role} under ${this.mode} policy.`,
-			maxTokens,
-		};
+		this.callHistory.push({ task, role, allowed: true, reason, maxTokens });
+		return { allowed: true, reason, maxTokens };
 	}
 
 	public snapshot(): AiCallPolicySnapshot {
@@ -303,6 +314,7 @@ export class AiCallBudget {
 			allowedTasks: [...policy.allowedTasks],
 			allowedRoles: [...policy.allowedRoles],
 			usedRoles: [...this.usedRoles],
+			callHistory: [...this.callHistory],
 		};
 	}
 }

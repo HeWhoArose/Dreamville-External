@@ -334,12 +334,15 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 
 			<div
 				id={containerId}
-				className="relative h-64 overflow-hidden"\n\t\t\t\tstyle={{ background: diceTheme.previewTable }}
+				className="relative h-64 overflow-hidden"
+				style={{ background: diceTheme.previewTable }}
 				aria-label={`3D physical dice table for ${roll.formula}`}
 			>
 				{useCssFallback && (
 					<div className="absolute inset-0 flex items-center justify-center">
-						<div style={{ background: diceTheme.customColorset.background, color: diceTheme.customColorset.foreground }}\n\t\t\t\t\t\t\tclassName={`relative flex h-28 w-28 items-center justify-center rounded-[24px] border-2 border-white/30 bg-gradient-to-br from-white via-stone-100 to-stone-300 text-5xl font-black text-stone-900 shadow-[0_24px_55px_rgba(0,0,0,0.45)] ${isRolling ? 'animate-[dice-throw_1150ms_cubic-bezier(.2,.8,.25,1)]' : ''}`}>
+						<div
+							style={{ background: diceTheme.customColorset.background, color: diceTheme.customColorset.foreground }}
+							className={`relative flex h-28 w-28 items-center justify-center rounded-[24px] border-2 border-white/30 bg-gradient-to-br from-white via-stone-100 to-stone-300 text-5xl font-black text-stone-900 shadow-[0_24px_55px_rgba(0,0,0,0.45)] ${isRolling ? 'animate-[dice-throw_1150ms_cubic-bezier(.2,.8,.25,1)]' : ''}`}>
 							<span>{isRevealed ? (roll.individualDice[0] ?? total) : 'D20'}</span>
 							<div className="absolute inset-[6px] rounded-[18px] border border-stone-400/30" />
 						</div>
@@ -391,7 +394,7 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 						? 'Critical Success'
 						: roll.isCriticalFailure
 							? 'Critical Failure'
-							: revealed
+							: isRevealed
 								? 'Result'
 								: 'Awaiting Roll'}
 				</p>

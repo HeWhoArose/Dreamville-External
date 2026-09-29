@@ -517,6 +517,11 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
     const start = Date.now();
     let text: string;
 
+    const canonicalLocationName = (() => {
+      const match = String(prompt || '').match(/LOCATION NAME:\s*([^\\n]+)/i);
+      return match?.[1]?.trim() || 'the current location';
+    })();
+
     switch (task) {
       case 'character.dialogue':
         text = JSON.stringify({
@@ -700,11 +705,13 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
         }
 
         text = JSON.stringify({
-          narrative: ['The brass armatures of the Whispering Orrery turn with steady, ancient precision as the world advances.'],
+          narrative: [
+            `The scene remains grounded in ${canonicalLocationName}. The immediate surroundings settle around the latest action, with no new location change committed.`,
+          ],
           dialogue: [],
           events: ['EMERGENCY_DETERMINISTIC_TICK'],
           stateChanges: [],
-          memoryCandidates: ['Observed the celestial armatures in motion.'],
+          memoryCandidates: [`The latest action was resolved in ${canonicalLocationName}.`],
           audioCues: ['brass_click'],
         });
         break;

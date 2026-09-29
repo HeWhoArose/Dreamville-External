@@ -1091,7 +1091,7 @@ test('Phase 12: Story Run persistence includes the per-story story-check RNG sta
 test('Phase 12: Story narration model picker resolves the exact narrative task route without hiding non-free configured fallbacks', () => {
 	const source = fs.readFileSync(path.join(process.cwd(), 'src/components/StoryView.tsx'), 'utf8');
 	assert.match(source, /taskRoutes/);
-	assert.match(source, /narrative\\.generate/);
+	assert.match(source, /narrative\.generate/);
 	assert.match(source, /allRegisteredModels/);
 	assert.doesNotMatch(source, /Verified free models only/);
 });

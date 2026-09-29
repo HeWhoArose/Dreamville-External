@@ -38,6 +38,7 @@ import { EpistemicInspectorModal } from './components/EpistemicInspectorModal';
 import { ContextInspectorModal } from './components/ContextInspectorModal';
 import { DeveloperDiagnosticsModal } from './components/DeveloperDiagnosticsModal';
 import { ArchiveModal } from './components/ArchiveModal';
+import { TokenUsageMonitorModal } from './components/TokenUsageMonitorModal';
 import { CreateStoryWizard } from './components/CreateStoryWizard';
 import { CharacterGenesisView } from './components/characterGenesis/CharacterGenesisView';
 
@@ -136,6 +137,7 @@ export const App: React.FC = () => {
   const [isContextModalOpen, setIsContextModalOpen] = useState(false);
   const [isDeveloperDiagnosticsOpen, setIsDeveloperDiagnosticsOpen] = useState(false);
   const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
+  const [isTokenUsageModalOpen, setIsTokenUsageModalOpen] = useState(false);
   const [genesisWorld, setGenesisWorld] = useState<WorldTemplate | null>(null);
   const [activeOpeningScene, setActiveOpeningScene] = useState<OpeningScene | null>(null);
   const [isLoadingOpening, setIsLoadingOpening] = useState(false);
@@ -894,6 +896,7 @@ export const App: React.FC = () => {
           activeStoryTitle={activeStorySummary?.title}
           worldClockTime={formattedWorldTime}
           isEngineReady={Boolean(viewState && !networkError)}
+          onOpenTokenUsage={() => setIsTokenUsageModalOpen(true)}
         >
           {/* Route Viewports */}
           {currentRoute === 'dashboard' && (
@@ -1134,12 +1137,21 @@ export const App: React.FC = () => {
               onOpenEpistemicInspector={() => setIsEpistemicModalOpen(true)}
               onOpenContextInspector={() => setIsContextModalOpen(true)}
               onOpenDeveloperDiagnostics={() => setIsDeveloperDiagnosticsOpen(true)}
+              onOpenTokenUsage={() => setIsTokenUsageModalOpen(true)}
             />
           )}
         </AppShell>
       )}
 
       {/* Modals & Diagnostic Workstations */}
+      <TokenUsageMonitorModal
+        isOpen={isTokenUsageModalOpen}
+        onClose={() => setIsTokenUsageModalOpen(false)}
+        onOpenModelRouting={() => {
+          setIsTokenUsageModalOpen(false);
+          setIsRoutingModalOpen(true);
+        }}
+      />
       <AudioSettingsModal
         isOpen={isAudioSettingsOpen}
         onClose={() => setIsAudioSettingsOpen(false)}

@@ -3629,6 +3629,255 @@ export class MultiModelOrchestrator {
     };
   }
 
+  public async getTokenUsageReport(): Promise<{
+    timestamp: number;
+    totals: {
+      totalTokens: number;
+      inputTokens: number;
+      outputTokens: number;
+      reasoningTokens: number;
+      cachedTokens: number;
+      toolTokens: number;
+      totalRequests: number;
+      successfulRequests: number;
+      failedRequests: number;
+      rateLimitedRequests: number;
+      serverErrorRequests: number;
+      timeoutRequests: number;
+      averageLatencyMs: number;
+    };
+    byProvider: Record<string, {
+      providerId: string;
+      totalTokens: number;
+      inputTokens: number;
+      outputTokens: number;
+      reasoningTokens: number;
+      requests: number;
+      successCount: number;
+      failureCount: number;
+      rateLimit429Count: number;
+      quotaStatus?: ProviderQuotaSnapshot;
+    }>;
+    byModel: Array<{
+      providerId: string;
+      modelId: string;
+      displayName: string;
+      pool: string;
+      health: string;
+      quota: string;
+      operationalStatus: string;
+      cooldownRemainingSec: number;
+      observedTokens: {
+        input: number;
+        output: number;
+        reasoning: number;
+        cached: number;
+        tool: number;
+        total: number;
+      };
+      requests: number;
+      successCount: number;
+      failureCount: number;
+      rateLimit429Count: number;
+      timeoutCount: number;
+      averageLatencyMs: number;
+      lastSuccessAt?: number;
+      lastFailureAt?: number;
+    }>;
+    byCategory: Record<string, {
+      category: AiTaskCategory;
+      totalTokens: number;
+      inputTokens: number;
+      outputTokens: number;
+      reasoningTokens: number;
+      requests: number;
+      rateLimit429Count: number;
+    }>;
+    recentLedger: UsageLedgerEntry[];
+    rateLimitStatus: {
+      isAnyModelThrottled: boolean;
+      isAnyModelCoolingDown: boolean;
+      activeCooldowns: Array<{
+        providerId: string;
+        modelId: string;
+        remainingSeconds: number;
+      }>;
+      total429Events: number;
+    };
+  }> {
+    const now = Date.now();
+    const models = this.getModelRuntimeStatus();
+    const usage = this.getUsageLedger({ limit: 100 });
+
+    const totals = {
+      totalTokens: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      reasoningTokens: 0,
+      cachedTokens: 0,
+      toolTokens: 0,
+      totalRequests: 0,
+      successfulRequests: 0,
+      failedRequests: 0,
+      rateLimitedRequests: 0,
+      serverErrorRequests: 0,
+      timeoutRequests: 0,
+      averageLatencyMs: 0,
+    };
+
+    const byProvider: Record<string, any> = {};
+    const byCategory: Record<string, any> = {};
+    const activeCooldowns: Array<{ providerId: string; modelId: string; remainingSeconds: number }> = [];
+
+    // Aggregate by models
+    const byModel = models.map((m) => {
+      const reg = Array.from(this.models.values()).find(
+        (candidate) => candidate.providerId === m.providerId && candidate.modelId === m.modelId
+      );
+      const remainingCooldown = m.cooldownUntil && m.cooldownUntil > now
+        ? Math.ceil((m.cooldownUntil - now) / 1000)
+        : 0;
+
+      if (remainingCooldown > 0) {
+        activeCooldowns.push({
+          providerId: m.providerId,
+          modelId: m.modelId,
+          remainingSeconds: remainingCooldown,
+        });
+      }
+
+      totals.totalTokens += m.observedTokens.total;
+      totals.inputTokens += m.observedTokens.input;
+      totals.outputTokens += m.observedTokens.output;
+      totals.reasoningTokens += m.observedTokens.reasoning;
+      totals.cachedTokens += m.observedTokens.cached;
+      totals.toolTokens += m.observedTokens.tool;
+      totals.totalRequests += m.requests;
+      totals.successfulRequests += m.successCount;
+      totals.failedRequests += m.failureCount;
+      totals.rateLimitedRequests += m.rateLimit429Count;
+      totals.serverErrorRequests += m.serverError5xxCount;
+      totals.timeoutRequests += m.timeoutCount;
+
+      if (!byProvider[m.providerId]) {
+        byProvider[m.providerId] = {
+          providerId: m.providerId,
+          totalTokens: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          reasoningTokens: 0,
+          requests: 0,
+          successCount: 0,
+          failureCount: 0,
+          rateLimit429Count: 0,
+        };
+      }
+
+      byProvider[m.providerId].totalTokens += m.observedTokens.total;
+      byProvider[m.providerId].inputTokens += m.observedTokens.input;
+      byProvider[m.providerId].outputTokens += m.observedTokens.output;
+      byProvider[m.providerId].reasoningTokens += m.observedTokens.reasoning;
+      byProvider[m.providerId].requests += m.requests;
+      byProvider[m.providerId].successCount += m.successCount;
+      byProvider[m.providerId].failureCount += m.failureCount;
+      byProvider[m.providerId].rateLimit429Count += m.rateLimit429Count;
+
+      return {
+        providerId: m.providerId,
+        modelId: m.modelId,
+        displayName: reg?.displayName || m.modelId,
+        pool: reg?.pool || 'creative',
+        health: m.status,
+        quota: reg?.quota || 'Healthy',
+        operationalStatus: m.operationalStatus,
+        cooldownRemainingSec: remainingCooldown,
+        observedTokens: m.observedTokens,
+        requests: m.requests,
+        successCount: m.successCount,
+        failureCount: m.failureCount,
+        rateLimit429Count: m.rateLimit429Count,
+        timeoutCount: m.timeoutCount,
+        averageLatencyMs: m.averageLatencyMs,
+        lastSuccessAt: m.lastSuccessAt,
+        lastFailureAt: m.lastFailureAt,
+      };
+    });
+
+    // Aggregate by category from recent usage ledger
+    for (const entry of usage) {
+      if (!byCategory[entry.category]) {
+        byCategory[entry.category] = {
+          category: entry.category,
+          totalTokens: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          reasoningTokens: 0,
+          requests: 0,
+          rateLimit429Count: 0,
+        };
+      }
+      byCategory[entry.category].totalTokens += entry.totalTokens;
+      byCategory[entry.category].inputTokens += entry.inputTokens;
+      byCategory[entry.category].outputTokens += entry.outputTokens;
+      byCategory[entry.category].reasoningTokens += entry.reasoningTokens;
+      byCategory[entry.category].requests += 1;
+      if (entry.failureType === '429') {
+        byCategory[entry.category].rateLimit429Count += 1;
+      }
+    }
+
+    // Query live provider quotas if available
+    for (const providerId of Object.keys(byProvider)) {
+      try {
+        const adapter = this.getAdapter(providerId);
+        if (adapter && typeof adapter.getQuotaStatus === 'function') {
+          byProvider[providerId].quotaStatus = await adapter.getQuotaStatus().catch(() => undefined);
+        }
+      } catch {
+        // Best effort
+      }
+    }
+
+    const totalSuccessfulWithLatency = models.filter((m) => m.successCount > 0);
+    totals.averageLatencyMs = totalSuccessfulWithLatency.length > 0
+      ? Math.round(
+          totalSuccessfulWithLatency.reduce((acc, m) => acc + (m.averageLatencyMs * m.successCount), 0) /
+          Math.max(1, totals.successfulRequests)
+        )
+      : 0;
+
+    return {
+      timestamp: now,
+      totals,
+      byProvider,
+      byModel,
+      byCategory,
+      recentLedger: usage,
+      rateLimitStatus: {
+        isAnyModelThrottled: models.some((m) => m.operationalStatus === 'THROTTLED'),
+        isAnyModelCoolingDown: activeCooldowns.length > 0,
+        activeCooldowns,
+        total429Events: totals.rateLimitedRequests,
+      },
+    };
+  }
+
+  public resetUsageTelemetry(): void {
+    this.usageLedger = [];
+    for (const status of this.runtimeStatus.values()) {
+      status.requests = 0;
+      status.successCount = 0;
+      status.failureCount = 0;
+      status.consecutiveFailures = 0;
+      status.rateLimit429Count = 0;
+      status.serverError5xxCount = 0;
+      status.timeoutCount = 0;
+      status.lastLatencyMs = 0;
+      status.averageLatencyMs = 0;
+      status.observedTokens = { input: 0, output: 0, reasoning: 0, cached: 0, tool: 0, total: 0 };
+    }
+  }
+
   public async testModel(providerId: string, modelId: string): Promise<{
     success: boolean;
     status: 'READY' | 'CONFIGURED_NOT_TESTED' | 'QUOTA_LIMIT' | 'UNAVAILABLE' | 'NOT_CONFIGURED';

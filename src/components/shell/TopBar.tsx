@@ -11,6 +11,7 @@ export interface TopBarProps {
   worldClockTime?: string;
   activeStoryTitle?: string;
   isEngineReady?: boolean;
+  onOpenTokenUsage?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -21,6 +22,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   worldClockTime,
   activeStoryTitle,
   isEngineReady = true,
+  onOpenTokenUsage,
 }) => {
   return (
     <header
@@ -86,6 +88,18 @@ export const TopBar: React.FC<TopBarProps> = ({
 
       {/* Right: Engine Health & Quick Actions */}
       <div className="flex items-center gap-2.5">
+        {onOpenTokenUsage && (
+          <button
+            type="button"
+            onClick={onOpenTokenUsage}
+            className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-[var(--db-radius-md)] bg-[var(--db-surface-purple)] border border-[var(--db-purple-500)]/30 text-[var(--db-gold-400)] hover:bg-[var(--db-purple-500)]/25 hover:border-[var(--db-gold-500)]/50 transition-all font-mono"
+            title="Open Real-time Token Consumption & Rate Limit Monitor"
+          >
+            <span>⚡</span>
+            <span className="hidden sm:inline font-sans text-xs">Tokens & Quotas</span>
+          </button>
+        )}
+
         <Badge
           variant={isEngineReady ? 'emerald' : 'amber'}
           size="sm"

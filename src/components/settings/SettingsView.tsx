@@ -24,6 +24,7 @@ export interface SettingsViewProps {
   onOpenEpistemicInspector?: () => void;
   onOpenContextInspector?: () => void;
   onOpenDeveloperDiagnostics?: () => void;
+  onOpenTokenUsage?: () => void;
   className?: string;
 }
 
@@ -132,6 +133,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   onOpenEpistemicInspector,
   onOpenContextInspector,
   onOpenDeveloperDiagnostics,
+  onOpenTokenUsage,
   className = '',
 }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
@@ -681,6 +683,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 System Healthy
               </Badge>
             </div>
+          </div>
+
+          {/* Real-time Token Usage & Rate Limits Card */}
+          <div className="p-5 rounded-[var(--db-radius-lg)] bg-[var(--db-bg-card)] border border-[var(--db-border-default)] flex items-center justify-between">
+            <div className="space-y-1">
+              <h3 className="text-sm font-serif font-bold text-[var(--db-text-primary)] flex items-center gap-2">
+                <span>⚡</span> API Token Consumption & Model Rate Limits
+              </h3>
+              <p className="text-xs text-[var(--db-text-muted)]">
+                Inspect real-time token depletion, reasoning overhead, 429 rate limit events, and active model cooldowns.
+              </p>
+            </div>
+            <Button
+              variant="subtle"
+              size="sm"
+              onClick={() => onOpenTokenUsage?.()}
+              className="text-xs"
+            >
+              Open Resource Monitor →
+            </Button>
           </div>
         </div>
       )}
@@ -1866,6 +1888,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 <p className="text-[11px] text-[var(--db-text-muted)]">Examine dynamic engine context windows and prompt compilation.</p>
                 <Button variant="subtle" size="sm" onClick={() => onOpenContextInspector?.()}>
                   Launch Context Inspector
+                </Button>
+              </div>
+
+              <div className="p-4 rounded-[var(--db-radius-md)] bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] space-y-2">
+                <h4 className="text-xs font-bold text-[var(--db-text-primary)]">Token & Rate Limit Monitor</h4>
+                <p className="text-[11px] text-[var(--db-text-muted)]">Real-time token consumption, reasoning overhead, 429 rate limit events, and cooldown countdowns.</p>
+                <Button variant="subtle" size="sm" onClick={() => onOpenTokenUsage?.()}>
+                  Launch Token Monitor
                 </Button>
               </div>
             </div>

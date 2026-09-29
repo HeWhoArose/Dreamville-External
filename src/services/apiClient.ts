@@ -2923,6 +2923,37 @@ class ApiClient {
     return data;
   }
 
+  public async getTokenUsageReport(): Promise<{ success: boolean; report: any }> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/token-usage`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    const data = await readJsonSafely<any>(res);
+    if (!res.ok) throw new Error(data?.error || `Failed to fetch token usage report: HTTP ${res.status}`);
+    return data;
+  }
+
+  public async resetTokenTelemetry(): Promise<{ success: boolean; message: string; report: any }> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/reset-telemetry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    });
+    const data = await readJsonSafely<any>(res);
+    if (!res.ok) throw new Error(data?.error || `Failed to reset token telemetry: HTTP ${res.status}`);
+    return data;
+  }
+
+  public async resetModelCooldown(providerId?: string, modelId?: string): Promise<{ success: boolean; message: string; report: any }> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/reset-cooldown`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ providerId, modelId }),
+    });
+    const data = await readJsonSafely<any>(res);
+    if (!res.ok) throw new Error(data?.error || `Failed to reset model cooldown: HTTP ${res.status}`);
+    return data;
+  }
+
 }
 
 export const apiClient = new ApiClient();

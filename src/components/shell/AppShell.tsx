@@ -11,6 +11,7 @@ export interface AppShellProps {
   activeStoryTitle?: string;
   worldClockTime?: string;
   isEngineReady?: boolean;
+  onOpenTokenUsage?: () => void;
 }
 
 export const AppShell: React.FC<AppShellProps> = ({
@@ -20,6 +21,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   activeStoryTitle,
   worldClockTime,
   isEngineReady = true,
+  onOpenTokenUsage,
 }) => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -48,6 +50,7 @@ export const AppShell: React.FC<AppShellProps> = ({
         activeStoryTitle={activeStoryTitle}
         worldClockTime={worldClockTime}
         isEngineReady={isEngineReady}
+        onOpenTokenUsage={onOpenTokenUsage}
       />
 
       {/* Main Layout Area */}

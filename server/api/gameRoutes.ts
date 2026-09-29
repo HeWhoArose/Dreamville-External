@@ -7227,6 +7227,86 @@ gameRouter.post('/orchestrator/health', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/game/orchestrator/token-usage
+ * Returns real-time API token consumption metrics, active provider quotas, and model rate limit statuses.
+ */
+gameRouter.get('/orchestrator/token-usage', async (_req: Request, res: Response) => {
+  try {
+    const orchestrator = worldRepository.getAiOrchestrator();
+    const report = await orchestrator.getTokenUsageReport();
+    res.json({
+      success: true,
+      report,
+    });
+  } catch (error: any) {
+    console.error('Failed to get token usage report:', error);
+    res.status(500).json({
+      success: false,
+      error: error?.message || 'Failed to retrieve token usage report.',
+    });
+  }
+});
+
+/**
+ * POST /api/game/orchestrator/reset-telemetry
+ * Clears accumulated token metrics and request history for a fresh testing session.
+ */
+gameRouter.post('/orchestrator/reset-telemetry', async (_req: Request, res: Response) => {
+  try {
+    const orchestrator = worldRepository.getAiOrchestrator();
+    orchestrator.resetUsageTelemetry();
+    const report = await orchestrator.getTokenUsageReport();
+    res.json({
+      success: true,
+      message: 'Token usage telemetry and ledger reset successfully.',
+      report,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error?.message || 'Failed to reset usage telemetry.',
+    });
+  }
+});
+
+/**
+ * POST /api/game/orchestrator/reset-cooldown
+ * Resets cooldown status and circuit breaker for a specific model or all models.
+ */
+gameRouter.post('/orchestrator/reset-cooldown', async (req: Request, res: Response) => {
+  try {
+    const { providerId, modelId } = req.body || {};
+    const orchestrator = worldRepository.getAiOrchestrator();
+
+    if (providerId && modelId) {
+      orchestrator.resetCircuitBreaker(providerId, modelId);
+      orchestrator.updateModelHealth(providerId, modelId, 'Healthy');
+    } else {
+      for (const model of orchestrator.getAllModels()) {
+        orchestrator.resetCircuitBreaker(model.providerId, model.modelId);
+        if (model.health === 'Throttled') {
+          orchestrator.updateModelHealth(model.providerId, model.modelId, 'Healthy');
+        }
+      }
+    }
+
+    const report = await orchestrator.getTokenUsageReport();
+    res.json({
+      success: true,
+      message: providerId && modelId
+        ? `Cooldown and circuit breaker reset for ${providerId}::${modelId}.`
+        : 'All model cooldowns and circuit breakers reset.',
+      report,
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error?.message || 'Failed to reset model cooldown.',
+    });
+  }
+});
+
+/**
  * POST /api/game/orchestrator/discover
  * Dynamically discovers models from providers (e.g. Google Gemini) and updates the registry.
  */

@@ -273,6 +273,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
   const [narrationModelLoading, setNarrationModelLoading] = useState(false);
   const [narrationModelError, setNarrationModelError] = useState<string | null>(null);
   const [narrationLastExecution, setNarrationLastExecution] = useState<any | null>(null);
+  const [narrationCurrentOperation, setNarrationCurrentOperation] = useState<any | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const actionInputRef = useRef<HTMLInputElement | null>(null);
@@ -481,7 +482,8 @@ export const StoryView: React.FC<StoryViewProps> = ({
         apiClient.getOrchestratorCategoryStates(),
       ]);
       const category = categories.find((entry: any) => entry.category === 'narration');
-      setNarrationLastExecution(category?.currentOperation || category?.lastExecution || null);
+      setNarrationCurrentOperation(category?.currentOperation || null);
+      setNarrationLastExecution(category?.lastExecution || null);
       const registeredModels = (Array.isArray(modelResponse.models) ? modelResponse.models : [])
         .filter((model: any) => model.freeTierStatus === 'VERIFIED' && model.freeTierEvidenceSource === 'PROVIDER');
       const fallbackChain = Array.isArray(category?.fallbackChain) ? category.fallbackChain : [];
@@ -1259,13 +1261,13 @@ export const StoryView: React.FC<StoryViewProps> = ({
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-xs font-semibold text-stone-200">Narration AI</span>
-                      {narrationLastExecution ? (
+                      {narrationCurrentOperation ? (
+                        <span className="rounded-full bg-cyan-500/10 px-2 py-0.5 text-[9px] font-mono text-cyan-300">
+                          Running · {narrationCurrentOperation.displayName || narrationCurrentOperation.modelId}
+                        </span>
+                      ) : narrationLastExecution ? (
                         <span className={`rounded-full px-2 py-0.5 text-[9px] font-mono ${narrationLastExecution.status === 'SUCCESS' ? 'bg-emerald-500/10 text-emerald-300' : 'bg-red-500/10 text-red-300'}`}>
                           {narrationLastExecution.status === 'SUCCESS' ? 'Last run' : 'Last failed'} · {narrationLastExecution.displayName || narrationLastExecution.modelId}
-                        </span>
-                      ) : narrationCategoryState?.currentOperation ? (
-                        <span className="rounded-full bg-cyan-500/10 px-2 py-0.5 text-[9px] font-mono text-cyan-300">
-                          Running · {narrationCategoryState.currentOperation.displayName || narrationCategoryState.currentOperation.modelId}
                         </span>
                       ) : (
                         <span className="text-[9px] text-stone-600">No narration run recorded in this session</span>

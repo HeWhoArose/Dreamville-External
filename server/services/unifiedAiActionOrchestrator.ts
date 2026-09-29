@@ -3,6 +3,8 @@ import type { CapabilityDefinition } from '../domain/capabilityEngine';
 import { CapabilitySimulationEngine, type CapabilitySimulationResult } from '../domain/capabilitySimulationEngine';
 import type { TaskId } from '../domain/aiOrchestrator';
 import { getAiTaskContract } from '../domain/aiTaskContracts';
+import { AiCallBudget, inferAiCallPolicyMode } from '../domain/aiCallPolicy';
+import { WorkingContextEngine } from '../domain/workingContextEngine';
 
 export interface ActionResolutionHint {
 	item?: { requested: boolean; itemName?: string; amount?: number };
@@ -14,7 +16,7 @@ export interface UnifiedActionPipelineResult {
 	actionText: string;
 	intent: { baseAction: string; intent: string; requestedEffects: string[]; modifiers: string[]; target?: string; confidence: number; source: 'AI' | 'DETERMINISTIC_FALLBACK' };
 	resolutionHint?: ActionResolutionHint;
-	research: { required: boolean; brief: string; facts: string[]; source: 'AI' | 'DETERMINISTIC_FALLBACK' | 'NOT_REQUIRED' };
+	research: { required: boolean; brief: string; facts: string[]; sources?: string[]; source: 'AI' | 'DETERMINISTIC_FALLBACK' | 'NOT_REQUIRED' };
 	capability?: CapabilityDefinition;
 	alternativeCapability?: CapabilityDefinition;
 	capabilityIntent: boolean;
@@ -25,6 +27,7 @@ export interface UnifiedActionPipelineResult {
 	tacticalContext?: { required: boolean; plan?: string; source: 'AI' | 'DETERMINISTIC_FALLBACK' | 'NOT_REQUIRED' };
 	narrationDirective: string;
 	telemetry: Array<{ task: TaskId; modelId: string; providerId: string; source: string; attempts: number }>;
+	aiCallPolicy: ReturnType<AiCallBudget['snapshot']>;
 }
 
 function json<T>(text: string): T | null { try { const value = JSON.parse(text); return value && typeof value === 'object' ? value as T : null; } catch { return null; } }
@@ -48,14 +51,25 @@ function capabilityCandidateFromWorld(world: any, actionText: string): Capabilit
 export class UnifiedAiActionOrchestrator {
 	constructor(private readonly repository: WorldRepository) {}
 
-	private async runTask(task: TaskId, prompt: string, systemInstruction: string, options: any = {}) {
-		const result = await this.repository.getAiOrchestrator().executeTaskGeneration(task, prompt, systemInstruction, {
-			timeoutMs: options.timeoutMs ?? getAiTaskContract(task).defaultTimeoutMs,
-			maxTokens: options.maxTokens ?? getAiTaskContract(task).defaultMaxTokens,
+	private async runTask(
+		task: TaskId,
+		prompt: string,
+		systemInstruction: string,
+		options: any = {},
+		budget?: AiCallBudget,
+	) {
+		const contract = getAiTaskContract(task);
+		const requestedMaxTokens = options.maxTokens ?? contract.defaultMaxTokens;
+		const decision = budget?.authorize(task, requestedMaxTokens);
+		if (decision && !decision.allowed) {
+			throw new Error('AI_CALL_POLICY_BLOCKED: ' + decision.reason);
+		}
+		return this.repository.getAiOrchestrator().executeTaskGeneration(task, prompt, systemInstruction, {
+			timeoutMs: options.timeoutMs ?? contract.defaultTimeoutMs,
+			maxTokens: decision?.maxTokens ?? requestedMaxTokens,
 			contextTokens: Math.min(12000, Math.max(0, Math.ceil(prompt.length / 4))),
 			validateResponse: options.validateResponse,
 		});
-		return result;
 	}
 
 	public async resolveAction(storyId: string, actionText: string, sceneContext?: Record<string, unknown>): Promise<UnifiedActionPipelineResult> {
@@ -76,15 +90,20 @@ export class UnifiedAiActionOrchestrator {
 			.sort((a, b) => b.score - a.score)[0]?.item;
 		const itemUseRequested = /\b(use|consume|drink|eat|apply|read|activate)\b/i.test(cleanAction);
 		const checkOrHazardRequested = /\b(hide|sneak|search|inspect|investigate|climb|jump|dodge|evade|resist|persuade|deceive|intimidate|swim|fall|fell|falling|trap|poison|gas|fumes|debris|collapse)\b/i.test(cleanAction);
+		const explicitCapabilitySyntax = /\b(cast|activate|invoke|channel|release)\b/i.test(cleanAction);
 		const preCandidate =
 			owned.find((cap) => typeof cap?.name === 'string' && normalizedAction.includes(cap.name.toLowerCase())) ||
 			capabilityCandidateFromWorld(world, cleanAction);
 		const shouldAskIntentModel =
-			Boolean(preCandidate) ||
-			/\b(cast|activate|invoke|channel|release)\b/i.test(cleanAction) ||
-			(/\buse\b/i.test(cleanAction) && !itemMatch) ||
-			checkOrHazardRequested ||
-			(itemUseRequested && !itemMatch);
+			!preCandidate &&
+			(explicitCapabilitySyntax || checkOrHazardRequested || (itemUseRequested && !itemMatch));
+		const aiCallPolicyMode = inferAiCallPolicyMode({
+			hasCanonicalCapability: Boolean(preCandidate),
+			itemKnown: Boolean(itemMatch),
+			requiresCheckOrHazardInterpretation: checkOrHazardRequested,
+			explicitCapabilitySyntax,
+		});
+		const aiCallBudget = new AiCallBudget(aiCallPolicyMode);
 		let intent = deterministicIntent(cleanAction);
 		let capabilityIntent = Boolean(preCandidate);
 		let resolutionHint: ActionResolutionHint | undefined;
@@ -94,7 +113,8 @@ export class UnifiedAiActionOrchestrator {
 					'intent.interpret',
 					JSON.stringify({ action: cleanAction, character: run?.protagonist?.identity?.name, scene: sceneContext || {}, knownItem: itemMatch ? { name: itemMatch.name, quantity: itemMatch.quantity, charges: itemMatch.charges } : undefined }),
 					'Return ONLY JSON: {"baseAction":"...","intent":"...","capabilityIntent":true|false,"requestedEffects":[],"modifiers":[],"target":"","confidence":0..1,"resolutionHint":{"item":{"requested":true,"itemName":"","amount":1},"check":{"kind":"ABILITY_CHECK|SAVING_THROW|NONE","skillId":"","ability":""},"hazard":{"type":"FALL|TRAP|DEBRIS|POISON|FIRE|OTHER","distanceFeet":0}}}. Use hints only to identify what the canonical engine should resolve. Never invent ownership, HP, damage, DC, dice, costs, or success. Hazard distance is valid only when explicitly stated in action or scene.',
-					{ timeoutMs: 4500, maxTokens: 450, validateResponse: (text: string) => { const p = json<any>(text); return p && typeof p.baseAction === 'string' && typeof p.intent === 'string' ? { valid: true } : { valid: false, errorReason: 'Invalid intent schema.' }; } }
+					{ timeoutMs: 4500, maxTokens: 350, validateResponse: (text: string) => { const p = json<any>(text); return p && typeof p.baseAction === 'string' && typeof p.intent === 'string' ? { valid: true } : { valid: false, errorReason: 'Invalid intent schema.' }; } },
+					aiCallBudget,
 				);
 			const p = json<any>(result.text);
 			if (p) {
@@ -121,21 +141,52 @@ export class UnifiedAiActionOrchestrator {
 		// Otherwise, the LLM intent interpretation is the primary classifier. The
 		// deterministic capability regex is only the fallback when intent AI fails.
 		const capabilityLike = Boolean(candidate) || capabilityIntent;
-		let research: UnifiedActionPipelineResult['research'] = {required:false,brief:'',facts:[],source:'NOT_REQUIRED'};
+		let research: UnifiedActionPipelineResult['research'] = {required:false,brief:'',facts:[],sources:[],source:'NOT_REQUIRED'};
 		if (capabilityLike && !candidate) {
-			research={required:true,brief:'Research remains advisory evidence until explicitly qualified and promoted.',facts:[],source:'DETERMINISTIC_FALLBACK'};
-			try {
-				const result=await this.runTask('research.query',JSON.stringify({query:cleanAction,world:{title:world?.title,description:world?.description,rules:world?.worldRules||world?.customRules||[]},instruction:'Advisory only; do not mutate canon.'}),'Return ONLY JSON: {"brief":"...","facts":["..."]}. Never claim generated facts are canonical.',{timeoutMs:8000,maxTokens:1200,validateResponse:(text:string)=>{const p=json<any>(text);return p&&typeof p.brief==='string'&&Array.isArray(p.facts)?{valid:true}:{valid:false,errorReason:'Invalid research schema.'};}});
-				const p=json<any>(result.text); if(p) research={required:true,brief:p.brief,facts:p.facts.map(String).slice(0,12),source:result.source==='DETERMINISTIC_FALLBACK'?'DETERMINISTIC_FALLBACK':'AI'};
-				telemetry.push({task:'research.query',modelId:result.modelId,providerId:result.providerId,source:result.source,attempts:result.attempts});
-			} catch {}
+			const researchResult = WorkingContextEngine.researchForAction({
+				storyId,
+				playerAction: cleanAction,
+				viewerActorId: actorId,
+				worldRepo: this.repository,
+				hardTokenBudget: 900,
+			});
+			research = {
+				required: researchResult.required,
+				brief: researchResult.brief,
+				facts: researchResult.facts,
+				sources: researchResult.sources,
+				source: 'DETERMINISTIC_FALLBACK',
+			};
 		}
 		let synthesized: CapabilityDefinition | undefined;
-		if(capabilityLike && !candidate) {
+		if (capabilityLike && !candidate && capabilityIntent && intent.source === 'AI') {
 			try {
-				const result=await this.runTask('capability.synthesize',JSON.stringify({action:cleanAction,intent,research,character:run?.protagonist,world,ownedCapabilities:owned.map(c=>({id:c.id,name:c.name,description:c.description}))}),'Return ONLY JSON describing one proposal with name, category, activationMode, powerTier, costs, description, targetType, rangeScope, actionType. It is never a grant.',{timeoutMs:12000,maxTokens:1600,validateResponse:(text:string)=>{const p=json<any>(text);return p&&typeof p.name==='string'&&typeof p.description==='string'?{valid:true}:{valid:false,errorReason:'Invalid capability proposal schema.'};}});
-				const p=json<any>(result.text); if(p) synthesized={...p,id:'proposal_'+storyId+'_'+actorId,provenance:'AI_GENERATED'};
-				telemetry.push({task:'capability.synthesize',modelId:result.modelId,providerId:result.providerId,source:result.source,attempts:result.attempts});
+				const result = await this.runTask(
+					'capability.synthesize',
+					JSON.stringify({
+						action: cleanAction,
+						intent,
+						research,
+						character: run?.protagonist,
+						world,
+						ownedCapabilities: owned.map((c) => ({ id: c.id, name: c.name, description: c.description })),
+					}),
+					'Return ONLY JSON describing one proposal with name, category, activationMode, powerTier, costs, description, targetType, rangeScope, actionType. It is never a grant and must use canonical research only as evidence.',
+					{
+						timeoutMs: 10000,
+						maxTokens: 850,
+						validateResponse: (text: string) => {
+							const p = json<any>(text);
+							return p && typeof p.name === 'string' && typeof p.description === 'string'
+								? { valid: true }
+								: { valid: false, errorReason: 'Invalid capability proposal schema.' };
+						},
+					},
+					aiCallBudget,
+				);
+				const p = json<any>(result.text);
+				if (p) synthesized = { ...p, id: 'proposal_' + storyId + '_' + actorId, provenance: 'AI_GENERATED' };
+				telemetry.push({ task: 'capability.synthesize', modelId: result.modelId, providerId: result.providerId, source: result.source, attempts: result.attempts });
 			} catch {}
 		}
 		const finalCandidate=candidate||synthesized;
@@ -193,73 +244,28 @@ export class UnifiedAiActionOrchestrator {
 			} catch {}
 		}
 
-		const rules: UnifiedActionPipelineResult['rules']=simulation.status==='WORLD_FORBIDDEN'||simulation.worldAllowed===false?{status:'BLOCK',reason:simulation.explanation,source:'DETERMINISTIC'}:simulation.status==='UNSUPPORTED_REQUEST'?{status:'REVIEW',reason:'No capability mechanism was identified; use normal action resolution.',source:'DETERMINISTIC'}:{status:'PASS',reason:simulation.explanation,source:'DETERMINISTIC'};
-		let ruleAnalysis = '';
-		if (capabilityLike) {
-			try {
-				const result = await this.runTask(
-					'rules.analyze',
-					JSON.stringify({
-						action: cleanAction,
-						intent,
-						research,
-						simulation,
-						worldRules: world?.worldRules || world?.customRules || [],
-						rulesProfile,
-					}),
-					'Return ONLY a concise JSON object {"analysis":"..."}. Analyze applicable rules as advisory context only. Never override deterministic resolution.',
-					{
-						timeoutMs: 6000,
-						maxTokens: 800,
-						validateResponse: (text: string) => {
-							const p = json<any>(text);
-							return p && typeof p.analysis === 'string'
-								? { valid: true }
-								: { valid: false, errorReason: 'Invalid rule analysis schema.' };
-						},
-					},
-				);
-				const p = json<any>(result.text);
-				if (p) ruleAnalysis = p.analysis;
-				telemetry.push({
-					task: 'rules.analyze',
-					modelId: result.modelId,
-					providerId: result.providerId,
-					source: result.source,
-					attempts: result.attempts,
-				});
-			} catch {}
-		}
-		let explanation=rules.reason;
-		if(capabilityLike){
-			try{
-				const result=await this.runTask(
-					'capability.explain',
-					JSON.stringify({
-						action:cleanAction,
-						intent,
-						research,
-						simulation,
-						rules,
-						ruleAnalysis,
-					}),
-					'Explain the canonical result plainly, including why the action is allowed, blocked, or requires progression. Never override or invent mechanics.',
-					{timeoutMs:4500,maxTokens:700}
-				);
-				explanation=result.text||explanation;
-				telemetry.push({
-					task:'capability.explain',
-					modelId:result.modelId,
-					providerId:result.providerId,
-					source:result.source,
-					attempts:result.attempts,
-				});
-			}catch{}
-		}
+		const rules: UnifiedActionPipelineResult['rules'] =
+			simulation.status === 'WORLD_FORBIDDEN' || simulation.worldAllowed === false
+				? { status:'BLOCK', reason:simulation.explanation, source:'DETERMINISTIC' }
+				: simulation.status === 'UNSUPPORTED_REQUEST'
+					? { status:'REVIEW', reason:'No capability mechanism was identified; use normal action resolution.', source:'DETERMINISTIC' }
+					: { status:'PASS', reason:simulation.explanation, source:'DETERMINISTIC' };
+
+		const ruleAnalysis = capabilityLike
+			? 'Canonical rules profile and deterministic capability simulation are authoritative. No advisory rules-model call was used.'
+			: '';
+
+		const explanation = capabilityLike
+			? [rules.reason, research.brief ? 'Relevant canonical context was retrieved deterministically.' : ''].filter(Boolean).join(' ')
+			: rules.reason;
+
 		let tacticalContext: UnifiedActionPipelineResult['tacticalContext']={required:false,source:'NOT_REQUIRED'};
-		if(Boolean(this.repository.getCombatEngine(storyId).getCurrentActor())&&capabilityLike){
-			tacticalContext={required:true,source:'DETERMINISTIC_FALLBACK'};
-			try{const result=await this.runTask('tactical.reason',JSON.stringify({action:cleanAction,intent,research,rules,ruleAnalysis,simulation,combat:this.repository.getCombatEngine(storyId).getParticipants()}),'Return ONLY JSON {"plan":"..."}. Never invent actors, abilities, positions, or outcomes.',{timeoutMs:6000,maxTokens:900,validateResponse:(text:string)=>{const p=json<any>(text);return p&&typeof p.plan==='string'?{valid:true}:{valid:false,errorReason:'Invalid tactical plan.'};}});const p=json<any>(result.text);if(p)tacticalContext={required:true,plan:p.plan,source:result.source==='DETERMINISTIC_FALLBACK'?'DETERMINISTIC_FALLBACK':'AI'};telemetry.push({task:'tactical.reason',modelId:result.modelId,providerId:result.providerId,source:result.source,attempts:result.attempts});}catch{}
+		if (Boolean(this.repository.getCombatEngine(storyId).getCurrentActor()) && capabilityLike) {
+			tacticalContext = {
+				required: true,
+				plan: simulation.explanation || 'Use the canonical combat engine to resolve the action.',
+				source: 'DETERMINISTIC_FALLBACK',
+			};
 		}
 		const tacticalDirective = tacticalContext?.required
 			? ' Tactical context: ' + (tacticalContext.plan || 'No tactical plan was produced; keep the canonical action outcome authoritative.')
@@ -281,6 +287,7 @@ export class UnifiedAiActionOrchestrator {
 				? ('Describe only the canonical outcome after resolution. Intent: '+intent.intent+'. Requested effects: '+intent.requestedEffects.join(', ')+'. Mechanical result: '+simulation.explanation+'. Capability explanation: '+explanation+'. Research context: '+research.brief+'. Rule analysis context: '+ruleAnalysis+'.'+tacticalDirective)
 				: ('Explain the canonical rejection/block without inventing success. '+explanation+'. Research context: '+research.brief+'. Rule analysis context: '+ruleAnalysis+'.'+tacticalDirective),
 			telemetry,
+			aiCallPolicy: aiCallBudget.snapshot(),
 		};
 	}
 }

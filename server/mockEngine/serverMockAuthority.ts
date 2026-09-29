@@ -696,6 +696,7 @@ export class ServerMockAuthority {
     let narrativeGeneration: import('../../src/types').ActionLog['narrativeGeneration'];
     let narrativeResearchPacket: any;
     let narrativeContextAudit: any;
+    let narrativeVisualCues: string[] | undefined;
     try {
       const narrator = worldRepository.getAiOrchestrator();
       const generated = await narrator.generateNarrativeOnly({
@@ -742,6 +743,10 @@ export class ServerMockAuthority {
       ) {
         narrativeTurnPackage = generated.turnPackage;
         narrativeResponse = generated.turnPackage.narrative.join('\n\n').trim();
+        narrativeVisualCues = (generated.turnPackage.visualCues || [])
+          .map((cue: any) => typeof cue === 'string' ? cue : cue?.prompt)
+          .filter((cue: any): cue is string => typeof cue === 'string' && cue.trim().length > 0)
+          .slice(0, 4);
       } else {
         narrativeError = {
           code: 'NARRATION_AI_UNAVAILABLE',
@@ -770,6 +775,7 @@ export class ServerMockAuthority {
       actionLog.narrativeResponse = narrativeResponse || undefined;
       actionLog.narrativeError = narrativeError;
       actionLog.narrativeGeneration = narrativeGeneration;
+      actionLog.visualCues = narrativeVisualCues;
       if (storyCheck) {
         actionLog.checkResult = storyCheck;
       }

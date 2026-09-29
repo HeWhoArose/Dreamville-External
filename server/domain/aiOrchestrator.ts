@@ -6175,6 +6175,7 @@ export class MultiModelOrchestrator {
       'When recent narration contains a distinctive phrase, image, or sentence structure, deliberately avoid repeating it unless the repetition is an intentional in-world motif.',
       'Whenever canonical context supports it, add one forward-looking beat: a visible opportunity, complication, clue, threat, NPC response, environmental change, or decision point. Do not invent a new fact merely to create drama.',
       'Use 2–4 developed paragraphs for a normal story turn. A tiny action can be shorter only when the canonical scene genuinely provides no additional consequence; meaningful exploration, discovery, danger, dialogue, or combat should receive enough space to develop.',
+      'When this turn contains multiple visually distinct causal beats, also populate visualCues with 1–4 concise chronological beats for scene art. Each visual cue must describe only an event already supported by the current turn, must remain in the same location unless canonical state changed it, and must not invent setup, aftermath, or future events. If the turn is one frozen visual moment, use one visual cue.',
       'Do not add menus, meta-commentary, engine terminology, model names, system-status language, labels, or debug text.',
       'Do not invent hidden facts, NPC knowledge, items, powers, or outcomes that are not supported by canonical context.',
       'Do not propose or perform canonical state changes. The response is presentation only.',

@@ -1927,7 +1927,8 @@ describe('Broad Implementation Pass — Domain Subsystems', () => {
       // Emergency floor is never chosen when standard models are healthy
       const sel = orchestrator.selectBestModel('narrative.generate');
       assert.strictEqual(sel.selectedModel.isEmergencyFloor, false);
-      assert.ok(sel.selectedModel.modelId.startsWith('gemini') || sel.selectedModel.modelId === 'mock-reasoning-pro');
+      assert.equal(sel.selectedModel.isEmergencyFloor, false);
+      assert.notEqual(sel.selectedModel.providerId, 'provider_deterministic_emergency');
     });
 
     it('handles provider aliasing and quota exhaustion by triggering immediate failover without retry waste (DEF-CH12-DYNAMIC-07)', async () => {

@@ -184,6 +184,97 @@ test('helper callers use the task-specific routes and each primary route model i
 	assert.equal(capabilitySelected.modelId, 'gemini-3.5-flash');
 });
 
+test('helper callers execute through the configured task route and adapter before fallback', async () => {
+	const orchestrator = new MultiModelOrchestrator();
+	const intentModel = {
+		providerId: 'audit_intent_primary',
+		modelId: 'intent-primary',
+		displayName: 'Intent Primary',
+		pool: 'fast' as const,
+		capabilities: ['text_generation', 'structured_output', 'fast'],
+		contextWindow: 32768,
+		health: 'Healthy' as const,
+		quota: 'Healthy' as const,
+		latencyMs: 5,
+		userPriority: 100,
+		roleEligibility: ['intent.interpret'] as const,
+		fallbackEligibility: true,
+		isEmergencyFloor: false,
+		accessStatus: 'accessible' as const,
+		lifecycleState: 'active' as const,
+		supportedInputTypes: ['text'],
+		supportedOutputTypes: ['text', 'json'],
+	};
+	const intentFallback = {
+		...intentModel,
+		providerId: 'audit_intent_fallback',
+		modelId: 'intent-fallback',
+		userPriority: 90,
+	};
+	const capabilityModel = {
+		providerId: 'audit_capability_primary',
+		modelId: 'capability-primary',
+		displayName: 'Capability Primary',
+		pool: 'reasoning' as const,
+		capabilities: ['text_generation', 'reasoning', 'structured_output'],
+		contextWindow: 32768,
+		health: 'Healthy' as const,
+		quota: 'Healthy' as const,
+		latencyMs: 5,
+		userPriority: 100,
+		roleEligibility: ['capability.synthesize'] as const,
+		fallbackEligibility: true,
+		isEmergencyFloor: false,
+		accessStatus: 'accessible' as const,
+		lifecycleState: 'active' as const,
+		supportedInputTypes: ['text'],
+		supportedOutputTypes: ['text', 'json'],
+		hasStructuredOutput: true,
+	};
+	const intentAdapter = new (await import('../server/domain/aiOrchestrator')).DeterministicMockAdapter('audit_intent_primary');
+	const intentFallbackAdapter = new (await import('../server/domain/aiOrchestrator')).DeterministicMockAdapter('audit_intent_fallback');
+	const capabilityAdapter = new (await import('../server/domain/aiOrchestrator')).DeterministicMockAdapter('audit_capability_primary');
+
+	orchestrator.registerModel(intentModel);
+	orchestrator.registerModel(intentFallback);
+	orchestrator.registerModel(capabilityModel);
+	orchestrator.registerAdapter(intentAdapter);
+	orchestrator.registerAdapter(intentFallbackAdapter);
+	orchestrator.registerAdapter(capabilityAdapter);
+	orchestrator.setFallbackChain('intent.interpret', [
+		'audit_intent_primary::intent-primary',
+		'audit_intent_fallback::intent-fallback',
+		'provider_deterministic_emergency::emergency-fallback-local',
+	]);
+	orchestrator.setFallbackChain('capability.synthesize', [
+		'audit_capability_primary::capability-primary',
+		'provider_deterministic_emergency::emergency-fallback-local',
+	]);
+
+	const intentResult = await orchestrator.executeTaskGeneration(
+		'intent.interpret',
+		'{"action":"hide behind the pillar"}',
+		'Return a compact intent.',
+		{ timeoutMs: 2000, maxTokens: 100 },
+	);
+	assert.equal(intentResult.providerId, 'audit_intent_primary');
+	assert.equal(intentResult.modelId, 'intent-primary');
+	assert.equal(intentResult.source, 'AI_PRIMARY');
+	assert.deepEqual(intentAdapter.callHistory.map((entry) => entry.task), ['intent.interpret']);
+	assert.equal(intentFallbackAdapter.callHistory.length, 0);
+
+	const capabilityResult = await orchestrator.executeTaskGeneration(
+		'capability.synthesize',
+		'{"action":"shape a novel ward"}',
+		'Return a capability proposal.',
+		{ timeoutMs: 2000, maxTokens: 100 },
+	);
+	assert.equal(capabilityResult.providerId, 'audit_capability_primary');
+	assert.equal(capabilityResult.modelId, 'capability-primary');
+	assert.equal(capabilityResult.source, 'AI_PRIMARY');
+	assert.deepEqual(capabilityAdapter.callHistory.map((entry) => entry.task), ['capability.synthesize']);
+});
+
 test('deterministic callers remain blocked from helper-only roles', () => {
 	const budget = new AiCallBudget('DETERMINISTIC_MECHANICS');
 	for (const [task, role] of [

@@ -482,7 +482,8 @@ export const StoryView: React.FC<StoryViewProps> = ({
       ]);
       const category = categories.find((entry: any) => entry.category === 'narration');
       setNarrationLastExecution(category?.currentOperation || category?.lastExecution || null);
-      const registeredModels = Array.isArray(modelResponse.models) ? modelResponse.models : [];
+      const registeredModels = (Array.isArray(modelResponse.models) ? modelResponse.models : [])
+        .filter((model: any) => model.freeTierStatus === 'VERIFIED' && model.freeTierEvidenceSource === 'PROVIDER');
       const fallbackChain = Array.isArray(category?.fallbackChain) ? category.fallbackChain : [];
       const modelsByKey = new Map(
         registeredModels.map((model: any) => [

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { AiCallBudget, inferAiCallPolicyMode } from '../server/domain/aiCallPolicy';
+import { AiCallBudget, decideAiHelperNeed, inferAiCallPolicyMode } from '../server/domain/aiCallPolicy';
 import { WorkingContextEngine } from '../server/domain/workingContextEngine';
 
 test('AI call policy keeps ordinary and canonical mechanics deterministic', () => {
@@ -15,7 +15,7 @@ test('interpretation mode permits exactly one small helper call', () => {
 	const budget = new AiCallBudget('INTERPRETATION');
 	const first = budget.authorize('intent.interpret', 700);
 	assert.equal(first.allowed, true);
-	assert.equal(first.maxTokens, 350);
+	assert.equal(first.maxTokens, 400);
 
 	const second = budget.authorize('intent.interpret', 350);
 	assert.equal(second.allowed, false);
@@ -75,3 +75,28 @@ test('F&F-style context normalization deduplicates overlapping blocks and assign
 	assert.match(blocks[0].sourceAuthority || '', /NarrativeContinuityEngine/);
 });
 
+
+
+test('helper selection is deliberate: clear actions get none, ambiguity gets one, novel capability gets two', () => {
+	assert.deepEqual(
+		decideAiHelperNeed({ itemKnown: true }),
+		{
+			strategy: 'NONE',
+			mode: 'DETERMINISTIC_MECHANICS',
+			reason: 'The requested item is canonically identified; inventory resolution does not need an LLM.',
+			maxHelperCalls: 0,
+		},
+	);
+	assert.equal(
+		decideAiHelperNeed({ requiresCheckOrHazardInterpretation: true }).strategy,
+		'INTERPRET_ONCE',
+	);
+	assert.equal(
+		decideAiHelperNeed({ explicitCapabilitySyntax: true }).strategy,
+		'INTERPRET_THEN_SYNTHESIZE',
+	);
+	assert.equal(
+		decideAiHelperNeed({ ambiguousLanguage: true }).strategy,
+		'INTERPRET_ONCE',
+	);
+});

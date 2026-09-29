@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { MultiModelOrchestrator } from '../server/domain/aiOrchestrator';
+import { DeterministicMockAdapter, MultiModelOrchestrator, type ModelRegistryRecord } from '../server/domain/aiOrchestrator';
 import { getAllAiTaskContracts } from '../server/domain/aiTaskContracts';
 
 const emergency = 'provider_deterministic_emergency::emergency-fallback-local';
@@ -111,53 +111,76 @@ test('every production fallback entry is adapter-addressable and leaves multiple
   }
 });
 
-test('configured routes do not fall directly to the deterministic floor when earlier providers are unavailable', () => {
-  const cases: Array<{
-    task: Parameters<MultiModelOrchestrator['selectBestModel']>[0];
-    unavailableKeys: string[];
-    expectedFallback: string;
-  }> = [
+test('fallback execution reaches a later AI tier before deterministic recovery', async () => {
+  const orchestrator = new MultiModelOrchestrator();
+  const primaryProvider = 'audit_production_route_primary';
+  const secondaryProvider = 'audit_production_route_secondary';
+  const primaryAdapter = new DeterministicMockAdapter(primaryProvider);
+  const secondaryAdapter = new DeterministicMockAdapter(secondaryProvider);
+
+  primaryAdapter.failureMode = '500';
+  primaryAdapter.maxFailuresBeforeSuccess = 999;
+  secondaryAdapter.cannedResponses.set(
+    'narrative.generate',
+    JSON.stringify({
+      narrative: ['The secondary AI tier successfully produced the narration.'],
+      dialogue: [],
+      events: [],
+      stateChanges: [],
+      memoryCandidates: [],
+      audioCues: [],
+    }),
+  );
+
+  const makeModel = (providerId: string, modelId: string): ModelRegistryRecord => ({
+    providerId,
+    modelId,
+    displayName: modelId,
+    pool: 'creative',
+    capabilities: ['text_generation', 'creative_writing', 'structured_output'],
+    contextWindow: 131072,
+    health: 'Healthy',
+    quota: 'Healthy',
+    latencyMs: 10,
+    userPriority: 100,
+    roleEligibility: ['narrative.generate'],
+    fallbackEligibility: true,
+    accessStatus: 'accessible',
+    lifecycleState: 'active',
+    isEmergencyFloor: false,
+  });
+
+  orchestrator.registerAdapter(primaryAdapter);
+  orchestrator.registerAdapter(secondaryAdapter);
+  orchestrator.registerModel(makeModel(primaryProvider, 'primary'));
+  orchestrator.registerModel(makeModel(secondaryProvider, 'secondary'));
+
+  orchestrator.setFallbackChain('narrative.generate', [
+    primaryProvider + '::primary',
+    secondaryProvider + '::secondary',
+    emergency,
+  ]);
+  orchestrator.pinModelForTask('narrative.generate', primaryProvider + '::primary');
+
+  const result = await orchestrator.executeTaskGeneration(
+    'narrative.generate',
+    'Run a production-style fallback audit.',
+    undefined,
     {
-      task: 'narrative.generate',
-      unavailableKeys: [
-        'groq::qwen/qwen3.8-27b',
-        'openrouter::inclusionai/ling-3.0-flash:free',
-        'openrouter::google/gemma-4-31b-it:free',
-      ],
-      expectedFallback: 'google_gemini::gemini-3.5-flash',
+      allowDeterministicFallback: true,
+      timeoutMs: 1000,
     },
-    {
-      task: 'rules.adjudicate',
-      unavailableKeys: [
-        'groq::openai/gpt-oss-120b',
-        'groq::qwen/qwen3.8-27b',
-      ],
-      expectedFallback: 'google_gemini::gemini-3.5-flash',
-    },
-    {
-      task: 'character.extract',
-      unavailableKeys: [
-        'google_gemini::gemini-3.5-flash-lite',
-      ],
-      expectedFallback: 'google_gemini::gemini-3.5-flash',
-    },
-  ];
+  );
 
-  for (const scenario of cases) {
-    const orchestrator = new MultiModelOrchestrator();
-
-    for (const key of scenario.unavailableKeys) {
-      const [providerId, modelId] = key.split('::');
-      orchestrator.updateModelHealth(providerId, modelId, 'Unavailable');
-    }
-
-    const selection = orchestrator.selectBestModel(scenario.task, { contextTokens: 1000 });
-
-    assert.equal(
-      selection.selectedModel.providerId + '::' + selection.selectedModel.modelId,
-      scenario.expectedFallback,
-      'Configured route should select the next viable AI model for ' + scenario.task,
-    );
-    assert.equal(selection.selectedModel.isEmergencyFloor, false);
-  }
+  assert.equal(result.modelId, 'secondary');
+  assert.equal(result.source, 'AI_FALLBACK');
+  assert.deepEqual(
+    result.attemptsTrail.map((entry) => entry.modelId),
+    ['primary', 'secondary'],
+  );
+  assert.equal(
+    result.attemptsTrail.some((entry) => entry.modelId === 'emergency-fallback-local'),
+    false,
+  );
 });
+;

@@ -185,7 +185,8 @@ export class StoryCheckEngine {
     actionText: string,
     character: StoryCheckCharacter,
     challenge?: StoryCheckChallenge,
-    rulesProfile?: RulesProfile
+    rulesProfile?: RulesProfile,
+    resolutionHint?: StoryCheckResolutionHint
   ): StoryCheckResult | null {
     const text = normalize(actionText);
     if (!text) return null;
@@ -215,6 +216,13 @@ export class StoryCheckEngine {
     }
 
     const sceneText = normalize(character.sceneText || '');
+    const hintedCheck = resolutionHint?.check;
+    const hintedAbility = hintedCheck?.ability && ['Strength', 'Dexterity', 'Constitution', 'Intelligence', 'Wisdom', 'Charisma'].includes(hintedCheck.ability)
+      ? hintedCheck.ability as StoryCheckAbility
+      : undefined;
+    const hintedSkillDefinition = hintedCheck?.skillId
+      ? getStorySkillCheckDefinition(String(hintedCheck.skillId))
+      : undefined;
     const inferredSaveSelection = this.pickSaveProfile(text, sceneText);
     let saveSelection = challenge?.savingThrowAbility
       ? {
@@ -251,17 +259,27 @@ export class StoryCheckEngine {
 
     if (!saveSelection && this.isRoutine(text)) return null;
 
-    const profile = saveSelection ? null : this.pickProfile(text);
+    const profile = saveSelection
+      ? null
+      : hintedSkillDefinition || this.pickProfile(text);
     if (!saveSelection && !profile) return null;
 
     const explicitSkillDefinition = !saveSelection && challenge?.skill
       ? getStorySkillCheckDefinition(String(challenge.skill))
       : undefined;
-    const testType: StoryTestType = challenge?.testType || (saveSelection ? 'SAVING_THROW' : 'ABILITY_CHECK');
-    const ability: StoryCheckAbility = ((challenge?.ability as StoryCheckAbility | undefined) || (saveSelection ? saveSelection.profile.ability : explicitSkillDefinition?.governingAbility || profile?.ability) || 'STR') as StoryCheckAbility;
-    const skillName = challenge?.skill || (saveSelection ? 'Saving Throw' : profile!.skill);
+    const selectedSkillDefinition = explicitSkillDefinition || hintedSkillDefinition;
+    const testType: StoryTestType = challenge?.testType
+      || (hintedCheck?.kind === 'SAVING_THROW' ? 'SAVING_THROW' : saveSelection ? 'SAVING_THROW' : 'ABILITY_CHECK');
+    const ability: StoryCheckAbility = ((challenge?.ability as StoryCheckAbility | undefined)
+      || hintedAbility
+      || (saveSelection ? saveSelection.profile.ability : selectedSkillDefinition?.governingAbility || profile?.ability)
+      || 'STR') as StoryCheckAbility;
+    const skillName = challenge?.skill || (saveSelection ? 'Saving Throw' : selectedSkillDefinition?.name || profile!.skill);
     const authoredSkill = !saveSelection
-      ? (character.skills || []).find((skill) => skill.name.toLowerCase() === String(skillName).toLowerCase())
+      ? (character.skills || []).find((skill) =>
+          skill.name.toLowerCase() === String(skillName).toLowerCase() ||
+          skill.id.toLowerCase() === String(skillName).toLowerCase()
+        )
       : undefined;
     const rollFormula = challenge?.rollFormula
       ? normalizeDiceFormula(challenge.rollFormula, '1d20')

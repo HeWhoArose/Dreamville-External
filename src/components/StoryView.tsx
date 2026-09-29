@@ -1031,7 +1031,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
                   ? ''
                   : entry.epistemicValidation === 'REJECTED_BY_ENGINE'
                     ? 'The action could not be carried out.'
-                    : entry.authoritativeFeedback || ''
+                    : entry.presentationFeedback || ''
               );
               if (!entry.description && !narration && !entry.narrativeError) return null;
               const modelLabel = resolveModelDisplayName(entry);

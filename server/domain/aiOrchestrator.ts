@@ -6607,13 +6607,15 @@ export class MultiModelOrchestrator {
             if (!validation.valid || !validation.turnPackage) {
               throw new Error(`Turn package validation failed: ${validation.errorReason}`);
             }
-            const continuity = this.validateNarrativeSceneContinuity(
-              validation.turnPackage.narrative.join(' '),
-              repo,
-              storyId,
-            );
-            if (!continuity.valid) {
-              throw new Error(continuity.errorReason || 'Narration scene continuity validation failed.');
+            if (task === 'narrative.generate') {
+              const continuity = this.validateNarrativeSceneContinuity(
+                validation.turnPackage.narrative.join(' '),
+                repo,
+                storyId,
+              );
+              if (!continuity.valid) {
+                throw new Error(continuity.errorReason || 'Narration scene continuity validation failed.');
+              }
             }
 
             // 5. Adjudicate State Changes through Domain Authority Bridge (DEF-CH12-05)

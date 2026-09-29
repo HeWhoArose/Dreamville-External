@@ -203,7 +203,7 @@ export class AiContextAdapters {
 			storyId: params.storyId,
 			viewerActorId: params.viewerActorId,
 			playerAction: params.playerAction,
-			hardTokenBudget: params.hardTokenBudget || 1400,
+			hardTokenBudget: params.hardTokenBudget || 700,
 			worldRepo: repository,
 			customChunks: customChunks.length > 0 ? customChunks : undefined,
 		});

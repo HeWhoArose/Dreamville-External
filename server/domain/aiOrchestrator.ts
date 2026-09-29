@@ -7169,51 +7169,63 @@ export class MultiModelOrchestrator {
       const forced = Array.from(this.models.values()).find(
         (model) => model.modelId === options.forceModelId || this.modelKey(model) === options.forceModelId,
       );
-      if (!forced) {
-        throw new Error('Requested AI model "' + options.forceModelId + '" is not registered.');
-      }
-      if (!forced.roleEligibility.includes(task)) {
-        throw new Error('Requested AI model "' + options.forceModelId + '" is not eligible for task "' + task + '".');
-      }
-      const forcedPreflight = this.getTaskCandidatePreflight(
-        task,
-        forced.providerId,
-        forced.modelId,
-        contextTokens,
-        options?.maxTokens,
-      );
-      const forcedUsable = forced.isEmergencyFloor || (
-        this.isCandidateUsable(forced, task, contextTokens) &&
-        (!forcedPreflight || forcedPreflight.eligible)
-      );
 
-      if (forcedUsable) {
-        selection = {
-          selectedModel: forced,
-          selectionReason: 'Explicitly selected model "' + (forced.displayName || forced.modelId) + '" as the preferred primary; configured fallbacks remain active.',
-          selectionScore: forced.userPriority,
-          fallbacks: this.getFallbackChain(task).flatMap((key) => {
-            const model = Array.from(this.models.values()).find(
-              (candidate) => this.modelKey(candidate) === key || candidate.modelId === key,
-            );
-            return model && this.modelKey(model) !== this.modelKey(forced) ? [model] : [];
-          }),
-        };
-      } else {
+      // A caller-provided model is a preference, not a dead-end dependency.
+      // Stale UI state, provider discovery changes, quota exhaustion, cooldown,
+      // context limits, and task-eligibility changes must all remain recoverable.
+      if (!forced || !forced.roleEligibility.includes(task)) {
         const fallbackSelection = this.selectBestModel(task, { contextTokens });
         selection = {
           ...fallbackSelection,
-          selectionReason: 'Requested model "' + options.forceModelId + '" was unavailable at preflight; using the configured fallback route instead.',
+          selectionReason: !forced
+            ? 'Requested model "' + options.forceModelId + '" is no longer registered; using the configured fallback route instead.'
+            : 'Requested model "' + options.forceModelId + '" is not eligible for this task; using the configured fallback route instead.',
         };
+      } else {
+        const forcedPreflight = this.getTaskCandidatePreflight(
+          task,
+          forced.providerId,
+          forced.modelId,
+          contextTokens,
+          options?.maxTokens,
+        );
+        const forcedUsable = forced.isEmergencyFloor || (
+          this.isCandidateUsable(forced, task, contextTokens) &&
+          (!forcedPreflight || forcedPreflight.eligible)
+        );
+
+        if (forcedUsable) {
+          selection = {
+            selectedModel: forced,
+            selectionReason: 'Explicitly selected model "' + (forced.displayName || forced.modelId) + '" as the preferred primary; configured fallbacks remain active.',
+            selectionScore: forced.userPriority,
+            fallbacks: this.getFallbackChain(task).flatMap((key) => {
+              const model = Array.from(this.models.values()).find(
+                (candidate) => this.modelKey(candidate) === key || candidate.modelId === key,
+              );
+              if (!model || this.modelKey(model) === this.modelKey(forced)) return [];
+              if (model.isEmergencyFloor) return [model];
+
+              const preflight = this.getTaskCandidatePreflight(
+                task,
+                model.providerId,
+                model.modelId,
+                contextTokens,
+                options?.maxTokens,
+              );
+              return this.isCandidateUsable(model, task, contextTokens) && Boolean(preflight?.eligible)
+                ? [model]
+                : [];
+            }),
+          };
+        } else {
+          const fallbackSelection = this.selectBestModel(task, { contextTokens });
+          selection = {
+            ...fallbackSelection,
+            selectionReason: 'Requested model "' + options.forceModelId + '" was unavailable at preflight; using the configured fallback route instead.',
+          };
+        }
       }
-        selectionScore: forced.userPriority,
-        fallbacks: this.getFallbackChain(task).flatMap((key) => {
-          const model = Array.from(this.models.values()).find(
-            (candidate) => this.modelKey(candidate) === key || candidate.modelId === key,
-          );
-          return model && this.modelKey(model) !== this.modelKey(forced) ? [model] : [];
-        }),
-      };
     }
 
     const selectedModelKey = this.modelKey(selection.selectedModel);

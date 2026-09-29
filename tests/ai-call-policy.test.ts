@@ -11,8 +11,8 @@ test('AI call policy keeps ordinary and canonical mechanics deterministic', () =
 	assert.equal(inferAiCallPolicyMode({ requiresCheckOrHazardInterpretation: true }), 'INTERPRETATION');
 	assert.equal(inferAiCallPolicyMode({ explicitCapabilitySyntax: true }), 'NOVEL_CAPABILITY');
 	assert.equal(inferAiCallPolicyMode({ ambiguousLanguage: true }), 'NARRATION_ONLY');
-	assert.equal(inferAiCallPolicyMode({ compoundAction: true }), 'NOVEL_CAPABILITY');
-	assert.equal(inferAiCallPolicyMode({ itemKnown: true, compoundAction: true }), 'NOVEL_CAPABILITY');
+	assert.equal(inferAiCallPolicyMode({ compoundAction: true }), 'INTERPRETATION');
+	assert.equal(inferAiCallPolicyMode({ itemKnown: true, compoundAction: true }), 'DETERMINISTIC_MECHANICS');
 });
 
 test('interpretation mode permits exactly one small helper call', () => {
@@ -101,7 +101,7 @@ test('helper selection is deliberate: clear actions get none, ambiguity gets one
 	);
 	assert.equal(
 		decideAiHelperNeed({ compoundAction: true }).mode,
-		'NOVEL_CAPABILITY',
+		'INTERPRETATION',
 	);
 	assert.equal(
 		decideAiHelperNeed({ explicitCapabilitySyntax: true }).strategy,

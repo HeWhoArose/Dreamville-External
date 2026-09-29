@@ -484,26 +484,35 @@ export const StoryView: React.FC<StoryViewProps> = ({
       const category = categories.find((entry: any) => entry.category === 'narration');
       setNarrationCurrentOperation(category?.currentOperation || null);
       setNarrationLastExecution(category?.lastExecution || null);
-      const registeredModels = (Array.isArray(modelResponse.models) ? modelResponse.models : [])
-        .filter((model: any) => model.freeTierStatus === 'VERIFIED' && model.freeTierEvidenceSource === 'PROVIDER');
-      const fallbackChain = Array.isArray(category?.fallbackChain) ? category.fallbackChain : [];
+      const allRegisteredModels = Array.isArray(modelResponse.models) ? modelResponse.models : [];
       const modelsByKey = new Map(
-        registeredModels.map((model: any) => [
+        allRegisteredModels.map((model: any) => [
           `${model.providerId}::${model.modelId}`,
           model,
         ]),
       );
 
-      // The Story picker is category-scoped: show the models that actually belong
-      // to the narration task's configured route, in the exact configured order.
-      // Do not expand this list to every model that merely declares
-      // narrative.generate eligibility.
+      // Prefer the exact narrative.generate task route. Category-level fallbackChain
+      // can be empty when the category contains multiple tasks with different routes.
+      const narrativeTaskRoute =
+        Array.isArray(category?.taskRoutes)
+          ? category.taskRoutes.find((route: any) => route.task === 'narrative.generate')
+          : undefined;
+      const fallbackChain = Array.isArray(narrativeTaskRoute?.fallbackChain)
+        ? narrativeTaskRoute.fallbackChain
+        : Array.isArray(category?.fallbackChain)
+          ? category.fallbackChain
+          : [];
+
+      // Show every non-emergency model actually assigned to the narration route,
+      // regardless of billing/free-tier classification. Free verification remains
+      // visible as metadata on each model instead of hiding configured fallbacks.
       const routeModels = fallbackChain
         .filter((key: string) => !key.includes('emergency-fallback-local'))
         .map((key: string) => {
           const direct = modelsByKey.get(key);
           if (direct) return direct;
-          return registeredModels.find(
+          return allRegisteredModels.find(
             (model: any) =>
               model.modelId === key ||
               `${model.providerId}::${model.modelId}` === key,
@@ -1297,7 +1306,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
                       <div className="px-3 py-2 border-b border-white/[0.05]">
                         <div className="flex items-center justify-between gap-2">
                           <div className="text-[9px] font-black uppercase tracking-[0.16em] text-cyan-100/55">Narration fallback route</div>
-                          <span className="text-[8px] text-emerald-300/70">Verified free models only</span>
+                          <span className="text-[8px] text-cyan-300/70">Configured narration route</span>
                         </div>
                         <div className="mt-1 flex flex-wrap gap-1.5">
                           {narrationCategoryState.fallbackChain.map((key: string, index: number) => {

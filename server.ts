@@ -11,9 +11,16 @@ async function startServer() {
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-  // Development request logger for API routes
+  // Development request logger for API routes (silence high-frequency telemetry/token-usage polling)
   app.use('/api', (req, res, next) => {
-    console.log(`[API Request] ${req.method} ${req.originalUrl} | Host: ${req.headers.host || 'unknown'} | Content-Type: ${req.headers['content-type'] || 'none'}`);
+    const isQuietPoll =
+      req.originalUrl.includes('/orchestrator/token-usage') ||
+      req.originalUrl.includes('/health') ||
+      req.headers['x-quiet-poll'] === 'true';
+
+    if (!isQuietPoll) {
+      console.log(`[API Request] ${req.method} ${req.originalUrl} | Host: ${req.headers.host || 'unknown'} | Content-Type: ${req.headers['content-type'] || 'none'}`);
+    }
     next();
   });
 

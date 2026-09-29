@@ -6,7 +6,15 @@ import { WorkingContextEngine, AssembledTurnContext } from './workingContextEngi
 import type { WorldRepository } from '../repositories/worldRepository';
 import { worldRepository } from '../repositories/worldRepository';
 import { StoryAdaptationPipeline } from './storyAdaptation';
-import { getProviderApiKey } from '../services/providerCredentialService';
+import {
+  getProviderApiKey,
+  getProviderBaseUrl,
+  loadCustomProviders,
+  getCustomProvider,
+  saveCustomProvider,
+  deleteCustomProvider,
+  type CustomProviderConfig,
+} from '../services/providerCredentialService';
 import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
 import { evaluateAiTaskCandidatePreflight, evaluateAiTaskReadiness, getAiTaskContract, getAiTasksByCategory, getAllAiTaskContracts, validateAiTaskResponse, type AiTaskCandidatePreflight, type AiTaskReadiness } from './aiTaskContracts';
 import { narrativeContinuityEngine } from './narrativeContinuityEngine';
@@ -1499,6 +1507,218 @@ export class OpenRouterAdapter implements IProviderAdapter {
         cachedTokens: Number(payload?.usage?.prompt_tokens_details?.cached_tokens || 0) || undefined,
         toolTokens: Number(payload?.usage?.tool_tokens || 0) || undefined,
         modelId: String(payload?.model || options?.modelId || 'openrouter/free'),
+        providerId: this.providerId,
+      };
+    } finally {
+      if (timeout) clearTimeout(timeout);
+    }
+  }
+}
+
+/**
+ * OpenAiCompatibleAdapter
+ * Universal adapter for any OpenAI-compatible custom or preset AI provider
+ * (e.g. Groq, DeepSeek, Mistral, Together, Ollama, LM Studio, Perplexity, xAI, or custom REST endpoint).
+ */
+export class OpenAiCompatibleAdapter implements IProviderAdapter {
+  public providerId: string;
+  public baseUrl: string;
+  public customHeaders: Record<string, string>;
+
+  constructor(providerId: string, baseUrl?: string, customHeaders?: Record<string, string>) {
+    this.providerId = providerId.trim().toLowerCase();
+    this.baseUrl = (baseUrl || getProviderBaseUrl(this.providerId) || 'https://api.openai.com/v1').replace(/\/+$/, '');
+    this.customHeaders = customHeaders || {};
+  }
+
+  private getApiKey(): string | undefined {
+    return getProviderApiKey(this.providerId);
+  }
+
+  public isDiscoverySupported(): boolean {
+    return true;
+  }
+
+  public getProviderStatus(): { configured: boolean; message: string } {
+    const key = this.getApiKey();
+    const isLocal = this.baseUrl.includes('localhost') || this.baseUrl.includes('127.0.0.1');
+    const configured = Boolean(key) || isLocal;
+    return configured
+      ? { configured: true, message: `${this.providerId} configured at ${this.baseUrl}` }
+      : { configured: false, message: `${this.providerId} API key is not configured.` };
+  }
+
+  public async validateCredentials(): Promise<boolean> {
+    const key = this.getApiKey();
+    const isLocal = this.baseUrl.includes('localhost') || this.baseUrl.includes('127.0.0.1');
+    if (!key && !isLocal) return false;
+
+    try {
+      const headers: Record<string, string> = {
+        Accept: 'application/json',
+        ...this.customHeaders,
+      };
+      if (key) headers['Authorization'] = `Bearer ${key}`;
+
+      const res = await fetch(`${this.baseUrl}/models`, { headers });
+      if (res.ok) return true;
+
+      // Some local/custom servers don't expose GET /models; test a 1-token probe completion
+      const testRes = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({
+          model: 'default',
+          messages: [{ role: 'user', content: 'ping' }],
+          max_tokens: 1,
+        }),
+      });
+      return testRes.status !== 401 && testRes.status !== 403;
+    } catch {
+      return false;
+    }
+  }
+
+  public async discoverModels(): Promise<DiscoveredModelMetadata[]> {
+    const key = this.getApiKey();
+    const isLocal = this.baseUrl.includes('localhost') || this.baseUrl.includes('127.0.0.1');
+    if (!key && !isLocal) return [];
+
+    try {
+      const headers: Record<string, string> = {
+        Accept: 'application/json',
+        ...this.customHeaders,
+      };
+      if (key) headers['Authorization'] = `Bearer ${key}`;
+
+      const res = await fetch(`${this.baseUrl}/models`, { headers });
+      if (!res.ok) return [];
+
+      const payload: any = await res.json().catch(() => null);
+      const rawModels = Array.isArray(payload?.data)
+        ? payload.data
+        : Array.isArray(payload)
+        ? payload
+        : [];
+
+      return rawModels
+        .map((m: any): DiscoveredModelMetadata | null => {
+          const id = String(m?.id || m?.name || '').trim();
+          if (!id) return null;
+          return {
+            id,
+            rawName: id,
+            displayName: String(m?.name || m?.displayName || id),
+            description: m?.description ? String(m.description) : undefined,
+            inputTokenLimit: Number(m?.context_length || m?.max_context_length || 32768),
+            outputTokenLimit: Number(m?.max_tokens || m?.max_completion_tokens || 4096),
+            supportedActions: ['generateContent'],
+            isAccessible: true,
+            lifecycleState: 'active',
+          };
+        })
+        .filter(Boolean) as DiscoveredModelMetadata[];
+    } catch {
+      return [];
+    }
+  }
+
+  public async generate(
+    task: TaskId,
+    prompt: string,
+    options?: ProviderGenerateOptions
+  ): Promise<ProviderGenerateResult> {
+    const key = this.getApiKey();
+    const isLocal = this.baseUrl.includes('localhost') || this.baseUrl.includes('127.0.0.1');
+    if (!key && !isLocal) {
+      throw new Error(`API key is not configured for provider '${this.providerId}'.`);
+    }
+
+    const start = Date.now();
+    const controller = new AbortController();
+    const timeout = options?.timeoutMs
+      ? setTimeout(() => controller.abort(), options.timeoutMs)
+      : undefined;
+
+    const signal = options?.abortSignal
+      ? AbortSignal.any([controller.signal, options.abortSignal])
+      : controller.signal;
+
+    const requestedMaxTokens = Math.max(256, Number(options?.maxTokens || 2048));
+    const boundedMaxTokens = Math.min(requestedMaxTokens, 8192);
+    const targetModel = options?.modelId || 'default';
+
+    const messages = [
+      ...(options?.systemInstruction ? [{ role: 'system', content: options.systemInstruction }] : []),
+      { role: 'user', content: prompt },
+    ];
+
+    const body: Record<string, unknown> = {
+      model: targetModel,
+      messages,
+      stream: false,
+      max_tokens: boundedMaxTokens,
+    };
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...this.customHeaders,
+    };
+    if (key) {
+      headers['Authorization'] = `Bearer ${key}`;
+    }
+
+    try {
+      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: 'POST',
+        signal,
+        headers,
+        body: JSON.stringify(body),
+      });
+
+      const rawText = await response.text().catch(() => '');
+      let payload: any = null;
+      try {
+        payload = rawText ? JSON.parse(rawText) : null;
+      } catch {
+        payload = null;
+      }
+
+      if (!response.ok) {
+        const errorMsg =
+          payload?.error?.message ||
+          payload?.error ||
+          rawText.slice(0, 400) ||
+          `Provider '${this.providerId}' request failed (HTTP ${response.status})`;
+        throw new Error(String(errorMsg));
+      }
+
+      const choice = payload?.choices?.[0];
+      const message = choice?.message;
+      let text = '';
+
+      if (typeof message?.content === 'string') {
+        text = message.content;
+      } else if (Array.isArray(message?.content)) {
+        text = message.content.map((p: any) => typeof p === 'string' ? p : p?.text || '').join('');
+      } else if (typeof choice?.text === 'string') {
+        text = choice.text;
+      }
+
+      if (!text.trim()) {
+        throw new Error(`Provider '${this.providerId}' returned no text content.`);
+      }
+
+      return {
+        text: text.trim(),
+        rawResponse: payload,
+        latencyMs: Math.max(1, Date.now() - start),
+        inputTokens: Number(payload?.usage?.prompt_tokens || 0) || Math.ceil(prompt.length / 4),
+        outputTokens: Number(payload?.usage?.completion_tokens || 0) || Math.ceil(text.length / 4),
+        reasoningTokens: Number(payload?.usage?.completion_tokens_details?.reasoning_tokens || 0) || undefined,
+        cachedTokens: Number(payload?.usage?.prompt_tokens_details?.cached_tokens || 0) || undefined,
+        modelId: String(payload?.model || targetModel),
         providerId: this.providerId,
       };
     } finally {
@@ -3276,6 +3496,73 @@ export class MultiModelOrchestrator {
     // Also register alias 'provider_google_gemini'
     this.adapters.set('provider_google_gemini', gemini);
     this.registerAdapter(new OpenRouterAdapter());
+
+    // Register standard OpenAI and Anthropic compatible adapters
+    this.registerAdapter(new OpenAiCompatibleAdapter('openai', 'https://api.openai.com/v1'));
+    this.registerAdapter(new OpenAiCompatibleAdapter('groq', 'https://api.groq.com/openai/v1'));
+    this.registerAdapter(new OpenAiCompatibleAdapter('deepseek', 'https://api.deepseek.com/v1'));
+    this.registerAdapter(new OpenAiCompatibleAdapter('mistral', 'https://api.mistral.ai/v1'));
+
+    // Load and register all user-configured custom providers
+    const customProviders = loadCustomProviders();
+    for (const cp of customProviders) {
+      this.registerAdapter(new OpenAiCompatibleAdapter(cp.id, cp.baseUrl, cp.headers));
+      if (Array.isArray(cp.models)) {
+        for (const m of cp.models) {
+          if (m?.id) {
+            this.registerCustomModel({
+              providerId: cp.id,
+              modelId: m.id,
+              displayName: m.name || m.id,
+              pool: (m.pool as ModelPool) || 'creative',
+              contextWindow: m.contextWindow || 64000,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  public registerCustomProvider(config: CustomProviderConfig): void {
+    const adapter = new OpenAiCompatibleAdapter(config.id, config.baseUrl, config.headers);
+    this.registerAdapter(adapter);
+
+    if (Array.isArray(config.models)) {
+      for (const m of config.models) {
+        if (m?.id) {
+          this.registerCustomModel({
+            providerId: config.id,
+            modelId: m.id,
+            displayName: m.name || m.id,
+            pool: (m.pool as ModelPool) || 'creative',
+            contextWindow: m.contextWindow || 64000,
+          });
+        }
+      }
+    }
+
+    const isConfigured = Boolean(getProviderApiKey(config.id)) || config.baseUrl.includes('localhost') || config.baseUrl.includes('127.0.0.1');
+    this.syncProviderModelAccessStatus(config.id, isConfigured);
+    this.savePersistedConfig();
+  }
+
+  public removeCustomProvider(providerId: string): void {
+    const normalizedId = providerId.trim().toLowerCase();
+    this.adapters.delete(normalizedId);
+
+    // Remove all models registered under this custom provider
+    const keysToRemove: string[] = [];
+    for (const [key, model] of this.models.entries()) {
+      if (model.providerId.toLowerCase() === normalizedId) {
+        keysToRemove.push(key);
+      }
+    }
+    for (const key of keysToRemove) {
+      this.models.delete(key);
+      this.runtimeStatus.delete(key);
+      this.manualOverrides.delete(key);
+    }
+    this.savePersistedConfig();
   }
 
   /**
@@ -4147,7 +4434,88 @@ export class MultiModelOrchestrator {
       }
     }
 
-    // 4. Other external providers
+    // 4. Other external and custom providers
+    const adapter = this.getAdapter(providerId);
+    if (adapter) {
+      const apiKey = getProviderApiKey(providerId);
+      const isLocal = providerId.includes('local') || providerId.includes('ollama') || providerId.includes('lmstudio');
+      if (!apiKey && !isLocal) {
+        if (model) {
+          model.health = 'InvalidAuth';
+          model.accessStatus = 'not_configured';
+        }
+        return {
+          success: false,
+          status: 'NOT_CONFIGURED',
+          health: 'InvalidAuth',
+          quota: 'Unknown',
+          latencyMs: 0,
+          message: `API key is not configured for provider '${providerId}'.`,
+          testedAt: Date.now(),
+        };
+      }
+
+      const start = Date.now();
+      try {
+        const providerRes = await adapter.generate('utility.inspect', 'Respond with exactly: OK', {
+          modelId,
+          timeoutMs: 8000,
+        });
+        const latencyMs = Math.max(1, Date.now() - start);
+
+        if (model) {
+          model.health = 'Healthy';
+          model.quota = 'Healthy';
+          model.accessStatus = 'accessible';
+          model.latencyMs = latencyMs;
+        }
+
+        return {
+          success: true,
+          status: 'READY',
+          health: 'Healthy',
+          quota: 'Healthy',
+          latencyMs,
+          message: `Provider '${providerId}' model responded successfully via ${providerRes.modelId}.`,
+          testedAt: Date.now(),
+        };
+      } catch (err: any) {
+        const errMsg = String(err?.message || err);
+        const latencyMs = Math.max(1, Date.now() - start);
+        const lower = errMsg.toLowerCase();
+
+        let health: HealthState = 'Degraded';
+        let status: 'UNAVAILABLE' | 'NOT_CONFIGURED' | 'QUOTA_LIMIT' = 'UNAVAILABLE';
+        let quota: QuotaState = 'Unknown';
+
+        if (lower.includes('401') || lower.includes('unauthorized') || lower.includes('invalid') || lower.includes('api key')) {
+          health = 'InvalidAuth';
+          status = 'NOT_CONFIGURED';
+        } else if (lower.includes('402') || lower.includes('429') || lower.includes('rate limit') || lower.includes('quota') || lower.includes('credits')) {
+          health = 'Throttled';
+          status = 'QUOTA_LIMIT';
+          quota = 'Exhausted';
+        }
+
+        if (model) {
+          model.health = health;
+          model.quota = quota;
+          model.accessStatus = health === 'InvalidAuth' ? 'not_configured' : 'unavailable';
+          model.latencyMs = latencyMs;
+        }
+
+        return {
+          success: false,
+          status,
+          health,
+          quota,
+          latencyMs,
+          message: `Provider '${providerId}' test failed: ${errMsg}`,
+          testedAt: Date.now(),
+        };
+      }
+    }
+
     if (model) {
       model.health = 'InvalidAuth';
       model.accessStatus = 'not_configured';
@@ -4377,13 +4745,31 @@ export class MultiModelOrchestrator {
   }
 
   public getAdapter(providerId: string): IProviderAdapter | undefined {
-    if (providerId === 'provider_local_emergency') {
-      return this.adapters.get('provider_deterministic_emergency') || this.adapters.get(providerId);
+    const normalized = (providerId || '').trim().toLowerCase();
+    if (normalized === 'provider_local_emergency') {
+      return this.adapters.get('provider_deterministic_emergency') || this.adapters.get(normalized);
     }
-    if (providerId === 'provider_google_gemini' || providerId === 'google_gemini') {
+    if (normalized === 'provider_google_gemini' || normalized === 'google_gemini') {
       return this.adapters.get('google_gemini') || this.adapters.get('provider_google_gemini');
     }
-    return this.adapters.get(providerId);
+    const existing = this.adapters.get(normalized);
+    if (existing) return existing;
+
+    const custom = getCustomProvider(normalized);
+    if (custom) {
+      const adapter = new OpenAiCompatibleAdapter(custom.id, custom.baseUrl, custom.headers);
+      this.registerAdapter(adapter);
+      return adapter;
+    }
+
+    const defaultBaseUrl = getProviderBaseUrl(normalized);
+    if (defaultBaseUrl) {
+      const adapter = new OpenAiCompatibleAdapter(normalized, defaultBaseUrl);
+      this.registerAdapter(adapter);
+      return adapter;
+    }
+
+    return undefined;
   }
 
   public getAllAdapters(): IProviderAdapter[] {

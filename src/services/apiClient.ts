@@ -38,6 +38,28 @@ const readJsonSafely = async <T = any>(res: Response): Promise<T> => {
     }
   }
 
+  // If payload is valid JSON despite unexpected content-type
+  const trimmed = text.trim();
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      return JSON.parse(trimmed) as T;
+    } catch {
+      // Continue to HTML / non-JSON checks
+    }
+  }
+
+  // Handle server startup / restarting HTML fallback pages gracefully
+  if (
+    trimmed.includes('<title>Starting Server') ||
+    trimmed.includes('Starting Server') ||
+    (trimmed.startsWith('<!doctype html') || trimmed.startsWith('<!DOCTYPE html'))
+  ) {
+    const error: any = new Error('Server is currently starting or initializing. Please retry in a moment.');
+    error.isServerStarting = true;
+    error.statusCode = res.status;
+    throw error;
+  }
+
   const preview = text.replace(/\s+/g, ' ').slice(0, 160);
   throw new Error(
     'Server returned a non-JSON response' +
@@ -2926,7 +2948,7 @@ class ApiClient {
   public async getTokenUsageReport(): Promise<{ success: boolean; report: any }> {
     const res = await fetch(`${this.baseUrl}/orchestrator/token-usage`, {
       method: 'GET',
-      headers: { Accept: 'application/json' },
+      headers: { Accept: 'application/json', 'X-Quiet-Poll': 'true' },
     });
     const data = await readJsonSafely<any>(res);
     if (!res.ok) throw new Error(data?.error || `Failed to fetch token usage report: HTTP ${res.status}`);
@@ -2954,6 +2976,68 @@ class ApiClient {
     return data;
   }
 
+  public async getCustomProviders(): Promise<{ success: boolean; providers: any[] }> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/custom-providers`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    const data = await readJsonSafely<any>(res);
+    if (!res.ok) throw new Error(data?.error || `Failed to fetch custom providers: HTTP ${res.status}`);
+    return data;
+  }
+
+  public async saveCustomProvider(config: {
+    id: string;
+    name: string;
+    baseUrl: string;
+    protocol?: string;
+    apiKey?: string;
+    headers?: Record<string, string>;
+    models?: Array<{ id: string; name?: string; contextWindow?: number; pool?: string }>;
+  }): Promise<{ success: boolean; provider: any; message: string }> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/custom-providers`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(config),
+    });
+    const data = await readJsonSafely<any>(res);
+    if (!res.ok) throw new Error(data?.error || `Failed to save custom provider: HTTP ${res.status}`);
+    return data;
+  }
+
+  public async deleteCustomProvider(providerId: string): Promise<{ success: boolean; providerId: string; message: string }> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/custom-providers/${encodeURIComponent(providerId)}`, {
+      method: 'DELETE',
+      headers: { Accept: 'application/json' },
+    });
+    const data = await readJsonSafely<any>(res);
+    if (!res.ok) throw new Error(data?.error || `Failed to delete custom provider: HTTP ${res.status}`);
+    return data;
+  }
+
+  public async testCustomProviderEndpoint(params: {
+    baseUrl: string;
+    apiKey?: string;
+    headers?: Record<string, string>;
+  }): Promise<{
+    success: boolean;
+    reachable: boolean;
+    authenticated?: boolean;
+    latencyMs?: number;
+    discoveredModelCount?: number;
+    sampleModels?: string[];
+    message?: string;
+    error?: string;
+  }> {
+    const res = await fetch(`${this.baseUrl}/orchestrator/custom-providers/test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const data = await readJsonSafely<any>(res);
+    if (!res.ok && !data?.error) throw new Error(`Provider endpoint test failed: HTTP ${res.status}`);
+    return data;
+  }
 }
 
 export const apiClient = new ApiClient();

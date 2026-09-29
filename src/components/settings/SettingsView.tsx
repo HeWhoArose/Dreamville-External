@@ -38,6 +38,9 @@ interface ProviderInfo {
   health: 'Healthy' | 'Degraded' | 'Offline' | 'Unconfigured';
   lastTested?: string;
   hasKeySaved?: boolean;
+  baseUrl?: string;
+  isCustom?: boolean;
+  headers?: Record<string, string>;
 }
 
 const INITIAL_PROVIDERS: ProviderInfo[] = [
@@ -179,6 +182,28 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [isAddingCustomModel, setIsAddingCustomModel] = useState(false);
   const [addCustomModelFeedback, setAddCustomModelFeedback] = useState<string | null>(null);
 
+  // Custom AI Provider Registration State
+  const [showAddCustomProviderModal, setShowAddCustomProviderModal] = useState(false);
+  const [rawCustomProviders, setRawCustomProviders] = useState<any[]>([]);
+  const [cpName, setCpName] = useState('');
+  const [cpId, setCpId] = useState('');
+  const [cpBaseUrl, setCpBaseUrl] = useState('');
+  const [cpApiKey, setCpApiKey] = useState('');
+  const [cpHeadersStr, setCpHeadersStr] = useState('');
+  const [cpInitialModelsStr, setCpInitialModelsStr] = useState('');
+  const [isTestingCustomEndpoint, setIsTestingCustomEndpoint] = useState(false);
+  const [customEndpointTestResult, setCustomEndpointTestResult] = useState<{
+    success: boolean;
+    message?: string;
+    error?: string;
+    latencyMs?: number;
+    discoveredModelCount?: number;
+    sampleModels?: string[];
+  } | null>(null);
+  const [isSavingCustomProvider, setIsSavingCustomProvider] = useState(false);
+  const [customProviderSaveMessage, setCustomProviderSaveMessage] = useState<string | null>(null);
+  const [customProviderSaveError, setCustomProviderSaveError] = useState<string | null>(null);
+
   // Auto Fallback Configuration State
   const [isAutoConfiguringFallbacks, setIsAutoConfiguringFallbacks] = useState(false);
   const [autoConfigResult, setAutoConfigResult] = useState<any | null>(null);
@@ -241,29 +266,63 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     try {
       await apiClient.discoverOrchestratorModels(forceRefresh);
 
-      const [modelsRes, pinsRes, fallbacksRes, openRouterStatus] = await Promise.all([
+      const [modelsRes, pinsRes, fallbacksRes, openRouterStatus, customProvidersRes] = await Promise.all([
         apiClient.getOrchestratorModels(),
         apiClient.getOrchestratorPins(),
         apiClient.getOrchestratorFallbacks(),
         apiClient.getProviderCredentialStatus('openrouter').catch(() => ({ configured: false })),
+        apiClient.getCustomProviders().catch(() => ({ success: true, providers: [] })),
       ]);
+
+      const loadedCustomProviders = customProvidersRes?.providers || [];
+      setRawCustomProviders(loadedCustomProviders);
 
       if (modelsRes?.models) {
         setOrchestratorModels(modelsRes.models);
-        setProviders((prev) =>
-          prev.map((p) =>
+
+        const customProviderInfos: ProviderInfo[] = loadedCustomProviders.map((cp: any) => {
+          const modelCount = modelsRes.models.filter(
+            (m: any) => m.providerId?.toLowerCase() === cp.id?.toLowerCase()
+          ).length;
+          const isLocal = cp.baseUrl?.includes('localhost') || cp.baseUrl?.includes('127.0.0.1');
+          const isConnected = cp.hasApiKey || isLocal;
+
+          return {
+            id: cp.id,
+            name: cp.name,
+            type: 'CONNECTED' as const,
+            status: isConnected ? ('CONNECTED' as const) : ('NOT_CONFIGURED' as const),
+            modelCount,
+            modalities: ['Text', 'Custom Endpoint'],
+            health: isConnected ? ('Healthy' as const) : ('Unconfigured' as const),
+            hasKeySaved: Boolean(cp.hasApiKey),
+            baseUrl: cp.baseUrl,
+            isCustom: true,
+            headers: cp.headers,
+          };
+        });
+
+        // Combine base providers with custom providers
+        setProviders(() => {
+          const baseUpdated: ProviderInfo[] = INITIAL_PROVIDERS.map((p) =>
             p.id === 'openrouter'
               ? {
                   ...p,
-                  status: openRouterStatus?.configured ? 'CONNECTED' : 'NOT_CONFIGURED',
-                  health: openRouterStatus?.configured ? 'Healthy' : 'Unconfigured',
+                  status: (openRouterStatus?.configured ? 'CONNECTED' : 'NOT_CONFIGURED') as 'CONNECTED' | 'NOT_CONFIGURED',
+                  health: (openRouterStatus?.configured ? 'Healthy' : 'Unconfigured') as 'Healthy' | 'Unconfigured',
                   hasKeySaved: openRouterStatus?.configured === true,
                   modelCount: modelsRes.models.filter((m: any) => m.providerId === 'openrouter').length,
                   lastTested: openRouterStatus?.configured ? 'Server verified' : undefined,
                 }
-              : p
-          )
-        );
+              : {
+                  ...p,
+                  modelCount: modelsRes.models.filter((m: any) => m.providerId === p.id || (p.id === 'dreambook-native' && m.isEmergencyFloor)).length || p.modelCount,
+                }
+          );
+
+          // Append custom providers that are not in base
+          return [...baseUpdated, ...customProviderInfos];
+        });
       }
       if (pinsRes?.pins) setTaskPins(pinsRes.pins);
       if (fallbacksRes?.fallbackChains) setFallbackChains(fallbacksRes.fallbackChains);
@@ -326,6 +385,155 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     } finally {
       setIsTestingConnection(false);
     }
+  };
+
+  const handleTestCustomEndpoint = async () => {
+    if (!cpBaseUrl.trim()) {
+      setCustomEndpointTestResult({
+        success: false,
+        error: 'Please enter a Base URL before testing.',
+      });
+      return;
+    }
+
+    setIsTestingCustomEndpoint(true);
+    setCustomEndpointTestResult(null);
+    try {
+      let parsedHeaders: Record<string, string> | undefined;
+      if (cpHeadersStr.trim()) {
+        try {
+          parsedHeaders = JSON.parse(cpHeadersStr.trim());
+        } catch {
+          parsedHeaders = {};
+          cpHeadersStr.split('\n').forEach((line) => {
+            const idx = line.indexOf(':');
+            if (idx > 0) {
+              parsedHeaders![line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+            }
+          });
+        }
+      }
+
+      const res = await apiClient.testCustomProviderEndpoint({
+        baseUrl: cpBaseUrl.trim(),
+        apiKey: cpApiKey.trim() || undefined,
+        headers: parsedHeaders,
+      });
+
+      if (res.success) {
+        setCustomEndpointTestResult({
+          success: true,
+          message: res.message || 'Connected successfully!',
+          latencyMs: res.latencyMs,
+          discoveredModelCount: res.discoveredModelCount,
+          sampleModels: res.sampleModels,
+        });
+      } else {
+        setCustomEndpointTestResult({
+          success: false,
+          error: res.error || 'Connection failed.',
+        });
+      }
+    } catch (err: any) {
+      setCustomEndpointTestResult({
+        success: false,
+        error: err?.message || 'Failed to connect to endpoint.',
+      });
+    } finally {
+      setIsTestingCustomEndpoint(false);
+    }
+  };
+
+  const handleSaveCustomProvider = async () => {
+    if (!cpName.trim()) {
+      setCustomProviderSaveError('Provider Name is required.');
+      return;
+    }
+    if (!cpBaseUrl.trim()) {
+      setCustomProviderSaveError('Base URL is required.');
+      return;
+    }
+
+    const providerId = (cpId.trim() || cpName.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_')).toLowerCase();
+
+    setIsSavingCustomProvider(true);
+    setCustomProviderSaveError(null);
+    setCustomProviderSaveMessage(null);
+
+    try {
+      let parsedHeaders: Record<string, string> | undefined;
+      if (cpHeadersStr.trim()) {
+        try {
+          parsedHeaders = JSON.parse(cpHeadersStr.trim());
+        } catch {
+          parsedHeaders = {};
+          cpHeadersStr.split('\n').forEach((line) => {
+            const idx = line.indexOf(':');
+            if (idx > 0) {
+              parsedHeaders![line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+            }
+          });
+        }
+      }
+
+      let parsedModels: Array<{ id: string; name?: string }> | undefined;
+      if (cpInitialModelsStr.trim()) {
+        parsedModels = cpInitialModelsStr
+          .split(/[\n,]/)
+          .map((m) => m.trim())
+          .filter(Boolean)
+          .map((m) => ({ id: m, name: m }));
+      }
+
+      const res = await apiClient.saveCustomProvider({
+        id: providerId,
+        name: cpName.trim(),
+        baseUrl: cpBaseUrl.trim(),
+        protocol: 'openai_compatible',
+        apiKey: cpApiKey.trim() || undefined,
+        headers: parsedHeaders,
+        models: parsedModels,
+      });
+
+      setCustomProviderSaveMessage(res.message || 'Custom provider added successfully!');
+      await loadOrchestratorData(true);
+
+      setTimeout(() => {
+        setShowAddCustomProviderModal(false);
+        setCpName('');
+        setCpId('');
+        setCpBaseUrl('');
+        setCpApiKey('');
+        setCpHeadersStr('');
+        setCpInitialModelsStr('');
+        setCustomEndpointTestResult(null);
+        setCustomProviderSaveMessage(null);
+      }, 1200);
+    } catch (err: any) {
+      setCustomProviderSaveError(err?.message || 'Failed to save custom provider.');
+    } finally {
+      setIsSavingCustomProvider(false);
+    }
+  };
+
+  const handleDeleteCustomProvider = async (providerId: string) => {
+    try {
+      await apiClient.deleteCustomProvider(providerId);
+      await loadOrchestratorData(true);
+    } catch (err: any) {
+      console.error('Failed to delete custom provider:', err);
+    }
+  };
+
+  const applyProviderPreset = (preset: { name: string; id: string; url: string; defaultModels: string }) => {
+    setCpName(preset.name);
+    setCpId(preset.id);
+    setCpBaseUrl(preset.url);
+    if (preset.defaultModels) {
+      setCpInitialModelsStr(preset.defaultModels);
+    }
+    setCustomEndpointTestResult(null);
+    setCustomProviderSaveError(null);
   };
 
   const getTaskChain = (taskId: string): string[] => {
@@ -870,15 +1078,229 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       {activeTab === 'PROVIDERS' && (
         <div className="space-y-6 max-w-5xl">
           <div className="p-5 rounded-[var(--db-radius-lg)] bg-[var(--db-bg-card)] border border-[var(--db-border-default)] space-y-5">
-            <div className="flex items-center justify-between pb-3 border-b border-[var(--db-border-subtle)]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[var(--db-border-subtle)]">
               <div>
                 <h3 className="text-base font-serif font-bold text-[var(--db-text-primary)]">AI Providers</h3>
                 <p className="text-xs text-[var(--db-text-muted)] mt-0.5">
-                  Connect and manage the services that supply DreamBook's models.
+                  Connect and manage built-in, cloud, and custom AI providers (OpenAI-compatible, Ollama, LM Studio, Groq, DeepSeek).
                 </p>
               </div>
-              <Badge variant="purple" size="sm">Secure Secret Vault</Badge>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => {
+                    setShowAddCustomProviderModal(true);
+                    setCustomEndpointTestResult(null);
+                    setCustomProviderSaveError(null);
+                  }}
+                >
+                  + Add Custom Provider
+                </Button>
+                <Badge variant="purple" size="sm">Secure Vault</Badge>
+              </div>
             </div>
+
+            {/* ADD CUSTOM PROVIDER MODAL */}
+            {showAddCustomProviderModal && (
+              <div className="p-5 rounded-lg bg-[var(--db-bg-canvas)] border border-[var(--db-purple-500)]/40 space-y-4 shadow-xl">
+                <div className="flex items-center justify-between pb-2 border-b border-[var(--db-border-subtle)]">
+                  <div>
+                    <h4 className="text-sm font-bold text-[var(--db-text-primary)] flex items-center gap-2">
+                      <span>🔌</span> Add Custom AI Provider
+                    </h4>
+                    <p className="text-xs text-[var(--db-text-muted)] mt-0.5">
+                      Connect any OpenAI-compatible API, local server, or specialized model provider.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddCustomProviderModal(false)}
+                    className="text-xs text-[var(--db-text-muted)] hover:text-white cursor-pointer px-2 py-1 rounded bg-[var(--db-bg-card)]"
+                  >
+                    ✕ Close
+                  </button>
+                </div>
+
+                {/* Quick Presets */}
+                <div>
+                  <label className="block text-[11px] font-semibold text-[var(--db-text-secondary)] mb-1.5 uppercase tracking-wider">
+                    Quick Presets
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      { name: 'Ollama Local', id: 'ollama', url: 'http://localhost:11434/v1', defaultModels: 'llama3.2:latest, mistral:latest' },
+                      { name: 'LM Studio Local', id: 'lmstudio', url: 'http://localhost:1234/v1', defaultModels: 'local-model' },
+                      { name: 'Groq Cloud', id: 'groq', url: 'https://api.groq.com/openai/v1', defaultModels: 'llama-3.3-70b-versatile, llama-3.1-8b-instant' },
+                      { name: 'Together AI', id: 'together', url: 'https://api.together.xyz/v1', defaultModels: 'meta-llama/Llama-3.3-70B-Instruct-Turbo' },
+                      { name: 'DeepSeek API', id: 'deepseek', url: 'https://api.deepseek.com/v1', defaultModels: 'deepseek-chat, deepseek-reasoner' },
+                      { name: 'Mistral AI', id: 'mistral', url: 'https://api.mistral.ai/v1', defaultModels: 'mistral-large-latest, mistral-small-latest' },
+                    ].map((preset) => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => applyProviderPreset(preset)}
+                        className="px-2.5 py-1 text-[11px] rounded bg-[var(--db-bg-card)] hover:bg-[var(--db-purple-900)]/40 text-[var(--db-text-secondary)] hover:text-[var(--db-purple-200)] border border-[var(--db-border-default)] transition-colors cursor-pointer"
+                      >
+                        {preset.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block text-[11px] font-medium text-[var(--db-text-secondary)] mb-1">
+                      Provider Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={cpName}
+                      onChange={(e) => {
+                        setCpName(e.target.value);
+                        if (!cpId) {
+                          setCpId(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '_'));
+                        }
+                      }}
+                      placeholder="e.g. Together AI or Ollama Local"
+                      className="w-full px-3 py-2 rounded bg-[var(--db-bg-card)] border border-[var(--db-border-default)] text-xs text-[var(--db-text-primary)] focus:outline-none focus:border-[var(--db-purple-500)]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-medium text-[var(--db-text-secondary)] mb-1">
+                      Provider Identifier Slug *
+                    </label>
+                    <input
+                      type="text"
+                      value={cpId}
+                      onChange={(e) => setCpId(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '_'))}
+                      placeholder="e.g. together or ollama_local"
+                      className="w-full px-3 py-2 rounded bg-[var(--db-bg-card)] border border-[var(--db-border-default)] text-xs text-[var(--db-text-primary)] font-mono focus:outline-none focus:border-[var(--db-purple-500)]"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-[11px] font-medium text-[var(--db-text-secondary)] mb-1">
+                      Base Endpoint URL (OpenAI-compatible) *
+                    </label>
+                    <input
+                      type="text"
+                      value={cpBaseUrl}
+                      onChange={(e) => setCpBaseUrl(e.target.value)}
+                      placeholder="e.g. http://localhost:11434/v1 or https://api.together.xyz/v1"
+                      className="w-full px-3 py-2 rounded bg-[var(--db-bg-card)] border border-[var(--db-border-default)] text-xs text-[var(--db-text-primary)] font-mono focus:outline-none focus:border-[var(--db-purple-500)]"
+                    />
+                    <div className="text-[10px] text-[var(--db-text-muted)] mt-1">
+                      Must implement OpenAI-compatible endpoints: <code>/chat/completions</code> and optionally <code>/models</code>.
+                    </div>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-[11px] font-medium text-[var(--db-text-secondary)] mb-1">
+                      API Key (Optional for local servers like Ollama/LM Studio)
+                    </label>
+                    <input
+                      type="password"
+                      value={cpApiKey}
+                      onChange={(e) => setCpApiKey(e.target.value)}
+                      placeholder="••••••••••••••••••••••••"
+                      className="w-full px-3 py-2 rounded bg-[var(--db-bg-card)] border border-[var(--db-border-default)] text-xs text-[var(--db-text-primary)] font-mono focus:outline-none focus:border-[var(--db-purple-500)]"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-[11px] font-medium text-[var(--db-text-secondary)] mb-1">
+                      Initial Models (Optional, comma-separated IDs)
+                    </label>
+                    <input
+                      type="text"
+                      value={cpInitialModelsStr}
+                      onChange={(e) => setCpInitialModelsStr(e.target.value)}
+                      placeholder="e.g. llama3.2:latest, mistral:7b-instruct, qwen2.5-coder"
+                      className="w-full px-3 py-2 rounded bg-[var(--db-bg-card)] border border-[var(--db-border-default)] text-xs text-[var(--db-text-primary)] font-mono focus:outline-none focus:border-[var(--db-purple-500)]"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-[11px] font-medium text-[var(--db-text-secondary)] mb-1">
+                      Custom HTTP Headers (Optional, JSON format or Key: Value)
+                    </label>
+                    <input
+                      type="text"
+                      value={cpHeadersStr}
+                      onChange={(e) => setCpHeadersStr(e.target.value)}
+                      placeholder='e.g. {"HTTP-Referer": "https://dreambook.app"}'
+                      className="w-full px-3 py-2 rounded bg-[var(--db-bg-card)] border border-[var(--db-border-default)] text-xs text-[var(--db-text-primary)] font-mono focus:outline-none focus:border-[var(--db-purple-500)]"
+                    />
+                  </div>
+                </div>
+
+                {/* Test Feedback */}
+                {customEndpointTestResult && (
+                  <div
+                    className={`p-3 rounded text-xs font-mono border ${
+                      customEndpointTestResult.success
+                        ? 'bg-[var(--db-emerald-900)]/20 border-[var(--db-emerald-500)]/40 text-[var(--db-emerald-300)]'
+                        : 'bg-[var(--db-ruby-900)]/20 border-[var(--db-ruby-500)]/40 text-[var(--db-ruby-300)]'
+                    }`}
+                  >
+                    <div className="font-semibold">
+                      {customEndpointTestResult.success ? '✓ Connectivity Test Passed' : '✕ Connection Test Failed'}
+                    </div>
+                    <div className="mt-1 text-[11px]">
+                      {customEndpointTestResult.message || customEndpointTestResult.error}
+                    </div>
+                    {Array.isArray(customEndpointTestResult.sampleModels) && customEndpointTestResult.sampleModels.length > 0 && (
+                      <div className="mt-2 text-[10px] text-[var(--db-text-muted)]">
+                        Discovered models: {customEndpointTestResult.sampleModels.slice(0, 6).join(', ')}
+                        {customEndpointTestResult.sampleModels.length > 6 && ` (+${customEndpointTestResult.sampleModels.length - 6} more)`}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {customProviderSaveError && (
+                  <div className="p-2.5 rounded bg-[var(--db-ruby-900)]/20 border border-[var(--db-ruby-500)]/40 text-xs text-[var(--db-ruby-300)]">
+                    {customProviderSaveError}
+                  </div>
+                )}
+
+                {customProviderSaveMessage && (
+                  <div className="p-2.5 rounded bg-[var(--db-emerald-900)]/20 border border-[var(--db-emerald-500)]/40 text-xs text-[var(--db-emerald-300)]">
+                    {customProviderSaveMessage}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between pt-2 border-t border-[var(--db-border-subtle)]">
+                  <Button
+                    variant="subtle"
+                    size="sm"
+                    disabled={isTestingCustomEndpoint}
+                    onClick={handleTestCustomEndpoint}
+                  >
+                    {isTestingCustomEndpoint ? 'Testing Connection...' : '⚡ Test Connectivity'}
+                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="subtle"
+                      size="sm"
+                      onClick={() => setShowAddCustomProviderModal(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={isSavingCustomProvider}
+                      onClick={handleSaveCustomProvider}
+                    >
+                      {isSavingCustomProvider ? 'Saving Provider...' : 'Save & Register Provider'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {providers.map((p) => {
@@ -893,7 +1315,13 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                         <div className="flex items-center gap-2 flex-wrap">
                           <h4 className="text-xs font-bold text-[var(--db-text-primary)]">{p.name}</h4>
                           {p.type === 'BUILTIN' && <Badge variant="gold" size="sm">Built-In</Badge>}
+                          {p.isCustom && <Badge variant="purple" size="sm">Custom</Badge>}
                         </div>
+                        {p.baseUrl && (
+                          <div className="text-[10px] font-mono text-[var(--db-text-muted)] truncate mt-0.5" title={p.baseUrl}>
+                            {p.baseUrl}
+                          </div>
+                        )}
                         <div className="text-[11px] text-[var(--db-text-muted)] mt-0.5">
                           {p.modelCount} Available Models • {p.modalities.join(', ')}
                         </div>
@@ -909,17 +1337,31 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                           ? 'API Key Saved (Secret Vault Protected)'
                           : p.type === 'BUILTIN'
                           ? 'Internal Runtime'
+                          : p.baseUrl?.includes('localhost')
+                          ? 'Local Host Endpoint'
                           : 'No Key Configured'}
                       </span>
-                      {p.type !== 'BUILTIN' && (
-                        <button
-                          type="button"
-                          onClick={() => setEditingProviderId(isEditing ? null : p.id)}
-                          className="text-xs text-[var(--db-purple-400)] hover:text-[var(--db-purple-300)] font-medium cursor-pointer"
-                        >
-                          {isEditing ? 'Cancel' : p.hasKeySaved ? 'Manage' : 'Connect'}
-                        </button>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {p.isCustom && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCustomProvider(p.id)}
+                            className="text-xs text-[var(--db-ruby-400)] hover:text-[var(--db-ruby-300)] font-medium cursor-pointer"
+                            title="Remove custom provider"
+                          >
+                            Remove
+                          </button>
+                        )}
+                        {p.type !== 'BUILTIN' && (
+                          <button
+                            type="button"
+                            onClick={() => setEditingProviderId(isEditing ? null : p.id)}
+                            className="text-xs text-[var(--db-purple-400)] hover:text-[var(--db-purple-300)] font-medium cursor-pointer"
+                          >
+                            {isEditing ? 'Cancel' : p.hasKeySaved ? 'Manage Key' : 'Connect Key'}
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {isEditing && (
@@ -1032,6 +1474,11 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                       <option value="groq">Groq</option>
                       <option value="deepseek">DeepSeek</option>
                       <option value="local">Local (Ollama/LM Studio)</option>
+                      {rawCustomProviders.map((cp: any) => (
+                        <option key={cp.id} value={cp.id}>
+                          {cp.name} (Custom Provider)
+                        </option>
+                      ))}
                     </select>
                     {customModelProvider === 'openrouter' && (
                       <div className="mt-2 text-[10px] text-[var(--db-text-muted)] leading-relaxed">
@@ -1079,12 +1526,20 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     </select>
                   </div>
                 </div>
+
                 {addCustomModelFeedback && (
-                  <div className={`p-2.5 rounded-lg text-xs ${addCustomModelFeedback.includes('successfully') ? 'bg-emerald-950/40 border border-emerald-800 text-emerald-300' : 'bg-rose-950/40 border border-rose-800 text-rose-300'}`}>
+                  <div
+                    className={`p-2.5 rounded text-xs ${
+                      addCustomModelFeedback.startsWith('✓')
+                        ? 'bg-[var(--db-emerald-900)]/30 border border-[var(--db-emerald-500)]/40 text-[var(--db-emerald-300)]'
+                        : 'bg-[var(--db-ruby-900)]/30 border border-[var(--db-ruby-500)]/40 text-[var(--db-ruby-300)]'
+                    }`}
+                  >
                     {addCustomModelFeedback}
                   </div>
                 )}
-                <div className="flex items-center justify-end gap-2 pt-2">
+
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-[var(--db-border-subtle)]">
                   <Button
                     variant="subtle"
                     size="sm"
@@ -1096,9 +1551,33 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     variant="primary"
                     size="sm"
                     disabled={isAddingCustomModel || !customModelId.trim()}
-                    onClick={handleRegisterCustomModel}
+                    onClick={async () => {
+                      if (!customModelId.trim()) return;
+                      setIsAddingCustomModel(true);
+                      setAddCustomModelFeedback(null);
+                      try {
+                        const res = await apiClient.registerCustomModel({
+                          providerId: customModelProvider,
+                          modelId: customModelId.trim(),
+                          displayName: customModelName.trim() || customModelId.trim(),
+                          pool: customModelPool,
+                        });
+                        setAddCustomModelFeedback(`✓ Model "${res.model?.displayName || customModelId}" registered successfully.`);
+                        await loadOrchestratorData(true);
+                        setTimeout(() => {
+                          setShowAddCustomModal(false);
+                          setCustomModelId('');
+                          setCustomModelName('');
+                          setAddCustomModelFeedback(null);
+                        }, 1200);
+                      } catch (err: any) {
+                        setAddCustomModelFeedback(`✕ ${err?.message || 'Failed to register model.'}`);
+                      } finally {
+                        setIsAddingCustomModel(false);
+                      }
+                    }}
                   >
-                    {isAddingCustomModel ? 'Registering...' : 'Register Model'}
+                    {isAddingCustomModel ? 'Registering...' : 'Save Model'}
                   </Button>
                 </div>
               </div>

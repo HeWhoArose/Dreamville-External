@@ -6712,6 +6712,203 @@ gameRouter.post('/orchestrator/providers/:providerId/key', async (req: Request, 
 });
 
 /**
+ * GET /api/game/orchestrator/custom-providers
+ * Returns all custom configured providers.
+ */
+gameRouter.get('/orchestrator/custom-providers', async (_req: Request, res: Response) => {
+  try {
+    const { loadCustomProviders } = await import('../services/providerCredentialService');
+    const providers = loadCustomProviders();
+    res.json({
+      success: true,
+      providers: providers.map(p => ({
+        ...p,
+        apiKey: p.apiKey ? '••••••••' : undefined,
+        hasApiKey: Boolean(p.apiKey),
+      })),
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to list custom providers.' });
+  }
+});
+
+/**
+ * POST /api/game/orchestrator/custom-providers
+ * Adds or updates a custom AI provider (OpenAI compatible endpoint, Ollama, LM Studio, Mistral, Groq, etc.)
+ */
+gameRouter.post('/orchestrator/custom-providers', async (req: Request, res: Response) => {
+  try {
+    const { id, name, baseUrl, protocol, apiKey, headers, models } = req.body || {};
+    if (!id || !String(id).trim()) {
+      return res.status(400).json({ success: false, error: 'Provider ID is required (e.g. "ollama", "groq", "together").' });
+    }
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ success: false, error: 'Provider name is required.' });
+    }
+    if (!baseUrl || !String(baseUrl).trim()) {
+      return res.status(400).json({ success: false, error: 'Base URL is required (e.g. "http://localhost:11434/v1" or "https://api.together.xyz/v1").' });
+    }
+
+    const { saveCustomProvider, setProviderApiKey, setProviderBaseUrl } = await import('../services/providerCredentialService');
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const orchestrator = worldRepository.getAiOrchestrator();
+
+    const normalizedId = String(id).trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+    const normalizedBaseUrl = String(baseUrl).trim().replace(/\/+$/, '');
+
+    const customConfig = {
+      id: normalizedId,
+      name: String(name).trim(),
+      baseUrl: normalizedBaseUrl,
+      protocol: protocol || 'openai_compatible',
+      headers: headers && typeof headers === 'object' ? headers : undefined,
+      models: Array.isArray(models) ? models : undefined,
+    };
+
+    saveCustomProvider({
+      ...customConfig,
+      apiKey: apiKey && String(apiKey).trim() ? String(apiKey).trim() : undefined,
+    });
+
+    setProviderBaseUrl(normalizedId, normalizedBaseUrl);
+    if (apiKey && String(apiKey).trim()) {
+      setProviderApiKey(normalizedId, String(apiKey).trim());
+    }
+
+    orchestrator.registerCustomProvider(customConfig);
+
+    // Try discovering models if supported
+    try {
+      await orchestrator.refreshDiscovery({ force: true });
+    } catch {
+      // Non-fatal if discovery fails during initial save
+    }
+
+    res.json({
+      success: true,
+      provider: {
+        ...customConfig,
+        hasApiKey: Boolean(apiKey),
+      },
+      message: `Custom provider "${customConfig.name}" registered successfully.`,
+    });
+  } catch (error: any) {
+    console.error('Failed to save custom provider:', error);
+    res.status(500).json({ success: false, error: error?.message || 'Failed to save custom provider.' });
+  }
+});
+
+/**
+ * DELETE /api/game/orchestrator/custom-providers/:providerId
+ * Deletes a custom AI provider and removes its models from registry.
+ */
+gameRouter.delete('/orchestrator/custom-providers/:providerId', async (req: Request, res: Response) => {
+  try {
+    const providerId = String(req.params.providerId || '').trim();
+    if (!providerId) {
+      return res.status(400).json({ success: false, error: 'providerId is required.' });
+    }
+
+    const { deleteCustomProvider } = await import('../services/providerCredentialService');
+    const { worldRepository } = await import('../repositories/worldRepository');
+    const orchestrator = worldRepository.getAiOrchestrator();
+
+    deleteCustomProvider(providerId);
+    orchestrator.removeCustomProvider(providerId);
+
+    res.json({
+      success: true,
+      providerId,
+      message: `Custom provider "${providerId}" deleted.`,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to delete custom provider.' });
+  }
+});
+
+/**
+ * POST /api/game/orchestrator/custom-providers/test
+ * Tests connectivity & discovery for a custom provider endpoint before saving.
+ */
+gameRouter.post('/orchestrator/custom-providers/test', async (req: Request, res: Response) => {
+  try {
+    const { baseUrl, apiKey, headers: customHeaders } = req.body || {};
+    if (!baseUrl || !String(baseUrl).trim()) {
+      return res.status(400).json({ success: false, error: 'baseUrl is required.' });
+    }
+
+    const targetUrl = String(baseUrl).trim().replace(/\/+$/, '');
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      ...(customHeaders || {}),
+    };
+    if (apiKey && String(apiKey).trim()) {
+      headers['Authorization'] = `Bearer ${String(apiKey).trim()}`;
+    }
+
+    const start = Date.now();
+    let modelsFound: string[] = [];
+
+    // Probe 1: GET /models
+    try {
+      const resModels = await fetch(`${targetUrl}/models`, {
+        headers,
+        signal: AbortSignal.timeout(5000),
+      });
+
+      if (resModels.ok) {
+        const payload: any = await resModels.json().catch(() => null);
+        const list = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload) ? payload : [];
+        modelsFound = list.map((m: any) => String(m?.id || m?.name || '')).filter(Boolean);
+      }
+    } catch {
+      // Try fallback chat completion probe
+    }
+
+    // Probe 2: If no models or endpoint returned non-200, test chat/completions ping
+    if (modelsFound.length === 0) {
+      const chatRes = await fetch(`${targetUrl}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify({
+          model: 'default',
+          messages: [{ role: 'user', content: 'ping' }],
+          max_tokens: 1,
+        }),
+        signal: AbortSignal.timeout(6000),
+      });
+
+      if (chatRes.status === 401 || chatRes.status === 403) {
+        return res.status(401).json({
+          success: false,
+          reachable: true,
+          authenticated: false,
+          error: `Authentication failed (HTTP ${chatRes.status}). Check your API Key.`,
+          latencyMs: Date.now() - start,
+        });
+      }
+    }
+
+    const latencyMs = Math.max(1, Date.now() - start);
+    return res.json({
+      success: true,
+      reachable: true,
+      authenticated: true,
+      latencyMs,
+      discoveredModelCount: modelsFound.length,
+      sampleModels: modelsFound.slice(0, 10),
+      message: `Connected successfully! Found ${modelsFound.length} models (${latencyMs}ms).`,
+    });
+  } catch (error: any) {
+    return res.status(502).json({
+      success: false,
+      reachable: false,
+      error: `Could not reach provider endpoint: ${error?.message || error}`,
+    });
+  }
+});
+
+/**
  * POST /api/game/orchestrator/custom-model
  * Registers a custom model into the orchestrator registry.
  */

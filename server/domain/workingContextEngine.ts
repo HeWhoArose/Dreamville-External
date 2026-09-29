@@ -223,7 +223,7 @@ export class WorkingContextEngine {
         const idleChunk = { ...chunk, blockStatus: 'IDLE' as const };
         idle.push(idleChunk);
         evicted.push(`${chunk.label} (${chunk.band})`);
-        evictionReasons[chunk.label] = `Idle: exceeds remaining token budget (${effectiveTokens} > ${hardTokenBudget})`;
+        evictionReasons[chunk.label] = `Exceeds remaining token budget (${effectiveTokens} > ${hardTokenBudget}); block is IDLE.`;
         // Close all strictly lower priority bands to prevent knapsack inversion
         lowestClosedBand = Math.min(lowestClosedBand, bandRank + 1);
       }

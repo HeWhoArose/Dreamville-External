@@ -6504,6 +6504,8 @@ gameRouter.post('/context/assemble', async (req: Request, res: Response) => {
       totalTokens: result.totalTokens,
       hardTokenBudget: result.hardTokenBudget,
       includedChunks: result.includedChunks,
+      idleChunks: result.idleChunks,
+      archivedChunks: result.archivedChunks,
       evictedChunkLabels: result.evictedChunkLabels,
       evictionReasons: result.evictionReasons,
       epistemicallySanitized: result.epistemicallySanitized,

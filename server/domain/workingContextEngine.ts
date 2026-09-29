@@ -50,6 +50,8 @@ export interface BudgetedContextResult {
   totalTokens: number;
   hardTokenBudget: number;
   includedChunks: ContextChunk[];
+  idleChunks: ContextChunk[];
+  archivedChunks: ContextChunk[];
   evictedChunkLabels: string[];
   evictionReasons: Record<string, string>;
 }
@@ -157,6 +159,8 @@ export class WorkingContextEngine {
     });
 
     const included: ContextChunk[] = [];
+    const idle: ContextChunk[] = [];
+    const archived: ContextChunk[] = [];
     const evicted: string[] = [];
     const evictionReasons: Record<string, string> = {};
 
@@ -172,6 +176,8 @@ export class WorkingContextEngine {
         chunk.blockStatus === 'ARCHIVED' ||
         (currentTurn !== undefined && chunk.expiresAtTurn !== undefined && chunk.expiresAtTurn < currentTurn)
       ) {
+        const archivedChunk = { ...chunk, blockStatus: 'ARCHIVED' as const };
+        archived.push(archivedChunk);
         evicted.push(`${chunk.label} (${chunk.band})`);
         evictionReasons[chunk.label] = 'Archived or expired context block';
         continue;
@@ -180,8 +186,10 @@ export class WorkingContextEngine {
       // Strict Priority Band Eviction:
       // If a higher priority band suffered eviction, lower priority bands CANNOT backfill into the budget gap.
       if (bandRank >= lowestClosedBand) {
+        const idleChunk = { ...chunk, blockStatus: 'IDLE' as const };
+        idle.push(idleChunk);
         evicted.push(`${chunk.label} (${chunk.band})`);
-        evictionReasons[chunk.label] = `Disallowed from backfilling budget after higher-priority band eviction`;
+        evictionReasons[chunk.label] = `Idle: higher-priority band eviction closed this block from the current prompt`;
         continue;
       }
 
@@ -210,8 +218,10 @@ export class WorkingContextEngine {
         currentDeclaredTokens = declaredWithFraming;
       } else {
         // Chunk exceeds remaining budget
+        const idleChunk = { ...chunk, blockStatus: 'IDLE' as const };
+        idle.push(idleChunk);
         evicted.push(`${chunk.label} (${chunk.band})`);
-        evictionReasons[chunk.label] = `Exceeds remaining token budget (${effectiveTokens} > ${hardTokenBudget})`;
+        evictionReasons[chunk.label] = `Idle: exceeds remaining token budget (${effectiveTokens} > ${hardTokenBudget})`;
         // Close all strictly lower priority bands to prevent knapsack inversion
         lowestClosedBand = Math.min(lowestClosedBand, bandRank + 1);
       }
@@ -225,6 +235,8 @@ export class WorkingContextEngine {
       totalTokens,
       hardTokenBudget,
       includedChunks: included,
+      idleChunks: idle,
+      archivedChunks: archived,
       evictedChunkLabels: evicted,
       evictionReasons,
     };

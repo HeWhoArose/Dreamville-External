@@ -1095,3 +1095,13 @@ test('Phase 12: Story narration model picker resolves the exact narrative task r
 	assert.match(source, /allRegisteredModels/);
 	assert.doesNotMatch(source, /Verified free models only/);
 });
+
+
+test('Phase 12: OpenRouter Free is a registered narration fallback model', () => {
+	const orchestrator = createTestOrchestrator();
+	const registered = orchestrator.getModel('openrouter', 'openrouter/free');
+	assert.ok(registered);
+	assert.equal(registered?.roleEligibility.includes('narrative.generate'), true);
+	assert.equal(registered?.fallbackEligibility, true);
+	assert.equal(registered?.isEmergencyFloor, false);
+});

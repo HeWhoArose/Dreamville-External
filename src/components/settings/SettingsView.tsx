@@ -1131,6 +1131,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     {[
                       { name: 'Ollama Local', id: 'ollama', url: 'http://localhost:11434/v1', defaultModels: 'llama3.2:latest, mistral:latest' },
                       { name: 'LM Studio Local', id: 'lmstudio', url: 'http://localhost:1234/v1', defaultModels: 'local-model' },
+                      { name: 'NVIDIA NIM', id: 'nvidia', url: 'https://integrate.api.nvidia.com/v1', defaultModels: 'meta/llama-3.3-70b-instruct, nvidia/llama-3.1-nemotron-70b-instruct, deepseek-ai/deepseek-r1' },
                       { name: 'Groq Cloud', id: 'groq', url: 'https://api.groq.com/openai/v1', defaultModels: 'llama-3.3-70b-versatile, llama-3.1-8b-instant' },
                       { name: 'Together AI', id: 'together', url: 'https://api.together.xyz/v1', defaultModels: 'meta-llama/Llama-3.3-70B-Instruct-Turbo' },
                       { name: 'DeepSeek API', id: 'deepseek', url: 'https://api.deepseek.com/v1', defaultModels: 'deepseek-chat, deepseek-reasoner' },

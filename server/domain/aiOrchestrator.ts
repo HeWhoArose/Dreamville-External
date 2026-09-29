@@ -6984,6 +6984,7 @@ export class MultiModelOrchestrator {
       maxTokens?: number;
       contextTokens?: number;
       forceModelId?: string;
+      canonicalLocationName?: string;
       validateResponse?: (text: string) => TaskResponseValidationResult;
       /**
        * When true, a configured task route may be expanded with additional eligible AI models

@@ -902,3 +902,10 @@ test('Phase 12 regression: free-model auto-arrange detection recognizes billing-
 		false,
 	);
 });
+
+
+test('Phase 12 regression: narrative fallback chain contains the configured OpenRouter free route', () => {
+	const config = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'server/data/orchestrator_config.json'), 'utf8'));
+	assert.ok(Array.isArray(config.fallbackChains?.['narrative.generate']));
+	assert.ok(config.fallbackChains['narrative.generate'].includes('openrouter::openrouter/free'));
+});

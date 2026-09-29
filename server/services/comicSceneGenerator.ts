@@ -127,6 +127,8 @@ export function resolveComicSceneVisualMoment(context: ComicSceneContext): Comic
   };
 }
 
+// PANEL LOGIC: adaptive panel logic is intentionally resolved to exactly one panel for
+// the current visual moment so previous/future beats cannot be merged into one image.
 export function buildComicScenePrompt(context: ComicSceneContext): ComicScenePromptResult {
   const visualMoment = resolveComicSceneVisualMoment(context);
   const latest = context.latestAction;

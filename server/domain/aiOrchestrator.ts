@@ -2184,7 +2184,11 @@ Do not enclose in markdown ticks, output pure JSON.`;
         lifecycleState: 'active',
         isPaidModel: true,
         freeTierStatus: 'NOT_FREE',
-        freeTierEvidenceSource: 'PROVIDER','models/gemini-3.5-flash-lite',
+        freeTierEvidenceSource: 'PROVIDER',
+      },
+      {
+        id: 'gemini-3.5-flash-lite',
+        rawName: 'models/gemini-3.5-flash-lite',
         displayName: 'Gemini 3.5 Flash Lite (Fast Utility)',
         description: 'Ultra-fast utility and extraction model',
         inputTokenLimit: 1048576,
@@ -2233,6 +2237,7 @@ Do not enclose in markdown ticks, output pure JSON.`;
         lifecycleState: 'preview',
       },
     ];
+  }
   }
 }
 
@@ -3183,7 +3188,8 @@ export class MultiModelOrchestrator {
       billingEvidenceSource: 'PROVIDER',
       freeTierStatus: 'NOT_FREE',
       freeTierEvidenceSource: 'PROVIDER',
-      freeTierVerifiedAt: Date.now(),cycleState: 'active',
+      freeTierVerifiedAt: Date.now(),
+      lifecycleState: 'active',
       isEmergencyFloor: false,
     });
 

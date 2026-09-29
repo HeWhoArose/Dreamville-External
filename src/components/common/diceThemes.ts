@@ -12,6 +12,7 @@ export interface DiceThemePreset {
 		texture: string;
 		background: string;
 		foreground: string;
+		outline: string;
 	};
 }
 

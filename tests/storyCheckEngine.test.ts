@@ -300,3 +300,38 @@ test('a dangerous breath can trigger a Constitution saving throw', () => {
   assert.equal(result!.ability, 'Constitution');
   assert.equal(result!.worldTriggered, true);
 });
+
+
+test('story check RNG advances across repeated checks instead of repeating a fixed d20 result', () => {
+  const engine = new StoryCheckEngine();
+  const results: number[] = [];
+
+  for (let i = 0; i < 6; i += 1) {
+    const result = engine.resolve(
+      'story_rng_sequence',
+      'I inspect the markings on the wall.',
+      {
+        coreStats: {
+          level: 1,
+          strength: 10,
+          dexterity: 10,
+          constitution: 10,
+          intelligence: 16,
+          wisdom: 12,
+          charisma: 10,
+          ac: 10,
+          speed: 30,
+          hitDice: '1d10',
+          hpCurrent: 10,
+          hpMax: 10,
+        },
+        skills: [],
+      }
+    );
+    assert.ok(result);
+    results.push(result!.roll.individualDice[0]);
+  }
+
+  assert.equal(results.every((value) => value === 3), false);
+  assert.ok(new Set(results).size > 1);
+});

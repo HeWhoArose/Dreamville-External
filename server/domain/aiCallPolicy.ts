@@ -128,14 +128,14 @@ export function decideAiHelperNeed(params: {
 		};
 	}
 
-	if (params.requiresCheckOrHazardInterpretation || params.ambiguousLanguage) {
+	if (params.requiresCheckOrHazardInterpretation || params.ambiguousLanguage || params.compoundAction) {
 		return {
-			strategy: params.compoundAction ? 'INTERPRET_SYNTHESIZE_AND_REPAIR' : 'INTERPRET_ONCE',
-			mode: params.compoundAction ? 'NOVEL_CAPABILITY' : 'INTERPRETATION',
+			strategy: 'INTERPRET_ONCE',
+			mode: 'INTERPRETATION',
 			reason: params.compoundAction
-				? 'The action contains ambiguity plus multiple semantic stages; interpretation is required and additional helper roles are available only after deterministic validation identifies a real gap.'
+				? 'The action has multiple semantic stages; one interpretation pass is allowed, while additional helpers require a separately detected novel capability or canonical validation failure.'
 				: 'The action may require a semantic check/hazard interpretation before canonical resolution.',
-			maxHelperCalls: params.compoundAction ? MAX_ADAPTIVE_HELPER_CALLS : 1,
+			maxHelperCalls: 1,
 		};
 	}
 
@@ -158,11 +158,11 @@ export function inferAiCallPolicyMode(params: {
 		return 'DETERMINISTIC_MECHANICS';
 	}
 
-	if ((params.explicitCapabilitySyntax || params.compoundAction) && !params.hasCanonicalCapability) {
+	if (params.explicitCapabilitySyntax && !params.hasCanonicalCapability) {
 		return 'NOVEL_CAPABILITY';
 	}
 
-	if (params.requiresCheckOrHazardInterpretation) {
+	if (params.requiresCheckOrHazardInterpretation || params.compoundAction) {
 		return 'INTERPRETATION';
 	}
 

@@ -764,12 +764,12 @@ export class ServerMockAuthority {
         storyId: targetStoryId,
         playerAction: String(freeformText),
         committedOutcome,
-        hardTokenBudget: 1100,
+        hardTokenBudget: 700,
         timeoutMs: 7000,
         maxRetries: 1,
         recentTurns: this.getDynamicStoryState(targetStoryId).actionHistory
           .filter((entry) => entry.id !== baseResult?.actionId && Boolean(entry.narrativeResponse || entry.description))
-          .slice(-8)
+          .slice(-2)
           .reverse()
           .map((entry) => ({
             playerAction: entry.description,

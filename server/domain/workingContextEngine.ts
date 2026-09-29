@@ -117,6 +117,118 @@ export class WorkingContextEngine {
   }
 
   /**
+   * Applies the F&F-style working-context lifecycle without creating a second
+   * source of truth: every block is typed, sourced, deduplicated, and treated
+   * as a projection of canonical state.
+   */
+  public static normalizeContextBlocks(chunks: ContextChunk[]): ContextChunk[] {
+    const priorityOrder: Record<PriorityBand, number> = {
+      B1_CRITICAL: 1,
+      B2_IMMEDIATE: 2,
+      B3_CAUSAL_OPPORTUNITY: 3,
+      B4_EPISODIC: 4,
+      B5_SEMANTIC_LORE: 5,
+    };
+    const inferType = (chunk: ContextChunk): ContextBlockType => {
+      if (chunk.blockType) return chunk.blockType;
+      const label = `${chunk.label} ${chunk.sourceAuthority || ''}`.toLowerCase();
+      if (/instruction|behavior|contract/.test(label)) return 'INSTRUCTION';
+      if (/memory|chronicle|episodic|recent/.test(label)) return 'MEMORY';
+      if (/character|player|entity|npc|capabilit|equipment|inventory|item|condition/.test(label)) return 'ENTITY';
+      if (/lore|knowledge|world rule|world law|research/.test(label)) return 'LORE';
+      return 'MISC';
+    };
+    const merged = new Map<string, ContextChunk>();
+    for (const raw of chunks) {
+      const chunk = {
+        ...raw,
+        blockType: inferType(raw),
+        blockStatus: raw.blockStatus || 'ACTIVE',
+      };
+      const key = `${chunk.content || ''}`.replace(/\s+/g, ' ').trim().toLowerCase();
+      if (!key) continue;
+      const existing = merged.get(key);
+      if (!existing) {
+        merged.set(key, chunk);
+        continue;
+      }
+      const preferNew =
+        (priorityOrder[chunk.band] < priorityOrder[existing.band]) ||
+        ((chunk.relevanceScore ?? 0) > (existing.relevanceScore ?? 0));
+      const winner = preferNew ? chunk : existing;
+      const loser = preferNew ? existing : chunk;
+      const sourceAuthority = [winner.sourceAuthority, loser.sourceAuthority]
+        .filter(Boolean)
+        .filter((value, index, values) => values.indexOf(value) === index)
+        .join(' + ') || undefined;
+      merged.set(key, {
+        ...winner,
+        sourceAuthority,
+        isProtected: Boolean(existing.isProtected || chunk.isProtected),
+        relevanceScore: Math.max(existing.relevanceScore ?? 0, chunk.relevanceScore ?? 0),
+      });
+    }
+    return [...merged.values()];
+  }
+
+  /**
+   * Deterministic research step inspired by F&F's Working Context research:
+   * retrieve only canonical blocks relevant to the current action, expose their
+   * provenance, and never spend an LLM call to rediscover facts already owned by
+   * DreamBook's engines.
+   */
+  public static researchForAction(params: {
+    storyId: string;
+    playerAction: string;
+    viewerActorId?: string;
+    worldRepo?: WorldRepository;
+    hardTokenBudget?: number;
+  }): {
+    required: boolean;
+    brief: string;
+    facts: string[];
+    sources: string[];
+    blocks: ContextChunk[];
+  } {
+    const repo = params.worldRepo || worldRepository;
+    const currentTurn = repo.getCanonicalCommandEvents(params.storyId).length + 1;
+    const context = WorkingContextEngine.assembleTurnContext({
+      storyId: params.storyId,
+      viewerActorId: params.viewerActorId,
+      playerAction: params.playerAction,
+      hardTokenBudget: params.hardTokenBudget ?? 900,
+      worldRepo: repo,
+    });
+    const blocks = context.includedChunks
+      .filter((chunk) => chunk.blockStatus !== 'ARCHIVED')
+      .map((chunk) => ({
+        ...chunk,
+        blockStatus: 'ACTIVE' as const,
+        expiresAtTurn: currentTurn + 2,
+      }));
+    const facts: string[] = [];
+    const sources: string[] = [];
+    const seen = new Set<string>();
+    for (const block of blocks) {
+      const fact = `[${block.label}] ${block.content}`;
+      const key = fact.replace(/\s+/g, ' ').trim().toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      facts.push(fact);
+      if (block.sourceAuthority || block.source) {
+        sources.push(`${block.label}: ${block.sourceAuthority || block.source}`);
+      }
+    }
+    return {
+      required: facts.length > 0,
+      brief: facts.slice(0, 8).join('\n'),
+      facts: facts.slice(0, 8),
+      sources: sources.slice(0, 8),
+      blocks,
+    };
+  }
+
+  /**
    * Compiles context chunks into a budgeted prompt string, evicting lower priority bands (B5 -> B4 -> B3)
    * while strictly preserving B1 Critical and B2 Immediate (V10.8.30.2).
    *
@@ -888,17 +1000,20 @@ export class WorkingContextEngine {
       candidateChunks.push(...params.customChunks);
     }
 
-    // Execute budgeted assembly with strict band preservation and framing overhead accounting
+    // F&F-style context blocks are self-managed projections: normalize types,
+    // deduplicate overlapping research blocks, and preserve canonical provenance
+    // before applying the deterministic token budget.
+    const normalizedCandidateChunks = WorkingContextEngine.normalizeContextBlocks(candidateChunks);
     const currentTurn = repo.getCanonicalCommandEvents(storyId).length + 1;
     const budgetedResult = WorkingContextEngine.assembleBudgetedContext(
-      candidateChunks,
+      normalizedCandidateChunks,
       hardTokenBudget,
       currentTurn,
     );
 
     return {
       packet,
-      chunks: candidateChunks,
+      chunks: normalizedCandidateChunks,
       assembledText: budgetedResult.assembledText,
       totalTokens: budgetedResult.totalTokens,
       hardTokenBudget,

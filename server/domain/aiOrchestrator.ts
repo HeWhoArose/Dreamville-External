@@ -80,7 +80,6 @@ export type FreeTierStatus = 'VERIFIED' | 'NOT_FREE' | 'UNKNOWN';
 
 /** Provider-confirmed free-tier Gemini model identifiers. */
 const GOOGLE_VERIFIED_FREE_GEMINI_MODELS = new Set([
-  'gemini-3.8-flash',
   'gemini-3.5-flash',
   'gemini-3.5-flash-lite',
   'gemini-3.1-flash-lite',
@@ -2183,13 +2182,9 @@ Do not enclose in markdown ticks, output pure JSON.`;
         supportedActions: ['generateContent', 'countTokens'],
         isAccessible: true,
         lifecycleState: 'active',
-        isPaidModel: false,
-        freeTierStatus: 'VERIFIED',
-        freeTierEvidenceSource: 'PROVIDER',
-      },
-      {
-        id: 'gemini-3.5-flash-lite',
-        rawName: 'models/gemini-3.5-flash-lite',
+        isPaidModel: true,
+        freeTierStatus: 'NOT_FREE',
+        freeTierEvidenceSource: 'PROVIDER','models/gemini-3.5-flash-lite',
         displayName: 'Gemini 3.5 Flash Lite (Fast Utility)',
         description: 'Ultra-fast utility and extraction model',
         inputTokenLimit: 1048576,
@@ -3183,13 +3178,12 @@ export class MultiModelOrchestrator {
       roleEligibility: [...ALL_GENERAL_TEXT_ROLES],
       fallbackEligibility: true,
       accessStatus: 'accessible',
-      isPaidModel: false,
-      billingState: 'FREE',
+      isPaidModel: true,
+      billingState: 'PAID',
       billingEvidenceSource: 'PROVIDER',
-      freeTierStatus: 'VERIFIED',
+      freeTierStatus: 'NOT_FREE',
       freeTierEvidenceSource: 'PROVIDER',
-      freeTierVerifiedAt: Date.now(),
-      lifecycleState: 'active',
+      freeTierVerifiedAt: Date.now(),cycleState: 'active',
       isEmergencyFloor: false,
     });
 

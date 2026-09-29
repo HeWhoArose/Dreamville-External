@@ -6,10 +6,19 @@ export type AiCallPolicyMode =
 	| 'INTERPRETATION'
 	| 'NOVEL_CAPABILITY';
 
+export type AiHelperStrategy = 'NONE' | 'INTERPRET_ONCE' | 'INTERPRET_THEN_SYNTHESIZE';
+
 export interface AiCallPolicyDecision {
 	allowed: boolean;
 	reason: string;
 	maxTokens: number;
+}
+
+export interface AiHelperNeedDecision {
+	strategy: AiHelperStrategy;
+	mode: AiCallPolicyMode;
+	reason: string;
+	maxHelperCalls: number;
 }
 
 export interface AiCallPolicySnapshot {
@@ -53,6 +62,58 @@ const MODE_POLICIES: Record<AiCallPolicyMode, {
 		allowedTasks: ['intent.interpret', 'capability.synthesize'],
 	},
 };
+
+export function decideAiHelperNeed(params: {
+	hasCanonicalCapability?: boolean;
+	itemKnown?: boolean;
+	requiresCheckOrHazardInterpretation?: boolean;
+	explicitCapabilitySyntax?: boolean;
+	unknownUseTarget?: boolean;
+	ambiguousLanguage?: boolean;
+}): AiHelperNeedDecision {
+	if (params.hasCanonicalCapability) {
+		return {
+			strategy: 'NONE',
+			mode: 'DETERMINISTIC_MECHANICS',
+			reason: 'A canonical capability is already known; deterministic capability execution is authoritative.',
+			maxHelperCalls: 0,
+		};
+	}
+
+	if (params.itemKnown && !params.ambiguousLanguage) {
+		return {
+			strategy: 'NONE',
+			mode: 'DETERMINISTIC_MECHANICS',
+			reason: 'The requested item is canonically identified; inventory resolution does not need an LLM.',
+			maxHelperCalls: 0,
+		};
+	}
+
+	if (params.explicitCapabilitySyntax || params.unknownUseTarget) {
+		return {
+			strategy: 'INTERPRET_THEN_SYNTHESIZE',
+			mode: 'NOVEL_CAPABILITY',
+			reason: 'The player expressed a capability-like or unresolved use request without a canonical match.',
+			maxHelperCalls: 2,
+		};
+	}
+
+	if (params.requiresCheckOrHazardInterpretation || params.ambiguousLanguage) {
+		return {
+			strategy: 'INTERPRET_ONCE',
+			mode: 'INTERPRETATION',
+			reason: 'The action may require a semantic check/hazard interpretation before canonical resolution.',
+			maxHelperCalls: 1,
+		};
+	}
+
+	return {
+		strategy: 'NONE',
+		mode: 'NARRATION_ONLY',
+		reason: 'The action is sufficiently clear for deterministic resolution plus narration.',
+		maxHelperCalls: 0,
+	};
+}
 
 export function inferAiCallPolicyMode(params: {
 	hasCanonicalCapability?: boolean;

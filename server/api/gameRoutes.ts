@@ -6846,7 +6846,7 @@ gameRouter.post('/orchestrator/custom-providers/test', async (req: Request, res:
       headers['Authorization'] = `Bearer ${String(apiKey).trim()}`;
     }
 
-    const start = Date.now();
+    const start = performance.now();
     let modelsFound: string[] = [];
 
     // Probe 1: GET /models
@@ -6884,12 +6884,12 @@ gameRouter.post('/orchestrator/custom-providers/test', async (req: Request, res:
           reachable: true,
           authenticated: false,
           error: `Authentication failed (HTTP ${chatRes.status}). Check your API Key.`,
-          latencyMs: Date.now() - start,
+          latencyMs: Math.max(1, Math.round(performance.now() - start)),
         });
       }
     }
 
-    const latencyMs = Math.max(1, Date.now() - start);
+    const latencyMs = Math.max(1, Math.round(performance.now() - start));
     return res.json({
       success: true,
       reachable: true,

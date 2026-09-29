@@ -47,7 +47,7 @@ test('current-scene comic prompt is an exact single current visual moment', () =
   assert.match(result.prompt, /I take the ancient scroll and hide/i);
   assert.match(result.prompt, /rusted guardian turns toward the empty plinth/i);
   assert.match(result.prompt, /canonical action failed/i);
-  assert.match(result.prompt, /one comic-book panel/i);
+  assert.match(result.prompt, /Use exactly 1 panel/i);
   assert.doesNotMatch(result.prompt, /OLD OPENING SCENE THAT MUST NEVER BE USED/i);
   assert.doesNotMatch(result.prompt, /OLD NARRATION THAT MUST NEVER BECOME THE CURRENT IMAGE/i);
   assert.doesNotMatch(result.prompt, /OLD DIALOGUE FROM AN EARLIER TURN/i);

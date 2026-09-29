@@ -880,18 +880,30 @@ test('Phase 12 regression: deterministic fallback can be explicitly withheld aft
 	);
 });
 
-test('Phase 12 regression: free-model auto-arrange detection recognizes billing-free models and names containing free', () => {
+test('Phase 12 regression: free-model detection requires provider-verified free-tier evidence', () => {
 	assert.equal(
 		MultiModelOrchestrator.isFreeModelCandidate({
 			...model('provider_free', 'model-billing-free', ['character.extract']),
 			billingState: 'FREE',
+			billingEvidenceSource: 'UNKNOWN',
 		}),
-		true,
+		false,
 	);
 	assert.equal(
 		MultiModelOrchestrator.isFreeModelCandidate({
 			...model('provider_named_free', 'provider/model-free', ['character.extract']),
 			billingState: 'UNKNOWN',
+		}),
+		false,
+	);
+	assert.equal(
+		MultiModelOrchestrator.isFreeModelCandidate({
+			...model('provider_verified_free', 'provider/model-verified', ['character.extract']),
+			billingState: 'FREE',
+			billingEvidenceSource: 'PROVIDER',
+			isPaidModel: false,
+			freeTierStatus: 'VERIFIED',
+			freeTierEvidenceSource: 'PROVIDER',
 		}),
 		true,
 	);
@@ -900,6 +912,8 @@ test('Phase 12 regression: free-model auto-arrange detection recognizes billing-
 			...model('provider_paid', 'provider/model-paid', ['character.extract']),
 			billingState: 'PAID',
 			isPaidModel: true,
+			freeTierStatus: 'NOT_FREE',
+			freeTierEvidenceSource: 'PROVIDER',
 		}),
 		false,
 	);

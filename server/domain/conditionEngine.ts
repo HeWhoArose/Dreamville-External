@@ -760,6 +760,22 @@ export class ConditionEngine {
     }
   }
 
+  public resolveHealing(
+    actorId: string,
+    requestedAmount: number,
+  ): { requestedAmount: number; finalAmount: number; healthCurrent: number } {
+    const state = this.requireActor(actorId);
+    const requested = Math.max(0, Number(requestedAmount) || 0);
+    const finalAmount = Math.max(0, Math.min(requested, state.healthMax - state.healthCurrent));
+    state.healthCurrent += finalAmount;
+    if (state.healthCurrent > 0) state.dead = false;
+    return {
+      requestedAmount: requested,
+      finalAmount,
+      healthCurrent: state.healthCurrent,
+    };
+  }
+
   public resolveDamage(
     actorId: string,
     requestedAmount: number,

@@ -92,6 +92,58 @@ export function expandDiceGroups(
 	});
 }
 
+function get2DDiceClipPath(sides: number): string {
+	switch (sides) {
+		case 4: return 'polygon(50% 4%, 96% 92%, 4% 92%)';
+		case 6: return 'polygon(9% 9%, 91% 9%, 91% 91%, 9% 91%)';
+		case 8: return 'polygon(50% 3%, 97% 50%, 50% 97%, 3% 50%)';
+		case 10: return 'polygon(50% 2%, 85% 14%, 98% 50%, 85% 86%, 50% 98%, 15% 86%, 2% 50%, 15% 14%)';
+		case 12: return 'polygon(50% 2%, 79% 9%, 96% 30%, 96% 70%, 79% 91%, 50% 98%, 21% 91%, 4% 70%, 4% 30%, 21% 9%)';
+		case 20: return 'polygon(50% 2%, 79% 10%, 96% 35%, 90% 76%, 66% 97%, 34% 97%, 10% 76%, 4% 35%, 21% 10%)';
+		case 100: return 'circle(48% at 50% 50%)';
+		default: return 'polygon(50% 3%, 95% 26%, 86% 82%, 50% 97%, 14% 82%, 5% 26%)';
+	}
+}
+
+const TwoDDicePresentation: React.FC<{
+	sides: number[];
+	roll: RollRecord;
+	theme: ReturnType<typeof getDiceThemePreset>;
+	revealed: boolean;
+	isRolling: boolean;
+}> = ({ sides, roll, theme, revealed, isRolling }) => (
+	<div className='absolute inset-0 flex items-center justify-center overflow-hidden px-4 py-5'>
+		<div className='flex w-full max-w-3xl flex-wrap items-center justify-center gap-3'>
+			{sides.slice(0, 8).map((dieSides, index) => {
+				const value = roll.individualDice[index] ?? (index === 0 ? roll.total : 0);
+				const clipPath = get2DDiceClipPath(dieSides);
+				return (
+					<div
+						key={roll.rollId + '-2d-' + index}
+						className={'relative flex h-24 w-24 shrink-0 items-center justify-center transition-transform sm:h-28 sm:w-28 ' + (isRolling ? 'animate-[dice-2d-throw_1050ms_cubic-bezier(.2,.8,.25,1)]' : '')}
+						style={{ clipPath, filter: 'drop-shadow(0 14px 18px rgba(0,0,0,.4))', background: theme.customColorset.outline }}
+						aria-label={'2D D' + dieSides + ' result'}
+					>
+						<div
+							className='absolute inset-[3px] flex items-center justify-center'
+							style={{
+								clipPath,
+								background: 'linear-gradient(145deg, ' + theme.customColorset.background + ' 0%, ' + theme.customColorset.background + 'cc 58%, ' + theme.customColorset.outline + ' 100%)',
+								color: theme.customColorset.foreground,
+							}}
+						>
+							<div className='text-center'>
+								<p className='text-[9px] font-black uppercase tracking-[0.18em] opacity-65'>D{dieSides}</p>
+								<p className='mt-0.5 text-4xl font-black leading-none sm:text-5xl'>{revealed ? value : '?'}</p>
+							</div>
+						</div>
+					</div>
+				);
+			})}
+		</div>
+	</div>
+);
+
 function resultTone(roll: RollRecord): string {
 	if (roll.isCriticalSuccess) {
 		return 'border-emerald-300/40 bg-emerald-400/10 text-emerald-100 shadow-[0_0_45px_rgba(16,185,129,0.22)]';
@@ -136,6 +188,11 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 	}, [roll.formula]);
 
 	const initializeDiceBox = async () => {
+		if (diceTheme.mode === '2D') {
+			setIsInitializing(false);
+			setUseCssFallback(false);
+			return null;
+		}
 		if (diceBoxRef.current) return diceBoxRef.current;
 		if (initializationRef.current) return initializationRef.current;
 
@@ -230,9 +287,11 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 		playSfx('dice.roll', 'HIGH', 0.82);
 
 		try {
-			const box = await initializeDiceBox();
+			const box = diceTheme.mode === '2D' ? null : await initializeDiceBox();
 
-			if (!box || useCssFallback) {
+			if (diceTheme.mode === '2D') {
+				await new Promise((resolve) => setTimeout(resolve, 1050));
+			} else if (!box || useCssFallback) {
 				await new Promise((resolve) => setTimeout(resolve, 1150));
 			} else if (!roll.individualDice.length) {
 				await box.roll(formulaWithoutModifier);
@@ -298,7 +357,7 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 	const diceTotal = roll.individualDice.reduce((sum, value) => sum + value, 0);
 	const total = roll.total;
 	const tone = resultTone(roll);
-	const headerTitle = title || 'Physical Dice';
+	const headerTitle = title || (diceTheme.mode === '2D' ? 'Illustrated Dice' : 'Physical Dice');
 	const headerSubtitle = subtitle || roll.formula;
 	const buttonVisible = showRollButton !== false;
 
@@ -336,8 +395,18 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 				id={containerId}
 				className="relative h-64 overflow-hidden"
 				style={{ background: diceTheme.previewTable }}
-				aria-label={`3D physical dice table for ${roll.formula}`}
+				aria-label={diceTheme.mode === '2D' ? `2D illustrated dice for ${roll.formula}` : `3D physical dice table for ${roll.formula}`}
 			>
+				{diceTheme.mode === '2D' && (
+					<TwoDDicePresentation
+						sides={diceSides}
+						roll={roll}
+						theme={diceTheme}
+						revealed={isRevealed}
+						isRolling={isRolling}
+					/>
+				)}
+
 				{useCssFallback && (
 					<div className="absolute inset-0 flex items-center justify-center">
 						<div
@@ -420,6 +489,14 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 			)}
 
 <style>{`
+			@keyframes dice-2d-throw {
+				0% { transform: translate3d(-42px,-18px,0) rotate(-10deg) scale(.76); }
+				28% { transform: translate3d(34px,-34px,0) rotate(14deg) scale(.92); }
+				58% { transform: translate3d(-16px,2px,0) rotate(-7deg) scale(1.04); }
+				82% { transform: translate3d(8px,4px,0) rotate(3deg) scale(.99); }
+				100% { transform: translate3d(0,0,0) rotate(0deg) scale(1); }
+			}
+
 			@keyframes dice-throw {
 				0% { transform: translate3d(-36px,-22px,0) rotate(-24deg) scale(.72); }
 				25% { transform: translate3d(26px,-48px,0) rotate(120deg) scale(.9); }

@@ -962,6 +962,7 @@ export const RoutingWorkstationModal: React.FC<RoutingWorkstationModalProps> = (
                               )
                               .map((candidate: any) => {
                                 const key = `${candidate.providerId}::${candidate.modelId}`;
+                                if (candidate.freeTierStatus !== 'VERIFIED' || candidate.freeTierEvidenceSource !== 'PROVIDER') return null;
                                 const runtime = phase12Operations?.models?.find(
                                   (entry: any) => entry.providerId === candidate.providerId && entry.modelId === candidate.modelId
                                 );

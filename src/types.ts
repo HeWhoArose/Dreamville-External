@@ -387,6 +387,8 @@ export interface ActionLog {
     modelId?: string;
     regenerated?: boolean;
   };
+  /** Structured visual beats produced by the narrator for current-turn scene art. */
+  visualCues?: string[];
   checkResult?: StoryCheckResult;
   actionAdvice?: ActionAdvice;
 }

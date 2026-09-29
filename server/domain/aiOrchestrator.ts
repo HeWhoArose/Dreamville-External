@@ -1966,7 +1966,8 @@ You are the Dreamville canonical narrator. Produce ONLY a valid JSON turn packag
   "events": ["EVENT_NAME"],
   "stateChanges": [{"kind": "INVENTORY|LOCATION|CAPABILITY|COMBAT", "targetId": "string", "value": "string"}],
   "memoryCandidates": ["string"],
-  "audioCues": ["string"]
+  "audioCues": ["string"],
+  "visualCues": ["short, concrete visual beat in chronological order"]
 }
 Do not enclose in markdown ticks, output pure JSON.`;
         const systemPrompt = options?.systemInstruction || defaultSystemPrompt;
@@ -5823,6 +5824,23 @@ export class MultiModelOrchestrator {
         }
       }
 
+      // 7. Visual cues validation
+      const visualCues: (string | { prompt: string })[] = [];
+      if (parsed.visualCues) {
+        if (!Array.isArray(parsed.visualCues)) {
+          return { valid: false, errorReason: 'visualCues must be an array.' };
+        }
+        for (const v of parsed.visualCues) {
+          if (typeof v === 'string' && v.trim()) {
+            visualCues.push(v.trim());
+          } else if (v && typeof v === 'object' && typeof v.prompt === 'string' && v.prompt.trim()) {
+            visualCues.push({ prompt: v.prompt.trim() });
+          } else {
+            return { valid: false, errorReason: 'Visual cue items must be strings or { prompt: string } objects.' };
+          }
+        }
+      }
+
       return {
         valid: true,
         turnPackage: {
@@ -5832,6 +5850,7 @@ export class MultiModelOrchestrator {
           stateChanges,
           memoryCandidates,
           audioCues,
+          visualCues,
         },
       };
     } catch {

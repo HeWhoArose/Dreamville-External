@@ -217,7 +217,7 @@ export class UnifiedAiActionOrchestrator {
 					'Return ONLY JSON describing one alternative capability that can achieve a coherent approximation of the requested intent while respecting the character, world, and rules. It must be meaningfully different from the unavailable capability and is a proposal only.',
 					{
 						timeoutMs: 12000,
-						maxTokens: 1600,
+						maxTokens: 850,
 						validateResponse: (text: string) => {
 							const p = json<any>(text);
 							return p && typeof p.name === 'string' && typeof p.description === 'string'
@@ -225,6 +225,7 @@ export class UnifiedAiActionOrchestrator {
 								: { valid: false, errorReason: 'Invalid alternative capability schema.' };
 						},
 					},
+					aiCallBudget,
 				);
 				const p = json<any>(result.text);
 				if (p) {

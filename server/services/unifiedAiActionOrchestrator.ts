@@ -3,7 +3,7 @@ import type { CapabilityDefinition } from '../domain/capabilityEngine';
 import { CapabilitySimulationEngine, type CapabilitySimulationResult } from '../domain/capabilitySimulationEngine';
 import type { TaskId } from '../domain/aiOrchestrator';
 import { getAiTaskContract } from '../domain/aiTaskContracts';
-import { AiCallBudget, decideAiHelperNeed } from '../domain/aiCallPolicy';
+import { AiCallBudget, decideAiHelperNeed, type AiHelperRole } from '../domain/aiCallPolicy';
 import { WorkingContextEngine } from '../domain/workingContextEngine';
 
 export interface ActionResolutionHint {
@@ -58,10 +58,11 @@ export class UnifiedAiActionOrchestrator {
 		systemInstruction: string,
 		options: any = {},
 		budget?: AiCallBudget,
+		role?: AiHelperRole,
 	) {
 		const contract = getAiTaskContract(task);
 		const requestedMaxTokens = options.maxTokens ?? contract.defaultMaxTokens;
-		const decision = budget?.authorize(task, requestedMaxTokens);
+		const decision = budget?.authorize(task, requestedMaxTokens, role);
 		if (decision && !decision.allowed) {
 			throw new Error('AI_CALL_POLICY_BLOCKED: ' + decision.reason);
 		}
@@ -95,13 +96,14 @@ export class UnifiedAiActionOrchestrator {
 		const preCandidate =
 			owned.find((cap) => typeof cap?.name === 'string' && normalizedAction.includes(cap.name.toLowerCase())) ||
 			capabilityCandidateFromWorld(world, cleanAction);
-		const shouldAskIntentModel =
-			!preCandidate &&
-			(explicitCapabilitySyntax || checkOrHazardRequested || (itemUseRequested && !itemMatch));
 		const ambiguousLanguage =
 			/\b(that|this|it|something|somehow|maybe|try something|figure it out|do something)\b/i.test(cleanAction) &&
 			!preCandidate &&
 			!itemMatch;
+		const compoundAction = /\b(then|after that|and then|followed by|while)\b|[,;]\s*(?:then|and|while)\b/i.test(cleanAction) && /\b(and|then|after|while|followed by)\b/i.test(cleanAction);
+		const shouldAskIntentModel =
+			!preCandidate &&
+			(explicitCapabilitySyntax || checkOrHazardRequested || (itemUseRequested && !itemMatch) || ambiguousLanguage || compoundAction);
 		const helperDecision = decideAiHelperNeed({
 			hasCanonicalCapability: Boolean(preCandidate),
 			itemKnown: Boolean(itemMatch),
@@ -109,6 +111,7 @@ export class UnifiedAiActionOrchestrator {
 			explicitCapabilitySyntax,
 			unknownUseTarget: itemUseRequested && !itemMatch,
 			ambiguousLanguage,
+			compoundAction,
 		});
 		const aiCallPolicyMode = helperDecision.mode;
 		const aiCallBudget = new AiCallBudget(aiCallPolicyMode);
@@ -123,6 +126,7 @@ export class UnifiedAiActionOrchestrator {
 					'Return ONLY JSON: {"baseAction":"...","intent":"...","capabilityIntent":true|false,"requestedEffects":[],"modifiers":[],"target":"","confidence":0..1,"resolutionHint":{"item":{"requested":true,"itemName":"","amount":1},"check":{"kind":"ABILITY_CHECK|SAVING_THROW|NONE","skillId":"","ability":""},"hazard":{"type":"FALL|TRAP|DEBRIS|POISON|FIRE|OTHER","distanceFeet":0}}}. Use hints only to identify what the canonical engine should resolve. Never invent ownership, HP, damage, DC, dice, costs, or success. Hazard distance is valid only when explicitly stated in action or scene.',
 					{ timeoutMs: 4500, maxTokens: 350, validateResponse: (text: string) => { const p = json<any>(text); return p && typeof p.baseAction === 'string' && typeof p.intent === 'string' ? { valid: true } : { valid: false, errorReason: 'Invalid intent schema.' }; } },
 					aiCallBudget,
+					'INTENT_INTERPRET',
 				);
 			const p = json<any>(result.text);
 			if (p) {
@@ -191,19 +195,66 @@ export class UnifiedAiActionOrchestrator {
 						},
 					},
 					aiCallBudget,
+					'CAPABILITY_SYNTHESIZE',
 				);
 				const p = json<any>(result.text);
 				if (p) synthesized = { ...p, id: 'proposal_' + storyId + '_' + actorId, provenance: 'AI_GENERATED' };
 				telemetry.push({ task: 'capability.synthesize', modelId: result.modelId, providerId: result.providerId, source: result.source, attempts: result.attempts });
 			} catch {}
 		}
-		const finalCandidate=candidate||synthesized;
+		let finalCandidate: CapabilityDefinition | undefined = candidate || synthesized;
 		const progressionState=this.repository.getCharacterProgressionEngine(storyId).getState(actorId);
 		const progressionPolicy=capabilityEngine.getProgressionPolicy();
 		const rulesProfile=this.repository.getRulesProfile(storyId);
 		const customRules=world?new (await import('../domain/customRuleEngine')).CustomRuleEngine().getRules(this.repository as any,storyId):[];
-		const simulation=simulator.simulate(cleanAction,{actorId,character:run?.protagonist,world:world||{title:'Current World',dndRulesMode:rulesProfile?.mode||'FULL_DND'},rulesProfile,progressionPolicy,progressionState:{...progressionState,maxCharacterLevel:progressionPolicy.maxLevel},customRules,powerState:capabilityEngine.getPowerState(actorId),ownedCapabilities:owned,skillInstances:capabilityEngine.getActorSkillInstances(actorId),allWorldCapabilities:[...((world?.canonicalCapabilities||[]) as CapabilityDefinition[]),...((world?.capabilities||[]) as CapabilityDefinition[])],environment:{}},finalCandidate);
+		let simulation=simulator.simulate(cleanAction,{actorId,character:run?.protagonist,world:world||{title:'Current World',dndRulesMode:rulesProfile?.mode||'FULL_DND'},rulesProfile,progressionPolicy,progressionState:{...progressionState,maxCharacterLevel:progressionPolicy.maxLevel},customRules,powerState:capabilityEngine.getPowerState(actorId),ownedCapabilities:owned,skillInstances:capabilityEngine.getActorSkillInstances(actorId),allWorldCapabilities:[...((world?.canonicalCapabilities||[]) as CapabilityDefinition[]),...((world?.capabilities||[]) as CapabilityDefinition[])],environment:{}},finalCandidate);
 		let alternativeCapability: CapabilityDefinition | undefined;
+		if (
+			capabilityLike &&
+			synthesized &&
+			(simulation.status === 'UNSUPPORTED_REQUEST' || simulation.status === 'CURRENTLY_BLOCKED')
+		) {
+			try {
+				const result = await this.runTask(
+					'capability.synthesize',
+					JSON.stringify({
+						mode: 'SEMANTIC_REPAIR',
+						requestedAction: cleanAction,
+						intent,
+						failedProposal: synthesized,
+						validation: simulation,
+						research,
+						character: run?.protagonist,
+						world,
+					}),
+					'Return ONLY JSON describing one repaired capability proposal. Preserve the player intent, but correct the failed mechanism. Proposal only; never invent ownership, success, HP, damage, DC, dice, or resource outcomes.',
+					{
+						timeoutMs: 10000,
+						maxTokens: 850,
+						validateResponse: (text: string) => {
+							const p = json<any>(text);
+							return p && typeof p.name === 'string' && typeof p.description === 'string'
+								? { valid: true }
+								: { valid: false, errorReason: 'Invalid repaired capability schema.' };
+						},
+					},
+					aiCallBudget,
+					'SEMANTIC_REPAIR',
+				);
+				const p = json<any>(result.text);
+				if (p) {
+					const repaired = { ...p, id: 'proposal_repair_' + storyId + '_' + actorId, provenance: 'AI_GENERATED' } as CapabilityDefinition;
+					const repairedSimulation = simulator.simulate(cleanAction,{actorId,character:run?.protagonist,world:world||{title:'Current World',dndRulesMode:rulesProfile?.mode||'FULL_DND'},rulesProfile,progressionPolicy,progressionState:{...progressionState,maxCharacterLevel:progressionPolicy.maxLevel},customRules,powerState:capabilityEngine.getPowerState(actorId),ownedCapabilities:owned,skillInstances:capabilityEngine.getActorSkillInstances(actorId),allWorldCapabilities:[...((world?.canonicalCapabilities||[]) as CapabilityDefinition[]),...((world?.capabilities||[]) as CapabilityDefinition[])],environment:{}},repaired);
+					if (repairedSimulation.status !== 'UNSUPPORTED_REQUEST' && repairedSimulation.status !== 'CURRENTLY_BLOCKED') {
+						finalCandidate = repaired;
+						synthesized = repaired;
+						simulation = repairedSimulation;
+					}
+				}
+				telemetry.push({ task: 'capability.synthesize', modelId: result.modelId, providerId: result.providerId, source: result.source, attempts: result.attempts });
+			} catch {}
+		}
+
 		if (
 			capabilityLike &&
 			finalCandidate &&
@@ -234,6 +285,7 @@ export class UnifiedAiActionOrchestrator {
 						},
 					},
 					aiCallBudget,
+					'ALTERNATIVE_SYNTHESIZE',
 				);
 				const p = json<any>(result.text);
 				if (p) {

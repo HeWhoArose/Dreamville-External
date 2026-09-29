@@ -508,6 +508,7 @@ export class ServerMockAuthority {
     const targetStoryId = (request as any).storyId || this.activeStoryId;
     const playerForAdvice = worldRepository.getPlayerLifecycle(targetStoryId);
     const actorId = playerForAdvice?.actorId || `player_actor_${targetStoryId}`;
+    let actionAdvice: import('../services/storyActionAdvisor').ActionAdvice | undefined;
     const freeformText =
       (request as any).actionText ||
       (request as any).customText ||
@@ -528,7 +529,8 @@ export class ServerMockAuthority {
       : undefined;
 
     if (request.type === 'CUSTOM_ACTION' && !bypassCapabilityAdvisor && !encounterCandidate) {
-      const advice = await storyActionAdvisor.advise(targetStoryId, String(freeformText));
+      actionAdvice = await storyActionAdvisor.advise(targetStoryId, String(freeformText));
+      const advice = actionAdvice;
 
       if (advice.mode === 'SUGGEST_ALTERNATIVE' || advice.mode === 'CAPABILITY_SIMULATION') {
         return {
@@ -634,6 +636,9 @@ export class ServerMockAuthority {
       sceneText,
       challenge: authoredChallenge || undefined,
       rulesProfile,
+      resolutionHint: actionAdvice?.aiPipeline?.resolutionHint
+        ? { check: actionAdvice.aiPipeline.resolutionHint.check }
+        : undefined,
     });
 
     let committedOutcome = '';

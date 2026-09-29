@@ -98,7 +98,7 @@ const CONTRACTS: Record<TaskId, AiTaskContract> = {
 		requiresStructuredOutput: false,
 		preferredPools: ['creative', 'fast'],
 		defaultTimeoutMs: 15000,
-		defaultMaxTokens: 1800,
+		defaultMaxTokens: 800,
 	},
 	'character.dialogue': {
 		task: 'character.dialogue',

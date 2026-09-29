@@ -7991,7 +7991,22 @@ export class MultiModelOrchestrator {
   }): Promise<any> {
     const previousChains = new Map<TaskId, string[]>(Array.from(this.taskFallbackChains.entries()).map(([task, chain]) => [task, [...chain]] as [TaskId, string[]]));
     const maxFallbacks = Math.max(2, Math.min(6, Math.trunc(options?.maxFallbacksPerCategory ?? 4)));
-    const verification = await this.autoConfigureFallbacks({ maxFallbacksPerCategory: maxFallbacks, concurrency: options?.concurrency ?? 4, includeFreeModels: true, freeOnly: true });
+    let verification: Awaited<ReturnType<MultiModelOrchestrator['autoConfigureFallbacks']>>;
+    try {
+      verification = await this.autoConfigureFallbacks({ maxFallbacksPerCategory: maxFallbacks, concurrency: options?.concurrency ?? 4, includeFreeModels: true, freeOnly: true });
+    } catch (error: any) {
+      for (const [task, chain] of previousChains.entries()) this.taskFallbackChains.set(task, chain);
+      this.savePersistedConfig();
+      return {
+        success: false,
+        timestamp: Date.now(),
+        freeModels: [],
+        configuredChains: this.getAllFallbackChains(),
+        verification: { success: false, timestamp: Date.now(), totalModelsTested: 0, healthyModelsCount: 0, failedModelsCount: 0, results: [], configuredChains: this.getAllFallbackChains(), summaryMessage: 'Free-model readiness verification failed before AI classification; existing fallback routes were restored.' },
+        summaryMessage: 'Free-model readiness verification failed; existing fallback routes were restored.',
+        error: error?.message || 'Free-model readiness verification failed.',
+      };
+    }
 
     const freeReadyResults = verification.results.filter((entry) => entry.status === 'READY');
     const freeModels = freeReadyResults.map((entry) => ({ providerId: entry.providerId, modelId: entry.modelId, displayName: entry.displayName, verifiedTasks: entry.verifiedTasks || [], status: entry.status }));
@@ -8029,16 +8044,31 @@ export class MultiModelOrchestrator {
       JSON.stringify(freeModelDescriptions),
     ].join('\\n');
 
-    const generated = await this.executeTaskGeneration('utility.inspect', assignmentPrompt, 'Classify provider-verified free AI models for Dreamville routing. Return only the requested JSON object. Do not call tools, mutate state, or add commentary.', {
-      forceModelId: classifier.providerId + '::' + classifier.modelId,
-      maxTokens: 1200,
-      timeoutMs: 10000,
-      allowDeterministicFallback: false,
-      validateResponse: (text) => {
-        try { const parsed = JSON.parse(String(text || '').trim()); return { valid: Boolean(parsed && Array.isArray(parsed.assignments) && parsed.assignments.length > 0), errorReason: 'Gemini classifier returned no assignments.' }; }
-        catch { return { valid: false, errorReason: 'Gemini classifier did not return valid JSON.' }; }
-      },
-    });
+    let generated: Awaited<ReturnType<MultiModelOrchestrator['executeTaskGeneration']>>;
+    try {
+      generated = await this.executeTaskGeneration('utility.inspect', assignmentPrompt, 'Classify provider-verified free AI models for Dreamville routing. Return only the requested JSON object. Do not call tools, mutate state, or add commentary.', {
+        forceModelId: classifier.providerId + '::' + classifier.modelId,
+        maxTokens: 1200,
+        timeoutMs: 10000,
+        allowDeterministicFallback: false,
+        validateResponse: (text) => {
+          try { const parsed = JSON.parse(String(text || '').trim()); return { valid: Boolean(parsed && Array.isArray(parsed.assignments) && parsed.assignments.length > 0), errorReason: 'Gemini classifier returned no assignments.' }; }
+          catch { return { valid: false, errorReason: 'Gemini classifier did not return valid JSON.' }; }
+        },
+      });
+    } catch (error: any) {
+      restore();
+      return {
+        success: false,
+        timestamp: Date.now(),
+        classifier: { providerId: classifier.providerId, modelId: classifier.modelId, displayName: classifier.displayName },
+        freeModels,
+        configuredChains: this.getAllFallbackChains(),
+        verification,
+        summaryMessage: 'Gemini free-model classification failed; existing fallback routes were restored.',
+        error: error?.message || 'Gemini free-model classification failed.',
+      };
+    }
 
     let parsed: any = null;
     try { parsed = JSON.parse(String(generated.text || '').trim()); } catch {}
@@ -8095,6 +8125,7 @@ export class MultiModelOrchestrator {
         .filter((entry) => entry.verifiedTasks.includes(task))
         .sort((a, b) => b.score - a.score || b.model.userPriority - a.model.userPriority || (a.model.latencyMs || 500) - (b.model.latencyMs || 500) || this.modelKey(a.model).localeCompare(this.modelKey(b.model)));
       const keys = Array.from(new Set(candidates.map((entry) => this.modelKey(entry.model)))).slice(0, maxFallbacks);
+      if (keys.length === 0) continue;
       this.taskFallbackChains.set(task, [...keys, emergencyKey]);
       touchedTasks++;
     }

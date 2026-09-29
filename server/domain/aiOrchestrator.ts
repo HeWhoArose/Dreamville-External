@@ -6229,8 +6229,12 @@ export class MultiModelOrchestrator {
       : 'Canonical location is unavailable; do not invent a location change.';
 
     const styleInstruction = params.styleInstruction || [
-      'Write immersive tabletop-RPG prose for the latest player action.',
+      'Write an immersive tabletop-RPG narrator response for the latest player action.',
       'Canonical mechanics are authoritative. Never invent or expose mechanics, model names, internal identifiers, DCs, dice, state fields, or engine terminology.',
+      'Do not tell the player what they attempted; depict the attempt as fiction.',
+      'Never use phrases such as "the outcome unfolds in the narrative", "the action is committed", or other implementation language.',
+      'Use relevant Narrative Research only when it materially helps the current action; never dump raw research.',
+      'Vary sentence rhythm and sensory detail without repeating recent turns.',
       authoritativeOutcome
         ? 'A canonical outcome has already been resolved. Describe only the observable experience and immediate consequences supported by it.'
         : 'No canonical mechanical outcome was supplied. Describe only the attempt and observable scene response; do not decide hidden success or failure.',

@@ -202,14 +202,59 @@ export class UnifiedAiActionOrchestrator {
 				telemetry.push({ task: 'capability.synthesize', modelId: result.modelId, providerId: result.providerId, source: result.source, attempts: result.attempts });
 			} catch {}
 		}
-		const finalCandidate=candidate||synthesized;
+		let finalCandidate: CapabilityDefinition | undefined = candidate || synthesized;
 		const progressionState=this.repository.getCharacterProgressionEngine(storyId).getState(actorId);
 		const progressionPolicy=capabilityEngine.getProgressionPolicy();
 		const rulesProfile=this.repository.getRulesProfile(storyId);
 		const customRules=world?new (await import('../domain/customRuleEngine')).CustomRuleEngine().getRules(this.repository as any,storyId):[];
 		const simulation=simulator.simulate(cleanAction,{actorId,character:run?.protagonist,world:world||{title:'Current World',dndRulesMode:rulesProfile?.mode||'FULL_DND'},rulesProfile,progressionPolicy,progressionState:{...progressionState,maxCharacterLevel:progressionPolicy.maxLevel},customRules,powerState:capabilityEngine.getPowerState(actorId),ownedCapabilities:owned,skillInstances:capabilityEngine.getActorSkillInstances(actorId),allWorldCapabilities:[...((world?.canonicalCapabilities||[]) as CapabilityDefinition[]),...((world?.capabilities||[]) as CapabilityDefinition[])],environment:{}},finalCandidate);
 		let alternativeCapability: CapabilityDefinition | undefined;
-		let repairAttempted = false;
+		if (
+			capabilityLike &&
+			synthesized &&
+			(simulation.status === 'UNSUPPORTED_REQUEST' || simulation.status === 'CURRENTLY_BLOCKED')
+		) {
+			try {
+				const result = await this.runTask(
+					'capability.synthesize',
+					JSON.stringify({
+						mode: 'SEMANTIC_REPAIR',
+						requestedAction: cleanAction,
+						intent,
+						failedProposal: synthesized,
+						validation: simulation,
+						research,
+						character: run?.protagonist,
+						world,
+					}),
+					'Return ONLY JSON describing one repaired capability proposal. Preserve the player intent, but correct the failed mechanism. Proposal only; never invent ownership, success, HP, damage, DC, dice, or resource outcomes.',
+					{
+						timeoutMs: 10000,
+						maxTokens: 850,
+						validateResponse: (text: string) => {
+							const p = json<any>(text);
+							return p && typeof p.name === 'string' && typeof p.description === 'string'
+								? { valid: true }
+								: { valid: false, errorReason: 'Invalid repaired capability schema.' };
+						},
+					},
+					aiCallBudget,
+					'SEMANTIC_REPAIR',
+				);
+				const p = json<any>(result.text);
+				if (p) {
+					const repaired = { ...p, id: 'proposal_repair_' + storyId + '_' + actorId, provenance: 'AI_GENERATED' } as CapabilityDefinition;
+					const repairedSimulation = simulator.simulate(cleanAction,{actorId,character:run?.protagonist,world:world||{title:'Current World',dndRulesMode:rulesProfile?.mode||'FULL_DND'},rulesProfile,progressionPolicy,progressionState:{...progressionState,maxCharacterLevel:progressionPolicy.maxLevel},customRules,powerState:capabilityEngine.getPowerState(actorId),ownedCapabilities:owned,skillInstances:capabilityEngine.getActorSkillInstances(actorId),allWorldCapabilities:[...((world?.canonicalCapabilities||[]) as CapabilityDefinition[]),...((world?.capabilities||[]) as CapabilityDefinition[])],environment:{}},repaired);
+					if (repairedSimulation.status !== 'UNSUPPORTED_REQUEST' && repairedSimulation.status !== 'CURRENTLY_BLOCKED') {
+						finalCandidate = repaired;
+						synthesized = repaired;
+						simulation = repairedSimulation;
+					}
+				}
+				telemetry.push({ task: 'capability.synthesize', modelId: result.modelId, providerId: result.providerId, source: result.source, attempts: result.attempts });
+			} catch {}
+		}
+
 		if (
 			capabilityLike &&
 			finalCandidate &&
@@ -257,52 +302,6 @@ export class UnifiedAiActionOrchestrator {
 					source: result.source,
 					attempts: result.attempts,
 				});
-			} catch {}
-		}
-
-		if (
-			capabilityLike &&
-			synthesized &&
-			(simulation.status === 'UNSUPPORTED_REQUEST' || simulation.status === 'CURRENTLY_BLOCKED')
-		) {
-			try {
-				repairAttempted = true;
-				const result = await this.runTask(
-					'capability.synthesize',
-					JSON.stringify({
-						mode: 'SEMANTIC_REPAIR',
-						requestedAction: cleanAction,
-						intent,
-						failedProposal: synthesized,
-						validation: simulation,
-						research,
-						character: run?.protagonist,
-						world,
-					}),
-					'Return ONLY JSON describing one repaired capability proposal. Preserve the player intent, but correct the failed mechanism. Proposal only; never invent ownership, success, HP, damage, DC, dice, or resource outcomes.',
-					{
-						timeoutMs: 10000,
-						maxTokens: 850,
-						validateResponse: (text: string) => {
-							const p = json<any>(text);
-							return p && typeof p.name === 'string' && typeof p.description === 'string'
-								? { valid: true }
-								: { valid: false, errorReason: 'Invalid repaired capability schema.' };
-						},
-					},
-					aiCallBudget,
-					'SEMANTIC_REPAIR',
-				);
-				const p = json<any>(result.text);
-				if (p) {
-					const repaired = { ...p, id: 'proposal_repair_' + storyId + '_' + actorId, provenance: 'AI_GENERATED' } as CapabilityDefinition;
-					const repairedSimulation = simulator.simulate(cleanAction,{actorId,character:run?.protagonist,world:world||{title:'Current World',dndRulesMode:rulesProfile?.mode||'FULL_DND'},rulesProfile,progressionPolicy,progressionState:{...progressionState,maxCharacterLevel:progressionPolicy.maxLevel},customRules,powerState:capabilityEngine.getPowerState(actorId),ownedCapabilities:owned,skillInstances:capabilityEngine.getActorSkillInstances(actorId),allWorldCapabilities:[...((world?.canonicalCapabilities||[]) as CapabilityDefinition[]),...((world?.capabilities||[]) as CapabilityDefinition[])],environment:{}},repaired);
-					if (repairedSimulation.status !== 'UNSUPPORTED_REQUEST' && repairedSimulation.status !== 'CURRENTLY_BLOCKED') {
-						synthesized = repaired;
-						simulation = repairedSimulation;
-					}
-				}
-				telemetry.push({ task: 'capability.synthesize', modelId: result.modelId, providerId: result.providerId, source: result.source, attempts: result.attempts });
 			} catch {}
 		}
 

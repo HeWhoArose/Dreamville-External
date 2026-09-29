@@ -448,6 +448,26 @@ test('Character Creation Slice 2 — Character Genesis Forensic Verification', a
       testWorld
     );
 
+    // Simulate a player accepting an additional skill from the Character Genesis "Add More Skills" flow.
+    draft.skills = [
+      ...(draft.skills || []),
+      {
+        id: 'skill_added_more_glyph_lore',
+        name: 'Glyph Lore',
+        governingAbility: 'Intelligence',
+        proficiency: 'PROFICIENT',
+        isProficient: true,
+        isExpertise: false,
+        isCustom: true,
+        description: 'Recognizes and interprets ancient magical inscriptions.',
+        mechanicalDescription: 'Used when deciphering relevant written relics or inscriptions.',
+        tags: ['Lore', 'Ancient'],
+        worldCompatibility: testWorld.worldId,
+        provenance: 'AI_GENERATED',
+        checkFormula: '1d20',
+      },
+    ];
+
     // Confirm the character
     const confirmed = characterGenesisService.confirmCharacter(draft, testWorld);
     assert.ok(confirmed, 'Should produce ConfirmedCharacter');
@@ -456,6 +476,10 @@ test('Character Creation Slice 2 — Character Genesis Forensic Verification', a
     assert.equal(confirmed.worldVersion, testWorld.worldManifestVersion, 'Must bind to worldVersion');
     assert.ok(confirmed.confirmedAt, 'Must have confirmedAt timestamp');
     assert.equal(confirmed.identity.name, draft.identity.name, 'Name must match draft');
+    assert.ok(
+      confirmed.skills?.some((skill) => skill.id === 'skill_added_more_glyph_lore'),
+      'Skills accepted through Add More Skills must survive confirmation.',
+    );
 
     // Save to repository
     worldRepository.saveConfirmedCharacter(testWorld.worldId, confirmed);

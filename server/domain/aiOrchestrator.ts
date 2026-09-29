@@ -6127,7 +6127,7 @@ export class MultiModelOrchestrator {
           canonicalLocation.description ? `Canonical description: ${canonicalLocation.description}` : '',
           canonicalLocation.ambientSensory ? `Canonical ambient/sensory cues: ${canonicalLocation.ambientSensory}` : '',
           'Continuity rule: remain within this canonical location unless the canonical game state has already committed a location change for this turn. A failed check, fallback model, or narration request never authorizes an uncommitted relocation.',
-        ].filter(Boolean).join('\\n')
+        ].filter(Boolean).join('\n')
       : 'Canonical location is unavailable; do not invent a location change.';
 
     const styleInstruction = params.styleInstruction || [

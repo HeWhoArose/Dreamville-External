@@ -76,6 +76,19 @@ export type QuotaState = 'Healthy' | 'Low' | 'NearExhaustion' | 'Exhausted' | 'U
 export type BillingState = 'FREE' | 'PAID' | 'ACCOUNT_DEPENDENT' | 'UNKNOWN';
 export type BillingEvidenceSource = 'PROVIDER' | 'CONFIGURATION' | 'UNKNOWN';
 export type QuotaEvidenceSource = 'PROVIDER' | 'OBSERVED' | 'ESTIMATE' | 'UNKNOWN';
+export type FreeTierStatus = 'VERIFIED' | 'NOT_FREE' | 'UNKNOWN';
+
+/** Provider-confirmed free-tier Gemini model identifiers. */
+const GOOGLE_VERIFIED_FREE_GEMINI_MODELS = new Set([
+  'gemini-3.8-flash',
+  'gemini-3.5-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-3.1-flash-lite',
+  'gemini-2.5-pro',
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-2.5-flash-native-audio-preview-12-2025',
+]);
 export type ModelPool =
   | 'creative'
   | 'utility'
@@ -115,6 +128,9 @@ export interface ModelRegistryRecord {
   billingState?: BillingState;
   billingEvidenceSource?: BillingEvidenceSource;
   quotaEvidenceSource?: QuotaEvidenceSource;
+  freeTierStatus?: FreeTierStatus;
+  freeTierEvidenceSource?: BillingEvidenceSource;
+  freeTierVerifiedAt?: number;
   description?: string;
 }
 
@@ -203,6 +219,36 @@ export interface TaskRuntimeRouteState {
   fallbackChain: string[];
 }
 
+export interface ActiveModelOperation {
+  operationId: string;
+  task: TaskId;
+  category: AiTaskCategory;
+  providerId: string;
+  modelId: string;
+  displayName: string;
+  modelKey: string;
+  status: 'RUNNING';
+  attempt: number;
+  startedAt: number;
+  source: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK';
+}
+
+export interface LastModelExecution {
+  operationId: string;
+  task: TaskId;
+  category: AiTaskCategory;
+  providerId: string;
+  modelId: string;
+  displayName: string;
+  modelKey: string;
+  status: 'SUCCESS' | 'FAILED';
+  startedAt: number;
+  finishedAt: number;
+  latencyMs: number;
+  source: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK';
+  error?: string;
+}
+
 export interface CategoryRuntimeState {
   category: AiTaskCategory;
   tasks: TaskId[];
@@ -210,6 +256,8 @@ export interface CategoryRuntimeState {
   mode: 'AUTO' | 'MANUAL';
   fallbackChain: string[];
   taskRoutes: TaskRuntimeRouteState[];
+  currentOperation?: ActiveModelOperation;
+  lastExecution?: LastModelExecution;
 }
 
 export interface DiscoveredModelMetadata {
@@ -229,6 +277,9 @@ export interface DiscoveredModelMetadata {
   isAccessible: boolean;
   lifecycleState?: 'active' | 'preview' | 'experimental' | 'deprecated' | 'discontinued';
   isPaidModel?: boolean;
+  freeTierStatus?: FreeTierStatus;
+  freeTierEvidenceSource?: BillingEvidenceSource;
+  freeTierVerifiedAt?: number;
 }
 
 export interface ManualModelOverride {
@@ -1272,7 +1323,11 @@ export class OpenRouterAdapter implements IProviderAdapter {
 
         const promptPrice = Number(model?.pricing?.prompt || 0);
         const completionPrice = Number(model?.pricing?.completion || 0);
-        const isPaidModel = promptPrice > 0 || completionPrice > 0;
+        const hasNumericPricing = Number.isFinite(promptPrice) && Number.isFinite(completionPrice);
+        const isPaidModel = hasNumericPricing ? (promptPrice > 0 || completionPrice > 0) : undefined;
+        const freeTierStatus: FreeTierStatus = hasNumericPricing
+          ? (promptPrice === 0 && completionPrice === 0 ? 'VERIFIED' : 'NOT_FREE')
+          : 'UNKNOWN';
 
         return {
           id,
@@ -1287,6 +1342,8 @@ export class OpenRouterAdapter implements IProviderAdapter {
           isAccessible: true,
           lifecycleState: 'active',
           isPaidModel,
+          freeTierStatus,
+          freeTierEvidenceSource: freeTierStatus === 'UNKNOWN' ? 'UNKNOWN' : 'PROVIDER',
           temperature: undefined,
           maxTemperature: undefined,
           topP: undefined,
@@ -1828,9 +1885,9 @@ export class GoogleGeminiAdapter implements IProviderAdapter {
           thinking: m.thinking,
           isAccessible: true,
           lifecycleState: modelId.includes('deprecated') ? 'deprecated' : (modelId.includes('preview') ? 'preview' : 'active'),
-          // Google model discovery does not provide billing-plan evidence here.
-          // Do not mislabel the model as free; register billing as UNKNOWN.
-          isPaidModel: undefined,
+          isPaidModel: GOOGLE_VERIFIED_FREE_GEMINI_MODELS.has(modelId) ? false : undefined,
+          freeTierStatus: GOOGLE_VERIFIED_FREE_GEMINI_MODELS.has(modelId) ? 'VERIFIED' : 'UNKNOWN',
+          freeTierEvidenceSource: GOOGLE_VERIFIED_FREE_GEMINI_MODELS.has(modelId) ? 'PROVIDER' : 'UNKNOWN',
         });
       }
 
@@ -2112,6 +2169,9 @@ Do not enclose in markdown ticks, output pure JSON.`;
         supportedActions: ['generateContent', 'countTokens'],
         isAccessible: true,
         lifecycleState: 'active',
+        isPaidModel: false,
+        freeTierStatus: 'VERIFIED',
+        freeTierEvidenceSource: 'PROVIDER',
       },
       {
         id: 'gemini-3.8-flash',
@@ -2123,6 +2183,9 @@ Do not enclose in markdown ticks, output pure JSON.`;
         supportedActions: ['generateContent', 'countTokens'],
         isAccessible: true,
         lifecycleState: 'active',
+        isPaidModel: false,
+        freeTierStatus: 'VERIFIED',
+        freeTierEvidenceSource: 'PROVIDER',
       },
       {
         id: 'gemini-3.5-flash-lite',
@@ -2134,6 +2197,9 @@ Do not enclose in markdown ticks, output pure JSON.`;
         supportedActions: ['generateContent', 'countTokens'],
         isAccessible: true,
         lifecycleState: 'active',
+        isPaidModel: false,
+        freeTierStatus: 'VERIFIED',
+        freeTierEvidenceSource: 'PROVIDER',
       },
       {
         id: 'gemini-2.5-flash',
@@ -2145,6 +2211,9 @@ Do not enclose in markdown ticks, output pure JSON.`;
         supportedActions: ['generateContent', 'countTokens'],
         isAccessible: true,
         lifecycleState: 'active',
+        isPaidModel: false,
+        freeTierStatus: 'VERIFIED',
+        freeTierEvidenceSource: 'PROVIDER',
       },
       {
         id: 'gemini-2.5-critic',
@@ -2436,6 +2505,9 @@ export class MultiModelOrchestrator {
   private taskPinnedModels: Map<TaskId, string> = new Map();
   private taskFallbackChains: Map<TaskId, string[]> = new Map();
   private explicitFallbackChainTasks: Set<TaskId> = new Set();
+  private activeModelOperations: Map<string, ActiveModelOperation> = new Map();
+  private lastModelExecutionByTask: Map<TaskId, LastModelExecution> = new Map();
+  private executionSequence = 0;
   private discoveredCatalog: DiscoveredModelMetadata[] = [];
   private excludedCatalog: { modelId: string; rawName: string; reason: string }[] = [];
   private lastDiscoveredAt: number = 0;
@@ -2690,6 +2762,76 @@ export class MultiModelOrchestrator {
 
   private modelKey(model: ModelRegistryRecord): string {
     return model.providerId + '::' + model.modelId;
+  }
+
+  private beginModelOperation(
+    task: TaskId,
+    model: ModelRegistryRecord,
+    attempt: number,
+    source: ActiveModelOperation['source'],
+  ): string {
+    const operationId = 'aiop_' + Date.now() + '_' + (++this.executionSequence);
+    const operation: ActiveModelOperation = {
+      operationId,
+      task,
+      category: this.getTaskCategory(task),
+      providerId: model.providerId,
+      modelId: model.modelId,
+      displayName: model.displayName || model.modelId,
+      modelKey: this.modelKey(model),
+      status: 'RUNNING',
+      attempt,
+      startedAt: Date.now(),
+      source,
+    };
+    this.activeModelOperations.set(operationId, operation);
+    return operationId;
+  }
+
+  private finishModelOperation(
+    operationId: string,
+    status: LastModelExecution['status'],
+    latencyMs: number,
+    error?: string,
+  ): void {
+    const operation = this.activeModelOperations.get(operationId);
+    if (!operation) return;
+    const finishedAt = Date.now();
+    this.activeModelOperations.delete(operationId);
+    this.lastModelExecutionByTask.set(operation.task, {
+      operationId,
+      task: operation.task,
+      category: operation.category,
+      providerId: operation.providerId,
+      modelId: operation.modelId,
+      displayName: operation.displayName,
+      modelKey: operation.modelKey,
+      status,
+      startedAt: operation.startedAt,
+      finishedAt,
+      latencyMs: Math.max(1, latencyMs),
+      source: operation.source,
+      error: error ? String(error).slice(0, 300) : undefined,
+    });
+  }
+
+  public getFreeModelCatalog(): Array<ModelRegistryRecord & { runtime?: ModelRuntimeStatus }> {
+    const seen = new Set<string>();
+    const result: Array<ModelRegistryRecord & { runtime?: ModelRuntimeStatus }> = [];
+    for (const model of this.models.values()) {
+      if (model.isEmergencyFloor || !MultiModelOrchestrator.isFreeModelCandidate(model)) continue;
+      const canonicalKey = model.providerId === 'provider_google_gemini'
+        ? 'google_gemini::' + model.modelId
+        : this.modelKey(model);
+      if (seen.has(canonicalKey)) continue;
+      seen.add(canonicalKey);
+      result.push({ ...model, runtime: { ...this.ensureRuntimeStatus(model) } });
+    }
+    return result.sort((a, b) => (a.displayName || a.modelId).localeCompare(b.displayName || b.modelId));
+  }
+
+  public async refreshProviderQuotas(): Promise<ProviderQuotaSnapshot[]> {
+    return this.refreshProviderQuotaSnapshots();
   }
 
   private ensureRuntimeStatus(model: ModelRegistryRecord): ModelRuntimeStatus {
@@ -2976,12 +3118,19 @@ export class MultiModelOrchestrator {
   }
 
   public getFallbackChain(task: TaskId): string[] {
-    return this.taskFallbackChains.get(task) || [
+    const configured = this.taskFallbackChains.get(task) || [
       'google_gemini::gemini-3.5-flash',
       'google_gemini::gemini-3.8-flash',
       'google_gemini::gemini-3.5-flash-lite',
       'provider_deterministic_emergency::emergency-fallback-local',
     ];
+    const emergencyKey = 'provider_deterministic_emergency::emergency-fallback-local';
+    const freeOnly = configured.filter((key) => {
+      if (key === emergencyKey || key.includes('emergency-fallback-local')) return true;
+      const model = this.models.get(key) || Array.from(this.models.values()).find((candidate) => candidate.modelId === key);
+      return Boolean(model && MultiModelOrchestrator.isFreeModelCandidate(model));
+    });
+    return freeOnly.length > 0 ? Array.from(new Set(freeOnly)) : [emergencyKey];
   }
 
   public getAllFallbackChains(): Record<string, string[]> {
@@ -3016,6 +3165,12 @@ export class MultiModelOrchestrator {
       roleEligibility: [...ALL_GENERAL_TEXT_ROLES],
       fallbackEligibility: true,
       accessStatus: 'accessible',
+      isPaidModel: false,
+      billingState: 'FREE',
+      billingEvidenceSource: 'PROVIDER',
+      freeTierStatus: 'VERIFIED',
+      freeTierEvidenceSource: 'PROVIDER',
+      freeTierVerifiedAt: Date.now(),
       lifecycleState: 'active',
       isEmergencyFloor: false,
     });
@@ -3035,6 +3190,12 @@ export class MultiModelOrchestrator {
       roleEligibility: [...ALL_GENERAL_TEXT_ROLES],
       fallbackEligibility: true,
       accessStatus: 'accessible',
+      isPaidModel: false,
+      billingState: 'FREE',
+      billingEvidenceSource: 'PROVIDER',
+      freeTierStatus: 'VERIFIED',
+      freeTierEvidenceSource: 'PROVIDER',
+      freeTierVerifiedAt: Date.now(),
       lifecycleState: 'active',
       isEmergencyFloor: false,
     });
@@ -3054,6 +3215,12 @@ export class MultiModelOrchestrator {
       roleEligibility: [...ALL_GENERAL_TEXT_ROLES],
       fallbackEligibility: true,
       accessStatus: 'accessible',
+      isPaidModel: false,
+      billingState: 'FREE',
+      billingEvidenceSource: 'PROVIDER',
+      freeTierStatus: 'VERIFIED',
+      freeTierEvidenceSource: 'PROVIDER',
+      freeTierVerifiedAt: Date.now(),
       lifecycleState: 'active',
       isEmergencyFloor: false,
     });
@@ -3617,6 +3784,21 @@ export class MultiModelOrchestrator {
             continue;
           }
 
+          if (discovered.freeTierStatus) {
+            classification.record.freeTierStatus = discovered.freeTierStatus;
+            classification.record.freeTierEvidenceSource = discovered.freeTierEvidenceSource || 'UNKNOWN';
+            classification.record.freeTierVerifiedAt = Date.now();
+            if (discovered.freeTierStatus === 'VERIFIED') {
+              classification.record.billingState = 'FREE';
+              classification.record.billingEvidenceSource = 'PROVIDER';
+              classification.record.isPaidModel = false;
+            } else if (discovered.freeTierStatus === 'NOT_FREE') {
+              classification.record.billingState = 'PAID';
+              classification.record.billingEvidenceSource = 'PROVIDER';
+              classification.record.isPaidModel = true;
+            }
+          }
+
           // Apply manual override if one exists
           const finalRecord = this.applyManualOverridesToRecord(classification.record);
           if (!finalRecord) {
@@ -3846,6 +4028,14 @@ export class MultiModelOrchestrator {
           ? taskRoutes[0].fallbackChain
           : [];
 
+      const currentOperation = Array.from(this.activeModelOperations.values())
+        .filter((operation) => operation.category === category)
+        .sort((a, b) => b.startedAt - a.startedAt)[0];
+      const lastExecution = tasks
+        .map((task) => this.lastModelExecutionByTask.get(task))
+        .filter((execution): execution is LastModelExecution => Boolean(execution))
+        .sort((a, b) => b.finishedAt - a.finishedAt)[0];
+
       return {
         category,
         tasks,
@@ -3853,6 +4043,8 @@ export class MultiModelOrchestrator {
         mode: this.categoryOverrides.has(category) ? 'MANUAL' : 'AUTO',
         fallbackChain: commonFallbackChain,
         taskRoutes,
+        currentOperation: currentOperation ? { ...currentOperation } : undefined,
+        lastExecution: lastExecution ? { ...lastExecution } : undefined,
       };
     });
   }
@@ -4607,6 +4799,20 @@ export class MultiModelOrchestrator {
     }
     if (!effective.billingEvidenceSource) {
       effective.billingEvidenceSource = 'UNKNOWN';
+    }
+    if (!effective.freeTierStatus) {
+      if (effective.billingState === 'FREE' && effective.billingEvidenceSource === 'PROVIDER') {
+        effective.freeTierStatus = 'VERIFIED';
+        effective.freeTierEvidenceSource = 'PROVIDER';
+        effective.freeTierVerifiedAt = Date.now();
+      } else if (effective.isPaidModel === true && effective.billingEvidenceSource === 'PROVIDER') {
+        effective.freeTierStatus = 'NOT_FREE';
+        effective.freeTierEvidenceSource = 'PROVIDER';
+        effective.freeTierVerifiedAt = Date.now();
+      } else {
+        effective.freeTierStatus = 'UNKNOWN';
+        effective.freeTierEvidenceSource = effective.billingEvidenceSource || 'UNKNOWN';
+      }
     }
     if (!effective.quotaEvidenceSource) {
       effective.quotaEvidenceSource = 'UNKNOWN';
@@ -6211,7 +6417,9 @@ export class MultiModelOrchestrator {
       let fallbacks: ModelRegistryRecord[];
 
       if (params.forceModelId) {
-        const forced = Array.from(this.models.values()).find((m) => m.modelId === params.forceModelId);
+        const forced = params.forceModelId.includes('::')
+          ? this.models.get(params.forceModelId)
+          : Array.from(this.models.values()).find((m) => m.modelId === params.forceModelId);
         if (!forced) throw new Error(`Forced model ID '${params.forceModelId}' not found.`);
         if (!forced.roleEligibility.includes(task)) {
           throw new Error(`Model '${params.forceModelId}' is not eligible for role/task '${task}'.`);
@@ -6947,6 +7155,10 @@ export class MultiModelOrchestrator {
       }
 
       const attemptStartedAt = Date.now();
+      const operationSource: ActiveModelOperation['source'] = currentCandidate.isEmergencyFloor
+        ? 'DETERMINISTIC_FALLBACK'
+        : (this.modelKey(currentCandidate) === selectedModelKey ? 'AI_PRIMARY' : 'AI_FALLBACK');
+      const operationId = this.beginModelOperation(task, currentCandidate, totalAttempts + 1, operationSource);
       try {
         totalAttempts++;
         const abortController = new AbortController();
@@ -6982,6 +7194,7 @@ export class MultiModelOrchestrator {
 
         const latencyMs = Math.max(1, Date.now() - attemptStartedAt);
         this.recordProviderSuccess(currentCandidate, providerRes, task, attemptStartedAt);
+        this.finishModelOperation(operationId, 'SUCCESS', latencyMs);
         this.consecutiveFailures.set(modelKey, 0);
 
         attemptsTrail.push({
@@ -7016,6 +7229,7 @@ export class MultiModelOrchestrator {
         lastError = err?.message || String(err);
         const latencyMs = Math.max(1, Date.now() - attemptStartedAt);
         this.recordProviderFailure(currentCandidate, task, err, attemptStartedAt);
+        this.finishModelOperation(operationId, 'FAILED', latencyMs, lastError);
         const failureType = this.classifyFailure(err);
         if (
           failureType === '429' ||
@@ -7223,9 +7437,13 @@ export class MultiModelOrchestrator {
           }
         }
 
-        if (snapshot.billingState === 'FREE') {
-          model.billingState = model.isPaidModel === true ? 'PAID' : 'FREE';
-          model.billingEvidenceSource = model.isPaidModel === true ? 'PROVIDER' : 'PROVIDER';
+        if (snapshot.billingState === 'FREE' && model.freeTierStatus !== 'NOT_FREE') {
+          model.billingState = 'FREE';
+          model.billingEvidenceSource = 'PROVIDER';
+          model.isPaidModel = false;
+          model.freeTierStatus = 'VERIFIED';
+          model.freeTierEvidenceSource = 'PROVIDER';
+          model.freeTierVerifiedAt = Date.now();
         }
       }
     }
@@ -7344,15 +7562,18 @@ export class MultiModelOrchestrator {
   }
 
   public static isFreeModelCandidate(model: ModelRegistryRecord): boolean {
-    const label = [model.modelId, model.displayName, model.description].filter(Boolean).join(' ');
-    const namedFree = /free/i.test(label);
-    return model.billingState === 'FREE' || model.isPaidModel === false || namedFree;
+    return Boolean(
+      model.isPaidModel !== true &&
+      model.freeTierStatus === 'VERIFIED' &&
+      model.freeTierEvidenceSource === 'PROVIDER'
+    );
   }
 
   public async autoConfigureFallbacks(options?: {
     maxFallbacksPerCategory?: number;
     concurrency?: number;
     includeFreeModels?: boolean;
+    freeOnly?: boolean;
   }): Promise<{
     success: boolean;
     timestamp: number;
@@ -7380,6 +7601,7 @@ export class MultiModelOrchestrator {
     const maxFallbacks = Math.max(2, Math.min(6, options?.maxFallbacksPerCategory ?? 4));
     const concurrency = Math.max(1, Math.min(6, Math.trunc(options?.concurrency ?? 4)));
     const includeFreeModels = options?.includeFreeModels === true;
+    const freeOnly = options?.freeOnly === true;
 
     await this.discoverAndRegisterModels({ forceRefresh: true });
     await this.refreshProviderQuotaSnapshots();
@@ -7393,6 +7615,7 @@ export class MultiModelOrchestrator {
     const dedupedModels = new Map<string, ModelRegistryRecord>();
     for (const model of this.getAllModels()) {
       if (model.isEmergencyFloor || model.health === 'DisabledByUser') continue;
+      if (freeOnly && !MultiModelOrchestrator.isFreeModelCandidate(model)) continue;
       const canonicalKey = canonicalProviderId(model.providerId) + '::' + model.modelId;
       const existing = dedupedModels.get(canonicalKey);
       if (!existing || model.userPriority > existing.userPriority) {
@@ -7768,6 +7991,123 @@ export class MultiModelOrchestrator {
         ' fallbacks per task while preserving manual category overrides and task pins.' +
         (includeFreeModels ? ' Free/explicitly-free model candidates were prioritized where eligible.' : ''),
     };
+  }
+
+  public async autoAssignFreeModelsWithAi(options?: {
+    maxFallbacksPerCategory?: number;
+    concurrency?: number;
+  }): Promise<any> {
+    const previousChains = new Map<string, string[]>(Array.from(this.taskFallbackChains.entries()).map(([task, chain]) => [task, [...chain]]));
+    const maxFallbacks = Math.max(2, Math.min(6, Math.trunc(options?.maxFallbacksPerCategory ?? 4)));
+    const verification = await this.autoConfigureFallbacks({ maxFallbacksPerCategory: maxFallbacks, concurrency: options?.concurrency ?? 4, includeFreeModels: true, freeOnly: true });
+
+    const freeReadyResults = verification.results.filter((entry) => entry.status === 'READY');
+    const freeModels = freeReadyResults.map((entry) => ({ providerId: entry.providerId, modelId: entry.modelId, displayName: entry.displayName, verifiedTasks: entry.verifiedTasks || [], status: entry.status }));
+    const classifierCandidates = this.getAllModels()
+      .filter((model) => model.providerId === 'google_gemini' && MultiModelOrchestrator.isFreeModelCandidate(model))
+      .filter((model) => model.roleEligibility.includes('utility.inspect'))
+      .filter((model) => model.health !== 'Unavailable' && model.health !== 'InvalidAuth' && model.quota !== 'Exhausted')
+      .sort((a, b) => {
+        const preferred = (id: string) => id === 'gemini-3.5-flash-lite' ? 0 : id === 'gemini-3.5-flash' ? 1 : id === 'gemini-2.5-flash-lite' ? 2 : 10;
+        return preferred(a.modelId) - preferred(b.modelId) || b.userPriority - a.userPriority;
+      });
+    const classifier = classifierCandidates[0];
+    const restore = () => { for (const [task, chain] of previousChains.entries()) this.taskFallbackChains.set(task, chain); this.savePersistedConfig(); };
+
+    if (!classifier || freeModels.length === 0) {
+      restore();
+      return { success: false, timestamp: Date.now(), freeModels, configuredChains: this.getAllFallbackChains(), verification, summaryMessage: 'No provider-verified free Gemini classifier and/or no free models passed readiness checks. Existing fallback routes were restored.', error: 'AI free-model assignment could not start because the required free Gemini classifier or verified free candidates were unavailable.' };
+    }
+
+    const freeModelDescriptions = freeModels.map((model) => ({
+      modelKey: model.providerId + '::' + model.modelId,
+      displayName: model.displayName,
+      verifiedTasks: model.verifiedTasks,
+      registry: (() => { const record = this.getModel(model.providerId, model.modelId); return record ? { pool: record.pool, capabilities: record.capabilities, contextWindow: record.contextWindow, description: record.description, latencyMs: record.latencyMs } : {}; })(),
+    }));
+    const categories = Array.from(new Set(getAllAiTaskContracts().map((contract) => contract.category))) as AiTaskCategory[];
+    const assignmentPrompt = [
+      'You are the Dreamville free-model routing analyst.',
+      'Choose the best Dreamville AI task categories for EACH provider-verified free model listed below.',
+      'Use model description, capability, pool, context window, latency and verified task readiness as evidence.',
+      'Do not invent model capabilities. A model may be assigned to multiple categories when justified.',
+      'Do not assign a model to speech or image unless the evidence supports those capabilities.',
+      'Return ONLY JSON: {"assignments":[{"modelKey":"provider::model","categories":[{"category":"narration","priority":100}]}]}',
+      'Allowed categories: ' + categories.join(', '),
+      JSON.stringify(freeModelDescriptions),
+    ].join('\\n');
+
+    const generated = await this.executeTaskGeneration('utility.inspect', assignmentPrompt, 'Classify provider-verified free AI models for Dreamville routing. Return only the requested JSON object. Do not call tools, mutate state, or add commentary.', {
+      forceModelId: classifier.providerId + '::' + classifier.modelId,
+      maxTokens: 1200,
+      timeoutMs: 10000,
+      allowDeterministicFallback: false,
+      validateResponse: (text) => {
+        try { const parsed = JSON.parse(String(text || '').trim()); return { valid: Boolean(parsed && Array.isArray(parsed.assignments) && parsed.assignments.length > 0), errorReason: 'Gemini classifier returned no assignments.' }; }
+        catch { return { valid: false, errorReason: 'Gemini classifier did not return valid JSON.' }; }
+      },
+    });
+
+    let parsed: any = null;
+    try { parsed = JSON.parse(String(generated.text || '').trim()); } catch {}
+    const freeModelKeys = new Set(freeModels.map((model) => model.providerId + '::' + model.modelId));
+    const allowedCategories = new Set(categories);
+    const assignments: Array<{ modelKey: string; displayName: string; categories: Array<{ category: AiTaskCategory; priority: number }> }> = [];
+
+    for (const raw of Array.isArray(parsed?.assignments) ? parsed.assignments : []) {
+      const modelKey = typeof raw?.modelKey === 'string' ? raw.modelKey.trim() : '';
+      if (!freeModelKeys.has(modelKey)) continue;
+      const model = freeModels.find((candidate) => candidate.providerId + '::' + candidate.modelId === modelKey);
+      if (!model) continue;
+      const categoryScores = new Map<AiTaskCategory, number>();
+      for (const item of Array.isArray(raw.categories) ? raw.categories : []) {
+        const category = typeof item === 'string' ? item : item?.category;
+        if (!allowedCategories.has(category)) continue;
+        const value = Number(typeof item === 'string' ? 50 : item?.priority);
+        const priority = Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : 50;
+        categoryScores.set(category, Math.max(categoryScores.get(category) || 0, priority));
+      }
+      if (categoryScores.size === 0) continue;
+      assignments.push({ modelKey, displayName: model.displayName, categories: Array.from(categoryScores.entries()).map(([category, priority]) => ({ category, priority })).sort((a, b) => b.priority - a.priority) });
+    }
+
+    if (assignments.length === 0) {
+      restore();
+      return { success: false, timestamp: Date.now(), classifier: { providerId: classifier.providerId, modelId: classifier.modelId, displayName: classifier.displayName }, freeModels, configuredChains: this.getAllFallbackChains(), verification, summaryMessage: 'Gemini free-model analysis returned no valid assignments. Existing fallback routes were restored.', error: 'Gemini free-model classifier returned no valid model/category assignments.' };
+    }
+
+    const categoryModels = new Map<AiTaskCategory, Array<{ model: ModelRegistryRecord; score: number; verifiedTasks: TaskId[] }>>();
+    for (const assignment of assignments) {
+      const separator = assignment.modelKey.indexOf('::');
+      const providerId = separator >= 0 ? assignment.modelKey.slice(0, separator) : '';
+      const modelId = separator >= 0 ? assignment.modelKey.slice(separator + 2) : assignment.modelKey;
+      const model = this.getModel(providerId, modelId);
+      const verified = freeModels.find((candidate) => candidate.providerId + '::' + candidate.modelId === assignment.modelKey);
+      if (!model || !verified || !MultiModelOrchestrator.isFreeModelCandidate(model)) continue;
+      for (const categoryAssignment of assignment.categories) {
+        const list = categoryModels.get(categoryAssignment.category) || [];
+        list.push({ model, score: categoryAssignment.priority, verifiedTasks: verified.verifiedTasks });
+        categoryModels.set(categoryAssignment.category, list);
+      }
+    }
+
+    const emergencyKey = 'provider_deterministic_emergency::emergency-fallback-local';
+    let touchedTasks = 0;
+    for (const contract of getAllAiTaskContracts()) {
+      const task = contract.task;
+      const category = contract.category;
+      if (this.categoryOverrides.has(category) || this.taskPinnedModels.has(task)) continue;
+      const candidates = (categoryModels.get(category) || [])
+        .filter((entry) => entry.model.roleEligibility.includes(task))
+        .filter((entry) => entry.model.fallbackEligibility !== false)
+        .filter((entry) => entry.verifiedTasks.includes(task))
+        .sort((a, b) => b.score - a.score || b.model.userPriority - a.model.userPriority || (a.model.latencyMs || 500) - (b.model.latencyMs || 500) || this.modelKey(a.model).localeCompare(this.modelKey(b.model)));
+      const keys = Array.from(new Set(candidates.map((entry) => this.modelKey(entry.model)))).slice(0, maxFallbacks);
+      this.taskFallbackChains.set(task, [...keys, emergencyKey]);
+      touchedTasks++;
+    }
+    this.savePersistedConfig();
+    return { success: true, timestamp: Date.now(), classifier: { providerId: classifier.providerId, modelId: classifier.modelId, displayName: classifier.displayName }, freeModels, assignments, configuredChains: this.getAllFallbackChains(), verification, summaryMessage: 'Gemini free-model analysis classified ' + assignments.length + ' free models and rebuilt ' + touchedTasks + ' eligible task routes using only provider-verified free models plus the deterministic emergency floor.' };
   }
 
   public getStatus(): {

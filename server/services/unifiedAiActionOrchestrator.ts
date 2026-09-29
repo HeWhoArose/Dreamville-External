@@ -234,6 +234,7 @@ export class UnifiedAiActionOrchestrator {
 						},
 					},
 					aiCallBudget,
+					'CAPABILITY_SYNTHESIZE',
 				);
 				const p = json<any>(result.text);
 				if (p) synthesized = { ...p, id: 'proposal_' + storyId + '_' + actorId, provenance: 'AI_GENERATED' };

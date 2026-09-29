@@ -3059,72 +3059,41 @@ export class MultiModelOrchestrator {
   }
 
   private seedDefaultPins(): void {
-    this.taskPinnedModels.set('narrative.generate', 'google_gemini::gemini-3.5-flash');
-    this.taskPinnedModels.set('world.generate', 'google_gemini::gemini-3.5-flash');
-    this.taskPinnedModels.set('character.dialogue', 'google_gemini::gemini-3.5-flash');
-    this.taskPinnedModels.set('ooc.respond', 'google_gemini::gemini-3.5-flash');
-    this.taskPinnedModels.set('story.advice', 'google_gemini::gemini-3.5-flash');
-    this.taskPinnedModels.set('character.extract', 'google_gemini::gemini-3.5-flash-lite');
-    this.taskPinnedModels.set('memory.extract', 'google_gemini::gemini-3.5-flash');
-    this.taskPinnedModels.set('character.capability.propose', 'google_gemini::gemini-3.5-flash');
-    this.taskPinnedModels.set('intent.interpret', 'google_gemini::gemini-3.5-flash-lite');
-    this.taskPinnedModels.set('capability.synthesize', 'google_gemini::gemini-3.5-flash');
-    this.taskPinnedModels.set('capability.explain', 'google_gemini::gemini-3.5-flash-lite');
-    this.taskPinnedModels.set('research.query', 'google_gemini::gemini-3.5-flash');
-    this.taskPinnedModels.set('research.world-brief', 'google_gemini::gemini-3.5-flash');
-    this.taskPinnedModels.set('rules.analyze', 'google_gemini::gemini-3.5-flash');
-    this.taskPinnedModels.set('tactical.reason', 'google_gemini::gemini-3.5-flash');
-    this.taskPinnedModels.set('summary.scene', 'google_gemini::gemini-3.5-flash');
-    this.taskPinnedModels.set('rules.adjudicate', 'google_gemini::gemini-3.5-flash');
-    this.taskPinnedModels.set('utility.inspect', 'google_gemini::gemini-3.5-flash');
+    const emergencyKey = 'provider_deterministic_emergency::emergency-fallback-local';
+    const routes: Partial<Record<TaskId, string[]>> = {
+      'narrative.generate': ['groq::qwen/qwen3.8-27b','openrouter::inclusionai/ling-3.0-flash:free','openrouter::google/gemma-4-31b-it:free','google_gemini::gemini-3.5-flash','openrouter::qwen/qwen3.8-27b:free','google_gemini::gemini-3.5-flash-lite'],
+      'narrative.review': ['groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.5-flash-lite'],
+      'character.dialogue': ['groq::qwen/qwen3.8-27b','openrouter::inclusionai/ling-3.0-flash:free','openrouter::google/gemma-4-31b-it:free','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.5-flash-lite'],
+      'character.extract': ['google_gemini::gemini-3.5-flash-lite','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free','google_gemini::gemini-3.5-flash'],
+      'memory.extract': ['google_gemini::gemini-3.5-flash-lite','groq::openai/gpt-oss-20b','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free','google_gemini::gemini-3.5-flash'],
+      'summary.scene': ['google_gemini::gemini-3.5-flash-lite','groq::qwen/qwen3.8-27b','openrouter::inclusionai/ling-3.0-flash:free','openrouter::google/gemma-4-31b-it:free','google_gemini::gemini-3.5-flash'],
+      'intent.interpret': ['google_gemini::gemini-3.5-flash-lite','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free','google_gemini::gemini-3.5-flash'],
+      'capability.explain': ['google_gemini::gemini-3.5-flash-lite','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free','google_gemini::gemini-3.5-flash'],
+      'utility.inspect': ['google_gemini::gemini-3.5-flash-lite','groq::qwen/qwen3.8-27b','openrouter::inclusionai/ling-3.0-flash:free','openrouter::google/gemma-4-31b-it:free'],
+      'rules.adjudicate': ['groq::openai/gpt-oss-120b','groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free'],
+      'rules.analyze': ['groq::openai/gpt-oss-120b','groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free'],
+      'tactical.reason': ['groq::openai/gpt-oss-120b','groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free'],
+      'combat.tactics': ['groq::openai/gpt-oss-120b','groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free'],
+      'combat.animation.plan': ['groq::qwen/qwen3.8-27b','groq::openai/gpt-oss-20b','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free','google_gemini::gemini-3.5-flash-lite'],
+      'character.capability.propose': ['groq::openai/gpt-oss-120b','groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free'],
+      'capability.synthesize': ['groq::openai/gpt-oss-120b','groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free'],
+      'world.generate': ['groq::qwen/qwen3.8-27b','openrouter::inclusionai/ling-3.0-flash:free','google_gemini::gemini-3.5-flash','openrouter::google/gemma-4-31b-it:free','openrouter::qwen/qwen3.8-27b:free','google_gemini::gemini-3.5-flash-lite'],
+      'research.query': ['groq::openai/gpt-oss-120b','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free','google_gemini::gemini-3.5-flash'],
+      'research.world-brief': ['groq::openai/gpt-oss-120b','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free','google_gemini::gemini-3.5-flash'],
+      'story.advice': ['groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash-lite','openrouter::inclusionai/ling-3.0-flash:free','openrouter::google/gemma-4-31b-it:free','google_gemini::gemini-3.5-flash'],
+      'ooc.respond': ['groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash','openrouter::inclusionai/ling-3.0-flash:free','openrouter::google/gemma-4-31b-it:free','google_gemini::gemini-3.5-flash-lite'],
+    };
+
+    for (const [task, chain] of Object.entries(routes) as Array<[TaskId, string[]]>) {
+      this.taskPinnedModels.set(task, chain[0]);
+      this.taskFallbackChains.set(task, [...chain, emergencyKey]);
+    }
+
     this.taskPinnedModels.set('speech.generate', 'provider_mock_speech::mock-speech-v1');
     this.taskPinnedModels.set('image.generate', 'google_imagen::imagen-3.0-generate-002');
-
-    // Default Fallback Chains
-    const defaultChain = [
-      'google_gemini::gemini-3.5-flash',
-      'google_gemini::gemini-3.8-flash',
-      'google_gemini::gemini-3.5-flash-lite',
-      'provider_deterministic_emergency::emergency-fallback-local',
-    ];
-    for (const task of [
-      'narrative.generate',
-      'character.dialogue',
-      'ooc.respond',
-      'character.extract',
-      'memory.extract',
-      'character.capability.propose',
-      'story.advice',
-      'intent.interpret',
-      'capability.synthesize',
-      'capability.explain',
-      'research.query',
-      'research.world-brief',
-      'rules.adjudicate',
-      'rules.analyze',
-      'summary.scene',
-      'world.generate',
-      'combat.tactics',
-      'tactical.reason',
-      'combat.animation.plan',
-      'narrative.review',
-      'utility.inspect',
-    ] as TaskId[]) {
-      this.taskFallbackChains.set(task, [...defaultChain]);
-    }
-    this.taskFallbackChains.set('speech.generate', [
-      'provider_mock_speech::mock-speech-v1',
-      'provider_deterministic_emergency::emergency-fallback-local',
-    ]);
-    this.taskFallbackChains.set('speech.transcribe', [
-      'provider_mock_stt::mock-stt-v1',
-      'provider_deterministic_emergency::emergency-fallback-local',
-    ]);
-    this.taskFallbackChains.set('image.generate', [
-      'google_imagen::imagen-3.0-generate-002',
-      'provider_deterministic_emergency::emergency-fallback-local',
-    ]);
-
+    this.taskFallbackChains.set('speech.generate', ['provider_mock_speech::mock-speech-v1', emergencyKey]);
+    this.taskFallbackChains.set('speech.transcribe', ['provider_mock_stt::mock-stt-v1', emergencyKey]);
+    this.taskFallbackChains.set('image.generate', ['google_imagen::imagen-3.0-generate-002', emergencyKey]);
   }
 
   public setFallbackChain(task: TaskId, chain: string[]): void {
@@ -3138,8 +3107,10 @@ export class MultiModelOrchestrator {
 
   public getFallbackChain(task: TaskId): string[] {
     return this.taskFallbackChains.get(task) || [
+      'groq::qwen/qwen3.8-27b',
+      'openrouter::inclusionai/ling-3.0-flash:free',
+      'openrouter::google/gemma-4-31b-it:free',
       'google_gemini::gemini-3.5-flash',
-      'google_gemini::gemini-3.8-flash',
       'google_gemini::gemini-3.5-flash-lite',
       'provider_deterministic_emergency::emergency-fallback-local',
     ];
@@ -3609,7 +3580,7 @@ export class MultiModelOrchestrator {
   }
 
   public refreshAllProviderModelStatuses(): void {
-    const providers = ['google_gemini', 'provider_google_gemini', 'openrouter', 'openai', 'anthropic', 'elevenlabs', 'google_cloud_tts', 'google_imagen'];
+    const providers = ['google_gemini', 'provider_google_gemini', 'openrouter', 'groq', 'openai', 'anthropic', 'elevenlabs', 'google_cloud_tts', 'google_imagen'];
     const isTestRuntime =
       typeof process !== 'undefined' &&
       (process.env.NODE_ENV === 'test' || Boolean(process.env.NODE_TEST_CONTEXT));
@@ -8314,3 +8285,90 @@ export class MultiModelOrchestrator {
     };
   }
 }
+    // Resilience-first free model pool. Free-plan limits are provider/account dependent at runtime;
+    // these records describe the current free-plan baseline and are refreshed by provider telemetry.
+    const groqConfigured = Boolean(getProviderApiKey('groq'));
+    for (const model of [
+      ['qwen/qwen3.8-27b', 'Groq Qwen3.8 27B (Free)', 'creative', 135],
+      ['openai/gpt-oss-120b', 'Groq GPT-OSS 120B (Free)', 'reasoning', 130],
+      ['openai/gpt-oss-20b', 'Groq GPT-OSS 20B (Free)', 'fast', 118],
+    ] as Array<[string, string, ModelPool, number]>) {
+      this.registerModel({
+        providerId: 'groq',
+        modelId: model[0],
+        displayName: model[1],
+        pool: model[2],
+        capabilities: model[0] === 'qwen/qwen3.8-27b'
+          ? ['text_generation', 'reasoning', 'creative_writing', 'structured_output', 'fast']
+          : ['text_generation', 'reasoning', 'extended_thinking', 'structured_output'],
+        contextWindow: 131072,
+        health: groqConfigured ? 'Healthy' : 'InvalidAuth',
+        quota: groqConfigured ? 'Healthy' : 'Unknown',
+        latencyMs: groqConfigured ? 180 : 0,
+        userPriority: model[3],
+        roleEligibility: [...ALL_GENERAL_TEXT_ROLES],
+        supportedInputTypes: ['text'],
+        supportedOutputTypes: ['text', 'json'],
+        hasTools: true,
+        hasStructuredOutput: true,
+        hasVision: false,
+        hasAudio: false,
+        fallbackEligibility: true,
+        accessStatus: groqConfigured ? 'accessible' : 'not_configured',
+        isPaidModel: false,
+        billingState: 'FREE',
+        billingEvidenceSource: 'PROVIDER',
+        freeTierStatus: 'VERIFIED',
+        freeTierEvidenceSource: 'PROVIDER',
+        freeTierVerifiedAt: Date.now(),
+        configuredLimits: {
+          requestsPerMinute: 30,
+          requestsPerDay: 1000,
+          tokensPerMinute: 8000,
+          tokensPerDay: 200000,
+        },
+        lifecycleState: 'active',
+        isEmergencyFloor: false,
+      });
+    }
+
+    const openRouterFreeDefaults = [
+      ['inclusionai/ling-3.0-flash:free', 'Ling 3.0 Flash (OpenRouter Free)', 'creative', 106, false],
+      ['google/gemma-4-31b-it:free', 'Gemma 4 31B (OpenRouter Free)', 'creative', 103, true],
+      ['qwen/qwen3.8-27b:free', 'Qwen3.8 27B (OpenRouter Free)', 'creative', 100, true],
+    ] as Array<[string, string, ModelPool, number, boolean]>;
+
+    for (const model of openRouterFreeDefaults) {
+      this.registerModel({
+        providerId: 'openrouter',
+        modelId: model[0],
+        displayName: model[1],
+        pool: model[2],
+        capabilities: model[4]
+          ? ['text_generation', 'reasoning', 'creative_writing', 'structured_output', 'fast']
+          : ['text_generation', 'reasoning', 'creative_writing', 'fast'],
+        contextWindow: 262144,
+        health: openrouterConfigured ? 'Healthy' : 'InvalidAuth',
+        quota: openrouterConfigured ? 'Healthy' : 'Unknown',
+        latencyMs: openrouterConfigured ? 350 : 0,
+        userPriority: model[3],
+        roleEligibility: [...ALL_GENERAL_TEXT_ROLES],
+        supportedInputTypes: ['text'],
+        supportedOutputTypes: ['text', 'json'],
+        hasTools: true,
+        hasStructuredOutput: model[4],
+        hasVision: false,
+        hasAudio: false,
+        fallbackEligibility: true,
+        accessStatus: openrouterConfigured ? 'accessible' : 'not_configured',
+        isPaidModel: false,
+        billingState: 'FREE',
+        billingEvidenceSource: 'PROVIDER',
+        freeTierStatus: 'VERIFIED',
+        freeTierEvidenceSource: 'PROVIDER',
+        freeTierVerifiedAt: Date.now(),
+        lifecycleState: 'active',
+        isEmergencyFloor: false,
+      });
+    }
+

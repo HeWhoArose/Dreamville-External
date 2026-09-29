@@ -5,6 +5,7 @@ import type { DndRulesMode, NarrativeProfile } from '../../src/types';
 import { rulesProfileEngine } from './rulesProfileEngine';
 import { worldRepository } from '../repositories/worldRepository';
 import { NarrativeContinuityEngine } from './narrativeContinuityEngine';
+import { deriveNarrationContextNeeds } from './narrationContextPolicy';
 
 export interface WorkingContextPacket {
   scene: string;
@@ -347,14 +348,14 @@ export class WorkingContextEngine {
 
     // 4. Player State & Physiology
     const physio = player ? livingSim.getEntityPhysiology(player.actorId) : undefined;
-    const physioSummary = physio
-      ? `Hunger: ${physio.hunger}%, Thirst: ${physio.thirst}%, Fatigue: ${physio.fatigue}%, Pain: ${physio.pain}%`
-      : 'Physiology: nominal';
-    const injurySummary = player && player.injuries.length > 0
+    const injurySummary = contextNeeds.includeHealth && player && player.injuries.length > 0
       ? `Injuries: ${player.injuries.map((i) => `${i.description} [${i.severity}${i.healed ? ', Healed' : ''}]`).join(', ')}`
-      : 'No active injuries';
+      : '';
+    const physioSummary = contextNeeds.includeHealth && physio
+      ? `Hunger: ${physio.hunger}%, Thirst: ${physio.thirst}%, Fatigue: ${physio.fatigue}%, Pain: ${physio.pain}%`
+      : '';
     const playerState = player
-      ? `Actor: ${player.name} (${player.actorId}) | Activity: ${player.currentActivity} | ${injurySummary} | ${physioSummary}`
+      ? `Actor: ${player.name} (${player.actorId}) | Activity: ${player.currentActivity}${injurySummary ? ` | ${injurySummary}` : ''}${physioSummary ? ` | ${physioSummary}` : ''}`
       : 'Player state unavailable';
 
     // 5. Epistemic Projection: Visible Entities
@@ -381,7 +382,7 @@ export class WorkingContextEngine {
     const tacticalCombatAllowed = rulesProfile ? rulesProfileEngine.allowsDndTacticalCombat(rulesProfile) : true;
     const combatParticipants = tacticalCombatAllowed ? projectedCombat.participants : [];
     const isInCombat = combatParticipants.length > 0;
-    if (isInCombat) {
+    if (isInCombat && contextNeeds.includeCombat) {
       const currentActor = projectedCombat.currentActor;
       conditions.push(`Combat Active (Round: ${projectedCombat.currentRound}, Actor: ${currentActor?.name || currentActor?.id || 'None'})`);
       const hazards = projectedCombat.hazards;
@@ -392,30 +393,30 @@ export class WorkingContextEngine {
 
     // 7. Epistemic Projection: Capabilities (CH3.2: includes active equipment grants)
     const powerState = player ? capabilityEngine.getPowerState(player.actorId) : undefined;
-    if (powerState && powerState.activeConditions) {
+    if (powerState && powerState.activeConditions && contextNeeds.includeHealth) {
       conditions.push(...powerState.activeConditions);
     }
-    const actorCaps = player ? capabilityEngine.getEffectiveActorCapabilities(player.actorId, inventoryEngine) : [];
-    const relevantCapabilities = actorCaps.slice(0, 6).map((c) => {
+    const actorCaps = contextNeeds.includeCapabilities && player ? capabilityEngine.getEffectiveActorCapabilities(player.actorId, inventoryEngine) : [];
+    const relevantCapabilities = actorCaps.slice(0, 4).map((c) => {
       const sourceDescriptions = c.sources.map((s) => (s.type === 'EQUIPMENT' ? `Granted by ${s.itemName || 'Equipped Item'}` : s.type)).join(', ');
       return `${c.name} [${c.powerTier}] (${sourceDescriptions}): ${c.description}`;
     });
 
     // 8. Epistemic Projection: Memories (Anti-Recency & Epistemic Visibility Filtering)
     const memoryKeywords = [locId, params.playerAction || ''].filter(Boolean);
-    const retrievedMemories = memoryEngine.retrieveMemories({
+    const retrievedMemories = contextNeeds.includeMemories ? memoryEngine.retrieveMemories({
       storyId,
       viewerActorId: viewerId, // Excludes PRIVATE memories of other entities
       queryKeywords: memoryKeywords,
-      maxResults: 4,
-    });
-    const universeMemories = UniverseRuntimeService.getRelevantUniverseMemories(
+      maxResults: 3,
+    }) : [];
+    const universeMemories = contextNeeds.includeMemories ? UniverseRuntimeService.getRelevantUniverseMemories(
       repo,
       storyId,
       universeViewerId(repo, storyId, viewerId),
       memoryKeywords.flatMap((value) => String(value).toLowerCase().split(/\W+/).filter((token) => token.length >= 3)).slice(0, 12),
-      6,
-    );
+      4,
+    ) : [];
     const relevantMemories = [
       ...retrievedMemories.map((m) => `[WORLD ${m.memoryClass}] ${m.content}`),
       ...universeMemories.map((m) => `[UNIVERSE ${m.memoryClass} from ${m.sourceWorldId}] ${m.content}`),
@@ -423,6 +424,7 @@ export class WorkingContextEngine {
 
     // 9. Latent Opportunities (CH9 Poison-Teeth Exemplar)
     const actionText = params.playerAction || 'Observe surroundings';
+    const contextNeeds = deriveNarrationContextNeeds({ actionText, npcTargetId: params.npcTargetId, isInCombat });
     const opportunityMatches = memoryEngine.scanOpportunities({
       actionText,
       actorId: viewerId,
@@ -435,7 +437,10 @@ export class WorkingContextEngine {
 
     // 10. Relationships / Visible Archetypes
     const relationships: string[] = [];
-    for (const ent of visibleEntities) {
+    if (!contextNeeds.includeRelationships) {
+      // Relationship/agency context is intentionally omitted unless this action needs it.
+    }
+    for (const ent of contextNeeds.includeRelationships ? visibleEntities : []) {
       const npcId = ent.split(' ')[0];
       const sched = livingSim.getNpcSchedule(npcId);
       if (sched) {
@@ -455,14 +460,14 @@ export class WorkingContextEngine {
     }
 
     // 11. Quests & Scheduled Events
-    const scheduledEvents = livingSim.getScheduledEvents().filter((e) => !e.isResolved);
+    const scheduledEvents = contextNeeds.includeQuests ? livingSim.getScheduledEvents().filter((e) => !e.isResolved) : [];
     const quests = scheduledEvents
       .filter((e) => !e.locationId || e.locationId === locId || playerDiscoveredSet.has(e.locationId))
       .map((e) => `${e.name} (Location: ${e.locationId && playerDiscoveredSet.has(e.locationId) ? e.locationId : 'Global'}, Status: ${e.status})`);
 
     // 12. Inventory
-    const equipped = player ? (inventoryEngine.getActorPaperDoll(player.actorId) as unknown as Record<string, import('./inventoryItem').ItemInstance | null>) : {};
-    const inventoryItems = player ? inventoryEngine.getActorInventory(player.actorId) : [];
+    const equipped = contextNeeds.includeInventory && player ? (inventoryEngine.getActorPaperDoll(player.actorId) as unknown as Record<string, import('./inventoryItem').ItemInstance | null>) : {};
+    const inventoryItems = contextNeeds.includeInventory && player ? inventoryEngine.getActorInventory(player.actorId) : [];
     const inventoryList: string[] = [];
     for (const [slot, item] of Object.entries(equipped)) {
       if (item) {
@@ -597,7 +602,7 @@ export class WorkingContextEngine {
       });
     }
 
-    if (worldKnowledgeSnapshot) {
+    if (worldKnowledgeSnapshot && contextNeeds.includeLore) {
       candidateChunks.push({
         id: 'b3_world_bible_snapshot',
         band: 'B3_CAUSAL_OPPORTUNITY',
@@ -621,7 +626,7 @@ export class WorkingContextEngine {
       });
     }
 
-    if (continuityResearch.plot || continuityResearch.plan) {
+    if (contextNeeds.includeQuests && (continuityResearch.plot || continuityResearch.plan)) {
       const continuityContent = [
         `Plot summary: ${continuityResearch.plot.summary || 'No compressed plot summary yet.'}`,
         `Current arc: ${continuityResearch.plot.currentArc || 'OPENING'}`,
@@ -647,7 +652,7 @@ export class WorkingContextEngine {
       });
     }
 
-    if (continuityResearch.storyThreads.length > 0) {
+    if (contextNeeds.includeQuests && continuityResearch.storyThreads.length > 0) {
       const threadContent = continuityResearch.storyThreads
         .slice(-10)
         .map((thread: any) => {
@@ -670,7 +675,7 @@ export class WorkingContextEngine {
       }
     }
 
-    if (continuityResearch.knowledgeFacts.length > 0) {
+    if (continuityResearch.knowledgeFacts.length > 0 && contextNeeds.includeLore) {
       const researchKnowledgeContent = continuityResearch.knowledgeFacts
         .slice(0, 10)
         .map((fact: any) => `Fact: ${JSON.stringify(fact)}`)
@@ -777,7 +782,7 @@ export class WorkingContextEngine {
     }
 
     // B3_CAUSAL_OPPORTUNITY: Latent opportunities, active capabilities, immediate threats
-    if (opportunityMatches.length > 0) {
+    if (contextNeeds.includeCapabilities && opportunityMatches.length > 0) {
       const oppContent = opportunityMatches
         .map((o) => `[OPPORTUNITY] ${o.detectedOpportunity} (Trigger: ${o.triggerTag})`)
         .join('\n');
@@ -806,7 +811,7 @@ export class WorkingContextEngine {
     }
 
     // B4_EPISODIC: Recent memories, recent chronicle evidence, NPC cues
-    if (relevantMemories.length > 0 || committedStateChanges.length > 0) {
+    if ((contextNeeds.includeMemories && relevantMemories.length > 0) || committedStateChanges.length > 0) {
       const episodicContent = [
         ...relevantMemories.map((m) => `Memory: ${m}`),
         ...committedStateChanges.map((c) => `Chronicle: ${c}`),

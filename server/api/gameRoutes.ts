@@ -6970,6 +6970,42 @@ gameRouter.get('/orchestrator/models', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/game/orchestrator/free-models
+ * Returns only provider-verified free-tier models. Model names/descriptions alone never qualify.
+ */
+gameRouter.get('/orchestrator/free-models', async (_req: Request, res: Response) => {
+  try {
+    const orchestrator = worldRepository.getAiOrchestrator();
+    await orchestrator.refreshProviderQuotas();
+    res.json({
+      success: true,
+      models: orchestrator.getFreeModelCatalog(),
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to retrieve verified free models.' });
+  }
+});
+
+/**
+ * POST /api/game/orchestrator/ai-assign-free-models
+ * Uses a provider-verified free Gemini model as the classifier, then applies only
+ * verified-free models to eligible task fallback chains. Existing routes are restored
+ * if classification fails.
+ */
+gameRouter.post('/orchestrator/ai-assign-free-models', async (req: Request, res: Response) => {
+  try {
+    const orchestrator = worldRepository.getAiOrchestrator();
+    const result = await orchestrator.autoAssignFreeModelsWithAi({
+      maxFallbacksPerCategory: typeof req.body?.maxFallbacksPerCategory === 'number' ? req.body.maxFallbacksPerCategory : undefined,
+      concurrency: typeof req.body?.concurrency === 'number' ? req.body.concurrency : undefined,
+    });
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || 'Failed to AI-assign free models.' });
+  }
+});
+
+/**
  * POST /api/game/orchestrator/preflight
  * Evaluates one model against one exact task contract without contacting the provider.
  * This is a read-only eligibility check; it never mutates routing or canonical story state.

@@ -3507,6 +3507,93 @@ export class MultiModelOrchestrator {
       });
     }
 
+    // Resilience-first free model pool. Free-plan limits are provider/account dependent at runtime;
+    // these records describe the current free-plan baseline and are refreshed by provider telemetry.
+    const groqConfigured = Boolean(getProviderApiKey('groq'));
+    for (const model of [
+      ['qwen/qwen3.8-27b', 'Groq Qwen3.8 27B (Free)', 'creative', 135],
+      ['openai/gpt-oss-120b', 'Groq GPT-OSS 120B (Free)', 'reasoning', 130],
+      ['openai/gpt-oss-20b', 'Groq GPT-OSS 20B (Free)', 'fast', 118],
+    ] as Array<[string, string, ModelPool, number]>) {
+      this.registerModel({
+        providerId: 'groq',
+        modelId: model[0],
+        displayName: model[1],
+        pool: model[2],
+        capabilities: model[0] === 'qwen/qwen3.8-27b'
+          ? ['text_generation', 'reasoning', 'creative_writing', 'structured_output', 'fast']
+          : ['text_generation', 'reasoning', 'extended_thinking', 'structured_output'],
+        contextWindow: 131072,
+        health: groqConfigured ? 'Healthy' : 'InvalidAuth',
+        quota: groqConfigured ? 'Healthy' : 'Unknown',
+        latencyMs: groqConfigured ? 180 : 0,
+        userPriority: model[3],
+        roleEligibility: [...ALL_GENERAL_TEXT_ROLES],
+        supportedInputTypes: ['text'],
+        supportedOutputTypes: ['text', 'json'],
+        hasTools: true,
+        hasStructuredOutput: true,
+        hasVision: false,
+        hasAudio: false,
+        fallbackEligibility: true,
+        accessStatus: groqConfigured ? 'accessible' : 'not_configured',
+        isPaidModel: false,
+        billingState: 'FREE',
+        billingEvidenceSource: 'PROVIDER',
+        freeTierStatus: 'VERIFIED',
+        freeTierEvidenceSource: 'PROVIDER',
+        freeTierVerifiedAt: Date.now(),
+        configuredLimits: {
+          requestsPerMinute: 30,
+          requestsPerDay: 1000,
+          tokensPerMinute: 8000,
+          tokensPerDay: 200000,
+        },
+        lifecycleState: 'active',
+        isEmergencyFloor: false,
+      });
+    }
+
+    const openRouterFreeDefaults = [
+      ['inclusionai/ling-3.0-flash:free', 'Ling 3.0 Flash (OpenRouter Free)', 'creative', 106, false],
+      ['google/gemma-4-31b-it:free', 'Gemma 4 31B (OpenRouter Free)', 'creative', 103, true],
+      ['qwen/qwen3.8-27b:free', 'Qwen3.8 27B (OpenRouter Free)', 'creative', 100, true],
+    ] as Array<[string, string, ModelPool, number, boolean]>;
+
+    for (const model of openRouterFreeDefaults) {
+      this.registerModel({
+        providerId: 'openrouter',
+        modelId: model[0],
+        displayName: model[1],
+        pool: model[2],
+        capabilities: model[4]
+          ? ['text_generation', 'reasoning', 'creative_writing', 'structured_output', 'fast']
+          : ['text_generation', 'reasoning', 'creative_writing', 'fast'],
+        contextWindow: 262144,
+        health: openrouterConfigured ? 'Healthy' : 'InvalidAuth',
+        quota: openrouterConfigured ? 'Healthy' : 'Unknown',
+        latencyMs: openrouterConfigured ? 350 : 0,
+        userPriority: model[3],
+        roleEligibility: [...ALL_GENERAL_TEXT_ROLES],
+        supportedInputTypes: ['text'],
+        supportedOutputTypes: ['text', 'json'],
+        hasTools: true,
+        hasStructuredOutput: model[4],
+        hasVision: false,
+        hasAudio: false,
+        fallbackEligibility: true,
+        accessStatus: openrouterConfigured ? 'accessible' : 'not_configured',
+        isPaidModel: false,
+        billingState: 'FREE',
+        billingEvidenceSource: 'PROVIDER',
+        freeTierStatus: 'VERIFIED',
+        freeTierEvidenceSource: 'PROVIDER',
+        freeTierVerifiedAt: Date.now(),
+        lifecycleState: 'active',
+        isEmergencyFloor: false,
+      });
+    }
+
     // External Provider Models
     this.registerModel({
       providerId: 'openai',
@@ -8285,90 +8372,3 @@ export class MultiModelOrchestrator {
     };
   }
 }
-    // Resilience-first free model pool. Free-plan limits are provider/account dependent at runtime;
-    // these records describe the current free-plan baseline and are refreshed by provider telemetry.
-    const groqConfigured = Boolean(getProviderApiKey('groq'));
-    for (const model of [
-      ['qwen/qwen3.8-27b', 'Groq Qwen3.8 27B (Free)', 'creative', 135],
-      ['openai/gpt-oss-120b', 'Groq GPT-OSS 120B (Free)', 'reasoning', 130],
-      ['openai/gpt-oss-20b', 'Groq GPT-OSS 20B (Free)', 'fast', 118],
-    ] as Array<[string, string, ModelPool, number]>) {
-      this.registerModel({
-        providerId: 'groq',
-        modelId: model[0],
-        displayName: model[1],
-        pool: model[2],
-        capabilities: model[0] === 'qwen/qwen3.8-27b'
-          ? ['text_generation', 'reasoning', 'creative_writing', 'structured_output', 'fast']
-          : ['text_generation', 'reasoning', 'extended_thinking', 'structured_output'],
-        contextWindow: 131072,
-        health: groqConfigured ? 'Healthy' : 'InvalidAuth',
-        quota: groqConfigured ? 'Healthy' : 'Unknown',
-        latencyMs: groqConfigured ? 180 : 0,
-        userPriority: model[3],
-        roleEligibility: [...ALL_GENERAL_TEXT_ROLES],
-        supportedInputTypes: ['text'],
-        supportedOutputTypes: ['text', 'json'],
-        hasTools: true,
-        hasStructuredOutput: true,
-        hasVision: false,
-        hasAudio: false,
-        fallbackEligibility: true,
-        accessStatus: groqConfigured ? 'accessible' : 'not_configured',
-        isPaidModel: false,
-        billingState: 'FREE',
-        billingEvidenceSource: 'PROVIDER',
-        freeTierStatus: 'VERIFIED',
-        freeTierEvidenceSource: 'PROVIDER',
-        freeTierVerifiedAt: Date.now(),
-        configuredLimits: {
-          requestsPerMinute: 30,
-          requestsPerDay: 1000,
-          tokensPerMinute: 8000,
-          tokensPerDay: 200000,
-        },
-        lifecycleState: 'active',
-        isEmergencyFloor: false,
-      });
-    }
-
-    const openRouterFreeDefaults = [
-      ['inclusionai/ling-3.0-flash:free', 'Ling 3.0 Flash (OpenRouter Free)', 'creative', 106, false],
-      ['google/gemma-4-31b-it:free', 'Gemma 4 31B (OpenRouter Free)', 'creative', 103, true],
-      ['qwen/qwen3.8-27b:free', 'Qwen3.8 27B (OpenRouter Free)', 'creative', 100, true],
-    ] as Array<[string, string, ModelPool, number, boolean]>;
-
-    for (const model of openRouterFreeDefaults) {
-      this.registerModel({
-        providerId: 'openrouter',
-        modelId: model[0],
-        displayName: model[1],
-        pool: model[2],
-        capabilities: model[4]
-          ? ['text_generation', 'reasoning', 'creative_writing', 'structured_output', 'fast']
-          : ['text_generation', 'reasoning', 'creative_writing', 'fast'],
-        contextWindow: 262144,
-        health: openrouterConfigured ? 'Healthy' : 'InvalidAuth',
-        quota: openrouterConfigured ? 'Healthy' : 'Unknown',
-        latencyMs: openrouterConfigured ? 350 : 0,
-        userPriority: model[3],
-        roleEligibility: [...ALL_GENERAL_TEXT_ROLES],
-        supportedInputTypes: ['text'],
-        supportedOutputTypes: ['text', 'json'],
-        hasTools: true,
-        hasStructuredOutput: model[4],
-        hasVision: false,
-        hasAudio: false,
-        fallbackEligibility: true,
-        accessStatus: openrouterConfigured ? 'accessible' : 'not_configured',
-        isPaidModel: false,
-        billingState: 'FREE',
-        billingEvidenceSource: 'PROVIDER',
-        freeTierStatus: 'VERIFIED',
-        freeTierEvidenceSource: 'PROVIDER',
-        freeTierVerifiedAt: Date.now(),
-        lifecycleState: 'active',
-        isEmergencyFloor: false,
-      });
-    }
-

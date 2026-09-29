@@ -370,7 +370,7 @@ test('Phase 12: Phase 9 equipment and Phase 10 living-world state reach authoriz
 
 	const context = WorkingContextEngine.assembleTurnContext({
 		storyId,
-		playerAction: 'Observe your surroundings.',
+		playerAction: 'Activate Phase 12 Context Sight.',
 		hardTokenBudget: 1400,
 		worldRepo: repository,
 	});

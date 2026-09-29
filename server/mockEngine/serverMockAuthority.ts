@@ -385,6 +385,7 @@ export class ServerMockAuthority {
       activeLocation,
       protagonist: {
         ...state.protagonist,
+        skills: run?.characterSkills || run?.protagonist?.skills || [],
         name: player ? player.name : (run ? run.characterName : state.protagonist.name),
         title: run?.characterRole || state.protagonist.title,
         portraitUrl: run?.characterPortraitUrl,

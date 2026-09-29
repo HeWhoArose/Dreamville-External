@@ -90,6 +90,27 @@ test('critical narrative and dialogue routes contain cross-provider continuity f
   }
 });
 
+test('every production fallback entry is adapter-addressable and leaves multiple AI tiers before deterministic recovery', () => {
+  const supportedProviders = new Set(['google_gemini', 'openrouter', 'groq', 'provider_mock_stt', 'provider_mock_speech', 'google_imagen']);
+
+  for (const contract of getAllAiTaskContracts()) {
+    const route = config.fallbackChains?.[contract.task];
+    assert.ok(Array.isArray(route), 'Missing route: ' + contract.task);
+
+    const aiKeys = route.filter((key: string) => key !== emergency);
+    for (const key of aiKeys) {
+      const separator = key.indexOf('::');
+      assert.ok(separator > 0, 'Malformed model key in ' + contract.task + ': ' + key);
+      const providerId = key.slice(0, separator);
+      assert.ok(supportedProviders.has(providerId), 'No adapter provider for ' + key);
+    }
+
+    if (contract.category !== 'speech' && contract.category !== 'image') {
+      assert.ok(aiKeys.length >= 3, 'Text task needs at least three AI tiers before deterministic recovery: ' + contract.task);
+    }
+  }
+});
+
 test('configured routes do not fall directly to the deterministic floor when earlier providers are unavailable', () => {
   const cases: Array<{
     task: Parameters<MultiModelOrchestrator['selectBestModel']>[0];

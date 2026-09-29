@@ -28,6 +28,8 @@ import { storyActionAdvisor } from '../services/storyActionAdvisor';
 import { combatEncounterService } from '../domain/combatEncounterService';
 import { CapabilitySimulationEngine } from '../domain/capabilitySimulationEngine';
 import { narrativeContinuityEngine } from '../domain/narrativeContinuityEngine';
+import { narrativeStateBroker, type ItemUseResolution } from '../domain/narrativeStateBroker';
+import { environmentalHazardEngine } from '../domain/environmentalHazardEngine';
 
 /**
  * ServerMockAuthority
@@ -609,6 +611,14 @@ export class ServerMockAuthority {
       : undefined;
     const rulesProfile = worldRepository.getRulesProfile(targetStoryId)
       || rulesProfileEngine.createDefault('FULL_DND');
+
+    const itemUseResolution: ItemUseResolution = narrativeStateBroker.inspectItemUse(
+      worldRepository,
+      targetStoryId,
+      actorId,
+      String(freeformText),
+    );
+    const itemUseBlocked = itemUseResolution.requested && !itemUseResolution.found;
     // Narrative checks and authored challenge consequences are canonical mechanics. The AI may
     // describe the committed result, but it never supplies the die, modifier, DC, damage, or condition.
     const sceneText = [
@@ -629,19 +639,23 @@ export class ServerMockAuthority {
       capabilities: capabilityEngine.getEffectiveActorCapabilities(actorId),
     });
 
-    const storyCheck = storyCheckAuthority.resolve(worldRepository, {
-      storyId: targetStoryId,
-      actorId,
-      actionText: String(freeformText),
-      sceneText,
-      challenge: authoredChallenge || undefined,
-      rulesProfile,
-      resolutionHint: actionAdvice?.aiPipeline?.resolutionHint
-        ? { check: actionAdvice.aiPipeline.resolutionHint.check }
-        : undefined,
-    });
+    const storyCheck = itemUseBlocked
+      ? null
+      : storyCheckAuthority.resolve(worldRepository, {
+          storyId: targetStoryId,
+          actorId,
+          actionText: String(freeformText),
+          sceneText,
+          challenge: authoredChallenge || undefined,
+          rulesProfile,
+          resolutionHint: actionAdvice?.aiPipeline?.resolutionHint
+            ? { check: actionAdvice.aiPipeline.resolutionHint.check }
+            : undefined,
+        });
 
-    let committedOutcome = '';
+    let committedOutcome = itemUseBlocked
+      ? 'The requested item is not available in the actor inventory. Do not narrate the item as if it was used.'
+      : '';
     if (storyCheck) {
       const testLabel = storyCheck.testType === 'SAVING_THROW'
         ? storyCheck.ability + ' saving throw'
@@ -663,11 +677,53 @@ export class ServerMockAuthority {
         committedOutcome += ' ' + consequence.summary;
       }
     }
-    if (!storyCheck) {
+    if (!storyCheck && !itemUseBlocked) {
       if (this.explicitCapabilityIntentForNarration(String(freeformText))) {
         committedOutcome = 'A special capability-related action was resolved by the canonical capability/rules layer. Narrate only the visible result and never expose capability or engine terminology.';
       } else {
         committedOutcome = 'This is an ordinary narrative/world action. No special capability was invoked. Narrate the physical and sensory result naturally and continue the scene.';
+      }
+    }
+
+    let itemUseResult: ReturnType<typeof narrativeStateBroker.commitItemUse> | undefined;
+    if (itemUseResolution.requested && itemUseResolution.found && (!storyCheck || storyCheck.success)) {
+      itemUseResult = narrativeStateBroker.commitItemUse(
+        worldRepository,
+        targetStoryId,
+        actorId,
+        itemUseResolution,
+      );
+      if (itemUseResult.success) {
+        const itemName = itemUseResolution.item?.name || 'item';
+        if (itemUseResult.healing) {
+          committedOutcome += ` ${itemName} was consumed and restored ${itemUseResult.healing.finalAmount} health. Narrate only the visible use and recovery; do not expose engine terminology.`;
+        } else if (itemUseResult.consumed?.success) {
+          committedOutcome += ` ${itemName} was used successfully; the canonical inventory transaction consumed the item's configured quantity/charge. Narrate the visible effect only.`;
+        } else {
+          committedOutcome += ` ${itemName} was used, but it is not consumable under its canonical definition.`;
+        }
+      } else {
+        committedOutcome += ` The requested item use failed: ${itemUseResult.errorReason || 'item use could not be committed'}.`;
+      }
+    } else if (itemUseResolution.requested && itemUseResolution.found && storyCheck && !storyCheck.success) {
+      committedOutcome += ` The attempted use of ${itemUseResolution.item?.name || 'the item'} did not resolve successfully; do not consume the item.`;
+    }
+
+    const resolutionHint = actionAdvice?.aiPipeline?.resolutionHint;
+    if (
+      resolutionHint?.hazard?.type === 'FALL' &&
+      Number.isFinite(resolutionHint.hazard.distanceFeet) &&
+      Number(resolutionHint.hazard.distanceFeet) >= 10 &&
+      rulesProfile.mode !== 'CUSTOM_HOMEBREW_DND'
+    ) {
+      const fallResolution = environmentalHazardEngine.resolveFall({
+        repository: worldRepository,
+        storyId: targetStoryId,
+        actorId,
+        distanceFeet: Number(resolutionHint.hazard.distanceFeet),
+      });
+      if (fallResolution.applied && fallResolution.damage) {
+        committedOutcome += ` A canonical ${fallResolution.damageFormula} fall-damage resolution was applied, resulting in ${fallResolution.damage.finalAmount} damage and ${fallResolution.damage.healthCurrent} health remaining.`;
       }
     }
 

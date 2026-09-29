@@ -76,7 +76,7 @@ const MODE_POLICIES: Record<AiCallPolicyMode, {
 	},
 	NOVEL_CAPABILITY: {
 		maxHelperCalls: MAX_ADAPTIVE_HELPER_CALLS,
-		maxHelperOutputTokens: 2200,
+		maxHelperOutputTokens: 3000,
 		allowedTasks: ['intent.interpret', 'capability.synthesize'],
 		allowedRoles: [
 			'INTENT_INTERPRET',

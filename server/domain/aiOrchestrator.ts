@@ -6285,25 +6285,9 @@ export class MultiModelOrchestrator {
       },
     );
 
-    if (generated.source === 'DETERMINISTIC_FALLBACK') {
-      const testRuntimeFallback = typeof process !== 'undefined' && (
-        process.env.NODE_ENV === 'test' ||
-        Boolean(process.env.NODE_TEST_CONTEXT)
-      );
-      if (!testRuntimeFallback) {
-        return {
-          success: false,
-          providerId: generated.providerId,
-          modelId: generated.modelId,
-          source: generated.source,
-          fallbackReason: generated.fallbackReason,
-          attemptsTrail: generated.attemptsTrail,
-          researchPacket,
-          contextAudit,
-          error: generated.fallbackReason || 'All AI narration models failed; deterministic emergency fallback was withheld from player-facing narration.',
-        };
-      }
-    }
+    // Narrative generation has a deterministic emergency floor. When all configured
+    // AI providers fail, the authoritative fallback remains player-facing rather than
+    // converting a recoverable narration failure into a dead-end turn.
 
     const validation = this.validateTurnPackage(generated.text, { allowPlainTextNarration: true });
     if (!validation.valid || !validation.turnPackage) {

@@ -74,15 +74,15 @@ export class UnifiedAiActionOrchestrator {
 			.map((item) => ({ item, score: normalizedAction.includes(String(item.name || '').toLowerCase()) ? String(item.name || '').length : 0 }))
 			.filter((entry) => entry.score > 0)
 			.sort((a, b) => b.score - a.score)[0]?.item;
-		const itemUseRequested = /\\b(use|consume|drink|eat|apply|read|activate)\\b/i.test(cleanAction);
-		const checkOrHazardRequested = /\\b(hide|sneak|search|inspect|investigate|climb|jump|dodge|evade|resist|persuade|deceive|intimidate|swim|fall|fell|falling|trap|poison|gas|fumes|debris|collapse)\\b/i.test(cleanAction);
+		const itemUseRequested = /\b(use|consume|drink|eat|apply|read|activate)\b/i.test(cleanAction);
+		const checkOrHazardRequested = /\b(hide|sneak|search|inspect|investigate|climb|jump|dodge|evade|resist|persuade|deceive|intimidate|swim|fall|fell|falling|trap|poison|gas|fumes|debris|collapse)\b/i.test(cleanAction);
 		const preCandidate =
 			owned.find((cap) => typeof cap?.name === 'string' && normalizedAction.includes(cap.name.toLowerCase())) ||
 			capabilityCandidateFromWorld(world, cleanAction);
 		const shouldAskIntentModel =
 			Boolean(preCandidate) ||
-			/\\b(cast|activate|invoke|channel|release)\\b/i.test(cleanAction) ||
-			(/\\buse\\b/i.test(cleanAction) && !itemMatch) ||
+			/\b(cast|activate|invoke|channel|release)\b/i.test(cleanAction) ||
+			(/\buse\b/i.test(cleanAction) && !itemMatch) ||
 			checkOrHazardRequested ||
 			(itemUseRequested && !itemMatch);
 		let intent = deterministicIntent(cleanAction);

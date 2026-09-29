@@ -2707,6 +2707,7 @@ export class InMemoryWorldRepository implements WorldRepository {
         ...(this.inventoryEngines.has(storyId) ? { inventory: this.inventoryEngines.get(storyId)!.exportState() } : {}),
         ...(this.entityRegistries.has(storyId) ? { entities: this.entityRegistries.get(storyId)!.exportState() } : {}),
         ...(this.memoryEngines.has(storyId) ? { memory: this.memoryEngines.get(storyId)!.exportState() } : {}),
+        ...(this.storyCheckEngines.has(storyId) ? { storyChecks: this.storyCheckEngines.get(storyId)!.exportState() } : {}),
         ...(this.geographies.has(storyId) ? { geography: this.geographies.get(storyId)!.exportState() } : {}),
         ...(this.playerLifecycles.has(storyId) ? { playerLifecycle: this.playerLifecycles.get(storyId)!.toJSON() } : {}),
         ...(this.npcLifecycles.has(storyId) ? {
@@ -3012,6 +3013,14 @@ export class InMemoryWorldRepository implements WorldRepository {
       canonicalRun.runtimeState = {
         ...(canonicalRun.runtimeState || {}),
         memory: memoryEngine.exportState(),
+      };
+    }
+
+    const storyCheckEngine = this.storyCheckEngines.get(canonicalRun.storyId);
+    if (storyCheckEngine) {
+      canonicalRun.runtimeState = {
+        ...(canonicalRun.runtimeState || {}),
+        storyChecks: storyCheckEngine.exportState(),
       };
     }
 

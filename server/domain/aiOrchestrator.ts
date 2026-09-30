@@ -6452,6 +6452,50 @@ export class MultiModelOrchestrator {
       };
     }
 
+    const finalNarrationText = validation.turnPackage.narrative.join(' ');
+    const finalSceneContinuity = this.validateNarrativeSceneContinuity(finalNarrationText, worldRepo, storyId);
+    if (!finalSceneContinuity.valid) {
+      return {
+        success: false,
+        providerId: generated.providerId,
+        modelId: generated.modelId,
+        source: generated.source,
+        fallbackReason: generated.fallbackReason,
+        attemptsTrail: generated.attemptsTrail,
+        researchPacket,
+        contextAudit,
+        error: finalSceneContinuity.errorReason || 'Narration scene continuity validation failed.',
+      };
+    }
+    const finalActionContinuity = this.validateNarrativeActionContinuity(finalNarrationText, playerAction);
+    if (!finalActionContinuity.valid) {
+      return {
+        success: false,
+        providerId: generated.providerId,
+        modelId: generated.modelId,
+        source: generated.source,
+        fallbackReason: generated.fallbackReason,
+        attemptsTrail: generated.attemptsTrail,
+        researchPacket,
+        contextAudit,
+        error: finalActionContinuity.errorReason || 'Narration action continuity validation failed.',
+      };
+    }
+    const finalTemporalContinuity = this.validateNarrativeTemporalContinuity(finalNarrationText, worldRepo, storyId);
+    if (!finalTemporalContinuity.valid) {
+      return {
+        success: false,
+        providerId: generated.providerId,
+        modelId: generated.modelId,
+        source: generated.source,
+        fallbackReason: generated.fallbackReason,
+        attemptsTrail: generated.attemptsTrail,
+        researchPacket,
+        contextAudit,
+        error: finalTemporalContinuity.errorReason || 'Narration temporal continuity validation failed.',
+      };
+    }
+
     return {
       success: true,
       turnPackage: {

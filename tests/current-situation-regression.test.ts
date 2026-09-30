@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { CurrentSituationBuilder } from '../server/domain/currentSituation';
+import { NarrativeContinuityEngine } from '../server/domain/narrativeContinuityEngine';
 import { formatCanonicalTimestamp } from '../server/domain/deterministicRng';
 import { PlayerLifecycleState } from '../server/domain/playerLifecycleState';
 import type { KnowledgeFact, WorldTimestamp } from '../server/domain/types';
@@ -232,4 +233,62 @@ test('working context exposes the same current situation object used by downstre
 	assert.equal(workingContext.currentSituation.player.locationId, situation.player.locationId);
 	assert.ok(workingContext.chunks.some((chunk) => chunk.id === 'b1_current_situation'));
 	assert.match(workingContext.assembledText, /CURRENT SITUATION/i);
+});
+
+
+test('current situation research reuses the canonical situation projection', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'phase1_research_integration_regression';
+	repository.seedStory(storyId);
+
+	const situation = CurrentSituationBuilder.build({
+		storyId,
+		playerAction: 'I move closer and listen to the rumors.',
+		worldRepo: repository,
+	});
+	const packet = NarrativeContinuityEngine.research(
+		repository,
+		storyId,
+		'I move closer and listen to the rumors.',
+		situation.player.actorId,
+		{ persist: false, currentSituation: situation },
+	);
+
+	assert.equal(packet.currentSituation?.turnId, situation.turnId);
+	assert.equal(packet.currentSituation?.location.id, situation.location.id);
+	assert.deepEqual(
+		packet.currentSituation?.nearbyEntities.map((entity) => entity.id),
+		situation.nearbyEntities.map((entity) => entity.id),
+	);
+});
+
+test('player-safe current situation projection omits canonical world facts and private dialogue notes', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'phase1_safe_projection_regression';
+	repository.seedStory(storyId);
+	const run = repository.getStoryRun(storyId);
+	assert.ok(run);
+	run.runtimeState = {
+		...(run.runtimeState || {}),
+		activeDialogue: {
+			nodeId: 'dialogue_safe',
+			speakerId: 'speaker_safe',
+			speakerName: 'Archivist',
+			text: 'The public gate is open.',
+			epistemicNote: 'Private engine note: the archivist is concealing the vault.',
+		},
+	};
+	repository.saveStoryRun(run);
+
+	const situation = CurrentSituationBuilder.build({
+		storyId,
+		playerAction: 'I listen.',
+		worldRepo: repository,
+	});
+	const safe = CurrentSituationBuilder.toPlayerSafeProjection(situation) as any;
+
+	assert.equal(safe.worldFacts, undefined);
+	assert.equal(safe.worldFactsOmitted, true);
+	assert.equal(safe.activeDialogue?.epistemicNote, undefined);
+	assert.equal(safe.activeDialogue?.text, 'The public gate is open.');
 });

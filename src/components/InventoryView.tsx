@@ -134,7 +134,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   </div>
 
                   {equipped ? (
-                    <div className="my-1 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setItemModal(equipped)}
+                      className="my-1 text-center w-full rounded-lg hover:bg-stone-800/50 transition p-1"
+                      title={`View information about ${equipped.name}`}
+                    >
                       <div className="text-xl mb-0.5">{equipped.icon || slot.icon}</div>
                       <div
                         className="text-[11px] font-semibold text-stone-200 truncate font-serif"

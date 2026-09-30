@@ -6545,7 +6545,6 @@ export class MultiModelOrchestrator {
       worldRepo,
     });
 
-    const canonicalPlayer = worldRepo.getPlayerLifecycle(storyId);
     const canonicalSceneAnchor = [
       `Location ID: ${currentSituation.location.id}`,
       `Location name: ${currentSituation.location.name}`,
@@ -6632,28 +6631,28 @@ export class MultiModelOrchestrator {
           isProtected: true,
           relevanceScore: 1,
         },
-        ...(isInformationSeekingAction && params.sceneContext ? [{
+        ...(isInformationSeekingAction && currentSceneFactualContext ? [{
           id: 'current_scene_factual_context',
           band: 'B2_IMMEDIATE' as const,
           label: 'Current Scene Factual Context',
-          content: params.sceneContext,
-          estimatedTokens: WorkingContextEngine.estimateTokens(params.sceneContext),
-          sourceAuthority: 'Canonical StoryRun Scene Context',
+          content: currentSceneFactualContext,
+          estimatedTokens: WorkingContextEngine.estimateTokens(currentSceneFactualContext),
+          sourceAuthority: 'CurrentSituationBuilder canonical scene projection',
           isProtected: true,
           relevanceScore: 0.98,
         }] : []),
-        ...(params.recentTurns?.length ? [{
+        ...(canonicalRecentTurns.length ? [{
           id: 'recent_story_turns',
           band: 'B2_IMMEDIATE' as const,
           label: 'Recent Story Turns',
-          content: params.recentTurns
+          content: canonicalRecentTurns
             .slice(-2)
             .map((turn, index) => `Turn ${index + 1} | ${turn.worldTime || 'current'} | Player: ${turn.playerAction} | Narration: ${turn.narration}`)
             .join('\n'),
           estimatedTokens: WorkingContextEngine.estimateTokens(
-            params.recentTurns.slice(-2).map((turn) => `${turn.playerAction} ${turn.narration}`).join(' ')
+            canonicalRecentTurns.slice(-2).map((turn) => `${turn.playerAction} ${turn.narration}`).join(' ')
           ),
-          sourceAuthority: 'Canonical Story History',
+          sourceAuthority: 'CurrentSituationBuilder recent-turn projection',
           isProtected: true,
           relevanceScore: 1,
         }] : []),

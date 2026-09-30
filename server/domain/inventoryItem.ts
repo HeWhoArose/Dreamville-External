@@ -38,6 +38,7 @@ export interface ItemDefinition {
   category: ItemCategory;
   rarity: ItemRarity;
   description: string;
+  useCases?: string[];
   allowedSlots?: EquipmentSlot[];
   equipmentClass?: EquipmentClass;
   equipable?: boolean;
@@ -56,6 +57,155 @@ export interface ItemDefinition {
   };
   maxCharges?: number;
   defaultAssetId?: string;
+}
+
+/**
+ * Builds a factual description for an item definition when authored/AI-provided
+ * lore is missing. Mechanical properties are preferred; otherwise the wording
+ * stays deliberately generic rather than inventing item behavior.
+ */
+export function buildItemDescription(input: {
+  name?: string;
+  category?: string;
+  rarity?: string;
+  properties?: Record<string, unknown>;
+}): string {
+  const name = String(input.name || 'Unnamed Item').trim() || 'Unnamed Item';
+  const category = String(input.category || 'Miscellaneous').trim() || 'Miscellaneous';
+  const properties = input.properties && typeof input.properties === 'object' ? input.properties : {};
+
+  const healAmount = Number(properties.healAmount);
+  const damageDice = String(properties.damageDice || '').trim();
+  const damageType = String(properties.damageType || '').trim();
+  const armorBonus = Number(properties.armorBonus);
+  const speedBonus = Number(properties.speedBonus);
+  const observationBonus = Number(properties.observationBonus);
+  const hazardResistance = Number(properties.hazardResistance);
+  const lightRadius = Number(properties.lightRadius);
+
+  if (Number.isFinite(healAmount) && healAmount > 0) {
+    return `${name} is a ${category.toLowerCase()} with a restorative effect that can restore ${healAmount} HP when consumed.`;
+  }
+  if (damageDice) {
+    return damageType
+      ? `${name} is a ${category.toLowerCase()} intended for combat, with a canonical damage profile of ${damageDice} ${damageType}.`
+      : `${name} is a ${category.toLowerCase()} intended for combat, with a canonical damage profile of ${damageDice}.`;
+  }
+  if (Number.isFinite(armorBonus) && armorBonus !== 0) {
+    return `${name} is protective ${category.toLowerCase()} that provides a canonical Armor Class modifier of ${armorBonus > 0 ? '+' : ''}${armorBonus} when equipped.`;
+  }
+  if (Number.isFinite(speedBonus) && speedBonus !== 0) {
+    return `${name} is a ${category.toLowerCase()} that provides a canonical Speed modifier of ${speedBonus > 0 ? '+' : ''}${speedBonus} when equipped.`;
+  }
+  if (Number.isFinite(observationBonus) && observationBonus !== 0) {
+    return `${name} is a ${category.toLowerCase()} that provides a canonical observation modifier of ${observationBonus > 0 ? '+' : ''}${observationBonus} when its rules apply.`;
+  }
+  if (Number.isFinite(hazardResistance) && hazardResistance !== 0) {
+    return `${name} is a ${category.toLowerCase()} that provides a canonical hazard-resistance modifier of ${hazardResistance > 0 ? '+' : ''}${hazardResistance} when its rules apply.`;
+  }
+  if (Number.isFinite(lightRadius) && lightRadius > 0) {
+    return `${name} is a ${category.toLowerCase()} that provides illumination with a canonical radius of ${lightRadius}.`;
+  }
+
+  return `${name} is a ${category.toLowerCase()} item. Its practical use is determined by its canonical item properties and the situation in which it is used.`;
+}
+
+/**
+ * Builds concise, player-facing use hints from canonical item metadata.
+ * These are informational only: they do not execute an action or imply that
+ * the player has chosen to use the item.
+ */
+export function buildItemUseCases(input: {
+  name?: string;
+  category?: string;
+  equipable?: boolean;
+  allowedSlots?: string[];
+  properties?: Record<string, unknown>;
+  consumption?: { mode: 'QUANTITY' | 'CHARGE' | 'DESTROY'; amount?: number };
+}): string[] {
+  const category = String(input.category || 'Miscellaneous').trim() || 'Miscellaneous';
+  const properties = input.properties && typeof input.properties === 'object' ? input.properties : {};
+  const uses: string[] = [];
+
+  if (input.equipable && Array.isArray(input.allowedSlots) && input.allowedSlots.length > 0) {
+    uses.push(`Equip in an allowed slot (${input.allowedSlots.join(', ')}).`);
+  }
+
+  switch (category) {
+    case 'Weapon':
+      uses.push('Use in combat when an attack or other weapon action is declared.');
+      break;
+    case 'Armor':
+    case 'Shield':
+    case 'Accessory':
+      uses.push('Equip to apply the item’s canonical passive modifiers or protections.');
+      break;
+    case 'Potion':
+    case 'Food':
+      uses.push('Consume when the situation and item rules permit the consumable effect.');
+      break;
+    case 'Scroll':
+      uses.push('Use or read when a rule, scene, or capability recognizes the scroll.');
+      break;
+    case 'Material':
+      uses.push('Use as a crafting or material component when a recipe or rule calls for it.');
+      break;
+    case 'Document':
+      uses.push('Read, present, carry, or reference it when the situation calls for the document.');
+      break;
+    case 'Quest':
+      uses.push('Carry, present, deliver, or use it when a quest or scene requires it.');
+      break;
+    case 'Tool':
+      uses.push('Use for exploration, problem-solving, crafting, or other checks when relevant.');
+      break;
+    default:
+      uses.push('Use when the current situation or a canonical item rule supports it.');
+      break;
+  }
+
+  const healAmount = Number(properties.healAmount);
+  const damageDice = String(properties.damageDice || '').trim();
+  const damageType = String(properties.damageType || '').trim();
+  const armorBonus = Number(properties.armorBonus);
+  const speedBonus = Number(properties.speedBonus);
+  const observationBonus = Number(properties.observationBonus);
+  const hazardResistance = Number(properties.hazardResistance);
+  const lightRadius = Number(properties.lightRadius);
+
+  if (Number.isFinite(healAmount) && healAmount > 0) {
+    uses.push(`Restores ${healAmount} HP when its configured healing effect is consumed.`);
+  }
+  if (damageDice) {
+    uses.push(damageType
+      ? `Its canonical combat profile uses ${damageDice} ${damageType} damage.`
+      : `Its canonical combat profile uses ${damageDice} damage.`);
+  }
+  if (Number.isFinite(armorBonus) && armorBonus !== 0) {
+    uses.push(`Applies a canonical Armor Class modifier of ${armorBonus > 0 ? '+' : ''}${armorBonus} when equipped.`);
+  }
+  if (Number.isFinite(speedBonus) && speedBonus !== 0) {
+    uses.push(`Applies a canonical Speed modifier of ${speedBonus > 0 ? '+' : ''}${speedBonus} when equipped.`);
+  }
+  if (Number.isFinite(observationBonus) && observationBonus !== 0) {
+    uses.push(`Provides a canonical observation modifier of ${observationBonus > 0 ? '+' : ''}${observationBonus} when its rules apply.`);
+  }
+  if (Number.isFinite(hazardResistance) && hazardResistance !== 0) {
+    uses.push(`Provides a canonical hazard-resistance modifier of ${hazardResistance > 0 ? '+' : ''}${hazardResistance} when its rules apply.`);
+  }
+  if (Number.isFinite(lightRadius) && lightRadius > 0) {
+    uses.push(`Provides illumination with a canonical radius of ${lightRadius}.`);
+  }
+
+  if (input.consumption?.mode === 'QUANTITY') {
+    uses.push('Consumption reduces the item quantity.');
+  } else if (input.consumption?.mode === 'CHARGE') {
+    uses.push('Consumption spends charges rather than removing the entire item immediately.');
+  } else if (input.consumption?.mode === 'DESTROY') {
+    uses.push('Using the item destroys the consumed instance.');
+  }
+
+  return [...new Set(uses)].slice(0, 8);
 }
 
 export interface ItemInstance {
@@ -114,6 +264,16 @@ export interface PaperDollSlots {
  * Implements Challenge 5 & Addenda V10.3A, V10.3B.
  * Deterministic authority over items, durability degradation, repair, equipment paper-doll, and crafting.
  */
+function propertiesForSignature(value: unknown): unknown {
+  if (!value || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map(propertiesForSignature);
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, entry]) => [key, propertiesForSignature(entry)]),
+  );
+}
+
 export class InventoryItemEngine {
   private itemDefinitions: Map<string, ItemDefinition> = new Map();
   private itemInstances: Map<string, ItemInstance> = new Map();
@@ -345,15 +505,30 @@ export class InventoryItemEngine {
   }
 
   public registerDefinition(def: ItemDefinition): void {
-    const normalized = normalizeEquipmentMetadata(def);
+    const cloned = JSON.parse(JSON.stringify(def)) as ItemDefinition;
+    const normalized = normalizeEquipmentMetadata(cloned);
+    const normalizedDescription = String(cloned.description || '').trim() || buildItemDescription(cloned);
+    const normalizedAllowedSlots = normalized.allowedSlots.length > 0 ? normalized.allowedSlots : undefined;
+    const normalizedUseCases = Array.isArray(cloned.useCases)
+      ? [...new Set(cloned.useCases.map((entry) => String(entry).trim()).filter(Boolean))]
+      : [];
+
     const canonical: ItemDefinition = {
-      ...JSON.parse(JSON.stringify(def)),
+      ...cloned,
+      description: normalizedDescription,
+      useCases: normalizedUseCases.length > 0
+        ? normalizedUseCases.slice(0, 8)
+        : buildItemUseCases({
+            ...cloned,
+            equipable: normalized.equipable,
+            allowedSlots: normalizedAllowedSlots,
+          }),
       equipmentClass: normalized.equipmentClass,
       equipable: normalized.equipable,
       handUsage: normalized.handUsage,
-      allowedSlots: normalized.allowedSlots.length > 0 ? normalized.allowedSlots : undefined,
-      modifiers: Array.isArray(def.modifiers) ? JSON.parse(JSON.stringify(def.modifiers)) : undefined,
-      customRules: Array.isArray(def.customRules) ? JSON.parse(JSON.stringify(def.customRules)) : undefined,
+      allowedSlots: normalizedAllowedSlots,
+      modifiers: Array.isArray(cloned.modifiers) ? JSON.parse(JSON.stringify(cloned.modifiers)) : undefined,
+      customRules: Array.isArray(cloned.customRules) ? JSON.parse(JSON.stringify(cloned.customRules)) : undefined,
     };
     this.itemDefinitions.set(def.id, canonical);
   }
@@ -485,7 +660,24 @@ export class InventoryItemEngine {
 
   private ensureGenesisDefinition(raw: Record<string, unknown>, category: ItemCategory): string {
     const explicit = String(raw.defId || '').trim();
-    const defId = explicit || deterministicId('item_def_genesis', String(raw.id || ''), String(raw.name || ''), category);
+    const canonicalName = String(raw.name || 'Unnamed Item').trim().toLowerCase().replace(/\s+/g, ' ');
+    const definitionSignature = JSON.stringify({
+      name: canonicalName,
+      category,
+      rarity: String(raw.rarity || 'Common'),
+      description: String(raw.description || '').trim(),
+      allowedSlots: Array.isArray(raw.allowedSlots) ? raw.allowedSlots.map(String).sort() : [],
+      equipmentClass: String(raw.equipmentClass || ''),
+      handUsage: String(raw.handUsage || ''),
+      weightKg: Number(raw.weightKg ?? 0) || 0,
+      maxDurability: Number(raw.maxDurability ?? raw.durability ?? 100) || 100,
+      properties: propertiesForSignature(raw.properties),
+      useCases: Array.isArray(raw.useCases) ? raw.useCases.map(String).sort() : [],
+      consumptionMode: typeof (raw as any).consumptionMode === 'string' ? String((raw as any).consumptionMode).toUpperCase() : '',
+      maxCharges: Number((raw as any).maxCharges ?? 0) || 0,
+      grantedCapabilities: Array.isArray((raw as any).grantedCapabilities) ? (raw as any).grantedCapabilities.map(String).sort() : [],
+    });
+    const defId = explicit || deterministicId('item_def_genesis', definitionSignature);
     if (this.itemDefinitions.has(defId)) return defId;
 
     const properties = raw.properties && typeof raw.properties === 'object' && !Array.isArray(raw.properties)
@@ -505,6 +697,7 @@ export class InventoryItemEngine {
       category,
       rarity: String(raw.rarity || 'Common') as ItemRarity,
       description: String(raw.description || ''),
+      useCases: Array.isArray((raw as any).useCases) ? (raw as any).useCases.map(String) : undefined,
       allowedSlots: Array.isArray(raw.allowedSlots)
         ? raw.allowedSlots.map((slot) => normalizeEquipmentSlot(String(slot))).filter((slot): slot is EquipmentSlot => Boolean(slot))
         : undefined,
@@ -572,6 +765,34 @@ export class InventoryItemEngine {
     }
   }
 
+  private isStackableDefinition(def: ItemDefinition): boolean {
+    if (def.equipable || (def.allowedSlots && def.allowedSlots.length > 0)) return false;
+    if (def.maxCharges !== undefined) return false;
+    if (def.consumption?.mode === 'CHARGE') return false;
+    return true;
+  }
+
+  private findStackableInstance(params: {
+    defId: string;
+    ownerEntityId: string;
+    containerType: 'actor' | 'container' | 'corpse' | 'shop' | 'armory' | 'ground';
+    customName?: string;
+  }): ItemInstance | undefined {
+    const expectedName = String(params.customName || '').trim();
+    for (const item of this.itemInstances.values()) {
+      if (
+        item.defId === params.defId &&
+        item.ownerEntityId === params.ownerEntityId &&
+        item.containerType === params.containerType &&
+        item.equippedSlot === null &&
+        (expectedName ? item.name === expectedName : item.name === (this.itemDefinitions.get(params.defId)?.name || item.name))
+      ) {
+        return item;
+      }
+    }
+    return undefined;
+  }
+
   public createInstance(params: {
     defId: string;
     ownerEntityId: string;
@@ -585,6 +806,21 @@ export class InventoryItemEngine {
       throw new Error(`Item definition '${params.defId}' not found.`);
     }
 
+    const containerType = params.containerType ?? 'actor';
+    const quantity = Math.max(1, Math.trunc(params.quantity ?? 1));
+    if (this.isStackableDefinition(def)) {
+      const existing = this.findStackableInstance({
+        defId: def.id,
+        ownerEntityId: params.ownerEntityId,
+        containerType,
+        customName: params.customName,
+      });
+      if (existing) {
+        existing.quantity += quantity;
+        return JSON.parse(JSON.stringify(existing));
+      }
+    }
+
     this.globalInstanceCounter++;
     const instanceId = `item_${def.id}_${this.globalInstanceCounter}`;
     const initialCharges = typeof def.maxCharges === 'number' ? Math.max(0, Math.trunc(def.maxCharges)) : undefined;
@@ -594,13 +830,13 @@ export class InventoryItemEngine {
       name: params.customName || def.name,
       category: def.category,
       rarity: def.rarity,
-      quantity: Math.max(1, Math.trunc(params.quantity ?? 1)),
+      quantity,
       durability: def.maxDurability,
       maxDurability: def.maxDurability,
       qualityModifier: 1.0,
       equippedSlot: null,
       ownerEntityId: params.ownerEntityId,
-      containerType: params.containerType ?? 'actor',
+      containerType,
       materials: [...(def.tags.filter((t) => ['iron', 'steel', 'wood', 'leather'].includes(t)))],
       enchantments: [],
       provenance: params.provenance,

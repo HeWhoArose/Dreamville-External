@@ -73,6 +73,48 @@ function normalize(value: unknown): string {
 	return String(value || '').trim().toLowerCase();
 }
 
+function uniqueStrings(values: string[], limit = 8): string[] {
+	const seen = new Set<string>();
+	const result: string[] = [];
+	for (const raw of values) {
+		const value = String(raw || '').trim();
+		const key = normalize(value);
+		if (!value || seen.has(key)) continue;
+		seen.add(key);
+		result.push(value);
+		if (result.length >= limit) break;
+	}
+	return result;
+}
+
+function extractSceneLeadTopics(sources: string[]): string[] {
+	const topics: string[] = [];
+	for (const source of sources) {
+		const sentences = source
+			.split(/(?<=[.!?])\s+/)
+			.map((sentence) => sentence.trim())
+			.filter(Boolean);
+
+		for (const sentence of sentences) {
+			if (!/\b(rumou?r|whisper|gossip|report|heard|talk spreads|speak of|news|talk of|stories)\b/i.test(sentence)) {
+				continue;
+			}
+
+			const directMatch = sentence.match(
+				/\b(?:rumou?rs?|whispers?|reports?|stories|talk|gossip)(?:\s+(?:of|about|around|regarding))\s+(.+?)(?=[.!?]|$)/i
+			);
+			const spokenMatch = sentence.match(/\bspeak\s+of\s+(.+?)(?=[.!?]|$)/i);
+			const topic = directMatch?.[1]?.trim() || spokenMatch?.[1]?.trim() || sentence;
+			if (topic.length >= 8) topics.push(topic);
+		}
+	}
+	return uniqueStrings(topics, 3);
+}
+
+function sceneContainsAny(text: string, pattern: RegExp): boolean {
+	return pattern.test(text);
+}
+
 function getCanonicalSceneContext(
 	repository: WorldRepository,
 	storyId: string,

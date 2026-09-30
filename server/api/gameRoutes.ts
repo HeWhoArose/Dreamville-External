@@ -167,7 +167,6 @@ gameRouter.get('/current-situation', (req: Request, res: Response) => {
 });
 
 /**
- * GET /api/game/action/tips/**
  * GET /api/game/action/tips
  * Returns player-facing, non-canonical suggestions for the current story scene.
  * Suggestions never mutate game state.
@@ -175,25 +174,7 @@ gameRouter.get('/current-situation', (req: Request, res: Response) => {
 gameRouter.get('/action/tips', async (req: Request, res: Response) => {
   try {
     const storyId = resolveStoryId(req, true);
-    const sceneState = serverMockAuthority.getSanitizedViewState(storyId);
-    const tips = await storyActionAdvisor.getTipsForAction(storyId, '', {
-      worldTime: sceneState.worldTime
-        ? `${sceneState.worldTime.period}, Day ${sceneState.worldTime.cycle}, ${sceneState.worldTime.era}`
-        : undefined,
-      locationName: sceneState.activeLocation?.name,
-      locationRegion: sceneState.activeLocation?.region,
-      locationDescription: sceneState.activeLocation?.description,
-      openingNarrative: sceneState.openingScene?.narrativeText,
-      startingSituation: sceneState.openingScene?.startingSituation,
-      activeDialogue: sceneState.activeDialogue
-        ? `${sceneState.activeDialogue.speakerName || sceneState.activeDialogue.speakerId || 'Speaker'}: ${sceneState.activeDialogue.text || ''}`
-        : undefined,
-      recentActions: Array.isArray(sceneState.actionHistory)
-        ? sceneState.actionHistory.slice(0, 4).map((action: any) =>
-            action.narrativeResponse || action.description || ''
-          ).filter(Boolean)
-        : [],
-    });
+    const tips = await storyActionAdvisor.getTipsForAction(storyId, '');
     return res.json({
       success: true,
       storyId,

@@ -2133,7 +2133,9 @@ Do not enclose in markdown ticks, output pure JSON.`;
         rawText = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
 
         if (task === 'speech.transcribe') {
-          rawText = rawText || 'Transcribed text';
+          if (!rawText) {
+            throw new Error('Speech transcription provider returned empty text.');
+          }
           const parsed = { narrative: [rawText], dialogue: [], events: [], stateChanges: [], memoryCandidates: [], audioCues: [] };
           return {
             text: JSON.stringify(parsed),

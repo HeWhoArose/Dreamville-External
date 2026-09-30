@@ -1186,11 +1186,10 @@ export class StoryActionAdvisor {
 				source: 'DETERMINISTIC' as const,
 			}));
 		const deterministicTips: ActionTip[] = [...contextualTips, ...contextualCapabilityTips].slice(0, 4);
-		// Do not spend an extra LLM request on routine turns when deterministic
-		// scene-grounded suggestions already provide useful options. The AI advice
-		// pass is reserved for genuinely ambiguous scenes where code cannot produce
-		// at least two grounded suggestions.
-		if (deterministicTips.length >= 2) return deterministicTips;
+		// Return immediately only when the canonical scene already produced a full
+		// set of concrete options. Otherwise allow the AI advice route to enrich
+		// ambiguous scenes using the same current-scene context.
+		if (deterministicTips.length >= 4) return deterministicTips;
 		const genericTips: ActionTip[] = actorCapabilities.slice(0, 4).map((capability) => ({
 			id: deterministicId('generic_action_tip', storyId, actorId, capability.id),
 			title: 'Use ' + capability.name,

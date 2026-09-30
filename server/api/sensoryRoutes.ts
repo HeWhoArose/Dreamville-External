@@ -96,9 +96,16 @@ sensoryRouter.post('/transcribe', async (req: Request, res: Response) => {
       timeoutMs: 5000,
     });
     
+    if (!result.success || !result.text.trim()) {
+      return res.status(503).json({
+        success: false,
+        error: 'No transcription result is available.',
+      });
+    }
+
     res.json({
-      success: result.success,
-      text: result.text || 'Transcribed text',
+      success: true,
+      text: result.text.trim(),
     });
   } catch (error: any) {
     res.status(500).json({ error: 'Transcription failed.', details: String(error) });

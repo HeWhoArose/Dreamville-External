@@ -2261,11 +2261,6 @@ IMPORTANT:
   }
 
   /**
-   * Infers additional character skills from the original character concept and
-   * current draft without automatically adding them. Every returned skill is a
-   * player-reviewed proposal and is filtered against already existing skills.
-   */
-  /**
    * Infers up to four additional capability proposals from the full character concept and
    * current draft in a single AI request. Nothing is committed automatically.
    */

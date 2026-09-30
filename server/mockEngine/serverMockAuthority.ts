@@ -1038,6 +1038,33 @@ Details separate themselves from the larger shape of the place: textures, distan
 What reaches them is not yet a clear answer, only the character of the surrounding silence and whatever movement the place permits through it. ${atmosphere}`;
     }
 
+    if (/\b(ask|asked|inquire|inquired|question|questioned|consult|consulted|gossip|rumor|rumours|rumors)\b/.test(normalized)) {
+      const topicMatch = actionText.match(/\b(?:ask|inquire|question|consult)(?:.*?)(?:about|regarding)\s+(.+?)(?:[.!?]|$)/i);
+      const topic = topicMatch?.[1]?.trim() || 'the matter you came to investigate';
+      const openingNarrative = String(run?.openingScene?.narrativeText || '').trim();
+      const sources = [openingNarrative, recentBeat, cleanThread]
+        .map((value) => String(value || '').trim())
+        .filter(Boolean);
+
+      const topicTokens = topic
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter((token) => token.length >= 4 && !['about', 'what', 'people', 'heard'].includes(token));
+
+      const groundedSnippet = sources
+        .flatMap((source) => source.split(/(?<=[.!?])\s+/).map((sentence) => sentence.trim()).filter(Boolean))
+        .map((sentence) => ({
+          sentence,
+          score: topicTokens.reduce((score, token) => score + (sentence.toLowerCase().includes(token) ? 1 : 0), 0),
+        }))
+        .sort((a, b) => b.score - a.score || b.sentence.length - a.sentence.length)[0]?.sentence;
+
+      if (groundedSnippet) {
+        return actorName + ' works into the crowd and asks what people have heard about ' + topic + '. The replies circle around an existing account rather than a verified fact: ' + groundedSnippet + ' The rumor remains unconfirmed, but the exchange gives Aelion something concrete to investigate instead of leaving the question unanswered.';
+      }
+
+      return actorName + ' works into the crowd and asks what people have heard about ' + topic + '. No one offers a reliable account; the response is limited to fragments of rumor and uncertainty. The question produces no confirmed fact yet, but it makes clear that a more direct source is needed.';
+    }
     if (/\b(walk|move|step|approach|head|go|travel)\b/.test(normalized)) {
       const targetMatch = actionText.match(/\b(?:toward|towards|to|into|through|around)\s+(.+?)(?:[.!?]|$)/i);
       const destination = targetMatch?.[1]?.trim();

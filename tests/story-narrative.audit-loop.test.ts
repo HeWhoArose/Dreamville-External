@@ -29,6 +29,9 @@ test('Narration, action-routing, suggestions, portrait prompts, and scene prompt
 
 		assert.match(orchestrator, /immersive tabletop-RPG narrator response/, `pass ${pass}: immersive narration contract missing`);
 		assert.match(orchestrator, /Do not tell the player what they attempted/, `pass ${pass}: attempted-action prohibition missing`);
+		assert.match(orchestrator, /validateNarrativeActionContinuity/, `pass ${pass}: current-action continuity guard missing`);
+		assert.match(orchestrator, /validateNarrativeTemporalContinuity/, `pass ${pass}: temporal continuity guard missing`);
+		assert.match(orchestrator, /Canonical world time:/, `pass ${pass}: canonical world-time lock missing`);
 		assert.match(orchestrator, /Never use phrases such as "the outcome unfolds in the narrative"/, `pass ${pass}: implementation-language prohibition missing`);
 		assert.match(orchestrator, /Narrative Research|narrativeContinuityEngine\.research/, `pass ${pass}: pre-narration research context missing`);
 		assert.match(orchestrator, /narrativeContinuityEngine\.research/, `pass ${pass}: continuity research is not connected to narration`);

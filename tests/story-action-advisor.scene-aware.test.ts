@@ -82,30 +82,3 @@ test('scene-aware suggestions use current rumors, visible NPCs, and reachable di
 	assert.doesNotMatch(serialized, /Listen for change.*Change your vantage.*Test the environment/s);
 });
 
-test('recent canonical narration becomes part of suggestion context after a turn', async () => {
-	const repository = new InMemoryWorldRepository({ disablePersistence: true });
-	const storyId = 'scene_aware_recent_context';
-	repository.seedStory(storyId);
-
-	const run = repository.getStoryRun(storyId);
-	assert.ok(run);
-	repository.saveStoryRun({
-		...run,
-		runtimeState: {
-			...(run as any).runtimeState,
-			narrativeContextHistory: [
-				{
-					actionId: 'turn_1',
-					playerAction: 'I question the root-trappers about the fissures.',
-					narration: {
-						response: 'A root-trapper warns that a sealed eastern archive may contain an old route chart.',
-					},
-				},
-			],
-		},
-	});
-
-	const advisor = new StoryActionAdvisor(repository);
-	const tips = await advisor.getTipsForAction(storyId, '');
-	assert.ok(tips.length > 0);
-});

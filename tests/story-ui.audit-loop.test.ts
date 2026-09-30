@@ -61,6 +61,36 @@ test('Story UI audit-implementation-regression-fallback loop completes ten deter
 		// Regression boundary: speaker themes remain world-scoped.
 		assert.equal(story.includes('getCharacterSpeakerTheme'), true, `Audit ${iteration}: world-scoped speaker color system disconnected`);
 		assert.equal(story.includes('Story conversation'), true, `Audit ${iteration}: story conversation disappeared`);
+		assert.equal(
+			story.includes('const visible = history.slice(Math.max(0, history.length - visibleTurnCount));'),
+			true,
+			`Audit ${iteration}: story timeline no longer selects the newest visible turns from chronological history`,
+		);
+		assert.equal(
+			story.includes('.slice()\\n          .reverse()'),
+			false,
+			`Audit ${iteration}: stale reverse-before-window timeline bug returned`,
+		);
+		assert.equal(
+			story.includes("inputMode === 'OOC' && oocHistory.length > 0"),
+			true,
+			`Audit ${iteration}: OOC transcript remains visible after returning to Story mode`,
+		);
+		assert.equal(
+			story.includes('showJumpToLatest'),
+			true,
+			`Audit ${iteration}: latest-narration jump state is missing`,
+		);
+		assert.equal(
+			story.includes('storyTimelineEndRef'),
+			true,
+			`Audit ${iteration}: story timeline end anchor is missing`,
+		);
+		assert.equal(
+			story.includes('Latest narration'),
+			true,
+			`Audit ${iteration}: latest-narration jump button is missing`,
+		);
 		assert.equal(story.includes('Generate Scene'), true, `Audit ${iteration}: scene generation entry disappeared`);
 		assert.equal(story.includes('Generate Image'), true, `Audit ${iteration}: scene image action disappeared`);
 		assert.equal(story.includes('Generate Prompt'), true, `Audit ${iteration}: scene prompt action disappeared`);

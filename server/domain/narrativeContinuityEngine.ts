@@ -4,6 +4,7 @@ import type { StructuredTurnPackage } from './aiOrchestrator';
 import { worldMomentumEngine } from './worldMomentumEngine';
 import { researchEvidencePipeline } from './researchEvidence';
 import { UniverseRuntimeService } from './universeRuntimeService';
+import { CurrentSituationBuilder, type CurrentSituation } from './currentSituation';
 
 export interface NarrativePlotState {
   storyId: string;
@@ -49,6 +50,7 @@ export interface NarrativeResearchPacket {
   worldMomentum?: ReturnType<typeof worldMomentumEngine.getState>;
   researchEvidence?: unknown[];
   causalProvenance?: unknown;
+  currentSituation?: CurrentSituation;
 }
 
 export class NarrativeContinuityEngine {
@@ -67,12 +69,23 @@ export class NarrativeContinuityEngine {
     storyId: string,
     query: string,
     viewerActorId?: string,
-    options: { persist?: boolean } = {},
+    options: { persist?: boolean; currentSituation?: CurrentSituation } = {},
   ): NarrativeResearchPacket {
     const memoryEngine = repository.getMemoryEngine(storyId);
     const clock = repository.getWorldClock(storyId);
     const normalizedQuery = query.trim() || 'current story context';
-    const queryKeywords = normalizedQuery.toLowerCase().split(/\W+/).filter((token) => token.length >= 3).slice(0, 12);
+    const currentSituation = options.currentSituation || CurrentSituationBuilder.build({
+      storyId,
+      playerAction: normalizedQuery,
+      viewerActorId,
+      worldRepo: repository,
+    });
+    const queryKeywords = Array.from(new Set([
+      ...normalizedQuery.toLowerCase().split(/\W+/).filter((token) => token.length >= 3),
+      ...currentSituation.location.name.toLowerCase().split(/\W+/).filter((token) => token.length >= 3),
+      ...currentSituation.location.regionId.toLowerCase().split(/\W+/).filter((token) => token.length >= 3),
+      ...currentSituation.nearbyEntities.map((entity) => entity.name.toLowerCase()),
+    ])).slice(0, 16);
     const baseMemories = memoryEngine.retrieveMemories({
       storyId,
       viewerActorId,
@@ -167,6 +180,7 @@ export class NarrativeContinuityEngine {
       worldMomentum: worldMomentumEngine.getState(repository, storyId),
       researchEvidence: researchEvidencePipeline.getEvidenceForStory(storyId),
       causalProvenance: researchEvidencePipeline.getCausalGraphForStory(storyId),
+      currentSituation,
       usageGuidance: {
         knowledgeFacts: 'Use only to establish facts the viewer is authorized to know; never turn secret or uncertain knowledge into certainty.',
         memories: 'Use both world-local and universe-level durable memories to maintain continuity with what the protagonist has experienced, learned, acquired, or persistently remembers. Universe memories may refer to worlds the protagonist is not currently visiting.',

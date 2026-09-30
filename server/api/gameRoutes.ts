@@ -9,6 +9,7 @@ import { combatTacticsService } from '../domain/combatTacticsService';
 import { PlayerLifecycleState } from '../domain/playerLifecycleState';
 import { OpeningSceneService } from '../services/openingSceneService';
 import { WorkingContextEngine } from '../domain/workingContextEngine';
+import { CurrentSituationBuilder } from '../domain/currentSituation';
 import { narrativeContinuityEngine } from '../domain/narrativeContinuityEngine';
 import { worldVisualIdentityService } from '../services/worldVisualIdentityService';
 import { rulesProfileEngine } from '../domain/rulesProfileEngine';
@@ -139,6 +140,34 @@ gameRouter.get('/state', (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/game/current-situation
+ * Returns the player-safe projection of the canonical CurrentSituation model.
+ * Canonical world facts are intentionally omitted from this projection.
+ */
+gameRouter.get('/current-situation', (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    const situation = CurrentSituationBuilder.build({
+      storyId,
+      viewerActorId: worldRepository.getPlayerLifecycle(storyId)?.actorId,
+      worldRepo: worldRepository,
+    });
+    return res.json({
+      success: true,
+      storyId,
+      situation: CurrentSituationBuilder.toPlayerSafeProjection(situation),
+    });
+  } catch (error: any) {
+    console.error('[Current Situation] Projection failed:', error);
+    return res.status(500).json({
+      success: false,
+      errorReason: error?.message || 'Failed to build current situation.',
+    });
+  }
+});
+
+/**
+ * GET /api/game/action/tips/**
  * GET /api/game/action/tips
  * Returns player-facing, non-canonical suggestions for the current story scene.
  * Suggestions never mutate game state.

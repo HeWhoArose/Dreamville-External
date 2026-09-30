@@ -4,13 +4,14 @@ import assert from 'node:assert/strict';
 import { CurrentSituationBuilder } from '../server/domain/currentSituation';
 import { formatCanonicalTimestamp } from '../server/domain/deterministicRng';
 import { PlayerLifecycleState } from '../server/domain/playerLifecycleState';
-import type { KnowledgeFact } from '../server/domain/types';
+import type { KnowledgeFact, WorldTimestamp } from '../server/domain/types';
+import { WorkingContextEngine } from '../server/domain/workingContextEngine';
 import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
 
 function makeKnowledgeFact(
 	id: string,
 	secretLevel: KnowledgeFact['secretLevel'],
-	timestamp: ReturnType<InMemoryWorldRepository['getWorldClock']>['getTimestamp'],
+	timestamp: WorldTimestamp,
 ): KnowledgeFact {
 	return {
 		id,

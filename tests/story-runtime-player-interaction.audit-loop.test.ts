@@ -54,6 +54,29 @@ test('S2 dice presentation preserves authoritative group structure across eleven
 	}
 });
 
+test('S2 story timeline renders newest-first server history in chronological player order', () => {
+	const story = read('src/components/StoryView.tsx');
+	const authority = read('server/mockEngine/serverMockAuthority.ts');
+
+	for (let iteration = 1; iteration <= 11; iteration += 1) {
+		assert.match(
+			story,
+			/const history = \(actionHistory \|\| \[\]\)[\\s\\S]*?\.slice\(\)[\\s\\S]*?\.reverse\(\)/,
+			`Audit ${iteration}: StoryView must reverse the server's newest-first action history before rendering`,
+		);
+		assert.match(
+			authority,
+			/state\.actionHistory = \[logEntry, \.\.\.state\.actionHistory\]/,
+			`Audit ${iteration}: server action history must remain explicitly newest-first at the storage boundary`,
+		);
+		assert.match(
+			story,
+			/history\.slice\(Math\.max\(0, history\.length - visibleTurnCount\)\)/,
+			`Audit ${iteration}: visible-turn pagination must operate on chronological history`,
+		);
+	}
+});
+
 test('S2 narration turn labels use action turn ordinals rather than world calendar cycles', () => {
 	const types = read('src/types.ts');
 	const story = read('src/components/StoryView.tsx');

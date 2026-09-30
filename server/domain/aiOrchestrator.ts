@@ -18,6 +18,7 @@ import {
 import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
 import { evaluateAiTaskCandidatePreflight, evaluateAiTaskReadiness, getAiTaskContract, getAiTasksByCategory, getAllAiTaskContracts, validateAiTaskResponse, type AiTaskCandidatePreflight, type AiTaskReadiness } from './aiTaskContracts';
 import { narrativeContinuityEngine } from './narrativeContinuityEngine';
+import { CurrentSituationBuilder } from './currentSituation';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
 
@@ -6537,29 +6538,26 @@ export class MultiModelOrchestrator {
     const connectedDirective = (params.continuationDirective || '').trim();
     const isInformationSeekingAction = NARRATIVE_INFORMATION_SEEKING_PATTERN.test(playerAction);
     const worldRepo = this.getWorldRepository();
+    const currentSituation = CurrentSituationBuilder.build({
+      storyId,
+      playerAction,
+      viewerActorId: params.storyId ? worldRepo.getPlayerLifecycle(storyId)?.actorId : undefined,
+      worldRepo,
+    });
 
     const canonicalPlayer = worldRepo.getPlayerLifecycle(storyId);
-    const canonicalRun = worldRepo.getStoryRun(storyId);
-    const canonicalLocationId =
-      canonicalPlayer?.locationId ||
-      canonicalRun?.currentLocationId ||
-      canonicalRun?.startingLocationId ||
-      '';
-    const canonicalLocation = canonicalLocationId
-      ? worldRepo.getGeographyGraph(storyId).getNode(canonicalLocationId)
-      : undefined;
-    const canonicalSceneAnchor = canonicalLocation
-      ? [
-          `Location ID: ${canonicalLocation.id}`,
-          `Location name: ${canonicalLocation.name}`,
-          canonicalLocation.regionId ? `Region: ${canonicalLocation.regionId}` : '',
-          canonicalLocation.description ? `Canonical description: ${canonicalLocation.description}` : '',
-          canonicalLocation.ambientSensory ? `Canonical ambient/sensory cues: ${canonicalLocation.ambientSensory}` : '',
-          `Canonical world time: ${worldRepo.getWorldClock(storyId).formatHeader()}`,
-          'Continuity rule: remain within this canonical location unless the canonical game state has already committed a location change for this turn. A failed check, fallback model, or narration request never authorizes an uncommitted relocation.',
-          'Temporal rule: do not move the time of day forward or backward in narration. Multiple player actions may occur within the same canonical time until the game clock is explicitly advanced.',
-        ].filter(Boolean).join('\n')
-      : 'Canonical location is unavailable; do not invent a location change.';
+    const canonicalSceneAnchor = [
+      `Location ID: ${currentSituation.location.id}`,
+      `Location name: ${currentSituation.location.name}`,
+      currentSituation.location.regionId ? `Region: ${currentSituation.location.regionId}` : '',
+      currentSituation.location.description ? `Canonical description: ${currentSituation.location.description}` : '',
+      currentSituation.location.ambientSensory ? `Canonical ambient/sensory cues: ${currentSituation.location.ambientSensory}` : '',
+      `Canonical world time: ${currentSituation.worldTime}`,
+      `Visible entities: ${currentSituation.nearbyEntities.filter((entity) => entity.visibleToPlayer).map((entity) => entity.name).join(', ') || 'None'}`,
+      currentSituation.activeDialogue ? `Active dialogue: ${currentSituation.activeDialogue.speakerName}: ${currentSituation.activeDialogue.text}` : '',
+      'Continuity rule: remain within this canonical location unless the canonical game state has already committed a location change for this turn. A failed check, fallback model, or narration request never authorizes an uncommitted relocation.',
+      'Temporal rule: do not move the time of day forward or backward in narration. Multiple player actions may occur within the same canonical time until the game clock is explicitly advanced.',
+    ].filter(Boolean).join('\n');
 
     const styleInstruction = params.styleInstruction || [
       'Write an immersive tabletop-RPG narrator response for the latest player action.',
@@ -6591,17 +6589,32 @@ export class MultiModelOrchestrator {
       'No menus, captions, meta-commentary, status labels, or debug text.',
     ].filter(Boolean).join(' ');
 
-    const viewerActorId = worldRepo.getPlayerLifecycle(storyId)?.actorId;
+    const viewerActorId = currentSituation.player.actorId;
+    const canonicalRecentTurns = (params.recentTurns && params.recentTurns.length > 0)
+      ? params.recentTurns
+      : currentSituation.recentTurns.map((turn) => ({
+          playerAction: turn.playerAction || '',
+          narration: turn.narration || '',
+          worldTime: turn.worldTime,
+        }));
+    const currentSceneFactualContext = [
+      currentSituation.location.description,
+      currentSituation.location.ambientSensory,
+      currentSituation.activeDialogue ? `Active dialogue: ${currentSituation.activeDialogue.speakerName}: ${currentSituation.activeDialogue.text}` : '',
+      ...currentSituation.visibleEvents.map((event) => event.summary),
+      ...currentSituation.relevantLore.map((fact) => `Authorized lore: ${fact.subjectEntityId} ${fact.predicate} ${fact.objectValue}`),
+    ].filter(Boolean).slice(0, 10).join('\n');
     const researchQuery = [
       playerAction,
-      ...(params.recentTurns || []).slice(-2).map((turn) => turn.playerAction),
+      ...canonicalRecentTurns.slice(-2).map((turn) => turn.playerAction),
+      currentSituation.location.name,
     ].filter(Boolean).join(' ');
     const researchPacket = narrativeContinuityEngine.research(
       worldRepo,
       storyId,
       researchQuery || 'current story context',
       viewerActorId,
-      { persist: false },
+      { persist: false, currentSituation },
     );
     const assembledContext = WorkingContextEngine.assembleTurnContext({
       storyId,

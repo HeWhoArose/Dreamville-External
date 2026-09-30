@@ -2631,6 +2631,37 @@ class ApiClient {
     return data;
   }
 
+  public async suggestAdditionalCharacterCapabilities(
+    worldId: string,
+    payload: {
+      characterConcept: string;
+      existingCapabilities: import('../types').CapabilityDefinition[];
+      characterContext?: {
+        name?: string;
+        species?: string;
+        role?: string;
+        profession?: string;
+        background?: string;
+        personality?: string[];
+        motivations?: string[];
+        capabilities?: string[];
+        skills?: string[];
+      };
+      desiredCount?: number;
+    },
+  ): Promise<{ success: boolean; capabilities: Array<import('../types').CapabilityDefinition & { generatedSkills: import('../types').GeneratedTechnique[] }> }> {
+    const res = await fetch(this.baseUrl + '/worlds/' + encodeURIComponent(worldId) + '/characters/additional-capabilities', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      throw new Error(data?.errorReason || data?.error || ('Failed to suggest additional capabilities: HTTP ' + res.status));
+    }
+    return data;
+  }
+
   public async proposeCustomEquipment(
     worldId: string,
     itemName: string,

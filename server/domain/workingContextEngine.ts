@@ -401,7 +401,7 @@ export class WorkingContextEngine {
       storyId,
       params.playerAction || 'current story context',
       viewerId,
-      { persist: false },
+      { persist: false, currentSituation },
     );
 
     // 2. Epistemic Projection: Campaign & Scene Knowledge

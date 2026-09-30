@@ -18,6 +18,7 @@ import { entityCardService } from '../services/entityCardService';
 import { characterGenesisService } from '../services/characterGenesisService';
 import { storyActionAdvisor } from '../services/storyActionAdvisor';
 import { canonicalCommandEngine } from '../domain/canonicalCommandEngine';
+import { captureCanonicalStateSnapshot } from '../domain/canonicalSnapshot';
 import { deterministicId, formatCanonicalTimestamp } from '../domain/deterministicRng';
 import type { CombatEffectDefinition } from '../../src/types';
 import { combatEffectEngine } from '../domain/combatEffectEngine';
@@ -370,6 +371,153 @@ gameRouter.post('/action/ooc/tool', async (req: Request, res: Response) => {
 	}
 });
 
+/**
+ * POST /api/game/action/history/edit
+ * Rewinds a Story Run to the selected past player action, replaces that action,
+ * and discards every later action so the timeline can continue from the edited turn.
+ */
+gameRouter.post('/action/history/edit', async (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    const actionId = String(req.body?.actionId || '').trim();
+    const newActionText = String(req.body?.newActionText || '').trim();
+    if (!actionId) return res.status(400).json({ success: false, errorReason: 'actionId is required.' });
+    if (!newActionText) return res.status(400).json({ success: false, errorReason: 'newActionText is required.' });
+
+    const state = serverMockAuthority.getDynamicStoryState(storyId);
+    const targetIndex = state.actionHistory.findIndex((entry: any) => entry.id === actionId);
+    const targetAction = targetIndex >= 0 ? state.actionHistory[targetIndex] : undefined;
+    if (!targetAction) {
+      return res.status(404).json({ success: false, code: 'ACTION_NOT_FOUND', errorReason: 'The selected past action was not found.' });
+    }
+    if (targetAction.actionType !== 'CUSTOM_ACTION') {
+      return res.status(409).json({ success: false, code: 'ACTION_EDIT_UNSUPPORTED', errorReason: 'Only freeform story actions can currently be edited safely.' });
+    }
+
+    const canonicalCommandId = targetAction.canonicalCommandId;
+    const events = worldRepository.getCanonicalCommandEvents(storyId);
+    const targetEvent = canonicalCommandId
+      ? events.find((event: any) => event.commandId === canonicalCommandId)
+      : undefined;
+    const preStateSnapshot = targetEvent?.replay?.preStateSnapshot;
+    const mockStateBefore = targetEvent?.replay?.mockStateBefore;
+    if (!canonicalCommandId || !targetEvent || !preStateSnapshot) {
+      return res.status(409).json({
+        success: false,
+        code: 'ACTION_EDIT_CHECKPOINT_UNAVAILABLE',
+        errorReason: 'This older action does not have a safe rewind checkpoint. Newer actions created after history editing is enabled can be edited.',
+      });
+    }
+
+    const originalCanonical = captureCanonicalStateSnapshot(storyId, worldRepository);
+    const originalMockState = serverMockAuthority.exportTransactionalState(storyId);
+    const removedActionCount = targetIndex + 1;
+    const editedCommandId = deterministicId('cmd_history_edit', storyId, actionId, newActionText, events.length + 1);
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    const actorId = player?.actorId || `player_actor_${storyId}`;
+
+    const commandResult = await canonicalCommandEngine.execute(
+      worldRepository,
+      {
+        commandId: editedCommandId,
+        storyId,
+        actorId,
+        type: 'INTERACT',
+        payload: { action: 'EDIT_PAST_ACTION', actionId, newActionText },
+        source: 'PLAYER',
+        transactionMode: 'ROLLBACK',
+      },
+      async () => {
+        // Restore the exact canonical world state from immediately before the edited turn.
+        worldRepository.restoreCanonicalStateSnapshot(preStateSnapshot, { persist: false });
+        if (mockStateBefore) {
+          serverMockAuthority.importTransactionalState(storyId, mockStateBefore);
+        } else {
+          const fallbackMock = JSON.parse(JSON.stringify(originalMockState));
+          fallbackMock.actionHistory = originalMockState.actionHistory.slice(targetIndex + 1);
+          serverMockAuthority.importTransactionalState(storyId, fallbackMock);
+        }
+
+        const advice = await storyActionAdvisor.advise(storyId, newActionText);
+        if (advice.mode === 'SUGGEST_ALTERNATIVE' || advice.mode === 'CAPABILITY_SIMULATION') {
+          serverMockAuthority.importTransactionalState(storyId, originalMockState);
+          return {
+            success: false,
+            statusCode: 409,
+            errorReason: advice.simulation?.explanation || 'This edited action requires an explicit capability decision before execution.',
+          };
+        }
+
+        const editedRequest: any = {
+          type: 'CUSTOM_ACTION',
+          storyId,
+          customText: newActionText,
+        };
+        if (advice.recognizedCapability?.id) editedRequest.intendedCapabilityId = advice.recognizedCapability.id;
+        if (advice.aiPipeline?.narrationDirective) editedRequest.__narrationDirective = advice.aiPipeline.narrationDirective;
+
+        const actionResult = await serverMockAuthority.processCustomAction(
+          editedRequest,
+          editedCommandId,
+          {
+            bypassCapabilityAdvisor: true,
+            narrationDirective: editedRequest.__narrationDirective,
+          } as any,
+        );
+        return {
+          success: actionResult.success !== false,
+          data: actionResult,
+          errorReason: actionResult.success === false ? actionResult.message : undefined,
+          summary: `Past action ${actionId} replaced and later timeline entries discarded.`,
+        };
+      },
+    );
+
+    if (!commandResult.success) {
+      worldRepository.restoreCanonicalStateSnapshot(originalCanonical, { persist: true });
+      serverMockAuthority.importTransactionalState(storyId, originalMockState);
+      return res.status(commandResult.statusCode || 400).json({ ...commandResult, error: commandResult.errorReason });
+    }
+
+    const actionData: any = commandResult.data;
+    const liveState = serverMockAuthority.getDynamicStoryState(storyId);
+    const newAction = liveState.actionHistory.find((entry: any) => entry.id === actionData?.actionId);
+    if (newAction) {
+      newAction.canonicalCommandId = commandResult.commandId;
+      newAction.canonicalEventId = commandResult.event?.eventId;
+    }
+
+    // The canonical command engine checkpointed the whole pre-edit state. Replace that
+    // checkpoint with the actual semantic pre-state of the new edited turn, so this new
+    // action can itself be edited later without jumping back to the discarded future.
+    const committedRun = worldRepository.getStoryRun(storyId);
+    const eventIndex = committedRun?.canonicalEvents?.findIndex((event: any) => event.eventId === commandResult.event?.eventId) ?? -1;
+    if (committedRun && eventIndex >= 0 && commandResult.event?.eventId) {
+      const committedEvent = committedRun.canonicalEvents[eventIndex];
+      committedRun.canonicalEvents[eventIndex] = {
+        ...committedEvent,
+        replay: {
+          ...committedEvent.replay,
+          preStateSnapshot,
+          mockStateBefore: mockStateBefore || originalMockState,
+        },
+      };
+      worldRepository.saveStoryRun(committedRun);
+      commandResult.event = committedRun.canonicalEvents[eventIndex];
+    }
+
+    res.json({
+      ...(commandResult.data as any),
+      historyEdit: true,
+      removedActionCount,
+      commandId: commandResult.commandId,
+      canonicalEvent: commandResult.event,
+      viewState: serverMockAuthority.getSanitizedViewState(storyId),
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, errorReason: error?.message || 'Past action edit failed.' });
+  }
+});
 /**
  * POST /api/game/action/narrate/regenerate
  * Regenerates presentation for an already-committed action without mutating canonical mechanics.
@@ -1000,6 +1148,33 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
       });
     }
 
+    // Link the player-facing action record to its canonical command and retain the
+    // exact pre-action presentation checkpoint required for safe history editing.
+    try {
+      const actionData: any = commandResult.data;
+      const liveState = serverMockAuthority.getDynamicStoryState(storyId);
+      const actionLog = liveState.actionHistory.find((entry: any) => entry.id === actionData?.actionId);
+      if (actionLog) {
+        actionLog.canonicalCommandId = commandResult.commandId;
+        actionLog.canonicalEventId = commandResult.event?.eventId;
+      }
+      const committedRun = worldRepository.getStoryRun(storyId);
+      const eventIndex = committedRun?.canonicalEvents?.findIndex((event: any) => event.eventId === commandResult.event?.eventId) ?? -1;
+      if (committedRun && eventIndex >= 0 && commandResult.event?.eventId) {
+        const committedEvent = committedRun.canonicalEvents[eventIndex];
+        committedRun.canonicalEvents[eventIndex] = {
+          ...committedEvent,
+          replay: {
+            ...committedEvent.replay,
+            mockStateBefore,
+          },
+        };
+        worldRepository.saveStoryRun(committedRun);
+        commandResult.event = committedRun.canonicalEvents[eventIndex];
+      }
+    } catch (checkpointError) {
+      console.warn('[StoryHistory] Failed to attach edit checkpoint metadata:', checkpointError);
+    }
     // Automatically record durable cross-world memories from the authoritative outcome.
     // The player never needs to tell the system to "save" an acquired item or important action.
     try {

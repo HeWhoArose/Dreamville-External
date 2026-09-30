@@ -6160,12 +6160,12 @@ export class MultiModelOrchestrator {
     if (!action || !output) return { valid: true };
 
     const requirements: Array<{ label: string; pattern: RegExp; anchors: string[] }> = [
-      { label: 'breathing', pattern: /\\b(?:breathe|breathing|breath|inhale|inhaled|exhale|exhaled)\\b/i, anchors: ['breathe', 'breath', 'inhale', 'exhale'] },
-      { label: 'sitting or settling', pattern: /\\b(?:sit|sits|sat|seated|settle|settles|settled|rest|rests|rested|kneel|kneels|knelt|crouch|crouches|crouched)\\b/i, anchors: ['sit', 'sat', 'seated', 'settle', 'rest', 'kneel', 'crouch'] },
-      { label: 'movement', pattern: /\\b(?:walk|walks|walked|move|moves|moved|step|steps|stepped|approach|approaches|approached|head|heads|headed|travel|travels|traveled)\\b/i, anchors: ['walk', 'move', 'step', 'approach', 'head', 'travel'] },
-      { label: 'item or text examination', pattern: /\\b(?:examine|examines|examined|inspect|inspects|inspected|study|studies|studied|read|reads|decipher|deciphers|deciphered|translate|translates|translated|look at|looks at|looked at)\\b/i, anchors: ['examine', 'inspect', 'study', 'read', 'decipher', 'translate', 'look'] },
-      { label: 'taking or holding', pattern: /\\b(?:take|takes|took|pick up|picks up|picked up|grasp|grasps|grasped|hold|holds|held|carry|carries|carried)\\b/i, anchors: ['take', 'took', 'pick', 'grasp', 'hold', 'carry'] },
-      { label: 'speaking', pattern: /\\b(?:ask|asks|asked|say|says|said|speak|speaks|spoke|tell|tells|told|reply|replies|replied|answer|answers|answered)\\b/i, anchors: ['ask', 'say', 'said', 'speak', 'spoke', 'tell', 'reply', 'answer'] },
+      { label: 'breathing', pattern: /\b(?:breathe|breathing|breath|inhale|inhaled|exhale|exhaled)\b/i, anchors: ['breathe', 'breath', 'inhale', 'exhale'] },
+      { label: 'sitting or settling', pattern: /\b(?:sit|sits|sat|seated|settle|settles|settled|rest|rests|rested|kneel|kneels|knelt|crouch|crouches|crouched)\b/i, anchors: ['sit', 'sat', 'seated', 'settle', 'rest', 'kneel', 'crouch'] },
+      { label: 'movement', pattern: /\b(?:walk|walks|walked|move|moves|moved|step|steps|stepped|approach|approaches|approached|head|heads|headed|travel|travels|traveled)\b/i, anchors: ['walk', 'move', 'step', 'approach', 'head', 'travel'] },
+      { label: 'item or text examination', pattern: /\b(?:examine|examines|examined|inspect|inspects|inspected|study|studies|studied|read|reads|decipher|deciphers|deciphered|translate|translates|translated|look at|looks at|looked at)\b/i, anchors: ['examine', 'inspect', 'study', 'read', 'decipher', 'translate', 'look'] },
+      { label: 'taking or holding', pattern: /\b(?:take|takes|took|pick up|picks up|picked up|grasp|grasps|grasped|hold|holds|held|carry|carries|carried)\b/i, anchors: ['take', 'took', 'pick', 'grasp', 'hold', 'carry'] },
+      { label: 'speaking', pattern: /\b(?:ask|asks|asked|say|says|said|speak|speaks|spoke|tell|tells|told|reply|replies|replied|answer|answers|answered)\b/i, anchors: ['ask', 'say', 'said', 'speak', 'spoke', 'tell', 'reply', 'answer'] },
     ];
 
     for (const requirement of requirements) {
@@ -6179,20 +6179,24 @@ export class MultiModelOrchestrator {
     }
 
     const targetPatterns = [
-      /\\b(?:walk|move|step|approach|head|travel)\\s+(?:toward|towards|to|into)\\s+(?:the|a|an|my|this|that)?\\s*([a-z][a-z0-9' -]{2,80})/i,
-      /\\b(?:examine|inspect|study|read|decipher|translate|look at)\\s+(?:the|a|an|my|this|that)?\\s*([a-z][a-z0-9' -]{2,80})/i,
-      /\\b(?:pick up|take|grasp|hold|carry)\\s+(?:the|a|an|my|this|that)?\\s*([a-z][a-z0-9' -]{2,80})/i,
+      /\b(?:walk|move|step|approach|head|travel)\s+(?:toward|towards|to|into)\s+(.+?)(?=[.!?]|\s+(?:and|then|while|before|after)\b|$)/i,
+      /\b(?:examine|inspect|study|read|decipher|translate|look at)\s+(.+?)(?=[.!?]|\s+(?:and|then|while|before|after)\b|$)/i,
+      /\b(?:pick up|take|grasp|hold|carry)\s+(.+?)(?=[.!?]|\s+(?:and|then|while|before|after)\b|$)/i,
     ];
-    const targetStopWords = new Set(['and', 'then', 'while', 'before', 'after', 'next', 'carefully', 'quietly', 'slowly', 'gently', 'firmly', 'nearby', 'there', 'here']);
+    const targetStopWords = new Set(['the', 'a', 'an', 'my', 'this', 'that', 'and', 'then', 'while', 'before', 'after', 'next', 'carefully', 'quietly', 'slowly', 'gently', 'firmly', 'nearby', 'there', 'here']);
+
     for (const pattern of targetPatterns) {
       const match = action.match(pattern);
       if (!match?.[1]) continue;
+
       const targetTokens = match[1]
         .toLowerCase()
         .split(/[^a-z0-9]+/)
         .filter((token) => token.length >= 4 && !targetStopWords.has(token))
         .slice(0, 3);
+
       if (targetTokens.length === 0) continue;
+
       if (!targetTokens.some((token) => output.includes(token))) {
         return {
           valid: false,

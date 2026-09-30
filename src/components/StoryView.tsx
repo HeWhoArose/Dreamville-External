@@ -27,6 +27,7 @@ import {
   Loader2,
   Mic,
   MicOff,
+  Pencil,
   Plus,
   RotateCcw,
   Send,
@@ -324,6 +325,10 @@ export const StoryView: React.FC<StoryViewProps> = ({
   const [narrationModelError, setNarrationModelError] = useState<string | null>(null);
   const [narrationLastExecution, setNarrationLastExecution] = useState<any | null>(null);
   const [narrationCurrentOperation, setNarrationCurrentOperation] = useState<any | null>(null);
+  const [actionEditActionId, setActionEditActionId] = useState<string | null>(null);
+  const [actionEditText, setActionEditText] = useState('');
+  const [actionEditBusy, setActionEditBusy] = useState(false);
+  const narrationMenuRef = useRef<HTMLDivElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const actionInputRef = useRef<HTMLInputElement | null>(null);
@@ -331,6 +336,23 @@ export const StoryView: React.FC<StoryViewProps> = ({
   useEffect(() => {
     loadNarrationModels();
   }, []);
+
+  useEffect(() => {
+    if (!sceneMenuOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (target && narrationMenuRef.current?.contains(target)) return;
+      setSceneMenuOpen(false);
+      setSuggestionsOpen(false);
+      setDiceSettingsOpen(false);
+      setSceneChoiceOpen(false);
+      setNarrationPickerOpen(false);
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [sceneMenuOpen]);
 
   const resolveModelDisplayName = useCallback(
     (entry?: ActionLog) => {
@@ -601,6 +623,30 @@ export const StoryView: React.FC<StoryViewProps> = ({
       setNarrationModelError(error?.message || 'Failed to change the narration model.');
     } finally {
       setNarrationModelLoading(false);
+    }
+  };
+
+  const editPastAction = async (entry: ActionLog) => {
+    const replacement = actionEditText.trim();
+    if (!storyId || !replacement || actionEditBusy || narrationBusyActionId) return;
+
+    setActionEditBusy(true);
+    setNarrationModelError(null);
+    try {
+      const result = await apiClient.editPastAction({
+        storyId,
+        actionId: entry.id,
+        newActionText: replacement,
+      });
+      onNarrationUpdated?.(result.viewState);
+      setActionEditActionId(null);
+      setActionEditText('');
+      setVisibleTurnCount(12);
+      setRevealedCheckIds({});
+    } catch (error: any) {
+      setNarrationModelError(error?.data?.errorReason || error?.message || 'Past action edit failed.');
+    } finally {
+      setActionEditBusy(false);
     }
   };
 
@@ -1079,8 +1125,42 @@ export const StoryView: React.FC<StoryViewProps> = ({
                           <span className="text-[9px] text-stone-500 font-mono">
                             Turn #{fallbackTurnNumbers.get(entry.id) || 1}
                           </span>
+                          {entry.actionType === 'CUSTOM_ACTION' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActionEditActionId(actionEditActionId === entry.id ? null : entry.id);
+                                setActionEditText(entry.description || '');
+                              }}
+                              disabled={actionEditBusy || Boolean(narrationBusyActionId)}
+                              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-amber-300/70 transition hover:bg-amber-500/10 hover:text-amber-200 disabled:opacity-40"
+                              title="Edit this action and remove all actions after it"
+                              aria-label="Edit this action"
+                            >
+                              <Pencil className="h-3 w-3" />
+                              <span className="hidden sm:inline">Edit</span>
+                            </button>
+                          )}
                         </div>
                         <p className="text-sm leading-6 text-stone-100 whitespace-pre-wrap">{entry.description}</p>
+                        {actionEditActionId === entry.id && entry.actionType === 'CUSTOM_ACTION' && (
+                          <div className="mt-3 rounded-2xl border border-amber-300/10 bg-black/20 p-3">
+                            <label className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-200/65">Edit past action</label>
+                            <p className="mt-1 text-[10px] leading-4 text-stone-500">This replaces this action and removes every later action from the story timeline.</p>
+                            <textarea
+                              value={actionEditText}
+                              onChange={(event) => setActionEditText(event.target.value)}
+                              rows={3}
+                              className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs leading-5 text-stone-200 outline-none focus:border-amber-300/30"
+                            />
+                            <div className="mt-2 flex justify-end gap-2">
+                              <button type="button" onClick={() => { setActionEditActionId(null); setActionEditText(''); }} className="rounded-lg border border-white/10 px-3 py-1.5 text-[10px] font-semibold text-stone-400 hover:text-stone-200">Cancel</button>
+                              <button type="button" onClick={() => void editPastAction(entry)} disabled={!actionEditText.trim() || actionEditBusy} className="rounded-lg bg-amber-200 px-3 py-1.5 text-[10px] font-bold text-[#22170a] disabled:opacity-40">
+                                {actionEditBusy ? 'Rewriting timeline…' : 'Replace & rewind'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -1271,7 +1351,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
         )}
 
         <form onSubmit={handleSubmitAction} className="flex items-center gap-2">
-          <div className="relative shrink-0">
+          <div ref={narrationMenuRef} className="relative shrink-0">
             <button
               type="button"
               onClick={() => {

@@ -54,6 +54,10 @@ export interface CanonicalCommandEvent {
 		postStateHash: string;
 		canonicalSequence: number;
 		resolvedDataHash: string;
+		/** Full canonical state immediately before this command. Internal server replay/edit checkpoint. */
+		preStateSnapshot?: CanonicalStateSnapshot;
+		/** Original authoritative command payload used for audit/replay. */
+		commandPayload?: Record<string, unknown>;
 		rngState: {
 			combat: {
 				before: { seed: number; rollCounter: number };
@@ -546,27 +550,25 @@ export class CanonicalCommandEngine {
 					postStateHash: stableHash(after),
 					canonicalSequence,
 					resolvedDataHash: stableHash(resolved.data),
-					replay: {
-						preStateSnapshot: clone(before),
-						commandPayload: clone(command.payload),
-						rngState: {
+					preStateSnapshot: clone(before),
+					commandPayload: clone(command.payload),
+					rngState: {
 						combat: {
-						before: {
-							seed: Number(before.combat?.seed ?? 0),
-							rollCounter: Number(before.combat?.rollCounter ?? 0),
+							before: {
+								seed: Number(before.combat?.seed ?? 0),
+								rollCounter: Number(before.combat?.rollCounter ?? 0),
+							},
+							after: {
+								seed: Number(after.combat?.seed ?? 0),
+								rollCounter: Number(after.combat?.rollCounter ?? 0),
+							},
 						},
-						after: {
-							seed: Number(after.combat?.seed ?? 0),
-							rollCounter: Number(after.combat?.rollCounter ?? 0),
+						storyChecks: {
+							before: clone(before.storyChecks || {}),
+							after: clone(after.storyChecks || {}),
 						},
 					},
-					storyChecks: {
-						before: clone(before.storyChecks || {}),
-						after: clone(after.storyChecks || {}),
-					},
-					},
-				},
-			};
+				},			};
 
 			if (command.transactionMode === 'STAGED') {
 				transactionalRepository.appendCanonicalCommandEvent(command.storyId, event);

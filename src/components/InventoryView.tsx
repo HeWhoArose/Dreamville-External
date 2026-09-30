@@ -19,7 +19,6 @@ interface InventoryViewProps {
   equipment: Record<string, Item | null>;
   onEquipItem: (item: Item, targetSlot?: string) => void;
   onUnequipSlot: (slot: string) => void;
-  onInspectItem?: (item: Item) => void;
   recipes?: CraftingRecipe[];
   onCraftRecipe?: (recipeId: string) => void;
   onRepairItem?: (itemId: string) => void;
@@ -54,7 +53,6 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   equipment,
   onEquipItem,
   onUnequipSlot,
-  onInspectItem,
   recipes = [],
   onCraftRecipe,
   onRepairItem,

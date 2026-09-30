@@ -6420,6 +6420,7 @@ export class MultiModelOrchestrator {
     const timeoutMs = params.timeoutMs ?? 7000;
     const authoritativeOutcome = (params.committedOutcome || '').trim();
     const connectedDirective = (params.continuationDirective || '').trim();
+    const isInformationSeekingAction = NARRATIVE_INFORMATION_SEEKING_PATTERN.test(playerAction);
     const worldRepo = this.getWorldRepository();
 
     const canonicalPlayer = worldRepo.getPlayerLifecycle(storyId);
@@ -6503,6 +6504,16 @@ export class MultiModelOrchestrator {
           isProtected: true,
           relevanceScore: 1,
         },
+        ...(isInformationSeekingAction && params.sceneContext ? [{
+          id: 'current_scene_factual_context',
+          band: 'B2_IMMEDIATE' as const,
+          label: 'Current Scene Factual Context',
+          content: params.sceneContext,
+          estimatedTokens: WorkingContextEngine.estimateTokens(params.sceneContext),
+          sourceAuthority: 'Canonical StoryRun Scene Context',
+          isProtected: true,
+          relevanceScore: 0.98,
+        }] : []),
         ...(params.recentTurns?.length ? [{
           id: 'recent_story_turns',
           band: 'B2_IMMEDIATE' as const,
@@ -6518,6 +6529,27 @@ export class MultiModelOrchestrator {
           isProtected: true,
           relevanceScore: 1,
         }] : []),
+        {
+          id: 'narrative_turn_substance_contract',
+          band: 'B1_CRITICAL' as const,
+          label: 'Current Turn Substance Contract',
+          content: isInformationSeekingAction
+            ? [
+                'Current action is information-seeking.',
+                'Resolve the full visible sequence: reach the relevant source established in context, make the inquiry, then give the information actually available from canonical context or explicitly state that no reliable answer was obtained.',
+                'For rumors, clearly distinguish repeated hearsay from established fact.',
+                'Do not stop after movement or speech. The turn is incomplete until the player learns something useful or encounters a grounded inability to learn it.',
+              ].join(' ')
+            : 'Current turn must produce concrete progress. Avoid decorative filler that does not advance the player action, reveal a grounded observation, show a reaction, or establish a specific unresolved detail.',
+          estimatedTokens: WorkingContextEngine.estimateTokens(
+            isInformationSeekingAction
+              ? 'Current action is information-seeking. Resolve approach, inquiry, available answer or grounded non-answer, and distinguish rumor from fact.'
+              : 'Current turn must produce concrete progress and avoid decorative filler.',
+          ),
+          sourceAuthority: 'DreamBook Narrative Turn Contract',
+          isProtected: true,
+          relevanceScore: 1,
+        },
         {
           id: 'narrative_presentation_contract',
           band: 'B1_CRITICAL' as const,

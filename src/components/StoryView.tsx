@@ -437,7 +437,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
 
           const normalized = finalText.trim();
           if (normalized) {
-            setTypedAction((previous) => (previous ? \`\${previous} \${normalized}\` : normalized));
+            setTypedAction((previous) => (previous ? `${previous} ${normalized}` : normalized));
             triggerHaptic('medium');
           }
         };
@@ -448,7 +448,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
                 ? 'Microphone permission was denied. Allow microphone access and try again.'
                 : event?.error === 'audio-capture'
                 ? 'No usable microphone was found.'
-                : \`Voice transcription failed: \${event?.error || 'unknown error'}.\`;
+                : `Voice transcription failed: ${event?.error || 'unknown error'}.`;
             setTranscriptionError(reason);
           }
           setIsRecording(false);
@@ -467,7 +467,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
         speechRecognitionRef.current = null;
         setTranscriptionError(
           error instanceof Error
-            ? \`Could not start microphone transcription: \${error.message}\`
+            ? `Could not start microphone transcription: ${error.message}`
             : 'Could not start microphone transcription.',
         );
         return;
@@ -520,7 +520,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
           }
 
           const text = String(data.text).trim();
-          setTypedAction((previous) => (previous ? \`\${previous} \${text}\` : text));
+          setTypedAction((previous) => (previous ? `${previous} ${text}` : text));
           triggerHaptic('medium');
         } catch (error) {
           setTranscriptionError(

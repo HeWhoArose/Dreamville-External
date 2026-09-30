@@ -10,6 +10,7 @@ import type {
 } from '../domain/capabilitySimulationEngine';
 import { CapabilitySimulationEngine } from '../domain/capabilitySimulationEngine';
 import type { WorldRepository } from '../repositories/worldRepository';
+import { CurrentSituationBuilder } from '../domain/currentSituation';
 import { worldRepository } from '../repositories/worldRepository';
 import { UnifiedAiActionOrchestrator, type UnifiedActionPipelineResult } from './unifiedAiActionOrchestrator';
 
@@ -120,33 +121,36 @@ function getCanonicalSceneContext(
 	storyId: string,
 	supplied?: StoryActionSceneContext,
 ): StoryActionSceneContext {
-	const player = repository.getPlayerLifecycle(storyId);
-	const run = repository.getStoryRun(storyId);
-	const locationId = player?.locationId || run?.currentLocationId;
-	const location = locationId
-		? repository.getGeographyGraph(storyId).getNode(locationId)
-		: undefined;
+	const situation = CurrentSituationBuilder.build({
+		storyId,
+		playerAction: supplied?.recentActions?.at(-1) || '',
+		worldRepo: repository,
+	});
 
 	return {
-		locationName: supplied?.locationName || location?.name,
-		locationRegion: supplied?.locationRegion || location?.regionId,
-		locationDescription: supplied?.locationDescription || location?.description,
-		worldTime: supplied?.worldTime,
-		openingNarrative: supplied?.openingNarrative || run?.openingScene?.narrativeText,
+		locationName: supplied?.locationName || situation.location.name,
+		locationRegion: supplied?.locationRegion || situation.location.regionId,
+		locationDescription: supplied?.locationDescription || situation.location.description,
+		worldTime: supplied?.worldTime || situation.worldTime,
+		// Do not fall back to a stale persisted opening scene. The current situation
+		// is the authoritative scene projection for action advice.
+		openingNarrative: supplied?.openingNarrative,
 		startingSituation:
 			supplied?.startingSituation ||
-			run?.startingSituation?.summary ||
-			run?.startingSituation?.hook ||
-			run?.initialScene,
-		activeDialogue: supplied?.activeDialogue,
+			situation.plot.summary ||
+			situation.openThreads.at(0)?.summary ||
+		'',
+		activeDialogue:
+			supplied?.activeDialogue ||
+			(situation.activeDialogue
+				? `${situation.activeDialogue.speakerName}: ${situation.activeDialogue.text}`
+				: undefined),
 		recentActions:
 			supplied?.recentActions ||
-			(Array.isArray(run?.runtimeState?.narrativeContextHistory)
-				? run.runtimeState.narrativeContextHistory
-					.slice(-4)
-					.map((entry: any) => entry?.narration?.response || entry?.playerAction)
-					.filter(Boolean)
-				: []),
+			situation.recentTurns
+				.slice(-4)
+				.map((entry) => entry.narration || entry.playerAction || '')
+				.filter(Boolean),
 	};
 }
 

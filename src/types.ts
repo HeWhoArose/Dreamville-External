@@ -395,6 +395,9 @@ export interface ActionLog {
   };
   /** Structured visual beats produced by the narrator for current-turn scene art. */
   visualCues?: string[];
+  /** Canonical command identity used to support safe editing/rollback of past player actions. */
+  canonicalCommandId?: string;
+  canonicalEventId?: string;
   checkResult?: StoryCheckResult;
   actionAdvice?: ActionAdvice;
 }

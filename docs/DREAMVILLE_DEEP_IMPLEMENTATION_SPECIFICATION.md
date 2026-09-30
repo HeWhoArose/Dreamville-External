@@ -1948,3 +1948,33 @@ DATA
 ```
 
 That is the standard for this implementation.
+
+
+# 28. Research Basis — Friends & Fables
+
+The architectural direction in this specification is informed by publicly documented Friends & Fables material. These sources are used for architectural principles, not as claims about private implementation details.
+
+- How Franz Works: https://fables.gg/blog/how-franz-works
+  - Describes multi-request orchestration, working context, research before narration, and separation of state updates from narration.
+- Franz 2.0 — Working Context, Lore, Improved Planning: https://fables.gg/patch-notes/franz-20-working-context-lore-improved-planning-and-more
+  - Describes context blocks, research, scene context, plot, plan, priorities, budgets, expiration, and relevance.
+- Plot and Plan: https://help.fables.gg/articles/4217496-plot-and-plan
+  - Documents the short-lived per-turn plan and running plot distinction.
+- Working Context Blocks: https://help.fables.gg/articles/8560008-working-context-blocks
+  - Documents relevance-driven context selection and context budgets.
+- Current Scene: https://help.fables.gg/articles/1999565-current-scene
+  - Documents current-location and nearby-entity scene context.
+- Memories: https://help.fables.gg/articles/2838157-memories
+  - Documents location/character-linked memories and the importance of limiting context to relevant information.
+- What Game State Can ACE See/Update?: https://fables.gg/en/help/articles/4035786-what-game-state-can-ace-see-update
+  - Documents task-specific context and the principle that missing context is often a source of incorrect narration.
+- ACE-1: https://fables.gg/blog/introducing-ace-1-the-engine-powering-the-best-ai-ttrpg-experiences
+  - Describes the campaign-engine approach, state management, retrieval, memory, entity links, and separation of the AI GM from the underlying game engine.
+- ACE 1.5: https://fables.gg/patch-notes/ace-15-bringing-pois-and-npcs-to-life-npc-conversations
+  - Documents spatial POI context, NPC relevance, character context, and reduced player-character dialogue generation.
+- February 2026 Development Log: https://fables.gg/patch-notes/development-log-2601
+  - Important architectural signal: the team described older rigid narration architecture as increasingly limiting with newer models and planned a deeper narration/state-update rewrite.
+
+These references reinforce the central implementation rule of this document:
+
+**Context assembly and narrative direction should carry most of the semantic burden; deterministic validation should protect canonical truth and catastrophic contradictions rather than attempting to understand every possible player sentence through increasingly brittle pattern matching.**

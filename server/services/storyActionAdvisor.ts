@@ -1013,6 +1013,42 @@ export class StoryActionAdvisor {
 
 		const normalizedScene = normalize(sceneSources.join(' '));
 		const locationLabel = sceneContext?.locationName || location?.name || 'the current area';
+		const player = this.repository.getPlayerLifecycle(storyId);
+		const playerLocationId = player?.locationId || location?.id || '';
+		const livingWorld = this.repository.getLivingWorldSimulation(storyId);
+		const nearbyNpcs = livingWorld
+			.getAllNpcSchedules()
+			.filter((npc) => npc.currentLocationId === playerLocationId)
+			.filter((npc) => npc.npcId !== actorId);
+		const visibleNpcNames = uniqueStrings(nearbyNpcs.map((npc) => npc.name), 4);
+		const unresolvedEvents = livingWorld
+			.getScheduledEvents()
+			.filter((event) => !event.isResolved)
+			.filter((event) => !event.locationId || event.locationId === playerLocationId);
+		const geography = this.repository.getGeographyGraph(storyId);
+		const outgoingEdges = playerLocationId
+			? geography.getOutgoingEdges(playerLocationId)
+				.filter((edge) => !edge.isBlocked && edge.allowedModes.includes('Foot'))
+			: [];
+		const discovered = new Set(player?.discoveredLocationIds || []);
+		const nearbyDestinations = outgoingEdges
+			.map((edge) => {
+				const destination = geography.getNode(edge.toLocationId);
+				return destination && (destination.discovered || discovered.has(destination.id))
+					? { node: destination, edge }
+					: null;
+			})
+			.filter(Boolean)
+			.slice(0, 4) as Array<{ node: any; edge: any }>;
+		const authorizedFacts = this.repository.getAuthorizedKnowledgeFacts(storyId, actorId);
+		const rumorFacts = authorizedFacts
+			.filter((fact) => fact.sourceType === 'rumor' || fact.sourceType === 'told' || fact.scope === 'uncertain')
+			.slice(-5);
+		const sceneTopics = extractSceneLeadTopics(sceneSources);
+		const hasMapCue = sceneContainsAny(
+			normalizedScene,
+			/\b(map|maps|cartograph|chart|atlas|merchant|trader|shop|market|vendor|mapmaker)\b/i
+		);
 		const contextualTips: ActionTip[] = [];
 		const addContextTip = (title: string, description: string, actionText: string, intent: string) => {
 			if (contextualTips.some((tip) => normalize(tip.actionText) === normalize(actionText))) return;

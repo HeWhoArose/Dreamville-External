@@ -193,12 +193,6 @@ export class WorkingContextEngine {
     blocks: ContextChunk[];
   } {
     const repo = params.worldRepo || worldRepository;
-    const currentSituation = CurrentSituationBuilder.build({
-      storyId,
-      playerAction: params.playerAction,
-      viewerActorId: params.viewerActorId,
-      worldRepo: repo,
-    });
     const currentTurn = repo.getCanonicalCommandEvents(params.storyId).length + 1;
     const context = WorkingContextEngine.assembleTurnContext({
       storyId: params.storyId,
@@ -383,6 +377,12 @@ export class WorkingContextEngine {
     const storyId = params.storyId || 'default_story';
     const hardTokenBudget = params.hardTokenBudget ?? 400;
     const repo = params.worldRepo || worldRepository;
+    const currentSituation = CurrentSituationBuilder.build({
+      storyId,
+      playerAction: params.playerAction,
+      viewerActorId: params.viewerActorId,
+      worldRepo: repo,
+    });
 
     // 1. Read canonical states (read-only; no state mutation)
     const player = repo.getPlayerLifecycle(storyId);
@@ -497,10 +497,6 @@ export class WorkingContextEngine {
     const timeHeader = clock.getFormattedLocationTimeHeader(locationName, clock.getTimestamp());
     const actionText = params.playerAction || 'Observe surroundings';
     const contextNeeds = deriveNarrationContextNeeds({
-      actionText,
-      npcTargetId: params.npcTargetId,
-      isInCombat: false,
-    });
       actionText,
       npcTargetId: params.npcTargetId,
       isInCombat: false,

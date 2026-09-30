@@ -31,6 +31,35 @@ test('narration continuity rejects a current action that is silently replaced by
 	assert.equal(correctAction.valid, true);
 });
 
+test('narration continuity rejects protagonist speech when the player only asked to listen', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'narration_listening_mode_regression';
+	repository.seedStory(storyId);
+	const orchestrator = new MultiModelOrchestrator(repository);
+
+	const mistakenSpeech = (orchestrator as any).validateNarrativeActionModeContinuity(
+		'Aelion moves closer to the crowd and raises his voice, asking the traders about the rumors.',
+		'I move closer to hear the rumors.',
+		'Aelion Vane',
+	);
+	assert.equal(mistakenSpeech.valid, false);
+	assert.match(mistakenSpeech.errorReason, /listen|hear|speak|shout/i);
+
+	const correctListening = (orchestrator as any).validateNarrativeActionModeContinuity(
+		'Aelion moves close enough to make out the low conversation without interrupting it. He hears the root-trappers repeat that unstable starlight fissures have been reported deeper in the Whispering Spore-Sea, though none claims to have witnessed one directly.',
+		'I move closer to hear the rumors.',
+		'Aelion Vane',
+	);
+	assert.equal(correctListening.valid, true);
+
+	const explicitSpeech = (orchestrator as any).validateNarrativeActionModeContinuity(
+		'Aelion moves closer and asks the root-trappers what they have heard about the fissures.',
+		'I move closer and ask about the rumors.',
+		'Aelion Vane',
+	);
+	assert.equal(explicitSpeech.valid, true);
+});
+
 test('narration continuity rejects information-seeking turns that stop at atmosphere', () => {
 	const repository = new InMemoryWorldRepository({ disablePersistence: true });
 	const storyId = 'narration_information_regression';

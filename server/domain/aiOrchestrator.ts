@@ -412,6 +412,7 @@ export interface ProviderGenerateOptions {
   modelId?: string;
   systemInstruction?: string;
   canonicalLocationName?: string;
+  playerAction?: string;
   reasoningEffort?: 'xhigh' | 'high' | 'medium' | 'low' | 'minimal' | 'none';
 }
 
@@ -521,8 +522,15 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
     const canonicalLocationName =
       options?.canonicalLocationName?.trim() ||
       (() => {
-        const match = String(prompt || '').match(/LOCATION NAME:\s*([^\\n]+)/i);
+        const match = String(prompt || '').match(/LOCATION NAME:\s*([^\n]+)/i);
         return match?.[1]?.trim() || 'the current location';
+      })();
+
+    const extractedPlayerAction =
+      options?.playerAction?.trim() ||
+      (() => {
+        const match = String(prompt || '').match(/(?:Latest Player Action|PLAYER ACTION|Player Input|Action Requested|Intent|Latest Action|Action):\s*([^\n]+)/i);
+        return match?.[1]?.trim() || '';
       })();
 
     switch (task) {
@@ -707,9 +715,13 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
           break;
         }
 
+        const actionSentence = extractedPlayerAction
+          ? `You carry out your action to ${extractedPlayerAction.replace(/^(?:i|we|my character)\s+/i, '')}, staying attentive to the immediate environment in ${canonicalLocationName}.`
+          : `The scene remains grounded in ${canonicalLocationName}.`;
+
         text = JSON.stringify({
           narrative: [
-            `The scene remains grounded in ${canonicalLocationName}. The immediate surroundings settle around the latest action, with no new location change committed.`,
+            `${actionSentence} The immediate surroundings settle around the effort, with no new location change or time shift committed.`,
           ],
           dialogue: [],
           events: ['EMERGENCY_DETERMINISTIC_TICK'],
@@ -2039,7 +2051,7 @@ Do not enclose in markdown ticks, output pure JSON.`;
 
         let reqConfig: Record<string, any> = {
           systemInstruction: systemPrompt,
-          responseMimeType: task === 'narrative.generate' || task === 'narrative.review'
+          responseMimeType: task === 'narrative.review' || task === 'capability.explain'
             ? 'text/plain'
             : 'application/json',
         };
@@ -5825,8 +5837,22 @@ export class MultiModelOrchestrator {
         }
       }
 
+      if (parsed !== undefined && typeof parsed === 'object' && parsed !== null) {
+        if (!Array.isArray(parsed.narrative)) {
+          if (typeof parsed.narrative === 'string' && parsed.narrative.trim()) {
+            parsed.narrative = [parsed.narrative.trim()];
+          } else if (typeof parsed.narrativeText === 'string' && parsed.narrativeText.trim()) {
+            parsed.narrative = [parsed.narrativeText.trim()];
+          } else if (typeof parsed.narration === 'string' && parsed.narration.trim()) {
+            parsed.narrative = [parsed.narration.trim()];
+          } else if (typeof parsed.story === 'string' && parsed.story.trim()) {
+            parsed.narrative = [parsed.story.trim()];
+          }
+        }
+      }
+
       if (parsed === undefined) {
-        if (options?.allowPlainTextNarration && cleaned.length >= 80) {
+        if (options?.allowPlainTextNarration && cleaned.length >= 50) {
           return {
             valid: true,
             turnPackage: {
@@ -5842,7 +5868,7 @@ export class MultiModelOrchestrator {
         return { valid: false, errorReason: 'Response is not valid JSON.' };
       }
 
-      if (typeof parsed === 'string' && options?.allowPlainTextNarration && parsed.trim().length >= 80) {
+      if (typeof parsed === 'string' && options?.allowPlainTextNarration && parsed.trim().length >= 50) {
         return {
           valid: true,
           turnPackage: {
@@ -6487,6 +6513,7 @@ export class MultiModelOrchestrator {
         contextTokens: assembledContext.totalTokens,
         forceModelId: params.forceModelId,
         canonicalLocationName: canonicalLocation?.name,
+        playerAction,
         validateResponse: (text) => {
           const validation = this.validateTurnPackage(text, { allowPlainTextNarration: true });
           if (!validation.valid || !validation.turnPackage) {
@@ -7262,6 +7289,7 @@ export class MultiModelOrchestrator {
       contextTokens?: number;
       forceModelId?: string;
       canonicalLocationName?: string;
+      playerAction?: string;
       validateResponse?: (text: string) => TaskResponseValidationResult;
       /**
        * When true, a configured task route may be expanded with additional eligible AI models
@@ -7627,6 +7655,7 @@ export class MultiModelOrchestrator {
             modelId: currentCandidate.modelId,
             systemInstruction,
             canonicalLocationName: options?.canonicalLocationName,
+            playerAction: options?.playerAction,
           });
         } finally {
           clearTimeout(timer);
@@ -7770,6 +7799,7 @@ export class MultiModelOrchestrator {
           modelId: emergency.modelId,
           systemInstruction,
           canonicalLocationName: options?.canonicalLocationName,
+          playerAction: options?.playerAction,
         });
         if (!emergencyResult.text) throw new Error('Deterministic emergency floor returned an empty response.');
 

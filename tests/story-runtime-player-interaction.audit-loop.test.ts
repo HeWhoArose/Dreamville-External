@@ -61,7 +61,7 @@ test('S2 story timeline renders newest-first server history in chronological pla
 	for (let iteration = 1; iteration <= 11; iteration += 1) {
 		assert.match(
 			story,
-			/const history = \(actionHistory \|\| \[\]\)[\\s\\S]*?\.slice\(\)[\\s\\S]*?\.reverse\(\)/,
+			/const history = \(actionHistory \|\| \[\]\)[\s\S]*?\.slice\(\)[\s\S]*?\.reverse\(\)/,
 			`Audit ${iteration}: StoryView must reverse the server's newest-first action history before rendering`,
 		);
 		assert.match(

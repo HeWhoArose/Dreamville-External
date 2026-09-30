@@ -7,6 +7,10 @@ export type DiceThemeId =
 	| 'EMERALD'
 	| 'FROST'
 	| 'OBSIDIAN'
+	| 'ROYAL_CROWN'
+	| 'AMETHYST_GOLD'
+	| 'SHADOW_KNIGHT'
+	| 'ENCHANTED_PARCHMENT'
 	| '2D_PARCHMENT'
 	| '2D_ARCANE'
 	| '2D_CRIMSON'
@@ -128,6 +132,70 @@ export const DICE_THEME_PRESETS: readonly DiceThemePreset[] = [
 			background: '#18181b',
 			foreground: '#f6d88b',
 			outline: '#050505',
+		},
+	},
+	{
+		id: 'ROYAL_CROWN',
+		mode: '3D',
+		label: 'Royal Crown',
+		description: 'Regal purple-and-gold metal inspired by ornate royal dice aesthetics.',
+		material: 'metal',
+		spotlight: 0xffe3a8,
+		previewTable: 'radial-gradient(circle at 50% 24%, rgba(251,191,36,.22), transparent 26%), linear-gradient(180deg, #3a1d55 0%, #100714 100%)',
+		customColorset: {
+			name: 'dreamville-royal-crown',
+			texture: '',
+			background: '#4c1d72',
+			foreground: '#f8d57d',
+			outline: '#190b25',
+		},
+	},
+	{
+		id: 'AMETHYST_GOLD',
+		mode: '3D',
+		label: 'Amethyst Gold',
+		description: 'Gemstone-style violet glass with luminous gold numbering.',
+		material: 'glass',
+		spotlight: 0xf1d7ff,
+		previewTable: 'radial-gradient(circle at 50% 24%, rgba(216,180,254,.22), transparent 27%), linear-gradient(180deg, #25103e 0%, #08040d 100%)',
+		customColorset: {
+			name: 'dreamville-amethyst-gold',
+			texture: '',
+			background: '#6d3aa4',
+			foreground: '#ffe7a3',
+			outline: '#271035',
+		},
+	},
+	{
+		id: 'SHADOW_KNIGHT',
+		mode: '3D',
+		label: 'Shadow Knight',
+		description: 'Dark forged-metal dice with cold silver numbers and a deep shadow table.',
+		material: 'metal',
+		spotlight: 0xd9e7ff,
+		previewTable: 'radial-gradient(circle at 50% 24%, rgba(148,163,184,.14), transparent 25%), linear-gradient(180deg, #20242e 0%, #06070a 100%)',
+		customColorset: {
+			name: 'dreamville-shadow-knight',
+			texture: '',
+			background: '#161a22',
+			foreground: '#dbeafe',
+			outline: '#05070b',
+		},
+	},
+	{
+		id: 'ENCHANTED_PARCHMENT',
+		mode: '3D',
+		label: 'Enchanted Parchment',
+		description: 'Warm antique-gold dice with parchment tones and a storybook glow.',
+		material: 'wood',
+		spotlight: 0xffe4ad,
+		previewTable: 'radial-gradient(circle at 50% 24%, rgba(251,191,36,.19), transparent 26%), linear-gradient(180deg, #4a321c 0%, #130c06 100%)',
+		customColorset: {
+			name: 'dreamville-enchanted-parchment',
+			texture: '',
+			background: '#9a6b33',
+			foreground: '#fff0bf',
+			outline: '#3a2411',
 		},
 	},
 

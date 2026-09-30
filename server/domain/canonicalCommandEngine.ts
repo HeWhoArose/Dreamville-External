@@ -142,6 +142,19 @@ function normalizeForReplay(value: unknown, key?: string): unknown {
 	return normalized;
 }
 
+function buildReplayCheckpoint(snapshot: CanonicalStateSnapshot): CanonicalStateSnapshot {
+	const checkpoint = clone(snapshot);
+	if (checkpoint?.adaptation?.ch16Run) {
+		checkpoint.adaptation.ch16Run = {
+			...checkpoint.adaptation.ch16Run,
+			// Canonical event checkpoints live outside this snapshot. Keeping the event
+			// log out prevents recursive snapshot growth while retaining the world state.
+			canonicalEvents: [],
+		};
+	}
+	return checkpoint;
+}
+
 function stableHash(value: unknown): string {
 	const normalized = normalizeForReplay(value);
 	const serialized = normalized === undefined
@@ -552,7 +565,10 @@ export class CanonicalCommandEngine {
 					postStateHash: stableHash(after),
 					canonicalSequence,
 					resolvedDataHash: stableHash(resolved.data),
-					preStateSnapshot: clone(before),
+					preStateSnapshot:
+						(command.type === 'INTERACT' && (command.payload as any)?.actionRequest?.type === 'CUSTOM_ACTION')
+							? buildReplayCheckpoint(before)
+							: undefined,
 					commandPayload: clone(command.payload),
 					rngState: {
 						combat: {

@@ -1077,7 +1077,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
                             </span>
                           )}
                           <span className="text-[9px] text-stone-500 font-mono">
-                            Turn #{entry.cycle || 1}
+                            Turn #{fallbackTurnNumbers.get(entry.id) || 1}
                           </span>
                         </div>
                         <p className="text-sm leading-6 text-stone-100 whitespace-pre-wrap">{entry.description}</p>

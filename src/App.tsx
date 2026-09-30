@@ -417,13 +417,6 @@ export const App: React.FC = () => {
     });
   };
 
-  const handleInspectItem = (item: Item) => {
-    dispatchAction({
-      type: 'INSPECT_ITEM',
-      itemId: item.id,
-    });
-  };
-
   const handleCraftRecipe = (recipeId: string) => {
     dispatchAction({
       type: 'CUSTOM_ACTION',
@@ -804,7 +797,6 @@ export const App: React.FC = () => {
           equipment={viewState.equipment}
           onEquipItem={handleEquipItem}
           onUnequipSlot={handleUnequipSlot}
-          onInspectItem={handleInspectItem}
           recipes={recipes}
           onCraftRecipe={handleCraftRecipe}
           onRepairItem={handleRepairItem}

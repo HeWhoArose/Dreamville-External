@@ -61,8 +61,13 @@ test('S2 story timeline renders newest-first server history in chronological pla
 	for (let iteration = 1; iteration <= 11; iteration += 1) {
 		assert.match(
 			story,
-			/const history = \(actionHistory \|\| \[\]\)[\s\S]*?\.slice\(\)[\s\S]*?\.reverse\(\)/,
-			`Audit ${iteration}: StoryView must reverse the server's newest-first action history before rendering`,
+			/const history = \(actionHistory \|\| \[\]\)/,
+			`Audit ${iteration}: StoryView must preserve the server's canonical newest-first history for pagination`,
+		);
+		assert.match(
+			story,
+			/const chronologicalHistory = \[\.\.\.history\]\.reverse\(\)/,
+			`Audit ${iteration}: StoryView must derive chronological ordering without reversing the full history window`,
 		);
 		assert.match(
 			authority,
@@ -71,8 +76,8 @@ test('S2 story timeline renders newest-first server history in chronological pla
 		);
 		assert.match(
 			story,
-			/history\.slice\(Math\.max\(0, history\.length - visibleTurnCount\)\)/,
-			`Audit ${iteration}: visible-turn pagination must operate on chronological history`,
+			/const visible = \[\.\.\.history\.slice\(0, visibleTurnCount\)\]\.reverse\(\)/,
+			`Audit ${iteration}: visible-turn pagination must window newest entries before reversing them for display`,
 		);
 	}
 });

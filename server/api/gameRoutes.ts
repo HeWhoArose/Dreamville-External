@@ -429,7 +429,15 @@ gameRouter.post('/action/history/edit', async (req: Request, res: Response) => {
       },
       async () => {
         // Restore the exact canonical world state from immediately before the edited turn.
+        // The checkpoint intentionally excludes canonical event history to avoid recursive
+        // snapshot growth, so restore the surviving prefix explicitly.
         worldRepository.restoreCanonicalStateSnapshot(preStateSnapshot, { persist: false });
+        const rewindRun = worldRepository.getStoryRun(storyId);
+        if (rewindRun) {
+          const targetEventIndex = events.findIndex((event: any) => event.eventId === targetEvent.eventId);
+          rewindRun.canonicalEvents = targetEventIndex >= 0 ? events.slice(0, targetEventIndex) : [];
+          worldRepository.saveStoryRun(rewindRun);
+        }
         if (mockStateBefore) {
           serverMockAuthority.importTransactionalState(storyId, mockStateBefore);
         } else {
@@ -1148,32 +1156,34 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
       });
     }
 
-    // Link the player-facing action record to its canonical command and retain the
+    // Link freeform player actions to their canonical command and retain the
     // exact pre-action presentation checkpoint required for safe history editing.
-    try {
-      const actionData: any = commandResult.data;
-      const liveState = serverMockAuthority.getDynamicStoryState(storyId);
-      const actionLog = liveState.actionHistory.find((entry: any) => entry.id === actionData?.actionId);
-      if (actionLog) {
-        actionLog.canonicalCommandId = commandResult.commandId;
-        actionLog.canonicalEventId = commandResult.event?.eventId;
+    if (actionRequest.type === 'CUSTOM_ACTION') {
+      try {
+        const actionData: any = commandResult.data;
+        const liveState = serverMockAuthority.getDynamicStoryState(storyId);
+        const actionLog = liveState.actionHistory.find((entry: any) => entry.id === actionData?.actionId);
+        if (actionLog) {
+          actionLog.canonicalCommandId = commandResult.commandId;
+          actionLog.canonicalEventId = commandResult.event?.eventId;
+        }
+        const committedRun = worldRepository.getStoryRun(storyId);
+        const eventIndex = committedRun?.canonicalEvents?.findIndex((event: any) => event.eventId === commandResult.event?.eventId) ?? -1;
+        if (committedRun && eventIndex >= 0 && commandResult.event?.eventId) {
+          const committedEvent = committedRun.canonicalEvents[eventIndex];
+          committedRun.canonicalEvents[eventIndex] = {
+            ...committedEvent,
+            replay: {
+              ...committedEvent.replay,
+              mockStateBefore,
+            },
+          };
+          worldRepository.saveStoryRun(committedRun);
+          commandResult.event = committedRun.canonicalEvents[eventIndex];
+        }
+      } catch (checkpointError) {
+        console.warn('[StoryHistory] Failed to attach edit checkpoint metadata:', checkpointError);
       }
-      const committedRun = worldRepository.getStoryRun(storyId);
-      const eventIndex = committedRun?.canonicalEvents?.findIndex((event: any) => event.eventId === commandResult.event?.eventId) ?? -1;
-      if (committedRun && eventIndex >= 0 && commandResult.event?.eventId) {
-        const committedEvent = committedRun.canonicalEvents[eventIndex];
-        committedRun.canonicalEvents[eventIndex] = {
-          ...committedEvent,
-          replay: {
-            ...committedEvent.replay,
-            mockStateBefore,
-          },
-        };
-        worldRepository.saveStoryRun(committedRun);
-        commandResult.event = committedRun.canonicalEvents[eventIndex];
-      }
-    } catch (checkpointError) {
-      console.warn('[StoryHistory] Failed to attach edit checkpoint metadata:', checkpointError);
     }
     // Automatically record durable cross-world memories from the authoritative outcome.
     // The player never needs to tell the system to "save" an acquired item or important action.

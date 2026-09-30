@@ -45,6 +45,16 @@ test('NPC dialogue requests relationship context', () => {
 	assert.equal(needs.maxRecentTurns, 2);
 });
 
+test('information-seeking actions request lore and social context even without an explicit NPC target', () => {
+	const needs = deriveNarrationContextNeeds({
+		actionText: 'I move down to the crowd to inquire about the rumors.',
+	});
+
+	assert.equal(needs.includeLore, true);
+	assert.equal(needs.includeRelationships, true);
+	assert.equal(needs.maxRecentTurns, 2);
+});
+
 test('combat requests combat and health context', () => {
 	const needs = deriveNarrationContextNeeds({
 		actionText: 'I strike the enemy with my staff.',

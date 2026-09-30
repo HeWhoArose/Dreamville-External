@@ -5,6 +5,7 @@ import type { DndRulesMode, NarrativeProfile } from '../../src/types';
 import { rulesProfileEngine } from './rulesProfileEngine';
 import { worldRepository } from '../repositories/worldRepository';
 import { NarrativeContinuityEngine } from './narrativeContinuityEngine';
+import { CurrentSituationBuilder, type CurrentSituation } from './currentSituation';
 import { deriveNarrationContextNeeds } from './narrationContextPolicy';
 
 export interface WorkingContextPacket {
@@ -57,6 +58,7 @@ export interface BudgetedContextResult {
 }
 
 export interface AssembledTurnContext {
+  currentSituation: CurrentSituation;
   packet: WorkingContextPacket;
   chunks: ContextChunk[];
   assembledText: string;
@@ -191,6 +193,12 @@ export class WorkingContextEngine {
     blocks: ContextChunk[];
   } {
     const repo = params.worldRepo || worldRepository;
+    const currentSituation = CurrentSituationBuilder.build({
+      storyId,
+      playerAction: params.playerAction,
+      viewerActorId: params.viewerActorId,
+      worldRepo: repo,
+    });
     const currentTurn = repo.getCanonicalCommandEvents(params.storyId).length + 1;
     const context = WorkingContextEngine.assembleTurnContext({
       storyId: params.storyId,
@@ -472,9 +480,9 @@ export class WorkingContextEngine {
     ].filter(Boolean).join('\n');
 
     // 2. Epistemic Projection: Scene & Geography
-    const locId = player ? player.locationId : (run?.startingLocationId || run?.currentLocationId || (storyId === 'default_story' ? 'loc_whispering_orrery' : 'loc_unknown'));
+    const locId = currentSituation.location.id;
     const locNode = geography.getNode(locId);
-		const isDiscovered = player ? player.discoveredLocationIds.includes(locId) : false;
+    const isDiscovered = currentSituation.location.discovered;
     // Epistemic filter: only show rich description if discovered; otherwise basic label
     const sceneDesc = isDiscovered && locNode
       ? `${locNode.name}: ${locNode.description}`
@@ -485,11 +493,8 @@ export class WorkingContextEngine {
     const scene = `${sceneDesc}${activeJourney}`;
 
     // 3. Time
-    const locationName = locNode ? locNode.name : 'Current Location';
+    const locationName = currentSituation.location.name;
     const timeHeader = clock.getFormattedLocationTimeHeader(locationName, clock.getTimestamp());
-
-    const actionText = params.playerAction || 'Observe surroundings';
-    const contextNeeds = deriveNarrationContextNeeds({
       actionText,
       npcTargetId: params.npcTargetId,
       isInCombat: false,
@@ -509,9 +514,16 @@ export class WorkingContextEngine {
 
     // 5. Epistemic Projection: Visible Entities
     const allSchedules = livingSim.getAllNpcSchedules();
-    const visibleEntities: string[] = [];
+    const visibleEntities: string[] = currentSituation.nearbyEntities
+      .filter((entity) => entity.visibleToPlayer)
+      .map((entity) => {
+        const activity = entity.currentActivity ? `Activity: ${entity.currentActivity}` : '';
+        const role = entity.role ? `Role: ${entity.role}` : '';
+        return [`${entity.name} (${entity.kind})`, activity, role].filter(Boolean).join(' | ');
+      });
     for (const sched of allSchedules) {
       if (sched.currentLocationId === locId && (!player || sched.npcId !== player.actorId)) {
+        if (visibleEntities.some((entry) => entry.startsWith(`${sched.name || sched.npcId} (`))) continue;
         const cue = livingSim.evaluateHungerNarrativeCue(sched.npcId);
         visibleEntities.push(
           `${sched.name || sched.npcId} (Activity: ${sched.currentActivity}${cue.shouldCue ? `, Cue: ${cue.narrativePromptHint || cue.cueStyle}` : ''})`
@@ -662,6 +674,16 @@ export class WorkingContextEngine {
 
     // Construct Prioritized Candidate Context Chunks
     const candidateChunks: ContextChunk[] = [
+      {
+        id: 'b1_current_situation',
+        band: 'B1_CRITICAL',
+        label: 'Canonical Current Situation Model',
+        content: CurrentSituationBuilder.toPromptContext(currentSituation),
+        estimatedTokens: WorkingContextEngine.estimateTokens(CurrentSituationBuilder.toPromptContext(currentSituation)),
+        sourceAuthority: 'CurrentSituationBuilder (Phase 1) / WorldRepository canonical read models',
+        isProtected: true,
+        relevanceScore: 1,
+      },
       // B1_CRITICAL: Canonical campaign mode boundaries
       {
         id: 'b1_campaign_modes',
@@ -978,7 +1000,7 @@ export class WorkingContextEngine {
     }
 
     // B5_SEMANTIC_LORE: Viewer-authorized world knowledge
-    const authorizedFacts = repo.getAuthorizedKnowledgeFacts(storyId, viewerId)
+    const authorizedFacts = currentSituation.playerKnowledge.knownFacts
       .slice(0, 3);
     if (authorizedFacts.length > 0) {
       const loreContent = authorizedFacts
@@ -1012,6 +1034,7 @@ export class WorkingContextEngine {
     );
 
     return {
+      currentSituation,
       packet,
       chunks: normalizedCandidateChunks,
       assembledText: budgetedResult.assembledText,

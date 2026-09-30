@@ -585,25 +585,38 @@ gameRouter.post('/action/narrate/regenerate', async (req: Request, res: Response
     } as any);
 
     if (!generated.success || !generated.turnPackage?.narrative?.length) {
-      const errorPayload = {
-        success: false,
-        code: generated.source === 'DETERMINISTIC_FALLBACK' ? 'AI_UNAVAILABLE' : 'NARRATION_REGENERATION_FAILED',
-        message: generated.error || 'The narration model did not return a usable response.',
-        errorReason: generated.error || 'The narration model did not return a usable response.',
-        providerId: generated.providerId,
-        modelId: generated.modelId,
-        fallbackReason: generated.fallbackReason,
-        attemptsTrail: generated.attemptsTrail || [],
-      };
-      action.narrativeResponse = undefined;
-      action.narrativeError = errorPayload;
+      const localNarration = serverMockAuthority.synthesizeFreeformActionFallback(
+        storyId,
+        action.description,
+        checkOutcome,
+      );
+      action.narrativeResponse = localNarration;
+      action.narrativeError = undefined;
       action.narrativeGeneration = {
-        source: generated.source,
-        providerId: generated.providerId,
-        modelId: generated.modelId,
+        source: 'DETERMINISTIC_FALLBACK',
+        providerId: 'provider_local_story_fallback',
+        modelId: 'local-story-fallback',
         regenerated: true,
       };
-      return res.status(503).json(errorPayload);
+      action.visualCues = undefined;
+
+      console.warn('[NarrationFallback] Retry narration used local story fallback.', {
+        storyId,
+        actionId,
+        provider: generated.providerId,
+        modelId: generated.modelId,
+        error: generated.error,
+        fallbackReason: generated.fallbackReason,
+        attemptsTrail: generated.attemptsTrail || [],
+      });
+
+      return res.json({
+        success: true,
+        localFallback: true,
+        narrativeResponse: localNarration,
+        narrativeGeneration: action.narrativeGeneration,
+        viewState: serverMockAuthority.getSanitizedViewState(storyId),
+      });
     }
 
     action.narrativeResponse = generated.turnPackage.narrative.join('\n\n').trim();

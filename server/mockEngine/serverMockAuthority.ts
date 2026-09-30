@@ -798,32 +798,88 @@ export class ServerMockAuthority {
         modelId: generated.modelId,
         regenerated: false,
       };
-      if (
-        generated.success &&
-        generated.turnPackage?.narrative?.length &&
-        generated.source !== 'DETERMINISTIC_FALLBACK'
-      ) {
+      if (generated.success && generated.turnPackage?.narrative?.length) {
         narrativeTurnPackage = generated.turnPackage;
         narrativeResponse = generated.turnPackage.narrative.join('\n\n').trim();
         narrativeVisualCues = (generated.turnPackage.visualCues || [])
           .map((cue: any) => typeof cue === 'string' ? cue : cue?.prompt)
           .filter((cue: any): cue is string => typeof cue === 'string' && cue.trim().length > 0)
           .slice(0, 4);
+
+        if (generated.source === 'DETERMINISTIC_FALLBACK') {
+          // The local emergency engine is a successful presentation fallback, not an AI error.
+          // Keep the player-facing turn alive and expose its provenance without showing an
+          // "AI unavailable" error card.
+          narrativeGeneration = {
+            source: 'DETERMINISTIC_FALLBACK',
+            providerId: 'provider_local_story_fallback',
+            modelId: 'local-story-fallback',
+            regenerated: false,
+          };
+        }
       } else {
-        narrativeError = {
-          code: 'NARRATION_AI_UNAVAILABLE',
-          message: generated.error || 'The narration model did not return a usable AI response.',
-          providerId: generated.providerId,
-          modelId: generated.modelId,
+        // Last-resort local prose fallback. This is deliberately based on the committed
+        // action and canonical scene rather than a fixed generic error message, so a total
+        // provider outage still produces a useful, action-specific narration.
+        narrativeResponse = this.synthesizeFreeformActionFallback(
+          targetStoryId,
+          String(freeformText),
+          committedOutcome,
+        );
+        narrativeTurnPackage = {
+          narrative: [narrativeResponse],
+          dialogue: [],
+          events: ['LOCAL_NARRATION_FALLBACK'],
+          stateChanges: [],
+          memoryCandidates: [],
+          audioCues: [],
+        };
+        narrativeGeneration = {
+          source: 'DETERMINISTIC_FALLBACK',
+          providerId: 'provider_local_story_fallback',
+          modelId: 'local-story-fallback',
+          regenerated: false,
+        };
+        narrativeVisualCues = undefined;
+        // Keep provider failure details in server logs/diagnostics rather than turning
+        // an otherwise playable local fallback into a blocking narration error.
+        narrativeError = undefined;
+        console.warn('[NarrationFallback] AI narration unavailable; local story fallback used.', {
+          storyId: targetStoryId,
+          actionId: baseResult?.actionId,
+          provider: generated.providerId,
+          model: generated.modelId,
+          error: generated.error,
           fallbackReason: generated.fallbackReason,
           attemptsTrail: generated.attemptsTrail,
-        };
+        });
       }
     } catch (error: any) {
-      narrativeError = {
-        code: 'NARRATION_GENERATION_FAILED',
-        message: error?.message || String(error),
+      narrativeResponse = this.synthesizeFreeformActionFallback(
+        targetStoryId,
+        String(freeformText),
+        committedOutcome,
+      );
+      narrativeTurnPackage = {
+        narrative: [narrativeResponse],
+        dialogue: [],
+        events: ['LOCAL_NARRATION_FALLBACK'],
+        stateChanges: [],
+        memoryCandidates: [],
+        audioCues: [],
       };
+      narrativeGeneration = {
+        source: 'DETERMINISTIC_FALLBACK',
+        providerId: 'provider_local_story_fallback',
+        modelId: 'local-story-fallback',
+        regenerated: false,
+      };
+      narrativeError = undefined;
+      console.warn('[NarrationFallback] Narration generation threw; local story fallback used.', {
+        storyId: targetStoryId,
+        actionId: baseResult?.actionId,
+        error: error?.message || String(error),
+      });
     }
 
     const state = this.getDynamicStoryState(targetStoryId);
@@ -935,7 +991,7 @@ export class ServerMockAuthority {
     return new CapabilitySimulationEngine().isCapabilityLikeRequest(text);
   }
 
-  private synthesizeFreeformActionFallback(
+  public synthesizeFreeformActionFallback(
     storyId: string,
     actionText: string,
     committedOutcome?: string

@@ -10,6 +10,7 @@ import {
   CustomAttributeProposalRequest,
   CustomSkillProposalRequest,
   AdditionalCharacterSkillsProposalRequest,
+  AdditionalCharacterCapabilitiesProposalRequest,
   CustomEquipmentProposalRequest,
   CapabilityDefinition,
   GeneratedTechnique,
@@ -2264,6 +2265,208 @@ IMPORTANT:
    * current draft without automatically adding them. Every returned skill is a
    * player-reviewed proposal and is filtered against already existing skills.
    */
+  /**
+   * Infers up to four additional capability proposals from the full character concept and
+   * current draft in a single AI request. Nothing is committed automatically.
+   */
+  public async suggestAdditionalCapabilities(
+    input: AdditionalCharacterCapabilitiesProposalRequest,
+    worldTemplate: WorldTemplate
+  ): Promise<Array<CapabilityDefinition & { generatedSkills: GeneratedTechnique[] }>> {
+    const desiredCount = Math.max(1, Math.min(Number(input.desiredCount) || 4, 4));
+    const existingNames = new Set(
+      (input.existingCapabilities || [])
+        .map((capability) => String(capability?.name || '').trim().toLowerCase())
+        .filter(Boolean),
+    );
+    const characterContext = input.characterContext || {};
+
+    const prompt = [
+      'You are the DreamBook Character Genesis additional-capability discovery engine.',
+      'Infer OTHER useful, distinct capabilities that logically follow from the character.',
+      'Use identity, species, role, profession, background, personality, motivations, existing capabilities, and existing skills.',
+      'This is a SUGGESTION stage. Do not add, grant, learn, or execute anything.',
+      'WORLD:',
+      'Title: ' + (worldTemplate?.title || 'Unknown World'),
+      'Genre: ' + (worldTemplate?.genreTags?.join(', ') || 'Unknown'),
+      'Tone: ' + (worldTemplate?.toneTags?.join(', ') || 'Unknown'),
+      'Setting: ' + (worldTemplate?.setting || 'Unknown'),
+      'Rules Mode: ' + (worldTemplate?.dndRulesMode || 'FULL_DND'),
+      'World Rules: ' + JSON.stringify(worldTemplate?.worldRules || worldTemplate?.ruleConstraints || []),
+      'CHARACTER:',
+      'Name: ' + (characterContext.name || 'Unnamed'),
+      'Species: ' + (characterContext.species || 'Unknown'),
+      'Role: ' + (characterContext.role || 'Unknown'),
+      'Profession: ' + (characterContext.profession || 'Unknown'),
+      'Background: ' + (characterContext.background || 'Not provided'),
+      'Personality: ' + JSON.stringify(characterContext.personality || []),
+      'Motivations: ' + JSON.stringify(characterContext.motivations || []),
+      'Capabilities: ' + JSON.stringify(characterContext.capabilities || []),
+      'Skills: ' + JSON.stringify(characterContext.skills || []),
+      'ORIGINAL CHARACTER CONCEPT:',
+      input.characterConcept || 'Not provided',
+      'ALREADY OWNED / DRAFT CAPABILITIES:',
+      JSON.stringify((input.existingCapabilities || []).map((capability) => ({
+        name: capability.name,
+        category: capability.category,
+        powerTier: capability.powerTier,
+        description: capability.description,
+      }))),
+      'Generate up to ' + desiredCount + ' DISTINCT capability proposals. Prefer that many when the character supports them, but return fewer when there are not enough coherent options.',
+      'Each proposal must be meaningfully different from the others and from existing capabilities.',
+      'Do not contradict hard world rules. Avoid WorldScale unless clearly justified.',
+      'Each capability should contain 1-2 concise linked techniques.',
+      'FULL_DND: all capability checks, attack formulas, and saving-throw formulas MUST use 1d20.',
+      'HYBRID_DND: default to 1d20 unless the world explicitly supports a simple alternative.',
+      'CUSTOM_HOMEBREW_DND: do not silently apply D&D formulas.',
+      'OUTPUT STRICT JSON with a top-level capabilities array. Each entry must contain name, category, activationMode, powerTier, baseEnergyCost, baseStrainCost, description, actionType, targetType, rangeScope, checkFormula, damageFormula, effectDefinition, and techniques.',
+      'effectDefinition must contain resolutionMode, scale, targetingMode, instanceCount, attackFormula, saveFormula, savingThrowAbility, difficultyClass, damageFormula, damageType, outcome, and outcomeReason.',
+      'techniques entries must contain name, description, activationType, energyCost, cooldownTurns, range, checkFormula, and damageFormula.',
+    ].join('\n');
+
+    let raw: any = null;
+    try {
+      const response = await worldRepository.getAiOrchestrator().executeTaskGeneration(
+        'character.capability.propose',
+        prompt,
+        'Return only the requested JSON object containing additional capability proposals.',
+        {
+          timeoutMs: 18000,
+          maxTokens: 4200,
+          allowAdaptiveAiRecovery: true,
+          allowDeterministicFallback: false,
+          validateResponse: (text) => {
+            const parsed = this.parseJsonFromAiResponse(text);
+            const capabilities = Array.isArray(parsed) ? parsed : parsed?.capabilities;
+            return Array.isArray(capabilities)
+              ? { valid: true }
+              : { valid: false, errorReason: 'Additional capability discovery must return a capabilities array.' };
+          },
+        },
+      );
+
+      if (response.source === 'DETERMINISTIC_FALLBACK') {
+        throw this.buildAiUnavailableError(
+          response.fallbackReason || 'AI additional-capability discovery is unavailable; no automatic capability suggestions were created.',
+          response,
+        );
+      }
+      if (response.text) raw = this.parseJsonFromAiResponse(response.text);
+    } catch (error: any) {
+      if (error?.code === 'AI_UNAVAILABLE') throw error;
+      throw this.buildAiUnavailableError(
+        error?.message || 'AI additional-capability discovery failed; no automatic capability suggestions were created.',
+        error,
+      );
+    }
+
+    const candidates = Array.isArray(raw) ? raw : Array.isArray(raw?.capabilities) ? raw.capabilities : [];
+    const validCategories = new Set(['Combat', 'Magic', 'Movement', 'Domain', 'Perception', 'Biological', 'Social']);
+    const validActivationModes = new Set(['immediate', 'passive', 'reaction', 'charged', 'channelled', 'toggled']);
+    const validPowerTiers = new Set(['Minor', 'Moderate', 'Major', 'WorldScale']);
+    const validActionTypes = new Set(['action', 'bonus_action', 'reaction', 'free']);
+    const validTargetTypes = new Set(['single_target', 'self', 'area_of_effect', 'all_allies', 'all_enemies']);
+    const validRangeScopes = new Set(['melee', 'close', 'ranged', 'realm', 'global']);
+    const validResolutionModes = new Set(['SINGLE_ATTACK', 'MULTI_INSTANCE', 'SAVE', 'AREA', 'CHAIN', 'SEQUENCE', 'OUTCOME', 'WORLD_EFFECT']);
+    const validScales = new Set(['PERSON', 'GROUP', 'ENCOUNTER', 'STRUCTURE', 'DISTRICT', 'CITY', 'REGION', 'CONTINENT', 'PLANET', 'COSMIC']);
+    const seenNames = new Set(existingNames);
+    const suggestions: Array<CapabilityDefinition & { generatedSkills: GeneratedTechnique[] }> = [];
+
+    for (let index = 0; index < candidates.length && suggestions.length < desiredCount; index += 1) {
+      const candidate = candidates[index];
+      if (!candidate || typeof candidate !== 'object') continue;
+      const name = String(candidate.name || '').trim();
+      const description = String(candidate.description || '').trim();
+      const techniques = Array.isArray(candidate.techniques) ? candidate.techniques : [];
+      if (!name || !description || techniques.length === 0) continue;
+      const normalizedName = name.toLowerCase();
+      if (seenNames.has(normalizedName)) continue;
+
+      const capId = deterministicId(
+        'cap_ai_discovery',
+        input.worldId || worldTemplate?.worldId || 'unknown_world',
+        characterContext.name || input.characterConcept || 'character',
+        name,
+        index,
+      );
+      const rawEffect = candidate.effectDefinition && typeof candidate.effectDefinition === 'object' ? candidate.effectDefinition : {};
+      const category = validCategories.has(candidate.category) ? candidate.category : 'Combat';
+      const activationMode = validActivationModes.has(candidate.activationMode) ? candidate.activationMode : 'immediate';
+      const powerTier = validPowerTiers.has(candidate.powerTier) ? candidate.powerTier : 'Moderate';
+      const actionType = validActionTypes.has(candidate.actionType) ? candidate.actionType : 'action';
+      const targetType = validTargetTypes.has(candidate.targetType) ? candidate.targetType : 'single_target';
+      const rangeScope = validRangeScopes.has(candidate.rangeScope) ? candidate.rangeScope : 'close';
+
+      const capability: CapabilityDefinition = {
+        id: capId,
+        name,
+        category,
+        activationMode,
+        powerTier,
+        baseEnergyCost: Math.max(0, Number(candidate.baseEnergyCost ?? 15)),
+        baseStrainCost: Math.max(0, Number(candidate.baseStrainCost ?? 5)),
+        minVesselCapacityRequired: Math.max(0, Number(candidate.minVesselCapacityRequired ?? 15)),
+        description,
+        provenance: 'AI_GENERATED',
+        actionType,
+        targetType,
+        rangeScope,
+        sourceUserPrompt: input.characterConcept,
+        checkFormula: worldTemplate?.dndRulesMode === 'FULL_DND' || !worldTemplate?.dndRulesMode ? '1d20' : normalizeDiceFormula(candidate.checkFormula, '1d20'),
+        damageFormula: typeof candidate.damageFormula === 'string' ? candidate.damageFormula : undefined,
+        storyCheckChallenges: Array.isArray(candidate.storyCheckChallenges) ? candidate.storyCheckChallenges : undefined,
+      };
+
+      const effectDefinition: CombatEffectDefinition = {
+        id: capId + '_effect',
+        name,
+        resolutionMode: validResolutionModes.has(rawEffect.resolutionMode) ? rawEffect.resolutionMode : 'SINGLE_ATTACK',
+        scale: validScales.has(rawEffect.scale) ? rawEffect.scale : 'PERSON',
+        actionCost: actionType === 'bonus_action' ? 'BONUS_ACTION' : actionType === 'reaction' ? 'REACTION' : actionType === 'free' ? 'FREE' : 'ACTION',
+        targetingMode: rawEffect.targetingMode || (targetType === 'area_of_effect' ? 'ALL_IN_AREA' : 'ONE_TARGET'),
+        instanceCount: rawEffect.instanceCount == null ? undefined : Math.max(1, Math.min(50, Math.trunc(Number(rawEffect.instanceCount) || 1))),
+        attackFormula: worldTemplate?.dndRulesMode === 'FULL_DND' || !worldTemplate?.dndRulesMode ? '1d20' : normalizeDiceFormula(rawEffect.attackFormula || capability.checkFormula, '1d20'),
+        saveFormula: worldTemplate?.dndRulesMode === 'FULL_DND' || !worldTemplate?.dndRulesMode ? '1d20' : normalizeDiceFormula(rawEffect.saveFormula || capability.checkFormula, '1d20'),
+        savingThrowAbility: typeof rawEffect.savingThrowAbility === 'string' ? rawEffect.savingThrowAbility : undefined,
+        difficultyClass: Number.isFinite(Number(rawEffect.difficultyClass)) ? Math.max(1, Math.trunc(Number(rawEffect.difficultyClass))) : undefined,
+        damageFormula: typeof rawEffect.damageFormula === 'string' ? rawEffect.damageFormula : capability.damageFormula,
+        damageType: typeof rawEffect.damageType === 'string' ? rawEffect.damageType : undefined,
+        outcome: typeof rawEffect.outcome === 'string' ? rawEffect.outcome : undefined,
+        outcomeReason: typeof rawEffect.outcomeReason === 'string' ? rawEffect.outcomeReason : undefined,
+        outcomePayload: rawEffect.outcomePayload && typeof rawEffect.outcomePayload === 'object' ? rawEffect.outcomePayload : undefined,
+        provenance: 'CHARACTER_GENESIS',
+        aiGenerated: true,
+      };
+
+      const generatedSkills: GeneratedTechnique[] = techniques.slice(0, 2).map((technique: any, techniqueIndex: number) => ({
+        id: 'skill_' + capId + '_' + (techniqueIndex + 1),
+        name: String(technique?.name || (name + ' Technique ' + (techniqueIndex + 1))),
+        description: String(technique?.description || ('Focused application of ' + name + '.')),
+        parentCapabilityId: capId,
+        parentCapabilityName: name,
+        activationType: String(technique?.activationType || 'Active Action'),
+        energyCost: Math.max(0, Number(technique?.energyCost ?? 10)),
+        cooldownTurns: Math.max(0, Number(technique?.cooldownTurns ?? 1)),
+        range: String(technique?.range || 'Close'),
+        checkFormula: worldTemplate?.dndRulesMode === 'FULL_DND' || !worldTemplate?.dndRulesMode ? '1d20' : normalizeDiceFormula(technique?.checkFormula || capability.checkFormula, '1d20'),
+        damageFormula: typeof technique?.damageFormula === 'string' ? technique.damageFormula : undefined,
+        provenance: 'AI_GENERATED' as CharacterProvenanceSource,
+      }));
+
+      if (generatedSkills.length === 0) continue;
+      suggestions.push({ ...capability, effectDefinition, generatedSkills });
+      seenNames.add(normalizedName);
+    }
+
+    if (suggestions.length === 0) {
+      throw this.buildAiUnavailableError(
+        'AI did not return any distinct, usable additional capabilities for this character. No capability suggestions were added.',
+      );
+    }
+
+    return suggestions;
+  }
+
   public async suggestAdditionalSkills(
     input: AdditionalCharacterSkillsProposalRequest,
     worldTemplate: WorldTemplate

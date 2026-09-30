@@ -362,6 +362,8 @@ export interface ActionLog {
   id: string;
   timestamp: string;
   cycle: number;
+  /** Player-action turn ordinal within the Story Run; separate from in-world calendar cycle/day. */
+  turnNumber?: number;
   actionType: 'MOVEMENT' | 'DIALOGUE_CHOICE' | 'INSPECTION' | 'EQUIP_REQUEST' | 'CUSTOM_ACTION' | 'NOTE_RECORD';
   description: string;
   epistemicValidation: EpistemicValidationStatus;

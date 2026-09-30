@@ -1066,6 +1066,91 @@ export class StoryActionAdvisor {
 			const speaker = String(sceneContext.activeDialogue).split(':')[0]?.trim() || 'the nearby character';
 			addContextTip('Press the conversation', `Respond to ${speaker} and test what they are willing to reveal.`, `I respond to ${speaker} and ask what they are hiding.`, 'DIALOGUE');
 		}
+
+		if (sceneTopics.length > 0 && visibleNpcNames.length > 0) {
+			const topic = sceneTopics[0];
+			for (const npcName of visibleNpcNames.slice(0, 2)) {
+				addContextTip(
+					`Ask ${npcName} about the lead`,
+					`${npcName} is present here, and the current scene contains a specific rumor or report: ${topic}.`,
+					`I ask ${npcName} what they know about ${topic}.`,
+					'SOCIAL_INFORMATION',
+				);
+			}
+		} else if (sceneTopics.length > 0) {
+			const topic = sceneTopics[0];
+			addContextTip(
+				'Ask about the rumor',
+				`The current scene contains a concrete rumor or report: ${topic}.`,
+				`I ask the people here what they know about ${topic}.`,
+				'SOCIAL_INFORMATION',
+			);
+		}
+
+		if (rumorFacts.length > 0 && visibleNpcNames.length > 0) {
+			addContextTip(
+				`Cross-check the rumor with ${visibleNpcNames[0]}`,
+				'You already know a rumor from your canonical memory. Ask a person who is actually present whether their account matches it.',
+				`I ask ${visibleNpcNames[0]} whether they have heard anything that confirms or contradicts the rumor I know.`,
+				'CROSS_CHECK_INFORMATION',
+			);
+		}
+
+		if (nearbyDestinations.length > 0) {
+			const leadTopic = sceneTopics[0];
+			for (const destination of nearbyDestinations.slice(0, 2)) {
+				const destinationCue = normalize(
+					[
+						destination.node.name,
+						destination.node.description,
+						destination.node.ambientSensory,
+					].filter(Boolean).join(' ')
+				);
+				const usefulDestination = Boolean(leadTopic) ||
+					/\b(tavern|inn|market|guild|archive|library|shrine|shop|merchant|cartograph|map|watch|citadel|hall)\b/i.test(destinationCue);
+				if (!usefulDestination) continue;
+
+				addContextTip(
+					`Follow the lead to ${destination.node.name}`,
+					leadTopic
+						? `${destination.node.name} is a known reachable destination, so you can pursue the current lead there.`
+						: `${destination.node.name} is a known reachable place whose description suggests it may be relevant to the current situation.`,
+					leadTopic
+						? `I travel to ${destination.node.name} to follow up on ${leadTopic}.`
+						: `I travel to ${destination.node.name} to investigate what I can learn there.`,
+					'FOLLOW_LEAD_TO_LOCATION',
+				);
+			}
+		}
+
+		if (hasMapCue) {
+			const mapTargetNpc = nearbyNpcs.find((npc) => /\b(trader|merchant|cartographer|mapmaker|vendor|shopkeeper)\b/i.test(npc.name + ' ' + npc.currentActivity));
+			if (mapTargetNpc) {
+				addContextTip(
+					'Ask about a local map',
+					`${mapTargetNpc.name} is a current local contact and the scene contains map or trade cues.`,
+					`I ask ${mapTargetNpc.name} whether they sell or know where I can get a map of the local area.`,
+					'MAP_INFORMATION',
+				);
+			} else {
+				addContextTip(
+					'Find a local map',
+					'The current scene contains map, chart, atlas, or trading cues, so finding a local map is a grounded next step.',
+					'I ask around here where I can buy or obtain a map of the area.',
+					'MAP_INFORMATION',
+				);
+			}
+		}
+
+		if (unresolvedEvents.length > 0) {
+			const event = unresolvedEvents[unresolvedEvents.length - 1];
+			addContextTip(
+				`Follow up on ${event.name}`,
+				`${event.name} is still unresolved at or near the current location.`,
+				`I investigate the situation connected to ${event.name} before leaving this area.`,
+				'FOLLOW_UP_EVENT',
+			);
+		}
 		if (/(anomal|disturb|strange|rift|collapse|unstable|temporal|magic|energy|threat|danger|trap|blood|fire|smoke|ice|footprint|sound|noise)/i.test(normalizedScene)) {
 			addContextTip('Investigate the immediate disturbance', `Study the unusual details currently visible in ${locationLabel} before committing to an action.`, `I carefully inspect the immediate area of ${locationLabel} for the source of the disturbance.`, 'INVESTIGATE_SCENE');
 		}

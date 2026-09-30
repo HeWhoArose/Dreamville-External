@@ -6342,9 +6342,7 @@ export class MultiModelOrchestrator {
     const escapedActor = String(actorName || '')
       .trim()
       .replace(/[.*+?^$()|[\]\\]/g, '\\$&');
-    narration: string,
-    playerAction: string,
-  ): { valid: boolean; errorReason?: string } {');
+
     const subjects = ['you'];
     if (escapedActor) subjects.push(escapedActor);
 

@@ -21,6 +21,15 @@ import { narrativeContinuityEngine } from './narrativeContinuityEngine';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
 
+const NARRATIVE_INFORMATION_SEEKING_PATTERN =
+	/\b(ask|asked|inquire|inquired|question|questioned|find out|learn|discover|gather information|seek information|rumor|rumors|rumour|rumours|gossip|what happened|who|why|where|when|how|heard about|tell me)\b/i;
+
+const NARRATIVE_INFORMATION_RESPONSE_PATTERN =
+	/\b(answer|answered|answers|reply|replied|replies|respond|responded|responds|explain|explained|explains|mention|mentioned|mentions|report|reported|reports|reveal|revealed|reveals|confirm|confirmed|confirms|warn|warned|warns|tell|told|tells|said|says|whispered|whispers|admitted|admits|learned|learns|heard|hears)\b/i;
+
+const NARRATIVE_INFORMATION_NONANSWER_PATTERN =
+	/\b(no one|nobody|no reliable answer|nothing definite|nothing certain|could not say|couldn't say|did not know|didn't know|refused to answer|kept silent|offered only|conflicting accounts|uncertain|unknown|unclear|unverified|hearsay)\b/i;
+
 export type TaskId =
   | 'narrative.generate'
   | 'character.dialogue'
@@ -6263,7 +6272,7 @@ export class MultiModelOrchestrator {
       { label: 'movement', pattern: /\b(?:walk|walks|walked|move|moves|moved|step|steps|stepped|approach|approaches|approached|head|heads|headed|travel|travels|traveled)\b/i, anchors: ['walk', 'move', 'step', 'approach', 'head', 'travel'] },
       { label: 'item or text examination', pattern: /\b(?:examine|examines|examined|inspect|inspects|inspected|study|studies|studied|read|reads|decipher|deciphers|deciphered|translate|translates|translated|look at|looks at|looked at)\b/i, anchors: ['examine', 'inspect', 'study', 'read', 'decipher', 'translate', 'look'] },
       { label: 'taking or holding', pattern: /\b(?:take|takes|took|pick up|picks up|picked up|grasp|grasps|grasped|hold|holds|held|carry|carries|carried)\b/i, anchors: ['take', 'took', 'pick', 'grasp', 'hold', 'carry'] },
-      { label: 'speaking', pattern: /\b(?:ask|asks|asked|say|says|said|speak|speaks|spoke|tell|tells|told|reply|replies|replied|answer|answers|answered)\b/i, anchors: ['ask', 'say', 'said', 'speak', 'spoke', 'tell', 'reply', 'answer'] },
+      { label: 'speaking', pattern: /\b(?:ask|asks|asked|say|says|said|speak|speaks|spoke|tell|tells|told|reply|replies|replied|answer|answers|answered|inquire|inquires|inquired|question|questions|questioned|consult|consults|consulted)\b/i, anchors: ['ask', 'say', 'said', 'speak', 'spoke', 'tell', 'reply', 'answer', 'inquire', 'question', 'consult'] },
     ];
 
     for (const requirement of requirements) {
@@ -6280,6 +6289,7 @@ export class MultiModelOrchestrator {
       /\b(?:walk|move|step|approach|head|travel)\s+(?:toward|towards|to|into)\s+(.+?)(?=[.!?]|\s+(?:and|then|while|before|after)\b|$)/i,
       /\b(?:examine|inspect|study|read|decipher|translate|look at)\s+(.+?)(?=[.!?]|\s+(?:and|then|while|before|after)\b|$)/i,
       /\b(?:pick up|take|grasp|hold|carry)\s+(.+?)(?=[.!?]|\s+(?:and|then|while|before|after)\b|$)/i,
+      /\b(?:ask|question|inquire|consult)\s+(?:about\s+)?(.+?)(?=[.!?]|\s+(?:and|then|while|before|after)\b|$)/i,
     ];
     const targetStopWords = new Set(['the', 'a', 'an', 'my', 'this', 'that', 'and', 'then', 'while', 'before', 'after', 'next', 'carefully', 'quietly', 'slowly', 'gently', 'firmly', 'nearby', 'there', 'here']);
 
@@ -6301,6 +6311,30 @@ export class MultiModelOrchestrator {
           errorReason: `Narration action-continuity guard rejected output: the current action targets "${targetTokens.join(' ')}", but the narration did not visibly include that target.`,
         };
       }
+    }
+
+    return { valid: true };
+  }
+
+  private validateNarrativeInformationContinuity(
+    narration: string,
+    playerAction: string,
+  ): { valid: boolean; errorReason?: string } {
+    const action = String(playerAction || '').trim();
+    const output = String(narration || '').trim();
+    if (!action || !output || !NARRATIVE_INFORMATION_SEEKING_PATTERN.test(action)) {
+      return { valid: true };
+    }
+
+    const hasInformationResponse = NARRATIVE_INFORMATION_RESPONSE_PATTERN.test(output);
+    const hasGroundedNonAnswer = NARRATIVE_INFORMATION_NONANSWER_PATTERN.test(output);
+    const hasQuotedResponse = /[“"][^”"]{12,}[”"]/i.test(output);
+
+    if (!hasGroundedNonAnswer && !(hasInformationResponse && (hasQuotedResponse || /\b(?:that|because|about|from|near|inside|within|after|before|according to|according)\b/i.test(output)))) {
+      return {
+        valid: false,
+        errorReason: 'Narration information-continuity guard rejected output: the current action seeks information, but the response does not contain a grounded answer, quoted response, or explicit limitation on what can be learned.',
+      };
     }
 
     return { valid: true };
@@ -6418,6 +6452,13 @@ export class MultiModelOrchestrator {
       'Never use phrases such as "the outcome unfolds in the narrative", "the action is committed", or other implementation language.',
       'Use relevant Narrative Research only when it materially helps the current action; never dump raw research.',
       'Vary sentence rhythm and sensory detail without repeating recent turns.',
+      'Substance has priority over flourish. Every paragraph must either depict a concrete current-turn action, reveal a canon-grounded observation, show an immediate reaction/consequence, or establish a specific unresolved detail. Do not spend a paragraph merely describing atmosphere that does not change what the player knows or what is happening.',
+      'Do not pad short actions into poetic scene-setting. The player action is the reason this turn exists; move the scene forward because of it.',
+      'When the current action contains multiple concrete steps, resolve each observable step in order instead of stopping after the first movement.',
+      NARRATIVE_INFORMATION_SEEKING_PATTERN.test(playerAction)
+        ? 'This is an information-seeking action. The minimum useful response is: reach the relevant source already established in context, make the inquiry, then provide the specific information that can be learned from canonical context or clearly state that the available people provide no reliable answer. Distinguish rumor or hearsay from established fact. Do not replace the inquiry with atmosphere, and do not invent a named informant, secret, fact, or revelation that is not supported by the supplied context.'
+        : '',
+      'Prefer concrete nouns, specific observations, reactions, facts, and consequences over decorative adjectives and repeated sensory metaphors.',
       authoritativeOutcome
         ? 'A canonical outcome has already been resolved. Describe only the observable experience and immediate consequences supported by it.'
         : 'No canonical mechanical outcome was supplied. Describe only the attempt and observable scene response; do not decide hidden success or failure.',
@@ -6528,6 +6569,8 @@ export class MultiModelOrchestrator {
           if (!continuity.valid) return { valid: false, errorReason: continuity.errorReason };
           const actionContinuity = this.validateNarrativeActionContinuity(narrationText, playerAction);
           if (!actionContinuity.valid) return { valid: false, errorReason: actionContinuity.errorReason };
+          const informationContinuity = this.validateNarrativeInformationContinuity(narrationText, playerAction);
+          if (!informationContinuity.valid) return { valid: false, errorReason: informationContinuity.errorReason };
           const temporalContinuity = this.validateNarrativeTemporalContinuity(narrationText, worldRepo, storyId);
           return temporalContinuity.valid
             ? { valid: true }
@@ -6582,6 +6625,20 @@ export class MultiModelOrchestrator {
         researchPacket,
         contextAudit,
         error: finalActionContinuity.errorReason || 'Narration action continuity validation failed.',
+      };
+    }
+    const finalInformationContinuity = this.validateNarrativeInformationContinuity(finalNarrationText, playerAction);
+    if (!finalInformationContinuity.valid) {
+      return {
+        success: false,
+        providerId: generated.providerId,
+        modelId: generated.modelId,
+        source: generated.source,
+        fallbackReason: generated.fallbackReason,
+        attemptsTrail: generated.attemptsTrail,
+        researchPacket,
+        contextAudit,
+        error: finalInformationContinuity.errorReason || 'Narration information continuity validation failed.',
       };
     }
     const finalTemporalContinuity = this.validateNarrativeTemporalContinuity(finalNarrationText, worldRepo, storyId);

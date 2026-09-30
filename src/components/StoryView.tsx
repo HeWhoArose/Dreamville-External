@@ -1008,6 +1008,15 @@ export const StoryView: React.FC<StoryViewProps> = ({
           .filter((entry) => !(entry.actionType === 'NOTE_RECORD' && entry.id.includes('act_open_')))
           .slice()
           .reverse();
+        const fallbackTurnNumbers = new Map<string, number>();
+        let fallbackTurn = 0;
+        for (const entry of history) {
+          if (entry.actionType !== 'NOTE_RECORD') fallbackTurn += 1;
+          fallbackTurnNumbers.set(
+            entry.id,
+            entry.turnNumber ?? (entry.actionType === 'NOTE_RECORD' ? 0 : fallbackTurn),
+          );
+        }
         const visible = history.slice(Math.max(0, history.length - visibleTurnCount));
         const olderCount = Math.max(0, history.length - visible.length);
 

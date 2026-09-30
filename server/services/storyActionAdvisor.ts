@@ -1110,16 +1110,35 @@ export class StoryActionAdvisor {
 					/\b(tavern|inn|market|guild|archive|library|shrine|shop|merchant|cartograph|map|watch|citadel|hall)\b/i.test(destinationCue);
 				if (!usefulDestination) continue;
 
-				addContextTip(
-					`Follow the lead to ${destination.node.name}`,
-					leadTopic
-						? `${destination.node.name} is a known reachable destination, so you can pursue the current lead there.`
-						: `${destination.node.name} is a known reachable place whose description suggests it may be relevant to the current situation.`,
-					leadTopic
-						? `I travel to ${destination.node.name} to follow up on ${leadTopic}.`
-						: `I travel to ${destination.node.name} to investigate what I can learn there.`,
-					'FOLLOW_LEAD_TO_LOCATION',
-				);
+				const socialDestination = /\b(tavern|inn|market|guild|merchant|trader|shop|vendor)\b/i.test(destinationCue);
+				if (leadTopic && socialDestination) {
+					addContextTip(
+						`Ask around in ${destination.node.name}`,
+						`${destination.node.name} is a known reachable social or trading destination, making it a grounded place to pursue the current lead.`,
+						`I travel to ${destination.node.name} and ask around for gossip about ${leadTopic}.`,
+						'FOLLOW_LEAD_FOR_GOSSIP',
+					);
+				} else {
+					addContextTip(
+						`Follow the lead to ${destination.node.name}`,
+						leadTopic
+							? `${destination.node.name} is a known reachable destination, so you can pursue the current lead there.`
+							: `${destination.node.name} is a known reachable place whose description suggests it may be relevant to the current situation.`,
+						leadTopic
+							? `I travel to ${destination.node.name} to follow up on ${leadTopic}.`
+							: `I travel to ${destination.node.name} to investigate what I can learn there.`,
+						'FOLLOW_LEAD_TO_LOCATION',
+					);
+				}
+
+				if (/\b(market|shop|merchant|trader|vendor|cartograph|map)\b/i.test(destinationCue)) {
+					addContextTip(
+						`Look for a local map in ${destination.node.name}`,
+						`${destination.node.name} has canonical trade or map-related cues that make a map search relevant.`,
+						`I look for a local map in ${destination.node.name} and ask whether one is available for purchase.`,
+						'MAP_INFORMATION',
+					);
+				}
 			}
 		}
 

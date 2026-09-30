@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
+import { InMemoryWorldRepository, worldRepository } from '../server/repositories/worldRepository';
 import { MultiModelOrchestrator } from '../server/domain/aiOrchestrator';
 
 test('narration continuity rejects a current action that is silently replaced by unrelated prose', () => {
@@ -57,9 +57,8 @@ test('narration continuity rejects contradictory time-of-day language', () => {
 });
 
 test('canonical action turn numbers increment independently from world calendar cycle', async () => {
-	const repository = new InMemoryWorldRepository({ disablePersistence: true });
 	const storyId = 'turn_number_regression';
-	repository.seedStory(storyId);
+	worldRepository.seedStory(storyId);
 
 	const { serverMockAuthority } = await import('../server/mockEngine/serverMockAuthority');
 	serverMockAuthority.processAction({ type: 'CUSTOM_ACTION', actionText: 'I breathe.', storyId } as any);

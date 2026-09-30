@@ -205,10 +205,10 @@ test('Character Genesis — batch additional capability discovery', async (t) =>
 			testWorld,
 		);
 
-		assert.equal(suggestions.length, 3);
+		assert.equal(suggestions.length, 4);
 		assert.deepEqual(
 			suggestions.map((capability) => capability.name),
-			['Mirror Ward', 'Wind Step', 'Arcane Appraisal'],
+			['Mirror Ward', 'Wind Step', 'Arcane Appraisal', 'Unused Fifth Option'],
 		);
 		assert.ok(suggestions.every((capability) => capability.provenance === 'AI_GENERATED'));
 		assert.ok(suggestions.every((capability) => capability.generatedSkills.length >= 1));

@@ -50,6 +50,26 @@ test('dice presets include Norse Foundry-inspired artistic families', () => {
   assert.ok(themes.includes('Warm antique-gold dice'));
 });
 
+test('current custom actions remain editable, and AI narration failure still produces local prose', () => {
+  const view = read('src/components/StoryView.tsx');
+  const authority = read('server/mockEngine/serverMockAuthority.ts');
+  const routes = read('server/api/gameRoutes.ts');
+
+  assert.ok(view.includes('entry.actionType === ' + "'CUSTOM_ACTION'"));
+  assert.ok(view.includes('entry.canonicalCommandId'));
+  assert.ok(view.includes('Replace & rewind'));
+
+  assert.ok(authority.includes('public synthesizeFreeformActionFallback'));
+  assert.ok(authority.includes('LOCAL_NARRATION_FALLBACK'));
+  assert.ok(authority.includes("modelId: 'local-story-fallback'"));
+
+  assert.ok(routes.includes("gameRouter.post('/action/history/edit'"));
+  assert.ok(routes.includes('targetIndex'));
+  assert.ok(routes.includes('removedActionCount'));
+  assert.ok(routes.includes("modelId: 'local-story-fallback'"));
+  assert.ok(routes.includes('return res.json({'));
+});
+
 test('past-action edits remain distinct from presentation-only narration regeneration', () => {
   const view = read('src/components/StoryView.tsx');
   const routes = read('server/api/gameRoutes.ts');

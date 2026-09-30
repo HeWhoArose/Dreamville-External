@@ -58,6 +58,8 @@ export interface CanonicalCommandEvent {
 		preStateSnapshot?: CanonicalStateSnapshot;
 		/** Original authoritative command payload used for audit/replay. */
 		commandPayload?: Record<string, unknown>;
+		/** ServerMockAuthority presentation state immediately before this command. Internal only. */
+		mockStateBefore?: unknown;
 		rngState: {
 			combat: {
 				before: { seed: number; rollCounter: number };

@@ -495,6 +495,12 @@ export class WorkingContextEngine {
     // 3. Time
     const locationName = currentSituation.location.name;
     const timeHeader = clock.getFormattedLocationTimeHeader(locationName, clock.getTimestamp());
+    const actionText = params.playerAction || 'Observe surroundings';
+    const contextNeeds = deriveNarrationContextNeeds({
+      actionText,
+      npcTargetId: params.npcTargetId,
+      isInCombat: false,
+    });
       actionText,
       npcTargetId: params.npcTargetId,
       isInCombat: false,

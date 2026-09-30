@@ -219,6 +219,26 @@ class ApiClient {
     return data;
   }
 
+  public async editPastAction(params: {
+    storyId?: string;
+    actionId: string;
+    newActionText: string;
+  }): Promise<any> {
+    const query = params.storyId ? `?storyId=${encodeURIComponent(params.storyId)}` : '';
+    const res = await fetch(`${this.baseUrl}/action/history/edit${query}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const error: any = new Error(data?.errorReason || data?.error || `Past action edit failed with HTTP ${res.status}`);
+      error.status = res.status;
+      error.data = data;
+      throw error;
+    }
+    return data;
+  }
   public async getNarrativeContextAudit(storyId: string): Promise<any> {
     const res = await fetch(`${this.baseUrl}/story-runs/${encodeURIComponent(storyId)}/narrative/context`, {
       method: 'GET',

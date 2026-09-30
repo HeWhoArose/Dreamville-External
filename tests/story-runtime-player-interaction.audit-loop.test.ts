@@ -54,6 +54,19 @@ test('S2 dice presentation preserves authoritative group structure across eleven
 	}
 });
 
+test('S2 narration turn labels use action turn ordinals rather than world calendar cycles', () => {
+	const types = read('src/types.ts');
+	const story = read('src/components/StoryView.tsx');
+	const authority = read('server/mockEngine/serverMockAuthority.ts');
+
+	for (let iteration = 1; iteration <= 11; iteration += 1) {
+		assert.match(types, /turnNumber\?: number/, `Audit ${iteration}: ActionLog turnNumber contract missing`);
+		assert.match(story, /fallbackTurnNumbers/, `Audit ${iteration}: story view turn-number fallback missing`);
+		assert.match(story, /fallbackTurnNumbers\.get\(entry\.id\)/, `Audit ${iteration}: story view must render action turn ordinals`);
+		assert.match(authority, /completedTurns = state\.actionHistory\.reduce/, `Audit ${iteration}: server turn-number sequencing missing`);
+	}
+});
+
 test('S2 Story/OOC/Continue and player portrait remain connected to canonical story state', () => {
 	const story = read('src/components/StoryView.tsx');
 	const app = read('src/App.tsx');

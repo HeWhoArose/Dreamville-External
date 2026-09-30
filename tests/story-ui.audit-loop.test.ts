@@ -72,6 +72,11 @@ test('Story UI audit-implementation-regression-fallback loop completes ten deter
 			`Audit ${iteration}: stale reverse-before-window timeline bug returned`,
 		);
 		assert.equal(
+			story.includes('const visible = [...history.slice(0, visibleTurnCount)].reverse();'),
+			true,
+			`Audit ${iteration}: story timeline is not windowed before chronological reversal`,
+		);
+		assert.equal(
 			story.includes("inputMode === 'OOC' && oocHistory.length > 0"),
 			true,
 			`Audit ${iteration}: OOC transcript remains visible after returning to Story mode`,

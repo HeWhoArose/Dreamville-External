@@ -957,6 +957,7 @@ export class StoryActionAdvisor {
 			actionText,
 			actorCapabilities,
 			canonicalSceneContext,
+			true,
 		);
 
 		if (tips.length > 0) return tips;

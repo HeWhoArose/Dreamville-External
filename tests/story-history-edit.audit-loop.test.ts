@@ -11,29 +11,30 @@ test('past-action editing is wired across UI, API, canonical checkpointing, and 
   const types = read('src/types.ts');
   const engine = read('server/domain/canonicalCommandEngine.ts');
 
-  assert.match(view, /actionEditActionId/);
-  assert.match(view, /apiClient\\.editPastAction/);
-  assert.match(view, /Replace & rewind/);
-  assert.match(view, /document\\.addEventListener\\('pointerdown'/);
-  assert.match(view, /ref=\\{narrationMenuRef\\}/);
-  assert.match(view, /entry\\.actionType === 'CUSTOM_ACTION'/);
+  assert.ok(view.includes('actionEditActionId'));
+  assert.ok(view.includes('apiClient.editPastAction'));
+  assert.ok(view.includes('Replace & rewind'));
+  assert.ok(view.includes("document.addEventListener('pointerdown'"));
+  assert.ok(view.includes('ref={narrationMenuRef}'));
+  assert.ok(view.includes("entry.actionType === 'CUSTOM_ACTION'"));
 
-  assert.match(client, /editPastAction\\(params/);
-  assert.match(client, /\\/action\\/history\\/edit/);
+  assert.ok(client.includes('editPastAction(params'));
+  assert.ok(client.includes('/action/history/edit'));
 
-  assert.match(types, /canonicalCommandId\\?: string/);
-  assert.match(types, /canonicalEventId\\?: string/);
+  assert.ok(types.includes('canonicalCommandId?: string'));
+  assert.ok(types.includes('canonicalEventId?: string'));
 
-  assert.match(engine, /preStateSnapshot\\?: CanonicalStateSnapshot/);
-  assert.match(engine, /mockStateBefore\\?: unknown/);
-  assert.match(engine, /preStateSnapshot: clone\\(before\\)/);
+  assert.ok(engine.includes('preStateSnapshot?: CanonicalStateSnapshot'));
+  assert.ok(engine.includes('mockStateBefore?: unknown'));
+  assert.ok(engine.includes('preStateSnapshot:'));
+  assert.ok(engine.includes('buildReplayCheckpoint(before)'));
 
-  assert.match(routes, /POST \\/api\\/game\\/action\\/history\\/edit/);
-  assert.match(routes, /targetEvent\\?\\.replay\\?\\.preStateSnapshot/);
-  assert.match(routes, /restoreCanonicalStateSnapshot\\(preStateSnapshot/);
-  assert.match(routes, /serverMockAuthority\\.importTransactionalState\\(storyId, mockStateBefore\\)/);
-  assert.match(routes, /processCustomAction\\(/);
-  assert.match(routes, /removedActionCount/);
+  assert.ok(routes.includes("gameRouter.post('/action/history/edit'"));
+  assert.ok(routes.includes('targetEvent?.replay?.preStateSnapshot'));
+  assert.ok(routes.includes('restoreCanonicalStateSnapshot(preStateSnapshot'));
+  assert.ok(routes.includes('serverMockAuthority.importTransactionalState(storyId, mockStateBefore)'));
+  assert.ok(routes.includes('processCustomAction('));
+  assert.ok(routes.includes('removedActionCount'));
 });
 
 test('dice presets include Norse Foundry-inspired artistic families', () => {
@@ -43,21 +44,21 @@ test('dice presets include Norse Foundry-inspired artistic families', () => {
     assert.ok(themes.includes("id: '" + id + "'"));
   }
 
-  assert.match(themes, /Regal purple-and-gold metal/);
-  assert.match(themes, /Gemstone-style violet glass/);
-  assert.match(themes, /Dark forged-metal dice/);
-  assert.match(themes, /Warm antique-gold dice/);
+  assert.ok(themes.includes('Regal purple-and-gold metal'));
+  assert.ok(themes.includes('Gemstone-style violet glass'));
+  assert.ok(themes.includes('Dark forged-metal dice'));
+  assert.ok(themes.includes('Warm antique-gold dice'));
 });
 
 test('past-action edits remain distinct from presentation-only narration regeneration', () => {
   const view = read('src/components/StoryView.tsx');
   const routes = read('server/api/gameRoutes.ts');
 
-  const presentationOnlyIndex = routes.indexOf('POST /api/game/action/narrate/regenerate');
-  const historyEditIndex = routes.indexOf('POST /api/game/action/history/edit');
+  const presentationOnlyIndex = routes.indexOf('gameRouter.post(\'/action/narrate/regenerate\'');
+  const historyEditIndex = routes.indexOf('gameRouter.post(\'/action/history/edit\'');
   assert.ok(historyEditIndex >= 0);
   assert.ok(presentationOnlyIndex >= 0);
   assert.notEqual(historyEditIndex, presentationOnlyIndex);
-  assert.match(view, /regenerateNarration\\(entry/);
-  assert.match(view, /editPastAction\\(entry/);
+  assert.ok(view.includes('regenerateNarration(entry'));
+  assert.ok(view.includes('editPastAction(entry'));
 });

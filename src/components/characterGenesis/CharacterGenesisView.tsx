@@ -2724,6 +2724,128 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 </div>
               )}
 
+              {/* AI Additional Capability Discovery Review Gate */}
+              <div className="p-4 rounded-xl bg-emerald-950/30 border border-emerald-800/70 space-y-3 mt-3 shadow-inner">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-emerald-200 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Additional Capability Discovery</span>
+                    </div>
+                    <p className="text-[11px] text-neutral-400 mt-1 leading-relaxed">
+                      Add More uses the full character concept, identity, background, role, motivations, existing capabilities, and skills to propose up to four distinct additional capabilities. Nothing is added until you accept it.
+                    </p>
+                  </div>
+                  <span className="text-[10px] px-2 py-1 rounded bg-neutral-950/70 border border-emerald-800 text-emerald-300 font-mono shrink-0">
+                    UP TO 4
+                  </span>
+                </div>
+
+                {isSuggestingMoreCapabilities && (
+                  <div className="p-3 rounded-lg bg-neutral-950/80 border border-emerald-900/80 flex items-center gap-3 text-xs text-emerald-200">
+                    <RefreshCw className="w-4 h-4 animate-spin text-emerald-400 shrink-0" />
+                    <div>
+                      <div className="font-semibold">Generating capability proposals…</div>
+                      <div className="text-[10px] text-neutral-500 mt-0.5">
+                        Reviewing the complete character and current capability set.
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {additionalCapabilitiesError && (
+                  <div className="p-3 rounded-lg bg-red-950/40 border border-red-800/60 text-xs text-red-300">
+                    {additionalCapabilitiesError}
+                  </div>
+                )}
+
+                {additionalCapabilitySuggestions.length > 0 ? (
+                  <div className="space-y-3 pt-2 border-t border-emerald-900/80">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <div className="text-xs font-semibold text-emerald-200">
+                        AI Proposed Capabilities ({additionalCapabilitySuggestions.length})
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={handleRejectAllAdditionalCapabilities}
+                          className="px-2.5 py-1 rounded bg-neutral-900 border border-neutral-700 text-[10px] text-neutral-400 hover:text-white"
+                        >
+                          Dismiss All
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleAcceptAllAdditionalCapabilities}
+                          className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-[10px] text-white font-semibold"
+                        >
+                          Accept All
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                      {additionalCapabilitySuggestions.map((capability) => (
+                        <div
+                          key={capability.id}
+                          className="p-3 rounded-lg bg-neutral-950 border border-emerald-900/70 space-y-2"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="text-xs font-semibold text-white break-words">{capability.name}</div>
+                              <div className="text-[10px] text-emerald-300 font-mono mt-0.5">
+                                {capability.category} • {capability.powerTier}
+                              </div>
+                            </div>
+                            <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-mono shrink-0">
+                              AI
+                            </span>
+                          </div>
+
+                          <p className="text-[11px] text-neutral-300 leading-relaxed">
+                            {capability.description}
+                          </p>
+
+                          <div className="grid grid-cols-2 gap-2 text-[10px] font-mono text-neutral-400">
+                            <span>Energy: {capability.baseEnergyCost}</span>
+                            <span>Strain: {capability.baseStrainCost}</span>
+                            <span>Range: {capability.rangeScope || 'close'}</span>
+                            <span>Action: {capability.actionType || 'action'}</span>
+                          </div>
+
+                          {capability.generatedSkills?.length ? (
+                            <div className="p-2 rounded bg-neutral-900 border border-neutral-800 text-[10px] text-emerald-200 leading-relaxed">
+                              <span className="text-neutral-500">Derived techniques:</span>{' '}
+                              {capability.generatedSkills.map((skill) => skill.name).join(', ')}
+                            </div>
+                          ) : null}
+
+                          <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 pt-1 border-t border-neutral-800">
+                            <button
+                              type="button"
+                              onClick={() => handleRejectAdditionalCapability(capability.id)}
+                              className="w-full sm:w-auto justify-center px-2.5 py-1.5 rounded bg-neutral-900 border border-neutral-700 text-[10px] text-neutral-400 hover:text-white"
+                            >
+                              Reject
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleAcceptAdditionalCapability(capability)}
+                              className="w-full sm:w-auto justify-center px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-[10px] text-white font-semibold"
+                            >
+                              Add Capability
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : !additionalCapabilitiesError && !isSuggestingMoreCapabilities ? (
+                  <div className="text-[10px] text-neutral-500">
+                    Press <span className="text-emerald-300 font-medium">Add More</span> to generate up to four proposals.
+                  </div>
+                ) : null}
+              </div>
+
               {/* AI Additional Skill Discovery Review Gate */}
               <div className="p-4 rounded-xl bg-indigo-950/40 border border-indigo-800/70 space-y-3 mt-3 shadow-inner">
                 <div className="flex items-start justify-between gap-3">

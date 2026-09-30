@@ -67,7 +67,7 @@ test('Story UI audit-implementation-regression-fallback loop completes ten deter
 			`Audit ${iteration}: story timeline no longer selects the newest visible turns from chronological history`,
 		);
 		assert.equal(
-			story.includes('.slice()\\n          .reverse()'),
+			story.includes('.slice()\n          .reverse()'),
 			false,
 			`Audit ${iteration}: stale reverse-before-window timeline bug returned`,
 		);

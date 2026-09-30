@@ -87,6 +87,7 @@ export interface Item {
   handUsage?: HandUsage;
   allowedSlots?: EquipmentSlotId[];
   properties?: Record<string, unknown>;
+  useCases?: string[];
 }
 
 export type PaperDollSlotKey =

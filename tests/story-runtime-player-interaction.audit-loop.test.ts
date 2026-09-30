@@ -69,11 +69,14 @@ test('S2 narration turn labels use action turn ordinals rather than world calend
 
 test('S2 Story/OOC/Continue and player portrait remain connected to canonical story state', () => {
 	const story = read('src/components/StoryView.tsx');
+	const inventory = read('src/components/InventoryView.tsx');
 	const app = read('src/App.tsx');
 	const library = read('src/components/library/StoryLibraryView.tsx');
 	const routes = read('server/api/gameRoutes.ts');
 
 	for (let iteration = 1; iteration <= 11; iteration += 1) {
+		assert.doesNotMatch(inventory, /onInspectItem/, `Audit ${iteration}: inventory UI still exposes obsolete narrative-inspection click wiring`);
+		assert.doesNotMatch(app, /handleInspectItem|onInspectItem=/, `Audit ${iteration}: App still wires inventory clicks into INSPECT_ITEM`);
 		assert.equal(story.includes("useState<'STORY' | 'OOC'>('STORY')"), true, `Audit ${iteration}: Story/OOC input mode missing`);
 		assert.equal(story.includes('apiClient.sendOocMessage(actionText, storyId)'), true, `Audit ${iteration}: OOC requests are not routed through the OOC service`);
 		assert.equal(story.includes('const handleContinueStory = () =>'), true, `Audit ${iteration}: Continue interaction missing`);

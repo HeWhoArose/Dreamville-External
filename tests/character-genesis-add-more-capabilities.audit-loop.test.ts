@@ -35,3 +35,5 @@ test('Character Genesis Add More capabilities wiring remains connected end-to-en
 	assert.ok(service.includes("'character.capability.propose'"));
 	assert.ok(service.includes('maxTokens: 4200'));
 });
+
+// CI verification branch only.

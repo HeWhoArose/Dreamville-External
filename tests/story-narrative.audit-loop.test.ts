@@ -37,6 +37,9 @@ test('Narration, action-routing, suggestions, portrait prompts, and scene prompt
 		assert.match(orchestrator, /narrativeContinuityEngine\.research/, `pass ${pass}: continuity research is not connected to narration`);
 		assert.match(orchestrator, /maxTokens: 650/, `pass ${pass}: narration output budget remains too constrained`);
 		assert.match(orchestrator, /Vary sentence rhythm|sensory detail/, `pass ${pass}: narrative diversity contract missing`);
+		assert.match(orchestrator, /Substance has priority over flourish/, `pass ${pass}: narrative substance contract missing`);
+		assert.match(orchestrator, /validateNarrativeInformationContinuity/, `pass ${pass}: information-seeking continuity guard missing`);
+		assert.match(orchestrator, /This is an information-seeking action/, `pass ${pass}: inquiry-specific narration guidance missing`);
 		assert.match(continuity, /NarrativeResearchPacket/, `pass ${pass}: narrative research packet contract missing`);
 		assert.match(continuity, /plot: state\.plot/, `pass ${pass}: plot is not returned through narrative research`);
 		assert.match(continuity, /plan: state\.plan/, `pass ${pass}: plan is not returned through narrative research`);
@@ -52,6 +55,7 @@ test('Narration, action-routing, suggestions, portrait prompts, and scene prompt
 		assert.match(portrait, /'character.extract'/, `pass ${pass}: Character Genesis progression inference is not routed through character extraction category`);
 		assert.match(orchestrator, /'character.extract',/, `pass ${pass}: default AI model registry does not expose Character Genesis eligibility`);
 		assert.match(authority, /narrativeResearchPacket/, `pass ${pass}: live action research packet is not retained`);
+		assert.match(authority, /run\?\.openingScene\?\.narrativeText/, `pass ${pass}: opening-scene facts are not fed into live narration`);
 		assert.match(combat, /bg-\[#100b2f\]/, `pass ${pass}: combat resolution background visual refresh missing`);
 		assert.match(authority, /narrativeContinuityEngine\.recordTurn/, `pass ${pass}: committed freeform turns are not returned to continuity`);
 		assert.match(authority, /narrativeTurnPackage/, `pass ${pass}: validated\/fallback narrative package is not retained for continuity`);

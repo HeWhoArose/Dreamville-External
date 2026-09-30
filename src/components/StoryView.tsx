@@ -1125,7 +1125,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
                           <span className="text-[9px] text-stone-500 font-mono">
                             Turn #{fallbackTurnNumbers.get(entry.id) || 1}
                           </span>
-                          {entry.actionType === 'CUSTOM_ACTION' && (
+                          {entry.actionType === 'CUSTOM_ACTION' && entry.canonicalCommandId && (
                             <button
                               type="button"
                               onClick={() => {
@@ -1143,7 +1143,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
                           )}
                         </div>
                         <p className="text-sm leading-6 text-stone-100 whitespace-pre-wrap">{entry.description}</p>
-                        {actionEditActionId === entry.id && entry.actionType === 'CUSTOM_ACTION' && (
+                        {actionEditActionId === entry.id && entry.actionType === 'CUSTOM_ACTION' && entry.canonicalCommandId && (
                           <div className="mt-3 rounded-2xl border border-amber-300/10 bg-black/20 p-3">
                             <label className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-200/65">Edit past action</label>
                             <p className="mt-1 text-[10px] leading-4 text-stone-500">This replaces this action and removes every later action from the story timeline.</p>

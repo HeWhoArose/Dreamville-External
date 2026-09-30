@@ -221,7 +221,6 @@ test('working context exposes the same current situation object used by downstre
 		worldRepo: repository,
 	});
 
-	const { WorkingContextEngine } = require('../server/domain/workingContextEngine') as typeof import('../server/domain/workingContextEngine');
 	const workingContext = WorkingContextEngine.assembleTurnContext({
 		storyId,
 		playerAction: 'I inspect the current archive.',

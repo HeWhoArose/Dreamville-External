@@ -525,7 +525,9 @@ export class CurrentSituationBuilder {
 			.map((edge: RouteEdge) => {
 				const destination = geography.getNode(edge.toLocationId);
 				if (!destination) return null;
-				const discovered = destination.discovered || Boolean(player?.discoveredLocationIds?.includes(destination.id));
+				const discovered = player
+					? player.discoveredLocationIds.includes(destination.id)
+					: destination.discovered;
 				if (!discovered) return null;
 				return {
 					id: destination.id,
@@ -550,7 +552,9 @@ export class CurrentSituationBuilder {
 			description: location.description,
 			ambientSensory: location.ambientSensory,
 			accessible: location.accessible,
-			discovered: location.discovered || Boolean(player?.discoveredLocationIds?.includes(location.id)),
+			discovered: player
+				? player.discoveredLocationIds.includes(location.id)
+				: location.discovered,
 			parentLocationId: location.parentLocationId,
 			connectedLocations,
 		};
@@ -793,7 +797,7 @@ export class CurrentSituationBuilder {
 			.join('\n') || 'No recent turn history.';
 
 		const openThreads = situation.openThreads
-			.map((thread) => `[^${thread.status || 'OPEN'}] ${thread.title}${thread.summary ? `: ${thread.summary}` : ''}`)
+			.map((thread) => `[${thread.status || 'OPEN'}] ${thread.title}${thread.summary ? `: ${thread.summary}` : ''}`)
 			.join('\n') || 'None.';
 
 		const memories = situation.relevantMemories

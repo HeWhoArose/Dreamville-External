@@ -35,3 +35,5 @@ test('Character Genesis Add More capabilities wiring remains connected end-to-en
 	assert.match(service, /'character.capability.propose'/);
 	assert.match(service, /maxTokens: 4200/);
 });
+
+// CI verification branch only: no runtime behavior change.

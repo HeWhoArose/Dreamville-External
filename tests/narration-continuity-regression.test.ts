@@ -58,6 +58,25 @@ test('narration continuity rejects information-seeking turns that stop at atmosp
 	assert.equal(groundedNonAnswer.valid, true);
 });
 
+test('deterministic narration fallback preserves substance for movement-plus-inquiry actions', async () => {
+	const { serverMockAuthority } = await import('../server/mockEngine/serverMockAuthority');
+	const storyId = 'narration_fallback_information_regression_' + Date.now();
+	worldRepository.seedStory(storyId);
+	const run = worldRepository.getStoryRun(storyId);
+	assert.ok(run, 'Seed story run must exist');
+	(run as any).openingScene = {
+		...((run as any).openingScene || {}),
+		narrativeText: 'Whispers in the Citadel speak of unstable starlight fissures deeper within the Whispering Spore-Sea.',
+	};
+	worldRepository.saveStoryRun(run);
+
+	const action = 'I move down to the crowd to inquire about the rumors.';
+	const fallback = serverMockAuthority.synthesizeFreeformActionFallback(storyId, action);
+	assert.match(fallback, /works into the crowd|asks what people have heard/i);
+	assert.match(fallback, /starlight fissures|Whispering Spore-Sea/i);
+	assert.match(fallback, /unconfirmed|verified fact|reliable account/i);
+});
+
 test('narration continuity rejects contradictory time-of-day language', () => {
 	const repository = new InMemoryWorldRepository({ disablePersistence: true });
 	const storyId = 'narration_time_regression';

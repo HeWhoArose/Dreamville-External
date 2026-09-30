@@ -242,7 +242,7 @@ function eventText(event: any): string {
 	return normalizeText(
 		event?.summary ||
 		event?.description ||
-		event?.authoritativeFeedback ||
+		event?.narrativeResponse ||
 		event?.message ||
 		event?.payload?.actionText ||
 		event?.payload?.action ||
@@ -776,11 +776,12 @@ export class CurrentSituationBuilder {
 	public static toPromptContext(situation: CurrentSituation): string {
 		const visibleEntities = situation.nearbyEntities
 			.filter((entity) => entity.visibleToPlayer)
+			.slice(0, 8)
 			.map((entity) => `${entity.name} [${entity.kind}; ${entity.distanceBand}]`)
 			.join('; ') || 'None';
 
 		const recentTurns = situation.recentTurns
-			.slice(-6)
+			.slice(-4)
 			.map((turn) => {
 				const parts = [
 					turn.turnNumber !== undefined ? `Turn ${turn.turnNumber}` : '',
@@ -794,14 +795,17 @@ export class CurrentSituationBuilder {
 			.join('\n') || 'No recent turn history.';
 
 		const openThreads = situation.openThreads
+			.slice(0, 4)
 			.map((thread) => `[${thread.status || 'OPEN'}] ${thread.title}${thread.summary ? `: ${thread.summary}` : ''}`)
 			.join('\n') || 'None.';
 
 		const memories = situation.relevantMemories
-			.map((memory) => `[${memory.memoryClass}] ${memory.content}`)
+			.slice(0, 4)
+			.map((memory) => `[${memory.memoryClass}] ${memory.content.slice(0, 420)}`)
 			.join('\n') || 'None retrieved.';
 
 		const lore = situation.relevantLore
+			.slice(0, 4)
 			.map((fact) => `[${fact.sourceType}] ${fact.subjectEntityId} ${fact.predicate} -> ${fact.objectValue}`)
 			.join('\n') || 'None retrieved.';
 
@@ -828,8 +832,11 @@ export class CurrentSituationBuilder {
 	}
 
 	public static toPlayerSafeProjection(situation: CurrentSituation): Omit<CurrentSituation, 'worldFacts'> & { worldFactsOmitted: true } {
-		const safe = clone(situation);
-		delete (safe as any).worldFacts;
+		const safe = clone(situation) as any;
+		delete safe.worldFacts;
+		if (safe.activeDialogue) {
+			delete safe.activeDialogue.epistemicNote;
+		}
 		return {
 			...safe,
 			worldFactsOmitted: true,

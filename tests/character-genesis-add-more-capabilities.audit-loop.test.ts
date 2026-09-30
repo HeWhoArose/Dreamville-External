@@ -18,7 +18,7 @@ test('Character Genesis Add More capabilities wiring remains connected end-to-en
 	assert.ok(view.includes('id="btn-add-more-capabilities"'));
 	assert.ok(view.includes('onClick={handleSuggestAdditionalCapabilities}'));
 	assert.ok(view.includes('<span>Add More</span>'));
-	assert.ok(view.includes('additionalCapabilitySuggestions.slice(0, 4)'));
+	assert.ok(view.includes('res?.capabilities) ? res.capabilities.slice(0, 4) : []'));
 	assert.ok(view.includes('handleAcceptAdditionalCapability'));
 	assert.ok(view.includes('handleAcceptAllAdditionalCapabilities'));
 	assert.ok(view.includes("markFieldEdited('capabilities')"));

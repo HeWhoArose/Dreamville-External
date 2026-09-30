@@ -31,6 +31,33 @@ test('narration continuity rejects a current action that is silently replaced by
 	assert.equal(correctAction.valid, true);
 });
 
+test('narration continuity rejects information-seeking turns that stop at atmosphere', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'narration_information_regression';
+	repository.seedStory(storyId);
+	const orchestrator = new MultiModelOrchestrator(repository);
+
+	const action = 'I move down to the crowd to inquire about the rumors.';
+	const incomplete = (orchestrator as any).validateNarrativeInformationContinuity(
+		'Aelion moves into the crowd and asks about the rumors. The amber light settles across the timber as the words fade into the evening air.',
+		action,
+	);
+	assert.equal(incomplete.valid, false);
+	assert.match(incomplete.errorReason, /information-continuity|grounded answer|information/i);
+
+	const grounded = (orchestrator as any).validateNarrativeInformationContinuity(
+		'Aelion moves into the crowd and asks what people have heard about the rumors. Several root-trappers answer that the reports concern unstable starlight fissures deeper in the Whispering Spore-Sea, though none claims to have seen the phenomenon directly.',
+		action,
+	);
+	assert.equal(grounded.valid, true);
+
+	const groundedNonAnswer = (orchestrator as any).validateNarrativeInformationContinuity(
+		'Aelion moves into the crowd and asks about the rumors, but the people nearby offer only conflicting hearsay and no reliable account.',
+		action,
+	);
+	assert.equal(groundedNonAnswer.valid, true);
+});
+
 test('narration continuity rejects contradictory time-of-day language', () => {
 	const repository = new InMemoryWorldRepository({ disablePersistence: true });
 	const storyId = 'narration_time_regression';

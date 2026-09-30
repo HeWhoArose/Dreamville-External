@@ -119,38 +119,28 @@ function sceneContainsAny(text: string, pattern: RegExp): boolean {
 function getCanonicalSceneContext(
 	repository: WorldRepository,
 	storyId: string,
-	supplied?: StoryActionSceneContext,
+	_supplied?: StoryActionSceneContext,
 ): StoryActionSceneContext {
 	const situation = CurrentSituationBuilder.build({
 		storyId,
-		playerAction: supplied?.recentActions?.at(-1) || '',
 		worldRepo: repository,
 	});
 
 	return {
-		locationName: supplied?.locationName || situation.location.name,
-		locationRegion: supplied?.locationRegion || situation.location.regionId,
-		locationDescription: supplied?.locationDescription || situation.location.description,
-		worldTime: supplied?.worldTime || situation.worldTime,
-		// Do not fall back to a stale persisted opening scene. The current situation
-		// is the authoritative scene projection for action advice.
-		openingNarrative: supplied?.openingNarrative,
-		startingSituation:
-			supplied?.startingSituation ||
-			situation.plot.summary ||
-			situation.openThreads.at(0)?.summary ||
-		'',
-		activeDialogue:
-			supplied?.activeDialogue ||
-			(situation.activeDialogue
-				? `${situation.activeDialogue.speakerName}: ${situation.activeDialogue.text}`
-				: undefined),
-		recentActions:
-			supplied?.recentActions ||
-			situation.recentTurns
-				.slice(-4)
-				.map((entry) => entry.narration || entry.playerAction || '')
-				.filter(Boolean),
+		locationName: situation.location.name,
+		locationRegion: situation.location.regionId,
+		locationDescription: situation.location.description,
+		worldTime: situation.worldTime,
+		// The current situation, not the persisted opening scene, is the canonical action-advice context.
+		openingNarrative: undefined,
+		startingSituation: situation.plot.summary || situation.openThreads.at(0)?.summary || '',
+		activeDialogue: situation.activeDialogue
+			? `${situation.activeDialogue.speakerName}: ${situation.activeDialogue.text}`
+			: undefined,
+		recentActions: situation.recentTurns
+			.slice(-4)
+			.map((entry) => entry.narration || entry.playerAction || '')
+			.filter(Boolean),
 	};
 }
 

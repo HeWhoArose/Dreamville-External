@@ -35,6 +35,7 @@ test('past-action editing is wired across UI, API, canonical checkpointing, and 
   assert.ok(routes.includes('serverMockAuthority.importTransactionalState(storyId, mockStateBefore)'));
   assert.ok(routes.includes('processCustomAction('));
   assert.ok(routes.includes('removedActionCount'));
+  assert.ok(routes.includes('(commandResult.data as any).viewState = serverMockAuthority.getSanitizedViewState(storyId)'));
 });
 
 test('dice presets include Norse Foundry-inspired artistic families', () => {

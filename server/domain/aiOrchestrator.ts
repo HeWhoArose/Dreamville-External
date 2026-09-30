@@ -6366,6 +6366,71 @@ export class MultiModelOrchestrator {
     return { valid: true };
   }
 
+  private validateNarrativeInformationTopicContinuity(
+    narration: string,
+    playerAction: string,
+    sceneContext?: string,
+  ): { valid: boolean; errorReason?: string } {
+    const action = String(playerAction || '').trim();
+    const output = String(narration || '').trim();
+    const context = String(sceneContext || '').trim();
+    if (!action || !output || !context || !NARRATIVE_INFORMATION_SEEKING_PATTERN.test(action)) {
+      return { valid: true };
+    }
+
+    const passiveListening = NARRATIVE_PASSIVE_LISTENING_PATTERN.test(action);
+    const genericRumorRequest = /\b(?:rumor|rumors|rumour|rumours|gossip|whisper|whispers|hear|listen|overhear|eavesdrop)\b/i.test(action);
+    const explicitTopicMatch = action.match(/\b(?:about|regarding|concerning|on)\s+(.+?)(?:[.!?]|$)/i);
+    const explicitTopic = String(explicitTopicMatch?.[1] || '')
+      .trim()
+      .replace(/^the\s+/i, '')
+      .toLowerCase();
+    const genericTopic = /^(?:rumors?|rumours?|gossip|whispers?|what (?:people|they) (?:heard|know))$/i.test(explicitTopic);
+
+    if (!passiveListening || !genericRumorRequest || (explicitTopic && !genericTopic)) {
+      return { valid: true };
+    }
+
+    const rumorSentences = context
+      .split(/(?<=[.!?])\s+/)
+      .map((sentence) => sentence.trim())
+      .filter((sentence) => /\b(?:rumor|rumors|rumour|rumours|whisper|whispers|gossip|talk spreads|reports?|heard)\b/i.test(sentence));
+
+    if (rumorSentences.length === 0) {
+      return { valid: true };
+    }
+
+    const stopWords = new Set([
+      'about', 'after', 'again', 'among', 'around', 'because', 'before', 'being', 'current',
+      'deeper', 'from', 'have', 'heard', 'people', 'reports', 'reporting', 'some', 'that',
+      'their', 'there', 'these', 'those', 'within', 'where', 'which', 'whispers', 'rumors',
+      'rumours', 'gossip', 'talk', 'spread', 'speaks', 'speak',
+    ]);
+
+    const anchorTokens = Array.from(new Set(
+      rumorSentences
+        .join(' ')
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter((token) => token.length >= 6 && !stopWords.has(token))
+    )).slice(0, 10);
+
+    if (anchorTokens.length < 2) {
+      return { valid: true };
+    }
+
+    const outputLower = output.toLowerCase();
+    const matched = anchorTokens.filter((token) => outputLower.includes(token));
+    if (matched.length < Math.min(2, anchorTokens.length)) {
+      return {
+        valid: false,
+        errorReason: 'Narration information-topic guard rejected output: the player asked to hear the current rumors, but the narration introduced a different or unsupported rumor topic instead of resolving the visible scene lead.',
+      };
+    }
+
+    return { valid: true };
+  }
+
   private validateNarrativeInformationContinuity(
     narration: string,
     playerAction: string,
@@ -6657,6 +6722,12 @@ export class MultiModelOrchestrator {
             canonicalPlayer?.name,
           );
           if (!actionModeContinuity.valid) return { valid: false, errorReason: actionModeContinuity.errorReason };
+          const informationTopicContinuity = this.validateNarrativeInformationTopicContinuity(
+            narrationText,
+            playerAction,
+            params.sceneContext,
+          );
+          if (!informationTopicContinuity.valid) return { valid: false, errorReason: informationTopicContinuity.errorReason };
           const informationContinuity = this.validateNarrativeInformationContinuity(narrationText, playerAction);
           if (!informationContinuity.valid) return { valid: false, errorReason: informationContinuity.errorReason };
           const temporalContinuity = this.validateNarrativeTemporalContinuity(narrationText, worldRepo, storyId);

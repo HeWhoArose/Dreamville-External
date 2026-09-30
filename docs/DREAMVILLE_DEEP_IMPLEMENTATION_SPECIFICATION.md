@@ -46,17 +46,18 @@ A phase is complete only when:
 - `npm run build` passes;
 - and a second architectural audit finds no orphaned path.
 
-## 0.1 Repository boundary
+## 0.1 Current repository status and authority
 
-The repository README states that the authoritative core engine is maintained separately and that the external client must not silently become an alternative source of canonical game truth.
+**Important correction to legacy documentation:** this repository is now being treated as the active, standalone Dreamville core engine. The older description of Dreamville-External as a downstream/user-facing client is historical and must not constrain this implementation program.
 
-Therefore:
+For this implementation specification:
 
-- canonical world state remains authoritative;
-- deterministic rules remain authoritative;
-- AI output is a proposal/presentation layer unless an explicitly approved authoritative command path commits it;
-- the client must never infer that plausible prose equals state;
-- when a feature requires a core-engine contract, document and implement the integration boundary rather than duplicating authority in the client.
+- Dreamville-External is the authoritative application/core being developed;
+- canonical world state, deterministic simulation, rules, persistence, AI orchestration, narrative systems, UI, and supporting services may be implemented here when required;
+- AI output must still be distinguished from canonical state, but this is an internal architectural responsibility, not a reason to defer work to another repository;
+- do not create a second external/core boundary based on the obsolete repository description;
+- do not refuse or defer a required core-engine change merely because an old README describes another repository as authoritative;
+- when a subsystem is missing, implement it in this repository unless a current, verified dependency explicitly requires an external service.
 
 Current repository areas that are relevant include:
 
@@ -1906,8 +1907,8 @@ Any AI coding agent implementing this specification must follow these rules:
 20. Perform a producer/consumer connection audit before moving to the next phase.
 21. Never declare a phase complete merely because its local tests pass.
 22. Never leave a TODO that represents an essential connection and still mark the phase complete.
-23. If a required dependency belongs to the separate authoritative core engine, explicitly identify the contract required from that engine.
-24. Do not fabricate a core-engine implementation inside the external client.
+23. Treat Dreamville-External as the active standalone core engine for this implementation program.
+24. Do not defer required core-engine work to another repository because of legacy documentation.
 25. Preserve the user's agency: the system should interpret and continue the player's action, not decide the player's story for them.
 
 ---

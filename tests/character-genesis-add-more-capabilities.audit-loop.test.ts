@@ -15,23 +15,23 @@ test('Character Genesis Add More capabilities wiring remains connected end-to-en
 	const route = fs.readFileSync(routePath, 'utf8');
 	const service = fs.readFileSync(servicePath, 'utf8');
 
-	assert.match(view, /id="btn-add-more-capabilities"/);
-	assert.match(view, /onClick={handleSuggestAdditionalCapabilities}/);
-	assert.match(view, /<span>Add More</span>/);
-	assert.match(view, /additionalCapabilitySuggestions.slice(0, 4)/);
-	assert.match(view, /handleAcceptAdditionalCapability/);
-	assert.match(view, /handleAcceptAllAdditionalCapabilities/);
-	assert.match(view, /markFieldEdited('capabilities')/);
-	assert.match(view, /markFieldEdited('generatedSkills')/);
+	assert.ok(view.includes('id="btn-add-more-capabilities"'));
+	assert.ok(view.includes('onClick={handleSuggestAdditionalCapabilities}'));
+	assert.ok(view.includes('<span>Add More</span>'));
+	assert.ok(view.includes('additionalCapabilitySuggestions.slice(0, 4)'));
+	assert.ok(view.includes('handleAcceptAdditionalCapability'));
+	assert.ok(view.includes('handleAcceptAllAdditionalCapabilities'));
+	assert.ok(view.includes("markFieldEdited('capabilities')"));
+	assert.ok(view.includes("markFieldEdited('generatedSkills')"));
 
-	assert.match(client, /suggestAdditionalCharacterCapabilities/);
-	assert.match(client, /additional-capabilities/);
+	assert.ok(client.includes('suggestAdditionalCharacterCapabilities'));
+	assert.ok(client.includes('additional-capabilities'));
 
-	assert.match(route, /post('/worlds/:worldId/characters/additional-capabilities'/);
-	assert.match(route, /suggestAdditionalCapabilities/);
+	assert.ok(route.includes("post('/worlds/:worldId/characters/additional-capabilities'"));
+	assert.ok(route.includes('suggestAdditionalCapabilities'));
 
-	assert.match(service, /public async suggestAdditionalCapabilities/);
-	assert.match(service, /Math.min(Number(input.desiredCount) || 4, 4)/);
-	assert.match(service, /'character.capability.propose'/);
-	assert.match(service, /maxTokens: 4200/);
+	assert.ok(service.includes('public async suggestAdditionalCapabilities'));
+	assert.ok(service.includes('Math.min(Number(input.desiredCount) || 4, 4)'));
+	assert.ok(service.includes("'character.capability.propose'"));
+	assert.ok(service.includes('maxTokens: 4200'));
 });

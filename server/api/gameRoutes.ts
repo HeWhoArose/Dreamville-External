@@ -1198,6 +1198,12 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
         console.warn('[StoryHistory] Failed to attach edit checkpoint metadata:', checkpointError);
       }
     }
+    // Refresh the player-facing projection after edit metadata is attached so the
+    // current action immediately exposes its Edit control without requiring a refresh.
+    if (actionRequest.type === 'CUSTOM_ACTION') {
+      (commandResult.data as any).viewState = serverMockAuthority.getSanitizedViewState(storyId);
+    }
+
     // Automatically record durable cross-world memories from the authoritative outcome.
     // The player never needs to tell the system to "save" an acquired item or important action.
     try {

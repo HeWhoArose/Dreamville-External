@@ -60,6 +60,29 @@ test('narration continuity rejects protagonist speech when the player only asked
 	assert.equal(explicitSpeech.valid, true);
 });
 
+test('narration continuity keeps generic rumor-listening tied to the visible scene topic', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'narration_rumor_topic_regression';
+	repository.seedStory(storyId);
+	const orchestrator = new MultiModelOrchestrator(repository);
+
+	const sceneContext = 'Whispers in the Citadel speak of unstable starlight fissures and unmapped shifts deeper within the Whispering Spore-Sea.';
+	const wrongTopic = (orchestrator as any).validateNarrativeInformationTopicContinuity(
+		'Aelion moves closer and listens as traders discuss trade caravan delays along the northern perimeter.',
+		'I move closer to hear the rumors.',
+		sceneContext,
+	);
+	assert.equal(wrongTopic.valid, false);
+	assert.match(wrongTopic.errorReason, /information-topic|rumor|scene lead/i);
+
+	const correctTopic = (orchestrator as any).validateNarrativeInformationTopicContinuity(
+		'Aelion moves close enough to hear the root-trappers repeat that unstable starlight fissures have been reported deeper in the Whispering Spore-Sea.',
+		'I move closer to hear the rumors.',
+		sceneContext,
+	);
+	assert.equal(correctTopic.valid, true);
+});
+
 test('narration continuity rejects information-seeking turns that stop at atmosphere', () => {
 	const repository = new InMemoryWorldRepository({ disablePersistence: true });
 	const storyId = 'narration_information_regression';

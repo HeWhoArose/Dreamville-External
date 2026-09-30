@@ -351,6 +351,7 @@ export class ServerMockAuthority {
         name: item.name,
         category: item.category,
         description: def?.description || `${item.name} (${item.provenance})`,
+        useCases: def?.useCases || [],
         quantity: item.quantity,
         weight: def?.weightKg ?? 1.0,
         rarity: item.rarity,
@@ -1616,6 +1617,13 @@ The moment does not end so much as shift, leaving the scene open to whatever the
     }
 
     if (logEntry) {
+      if (logEntry.actionType !== 'NOTE_RECORD') {
+        const completedTurns = state.actionHistory.reduce(
+          (count, entry) => count + (entry.actionType === 'NOTE_RECORD' ? 0 : 1),
+          0,
+        );
+        (logEntry as ActionLog & { turnNumber?: number }).turnNumber = completedTurns + 1;
+      }
       state.actionHistory = [logEntry, ...state.actionHistory];
     }
 

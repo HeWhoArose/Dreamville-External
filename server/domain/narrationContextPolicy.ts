@@ -26,7 +26,10 @@ const QUEST_PATTERN =
 	/\b(quest|mission|objective|journal|clue|lead|thread|destination|why am i here|what should i do)\b/i;
 
 const RELATIONSHIP_PATTERN =
-	/\b(talk|speak|ask|tell|answer|persuade|deceive|intimidate|trust|relationship|friend|enemy|npc|character)\b/i;
+	/\b(talk|speak|ask|tell|answer|persuade|deceive|intimidate|trust|relationship|friend|enemy|npc|character|inquire|question|consult|gossip)\b/i;
+
+const INFORMATION_SEEKING_PATTERN =
+	/\b(ask|asked|inquire|inquired|question|questioned|find out|learn|discover|gather information|seek information|rumor|rumours|gossip|what happened|who|why|where|when|how|heard about|tell me)\b/i;
 
 export function deriveNarrationContextNeeds(params: {
 	actionText: string;
@@ -42,9 +45,9 @@ export function deriveNarrationContextNeeds(params: {
 	const includeHealth = HAZARD_OR_HEALTH_PATTERN.test(source);
 	const includeInventory = /\b(show|check|list|what(?:'s| is) in|my inventory|my equipment|inventory contents|equipment contents)\b/i.test(source) && INVENTORY_PATTERN.test(source);
 	const includeCapabilities = CAPABILITY_PATTERN.test(source);
-	const includeLore = LORE_PATTERN.test(source);
+	const includeLore = LORE_PATTERN.test(source) || INFORMATION_SEEKING_PATTERN.test(source);
 	const includeQuests = QUEST_PATTERN.test(source);
-	const includeRelationships = Boolean(params.npcTargetId) || RELATIONSHIP_PATTERN.test(source);
+	const includeRelationships = Boolean(params.npcTargetId) || RELATIONSHIP_PATTERN.test(source) || INFORMATION_SEEKING_PATTERN.test(source);
 	const includeCombat = Boolean(params.isInCombat) || /\b(combat|initiative|attack|strike|enemy|target|defend|dodge)\b/i.test(source);
 
 	return {

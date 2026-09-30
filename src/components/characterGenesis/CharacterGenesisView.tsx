@@ -177,6 +177,9 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
   const [additionalSkillSuggestions, setAdditionalSkillSuggestions] = useState<CharacterSkill[]>([]);
   const [isSuggestingMoreSkills, setIsSuggestingMoreSkills] = useState<boolean>(false);
   const [additionalSkillsError, setAdditionalSkillsError] = useState<string | null>(null);
+  const [additionalCapabilitySuggestions, setAdditionalCapabilitySuggestions] = useState<Array<CapabilityDefinition & { generatedSkills: GeneratedTechnique[] }>>([]);
+  const [isSuggestingMoreCapabilities, setIsSuggestingMoreCapabilities] = useState<boolean>(false);
+  const [additionalCapabilitiesError, setAdditionalCapabilitiesError] = useState<string | null>(null);
 
   // Custom attribute proposal state
   const [customAttributeConcept, setCustomAttributeConcept] = useState<string>('');
@@ -827,6 +830,118 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
 
   const handleRejectCapProposal = () => {
     setPendingCapProposal(null);
+  };
+
+  // AI Additional Capability Discovery: infer up to four distinct capabilities from the full character.
+  // Nothing is added to the draft until the player explicitly accepts a proposal.
+  const handleSuggestAdditionalCapabilities = async () => {
+    if (!selectedWorld || !draft) return;
+
+    setAdditionalCapabilitiesError(null);
+    setAdditionalCapabilitySuggestions([]);
+    setIsSuggestingMoreCapabilities(true);
+
+    try {
+      const existingCapabilities = draft.capabilities || [];
+      const characterContext = {
+        name: draft.identity?.name,
+        species: draft.identity?.species,
+        role: draft.role?.role || draft.role?.archetype,
+        profession: draft.role?.profession,
+        background: draft.background?.history,
+        personality: draft.personality?.traits || [],
+        motivations: [
+          ...(draft.motivations?.goals || []),
+          ...(draft.motivations?.desires || []),
+          ...(draft.motivations?.fears || []),
+        ],
+        capabilities: existingCapabilities.map((capability) => capability.name),
+        skills: (draft.generatedSkills || []).map((skill) => skill.name),
+      };
+
+      const res = await apiClient.suggestAdditionalCharacterCapabilities(
+        selectedWorld.worldId,
+        {
+          characterConcept: naturalConcept || draft.sourceDescription || '',
+          existingCapabilities,
+          characterContext,
+          desiredCount: 4,
+        },
+      );
+
+      const suggestions = Array.isArray(res?.capabilities) ? res.capabilities.slice(0, 4) : [];
+      if (suggestions.length === 0) {
+        throw new Error('The AI did not return any additional capability proposals.');
+      }
+
+      setAdditionalCapabilitySuggestions(suggestions);
+    } catch (err: any) {
+      setAdditionalCapabilitiesError(err?.message || 'Could not discover additional capabilities.');
+    } finally {
+      setIsSuggestingMoreCapabilities(false);
+    }
+  };
+
+  const handleAcceptAdditionalCapability = (
+    capability: CapabilityDefinition & { generatedSkills: GeneratedTechnique[] },
+  ) => {
+    if (!draft) return;
+
+    const currentCapabilities = draft.capabilities || [];
+    const alreadyExists = currentCapabilities.some(
+      (existing) => existing.name.trim().toLowerCase() === capability.name.trim().toLowerCase(),
+    );
+
+    if (alreadyExists) {
+      setAdditionalCapabilitySuggestions((current) => current.filter((entry) => entry.id !== capability.id));
+      return;
+    }
+
+    const newSkills = capability.generatedSkills || [];
+    setDraft({
+      ...draft,
+      capabilities: [...currentCapabilities, capability],
+      generatedSkills: [...(draft.generatedSkills || []), ...newSkills],
+    });
+    markFieldEdited('capabilities');
+    markFieldEdited('generatedSkills');
+    setAdditionalCapabilitySuggestions((current) => current.filter((entry) => entry.id !== capability.id));
+  };
+
+  const handleAcceptAllAdditionalCapabilities = () => {
+    if (!draft || additionalCapabilitySuggestions.length === 0) return;
+
+    const currentCapabilities = draft.capabilities || [];
+    const existingNames = new Set(currentCapabilities.map((capability) => capability.name.trim().toLowerCase()));
+    const accepted = additionalCapabilitySuggestions.filter((capability) => {
+      const key = capability.name.trim().toLowerCase();
+      if (!key || existingNames.has(key)) return false;
+      existingNames.add(key);
+      return true;
+    });
+
+    if (accepted.length === 0) {
+      setAdditionalCapabilitySuggestions([]);
+      return;
+    }
+
+    const acceptedSkills = accepted.flatMap((capability) => capability.generatedSkills || []);
+    setDraft({
+      ...draft,
+      capabilities: [...currentCapabilities, ...accepted],
+      generatedSkills: [...(draft.generatedSkills || []), ...acceptedSkills],
+    });
+    markFieldEdited('capabilities');
+    markFieldEdited('generatedSkills');
+    setAdditionalCapabilitySuggestions([]);
+  };
+
+  const handleRejectAdditionalCapability = (capabilityId: string) => {
+    setAdditionalCapabilitySuggestions((current) => current.filter((capability) => capability.id !== capabilityId));
+  };
+
+  const handleRejectAllAdditionalCapabilities = () => {
+    setAdditionalCapabilitySuggestions([]);
   };
 
   // 3. Propose Custom Feat (AI Proposal Review Gate)
@@ -2518,6 +2633,21 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                       <Plus className="w-3.5 h-3.5" />
                     )}
                     <span>Synthesize Capability</span>
+                  </button>
+
+                  <button
+                    id="btn-add-more-capabilities"
+                    type="button"
+                    onClick={handleSuggestAdditionalCapabilities}
+                    disabled={isSuggestingMoreCapabilities || additionalCapabilitySuggestions.length > 0 || isProposingCap}
+                    className="w-full sm:w-auto justify-center shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-emerald-700/80 disabled:opacity-50 text-xs text-emerald-200 font-semibold transition-colors"
+                  >
+                    {isSuggestingMoreCapabilities ? (
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-3.5 h-3.5" />
+                    )}
+                    <span>Add More</span>
                   </button>
 
                   <button

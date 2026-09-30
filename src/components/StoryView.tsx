@@ -20,6 +20,7 @@ import {
   AlertCircle,
   ArrowRight,
   CheckCircle2,
+  ChevronDown,
   Dices,
   FileText,
   Headphones,
@@ -328,7 +329,11 @@ export const StoryView: React.FC<StoryViewProps> = ({
   const [actionEditActionId, setActionEditActionId] = useState<string | null>(null);
   const [actionEditText, setActionEditText] = useState('');
   const [actionEditBusy, setActionEditBusy] = useState(false);
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const narrationMenuRef = useRef<HTMLDivElement | null>(null);
+  const storyTimelineEndRef = useRef<HTMLDivElement | null>(null);
+  const userWasNearStoryEndRef = useRef(true);
+  const previousActionCountRef = useRef(actionHistory.length);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const actionInputRef = useRef<HTMLInputElement | null>(null);
@@ -526,6 +531,70 @@ export const StoryView: React.FC<StoryViewProps> = ({
     triggerHaptic('medium');
     playSfx('ui.click', 'LOW', 0.5);
     onCustomAction?.('Continue the story naturally from the current moment without introducing an out-of-character explanation.');
+  };
+
+  const storyHasNarration = actionHistory.some((entry) =>
+    Boolean(entry.narrativeResponse || entry.presentationFeedback || entry.narrativeError),
+  );
+
+  const syncStoryTimelineScrollState = useCallback(() => {
+    const anchor = storyTimelineEndRef.current;
+    if (!anchor) return;
+
+    const distanceBelowViewport = anchor.getBoundingClientRect().top - window.innerHeight;
+    const nearLatest = distanceBelowViewport <= 180;
+    userWasNearStoryEndRef.current = nearLatest;
+    setShowJumpToLatest(storyHasNarration && !nearLatest);
+  }, [storyHasNarration]);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      window.requestAnimationFrame(syncStoryTimelineScrollState);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    window.addEventListener('resize', handleScroll);
+
+    const frame = window.requestAnimationFrame(handleScroll);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('scroll', handleScroll);
+      window.removeEventListener('resize', handleScroll);
+    };
+  }, [syncStoryTimelineScrollState]);
+
+  useEffect(() => {
+    const actionCountChanged = actionHistory.length !== previousActionCountRef.current;
+    previousActionCountRef.current = actionHistory.length;
+    if (!actionCountChanged) return;
+
+    if (userWasNearStoryEndRef.current) {
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          storyTimelineEndRef.current?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'end',
+          });
+        });
+      });
+      return;
+    }
+
+    setShowJumpToLatest(storyHasNarration);
+  }, [actionHistory.length, storyHasNarration]);
+
+  const jumpToLatestNarration = () => {
+    triggerHaptic('light');
+    playSfx('ui.click', 'LOW', 0.35);
+    storyTimelineEndRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'end',
+    });
+    window.setTimeout(() => {
+      userWasNearStoryEndRef.current = true;
+      setShowJumpToLatest(false);
+    }, 350);
   };
 
   const insertSuggestedAction = (suggestion: string) => {
@@ -1053,10 +1122,11 @@ export const StoryView: React.FC<StoryViewProps> = ({
         </section>
       )}
       {(() => {
+        // Keep the canonical timeline chronological. The previous implementation
+        // reversed first and then sliced from the end, which could hide the newest
+        // turns and leave the player looking at stale narration.
         const history = (actionHistory || [])
-          .filter((entry) => !(entry.actionType === 'NOTE_RECORD' && entry.id.includes('act_open_')))
-          .slice()
-          .reverse();
+          .filter((entry) => !(entry.actionType === 'NOTE_RECORD' && entry.id.includes('act_open_')));
         const fallbackTurnNumbers = new Map<string, number>();
         let fallbackTurn = 0;
         for (const entry of history) {
@@ -1303,6 +1373,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
           </section>
         );
       })()}
+      <div ref={storyTimelineEndRef} aria-hidden="true" className="h-px w-full" />
       <section className="rounded-3xl border border-violet-400/20 bg-gradient-to-r from-violet-500/[0.08] via-fuchsia-500/[0.035] to-transparent px-4 py-4 shadow-[0_18px_60px_rgba(124,58,237,0.10)] md:px-5">
         <div className="mb-2 flex items-center justify-between gap-3">
           <div>
@@ -1338,7 +1409,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
           </button>
         </div>
 
-        {oocHistory.length > 0 && (
+        {inputMode === 'OOC' && oocHistory.length > 0 && (
           <div className="mb-3 max-h-52 space-y-2 overflow-y-auto rounded-2xl border border-sky-300/10 bg-sky-400/[0.03] p-3">
             {oocHistory.slice(-8).map((entry, index) => (
               <div key={`ooc-${index}`} className={entry.role === 'player' ? 'text-right' : 'text-left'}>
@@ -1681,6 +1752,20 @@ export const StoryView: React.FC<StoryViewProps> = ({
           </p>
         )}
       </section>
+
+      {showJumpToLatest && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-20 z-30 flex justify-center px-4 lg:bottom-6">
+          <button
+            type="button"
+            onClick={jumpToLatestNarration}
+            className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-violet-300/25 bg-[#120b20]/95 px-4 py-2 text-xs font-semibold text-violet-100 shadow-[0_12px_36px_rgba(0,0,0,0.35)] backdrop-blur-xl transition hover:border-violet-300/45 hover:bg-[#181025]"
+            aria-label="Jump to latest narration"
+          >
+            <ChevronDown className="h-3.5 w-3.5" />
+            Latest narration
+          </button>
+        </div>
+      )}
 
       {(scenePrompt || sceneImageUrl || sceneError) && (
         <section className="rounded-3xl border border-white/8 bg-[#0b0813]/75 p-4">

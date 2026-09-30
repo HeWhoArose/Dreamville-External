@@ -1,7 +1,7 @@
 import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
 import type { DurableMemory } from './memoryOpportunityEngine';
 import type { EntityCard, EntityKind } from './entityCard';
-import type { KnowledgeFact, LocationNode, RouteEdge, WorldTimestamp } from './types';
+import type { KnowledgeFact, RouteEdge, WorldTimestamp } from './types';
 import type { WorldRepository } from '../repositories/worldRepository';
 
 export interface PlayerIntent {
@@ -300,7 +300,7 @@ function entityCardIsVisible(card: EntityCard, currentLocationId: string, player
 	return { visible: false, explicitlyReferenced, distanceBand: 'REFERRED' };
 }
 
-function projectEntityCard(card: EntityCard, currentLocationId: string, explicitlyReferenced: boolean, distanceBand: EntityDistanceBand): NearbyEntityContext {
+function projectEntityCard(card: EntityCard, explicitlyReferenced: boolean, distanceBand: EntityDistanceBand): NearbyEntityContext {
 	return {
 		id: card.id,
 		name: card.name,
@@ -409,7 +409,7 @@ function projectActiveDialogue(raw: any): ActiveDialogueContext | undefined {
 	};
 }
 
-function buildRecentTurns(run: any, canonicalEvents: any[], maxRecentTurns: number, currentAction?: PlayerIntent): RecentTurnContext[] {
+function buildRecentTurns(run: any, canonicalEvents: any[], maxRecentTurns: number): RecentTurnContext[] {
 	const runtimeHistory = Array.isArray(run?.runtimeState?.narrativeContextHistory)
 		? run.runtimeState.narrativeContextHistory
 		: [];
@@ -489,8 +489,7 @@ export class CurrentSituationBuilder {
 			actionText,
 			location.name,
 			location.regionId,
-			run?.startingSituation?.summary,
-			run?.startingSituation?.hook,
+			
 		].filter(Boolean).join(' '));
 
 		const memoryKeywords = keywords.slice(0, 16);
@@ -552,9 +551,7 @@ export class CurrentSituationBuilder {
 			description: location.description,
 			ambientSensory: location.ambientSensory,
 			accessible: location.accessible,
-			discovered: player
-				? player.discoveredLocationIds.includes(location.id)
-				: location.discovered,
+			discovered: player ? true : location.discovered,
 			parentLocationId: location.parentLocationId,
 			connectedLocations,
 		};
@@ -589,7 +586,7 @@ export class CurrentSituationBuilder {
 			if (nearbyEntities.some((entity) => entity.id === card.id)) continue;
 			const visibility = entityCardIsVisible(card, location.id, actionText, viewerActorId, repository);
 			if (!visibility.visible) continue;
-			const projected = projectEntityCard(card, location.id, visibility.explicitlyReferenced, visibility.distanceBand);
+			const projected = projectEntityCard(card, visibility.explicitlyReferenced, visibility.distanceBand);
 			if (projected.presence === 'absent' || !projected.isAlive) continue;
 			nearbyEntities.push(projected);
 		}
@@ -610,7 +607,7 @@ export class CurrentSituationBuilder {
 		);
 
 		const canonicalEvents = repository.getCanonicalCommandEvents(params.storyId);
-		const recentTurns = buildRecentTurns(run, canonicalEvents, params.maxRecentTurns ?? 8, params.currentAction);
+		const recentTurns = buildRecentTurns(run, canonicalEvents, params.maxRecentTurns ?? 8);
 		const lastEvents = canonicalEvents
 			.slice(-6)
 			.map((event: any, index: number) => ({
@@ -703,7 +700,7 @@ export class CurrentSituationBuilder {
 						: 'Destination is inaccessible.',
 			})),
 			...limitedNearbyEntities
-				.filter((entity) => entity.kind !== 'PLAYER' && entity.presence === 'present')
+				.filter((entity) => entity.kind !== 'PLAYER' && entity.presence === 'present' && entity.distanceBand === 'SAME_LOCATION')
 				.map((entity) => ({
 					id: `talk:${entity.id}`,
 					type: 'TALK' as const,
@@ -713,7 +710,7 @@ export class CurrentSituationBuilder {
 					enabled: true,
 				})),
 			...limitedNearbyEntities
-				.filter((entity) => entity.kind !== 'PLAYER' && entity.presence === 'present')
+				.filter((entity) => entity.kind !== 'PLAYER' && entity.presence === 'present' && entity.distanceBand === 'SAME_LOCATION')
 				.map((entity) => ({
 					id: `inspect:${entity.id}`,
 					type: 'INSPECT' as const,

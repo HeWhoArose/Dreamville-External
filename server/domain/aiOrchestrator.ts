@@ -6341,7 +6341,7 @@ export class MultiModelOrchestrator {
 
     const escapedActor = String(actorName || '')
       .trim()
-      .replace(/[.*+?^$()|[\]\\]/g, '\\  private validateNarrativeInformationContinuity(
+      .replace(/[.*+?^$()|[\]\\]/g, '\\$&');
     narration: string,
     playerAction: string,
   ): { valid: boolean; errorReason?: string } {');

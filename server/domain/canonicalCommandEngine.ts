@@ -546,7 +546,10 @@ export class CanonicalCommandEngine {
 					postStateHash: stableHash(after),
 					canonicalSequence,
 					resolvedDataHash: stableHash(resolved.data),
-					rngState: {
+					replay: {
+						preStateSnapshot: clone(before),
+						commandPayload: clone(command.payload),
+						rngState: {
 						combat: {
 						before: {
 							seed: Number(before.combat?.seed ?? 0),

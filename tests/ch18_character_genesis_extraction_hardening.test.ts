@@ -527,7 +527,7 @@ test('Character Genesis has an AI validator on every executeTaskGeneration struc
 	);
 
 	const callPositions = [...source.matchAll(/executeTaskGeneration\(/g)].map((match) => match.index ?? -1);
-	assert.equal(callPositions.length, 10, 'Character Genesis should have exactly ten AI task-generation parse paths.');
+	assert.equal(callPositions.length, 11, 'Character Genesis should have exactly eleven AI task-generation parse paths.');
 
 	for (const position of callPositions) {
 		const window = source.slice(position, Math.min(source.length, position + 1800));

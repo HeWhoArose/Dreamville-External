@@ -1060,7 +1060,7 @@ What reaches them is not yet a clear answer, only the character of the surroundi
         .sort((a, b) => b.score - a.score || b.sentence.length - a.sentence.length)[0]?.sentence;
 
       if (groundedSnippet) {
-        return actorName + ' works into the crowd and asks what people have heard about ' + topic + '. The replies circle around an existing account rather than a verified fact: ' + groundedSnippet + ' The rumor remains unconfirmed, but the exchange gives Aelion something concrete to investigate instead of leaving the question unanswered.';
+        return actorName + ' works into the crowd and asks what people have heard about ' + topic + '. The replies circle around an existing account rather than a verified fact: ' + groundedSnippet + ' The rumor remains unconfirmed, but the exchange gives ' + actorName + ' something concrete to investigate instead of leaving the question unanswered.';
       }
 
       return actorName + ' works into the crowd and asks what people have heard about ' + topic + '. No one offers a reliable account; the response is limited to fragments of rumor and uncertainty. The question produces no confirmed fact yet, but it makes clear that a more direct source is needed.';

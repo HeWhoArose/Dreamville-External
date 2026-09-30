@@ -19,7 +19,7 @@ interface InventoryViewProps {
   equipment: Record<string, Item | null>;
   onEquipItem: (item: Item, targetSlot?: string) => void;
   onUnequipSlot: (slot: string) => void;
-  onInspectItem: (item: Item) => void;
+  onInspectItem?: (item: Item) => void;
   recipes?: CraftingRecipe[];
   onCraftRecipe?: (recipeId: string) => void;
   onRepairItem?: (itemId: string) => void;
@@ -63,6 +63,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [selectedItem, setSelectedItem] = useState<Item | null>(inventory[0] || null);
   const [activeFilter, setActiveFilter] = useState<string>('ALL');
   const [activeTab, setActiveTab] = useState<'BAG' | 'WORKSHOP'>('BAG');
+  const [itemModal, setItemModal] = useState<Item | null>(null);
 
   const totalWeight = inventory
     .reduce((sum, item) => sum + (item.weight || 0) * (item.quantity || 1), 0)
@@ -262,7 +263,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     id={`item-${item.id}`}
                     onClick={() => {
                       setSelectedItem(item);
-                      onInspectItem(item);
+                      setItemModal(item);
                     }}
                     className={`p-3 rounded-xl border text-left transition relative flex flex-col justify-between ${
                       isSelected
@@ -511,11 +512,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               <button
                 id="inspect-item-btn"
                 disabled={isProcessingAction}
-                onClick={() => onInspectItem(selectedItem)}
+                onClick={() => setItemModal(selectedItem)}
                 className="w-full py-2 px-3 rounded-xl bg-stone-800 hover:bg-stone-750 text-stone-200 border border-stone-700 text-xs transition flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 <Info className="w-3.5 h-3.5 text-amber-400" />
-                <span>Submit Detailed Inspection Request</span>
+                <span>View Item Information</span>
               </button>
             </div>
 
@@ -530,5 +531,22 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         )}
       </div>
     </div>
+
+      {itemModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-labelledby="item-information-title" onClick={() => setItemModal(null)}>
+          <div className="w-full max-w-lg rounded-2xl border border-stone-700 bg-stone-950 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-4 border-b border-stone-800 p-5">
+              <div className="flex items-start gap-3"><div className="h-14 w-14 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-3xl">{itemModal.icon || '📦'}</div><div><div className="text-[10px] font-mono uppercase tracking-widest text-amber-400">{itemModal.rarity || 'Common'} · {itemModal.category}</div><h3 id="item-information-title" className="mt-1 text-lg font-serif font-bold text-stone-100">{itemModal.name}</h3><div className="text-xs font-mono text-stone-500">Quantity: {itemModal.quantity || 1}</div></div></div>
+              <button type="button" aria-label="Close item information" onClick={() => setItemModal(null)} className="rounded-lg px-2 py-1 text-stone-400 hover:bg-stone-800 hover:text-stone-100">×</button>
+            </div>
+            <div className="space-y-4 p-5">
+              <section><h4 className="text-[10px] font-mono uppercase tracking-widest text-stone-500">Description</h4><p className="mt-1 text-sm leading-relaxed text-stone-200">{itemModal.description || 'No authored description is available for this item.'}</p></section>
+              <section><h4 className="text-[10px] font-mono uppercase tracking-widest text-stone-500">What it can be used for</h4><ul className="mt-2 space-y-1.5">{(itemModal.useCases || []).length > 0 ? itemModal.useCases!.map((use, index) => React.createElement('li', { key: itemModal.id + '-use-' + index, className: 'text-sm text-stone-300' }, '• ' + use)) : React.createElement('li', { className: 'text-sm text-stone-400' }, 'Use depends on the item’s canonical properties and the situation.')}</ul></section>
+              {itemModal.properties && Object.keys(itemModal.properties).length > 0 && (<section><h4 className="text-[10px] font-mono uppercase tracking-widest text-stone-500">Known properties</h4><div className="mt-2 grid grid-cols-2 gap-2">{Object.entries(itemModal.properties).map(([key, value]) => <div key={key} className="rounded-lg border border-stone-800 bg-stone-900/60 p-2"><div className="text-[10px] font-mono text-stone-500">{key}</div><div className="text-xs text-stone-200 break-words">{String(value)}</div></div>)}</div></section>)}
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-stone-400"><strong className="text-amber-300">Player action:</strong> viewing this information does not inspect, use, equip, consume, or advance the turn. Decide what you want to do with the item first; the game will then determine the applicable requirements and consequences.</div>
+            </div>
+          </div>
+        </div>
+      )}
   );
 };

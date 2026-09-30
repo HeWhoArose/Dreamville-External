@@ -135,7 +135,7 @@ const StoryCheckCard: React.FC<{
           </div>
         )}
         {check.contextNotes.length > 0 && (
-          <div className="mt-2 space-y-1">
+          <div className="mt-2 space-y-1.5">
             {check.contextNotes.map((note) => <p key={note} className="text-[10px] text-stone-600">{note}</p>)}
           </div>
         )}
@@ -336,7 +336,8 @@ export const StoryView: React.FC<StoryViewProps> = ({
   const previousActionCountRef = useRef(actionHistory.length);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
-  const actionInputRef = useRef<HTMLInputElement | null>(null);
+  const actionInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const speechRecognitionRef = useRef<any | null>(null);
 
   useEffect(() => {
     loadNarrationModels();
@@ -414,28 +415,69 @@ export const StoryView: React.FC<StoryViewProps> = ({
     setTranscriptionError(null);
     triggerHaptic('light');
 
-    const fallbackTranscribe = async (payload: string, delayMs: number) => {
-      setIsTranscribing(true);
-      window.setTimeout(async () => {
-        try {
-          const res = await fetch('/api/game/sensory/transcribe', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ audioBase64: payload }),
-          });
-          const data = await res.json();
-          if (data.text) setTypedAction((prev) => (prev ? `${prev} ${data.text}` : data.text));
-          triggerHaptic('medium');
-        } catch {
-          setTranscriptionError('Transcription request failed.');
-        } finally {
-          setIsTranscribing(false);
-        }
-      }, delayMs);
-    };
+    const SpeechRecognitionCtor =
+      typeof window !== 'undefined'
+        ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+        : null;
 
-    if (!navigator.mediaDevices?.getUserMedia) {
-      await fallbackTranscribe('sample_audio_capture_payload', 500);
+    if (SpeechRecognitionCtor) {
+      try {
+        const recognition = new SpeechRecognitionCtor();
+        recognition.lang = navigator.language || 'en-US';
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.onresult = (event: any) => {
+          let finalText = '';
+          for (let index = event.resultIndex || 0; index < event.results.length; index += 1) {
+            const result = event.results[index];
+            if (result?.isFinal) {
+              finalText += String(result[0]?.transcript || '');
+            }
+          }
+
+          const normalized = finalText.trim();
+          if (normalized) {
+            setTypedAction((previous) => (previous ? \`\${previous} \${normalized}\` : normalized));
+            triggerHaptic('medium');
+          }
+        };
+        recognition.onerror = (event: any) => {
+          if (event?.error !== 'aborted') {
+            const reason =
+              event?.error === 'not-allowed'
+                ? 'Microphone permission was denied. Allow microphone access and try again.'
+                : event?.error === 'audio-capture'
+                ? 'No usable microphone was found.'
+                : \`Voice transcription failed: \${event?.error || 'unknown error'}.\`;
+            setTranscriptionError(reason);
+          }
+          setIsRecording(false);
+          speechRecognitionRef.current = null;
+        };
+        recognition.onend = () => {
+          setIsRecording(false);
+          speechRecognitionRef.current = null;
+        };
+
+        speechRecognitionRef.current = recognition;
+        recognition.start();
+        setIsRecording(true);
+        return;
+      } catch (error) {
+        speechRecognitionRef.current = null;
+        setTranscriptionError(
+          error instanceof Error
+            ? \`Could not start microphone transcription: \${error.message}\`
+            : 'Could not start microphone transcription.',
+        );
+        return;
+      }
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setTranscriptionError(
+        'Voice transcription is not available in this browser. Use a browser with microphone and speech-recognition support.',
+      );
       return;
     }
 
@@ -451,37 +493,70 @@ export const StoryView: React.FC<StoryViewProps> = ({
 
       mediaRecorder.onstop = async () => {
         stream.getTracks().forEach((track) => track.stop());
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        setIsTranscribing(true);
+        const audioBlob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType || 'audio/webm' });
 
         try {
-          const reader = new FileReader();
-          reader.readAsDataURL(audioBlob);
-          reader.onloadend = async () => {
-            const base64Audio = (reader.result as string)?.split(',')[1] || '';
-            const res = await fetch('/api/game/sensory/transcribe', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ audioBase64: base64Audio }),
-            });
-            const data = await res.json();
-            if (data.text) setTypedAction((prev) => (prev ? `${prev} ${data.text}` : data.text));
-            setIsTranscribing(false);
-          };
-        } catch {
-          setTranscriptionError('Failed to transcribe audio.');
+          const base64Audio = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onerror = () => reject(new Error('Failed to read the microphone recording.'));
+            reader.onloadend = () => resolve((reader.result as string)?.split(',')[1] || '');
+            reader.readAsDataURL(audioBlob);
+          });
+
+          if (!base64Audio) {
+            throw new Error('The microphone recording was empty.');
+          }
+
+          setIsTranscribing(true);
+          const res = await fetch('/api/game/sensory/transcribe', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ audioBase64: base64Audio, storyId }),
+          });
+          const data = await res.json();
+
+          if (!res.ok || !data?.success || !String(data?.text || '').trim()) {
+            throw new Error(data?.error || 'No transcription result was returned.');
+          }
+
+          const text = String(data.text).trim();
+          setTypedAction((previous) => (previous ? \`\${previous} \${text}\` : text));
+          triggerHaptic('medium');
+        } catch (error) {
+          setTranscriptionError(
+            error instanceof Error ? error.message : 'Failed to transcribe the microphone recording.',
+          );
+        } finally {
           setIsTranscribing(false);
+          mediaRecorderRef.current = null;
         }
       };
 
       mediaRecorder.start();
       setIsRecording(true);
-    } catch {
-      await fallbackTranscribe('mock_mic_capture', 500);
+    } catch (error) {
+      const message =
+        error instanceof DOMException && error.name === 'NotAllowedError'
+          ? 'Microphone permission was denied. Allow microphone access and try again.'
+          : error instanceof DOMException && error.name === 'NotFoundError'
+          ? 'No microphone was found on this device.'
+          : error instanceof Error
+          ? error.message
+          : 'Could not access the microphone.';
+      setTranscriptionError(message);
+      mediaRecorderRef.current = null;
     }
   };
 
   const stopRecording = () => {
+    if (speechRecognitionRef.current && isRecording) {
+      speechRecognitionRef.current.stop();
+      speechRecognitionRef.current = null;
+      setIsRecording(false);
+      triggerHaptic('light');
+      return;
+    }
+
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
@@ -1425,7 +1500,8 @@ export const StoryView: React.FC<StoryViewProps> = ({
           </div>
         )}
 
-        <form onSubmit={handleSubmitAction} className="flex items-center gap-2">
+        <form onSubmit={handleSubmitAction} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <div className="flex items-center gap-2 sm:contents">
           <div ref={narrationMenuRef} className="relative shrink-0">
             <button
               type="button"
@@ -1445,7 +1521,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
             </button>
 
             {sceneMenuOpen && (
-              <div className="absolute bottom-14 left-0 z-50 max-h-[min(72vh,40rem)] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto rounded-2xl border border-white/10 bg-[#110b1d] p-2 shadow-2xl">
+              <div className="absolute bottom-14 left-0 z-50 max-h-[min(72vh,40rem)] w-[min(24rem,calc(100vw-1rem))] overflow-y-auto overscroll-contain rounded-2xl border border-white/10 bg-[#110b1d] p-2 shadow-2xl">
                 <button
                   type="button"
                   onClick={() => setSuggestionsOpen((value) => !value)}
@@ -1474,7 +1550,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
                 </button>
 
                 {diceSettingsOpen && (
-                  <div className="mt-1 rounded-xl border border-amber-200/10 bg-black/20 p-2">
+                  <div className="mt-1 space-y-2 rounded-xl border border-amber-200/10 bg-[#090611]/95 p-2 shadow-inner">
                     <div className="mb-2 rounded-lg border border-white/6 bg-white/[0.02] px-3 py-2">
                       <div className="flex items-center gap-2">
                         <Dices className="h-3.5 w-3.5 text-amber-300" />
@@ -1521,7 +1597,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
                                   key={theme.id}
                                   type="button"
                                   onClick={() => void updateSettings({ diceTheme: theme.id })}
-                                  className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-white/[0.04]"
+                                  className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition hover:bg-white/[0.04]"
                                   aria-pressed={active}
                                 >
                                   <span
@@ -1714,10 +1790,13 @@ export const StoryView: React.FC<StoryViewProps> = ({
             )}
           </button>
 
-          <input
+          </div>
+
+          <div className="flex min-w-0 flex-1 items-end gap-2">
+          <textarea
             ref={actionInputRef}
-            type="text"
             value={typedAction}
+            rows={2}
             onChange={(event) => setTypedAction(event.target.value)}
             disabled={isProcessingAction || isProcessingOoc || isRecording}
             placeholder={
@@ -1733,7 +1812,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
                 ? 'Ask OOC about your character, rules, lore, inventory, or the current story…'
                 : 'Describe what you do…'
             }
-            className="h-12 min-w-0 flex-1 rounded-2xl border border-violet-400/10 bg-black/20 px-4 text-sm text-stone-100 placeholder:text-stone-600 focus:border-violet-400/40 focus:outline-none focus:ring-2 focus:ring-violet-500/10"
+            className="min-h-12 max-h-40 min-w-0 flex-1 resize-none overflow-y-auto rounded-2xl border border-violet-400/10 bg-black/20 px-4 py-3 text-sm leading-5 text-stone-100 placeholder:text-stone-600 focus:border-violet-400/40 focus:outline-none focus:ring-2 focus:ring-violet-500/10 sm:h-12"
           />
 
           <button
@@ -1744,6 +1823,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
             {isProcessingAction ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             <span className="hidden sm:inline">Send</span>
           </button>
+          </div>
         </form>
 
         {transcriptionError && (

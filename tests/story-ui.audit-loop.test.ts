@@ -62,9 +62,9 @@ test('Story UI audit-implementation-regression-fallback loop completes ten deter
 		assert.equal(story.includes('getCharacterSpeakerTheme'), true, `Audit ${iteration}: world-scoped speaker color system disconnected`);
 		assert.equal(story.includes('Story conversation'), true, `Audit ${iteration}: story conversation disappeared`);
 		assert.equal(
-			story.includes('const visible = history.slice(Math.max(0, history.length - visibleTurnCount));'),
+			story.includes('const visible = [...history.slice(0, visibleTurnCount)].reverse();'),
 			true,
-			`Audit ${iteration}: story timeline no longer selects the newest visible turns from chronological history`,
+			`Audit ${iteration}: story timeline no longer windows the newest turns before chronological display`,
 		);
 		assert.equal(
 			story.includes('.slice()\n          .reverse()'),

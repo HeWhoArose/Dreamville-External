@@ -134,7 +134,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                   {equipped ? (
                     <button
                       type="button"
-                      onClick={() => setItemModal(equipped)}
+                      onClick={() => setItemModal(inventory.find((entry) => entry.id === equipped.id) || equipped)}
                       className="my-1 text-center w-full rounded-lg hover:bg-stone-800/50 transition p-1"
                       title={`View information about ${equipped.name}`}
                     >

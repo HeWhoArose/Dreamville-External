@@ -5,10 +5,10 @@ import { test } from 'node:test';
 import { DEFAULT_DICE_THEME, DICE_THEME_PRESETS, getDiceThemePreset } from '../src/components/common/diceThemes';
 
 test('dice theme registry exposes balanced 3D and 2D theme families', () => {
-	assert.equal(DICE_THEME_PRESETS.length, 12);
-	assert.equal(DICE_THEME_PRESETS.filter((theme) => theme.mode === '3D').length, 6);
+	assert.equal(DICE_THEME_PRESETS.length, 16);
+	assert.equal(DICE_THEME_PRESETS.filter((theme) => theme.mode === '3D').length, 10);
 	assert.equal(DICE_THEME_PRESETS.filter((theme) => theme.mode === '2D').length, 6);
-	assert.equal(new Set(DICE_THEME_PRESETS.map((theme) => theme.id)).size, 12);
+	assert.equal(new Set(DICE_THEME_PRESETS.map((theme) => theme.id)).size, 16);
 	assert.equal(getDiceThemePreset('2D_ARCANE').mode, '2D');
 	assert.equal(getDiceThemePreset('2D_ARCANE').label, '2D Arcane Ink');
 	assert.equal(getDiceThemePreset('not-a-real-theme').id, DEFAULT_DICE_THEME);

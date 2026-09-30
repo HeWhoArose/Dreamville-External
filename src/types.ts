@@ -138,6 +138,7 @@ export interface ItemDefinition {
   category: string;
   rarity: string;
   description: string;
+  useCases?: string[];
   allowedSlots: string[];
   weightKg: number;
   baseValueGold: number;

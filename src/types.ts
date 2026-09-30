@@ -2510,6 +2510,24 @@ export interface AdditionalCharacterSkillsProposalRequest {
   desiredCount?: number;
 }
 
+export interface AdditionalCharacterCapabilitiesProposalRequest {
+  worldId: string;
+  characterConcept: string;
+  existingCapabilities: CapabilityDefinition[];
+  characterContext?: {
+    name?: string;
+    species?: string;
+    role?: string;
+    profession?: string;
+    background?: string;
+    personality?: string[];
+    motivations?: string[];
+    capabilities?: string[];
+    skills?: string[];
+  };
+  desiredCount?: number;
+}
+
 export interface CustomEquipmentProposalRequest {
   worldId: string;
   itemName: string;

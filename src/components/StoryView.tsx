@@ -1122,11 +1122,13 @@ export const StoryView: React.FC<StoryViewProps> = ({
         </section>
       )}
       {(() => {
-        // Keep the canonical timeline chronological. The previous implementation
-        // reversed first and then sliced from the end, which could hide the newest
-        // turns and leave the player looking at stale narration.
+        // The server stores actionHistory newest-first because new actions are
+        // prepended for efficient writes. The story conversation must render the
+        // canonical timeline oldest-first so Turn #1 stays above Turn #2, etc.
         const history = (actionHistory || [])
-          .filter((entry) => !(entry.actionType === 'NOTE_RECORD' && entry.id.includes('act_open_')));
+          .filter((entry) => !(entry.actionType === 'NOTE_RECORD' && entry.id.includes('act_open_')))
+          .slice()
+          .reverse();
         const fallbackTurnNumbers = new Map<string, number>();
         let fallbackTurn = 0;
         for (const entry of history) {

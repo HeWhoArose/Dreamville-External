@@ -160,7 +160,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                           style={{ width: `${durabilityPct}%` }}
                         />
                       </div>
-                    </div>
+                    </button>
                   ) : (
                     <div className="my-1 text-center text-stone-600 text-xs italic flex flex-col items-center justify-center flex-1">
                       <span className="text-base opacity-40">{slot.icon}</span>

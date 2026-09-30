@@ -22,7 +22,13 @@ import { narrativeContinuityEngine } from './narrativeContinuityEngine';
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
 
 const NARRATIVE_INFORMATION_SEEKING_PATTERN =
-	/\b(ask|asked|inquire|inquired|question|questioned|find out|learn|discover|gather information|seek information|rumor|rumors|rumour|rumours|gossip|what happened|who|why|where|when|how|heard about|tell me)\b/i;
+	/\b(ask|asked|inquire|inquired|question|questioned|find out|learn|discover|gather information|seek information|rumor|rumors|rumour|rumours|gossip|what happened|who|why|where|when|how|heard about|hear|listen|listen for|overhear|eavesdrop|tell me)\b/i;
+
+const NARRATIVE_PASSIVE_LISTENING_PATTERN =
+	/\b(listen|listens|listened|listen for|hear|hears|heard|overhear|overhears|overheard|eavesdrop|eavesdrops|eavesdropped)\b/i;
+
+const NARRATIVE_DIRECT_SPEECH_PATTERN =
+	/\b(ask|asks|asked|say|says|said|speak|speaks|spoke|tell|tells|told|reply|replies|replied|answer|answers|answered|inquire|inquires|inquired|question|questions|questioned|consult|consults|consulted|shout|shouts|shouted|call out|calls out|called out)\b/i;
 
 const NARRATIVE_INFORMATION_RESPONSE_PATTERN =
 	/\b(answer|answered|answers|reply|replied|replies|respond|responded|responds|explain|explained|explains|mention|mentioned|mentions|report|reported|reports|reveal|revealed|reveals|confirm|confirmed|confirms|warn|warned|warns|tell|told|tells|said|says|whispered|whispers|admitted|admits|learned|learns|heard|hears)\b/i;
@@ -6316,6 +6322,50 @@ export class MultiModelOrchestrator {
     return { valid: true };
   }
 
+  private validateNarrativeActionModeContinuity(
+    narration: string,
+    playerAction: string,
+    actorName?: string,
+  ): { valid: boolean; errorReason?: string } {
+    const action = String(playerAction || '').trim();
+    const output = String(narration || '').trim();
+    if (!action || !output) return { valid: true };
+
+    const isPassiveListening = NARRATIVE_PASSIVE_LISTENING_PATTERN.test(action);
+    const explicitSpeechIntent = NARRATIVE_DIRECT_SPEECH_PATTERN.test(action);
+    if (!isPassiveListening || explicitSpeechIntent || !NARRATIVE_DIRECT_SPEECH_PATTERN.test(output)) {
+      return { valid: true };
+    }
+
+    const escapedActor = String(actorName || '')
+      .trim()
+      .replace(/[.*+?^$()|[\]\\]/g, '\\  private validateNarrativeInformationContinuity(
+    narration: string,
+    playerAction: string,
+  ): { valid: boolean; errorReason?: string } {');
+    const subjects = ['you'];
+    if (escapedActor) subjects.push(escapedActor);
+
+    const speechVerbs = 'ask|asks|asked|say|says|said|speak|speaks|spoke|tell|tells|told|reply|replies|replied|answer|answers|answered|inquire|inquires|inquired|question|questions|questioned|consult|consults|consulted|shout|shouts|shouted|call out|calls out|called out';
+    const protagonistSpeechPattern = new RegExp(
+      '\\b(?:' + subjects.join('|') + ')\\s+(?:(?:then|directly|quietly|carefully|firmly)\\s+)?(?:' + speechVerbs + ')\\b',
+      'i',
+    );
+    const raisingVoicePattern = new RegExp(
+      '\\b(?:' + subjects.join('|') + ')\\s+(?:\\w+\\s+){0,4}(?:raise|raised|raising)\\s+(?:your|his|her|their)\\s+voice\\b',
+      'i',
+    );
+
+    if (protagonistSpeechPattern.test(output) || raisingVoicePattern.test(output)) {
+      return {
+        valid: false,
+        errorReason: 'Narration action-mode continuity guard rejected output: the player chose to listen or hear, but the narration made the protagonist speak, ask, or shout instead.',
+      };
+    }
+
+    return { valid: true };
+  }
+
   private validateNarrativeInformationContinuity(
     narration: string,
     playerAction: string,
@@ -6457,7 +6507,7 @@ export class MultiModelOrchestrator {
       'Do not pad short actions into poetic scene-setting. The player action is the reason this turn exists; move the scene forward because of it.',
       'When the current action contains multiple concrete steps, resolve each observable step in order instead of stopping after the first movement.',
       NARRATIVE_INFORMATION_SEEKING_PATTERN.test(playerAction)
-        ? 'This is an information-seeking action. The minimum useful response is: reach the relevant source already established in context, make the inquiry, then provide the specific information that can be learned from canonical context or clearly state that the available people provide no reliable answer. Distinguish rumor or hearsay from established fact. Do not replace the inquiry with atmosphere, and do not invent a named informant, secret, fact, or revelation that is not supported by the supplied context.'
+        ? 'This is an information-seeking action. The minimum useful response is: reach the relevant source already established in context, then perform only the kind of information gathering the player actually requested. If the player says listen, hear, overhear, or eavesdrop, the protagonist is listening only; do not make the protagonist ask, answer, speak, call out, or raise their voice unless the player also explicitly requested speech. Then provide the specific information that can be learned from canonical context or clearly state that the available people provide no reliable answer. Distinguish rumor or hearsay from established fact. Do not replace the inquiry with atmosphere, and do not invent a named informant, secret, fact, or revelation that is not supported by the supplied context.'
         : '',
       'Prefer concrete nouns, specific observations, reactions, facts, and consequences over decorative adjectives and repeated sensory metaphors.',
       authoritativeOutcome
@@ -6601,6 +6651,12 @@ export class MultiModelOrchestrator {
           if (!continuity.valid) return { valid: false, errorReason: continuity.errorReason };
           const actionContinuity = this.validateNarrativeActionContinuity(narrationText, playerAction);
           if (!actionContinuity.valid) return { valid: false, errorReason: actionContinuity.errorReason };
+          const actionModeContinuity = this.validateNarrativeActionModeContinuity(
+            narrationText,
+            playerAction,
+            canonicalPlayer?.name,
+          );
+          if (!actionModeContinuity.valid) return { valid: false, errorReason: actionModeContinuity.errorReason };
           const informationContinuity = this.validateNarrativeInformationContinuity(narrationText, playerAction);
           if (!informationContinuity.valid) return { valid: false, errorReason: informationContinuity.errorReason };
           const temporalContinuity = this.validateNarrativeTemporalContinuity(narrationText, worldRepo, storyId);

@@ -1126,19 +1126,18 @@ export const StoryView: React.FC<StoryViewProps> = ({
         // prepended for efficient writes. The story conversation must render the
         // canonical timeline oldest-first so Turn #1 stays above Turn #2, etc.
         const history = (actionHistory || [])
-          .filter((entry) => !(entry.actionType === 'NOTE_RECORD' && entry.id.includes('act_open_')))
-          .slice()
-          .reverse();
+          .filter((entry) => !(entry.actionType === 'NOTE_RECORD' && entry.id.includes('act_open_')));
+        const chronologicalHistory = [...history].reverse();
         const fallbackTurnNumbers = new Map<string, number>();
         let fallbackTurn = 0;
-        for (const entry of history) {
+        for (const entry of chronologicalHistory) {
           if (entry.actionType !== 'NOTE_RECORD') fallbackTurn += 1;
           fallbackTurnNumbers.set(
             entry.id,
             entry.turnNumber ?? (entry.actionType === 'NOTE_RECORD' ? 0 : fallbackTurn),
           );
         }
-        const visible = history.slice(Math.max(0, history.length - visibleTurnCount));
+        const visible = [...history.slice(0, visibleTurnCount)].reverse();
         const olderCount = Math.max(0, history.length - visible.length);
 
         return (

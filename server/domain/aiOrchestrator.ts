@@ -6151,6 +6151,85 @@ export class MultiModelOrchestrator {
     return { valid: true };
   }
 
+  private validateNarrativeActionContinuity(
+    narration: string,
+    playerAction: string,
+  ): { valid: boolean; errorReason?: string } {
+    const action = String(playerAction || '').trim().toLowerCase();
+    const output = String(narration || '').trim().toLowerCase();
+    if (!action || !output) return { valid: true };
+
+    const requirements: Array<{ label: string; pattern: RegExp; anchors: string[] }> = [
+      { label: 'breathing', pattern: /\\b(?:breathe|breathing|breath|inhale|inhaled|exhale|exhaled)\\b/i, anchors: ['breathe', 'breath', 'inhale', 'exhale'] },
+      { label: 'sitting or settling', pattern: /\\b(?:sit|sits|sat|seated|settle|settles|settled|rest|rests|rested|kneel|kneels|knelt|crouch|crouches|crouched)\\b/i, anchors: ['sit', 'sat', 'seated', 'settle', 'rest', 'kneel', 'crouch'] },
+      { label: 'movement', pattern: /\\b(?:walk|walks|walked|move|moves|moved|step|steps|stepped|approach|approaches|approached|head|heads|headed|travel|travels|traveled)\\b/i, anchors: ['walk', 'move', 'step', 'approach', 'head', 'travel'] },
+      { label: 'item or text examination', pattern: /\\b(?:examine|examines|examined|inspect|inspects|inspected|study|studies|studied|read|reads|decipher|deciphers|deciphered|translate|translates|translated|look at|looks at|looked at)\\b/i, anchors: ['examine', 'inspect', 'study', 'read', 'decipher', 'translate', 'look'] },
+      { label: 'taking or holding', pattern: /\\b(?:take|takes|took|pick up|picks up|picked up|grasp|grasps|grasped|hold|holds|held|carry|carries|carried)\\b/i, anchors: ['take', 'took', 'pick', 'grasp', 'hold', 'carry'] },
+      { label: 'speaking', pattern: /\\b(?:ask|asks|asked|say|says|said|speak|speaks|spoke|tell|tells|told|reply|replies|replied|answer|answers|answered)\\b/i, anchors: ['ask', 'say', 'said', 'speak', 'spoke', 'tell', 'reply', 'answer'] },
+    ];
+
+    for (const requirement of requirements) {
+      if (!requirement.pattern.test(action)) continue;
+      if (!requirement.anchors.some((anchor) => output.includes(anchor))) {
+        return {
+          valid: false,
+          errorReason: `Narration action-continuity guard rejected output: the current player action requires the visible action of ${requirement.label}, but the narration did not depict it.`,
+        };
+      }
+    }
+
+    const targetPatterns = [
+      /\\b(?:walk|move|step|approach|head|travel)\\s+(?:toward|towards|to|into)\\s+(?:the|a|an|my|this|that)?\\s*([a-z][a-z0-9' -]{2,80})/i,
+      /\\b(?:examine|inspect|study|read|decipher|translate|look at)\\s+(?:the|a|an|my|this|that)?\\s*([a-z][a-z0-9' -]{2,80})/i,
+      /\\b(?:pick up|take|grasp|hold|carry)\\s+(?:the|a|an|my|this|that)?\\s*([a-z][a-z0-9' -]{2,80})/i,
+    ];
+    const targetStopWords = new Set(['and', 'then', 'while', 'before', 'after', 'next', 'carefully', 'quietly', 'slowly', 'gently', 'firmly', 'nearby', 'there', 'here']);
+    for (const pattern of targetPatterns) {
+      const match = action.match(pattern);
+      if (!match?.[1]) continue;
+      const targetTokens = match[1]
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter((token) => token.length >= 4 && !targetStopWords.has(token))
+        .slice(0, 3);
+      if (targetTokens.length === 0) continue;
+      if (!targetTokens.some((token) => output.includes(token))) {
+        return {
+          valid: false,
+          errorReason: `Narration action-continuity guard rejected output: the current action targets "${targetTokens.join(' ')}", but the narration did not visibly include that target.`,
+        };
+      }
+    }
+
+    return { valid: true };
+  }
+
+  private validateNarrativeTemporalContinuity(
+    narration: string,
+    repository: WorldRepository,
+    storyId: string,
+  ): { valid: boolean; errorReason?: string } {
+    const clock = repository.getWorldClock(storyId);
+    const state = clock.getState();
+    const output = String(narration || '').toLowerCase();
+    const forbiddenByPhase: Record<string, string[]> = {
+      Predawn: ['sunset', 'dusk', 'afternoon', 'midday', 'noon', 'night', 'midnight'],
+      Dawn: ['sunset', 'dusk', 'afternoon', 'midday', 'noon', 'midnight'],
+      Morning: ['first light', 'dawn', 'predawn', 'sunset', 'dusk', 'midnight', 'late evening'],
+      Afternoon: ['first light', 'daybreak', 'dawn', 'predawn', 'sunrise', 'sunset', 'dusk', 'nightfall', 'midnight', 'early morning', 'morning'],
+      Dusk: ['first light', 'daybreak', 'dawn', 'predawn', 'sunrise', 'midday', 'noon', 'early morning', 'morning'],
+      Night: ['first light', 'daybreak', 'dawn', 'sunrise', 'morning', 'afternoon', 'midday', 'noon', 'sunset'],
+    };
+    const contradiction = (forbiddenByPhase[state.currentDayPhase] || []).find((token) => output.includes(token));
+    if (contradiction) {
+      return {
+        valid: false,
+        errorReason: `Narration temporal-continuity guard rejected output: canonical world time is ${state.currentDayPhase} at ${String(state.timestamp.hour).padStart(2, '0')}:${String(state.timestamp.minute).padStart(2, '0')}, so the narration cannot introduce "${contradiction}" without a canonical time change.`,
+      };
+    }
+    return { valid: true };
+  }
+
   /**
    * Presentation-only narrative generation.
    *
@@ -6224,7 +6303,9 @@ export class MultiModelOrchestrator {
           canonicalLocation.regionId ? `Region: ${canonicalLocation.regionId}` : '',
           canonicalLocation.description ? `Canonical description: ${canonicalLocation.description}` : '',
           canonicalLocation.ambientSensory ? `Canonical ambient/sensory cues: ${canonicalLocation.ambientSensory}` : '',
+          `Canonical world time: ${worldRepo.getWorldClock(storyId).formatHeader()}`,
           'Continuity rule: remain within this canonical location unless the canonical game state has already committed a location change for this turn. A failed check, fallback model, or narration request never authorizes an uncommitted relocation.',
+          'Temporal rule: do not move the time of day forward or backward in narration. Multiple player actions may occur within the same canonical time until the game clock is explicitly advanced.',
         ].filter(Boolean).join('\n')
       : 'Canonical location is unavailable; do not invent a location change.';
 
@@ -6240,6 +6321,9 @@ export class MultiModelOrchestrator {
         : 'No canonical mechanical outcome was supplied. Describe only the attempt and observable scene response; do not decide hidden success or failure.',
       connectedDirective ? 'Follow the connected presentation directive only as style guidance; never override canonical state.' : '',
       'Stay in the canonical current location unless a committed location change is supplied.',
+      'Treat the latest player action as the current turn contract. Depict that action first and do not silently replace it with an earlier action from recent history.',
+      'Preserve every concrete action target named by the player when it is narratively observable (for example, a scroll, staff, citadel, doorway, person, or object).',
+      'Do not invent a time-of-day change. Use only the canonical world time supplied in context unless a canonical time-advance action has already changed it.',
       'Do not invent characters, items, abilities, environmental objects, causal explanations, or knowledge outside the supplied context.',
       'Respect CHECK_PENDING or unresolved actions: show the attempt, not the result.',
       'Use concrete established sensory details and vary wording without repeating recent turns.',
@@ -6332,14 +6416,19 @@ export class MultiModelOrchestrator {
           if (!validation.valid || !validation.turnPackage) {
             return { valid: false, errorReason: validation.errorReason };
           }
+          const narrationText = validation.turnPackage.narrative.join(' ');
           const continuity = this.validateNarrativeSceneContinuity(
-            validation.turnPackage.narrative.join(' '),
+            narrationText,
             worldRepo,
             storyId,
           );
-          return continuity.valid
+          if (!continuity.valid) return { valid: false, errorReason: continuity.errorReason };
+          const actionContinuity = this.validateNarrativeActionContinuity(narrationText, playerAction);
+          if (!actionContinuity.valid) return { valid: false, errorReason: actionContinuity.errorReason };
+          const temporalContinuity = this.validateNarrativeTemporalContinuity(narrationText, worldRepo, storyId);
+          return temporalContinuity.valid
             ? { valid: true }
-            : { valid: false, errorReason: continuity.errorReason };
+            : { valid: false, errorReason: temporalContinuity.errorReason };
         },
       },
     );

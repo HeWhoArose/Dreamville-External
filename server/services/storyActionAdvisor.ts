@@ -139,7 +139,14 @@ function getCanonicalSceneContext(
 			run?.startingSituation?.hook ||
 			run?.initialScene,
 		activeDialogue: supplied?.activeDialogue,
-		recentActions: supplied?.recentActions,
+		recentActions:
+			supplied?.recentActions ||
+			(Array.isArray(run?.runtimeState?.narrativeContextHistory)
+				? run.runtimeState.narrativeContextHistory
+					.slice(-4)
+					.map((entry: any) => entry?.narration?.response || entry?.playerAction)
+					.filter(Boolean)
+				: []),
 	};
 }
 

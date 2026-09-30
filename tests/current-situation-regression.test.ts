@@ -124,7 +124,7 @@ test('current situation keeps player knowledge separate from authoritative world
 
 	const situation = CurrentSituationBuilder.build({
 		storyId,
-		playerAction: 'I inspect what I already know.',
+		playerAction: 'I inspect the archive gate and check what I already know.',
 		viewerActorId: player.actorId,
 		worldRepo: repository,
 	});

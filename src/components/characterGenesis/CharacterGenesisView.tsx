@@ -246,6 +246,7 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
   const [customStatValue, setCustomStatValue] = useState<string>('10');
   const [autosaveStatus, setAutosaveStatus] = useState<string>('Not saved');
   const [showInterpretation, setShowInterpretation] = useState<boolean>(true);
+  const [skillAddedNotice, setSkillAddedNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (!draft || !selectedWorld) return;
@@ -824,6 +825,8 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
 
     markFieldEdited('capabilities');
     markFieldEdited('generatedSkills');
+    setSkillAddedNotice(`Capability "${newCap.name}"${newSkills.length > 0 ? ` and ${newSkills.length} technique(s)` : ''} added to character!`);
+    setTimeout(() => setSkillAddedNotice(null), 4500);
     setPendingCapProposal(null);
     setCustomCapInput('');
   };
@@ -1058,6 +1061,8 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
     });
 
     markFieldEdited('skills');
+    setSkillAddedNotice(`Custom skill "${pendingSkillProposal.name}" added to character sheet!`);
+    setTimeout(() => setSkillAddedNotice(null), 4500);
     setPendingSkillProposal(null);
     setCustomSkillName('');
     setCustomSkillConcept('');
@@ -1121,45 +1126,76 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
     if (!draft) return;
 
     const currentSkills = getInitialDndSkills(draft.skills || []);
-    const alreadyExists = currentSkills.some(
-      (existing) => existing.name.trim().toLowerCase() === skill.name.trim().toLowerCase(),
+    const existingIndex = currentSkills.findIndex(
+      (existing) =>
+        existing.id === skill.id ||
+        existing.name.trim().toLowerCase() === skill.name.trim().toLowerCase()
     );
 
-    if (alreadyExists) {
-      setAdditionalSkillSuggestions((current) => current.filter((entry) => entry.id !== skill.id));
-      return;
+    const newSkill: CharacterSkill = {
+      ...skill,
+      isCustom: true,
+      isProficient: true,
+      proficiency: skill.proficiency || 'PROFICIENT',
+      governingAbility: skill.governingAbility || 'Intelligence',
+      checkFormula: skill.checkFormula || '1d20',
+      provenance: skill.provenance || 'AI_GENERATED',
+    };
+
+    let updatedSkills: CharacterSkill[];
+    if (existingIndex >= 0) {
+      updatedSkills = [...currentSkills];
+      updatedSkills[existingIndex] = { ...updatedSkills[existingIndex], ...newSkill };
+    } else {
+      updatedSkills = [...currentSkills, newSkill];
     }
 
     setDraft({
       ...draft,
-      skills: [...currentSkills, skill],
+      skills: updatedSkills,
     });
     markFieldEdited('skills');
+    setSkillAddedNotice(`Skill "${skill.name}" added to character sheet!`);
+    setTimeout(() => setSkillAddedNotice(null), 4500);
     setAdditionalSkillSuggestions((current) => current.filter((entry) => entry.id !== skill.id));
   };
 
   const handleAcceptAllAdditionalSkills = () => {
     if (!draft || additionalSkillSuggestions.length === 0) return;
 
+    const count = additionalSkillSuggestions.length;
     const currentSkills = getInitialDndSkills(draft.skills || []);
-    const existingNames = new Set(currentSkills.map((skill) => skill.name.trim().toLowerCase()));
-    const accepted = additionalSkillSuggestions.filter((skill) => {
-      const key = skill.name.trim().toLowerCase();
-      if (!key || existingNames.has(key)) return false;
-      existingNames.add(key);
-      return true;
-    });
+    const merged = [...currentSkills];
 
-    if (accepted.length === 0) {
-      setAdditionalSkillSuggestions([]);
-      return;
+    for (const skill of additionalSkillSuggestions) {
+      const key = skill.name.trim().toLowerCase();
+      if (!key) continue;
+      const newSkill: CharacterSkill = {
+        ...skill,
+        isCustom: true,
+        isProficient: true,
+        proficiency: skill.proficiency || 'PROFICIENT',
+        governingAbility: skill.governingAbility || 'Intelligence',
+        checkFormula: skill.checkFormula || '1d20',
+        provenance: skill.provenance || 'AI_GENERATED',
+      };
+      const idx = merged.findIndex(
+        (s) => s.id === skill.id || s.name.trim().toLowerCase() === key
+      );
+      if (idx >= 0) {
+        merged[idx] = { ...merged[idx], ...newSkill };
+      } else {
+        merged.push(newSkill);
+      }
     }
 
     setDraft({
       ...draft,
-      skills: [...currentSkills, ...accepted],
+      skills: merged,
     });
     markFieldEdited('skills');
+    setSkillAddedNotice(`${count} skills added to character sheet!`);
+    setTimeout(() => setSkillAddedNotice(null), 4500);
     setAdditionalSkillSuggestions([]);
   };
 
@@ -1169,6 +1205,14 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
 
   const handleRejectAllAdditionalSkills = () => {
     setAdditionalSkillSuggestions([]);
+  };
+
+  const handleDeleteCustomSkill = (skillId: string) => {
+    if (!draft) return;
+    const currentSkills = getInitialDndSkills(draft.skills || []);
+    const updatedSkills = currentSkills.filter((sk) => sk.id !== skillId);
+    setDraft({ ...draft, skills: updatedSkills });
+    markFieldEdited('skills');
   };
 
   const toggleSkillProficiency = (skillId: string) => {
@@ -2601,6 +2645,23 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
         {/* STEP 4: CAPABILITIES & SKILLS / TECHNIQUES */}
         {draft && activeStep === 4 && (
           <div className="space-y-6">
+            {/* Added Notification Toast / Banner */}
+            {skillAddedNotice && (
+              <div className="p-3.5 rounded-xl bg-emerald-950/80 border border-emerald-500/70 text-emerald-200 text-xs flex items-center justify-between shadow-lg animate-in fade-in slide-in-from-top duration-300">
+                <div className="flex items-center gap-2">
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span className="font-semibold">{skillAddedNotice}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSkillAddedNotice(null)}
+                  className="text-emerald-400 hover:text-white text-xs px-1.5 py-0.5"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
             {/* Custom Capability Proposal Bar */}
             <div className="p-5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-3">
               <h3 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider flex items-center gap-2">
@@ -3056,6 +3117,78 @@ export const CharacterGenesisView: React.FC<CharacterGenesisViewProps> = ({
                 ))}
               </div>
             </div>
+
+            {/* Active Custom & Discovered Skills */}
+            {(() => {
+              const allSkills = getInitialDndSkills(draft.skills || []);
+              const customSkills = allSkills.filter(
+                (sk) => sk.isCustom || sk.provenance === 'AI_GENERATED' || sk.provenance === 'PLAYER_INPUT' || sk.provenance === 'USER_EDITED'
+              );
+              return (
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-semibold text-emerald-400 uppercase tracking-wider flex items-center gap-2">
+                      <BookOpen className="w-3.5 h-3.5" />
+                      <span>Custom & Discovered Skills ({customSkills.length})</span>
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setActiveStep(5)}
+                      className="text-[11px] text-indigo-300 hover:text-indigo-200 underline font-medium"
+                    >
+                      View Full D&D Skill Sheet in Step 5 →
+                    </button>
+                  </div>
+
+                  {customSkills.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {customSkills.map((skill) => (
+                        <div
+                          key={skill.id}
+                          className="p-3.5 rounded-lg bg-emerald-950/20 border border-emerald-800/50 space-y-2 relative group"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <h5 className="text-xs font-semibold text-white flex items-center gap-2">
+                                {skill.name}
+                                <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700 font-mono">
+                                  {skill.governingAbility}
+                                </span>
+                              </h5>
+                              <div className="text-[10px] text-neutral-400 font-mono mt-0.5">
+                                Check: {skill.checkFormula || '1d20'} • {skill.proficiency || 'PROFICIENT'}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCustomSkill(skill.id)}
+                              className="opacity-0 group-hover:opacity-100 text-neutral-500 hover:text-red-400 transition-opacity p-1"
+                              title="Remove Custom Skill"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          <p className="text-[11px] text-neutral-300 leading-relaxed">
+                            {skill.description}
+                          </p>
+
+                          {skill.mechanicalDescription && (
+                            <div className="p-2 rounded bg-neutral-900/90 border border-neutral-800 text-[10px] text-emerald-200 leading-relaxed">
+                              <span className="text-neutral-500">Effect:</span> {skill.mechanicalDescription}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-xl bg-neutral-950 border border-neutral-800/80 text-center text-xs text-neutral-500">
+                      No custom skills added yet. Use <span className="text-indigo-300 font-medium">Add More Skills</span> above or synthesize capabilities to discover unique character skills!
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Navigation */}
             <div className="flex items-center justify-between pt-4">

@@ -158,7 +158,16 @@ function capabilityMatchesAction(capability: CapabilityDefinition, text: string)
 	const capabilityName = normalize(capability.name);
 	if (!capabilityName) return false;
 	const capId = String(capability?.id || '');
-	return normalized.includes(capabilityName) || (capId ? normalized === capId.toLowerCase() : false);
+	if (normalized.includes(capabilityName) || (capId ? normalized === capId.toLowerCase() : false)) {
+		return true;
+	}
+	if (capability.name.includes(':') || capability.name.includes('-')) {
+		const parts = capability.name.split(/[:–—-]/).map((p) => normalize(p)).filter((p) => p.length >= 3);
+		for (const part of parts) {
+			if (normalized.includes(part)) return true;
+		}
+	}
+	return false;
 }
 
 function actorAlreadyHasCapability(capabilities: EffectiveCapability[], capabilityId: string): boolean {

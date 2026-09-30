@@ -376,11 +376,11 @@ export const App: React.FC = () => {
       }
     } catch (err: any) {
       if (currentSeq === actionSeqRef.current) {
-        console.error('Failed to execute story action:', err);
         if (err?.status === 409 && err?.data?.advice) {
           setPendingActionAdvice(err.data.advice as ActionAdvice);
           setNetworkError(null);
         } else {
+          console.error('Failed to execute story action:', err);
           setNetworkError(err instanceof Error ? err.message : 'The story action could not be executed.');
         }
       }

@@ -623,7 +623,42 @@ export class CapabilitySimulationEngine {
       };
     }
 
-    const owned = context.ownedCapabilities.some((cap) => normalize(cap.name) === normalizedAction || normalizedAction.includes(normalize(cap.name)));
+    const matchesTarget = (nameOrId?: string): boolean => {
+      if (!nameOrId) return false;
+      const normalizedItem = normalize(nameOrId);
+      if (!normalizedItem) return false;
+      if (normalizedItem === normalizedAction || normalizedAction.includes(normalizedItem)) return true;
+      if (candidateCapability) {
+        if (candidateCapability.id && normalizedItem === normalize(candidateCapability.id)) return true;
+        if (candidateCapability.name && normalizedItem === normalize(candidateCapability.name)) return true;
+      }
+      if (nameOrId.includes(':') || nameOrId.includes('-')) {
+        const parts = nameOrId.split(/[:–—-]/).map((p) => normalize(p)).filter((p) => p.length >= 3);
+        for (const part of parts) {
+          if (normalizedAction.includes(part)) return true;
+          if (candidateCapability?.name && normalize(candidateCapability.name).includes(part)) return true;
+        }
+      }
+      return false;
+    };
+
+    const isOwned = (cap: { id?: string; name?: string } | null | undefined): boolean => {
+      if (!cap) return false;
+      if (candidateCapability && cap.id && candidateCapability.id && cap.id === candidateCapability.id) return true;
+      if (matchesTarget(cap.name) || matchesTarget(cap.id)) return true;
+      return false;
+    };
+
+    const owned =
+      context.ownedCapabilities.some(isOwned) ||
+      (context.skillInstances || []).some((inst) => {
+        if (candidateCapability?.id && inst.capabilityId === candidateCapability.id) return true;
+        return context.ownedCapabilities.some((cap) => cap.id === inst.capabilityId && isOwned(cap));
+      }) ||
+      (Array.isArray(context.character?.capabilities) && context.character.capabilities.some(isOwned)) ||
+      (Array.isArray(context.character?.generatedSkills) && context.character.generatedSkills.some(isOwned)) ||
+      (Array.isArray(context.character?.skills) && context.character.skills.some(isOwned));
+
     if (owned) {
       return {
         status: 'ALREADY_OWNED',

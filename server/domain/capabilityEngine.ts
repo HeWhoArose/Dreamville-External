@@ -1098,6 +1098,10 @@ export class CapabilityEngine {
     return Array.from(this.capabilityGraph.values());
   }
 
+  public getCapabilityGraphNode(nodeId: string): CapabilityGraphNode | undefined {
+    return this.capabilityGraph.get(nodeId);
+  }
+
   public setCapabilityGraphNode(nodeId: string, node: CapabilityGraphNode): void {
     this.capabilityGraph.set(nodeId, node);
   }

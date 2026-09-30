@@ -1002,6 +1002,41 @@ export class InMemoryWorldRepository implements WorldRepository {
         }
       });
 
+      // Register and acquire character generated skills and techniques
+      (char.generatedSkills || []).forEach((skill: any, skillIndex: number) => {
+        if (skill && (skill.name || skill.id)) {
+          const skillId = skill.id || deterministicId(
+            'skill_gen',
+            storyId,
+            skillIndex,
+            skill.name || ''
+          );
+          const skillDef: CapabilityDefinition = {
+            id: skillId,
+            name: skill.name || skillId,
+            category: (skill.category as any) || 'Combat',
+            activationMode: (skill.activationType === 'Reaction' ? 'reaction' : skill.activationType === 'Bonus Action' ? 'bonus_action' : 'immediate') as any,
+            powerTier: (skill.powerTier as any) || 'Minor',
+            baseEnergyCost: Number(skill.energyCost ?? skill.baseEnergyCost ?? 0),
+            baseStrainCost: Number(skill.strainCost ?? skill.baseStrainCost ?? 0),
+            minVesselCapacityRequired: Number(skill.minVesselCapacityRequired ?? 0),
+            description: skill.description || 'Character technique.',
+            provenance: skill.provenance || 'CHARACTER_GENESIS_TECHNIQUE',
+          };
+
+          capEngine.registerCapability(skillDef);
+          capEngine.acquireSkill(actorId, skillId);
+
+          if (skill.parentCapabilityId) {
+            const parentGraph = capEngine.getCapabilityGraphNode(skill.parentCapabilityId);
+            if (parentGraph) {
+              if (!parentGraph.derivedSkills.includes(skillDef.name)) parentGraph.derivedSkills.push(skillDef.name);
+              if (!parentGraph.derivedSkills.includes(skillId)) parentGraph.derivedSkills.push(skillId);
+            }
+          }
+        }
+      });
+
       // Anchor the canonical power-state HP to the confirmed character's D&D core stats.
       // The capability system may still track its own energy/strain resources, but HP starts from
       // CharacterGenesis rather than a hard-coded default.

@@ -1456,8 +1456,15 @@ export class OpenRouterAdapter implements IProviderAdapter {
     const boundedMaxTokens = Math.min(requestedMaxTokens, 8192);
 
     const buildBody = (recoveryAttempt: boolean): Record<string, unknown> => {
+      let cleanModel = String(options?.modelId || 'openrouter/free').trim();
+      if (cleanModel.startsWith('openrouter::')) {
+        cleanModel = cleanModel.slice('openrouter::'.length);
+      } else if (cleanModel.includes('::')) {
+        cleanModel = cleanModel.split('::').pop()!;
+      }
+
       const body: Record<string, unknown> = {
-        model: options?.modelId || 'openrouter/free',
+        model: cleanModel,
         messages: [
           ...(options?.systemInstruction
             ? [{ role: 'system', content: options.systemInstruction }]
@@ -1719,30 +1726,50 @@ export class OpenAiCompatibleAdapter implements IProviderAdapter {
 
     const requestedMaxTokens = Math.max(256, Number(options?.maxTokens || 2048));
     const boundedMaxTokens = Math.min(requestedMaxTokens, 8192);
-    const targetModel = options?.modelId || 'default';
 
-    const messages = [
-      ...(options?.systemInstruction ? [{ role: 'system', content: options.systemInstruction }] : []),
-      { role: 'user', content: prompt },
-    ];
-
-    const body: Record<string, unknown> = {
-      model: targetModel,
-      messages,
-      stream: false,
-      max_tokens: boundedMaxTokens,
-    };
+    let targetModel = String(options?.modelId || 'default').trim();
+    if (targetModel.includes('::')) {
+      const parts = targetModel.split('::');
+      targetModel = parts.slice(1).join('::') || parts[0];
+    }
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       Accept: 'application/json',
+      'User-Agent': 'DreamBook/1.0',
       ...this.customHeaders,
     };
     if (key) {
       headers['Authorization'] = `Bearer ${key}`;
     }
 
-    try {
+    const executeRequest = async (useCompletionTokens: boolean, foldSystemIntoUser: boolean) => {
+      let messages: Array<{ role: string; content: string }>;
+      if (options?.systemInstruction && !foldSystemIntoUser) {
+        messages = [
+          { role: 'system', content: options.systemInstruction },
+          { role: 'user', content: prompt },
+        ];
+      } else if (options?.systemInstruction && foldSystemIntoUser) {
+        messages = [
+          { role: 'user', content: `[SYSTEM INSTRUCTION: ${options.systemInstruction}]\n\n${prompt}` },
+        ];
+      } else {
+        messages = [{ role: 'user', content: prompt }];
+      }
+
+      const body: Record<string, unknown> = {
+        model: targetModel,
+        messages,
+        stream: false,
+      };
+
+      if (useCompletionTokens) {
+        body.max_completion_tokens = boundedMaxTokens;
+      } else {
+        body.max_tokens = boundedMaxTokens;
+      }
+
       const response = await fetch(`${this.baseUrl}/chat/completions`, {
         method: 'POST',
         signal,
@@ -1756,6 +1783,32 @@ export class OpenAiCompatibleAdapter implements IProviderAdapter {
         payload = rawText ? JSON.parse(rawText) : null;
       } catch {
         payload = null;
+      }
+
+      return { response, payload, rawText };
+    };
+
+    try {
+      let { response, payload, rawText } = await executeRequest(false, false);
+
+      // If initial request fails due to parameter incompatibility (e.g. system role or max_tokens), try compatible variations
+      if (!response.ok) {
+        const errString = (payload?.error?.message || payload?.error || rawText || '').toLowerCase();
+        if (errString.includes('max_completion_tokens') || (errString.includes('max_tokens') && errString.includes('unsupported'))) {
+          const retryRes = await executeRequest(true, false);
+          if (retryRes.response.ok) {
+            response = retryRes.response;
+            payload = retryRes.payload;
+            rawText = retryRes.rawText;
+          }
+        } else if (errString.includes('system') && (errString.includes('role') || errString.includes('developer') || errString.includes('not supported') || errString.includes('must alternate'))) {
+          const retryRes = await executeRequest(false, true);
+          if (retryRes.response.ok) {
+            response = retryRes.response;
+            payload = retryRes.payload;
+            rawText = retryRes.rawText;
+          }
+        }
       }
 
       if (!response.ok) {
@@ -1780,7 +1833,19 @@ export class OpenAiCompatibleAdapter implements IProviderAdapter {
       }
 
       if (!text.trim()) {
-        throw new Error(`Provider '${this.providerId}' returned no text content.`);
+        if (typeof message?.reasoning_content === 'string' && message.reasoning_content.trim()) {
+          text = message.reasoning_content;
+        } else if (typeof message?.reasoning === 'string' && message.reasoning.trim()) {
+          text = message.reasoning;
+        } else if (typeof message?.thought === 'string' && message.thought.trim()) {
+          text = message.thought;
+        } else if (typeof (choice as any)?.delta?.content === 'string') {
+          text = (choice as any).delta.content;
+        }
+      }
+
+      if (!text.trim()) {
+        throw new Error(`Provider '${this.providerId}' (${targetModel}) returned no text content.`);
       }
 
       return {
@@ -3765,9 +3830,16 @@ export class MultiModelOrchestrator {
 
     // Register standard OpenAI and Anthropic compatible adapters
     this.registerAdapter(new OpenAiCompatibleAdapter('openai', 'https://api.openai.com/v1'));
+    this.registerAdapter(new OpenAiCompatibleAdapter('anthropic', 'https://api.anthropic.com/v1'));
+    this.registerAdapter(new OpenAiCompatibleAdapter('nvidia', 'https://integrate.api.nvidia.com/v1'));
     this.registerAdapter(new OpenAiCompatibleAdapter('groq', 'https://api.groq.com/openai/v1'));
     this.registerAdapter(new OpenAiCompatibleAdapter('deepseek', 'https://api.deepseek.com/v1'));
     this.registerAdapter(new OpenAiCompatibleAdapter('mistral', 'https://api.mistral.ai/v1'));
+    this.registerAdapter(new OpenAiCompatibleAdapter('together', 'https://api.together.xyz/v1'));
+    this.registerAdapter(new OpenAiCompatibleAdapter('perplexity', 'https://api.perplexity.ai'));
+    this.registerAdapter(new OpenAiCompatibleAdapter('xai', 'https://api.x.ai/v1'));
+    this.registerAdapter(new OpenAiCompatibleAdapter('ollama', 'http://localhost:11434/v1'));
+    this.registerAdapter(new OpenAiCompatibleAdapter('lmstudio', 'http://localhost:1234/v1'));
 
     // Load and register all user-configured custom providers
     const customProviders = loadCustomProviders();

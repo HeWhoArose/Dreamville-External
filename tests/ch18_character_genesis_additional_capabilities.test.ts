@@ -129,7 +129,7 @@ test('Character Genesis — batch additional capability discovery', async (t) =>
 					techniques: [
 						{
 							name: 'Resonance Scan',
-							description: 'Briefly reads an object's magical signature.',
+							description: "Briefly reads an object's magical signature.",
 							activationType: 'Action',
 							energyCost: 4,
 							cooldownTurns: 1,

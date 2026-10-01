@@ -67,7 +67,7 @@ const SAVE_PROFILES: SaveProfile[] = [
     actionTriggers: ['open', 'touch', 'step', 'walk', 'move', 'enter', 'approach', 'toward', 'towards', 'forward'],
     dc: 13,
     reason: 'Maintaining balance and control while traversing a physical hazard.',
-    triggerReason: 'The current scene makes ordinary traversal physically hazardous or uncertain, requiring a reflexive movement response.',
+    triggerReason: 'The current scene presents a physical hazard that makes ordinary traversal hazardous or uncertain, requiring a reflexive movement response.',
   },
   {
     ability: 'Constitution',

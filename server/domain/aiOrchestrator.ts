@@ -488,6 +488,8 @@ export interface AdjudicationOutcomeItem {
 
 export interface AdjudicationResult {
   allApproved: boolean;
+  narrativePlanObjective?: string;
+  expectedNarrativeEffectKinds?: string[];
   approvedCount: number;
   rejectedCount: number;
   outcomes: AdjudicationOutcomeItem[];
@@ -2374,7 +2376,8 @@ export class DomainAdjudicationBridge {
   public static adjudicate(
     turnPackage: StructuredTurnPackage,
     repo: WorldRepository,
-    storyId: string
+    storyId: string,
+    narrativePlan?: EphemeralNarrativePlan,
   ): AdjudicationResult {
     const outcomes: AdjudicationOutcomeItem[] = [];
 
@@ -2516,6 +2519,8 @@ export class DomainAdjudicationBridge {
       outcomes,
       approvedChanges,
       disapprovedChanges,
+      narrativePlanObjective: narrativePlan?.objective,
+      expectedNarrativeEffectKinds: narrativePlan?.stateEffectsExpected.map((effect) => effect.kind),
     };
   }
 }
@@ -6401,6 +6406,44 @@ export class MultiModelOrchestrator {
     return { valid: true };
   }
 
+  /**
+   * Last-mile semantic agency backstop for the live turn.
+   * The intent interpreter and director are the primary semantic layers; this
+   * guard only blocks the catastrophic contradiction that a passive player action
+   * becomes protagonist speech. It does not attempt to understand the whole prose.
+   */
+  private validateNarrativeIntentSafety(
+    narration: string,
+    intent: PlayerIntent,
+    actorName?: string,
+  ): { valid: boolean; errorReason?: string } {
+    if (!narration || !intent || intent.speechIntent) return { valid: true };
+    if (intent.interactionMode !== 'PASSIVE_OBSERVATION' && !intent.observationIntent) return { valid: true };
+
+    const escapedActor = String(actorName || '')
+      .trim()
+      .replace(/[.*+?^$()|[\\]\\]/g, '\\$&');
+    const subjects = ['you'];
+    if (escapedActor) subjects.push(escapedActor);
+    const speechVerbs = 'ask|asks|asked|say|says|said|speak|speaks|spoke|tell|tells|told|reply|replies|replied|answer|answers|answered|inquire|inquires|inquired|question|questions|questioned|consult|consults|consulted|shout|shouts|shouted|call out|calls out|called out';
+    const protagonistSpeechPattern = new RegExp(
+      '\\b(?:' + subjects.join('|') + ')\\s+(?:(?:then|directly|quietly|carefully|firmly)\\s+)?(?:' + speechVerbs + ')\\b',
+      'i',
+    );
+    const raisingVoicePattern = new RegExp(
+      '\\b(?:' + subjects.join('|') + ')\\s+(?:\\w+\\s+){0,4}(?:raise|raised|raising)\\s+(?:your|his|her|their)\\s+voice\\b',
+      'i',
+    );
+
+    if (protagonistSpeechPattern.test(narration) || raisingVoicePattern.test(narration)) {
+      return {
+        valid: false,
+        errorReason: 'Semantic intent safety backstop rejected output: passive observation/listening was converted into protagonist speech.',
+      };
+    }
+    return { valid: true };
+  }
+
   private validateNarrativeActionModeContinuity(
     narration: string,
     playerAction: string,
@@ -6871,6 +6914,8 @@ export class MultiModelOrchestrator {
             currentSituation.player.name,
           );
           if (!actionModeContinuity.valid) return { valid: false, errorReason: actionModeContinuity.errorReason };
+          const intentSafety = this.validateNarrativeIntentSafety(narrationText, playerIntent, currentSituation.player.name);
+          if (!intentSafety.valid) return { valid: false, errorReason: intentSafety.errorReason };
           const informationTopicContinuity = this.validateNarrativeInformationTopicContinuity(
             narrationText,
             playerAction,
@@ -7356,6 +7401,14 @@ export class MultiModelOrchestrator {
               throw new Error(`Turn package validation failed: ${validation.errorReason}`);
             }
             if (task === 'narrative.generate') {
+              const intentSafety = this.validateNarrativeIntentSafety(
+                validation.turnPackage.narrative.join(' '),
+                playerIntent,
+                currentSituation.player.name,
+              );
+              if (!intentSafety.valid) {
+                throw new Error(intentSafety.errorReason || 'Narrative semantic intent safety validation failed.');
+              }
               const continuity = this.validateNarrativeSceneContinuity(
                 validation.turnPackage.narrative.join(' '),
                 repo,
@@ -7372,7 +7425,8 @@ export class MultiModelOrchestrator {
             const adjudication = DomainAdjudicationBridge.adjudicate(
               validation.turnPackage,
               repo,
-              storyId
+              storyId,
+              narrativePlan,
             );
 
             // 6. Create Continuation Checkpoint (DEF-CH12-06, V6.15 completeness)
@@ -7534,10 +7588,19 @@ export class MultiModelOrchestrator {
           this.recordProviderSuccess(emergencyModel, res, task, emergencyStartedAt);
           const validation = this.validateTurnPackage(res.text);
           if (validation.valid && validation.turnPackage) {
-            const adjudication = DomainAdjudicationBridge.adjudicate(
+            const intentSafety = this.validateNarrativeIntentSafety(
+              validation.turnPackage.narrative.join(' '),
+              playerIntent,
+              currentSituation.player.name,
+            );
+            if (!intentSafety.valid) {
+              lastError = intentSafety.errorReason || 'Emergency narration violated semantic player intent.';
+            } else {
+              const adjudication = DomainAdjudicationBridge.adjudicate(
               validation.turnPackage,
               repo,
-              storyId
+              storyId,
+              narrativePlan,
             );
             const checkpointId = rawIdempotencyKey
               ? deterministicId('cp_emergency', storyId, rawIdempotencyKey.replace(/[^a-zA-Z0-9_-]/g, '_'), totalAttempts)
@@ -7625,6 +7688,7 @@ export class MultiModelOrchestrator {
               checkpoint,
               audioResultBase64: res.audioBase64,
             };
+            }
           }
         }
       }

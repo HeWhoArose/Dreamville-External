@@ -6351,6 +6351,7 @@ export class MultiModelOrchestrator {
   private validateNarrativeActionContinuity(
     narration: string,
     playerAction: string,
+    intent?: PlayerIntent,
   ): { valid: boolean; errorReason?: string } {
     const action = String(playerAction || '').trim().toLowerCase();
     const output = String(narration || '').trim().toLowerCase();
@@ -6906,7 +6907,7 @@ export class MultiModelOrchestrator {
             storyId,
           );
           if (!continuity.valid) return { valid: false, errorReason: continuity.errorReason };
-          const actionContinuity = this.validateNarrativeActionContinuity(narrationText, playerAction);
+          const actionContinuity = this.validateNarrativeActionContinuity(narrationText, playerAction, playerIntent);
           if (!actionContinuity.valid) return { valid: false, errorReason: actionContinuity.errorReason };
           const actionModeContinuity = this.validateNarrativeActionModeContinuity(
             narrationText,
@@ -6968,7 +6969,7 @@ export class MultiModelOrchestrator {
         error: finalSceneContinuity.errorReason || 'Narration scene continuity validation failed.',
       };
     }
-    const finalActionContinuity = this.validateNarrativeActionContinuity(finalNarrationText, playerAction);
+    const finalActionContinuity = this.validateNarrativeActionContinuity(finalNarrationText, playerAction, playerIntent);
     if (!finalActionContinuity.valid) {
       return {
         success: false,

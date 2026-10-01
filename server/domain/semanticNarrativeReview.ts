@@ -127,7 +127,7 @@ export class SemanticNarrativeReview {
 			const researchAnchors = [
 				...situation.visibleEvents.map((event) => event.summary),
 				...situation.relevantLore.map((fact) => [fact.predicate, fact.objectValue].join(' ')),
-				...plan.informationToReveal.map((reveal) => reveal.content),
+				...plan.informationToReveal.map((reveal) => reveal.topic),
 			].join(' ');
 			if (overlap(narration, researchAnchors) < 0.08 && !/\b(?:nothing|no one|nobody|unclear|uncertain|unknown|unverified|could not|couldn't|refused|silent|silence)\b/i.test(lower)) {
 				missingRequirements.push('The information-seeking action should resolve against the established scene lead or clearly state that no reliable information was obtained.');

@@ -54,7 +54,8 @@ export class NarrativeQualityContractEngine {
  public static toPromptContext(contract: NarrativeQualityContract): string {
   if (!contract.controls.enabled) return 'Narrative Quality Contract: disabled for this turn.';
   const enabled = Object.entries(contract.controls).filter(([key, value]) => typeof value === 'boolean' && value === true).map(([key]) => key).join(', ');
-  return ['Narrative Quality Contract v' + contract.version, 'Turn profile: ' + contract.profile, 'Enforcement: ' + contract.controls.enforcement, 'Enabled controls: ' + enabled, 'Preferred paragraphs: ' + contract.controls.preferredParagraphs + '; maximum paragraphs: ' + contract.controls.maxParagraphs].join('\n');
+  const priorities = ['minimumSceneGrounding: anchor the immediate scene', 'specificity: prefer concrete details', 'pacing: vary response length by turn', 'sensoryVariety: avoid repeated sensory imagery', 'characterDistinctiveness: preserve established character identity', 'emotionalContinuity: preserve emotional direction', 'novelty: avoid repeated openings and stock phrasing', 'coherence: keep action and consequence coherent', 'playerAgency: never choose consequential future actions for the player'].filter((directive) => contract.controls[directive.split(':')[0] as keyof NarrativeQualityControls] === true);
+  return ['Narrative Quality Contract v' + contract.version, 'Turn profile: ' + contract.profile, 'Enforcement: ' + contract.controls.enforcement, 'Enabled controls: ' + enabled, 'Preferred paragraphs: ' + contract.controls.preferredParagraphs + '; maximum paragraphs: ' + contract.controls.maxParagraphs, 'Priorities: ' + priorities.join('; ')].join('\n');
  }
  public static countParagraphs(narration: string): number { return String(narration || '').trim().split(/\n\s*\n/).filter(Boolean).length; }
  public static validate(narration: string, contract: NarrativeQualityContract): { valid: boolean; reasons: string[] } {

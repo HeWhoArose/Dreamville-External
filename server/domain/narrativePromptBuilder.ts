@@ -48,13 +48,13 @@ export function projectSupportingWorkingContext(context: AssembledTurnContext): 
 }
 
 function buildNarrationSituationContext(situation: CurrentSituation): string {
-	const visibleEntities = situation.nearbyEntities
+	const visibleEntities = (Array.isArray(situation.nearbyEntities) ? situation.nearbyEntities : [])
 		.filter((entity) => entity.visibleToPlayer)
 		.slice(0, 8)
 		.map((entity) => entity.name + ' [' + entity.kind + '; ' + entity.distanceBand + ']')
 		.join('; ') || 'None';
 
-	const recentTurns = situation.recentTurns
+	const recentTurns = (Array.isArray(situation.recentTurns) ? situation.recentTurns : [])
 		.slice(-2)
 		.map((turn) => [
 			turn.playerAction ? 'Player: ' + turn.playerAction : '',

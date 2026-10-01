@@ -1084,7 +1084,7 @@ export class WorkingContextEngine {
     const persistedPins = Array.isArray(repo.getStoryRun(storyId)?.runtimeState?.workingContextPins)
       ? repo.getStoryRun(storyId)!.runtimeState!.workingContextPins.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0)
       : [];
-    const pinnedSet = new Set(persistedPins);
+    const pinnedSet = new Set<string>(persistedPins);
     
     // F&F-style context blocks are self-managed projections: normalize types,
     // deduplicate overlapping research blocks, and preserve canonical provenance

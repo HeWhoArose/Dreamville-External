@@ -47,7 +47,7 @@ function authorizedHealthProposal(
 ): boolean {
 	return normalize(proposal.kind) === 'health' &&
 		proposal.targetId === actorId &&
-		proposal.metadata?.['authorizedByCanonicalMechanic'] === true;
+		proposal.metadata?.['serverVerifiedCanonicalMechanic'] === true;
 }
 
 export class NarrativeStateAdjudicator {

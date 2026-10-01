@@ -87,7 +87,7 @@ Recovery owner phases:
 3. canonical state
 4. canonical event
 
-An interrupted entry in the same repository runtime is restored from its pre-state checkpoint and marked `ABORTED` before the next command executes. Cross-restart durability is provided by the persisted canonical event replay checkpoint; the operational ledger itself is not persisted.
+Recovery is explicit: an interrupted entry in the same repository runtime can be restored from its pre-state checkpoint and marked `ABORTED` through the recovery operation. Normal command execution does not silently rewind the repository. Cross-restart durability is provided by the persisted canonical event replay checkpoint; the operational ledger itself is not persisted.
 
 ## Regression coverage
 

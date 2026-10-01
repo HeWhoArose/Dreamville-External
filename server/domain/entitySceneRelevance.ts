@@ -58,7 +58,7 @@ export class EntitySceneRelevanceEngine {
 				const explicit = entityReferenced(entity, intent, actionText);
 
 				if (!entity.visibleToPlayer) return { entityId: entity.id, score: 0, rank: 0, reasons: ['NOT_VISIBLE'], bands: [], visible: false };
-				if (entity.distanceBand === 'SAME_LOCATION' && entity.presence === 'present') {
+				if (entity.distanceBand !== 'REFERRED' && entity.presence === 'present') {
 					score += 50;
 					reasons.push('same current location');
 					bands.push('CURRENT_LOCATION');

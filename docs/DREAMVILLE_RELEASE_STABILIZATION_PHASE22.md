@@ -46,3 +46,7 @@ Phase 22 is complete only when:
 - Phase 20 orphan audit contains no known release-critical orphan.
 - Phase 21 release gate is wired to contracts → lint → test → build.
 - Phase 22 stabilization tests pass and no new orphaned authority is introduced.
+
+## Final architecture audit
+
+2026-10-01: Full Phase 0–22 architecture audit performed. The release gate is required on the merged main tree; branch-level validation and post-merge validation are both recorded separately.

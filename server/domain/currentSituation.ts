@@ -4,6 +4,7 @@ import type { EntityCard, EntityKind } from './entityCard';
 import type { KnowledgeFact, RouteEdge, WorldTimestamp } from './types';
 import type { WorldRepository } from '../repositories/worldRepository';
 import type { PlayerIntent } from './playerIntentInterpreter';
+import type { LocalSpatialState } from './playerLifecycleState';
 
 
 export interface CurrentLocationContext {
@@ -759,6 +760,7 @@ export class CurrentSituationBuilder {
 				injuries: Array.isArray(player?.injuries)
 					? player.injuries.filter((injury) => !injury.healed).map((injury) => normalizeText(injury.description || injury.type)).filter(Boolean)
 					: [],
+				spatial: player?.localSpatialState || { proximityBand: 'SAME_AREA', areaId: locationId },
 			},
 			location: currentLocation,
 			nearbyEntities: limitedNearbyEntities,
@@ -829,6 +831,7 @@ export class CurrentSituationBuilder {
 			`Visible entities: ${visibleEntities}`,
 			situation.activeDialogue ? `Active dialogue: ${situation.activeDialogue.speakerName}: ${situation.activeDialogue.text}` : '',
 			`Current action: ${situation.currentAction?.action || 'None'}`,
+			`Local spatial focus: ${situation.player.spatial.focusLabel || situation.player.spatial.focusEntityId || 'none'} [${situation.player.spatial.proximityBand}]`,
 			`Plot: ${situation.plot.currentArc} — ${situation.plot.summary || 'No compressed plot summary.'}`,
 			`Open threads:\n${openThreads}`,
 			`Recent turns:\n${recentTurns}`,

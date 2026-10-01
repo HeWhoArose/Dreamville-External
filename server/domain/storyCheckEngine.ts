@@ -669,7 +669,7 @@ export class StoryCheckEngine {
       .map((profile) => ({
         profile,
         score: profile.explicitKeywords.reduce(
-          (score, keyword) => score + (text.includes(normalize(keyword)) ? keyword.length + 2 : 0),
+          (score, keyword) => score + (phraseMatches(text, keyword) ? keyword.length + 2 : 0),
           0
         ),
         worldTriggered: false,
@@ -682,11 +682,11 @@ export class StoryCheckEngine {
     const triggered = SAVE_PROFILES
       .map((profile) => {
         const hazardScore = profile.sceneHazards.reduce(
-          (score, hazard) => score + (sceneText.includes(normalize(hazard)) ? hazard.length + 2 : 0),
+          (score, hazard) => score + (phraseMatches(sceneText, hazard) ? hazard.length + 2 : 0),
           0
         );
         const actionScore = profile.actionTriggers.reduce(
-          (score, trigger) => score + (text.includes(normalize(trigger)) ? trigger.length : 0),
+          (score, trigger) => score + (phraseMatches(text, trigger) ? trigger.length : 0),
           0
         );
         return {

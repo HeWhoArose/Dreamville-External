@@ -6824,7 +6824,7 @@ export class MultiModelOrchestrator {
       globalInstruction: 'You are Dreamville’s narrative presentation engine. Generate only the player-facing narrative turn using the supplied canonical state, semantic player intent, bounded research, and ephemeral plan.',
       styleInstruction,
       canonicalOutcome: authoritativeOutcome,
-      maxPromptTokens: Math.max(hardTokenBudget, 1200),
+      maxPromptTokens: Math.max(hardTokenBudget * 2, 2200),
     });
 
     const contextAudit = {
@@ -7147,7 +7147,7 @@ export class MultiModelOrchestrator {
         workingContext: projectSupportingWorkingContext(assembledContext),
         globalInstruction: 'You are Dreamville’s authoritative narrative presentation engine. Generate only the player-facing narrative turn. Canonical game state remains authoritative and prose never commits state.',
         styleInstruction: defaultNarrationStyle(),
-        maxPromptTokens: Math.max(hardTokenBudget, 1200),
+        maxPromptTokens: Math.max(hardTokenBudget * 2, 2200),
       });
 
       const profile = repo.getAdaptationProfile(storyId);

@@ -283,9 +283,7 @@ function entityCardIsVisible(
 	const explicitlyReferenced = names.some((name) => text.includes(name));
 	const sameLocation = card.worldState?.locationId === currentLocationId;
 	const localFocus = localSpatialState?.focusEntityId === card.id;
-	const localDistanceBand: EntityDistanceBand = localFocus
-		? localSpatialState?.proximityBand || 'SAME_AREA'
-		: 'SAME_AREA';
+	const localDistanceBand = localSpatialState?.proximityBand;
 	const projectedLocalBand: EntityDistanceBand =
 		localFocus && localDistanceBand === 'CONTACT' ? 'CONTACT' :
 		localFocus && localDistanceBand === 'ADJACENT' ? 'ADJACENT' :
@@ -344,14 +342,17 @@ function projectLifecycleEntity(
 		presence: state.isDead ? 'absent' : 'present',
 		isAlive: !state.isDead,
 		currentActivity: state.currentActivity,
-		distanceBand: state.locationId === currentLocationId
-			? (localSpatialState?.focusEntityId === state.actorId
-				? localSpatialState.proximityBand === 'CONTACT' ? 'CONTACT'
-					: localSpatialState.proximityBand === 'ADJACENT' ? 'ADJACENT'
-					: localSpatialState.proximityBand === 'NEAR' ? 'NEAR'
-					: 'SAME_LOCATION'
-				: 'SAME_LOCATION')
-			: 'REFERRED',
+		distanceBand: (() => {
+			const focusedProximity =
+				state.locationId === currentLocationId && localSpatialState?.focusEntityId === state.actorId
+					? localSpatialState?.proximityBand
+					: undefined;
+			if (state.locationId !== currentLocationId) return 'REFERRED' as const;
+			if (focusedProximity === 'CONTACT') return 'CONTACT' as const;
+			if (focusedProximity === 'ADJACENT') return 'ADJACENT' as const;
+			if (focusedProximity === 'NEAR') return 'NEAR' as const;
+			return 'SAME_LOCATION' as const;
+		})(),
 		importance: state.locationId === currentLocationId ? 1 : explicitlyReferenced ? 0.9 : 0.4,
 		explicitlyReferenced,
 		visibleToPlayer: true,

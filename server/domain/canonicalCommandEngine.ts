@@ -337,12 +337,6 @@ export class CanonicalCommandEngine {
 		if (!repository.getStoryRun(command.storyId)) {
 			repository.seedStory(command.storyId);
 		}
-		canonicalCommitLedger.recoverInterrupted(
-			repository,
-			command.storyId,
-			formatCanonicalTimestamp(repository.getWorldClock(command.storyId).getTimestamp()),
-		);
-
 		const key = `${command.storyId}::${command.commandId}`;
 		const fingerprint = stableStringify({
 			storyId: command.storyId,
@@ -352,41 +346,6 @@ export class CanonicalCommandEngine {
 			payload: command.payload,
 		});
 
-		for (const existingEvent of repository.getCanonicalCommandEvents(command.storyId)) {
-			if (existingEvent?.commandId !== command.commandId) continue;
-			if (existingEvent?.fingerprint && existingEvent.fingerprint !== fingerprint) {
-				return {
-					success: false,
-					commandId: command.commandId,
-					errorReason: 'A canonical command with this commandId already exists with a different payload.',
-					rolledBack: false,
-					mutationPaths: [],
-				};
-			}
-			const replay = this.completedResults.get(key);
-			const replayData = replay && replay.fingerprint === fingerprint ? clone(replay.data) as any : undefined;
-			if (replayData && replayData.telemetry) {
-				replayData.telemetry.idempotencyReplayed = true;
-			}
-			canonicalCommitLedger.markPhase(
-				repository,
-				command.storyId,
-				command.commandId,
-				'COMMITTED',
-				formatCanonicalTimestamp(repository.getWorldClock(command.storyId).getTimestamp()),
-				{ recoveryAction: 'NONE', postStateHash: existingEvent.replay.postStateHash },
-			);
-
-			return {
-				success: true,
-				commandId: command.commandId,
-				event: existingEvent,
-				data: replayData,
-				rolledBack: false,
-				mutationPaths: existingEvent.mutationPaths || [],
-			};
-		}
-
 		const existingFlight = this.inFlight.get(key);
 		if (existingFlight) {
 			return clone(await existingFlight) as CanonicalCommandResult<TResult>;
@@ -394,7 +353,53 @@ export class CanonicalCommandEngine {
 
 		const promise = this.enqueueStoryCommand(
 			command.storyId,
-			() => this.executeFresh(repository, command, handler, fingerprint)
+			async () => {
+				// Recovery and idempotency inspection must be serialized with command execution.
+				// Running either before the per-story queue lets a concurrent request recover
+				// another request's PREPARED ledger entry or race the canonical event log.
+				canonicalCommitLedger.recoverInterrupted(
+					repository,
+					command.storyId,
+					formatCanonicalTimestamp(repository.getWorldClock(command.storyId).getTimestamp()),
+				);
+
+				for (const existingEvent of repository.getCanonicalCommandEvents(command.storyId)) {
+					if (existingEvent?.commandId !== command.commandId) continue;
+					if (existingEvent?.fingerprint && existingEvent.fingerprint !== fingerprint) {
+						return {
+							success: false,
+							commandId: command.commandId,
+							errorReason: 'A canonical command with this commandId already exists with a different payload.',
+							rolledBack: false,
+							mutationPaths: [],
+						};
+					}
+					const replay = this.completedResults.get(key);
+					const replayData = replay && replay.fingerprint === fingerprint ? clone(replay.data) as any : undefined;
+					if (replayData && replayData.telemetry) {
+						replayData.telemetry.idempotencyReplayed = true;
+					}
+					canonicalCommitLedger.markPhase(
+						repository,
+						command.storyId,
+						command.commandId,
+						'COMMITTED',
+						formatCanonicalTimestamp(repository.getWorldClock(command.storyId).getTimestamp()),
+						{ recoveryAction: 'NONE', postStateHash: existingEvent.replay.postStateHash },
+					);
+
+					return {
+						success: true,
+						commandId: command.commandId,
+						event: existingEvent,
+						data: replayData,
+						rolledBack: false,
+						mutationPaths: existingEvent.mutationPaths || [],
+					};
+				}
+
+				return this.executeFresh(repository, command, handler, fingerprint);
+			}
 		);
 		this.inFlight.set(key, promise as Promise<CanonicalCommandResult>);
 		try {

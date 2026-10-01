@@ -44,7 +44,6 @@ describe('CH7 Evidence-Closure Audit: AI -> Novel Capability Pipeline & Internal
 
     it('processes a genuine novel capability proposal from AI output through deterministic CH7 synthesis to canonical state', async () => {
       worldRepository.seedStory(storyId);
-      worldRepository.seedStory(storyIdNeg);
       const orchestrator = new MultiModelOrchestrator(worldRepository);
       const fakeAdapter = new ControlledNovelAIAdapter();
       orchestrator.registerAdapter(fakeAdapter);

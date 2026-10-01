@@ -2,7 +2,7 @@ import { CurrentSituationBuilder, type CurrentSituation } from './currentSituati
 import type { PlayerIntent } from './playerIntentInterpreter';
 import { NarrativeDirector, type EphemeralNarrativePlan } from './narrativeDirector';
 import type { NarrativeResearchResult } from './narrativeResearchPipeline';
-import { WorkingContextEngine } from './workingContextEngine';
+import { WorkingContextEngine, type AssembledTurnContext } from './workingContextEngine';
 
 export interface NarrationPromptInput {
 	situation: CurrentSituation;
@@ -20,6 +20,21 @@ export interface NarrationPromptResult {
 	prompt: string;
 	styleInstruction: string;
 	totalTokens: number;
+}
+
+export function projectSupportingWorkingContext(context: AssembledTurnContext): string {
+	const duplicateSourceIds = new Set([
+		'b1_current_situation',
+		'b2_player_intent',
+		'b3_narrative_research',
+		'b2_narrative_plan',
+		'canonical_scene_anchor',
+		'current_scene_factual_context',
+	]);
+	return context.includedChunks
+		.filter((chunk) => !duplicateSourceIds.has(chunk.id || ''))
+		.map((chunk) => '[' + chunk.label + ']\n' + chunk.content)
+		.join('\n\n') || '[no additional working context]';
 }
 
 export function defaultNarrationStyle(): string {

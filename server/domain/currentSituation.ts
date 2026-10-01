@@ -643,6 +643,7 @@ export class CurrentSituationBuilder {
 		};
 
 		const threadCandidates = [
+			...(Array.isArray(runtime.openNarrativeThreads) ? runtime.openNarrativeThreads : []),
 			...(Array.isArray(plotRaw.openThreads)
 				? plotRaw.openThreads.map((thread: any, index: number) => typeof thread === 'string' ? { id: `plot_thread_${index + 1}`, title: thread } : thread)
 				: []),

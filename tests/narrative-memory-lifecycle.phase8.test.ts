@@ -190,3 +190,26 @@ test('Phase 8 does not turn an uneventful player action into a plot transcript b
 	const after = repository.getStoryRun('memory-story')?.runtimeState?.plot?.beats?.length || 0;
 	assert.equal(after, before);
 });
+
+
+test('Phase 8 does not resolve an open thread from a negated resolution statement', () => {
+	const { repository, situation } = setup();
+	NarrativeMemoryLifecycle.processTurn({
+		repository,
+		storyId: 'memory-story',
+		turnId: 'turn-open-thread',
+		playerAction: 'I investigate.',
+		currentSituation: situation,
+		turnPackage: {
+			narrative: ['The origin of the fissure was not resolved and remains unknown.'],
+			dialogue: [],
+			events: [],
+			stateChanges: [],
+			memoryCandidates: ['The origin of the fissure remains unknown and requires investigation.'],
+			audioCues: [],
+		},
+	});
+	const run = repository.getStoryRun('memory-story');
+	const threads = run?.runtimeState?.openNarrativeThreads || [];
+	assert.ok(threads.some((thread: any) => thread.status === 'OPEN' && thread.title.includes('origin of the fissure')));
+});

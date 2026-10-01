@@ -6169,57 +6169,120 @@ export class MultiModelOrchestrator {
   public async transcribeAudio(params: {
     storyId?: string;
     audioBase64: string;
+    audioMimeType?: string;
     timeoutMs?: number;
   }): Promise<{
     success: boolean;
     text: string;
     modelId?: string;
+    providerId?: string;
+    errorCode?: 'INPUT_EMPTY' | 'INPUT_INVALID_BASE64' | 'TRANSCRIPTION_UNAVAILABLE' | 'TRANSCRIPTION_MALFORMED';
+    errorReason?: string;
+    attemptsTrail?: Array<{
+      providerId: string;
+      modelId: string;
+      status: 'SUCCESS' | 'FAILED';
+      error?: string;
+      latencyMs: number;
+    }>;
   }> {
-    const audioBase64 = params.audioBase64 || '';
+    const audioValidation = validateAudioBase64(params.audioBase64);
+    if (!audioValidation.valid) {
+      return {
+        success: false,
+        text: '',
+        errorCode: audioValidation.errorCode,
+        errorReason: audioValidation.reason,
+        attemptsTrail: [],
+      };
+    }
+
     const selection = this.selectBestModel('speech.transcribe', { contextTokens: 256 });
     const candidates = [selection.selectedModel, ...selection.fallbacks];
-    const timeoutMs = params.timeoutMs || 5000;
+    const timeoutMs = Math.max(1000, Math.min(params.timeoutMs || 5000, 30000));
+    const attemptsTrail: Array<{
+      providerId: string;
+      modelId: string;
+      status: 'SUCCESS' | 'FAILED';
+      error?: string;
+      latencyMs: number;
+    }> = [];
+    let sawMalformedResponse = false;
+    let lastError = '';
 
     for (const candidate of candidates) {
+      if (candidate.isEmergencyFloor) continue;
       if (this.isModelCoolingDown(candidate) || this.isCircuitBreakerTripped(candidate.providerId, candidate.modelId)) continue;
+
       const adapter = this.getAdapter(candidate.providerId);
-      if (!adapter) continue;
+      if (!adapter) {
+        attemptsTrail.push({
+          providerId: candidate.providerId,
+          modelId: candidate.modelId,
+          status: 'FAILED',
+          error: 'Provider adapter is unavailable.',
+          latencyMs: 0,
+        });
+        continue;
+      }
 
       const attemptStartedAt = Date.now();
+      const abortController = new AbortController();
+      const timer = setTimeout(() => abortController.abort(), timeoutMs);
       try {
-        const res = await adapter.generate('speech.transcribe', 'Transcribe user audio input', {
+        const res = await adapter.generate('speech.transcribe', 'Transcribe the supplied audio accurately. Return only the transcript.', {
           timeoutMs,
+          abortSignal: abortController.signal,
           modelId: candidate.modelId,
-          audioInputBase64: audioBase64,
+          audioInputBase64: audioValidation.normalized,
+          audioMimeType: params.audioMimeType || 'audio/webm',
+          maxTokens: 1000,
         });
 
-        let transcribedText = '';
-        try {
-          const parsed = JSON.parse(res.text);
-          transcribedText = parsed.narrative?.[0] || res.text;
-        } catch {
-          transcribedText = res.text;
+        const transcript = normalizeTranscriptionProviderText(res?.text || '');
+        if (!transcript.valid) {
+          sawMalformedResponse = true;
+          throw new Error(transcript.reason || 'Transcription provider returned an invalid transcript payload.');
         }
 
-        if (!transcribedText) throw new Error('Transcription provider returned empty text.');
         this.recordProviderSuccess(candidate, res, 'speech.transcribe', attemptStartedAt);
+        attemptsTrail.push({
+          providerId: candidate.providerId,
+          modelId: candidate.modelId,
+          status: 'SUCCESS',
+          latencyMs: Math.max(1, Date.now() - attemptStartedAt),
+        });
 
         return {
           success: true,
-          text: transcribedText,
+          text: transcript.text,
           modelId: candidate.modelId,
+          providerId: candidate.providerId,
+          attemptsTrail,
         };
       } catch (err: any) {
+        lastError = String(err?.message || err || 'Transcription provider failed.');
         this.recordProviderFailure(candidate, 'speech.transcribe', err, attemptStartedAt);
+        attemptsTrail.push({
+          providerId: candidate.providerId,
+          modelId: candidate.modelId,
+          status: 'FAILED',
+          error: lastError,
+          latencyMs: Math.max(1, Date.now() - attemptStartedAt),
+        });
+      } finally {
+        clearTimeout(timer);
       }
     }
 
     return {
       success: false,
       text: '',
+      errorCode: sawMalformedResponse ? 'TRANSCRIPTION_MALFORMED' : 'TRANSCRIPTION_UNAVAILABLE',
+      errorReason: lastError || 'No eligible transcription provider is currently available.',
+      attemptsTrail,
     };
   }
-
   /**
    * Phase 2 semantic player-intent interpretation.
    * Deterministic parsing handles explicit mechanical distinctions first.

@@ -25,6 +25,7 @@ function fireballCapability(): CapabilityDefinition {
 }
 
 function seedRun(repository: InMemoryWorldRepository, storyId: string, role: string): void {
+	repository.seedStory(storyId);
 	repository.saveStoryRun({
 		storyId,
 		id: storyId,

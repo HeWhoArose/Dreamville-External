@@ -7601,8 +7601,8 @@ export class MultiModelOrchestrator {
               workingContextTokens: narrationPrompt.totalTokens,
               worldTime: repo.getWorldClock(storyId).formatHeader(),
               locationId: repo.getPlayerLifecycle(storyId)?.locationId || 'loc_whispering_orrery',
-              sceneSummary: validation.turnPackage.narrative[0] || 'Scene observed.',
-              recentOutput: validation.turnPackage.narrative.join(' '),
+              sceneSummary: reviewedTurnPackage.narrative[0] || 'Scene observed.',
+              recentOutput: reviewedTurnPackage.narrative.join(' '),
               uncommittedOutput: '',
               canonicalInvariants: {
                 playerActorId: `player_actor_${storyId}`,
@@ -7612,12 +7612,12 @@ export class MultiModelOrchestrator {
                 tone: 'evocative_canonical_archival',
                 epistemicSanitized: 'true',
               },
-              openThreads: validation.turnPackage.memoryCandidates || [],
+              openThreads: reviewedTurnPackage.memoryCandidates || [],
               presentationEvents: [
-                ...(validation.turnPackage.audioCues || []).map((c: any) =>
+                ...(reviewedTurnPackage.audioCues || []).map((c: any) =>
                   typeof c === 'string' ? `audio:${c}` : `audio:${c.soundId}`
                 ),
-                ...(validation.turnPackage.visualCues || []).map((v: any) =>
+                ...(reviewedTurnPackage.visualCues || []).map((v: any) =>
                   typeof v === 'string' ? `visual:${v}` : `visual:${v.prompt}`
                 ),
               ],
@@ -7630,8 +7630,8 @@ export class MultiModelOrchestrator {
                 viewerActorId: `player_actor_${storyId}`,
               },
               handoffEligible: true,
-              summaryText: validation.turnPackage.narrative[0] || 'Scene observed.',
-              recentHistory: validation.turnPackage.narrative || [],
+              summaryText: reviewedTurnPackage.narrative[0] || 'Scene observed.',
+              recentHistory: reviewedTurnPackage.narrative || [],
               activeConditions: [],
               activeQuests: [],
               selectedModelId: currentCandidate.modelId,

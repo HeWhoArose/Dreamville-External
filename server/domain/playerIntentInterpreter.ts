@@ -243,7 +243,7 @@ export class PlayerIntentInterpreter {
 		};
 		const explicitTargets = modelExplicitTargets.filter(targetIsGrounded);
 		const impliedTargets = modelImpliedTargets.filter(targetIsGrounded);
-		const safeSpeech = fallback.speechIntent ? Boolean(value.speechIntent) : false;
+		const safeSpeech = fallback.speechIntent || Boolean(value.speechIntent && DIALOGUE_PATTERN.test(originalText));
 		const safeMovement = fallback.movementIntent || Boolean(value.movementIntent && MOVEMENT_PATTERN.test(originalText));
 		const safeObservation = fallback.observationIntent || Boolean(value.observationIntent && PASSIVE_OBSERVATION_PATTERN.test(originalText));
 		const safeMode = !fallback.speechIntent && fallback.interactionMode === 'PASSIVE_OBSERVATION'

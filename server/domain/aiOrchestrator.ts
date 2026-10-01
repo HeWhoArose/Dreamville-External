@@ -7275,12 +7275,12 @@ export class MultiModelOrchestrator {
           hardTokenBudget,
         );
         const forcedUsable = forced.isEmergencyFloor || (
-          this.isCandidateUsable(forced, task, assembledContext.totalTokens) &&
+          this.isCandidateUsable(forced, task, narrationPrompt.totalTokens) &&
           (!forcedPreflight || forcedPreflight.eligible)
         );
 
         if (!forcedUsable) {
-          const fallbackSelection = this.selectBestModel(task, { contextTokens: assembledContext.totalTokens });
+          const fallbackSelection = this.selectBestModel(task, { contextTokens: narrationPrompt.totalTokens });
           selectedModel = fallbackSelection.selectedModel;
           selectionReason = 'Requested model "' + params.forceModelId + '" was unavailable at preflight; using the configured fallback route instead.';
           fallbacks = fallbackSelection.fallbacks;
@@ -7300,7 +7300,7 @@ export class MultiModelOrchestrator {
                 narrationPrompt.totalTokens,
                 hardTokenBudget,
               );
-              return this.isCandidateUsable(m, task, assembledContext.totalTokens) && Boolean(preflight?.eligible);
+              return this.isCandidateUsable(m, task, narrationPrompt.totalTokens) && Boolean(preflight?.eligible);
             });
           fallbacks = configuredFallbacks;
         }
@@ -7386,7 +7386,7 @@ export class MultiModelOrchestrator {
               role: 'narrator',
               playerAction: params.playerAction,
               playerIntent,
-              workingContextTokens: assembledContext.totalTokens,
+              workingContextTokens: narrationPrompt.totalTokens,
               worldTime: repo.getWorldClock(storyId).formatHeader(),
               locationId: repo.getPlayerLifecycle(storyId)?.locationId || 'loc_whispering_orrery',
               sceneSummary: validation.turnPackage.narrative[0] || 'Scene observed.',
@@ -7413,7 +7413,7 @@ export class MultiModelOrchestrator {
                 sanitized: true,
                 epistemicSanitized: true,
                 hiddenFactsSuppressed: [],
-                totalTokens: assembledContext.totalTokens,
+                totalTokens: narrationPrompt.totalTokens,
                 truncated: (assembledContext.evictedChunkLabels?.length ?? 0) > 0,
                 viewerActorId: `player_actor_${storyId}`,
               },
@@ -7549,7 +7549,7 @@ export class MultiModelOrchestrator {
               role: 'narrator',
               playerAction: params.playerAction,
               playerIntent,
-              workingContextTokens: assembledContext.totalTokens,
+              workingContextTokens: narrationPrompt.totalTokens,
               worldTime: repo.getWorldClock(storyId).formatHeader(),
               locationId: repo.getPlayerLifecycle(storyId)?.locationId || 'loc_whispering_orrery',
               sceneSummary: validation.turnPackage.narrative[0],
@@ -7573,7 +7573,7 @@ export class MultiModelOrchestrator {
                 sanitized: true,
                 epistemicSanitized: true,
                 hiddenFactsSuppressed: [],
-                totalTokens: assembledContext.totalTokens,
+                totalTokens: narrationPrompt.totalTokens,
                 truncated: (assembledContext.evictedChunkLabels?.length ?? 0) > 0,
                 viewerActorId: `player_actor_${storyId}`,
               },
@@ -7643,7 +7643,7 @@ export class MultiModelOrchestrator {
           fallbackChain: candidateChain.map((m) => m.modelId),
           attempts: totalAttempts,
           latencyMs: 0,
-          inputTokens: assembledContext.totalTokens,
+          inputTokens: narrationPrompt.totalTokens,
           outputTokens: 0,
           validated: false,
           idempotencyKey: rawIdempotencyKey,

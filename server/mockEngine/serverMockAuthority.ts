@@ -760,6 +760,14 @@ export class ServerMockAuthority {
       }
     }
 
+    const canonicalEventForResolution = canonicalCommandId
+      ? worldRepository
+          .getCanonicalCommandEvents(targetStoryId)
+          .slice()
+          .reverse()
+          .find((event) => event.commandId === canonicalCommandId)
+      : undefined;
+
     let actionResolution: ActionResolution = {
       resolutionId: deterministicId('action_resolution', targetStoryId, baseResult.actionId, String(freeformText)),
       storyId: targetStoryId,
@@ -794,7 +802,12 @@ export class ServerMockAuthority {
           : (resolutionGate.mode === 'CAPABILITY'
             ? 'The action is resolved by the established capability/rules layer.'
             : 'The action proceeds as an ordinary deterministic world/narrative action.'),
-      canonicalStateChanges: [],
+      canonicalStateChanges: (canonicalEventForResolution?.mutationPaths || []).map((path) => ({
+        kind: 'CANONICAL_MUTATION',
+        targetId: actorId,
+        value: path,
+        metadata: { source: 'canonical_command_event' },
+      })),
       physicalConsequences: storyCheck?.consequence?.summary ? [storyCheck.consequence.summary] : [],
       playerVisibleConsequences: [
         ...(storyCheck?.narrativeGuidance
@@ -803,6 +816,7 @@ export class ServerMockAuthority {
         ...(storyCheck?.consequence?.summary ? [storyCheck.consequence.summary] : []),
       ].filter(Boolean),
       evidenceIds: [
+        canonicalEventForResolution?.eventId,
         storyCheck?.checkId,
         storyCheck?.challengeId,
         ...(storyCheck?.consequence?.challengeId ? [storyCheck.consequence.challengeId] : []),
@@ -811,6 +825,7 @@ export class ServerMockAuthority {
       provenance: {
         source: 'CANONICAL_ENGINE',
         canonicalCommandId,
+        canonicalEventId: canonicalEventForResolution?.eventId,
       },
     };
 

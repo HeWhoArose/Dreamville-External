@@ -7259,8 +7259,23 @@ export class MultiModelOrchestrator {
     );
 
     // Narrative generation has a deterministic emergency floor. When all configured
-    // AI providers fail, the authoritative fallback remains player-facing rather than
-    // converting a recoverable narration failure into a dead-end turn.
+    // AI providers fail, surface the actual fallback-attempt diagnostics instead of
+    // replacing them with a misleading "Response is not valid JSON" parse error.
+    if (!generated.text) {
+      return {
+        success: false,
+        providerId: generated.providerId,
+        modelId: generated.modelId,
+        source: generated.source,
+        fallbackReason: generated.fallbackReason,
+        attemptsTrail: generated.attemptsTrail,
+        researchPacket,
+        narrativePlan,
+        researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
+        contextAudit,
+        error: generated.fallbackReason || 'All configured narrative providers failed, including the deterministic emergency floor.',
+      };
+    }
 
     const validation = this.validateTurnPackage(generated.text, { allowPlainTextNarration: true });
     if (!validation.valid || !validation.turnPackage) {

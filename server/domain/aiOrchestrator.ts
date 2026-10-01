@@ -7738,6 +7738,8 @@ export class MultiModelOrchestrator {
                 modelId: currentCandidate.modelId,
                 audioInputBase64: params.audioInputBase64,
                 voiceProfile: params.voiceProfile,
+                canonicalLocationName: currentSituation.location.name,
+                playerAction: params.playerAction,
               });
             } finally {
               clearTimeout(timer);

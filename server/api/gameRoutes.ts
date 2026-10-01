@@ -10589,8 +10589,22 @@ gameRouter.post('/spells/cast', async (req: Request, res: Response) => {
 
 function buildCurrentComicSceneContext(storyId: string): { context: ComicSceneContext; sourceActionId?: string } {
   const state = serverMockAuthority.getSanitizedViewState(storyId);
+  const latestAction = Array.isArray(state.actionHistory)
+    ? state.actionHistory.find((action: any) => action.actionType !== 'NOTE_RECORD')
+    : undefined;
+  let relevanceIds: Set<string> = new Set();
+  try {
+    const player = worldRepository.getPlayerLifecycle(storyId);
+    if (player) {
+      const situation = CurrentSituationBuilder.build({ storyId, playerAction: latestAction?.description || '', viewerActorId: player.actorId, worldRepo: worldRepository });
+      relevanceIds = new Set(EntitySceneRelevanceEngine.topVisible(situation, situation.currentAction, 8).map((entity) => entity.id));
+    }
+  } catch {
+    relevanceIds = new Set();
+  }
   const currentCharacters = Object.values(state.characters || {})
     .filter((character: any) => character.locationId === state.activeLocationId && character.role !== 'PROTAGONIST')
+    .filter((character: any) => relevanceIds.size === 0 || relevanceIds.has(String(character.id || character.characterId || character.actorId || '')))
     .map((character: any) => ({
       name: character.name,
       role: character.role,
@@ -10601,9 +10615,6 @@ function buildCurrentComicSceneContext(storyId: string): { context: ComicSceneCo
   // Opening/note records are not turns. Scene generation must anchor to the
   // most recent committed player action so an old opening narration can never
   // become the source image for a new scene.
-  const latestAction = Array.isArray(state.actionHistory)
-    ? state.actionHistory.find((action: any) => action.actionType !== 'NOTE_RECORD')
-    : undefined;
   const context: ComicSceneContext = {
     worldTitle: worldRepository.getStoryRun(storyId)?.worldId
       ? worldRepository.getWorldTemplate(worldRepository.getStoryRun(storyId)!.worldId)?.title || worldRepository.getStoryRun(storyId)?.worldId

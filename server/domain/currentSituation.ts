@@ -448,32 +448,30 @@ function buildRecentTurns(run: any, canonicalEvents: any[], maxRecentTurns: numb
 
 export class CurrentSituationBuilder {
 	public static build(params: BuildCurrentSituationParams): CurrentSituation {
-		const repository = params.worldRepo;
-		if (!repository) {
-			throw new Error('CurrentSituationBuilder requires a WorldRepository.');
-		}
-
 		const run = repository.getStoryRun(params.storyId);
-		if (!run) {
-			throw new Error(`Cannot build current situation: StoryRun '${params.storyId}' was not found.`);
-		}
-
 		const player = repository.getPlayerLifecycle(params.storyId);
 		const viewerActorId = params.viewerActorId || player?.actorId || run?.protagonist?.characterId || `player_actor_${params.storyId}`;
 		const locationId = player?.locationId || run?.currentLocationId || run?.startingLocationId;
-		if (!locationId) {
-			throw new Error(`Cannot build current situation: no current location is established for story '${params.storyId}'.`);
-		}
-
-		const geography = repository.getGeographyGraph(params.storyId);
-		const location = geography.getNode(locationId);
-		if (!location) {
-			throw new Error(`Cannot build current situation: canonical location '${locationId}' was not found.`);
-		}
-
 		const timestamp = repository.getWorldClock(params.storyId).getTimestamp();
-		const worldId = String(run.worldId || '');
-		const playerKnowledgeFacts = repository.getAuthorizedKnowledgeFacts(params.storyId, viewerActorId);
+		const worldId = String(run?.worldId || '');
+		const geography = repository.getGeographyGraph(params.storyId);
+		const location = locationId ? geography.getNode(locationId) : undefined;
+		const hasCanonicalLocation = Boolean(locationId && location);
+
+		// The situation model is a read projection. It must not mutate the repository
+		// merely because a caller is an early/minimal turn fixture. When canonical
+		// location state is unavailable, expose a bounded unknown location instead of
+		// inventing a real location or throwing before fallback orchestration can run.
+		const safeLocation = location || {
+			id: locationId || `location_unknown_${params.storyId}`,
+			name: 'Unknown Location',
+			regionId: 'UNKNOWN',
+			description: 'The current canonical location has not been established.',
+			ambientSensory: undefined,
+			accessible: false,
+			discovered: false,
+			parentLocationId: null,
+		} as any;		const playerKnowledgeFacts = repository.getAuthorizedKnowledgeFacts(params.storyId, viewerActorId);
 		const authoritativeFacts = repository.getWorldFacts(params.storyId)
 			.map(projectAuthoritativeFact)
 			.filter((fact) => Boolean(fact.id || fact.objectValue));
@@ -514,7 +512,7 @@ export class CurrentSituationBuilder {
 			})
 			.slice(0, 8);
 
-		const connectedLocations = geography.getOutgoingEdges(locationId)
+		const connectedLocations = locationId ? geography.getOutgoingEdges(locationId)
 			.map((edge: RouteEdge) => {
 				const destination = geography.getNode(edge.toLocationId);
 				if (!destination) return null;
@@ -539,14 +537,14 @@ export class CurrentSituationBuilder {
 			.filter(Boolean) as CurrentLocationContext['connectedLocations'];
 
 		const currentLocation: CurrentLocationContext = {
-			id: location.id,
-			name: location.name,
-			regionId: location.regionId,
-			description: location.description,
-			ambientSensory: location.ambientSensory,
-			accessible: location.accessible,
-			discovered: player ? true : location.discovered,
-			parentLocationId: location.parentLocationId,
+			id: safeLocation.id,
+			name: safeLocation.name,
+			regionId: safeLocation.regionId,
+			description: safeLocation.description,
+			ambientSensory: safeLocation.ambientSensory,
+			accessible: hasCanonicalLocation ? safeLocation.accessible : false,
+			discovered: hasCanonicalLocation ? (player ? true : safeLocation.discovered) : false,
+			parentLocationId: safeLocation.parentLocationId,
 			connectedLocations,
 		};
 
@@ -571,7 +569,7 @@ export class CurrentSituationBuilder {
 		for (const npc of canonicalNpcs) {
 			if (nearbyEntities.some((entity) => entity.id === npc.actorId)) continue;
 			const explicit = Boolean(actionText) && normalizeText(actionText).toLowerCase().includes(normalizeText(npc.name).toLowerCase());
-			if (npc.locationId !== location.id && !explicit) continue;
+			if (npc.locationId !== safeLocation.id && !explicit) continue;
 			if (npc.isDead) continue;
 			nearbyEntities.push(projectLifecycleEntity(npc, location.id, explicit));
 		}

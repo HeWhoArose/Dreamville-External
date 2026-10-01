@@ -181,7 +181,7 @@ gameRouter.get('/narrative-research', (req: Request, res: Response) => {
 			viewerActorId: actorId,
 		});
 		const boundedResearch = EpistemicBoundaryEnforcer.sanitizeResearch(research, situation);
-			return res.json({
+		return res.json({
 			success: true,
 			storyId,
 			research: NarrativeResearchPipeline.summarizeForPlayer(boundedResearch.result),

@@ -126,7 +126,15 @@ const REPLAY_VOLATILE_KEYS = new Set([
 ]);
 
 function normalizeForReplay(value: unknown, key?: string): unknown {
-	if (key === 'narrative' || key === 'narrativeHistory') return undefined;
+	if (
+		key === 'narrative' ||
+		key === 'narrativeHistory' ||
+		key === 'canonicalCommitLedger' ||
+		key === 'narrativeContextHistory' ||
+		key === 'canonicalNarrativeEvents' ||
+		key === 'workingContextPins' ||
+		key === 'canonicalEvents'
+	) return undefined;
 	if (REPLAY_VOLATILE_KEYS.has(key || '')) return undefined;
 	if (value === null || typeof value !== 'object') return value;
 	if (Array.isArray(value)) {

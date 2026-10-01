@@ -8,7 +8,7 @@ describe('Phase 20 — orphan and connection audit', () => {
 		for (const phrase of [
 			'No known Phase 11–16 orphaned subsystem',
 			'CurrentSituationBuilder → VisualSceneContext → buildComicScenePromptFromVisualContext',
-			'Canonical state adjudicator requires independently verified changes before commit',
+			'canonical state adjudicator requires independently verified changes before commit',
 		]) {
 			assert.ok(audit.includes(phrase), phrase);
 		}

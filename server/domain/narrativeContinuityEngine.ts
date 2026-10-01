@@ -38,7 +38,6 @@ export interface NarrativeResearchPacket {
   memories: unknown[];
   storyThreads: unknown[];
   relationships: unknown[];
-  npcPlanningContext?: NpcPlanningSlice;
   plot: NarrativePlotState;
   plan: NarrativePlanState;
   usageGuidance: {
@@ -46,7 +45,6 @@ export interface NarrativeResearchPacket {
     memories: string;
     storyThreads: string;
     relationships: string;
-    npcPlanningContext?: string;
     plot: string;
     plan: string;
     worldMomentum: string;
@@ -87,9 +85,6 @@ export class NarrativeContinuityEngine {
       viewerActorId,
       worldRepo: repository,
     });
-    const npcPlanningContext = viewerActorId
-      ? buildNpcPlanningSlice(repository, storyId, viewerActorId, currentSituation)
-      : undefined;
     const queryKeywords = Array.from(new Set([
       ...normalizedQuery.toLowerCase().split(/\W+/).filter((token) => token.length >= 3),
       ...currentSituation.location.name.toLowerCase().split(/\W+/).filter((token) => token.length >= 3),
@@ -178,7 +173,6 @@ export class NarrativeContinuityEngine {
       knowledgeFacts: this.rankAndLimit(knowledgeFacts, queryKeywords, 12),
       memories: continuityMemories,
       storyThreads: repository.getStoryThreads(storyId).slice(-12),
-      npcPlanningContext,
       relationships: viewerActorId
         ? repository
             .getEntityCards(storyId)
@@ -197,7 +191,6 @@ export class NarrativeContinuityEngine {
         memories: 'Use both world-local and universe-level durable memories to maintain continuity with what the protagonist has experienced, learned, acquired, or persistently remembers. Universe memories may refer to worlds the protagonist is not currently visiting.',
         storyThreads: 'Use to preserve unresolved situations and consequences so the scene does not reset between turns.',
         relationships: 'Use to shape believable reactions, familiarity, trust, tension, and dialogue when a known entity is present.',
-        ...(npcPlanningContext ? { npcPlanningContext: 'Use only this addressed NPC slice for that actor’s memory, authorized knowledge, relationship, and immediate goal.' } : {}),
         plot: 'Use as the compressed history of what has actually happened; use it to avoid contradictions and repeated beats.',
         plan: 'Use as a GM planning aid for the current narrative direction; never force a planned beat or remove player agency.',
         worldMomentum: 'Use only when supported to add pressure, movement, or consequence already present in the simulation.',

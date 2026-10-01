@@ -577,8 +577,9 @@ export class StoryCheckEngine {
     const outcomeTier: StoryCheckOutcomeTier =
       criticalSuccess ? 'CRITICAL_SUCCESS' :
       criticalFailure ? 'CRITICAL_FAILURE' :
-      success ? (challenge?.onSuccess ? 'SUCCESS_WITH_COST' : 'CLEAN_SUCCESS') :
-      (challenge?.onFailure ? 'FAILURE_WITH_COST' : 'FAILURE');
+      success
+        ? (challenge?.successOutcomeTier || (challenge?.onSuccess ? 'SUCCESS_WITH_COST' : 'CLEAN_SUCCESS'))
+        : (challenge?.failureOutcomeTier || (challenge?.onFailure ? 'FAILURE_WITH_COST' : 'FAILURE'));
     const narrativeGuidance = buildNarrativeGuidance(
       profile?.skillId,
       skillName,
@@ -636,7 +637,7 @@ export class StoryCheckEngine {
     const outcomeTier: StoryCheckOutcomeTier =
       criticalSuccess ? 'CRITICAL_SUCCESS' :
       criticalFailure ? 'CRITICAL_FAILURE' :
-      success ? 'SUCCESS_WITH_COST' : 'FAILURE';
+      success ? (challenge.successOutcomeTier || 'SUCCESS_WITH_COST') : (challenge.failureOutcomeTier || 'FAILURE');
 
     return {
       checkId: `custom_check_${storyId}_${roll.rollId}`,

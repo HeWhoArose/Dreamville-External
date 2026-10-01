@@ -47,7 +47,7 @@ export class EntitySceneRelevanceEngine {
 					bands.push('CURRENT_LOCATION');
 				}
 				if (explicit) {
-					score += 40;
+					score += 55;
 					reasons.push('explicit player target/reference');
 					bands.push('EXPLICIT_TARGET');
 				}
@@ -70,7 +70,7 @@ export class EntitySceneRelevanceEngine {
 					bands.push('ACTIVE_THREAD');
 				}
 				if (entity.name && normalize(recentText).includes(normalize(entity.name))) {
-					score += 15;
+					score += 10;
 					reasons.push('recent interaction');
 					bands.push('RECENT_INTERACTION');
 				}

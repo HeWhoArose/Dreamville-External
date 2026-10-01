@@ -188,8 +188,8 @@ export class NarrativeMemoryLifecycle {
 			if (thread.status !== 'OPEN') continue;
 			const titleTokens = thread.title.toLowerCase().split(/\W+/).filter((token) => token.length >= 5).slice(0, 8);
 			const matched = titleTokens.filter((token) => narrative.includes(token)).length;
-			const positiveResolution = /\b(?:resolved|settled|answered|confirmed|found|completed|finished|closed|no longer resolved|was resolved)\b/i.test(narrative);
-			const negativeResolution = /\b(?:not|never|still|cannot|could not|couldn't|has not|hasn't|have not|haven't)\s+(?:resolved|settled|answered|confirmed|found|completed|finished|closed)\b/i.test(narrative);
+			const negativeResolution = /\b(?:not|never|still|cannot|could not|couldn't|has not|hasn't|have not|haven't|no longer)\s+(?:resolved|settled|answered|confirmed|found|completed|finished|closed)\b/i.test(narrative);
+			const positiveResolution = /\b(?:resolved|settled|answered|confirmed|found|completed|finished|closed|was resolved|has been resolved)\b/i.test(narrative);
 			if (matched >= Math.min(2, titleTokens.length) && positiveResolution && !negativeResolution) {
 				thread.status = 'RESOLVED';
 				thread.lastTouchedAt = timestamp;
@@ -204,17 +204,22 @@ export class NarrativeMemoryLifecycle {
 		runtime.openNarrativeThreads = runtime.openNarrativeThreads.filter((thread: NarrativeOpenThreadRecord) => thread.status === 'OPEN').slice(-40);
 
 		const plot = { ...(runtime.plot || {}) } as Record<string, any>;
-		const eventFacts = (params.turnPackage.events || []).map(normalize).filter(Boolean).slice(-6);
-		const stateFacts = (params.stateAdjudication?.commitRecords || []).map((record) => record.kind + ' committed for ' + record.targetId);
-		const factualBeatParts = [...eventFacts, ...stateFacts];
+		// Only committed canonical consequences can create durable plot beats. AI-generated
+		// prose/events remain presentation-layer claims and are intentionally excluded here.
+		const canonicalBeatFacts = (params.stateAdjudication?.commitRecords || [])
+			.map((record) => String(record.kind) + ' committed for ' + String(record.targetId))
+			.filter(Boolean)
+			.slice(-6);
+		const factualBeatParts = canonicalBeatFacts;
 		const plotSummary = factualBeatParts.length > 0
 			? factualBeatParts.join('; ').slice(0, 900)
 			: (normalize(plot.summary) || 'No new canonical development.');
+		let plotBeatId: string | undefined;
 		if (factualBeatParts.length > 0) {
-			const beatId = deterministicId('plot_beat', params.storyId, params.turnId, plotSummary);
+			plotBeatId = deterministicId('plot_beat', params.storyId, params.turnId, plotSummary);
 			const beats = Array.isArray(plot.beats) ? [...plot.beats] : [];
-			if (!beats.some((beat: any) => beat?.id === beatId)) {
-				beats.push({ id: beatId, turnId: params.turnId, text: plotSummary, tags: eventFacts.slice(0, 8), timestamp });
+			if (!beats.some((beat: any) => beat?.id === plotBeatId)) {
+				beats.push({ id: plotBeatId, turnId: params.turnId, text: plotSummary, tags: canonicalBeatFacts.slice(0, 8), timestamp });
 			}
 			plot.beats = beats.slice(-40);
 		}

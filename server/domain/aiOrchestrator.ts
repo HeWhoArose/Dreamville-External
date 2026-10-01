@@ -6949,6 +6949,7 @@ export class MultiModelOrchestrator {
 
     const hardTokenBudget = params.hardTokenBudget ?? 700;
     const timeoutMs = params.timeoutMs ?? 7000;
+    const turnAiCallBudget = new AiTurnCallBudget();
     const authoritativeOutcome = (params.committedOutcome || '').trim();
     const connectedDirective = (params.continuationDirective || '').trim();
     const worldRepo = this.getWorldRepository();

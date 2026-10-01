@@ -121,8 +121,9 @@ test('poisoned checks use disadvantage and keep the lower d20', () => {
   assert.equal(result!.advantageState, 'DISADVANTAGE');
   assert.equal(result!.roll.individualDice.length, 2);
   assert.equal(result!.roll.total, Math.min(...result!.roll.individualDice) + result!.totalModifier);
-  assert.equal(result!.criticalSuccess, false);
-  assert.equal(result!.criticalFailure, false);
+  const selectedDie = result!.roll.individualDice[result!.selectedDieIndex];
+  assert.equal(result!.criticalSuccess, selectedDie === 20);
+  assert.equal(result!.criticalFailure, selectedDie === 1);
 });
 
 test('blinded characters automatically fail sight-based perception checks', () => {

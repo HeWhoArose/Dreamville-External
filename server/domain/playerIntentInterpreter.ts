@@ -53,7 +53,7 @@ const COMBAT_PATTERN = /\b(?:attack|strike|hit|shoot|fire|stab|slash|punch|kick|
 const ITEM_USE_PATTERN = /\b(?:use|drink|eat|consume|activate|equip|wear|open|unlock|pick up|take|grasp|hold|decipher|translate)\b/i;
 const DIALOGUE_PATTERN = /\b(?:ask|tell|say|speak|talk|reply|answer|question|inquire|consult|call out|shout|yell)\b/i;
 const PASSIVE_OBSERVATION_PATTERN = /\b(?:listen|hear|overhear|eavesdrop|observe|watch|look|look around|look for|notice|study|scan|inspect)\b/i;
-const INFORMATION_PATTERN = /\b(?:learn|find out|discover|gather information|information|rumou?r|gossip|what happened|who|why|where|when|how|hear about|listen for|overhear)\b/i;
+const INFORMATION_PATTERN = /\b(?:learn|find out|discover|gather information|information|rumou?rs?|gossip|what happened|who|why|where|when|how|hear|listen|hear about|listen for|overhear)\b/i;
 const OOC_PATTERN = /^(?:ooc|out of character|system|meta)\s*[:>]/i;
 const DICE_PATTERN = /\b(?:roll|rolls|rolled|check|skill check|ability check|saving throw|dice|d20|2d6|2d20)\b/i;
 

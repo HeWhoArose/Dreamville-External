@@ -2,6 +2,7 @@ import type { StoryCheckResult, ActionResolution, ActionOutcomeTier } from '../.
 export type { ActionResolution, ActionOutcomeTier };
 
 export function outcomeTierFromCheck(check: StoryCheckResult): ActionOutcomeTier {
+  if (check.outcomeTier) return check.outcomeTier;
   if (check.criticalSuccess) return 'CRITICAL_SUCCESS';
   if (check.criticalFailure) return 'CRITICAL_FAILURE';
   if (check.success) return check.consequence?.applied ? 'SUCCESS_WITH_COST' : 'CLEAN_SUCCESS';

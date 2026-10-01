@@ -124,6 +124,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		'CANONICAL CURRENT SCENE ANCHOR:',
 		'Canonical constraints:',
 		'- The current location and time in Current Situation are authoritative.',
+		'- Stay in the canonical current location unless the canonical game state has already committed a location change.',
 		'- Player Intent is the semantic description of what the player meant to attempt.',
 		'- Research is bounded evidence. Omitted or excluded information is not permission to invent it.',
 		'- The Narrative Director Plan is ephemeral guidance for this turn only; it does not create canonical state.',

@@ -7521,7 +7521,7 @@ export class MultiModelOrchestrator {
             workingContext: projectSupportingWorkingContext(assembledContext),
             globalInstruction: 'You are Dreamville’s authoritative narrative presentation engine. Generate only the player-facing narrative turn. Canonical game state remains authoritative and prose never commits state.',
             styleInstruction: defaultNarrationStyle(),
-            maxPromptTokens: Math.max(hardTokenBudget * 2, 2200),
+            maxPromptTokens: Math.max(200, hardTokenBudget),
           })
         : {
             prompt: assembledContext.assembledText,

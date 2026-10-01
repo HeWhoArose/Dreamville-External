@@ -1,5 +1,6 @@
 import { SfxRegistry, SfxDefinition } from './sfxRegistry';
 import * as crypto from 'crypto';
+import { DEFAULT_DICE_THEME, isCanonicalDiceTheme, type DiceThemeId } from '../../src/data/diceThemes';
 
 export type HapticIntensity = 'off' | 'light' | 'medium' | 'heavy';
 export type NarrationMode = 'auto' | 'dialogue-only' | 'off';
@@ -18,6 +19,7 @@ export interface AudioSettings {
   autoplay: boolean;
   dataSavingMode: boolean;
   hapticIntensity: HapticIntensity;
+  diceTheme: DiceThemeId;
 }
 
 export interface VoiceProfile {
@@ -156,6 +158,7 @@ export class SensoryEngine {
       autoplay: true,
       dataSavingMode: false,
       hapticIntensity: 'medium',
+      diceTheme: DEFAULT_DICE_THEME,
     };
   }
 
@@ -172,9 +175,25 @@ export class SensoryEngine {
 
   public updateSettings(storyId: string, settings: Partial<AudioSettings>): void {
     const current = this.getSettings(storyId);
-    this.audioSettings.set(storyId, { ...current, ...settings });
+    const requestedDiceTheme = settings.diceTheme;
+    const normalizedDiceTheme = requestedDiceTheme && isCanonicalDiceTheme(requestedDiceTheme)
+      ? requestedDiceTheme
+      : current.diceTheme || DEFAULT_DICE_THEME;
+
+    this.audioSettings.set(storyId, {
+      ...current,
+      ...settings,
+      diceTheme: normalizedDiceTheme,
+    });
     // Invalidate speech cache if speech-affecting settings change
     this.speechCache.invalidateAll();
+  }
+
+  public getDiceTheme(storyId: string): DiceThemeId {
+    const settings = this.getSettings(storyId);
+    return isCanonicalDiceTheme(settings.diceTheme)
+      ? settings.diceTheme
+      : DEFAULT_DICE_THEME;
   }
 
   public getVoiceProfile(storyId: string, actorId: string): VoiceProfile | null {

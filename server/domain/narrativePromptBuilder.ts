@@ -232,7 +232,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			}
 		} else {
 			const compactGlobal = 'Generate only the player-facing narrative. Never choose a major future action for the player.';
-			const compactStyle = 'Depict the current action and observable response; preserve player agency and canonical truth.';
+			const compactStyle = 'Depict the current action and observable response; preserve player agency and canonical truth. Stay in the canonical current location unless the canonical game state has already committed a location change.';
 			const compactSituation = truncatePromptSection(situationContext, 520);
 			const compactIntent = truncatePromptSection(intentContext, 180);
 			const compactResearch = truncatePromptSection(initialResearch, 180);

@@ -7090,6 +7090,8 @@ export class MultiModelOrchestrator {
               storyId,
               turnId,
               role: 'narrator',
+              playerAction: params.playerAction,
+              playerIntent,
               workingContextTokens: assembledContext.totalTokens,
               worldTime: repo.getWorldClock(storyId).formatHeader(),
               locationId: repo.getPlayerLifecycle(storyId)?.locationId || 'loc_whispering_orrery',
@@ -7525,6 +7527,7 @@ export class MultiModelOrchestrator {
 
       return {
         success: false,
+        playerIntent,
         telemetry: {
           turnId,
           storyId,

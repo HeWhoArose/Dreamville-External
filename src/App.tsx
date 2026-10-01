@@ -370,7 +370,6 @@ export const App: React.FC = () => {
         setCombatTransition(result.combatTransition);
       }
       fetchAuxiliaryData();
-      apiClient.getStoryActionTips((payload as any).storyId).then(setStoryActionTips).catch(() => undefined);
       if (onComplete) {
         await onComplete(result);
       }

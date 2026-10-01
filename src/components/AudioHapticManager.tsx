@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { DEFAULT_DICE_THEME, DiceThemeId } from './common/diceThemes';
-import apiClient from '../services/apiClient';
+import { apiClient } from '../services/apiClient';
 
 export type HapticIntensity = 'off' | 'light' | 'medium' | 'heavy';
 export type NarrationMode = 'auto' | 'dialogue-only' | 'off';

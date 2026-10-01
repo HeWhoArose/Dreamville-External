@@ -1,6 +1,6 @@
 # Dreamville Final Orphan and Connection Audit — Phase 20
 
-Audit target: the Phase 11–15 integrated branch plus the Phase 16–20 additions on this release branch.
+Audit target: the Phase 11–15 integrated branch plus the Phase 16–22 additions and stabilization closure on this release branch.
 
 ## Audit method
 
@@ -61,11 +61,11 @@ The visual and narration layers cannot authorize canonical mutations. The canoni
 
 Research is sanitized through the epistemic boundary before being handed to narrative planning/presentation.
 
-## No known Phase 11–16 orphaned subsystem
+## No known Phase 11–22 orphaned subsystem
 
 At source-audit level, no release-critical subsystem introduced by Phases 11–16 is currently orphaned: each has a documented consumer and at least one regression or contract test.
 
-This is not a substitute for runtime verification. GitHub CI has now executed the repository release gate repeatedly; contract verification and TypeScript pass, while the full test gate remains red on earlier-phase/integration regressions still visible in the stacked branch.
+This is not a substitute for runtime verification. GitHub CI has now executed the repository release gate repeatedly. The current release sequence is `npm run lint`, `npm test`, and `npm run build`; contract verification and TypeScript pass, while the full test gate remains red on earlier-phase/integration regressions still visible in the stacked branch.
 
 ## Open release risks
 

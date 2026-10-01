@@ -150,6 +150,7 @@ describe('CH7 Evidence-Closure Audit: AI -> Novel Capability Pipeline & Internal
 
     it('proves negative AI / Authority tests: unauthorized AI proposals cannot mutate canonical state', async () => {
       const storyIdNeg = 'story_evidence_closure_neg';
+      worldRepository.seedStory(storyIdNeg);
       const orchestrator = new MultiModelOrchestrator(worldRepository);
       const fakeAdapter = new ControlledNovelAIAdapter();
       orchestrator.registerAdapter(fakeAdapter);

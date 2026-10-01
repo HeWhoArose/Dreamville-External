@@ -13,9 +13,10 @@ export interface ResolutionGateResult {
 }
 
 const ROUTINE_ACTION = /\b(?:walk|move|go|step|look|watch|listen|hear|wait|breathe|rest|stand|sit|approach)\b/i;
-const TECHNIQUE_ACTION = /\b(?:parkour|vault|wall run|wall-run|flip|acrobat|balance|climb|jump|leap|swim|sneak|hide|force|push the|pull the|drag|lift|heave|pick lock|lockpick|disarm|dodge|evade)\b/i;
+const TECHNIQUE_ACTION = /\b(?:parkour|vault|wall run|wall-run|flip|acrobat|balance|climb|jump|leap|swim|sneak|hide|pick lock|lockpick|disarm|dodge|evade)\b/i;
+const RESISTANCE_ACTION = /\b(?:force|push|pull|drag|lift|heave)\b/i;
+const RESISTANCE_SCENE = /\b(?:jammed|stuck|barred|locked|sealed|heavy|immovable|resisting|resists|opposed|struggle|struggling|pinned|anchored|reinforced)\b/i;
 const HAZARD_SCENE = /\b(?:collapsing|falling debris|explosion|blast|trap|falling|cave-in|slippery|slick|unstable|loose ground|broken pavement|treacherous terrain|hazardous footing|toxic gas|poison gas|venom|illusion|fear|charm|possession|banishment)\b/i;
-const EXPLICIT_TRY = /\b(?:attempt|attempts|try|tries|force|risk|carefully)\b/i;
 
 function normalized(value: unknown): string {
   return String(value ?? '').trim();
@@ -60,7 +61,8 @@ export class ResolutionGate {
       normalized(params.currentSituation?.activeConditions?.map((c) => c.label).join(' ')) + ' ' +
       normalized(params.currentSituation?.visibleEvents?.map((e) => e.summary).join(' '));
     const hazardousTraversal = ROUTINE_ACTION.test(action) && HAZARD_SCENE.test(scene);
-    const technique = TECHNIQUE_ACTION.test(action) || EXPLICIT_TRY.test(action);
+    const technique = TECHNIQUE_ACTION.test(action);
+    const resistedForce = RESISTANCE_ACTION.test(action) && RESISTANCE_SCENE.test(scene);
 
     if (hazardousTraversal) {
       return {
@@ -70,12 +72,16 @@ export class ResolutionGate {
         uncertaintyBasis: ['environmental hazard', 'movement control'],
       };
     }
-    if (technique) {
+    if (technique || resistedForce) {
       return {
         mode: 'CHECK_CANDIDATE',
         shouldRoll: true,
-        rationale: 'The player explicitly attempts a technique whose outcome is meaningfully uncertain.',
-        uncertaintyBasis: ['technique execution', 'capability/opposition', 'environment'],
+        rationale: resistedForce
+          ? 'The action encounters explicit physical resistance, making its resolution materially uncertain.'
+          : 'The player explicitly attempts a technique whose outcome is meaningfully uncertain.',
+        uncertaintyBasis: resistedForce
+          ? ['physical resistance', 'leverage/opposition', 'environment']
+          : ['technique execution', 'capability/opposition', 'environment'],
       };
     }
     return {

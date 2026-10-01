@@ -327,7 +327,7 @@ export class NarrativeResearchPipeline {
 					id: entity.id,
 					name: entity.name,
 					kind: entity.kind,
-					role: entity.role?.profession || entity.role?.archetype || entity.social?.role || entity.classification?.role,
+					role: entity.classification?.profession || entity.classification?.archetype || entity.social?.role || entity.classification?.role,
 					currentActivity: entity.worldState?.currentActivity,
 					presence: entity.worldState?.presence,
 					factionIds: entity.social?.factionIds,

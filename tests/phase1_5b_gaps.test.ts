@@ -108,9 +108,14 @@ class FallbackSuccessAdapter implements IProviderAdapter {
 
   public async generate(task: TaskId, prompt: string, options?: ProviderGenerateOptions): Promise<ProviderGenerateResult> {
     this.callCount++;
+    const actionMatch = String(prompt || '').match(/<player_action>\s*([\s\S]*?)\s*<\/player_action>/i);
+    const action = (actionMatch?.[1] || options?.playerAction || 'the requested action')
+      .trim()
+      .replace(/^(?:i|we|my character)\s+/i, '');
+    const location = options?.canonicalLocationName || 'the current location';
     return {
       text: JSON.stringify({
-        narrative: ['Fallback model successfully generated story continuation.'],
+        narrative: [`At ${location}, you ${action} while the immediate scene remains grounded and unchanged.`],
         dialogue: [],
         events: ['FALLBACK_MODEL_TRIGGERED'],
         stateChanges: [],

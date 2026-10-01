@@ -850,6 +850,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
       const result = await apiClient.generateCurrentScenePrompt();
       setScenePrompt(result.prompt);
       setSceneImageUrl(null);
+      setSceneSourceActionId(result.sourceActionId || null);
       setSceneChoiceOpen(false);
       setSceneMenuOpen(false);
     } catch (error: any) {
@@ -868,6 +869,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
         setSceneImageUrl(result.imageUrl);
       }
       setScenePrompt(result.prompt || null);
+      setSceneSourceActionId(result.sourceActionId || null);
       setSceneChoiceOpen(false);
       setSceneMenuOpen(false);
     } catch (error: any) {

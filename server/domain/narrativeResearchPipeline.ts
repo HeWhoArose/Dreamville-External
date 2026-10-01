@@ -459,7 +459,19 @@ export class NarrativeResearchPipeline {
 			}, queryTokens);
 		}
 
+		const authorizedFacts = params.repository
+			.getAuthorizedKnowledgeFacts(params.storyId, viewerActorId)
+			.map((fact: any) => ({
+				id: normalize(fact?.id || JSON.stringify(fact)),
+				subjectEntityId: normalize(fact?.subjectEntityId),
+				predicate: normalize(fact?.predicate),
+				objectValue: normalize(fact?.objectValue),
+				sourceType: normalize(fact?.sourceType),
+				scope: normalize(fact?.scope),
+				provenanceSummary: normalize(fact?.provenanceSummary),
+			}));
 		const knowledgeCandidates = [
+			...authorizedFacts,
 			...situation.relevantLore,
 			...packet.knowledgeFacts.map((fact: any) => ({
 				id: normalize(fact?.id || JSON.stringify(fact)),

@@ -492,3 +492,40 @@ test('AI skill hints cannot force a skill that the player action does not semant
 
   assert.equal(result, null);
 });
+
+
+test('AI saving-throw hints cannot manufacture a hazard in a routine scene', () => {
+  const engine = new StoryCheckEngine();
+  const result = engine.resolve(
+    'story_save_hint_guard',
+    'I walk forward.',
+    {
+      coreStats: {
+        level: 1,
+        strength: 10,
+        dexterity: 12,
+        constitution: 10,
+        intelligence: 10,
+        wisdom: 10,
+        charisma: 10,
+        ac: 10,
+        speed: 30,
+        hitDice: '1d10',
+        hpCurrent: 10,
+        hpMax: 10,
+      },
+      skills: [],
+      sceneText: 'The corridor is clear, level, and stable.',
+    },
+    undefined,
+    undefined,
+    {
+      check: {
+        kind: 'SAVING_THROW',
+        ability: 'Dexterity',
+      },
+    }
+  );
+
+  assert.equal(result, null);
+});

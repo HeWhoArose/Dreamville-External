@@ -360,7 +360,7 @@ export class StoryCheckEngine {
         ? rawHintedSkillDefinition
         : undefined;
     const inferredSaveSelection = this.pickSaveProfile(text, sceneText);
-    const hintedSaveProfile = hintedCheck?.kind === 'SAVING_THROW' && hintedAbility
+    const hintedSaveProfile = hintedCheck?.kind === 'SAVING_THROW' && hintedAbility && inferredSaveSelection
       ? SAVE_PROFILES.find((profile) => profile.ability === hintedAbility)
       : undefined;
     let saveSelection = challenge?.savingThrowAbility

@@ -1,3 +1,5 @@
+import type { VisualSceneContext } from '../domain/visualSceneContext';
+
 export interface ComicSceneContext {
   worldTitle?: string;
   location: {
@@ -229,8 +231,6 @@ export function buildComicScenePrompt(context: ComicSceneContext): ComicScenePro
   };
 }
 
-
-import type { VisualSceneContext } from '../domain/visualSceneContext';
 
 /**
  * Phase 16 adapter: converts the canonical CurrentSituation + latest authoritative

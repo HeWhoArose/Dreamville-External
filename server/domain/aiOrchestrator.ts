@@ -24,6 +24,7 @@ import { NarrativeResearchPipeline, type NarrativeResearchResult } from './narra
 import { NarrativeDirector, type EphemeralNarrativePlan } from './narrativeDirector';
 import { buildNarrationPrompt, defaultNarrationStyle, projectSupportingWorkingContext } from './narrativePromptBuilder';
 import { SemanticNarrativeReview, type NarrativeReview } from './semanticNarrativeReview';
+import { EpistemicBoundaryEnforcer } from './epistemicBoundary';
 import { NarrativeStateAdjudicator, type StateAdjudicationResult } from './narrativeStateAdjudicator';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
@@ -6793,7 +6794,7 @@ export class MultiModelOrchestrator {
       viewerActorId: currentSituation.player.actorId,
       worldRepo,
     });
-    const researchResult = NarrativeResearchPipeline.research({
+    const rawResearchResult = NarrativeResearchPipeline.research({
       repository: worldRepo,
       storyId,
       currentSituation,
@@ -6802,6 +6803,7 @@ export class MultiModelOrchestrator {
       hardTokenBudget: Math.max(1600, hardTokenBudget * 2),
       viewerActorId: currentSituation.player.actorId,
     });
+    const researchResult = EpistemicBoundaryEnforcer.sanitizeResearch(rawResearchResult, currentSituation).result;
     const narrativePlan = NarrativeDirector.create({
       situation: currentSituation,
       intent: playerIntent,
@@ -7247,7 +7249,7 @@ export class MultiModelOrchestrator {
         worldRepo: repo,
       });
       const isNarrativeTask = task === 'narrative.generate';
-      const researchResult = isNarrativeTask
+      const rawResearchResult = isNarrativeTask
         ? NarrativeResearchPipeline.research({
             repository: repo,
             storyId,
@@ -7257,6 +7259,9 @@ export class MultiModelOrchestrator {
             hardTokenBudget: Math.max(1600, hardTokenBudget * 2),
             viewerActorId: currentSituation.player.actorId,
           })
+        : undefined;
+      const researchResult = rawResearchResult
+        ? EpistemicBoundaryEnforcer.sanitizeResearch(rawResearchResult, currentSituation).result
         : undefined;
       const researchPacket = researchResult?.packet;
       const narrativePlan = researchResult

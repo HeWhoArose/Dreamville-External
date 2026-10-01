@@ -382,10 +382,13 @@ test('narration prompt gives structured action resolution precedence over prose 
     intent: resolution.playerIntent as any,
     research: { blocks: [] } as any,
     plan: {
+      storyId: 'phase23_prompt',
+      version: 1,
       objective: 'Resolve current action',
       nextBeats: [],
       priorityThreads: [],
       contingencies: [],
+      updatedAt: 'Y0001-M01-D01T00:00:00',
     } as any,
     actionResolution: resolution,
     maxPromptTokens: 3000,

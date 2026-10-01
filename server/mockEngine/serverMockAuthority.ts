@@ -661,9 +661,12 @@ export class ServerMockAuthority {
       const testLabel = storyCheck.testType === 'SAVING_THROW'
         ? storyCheck.ability + ' saving throw'
         : storyCheck.skill + ' check';
-      committedOutcome = storyCheck.success
-        ? testLabel + ' succeeded. Narrate the visible result and immediate consequence naturally.'
-        : testLabel + ' failed. Narrate the visible failure and immediate consequence naturally.';
+      const guidance = storyCheck.narrativeGuidance;
+      committedOutcome = [
+        testLabel + ' ' + (storyCheck.success ? 'succeeded' : 'failed') + ' (' + storyCheck.total + ' vs DC ' + storyCheck.difficultyClass + ').',
+        guidance && guidance.checkJustification ? 'Why the check was required: ' + guidance.checkJustification : '',
+        guidance ? (storyCheck.success ? (guidance.successGuidance ? 'Resolution guidance: ' + guidance.successGuidance : '') : (guidance.failureGuidance ? 'Failure guidance: ' + guidance.failureGuidance : '')) : '',
+      ].filter(Boolean).join(' ');
 
       if (authoredChallenge) {
         const consequence = storyCheckConsequenceEngine.apply(

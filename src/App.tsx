@@ -122,6 +122,8 @@ export const App: React.FC = () => {
   const [isProcessingAction, setIsProcessingAction] = useState<boolean>(false);
   const [pendingActionAdvice, setPendingActionAdvice] = useState<ActionAdvice | null>(null);
   const [storyActionTips, setStoryActionTips] = useState<ActionTip[]>([]);
+  const [isRefreshingStoryActionTips, setIsRefreshingStoryActionTips] = useState(false);
+  const [failedStoryAction, setFailedStoryAction] = useState<string | null>(null);
   const [combatTransition, setCombatTransition] = useState<CombatTransitionState | null>(null);
   const actionSeqRef = useRef<number>(0);
 
@@ -359,6 +361,9 @@ export const App: React.FC = () => {
     const currentSeq = ++actionSeqRef.current;
     setNetworkError(null);
     setIsProcessingAction(true);
+    if ((action as any).type === 'CUSTOM_ACTION') {
+      setFailedStoryAction(null);
+    }
     try {
       const payload = { ...action, storyId: (action as any).storyId || activeStoryId };
       const result = await apiClient.sendAction(payload);
@@ -366,6 +371,9 @@ export const App: React.FC = () => {
         return;
       }
       setViewState(result.viewState);
+      if ((action as any).type === 'CUSTOM_ACTION') {
+        setFailedStoryAction(null);
+      }
       if (result.combatTransition) {
         setCombatTransition(result.combatTransition);
       }
@@ -377,9 +385,14 @@ export const App: React.FC = () => {
       if (currentSeq === actionSeqRef.current) {
         if (err?.status === 409 && err?.data?.advice) {
           setPendingActionAdvice(err.data.advice as ActionAdvice);
+          setFailedStoryAction(null);
           setNetworkError(null);
         } else {
           console.error('Failed to execute story action:', err);
+          const actionText = typeof (action as any).actionText === 'string' ? (action as any).actionText.trim() : '';
+          if ((action as any).type === 'CUSTOM_ACTION' && actionText) {
+            setFailedStoryAction(actionText);
+          }
           setNetworkError(err instanceof Error ? err.message : 'The story action could not be executed.');
         }
       }
@@ -527,8 +540,21 @@ export const App: React.FC = () => {
     if (!nextViewState) return;
     setViewState(nextViewState);
   };
+  const refreshStoryActionTips = async (force = true) => {
+    setIsRefreshingStoryActionTips(true);
+    try {
+      const tips = await apiClient.getStoryActionTips(activeStoryId, { refresh: force });
+      setStoryActionTips(tips);
+    } catch (error) {
+      console.error('Failed to refresh story action suggestions:', error);
+    } finally {
+      setIsRefreshingStoryActionTips(false);
+    }
+  };
+
   const handleCustomAction = async (actionText: string) => {
     setPendingActionAdvice(null);
+    setFailedStoryAction(null);
 
     // The canonical /action endpoint performs capability preflight itself.
     // Hostile freeform actions now return a canonical combat transition.
@@ -737,6 +763,12 @@ export const App: React.FC = () => {
           onCustomAction={handleCustomAction}
           pendingActionAdvice={pendingActionAdvice}
           actionTips={storyActionTips}
+          onRefreshSuggestions={() => refreshStoryActionTips(true)}
+          isRefreshingSuggestions={isRefreshingStoryActionTips}
+          actionError={failedStoryAction ? networkError : null}
+          onRetryLastAction={() => {
+            if (failedStoryAction) void handleCustomAction(failedStoryAction);
+          }}
           onAcceptActionAdvice={handleAcceptActionAdvice}
           onRejectActionAdvice={handleRejectActionAdvice}
           isProcessingAction={isProcessingAction}

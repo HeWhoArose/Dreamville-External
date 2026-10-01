@@ -6528,7 +6528,7 @@ export class MultiModelOrchestrator {
 
     if (intent) {
       const movementAnchors = /\b(?:move|moved|moves|walk|walked|walks|step|stepped|steps|approach|approached|approaches|close|closer|near|nearer|head|headed|travel|traveled|travelled|enter|entered|leave|left)\b/i;
-      const observationAnchors = /\b(?:listen|listened|listens|hear|heard|hears|overhear|overheard|eavesdrop|watch|watched|watches|observe|observed|observes|notice|noticed|notices|see|saw|sees|look|looked|looks|scan|scanned|scans|inspect|inspected|study|studied|studies)\b/i;
+      const observationAnchors = /\b(?:listen|listened|listens|hear|heard|hears|overhear|overheard|eavesdrop|watch|watched|watches|observe|observed|observes|notice|noticed|notices|see|saw|sees|look|looked|looks|scan|scanned|scans|inspect|inspected|study|studied|studies|attend|attended|attentive|gaze|gazed|watchful|conversation|whispers?|rumou?rs?|details?|sounds?|voices?)\b/i;
       if (intent.movementIntent && !movementAnchors.test(output)) {
         return {
           valid: false,

@@ -2,6 +2,7 @@ import type { CurrentSituation } from './currentSituation';
 import type { PlayerIntent } from './playerIntentInterpreter';
 import type { EphemeralNarrativePlan } from './narrativeDirector';
 import type { StructuredTurnPackage } from './aiOrchestrator';
+import { NarrativeQualityContractEngine, type NarrativeQualityContract } from './narrativeQualityContract';
 
 export type NarrativeReviewDecision = 'ACCEPT' | 'REWRITE' | 'REJECT';
 
@@ -106,12 +107,15 @@ export class SemanticNarrativeReview {
 		situation: CurrentSituation;
 		plan: EphemeralNarrativePlan;
 		turnPackage: StructuredTurnPackage;
+		narrativeQualityContract?: NarrativeQualityContract;
 	}): NarrativeReview {
 		const { intent, situation, plan, turnPackage } = params;
 		const narration = turnPackage.narrative.join(' ').trim();
 		const violations: NarrativeViolation[] = [];
 		const missingRequirements: string[] = [];
 		const unsupportedClaims: string[] = [];
+		const qualityContract = params.narrativeQualityContract || NarrativeQualityContractEngine.resolve(intent);
+		const qualityValidation = NarrativeQualityContractEngine.validate(narration, qualityContract);
 
 		if (!narration) {
 			violations.push({ code: 'SEMANTIC_MISMATCH', message: 'Narrative output is empty.', severity: 'HIGH' });
@@ -128,6 +132,12 @@ export class SemanticNarrativeReview {
 		}
 
 		const lower = normalize(narration);
+
+		for (const reason of qualityValidation.reasons) {
+			if (!violations.some((violation) => violation.message === reason)) {
+				violations.push({ code: 'SEMANTIC_MISMATCH', message: 'N1 narrative quality contract: ' + reason, severity: qualityContract.controls.enforcement === 'REJECT' ? 'HIGH' : 'MEDIUM' });
+			}
+		}
 
 		if (intent.speechIntent === false && intent.observationIntent) {
 			if (containsAny(lower, /\b(?:you|the protagonist|your character)\s+(?:(?!\b(?:them|him|her|they|someone|someone else)\b)[a-z'-]+\s+){0,6}(?:ask|asks|asked|say|says|said|speak|speaks|spoke|tell|tells|told|reply|replies|replied|shout|shouts|shouted|call out|calls out)\b/i)) {

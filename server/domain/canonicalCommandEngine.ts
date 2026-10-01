@@ -3,6 +3,7 @@ import { InMemoryWorldRepository } from '../repositories/worldRepository';
 import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
 import { CustomRuleEngine } from './customRuleEngine';
 import { Phase8SimulationEngine } from './phase8SimulationEngine';
+import { canonicalCommitLedger } from './canonicalCommitLedger';
 
 export type CanonicalCommandType =
 	| 'MOVE'
@@ -328,6 +329,11 @@ export class CanonicalCommandEngine {
 		if (!repository.getStoryRun(command.storyId)) {
 			repository.seedStory(command.storyId);
 		}
+		canonicalCommitLedger.recoverInterrupted(
+			repository,
+			command.storyId,
+			formatCanonicalTimestamp(repository.getWorldClock(command.storyId).getTimestamp()),
+		);
 
 		const key = `${command.storyId}::${command.commandId}`;
 		const fingerprint = stableStringify({
@@ -354,6 +360,15 @@ export class CanonicalCommandEngine {
 			if (replayData && replayData.telemetry) {
 				replayData.telemetry.idempotencyReplayed = true;
 			}
+			canonicalCommitLedger.markPhase(
+				repository,
+				command.storyId,
+				command.commandId,
+				'COMMITTED',
+				formatCanonicalTimestamp(repository.getWorldClock(command.storyId).getTimestamp()),
+				{ recoveryAction: 'NONE', postStateHash: stableHash(after) },
+			);
+
 			return {
 				success: true,
 				commandId: command.commandId,
@@ -408,6 +423,13 @@ export class CanonicalCommandEngine {
 		fingerprint: string
 	): Promise<CanonicalCommandResult<TResult>> {
 		const before = captureCanonicalStateSnapshot(command.storyId, repository);
+		canonicalCommitLedger.begin(
+			repository,
+			command,
+			before,
+			stableHash(before),
+			formatCanonicalTimestamp(repository.getWorldClock(command.storyId).getTimestamp()),
+		);
 		const stagedRepository =
 			command.transactionMode === 'STAGED'
 				? (() => {
@@ -434,6 +456,14 @@ export class CanonicalCommandEngine {
 				snapshot: before,
 				repository: transactionalRepository,
 			});
+			canonicalCommitLedger.markPhase(
+				repository,
+				command.storyId,
+				command.commandId,
+				'HANDLER_RESOLVED',
+				formatCanonicalTimestamp(repository.getWorldClock(command.storyId).getTimestamp()),
+				{ ownerPhases: { handler: 'VERIFIED' } },
+			);
 
 			// STAGED handlers must mutate only the isolated transaction repository. A hidden dependency
 			// on the live singleton repository would otherwise bypass the staged boundary and could leak
@@ -518,6 +548,15 @@ export class CanonicalCommandEngine {
 				};
 			}
 
+			canonicalCommitLedger.markPhase(
+				repository,
+				command.storyId,
+				command.commandId,
+				'CUSTOM_RULES_VERIFIED',
+				formatCanonicalTimestamp(repository.getWorldClock(command.storyId).getTimestamp()),
+				{ ownerPhases: { customRules: 'VERIFIED' } },
+			);
+
 			// Phase 8.7-8.12 simulation domains consume the same canonical event identity.
 			// Their state is persisted inside the transactional Story Run runtime state,
 			// so rollback/replay remains under canonical authority.
@@ -588,6 +627,18 @@ export class CanonicalCommandEngine {
 					},
 				},			};
 
+			canonicalCommitLedger.markPhase(
+				repository,
+				command.storyId,
+				command.commandId,
+				'STATE_APPLIED',
+				formatCanonicalTimestamp(repository.getWorldClock(command.storyId).getTimestamp()),
+				{
+					ownerPhases: { state: 'VERIFIED' },
+					postStateHash: stableHash(after),
+				},
+			);
+
 			if (command.transactionMode === 'STAGED') {
 				transactionalRepository.appendCanonicalCommandEvent(command.storyId, event);
 				const committedAfter = captureCanonicalStateSnapshot(command.storyId, transactionalRepository);
@@ -602,6 +653,15 @@ export class CanonicalCommandEngine {
 			} else {
 				repository.appendCanonicalCommandEvent(command.storyId, event);
 			}
+			canonicalCommitLedger.markPhase(
+				repository,
+				command.storyId,
+				command.commandId,
+				'EVENT_RECORDED',
+				formatCanonicalTimestamp(repository.getWorldClock(command.storyId).getTimestamp()),
+				{ ownerPhases: { event: 'VERIFIED' } },
+			);
+
 			this.completedResults.set(
 				`${command.storyId}::${command.commandId}`,
 				{ fingerprint, data: clone(resolved.data) }
@@ -616,6 +676,17 @@ export class CanonicalCommandEngine {
 				mutationPaths,
 			};
 		} catch (error: any) {
+			canonicalCommitLedger.markPhase(
+				repository,
+				command.storyId,
+				command.commandId,
+				'ABORTED',
+				formatCanonicalTimestamp(repository.getWorldClock(command.storyId).getTimestamp()),
+				{
+					recoveryAction: 'ABORT_AND_RESTORE',
+					errorReason: error?.message || 'Canonical command failed during resolution.',
+				},
+			);
 			try {
 				transactionalRepository.rollbackCanonicalCommandTransaction(command.storyId);
 			} catch {

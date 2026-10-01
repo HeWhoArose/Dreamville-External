@@ -756,7 +756,11 @@ export class CurrentSituationBuilder {
 					enabled: true,
 				})),
 			...limitedNearbyEntities
-				.filter((entity) => entity.kind !== 'PLAYER' && entity.presence === 'present' && entity.distanceBand === 'SAME_LOCATION')
+				.filter((entity) =>
+					entity.kind !== 'PLAYER' &&
+					entity.presence === 'present' &&
+					entity.distanceBand !== 'REFERRED'
+				)
 				.map((entity) => ({
 					id: `inspect:${entity.id}`,
 					type: 'INSPECT' as const,

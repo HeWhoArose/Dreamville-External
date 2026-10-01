@@ -48,7 +48,7 @@ export interface PlayerIntentInterpretation {
 	fallbackReason?: string;
 }
 
-const MOVEMENT_PATTERN = /\b(?:move|walk|step|approach|go|head|travel|enter|leave|return|come|follow|run|sneak|creep|draw closer|move closer)\b/i;
+const MOVEMENT_PATTERN = /\b(?:move|walk|step|approach|go|head|travel|enter|leave|return|come|follow|run|sneak|creep|draw closer|draw nearer|move closer|move nearer)\b/i;
 const COMBAT_PATTERN = /\b(?:attack|strike|hit|shoot|fire|stab|slash|punch|kick|fight|cast at|defend|parry)\b/i;
 const ITEM_USE_PATTERN = /\b(?:use|drink|eat|consume|activate|equip|wear|open|unlock|pick up|take|grasp|hold|decipher|translate)\b/i;
 const DIALOGUE_PATTERN = /\b(?:ask|tell|say|speak|talk|reply|answer|question|inquire|consult|call out|shout|yell)\b/i;

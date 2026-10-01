@@ -1,6 +1,6 @@
 # Dreamville Full Regression and Release Gate — Phase 21
 
-Phase 21 is the final release gate for the Phase 16–21 stack.
+Phase 21 remains the automated release gate for the Phase 16–22 release stack; Phase 22 adds stabilization invariants on top of it.
 
 ## Automated gate
 

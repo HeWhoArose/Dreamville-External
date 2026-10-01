@@ -134,7 +134,7 @@ test('Phase 12: malformed narration output is rejected and does not mutate canon
 		clock: repository.getWorldClock('phase12_malformed').getTimestamp(),
 	});
 
-	assert.equal(result.success, true);
+	assert.equal(result.success, true, result.error || JSON.stringify(result));
 	assert.equal(result.turnPackage?.stateChanges.length, 0);
 	assert.equal(after, before);
 

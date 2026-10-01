@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { EpistemicBoundaryEnforcer } from '../server/domain/epistemicBoundary';
+import { buildNarrationPrompt } from '../server/domain/narrativePromptBuilder';
 
 function situation() {
 	return {
@@ -59,4 +60,31 @@ test('Phase 10 produces a player-safe situation without private epistemic notes'
 	assert.equal((safe as any).worldFacts, undefined);
 	assert.equal((safe as any).activeDialogue.epistemicNote, undefined);
 	assert.equal((safe as any).worldFactsOmitted, true);
+});
+
+
+test('Phase 10 prevents unauthorized world truth from reaching the narration prompt', () => {
+	const prompt = buildNarrationPrompt({
+		situation: situation(),
+		intent: {
+			action: 'observe',
+			interactionMode: 'PASSIVE_OBSERVATION',
+			speechIntent: false,
+			movementIntent: false,
+			observationIntent: true,
+			explicitTargets: [],
+			impliedTargets: [],
+			confidence: 1,
+			source: 'DETERMINISTIC',
+			originalText: 'I look at the guard.',
+		} as any,
+		research: {
+			blocks: [{ id: 'secret', kind: 'LORE', content: 'The guard hides the sealed royal letter.', estimatedTokens: 10 }],
+			promptContext: 'The guard hides the sealed royal letter.',
+			totalTokens: 10,
+		} as any,
+		plan: { objective: 'Observe the guard.', immediateSteps: [], informationToReveal: [], entitiesToReact: [], continuityRequirements: [], forbiddenAssumptions: [], stateEffectsExpected: [] } as any,
+		workingContext: '[secret] The guard hides the sealed royal letter.',
+	}).prompt;
+	assert.doesNotMatch(prompt, /sealed royal letter/);
 });

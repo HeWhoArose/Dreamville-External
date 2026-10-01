@@ -55,20 +55,42 @@ function containsAny(text: string, pattern: RegExp): boolean {
 }
 
 function buildForbiddenKnowledgeSet(situation: CurrentSituation): string[] {
-	const authorized = new Set(
-		situation.playerKnowledge.knownFacts
-			.map((fact) => normalize(JSON.stringify(fact)))
-			.filter(Boolean),
-	);
-	return situation.worldFacts
-		.filter((fact) => !authorized.has(normalize(JSON.stringify(fact))))
-		.flatMap((fact) => [
+	const authorized = situation.playerKnowledge.knownFacts.map((fact) => normalize(JSON.stringify(fact)));
+	const playerVisibleContext = [
+		situation.location.name,
+		situation.location.description,
+		situation.location.ambientSensory,
+		situation.activeDialogue?.text || '',
+		...situation.visibleEvents.map((event) => event.summary),
+		...situation.relevantLore.map((fact) => [fact.predicate, fact.objectValue].join(' ')),
+		...situation.openThreads.map((thread) => [thread.title, thread.summary].filter(Boolean).join(' ')),
+		situation.plot.summary,
+	]
+		.map(normalize)
+		.filter(Boolean)
+		.join(' ');
+
+	const forbidden: string[] = [];
+	for (const fact of situation.worldFacts) {
+		if (authorized.includes(normalize(JSON.stringify(fact)))) continue;
+
+		const candidates = [
 			String(fact.subjectEntityId || ''),
 			String(fact.predicate || ''),
 			String(fact.objectValue || ''),
-		])
-		.map(normalize)
-		.filter((value) => value.length >= 6);
+			[String(fact.subjectEntityId || ''), String(fact.predicate || ''), String(fact.objectValue || '')].join(' '),
+		]
+			.map(normalize)
+			.filter((value) => value.length >= 8)
+			.filter((value) => value.split(/\s+/).filter(Boolean).length >= 2);
+
+		for (const candidate of candidates) {
+			if (playerVisibleContext.includes(candidate)) continue;
+			forbidden.push(candidate);
+		}
+	}
+
+	return Array.from(new Set(forbidden));
 }
 
 function hasMajorAgencyTakeover(narration: string): boolean {

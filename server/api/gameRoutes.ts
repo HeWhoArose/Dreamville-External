@@ -37,7 +37,8 @@ import { combatAssetService } from '../services/combatAssetService';
 import { bossPhaseEngine } from '../domain/bossPhaseEngine';
 import { combatEnvironmentEngine } from '../domain/combatEnvironmentEngine';
 import { mediaAdapterService } from '../services/mediaAdapterService';
-import { buildComicScenePrompt, ComicSceneContext } from '../services/comicSceneGenerator';
+import { buildComicScenePromptFromVisualContext } from '../services/comicSceneGenerator';
+import { assertVisualSceneFreshness, buildVisualSceneContext, selectLatestVisualTurn, type VisualSceneContext } from '../domain/visualSceneContext';
 import { projectPlayerCapabilities } from './playerCapabilityProjection';
 import { oocToolRegistry, type OocToolCall } from '../domain/oocToolRegistry';
 import { UniverseRuntimeService } from '../domain/universeRuntimeService';
@@ -10611,103 +10612,39 @@ gameRouter.post('/spells/cast', async (req: Request, res: Response) => {
   }
 });
 
-function buildCurrentComicSceneContext(storyId: string): { context: ComicSceneContext; sourceActionId?: string } {
+function buildCurrentComicSceneContext(storyId: string): { context: VisualSceneContext; sourceActionId?: string } {
   const state = serverMockAuthority.getSanitizedViewState(storyId);
-  const latestAction = Array.isArray(state.actionHistory)
-    ? state.actionHistory.find((action: any) => action.actionType !== 'NOTE_RECORD')
+  const player = worldRepository.getPlayerLifecycle(storyId);
+  const latestTurn = Array.isArray(state.actionHistory)
+    ? selectLatestVisualTurn(state.actionHistory)
     : undefined;
-  let relevanceIds: Set<string> = new Set();
-  let relevanceNames: Set<string> = new Set();
-  try {
-    const player = worldRepository.getPlayerLifecycle(storyId);
-    if (player) {
-      const situation = CurrentSituationBuilder.build({ storyId, playerAction: latestAction?.description || '', viewerActorId: player.actorId, worldRepo: worldRepository });
-      relevanceIds = new Set(EntitySceneRelevanceEngine.topVisible(situation, situation.currentAction, 8).map((entity) => entity.id));
-      relevanceNames = new Set(EntitySceneRelevanceEngine.topVisible(situation, situation.currentAction, 8).map((entity) => String(entity.name).trim().toLowerCase()));
-    }
-  } catch {
-    relevanceIds = new Set();
-    relevanceNames = new Set();
-  }
-  const currentCharacters = Object.values(state.characters || {})
-    .filter((character: any) => character.locationId === state.activeLocationId && character.role !== 'PROTAGONIST')
-    .filter((character: any) => relevanceIds.size === 0 || relevanceIds.has(String(character.id || character.characterId || character.actorId || '')) || relevanceNames.has(String(character.name || '').trim().toLowerCase()))
-    .map((character: any) => ({
-      name: character.name,
-      role: character.role,
-      title: character.title,
-      portraitEmoji: character.portraitEmoji,
-    }));
 
-  // Opening/note records are not turns. Scene generation must anchor to the
-  // most recent committed player action so an old opening narration can never
-  // become the source image for a new scene.
-  const context: ComicSceneContext = {
-    worldTitle: worldRepository.getStoryRun(storyId)?.worldId
-      ? worldRepository.getWorldTemplate(worldRepository.getStoryRun(storyId)!.worldId)?.title || worldRepository.getStoryRun(storyId)?.worldId
-      : undefined,
-    location: {
-      name: state.activeLocation?.name || 'Current location',
-      region: state.activeLocation?.region,
-      description: state.activeLocation?.description,
-      ambientSensory: state.activeLocation?.ambientSensory,
-    },
-    protagonist: {
-      name: state.protagonist?.name || 'Protagonist',
-      role: state.protagonist?.title,
-      portraitEmoji: state.protagonist?.portraitEmoji,
-      portraitUrl: state.protagonist?.portraitUrl,
-    },
-    visibleCharacters: currentCharacters,
-    latestAction: latestAction
-      ? {
-          id: latestAction.id,
-          actionType: latestAction.actionType,
-          visualCues: latestAction.visualCues,
-          description: latestAction.description,
-          narrativeResponse: latestAction.narrativeResponse,
-          authoritativeFeedback: latestAction.authoritativeFeedback,
-          checkResult: latestAction.checkResult
-            ? {
-                success: latestAction.checkResult.success,
-                total: latestAction.checkResult.total,
-                difficultyClass: latestAction.checkResult.difficultyClass,
-                consequence: latestAction.checkResult.consequence
-                  ? { summary: latestAction.checkResult.consequence.summary }
-                  : undefined,
-              }
-            : undefined,
-        }
-      : undefined,
-    // A committed turn is authoritative for scene generation. Opening-scene
-    // context is allowed only when there is no committed action yet; otherwise
-    // stale setup text would contaminate the exact current visual moment.
-    currentSituation: latestAction
-      ? undefined
-      : state.openingScene?.startingSituation ||
-        state.openingScene?.narrativeText ||
-        worldRepository.getStoryRun(storyId)?.startingSituation?.summary ||
-        worldRepository.getStoryRun(storyId)?.startingSituation?.hook,
-    latestVisibleNarrative: latestAction
-      ? undefined
-      : state.openingScene?.narrativeText,
-    // Deliberately use active dialogue only; the prompt compiler will include it
-    // only for a committed dialogue action. Never include dialogueHistory here.
-    activeDialogue: state.activeDialogue
-      ? {
-          speakerName: state.activeDialogue.speakerName,
-          text: state.activeDialogue.text,
-        }
-      : null,
+  const currentSituation = CurrentSituationBuilder.build({
+    storyId,
+    playerAction: latestTurn?.description || '',
+    viewerActorId: player?.actorId,
+    worldRepo: worldRepository,
+  });
+
+  const visualContext = buildVisualSceneContext({
+    storyId,
+    currentSituation,
+    actionHistory: state.actionHistory || [],
+    presentationAction: latestTurn,
+  });
+  assertVisualSceneFreshness(visualContext);
+
+  return {
+    context: visualContext,
+    sourceActionId: visualContext.latestTurnId,
   };
-  return { context, sourceActionId: latestAction?.id };
 }
 
 gameRouter.post('/scene/generate-prompt', (req: Request, res: Response) => {
   try {
     const storyId = resolveStoryId(req, true);
     const { context, sourceActionId } = buildCurrentComicSceneContext(storyId);
-    const result = buildComicScenePrompt(context);
+    const result = buildComicScenePromptFromVisualContext(context);
     return res.json({
       success: true,
       storyId,
@@ -10726,14 +10663,14 @@ gameRouter.post('/scene/generate-image', async (req: Request, res: Response) => 
   try {
     const storyId = resolveStoryId(req, true);
     const { context, sourceActionId } = buildCurrentComicSceneContext(storyId);
-    const promptResult = buildComicScenePrompt(context);
+    const promptResult = buildComicScenePromptFromVisualContext(context);
     const media = await mediaAdapterService.generateImage({
       storyId,
       prompt: promptResult.prompt,
       slotType: 'scene',
       aspectRatio: '16:9',
       tags: ['story-scene', 'comic-page', 'latest-turn'],
-      characterName: context.protagonist.name,
+      characterName: context.currentSituation.player.name,
     });
     return res.json({
       success: media.success,

@@ -421,7 +421,7 @@ function buildRecentTurns(run: any, canonicalEvents: any[], maxRecentTurns: numb
 			unresolvedConsequence: normalizeText(entry?.unresolvedConsequence || '') || undefined,
 			isOpeningScene: Boolean(entry?.isOpeningScene),
 		}))
-		.filter((turn) => turn.playerAction || turn.narration);
+		.filter((turn: RecentTurnContext) => turn.playerAction || turn.narration);
 
 	if (runtimeTurns.length > 0) {
 		return runtimeTurns.slice(-maxRecentTurns);
@@ -716,10 +716,18 @@ export class CurrentSituationBuilder {
 				})),
 		];
 
-		const currentAction = params.currentAction || (actionText
+		const currentAction: PlayerIntent | undefined = params.currentAction || (actionText
 			? {
 				action: actionText,
-				source: 'DETERMINISTIC' as const,
+				interactionMode: 'OTHER',
+				speechIntent: false,
+				movementIntent: false,
+				observationIntent: false,
+				explicitTargets: [],
+				impliedTargets: [],
+				confidence: 0.2,
+				source: 'DETERMINISTIC',
+				originalText: actionText,
 			}
 			: undefined);
 

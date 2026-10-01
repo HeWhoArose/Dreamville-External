@@ -50,10 +50,10 @@ export interface PlayerIntentInterpretation {
 
 const MOVEMENT_PATTERN = /\b(?:move|walk|step|approach|go|head|travel|enter|leave|return|come|follow|run|sneak|creep|draw closer|move closer)\b/i;
 const COMBAT_PATTERN = /\b(?:attack|strike|hit|shoot|fire|stab|slash|punch|kick|fight|cast at|defend|parry)\b/i;
-const ITEM_USE_PATTERN = /\b(?:use|drink|eat|consume|activate|equip|wear|open|unlock|pick up|take|grasp|hold|read|examine|inspect|study|decipher|translate)\b/i;
+const ITEM_USE_PATTERN = /\b(?:use|drink|eat|consume|activate|equip|wear|open|unlock|pick up|take|grasp|hold|decipher|translate)\b/i;
 const DIALOGUE_PATTERN = /\b(?:ask|tell|say|speak|talk|reply|answer|question|inquire|consult|call out|shout|yell)\b/i;
 const PASSIVE_OBSERVATION_PATTERN = /\b(?:listen|hear|overhear|eavesdrop|observe|watch|look|look around|look for|notice|study|scan|inspect)\b/i;
-const INFORMATION_PATTERN = /\b(?:learn|find out|discover|gather information|information|rumou?r|gossip|what happened|who|why|where|when|how|hear about|listen for|overhear)\b/i;
+const INFORMATION_PATTERN = /\b(?:learn|find out|discover|gather information|information|rumou?rs?|gossip|what happened|who|why|where|when|how|hear|listen|hear about|listen for|overhear)\b/i;
 const OOC_PATTERN = /^(?:ooc|out of character|system|meta)\s*[:>]/i;
 const DICE_PATTERN = /\b(?:roll|rolls|rolled|check|skill check|ability check|saving throw|dice|d20|2d6|2d20)\b/i;
 
@@ -246,9 +246,18 @@ export class PlayerIntentInterpreter {
 		const safeSpeech = fallback.speechIntent || Boolean(value.speechIntent && DIALOGUE_PATTERN.test(originalText));
 		const safeMovement = fallback.movementIntent || Boolean(value.movementIntent && MOVEMENT_PATTERN.test(originalText));
 		const safeObservation = fallback.observationIntent || Boolean(value.observationIntent && PASSIVE_OBSERVATION_PATTERN.test(originalText));
-		const safeMode = !fallback.speechIntent && fallback.interactionMode === 'PASSIVE_OBSERVATION'
-			? 'PASSIVE_OBSERVATION'
-			: mode;
+		const safeMode =
+			fallback.speechIntent
+				? 'DIALOGUE'
+				: fallback.interactionMode === 'COMBAT'
+					? 'COMBAT'
+					: fallback.interactionMode === 'PASSIVE_OBSERVATION'
+						? 'PASSIVE_OBSERVATION'
+						: fallback.interactionMode === 'EXPLORATION'
+							? 'EXPLORATION'
+							: fallback.interactionMode === 'MOVEMENT'
+								? 'MOVEMENT'
+								: mode;
 
 		return {
 			action: clean(value.action) || fallback.action,

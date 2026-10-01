@@ -1,3 +1,5 @@
+import type { VisualSceneContext } from '../domain/visualSceneContext';
+
 export interface ComicSceneContext {
   worldTitle?: string;
   location: {
@@ -227,4 +229,72 @@ export function buildComicScenePrompt(context: ComicSceneContext): ComicScenePro
     freshnessRule: "Exact current visual moment only; committed-turn state overrides opening/previous-scene context.",
     visualMoment,
   };
+}
+
+
+/**
+ * Phase 16 adapter: converts the canonical CurrentSituation + latest authoritative
+ * player-action turn into the existing comic prompt contract. This is the only
+ * scene-prompt entry point that should be used by gameplay routes.
+ */
+export function buildComicScenePromptFromVisualContext(
+	visualContext: VisualSceneContext,
+): ComicScenePromptResult {
+	const situation = visualContext.currentSituation;
+	const latest = visualContext.latestTurn;
+
+	const context: ComicSceneContext = {
+		location: {
+			name: situation.location.name,
+			region: situation.location.regionId,
+			description: situation.location.description,
+			ambientSensory: situation.location.ambientSensory,
+		},
+		protagonist: {
+			name: situation.player.name,
+			role: 'Protagonist',
+		},
+		visibleCharacters: visualContext.visibleCharacters.map((character) => ({
+			name: character.name,
+			role: character.role,
+		})),
+		latestAction: latest
+			? {
+				id: latest.id,
+				actionType: latest.actionType,
+				visualCues: visualContext.latestVisualCues,
+				description: visualContext.latestPlayerAction,
+				narrativeResponse: visualContext.latestNarrative,
+				authoritativeFeedback: latest.authoritativeFeedback,
+				checkResult: latest.checkResult
+					? {
+						success: latest.checkResult.success,
+						total: latest.checkResult.total,
+						difficultyClass: latest.checkResult.difficultyClass,
+						consequence: latest.checkResult.consequence
+							? { summary: latest.checkResult.consequence.summary }
+							: undefined,
+					}
+					: undefined,
+			}
+			: undefined,
+		activeDialogue: visualContext.latestDialogue
+			? {
+				speakerName: visualContext.latestDialogue.speakerName,
+				text: visualContext.latestDialogue.text,
+			}
+			: null,
+		currentSituation: visualContext.openingState
+			? [
+					situation.location.name,
+					situation.location.description,
+					situation.worldTime,
+				].filter(Boolean).join('. ')
+			: undefined,
+		latestVisibleNarrative: visualContext.openingState
+			? situation.location.description
+			: undefined,
+	};
+
+	return buildComicScenePrompt(context);
 }

@@ -129,32 +129,51 @@ function getCanonicalSceneContext(
 	providedIntent?: PlayerIntent,
 	providedRelevance?: EntitySceneRelevance[],
 ): StoryActionSceneContext {
-	const situation = providedSituation || CurrentSituationBuilder.build({
-		storyId,
-		worldRepo: repository,
-	});
-	const intent = providedIntent || situation.currentAction;
-	const entityRelevance = providedRelevance || EntitySceneRelevanceEngine.rank(situation, intent);
+	if (providedSituation) {
+		const situation = providedSituation;
+		const intent = providedIntent || situation.currentAction;
+		const entityRelevance = providedRelevance || EntitySceneRelevanceEngine.rank(situation, intent);
+		return {
+			locationName: situation.location.name,
+			locationRegion: situation.location.regionId,
+			locationDescription: situation.location.description,
+			worldTime: situation.worldTime,
+			openingNarrative: undefined,
+			startingSituation: situation.plot.summary || situation.openThreads.at(0)?.summary || '',
+			activeDialogue: situation.activeDialogue
+				? `${situation.activeDialogue.speakerName}: ${situation.activeDialogue.text}`
+				: undefined,
+			recentActions: situation.recentTurns
+				.slice(-4)
+				.map((entry) => entry.narration || entry.playerAction || '')
+				.filter(Boolean),
+			currentSituation: situation,
+			playerIntent: intent,
+			entityRelevance,
+		};
+	}
 
-	return {
-		locationName: situation.location.name,
-		locationRegion: situation.location.regionId,
-		locationDescription: situation.location.description,
-		worldTime: situation.worldTime,
-		// The current situation, not the persisted opening scene, is the canonical action-advice context.
-		openingNarrative: undefined,
-		startingSituation: situation.plot.summary || situation.openThreads.at(0)?.summary || '',
-		activeDialogue: situation.activeDialogue
-			? `${situation.activeDialogue.speakerName}: ${situation.activeDialogue.text}`
-			: undefined,
-		recentActions: situation.recentTurns
-			.slice(-4)
-			.map((entry) => entry.narration || entry.playerAction || '')
-			.filter(Boolean),
-		currentSituation: situation,
-		playerIntent: intent,
-		entityRelevance,
-	};
+	try {
+		const situation = CurrentSituationBuilder.build({ storyId, worldRepo: repository });
+		const intent = providedIntent || situation.currentAction;
+		const entityRelevance = providedRelevance || EntitySceneRelevanceEngine.rank(situation, intent);
+		return getCanonicalSceneContext(repository, storyId, undefined, situation, intent, entityRelevance);
+	} catch {
+		// Preview/capability-only calls can legitimately occur before a story has an established
+		// geography node. Preserve supplied scene metadata without manufacturing canonical state.
+		return {
+			locationName: _supplied?.locationName || 'the current area',
+			locationRegion: _supplied?.locationRegion,
+			locationDescription: _supplied?.locationDescription,
+			worldTime: _supplied?.worldTime,
+			openingNarrative: undefined,
+			startingSituation: _supplied?.startingSituation || '',
+			activeDialogue: _supplied?.activeDialogue,
+			recentActions: _supplied?.recentActions || [],
+			playerIntent: providedIntent,
+			entityRelevance: providedRelevance || [],
+		};
+	}
 }
 
 export function buildSuggestionCacheKey(
@@ -991,31 +1010,39 @@ export class StoryActionAdvisor {
 
 		// Build the canonical situation first. Suggestions are a projection of canonical
 		// state, never a second interpretation of UI-local scene text.
-		const baseSituation = CurrentSituationBuilder.build({
-			storyId,
-			playerAction: cleanAction,
-			viewerActorId: actorId,
-			worldRepo: this.repository,
-		});
-		const playerIntent = cleanAction
-			? PlayerIntentInterpreter.deterministic(cleanAction, baseSituation)
-			: baseSituation.currentAction;
-		const situation = CurrentSituationBuilder.build({
-			storyId,
-			playerAction: cleanAction,
-			currentAction: playerIntent,
-			viewerActorId: actorId,
-			worldRepo: this.repository,
-		});
-		const entityRelevance = EntitySceneRelevanceEngine.rank(situation, playerIntent);
+		let situation: CurrentSituation | undefined;
+		let playerIntent: PlayerIntent | undefined;
+		try {
+			const baseSituation = CurrentSituationBuilder.build({
+				storyId,
+				playerAction: cleanAction,
+				viewerActorId: actorId,
+				worldRepo: this.repository,
+			});
+			playerIntent = cleanAction
+				? PlayerIntentInterpreter.deterministic(cleanAction, baseSituation)
+				: baseSituation.currentAction;
+			situation = CurrentSituationBuilder.build({
+				storyId,
+				playerAction: cleanAction,
+				currentAction: playerIntent,
+				viewerActorId: actorId,
+				worldRepo: this.repository,
+			});
+		} catch {
+			// Do not invent a scene merely to produce advisory capability tips.
+		}
+		const entityRelevance = situation ? EntitySceneRelevanceEngine.rank(situation, playerIntent) : [];
 		const canonicalSceneContext = getCanonicalSceneContext(this.repository, storyId, sceneContext, situation, playerIntent, entityRelevance);
 
-		const suggestionKey = buildSuggestionCacheKey(situation, playerIntent, entityRelevance);
-		const cached = this.suggestionCache.get(suggestionKey);
+		const suggestionKey = situation
+			? buildSuggestionCacheKey(situation, playerIntent, entityRelevance)
+			: undefined;
+		const cached = suggestionKey ? this.suggestionCache.get(suggestionKey) : undefined;
 		if (!options?.refresh && cached && Date.now() - cached.createdAt < this.suggestionCacheTtlMs) {
 			return cached.tips.map((tip) => ({ ...tip }));
 		}
-		if (cached && (options?.refresh || Date.now() - cached.createdAt >= this.suggestionCacheTtlMs)) {
+		if (cached && suggestionKey && (options?.refresh || Date.now() - cached.createdAt >= this.suggestionCacheTtlMs)) {
 			this.suggestionCache.delete(suggestionKey);
 		}
 
@@ -1035,15 +1062,15 @@ export class StoryActionAdvisor {
 		const safeTips = tips.length > 0
 			? tips.slice(0, 4)
 			: [{
-				id: deterministicId('scene_fallback_tip', storyId, actorId, situation.location.id),
+				id: deterministicId('scene_fallback_tip', storyId, actorId, canonicalSceneContext.locationName || 'current-area'),
 				title: 'Investigate the current scene',
 				description: 'Use the visible environment and the latest situation to decide your next move.',
 				intent: 'INVESTIGATE_SCENE',
-				actionText: `I carefully inspect ${situation.location.name} for useful clues, hazards, exits, or signs of what is happening.`,
+				actionText: `I carefully inspect ${canonicalSceneContext.locationName || 'the current area'} for useful clues, hazards, exits, or signs of what is happening.`,
 				source: 'DETERMINISTIC' as const,
 			}];
 
-		this.suggestionCache.set(suggestionKey, { tips: safeTips.map((tip) => ({ ...tip })), createdAt: Date.now() });
+		if (suggestionKey) this.suggestionCache.set(suggestionKey, { tips: safeTips.map((tip) => ({ ...tip })), createdAt: Date.now() });
 		if (this.suggestionCache.size > this.suggestionCacheMaxEntries) {
 			const oldestKey = this.suggestionCache.keys().next().value;
 			if (oldestKey) this.suggestionCache.delete(oldestKey);

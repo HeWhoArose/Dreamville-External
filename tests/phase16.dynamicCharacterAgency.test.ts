@@ -612,6 +612,7 @@ test('Phase 16 — narrative guidance keeps hidden causes out of player-facing g
 test('Phase 16 — working context includes canonical NPC relationship and agency guidance for narrative generation', () => {
 	const repository = new InMemoryWorldRepository({ disablePersistence: true });
 	const storyId = 'phase16_context_story';
+	repository.seedStory(storyId);
 	repository.saveStoryRun({
 		storyId,
 		id: storyId,

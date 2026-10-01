@@ -108,7 +108,7 @@ export class SemanticNarrativeReview {
 		const lower = normalize(narration);
 
 		if (intent.speechIntent === false && intent.observationIntent) {
-			if (containsAny(lower, /\b(?:you|the protagonist|your character)\s+(?:ask|asks|asked|say|says|said|speak|speaks|spoke|tell|tells|told|reply|replies|replied|shout|shouts|shouted|call out|calls out)\b/i)) {
+			if (containsAny(lower, /\b(?:you|the protagonist|your character)\s+(?:(?!\b(?:them|him|her|they|someone|someone else)\b)[a-z'-]+\s+){0,6}(?:ask|asks|asked|say|says|said|speak|speaks|spoke|tell|tells|told|reply|replies|replied|shout|shouts|shouted|call out|calls out)\b/i)) {
 				violations.push({ code: 'UNAUTHORIZED_SPEECH', message: 'Narration converted a non-speaking observation/listening action into protagonist speech.', severity: 'HIGH' });
 			}
 		}
@@ -123,11 +123,11 @@ export class SemanticNarrativeReview {
 			violations.push({ code: 'MISSING_OBSERVATION', message: 'The player requested observation/listening, but no observable result or grounded limitation was narrated.', severity: 'MEDIUM' });
 		}
 
-		if (intent.informationGoal) {
+		if (intent.informationGoal && !intent.speechIntent) {
 			const researchAnchors = [
 				...situation.visibleEvents.map((event) => event.summary),
 				...situation.relevantLore.map((fact) => [fact.predicate, fact.objectValue].join(' ')),
-				...plan.informationToReveal.map((reveal) => reveal.content),
+				...plan.informationToReveal.map((reveal) => reveal.topic),
 			].join(' ');
 			if (overlap(narration, researchAnchors) < 0.08 && !/\b(?:nothing|no one|nobody|unclear|uncertain|unknown|unverified|could not|couldn't|refused|silent|silence)\b/i.test(lower)) {
 				missingRequirements.push('The information-seeking action should resolve against the established scene lead or clearly state that no reliable information was obtained.');

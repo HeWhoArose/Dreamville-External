@@ -154,7 +154,7 @@ function blockPriority(kind: NarrativeResearchBlockKind): number {
 
 function addCandidate(
 	candidates: CandidateBlock[],
-	params: Omit<CandidateBlock, 'relevanceScore' | 'estimatedTokens'> & { relevanceScore?: number },
+	params: Omit<CandidateBlock, 'relevanceScore' | 'estimatedTokens' | 'topicTokens'> & { relevanceScore?: number },
 	queryTokens: string[],
 ): void {
 	const normalized = normalize(params.content);
@@ -327,7 +327,7 @@ export class NarrativeResearchPipeline {
 					id: entity.id,
 					name: entity.name,
 					kind: entity.kind,
-					role: entity.role?.profession || entity.role?.archetype || entity.social?.role || entity.classification?.role,
+					role: entity.classification?.profession || entity.classification?.archetype || entity.social?.role || entity.classification?.role,
 					currentActivity: entity.worldState?.currentActivity,
 					presence: entity.worldState?.presence,
 					factionIds: entity.social?.factionIds,
@@ -532,7 +532,7 @@ export class NarrativeResearchPipeline {
 			if (b.relevanceScore !== a.relevanceScore) return b.relevanceScore - a.relevanceScore;
 			return a.id.localeCompare(b.id);
 		});
-		const selected: NarrativeResearchBlock[] = [];
+		const selected: CandidateBlock[] = [];
 		const usedByKind: Record<NarrativeResearchBlockKind, number> = {
 			SCENE: 0,
 			ENTITY: 0,

@@ -2620,7 +2620,94 @@ export function persistTurnMemoryCandidates(
  * Circuit Breaking, Automated Failover, Cross-Model Continuation Checkpoints,
  * Strict Turn Package Validation, and Domain Adjudication.
  */
-export function validateAudioBase64(input: string): {,  valid: boolean;,  normalized: string;,  errorCode?: 'INPUT_EMPTY' | 'INPUT_INVALID_BASE64';,  reason?: string;,} {,  const normalized = String(input || '').replace(/\s+/g, '');,  if (!normalized) {,    return { valid: false, normalized: '', errorCode: 'INPUT_EMPTY', reason: 'No audio data was supplied.' };,  },  if (normalized.length < 16 || normalized.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(normalized)) {,    return { valid: false, normalized, errorCode: 'INPUT_INVALID_BASE64', reason: 'Audio payload is not valid base64 data.' };,  },  try {,    const bytes = Buffer.from(normalized, 'base64');,    if (!bytes.length) throw new Error('zero bytes');,  } catch {,    return { valid: false, normalized, errorCode: 'INPUT_INVALID_BASE64', reason: 'Audio payload could not be decoded.' };,  },  return { valid: true, normalized };,},,export function normalizeTranscriptionProviderText(rawText: string): { valid: boolean; text: string; reason?: string } {,  let cleaned = String(rawText || ''),    .trim(),    .replace(/^```(?:json|text)?\s*/i, ''),    .replace(/\s*```$/i, ''),    .trim();,  if (!cleaned) return { valid: false, text: '', reason: 'Transcription provider returned empty text.' };,  if (/^<!doctype html\b|^<html\b/i.test(cleaned)) {,    return { valid: false, text: '', reason: 'Transcription provider returned HTML instead of transcript text.' };,  },  try {,    const parsed = JSON.parse(cleaned);,    if (typeof parsed === 'string' && parsed.trim()) {,      cleaned = parsed.trim();,    } else {,      const candidates = [,        parsed?.transcript,,        parsed?.text,,        parsed?.transcription,,        Array.isArray(parsed?.narrative) ? parsed.narrative[0] : undefined,,        Array.isArray(parsed?.segments) ? parsed.segments.map((segment: any) => segment?.text).filter(Boolean).join(' ') : undefined,,      ];,      const resolved = candidates.find((candidate) => typeof candidate === 'string' && candidate.trim());,      if (!resolved) return { valid: false, text: '', reason: 'Transcription JSON did not contain transcript text.' };,      cleaned = String(resolved).trim();,    },  } catch {,    if (/^[\[{]/.test(cleaned)) return { valid: false, text: '', reason: 'Transcription provider returned malformed JSON.' };,  },  return cleaned ? { valid: true, text: cleaned } : { valid: false, text: '', reason: 'Transcription provider returned empty text.' };,},export class MultiModelOrchestrator {
+export function validateAudioBase64(input: string): {
+	valid: boolean;
+	normalized: string;
+	errorCode?: 'INPUT_EMPTY' | 'INPUT_INVALID_BASE64';
+	reason?: string;
+} {
+	const normalized = String(input || '').replace(/\s+/g, '');
+	if (!normalized) {
+		return {
+			valid: false,
+			normalized: '',
+			errorCode: 'INPUT_EMPTY',
+			reason: 'No audio data was supplied.',
+		};
+	}
+	if (
+		normalized.length < 16 ||
+		normalized.length % 4 !== 0 ||
+		!/^[A-Za-z0-9+/]+={0,2}$/.test(normalized)
+	) {
+		return {
+			valid: false,
+			normalized,
+			errorCode: 'INPUT_INVALID_BASE64',
+			reason: 'Audio payload is not valid base64 data.',
+		};
+	}
+	try {
+		const bytes = Buffer.from(normalized, 'base64');
+		if (!bytes.length) throw new Error('zero bytes');
+	} catch {
+		return {
+			valid: false,
+			normalized,
+			errorCode: 'INPUT_INVALID_BASE64',
+			reason: 'Audio payload could not be decoded.',
+		};
+	}
+	return { valid: true, normalized };
+}
+
+export function normalizeTranscriptionProviderText(rawText: string): { valid: boolean; text: string; reason?: string } {
+	let cleaned = String(rawText || '')
+		.trim()
+		.replace(/^\`\`\`(?:json|text)?\s*/i, '')
+		.replace(/\s*\`\`\`$/i, '')
+		.trim();
+
+	if (!cleaned) {
+		return { valid: false, text: '', reason: 'Transcription provider returned empty text.' };
+	}
+
+	if (/^<!doctype html\b|^<html\b/i.test(cleaned)) {
+		return { valid: false, text: '', reason: 'Transcription provider returned HTML instead of transcript text.' };
+	}
+
+	try {
+		const parsed = JSON.parse(cleaned);
+		if (typeof parsed === 'string' && parsed.trim()) {
+			cleaned = parsed.trim();
+		} else {
+			const candidates = [
+				parsed?.transcript,
+				parsed?.text,
+				parsed?.transcription,
+				Array.isArray(parsed?.narrative) ? parsed.narrative[0] : undefined,
+				Array.isArray(parsed?.segments)
+					? parsed.segments.map((segment: any) => segment?.text).filter(Boolean).join(' ')
+					: undefined,
+			];
+			const resolved = candidates.find((candidate) => typeof candidate === 'string' && candidate.trim());
+			if (!resolved) {
+				return { valid: false, text: '', reason: 'Transcription JSON did not contain transcript text.' };
+			}
+			cleaned = String(resolved).trim();
+		}
+	} catch {
+		if (/^[\[{]/.test(cleaned)) {
+			return { valid: false, text: '', reason: 'Transcription provider returned malformed JSON.' };
+		}
+	}
+
+	return cleaned
+		? { valid: true, text: cleaned }
+		: { valid: false, text: '', reason: 'Transcription provider returned empty text.' };
+}
+
+export class MultiModelOrchestrator {
   public static readonly PROMPT_VERSION = DREAMBOOK_PROMPT_VERSION;
   private models: Map<string, ModelRegistryRecord> = new Map();
   private adapters: Map<string, IProviderAdapter> = new Map();
@@ -6862,6 +6949,7 @@ export function validateAudioBase64(input: string): {,  valid: boolean;,  normal
 
     const hardTokenBudget = params.hardTokenBudget ?? 700;
     const timeoutMs = params.timeoutMs ?? 7000;
+    const turnAiCallBudget = new AiTurnCallBudget();
     const authoritativeOutcome = (params.committedOutcome || '').trim();
     const connectedDirective = (params.continuationDirective || '').trim();
     const worldRepo = this.getWorldRepository();

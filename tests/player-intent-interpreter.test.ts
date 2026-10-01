@@ -88,6 +88,23 @@ test('empty input is safe and produces no action', () => {
 	assert.equal(intent.confidence, 0);
 });
 
+test('inspection is observational rather than item manipulation', () => {
+	const { currentSituation } = situation();
+	const result = PlayerIntentInterpreter.deterministic('I inspect the damaged prism.', currentSituation);
+	assert.equal(result.interactionMode, 'PASSIVE_OBSERVATION');
+	assert.equal(result.observationIntent, true);
+	assert.equal(result.speechIntent, false);
+});
+
+test('movement plus information seeking preserves the information goal', () => {
+	const { currentSituation } = situation();
+	const result = PlayerIntentInterpreter.deterministic('I move closer to hear the rumors.', currentSituation);
+	assert.equal(result.interactionMode, 'PASSIVE_OBSERVATION');
+	assert.equal(result.goal, 'gather_information');
+	assert.equal(result.movementIntent, true);
+	assert.equal(result.observationIntent, true);
+});
+
 test('malformed AI output is rejected instead of becoming canonical intent', () => {
 	const { currentSituation } = situation();
 	const result = PlayerIntentInterpreter.fromModel(

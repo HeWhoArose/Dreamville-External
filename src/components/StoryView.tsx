@@ -323,6 +323,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
   const [sceneLoading, setSceneLoading] = useState(false);
   const [scenePrompt, setScenePrompt] = useState<string | null>(null);
   const [sceneImageUrl, setSceneImageUrl] = useState<string | null>(null);
+  const [sceneSourceActionId, setSceneSourceActionId] = useState<string | null>(null);
   const [sceneError, setSceneError] = useState<string | null>(null);
   const [narrationBusyActionId, setNarrationBusyActionId] = useState<string | null>(null);
   const [narrationEditActionId, setNarrationEditActionId] = useState<string | null>(null);
@@ -350,6 +351,25 @@ export const StoryView: React.FC<StoryViewProps> = ({
   useEffect(() => {
     loadNarrationModels();
   }, []);
+
+  useEffect(() => {
+    const latestTurn = [...actionHistory]
+      .filter((entry) => entry.actionType !== 'NOTE_RECORD')
+      .sort((left, right) => {
+        const leftTurn = Number.isFinite(Number(left.turnNumber)) ? Number(left.turnNumber) : -1;
+        const rightTurn = Number.isFinite(Number(right.turnNumber)) ? Number(right.turnNumber) : -1;
+        if (leftTurn !== rightTurn) return rightTurn - leftTurn;
+        return String(right.timestamp || '').localeCompare(String(left.timestamp || ''));
+      })[0];
+
+    const latestTurnId = latestTurn?.id || null;
+    if (sceneSourceActionId && sceneSourceActionId !== latestTurnId) {
+      setScenePrompt(null);
+      setSceneImageUrl(null);
+      setSceneError(null);
+      setSceneSourceActionId(null);
+    }
+  }, [actionHistory, sceneSourceActionId]);
 
   useEffect(() => {
     if (!sceneMenuOpen) return;

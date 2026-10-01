@@ -182,7 +182,7 @@ export const AudioHapticProvider: React.FC<{ children: React.ReactNode; storyId?
     return () => {
       cancelled = true;
     };
-  }, [storyId]); []);
+  }, [storyId]);
 
   // Handle browser tab visibility change
   useEffect(() => {

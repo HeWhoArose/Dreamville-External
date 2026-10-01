@@ -320,7 +320,12 @@ export interface ActionResolution {
   check?: StoryCheckResult;
   outcomeTier: ActionOutcomeTier;
   actualEffect: string;
-  canonicalStateChanges: StateChangeProposal[];
+  canonicalStateChanges: Array<{
+    kind: string;
+    targetId: string;
+    value: unknown;
+    metadata?: Record<string, unknown>;
+  }>;
   physicalConsequences: string[];
   playerVisibleConsequences: string[];
   evidenceIds: string[];

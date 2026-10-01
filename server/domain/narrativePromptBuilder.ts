@@ -1,4 +1,4 @@
-import type { CurrentSituation } from './currentSituation';
+import { CurrentSituationBuilder, type CurrentSituation } from './currentSituation';
 import type { PlayerIntent } from './playerIntentInterpreter';
 import { NarrativeDirector, type EphemeralNarrativePlan } from './narrativeDirector';
 import type { NarrativeResearchResult } from './narrativeResearchPipeline';
@@ -47,7 +47,7 @@ function section(title: string, body: string): string {
 export function buildNarrationPrompt(input: NarrationPromptInput): NarrationPromptResult {
 	const globalInstruction = input.globalInstruction || 'You are the narrative presentation engine for Dreamville. Generate only the player-facing narrative turn. Canonical state, player intent, bounded research, and the ephemeral plan are authoritative inputs; prose is not canonical truth.';
 	const styleInstruction = input.styleInstruction || defaultNarrationStyle();
-	const situationContext = input.situation ? CurrentSituationBuilderPrompt(input.situation) : '[current situation unavailable]';
+	const situationContext = input.situation ? CurrentSituationBuilder.toPromptContext(input.situation) : '[current situation unavailable]';
 	const intentContext = JSON.stringify(input.intent);
 	const researchContext = input.research?.promptContext || '[research unavailable; use current situation only and preserve uncertainty]';
 	const planContext = NarrativeDirector.toPromptContext(input.plan);
@@ -101,29 +101,3 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	return { prompt, styleInstruction, totalTokens };
 }
 
-function CurrentSituationBuilderPrompt(situation: CurrentSituation): string {
-	const visibleEntities = situation.nearbyEntities.filter((entity) => entity.visibleToPlayer).slice(0, 12).map((entity) => `${entity.name} [${entity.kind}; ${entity.distanceBand}]`).join('; ') || 'None';
-	const recentTurns = situation.recentTurns.slice(-4).map((turn) => [turn.turnNumber !== undefined ? `Turn ${turn.turnNumber}` : '', turn.playerAction ? `Player: ${turn.playerAction}` : '', turn.narration ? `Narration: ${turn.narration}` : '', turn.unresolvedConsequence ? `Unresolved consequence: ${turn.unresolvedConsequence}` : ''].filter(Boolean).join(' | ')).join('\n') || 'None';
-	const threads = situation.openThreads.slice(0, 6).map((thread) => `[${thread.status || 'OPEN'}] ${thread.title}${thread.summary ? ': ' + thread.summary : ''}`).join('\n') || 'None';
-	const memories = situation.relevantMemories.slice(0, 6).map((memory) => `[${memory.memoryClass}] ${memory.content.slice(0, 420)}`).join('\n') || 'None';
-	const lore = situation.relevantLore.slice(0, 6).map((fact) => `[${fact.sourceType}] ${fact.subjectEntityId} ${fact.predicate} -> ${fact.objectValue}`).join('\n') || 'None';
-	return [
-		'Canonical turn: ' + situation.turnId,
-		'World: ' + situation.worldId,
-		'Time: ' + situation.worldTime,
-		'Location: ' + situation.location.name + ' (' + situation.location.id + ')',
-		'Region: ' + situation.location.regionId,
-		'Location description: ' + (situation.location.description || 'None'),
-		situation.location.ambientSensory ? 'Ambient: ' + situation.location.ambientSensory : '',
-		'Visible entities: ' + visibleEntities,
-		situation.activeDialogue ? 'Active dialogue: ' + situation.activeDialogue.speakerName + ': ' + situation.activeDialogue.text : '',
-		'Recent turns:\n' + recentTurns,
-		'Plot: ' + (situation.plot.summary || 'No compressed plot summary.'),
-		'Open threads:\n' + threads,
-		'Relevant memories:\n' + memories,
-		'Relevant authorized lore:\n' + lore,
-		'Active conditions: ' + (situation.activeConditions.map((condition) => condition.label).join('; ') || 'None'),
-		'Available interactions: ' + (situation.availableInteractions.filter((interaction) => interaction.enabled).map((interaction) => interaction.label).join('; ') || 'None'),
-		'Knowledge boundary: world truth is not automatically player knowledge.',
-	].filter(Boolean).join('\n');
-}

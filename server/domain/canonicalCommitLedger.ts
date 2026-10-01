@@ -1,4 +1,4 @@
-import { captureCanonicalStateSnapshot, type CanonicalStateSnapshot } from './canonicalSnapshot';
+import type { CanonicalStateSnapshot } from './canonicalSnapshot';
 import type { CanonicalCommand } from './canonicalCommandEngine';
 import type { WorldRepository } from '../repositories/worldRepository';
 
@@ -21,7 +21,7 @@ export interface CanonicalCommitLedgerEntry {
   transactionMode: 'STAGED' | 'ROLLBACK';
   preStateHash: string;
   postStateHash?: string;
-  preStateSnapshot?: CanonicalStateSnapshot;
+  preStateSnapshot: CanonicalStateSnapshot;
   commandPayload: Record<string, unknown>;
   ownerPhases: Record<string, 'PENDING' | 'VERIFIED'>;
   recoveryAction: 'ABORT_AND_RESTORE' | 'NONE';
@@ -32,67 +32,42 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-function normalizeForHash(value: unknown, key?: string): unknown {
-  if (
-    key === 'canonicalEvents' ||
-    key === 'canonicalCommitLedger' ||
-    key === 'narrativeContextHistory' ||
-    key === 'canonicalNarrativeEvents' ||
-    key === 'workingContextPins' ||
-    key === 'narrative' ||
-    key === 'narrativeHistory'
-  ) return undefined;
-  if (value === null || typeof value !== 'object') return value;
-  if (Array.isArray(value)) return value.map((item) => normalizeForHash(item)).filter((item) => item !== undefined);
-  const record = value as Record<string, unknown>;
-  const normalized: Record<string, unknown> = {};
-  for (const childKey of Object.keys(record).sort()) {
-    const child = normalizeForHash(record[childKey], childKey);
-    if (child !== undefined) normalized[childKey] = child;
+/**
+ * Operational transaction journal.
+ *
+ * Important boundary:
+ * - It is deliberately NOT stored inside StoryRun.runtimeState.
+ * - Canonical state remains the sole shared persisted source of truth.
+ * - This journal is repository-instance scoped, so concurrent test workers and
+ *   independent repository instances cannot recover each other's live commands.
+ *
+ * Durable restart/replay remains provided by CanonicalCommandEvent.replay checkpoints.
+ * The journal adds owner-phase observability and same-process interruption recovery
+ * without introducing a second persistent state database.
+ */
+const repositoryLedgers = new WeakMap<object, Map<string, CanonicalCommitLedgerEntry>>();
+
+function ledgerFor(repository: WorldRepository): Map<string, CanonicalCommitLedgerEntry> {
+  let ledger = repositoryLedgers.get(repository as object);
+  if (!ledger) {
+    ledger = new Map<string, CanonicalCommitLedgerEntry>();
+    repositoryLedgers.set(repository as object, ledger);
   }
-  return normalized;
-}
-
-function stableHash(value: unknown): string {
-  const normalized = normalizeForHash(value);
-  const serialized = JSON.stringify(normalized);
-  let hash = 2166136261 >>> 0;
-  for (let i = 0; i < serialized.length; i++) {
-    hash ^= serialized.charCodeAt(i);
-    hash = Math.imul(hash, 16777619) >>> 0;
-  }
-  return hash.toString(16).padStart(8, '0');
-}
-
-function captureCanonicalStateSnapshotSafe(repository: WorldRepository, storyId: string): CanonicalStateSnapshot {
-  return captureCanonicalStateSnapshot(storyId, repository as any);
-}
-
-function hashCanonicalSnapshot(snapshot: CanonicalStateSnapshot): string {
-  return stableHash(snapshot);
-}
-
-
-
-function getLedger(repository: WorldRepository, storyId: string): CanonicalCommitLedgerEntry[] {
-  const run = repository.getStoryRun(storyId);
-  const ledger = Array.isArray(run?.runtimeState?.canonicalCommitLedger)
-    ? run!.runtimeState!.canonicalCommitLedger
-    : [];
-  return ledger.map((entry: CanonicalCommitLedgerEntry) => clone(entry));
-}
-
-function saveLedger(repository: WorldRepository, storyId: string, ledger: CanonicalCommitLedgerEntry[]): void {
-  const run = repository.getStoryRun(storyId);
-  if (!run) return;
-  run.runtimeState = { ...(run.runtimeState || {}), canonicalCommitLedger: ledger.slice(-100) };
-  repository.saveStoryRun(run);
+  return ledger;
 }
 
 export class CanonicalCommitLedger {
-  public static begin(repository: WorldRepository, command: CanonicalCommand, preStateSnapshot: CanonicalStateSnapshot, preStateHash: string, now: string): CanonicalCommitLedgerEntry {
+  public static begin(
+    repository: WorldRepository,
+    command: CanonicalCommand,
+    preStateSnapshot: CanonicalStateSnapshot,
+    preStateHash: string,
+    now: string,
+  ): CanonicalCommitLedgerEntry {
+    const ledger = ledgerFor(repository);
     const existing = this.find(repository, command.storyId, command.commandId);
     if (existing && existing.phase !== 'ABORTED') return existing;
+
     const entry: CanonicalCommitLedgerEntry = {
       ledgerId: existing?.ledgerId || ('ledger_' + command.storyId + '_' + command.commandId),
       storyId: command.storyId,
@@ -104,109 +79,98 @@ export class CanonicalCommitLedger {
       preStateHash,
       preStateSnapshot: clone(preStateSnapshot),
       commandPayload: clone(command.payload),
-      ownerPhases: { handler: 'PENDING', customRules: 'PENDING', state: 'PENDING', event: 'PENDING' },
+      ownerPhases: {
+        handler: 'PENDING',
+        customRules: 'PENDING',
+        state: 'PENDING',
+        event: 'PENDING',
+      },
       recoveryAction: 'ABORT_AND_RESTORE',
     };
-    const ledger = getLedger(repository, command.storyId);
-    const withoutPreviousAttempt = ledger.filter((candidate) => candidate.commandId !== command.commandId);
-    saveLedger(repository, command.storyId, [...withoutPreviousAttempt, entry]);
+
+    ledger.set(command.storyId + '::' + command.commandId, entry);
     return entry;
   }
 
-  public static find(repository: WorldRepository, storyId: string, commandId: string): CanonicalCommitLedgerEntry | undefined {
-    return getLedger(repository, storyId).slice().reverse().find((entry) => entry.commandId === commandId);
+  public static find(
+    repository: WorldRepository,
+    storyId: string,
+    commandId: string,
+  ): CanonicalCommitLedgerEntry | undefined {
+    return ledgerFor(repository).get(storyId + '::' + commandId);
   }
 
-  public static markPhase(repository: WorldRepository, storyId: string, commandId: string, phase: CanonicalCommitPhase, now: string, updates: Partial<CanonicalCommitLedgerEntry> = {}): CanonicalCommitLedgerEntry | undefined {
-    const ledger = getLedger(repository, storyId);
-    const index = ledger.findIndex((entry) => entry.commandId === commandId);
-    if (index < 0) return undefined;
-    const current = ledger[index];
-    ledger[index] = {
+  public static markPhase(
+    repository: WorldRepository,
+    storyId: string,
+    commandId: string,
+    phase: CanonicalCommitPhase,
+    now: string,
+    updates: Partial<CanonicalCommitLedgerEntry> = {},
+  ): CanonicalCommitLedgerEntry | undefined {
+    const ledger = ledgerFor(repository);
+    const key = storyId + '::' + commandId;
+    const current = ledger.get(key);
+    if (!current) return undefined;
+
+    const next: CanonicalCommitLedgerEntry = {
       ...current,
       ...updates,
       phase,
       updatedAt: now,
-      preStateSnapshot: phase === 'COMMITTED' || phase === 'ABORTED'
-        ? undefined
-        : current.preStateSnapshot,
-      ownerPhases: { ...current.ownerPhases, ...(updates.ownerPhases || {}) },
+      ownerPhases: {
+        ...current.ownerPhases,
+        ...(updates.ownerPhases || {}),
+      },
     };
-    saveLedger(repository, storyId, ledger);
-    return ledger[index];
+    ledger.set(key, next);
+    return next;
   }
 
-  public static recoverInterrupted(repository: WorldRepository, storyId: string, now: string): CanonicalCommitLedgerEntry[] {
-    const ledger = getLedger(repository, storyId);
-    const interrupted = ledger.filter((entry) => !['COMMITTED', 'ABORTED'].includes(entry.phase));
+  /**
+   * Recover only commands owned by this exact repository/runtime instance.
+   * This is intentionally explicit; canonical state replay checkpoints remain
+   * the cross-restart durability mechanism.
+   */
+  public static recoverInterrupted(
+    repository: WorldRepository,
+    storyId: string,
+    now: string,
+  ): CanonicalCommitLedgerEntry[] {
+    const ledger = ledgerFor(repository);
+    const interrupted = [...ledger.entries()]
+      .filter(([key, entry]) =>
+        key.startsWith(storyId + '::') &&
+        !['COMMITTED', 'ABORTED'].includes(entry.phase)
+      )
+      .map(([, entry]) => entry);
+
     const recovered: CanonicalCommitLedgerEntry[] = [];
     for (const entry of interrupted) {
-      const matchingEvent = repository
-        .getCanonicalCommandEvents(storyId)
-        .slice()
-        .reverse()
-        .find((event: any) => event.commandId === entry.commandId);
-
-      const currentSnapshot = captureCanonicalStateSnapshotSafe(repository, storyId);
-      if (
-        matchingEvent?.success &&
-        entry.postStateHash &&
-        hashCanonicalSnapshot(currentSnapshot) === entry.postStateHash
-      ) {
-        recovered.push({
-          ...entry,
-          phase: 'COMMITTED',
-          updatedAt: now,
-          recoveryAction: 'NONE',
-          errorReason: undefined,
-          preStateSnapshot: undefined,
-          ownerPhases: {
-            ...entry.ownerPhases,
-            handler: 'VERIFIED',
-            customRules: 'VERIFIED',
-            state: 'VERIFIED',
-            event: 'VERIFIED',
-          },
-        });
-        continue;
-      }
-
-      if (!entry.preStateSnapshot) {
-        recovered.push({
-          ...entry,
-          phase: 'ABORTED',
-          updatedAt: now,
-          recoveryAction: 'ABORT_AND_RESTORE',
-          errorReason: 'Interrupted command had no durable pre-state checkpoint available for recovery.',
-        });
-        continue;
-      }
-
       repository.restoreCanonicalStateSnapshot(clone(entry.preStateSnapshot));
-      if (matchingEvent) {
-        const run = repository.getStoryRun(storyId);
-        if (run) {
-          run.canonicalEvents = Array.isArray(run.canonicalEvents)
-            ? run.canonicalEvents.filter((event: any) => event.commandId !== entry.commandId)
-            : [];
-          repository.saveStoryRun(run);
-        }
-      }
-      recovered.push({
+      const updated: CanonicalCommitLedgerEntry = {
         ...entry,
         phase: 'ABORTED',
         updatedAt: now,
         recoveryAction: 'ABORT_AND_RESTORE',
-        errorReason: 'Interrupted canonical command was recovered by restoring its durable pre-state checkpoint.',
-        preStateSnapshot: undefined,
-        ownerPhases: { ...entry.ownerPhases, state: 'VERIFIED' },
-      });
-    }
-    if (interrupted.length > 0) {
-      const updated = ledger.map((entry) => recovered.find((item) => item.commandId === entry.commandId) || entry);
-      saveLedger(repository, storyId, updated);
+        errorReason: 'Interrupted canonical command was recovered by restoring its repository-local pre-state checkpoint.',
+        ownerPhases: {
+          ...entry.ownerPhases,
+          state: 'VERIFIED',
+        },
+      };
+      ledger.set(storyId + '::' + entry.commandId, updated);
+      recovered.push(updated);
     }
     return recovered;
+  }
+
+  public static clearRepository(repository: WorldRepository): void {
+    repositoryLedgers.delete(repository as object);
+  }
+
+  public static exportRepositoryLedger(repository: WorldRepository): CanonicalCommitLedgerEntry[] {
+    return [...ledgerFor(repository).values()].map(clone);
   }
 }
 

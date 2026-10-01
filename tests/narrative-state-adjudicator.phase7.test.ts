@@ -58,7 +58,7 @@ test('Phase 7 approves a bounded canonical health proposal and commits it transa
 		kind: 'HEALTH',
 		targetId: player.actorId,
 		value: 25,
-			};
+	};
 	const adjudication = NarrativeStateAdjudicator.adjudicate({
 		...baseParams(repository, player, [proposal]),
 		verifiedCanonicalChanges: [proposal],
@@ -73,7 +73,7 @@ test('Phase 7 approves a bounded canonical health proposal and commits it transa
 test('Phase 7 rejects out-of-bounds canonical health and does not mutate state', () => {
 	const { repository, player } = setup();
 	const adjudication = NarrativeStateAdjudicator.adjudicate(baseParams(repository, player, [
-		{ kind: 'HEALTH', targetId: player.actorId, value: 999, metadata: { authorizedByCanonicalMechanic: true } },
+		{ kind: 'HEALTH', targetId: player.actorId, value: 999 },
 	]));
 	assert.equal(adjudication.approvedCount, 0);
 	const committed = NarrativeStateAdjudicator.commit(repository, adjudication);

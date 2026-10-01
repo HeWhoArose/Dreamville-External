@@ -178,6 +178,29 @@ class ApiClient {
     }
     return Array.isArray(data?.tips) ? data.tips : [];
   }
+  public async transcribeAudio(params: { storyId?: string; audioBase64: string; audioMimeType?: string }): Promise<{ text: string; modelId?: string; providerId?: string }> {
+    const res = await fetch(`${this.baseUrl}/sensory/transcribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        storyId: params.storyId || globalActiveStoryId,
+        audioBase64: params.audioBase64,
+        audioMimeType: params.audioMimeType || 'audio/webm',
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data?.success !== true || !String(data?.text || '').trim()) {
+      const error: any = new Error(data?.error || data?.errorReason || `Transcription failed with HTTP ${res.status}`);
+      error.status = res.status;
+      error.data = data;
+      throw error;
+    }
+    return {
+      text: String(data.text).trim(),
+      modelId: data.modelId ? String(data.modelId) : undefined,
+      providerId: data.providerId ? String(data.providerId) : undefined,
+    };
+  }
   /**
    * Sends an out-of-character question/request to the dedicated OOC assistant.
    * POST /api/game/action/ooc

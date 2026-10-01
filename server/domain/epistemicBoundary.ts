@@ -16,7 +16,7 @@ function normalize(value: unknown): string {
 
 function factAuthorized(situation: CurrentSituation, fact: CurrentSituation['worldFacts'][number]): boolean {
 	const factId = normalize(fact.id);
-	if (factId && situation.playerKnowledge.authorizedFactIds.includes(factId)) return true;
+	if (factId && Array.isArray(situation.playerKnowledge.authorizedFactIds) && situation.playerKnowledge.authorizedFactIds.includes(factId)) return true;
 	const serialized = normalize(JSON.stringify(fact));
 	return situation.playerKnowledge.knownFacts.some((known) => normalize(JSON.stringify(known)) === serialized);
 }

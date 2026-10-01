@@ -66,7 +66,7 @@ describe('CH7 Evidence-Closure Audit: AI -> Novel Capability Pipeline & Internal
 
       // Stage 1: AI Model outputs narrative and a proposed novel capability concept
       fakeAdapter.payloadToReturn = JSON.stringify({
-        narrative: ['The caster channels a luminous mesh of starlight that shields against radiant heat.'],
+        narrative: ['At the Whispering Orrery, the caster channels a luminous mesh of starlight that shields against radiant heat.'],
         dialogue: [],
         events: ['EVT_STARLIGHT_CAST'],
         stateChanges: [], // Raw AI does NOT inject unauthorized capability state directly
@@ -183,7 +183,7 @@ describe('CH7 Evidence-Closure Audit: AI -> Novel Capability Pipeline & Internal
 
       // Test A & E: AI proposes arbitrary damage = 999999 and direct canonical mutation
       fakeAdapter.payloadToReturn = JSON.stringify({
-        narrative: ['An annihilating beam disintegrates the world.'],
+        narrative: ['At the Whispering Orrery, an annihilating beam strikes outward with impossible force.'],
         dialogue: [],
         events: [],
         stateChanges: [

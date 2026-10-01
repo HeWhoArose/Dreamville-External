@@ -275,6 +275,20 @@ export class WorkingContextEngine {
       return idA.localeCompare(idB);
     });
 
+    const protectedMinimumByLowerBand: Partial<Record<PriorityBand, number>> = {};
+    for (const band of ['B2_IMMEDIATE', 'B3_CAUSAL_OPPORTUNITY', 'B4_EPISODIC', 'B5_SEMANTIC_LORE'] as PriorityBand[]) {
+      const protectedTokens = sortedChunks
+        .filter((chunk) => chunk.band === band && chunk.isProtected && chunk.blockStatus !== 'ARCHIVED')
+        .map((chunk) =>
+          WorkingContextEngine.estimateTokens(
+            (chunk.label ? '[' + chunk.label.toUpperCase() + ']\n' : '') + chunk.content,
+          ),
+        );
+      if (protectedTokens.length > 0) {
+        protectedMinimumByLowerBand[band] = Math.min(...protectedTokens);
+      }
+    }
+
     const included: ContextChunk[] = [];
     const idle: ContextChunk[] = [];
     const archived: ContextChunk[] = [];
@@ -317,6 +331,26 @@ export class WorkingContextEngine {
         ? formattedChunk
         : `${currentAssembledText}\n\n${formattedChunk}`;
       const prospectiveTokens = WorkingContextEngine.estimateTokens(prospectiveText);
+
+      // Reserve enough room for the smallest protected B2 block so a large set of
+      // critical policy/context prose cannot consume the entire live-turn budget.
+      const lowerProtectedReservation =
+        bandRank === priorityOrder.B1_CRITICAL
+          ? (protectedMinimumByLowerBand.B2_IMMEDIATE || 0)
+          : 0;
+      if (
+        lowerProtectedReservation > 0 &&
+        bandRank === priorityOrder.B1_CRITICAL &&
+        prospectiveTokens + lowerProtectedReservation > hardTokenBudget &&
+        included.some((item) => item.band === 'B1_CRITICAL') &&
+        !chunk.isProtected
+      ) {
+        const idleChunk = { ...chunk, blockStatus: 'IDLE' as const };
+        idle.push(idleChunk);
+        evicted.push(`${chunk.label} (${chunk.band})`);
+        evictionReasons[chunk.label] = 'Deferred to preserve a protected immediate-turn context block within the hard budget.';
+        continue;
+      }
 
       // Caller-declared tokens + framing overhead accounting
       const headerTokens = WorkingContextEngine.estimateTokens(chunkHeader);

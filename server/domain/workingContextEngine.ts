@@ -757,6 +757,22 @@ export class WorkingContextEngine {
       });
     }
 
+    const authorizedKnowledgeContent = authorizedWorldFacts.length
+      ? authorizedWorldFacts.slice(0, 8).join(' | ')
+      : '';
+    if (authorizedKnowledgeContent) {
+      candidateChunks.push({
+        id: 'b2_authorized_knowledge',
+        band: 'B2_IMMEDIATE',
+        label: 'Player-Authorized Knowledge',
+        content: authorizedKnowledgeContent,
+        estimatedTokens: WorkingContextEngine.estimateTokens(authorizedKnowledgeContent),
+        sourceAuthority: 'WorldRepository.getAuthorizedKnowledgeFacts (Phase 11)',
+        isProtected: false,
+        relevanceScore: 0.88,
+      });
+    }
+
     candidateChunks.push({
       id: 'b2_protagonist_identity',
       band: 'B2_IMMEDIATE',

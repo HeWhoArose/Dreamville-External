@@ -6957,6 +6957,9 @@ export class MultiModelOrchestrator {
     const authoritativeOutcome = (params.committedOutcome || '').trim();
     const connectedDirective = (params.continuationDirective || '').trim();
     const worldRepo = this.getWorldRepository();
+    if (!worldRepo.getStoryRun(storyId)) {
+      worldRepo.seedStory(storyId);
+    }
     let currentSituation = CurrentSituationBuilder.build({
       storyId,
       playerAction,
@@ -7971,6 +7974,7 @@ export class MultiModelOrchestrator {
             audioInputBase64: params.audioInputBase64,
             voiceProfile: params.voiceProfile,
             canonicalLocationName: emergencyLocation?.name,
+            playerAction: params.playerAction,
           });
           this.recordProviderSuccess(emergencyModel, res, task, emergencyStartedAt);
           const validation = this.validateTurnPackage(res.text);

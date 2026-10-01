@@ -1006,16 +1006,16 @@ export class StoryActionAdvisor {
 			...(sceneContext?.recentActions || []),
 		].filter(Boolean).map((value) => String(value).trim()).filter(Boolean);
 
-		const normalizedScene = normalize(sceneSources.join(' '));
+		const normalizedScene = normalize(sceneSources.join(' ') + ' ' + relevantEntityContext);
 		const locationLabel = sceneContext?.locationName || location?.name || 'the current area';
 		const player = this.repository.getPlayerLifecycle(storyId);
 		const playerLocationId = player?.locationId || location?.id || '';
-		let relevantEntityIds = new Set<string>();
+		let relevantEntityContext = '';
 		try {
 			const situation = CurrentSituationBuilder.build({ storyId, playerAction: actionText, viewerActorId: actorId, worldRepo: this.repository });
-			relevantEntityIds = new Set(EntitySceneRelevanceEngine.topVisible(situation, situation.currentAction, 8).map((entity) => entity.id));
+			relevantEntityContext = EntitySceneRelevanceEngine.toPromptContext(situation, situation.currentAction, 8);
 		} catch {
-			relevantEntityIds = new Set<string>();
+			relevantEntityContext = '';
 		}
 		const livingWorld = this.repository.getLivingWorldSimulation(storyId);
 		const nearbyNpcs = livingWorld

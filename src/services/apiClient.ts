@@ -162,19 +162,22 @@ class ApiClient {
    * Fetches current-scene player tips without mutating canonical story state.
    * GET /api/game/action/tips
    */
-  public async getStoryActionTips(storyId?: string): Promise<any[]> {
-    const res = await fetch(`${this.baseUrl}/action/tips${storyId ? `?storyId=${encodeURIComponent(storyId)}` : ''}`, {
+  public async getStoryActionTips(storyId?: string, options?: { refresh?: boolean }): Promise<any[]> {
+    const query = new URLSearchParams();
+    if (storyId) query.set('storyId', storyId);
+    if (options?.refresh) query.set('refresh', '1');
+    const queryString = query.toString();
+    const res = await fetch(this.baseUrl + '/action/tips' + (queryString ? '?' + queryString : ''), {
       method: 'GET',
       headers: { Accept: 'application/json' },
     });
 
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      throw new Error(data?.errorReason || data?.error || `Story tips failed with HTTP ${res.status}`);
+      throw new Error(data?.errorReason || data?.error || ('Story tips failed with HTTP ' + res.status));
     }
     return Array.isArray(data?.tips) ? data.tips : [];
   }
-
   /**
    * Sends an out-of-character question/request to the dedicated OOC assistant.
    * POST /api/game/action/ooc

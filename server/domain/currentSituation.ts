@@ -832,7 +832,6 @@ export class CurrentSituationBuilder {
 			`Visible entities: ${visibleEntities}`,
 			situation.activeDialogue ? `Active dialogue: ${situation.activeDialogue.speakerName}: ${situation.activeDialogue.text}` : '',
 			`Current action: ${situation.currentAction?.action || 'None'}`,
-			`Local spatial focus: ${situation.player.spatial.focusLabel || situation.player.spatial.focusEntityId || 'none'} [${situation.player.spatial.proximityBand}]`,
 			`Plot: ${situation.plot.currentArc} — ${situation.plot.summary || 'No compressed plot summary.'}`,
 			`Open threads:\n${openThreads}`,
 			`Recent turns:\n${recentTurns}`,

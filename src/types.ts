@@ -1458,6 +1458,7 @@ export interface WorkingContextResponse {
   evictedChunkLabels: string[];
   evictionReasons: Record<string, string>;
   epistemicallySanitized: boolean;
+  pinnedSourceIds?: string[];
 }
 
 export interface ContextAssembleResponse extends WorkingContextResponse {

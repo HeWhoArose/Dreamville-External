@@ -276,6 +276,17 @@ export interface StoryCheckConsequenceResult {
   noEffectReason?: string;
 }
 
+export type StoryCheckOutcomeTier =
+  | 'NO_CHECK'
+  | 'CLEAN_SUCCESS'
+  | 'SUCCESS_WITH_COST'
+  | 'PARTIAL_SUCCESS'
+  | 'BLOCKED'
+  | 'FAILURE'
+  | 'FAILURE_WITH_COST'
+  | 'CRITICAL_SUCCESS'
+  | 'CRITICAL_FAILURE';
+
 export interface StoryCheckResult {
   checkId: string;
   testType: StoryTestType;
@@ -292,6 +303,8 @@ export interface StoryCheckResult {
   roll: RollRecord;
   total: number;
   success: boolean;
+  /** Canonical outcome tier; narration must project this rather than infer it from prose. */
+  outcomeTier: StoryCheckOutcomeTier;
   criticalSuccess: boolean;
   criticalFailure: boolean;
   reason: string;

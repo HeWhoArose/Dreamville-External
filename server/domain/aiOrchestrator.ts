@@ -22,6 +22,7 @@ import { CurrentSituationBuilder } from './currentSituation';
 import { PlayerIntentInterpreter, type PlayerIntent } from './playerIntentInterpreter';
 import { NarrativeResearchPipeline, type NarrativeResearchResult } from './narrativeResearchPipeline';
 import { NarrativeDirector, type EphemeralNarrativePlan } from './narrativeDirector';
+import { buildNarrationPrompt, defaultNarrationStyle } from './narrativePromptBuilder';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
 
@@ -6673,7 +6674,7 @@ export class MultiModelOrchestrator {
       'Substance has priority over flourish. Every paragraph must either depict a concrete current-turn action, reveal a canon-grounded observation, show an immediate reaction/consequence, or establish a specific unresolved detail. Do not spend a paragraph merely describing atmosphere that does not change what the player knows or what is happening.',
       'Do not pad short actions into poetic scene-setting. The player action is the reason this turn exists; move the scene forward because of it.',
       'When the current action contains multiple concrete steps, resolve each observable step in order instead of stopping after the first movement.',
-      NARRATIVE_INFORMATION_SEEKING_PATTERN.test(playerAction)
+      isInformationSeekingAction
         ? 'This is an information-seeking action. The minimum useful response is: reach the relevant source already established in context, then perform only the kind of information gathering the player actually requested. If the player says listen, hear, overhear, or eavesdrop, the protagonist is listening only; do not make the protagonist ask, answer, speak, call out, or raise their voice unless the player also explicitly requested speech. Then provide the specific information that can be learned from canonical context or clearly state that the available people provide no reliable answer. Distinguish rumor or hearsay from established fact. Do not replace the inquiry with atmosphere, and do not invent a named informant, secret, fact, or revelation that is not supported by the supplied context.'
         : '',
       'Prefer concrete nouns, specific observations, reactions, facts, and consequences over decorative adjectives and repeated sensory metaphors.',
@@ -6682,8 +6683,6 @@ export class MultiModelOrchestrator {
         : 'No canonical mechanical outcome was supplied. Describe only the attempt and observable scene response; do not decide hidden success or failure.',
       connectedDirective ? 'Follow the connected presentation directive only as style guidance; never override canonical state.' : '',
       'Semantic player intent is authoritative for what the player meant to attempt; do not silently replace it with a different action.',
-      'Player Intent: ' + JSON.stringify(playerIntent),
-      NarrativeDirector.toPromptContext(narrativePlan),
       'Stay in the canonical current location unless a committed location change is supplied.',
       'Treat the latest player action as the current turn contract. Depict that action first and do not silently replace it with an earlier action from recent history.',
       'Preserve every concrete action target named by the player when it is narratively observable (for example, a scroll, staff, citadel, doorway, person, or object).',
@@ -6816,6 +6815,18 @@ export class MultiModelOrchestrator {
       ],
     });
 
+    const narrationPrompt = buildNarrationPrompt({
+      situation: currentSituation,
+      intent: playerIntent,
+      research: researchResult,
+      plan: narrativePlan,
+      workingContext: assembledContext.assembledText,
+      globalInstruction: 'You are Dreamville’s narrative presentation engine. Generate only the player-facing narrative turn using the supplied canonical state, semantic player intent, bounded research, and ephemeral plan.',
+      styleInstruction,
+      canonicalOutcome: authoritativeOutcome,
+      maxPromptTokens: Math.max(hardTokenBudget, 1200),
+    });
+
     const contextAudit = {
       hardTokenBudget: assembledContext.hardTokenBudget,
       totalTokens: assembledContext.totalTokens,
@@ -6831,12 +6842,12 @@ export class MultiModelOrchestrator {
 
     const generated = await this.executeTaskGeneration(
       'narrative.generate',
-      assembledContext.assembledText,
-      styleInstruction,
+      narrationPrompt.prompt,
+      narrationPrompt.styleInstruction,
       {
         timeoutMs,
         maxTokens: 650,
-        contextTokens: assembledContext.totalTokens,
+        contextTokens: narrationPrompt.totalTokens,
         forceModelId: params.forceModelId,
         canonicalLocationName: currentSituation.location.name,
         playerAction,
@@ -7128,6 +7139,17 @@ export class MultiModelOrchestrator {
       });
 
       // 1b. CH15 Source Adaptation Adjudication Check
+      const narrationPrompt = buildNarrationPrompt({
+        situation: currentSituation,
+        intent: playerIntent,
+        research: researchResult,
+        plan: narrativePlan,
+        workingContext: assembledContext.assembledText,
+        globalInstruction: 'You are Dreamville’s authoritative narrative presentation engine. Generate only the player-facing narrative turn. Canonical game state remains authoritative and prose never commits state.',
+        styleInstruction: defaultNarrationStyle(),
+        maxPromptTokens: Math.max(hardTokenBudget, 1200),
+      });
+
       const profile = repo.getAdaptationProfile(storyId);
       const bible = repo.getAdaptedStoryBible(storyId);
       if (profile && bible) {
@@ -7163,7 +7185,7 @@ export class MultiModelOrchestrator {
               role: 'narrator',
               playerAction: params.playerAction,
               playerIntent,
-              workingContextTokens: assembledContext.totalTokens,
+              workingContextTokens: narrationPrompt.totalTokens,
               worldTime: repo.getWorldClock(storyId).formatHeader(),
               locationId: repo.getPlayerLifecycle(storyId)?.locationId || 'loc_whispering_orrery',
               sceneSummary: evalResult.reason,
@@ -7194,7 +7216,7 @@ export class MultiModelOrchestrator {
               fallbackChain: [],
               attempts: 1,
               latencyMs: 2,
-              inputTokens: assembledContext.totalTokens,
+              inputTokens: narrationPrompt.totalTokens,
               outputTokens: 20,
               validated: true,
             },
@@ -7249,7 +7271,7 @@ export class MultiModelOrchestrator {
           task,
           forced.providerId,
           forced.modelId,
-          assembledContext.totalTokens,
+          narrationPrompt.totalTokens,
           hardTokenBudget,
         );
         const forcedUsable = forced.isEmergencyFloor || (
@@ -7275,7 +7297,7 @@ export class MultiModelOrchestrator {
                 task,
                 m.providerId,
                 m.modelId,
-                assembledContext.totalTokens,
+                narrationPrompt.totalTokens,
                 hardTokenBudget,
               );
               return this.isCandidateUsable(m, task, assembledContext.totalTokens) && Boolean(preflight?.eligible);
@@ -7283,7 +7305,7 @@ export class MultiModelOrchestrator {
           fallbacks = configuredFallbacks;
         }
       } else {
-        const selection = this.selectBestModel(task, { contextTokens: assembledContext.totalTokens });
+        const selection = this.selectBestModel(task, { contextTokens: narrationPrompt.totalTokens });
         selectedModel = selection.selectedModel;
         selectionReason = selection.selectionReason;
         fallbacks = selection.fallbacks;
@@ -7313,7 +7335,7 @@ export class MultiModelOrchestrator {
 
             let providerRes: ProviderGenerateResult;
             try {
-              providerRes = await adapter.generate(task, assembledContext.assembledText, {
+              providerRes = await adapter.generate(task, narrationPrompt.prompt, {
                 timeoutMs,
                 abortSignal: abortController.signal,
                 retryCount: attempt,
@@ -7421,7 +7443,7 @@ export class MultiModelOrchestrator {
               fallbackChain: candidateChain.slice(0, cIdx + 1).map((m) => m.modelId),
               attempts: totalAttempts,
               latencyMs: providerRes.latencyMs,
-              inputTokens: Math.min(providerRes.inputTokens || assembledContext.totalTokens, assembledContext.totalTokens),
+              inputTokens: Math.min(providerRes.inputTokens || narrationPrompt.totalTokens, narrationPrompt.totalTokens),
               outputTokens: providerRes.outputTokens || 50,
               validated: true,
               adjudicationResult: adjudication,
@@ -7451,6 +7473,7 @@ export class MultiModelOrchestrator {
               success: true,
               turnPackage: validation.turnPackage,
               playerIntent,
+              narrativePlan,
               telemetry,
               adjudicationResult: adjudication,
               checkpoint,
@@ -7503,7 +7526,7 @@ export class MultiModelOrchestrator {
           const emergencyLocation = emergencyLocationId
             ? repo.getGeographyGraph(storyId).getNode(emergencyLocationId)
             : undefined;
-          const res = await emergencyAdapter.generate(task, assembledContext.assembledText, {
+          const res = await emergencyAdapter.generate(task, narrationPrompt.prompt, {
             audioInputBase64: params.audioInputBase64,
             voiceProfile: params.voiceProfile,
             canonicalLocationName: emergencyLocation?.name,
@@ -7579,7 +7602,7 @@ export class MultiModelOrchestrator {
               fallbackChain: ['emergency-fallback-local'],
               attempts: totalAttempts + 1,
               latencyMs: res.latencyMs,
-              inputTokens: assembledContext.totalTokens,
+              inputTokens: narrationPrompt.totalTokens,
               outputTokens: 30,
               validated: true,
               adjudicationResult: adjudication,

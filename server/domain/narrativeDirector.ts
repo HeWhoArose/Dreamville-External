@@ -41,10 +41,19 @@ function entityTargets(situation: CurrentSituation, intent: PlayerIntent): Inten
 		refs.push(ref);
 	}
 	if (refs.length > 0) return refs.slice(0, 4);
-	return situation.nearbyEntities
-		.filter((entity) => entity.kind !== 'PLAYER' && entity.visibleToPlayer && entity.distanceBand === 'SAME_LOCATION')
-		.slice(0, 2)
-		.map((entity) => ({ id: entity.id, name: entity.name, kind: entity.kind, source: 'IMPLIED' as const }));
+	const informationSeeking =
+		Boolean(intent.informationGoal) ||
+		intent.interactionMode === 'INFORMATION_SEEKING' ||
+		intent.interactionMode === 'PASSIVE_OBSERVATION';
+	if (informationSeeking && situation.activeDialogue) {
+		return [{
+			id: situation.activeDialogue.speakerId,
+			name: situation.activeDialogue.speakerName,
+			kind: 'NPC',
+			source: 'IMPLIED' as const,
+		}];
+	}
+	return [];
 }
 
 function informationReveals(intent: PlayerIntent, research: NarrativeResearchResult): InformationReveal[] {

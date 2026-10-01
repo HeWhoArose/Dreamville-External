@@ -332,8 +332,11 @@ export class NarrativeResearchPipeline {
 				content: truncate(JSON.stringify({
 					id: entity.id,
 					name: entity.name,
-					identity: entity.identity,
-					role: entity.role,
+					kind: entity.kind,
+					role: entity.role?.profession || entity.role?.archetype || entity.social?.role || entity.classification?.role,
+					currentActivity: entity.worldState?.currentActivity,
+					presence: entity.worldState?.presence,
+					factionIds: entity.social?.factionIds,
 				}), 1600),
 			}, queryTokens);
 		}

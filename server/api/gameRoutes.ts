@@ -6829,6 +6829,7 @@ gameRouter.post('/context/assemble', async (req: Request, res: Response) => {
       evictedChunkLabels: result.evictedChunkLabels,
       evictionReasons: result.evictionReasons,
       epistemicallySanitized: result.epistemicallySanitized,
+      pinnedSourceIds: result.pinnedSourceIds,
     });
   } catch (error) {
     console.error('Failed to assemble budgeted context:', error);

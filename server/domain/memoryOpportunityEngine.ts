@@ -32,6 +32,8 @@ export interface DurableMemory {
   memoryClass: MemoryClass;
   subjectEntityId: string;
   relatedEntityIds: string[];
+  relatedLocationId?: string;
+  relatedThreadId?: string;
   content: string;
   importance: number; // 0 to 100
   confidence: number; // 0.0 to 1.0

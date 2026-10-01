@@ -571,8 +571,9 @@ export class StoryCheckEngine {
     }
 
     const success = forcedFailure ? false : roll.total >= dc;
-    const criticalSuccess = roll.individualDice?.[0] === 20;
-    const criticalFailure = roll.individualDice?.[0] === 1;
+    const selectedDie = roll.individualDice?.[selectedDieIndex];
+    const criticalSuccess = selectedDie === 20;
+    const criticalFailure = selectedDie === 1;
     const outcomeTier: StoryCheckOutcomeTier =
       criticalSuccess ? 'CRITICAL_SUCCESS' :
       criticalFailure ? 'CRITICAL_FAILURE' :
@@ -629,8 +630,9 @@ export class StoryCheckEngine {
     };
     const difficultyClass = challenge.difficultyClass;
     const success = roll.total >= difficultyClass;
-    const criticalSuccess = roll.individualDice?.[0] === 20;
-    const criticalFailure = roll.individualDice?.[0] === 1;
+    const selectedDie = roll.individualDice?.[0];
+    const criticalSuccess = selectedDie === 20;
+    const criticalFailure = selectedDie === 1;
     const outcomeTier: StoryCheckOutcomeTier =
       criticalSuccess ? 'CRITICAL_SUCCESS' :
       criticalFailure ? 'CRITICAL_FAILURE' :

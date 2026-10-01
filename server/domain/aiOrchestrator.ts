@@ -6668,7 +6668,7 @@ export class MultiModelOrchestrator {
         )
       : NARRATIVE_PASSIVE_LISTENING_PATTERN.test(action);
     const explicitSpeechIntent = intent ? intent.speechIntent : NARRATIVE_DIRECT_SPEECH_PATTERN.test(action);
-    if (!isPassiveListening || explicitSpeechIntent || !NARRATIVE_DIRECT_SPEECH_PATTERN.test(output)) {
+    if (!isPassiveListening || explicitSpeechIntent) {
       return { valid: true };
     }
 

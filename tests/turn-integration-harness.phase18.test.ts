@@ -217,7 +217,7 @@ describe('Phase 18 — end-to-end turn harness', () => {
 });
 
 
-test('full action path hands check justification and bounded failure consequence into narration', async () => {
+it('full action path hands check justification and bounded failure consequence into narration', async () => {
   const { serverMockAuthority } = await import('../server/mockEngine/serverMockAuthority');
   const storyId = 'check_resolution_narration_closure_' + Date.now();
   worldRepository.seedStory(storyId);

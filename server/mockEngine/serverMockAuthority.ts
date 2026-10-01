@@ -208,7 +208,7 @@ export class ServerMockAuthority {
     const existing = Array.isArray(run.runtimeState?.workingContextPins)
       ? run.runtimeState.workingContextPins.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0)
       : [];
-    const next = new Set(existing);
+    const next = new Set<string>(existing);
     if (pinned) next.add(normalizedSourceId);
     else next.delete(normalizedSourceId);
     run.runtimeState = {

@@ -22,6 +22,20 @@ function entityReferenced(entity: NearbyEntityContext, intent?: PlayerIntent, ac
 	return false;
 }
 
+function hasExplicitTargetBand(entry: EntitySceneRelevance): boolean {
+	return entry.bands.includes('EXPLICIT_TARGET');
+}
+
+function compareRelevance(a: EntitySceneRelevance, b: EntitySceneRelevance): number {
+	// An explicit player target is a semantic commitment, not merely another
+	// relevance signal. It must outrank incidental dialogue/recent-history
+	// relevance so a currently mentioned target cannot be displaced by the
+	// speaker of an older/ongoing conversation.
+	const explicitDelta = Number(hasExplicitTargetBand(b)) - Number(hasExplicitTargetBand(a));
+	if (explicitDelta !== 0) return explicitDelta;
+	return b.score - a.score || a.entityId.localeCompare(b.entityId);
+}
+
 export class EntitySceneRelevanceEngine {
 	public static rank(
 		situation: CurrentSituation,
@@ -29,18 +43,18 @@ export class EntitySceneRelevanceEngine {
 	): EntitySceneRelevance[] {
 		const actionText = intent?.originalText || '';
 		const activeDialogueSpeaker = situation.activeDialogue?.speakerId;
-		const threadText = situation.openThreads.map((thread) => [thread.title, thread.summary].filter(Boolean).join(' ')).join(' ');
-		const recentText = situation.recentTurns.slice(-4).map((turn) => [turn.playerAction, turn.narration, turn.unresolvedConsequence].filter(Boolean).join(' ')).join(' ');
+		const threadText = (situation.openThreads || []).map((thread) => [thread.title, thread.summary].filter(Boolean).join(' ')).join(' ');
+		const recentText = (situation.recentTurns || []).slice(-4).map((turn) => [turn.playerAction, turn.narration, turn.unresolvedConsequence].filter(Boolean).join(' ')).join(' ');
 
-		const ranked = situation.nearbyEntities
+		const ranked = (situation.nearbyEntities || [])
 			.filter((entity) => entity.kind !== 'PLAYER')
 			.map((entity) => {
 				let score = 0;
 				const reasons: string[] = [];
 				const bands: EntitySceneRelevance['bands'] = [];
 				const explicitlyMarked = Boolean(entity.explicitlyReferenced) ||
-					(entity.id && (intent?.explicitTargets || []).some((target) => target.id === entity.id)) ||
-					(entity.name && (intent?.explicitTargets || []).some((target) => normalize(target.name) === normalize(entity.name)));
+					Boolean(entity.id && (intent?.explicitTargets || []).some((target) => target.id === entity.id)) ||
+					Boolean(entity.name && (intent?.explicitTargets || []).some((target) => normalize(target.name) === normalize(entity.name)));
 				const explicit = entityReferenced(entity, intent, actionText);
 
 				if (!entity.visibleToPlayer) return { entityId: entity.id, score: 0, rank: 0, reasons: ['NOT_VISIBLE'], bands: [], visible: false };
@@ -68,7 +82,7 @@ export class EntitySceneRelevanceEngine {
 					reasons.push('current intent target');
 					bands.push('CURRENT_ACTION');
 				}
-				const directlyThreadLinked = situation.openThreads.some((thread) =>
+				const directlyThreadLinked = (situation.openThreads || []).some((thread) =>
 					Array.isArray(thread.relatedEntityIds) && thread.relatedEntityIds.includes(entity.id)
 				);
 				if (directlyThreadLinked || (entity.name && normalize(threadText).includes(normalize(entity.name)))) {
@@ -98,7 +112,7 @@ export class EntitySceneRelevanceEngine {
 					visible: true,
 				};
 			})
-			.sort((a, b) => b.score - a.score || a.entityId.localeCompare(b.entityId))
+			.sort(compareRelevance)
 			.map((entry, index) => ({ ...entry, rank: index + 1 }));
 
 		return ranked;
@@ -106,17 +120,21 @@ export class EntitySceneRelevanceEngine {
 
 	public static topVisible(situation: CurrentSituation, intent?: PlayerIntent, limit = 8): NearbyEntityContext[] {
 		const relevance = new Map(this.rank(situation, intent).map((entry) => [entry.entityId, entry]));
-		return situation.nearbyEntities
+		return (situation.nearbyEntities || [])
 			.filter((entity) => entity.kind !== 'PLAYER')
 			.filter((entity) => entity.visibleToPlayer)
-			.sort((a, b) => (relevance.get(b.id)?.score || 0) - (relevance.get(a.id)?.score || 0))
+			.sort((a, b) => compareRelevance(
+				relevance.get(a.id) || { entityId: a.id, score: 0, rank: 0, reasons: [], bands: [], visible: true },
+				relevance.get(b.id) || { entityId: b.id, score: 0, rank: 0, reasons: [], bands: [], visible: true },
+			))
 			.slice(0, limit);
 	}
 
 	public static toPromptContext(situation: CurrentSituation, intent?: PlayerIntent, limit = 8): string {
+		const ranked = this.rank(situation, intent);
 		return this.topVisible(situation, intent, limit)
 			.map((entity) => {
-				const score = this.rank(situation, intent).find((entry) => entry.entityId === entity.id);
+				const score = ranked.find((entry) => entry.entityId === entity.id);
 				return entity.name + ' [' + entity.kind + '] relevance=' + (score?.score ?? 0) + ' reasons=' + (score?.reasons.join(', ') || 'scene presence');
 			})
 			.join('; ') || 'None';

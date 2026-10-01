@@ -7,7 +7,7 @@ import {
 } from '../../data/diceThemes';
 
 export type { DiceThemeId, DiceThemeMode };
-export { DICE_THEME_IDS };
+export { DICE_THEME_IDS, DEFAULT_DICE_THEME };
 
 export interface DiceThemePreset {
 	id: DiceThemeId;

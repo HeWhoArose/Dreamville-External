@@ -900,7 +900,7 @@ export const App: React.FC = () => {
   );
 
   return (
-    <AudioHapticProvider>
+    <AudioHapticProvider storyId={activeStoryId}>
       <SensoryEventProcessor events={(viewState as any)?.sensoryEvents} />
 
       {isPlayRoute ? (

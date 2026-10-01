@@ -23,6 +23,7 @@ import { PlayerIntentInterpreter, type PlayerIntent } from './playerIntentInterp
 import { NarrativeResearchPipeline, type NarrativeResearchResult } from './narrativeResearchPipeline';
 import { NarrativeDirector, type EphemeralNarrativePlan } from './narrativeDirector';
 import { buildNarrationPrompt, defaultNarrationStyle, projectSupportingWorkingContext } from './narrativePromptBuilder';
+import { SemanticNarrativeReview, type NarrativeReview } from './semanticNarrativeReview';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
 
@@ -6656,6 +6657,59 @@ export class MultiModelOrchestrator {
     return { valid: true };
   }
 
+  private async reviewAndRepairNarrative(params: {
+    turnPackage: StructuredTurnPackage;
+    intent: PlayerIntent;
+    situation: ReturnType<typeof CurrentSituationBuilder.build>;
+    plan: EphemeralNarrativePlan;
+    adapter: IProviderAdapter;
+    modelId: string;
+    timeoutMs: number;
+  }): Promise<{ turnPackage: StructuredTurnPackage; review: NarrativeReview }> {
+    let review = SemanticNarrativeReview.review({
+      intent: params.intent,
+      situation: params.situation,
+      plan: params.plan,
+      turnPackage: params.turnPackage,
+    });
+    if (review.decision === 'ACCEPT') return { turnPackage: params.turnPackage, review };
+
+    const rewritePrompt = SemanticNarrativeReview.buildRewritePrompt({
+      intent: params.intent,
+      situation: params.situation,
+      plan: params.plan,
+      turnPackage: params.turnPackage,
+      review,
+    });
+    const response = await params.adapter.generate('narrative.generate', rewritePrompt, {
+      timeoutMs: Math.min(params.timeoutMs, 5000),
+      modelId: params.modelId,
+      maxTokens: 1200,
+    });
+    const validation = this.validateTurnPackage(response.text);
+    if (!validation.valid || !validation.turnPackage) {
+      throw new Error('Narrative semantic rewrite returned an invalid turn package: ' + (validation.errorReason || 'unknown validation failure'));
+    }
+    const intentSafety = this.validateNarrativeIntentSafety(
+      validation.turnPackage.narrative.join(' '),
+      params.intent,
+      params.situation.player.name,
+    );
+    if (!intentSafety.valid) {
+      throw new Error(intentSafety.errorReason || 'Narrative semantic rewrite violated player intent safety.');
+    }
+    review = SemanticNarrativeReview.review({
+      intent: params.intent,
+      situation: params.situation,
+      plan: params.plan,
+      turnPackage: validation.turnPackage,
+    });
+    if (review.decision !== 'ACCEPT') {
+      throw new Error('Narrative semantic review remained ' + review.decision + ' after the single permitted rewrite.');
+    }
+    return { turnPackage: validation.turnPackage, review };
+  }
+
   /**
    * Presentation-only narrative generation.
    *
@@ -7491,11 +7545,29 @@ export class MultiModelOrchestrator {
               }
             }
 
-            // 5. Adjudicate State Changes through Domain Authority Bridge (DEF-CH12-05)
+            // 5. Semantic Narrative Review. Deterministic review is cheap and runs before
+            // state proposals are adjudicated. A single repair may use the same provider.
             this.recordProviderSuccess(currentCandidate, providerRes, task, attemptStartedAt);
 
+            let reviewedTurnPackage = validation.turnPackage;
+            let narrativeReview: NarrativeReview | undefined;
+            if (isNarrativeTask && narrativePlan) {
+              const reviewed = await this.reviewAndRepairNarrative({
+                turnPackage: validation.turnPackage,
+                intent: playerIntent,
+                situation: currentSituation,
+                plan: narrativePlan,
+                adapter,
+                modelId: currentCandidate.modelId,
+                timeoutMs,
+              });
+              reviewedTurnPackage = reviewed.turnPackage;
+              narrativeReview = reviewed.review;
+            }
+
+            // 6. Adjudicate state proposals through the canonical state boundary.
             const adjudication = DomainAdjudicationBridge.adjudicate(
-              validation.turnPackage,
+              reviewedTurnPackage,
               repo,
               storyId,
               narrativePlan,
@@ -7579,6 +7651,7 @@ export class MultiModelOrchestrator {
               researchBlockCount: researchResult?.blocks.length,
               researchTokens: researchResult?.totalTokens,
               narrativePlanObjective: narrativePlan?.objective,
+              narrativeReview,
             };
             this.lastTurnTelemetry = telemetry;
             narrativeContinuityEngine.recordTurn(repo, {
@@ -7597,9 +7670,10 @@ export class MultiModelOrchestrator {
 
             return {
               success: true,
-              turnPackage: validation.turnPackage,
+              turnPackage: reviewedTurnPackage,
               playerIntent,
               narrativePlan,
+              narrativeReview,
               telemetry,
               adjudicationResult: adjudication,
               checkpoint,
@@ -7670,8 +7744,23 @@ export class MultiModelOrchestrator {
             if (!intentSafety.valid) {
               lastError = intentSafety.errorReason || 'Emergency narration violated semantic player intent.';
             } else {
+              let emergencyTurnPackage = validation.turnPackage;
+              let emergencyNarrativeReview: NarrativeReview | undefined;
+              if (isNarrativeTask && narrativePlan) {
+                const reviewed = await this.reviewAndRepairNarrative({
+                  turnPackage: validation.turnPackage,
+                  intent: playerIntent,
+                  situation: currentSituation,
+                  plan: narrativePlan,
+                  adapter: emergencyAdapter,
+                  modelId: emergencyModel.modelId,
+                  timeoutMs,
+                });
+                emergencyTurnPackage = reviewed.turnPackage;
+                emergencyNarrativeReview = reviewed.review;
+              }
               const adjudication = DomainAdjudicationBridge.adjudicate(
-                validation.turnPackage,
+                emergencyTurnPackage,
                 repo,
                 storyId,
                 narrativePlan,
@@ -7749,14 +7838,16 @@ export class MultiModelOrchestrator {
               researchBlockCount: researchResult?.blocks.length,
               researchTokens: researchResult?.totalTokens,
               narrativePlanObjective: narrativePlan?.objective,
+              narrativeReview: emergencyNarrativeReview,
             };
             this.lastTurnTelemetry = telemetry;
 
             return {
               success: true,
-              turnPackage: validation.turnPackage,
+              turnPackage: emergencyTurnPackage,
               playerIntent,
               narrativePlan,
+              narrativeReview: emergencyNarrativeReview,
               telemetry,
               adjudicationResult: adjudication,
               checkpoint,

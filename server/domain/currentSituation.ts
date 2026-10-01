@@ -127,6 +127,8 @@ export interface RelevantLore {
 export interface KnowledgeBoundary {
 	viewerActorId: string;
 	knownFacts: RelevantLore[];
+	/** Fact IDs authorized for this viewer, independent of current-turn retrieval relevance. */
+	authorizedFactIds: string[];
 	note: string;
 }
 
@@ -758,6 +760,7 @@ export class CurrentSituationBuilder {
 			playerKnowledge: {
 				viewerActorId,
 				knownFacts: relevantLore,
+				authorizedFactIds: playerKnowledgeFacts.map((fact) => String(fact.id || '')).filter(Boolean),
 				note: 'Player knowledge contains only facts authorized for this viewer. Canonical world facts are kept separately.',
 			},
 			worldFacts: authoritativeFacts,

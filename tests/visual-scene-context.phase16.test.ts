@@ -9,6 +9,7 @@ import {
 	selectLatestVisualTurn,
 } from '../server/domain/visualSceneContext';
 import { buildComicScenePromptFromVisualContext } from '../server/services/comicSceneGenerator';
+import { promises as fs } from 'node:fs';
 
 function makeAction(overrides: Partial<ActionLog> = {}): ActionLog {
 	return {
@@ -204,6 +205,15 @@ describe('Phase 16 — visual scene context', () => {
 		assert.match(prompt, /action failed/i);
 		assert.match(prompt, /never convert the failure into a success/i);
 		assert.match(prompt, /The seal holds/i);
+	});
+
+
+	it('keeps the actual game route wired to the canonical visual-context adapter', async () => {
+		const routeSource = await fs.readFile(new URL('../server/api/gameRoutes.ts', import.meta.url), 'utf8');
+		assert.match(routeSource, /buildVisualSceneContext\(/);
+		assert.match(routeSource, /buildComicScenePromptFromVisualContext\(/);
+		assert.doesNotMatch(routeSource, /buildComicScenePrompt\(context\)/);
+		assert.match(routeSource, /assertVisualSceneFreshness\(/);
 	});
 
 	it('fails closed when the visual context freshness invariant is broken', () => {

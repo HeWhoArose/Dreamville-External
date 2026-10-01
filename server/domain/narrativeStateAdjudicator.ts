@@ -69,7 +69,7 @@ export class NarrativeStateAdjudicator {
 	}): StateAdjudicationResult {
 		const outcomes: StateAdjudicationOutcome[] = [];
 		const proposals = Array.isArray(params.turnPackage.stateChanges) ? params.turnPackage.stateChanges : [];
-		const verifiedCanonicalChanges = Array.isArray(params.verifiedCanonicalChanges) ? params.verifiedCanonicalChanges : [];
+		const verifiedCanonicalChanges = Array.isArray((params as any).verifiedCanonicalChanges) ? (params as any).verifiedCanonicalChanges : [];
 
 		proposals.forEach((proposal, index) => {
 			const commandId = deterministicId('narrative_state', params.storyId, params.turnId, index, proposal.kind, proposal.targetId);

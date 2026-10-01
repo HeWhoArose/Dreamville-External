@@ -1,4 +1,5 @@
 import type { StoryCheckResult, ActionResolution, ActionOutcomeTier } from '../../src/types';
+export type { ActionResolution, ActionOutcomeTier };
 
 export function outcomeTierFromCheck(check: StoryCheckResult): ActionOutcomeTier {
   if (check.criticalSuccess) return 'CRITICAL_SUCCESS';

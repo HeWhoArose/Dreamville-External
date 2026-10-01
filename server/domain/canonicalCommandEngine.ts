@@ -354,6 +354,14 @@ export class CanonicalCommandEngine {
 		const promise = this.enqueueStoryCommand(
 			command.storyId,
 			async () => {
+				// Recover any interrupted repository-local canonical commit before examining
+				// idempotency. Durable cross-restart recovery remains provided by canonical
+				// event replay checkpoints rather than this operational journal.
+				canonicalCommitLedger.recoverInterrupted(
+					repository,
+					command.storyId,
+					formatCanonicalTimestamp(repository.getWorldClock(command.storyId).getTimestamp()),
+				);
 				// Idempotency inspection is serialized with command execution.
 				// Repository-local recovery is explicit and never scans shared persistent StoryRun state.
 				for (const existingEvent of repository.getCanonicalCommandEvents(command.storyId)) {

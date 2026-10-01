@@ -65,10 +65,11 @@ Research is sanitized through the epistemic boundary before being handed to narr
 
 At source-audit level, no release-critical subsystem introduced by Phases 11–16 is currently orphaned: each has a documented consumer and at least one regression or contract test.
 
-This is not a substitute for runtime verification. The remaining release risk is execution of the final repository npm gate and manual scenario verification on the integration target.
+This is not a substitute for runtime verification. GitHub CI has now executed the repository release gate repeatedly; contract verification and TypeScript pass, while the full test gate remains red on earlier-phase/integration regressions still visible in the stacked branch.
 
 ## Open release risks
 
-1. `npm run lint`, `npm test`, and `npm run build` have not been executed in this environment.
+1. GitHub CI has executed `npm run verify:contracts` and `npm run lint` successfully on the release branch; the latest full test gate remains red, so `npm run build` has not yet become an authoritative release-pass result.
 2. External provider behaviour still requires live provider/fallback scenario verification.
-3. The release branch remains stacked on the Phase 11–15 draft until the earlier PR is integrated.
+3. The release branch remains stacked on the Phase 11–15 integration branch until the earlier PR is integrated.
+4. Phase 18 end-to-end fallback coverage and Phase 20 source-level orphan checks are passing in the release workflow.

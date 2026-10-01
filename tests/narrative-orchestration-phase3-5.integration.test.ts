@@ -126,7 +126,6 @@ test('Phases 3-5 reach the live narrative provider with ordered CurrentSituation
 	});
 
 	assert.equal(result.success, true, result.error || JSON.stringify(result));
-	console.error('AUDIT_DEBUG_PRIMARY_TELEMETRY', JSON.stringify(result.telemetry, null, 2), JSON.stringify(result.attemptsTrail, null, 2));
 	assert.equal(result.telemetry.selectedModelId, 'integration-primary', JSON.stringify({ error: result.error, telemetry: result.telemetry, attemptsTrail: result.telemetry?.fallbackChain }));
 	assert.equal(result.telemetry.researchBlockCount && result.telemetry.researchBlockCount > 0, true);
 	assert.equal(result.telemetry.researchTokens && result.telemetry.researchTokens > 0, true);
@@ -154,7 +153,7 @@ test('Phases 3-5 reach the live narrative provider with ordered CurrentSituation
 		if (i > 0) assert.equal(orderedSections[i] > orderedSections[i - 1], true);
 	}
 	assert.match(prompt, /speechIntent[\s":]+false/i);
-	assert.match(prompt, /Do not create player speech/i);
+	assert.match(prompt, /do not (?:make|create) (?:the )?player speak/i);
 	assert.match(prompt, /starlight fissures/i);
 	assert.doesNotMatch(prompt, /OLD_OPENING_SENTINEL_THIS_MUST_NOT_REACH_NARRATION_PROMPT/i);
 	assert.equal(repository.getStoryRun(storyId)?.runtimeState?.narrativePlan, undefined, 'Ephemeral Phase 4 plan must not be persisted as runtime state.');
@@ -179,7 +178,6 @@ test('Phase 3-5 narrative context survives malformed primary output and reaches 
 	});
 
 	assert.equal(result.success, true, result.error || JSON.stringify(result));
-	console.error('AUDIT_DEBUG_FALLBACK_TELEMETRY', JSON.stringify(result.telemetry, null, 2), JSON.stringify(result.attemptsTrail, null, 2));
 	assert.equal(result.telemetry.selectedModelId, 'integration-fallback', JSON.stringify({ error: result.error, telemetry: result.telemetry, attemptsTrail: result.telemetry?.fallbackChain }));
 	assert.equal(result.telemetry.fallbackChain.includes('integration-fallback'), true);
 	assert.equal(primary.callHistory.length, 1);

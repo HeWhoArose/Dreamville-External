@@ -452,6 +452,16 @@ export interface ProtagonistProfile {
  * External View State: The sanitized projection of the world delivered to the React presentation layer.
  * Strictly free of server-side canonical secrets.
  */
+export interface ContextTransparency {
+  hardTokenBudget: number;
+  totalTokens: number;
+  included: Array<{ id?: string; label: string; band: string; relevanceScore?: number; source?: string; protected: boolean }>;
+  idle: Array<{ id?: string; label: string; band: string; relevanceScore?: number; source?: string; protected: boolean }>;
+  archived: Array<{ id?: string; label: string; band: string; relevanceScore?: number; source?: string; protected: boolean }>;
+  evicted: string[];
+  pinnedSourceIds: string[];
+}
+
 export interface ExternalViewState {
 	storyId?: string;
 	combatState?: CombatStateResponse;
@@ -476,6 +486,7 @@ export interface ExternalViewState {
   isTraveling?: boolean;
   playerLifecycle?: any | null;
   openingScene?: OpeningScene | null;
+  contextTransparency?: ContextTransparency;
 }
 
 export type NarrativeEventType =

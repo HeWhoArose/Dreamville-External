@@ -215,3 +215,53 @@ describe('Phase 18 — end-to-end turn harness', () => {
 	});
 
 });
+
+
+test('full action path hands check justification and bounded failure consequence into narration', async () => {
+  const { serverMockAuthority } = await import('../server/mockEngine/serverMockAuthority');
+  const storyId = 'check_resolution_narration_closure_' + Date.now();
+  worldRepository.seedStory(storyId);
+
+  const orchestrator: any = worldRepository.getAiOrchestrator();
+  const originalGenerateNarrativeOnly = orchestrator.generateNarrativeOnly;
+  let seenCommittedOutcome = '';
+
+  orchestrator.generateNarrativeOnly = async (params: any) => {
+    seenCommittedOutcome = String(params?.committedOutcome || '');
+    return {
+      success: true,
+      source: 'AI_PRIMARY',
+      providerId: 'test-provider',
+      modelId: 'test-model',
+      turnPackage: {
+        narrative: ['The maneuver resolves in the current scene.'],
+        dialogue: [],
+        events: [],
+        stateChanges: [],
+        memoryCandidates: [],
+        audioCues: [],
+        visualCues: [],
+      },
+    };
+  };
+
+  try {
+    const result: any = await serverMockAuthority.processCustomAction(
+      {
+        type: 'CUSTOM_ACTION',
+        storyId,
+        actionText: 'I parkour my way towards the light.',
+      } as any,
+      'check_resolution_narration_command',
+      { bypassCapabilityAdvisor: true } as any,
+    );
+
+    assert.ok(result.checkResult);
+    assert.equal(result.checkResult.skill, 'Acrobatics');
+    assert.ok(result.checkResult.narrativeGuidance);
+    assert.match(seenCommittedOutcome, /Why the check was required/i);
+    assert.match(seenCommittedOutcome, /landing|balance|terrain|forward progress/i);
+  } finally {
+    orchestrator.generateNarrativeOnly = originalGenerateNarrativeOnly;
+  }
+});

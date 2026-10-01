@@ -27,6 +27,7 @@ This matrix is the release contract for the Phase 1–16 architecture. It record
 | 19 | Verification discipline checks | source/test/build gate contract | contributors/release process | implementation change | stop before release if contract absent | verification contract test |
 | 20 | OrphanConnectionAudit | orphan/connection report | release audit | pre-release audit | unresolved entries block release | orphan audit test |
 | 21 | ReleaseGateDefinition | lint/test/build + scenario gate | release decision | candidate branch/main | no release claim without all gates | release-gate contract test |
+| 22 | Phase 22 stabilization contracts | stabilization invariants + regression suite | release verifier / release gate | release-candidate audit | fail-fast on stale/partial/orphaned closure | phase22-release-stabilization test |
 
 ## Canonical gameplay dependency chain
 

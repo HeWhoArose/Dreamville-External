@@ -126,6 +126,7 @@ test('Phases 3-5 reach the live narrative provider with ordered CurrentSituation
 	});
 
 	assert.equal(result.success, true, result.error || JSON.stringify(result));
+	console.error('AUDIT_DEBUG_PRIMARY_TELEMETRY', JSON.stringify(result.telemetry, null, 2), JSON.stringify(result.attemptsTrail, null, 2));
 	assert.equal(result.telemetry.selectedModelId, 'integration-primary');
 	assert.equal(result.telemetry.researchBlockCount && result.telemetry.researchBlockCount > 0, true);
 	assert.equal(result.telemetry.researchTokens && result.telemetry.researchTokens > 0, true);

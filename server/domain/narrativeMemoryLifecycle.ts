@@ -188,7 +188,9 @@ export class NarrativeMemoryLifecycle {
 			if (thread.status !== 'OPEN') continue;
 			const titleTokens = thread.title.toLowerCase().split(/\W+/).filter((token) => token.length >= 5).slice(0, 8);
 			const matched = titleTokens.filter((token) => narrative.includes(token)).length;
-			if (matched >= Math.min(2, titleTokens.length) && /\b(?:resolved|settled|answered|confirmed|found|completed|finished|closed|no longer|was resolved)\b/i.test(narrative)) {
+			const positiveResolution = /\b(?:resolved|settled|answered|confirmed|found|completed|finished|closed|no longer resolved|was resolved)\b/i.test(narrative);
+			const negativeResolution = /\b(?:not|never|still|cannot|could not|couldn't|has not|hasn't|have not|haven't)\s+(?:resolved|settled|answered|confirmed|found|completed|finished|closed)\b/i.test(narrative);
+			if (matched >= Math.min(2, titleTokens.length) && positiveResolution && !negativeResolution) {
 				thread.status = 'RESOLVED';
 				thread.lastTouchedAt = timestamp;
 				resolvedThreadIds.push(thread.id);
@@ -220,7 +222,6 @@ export class NarrativeMemoryLifecycle {
 		}
 		plot.summary = plotSummary;
 		plot.updatedAt = timestamp;
-		plot.version = Math.max(1, Number(plot.version || 1)) + 1;
 		plot.openThreads = runtime.openNarrativeThreads.map((thread: NarrativeOpenThreadRecord) => thread.title).slice(-24);
 		runtime.plot = plot;
 

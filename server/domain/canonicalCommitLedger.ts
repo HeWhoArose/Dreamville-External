@@ -107,12 +107,14 @@ export class CanonicalCommitLedger {
       ownerPhases: { handler: 'PENDING', customRules: 'PENDING', state: 'PENDING', event: 'PENDING' },
       recoveryAction: 'ABORT_AND_RESTORE',
     };
-    saveLedger(repository, command.storyId, [...getLedger(repository, command.storyId), entry]);
+    const ledger = getLedger(repository, command.storyId);
+    const withoutPreviousAttempt = ledger.filter((candidate) => candidate.commandId !== command.commandId);
+    saveLedger(repository, command.storyId, [...withoutPreviousAttempt, entry]);
     return entry;
   }
 
   public static find(repository: WorldRepository, storyId: string, commandId: string): CanonicalCommitLedgerEntry | undefined {
-    return getLedger(repository, storyId).find((entry) => entry.commandId === commandId);
+    return getLedger(repository, storyId).slice().reverse().find((entry) => entry.commandId === commandId);
   }
 
   public static markPhase(repository: WorldRepository, storyId: string, commandId: string, phase: CanonicalCommitPhase, now: string, updates: Partial<CanonicalCommitLedgerEntry> = {}): CanonicalCommitLedgerEntry | undefined {

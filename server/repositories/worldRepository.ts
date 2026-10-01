@@ -3275,9 +3275,6 @@ export class InMemoryWorldRepository implements WorldRepository {
       ? clone(this.getStoryRun(storyId)?.canonicalEvents || [])
       : undefined;
     const currentRuntime = clone(this.getStoryRun(storyId)?.runtimeState || {});
-    const preservedCanonicalCommitLedger = Array.isArray(currentRuntime?.canonicalCommitLedger)
-      ? currentRuntime.canonicalCommitLedger
-      : undefined;
     const preservedWorkingContextPins = Array.isArray(currentRuntime?.workingContextPins)
       ? currentRuntime.workingContextPins
       : undefined;
@@ -3328,14 +3325,7 @@ export class InMemoryWorldRepository implements WorldRepository {
           inventory: clone(snapshot.inventory),
         };
       }
-      // Canonical rollback restores game state, not transaction bookkeeping or user context pins.
-      // These are operational/presentation metadata owned by the live repository boundary.
-      if (preservedCanonicalCommitLedger) {
-        restoredRun.runtimeState = {
-          ...(restoredRun.runtimeState || {}),
-          canonicalCommitLedger: clone(preservedCanonicalCommitLedger),
-        };
-      }
+      // Canonical rollback restores game state, not user context pins.
       if (preservedWorkingContextPins) {
         restoredRun.runtimeState = {
           ...(restoredRun.runtimeState || {}),

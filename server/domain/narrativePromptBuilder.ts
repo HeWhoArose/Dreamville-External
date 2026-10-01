@@ -211,7 +211,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		if (maxPromptTokens < 600) {
 			const budgetChars = Math.max(1200, maxPromptTokens * 4);
 			const microGlobal = 'Generate only the player-facing narrative. Preserve player agency and canonical truth. Never make major future decisions for the player.';
-			const microQuality = 'N1 profile=' + narrativeQualityContract.profile + '; enforcement=' + narrativeQualityContract.controls.enforcement + '; preferred paragraphs=' + narrativeQualityContract.controls.preferredParagraphs + '; max paragraphs=' + narrativeQualityContract.controls.maxParagraphs + '; preserve scene grounding, specificity, coherence, novelty, character distinctiveness, emotional continuity, pacing, and player agency.';
+			const microQuality = truncatePromptSection(promptBudgetQualityContext, 420);
 			const microSituation = truncatePromptSection(situationContext, 360);
 			const microIntent = truncatePromptSection(intentContext, 180);
 			const microResolution = truncatePromptSection(actionResolutionContext, 620);
@@ -292,7 +292,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		} else {
 			const compactGlobal = 'Generate only the player-facing narrative. Never choose a major future action for the player. The structured Action Resolution is authoritative for mechanics and consequences.';
 			const compactStyle = 'Depict the current action and observable response; preserve player agency and canonical truth. Stay in the canonical current location unless the canonical game state has already committed a location change.';
-			const compactQuality = 'N1 profile=' + narrativeQualityContract.profile + '; enforcement=' + narrativeQualityContract.controls.enforcement + '; preferred paragraphs=' + narrativeQualityContract.controls.preferredParagraphs + '; max paragraphs=' + narrativeQualityContract.controls.maxParagraphs + '; quality priorities: scene grounding, specificity, pacing, novelty, character distinctiveness, emotional continuity, coherence, player agency.';
+			const compactQuality = truncatePromptSection(promptBudgetQualityContext, 420);
 			const compactSituation = truncatePromptSection(situationContext, 520);
 			const compactIntent = truncatePromptSection(intentContext, 180);
 			const compactResolution = truncatePromptSection(actionResolutionContext, 700);

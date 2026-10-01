@@ -7455,6 +7455,27 @@ gameRouter.post('/orchestrator/turn', async (req: Request, res: Response) => {
           );
         }
 
+        if (turnResult.success && turnResult.turnPackage) {
+          const committedPlayer = context.repository.getPlayerLifecycle(storyId);
+          const committedSituation = CurrentSituationBuilder.build({
+            storyId,
+            playerAction,
+            currentAction: turnResult.playerIntent,
+            viewerActorId: committedPlayer?.actorId,
+            worldRepo: context.repository,
+          });
+          narrativeContinuityEngine.recordTurn(context.repository, {
+            storyId,
+            turnId: turnResult.telemetry.turnId,
+            playerAction,
+            playerIntent: turnResult.playerIntent,
+            currentSituation: committedSituation,
+            narrativeReview: turnResult.narrativeReview,
+            stateAdjudication: turnResult.stateAdjudication,
+            turnPackage: turnResult.turnPackage,
+          });
+        }
+
         return {
           success: turnResult.success,
           data: turnResult,

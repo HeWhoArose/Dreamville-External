@@ -516,18 +516,13 @@ export const StoryView: React.FC<StoryViewProps> = ({
           }
 
           setIsTranscribing(true);
-          const res = await fetch('/api/game/sensory/transcribe', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ audioBase64: base64Audio, storyId }),
+          const transcription = await apiClient.transcribeAudio({
+            storyId,
+            audioBase64: base64Audio,
+            audioMimeType: mediaRecorder.mimeType || audioBlob.type || 'audio/webm',
           });
-          const data = await res.json();
 
-          if (!res.ok || !data?.success || !String(data?.text || '').trim()) {
-            throw new Error(data?.error || 'No transcription result was returned.');
-          }
-
-          const text = String(data.text).trim();
+          const text = transcription.text.trim();
           setTypedAction((previous) => (previous ? `${previous} ${text}` : text));
           triggerHaptic('medium');
         } catch (error) {
@@ -1856,7 +1851,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
 
           <button
             type="submit"
-            disabled={!typedAction.trim() || isProcessingAction || isProcessingOoc || isRecording}
+            disabled={!typedAction.trim() || isProcessingAction || isProcessingOoc || isRecording || isTranscribing}
             className="flex h-12 shrink-0 items-center gap-2 rounded-2xl bg-gradient-to-r from-violet-300 to-fuchsia-300 px-5 text-sm font-semibold text-[#160b22] transition hover:from-violet-200 hover:to-fuchsia-200 disabled:cursor-not-allowed disabled:opacity-30"
           >
             {isProcessingAction ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}

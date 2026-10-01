@@ -180,6 +180,7 @@ export interface CurrentSituation {
 		isTransformed: boolean;
 		isPossessed: boolean;
 		injuries: string[];
+		spatial: LocalSpatialState;
 	};
 	location: CurrentLocationContext;
 	nearbyEntities: NearbyEntityContext[];

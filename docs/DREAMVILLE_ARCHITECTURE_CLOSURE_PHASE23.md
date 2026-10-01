@@ -107,6 +107,9 @@ Existing Phase 18 integration coverage continues to verify that check justificat
 
 ## Verification gate
 
+The Phase 23 changes do not alter the test runner's established file-level isolation model; the release suite remains the existing `npm test` contract.
+
+
 Required before merge to `main`:
 
 - `npm run verify:contracts`

@@ -54,7 +54,7 @@ export class StoryCheckAuthority {
 		const rulesProfile = request.rulesProfile
 			|| repository.getRulesProfile(request.storyId);
 
-		const diceThemeId = repository.getSensoryEngine?.().getDiceTheme(request.storyId);
+		const diceThemeId = repository.getSensoryEngine().getDiceTheme(request.storyId);
 
 		const character = {
 			coreStats: run.characterCoreStats || run.protagonist?.coreStats,

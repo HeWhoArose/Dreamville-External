@@ -239,7 +239,7 @@ export class NarrativeContinuityEngine {
           id: deterministicId('plot_beat', params.storyId, turnId, text),
           turnId,
           text: text.slice(0, 1000),
-          tags: ['LEGACY_COMPATIBILITY'],
+          tags: (params.turnPackage.events || []).filter(Boolean).slice(0, 4).length > 0 ? (params.turnPackage.events || []).filter(Boolean).slice(0, 4) : ['LEGACY_COMPATIBILITY'],
           timestamp,
         });
         state.plot.beats = state.plot.beats.slice(-40);

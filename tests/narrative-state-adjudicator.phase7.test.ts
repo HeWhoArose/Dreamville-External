@@ -61,6 +61,14 @@ test('Phase 7 approves a bounded canonical health proposal and commits it transa
 	};
 	const adjudication = NarrativeStateAdjudicator.adjudicate({
 		...baseParams(repository, player, [proposal]),
+		canonicalAdjudication: {
+			allApproved: true,
+			approvedCount: 1,
+			rejectedCount: 0,
+			outcomes: [{ change: proposal, approved: true, canonicalEngine: 'ConditionEngine' }],
+			approvedChanges: [proposal],
+			disapprovedChanges: [],
+		},
 		verifiedCanonicalChanges: [proposal],
 	});
 	assert.equal(adjudication.approvedCount, 1);
@@ -89,4 +97,27 @@ test('Phase 7 keeps rejected location proposals from mutating canonical state', 
 	]));
 	NarrativeStateAdjudicator.commit(repository, adjudication);
 	assert.equal(repository.getPlayerLifecycle('state-story')?.locationId, before);
+});
+
+
+test('Phase 7 does not treat existing domain approval alone as canonical authorization', () => {
+	const { repository, player } = setup();
+	const proposal = {
+		kind: 'HEALTH',
+		targetId: player.actorId,
+		value: 25,
+	};
+	const adjudication = NarrativeStateAdjudicator.adjudicate({
+		...baseParams(repository, player, [proposal]),
+		canonicalAdjudication: {
+			allApproved: true,
+			approvedCount: 1,
+			rejectedCount: 0,
+			outcomes: [{ change: proposal, approved: true, canonicalEngine: 'ConditionEngine' }],
+			approvedChanges: [proposal],
+			disapprovedChanges: [],
+		},
+	});
+	assert.equal(adjudication.approvedCount, 0);
+	assert.equal(adjudication.outcomes[0].committed, false);
 });

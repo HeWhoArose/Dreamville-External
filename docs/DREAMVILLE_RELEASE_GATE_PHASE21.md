@@ -68,4 +68,4 @@ The release is not considered green unless:
 
 ## Environment status for this implementation session
 
-The working environment could not access the repository over the network, so the npm commands were not executed locally. No claim of local lint/test/build success is made. The new workflow is intended to execute the same gate on GitHub, and the final main-branch gate remains the authoritative release verification.
+The working environment could not access the repository over the network, so the npm commands were not executed locally. GitHub Actions has nevertheless executed the release gate on this branch: contract verification and TypeScript have passed, while the full test suite is still red on remaining earlier-phase/integration regressions. Therefore Phase 21 is implemented but the release candidate is not yet green. The final main-branch gate remains the authoritative release verification.

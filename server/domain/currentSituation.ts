@@ -421,7 +421,7 @@ function buildRecentTurns(run: any, canonicalEvents: any[], maxRecentTurns: numb
 			unresolvedConsequence: normalizeText(entry?.unresolvedConsequence || '') || undefined,
 			isOpeningScene: Boolean(entry?.isOpeningScene),
 		}))
-		.filter((turn) => turn.playerAction || turn.narration);
+		.filter((turn: RecentTurnContext) => turn.playerAction || turn.narration);
 
 	if (runtimeTurns.length > 0) {
 		return runtimeTurns.slice(-maxRecentTurns);

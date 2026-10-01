@@ -7167,7 +7167,7 @@ export class MultiModelOrchestrator {
       globalInstruction: 'You are Dreamville’s narrative presentation engine. Generate only the player-facing narrative turn using the supplied canonical state, semantic player intent, bounded research, and ephemeral plan.',
       styleInstruction,
       canonicalOutcome: authoritativeOutcome,
-      maxPromptTokens: Math.max(hardTokenBudget * 2, 2200),
+      maxPromptTokens: hardTokenBudget < 1000 ? Math.max(400, hardTokenBudget) : Math.max(hardTokenBudget * 2, 2200),
     });
 
     const contextAudit = {

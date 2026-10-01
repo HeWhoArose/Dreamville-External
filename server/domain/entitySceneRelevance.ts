@@ -38,6 +38,9 @@ export class EntitySceneRelevanceEngine {
 				let score = 0;
 				const reasons: string[] = [];
 				const bands: EntitySceneRelevance['bands'] = [];
+				const explicitlyMarked = Boolean(entity.explicitlyReferenced) ||
+					(entity.id && (intent?.explicitTargets || []).some((target) => target.id === entity.id)) ||
+					(entity.name && (intent?.explicitTargets || []).some((target) => normalize(target.name) === normalize(entity.name)));
 				const explicit = entityReferenced(entity, intent, actionText);
 
 				if (!entity.visibleToPlayer) return { entityId: entity.id, score: 0, rank: 0, reasons: ['NOT_VISIBLE'], bands: [], visible: false };
@@ -46,10 +49,14 @@ export class EntitySceneRelevanceEngine {
 					reasons.push('same current location');
 					bands.push('CURRENT_LOCATION');
 				}
-				if (explicit) {
-					score += 55;
+				if (explicitlyMarked) {
+					score += 70;
 					reasons.push('explicit player target/reference');
 					bands.push('EXPLICIT_TARGET');
+				} else if (explicit) {
+					score += 15;
+					reasons.push('textual player reference');
+					bands.push('REFERRED');
 				}
 				if (activeDialogueSpeaker === entity.id) {
 					score += 35;

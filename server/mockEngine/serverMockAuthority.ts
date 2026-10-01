@@ -821,7 +821,7 @@ export class ServerMockAuthority {
         );
         actionResolution.actualEffect += ' The bounded local spatial state reflects the resolved movement.';
         actionResolution.canonicalStateChanges.push({
-          kind: 'LOCATION',
+          kind: 'SPATIAL',
           targetId: actorId,
           value: {
             localSpatialState: {

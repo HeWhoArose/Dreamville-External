@@ -7665,6 +7665,7 @@ export class MultiModelOrchestrator {
               narrativeReview,
             };
             this.lastTurnTelemetry = telemetry;
+            if (!repo.isCanonicalCommandTransactionActive()) {
             narrativeContinuityEngine.recordTurn(repo, {
               storyId,
               turnId,
@@ -7675,6 +7676,7 @@ export class MultiModelOrchestrator {
               stateAdjudication,
               turnPackage: reviewedTurnPackage,
             });
+            }
 
             return {
               success: true,
@@ -7861,6 +7863,7 @@ export class MultiModelOrchestrator {
             };
             this.lastTurnTelemetry = telemetry;
 
+            if (!repo.isCanonicalCommandTransactionActive()) {
             narrativeContinuityEngine.recordTurn(repo, {
               storyId,
               turnId,
@@ -7871,6 +7874,7 @@ export class MultiModelOrchestrator {
               stateAdjudication,
               turnPackage: emergencyTurnPackage,
             });
+            }
 
             return {
               success: true,

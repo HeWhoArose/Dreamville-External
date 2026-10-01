@@ -7,6 +7,8 @@ import { UniverseRuntimeService } from './universeRuntimeService';
 import { CurrentSituationBuilder, type CurrentSituation } from './currentSituation';
 import type { PlayerIntent } from './playerIntentInterpreter';
 import { narrativeMemoryLifecycle } from './narrativeMemoryLifecycle';
+import type { NarrativeReview } from './semanticNarrativeReview';
+import type { StateAdjudicationResult } from './narrativeStateAdjudicator';
 
 export interface NarrativePlotState {
   storyId: string;
@@ -211,7 +213,7 @@ export class NarrativeContinuityEngine {
     return packet;
   }
 
-  public static recordTurn(repository: WorldRepository, params: any): { plot: NarrativePlotState; plan: NarrativePlanState } {
+  public static recordTurn(repository: WorldRepository, params: { storyId: string; turnId?: string; playerAction?: string; playerIntent?: PlayerIntent; turnPackage: StructuredTurnPackage; currentSituation?: CurrentSituation; narrativeReview?: NarrativeReview; stateAdjudication?: StateAdjudicationResult }): { plot: NarrativePlotState; plan: NarrativePlanState } {
     const run = repository.getStoryRun(params.storyId);
     if (!run) return { plot: this.defaultPlot(params.storyId), plan: this.defaultPlan(params.storyId) };
     const situation = params.currentSituation || CurrentSituationBuilder.build({ storyId: params.storyId, playerAction: params.playerAction || '', currentAction: params.playerIntent, viewerActorId: repository.getPlayerLifecycle(params.storyId)?.actorId, worldRepo: repository });

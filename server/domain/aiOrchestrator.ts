@@ -6357,6 +6357,38 @@ export class MultiModelOrchestrator {
     const output = String(narration || '').trim().toLowerCase();
     if (!action || !output) return { valid: true };
 
+    if (intent) {
+      const movementAnchors = /\b(?:move|moved|moves|walk|walked|walks|step|stepped|steps|approach|approached|approaches|close|closer|near|nearer|head|headed|travel|traveled|travelled|enter|entered|leave|left)\b/i;
+      const observationAnchors = /\b(?:listen|listened|listens|hear|heard|hears|overhear|overheard|eavesdrop|watch|watched|watches|observe|observed|observes|notice|noticed|notices|see|saw|sees|look|looked|looks|scan|scanned|scans|inspect|inspected|study|studied|studies)\b/i;
+      if (intent.movementIntent && !movementAnchors.test(output)) {
+        return {
+          valid: false,
+          errorReason: 'Narration semantic backstop rejected output: the requested movement was not visibly depicted.',
+        };
+      }
+      if (intent.observationIntent && !observationAnchors.test(output)) {
+        return {
+          valid: false,
+          errorReason: 'Narration semantic backstop rejected output: the requested observation was not visibly depicted.',
+        };
+      }
+      const targets = [
+        ...(intent.explicitTargets || []).map((target) => target.name),
+        intent.target?.name,
+        intent.locationTarget?.name,
+      ]
+        .filter((name): name is string => Boolean(name && name.trim()))
+        .flatMap((name) => name.toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length >= 4))
+        .slice(0, 6);
+      if (targets.length > 0 && !targets.some((token) => output.includes(token))) {
+        return {
+          valid: false,
+          errorReason: 'Narration semantic backstop rejected output: an explicit player target was not visibly represented.',
+        };
+      }
+      return { valid: true };
+    }
+
     const requirements: Array<{ label: string; pattern: RegExp; anchors: string[] }> = [
       { label: 'breathing', pattern: /\b(?:breathe|breathing|breath|inhale|inhaled|exhale|exhaled)\b/i, anchors: ['breathe', 'breath', 'inhale', 'exhale'] },
       { label: 'sitting or settling', pattern: /\b(?:sit|sits|sat|seated|settle|settles|settled|rest|rests|rested|kneel|kneels|knelt|crouch|crouches|crouched)\b/i, anchors: ['sit', 'sat', 'seated', 'settle', 'rest', 'kneel', 'crouch'] },

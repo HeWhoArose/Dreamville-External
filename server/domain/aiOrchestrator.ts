@@ -22,7 +22,7 @@ import { CurrentSituationBuilder } from './currentSituation';
 import { PlayerIntentInterpreter, type PlayerIntent } from './playerIntentInterpreter';
 import { NarrativeResearchPipeline, type NarrativeResearchResult } from './narrativeResearchPipeline';
 import { NarrativeDirector, type EphemeralNarrativePlan } from './narrativeDirector';
-import { buildNarrationPrompt, defaultNarrationStyle } from './narrativePromptBuilder';
+import { buildNarrationPrompt, defaultNarrationStyle, projectSupportingWorkingContext } from './narrativePromptBuilder';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
 
@@ -6820,7 +6820,7 @@ export class MultiModelOrchestrator {
       intent: playerIntent,
       research: researchResult,
       plan: narrativePlan,
-      workingContext: assembledContext.assembledText,
+      workingContext: projectSupportingWorkingContext(assembledContext),
       globalInstruction: 'You are Dreamville’s narrative presentation engine. Generate only the player-facing narrative turn using the supplied canonical state, semantic player intent, bounded research, and ephemeral plan.',
       styleInstruction,
       canonicalOutcome: authoritativeOutcome,
@@ -7144,7 +7144,7 @@ export class MultiModelOrchestrator {
         intent: playerIntent,
         research: researchResult,
         plan: narrativePlan,
-        workingContext: assembledContext.assembledText,
+        workingContext: projectSupportingWorkingContext(assembledContext),
         globalInstruction: 'You are Dreamville’s authoritative narrative presentation engine. Generate only the player-facing narrative turn. Canonical game state remains authoritative and prose never commits state.',
         styleInstruction: defaultNarrationStyle(),
         maxPromptTokens: Math.max(hardTokenBudget, 1200),

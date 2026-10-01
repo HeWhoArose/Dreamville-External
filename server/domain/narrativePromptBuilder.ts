@@ -102,7 +102,7 @@ export function defaultNarrationStyle(): string {
 		'Preserve rumor, hearsay, memory, and uncertainty as uncertainty; do not upgrade them to established fact.',
 		'Remain in the canonical scene and world time unless the supplied canonical state explicitly says they changed. The canonical game state has already committed a location change only when the supplied Current Situation reflects that change.',
 		'Do not dump research or internal engine terminology into the player-facing narration.',
-		'Normally write 2–3 concise paragraphs; tiny actions may use one paragraph.',
+		'Response length is governed by the Narrative Quality Contract for this turn; do not force a universal paragraph count.',
 	].join(' ');
 }
 
@@ -208,7 +208,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		if (maxPromptTokens < 600) {
 			const budgetChars = Math.max(1200, maxPromptTokens * 4);
 			const microGlobal = 'Generate only the player-facing narrative. Preserve player agency and canonical truth. Never make major future decisions for the player.';
-			const microQuality = truncatePromptSection(narrativeQualityContext, 700);
+			const microQuality = 'N1 profile=' + narrativeQualityContract.profile + '; enforcement=' + narrativeQualityContract.controls.enforcement + '; preferred paragraphs=' + narrativeQualityContract.controls.preferredParagraphs + '; max paragraphs=' + narrativeQualityContract.controls.maxParagraphs + '; preserve scene grounding, specificity, coherence, novelty, character distinctiveness, emotional continuity, pacing, and player agency.';
 			const microSituation = truncatePromptSection(situationContext, 360);
 			const microIntent = truncatePromptSection(intentContext, 180);
 			const microResolution = truncatePromptSection(actionResolutionContext, 620);
@@ -251,9 +251,9 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			}
 		} else if (maxPromptTokens >= 1000) {
 			const compact = {
-				intentContext: truncatePromptSection(intentContext, 260),
+				intentContext: intentContext,
 				researchContext: truncatePromptSection(initialResearch, 420),
-				planContext: truncatePromptSection(planContext, 320),
+				planContext: truncatePromptSection(planContext, 300),
 				workingContext: '[supporting context omitted to preserve the canonical narration contract]',
 				situationContext: truncatePromptSection(situationContext, 900),
 			};
@@ -290,7 +290,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		} else {
 			const compactGlobal = 'Generate only the player-facing narrative. Never choose a major future action for the player. The structured Action Resolution is authoritative for mechanics and consequences.';
 			const compactStyle = 'Depict the current action and observable response; preserve player agency and canonical truth. Stay in the canonical current location unless the canonical game state has already committed a location change.';
-			const compactQuality = truncatePromptSection(narrativeQualityContext, 700);
+			const compactQuality = 'N1 profile=' + narrativeQualityContract.profile + '; enforcement=' + narrativeQualityContract.controls.enforcement + '; preferred paragraphs=' + narrativeQualityContract.controls.preferredParagraphs + '; max paragraphs=' + narrativeQualityContract.controls.maxParagraphs + '; quality priorities: scene grounding, specificity, pacing, novelty, character distinctiveness, emotional continuity, coherence, player agency.';
 			const compactSituation = truncatePromptSection(situationContext, 520);
 			const compactIntent = truncatePromptSection(intentContext, 180);
 			const compactResolution = truncatePromptSection(actionResolutionContext, 700);

@@ -33,7 +33,7 @@ function narrativeModel(providerId: string, modelId: string, priority = 100): Mo
 function validNarrative(): string {
 	return JSON.stringify({
 		narrative: [
-			'You move closer to the archivists without speaking, keeping your attention on the low conversation.',
+			'You move closer to the Whispering Orrery archivists without speaking, keeping your attention on the low conversation.',
 			'The whispers mention unstable starlight fissures in the lower sea, though the speakers treat the report as uncertain hearsay.',
 		],
 		dialogue: [],

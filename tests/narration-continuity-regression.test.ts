@@ -170,3 +170,31 @@ test('canonical action turn numbers increment independently from world calendar 
 	assert.equal(history[0].cycle, history[1].cycle);
 	assert.equal(history[1].cycle, history[2].cycle);
 });
+
+test('emergency floor adapter produces valid narration that satisfies information continuity', async () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'emergency_floor_info_regression';
+	repository.seedStory(storyId);
+	const orchestrator = new MultiModelOrchestrator(repository);
+
+	const action = 'I move down to the crowd to inquire about the rumors.';
+	const emergencyAdapter = (orchestrator as any).getAdapter('provider_deterministic_emergency');
+	assert.ok(emergencyAdapter);
+
+	const result = await emergencyAdapter.generate('narrative.generate', `Latest Player Action: ${action}`, {
+		canonicalLocationName: 'Rootspire Citadel',
+		playerAction: action,
+	});
+
+	const validation = orchestrator.validateTurnPackage(result.text, { allowPlainTextNarration: true });
+	assert.equal(validation.valid, true);
+	assert.ok(validation.turnPackage);
+
+	const narrationText = validation.turnPackage!.narrative.join(' ');
+	const actionContinuity = (orchestrator as any).validateNarrativeActionContinuity(narrationText, action);
+	assert.equal(actionContinuity.valid, true);
+
+	const infoContinuity = (orchestrator as any).validateNarrativeInformationContinuity(narrationText, action);
+	assert.equal(infoContinuity.valid, true);
+});
+

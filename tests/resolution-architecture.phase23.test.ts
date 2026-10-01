@@ -206,39 +206,68 @@ test('addressed NPC planning slice stays actor-scoped', () => {
   assert.match(slice!.knowledgeBoundary, /NPC/);
 });
 
-test('canonical restore preserves live transaction ledger and working-context pins', () => {
+test('canonical restore preserves user context pins but does not persist the operational ledger into StoryRun', () => {
   const repository = new InMemoryWorldRepository({ disablePersistence: true });
   const storyId = 'phase23_restore_metadata';
   repository.seedStory(storyId);
   const run = repository.getStoryRun(storyId)!;
   run.runtimeState = {
     ...(run.runtimeState || {}),
-    canonicalCommitLedger: [{
-      ledgerId: 'ledger_live',
-      storyId,
-      commandId: 'cmd_live',
-      phase: 'HANDLER_RESOLVED',
-      startedAt: 'Y0001-M01-D01T00:00:00',
-      updatedAt: 'Y0001-M01-D01T00:00:01',
-      transactionMode: 'STAGED',
-      preStateHash: 'hash',
-      preStateSnapshot: captureCanonicalStateSnapshot(storyId, repository),
-      commandPayload: {},
-      ownerPhases: { handler: 'VERIFIED' },
-      recoveryAction: 'ABORT_AND_RESTORE',
-    }],
     workingContextPins: ['b2_player_intent'],
   };
   repository.saveStoryRun(run);
-  const snapshot = captureCanonicalStateSnapshot(storyId, repository);
-  repository.getStoryRun(storyId)!.runtimeState = {
-    ...(repository.getStoryRun(storyId)!.runtimeState || {}),
-    workingContextPins: ['mutated'],
+
+  const command = {
+    commandId: 'phase23_live_ledger',
+    storyId,
+    actorId: repository.getPlayerLifecycle(storyId)!.actorId,
+    type: 'CORE_ACTION' as const,
+    payload: { action: 'test' },
+    source: 'PLAYER' as const,
   };
+  canonicalCommitLedger.begin(
+    repository,
+    command,
+    captureCanonicalStateSnapshot(storyId, repository),
+    'hash',
+    'Y0001-M01-D01T00:00:00',
+  );
+
+  const snapshot = captureCanonicalStateSnapshot(storyId, repository);
   repository.restoreCanonicalStateSnapshot(snapshot);
+
   const restored = repository.getStoryRun(storyId)!;
   assert.deepEqual(restored.runtimeState?.workingContextPins, ['b2_player_intent']);
-  assert.equal(restored.runtimeState?.canonicalCommitLedger?.[0]?.commandId, 'cmd_live');
+  assert.equal(restored.runtimeState?.canonicalCommitLedger, undefined);
+  assert.equal(canonicalCommitLedger.find(repository, storyId, command.commandId)?.phase, 'PREPARED');
+});
+
+test('canonical commit ledgers are isolated per repository instance', () => {
+  const repositoryA = new InMemoryWorldRepository({ disablePersistence: true });
+  const repositoryB = new InMemoryWorldRepository({ disablePersistence: true });
+  const storyId = 'phase23_isolated_ledger';
+  repositoryA.seedStory(storyId);
+  repositoryB.seedStory(storyId);
+
+  const command = {
+    commandId: 'shared_command_id',
+    storyId,
+    actorId: repositoryA.getPlayerLifecycle(storyId)!.actorId,
+    type: 'CORE_ACTION' as const,
+    payload: { action: 'test' },
+    source: 'PLAYER' as const,
+  };
+
+  canonicalCommitLedger.begin(
+    repositoryA,
+    command,
+    captureCanonicalStateSnapshot(storyId, repositoryA),
+    'hash-a',
+    'Y0001-M01-D01T00:00:00',
+  );
+
+  assert.ok(canonicalCommitLedger.find(repositoryA, storyId, command.commandId));
+  assert.equal(canonicalCommitLedger.find(repositoryB, storyId, command.commandId), undefined);
 });
 
 test('canonical commit ledger can recover an interrupted command from its pre-state', () => {

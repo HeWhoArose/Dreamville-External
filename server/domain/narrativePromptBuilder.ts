@@ -257,7 +257,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				intentContext: intentContext,
 				researchContext: truncatePromptSection(initialResearch, 420),
 				planContext: truncatePromptSection(planContext, 300),
-				workingContext: '[supporting context omitted to preserve the canonical narration contract]',
+				workingContext: truncatePromptSection(initialWorking, 320),
 				situationContext: truncatePromptSection(situationContext, 900),
 			};
 			const renderCompact = () => compose(

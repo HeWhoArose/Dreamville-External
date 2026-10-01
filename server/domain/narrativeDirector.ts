@@ -84,7 +84,7 @@ export class NarrativeDirector {
 		const situation = params.situation;
 		const intent = params.intent;
 		const research = params.research;
-		const isInformationSeeking = Boolean(intent.informationGoal) || intent.interactionMode === 'INFORMATION_SEEKING' || intent.interactionMode === 'PASSIVE_OBSERVATION';
+		const isInformationSeeking = Boolean(intent.informationGoal) || intent.interactionMode === 'INFORMATION_SEEKING';
 		const steps: string[] = [];
 		if (intent.movementIntent) steps.push(intent.action === 'approach_and_listen' ? 'Move the protagonist physically closer to the relevant source while preserving the stated passive intent.' : 'Resolve the requested movement or positional change before any secondary observation or interaction.');
 		if (intent.observationIntent) steps.push('Describe only observations the protagonist can perceive from the supplied current scene and research.');

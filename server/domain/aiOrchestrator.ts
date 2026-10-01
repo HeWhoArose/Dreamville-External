@@ -7391,6 +7391,12 @@ export class MultiModelOrchestrator {
     const maxRetries = params.maxRetries ?? 2;
 
     const repo = params.repository || this.getWorldRepository();
+    // A direct orchestrator caller may be creating the first turn for a new story.
+    // Initialize the canonical Story Run here rather than making every downstream
+    // read-model consumer invent or duplicate initialization behavior.
+    if (!repo.getStoryRun(storyId)) {
+      repo.seedStory(storyId);
+    }
     // V6.34 Stable Identifiers: stats remain process-local, but canonical turn identity
     // derives from the authoritative story command sequence so replay does not depend on
     // unrelated turns executed elsewhere in the process.

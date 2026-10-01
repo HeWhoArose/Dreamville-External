@@ -4,6 +4,7 @@ import { formatCanonicalTimestamp } from './deterministicRng';
 import { CurrentSituationBuilder, type CurrentSituation } from './currentSituation';
 import { narrativeContinuityEngine, type NarrativeResearchPacket } from './narrativeContinuityEngine';
 import type { PlayerIntent } from './playerIntentInterpreter';
+import { EntitySceneRelevanceEngine } from './entitySceneRelevance';
 
 export type NarrativeResearchBlockKind =
 	| 'SCENE'
@@ -288,16 +289,9 @@ export class NarrativeResearchPipeline {
 			].filter(Boolean).map((name) => String(name).toLowerCase()),
 		);
 
-		const relevantEntities = situation.nearbyEntities
-			.filter((entity) => entity.kind !== 'PLAYER')
-			.filter((entity) => entity.visibleToPlayer)
-			.filter((entity) =>
-				explicitTargetIds.has(entity.id) ||
-				explicitTargetNames.has(entity.name.toLowerCase()) ||
-				entity.distanceBand === 'SAME_LOCATION' ||
-				entity.explicitlyReferenced
-			)
-			.slice(0, 10);
+		const relevanceRank = new Map(EntitySceneRelevanceEngine.rank(situation, playerIntent).map((entry) => [entry.entityId, entry]));
+		const relevantEntities = EntitySceneRelevanceEngine.topVisible(situation, playerIntent, 10)
+			.filter((entity) => explicitTargetIds.has(entity.id) || explicitTargetNames.has(entity.name.toLowerCase()) || (relevanceRank.get(entity.id)?.score || 0) >= 30);
 
 		for (const entity of relevantEntities) {
 			const explicit = explicitTargetIds.has(entity.id) || explicitTargetNames.has(entity.name.toLowerCase()) || entity.explicitlyReferenced;

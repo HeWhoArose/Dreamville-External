@@ -6670,6 +6670,7 @@ export class MultiModelOrchestrator {
     modelId: string;
     timeoutMs: number;
     strict?: boolean;
+    allowRewrite?: boolean;
   }): Promise<{ turnPackage: StructuredTurnPackage; review: NarrativeReview }> {
     let review = SemanticNarrativeReview.review({
       intent: params.intent,
@@ -6677,7 +6678,7 @@ export class MultiModelOrchestrator {
       plan: params.plan,
       turnPackage: params.turnPackage,
     });
-    if (review.decision === 'ACCEPT' || params.strict === false) return { turnPackage: params.turnPackage, review };
+    if (review.decision === 'ACCEPT' || params.strict === false || params.allowRewrite === false) return { turnPackage: params.turnPackage, review };
 
     const rewritePrompt = SemanticNarrativeReview.buildRewritePrompt({
       intent: params.intent,
@@ -7223,6 +7224,8 @@ export class MultiModelOrchestrator {
     }
 
     const executeCore = async (): Promise<OrchestratedTurnResult> => {
+      // Phase 6 permits at most one semantic rewrite for the entire turn, not one rewrite per fallback provider.
+      let semanticRewriteUsed = false;
       const initialSituation = CurrentSituationBuilder.build({
         storyId,
         playerAction: params.playerAction || '',
@@ -7557,6 +7560,14 @@ export class MultiModelOrchestrator {
             let reviewedTurnPackage = validation.turnPackage;
             let narrativeReview: NarrativeReview | undefined;
             if (isNarrativeTask && narrativePlan) {
+              const initialReview = SemanticNarrativeReview.review({
+                intent: playerIntent,
+                situation: currentSituation,
+                plan: narrativePlan,
+                turnPackage: validation.turnPackage,
+              });
+              const shouldRewrite = initialReview.decision !== 'ACCEPT' && !semanticRewriteUsed;
+              if (shouldRewrite) semanticRewriteUsed = true;
               const reviewed = await this.reviewAndRepairNarrative({
                 turnPackage: validation.turnPackage,
                 intent: playerIntent,
@@ -7565,7 +7576,11 @@ export class MultiModelOrchestrator {
                 adapter,
                 modelId: currentCandidate.modelId,
                 timeoutMs,
+                allowRewrite: shouldRewrite,
               });
+              if (reviewed.review.decision !== 'ACCEPT') {
+                throw new Error('Narrative semantic review rejected the provider output after the single permitted rewrite budget was exhausted.');
+              }
               reviewedTurnPackage = reviewed.turnPackage;
               narrativeReview = reviewed.review;
             }

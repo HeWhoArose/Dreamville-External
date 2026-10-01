@@ -122,6 +122,7 @@ test('current situation keeps player knowledge separate from authoritative world
 
 	repository.addKnowledgeFact(storyId, makeKnowledgeFact('fact_public', 'public', timestamp));
 	repository.addKnowledgeFact(storyId, makeKnowledgeFact('fact_secret', 'cosmic_secret', timestamp));
+	repository.saveWorldFact(storyId, { id: 'fact_secret', subjectEntityId: 'entity_test_subject', predicate: 'contains', objectValue: 'The sealed vault contains a hidden star map.', secretLevel: 'cosmic_secret' });
 
 	const situation = CurrentSituationBuilder.build({
 		storyId,

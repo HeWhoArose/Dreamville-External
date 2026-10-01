@@ -24,6 +24,7 @@ import { NarrativeResearchPipeline, type NarrativeResearchResult } from './narra
 import { NarrativeDirector, type EphemeralNarrativePlan } from './narrativeDirector';
 import { buildNarrationPrompt, defaultNarrationStyle, projectSupportingWorkingContext } from './narrativePromptBuilder';
 import { SemanticNarrativeReview, type NarrativeReview } from './semanticNarrativeReview';
+import { NarrativeStateAdjudicator, type StateAdjudicationResult } from './narrativeStateAdjudicator';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
 
@@ -7572,6 +7573,15 @@ export class MultiModelOrchestrator {
               storyId,
               narrativePlan,
             );
+            const stateAdjudication = NarrativeStateAdjudicator.adjudicate({
+              repository: repo,
+              storyId,
+              turnId,
+              actorId: currentSituation.player.actorId,
+              playerIntent,
+              currentSituation,
+              turnPackage: reviewedTurnPackage,
+            });
 
             // 6. Create Continuation Checkpoint (DEF-CH12-06, V6.15 completeness)
             const checkpointId = rawIdempotencyKey
@@ -7674,6 +7684,7 @@ export class MultiModelOrchestrator {
               playerIntent,
               narrativePlan,
               narrativeReview,
+              stateAdjudication,
               telemetry,
               adjudicationResult: adjudication,
               checkpoint,
@@ -7765,6 +7776,15 @@ export class MultiModelOrchestrator {
                 storyId,
                 narrativePlan,
               );
+              const stateAdjudication = NarrativeStateAdjudicator.adjudicate({
+                repository: repo,
+                storyId,
+                turnId,
+                actorId: currentSituation.player.actorId,
+                playerIntent,
+                currentSituation,
+                turnPackage: emergencyTurnPackage,
+              });
             const checkpointId = rawIdempotencyKey
               ? deterministicId('cp_emergency', storyId, rawIdempotencyKey.replace(/[^a-zA-Z0-9_-]/g, '_'), totalAttempts)
               : deterministicId('cp_emergency', storyId, turnId, totalAttempts);
@@ -7848,6 +7868,7 @@ export class MultiModelOrchestrator {
               playerIntent,
               narrativePlan,
               narrativeReview: emergencyNarrativeReview,
+              stateAdjudication,
               telemetry,
               adjudicationResult: adjudication,
               checkpoint,

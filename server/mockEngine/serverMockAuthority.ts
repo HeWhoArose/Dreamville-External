@@ -30,6 +30,10 @@ import { CapabilitySimulationEngine } from '../domain/capabilitySimulationEngine
 import { narrativeContinuityEngine } from '../domain/narrativeContinuityEngine';
 import { narrativeStateBroker, type ItemUseResolution } from '../domain/narrativeStateBroker';
 import { environmentalHazardEngine } from '../domain/environmentalHazardEngine';
+import { CurrentSituationBuilder } from '../domain/currentSituation';
+import { PlayerIntentInterpreter } from '../domain/playerIntentInterpreter';
+import { ResolutionGate } from '../domain/resolutionGate';
+import { outcomeTierFromCheck, type ActionResolution } from '../domain/actionResolution';
 
 /**
  * ServerMockAuthority
@@ -620,6 +624,13 @@ export class ServerMockAuthority {
       String(freeformText),
     );
     const itemUseBlocked = itemUseResolution.requested && !itemUseResolution.found;
+    const resolutionSituation = CurrentSituationBuilder.build({
+      storyId: targetStoryId,
+      playerAction: String(freeformText),
+      viewerActorId: actorId,
+      worldRepo: worldRepository,
+    });
+    const resolutionIntent = PlayerIntentInterpreter.deterministic(String(freeformText), resolutionSituation);
     // Narrative checks and authored challenge consequences are canonical mechanics. The AI may
     // describe the committed result, but it never supplies the die, modifier, DC, damage, or condition.
     const sceneText = [
@@ -640,7 +651,19 @@ export class ServerMockAuthority {
       capabilities: capabilityEngine.getEffectiveActorCapabilities(actorId),
     });
 
-    const storyCheck = itemUseBlocked
+    const resolutionGate = ResolutionGate.evaluate({
+      actionText: String(freeformText),
+      currentSituation: resolutionSituation,
+      playerIntent: resolutionIntent,
+      authoredChallenge: authoredChallenge || undefined,
+      capabilityDetected: Boolean(
+        this.explicitCapabilityIntentForNarration(String(freeformText)) ||
+        actionAdvice?.recognizedCapability?.id ||
+        actionAdvice?.mode === 'EXECUTE_EXISTING'
+      ),
+      itemBlocked: itemUseBlocked,
+    });
+    const storyCheck = itemUseBlocked || !resolutionGate.shouldRoll
       ? null
       : storyCheckAuthority.resolve(worldRepository, {
           storyId: targetStoryId,
@@ -688,6 +711,60 @@ export class ServerMockAuthority {
         committedOutcome = 'This is an ordinary narrative/world action. No special capability was invoked. Narrate the physical and sensory result naturally and continue the scene.';
       }
     }
+
+    let actionResolution: ActionResolution = {
+      resolutionId: deterministicId('action_resolution', targetStoryId, baseResult.actionId, String(freeformText)),
+      storyId: targetStoryId,
+      turnId: baseResult.actionId,
+      playerAction: String(freeformText),
+      playerIntent: {
+        action: resolutionIntent.action,
+        interactionMode: resolutionIntent.interactionMode,
+        movementIntent: resolutionIntent.movementIntent,
+        observationIntent: resolutionIntent.observationIntent,
+        speechIntent: resolutionIntent.speechIntent,
+        informationGoal: resolutionIntent.informationGoal,
+        targetIds: resolutionIntent.explicitTargets.map((target) => target.id),
+      },
+      attemptedEffect: String(freeformText),
+      targetEntityIds: resolutionIntent.explicitTargets.map((target) => target.id),
+      resolutionMethod:
+        authoredChallenge ? 'AUTHORED_CHALLENGE' :
+        resolutionGate.mode === 'CAPABILITY' ? 'CAPABILITY' :
+        itemUseResolution.requested ? 'ITEM_USE' :
+        storyCheck ? 'CHECK' :
+        resolutionGate.mode === 'DETERMINISTIC' ? 'DETERMINISTIC' :
+        'NO_CHECK',
+      check: storyCheck || undefined,
+      outcomeTier: storyCheck ? outcomeTierFromCheck(storyCheck) : (itemUseBlocked ? 'BLOCKED' : 'NO_CHECK'),
+      actualEffect: storyCheck
+        ? (storyCheck.success
+          ? (storyCheck.narrativeGuidance?.successGuidance || 'The attempted action resolves successfully.')
+          : (storyCheck.narrativeGuidance?.failureGuidance || 'The attempted action does not resolve cleanly.'))
+        : itemUseBlocked
+          ? 'The requested item was unavailable.'
+          : (resolutionGate.mode === 'CAPABILITY'
+            ? 'The action is resolved by the established capability/rules layer.'
+            : 'The action proceeds as an ordinary deterministic world/narrative action.'),
+      canonicalStateChanges: [],
+      physicalConsequences: storyCheck?.consequence?.summary ? [storyCheck.consequence.summary] : [],
+      playerVisibleConsequences: [
+        ...(storyCheck?.narrativeGuidance
+          ? [storyCheck.success ? storyCheck.narrativeGuidance.successGuidance : storyCheck.narrativeGuidance.failureGuidance]
+          : []),
+        ...(storyCheck?.consequence?.summary ? [storyCheck.consequence.summary] : []),
+      ].filter(Boolean),
+      evidenceIds: [
+        storyCheck?.checkId,
+        storyCheck?.challengeId,
+        ...(storyCheck?.consequence?.challengeId ? [storyCheck.consequence.challengeId] : []),
+      ].filter((value): value is string => Boolean(value)),
+      uncertainty: resolutionGate.uncertaintyBasis,
+      provenance: {
+        source: 'CANONICAL_ENGINE',
+        canonicalCommandId,
+      },
+    };
 
     let itemUseResult: ReturnType<typeof narrativeStateBroker.commitItemUse> | undefined;
     if (itemUseResolution.requested && itemUseResolution.found && (!storyCheck || storyCheck.success)) {
@@ -767,6 +844,7 @@ export class ServerMockAuthority {
       const generated = await narrator.generateNarrativeOnly({
         storyId: targetStoryId,
         playerAction: String(freeformText),
+        actionResolution,
         committedOutcome,
         hardTokenBudget: 700,
         timeoutMs: 7000,

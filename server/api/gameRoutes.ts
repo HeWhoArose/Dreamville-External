@@ -10616,18 +10616,21 @@ function buildCurrentComicSceneContext(storyId: string): { context: ComicSceneCo
     ? state.actionHistory.find((action: any) => action.actionType !== 'NOTE_RECORD')
     : undefined;
   let relevanceIds: Set<string> = new Set();
+  let relevanceNames: Set<string> = new Set();
   try {
     const player = worldRepository.getPlayerLifecycle(storyId);
     if (player) {
       const situation = CurrentSituationBuilder.build({ storyId, playerAction: latestAction?.description || '', viewerActorId: player.actorId, worldRepo: worldRepository });
       relevanceIds = new Set(EntitySceneRelevanceEngine.topVisible(situation, situation.currentAction, 8).map((entity) => entity.id));
+      relevanceNames = new Set(EntitySceneRelevanceEngine.topVisible(situation, situation.currentAction, 8).map((entity) => String(entity.name).trim().toLowerCase()));
     }
   } catch {
     relevanceIds = new Set();
+    relevanceNames = new Set();
   }
   const currentCharacters = Object.values(state.characters || {})
     .filter((character: any) => character.locationId === state.activeLocationId && character.role !== 'PROTAGONIST')
-    .filter((character: any) => relevanceIds.size === 0 || relevanceIds.has(String(character.id || character.characterId || character.actorId || '')))
+    .filter((character: any) => relevanceIds.size === 0 || relevanceIds.has(String(character.id || character.characterId || character.actorId || '')) || relevanceNames.has(String(character.name || '').trim().toLowerCase()))
     .map((character: any) => ({
       name: character.name,
       role: character.role,

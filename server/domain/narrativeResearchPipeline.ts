@@ -359,7 +359,10 @@ export class NarrativeResearchPipeline {
 		}
 
 		// Only use threads surfaced through Current Situation. The continuity packet can contain broader server-side threads.
-		const threadCandidates = [...situation.openThreads];
+		const threadCandidates = [
+			...situation.openThreads,
+			...(typeof params.repository.getStoryThreads === 'function' ? params.repository.getStoryThreads(params.storyId) : []),
+		];
 
 		const seenThreads = new Set<string>();
 		for (const thread of threadCandidates) {

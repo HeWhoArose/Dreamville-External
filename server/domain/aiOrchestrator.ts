@@ -27,6 +27,7 @@ import { SemanticNarrativeReview, type NarrativeReview } from './semanticNarrati
 import { EpistemicBoundaryEnforcer } from './epistemicBoundary';
 import { NarrativeStateAdjudicator, type StateAdjudicationResult } from './narrativeStateAdjudicator';
 import { AiTurnCallBudget, type AiTurnCallBudgetSnapshot } from './aiTurnCallBudget';
+import type { ActionResolution } from './actionResolution';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
 
@@ -2862,7 +2863,13 @@ export class MultiModelOrchestrator {
     this.seedDefaultModels();
     this.seedDefaultAdapters();
     this.seedDefaultPins();
-    this.loadPersistedConfig();
+    const isTestRuntime =
+      typeof process !== 'undefined' &&
+      (process.env.NODE_ENV === 'test' || Boolean(process.env.NODE_TEST_CONTEXT));
+    const loadTestPersistence = process.env.DREAMVILLE_TEST_LOAD_PERSISTED_CONFIG === '1';
+    if (!isTestRuntime || loadTestPersistence) {
+      this.loadPersistedConfig();
+    }
     this.normalizePinnedTaskFallbackRoutes();
     this.normalizeGeneralTextTaskEligibility();
   }
@@ -2957,6 +2964,12 @@ export class MultiModelOrchestrator {
   }
 
   private savePersistedConfig(): void {
+    const isTestRuntime =
+      typeof process !== 'undefined' &&
+      (process.env.NODE_ENV === 'test' || Boolean(process.env.NODE_TEST_CONTEXT));
+    if (isTestRuntime && process.env.DREAMVILLE_TEST_LOAD_PERSISTED_CONFIG !== '1') {
+      return;
+    }
     try {
       const dir = path.dirname(this.configFilePath);
       if (!fs.existsSync(dir)) {
@@ -7059,6 +7072,9 @@ export class MultiModelOrchestrator {
   public async generateNarrativeOnly(params: {
     storyId?: string;
     playerAction: string;
+    /** Preferred typed canonical mechanics contract. */
+    actionResolution?: ActionResolution;
+    /** Backward-compatible projection for older callers. */
     committedOutcome?: string;
     hardTokenBudget?: number;
     timeoutMs?: number;
@@ -7090,8 +7106,11 @@ export class MultiModelOrchestrator {
     contextAudit?: {
       hardTokenBudget: number;
       totalTokens: number;
-      includedChunks: Array<{ label: string; source?: string; relevanceScore?: number; estimatedTokens: number }>;
+      includedChunks: Array<{ id?: string; label: string; band: string; source?: string; relevanceScore?: number; estimatedTokens: number; protected: boolean }>;
+      idleChunks?: Array<{ id?: string; label: string; band: string; source?: string; relevanceScore?: number; estimatedTokens: number; protected: boolean }>;
+      archivedChunks?: Array<{ id?: string; label: string; band: string; source?: string; relevanceScore?: number; estimatedTokens: number; protected: boolean }>;
       evictedChunkLabels: string[];
+      pinnedSourceIds?: string[];
       assembledTextPreview: string;
     };
   }> {
@@ -7320,6 +7339,7 @@ export class MultiModelOrchestrator {
       globalInstruction: 'You are Dreamville’s narrative presentation engine. Generate only the player-facing narrative turn using the supplied canonical state, semantic player intent, bounded research, and ephemeral plan.',
       styleInstruction,
       canonicalOutcome: authoritativeOutcome,
+      actionResolution: params.actionResolution,
       maxPromptTokens: Math.max(200, hardTokenBudget),
     });
 
@@ -7327,12 +7347,34 @@ export class MultiModelOrchestrator {
       hardTokenBudget: assembledContext.hardTokenBudget,
       totalTokens: assembledContext.totalTokens,
       includedChunks: assembledContext.includedChunks.map((chunk) => ({
+        id: chunk.id,
         label: chunk.label,
+        band: chunk.band,
         source: chunk.sourceAuthority,
         relevanceScore: chunk.relevanceScore,
         estimatedTokens: chunk.estimatedTokens,
+        protected: Boolean(chunk.isProtected),
+      })),
+      idleChunks: assembledContext.idleChunks.map((chunk) => ({
+        id: chunk.id,
+        label: chunk.label,
+        band: chunk.band,
+        source: chunk.sourceAuthority,
+        relevanceScore: chunk.relevanceScore,
+        estimatedTokens: chunk.estimatedTokens,
+        protected: Boolean(chunk.isProtected),
+      })),
+      archivedChunks: assembledContext.archivedChunks.map((chunk) => ({
+        id: chunk.id,
+        label: chunk.label,
+        band: chunk.band,
+        source: chunk.sourceAuthority,
+        relevanceScore: chunk.relevanceScore,
+        estimatedTokens: chunk.estimatedTokens,
+        protected: Boolean(chunk.isProtected),
       })),
       evictedChunkLabels: assembledContext.evictedChunkLabels,
+      pinnedSourceIds: assembledContext.pinnedSourceIds,
       assembledTextPreview: assembledContext.assembledText.slice(0, 6000),
     };
 

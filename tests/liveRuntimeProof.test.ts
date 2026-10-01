@@ -1112,8 +1112,13 @@ describe('CH1 Live Runtime Proof — Canonical Domain & HTTP API Path', () => {
 
   it('CH11 Live API: GET /api/game/context assembles canonical 13-domain working context packet and budgeted prompt (DEF-CH11-02, DEF-CH11-03)', async () => {
     const res = await fetch(`${baseUrl}/context?storyId=default_story&budget=450&action=Examine+the+celestial+chronometer`);
-    assert.strictEqual(res.status, 200);
-    const data = (await res.json()) as any;
+    const responseBody = await res.text();
+    assert.strictEqual(
+      res.status,
+      200,
+      `GET /context failed with status ${res.status}: ${responseBody.slice(0, 1200)}`,
+    );
+    const data = JSON.parse(responseBody) as any;
 
     assert.strictEqual(data.success, true);
     assert.strictEqual(data.epistemicallySanitized, true);

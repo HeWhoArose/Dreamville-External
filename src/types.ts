@@ -219,6 +219,9 @@ export interface StoryCheckChallenge {
   provenance?: string;
   onSuccess?: StoryCheckOutcomeDefinition;
   onFailure?: StoryCheckOutcomeDefinition;
+  /** Explicit authored outcome tier overrides for partial/cost/block style resolutions. */
+  successOutcomeTier?: StoryCheckOutcomeTier;
+  failureOutcomeTier?: StoryCheckOutcomeTier;
   [key: string]: unknown;
 }
 
@@ -238,6 +241,17 @@ export interface StoryCheckOutcomeDefinition {
   conditions?: StoryCheckChallengeCondition[];
   removeConditions?: string[];
   summary?: string;
+}
+
+export interface StoryCheckNarrativeGuidance {
+  /** Why this action legitimately required a mechanical check. */
+  checkJustification: string;
+  /** Bounded player-facing guidance for a successful resolution. */
+  successGuidance: string;
+  /** Bounded player-facing guidance for a failed resolution. */
+  failureGuidance: string;
+  /** Whether the guidance describes an authored/canonical effect or a narrative-only setback. */
+  consequenceMode: 'AUTHORED_CANONICAL' | 'NARRATIVE_ONLY';
 }
 
 export interface StoryCheckDamageOutcome {
@@ -265,6 +279,67 @@ export interface StoryCheckConsequenceResult {
   noEffectReason?: string;
 }
 
+export type StoryCheckOutcomeTier =
+  | 'NO_CHECK'
+  | 'CLEAN_SUCCESS'
+  | 'SUCCESS_WITH_COST'
+  | 'PARTIAL_SUCCESS'
+  | 'BLOCKED'
+  | 'FAILURE'
+  | 'FAILURE_WITH_COST'
+  | 'CRITICAL_SUCCESS'
+  | 'CRITICAL_FAILURE';
+
+export type ActionResolutionMethod =
+  | 'NO_CHECK'
+  | 'DETERMINISTIC'
+  | 'CHECK'
+  | 'AUTHORED_CHALLENGE'
+  | 'CAPABILITY'
+  | 'ITEM_USE'
+  | 'COMBAT'
+  | 'COST_ONLY';
+
+export type ActionOutcomeTier =
+  | StoryCheckOutcomeTier;
+
+export interface ActionResolution {
+  resolutionId: string;
+  storyId: string;
+  turnId: string;
+  playerAction: string;
+  playerIntent: {
+    action: string;
+    interactionMode: string;
+    movementIntent: boolean;
+    observationIntent: boolean;
+    speechIntent: boolean;
+    informationGoal?: string;
+    targetIds?: string[];
+  };
+  attemptedEffect: string;
+  targetEntityIds: string[];
+  resolutionMethod: ActionResolutionMethod;
+  check?: StoryCheckResult;
+  outcomeTier: ActionOutcomeTier;
+  actualEffect: string;
+  canonicalStateChanges: Array<{
+    kind: string;
+    targetId: string;
+    value: unknown;
+    metadata?: Record<string, unknown>;
+  }>;
+  physicalConsequences: string[];
+  playerVisibleConsequences: string[];
+  evidenceIds: string[];
+  uncertainty: string[];
+  provenance: {
+    source: 'CANONICAL_ENGINE';
+    canonicalCommandId?: string;
+    canonicalEventId?: string;
+  };
+}
+
 export interface StoryCheckResult {
   checkId: string;
   testType: StoryTestType;
@@ -281,6 +356,8 @@ export interface StoryCheckResult {
   roll: RollRecord;
   total: number;
   success: boolean;
+  /** Canonical outcome tier; narration must project this rather than infer it from prose. */
+  outcomeTier: StoryCheckOutcomeTier;
   criticalSuccess: boolean;
   criticalFailure: boolean;
   reason: string;
@@ -290,6 +367,8 @@ export interface StoryCheckResult {
   challengeId?: string;
   challengeLabel?: string;
   consequence?: StoryCheckConsequenceResult;
+  /** Explicit resolution-to-consequence closure for narration; never creates canonical state by itself. */
+  narrativeGuidance?: StoryCheckNarrativeGuidance;
 }
 
 export interface ActionTip {
@@ -401,6 +480,8 @@ export interface ActionLog {
   canonicalCommandId?: string;
   canonicalEventId?: string;
   checkResult?: StoryCheckResult;
+  /** Canonical mechanics envelope projected to narration and reusable for presentation regeneration. */
+  actionResolution?: ActionResolution;
   actionAdvice?: ActionAdvice;
 }
 
@@ -426,6 +507,16 @@ export interface ProtagonistProfile {
  * External View State: The sanitized projection of the world delivered to the React presentation layer.
  * Strictly free of server-side canonical secrets.
  */
+export interface ContextTransparency {
+  hardTokenBudget: number;
+  totalTokens: number;
+  included: Array<{ id?: string; label: string; band: string; relevanceScore?: number; source?: string; protected: boolean }>;
+  idle: Array<{ id?: string; label: string; band: string; relevanceScore?: number; source?: string; protected: boolean }>;
+  archived: Array<{ id?: string; label: string; band: string; relevanceScore?: number; source?: string; protected: boolean }>;
+  evicted: string[];
+  pinnedSourceIds: string[];
+}
+
 export interface ExternalViewState {
 	storyId?: string;
 	combatState?: CombatStateResponse;
@@ -450,6 +541,7 @@ export interface ExternalViewState {
   isTraveling?: boolean;
   playerLifecycle?: any | null;
   openingScene?: OpeningScene | null;
+  contextTransparency?: ContextTransparency;
 }
 
 export type NarrativeEventType =
@@ -1421,6 +1513,7 @@ export interface WorkingContextResponse {
   evictedChunkLabels: string[];
   evictionReasons: Record<string, string>;
   epistemicallySanitized: boolean;
+  pinnedSourceIds?: string[];
 }
 
 export interface ContextAssembleResponse extends WorkingContextResponse {

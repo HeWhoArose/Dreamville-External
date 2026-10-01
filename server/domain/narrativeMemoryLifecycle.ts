@@ -5,6 +5,7 @@ import type { PlayerIntent } from './playerIntentInterpreter';
 import type { StructuredTurnPackage } from './aiOrchestrator';
 import type { NarrativeReview } from './semanticNarrativeReview';
 import type { StateAdjudicationResult } from './narrativeStateAdjudicator';
+import { recordCanonicalNarrativeEvent, type CanonicalNarrativeEventRecord } from './canonicalNarrativeEvent';
 
 export interface NarrativeOpenThreadRecord {
 	id: string;
@@ -139,6 +140,22 @@ export class NarrativeMemoryLifecycle {
 		const memoryEngine = params.repository.getMemoryEngine(params.storyId);
 		const playerActorId = params.currentSituation.player.actorId;
 		const currentTurn = params.repository.getCanonicalCommandEvents(params.storyId).length;
+		const canonicalEvents = params.repository.getCanonicalCommandEvents(params.storyId);
+		const canonicalEvent = [...canonicalEvents].reverse().find((event) =>
+			event.commandId === params.turnId ||
+			event.eventId === params.turnId ||
+			String(event.commandId || '').includes(params.turnId),
+		);
+		const canonicalNarrativeEvent: CanonicalNarrativeEventRecord | undefined = canonicalEvent
+			? recordCanonicalNarrativeEvent(params.repository, {
+				storyId: params.storyId,
+				turnId: params.turnId,
+				canonicalEventId: canonicalEvent.eventId,
+				commandId: canonicalEvent.commandId,
+				summary: canonicalEvent.summary,
+				mutationPaths: canonicalEvent.mutationPaths,
+			})
+			: undefined;
 		for (const candidate of (memoryEligible ? (params.turnPackage.memoryCandidates || []) : [])) {
 			const value = normalize(candidate);
 			if (!value) continue;
@@ -157,8 +174,7 @@ export class NarrativeMemoryLifecycle {
 				continue;
 			}
 			const entityIds = relatedEntities(value, params.currentSituation);
-			memoryEngine.storeMemory({
-				id,
+			memoryEngine.storeMemory({				id,
 				storyId: params.storyId,
 				memoryClass: 'EPISODIC',
 				subjectEntityId: playerActorId,
@@ -173,7 +189,8 @@ export class NarrativeMemoryLifecycle {
 				accessibleToEntityIds: [playerActorId],
 				isPersistentCritical: false,
 				provenance: 'narrative_memory_lifecycle',
-				sourceEventId: params.turnId,
+				perspective: 'SUBJECTIVE',
+				sourceEventId: canonicalNarrativeEvent?.id,
 				validFromTurn: currentTurn,
 				lastRecalledTurn: currentTurn,
 				createdAtTimestamp: params.repository.getWorldClock(params.storyId).getTimestamp(),

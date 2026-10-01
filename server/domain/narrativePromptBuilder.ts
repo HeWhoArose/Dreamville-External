@@ -4,6 +4,8 @@ import { NarrativeDirector, type EphemeralNarrativePlan } from './narrativeDirec
 import type { NarrativeResearchResult } from './narrativeResearchPipeline';
 import { WorkingContextEngine, type AssembledTurnContext } from './workingContextEngine';
 import { EpistemicBoundaryEnforcer } from './epistemicBoundary';
+import type { ActionResolution } from './actionResolution';
+import { buildActionResolutionPromptContext } from './actionResolution';
 
 export interface NarrationPromptInput {
 	situation: CurrentSituation;
@@ -14,6 +16,7 @@ export interface NarrationPromptInput {
 	globalInstruction?: string;
 	styleInstruction?: string;
 	canonicalOutcome?: string;
+	actionResolution?: ActionResolution;
 	maxPromptTokens?: number;
 }
 
@@ -120,12 +123,14 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	const situationContext = input.situation ? buildNarrationSituationContext(input.situation) : '[current situation unavailable]';
 	const intentContext = JSON.stringify(input.intent);
 	const planContext = NarrativeDirector.toPromptContext(input.plan);
-		const canonicalConstraints = [
+	const actionResolutionContext = buildActionResolutionPromptContext(input.actionResolution);
+	const canonicalConstraints = [
 		'CANONICAL CURRENT SCENE ANCHOR:',
 		'Canonical constraints:',
 		'- The current location and time in Current Situation are authoritative.',
 		'- Stay in the canonical current location unless the canonical game state has already committed a location change.',
 		'- Player Intent is the semantic description of what the player meant to attempt.',
+		'- The structured Action Resolution is authoritative for mechanics, outcome tier, effects, and consequences; never reconstruct hidden mechanics from prose.',
 		'- Research is bounded evidence. Omitted or excluded information is not permission to invent it.',
 		'- The Narrative Director Plan is ephemeral guidance for this turn only; it does not create canonical state.',
 		'- State changes must come from canonical engines/commands, not from prose.',
@@ -156,6 +161,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		section('NARRATIVE STYLE', overrides?.styleInstruction || styleInstruction),
 		section('CURRENT SITUATION', overrides?.situationContext || situationContext),
 		section('PLAYER INTENT', overrides?.intentContext || intentContext),
+		section('ACTION RESOLUTION — AUTHORITATIVE', actionResolutionContext),
 		section('NARRATIVE RESEARCH', researchContext),
 		section('NARRATIVE DIRECTOR PLAN', overrides?.planContext || planContext),
 		section('SUPPORTING WORKING CONTEXT', workingContext),
@@ -198,6 +204,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			const microGlobal = 'Generate only the player-facing narrative. Preserve player agency and canonical truth. Never make major future decisions for the player.';
 			const microSituation = truncatePromptSection(situationContext, 360);
 			const microIntent = truncatePromptSection(intentContext, 180);
+			const microResolution = truncatePromptSection(actionResolutionContext, 620);
 			const microResearch = truncatePromptSection(initialResearch, 220);
 			const microPlan = truncatePromptSection(planContext, 140);
 			const microCanonical = 'The current location and time are authoritative. Stay in the canonical current location unless the canonical game state has already committed a location change. Do not invent unsupported facts or turn rumor into certainty.';
@@ -206,6 +213,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				section('GLOBAL NARRATION INSTRUCTIONS', microGlobal),
 				section('CURRENT SITUATION', microSituation),
 				section('PLAYER INTENT', microIntent),
+				section('ACTION RESOLUTION — AUTHORITATIVE', microResolution),
 				section('NARRATIVE RESEARCH', microResearch),
 				section('NARRATIVE DIRECTOR PLAN', microPlan),
 				section('CANONICAL CURRENT SCENE ANCHOR', microCanonical),
@@ -272,10 +280,11 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				totalTokens = WorkingContextEngine.estimateTokens(prompt);
 			}
 		} else {
-			const compactGlobal = 'Generate only the player-facing narrative. Never choose a major future action for the player.';
+			const compactGlobal = 'Generate only the player-facing narrative. Never choose a major future action for the player. The structured Action Resolution is authoritative for mechanics and consequences.';
 			const compactStyle = 'Depict the current action and observable response; preserve player agency and canonical truth. Stay in the canonical current location unless the canonical game state has already committed a location change.';
 			const compactSituation = truncatePromptSection(situationContext, 520);
 			const compactIntent = truncatePromptSection(intentContext, 180);
+			const compactResolution = truncatePromptSection(actionResolutionContext, 700);
 			const compactResearch = truncatePromptSection(initialResearch, 180);
 			const compactPlan = truncatePromptSection(planContext, 140);
 			const compactCanonical = [
@@ -290,6 +299,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				section('NARRATIVE STYLE', compactStyle),
 				section('CURRENT SITUATION', compactSituation),
 				section('PLAYER INTENT', compactIntent),
+				section('ACTION RESOLUTION — AUTHORITATIVE', compactResolution),
 				section('NARRATIVE RESEARCH', compactResearch),
 				section('NARRATIVE DIRECTOR PLAN', compactPlan),
 				section('SUPPORTING WORKING CONTEXT', '[omitted]'),

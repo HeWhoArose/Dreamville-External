@@ -36,6 +36,16 @@ function makeNarrationModel(
 	};
 }
 
+test('S4 fresh orchestrator does not inherit persisted test-route mutations', () => {
+	const orchestrator = new MultiModelOrchestrator();
+	const narrativeRoute = orchestrator.getFallbackChain('narrative.generate');
+	const narrativePin = orchestrator.getPinnedModelForTask('narrative.generate');
+	const gameplayOverride = orchestrator.getCategoryModelOverride('gameplay_advice');
+	assert.equal(narrativeRoute[0], 'groq::qwen/qwen3.8-27b');
+	assert.equal(narrativePin, undefined);
+	assert.equal(gameplayOverride, undefined);
+});
+
 test('S4 category routes enumerate and preserve route semantics for every owning task', () => {
 	const orchestrator = new MultiModelOrchestrator();
 	const states = orchestrator.getCategoryRuntimeStates();

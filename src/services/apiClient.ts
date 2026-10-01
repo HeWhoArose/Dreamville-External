@@ -1348,6 +1348,36 @@ class ApiClient {
    * Inspects working context candidate chunks and token budgeting breakdown (CH11).
    * GET /api/game/context/inspect
    */
+  public async getContextTransparency(storyId?: string): Promise<import('../types').ContextTransparency> {
+    const query = storyId ? `?storyId=${encodeURIComponent(storyId)}` : '';
+    const res = await fetch(`${this.baseUrl}/context-transparency${query}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data?.success === false) {
+      throw new Error(data?.errorReason || `Context transparency failed with HTTP ${res.status}`);
+    }
+    return data.context as import('../types').ContextTransparency;
+  }
+
+  public async setContextPin(params: { storyId?: string; sourceId: string; pinned: boolean }): Promise<{
+    success: boolean;
+    pinnedSourceIds: string[];
+    context: import('../types').ContextTransparency;
+  }> {
+    const res = await fetch(`${this.baseUrl}/context-pin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(params),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data?.success === false) {
+      throw new Error(data?.errorReason || `Context pin update failed with HTTP ${res.status}`);
+    }
+    return data;
+  }
+
   public async inspectContext(params?: {
     storyId?: string;
     budget?: number;

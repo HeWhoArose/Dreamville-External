@@ -205,6 +205,49 @@ gameRouter.get('/narrative-research', (req: Request, res: Response) => {
 	}
 });
 
+gameRouter.get('/context-transparency', (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    return res.json({
+      success: true,
+      storyId,
+      context: serverMockAuthority.getContextTransparency(storyId),
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      errorReason: error?.message || 'Failed to retrieve working context transparency.',
+    });
+  }
+});
+
+gameRouter.post('/context-pin', (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    const sourceId = typeof req.body?.sourceId === 'string' ? req.body.sourceId.trim() : '';
+    const pinned = req.body?.pinned !== false;
+    if (!sourceId) {
+      return res.status(400).json({ success: false, errorReason: 'sourceId is required.' });
+    }
+    const result = serverMockAuthority.setWorkingContextPin(storyId, sourceId, pinned);
+    if (!result.success) {
+      return res.status(404).json({ success: false, errorReason: 'Story run not found.' });
+    }
+    return res.json({
+      success: true,
+      storyId,
+      pinned,
+      pinnedSourceIds: result.pinnedSourceIds,
+      context: serverMockAuthority.getContextTransparency(storyId),
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      errorReason: error?.message || 'Failed to update working context pin.',
+    });
+  }
+});
+
 gameRouter.get('/current-situation', (req: Request, res: Response) => {
   try {
     const storyId = resolveStoryId(req, true);
@@ -637,10 +680,12 @@ gameRouter.post('/action/narrate/regenerate', async (req: Request, res: Response
       'Do not change mechanics, canonical facts, target state, or consequences.',
       editInstruction ? 'Player edit instruction: ' + editInstruction : '',
     ].filter(Boolean).join(' ');
+    const actionResolution = action.actionResolution;
 
     const generated = await worldRepository.getAiOrchestrator().generateNarrativeOnly({
       storyId,
       playerAction: action.description,
+      actionResolution,
       committedOutcome: checkOutcome,
       forceModelId,
       hardTokenBudget: 1100,
@@ -6786,6 +6831,7 @@ gameRouter.post('/context/assemble', async (req: Request, res: Response) => {
       evictedChunkLabels: result.evictedChunkLabels,
       evictionReasons: result.evictionReasons,
       epistemicallySanitized: result.epistemicallySanitized,
+      pinnedSourceIds: result.pinnedSourceIds,
     });
   } catch (error) {
     console.error('Failed to assemble budgeted context:', error);

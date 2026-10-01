@@ -7,6 +7,7 @@ import { worldRepository } from '../repositories/worldRepository';
 import { NarrativeContinuityEngine, type NarrativeResearchPacket } from './narrativeContinuityEngine';
 import { CurrentSituationBuilder, type CurrentSituation } from './currentSituation';
 import { deriveNarrationContextNeeds } from './narrationContextPolicy';
+import { buildNpcPlanningSlice } from './npcPlanningSlice';
 
 export interface WorkingContextPacket {
   scene: string;
@@ -59,6 +60,7 @@ export interface BudgetedContextResult {
 
 export interface AssembledTurnContext {
   currentSituation: CurrentSituation;
+  pinnedSourceIds: string[];
   packet: WorkingContextPacket;
   chunks: ContextChunk[];
   assembledText: string;
@@ -1079,10 +1081,23 @@ export class WorkingContextEngine {
       candidateChunks.push(...params.customChunks);
     }
 
+    const persistedPins = Array.isArray(repo.getStoryRun(storyId)?.runtimeState?.workingContextPins)
+      ? repo.getStoryRun(storyId)!.runtimeState!.workingContextPins.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0)
+      : [];
+    const pinnedSet = new Set<string>(persistedPins);
+    
     // F&F-style context blocks are self-managed projections: normalize types,
     // deduplicate overlapping research blocks, and preserve canonical provenance
     // before applying the deterministic token budget.
-    const normalizedCandidateChunks = WorkingContextEngine.normalizeContextBlocks(candidateChunks);
+    const normalizedCandidateChunks = WorkingContextEngine.normalizeContextBlocks(
+      candidateChunks.map((chunk) => ({
+        ...chunk,
+        isProtected:
+          Boolean(chunk.isProtected) ||
+          pinnedSet.has(String(chunk.id || '')) ||
+          pinnedSet.has(String(chunk.source || '')),
+      })),
+    );
     const currentTurn = repo.getCanonicalCommandEvents(storyId).length + 1;
     const budgetedResult = WorkingContextEngine.assembleBudgetedContext(
       normalizedCandidateChunks,
@@ -1092,6 +1107,7 @@ export class WorkingContextEngine {
 
     return {
       currentSituation,
+      pinnedSourceIds: [...pinnedSet],
       packet,
       chunks: normalizedCandidateChunks,
       assembledText: budgetedResult.assembledText,
@@ -1183,6 +1199,20 @@ export class WorkingContextEngine {
     const knownFacts = authorizedFacts.map(
       (fact) => `[${fact.predicate}] ${fact.objectValue}`
     );
+    const npcPlanningSituation = CurrentSituationBuilder.build({
+      storyId,
+      playerAction: params.playerSpokenText || '',
+      viewerActorId: player?.actorId || npcId,
+      worldRepo: repo,
+    });
+    const npcPlanningSlice = buildNpcPlanningSlice(
+      repo,
+      storyId,
+      player?.actorId || `player_actor_${storyId}`,
+      npcPlanningSituation,
+      npcId,
+    );
+
 
     if (npcKnowledge) {
       for (const fact of Object.values(npcKnowledge.facts)) {
@@ -1207,11 +1237,26 @@ export class WorkingContextEngine {
       observations.push(`Your canonical state was updated at world second ${npcState.updatedAtSeconds}.`);
     }
 
+    const npcPlanningFacts = npcPlanningSlice?.actorId === npcId
+      ? npcPlanningSlice.recentMemories.slice(0, 20).map((memory) =>
+          `[memory ${memory.confidence.toFixed(2)}] ${memory.content}`
+        )
+      : [];
+
     return WorkingContextEngine.buildSanitizedNpcContext({
       npcName: canonicalNpcName,
-      knownFacts,
+      knownFacts: [
+        ...knownFacts,
+        ...npcPlanningFacts,
+        ...(npcPlanningSlice?.immediateGoal ? [`[immediate-goal] ${npcPlanningSlice.immediateGoal}`] : []),
+        ...(npcPlanningSlice?.relationship ? [`[relationship] ${JSON.stringify(npcPlanningSlice.relationship)}`] : []),
+      ],
       currentObservations: observations,
       playerSpokenText: params.playerSpokenText || '',
+      systemDirectives: [
+        'This is a private NPC reasoning context. The NPC may use its own authorized memories, beliefs, relationship state, and immediate goal internally.',
+        'Never disclose private memory or hidden knowledge merely because it exists in this context.',
+      ],
     });
   }
 

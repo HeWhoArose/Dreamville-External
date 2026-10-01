@@ -8,7 +8,19 @@ export interface StorySkillCheckDefinition extends StandardDndSkillDef {
 
 const KEYWORDS: Record<string, { keywords: string[]; defaultDc: number; requiresSight?: boolean }> = {
 	acrobatics: {
-		keywords: ['balance', 'acrobat', 'dodge', 'tumble', 'flip', 'squeeze'],
+		keywords: [
+			'balance',
+			'acrobat',
+			'dodge',
+			'tumble',
+			'flip',
+			'squeeze',
+			'parkour',
+			'vault',
+			'wall run',
+			'landing',
+			'manage the landing',
+		],
 		defaultDc: 13,
 	},
 	animal_handling: {
@@ -33,7 +45,29 @@ const KEYWORDS: Record<string, { keywords: string[]; defaultDc: number; requires
 		defaultDc: 13,
 	},
 	athletics: {
-		keywords: ['climb', 'jump', 'swim', 'grapple', 'force open', 'break open', 'lift', 'push', 'pull'],
+		keywords: [
+			'climb',
+			'jump',
+			'swim',
+			'grapple',
+			'force open',
+			'break open',
+			'lift',
+			'push the',
+			'pull the',
+			'push a',
+			'pull a',
+			'push an',
+			'pull an',
+			'push open',
+			'pull open',
+			'push aside',
+			'pull aside',
+			'push against',
+			'pull against',
+			'heave',
+			'drag',
+		],
 		defaultDc: 13,
 	},
 	deception: {

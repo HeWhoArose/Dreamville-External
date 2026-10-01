@@ -8,6 +8,8 @@ import type {
   StoryD20AdvantageState,
   StoryTestType,
   StoryCheckChallenge,
+  StoryCheckNarrativeGuidance,
+  StoryCheckOutcomeTier,
 } from '../../src/types';
 import { LocalDiceEngine } from './combatEngine';
 import { rulesProfileEngine } from './rulesProfileEngine';
@@ -45,11 +47,28 @@ const SAVE_PROFILES: SaveProfile[] = [
   {
     ability: 'Dexterity',
     explicitKeywords: ['dodge', 'duck', 'evade', 'avoid the blast', 'leap clear', 'jump clear', 'roll away', 'get out of the way'],
-    sceneHazards: ['collapsing', 'collapse', 'falling debris', 'explosion', 'blast', 'trap', 'fall', 'cave-in'],
-    actionTriggers: ['open', 'touch', 'step', 'walk', 'move', 'enter', 'pull', 'push'],
+    sceneHazards: [
+      'collapsing',
+      'collapse',
+      'falling debris',
+      'explosion',
+      'blast',
+      'trap',
+      'fall',
+      'cave-in',
+      'slippery',
+      'slick',
+      'unstable',
+      'unstable footing',
+      'loose ground',
+      'broken pavement',
+      'treacherous terrain',
+      'hazardous footing',
+    ],
+    actionTriggers: ['open', 'touch', 'step', 'walk', 'move', 'enter', 'approach', 'toward', 'towards', 'forward'],
     dc: 13,
-    reason: 'Reacting quickly to avoid a physical hazard.',
-    triggerReason: 'The scene contains a sudden physical hazard that requires a reflexive response.',
+    reason: 'Maintaining balance and control while traversing a physical hazard.',
+    triggerReason: 'The current scene presents a physical hazard that makes ordinary traversal hazardous or uncertain, requiring a reflexive movement response.',
   },
   {
     ability: 'Constitution',
@@ -159,6 +178,109 @@ function containsCondition(
   );
 }
 
+function phraseMatches(normalizedText: string, keyword: string): boolean {
+  const normalizedKeyword = normalize(keyword);
+  if (!normalizedKeyword) return false;
+  return (' ' + normalizedText + ' ').includes(' ' + normalizedKeyword + ' ');
+}
+
+function actionSupportsSkill(
+  text: string,
+  definition: { id: string; keywords: string[] },
+): boolean {
+  const normalizedText = normalize(text);
+  return definition.keywords.some((keyword) => {
+    const normalizedKeyword = normalize(keyword);
+    return Boolean(normalizedKeyword) && phraseMatches(normalizedText, normalizedKeyword);
+  });
+}
+
+function buildNarrativeGuidance(
+  skillId: string | undefined,
+  skillName: string,
+  ability: string,
+  challenge: StoryCheckChallenge | undefined,
+  saveSelection: { profile: SaveProfile; worldTriggered: boolean } | null,
+): StoryCheckNarrativeGuidance {
+  if (challenge) {
+    return {
+      checkJustification:
+        challenge.triggerReason ||
+        challenge.reason ||
+        'An authored ' + challenge.label + ' challenge applies to the attempted action.',
+      successGuidance:
+        challenge.onSuccess?.summary ||
+        'The attempted action achieves its intended objective to the extent established by the canonical challenge.',
+      failureGuidance:
+        challenge.onFailure?.summary ||
+        'The attempted action does not achieve its intended objective; establish an immediate setback without inventing damage or conditions not supplied by the challenge.',
+      consequenceMode: challenge.onSuccess || challenge.onFailure ? 'AUTHORED_CANONICAL' : 'NARRATIVE_ONLY',
+    };
+  }
+
+  if (saveSelection?.worldTriggered) {
+    return {
+      checkJustification: saveSelection.profile.triggerReason,
+      successGuidance:
+        'The character keeps control and gets through the immediate environmental or supernatural hazard.',
+      failureGuidance:
+        'The character does not cleanly overcome the hazard. Establish a scene-supported physical setback such as lost footing, slowed progress, or a brief stumble; do not invent damage, conditions, or a forced destination unless a canonical mechanic supplies them.',
+      consequenceMode: 'NARRATIVE_ONLY',
+    };
+  }
+
+  switch (skillId) {
+    case 'acrobatics':
+      return {
+        checkJustification:
+          'The action requires controlled balance, body placement, or a precise maneuver rather than ordinary movement.',
+        successGuidance:
+          'The maneuver is executed cleanly and the character maintains control of their intended movement toward the target.',
+        failureGuidance:
+          'The maneuver does not resolve cleanly: the character may misjudge a landing, lose balance, collide with nearby terrain, or lose forward progress. Do not invent injury or damage unless canonical mechanics supply it.',
+        consequenceMode: 'NARRATIVE_ONLY',
+      };
+    case 'athletics':
+      return {
+        checkJustification:
+          'The action requires meaningful physical exertion, leverage, climbing, jumping, swimming, or force against an object.',
+        successGuidance:
+          'The physical exertion achieves the attempted result with the intended momentum or leverage.',
+        failureGuidance:
+          'The physical effort does not achieve the intended result; the character may lose leverage, stall, or be forced to stop. Do not invent damage or object destruction unless canonical mechanics supply it.',
+        consequenceMode: 'NARRATIVE_ONLY',
+      };
+    case 'stealth':
+      return {
+        checkJustification: 'The action deliberately relies on remaining concealed or moving without drawing notice.',
+        successGuidance: 'The movement remains concealed to the extent supported by the current scene.',
+        failureGuidance: 'The attempt creates a detectable sound, movement, or exposure risk, but do not invent an NPC reaction unless the current scene supports one.',
+        consequenceMode: 'NARRATIVE_ONLY',
+      };
+    case 'perception':
+    case 'investigation':
+      return {
+        checkJustification:
+          'The action is an information-gathering attempt that uses ' + skillName + ' rather than ordinary observation.',
+        successGuidance:
+          'The character obtains a useful, scene-grounded observation without inventing hidden truth.',
+        failureGuidance:
+          'The intended information is not reliably obtained; preserve uncertainty and fall back to only what can be directly observed.',
+        consequenceMode: 'NARRATIVE_ONLY',
+      };
+    default:
+      return {
+        checkJustification:
+          'The attempted action materially relies on ' + skillName + ' (' + ability + ') and therefore has meaningful uncertainty.',
+        successGuidance:
+          'The intended objective is achieved to the extent supported by the current scene.',
+        failureGuidance:
+          'The attempted objective is not achieved cleanly. Establish the smallest immediate setback supported by the current scene without inventing unrelated consequences.',
+        consequenceMode: 'NARRATIVE_ONLY',
+      };
+  }
+}
+
 export class StoryCheckEngine {
   private diceByStory = new Map<string, LocalDiceEngine>();
 
@@ -231,11 +353,15 @@ export class StoryCheckEngine {
     const hintedAbility = hintedCheck?.ability && ['Strength', 'Dexterity', 'Constitution', 'Intelligence', 'Wisdom', 'Charisma'].includes(hintedCheck.ability)
       ? hintedCheck.ability as StoryCheckAbility
       : undefined;
-    const hintedSkillDefinition = hintedCheck?.skillId
+    const rawHintedSkillDefinition = hintedCheck?.skillId
       ? getStorySkillCheckDefinition(String(hintedCheck.skillId))
       : undefined;
+    const hintedSkillDefinition =
+      rawHintedSkillDefinition && actionSupportsSkill(text, rawHintedSkillDefinition)
+        ? rawHintedSkillDefinition
+        : undefined;
     const inferredSaveSelection = this.pickSaveProfile(text, sceneText);
-    const hintedSaveProfile = hintedCheck?.kind === 'SAVING_THROW' && hintedAbility
+    const hintedSaveProfile = hintedCheck?.kind === 'SAVING_THROW' && hintedAbility && inferredSaveSelection
       ? SAVE_PROFILES.find((profile) => profile.ability === hintedAbility)
       : undefined;
     let saveSelection = challenge?.savingThrowAbility
@@ -445,8 +571,22 @@ export class StoryCheckEngine {
     }
 
     const success = forcedFailure ? false : roll.total >= dc;
-    const criticalSuccess = false;
-    const criticalFailure = false;
+    const selectedDie = roll.individualDice?.[selectedDieIndex];
+    const criticalSuccess = selectedDie === 20;
+    const criticalFailure = selectedDie === 1;
+    const outcomeTier: StoryCheckOutcomeTier =
+      criticalSuccess ? 'CRITICAL_SUCCESS' :
+      criticalFailure ? 'CRITICAL_FAILURE' :
+      success
+        ? (challenge?.successOutcomeTier || (challenge?.onSuccess ? 'SUCCESS_WITH_COST' : 'CLEAN_SUCCESS'))
+        : (challenge?.failureOutcomeTier || (challenge?.onFailure ? 'FAILURE_WITH_COST' : 'FAILURE'));
+    const narrativeGuidance = buildNarrativeGuidance(
+      profile?.skillId,
+      skillName,
+      String(ability),
+      challenge,
+      saveSelection,
+    );
 
     return {
       checkId: `check_${storyId}_${roll.rollId}`,
@@ -465,6 +605,7 @@ export class StoryCheckEngine {
       roll,
       total: roll.total,
       success,
+      outcomeTier,
       criticalSuccess,
       criticalFailure,
       reason: challenge?.reason || (saveSelection ? saveSelection.profile.reason : profile!.reason),
@@ -473,6 +614,7 @@ export class StoryCheckEngine {
       triggerReason: challenge?.triggerReason || saveSelection?.profile.triggerReason,
       challengeId: challenge?.id,
       challengeLabel: challenge?.label,
+      narrativeGuidance,
     };
   }
 
@@ -489,6 +631,13 @@ export class StoryCheckEngine {
     };
     const difficultyClass = challenge.difficultyClass;
     const success = roll.total >= difficultyClass;
+    const selectedDie = roll.individualDice?.[0];
+    const criticalSuccess = selectedDie === 20;
+    const criticalFailure = selectedDie === 1;
+    const outcomeTier: StoryCheckOutcomeTier =
+      criticalSuccess ? 'CRITICAL_SUCCESS' :
+      criticalFailure ? 'CRITICAL_FAILURE' :
+      success ? (challenge.successOutcomeTier || 'SUCCESS_WITH_COST') : (challenge.failureOutcomeTier || 'FAILURE');
 
     return {
       checkId: `custom_check_${storyId}_${roll.rollId}`,
@@ -508,8 +657,9 @@ export class StoryCheckEngine {
       roll,
       total: roll.total,
       success,
-      criticalSuccess: false,
-      criticalFailure: false,
+      outcomeTier,
+      criticalSuccess,
+      criticalFailure,
       reason: challenge.reason || challenge.label,
       contextNotes: [
         'CUSTOM_D20 resolution: no D&D ability, proficiency, saving-throw, or spell-slot rules were applied.',
@@ -518,6 +668,13 @@ export class StoryCheckEngine {
       triggerReason: challenge.triggerReason || `Authored custom challenge: ${challenge.label}.`,
       challengeId: challenge.id,
       challengeLabel: challenge.label,
+      narrativeGuidance: buildNarrativeGuidance(
+        undefined,
+        'Custom Rule',
+        'CUSTOM',
+        challenge,
+        null,
+      ),
     };
   }
 
@@ -529,7 +686,7 @@ export class StoryCheckEngine {
       .map((profile) => ({
         profile,
         score: profile.explicitKeywords.reduce(
-          (score, keyword) => score + (text.includes(normalize(keyword)) ? keyword.length + 2 : 0),
+          (score, keyword) => score + (phraseMatches(text, keyword) ? keyword.length + 2 : 0),
           0
         ),
         worldTriggered: false,
@@ -542,11 +699,11 @@ export class StoryCheckEngine {
     const triggered = SAVE_PROFILES
       .map((profile) => {
         const hazardScore = profile.sceneHazards.reduce(
-          (score, hazard) => score + (sceneText.includes(normalize(hazard)) ? hazard.length + 2 : 0),
+          (score, hazard) => score + (phraseMatches(sceneText, hazard) ? hazard.length + 2 : 0),
           0
         );
         const actionScore = profile.actionTriggers.reduce(
-          (score, trigger) => score + (text.includes(normalize(trigger)) ? trigger.length : 0),
+          (score, trigger) => score + (phraseMatches(text, trigger) ? trigger.length : 0),
           0
         );
         return {
@@ -566,7 +723,7 @@ export class StoryCheckEngine {
       .map((profile) => ({
         profile,
         score: profile.keywords.reduce(
-          (score, keyword) => score + (text.includes(normalize(keyword)) ? keyword.length + 1 : 0),
+          (score, keyword) => score + (phraseMatches(text, keyword) ? keyword.length + 1 : 0),
           0
         ),
       }))

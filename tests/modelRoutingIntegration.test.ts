@@ -12,6 +12,7 @@ describe('MODEL ROUTING & TASK ASSIGNMENT OPERATIONAL INTEGRATION', () => {
   const configPath = path.join(process.cwd(), 'server', 'data', configFileName);
 
   beforeEach(() => {
+    process.env.DREAMVILLE_TEST_LOAD_PERSISTED_CONFIG = '1';
     // Reset config file if present
     if (fs.existsSync(configPath)) {
       try {
@@ -24,6 +25,7 @@ describe('MODEL ROUTING & TASK ASSIGNMENT OPERATIONAL INTEGRATION', () => {
   });
 
   afterEach(() => {
+    delete process.env.DREAMVILLE_TEST_LOAD_PERSISTED_CONFIG;
     if (fs.existsSync(configPath)) {
       try {
         fs.unlinkSync(configPath);

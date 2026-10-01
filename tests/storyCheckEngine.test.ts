@@ -121,8 +121,9 @@ test('poisoned checks use disadvantage and keep the lower d20', () => {
   assert.equal(result!.advantageState, 'DISADVANTAGE');
   assert.equal(result!.roll.individualDice.length, 2);
   assert.equal(result!.roll.total, Math.min(...result!.roll.individualDice) + result!.totalModifier);
-  assert.equal(result!.criticalSuccess, false);
-  assert.equal(result!.criticalFailure, false);
+  const selectedDie = result!.roll.individualDice[result!.selectedDieIndex];
+  assert.equal(result!.criticalSuccess, selectedDie === 20);
+  assert.equal(result!.criticalFailure, selectedDie === 1);
 });
 
 test('blinded characters automatically fail sight-based perception checks', () => {
@@ -334,4 +335,198 @@ test('story check RNG advances across repeated checks instead of repeating a fix
 
   assert.equal(results.every((value) => value === 3), false);
   assert.ok(new Set(results).size > 1);
+});
+
+
+test('parkour selects Acrobatics and carries a concrete failed-maneuver consequence contract', () => {
+  const engine = new StoryCheckEngine();
+  const result = engine.resolve(
+    'story_parkour_resolution',
+    'I parkour my way towards the light.',
+    {
+      coreStats: {
+        level: 1,
+        strength: 10,
+        dexterity: 14,
+        constitution: 10,
+        intelligence: 10,
+        wisdom: 10,
+        charisma: 10,
+        ac: 12,
+        speed: 30,
+        hitDice: '1d10',
+        hpCurrent: 10,
+        hpMax: 10,
+      },
+      skills: [],
+    }
+  );
+
+  assert.ok(result);
+  assert.equal(result!.skill, 'Acrobatics');
+  assert.equal(result!.narrativeGuidance?.consequenceMode, 'NARRATIVE_ONLY');
+  assert.match(result!.narrativeGuidance?.checkJustification || '', /balance|body placement|precise maneuver/i);
+  assert.match(result!.narrativeGuidance?.failureGuidance || '', /landing|balance|terrain|forward progress/i);
+});
+
+test('moving toward a target does not become Athletics solely because the verb is push', () => {
+  const engine = new StoryCheckEngine();
+  const result = engine.resolve(
+    'story_push_movement',
+    'I push further towards the object.',
+    {
+      coreStats: {
+        level: 1,
+        strength: 12,
+        dexterity: 10,
+        constitution: 10,
+        intelligence: 10,
+        wisdom: 10,
+        charisma: 10,
+        ac: 10,
+        speed: 30,
+        hitDice: '1d10',
+        hpCurrent: 10,
+        hpMax: 10,
+      },
+      skills: [],
+      sceneText: 'The floor is dry and stable.',
+    }
+  );
+
+  assert.equal(result, null);
+});
+
+test('physical object displacement still selects Athletics after push keyword tightening', () => {
+  const engine = new StoryCheckEngine();
+  const result = engine.resolve(
+    'story_push_object',
+    'I push the stone aside.',
+    {
+      coreStats: {
+        level: 1,
+        strength: 14,
+        dexterity: 10,
+        constitution: 10,
+        intelligence: 10,
+        wisdom: 10,
+        charisma: 10,
+        ac: 10,
+        speed: 30,
+        hitDice: '1d10',
+        hpCurrent: 10,
+        hpMax: 10,
+      },
+      skills: [],
+    }
+  );
+
+  assert.ok(result);
+  assert.equal(result!.skill, 'Athletics');
+});
+
+test('ordinary movement only triggers a check when the scene makes movement itself hazardous', () => {
+  const engine = new StoryCheckEngine();
+  const result = engine.resolve(
+    'story_treacherous_movement',
+    'I walk forward.',
+    {
+      coreStats: {
+        level: 1,
+        strength: 10,
+        dexterity: 12,
+        constitution: 10,
+        intelligence: 10,
+        wisdom: 10,
+        charisma: 10,
+        ac: 10,
+        speed: 30,
+        hitDice: '1d10',
+        hpCurrent: 10,
+        hpMax: 10,
+      },
+      skills: [],
+      sceneText: 'The stone floor is slick, unstable, and broken beneath your feet.',
+    }
+  );
+
+  assert.ok(result);
+  assert.equal(result!.testType, 'SAVING_THROW');
+  assert.equal(result!.ability, 'Dexterity');
+  assert.equal(result!.worldTriggered, true);
+  assert.match(result!.triggerReason || '', /physical hazard/i);
+  assert.match(result!.narrativeGuidance?.failureGuidance || '', /footing|stumble|progress/i);
+});
+
+test('AI skill hints cannot force a skill that the player action does not semantically support', () => {
+  const engine = new StoryCheckEngine();
+  const result = engine.resolve(
+    'story_hint_guard',
+    'I push further towards the object.',
+    {
+      coreStats: {
+        level: 1,
+        strength: 12,
+        dexterity: 10,
+        constitution: 10,
+        intelligence: 10,
+        wisdom: 10,
+        charisma: 10,
+        ac: 10,
+        speed: 30,
+        hitDice: '1d10',
+        hpCurrent: 10,
+        hpMax: 10,
+      },
+      skills: [],
+    },
+    undefined,
+    undefined,
+    {
+      check: {
+        kind: 'ABILITY_CHECK',
+        skillId: 'athletics',
+        ability: 'Strength',
+      },
+    }
+  );
+
+  assert.equal(result, null);
+});
+
+
+test('AI saving-throw hints cannot manufacture a hazard in a routine scene', () => {
+  const engine = new StoryCheckEngine();
+  const result = engine.resolve(
+    'story_save_hint_guard',
+    'I walk forward.',
+    {
+      coreStats: {
+        level: 1,
+        strength: 10,
+        dexterity: 12,
+        constitution: 10,
+        intelligence: 10,
+        wisdom: 10,
+        charisma: 10,
+        ac: 10,
+        speed: 30,
+        hitDice: '1d10',
+        hpCurrent: 10,
+        hpMax: 10,
+      },
+      skills: [],
+      sceneText: 'The corridor is clear, level, and stable.',
+    },
+    undefined,
+    undefined,
+    {
+      check: {
+        kind: 'SAVING_THROW',
+        ability: 'Dexterity',
+      },
+    }
+  );
+
+  assert.equal(result, null);
 });

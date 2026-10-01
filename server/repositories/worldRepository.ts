@@ -3274,6 +3274,10 @@ export class InMemoryWorldRepository implements WorldRepository {
     const preservedCanonicalEvents = options?.preserveCanonicalEvents
       ? clone(this.getStoryRun(storyId)?.canonicalEvents || [])
       : undefined;
+    const currentRuntime = clone(this.getStoryRun(storyId)?.runtimeState || {});
+    const preservedWorkingContextPins = Array.isArray(currentRuntime?.workingContextPins)
+      ? currentRuntime.workingContextPins
+      : undefined;
 
     if (snapshot.worldClock) this.getWorldClock(storyId).importState(clone(snapshot.worldClock));
     if (snapshot.geography) this.getGeographyGraph(storyId).importState(clone(snapshot.geography));
@@ -3319,6 +3323,13 @@ export class InMemoryWorldRepository implements WorldRepository {
         restoredRun.runtimeState = {
           ...(restoredRun.runtimeState || {}),
           inventory: clone(snapshot.inventory),
+        };
+      }
+      // Canonical rollback restores game state, not user context pins.
+      if (preservedWorkingContextPins) {
+        restoredRun.runtimeState = {
+          ...(restoredRun.runtimeState || {}),
+          workingContextPins: clone(preservedWorkingContextPins),
         };
       }
       this.storyRuns.set(storyId, restoredRun);

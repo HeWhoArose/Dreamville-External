@@ -30,6 +30,11 @@ import { CapabilitySimulationEngine } from '../domain/capabilitySimulationEngine
 import { narrativeContinuityEngine } from '../domain/narrativeContinuityEngine';
 import { narrativeStateBroker, type ItemUseResolution } from '../domain/narrativeStateBroker';
 import { environmentalHazardEngine } from '../domain/environmentalHazardEngine';
+import { CurrentSituationBuilder } from '../domain/currentSituation';
+import { PlayerIntentInterpreter } from '../domain/playerIntentInterpreter';
+import { ResolutionGate } from '../domain/resolutionGate';
+import { outcomeTierFromCheck, type ActionResolution } from '../domain/actionResolution';
+import { type ContextTransparency } from '../../src/types';
 
 /**
  * ServerMockAuthority
@@ -193,6 +198,52 @@ export class ServerMockAuthority {
 
   public getActiveStoryId(): string {
     return this.activeStoryId;
+  }
+
+  public setWorkingContextPin(storyId: string, sourceId: string, pinned: boolean): { success: boolean; pinnedSourceIds: string[] } {
+    const normalizedSourceId = String(sourceId || '').trim().slice(0, 240);
+    if (!normalizedSourceId) return { success: false, pinnedSourceIds: [] };
+    const run = worldRepository.getStoryRun(storyId);
+    if (!run) return { success: false, pinnedSourceIds: [] };
+    const existing = Array.isArray(run.runtimeState?.workingContextPins)
+      ? run.runtimeState.workingContextPins.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0)
+      : [];
+    const next = new Set<string>(existing);
+    if (pinned) next.add(normalizedSourceId);
+    else next.delete(normalizedSourceId);
+    run.runtimeState = {
+      ...(run.runtimeState || {}),
+      workingContextPins: [...next].slice(-40),
+    };
+    worldRepository.saveStoryRun(run);
+    return { success: true, pinnedSourceIds: [...next] };
+  }
+
+  public getContextTransparency(storyId: string): ContextTransparency {
+    const run = worldRepository.getStoryRun(storyId);
+    const history = Array.isArray(run?.runtimeState?.narrativeContextHistory)
+      ? run.runtimeState.narrativeContextHistory
+      : [];
+    const audit = history.at(-1)?.contextAudit || {};
+    const mapChunk = (chunk: any) => ({
+      id: chunk.id,
+      label: String(chunk.label || 'Unnamed context block'),
+      band: String(chunk.band || 'UNKNOWN'),
+      source: chunk.source,
+      relevanceScore: chunk.relevanceScore,
+      protected: Boolean(chunk.protected),
+    });
+    return {
+      hardTokenBudget: Number(audit.hardTokenBudget || 0),
+      totalTokens: Number(audit.totalTokens || 0),
+      included: Array.isArray(audit.includedChunks) ? audit.includedChunks.map(mapChunk) : [],
+      idle: Array.isArray(audit.idleChunks) ? audit.idleChunks.map(mapChunk) : [],
+      archived: Array.isArray(audit.archivedChunks) ? audit.archivedChunks.map(mapChunk) : [],
+      evicted: Array.isArray(audit.evictedChunkLabels) ? audit.evictedChunkLabels.map(String).slice(0, 80) : [],
+      pinnedSourceIds: Array.isArray(run?.runtimeState?.workingContextPins)
+        ? run!.runtimeState!.workingContextPins.filter((id: unknown): id is string => typeof id === 'string')
+        : [],
+    };
   }
 
   public removeStoryState(storyId: string): void {
@@ -424,6 +475,7 @@ export class ServerMockAuthority {
       playerLifecycle: player ? player.toJSON() : null,
       openingScene: run?.openingScene || null,
       combatState: combatProjection,
+      contextTransparency: this.getContextTransparency(targetStoryId),
     };
   }
 
@@ -620,6 +672,13 @@ export class ServerMockAuthority {
       String(freeformText),
     );
     const itemUseBlocked = itemUseResolution.requested && !itemUseResolution.found;
+    const resolutionSituation = CurrentSituationBuilder.build({
+      storyId: targetStoryId,
+      playerAction: String(freeformText),
+      viewerActorId: actorId,
+      worldRepo: worldRepository,
+    });
+    const resolutionIntent = PlayerIntentInterpreter.deterministic(String(freeformText), resolutionSituation);
     // Narrative checks and authored challenge consequences are canonical mechanics. The AI may
     // describe the committed result, but it never supplies the die, modifier, DC, damage, or condition.
     const sceneText = [
@@ -640,7 +699,19 @@ export class ServerMockAuthority {
       capabilities: capabilityEngine.getEffectiveActorCapabilities(actorId),
     });
 
-    const storyCheck = itemUseBlocked
+    const resolutionGate = ResolutionGate.evaluate({
+      actionText: String(freeformText),
+      currentSituation: resolutionSituation,
+      playerIntent: resolutionIntent,
+      authoredChallenge: authoredChallenge || undefined,
+      capabilityDetected: Boolean(
+        this.explicitCapabilityIntentForNarration(String(freeformText)) ||
+        actionAdvice?.recognizedCapability?.id ||
+        actionAdvice?.mode === 'EXECUTE_EXISTING'
+      ),
+      itemBlocked: itemUseBlocked,
+    });
+    const storyCheck = itemUseBlocked || !resolutionGate.shouldRoll
       ? null
       : storyCheckAuthority.resolve(worldRepository, {
           storyId: targetStoryId,
@@ -661,9 +732,12 @@ export class ServerMockAuthority {
       const testLabel = storyCheck.testType === 'SAVING_THROW'
         ? storyCheck.ability + ' saving throw'
         : storyCheck.skill + ' check';
-      committedOutcome = storyCheck.success
-        ? testLabel + ' succeeded. Narrate the visible result and immediate consequence naturally.'
-        : testLabel + ' failed. Narrate the visible failure and immediate consequence naturally.';
+      const guidance = storyCheck.narrativeGuidance;
+      committedOutcome = [
+        testLabel + ' ' + (storyCheck.success ? 'succeeded' : 'failed') + ' (' + storyCheck.total + ' vs DC ' + storyCheck.difficultyClass + ').',
+        guidance && guidance.checkJustification ? 'Why the check was required: ' + guidance.checkJustification : '',
+        guidance ? (storyCheck.success ? (guidance.successGuidance ? 'Resolution guidance: ' + guidance.successGuidance : '') : (guidance.failureGuidance ? 'Failure guidance: ' + guidance.failureGuidance : '')) : '',
+      ].filter(Boolean).join(' ');
 
       if (authoredChallenge) {
         const consequence = storyCheckConsequenceEngine.apply(
@@ -685,6 +759,75 @@ export class ServerMockAuthority {
         committedOutcome = 'This is an ordinary narrative/world action. No special capability was invoked. Narrate the physical and sensory result naturally and continue the scene.';
       }
     }
+
+    const canonicalEventForResolution = canonicalCommandId
+      ? worldRepository
+          .getCanonicalCommandEvents(targetStoryId)
+          .slice()
+          .reverse()
+          .find((event) => event.commandId === canonicalCommandId)
+      : undefined;
+
+    let actionResolution: ActionResolution = {
+      resolutionId: deterministicId('action_resolution', targetStoryId, baseResult.actionId, String(freeformText)),
+      storyId: targetStoryId,
+      turnId: baseResult.actionId,
+      playerAction: String(freeformText),
+      playerIntent: {
+        action: resolutionIntent.action,
+        interactionMode: resolutionIntent.interactionMode,
+        movementIntent: resolutionIntent.movementIntent,
+        observationIntent: resolutionIntent.observationIntent,
+        speechIntent: resolutionIntent.speechIntent,
+        informationGoal: resolutionIntent.informationGoal,
+        targetIds: resolutionIntent.explicitTargets.map((target) => target.id).filter((id): id is string => Boolean(id)),
+      },
+      attemptedEffect: String(freeformText),
+      targetEntityIds: resolutionIntent.explicitTargets.map((target) => target.id).filter((id): id is string => Boolean(id)),
+      resolutionMethod:
+        authoredChallenge ? 'AUTHORED_CHALLENGE' :
+        resolutionGate.mode === 'CAPABILITY' ? 'CAPABILITY' :
+        itemUseResolution.requested ? 'ITEM_USE' :
+        storyCheck ? 'CHECK' :
+        resolutionGate.mode === 'DETERMINISTIC' ? 'DETERMINISTIC' :
+        'NO_CHECK',
+      check: storyCheck || undefined,
+      outcomeTier: storyCheck ? outcomeTierFromCheck(storyCheck) : (itemUseBlocked ? 'BLOCKED' : 'NO_CHECK'),
+      actualEffect: storyCheck
+        ? (storyCheck.success
+          ? (storyCheck.narrativeGuidance?.successGuidance || 'The attempted action resolves successfully.')
+          : (storyCheck.narrativeGuidance?.failureGuidance || 'The attempted action does not resolve cleanly.'))
+        : itemUseBlocked
+          ? 'The requested item was unavailable.'
+          : (resolutionGate.mode === 'CAPABILITY'
+            ? 'The action is resolved by the established capability/rules layer.'
+            : 'The action proceeds as an ordinary deterministic world/narrative action.'),
+      canonicalStateChanges: (canonicalEventForResolution?.mutationPaths || []).map((path: string) => ({
+        kind: 'CANONICAL_MUTATION',
+        targetId: actorId,
+        value: path,
+        metadata: { source: 'canonical_command_event' },
+      })),
+      physicalConsequences: storyCheck?.consequence?.summary ? [storyCheck.consequence.summary] : [],
+      playerVisibleConsequences: [
+        ...(storyCheck?.narrativeGuidance
+          ? [storyCheck.success ? storyCheck.narrativeGuidance.successGuidance : storyCheck.narrativeGuidance.failureGuidance]
+          : []),
+        ...(storyCheck?.consequence?.summary ? [storyCheck.consequence.summary] : []),
+      ].filter(Boolean),
+      evidenceIds: [
+        canonicalEventForResolution?.eventId,
+        storyCheck?.checkId,
+        storyCheck?.challengeId,
+        ...(storyCheck?.consequence?.challengeId ? [storyCheck.consequence.challengeId] : []),
+      ].filter((value): value is string => Boolean(value)),
+      uncertainty: resolutionGate.uncertaintyBasis,
+      provenance: {
+        source: 'CANONICAL_ENGINE',
+        canonicalCommandId,
+        canonicalEventId: canonicalEventForResolution?.eventId,
+      },
+    };
 
     let itemUseResult: ReturnType<typeof narrativeStateBroker.commitItemUse> | undefined;
     if (itemUseResolution.requested && itemUseResolution.found && (!storyCheck || storyCheck.success)) {
@@ -708,6 +851,93 @@ export class ServerMockAuthority {
       }
     } else if (itemUseResolution.requested && itemUseResolution.found && storyCheck && !storyCheck.success) {
       committedOutcome += ` The attempted use of ${itemUseResolution.item?.name || 'the item'} did not resolve successfully; do not consume the item.`;
+      actionResolution.actualEffect += ' The item-use attempt did not resolve successfully.';
+    }
+
+    if (itemUseResult?.success) {
+      actionResolution.resolutionMethod = 'ITEM_USE';
+      if (!storyCheck) actionResolution.outcomeTier = 'CLEAN_SUCCESS';
+      const itemName = itemUseResolution.item?.name || 'item';
+      if (itemUseResult.healing) {
+        actionResolution.actualEffect += ` ${itemName} was consumed and restored ${itemUseResult.healing.finalAmount} health.`;
+        actionResolution.playerVisibleConsequences.push(
+          `${itemName} was consumed and restored ${itemUseResult.healing.finalAmount} health.`,
+        );
+        actionResolution.canonicalStateChanges.push({
+          kind: 'INVENTORY',
+          targetId: actorId,
+          value: { itemId: itemUseResolution.item?.id, consumed: true },
+          metadata: { source: 'canonical_item_use' },
+        });
+        actionResolution.canonicalStateChanges.push({
+          kind: 'HEALTH',
+          targetId: actorId,
+          value: { restored: itemUseResult.healing.finalAmount },
+          metadata: { source: 'canonical_item_use' },
+        });
+      } else if (itemUseResult.consumed?.success) {
+        actionResolution.actualEffect += ` ${itemName} was used successfully and its configured quantity/charge was consumed.`;
+        actionResolution.playerVisibleConsequences.push(
+          `${itemName} was used successfully.`,
+        );
+        actionResolution.canonicalStateChanges.push({
+          kind: 'INVENTORY',
+          targetId: actorId,
+          value: { itemId: itemUseResolution.item?.id, consumed: true },
+          metadata: { source: 'canonical_item_use' },
+        });
+      }
+    } else if (itemUseResult && !itemUseResult.success) {
+      actionResolution.outcomeTier = storyCheck?.success === false ? 'FAILURE_WITH_COST' : 'BLOCKED';
+      actionResolution.actualEffect += ` Item use failed: ${itemUseResult.errorReason || 'item use could not be committed'}.`;
+      actionResolution.uncertainty.push('Canonical item-use transaction did not commit.');
+    }
+
+    const conditionStateBeforeAction = conditionEngine.getActorState(actorId);
+
+    const spatialMovementIntent = Boolean(resolutionIntent.movementIntent) &&
+      !player?.isTraveling &&
+      currentLocationId === player?.locationId &&
+      /\b(?:closer|toward|towards|approach|near|beside|next to|forward)\b/i.test(String(freeformText));
+    if (spatialMovementIntent && (!storyCheck || storyCheck.success)) {
+      const focusTarget = resolutionIntent.explicitTargets.find((target) =>
+        resolutionSituation.nearbyEntities.some((entity) => entity.id === target.id)
+      );
+      const normalizedAction = String(freeformText).toLowerCase();
+      const proximityBand =
+        /\b(?:contact|touch|touching|grab|hold)\b/.test(normalizedAction) ? 'CONTACT' :
+        /\b(?:adjacent|beside|next to|right next to)\b/.test(normalizedAction) ? 'ADJACENT' :
+        'NEAR';
+      const updatedPlayer = worldRepository.getPlayerLifecycle(targetStoryId);
+      if (updatedPlayer) {
+        worldRepository.updatePlayerLifecycle(targetStoryId, updatedPlayer.copyWith({
+          localSpatialState: {
+            ...updatedPlayer.localSpatialState,
+            areaId: updatedPlayer.localSpatialState?.areaId || updatedPlayer.locationId,
+            focusEntityId: focusTarget?.id,
+            focusLabel: focusTarget?.name || undefined,
+            proximityBand,
+            updatedTurnId: baseResult.actionId,
+          },
+        }));
+        actionResolution.physicalConsequences.push(
+          'The character is now canonically positioned ' + proximityBand.toLowerCase().replace('_', ' ') +
+          ' within the current location' + (focusTarget ? ' relative to ' + focusTarget.name : '') + '.'
+        );
+        actionResolution.actualEffect += ' The bounded local spatial state reflects the resolved movement.';
+        actionResolution.canonicalStateChanges.push({
+          kind: 'SPATIAL',
+          targetId: actorId,
+          value: {
+            localSpatialState: {
+              proximityBand,
+              focusEntityId: focusTarget?.id,
+              focusLabel: focusTarget?.name,
+            },
+          },
+          metadata: { scope: 'INTRA_LOCATION_SPATIAL', source: 'canonical_movement_resolution' },
+        });
+      }
     }
 
     const resolutionHint = actionAdvice?.aiPipeline?.resolutionHint;
@@ -725,6 +955,25 @@ export class ServerMockAuthority {
       });
       if (fallResolution.applied && fallResolution.damage) {
         committedOutcome += ` A canonical ${fallResolution.damageFormula} fall-damage resolution was applied, resulting in ${fallResolution.damage.finalAmount} damage and ${fallResolution.damage.healthCurrent} health remaining.`;
+        actionResolution.outcomeTier =
+          storyCheck?.success === false ? 'FAILURE_WITH_COST' :
+          storyCheck ? 'SUCCESS_WITH_COST' : 'SUCCESS_WITH_COST';
+        actionResolution.actualEffect += ` A canonical fall consequence applied ${fallResolution.damage.finalAmount} damage.`;
+        actionResolution.physicalConsequences.push(
+          `Fall consequence: ${fallResolution.damage.finalAmount} damage; ${fallResolution.damage.healthCurrent} health remaining.`,
+        );
+        actionResolution.playerVisibleConsequences.push(
+          `The fall causes ${fallResolution.damage.finalAmount} damage.`,
+        );
+        actionResolution.canonicalStateChanges.push({
+          kind: 'DAMAGE',
+          targetId: actorId,
+          value: {
+            amount: fallResolution.damage.finalAmount,
+            healthCurrent: fallResolution.damage.healthCurrent,
+          },
+          metadata: { source: 'environmental_hazard_engine' },
+        });
       }
     }
 
@@ -733,6 +982,30 @@ export class ServerMockAuthority {
     conditionEngine.tickActor(actorId, 'TURN', worldRepository.getWorldClock(targetStoryId).getAbsoluteTime());
 
     const conditionStateAfterAction = conditionEngine.getActorState(actorId);
+    if (conditionStateBeforeAction && conditionStateAfterAction) {
+      const healthChanged = conditionStateBeforeAction.healthCurrent !== conditionStateAfterAction.healthCurrent;
+      const deathChanged = Boolean(conditionStateBeforeAction.dead) !== Boolean(conditionStateAfterAction.dead);
+      if (healthChanged || deathChanged) {
+        actionResolution.outcomeTier =
+          actionResolution.outcomeTier === 'FAILURE'
+            ? 'FAILURE_WITH_COST'
+            : actionResolution.outcomeTier === 'CLEAN_SUCCESS'
+              ? 'SUCCESS_WITH_COST'
+              : actionResolution.outcomeTier;
+        actionResolution.actualEffect += healthChanged
+          ? ` Condition processing changed health to ${conditionStateAfterAction.healthCurrent}.`
+          : ' Condition processing changed the actor state.';
+        actionResolution.canonicalStateChanges.push({
+          kind: 'CONDITION',
+          targetId: actorId,
+          value: {
+            healthCurrent: conditionStateAfterAction.healthCurrent,
+            dead: Boolean(conditionStateAfterAction.dead),
+          },
+          metadata: { source: 'condition_engine' },
+        });
+      }
+    }
     const currentPowerState = capabilityEngine.getPowerState(actorId);
     if (conditionStateAfterAction && currentPowerState) {
       capabilityEngine.setPowerState(actorId, {
@@ -764,6 +1037,7 @@ export class ServerMockAuthority {
       const generated = await narrator.generateNarrativeOnly({
         storyId: targetStoryId,
         playerAction: String(freeformText),
+        actionResolution,
         committedOutcome,
         hardTokenBudget: 700,
         timeoutMs: 7000,
@@ -898,6 +1172,7 @@ export class ServerMockAuthority {
       if (storyCheck) {
         actionLog.checkResult = storyCheck;
       }
+      actionLog.actionResolution = actionResolution;
       if (actionTips.length > 0) {
         actionLog.actionAdvice = {
           mode: 'NORMAL_ACTION',

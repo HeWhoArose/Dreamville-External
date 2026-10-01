@@ -680,10 +680,12 @@ gameRouter.post('/action/narrate/regenerate', async (req: Request, res: Response
       'Do not change mechanics, canonical facts, target state, or consequences.',
       editInstruction ? 'Player edit instruction: ' + editInstruction : '',
     ].filter(Boolean).join(' ');
+    const actionResolution = action.actionResolution;
 
     const generated = await worldRepository.getAiOrchestrator().generateNarrativeOnly({
       storyId,
       playerAction: action.description,
+      actionResolution,
       committedOutcome: checkOutcome,
       forceModelId,
       hardTokenBudget: 1100,

@@ -1,5 +1,5 @@
-import type { StoryCheckResult, ActionResolution, ActionOutcomeTier } from '../../src/types';
-export type { ActionResolution, ActionOutcomeTier };
+import type { StoryCheckResult, ActionResolution, ActionOutcomeTier, ActionResolutionMethod } from '../../src/types';
+export type { ActionResolution, ActionOutcomeTier, ActionResolutionMethod };
 
 export function outcomeTierFromCheck(check: StoryCheckResult): ActionOutcomeTier {
   if (check.outcomeTier) return check.outcomeTier;

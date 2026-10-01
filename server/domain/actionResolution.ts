@@ -1,4 +1,3 @@
-import type { PlayerIntent } from './playerIntentInterpreter';
 import type { StateChangeProposal } from '../../src/types';
 import type { StoryCheckResult } from '../../src/types';
 

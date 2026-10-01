@@ -140,7 +140,7 @@ export class SemanticNarrativeReview {
 			violations.push({ code: 'MISSING_MOVEMENT', message: 'The player requested movement, but the narration does not depict a corresponding movement or position change.', severity: 'MEDIUM' });
 		}
 
-		if (intent.observationIntent && !containsAny(lower, /\b(?:hear|hears|heard|listen|listens|listened|overhear|overheard|notice|notices|noticed|observe|observes|observed|watch|watches|watched|see|sees|saw|look|looks|looked|spot|spots|inspect|inspects|examines|examined|sense|senses|detected|detects)\b/i)) {
+		if (intent.observationIntent && !containsAny(lower, /\b(?:hear|hears|heard|listen|listens|listened|overhear|overheard|notice|notices|noticed|observe|observes|observed|watch|watches|watched|see|sees|saw|look|looks|looked|spot|spots|inspect|inspects|examines|examined|sense|senses|detected|detects|attend|attended|attention|attentive|focus|focused|conversation|whisper|whispers|whispered|sound|sounds|voice|voices|rumou?r|hearsay)\b/i)) {
 			missingRequirements.push('The requested observation should produce an observable result or limitation.');
 			violations.push({ code: 'MISSING_OBSERVATION', message: 'The player requested observation/listening, but no observable result or grounded limitation was narrated.', severity: 'MEDIUM' });
 		}

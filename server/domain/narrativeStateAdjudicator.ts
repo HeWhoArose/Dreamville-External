@@ -1,4 +1,5 @@
 import { deterministicId } from './deterministicRng';
+			}
 import type { WorldRepository } from '../repositories/worldRepository';
 import type { PlayerIntent } from './playerIntentInterpreter';
 import type { CurrentSituation } from './currentSituation';

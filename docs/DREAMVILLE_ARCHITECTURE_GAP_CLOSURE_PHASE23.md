@@ -67,7 +67,7 @@ Durable actor memories are labeled `SUBJECTIVE` and reference that objective eve
 
 `CanonicalCommitLedger` records command preparation and owner phases in a repository-local operational journal.
 
-Before the next command for a story executes, interrupted entries are restored from their repository-local pre-state checkpoint and marked `ABORTED`. The journal is deliberately excluded from `StoryRun.runtimeState`, so it cannot become a second persisted source of truth.
+Recovery is an explicit repository-local bootstrap/recovery operation. Interrupted entries are restored from their pre-state checkpoint and marked `ABORTED`; recovery is never silently inserted into the normal command path. The journal is deliberately excluded from `StoryRun.runtimeState`, so it cannot become a second persisted source of truth.
 
 Cross-restart replay remains anchored by persisted `CanonicalCommandEvent.replay` checkpoints and canonical idempotency. Operational metadata is excluded from canonical replay hashes.
 

@@ -1,22 +1,13 @@
-export type DiceThemeMode = '3D' | '2D';
+import {
+	CANONICAL_DICE_THEMES,
+	DICE_THEME_IDS,
+	DEFAULT_DICE_THEME,
+	type DiceThemeId,
+	type DiceThemeMode,
+} from '../../data/diceThemes';
 
-export type DiceThemeId =
-	| 'CLASSIC'
-	| 'ARCANE'
-	| 'CRIMSON'
-	| 'EMERALD'
-	| 'FROST'
-	| 'OBSIDIAN'
-	| 'ROYAL_CROWN'
-	| 'AMETHYST_GOLD'
-	| 'SHADOW_KNIGHT'
-	| 'ENCHANTED_PARCHMENT'
-	| '2D_PARCHMENT'
-	| '2D_ARCANE'
-	| '2D_CRIMSON'
-	| '2D_EMERALD'
-	| '2D_FROST'
-	| '2D_OBSIDIAN';
+export type { DiceThemeId, DiceThemeMode };
+export { DICE_THEME_IDS };
 
 export interface DiceThemePreset {
 	id: DiceThemeId;
@@ -34,8 +25,6 @@ export interface DiceThemePreset {
 		outline: string;
 	};
 }
-
-export const DEFAULT_DICE_THEME: DiceThemeId = 'CLASSIC';
 
 export const DICE_THEME_PRESETS: readonly DiceThemePreset[] = [
 	{
@@ -298,5 +287,6 @@ export const DICE_THEME_PRESETS: readonly DiceThemePreset[] = [
 ];
 
 export function getDiceThemePreset(themeId?: string | null): DiceThemePreset {
-	return DICE_THEME_PRESETS.find((theme) => theme.id === themeId) || DICE_THEME_PRESETS[0];
+	const canonical = CANONICAL_DICE_THEMES.find((theme) => theme.id === themeId && theme.availability !== 'UNAVAILABLE') || CANONICAL_DICE_THEMES[0];
+	return DICE_THEME_PRESETS.find((theme) => theme.id === canonical.id) || DICE_THEME_PRESETS[0];
 }

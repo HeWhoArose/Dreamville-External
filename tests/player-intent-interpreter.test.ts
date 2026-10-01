@@ -151,3 +151,26 @@ test('model output retains explicit movement plus observation', () => {
 	assert.equal(result.observationIntent, true);
 	assert.equal(result.speechIntent, false);
 });
+
+
+test('AI intent cannot invent a target absent from player text or visible scene', () => {
+	const { currentSituation } = situation();
+	const result = PlayerIntentInterpreter.fromModel(
+		{
+			action: 'inspect_secret_door',
+			goal: 'inspect target',
+			interactionMode: 'MANIPULATION',
+			speechIntent: false,
+			movementIntent: false,
+			observationIntent: true,
+			explicitTargets: [{ id: 'invented-door', name: 'Secret Door', kind: 'OBJECT' }],
+			impliedTargets: [],
+			confidence: 0.99,
+		},
+		'I inspect the wall.',
+		currentSituation,
+	);
+
+	assert.ok(result);
+	assert.equal(result.explicitTargets.some((target) => target.name === 'Secret Door'), false);
+});

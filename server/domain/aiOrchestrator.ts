@@ -20,6 +20,8 @@ import { evaluateAiTaskCandidatePreflight, evaluateAiTaskReadiness, getAiTaskCon
 import { narrativeContinuityEngine } from './narrativeContinuityEngine';
 import { CurrentSituationBuilder } from './currentSituation';
 import { PlayerIntentInterpreter, type PlayerIntent } from './playerIntentInterpreter';
+import { NarrativeResearchPipeline, type NarrativeResearchResult } from './narrativeResearchPipeline';
+import { NarrativeDirector, type EphemeralNarrativePlan } from './narrativeDirector';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
 
@@ -513,11 +515,15 @@ export interface OrchestratedTurnTelemetry {
   cached?: boolean;
   idempotencyReplayed?: boolean;
   idempotencyKey?: string;
+  researchBlockCount?: number;
+  researchTokens?: number;
+  narrativePlanObjective?: string;
 }
 
 export interface OrchestratedTurnResult {
   success: boolean;
   playerIntent?: PlayerIntent;
+  narrativePlan?: EphemeralNarrativePlan;
   turnPackage?: StructuredTurnPackage;
   telemetry: OrchestratedTurnTelemetry;
   adjudicationResult?: AdjudicationResult;
@@ -6587,6 +6593,8 @@ export class MultiModelOrchestrator {
       error?: string;
     }>;
     researchPacket?: ReturnType<typeof narrativeContinuityEngine.research>;
+    narrativePlan?: EphemeralNarrativePlan;
+    researchAudit?: Pick<NarrativeResearchResult, 'blocks' | 'excluded' | 'budgets' | 'totalTokens' | 'query'>;
     contextAudit?: {
       hardTokenBudget: number;
       totalTokens: number;
@@ -6605,7 +6613,6 @@ export class MultiModelOrchestrator {
     const timeoutMs = params.timeoutMs ?? 7000;
     const authoritativeOutcome = (params.committedOutcome || '').trim();
     const connectedDirective = (params.continuationDirective || '').trim();
-    const isInformationSeekingAction = NARRATIVE_INFORMATION_SEEKING_PATTERN.test(playerAction);
     const worldRepo = this.getWorldRepository();
     let currentSituation = CurrentSituationBuilder.build({
       storyId,
@@ -6619,12 +6626,27 @@ export class MultiModelOrchestrator {
       currentSituation,
       timeoutMs: Math.min(timeoutMs, 5000),
     });
+    const playerIntent = intentInterpretation.intent;
     currentSituation = CurrentSituationBuilder.build({
       storyId,
       playerAction,
-      currentAction: intentInterpretation.intent,
+      currentAction: playerIntent,
       viewerActorId: currentSituation.player.actorId,
       worldRepo,
+    });
+    const researchResult = NarrativeResearchPipeline.research({
+      repository: worldRepo,
+      storyId,
+      currentSituation,
+      playerIntent,
+      playerAction,
+      hardTokenBudget: Math.max(1600, hardTokenBudget * 2),
+      viewerActorId: currentSituation.player.actorId,
+    });
+    const narrativePlan = NarrativeDirector.create({
+      situation: currentSituation,
+      intent: playerIntent,
+      research: researchResult,
     });
 
     const canonicalSceneAnchor = [
@@ -6640,6 +6662,7 @@ export class MultiModelOrchestrator {
       'Temporal rule: do not move the time of day forward or backward in narration. Multiple player actions may occur within the same canonical time until the game clock is explicitly advanced.',
     ].filter(Boolean).join('\n');
 
+    const isInformationSeekingAction = Boolean(playerIntent.informationGoal) || playerIntent.interactionMode === 'INFORMATION_SEEKING' || playerIntent.interactionMode === 'PASSIVE_OBSERVATION';
     const styleInstruction = params.styleInstruction || [
       'Write an immersive tabletop-RPG narrator response for the latest player action.',
       'Canonical mechanics are authoritative. Never invent or expose mechanics, model names, internal identifiers, DCs, dice, state fields, or engine terminology.',
@@ -6659,7 +6682,8 @@ export class MultiModelOrchestrator {
         : 'No canonical mechanical outcome was supplied. Describe only the attempt and observable scene response; do not decide hidden success or failure.',
       connectedDirective ? 'Follow the connected presentation directive only as style guidance; never override canonical state.' : '',
       'Semantic player intent is authoritative for what the player meant to attempt; do not silently replace it with a different action.',
-      'Intent: ' + JSON.stringify(intentInterpretation.intent),
+      'Player Intent: ' + JSON.stringify(playerIntent),
+      NarrativeDirector.toPromptContext(narrativePlan),
       'Stay in the canonical current location unless a committed location change is supplied.',
       'Treat the latest player action as the current turn contract. Depict that action first and do not silently replace it with an earlier action from recent history.',
       'Preserve every concrete action target named by the player when it is narratively observable (for example, a scroll, staff, citadel, doorway, person, or object).',
@@ -6687,18 +6711,7 @@ export class MultiModelOrchestrator {
       ...currentSituation.visibleEvents.map((event) => event.summary),
       ...currentSituation.relevantLore.map((fact) => `Authorized lore: ${fact.subjectEntityId} ${fact.predicate} ${fact.objectValue}`),
     ].filter(Boolean).slice(0, 10).join('\n');
-    const researchQuery = [
-      playerAction,
-      ...canonicalRecentTurns.slice(-2).map((turn) => turn.playerAction),
-      currentSituation.location.name,
-    ].filter(Boolean).join(' ');
-    const researchPacket = narrativeContinuityEngine.research(
-      worldRepo,
-      storyId,
-      researchQuery || 'current story context',
-      viewerActorId,
-      { persist: false, currentSituation },
-    );
+    const researchPacket = researchResult.packet;
     const assembledContext = WorkingContextEngine.assembleTurnContext({
       storyId,
       playerAction,
@@ -6725,6 +6738,35 @@ export class MultiModelOrchestrator {
           isProtected: true,
           relevanceScore: 0.98,
         }] : []),
+        {
+          id: 'b2_player_intent',
+          band: 'B2_IMMEDIATE' as const,
+          label: 'Semantic Player Intent',
+          content: JSON.stringify(playerIntent),
+          estimatedTokens: WorkingContextEngine.estimateTokens(JSON.stringify(playerIntent)),
+          sourceAuthority: 'PlayerIntentInterpreter',
+          isProtected: true,
+          relevanceScore: 1,
+        },
+        {
+          id: 'b3_narrative_research',
+          band: 'B3_CAUSAL_OPPORTUNITY' as const,
+          label: 'Bounded Narrative Research',
+          content: researchResult.promptContext,
+          estimatedTokens: WorkingContextEngine.estimateTokens(researchResult.promptContext),
+          sourceAuthority: 'NarrativeResearchPipeline (Phase 3)',
+          relevanceScore: 0.98,
+        },
+        {
+          id: 'b2_narrative_plan',
+          band: 'B2_IMMEDIATE' as const,
+          label: 'Ephemeral Narrative Director Plan',
+          content: NarrativeDirector.toPromptContext(narrativePlan),
+          estimatedTokens: WorkingContextEngine.estimateTokens(NarrativeDirector.toPromptContext(narrativePlan)),
+          sourceAuthority: 'NarrativeDirector (Phase 4)',
+          isProtected: true,
+          relevanceScore: 1,
+        },
         ...(canonicalRecentTurns.length ? [{
           id: 'recent_story_turns',
           band: 'B2_IMMEDIATE' as const,
@@ -6864,6 +6906,8 @@ export class MultiModelOrchestrator {
         fallbackReason: generated.fallbackReason,
         attemptsTrail: generated.attemptsTrail,
         researchPacket,
+        narrativePlan,
+        researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
         contextAudit,
         error: finalSceneContinuity.errorReason || 'Narration scene continuity validation failed.',
       };
@@ -6878,6 +6922,8 @@ export class MultiModelOrchestrator {
         fallbackReason: generated.fallbackReason,
         attemptsTrail: generated.attemptsTrail,
         researchPacket,
+        narrativePlan,
+        researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
         contextAudit,
         error: finalActionContinuity.errorReason || 'Narration action continuity validation failed.',
       };
@@ -6892,6 +6938,8 @@ export class MultiModelOrchestrator {
         fallbackReason: generated.fallbackReason,
         attemptsTrail: generated.attemptsTrail,
         researchPacket,
+        narrativePlan,
+        researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
         contextAudit,
         error: finalInformationContinuity.errorReason || 'Narration information continuity validation failed.',
       };
@@ -6906,6 +6954,8 @@ export class MultiModelOrchestrator {
         fallbackReason: generated.fallbackReason,
         attemptsTrail: generated.attemptsTrail,
         researchPacket,
+        narrativePlan,
+        researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
         contextAudit,
         error: finalTemporalContinuity.errorReason || 'Narration temporal continuity validation failed.',
       };
@@ -6923,6 +6973,8 @@ export class MultiModelOrchestrator {
       fallbackReason: generated.fallbackReason,
       attemptsTrail: generated.attemptsTrail,
       researchPacket,
+      narrativePlan,
+      researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
       contextAudit,
     };
   }
@@ -7019,19 +7071,29 @@ export class MultiModelOrchestrator {
         viewerActorId: initialSituation.player.actorId,
         worldRepo: repo,
       });
-
-      // 1. Ingest CH11 Working Context (DEF-CH12-02)
-      const researchPacket = narrativeContinuityEngine.research(
-        repo,
+      const researchResult = NarrativeResearchPipeline.research({
+        repository: repo,
         storyId,
-        params.playerAction || 'current story context',
-        currentSituation.player.actorId,
-        { persist: false, currentSituation },
-      );
+        currentSituation,
+        playerIntent,
+        playerAction: params.playerAction || '',
+        hardTokenBudget: Math.max(1600, hardTokenBudget * 2),
+        viewerActorId: currentSituation.player.actorId,
+      });
+      const researchPacket = researchResult.packet;
+      const narrativePlan = NarrativeDirector.create({
+        situation: currentSituation,
+        intent: playerIntent,
+        research: researchResult,
+      });
+
+      // 1. Ingest the shared CurrentSituation + Phase 3 research + Phase 4 plan into Working Context.
       const assembledContext: AssembledTurnContext = WorkingContextEngine.assembleTurnContext({
         storyId,
         playerAction: params.playerAction || 'Observe surroundings and assess position',
         currentAction: playerIntent,
+        currentSituation,
+        narrativeResearch: researchPacket,
         viewerActorId: currentSituation.player.actorId,
         hardTokenBudget,
         worldRepo: repo,
@@ -7047,12 +7109,21 @@ export class MultiModelOrchestrator {
         }, {
           id: 'b3_narrative_research',
           band: 'B3_CAUSAL_OPPORTUNITY',
-          label: 'Narrative Research / Plot / Plan',
-          content: JSON.stringify(researchPacket),
-          estimatedTokens: WorkingContextEngine.estimateTokens(JSON.stringify(researchPacket)),
-          sourceAuthority: 'NarrativeContinuityEngine',
-          relevanceScore: 0.9,
+          label: 'Bounded Narrative Research',
+          content: researchResult.promptContext,
+          estimatedTokens: WorkingContextEngine.estimateTokens(researchResult.promptContext),
+          sourceAuthority: 'NarrativeResearchPipeline (Phase 3)',
+          relevanceScore: 0.98,
           isProtected: false,
+        }, {
+          id: 'b2_narrative_plan',
+          band: 'B2_IMMEDIATE',
+          label: 'Ephemeral Narrative Director Plan',
+          content: NarrativeDirector.toPromptContext(narrativePlan),
+          estimatedTokens: WorkingContextEngine.estimateTokens(NarrativeDirector.toPromptContext(narrativePlan)),
+          sourceAuthority: 'NarrativeDirector (Phase 4)',
+          relevanceScore: 1,
+          isProtected: true,
         }],
       });
 
@@ -7357,6 +7428,9 @@ export class MultiModelOrchestrator {
               checkpointCreated: checkpointId,
               recoveredFromCheckpoint: Boolean(params.checkpointId),
               idempotencyKey: rawIdempotencyKey,
+              researchBlockCount: researchResult.blocks.length,
+              researchTokens: researchResult.totalTokens,
+              narrativePlanObjective: narrativePlan.objective,
             };
             this.lastTurnTelemetry = telemetry;
             narrativeContinuityEngine.recordTurn(repo, {
@@ -7512,6 +7586,9 @@ export class MultiModelOrchestrator {
               checkpointCreated: checkpointId,
               recoveredFromCheckpoint: Boolean(params.checkpointId),
               idempotencyKey: rawIdempotencyKey,
+              researchBlockCount: researchResult.blocks.length,
+              researchTokens: researchResult.totalTokens,
+              narrativePlanObjective: narrativePlan.objective,
             };
             this.lastTurnTelemetry = telemetry;
 
@@ -7519,6 +7596,7 @@ export class MultiModelOrchestrator {
               success: true,
               turnPackage: validation.turnPackage,
               playerIntent,
+              narrativePlan,
               telemetry,
               adjudicationResult: adjudication,
               checkpoint,
@@ -7547,6 +7625,7 @@ export class MultiModelOrchestrator {
           validated: false,
           idempotencyKey: rawIdempotencyKey,
         },
+        narrativePlan,
         error: `All models and emergency fallbacks failed. Last error: ${lastError}`,
       };
     };

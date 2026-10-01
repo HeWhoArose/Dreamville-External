@@ -128,6 +128,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		'- Research is bounded evidence. Omitted or excluded information is not permission to invent it.',
 		'- The Narrative Director Plan is ephemeral guidance for this turn only; it does not create canonical state.',
 		'- State changes must come from canonical engines/commands, not from prose.',
+		'- If the player listens, watches, observes, overhears, or eavesdrops without explicit speech, do not make the player speak, ask, shout, answer, or call out.',
 		input.canonicalOutcome ? '- A canonical outcome has already been resolved: ' + input.canonicalOutcome : '- No canonical mechanical outcome is supplied; describe the attempt and observable response without resolving hidden mechanics.',
 	].join('\n');
 	const outputContract = [

@@ -2672,7 +2672,7 @@ export function normalizeTranscriptionProviderText(rawText: string): { valid: bo
 		return { valid: false, text: '', reason: 'Transcription provider returned empty text.' };
 	}
 
-	if (/^<!doctype html\\b|^<html\\b/i.test(cleaned)) {
+	if (/^<!doctype html\b|^<html\b/i.test(cleaned)) {
 		return { valid: false, text: '', reason: 'Transcription provider returned HTML instead of transcript text.' };
 	}
 

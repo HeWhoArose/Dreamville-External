@@ -8,7 +8,7 @@
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "lint": "tsc --noEmit",
-    "test": "tsx --test --test-concurrency=1 tests/*.test.ts",
+    "test": "tsx --test tests/*.test.ts",
     "postinstall": "node scripts/copy-dice-assets.mjs",
     "verify:contracts": "node scripts/verify-release-contract.mjs"
   },

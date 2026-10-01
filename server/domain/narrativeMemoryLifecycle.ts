@@ -181,7 +181,7 @@ export class NarrativeMemoryLifecycle {
 		runtime.openNarrativeThreads = Array.from(threadMap.values())
 			.sort((a, b) => b.priority - a.priority || b.lastTouchedAt.localeCompare(a.lastTouchedAt))
 			.slice(0, 40);
-		runtime.openNarrativeThreads = runtime.openNarrativeThreads.filter((thread: NarrativeOpenThreadRecord) => thread.status !== 'RESOLVED' || resolvedThreadIds.includes(thread.id)).slice(-40);
+		runtime.openNarrativeThreads = runtime.openNarrativeThreads.filter((thread: NarrativeOpenThreadRecord) => thread.status === 'OPEN').slice(-40);
 
 		const plot = { ...(runtime.plot || {}) } as Record<string, any>;
 		const eventFacts = (params.turnPackage.events || []).map(normalize).filter(Boolean).slice(-6);

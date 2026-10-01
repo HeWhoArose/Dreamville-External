@@ -19,6 +19,7 @@ import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
 import { evaluateAiTaskCandidatePreflight, evaluateAiTaskReadiness, getAiTaskContract, getAiTasksByCategory, getAllAiTaskContracts, validateAiTaskResponse, type AiTaskCandidatePreflight, type AiTaskReadiness } from './aiTaskContracts';
 import { narrativeContinuityEngine } from './narrativeContinuityEngine';
 import { CurrentSituationBuilder } from './currentSituation';
+import { PlayerIntentInterpreter, type PlayerIntent } from './playerIntentInterpreter';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
 
@@ -6192,6 +6193,71 @@ export class MultiModelOrchestrator {
     return {
       success: false,
       text: '',
+    };
+  }
+
+  /**
+   * Phase 2 semantic player-intent interpretation.
+   * Deterministic parsing handles explicit mechanical distinctions first.
+   * AI is used only when deterministic interpretation is not sufficiently specific.
+   */
+  public async interpretPlayerIntent(params: {
+    storyId?: string;
+    playerText: string;
+    currentSituation?: ReturnType<typeof CurrentSituationBuilder.build>;
+    timeoutMs?: number;
+  }): Promise<{
+    intent: PlayerIntent;
+    modelId?: string;
+    providerId?: string;
+    fallbackReason?: string;
+  }> {
+    const originalText = String(params.playerText || '').trim();
+    const deterministic = PlayerIntentInterpreter.deterministic(originalText, params.currentSituation);
+    if (!originalText) return { intent: deterministic, fallbackReason: 'EMPTY_INPUT' };
+    if (deterministic.confidence >= 0.9) return { intent: deterministic };
+
+    const prompt = PlayerIntentInterpreter.buildPrompt(originalText, params.currentSituation);
+    const selection = this.selectBestModel('intent.interpret', {
+      contextTokens: Math.ceil(prompt.length / 4),
+    });
+    const candidates = [selection.selectedModel, ...selection.fallbacks];
+    const timeoutMs = params.timeoutMs ?? 5000;
+
+    for (const candidate of candidates) {
+      if (candidate.isEmergencyFloor || this.isModelCoolingDown(candidate) || this.isCircuitBreakerTripped(candidate.providerId, candidate.modelId)) continue;
+      const adapter = this.getAdapter(candidate.providerId);
+      if (!adapter) continue;
+
+      const startedAt = Date.now();
+      try {
+        const response = await adapter.generate('intent.interpret', prompt, {
+          timeoutMs,
+          modelId: candidate.modelId,
+        });
+        const cleaned = String(response.text || '').trim();
+        const objectStart = cleaned.indexOf('{');
+        const objectEnd = cleaned.lastIndexOf('}');
+        const parsed = JSON.parse(objectStart >= 0 && objectEnd > objectStart
+          ? cleaned.slice(objectStart, objectEnd + 1)
+          : cleaned);
+        const interpreted = PlayerIntentInterpreter.fromModel(parsed, originalText, params.currentSituation);
+        if (!interpreted) throw new Error('Intent interpreter returned an invalid semantic contract.');
+
+        this.recordProviderSuccess(candidate, response, 'intent.interpret', startedAt);
+        return {
+          intent: interpreted,
+          modelId: candidate.modelId,
+          providerId: candidate.providerId,
+        };
+      } catch (error: any) {
+        this.recordProviderFailure(candidate, 'intent.interpret', error, startedAt);
+      }
+    }
+
+    return {
+      intent: deterministic,
+      fallbackReason: 'INTENT_MODEL_UNAVAILABLE_OR_MALFORMED',
     };
   }
 

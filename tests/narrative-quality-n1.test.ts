@@ -31,8 +31,8 @@ test('N1 exposes explicit controls and instructions to downstream prompt constru
 	assert.equal(contract.controls.novelty, false);
 	assert.match(promptContext, /Narrative Quality Contract v1/);
 	assert.match(promptContext, /Turn profile: MICRO_ACTION/);
-	assert.doesNotMatch(promptContext, /Avoid repeating recently used/);
-	assert.match(promptContext, /Preferred shape: about 1 paragraph/);
+	assert.doesNotMatch(promptContext, /novelty: avoid repeated openings/);
+	assert.match(promptContext, /Preferred paragraphs: 1; maximum paragraphs: 2/);
 });
 
 test('N1 validation enforces only configured hard structural limits', () => {

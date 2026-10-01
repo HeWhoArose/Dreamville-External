@@ -100,6 +100,7 @@ export class NarrativeStateAdjudicator {
 						return;
 					}
 			}
+		}
 			outcomes.push({
 				proposal,
 				commandId,

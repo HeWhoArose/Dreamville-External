@@ -24,6 +24,6 @@ describe('Phase 20 — orphan and connection audit', () => {
 	it('keeps the release audit honest about the remaining runtime gate', async () => {
 		const audit = await fs.readFile(new URL('../docs/DREAMVILLE_ORPHAN_CONNECTION_AUDIT_PHASE20.md', import.meta.url), 'utf8');
 		assert.match(audit, /npm run lint.*npm test.*npm run build/s);
-		assert.match(audit, /have not been executed in this environment/);
+		assert.match(audit, /GitHub CI has now executed.*full test gate remains red/s);
 	});
 });

@@ -18,6 +18,16 @@ import {
  * - locationId updates to destination ONLY when journey completes.
  * - No NPC-specific AI systems (schedules, goal sets, autonomous routines).
  */
+export type LocalProximityBand = 'SAME_AREA' | 'NEAR' | 'ADJACENT' | 'CONTACT';
+
+export interface LocalSpatialState {
+  areaId?: string;
+  focusEntityId?: string;
+  focusLabel?: string;
+  proximityBand: LocalProximityBand;
+  updatedTurnId?: string;
+}
+
 export class PlayerLifecycleState implements IActorLifecycle {
   public readonly actorId: string;
   public readonly name: string;
@@ -32,6 +42,8 @@ export class PlayerLifecycleState implements IActorLifecycle {
   public readonly possessionRecord: PossessionRecord | null;
   public readonly lineage: string | null;
   public readonly discoveredLocationIds: ReadonlyArray<string>;
+  /** Bounded intra-location spatial state; never attempts to model 3D coordinates. */
+  public readonly localSpatialState: LocalSpatialState;
 
   constructor(params: {
     actorId: string;
@@ -46,6 +58,7 @@ export class PlayerLifecycleState implements IActorLifecycle {
     possessionRecord?: PossessionRecord | null;
     lineage?: string | null;
     discoveredLocationIds?: ReadonlyArray<string> | string[];
+    localSpatialState?: Partial<LocalSpatialState>;
   }) {
     this.actorId = params.actorId;
     this.name = params.name;
@@ -64,6 +77,13 @@ export class PlayerLifecycleState implements IActorLifecycle {
     const defaultDiscovered = ['loc_whispering_orrery', 'loc_lantern_vault', 'loc_glasswood_verge'];
     const initialDiscovered = params.discoveredLocationIds ? params.discoveredLocationIds : defaultDiscovered;
     this.discoveredLocationIds = Object.freeze([...new Set(initialDiscovered)]);
+    this.localSpatialState = Object.freeze({
+      proximityBand: params.localSpatialState?.proximityBand || 'SAME_AREA',
+      areaId: params.localSpatialState?.areaId || this.locationId,
+      focusEntityId: params.localSpatialState?.focusEntityId,
+      focusLabel: params.localSpatialState?.focusLabel,
+      updatedTurnId: params.localSpatialState?.updatedTurnId,
+    });
 
     Object.freeze(this);
   }
@@ -98,6 +118,7 @@ export class PlayerLifecycleState implements IActorLifecycle {
     possessionRecord?: PossessionRecord | null;
     lineage?: string | null;
     discoveredLocationIds?: ReadonlyArray<string> | string[];
+    localSpatialState?: Partial<LocalSpatialState>;
   }): PlayerLifecycleState {
     return new PlayerLifecycleState({
       actorId: updates.actorId ?? this.actorId,

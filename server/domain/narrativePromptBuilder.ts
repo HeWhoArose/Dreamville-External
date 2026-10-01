@@ -190,64 +190,74 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		totalTokens = WorkingContextEngine.estimateTokens(prompt);
 	}
 
-	// Final compact mode: small turn budgets must be real budgets, not an advisory ceiling.
-	// Preserve all semantic section boundaries, but progressively compress the least critical
-	// prose until the composed prompt is actually <= maxPromptTokens.
+	// Final compact mode: keep the semantic contract intact while reducing lower-priority prose.
 	if (totalTokens > maxPromptTokens) {
-		const compact = {
-			globalInstruction: truncatePromptSection(globalInstruction, 240),
-			styleInstruction: truncatePromptSection(styleInstruction, 260),
-			situationContext: truncatePromptSection(situationContext, 420),
-			intentContext: truncatePromptSection(intentContext, 240),
-			researchContext: truncatePromptSection(initialResearch, 420),
-			planContext: truncatePromptSection(planContext, 320),
-			workingContext: '[omitted]',
-			canonicalConstraints: truncatePromptSection(canonicalConstraints, 360),
-			outputContract: truncatePromptSection(outputContract, 360),
-		};
-		const minimums: Record<keyof typeof compact, number> = {
-			globalInstruction: 60,
-			styleInstruction: 70,
-			situationContext: 120,
-			intentContext: 70,
-			researchContext: 100,
-			planContext: 70,
-			workingContext: 9,
-			canonicalConstraints: 90,
-			outputContract: 120,
-		};
-		const renderCompact = () => compose(
-			compact.researchContext,
-			compact.workingContext,
-			{
-				globalInstruction: compact.globalInstruction,
-				styleInstruction: compact.styleInstruction,
-				situationContext: compact.situationContext,
-				intentContext: compact.intentContext,
-				planContext: compact.planContext,
-				canonicalConstraints: compact.canonicalConstraints,
-				outputContract: compact.outputContract,
-			},
-		);
-		prompt = renderCompact();
-		totalTokens = WorkingContextEngine.estimateTokens(prompt);
-
-		for (let pass = 0; pass < 64 && totalTokens > maxPromptTokens; pass += 1) {
-			const shrinkableKeys = (Object.keys(compact) as Array<keyof typeof compact>)
-				.filter((key) => compact[key].length > minimums[key])
-				.sort((a, b) => compact[b].length - compact[a].length);
-			if (shrinkableKeys.length === 0) break;
-			const key = shrinkableKeys[0];
-			const excessChars = Math.max(16, (totalTokens - maxPromptTokens) * 4 + 12);
-			compact[key] = truncatePromptSection(
-				compact[key],
-				Math.max(minimums[key], compact[key].length - excessChars),
+		if (maxPromptTokens >= 1000) {
+			const compact = {
+				intentContext: truncatePromptSection(intentContext, 260),
+				researchContext: truncatePromptSection(initialResearch, 420),
+				planContext: truncatePromptSection(planContext, 320),
+				workingContext: '[supporting context omitted to preserve the canonical narration contract]',
+				situationContext: truncatePromptSection(situationContext, 900),
+			};
+			const renderCompact = () => compose(
+				compact.researchContext,
+				compact.workingContext,
+				{
+					situationContext: compact.situationContext,
+					intentContext: compact.intentContext,
+					planContext: compact.planContext,
+				},
 			);
 			prompt = renderCompact();
 			totalTokens = WorkingContextEngine.estimateTokens(prompt);
+			for (let pass = 0; pass < 48 && totalTokens > maxPromptTokens; pass += 1) {
+				const keys: Array<keyof typeof compact> = [
+					'workingContext',
+					'researchContext',
+					'planContext',
+					'intentContext',
+					'situationContext',
+				];
+				const key = keys
+					.filter((candidate) => compact[candidate].length > 120)
+					.sort((a, b) => compact[b].length - compact[a].length)[0];
+				if (!key) break;
+				compact[key] = truncatePromptSection(
+					compact[key],
+					Math.max(120, compact[key].length - Math.max(24, (totalTokens - maxPromptTokens) * 4)),
+				);
+				prompt = renderCompact();
+				totalTokens = WorkingContextEngine.estimateTokens(prompt);
+			}
+		} else {
+			const compactGlobal = 'Generate only the player-facing narrative. Never choose a major future action for the player.';
+			const compactStyle = 'Depict the current action and observable response; preserve player agency and canonical truth.';
+			const compactSituation = truncatePromptSection(situationContext, 520);
+			const compactIntent = truncatePromptSection(intentContext, 180);
+			const compactResearch = truncatePromptSection(initialResearch, 180);
+			const compactPlan = truncatePromptSection(planContext, 140);
+			const compactCanonical = [
+				'State changes must come from canonical engines/commands.',
+				'Preserve rumor, hearsay, memory, and uncertainty as uncertainty.',
+				'Omitted or excluded information is not permission to invent it.',
+				'Stay in the canonical scene unless the canonical game state has already committed a location change.',
+			].join(' ');
+			const compactOutput = 'Return ONLY valid JSON with narrative, dialogue, events, stateChanges, memoryCandidates, audioCues, and visualCues.';
+			prompt = [
+				section('GLOBAL NARRATION INSTRUCTIONS', compactGlobal),
+				section('NARRATIVE STYLE', compactStyle),
+				section('CURRENT SITUATION', compactSituation),
+				section('PLAYER INTENT', compactIntent),
+				section('NARRATIVE RESEARCH', compactResearch),
+				section('NARRATIVE DIRECTOR PLAN', compactPlan),
+				section('SUPPORTING WORKING CONTEXT', '[omitted]'),
+				compactCanonical,
+				section('OUTPUT CONTRACT', compactOutput),
+			].join('\n\n');
+			totalTokens = WorkingContextEngine.estimateTokens(prompt);
 		}
 	}
-
 	return { prompt, styleInstruction, totalTokens };
 }
 

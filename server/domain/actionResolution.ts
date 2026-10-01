@@ -1,59 +1,8 @@
 import type { StateChangeProposal } from '../../src/types';
 import type { StoryCheckResult } from '../../src/types';
 
-export type ActionResolutionMethod =
-  | 'NO_CHECK'
-  | 'DETERMINISTIC'
-  | 'CHECK'
-  | 'AUTHORED_CHALLENGE'
-  | 'CAPABILITY'
-  | 'ITEM_USE'
-  | 'COMBAT'
-  | 'COST_ONLY';
-
-export type ActionOutcomeTier =
-  | 'NO_CHECK'
-  | 'CLEAN_SUCCESS'
-  | 'SUCCESS_WITH_COST'
-  | 'PARTIAL_SUCCESS'
-  | 'BLOCKED'
-  | 'FAILURE'
-  | 'FAILURE_WITH_COST'
-  | 'CRITICAL_SUCCESS'
-  | 'CRITICAL_FAILURE';
-
-export interface ActionResolution {
-  resolutionId: string;
-  storyId: string;
-  turnId: string;
-  playerAction: string;
-  playerIntent: {
-    action: string;
-    interactionMode: string;
-    movementIntent: boolean;
-    observationIntent: boolean;
-    speechIntent: boolean;
-    informationGoal?: string;
-    targetIds?: string[];
-  };
-  attemptedEffect: string;
-  targetEntityIds: string[];
-  resolutionMethod: ActionResolutionMethod;
-  check?: StoryCheckResult;
-  outcomeTier: ActionOutcomeTier;
-  actualEffect: string;
-  canonicalStateChanges: StateChangeProposal[];
-  physicalConsequences: string[];
-  playerVisibleConsequences: string[];
-  evidenceIds: string[];
-  uncertainty: string[];
-  provenance: {
-    source: 'CANONICAL_ENGINE';
-    canonicalCommandId?: string;
-    canonicalEventId?: string;
-  };
-}
-
+export type { ActionResolution, ActionResolutionMethod, ActionOutcomeTier } from '../../src/types';
+import type { ActionResolution, ActionOutcomeTier } from '../../src/types';
 export function outcomeTierFromCheck(check: StoryCheckResult): ActionOutcomeTier {
   if (check.criticalSuccess) return 'CRITICAL_SUCCESS';
   if (check.criticalFailure) return 'CRITICAL_FAILURE';

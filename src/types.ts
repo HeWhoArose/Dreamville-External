@@ -219,6 +219,9 @@ export interface StoryCheckChallenge {
   provenance?: string;
   onSuccess?: StoryCheckOutcomeDefinition;
   onFailure?: StoryCheckOutcomeDefinition;
+  /** Explicit authored outcome tier overrides for partial/cost/block style resolutions. */
+  successOutcomeTier?: StoryCheckOutcomeTier;
+  failureOutcomeTier?: StoryCheckOutcomeTier;
   [key: string]: unknown;
 }
 

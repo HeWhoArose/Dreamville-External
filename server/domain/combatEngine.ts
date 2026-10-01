@@ -15,6 +15,7 @@ import { deathSaveEngine } from './deathSaveEngine';
 import type { DeathSaveState, RulesProfile, CombatAttackInstanceResult, CombatEffectDefinition, CombatEffectResult, CombatEventRecord, CombatReplayRecord, BodyRegionId, DestructibleEnvironmentObject, CombatMoraleState, CombatForcedMovementDefinition, CombatForcedMovementResult, CombatMovementCollisionResult, TacticalPlanState, CombatPhase, CombatInitiativeRoll, CombatNarrativeResolution } from '../../src/types';
 import { CombatMoraleEngine } from './combatMoraleEngine';
 import { resolveCapabilityCheckFormula } from '../../src/data/rulesDice';
+import type { DiceThemeId } from '../../src/data/diceThemes';
 import type { ProgressionResolution } from './characterProgressionEngine';
 import {
   SpellRuntime,
@@ -43,6 +44,7 @@ export interface RollRecord {
   rollId: string;
   rulesetVersion: string;
   formula: string;
+  diceThemeId?: DiceThemeId;
   diceTerms?: DiceTerm[];
   individualDice: number[];
   modifier: number;

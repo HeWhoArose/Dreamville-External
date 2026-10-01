@@ -178,6 +178,32 @@ class ApiClient {
     }
     return Array.isArray(data?.tips) ? data.tips : [];
   }
+  public async getSensoryState(storyId?: string): Promise<any> {
+    const query = storyId ? `?storyId=${encodeURIComponent(storyId)}` : '';
+    const res = await fetch(`${this.baseUrl}/sensory/state${query}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `Sensory state failed with HTTP ${res.status}`);
+    return data;
+  }
+
+  public async updateSensorySettings(settings: Record<string, unknown>, storyId?: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/sensory/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ storyId, settings }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const error: any = new Error(data?.error || `Sensory settings failed with HTTP ${res.status}`);
+      error.status = res.status;
+      error.data = data;
+      throw error;
+    }
+    return data;
+  }
   public async transcribeAudio(params: { storyId?: string; audioBase64: string; audioMimeType?: string }): Promise<{ text: string; modelId?: string; providerId?: string }> {
     const res = await fetch(`${this.baseUrl}/sensory/transcribe`, {
       method: 'POST',

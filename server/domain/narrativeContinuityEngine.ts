@@ -5,6 +5,7 @@ import { worldMomentumEngine } from './worldMomentumEngine';
 import { researchEvidencePipeline } from './researchEvidence';
 import { UniverseRuntimeService } from './universeRuntimeService';
 import { CurrentSituationBuilder, type CurrentSituation } from './currentSituation';
+import type { PlayerIntent } from './playerIntentInterpreter';
 
 export interface NarrativePlotState {
   storyId: string;
@@ -209,7 +210,7 @@ export class NarrativeContinuityEngine {
     return packet;
   }
 
-  public static recordTurn(repository: WorldRepository, params: { storyId: string; turnId?: string; playerAction?: string; turnPackage: StructuredTurnPackage }): { plot: NarrativePlotState; plan: NarrativePlanState } {
+  public static recordTurn(repository: WorldRepository, params: { storyId: string; turnId?: string; playerAction?: string; playerIntent?: PlayerIntent; turnPackage: StructuredTurnPackage }): { plot: NarrativePlotState; plan: NarrativePlanState } {
     const run = repository.getStoryRun(params.storyId);
     if (!run) return { plot: this.defaultPlot(params.storyId), plan: this.defaultPlan(params.storyId) };
     const state = this.getState(repository, params.storyId);
@@ -233,10 +234,22 @@ export class NarrativeContinuityEngine {
     state.plan.contingencies = ['Respect current world and character knowledge boundaries.', 'Prefer canonical consequences over invented drama.'];
     state.plan.updatedAt = timestamp;
     state.plan.version += 1;
+    const intentHistory = Array.isArray((run.runtimeState as any)?.narrativeIntentHistory)
+      ? [...(run.runtimeState as any).narrativeIntentHistory]
+      : [];
+    if (params.playerIntent) {
+      intentHistory.push({
+        turnId: params.turnId,
+        playerAction: params.playerAction,
+        intent: params.playerIntent,
+        capturedAt: timestamp,
+      });
+    }
     run.runtimeState = {
       ...(run.runtimeState || {}),
       plot: state.plot,
       narrativePlan: state.plan,
+      narrativeIntentHistory: intentHistory.slice(-40),
     };
     repository.saveStoryRun(run);
     return state;

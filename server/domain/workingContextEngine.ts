@@ -4,7 +4,7 @@ import { UniverseRuntimeService } from './universeRuntimeService';
 import type { DndRulesMode, NarrativeProfile } from '../../src/types';
 import { rulesProfileEngine } from './rulesProfileEngine';
 import { worldRepository } from '../repositories/worldRepository';
-import { NarrativeContinuityEngine } from './narrativeContinuityEngine';
+import { NarrativeContinuityEngine, type NarrativeResearchPacket } from './narrativeContinuityEngine';
 import { CurrentSituationBuilder, type CurrentSituation } from './currentSituation';
 import { deriveNarrationContextNeeds } from './narrationContextPolicy';
 
@@ -373,12 +373,15 @@ export class WorkingContextEngine {
     customChunks?: ContextChunk[];
     npcTargetId?: string;
     viewerActorId?: string;
+    currentSituation?: CurrentSituation;
+    currentAction?: CurrentSituation['currentAction'];
+    narrativeResearch?: NarrativeResearchPacket;
     worldRepo?: WorldRepository;
   }): AssembledTurnContext {
     const storyId = params.storyId || 'default_story';
     const hardTokenBudget = params.hardTokenBudget ?? 400;
     const repo = params.worldRepo || worldRepository;
-    const currentSituation = CurrentSituationBuilder.build({
+    const currentSituation = params.currentSituation || CurrentSituationBuilder.build({
       storyId,
       playerAction: params.playerAction,
       currentAction: params.currentAction,
@@ -398,7 +401,7 @@ export class WorkingContextEngine {
     const livingSim = repo.getLivingWorldSimulation(storyId);
 
     const viewerId = params.viewerActorId || (player ? player.actorId : `player_actor_${storyId}`);
-    const continuityResearch = NarrativeContinuityEngine.research(
+    const continuityResearch = params.narrativeResearch || NarrativeContinuityEngine.research(
       repo,
       storyId,
       params.playerAction || 'current story context',

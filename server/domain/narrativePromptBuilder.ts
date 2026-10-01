@@ -138,16 +138,28 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		'Do not include markdown fences, commentary, analysis, implementation details, model names, or debug information.',
 	].join('\n');
 
-	const compose = (researchContext: string, workingContext: string): string => [
-		section('GLOBAL NARRATION INSTRUCTIONS', globalInstruction),
-		section('NARRATIVE STYLE', styleInstruction),
-		section('CURRENT SITUATION', situationContext),
-		section('PLAYER INTENT', intentContext),
+	const compose = (
+		researchContext: string,
+		workingContext: string,
+		overrides?: Partial<{
+			globalInstruction: string;
+			styleInstruction: string;
+			situationContext: string;
+			intentContext: string;
+			planContext: string;
+			canonicalConstraints: string;
+			outputContract: string;
+		}>,
+	): string => [
+		section('GLOBAL NARRATION INSTRUCTIONS', overrides?.globalInstruction || globalInstruction),
+		section('NARRATIVE STYLE', overrides?.styleInstruction || styleInstruction),
+		section('CURRENT SITUATION', overrides?.situationContext || situationContext),
+		section('PLAYER INTENT', overrides?.intentContext || intentContext),
 		section('NARRATIVE RESEARCH', researchContext),
-		section('NARRATIVE DIRECTOR PLAN', planContext),
+		section('NARRATIVE DIRECTOR PLAN', overrides?.planContext || planContext),
 		section('SUPPORTING WORKING CONTEXT', workingContext),
-		canonicalConstraints,
-		section('OUTPUT CONTRACT', outputContract),
+		overrides?.canonicalConstraints || canonicalConstraints,
+		section('OUTPUT CONTRACT', overrides?.outputContract || outputContract),
 	].join('\n\n');
 
 	const initialResearch = boundedResearch.promptContext || '[research unavailable; use current situation only and preserve uncertainty]';
@@ -178,13 +190,62 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		totalTokens = WorkingContextEngine.estimateTokens(prompt);
 	}
 
-	// A very small maxPromptTokens value cannot preserve the mandatory contract sections.
-	// In that case keep the complete semantic contract rather than producing a malformed prompt.
-	if (totalTokens > maxPromptTokens && researchContext !== '[research unavailable; use current situation only and preserve uncertainty]') {
-		researchContext = truncatePromptSection(researchContext, 650);
-		workingContext = '[supporting working context omitted to preserve the semantic contract]';
-		prompt = compose(researchContext, workingContext);
+	// Final compact mode: small turn budgets must be real budgets, not an advisory ceiling.
+	// Preserve all semantic section boundaries, but progressively compress the least critical
+	// prose until the composed prompt is actually <= maxPromptTokens.
+	if (totalTokens > maxPromptTokens) {
+		const compact = {
+			globalInstruction: truncatePromptSection(globalInstruction, 240),
+			styleInstruction: truncatePromptSection(styleInstruction, 260),
+			situationContext: truncatePromptSection(situationContext, 420),
+			intentContext: truncatePromptSection(intentContext, 240),
+			researchContext: truncatePromptSection(initialResearch, 420),
+			planContext: truncatePromptSection(planContext, 320),
+			workingContext: '[omitted]',
+			canonicalConstraints: truncatePromptSection(canonicalConstraints, 360),
+			outputContract: truncatePromptSection(outputContract, 360),
+		};
+		const minimums: Record<keyof typeof compact, number> = {
+			globalInstruction: 60,
+			styleInstruction: 70,
+			situationContext: 120,
+			intentContext: 70,
+			researchContext: 100,
+			planContext: 70,
+			workingContext: 9,
+			canonicalConstraints: 90,
+			outputContract: 120,
+		};
+		const renderCompact = () => compose(
+			compact.researchContext,
+			compact.workingContext,
+			{
+				globalInstruction: compact.globalInstruction,
+				styleInstruction: compact.styleInstruction,
+				situationContext: compact.situationContext,
+				intentContext: compact.intentContext,
+				planContext: compact.planContext,
+				canonicalConstraints: compact.canonicalConstraints,
+				outputContract: compact.outputContract,
+			},
+		);
+		prompt = renderCompact();
 		totalTokens = WorkingContextEngine.estimateTokens(prompt);
+
+		for (let pass = 0; pass < 64 && totalTokens > maxPromptTokens; pass += 1) {
+			const shrinkableKeys = (Object.keys(compact) as Array<keyof typeof compact>)
+				.filter((key) => compact[key].length > minimums[key])
+				.sort((a, b) => compact[b].length - compact[a].length);
+			if (shrinkableKeys.length === 0) break;
+			const key = shrinkableKeys[0];
+			const excessChars = Math.max(16, (totalTokens - maxPromptTokens) * 4 + 12);
+			compact[key] = truncatePromptSection(
+				compact[key],
+				Math.max(minimums[key], compact[key].length - excessChars),
+			);
+			prompt = renderCompact();
+			totalTokens = WorkingContextEngine.estimateTokens(prompt);
+		}
 	}
 
 	return { prompt, styleInstruction, totalTokens };

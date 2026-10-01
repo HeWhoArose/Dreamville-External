@@ -11,6 +11,7 @@ export type MemoryClass =
 
 export type MemoryStatus = 'active' | 'dormant' | 'archived';
 export type MemoryVisibility = 'PRIVATE' | 'SHARED' | 'PUBLIC';
+export type MemoryPerspective = 'OBJECTIVE' | 'SUBJECTIVE';
 
 export interface StructuredTriggerCondition {
   keywords?: string[];
@@ -47,6 +48,7 @@ export interface DurableMemory {
   lockedAtTimestamp?: WorldTimestamp;
   provenance: string;
   sourceEventId?: string;
+  perspective?: MemoryPerspective;
   validFromTurn: number;
   lastRecalledTurn: number;
   createdAtTimestamp?: WorldTimestamp;

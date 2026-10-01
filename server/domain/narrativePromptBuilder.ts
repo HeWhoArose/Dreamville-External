@@ -70,7 +70,7 @@ function buildNarrationSituationContext(situation: CurrentSituation): string {
 		'Location: ' + (situation.location?.name || 'Unknown Location') + ' (' + (situation.location?.id || 'unknown') + ')',
 		'Region: ' + (situation.location?.regionId || 'Unknown Region'),
 		'Location description: ' + (situation.location?.description || ''),
-		situation.location.ambientSensory ? 'Ambient: ' + situation.location.ambientSensory : '',
+		situation.location?.ambientSensory ? 'Ambient: ' + situation.location.ambientSensory : '',
 		'Visible entities: ' + visibleEntities,
 		situation.activeDialogue ? 'Active dialogue: ' + situation.activeDialogue.speakerName + ': ' + situation.activeDialogue.text : '',
 		'Current action: ' + (situation.currentAction?.originalText || situation.currentAction?.action || 'None'),

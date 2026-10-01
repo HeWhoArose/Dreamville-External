@@ -34,6 +34,7 @@ import { CurrentSituationBuilder } from '../domain/currentSituation';
 import { PlayerIntentInterpreter } from '../domain/playerIntentInterpreter';
 import { ResolutionGate } from '../domain/resolutionGate';
 import { outcomeTierFromCheck, type ActionResolution } from '../domain/actionResolution';
+import { type ContextTransparency } from '../../src/types';
 
 /**
  * ServerMockAuthority
@@ -197,6 +198,52 @@ export class ServerMockAuthority {
 
   public getActiveStoryId(): string {
     return this.activeStoryId;
+  }
+
+  public setWorkingContextPin(storyId: string, sourceId: string, pinned: boolean): { success: boolean; pinnedSourceIds: string[] } {
+    const normalizedSourceId = String(sourceId || '').trim().slice(0, 240);
+    if (!normalizedSourceId) return { success: false, pinnedSourceIds: [] };
+    const run = worldRepository.getStoryRun(storyId);
+    if (!run) return { success: false, pinnedSourceIds: [] };
+    const existing = Array.isArray(run.runtimeState?.workingContextPins)
+      ? run.runtimeState.workingContextPins.filter((id: unknown): id is string => typeof id === 'string' && id.trim())
+      : [];
+    const next = new Set(existing);
+    if (pinned) next.add(normalizedSourceId);
+    else next.delete(normalizedSourceId);
+    run.runtimeState = {
+      ...(run.runtimeState || {}),
+      workingContextPins: [...next].slice(-40),
+    };
+    worldRepository.saveStoryRun(run);
+    return { success: true, pinnedSourceIds: [...next] };
+  }
+
+  public getContextTransparency(storyId: string): ContextTransparency {
+    const run = worldRepository.getStoryRun(storyId);
+    const history = Array.isArray(run?.runtimeState?.narrativeContextHistory)
+      ? run.runtimeState.narrativeContextHistory
+      : [];
+    const audit = history.at(-1)?.contextAudit || {};
+    const mapChunk = (chunk: any) => ({
+      id: chunk.id,
+      label: String(chunk.label || 'Unnamed context block'),
+      band: String(chunk.band || 'UNKNOWN'),
+      source: chunk.source,
+      relevanceScore: chunk.relevanceScore,
+      protected: Boolean(chunk.protected),
+    });
+    return {
+      hardTokenBudget: Number(audit.hardTokenBudget || 0),
+      totalTokens: Number(audit.totalTokens || 0),
+      included: Array.isArray(audit.includedChunks) ? audit.includedChunks.map(mapChunk) : [],
+      idle: Array.isArray(audit.idleChunks) ? audit.idleChunks.map(mapChunk) : [],
+      archived: Array.isArray(audit.archivedChunks) ? audit.archivedChunks.map(mapChunk) : [],
+      evicted: Array.isArray(audit.evictedChunkLabels) ? audit.evictedChunkLabels.map(String).slice(0, 80) : [],
+      pinnedSourceIds: Array.isArray(run?.runtimeState?.workingContextPins)
+        ? run!.runtimeState!.workingContextPins.filter((id: unknown): id is string => typeof id === 'string')
+        : [],
+    };
   }
 
   public removeStoryState(storyId: string): void {
@@ -428,6 +475,7 @@ export class ServerMockAuthority {
       playerLifecycle: player ? player.toJSON() : null,
       openingScene: run?.openingScene || null,
       combatState: combatProjection,
+      contextTransparency: this.getContextTransparency(targetStoryId),
     };
   }
 

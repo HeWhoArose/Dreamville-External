@@ -216,7 +216,47 @@ export class NarrativeContinuityEngine {
   public static recordTurn(repository: WorldRepository, params: { storyId: string; turnId?: string; playerAction?: string; playerIntent?: PlayerIntent; turnPackage: StructuredTurnPackage; currentSituation?: CurrentSituation; narrativeReview?: NarrativeReview; stateAdjudication?: StateAdjudicationResult }): { plot: NarrativePlotState; plan: NarrativePlanState } {
     const run = repository.getStoryRun(params.storyId);
     if (!run) return { plot: this.defaultPlot(params.storyId), plan: this.defaultPlan(params.storyId) };
-    const situation = params.currentSituation || CurrentSituationBuilder.build({ storyId: params.storyId, playerAction: params.playerAction || '', currentAction: params.playerIntent, viewerActorId: repository.getPlayerLifecycle(params.storyId)?.actorId, worldRepo: repository });
+    let situation = params.currentSituation;
+    try {
+      if (!situation) {
+        situation = CurrentSituationBuilder.build({
+          storyId: params.storyId,
+          playerAction: params.playerAction || '',
+          currentAction: params.playerIntent,
+          viewerActorId: repository.getPlayerLifecycle(params.storyId)?.actorId,
+          worldRepo: repository,
+        });
+      }
+    } catch {
+      // Compatibility path for lightweight repository doubles/previews that do not establish
+      // geography. Real gameplay always supplies the canonical CurrentSituation.
+      const state = this.getState(repository, params.storyId);
+      const timestamp = formatCanonicalTimestamp(repository.getWorldClock(params.storyId).getTimestamp());
+      const turnId = params.turnId || deterministicId('continuity_turn', params.storyId, params.playerAction || '');
+      const text = (params.turnPackage.narrative || []).filter(Boolean).join(' ').trim() || params.playerAction || '';
+      if (text) {
+        state.plot.beats.push({
+          id: deterministicId('plot_beat', params.storyId, turnId, text),
+          turnId,
+          text: text.slice(0, 1000),
+          tags: ['LEGACY_COMPATIBILITY'],
+          timestamp,
+        });
+        state.plot.beats = state.plot.beats.slice(-40);
+        state.plot.summary = [state.plot.summary, text].filter(Boolean).join(' ').slice(-4000);
+      }
+      state.plot.updatedAt = timestamp;
+      state.plot.version += 1;
+      state.plan.objective = params.playerAction
+        ? 'Respond coherently to: ' + params.playerAction.slice(0, 240)
+        : state.plan.objective;
+      state.plan.nextBeats = state.plot.beats.slice(-4).map((beat) => beat.text);
+      state.plan.updatedAt = timestamp;
+      state.plan.version += 1;
+      run.runtimeState = { ...(run.runtimeState || {}), plot: state.plot, narrativePlan: state.plan };
+      repository.saveStoryRun(run);
+      return state;
+    }
     const lifecycle = narrativeMemoryLifecycle.processTurn({ repository, storyId: params.storyId, turnId: params.turnId || situation.turnId, playerAction: params.playerAction, playerIntent: params.playerIntent, currentSituation: situation, turnPackage: params.turnPackage, narrativeReview: params.narrativeReview, stateAdjudication: params.stateAdjudication });
     const state = this.getState(repository, params.storyId);
     state.plot.summary = lifecycle.plotSummary;

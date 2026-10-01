@@ -120,7 +120,8 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	const situationContext = input.situation ? buildNarrationSituationContext(input.situation) : '[current situation unavailable]';
 	const intentContext = JSON.stringify(input.intent);
 	const planContext = NarrativeDirector.toPromptContext(input.plan);
-	const canonicalConstraints = [
+		const canonicalConstraints = [
+		'CANONICAL CURRENT SCENE ANCHOR:',
 		'Canonical constraints:',
 		'- The current location and time in Current Situation are authoritative.',
 		'- Player Intent is the semantic description of what the player meant to attempt.',

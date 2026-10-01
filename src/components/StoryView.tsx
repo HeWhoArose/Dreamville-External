@@ -1535,11 +1535,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    setSuggestionsOpen((value) => {
-                      const next = !value;
-                      if (next) void onRefreshSuggestions?.();
-                      return next;
-                    });
+                    setSuggestionsOpen((value) => !value);
                     setDiceSettingsOpen(false);
                     setSceneChoiceOpen(false);
                   }}

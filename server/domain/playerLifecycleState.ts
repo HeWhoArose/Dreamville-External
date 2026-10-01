@@ -144,6 +144,9 @@ export class PlayerLifecycleState implements IActorLifecycle {
         updates.discoveredLocationIds !== undefined
           ? updates.discoveredLocationIds
           : [...this.discoveredLocationIds],
+      localSpatialState: updates.localSpatialState !== undefined
+        ? { ...this.localSpatialState, ...updates.localSpatialState }
+        : this.localSpatialState,
     });
   }
 
@@ -165,6 +168,7 @@ export class PlayerLifecycleState implements IActorLifecycle {
       possessionRecord: this.possessionRecord,
       lineage: this.lineage,
       discoveredLocationIds: this.discoveredLocationIds,
+      localSpatialState: this.localSpatialState,
     };
   }
 
@@ -182,6 +186,7 @@ export class PlayerLifecycleState implements IActorLifecycle {
       possessionRecord: data.possessionRecord,
       lineage: data.lineage,
       discoveredLocationIds: Array.isArray(data.discoveredLocationIds) ? data.discoveredLocationIds : undefined,
+      localSpatialState: data.localSpatialState,
     });
   }
 

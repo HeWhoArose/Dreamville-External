@@ -11,7 +11,7 @@ const animation = fs.readFileSync(path.join(root, 'src/components/common/DiceRol
 const audio = fs.readFileSync(path.join(root, 'src/components/AudioHapticManager.tsx'), 'utf8');
 
 test('Phase 15 authority reads canonical story-scoped theme before resolving checks', () => {
-	assert.match(authority, /repository\.getSensoryEngine\(\)\.getDiceTheme\(request\.storyId\)/);
+	assert.match(authority, /repository\.getSensoryEngine\(\)\.?getDiceTheme\(request\.storyId\)/);
 	assert.match(authority, /request\.resolutionHint,[\s\S]{0,120}diceThemeId,/);
 });
 

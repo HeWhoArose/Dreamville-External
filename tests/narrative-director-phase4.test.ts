@@ -47,7 +47,7 @@ test('Phase 4 turns listen-and-approach into an explicit one-turn plan', () => {
 	assert.ok(plan.immediateSteps.some((step) => /closer|passive|movement/i.test(step)));
 	assert.ok(plan.immediateSteps.some((step) => /information/i.test(step)));
 	assert.ok(plan.continuityRequirements.some((rule) => /Do not create player speech/i.test(rule)));
-	assert.ok(plan.continuityRequirements.some((rule) => /observation/listening/i.test(rule)));
+	assert.ok(plan.continuityRequirements.some((rule) => /observation[\\/]listening/i.test(rule)));
 	assert.ok(plan.forbiddenAssumptions.some((rule) => /rumor|hearsay/i.test(rule)));
 	assert.match(prompt, /EPHEMERAL/i);
 });

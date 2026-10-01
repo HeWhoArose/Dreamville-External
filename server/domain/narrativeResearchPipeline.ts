@@ -46,6 +46,7 @@ export interface NarrativeResearchExclusion {
 
 export interface NarrativeResearchResult {
 	storyId: string;
+	failures: string[];
 	turnId: string;
 	query: string;
 	viewerActorId: string;
@@ -96,6 +97,32 @@ function overlapScore(sourceTokens: string[], queryTokens: string[]): number {
 function hasAny(values: string[], candidates: string[]): boolean {
 	const set = new Set(values);
 	return candidates.some((value) => set.has(value));
+}
+
+function emptyPacket(storyId: string, query: string, viewerActorId: string, situation: CurrentSituation): NarrativeResearchPacket {
+	return {
+		storyId,
+		query,
+		knowledgeFacts: [],
+		memories: [],
+		storyThreads: [],
+		relationships: [],
+		plot: { storyId, version: 1, currentArc: situation.plot.currentArc || 'OPENING', summary: situation.plot.summary || '', beats: [], openThreads: [], updatedAt: situation.worldTime },
+		plan: { storyId, version: 1, objective: 'Proceed from Current Situation without additional research.', nextBeats: [], priorityThreads: [], contingencies: [], updatedAt: situation.worldTime },
+		usageGuidance: {
+			knowledgeFacts: 'No additional knowledge research was available.',
+			memories: 'No additional memory research was available.',
+			storyThreads: 'Use only Current Situation thread data.',
+			relationships: 'No additional relationship research was available.',
+			plot: 'Use Current Situation plot data.',
+			plan: 'No persistent plan was promoted by this failure path.',
+			worldMomentum: 'No additional world momentum research was available.',
+			researchEvidence: 'No additional research evidence was available.',
+			causalProvenance: 'No additional causal provenance was available.',
+		},
+		epistemicallyBoundTo: viewerActorId,
+		currentSituation: situation,
+	};
 }
 
 function currentTurnQuery(situation: CurrentSituation, packet: NarrativeResearchPacket): string {
@@ -203,13 +230,21 @@ export class NarrativeResearchPipeline {
 		const query = currentTurnQuery(situation, {
 			query: params.playerAction || situation.currentAction?.originalText || '',
 		} as NarrativeResearchPacket);
-		const packet = narrativeContinuityEngine.research(
-			params.repository,
-			params.storyId,
-			query || 'current story context',
-			viewerActorId,
-			{ persist: false, currentSituation: situation },
-		);
+		const researchQuery = query || 'current story context';
+		const failures: string[] = [];
+		let packet: NarrativeResearchPacket;
+		try {
+			packet = narrativeContinuityEngine.research(
+				params.repository,
+				params.storyId,
+				researchQuery,
+				viewerActorId,
+				{ persist: false, currentSituation: situation },
+			);
+		} catch (error: any) {
+			failures.push(String(error?.message || error || 'Narrative continuity research failed.'));
+			packet = emptyPacket(params.storyId, researchQuery, viewerActorId, situation);
+		}
 		const queryTokens = tokens([
 			params.playerAction,
 			playerIntent?.goal,
@@ -552,8 +587,9 @@ export class NarrativeResearchPipeline {
 		return {
 			storyId: params.storyId,
 			turnId: situation.turnId,
-			query,
+			query: researchQuery,
 			viewerActorId,
+			failures,
 			packet,
 			blocks: selected.map(({ topicTokens: _topicTokens, ...block }) => block),
 			excluded,
@@ -568,6 +604,7 @@ export class NarrativeResearchPipeline {
 		return {
 			storyId: result.storyId,
 			turnId: result.turnId,
+			failures: result.failures,
 			query: result.query,
 			viewerActorId: result.viewerActorId,
 			budgets: result.budgets,
@@ -585,6 +622,7 @@ export class NarrativeResearchPipeline {
 			})),
 			excluded: result.excluded.slice(0, 40),
 			promptContext: result.promptContext.slice(0, 12000),
+			fallbackMode: result.failures.length > 0 ? 'CURRENT_SITUATION_ONLY' : 'NORMAL_RESEARCH',
 		};
 	}
 }

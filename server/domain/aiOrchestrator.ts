@@ -6604,10 +6604,23 @@ export class MultiModelOrchestrator {
     const connectedDirective = (params.continuationDirective || '').trim();
     const isInformationSeekingAction = NARRATIVE_INFORMATION_SEEKING_PATTERN.test(playerAction);
     const worldRepo = this.getWorldRepository();
-    const currentSituation = CurrentSituationBuilder.build({
+    let currentSituation = CurrentSituationBuilder.build({
       storyId,
       playerAction,
-      viewerActorId: params.storyId ? worldRepo.getPlayerLifecycle(storyId)?.actorId : undefined,
+      viewerActorId: worldRepo.getPlayerLifecycle(storyId)?.actorId,
+      worldRepo,
+    });
+    const intentInterpretation = await this.interpretPlayerIntent({
+      storyId,
+      playerText: playerAction,
+      currentSituation,
+      timeoutMs: Math.min(timeoutMs, 5000),
+    });
+    currentSituation = CurrentSituationBuilder.build({
+      storyId,
+      playerAction,
+      currentAction: intentInterpretation.intent,
+      viewerActorId: currentSituation.player.actorId,
       worldRepo,
     });
 
@@ -6642,6 +6655,8 @@ export class MultiModelOrchestrator {
         ? 'A canonical outcome has already been resolved. Describe only the observable experience and immediate consequences supported by it.'
         : 'No canonical mechanical outcome was supplied. Describe only the attempt and observable scene response; do not decide hidden success or failure.',
       connectedDirective ? 'Follow the connected presentation directive only as style guidance; never override canonical state.' : '',
+      'Semantic player intent is authoritative for what the player meant to attempt; do not silently replace it with a different action.',
+      'Intent: ' + JSON.stringify(intentInterpretation.intent),
       'Stay in the canonical current location unless a committed location change is supplied.',
       'Treat the latest player action as the current turn contract. Depict that action first and do not silently replace it with an earlier action from recent history.',
       'Preserve every concrete action target named by the player when it is narratively observable (for example, a scroll, staff, citadel, doorway, person, or object).',
@@ -6778,7 +6793,7 @@ export class MultiModelOrchestrator {
         maxTokens: 650,
         contextTokens: assembledContext.totalTokens,
         forceModelId: params.forceModelId,
-        canonicalLocationName: canonicalLocation?.name,
+        canonicalLocationName: currentSituation.location.name,
         playerAction,
         validateResponse: (text) => {
           const validation = this.validateTurnPackage(text, { allowPlainTextNarration: true });
@@ -6797,13 +6812,13 @@ export class MultiModelOrchestrator {
           const actionModeContinuity = this.validateNarrativeActionModeContinuity(
             narrationText,
             playerAction,
-            canonicalPlayer?.name,
+            currentSituation.player.name,
           );
           if (!actionModeContinuity.valid) return { valid: false, errorReason: actionModeContinuity.errorReason };
           const informationTopicContinuity = this.validateNarrativeInformationTopicContinuity(
             narrationText,
             playerAction,
-            params.sceneContext,
+            currentSceneFactualContext,
           );
           if (!informationTopicContinuity.valid) return { valid: false, errorReason: informationTopicContinuity.errorReason };
           const informationContinuity = this.validateNarrativeInformationContinuity(narrationText, playerAction);

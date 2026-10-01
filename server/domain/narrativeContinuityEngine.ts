@@ -6,6 +6,7 @@ import { researchEvidencePipeline } from './researchEvidence';
 import { UniverseRuntimeService } from './universeRuntimeService';
 import { CurrentSituationBuilder, type CurrentSituation } from './currentSituation';
 import type { PlayerIntent } from './playerIntentInterpreter';
+import { narrativeMemoryLifecycle } from './narrativeMemoryLifecycle';
 
 export interface NarrativePlotState {
   storyId: string;

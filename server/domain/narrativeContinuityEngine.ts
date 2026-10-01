@@ -235,15 +235,26 @@ export class NarrativeContinuityEngine {
       const turnId = params.turnId || deterministicId('continuity_turn', params.storyId, params.playerAction || '');
       const text = (params.turnPackage.narrative || []).filter(Boolean).join(' ').trim() || params.playerAction || '';
       if (text) {
+        const eventTags = (params.turnPackage.events || []).filter(Boolean).slice(0, 4);
         state.plot.beats.push({
           id: deterministicId('plot_beat', params.storyId, turnId, text),
           turnId,
           text: text.slice(0, 1000),
-          tags: (params.turnPackage.events || []).filter(Boolean).slice(0, 4).length > 0 ? (params.turnPackage.events || []).filter(Boolean).slice(0, 4) : ['LEGACY_COMPATIBILITY'],
+          tags: eventTags.length > 0 ? eventTags : ['LEGACY_COMPATIBILITY'],
           timestamp,
         });
         state.plot.beats = state.plot.beats.slice(-40);
         state.plot.summary = [state.plot.summary, text].filter(Boolean).join(' ').slice(-4000);
+
+        // Lightweight repository doubles do not provide the full memory lifecycle.
+        // Preserve event-backed continuity rather than dropping the only durable
+        // indication that the turn created an unresolved narrative obligation.
+        for (const event of eventTags.slice(0, 2)) {
+          if (!state.plot.openThreads.includes(event)) {
+            state.plot.openThreads.push(event);
+          }
+        }
+        state.plot.openThreads = state.plot.openThreads.slice(-24);
       }
       state.plot.updatedAt = timestamp;
       state.plot.version += 1;

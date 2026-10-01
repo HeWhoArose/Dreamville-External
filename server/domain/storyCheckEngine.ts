@@ -9,6 +9,7 @@ import type {
   StoryTestType,
   StoryCheckChallenge,
   StoryCheckNarrativeGuidance,
+  StoryCheckOutcomeTier,
 } from '../../src/types';
 import { LocalDiceEngine } from './combatEngine';
 import { rulesProfileEngine } from './rulesProfileEngine';
@@ -570,8 +571,13 @@ export class StoryCheckEngine {
     }
 
     const success = forcedFailure ? false : roll.total >= dc;
-    const criticalSuccess = false;
-    const criticalFailure = false;
+    const criticalSuccess = roll.individualDice?.[0] === 20;
+    const criticalFailure = roll.individualDice?.[0] === 1;
+    const outcomeTier: StoryCheckOutcomeTier =
+      criticalSuccess ? 'CRITICAL_SUCCESS' :
+      criticalFailure ? 'CRITICAL_FAILURE' :
+      success ? (challenge?.onSuccess ? 'SUCCESS_WITH_COST' : 'CLEAN_SUCCESS') :
+      (challenge?.onFailure ? 'FAILURE_WITH_COST' : 'FAILURE');
     const narrativeGuidance = buildNarrativeGuidance(
       profile?.skillId,
       skillName,
@@ -597,6 +603,7 @@ export class StoryCheckEngine {
       roll,
       total: roll.total,
       success,
+      outcomeTier,
       criticalSuccess,
       criticalFailure,
       reason: challenge?.reason || (saveSelection ? saveSelection.profile.reason : profile!.reason),
@@ -622,6 +629,12 @@ export class StoryCheckEngine {
     };
     const difficultyClass = challenge.difficultyClass;
     const success = roll.total >= difficultyClass;
+    const criticalSuccess = roll.individualDice?.[0] === 20;
+    const criticalFailure = roll.individualDice?.[0] === 1;
+    const outcomeTier: StoryCheckOutcomeTier =
+      criticalSuccess ? 'CRITICAL_SUCCESS' :
+      criticalFailure ? 'CRITICAL_FAILURE' :
+      success ? 'SUCCESS_WITH_COST' : 'FAILURE';
 
     return {
       checkId: `custom_check_${storyId}_${roll.rollId}`,
@@ -641,8 +654,9 @@ export class StoryCheckEngine {
       roll,
       total: roll.total,
       success,
-      criticalSuccess: false,
-      criticalFailure: false,
+      outcomeTier,
+      criticalSuccess,
+      criticalFailure,
       reason: challenge.reason || challenge.label,
       contextNotes: [
         'CUSTOM_D20 resolution: no D&D ability, proficiency, saving-throw, or spell-slot rules were applied.',

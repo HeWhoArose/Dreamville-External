@@ -206,7 +206,7 @@ export class ServerMockAuthority {
     const run = worldRepository.getStoryRun(storyId);
     if (!run) return { success: false, pinnedSourceIds: [] };
     const existing = Array.isArray(run.runtimeState?.workingContextPins)
-      ? run.runtimeState.workingContextPins.filter((id: unknown): id is string => typeof id === 'string' && id.trim())
+      ? run.runtimeState.workingContextPins.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0)
       : [];
     const next = new Set(existing);
     if (pinned) next.add(normalizedSourceId);
@@ -772,10 +772,10 @@ export class ServerMockAuthority {
         observationIntent: resolutionIntent.observationIntent,
         speechIntent: resolutionIntent.speechIntent,
         informationGoal: resolutionIntent.informationGoal,
-        targetIds: resolutionIntent.explicitTargets.map((target) => target.id),
+        targetIds: resolutionIntent.explicitTargets.map((target) => target.id).filter((id): id is string => Boolean(id)),
       },
       attemptedEffect: String(freeformText),
-      targetEntityIds: resolutionIntent.explicitTargets.map((target) => target.id),
+      targetEntityIds: resolutionIntent.explicitTargets.map((target) => target.id).filter((id): id is string => Boolean(id)),
       resolutionMethod:
         authoredChallenge ? 'AUTHORED_CHALLENGE' :
         resolutionGate.mode === 'CAPABILITY' ? 'CAPABILITY' :

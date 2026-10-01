@@ -519,7 +519,7 @@ export class CurrentSituationBuilder {
 			})
 			.slice(0, 8);
 
-		const connectedLocations = locationId ? geography.getOutgoingEdges(locationId)
+		const connectedLocations = (locationId ? geography.getOutgoingEdges(locationId) : [])
 			.map((edge: RouteEdge) => {
 				const destination = geography.getNode(edge.toLocationId);
 				if (!destination) return null;

@@ -753,8 +753,19 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
           break;
         }
 
-        const actionSentence = extractedPlayerAction
-          ? `You carry out your action to ${extractedPlayerAction.replace(/^(?:i|we|my character)\s+/i, '')}, staying attentive to the immediate environment in ${canonicalLocationName}.`
+        const normalizedAction = extractedPlayerAction
+          .replace(/^(?:i|we|my character)\s+/i, '')
+          .trim();
+        const actionVerb =
+          /\b(?:listen|hear|overhear|eavesdrop)\b/i.test(normalizedAction)
+            ? 'You listen carefully'
+            : /\b(?:look|observe|watch|inspect|examine|scan|study)\b/i.test(normalizedAction)
+              ? 'You observe the scene'
+              : /\b(?:move|walk|approach|step|head|travel|enter|leave|go)\b/i.test(normalizedAction)
+                ? 'You move as requested'
+                : 'You carry out the requested action';
+        const actionSentence = normalizedAction
+          ? `${actionVerb} in ${canonicalLocationName}, following the player action: ${normalizedAction}.`
           : `The scene remains grounded in ${canonicalLocationName}.`;
 
         text = JSON.stringify({

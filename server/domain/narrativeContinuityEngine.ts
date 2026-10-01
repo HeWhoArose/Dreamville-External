@@ -46,6 +46,7 @@ export interface NarrativeResearchPacket {
     memories: string;
     storyThreads: string;
     relationships: string;
+    npcPlanningContext?: string;
     plot: string;
     plan: string;
     worldMomentum: string;

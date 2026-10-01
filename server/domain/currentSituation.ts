@@ -93,6 +93,7 @@ export interface PlotContext {
 export interface OpenThread {
 	id: string;
 	title: string;
+	relatedEntityIds?: string[];
 	summary?: string;
 	status?: string;
 	priority?: string | number;
@@ -255,6 +256,7 @@ function normalizeThread(raw: any, index: number): OpenThread | null {
 	return {
 		id,
 		title,
+		relatedEntityIds: Array.isArray(raw.relatedEntityIds) ? raw.relatedEntityIds.map(normalizeText).filter(Boolean).slice(0, 8) : undefined,
 		summary: normalizeText(raw.summary || raw.description || raw.details || '') || undefined,
 		status: normalizeText(raw.status || raw.state || '') || undefined,
 		priority: raw.priority ?? raw.importance ?? undefined,

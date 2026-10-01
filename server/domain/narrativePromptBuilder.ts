@@ -59,6 +59,13 @@ function section(title: string, body: string): string {
 	return normalized ? title + '\n' + normalized : title + '\n[none]';
 }
 
+function truncatePromptSection(value: string, maxChars: number): string {
+	const normalized = String(value || '').trim();
+	return normalized.length > maxChars
+		? normalized.slice(0, maxChars - 1).trimEnd() + '…'
+		: normalized;
+}
+
 export function buildNarrationPrompt(input: NarrationPromptInput): NarrationPromptResult {
 	const globalInstruction = input.globalInstruction || 'You are the narrative presentation engine for Dreamville. Generate only the player-facing narrative turn. Canonical state, player intent, bounded research, and the ephemeral plan are authoritative inputs; prose is not canonical truth.';
 	const styleInstruction = input.styleInstruction || defaultNarrationStyle();
@@ -106,17 +113,26 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	let prompt = compose(researchContext, workingContext);
 	let totalTokens = WorkingContextEngine.estimateTokens(prompt);
 
-	// Preserve global/style/situation/intent/plan/constraints/output structure.
-	// Shed lower-value supporting context first, then research detail, until the prompt fits.
-	for (let pass = 0; pass < 8 && totalTokens > maxPromptTokens; pass += 1) {
-		const excessChars = Math.max(500, (totalTokens - maxPromptTokens) * 4);
-		if (workingContext.length > 900) {
-			workingContext = workingContext.slice(0, Math.max(500, workingContext.length - excessChars)).trimEnd();
-		} else if (researchContext.length > 1200) {
-			researchContext = researchContext.slice(0, Math.max(800, researchContext.length - excessChars)).trimEnd();
+	// Preserve the high-value sections and deterministically shed supporting material first.
+	// The final prompt must not knowingly exceed the requested budget.
+	for (let pass = 0; pass < 12 && totalTokens > maxPromptTokens; pass += 1) {
+		const excessChars = Math.max(400, (totalTokens - maxPromptTokens) * 4);
+		if (workingContext.length > 700) {
+			workingContext = workingContext.slice(0, Math.max(350, workingContext.length - excessChars)).trimEnd();
+		} else if (researchContext.length > 900) {
+			researchContext = researchContext.slice(0, Math.max(600, researchContext.length - excessChars)).trimEnd();
 		} else {
 			break;
 		}
+		prompt = compose(researchContext, workingContext);
+		totalTokens = WorkingContextEngine.estimateTokens(prompt);
+	}
+
+	// A very small maxPromptTokens value cannot preserve the mandatory contract sections.
+	// In that case keep the complete semantic contract rather than producing a malformed prompt.
+	if (totalTokens > maxPromptTokens && researchContext !== '[research unavailable; use current situation only and preserve uncertainty]') {
+		researchContext = truncatePromptSection(researchContext, 650);
+		workingContext = '[supporting working context omitted to preserve the semantic contract]';
 		prompt = compose(researchContext, workingContext);
 		totalTokens = WorkingContextEngine.estimateTokens(prompt);
 	}

@@ -515,6 +515,7 @@ export interface OrchestratedTurnTelemetry {
 
 export interface OrchestratedTurnResult {
   success: boolean;
+  playerIntent?: PlayerIntent;
   turnPackage?: StructuredTurnPackage;
   telemetry: OrchestratedTurnTelemetry;
   adjudicationResult?: AdjudicationResult;
@@ -6996,19 +6997,52 @@ export class MultiModelOrchestrator {
     }
 
     const executeCore = async (): Promise<OrchestratedTurnResult> => {
+      const initialSituation = CurrentSituationBuilder.build({
+        storyId,
+        playerAction: params.playerAction || '',
+        viewerActorId: repo.getPlayerLifecycle(storyId)?.actorId,
+        worldRepo: repo,
+      });
+      const intentInterpretation = await this.interpretPlayerIntent({
+        storyId,
+        playerText: params.playerAction || '',
+        currentSituation: initialSituation,
+        timeoutMs: Math.min(timeoutMs, 5000),
+      });
+      const playerIntent = intentInterpretation.intent;
+      const currentSituation = CurrentSituationBuilder.build({
+        storyId,
+        playerAction: params.playerAction || '',
+        currentAction: playerIntent,
+        viewerActorId: initialSituation.player.actorId,
+        worldRepo: repo,
+      });
+
       // 1. Ingest CH11 Working Context (DEF-CH12-02)
       const researchPacket = narrativeContinuityEngine.research(
         repo,
         storyId,
         params.playerAction || 'current story context',
-        repo.getPlayerLifecycle(storyId)?.actorId,
+        currentSituation.player.actorId,
+        { persist: false, currentSituation },
       );
       const assembledContext: AssembledTurnContext = WorkingContextEngine.assembleTurnContext({
         storyId,
         playerAction: params.playerAction || 'Observe surroundings and assess position',
+        currentAction: playerIntent,
+        viewerActorId: currentSituation.player.actorId,
         hardTokenBudget,
         worldRepo: repo,
         customChunks: [{
+          id: 'b2_player_intent',
+          band: 'B2_IMMEDIATE',
+          label: 'Semantic Player Intent',
+          content: JSON.stringify(playerIntent),
+          estimatedTokens: WorkingContextEngine.estimateTokens(JSON.stringify(playerIntent)),
+          sourceAuthority: 'PlayerIntentInterpreter',
+          relevanceScore: 1,
+          isProtected: true,
+        }, {
           id: 'b3_narrative_research',
           band: 'B3_CAUSAL_OPPORTUNITY',
           label: 'Narrative Research / Plot / Plan',

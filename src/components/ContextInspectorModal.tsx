@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Layers, Cpu, ShieldCheck, AlertCircle, RefreshCw, Sliders, CheckCircle, Database } from 'lucide-react';
+import { X, Layers, Cpu, ShieldCheck, AlertCircle, RefreshCw, Sliders, CheckCircle, Database, Pin, PinOff } from 'lucide-react';
 import { apiClient } from '../services/apiClient';
 import { WorkingContextResponse, ContextInspectionResponse, PriorityBand } from '../types';
 
@@ -21,6 +21,7 @@ export const ContextInspectorModal: React.FC<ContextInspectorModalProps> = ({
   const [narrativeAudit, setNarrativeAudit] = useState<any | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'assembled' | 'packet' | 'bands' | 'eviction' | 'narrative'>('assembled');
+  const [pinnedSourceIds, setPinnedSourceIds] = useState<string[]>([]);
 
   const fetchContext = async () => {
     setIsLoading(true);
@@ -38,6 +39,7 @@ export const ContextInspectorModal: React.FC<ContextInspectorModalProps> = ({
         apiClient.getNarrativeContextAudit(storyId).catch(() => null),
       ]);
       setContextData(ctx);
+      setPinnedSourceIds(Array.isArray((ctx as any)?.pinnedSourceIds) ? (ctx as any).pinnedSourceIds : []);
       setInspectionData(insp);
       setNarrativeAudit(audit);
     } catch (err) {
@@ -52,6 +54,18 @@ export const ContextInspectorModal: React.FC<ContextInspectorModalProps> = ({
       fetchContext();
     }
   }, [isOpen]);
+
+  const togglePin = async (sourceId?: string) => {
+    if (!sourceId) return;
+    try {
+      const nextPinned = !pinnedSourceIds.includes(sourceId);
+      const result = await apiClient.setContextPin({ storyId, sourceId, pinned: nextPinned });
+      setPinnedSourceIds(result.pinnedSourceIds || []);
+      await fetchContext();
+    } catch (error) {
+      console.error('Failed to update context pin:', error);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -177,6 +191,20 @@ export const ContextInspectorModal: React.FC<ContextInspectorModalProps> = ({
               }`}
               style={{ width: `${budgetPercent}%` }}
             />
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-3">
+            <span className="text-[10px] text-stone-500">{pinnedSourceIds.length} pinned source{pinnedSourceIds.length === 1 ? '' : 's'} are protected across turns.</span>
+            {pinnedSourceIds.length > 0 && (
+              <button
+                type="button"
+                onClick={async () => {
+                  for (const id of pinnedSourceIds) await togglePin(id);
+                }}
+                className="text-[10px] text-amber-300 hover:text-amber-200"
+              >
+                Clear pins
+              </button>
+            )}
           </div>
           <div className="mt-3 grid grid-cols-3 gap-2 text-[10px] font-mono">
             <div className="rounded-lg border border-emerald-400/15 bg-emerald-400/5 px-2.5 py-2"><div className="text-emerald-300">ACTIVE</div><div className="mt-0.5 text-stone-300">{contextData?.includedChunks.length ?? 0}</div></div>
@@ -371,8 +399,18 @@ export const ContextInspectorModal: React.FC<ContextInspectorModalProps> = ({
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-3 text-stone-400 text-[11px]">
+                      <div className="flex items-center gap-2 text-stone-400 text-[11px]">
                         <span>~{chunk.estimatedTokens} tokens</span>
+                        <button
+                          type="button"
+                          onClick={() => void togglePin(chunk.id)}
+                          disabled={!chunk.id}
+                          className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-[9px] text-stone-400 hover:text-amber-200 hover:border-amber-300/30 disabled:opacity-30"
+                          title={chunk.id && pinnedSourceIds.includes(chunk.id) ? 'Unpin this context source' : 'Pin this context source'}
+                        >
+                          {chunk.id && pinnedSourceIds.includes(chunk.id) ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}
+                          {chunk.id && pinnedSourceIds.includes(chunk.id) ? 'Pinned' : 'Pin'}
+                        </button>
                         <CheckCircle className="w-3.5 h-3.5 text-emerald-400" />
                       </div>
                     </div>
@@ -384,7 +422,22 @@ export const ContextInspectorModal: React.FC<ContextInspectorModalProps> = ({
                     <h4 className="font-mono text-xs text-amber-300">Idle Blocks — available if budget opens</h4>
                     {contextData?.idleChunks.map((chunk, idx) => (
                       <div key={idx} className="rounded-xl border border-amber-400/15 bg-amber-400/5 px-3 py-2.5 font-mono text-xs">
-                        <div className="flex items-center justify-between gap-3"><span className="text-stone-200">{chunk.label}</span><span className="text-[10px] text-amber-300">IDLE</span></div>
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-stone-200">{chunk.label}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-amber-300">IDLE</span>
+                            <button
+                              type="button"
+                              onClick={() => void togglePin(chunk.id)}
+                              disabled={!chunk.id}
+                              className="inline-flex items-center gap-1 rounded-md border border-amber-200/10 px-2 py-1 text-[9px] text-amber-100/70 hover:text-amber-100 disabled:opacity-30"
+                              title="Pin this source so future assemblies protect it from lower-priority eviction"
+                            >
+                              <Pin className="h-3 w-3" />
+                              {chunk.id && pinnedSourceIds.includes(chunk.id) ? 'Pinned' : 'Pin'}
+                            </button>
+                          </div>
+                        </div>
                         <div className="mt-1 text-[10px] text-stone-500">~{chunk.estimatedTokens} tokens · {chunk.band}</div>
                       </div>
                     ))}

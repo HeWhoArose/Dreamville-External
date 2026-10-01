@@ -211,47 +211,22 @@ export class NarrativeContinuityEngine {
     return packet;
   }
 
-  public static recordTurn(repository: WorldRepository, params: { storyId: string; turnId?: string; playerAction?: string; playerIntent?: PlayerIntent; turnPackage: StructuredTurnPackage }): { plot: NarrativePlotState; plan: NarrativePlanState } {
+  public static recordTurn(repository: WorldRepository, params: any): { plot: NarrativePlotState; plan: NarrativePlanState } {
     const run = repository.getStoryRun(params.storyId);
     if (!run) return { plot: this.defaultPlot(params.storyId), plan: this.defaultPlan(params.storyId) };
+    const situation = params.currentSituation || CurrentSituationBuilder.build({ storyId: params.storyId, playerAction: params.playerAction || '', currentAction: params.playerIntent, viewerActorId: repository.getPlayerLifecycle(params.storyId)?.actorId, worldRepo: repository });
+    const lifecycle = narrativeMemoryLifecycle.processTurn({ repository, storyId: params.storyId, turnId: params.turnId || situation.turnId, playerAction: params.playerAction, playerIntent: params.playerIntent, currentSituation: situation, turnPackage: params.turnPackage, narrativeReview: params.narrativeReview, stateAdjudication: params.stateAdjudication });
     const state = this.getState(repository, params.storyId);
-    const timestamp = formatCanonicalTimestamp(repository.getWorldClock(params.storyId).getTimestamp());
-    const beatText = (params.turnPackage.narrative.join(' ').trim() || params.playerAction || 'Turn resolved.').slice(0, 1200);
-    const tags = [...params.turnPackage.events, ...params.turnPackage.memoryCandidates].map(String).map((value) => value.trim()).filter(Boolean).slice(0, 10);
-    state.plot.beats.push({ id: deterministicId('plot_beat', params.storyId, params.turnId || 'turn', beatText), turnId: params.turnId, text: beatText, tags, timestamp });
-    state.plot.beats = state.plot.beats.slice(-40);
-    const openThreads = new Set(state.plot.openThreads);
-    for (const memoryCandidate of params.turnPackage.memoryCandidates) {
-      const value = String(memoryCandidate).trim();
-      if (value) openThreads.add(value.slice(0, 240));
-    }
-    state.plot.openThreads = Array.from(openThreads).slice(-24);
-    state.plot.summary = beatText;
-    state.plot.updatedAt = timestamp;
+    state.plot.summary = lifecycle.plotSummary;
+    state.plot.updatedAt = formatCanonicalTimestamp(repository.getWorldClock(params.storyId).getTimestamp());
     state.plot.version += 1;
     state.plan.priorityThreads = state.plot.openThreads.slice(-8).reverse();
     state.plan.objective = state.plan.priorityThreads[0] || (params.playerAction ? 'Respond coherently to: ' + params.playerAction.slice(0, 240) : 'Continue the current story arc.');
-    state.plan.nextBeats = state.plan.priorityThreads.slice(0, 4).concat(params.turnPackage.events.slice(-4).map((event) => 'Follow consequence of ' + String(event).slice(0, 180))).slice(0, 8);
+    state.plan.nextBeats = state.plan.priorityThreads.slice(0, 4);
     state.plan.contingencies = ['Respect current world and character knowledge boundaries.', 'Prefer canonical consequences over invented drama.'];
-    state.plan.updatedAt = timestamp;
+    state.plan.updatedAt = formatCanonicalTimestamp(repository.getWorldClock(params.storyId).getTimestamp());
     state.plan.version += 1;
-    const intentHistory = Array.isArray((run.runtimeState as any)?.narrativeIntentHistory)
-      ? [...(run.runtimeState as any).narrativeIntentHistory]
-      : [];
-    if (params.playerIntent) {
-      intentHistory.push({
-        turnId: params.turnId,
-        playerAction: params.playerAction,
-        intent: params.playerIntent,
-        capturedAt: timestamp,
-      });
-    }
-    run.runtimeState = {
-      ...(run.runtimeState || {}),
-      plot: state.plot,
-      narrativePlan: state.plan,
-      narrativeIntentHistory: intentHistory.slice(-40),
-    };
+    run.runtimeState = { ...(run.runtimeState || {}), plot: state.plot, narrativePlan: state.plan };
     repository.saveStoryRun(run);
     return state;
   }

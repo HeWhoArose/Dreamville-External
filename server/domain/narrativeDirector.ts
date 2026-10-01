@@ -128,7 +128,7 @@ export class NarrativeDirector {
 			continuityRequirements: continuityRequirements.slice(0, 10),
 			forbiddenAssumptions: forbiddenAssumptions.slice(0, 8),
 			stateEffectsExpected: stateEffectsExpected.slice(0, 4),
-			createdAt: new Date().toISOString(),
+			createdAt: situation.worldTime,
 			expiresAfterNarration: true,
 		};
 	}

@@ -343,7 +343,7 @@ export class WorkingContextEngine {
         bandRank === priorityOrder.B1_CRITICAL &&
         prospectiveTokens + lowerProtectedReservation > hardTokenBudget &&
         included.some((item) => item.band === 'B1_CRITICAL') &&
-        !chunk.isProtected
+        chunk.id !== 'b1_current_situation'
       ) {
         const idleChunk = { ...chunk, blockStatus: 'IDLE' as const };
         idle.push(idleChunk);

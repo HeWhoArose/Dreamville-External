@@ -76,7 +76,8 @@ function tokens(value: unknown): string[] {
 				.toLowerCase()
 				.split(/[^a-z0-9]+/)
 				.filter((token) => token.length >= 4)
-				.filter((token) => !new Set(['about', 'after', 'before', 'because', 'between', 'could', 'from', 'have', 'hear', 'heard', 'how', 'listen', 'listening', 'reports', 'report', 'rumor', 'rumors', 'rumour', 'rumours', 'what', 'when', 'where', 'which', 'who', 'why']).has(token)),
+				.filter((token) => !new Set(['about', 'after', 'before', 'because', 'between', 'could', 'from', 'have', 'hear', 'heard', 'how', 'listen', 'listening', 'reports', 'report', 'rumor', 'rumors', 'rumour', 'rumours', 'what', 'when', 'where', 'which', 'who', 'why']).has(token))
+				.map((token) => token.length > 5 && token.endsWith('s') ? token.slice(0, -1) : token),
 		),
 	);
 }

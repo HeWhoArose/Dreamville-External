@@ -201,7 +201,6 @@ export class TurnIntegrationHarness {
 				canonicalAdjudication: emptyCanonicalAdjudication,
 				verifiedCanonicalChanges: [],
 			});
-			const commitAttempted = true;
 			if (commitMode === 'FAILURE') {
 				stages.push({
 					name: 'state-commit',

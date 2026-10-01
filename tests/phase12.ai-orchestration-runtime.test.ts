@@ -696,6 +696,7 @@ test('Phase 12 audit: task-aware auto arrange verifies an actual task response a
 		concurrency: 2,
 	});
 
+	console.error('AUDIT_DEBUG_PHASE12_RESULT', JSON.stringify(result, null, 2));
 	assert.equal(result.success, true);
 	assert.equal(result.results.find((entry) => entry.modelId === 'auto-ready')?.status, 'READY');
 	assert.deepEqual(orchestrator.getFallbackChain('narrative.review').slice(0, 1), ['phase12_auto_arrange_provider::auto-ready']);

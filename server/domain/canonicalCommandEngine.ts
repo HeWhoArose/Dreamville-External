@@ -481,6 +481,17 @@ export class CanonicalCommandEngine {
 				const liveComparison = compareCanonicalSnapshots(before, liveAfterHandler, { ignoreNarrativeHistory: true });
 				if (!liveComparison.identical) {
 					repository.restoreCanonicalStateSnapshot(before);
+					canonicalCommitLedger.markPhase(
+						repository,
+						command.storyId,
+						command.commandId,
+						'ABORTED',
+						formatCanonicalTimestamp(repository.getWorldClock(command.storyId).getTimestamp()),
+						{
+							recoveryAction: 'ABORT_AND_RESTORE',
+							errorReason: 'STAGED transaction handler mutated live canonical state instead of the transaction repository.',
+						},
+					);
 					return {
 						success: false,
 						commandId: command.commandId,
@@ -498,6 +509,17 @@ export class CanonicalCommandEngine {
 				} else {
 					transactionalRepository.rollbackCanonicalCommandTransaction(command.storyId);
 				}
+				canonicalCommitLedger.markPhase(
+					repository,
+					command.storyId,
+					command.commandId,
+					'ABORTED',
+					formatCanonicalTimestamp(repository.getWorldClock(command.storyId).getTimestamp()),
+					{
+						recoveryAction: 'ABORT_AND_RESTORE',
+						errorReason: resolved.errorReason || 'Canonical command rejected.',
+					},
+				);
 				return {
 					success: false,
 					commandId: command.commandId,
@@ -547,6 +569,17 @@ export class CanonicalCommandEngine {
 				} else {
 					transactionalRepository.rollbackCanonicalCommandTransaction(command.storyId);
 				}
+				canonicalCommitLedger.markPhase(
+					repository,
+					command.storyId,
+					command.commandId,
+					'ABORTED',
+					formatCanonicalTimestamp(repository.getWorldClock(command.storyId).getTimestamp()),
+					{
+						recoveryAction: 'ABORT_AND_RESTORE',
+						errorReason: customRuleResult.errorReason || 'Custom rule evaluation rejected the command.',
+					},
+				);
 				return {
 					success: false,
 					commandId: command.commandId,

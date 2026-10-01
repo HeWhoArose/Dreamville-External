@@ -8,6 +8,40 @@ import { CurrentSituationBuilder } from '../server/domain/currentSituation';
 import { PlayerLifecycleState } from '../server/domain/playerLifecycleState';
 import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
 
+function seedNpc(repo: InMemoryWorldRepository, storyId: string, npcId: string, locationId: string, name = 'Maren', currentActivity = 'studying the old observatory charts'): void {
+  repo.saveEntityCard(storyId, {
+    id: npcId,
+    storyId,
+    worldId: 'default_world',
+    name,
+    kind: 'NPC',
+    templateId: undefined,
+    isTemplate: false,
+    identity: { aliases: [name] },
+    classification: { tags: [], role: 'NPC' },
+    personality: { traits: [], values: [], motivations: [], fears: [], desires: [] },
+    behavior: { priorities: [] },
+    social: { factionIds: [], reputation: {}, relationships: {} },
+    worldState: {
+      locationId,
+      currentActivity,
+      currentGoal: currentActivity,
+      isAlive: true,
+      presence: 'present',
+    },
+    traits: [],
+    capabilities: [],
+    feats: [],
+    equipment: [],
+    memoryRefs: [],
+    lifecycle: { status: 'ACTIVE' },
+    provenance: { source: 'PHASE23_TEST', createdBy: 'SYSTEM', confidence: 1 },
+    metadata: {},
+    createdAt: '2026-10-01T00:00:00Z',
+    updatedAt: '2026-10-01T00:00:00Z',
+  } as any);
+}
+
 describe('NPC epistemic boundary and planning closure', () => {
   it('builds a private planning slice for an explicitly addressed NPC', () => {
     const repo = new InMemoryWorldRepository({ disablePersistence: true });
@@ -16,12 +50,7 @@ describe('NPC epistemic boundary and planning closure', () => {
 
     const player = repo.getPlayerLifecycle(storyId)!;
     const npcId = 'npc_maren';
-    repo.registerNpcLifecycle(storyId, {
-      npcId,
-      name: 'Maren',
-      locationId: player.locationId,
-      currentActivity: 'studying the old observatory charts',
-    } as any);
+    seedNpc(repo, storyId, npcId, player.locationId);
 
     const situation = CurrentSituationBuilder.build({
       storyId,
@@ -64,12 +93,7 @@ describe('NPC epistemic boundary and planning closure', () => {
     const player = repo.getPlayerLifecycle(storyId)!;
 
     const npcId = 'npc_maren';
-    repo.registerNpcLifecycle(storyId, {
-      npcId,
-      name: 'Maren',
-      locationId: player.locationId,
-      currentActivity: 'watching the observatory door',
-    } as any);
+    seedNpc(repo, storyId, npcId, player.locationId, 'Maren', 'watching the observatory door');
 
     repo.getMemoryEngine(storyId).storeMemory({
       id: 'npc_secret_not_for_narrator',
@@ -110,12 +134,7 @@ describe('NPC epistemic boundary and planning closure', () => {
     const player = repo.getPlayerLifecycle(storyId)!;
     const npcId = 'npc_maren';
 
-    repo.registerNpcLifecycle(storyId, {
-      npcId,
-      name: 'Maren',
-      locationId: player.locationId,
-      currentActivity: 'sorting letters',
-    } as any);
+    seedNpc(repo, storyId, npcId, player.locationId, 'Maren', 'sorting letters');
     repo.getMemoryEngine(storyId).storeMemory({
       id: 'private_dialogue_memory',
       storyId,

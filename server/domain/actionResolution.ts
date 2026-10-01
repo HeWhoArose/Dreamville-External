@@ -1,7 +1,5 @@
-import type { StoryCheckResult } from '../../src/types';
+import type { StoryCheckResult, ActionResolution, ActionOutcomeTier } from '../../src/types';
 
-export type { ActionResolution, ActionResolutionMethod, ActionOutcomeTier } from '../../src/types';
-import type { ActionResolution, ActionOutcomeTier } from '../../src/types';
 export function outcomeTierFromCheck(check: StoryCheckResult): ActionOutcomeTier {
   if (check.criticalSuccess) return 'CRITICAL_SUCCESS';
   if (check.criticalFailure) return 'CRITICAL_FAILURE';
@@ -24,21 +22,20 @@ export function buildActionResolutionPromptContext(resolution?: ActionResolution
     evidenceIds: resolution.evidenceIds,
     uncertainty: resolution.uncertainty,
     provenance: resolution.provenance,
-    check: resolution.check
-      ? {
-          testType: resolution.check.testType,
-          skill: resolution.check.skill,
-          ability: resolution.check.ability,
-          total: resolution.check.total,
-          difficultyClass: resolution.check.difficultyClass,
-          success: resolution.check.success,
-          criticalSuccess: resolution.check.criticalSuccess,
-          criticalFailure: resolution.check.criticalFailure,
-          reason: resolution.check.reason,
-          triggerReason: resolution.check.triggerReason,
-          narrativeGuidance: resolution.check.narrativeGuidance,
-          consequence: resolution.check.consequence,
-        }
-      : undefined,
+    check: resolution.check ? {
+      testType: resolution.check.testType,
+      skill: resolution.check.skill,
+      ability: resolution.check.ability,
+      total: resolution.check.total,
+      difficultyClass: resolution.check.difficultyClass,
+      success: resolution.check.success,
+      outcomeTier: resolution.check.outcomeTier,
+      criticalSuccess: resolution.check.criticalSuccess,
+      criticalFailure: resolution.check.criticalFailure,
+      reason: resolution.check.reason,
+      triggerReason: resolution.check.triggerReason,
+      narrativeGuidance: resolution.check.narrativeGuidance,
+      consequence: resolution.check.consequence,
+    } : undefined,
   }, null, 2);
 }

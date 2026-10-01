@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+import { DomainAdjudicationBridge } from '../server/domain/aiOrchestrator';
 import { CurrentSituationBuilder } from '../server/domain/currentSituation';
 import { NarrativeDirector } from '../server/domain/narrativeDirector';
 import { NarrativeResearchPipeline } from '../server/domain/narrativeResearchPipeline';
@@ -80,4 +81,22 @@ test('Phase 4 plan remains safe with empty research', () => {
 	assert.ok(plan.forbiddenAssumptions.length > 0);
 	assert.equal(plan.informationToReveal.length > 0, true);
 	assert.match(plan.informationToReveal[0].presentation, /NO_RELIABLE_ANSWER|UNCERTAIN|RUMOR|FACT/);
+});
+
+test('Phase 4 passes the ephemeral plan into canonical adjudication metadata without persisting the plan', () => {
+	const { repository, storyId, situation, intent, research } = fixture();
+	const plan = NarrativeDirector.create({ situation, intent, research });
+	const result = DomainAdjudicationBridge.adjudicate({
+		narrative: ['The protagonist listens without speaking.'],
+		dialogue: [],
+		events: [],
+		stateChanges: [],
+		memoryCandidates: [],
+		audioCues: [],
+	}, repository, storyId, plan);
+
+	assert.equal(result.allApproved, true);
+	assert.equal(result.narrativePlanObjective, plan.objective);
+	assert.deepEqual(result.expectedNarrativeEffectKinds, plan.stateEffectsExpected.map((effect) => effect.kind));
+	assert.equal(result.narrativePlanObjective?.includes('Do not'), false);
 });

@@ -53,7 +53,8 @@ export class NarrativeQualityContractEngine {
  }
  public static toPromptContext(contract: NarrativeQualityContract): string {
   if (!contract.controls.enabled) return 'Narrative Quality Contract: disabled for this turn.';
-  return ['Narrative Quality Contract v' + contract.version, 'Turn profile: ' + contract.profile, 'Enforcement: ' + contract.controls.enforcement, ...contract.instructions.map((instruction) => '- ' + instruction)].join('\n');
+  const enabled = Object.entries(contract.controls).filter(([key, value]) => typeof value === 'boolean' && value === true).map(([key]) => key).join(', ');
+  return ['Narrative Quality Contract v' + contract.version, 'Turn profile: ' + contract.profile, 'Enforcement: ' + contract.controls.enforcement, 'Enabled controls: ' + enabled, 'Preferred paragraphs: ' + contract.controls.preferredParagraphs + '; maximum paragraphs: ' + contract.controls.maxParagraphs].join('\n');
  }
  public static countParagraphs(narration: string): number { return String(narration || '').trim().split(/\n\s*\n/).filter(Boolean).length; }
  public static validate(narration: string, contract: NarrativeQualityContract): { valid: boolean; reasons: string[] } {

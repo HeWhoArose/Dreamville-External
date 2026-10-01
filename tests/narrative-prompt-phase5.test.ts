@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 
 import { CurrentSituationBuilder } from '../server/domain/currentSituation';
 import { NarrativeDirector } from '../server/domain/narrativeDirector';
-import { buildNarrationPrompt } from '../server/domain/narrativePromptBuilder';
+import { buildNarrationPrompt, projectSupportingWorkingContext } from '../server/domain/narrativePromptBuilder';
 import { NarrativeResearchPipeline } from '../server/domain/narrativeResearchPipeline';
 import { PlayerIntentInterpreter } from '../server/domain/playerIntentInterpreter';
 import { InMemoryWorldRepository } from '../server/repositories/worldRepository';

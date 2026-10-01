@@ -99,6 +99,54 @@ describe('Phase 23 architecture gap closure', () => {
     assert.equal(situation.player.spatial.focusEntityId, 'char_maren');
   });
 
+  it('CurrentSituation exposes focused entity proximity as an interaction-visible distance band', () => {
+    const repo = new InMemoryWorldRepository({ disablePersistence: true });
+    const storyId = 'spatial_read_model_story';
+    repo.seedStory(storyId);
+    const player = repo.getPlayerLifecycle(storyId)!;
+    const npcId = 'npc_focus_read_model';
+
+    repo.saveEntityCard(storyId, {
+      id: npcId,
+      storyId,
+      worldId: 'default_world',
+      name: 'Maren',
+      kind: 'NPC',
+      identity: { aliases: ['Maren'] },
+      classification: { role: 'NPC' },
+      social: { factionIds: [], reputation: {}, relationships: {} },
+      worldState: {
+        locationId: player.locationId,
+        currentActivity: 'waiting',
+        isAlive: true,
+        presence: 'present',
+      },
+      lifecycle: { status: 'ACTIVE' },
+      isTemplate: false,
+      metadata: {},
+    } as any);
+
+    repo.updatePlayerLifecycle(storyId, player.copyWith({
+      localSpatialState: {
+        areaId: player.locationId,
+        focusEntityId: npcId,
+        focusLabel: 'Maren',
+        proximityBand: 'ADJACENT',
+        updatedTurnId: 'turn_spatial_read',
+      },
+    }));
+
+    const situation = CurrentSituationBuilder.build({
+      storyId,
+      playerAction: 'I move beside Maren.',
+      viewerActorId: player.actorId,
+      worldRepo: repo,
+    });
+    const focused = situation.nearbyEntities.find((entity) => entity.id === npcId);
+    assert.equal(focused?.distanceBand, 'ADJACENT');
+    assert.ok(situation.availableInteractions.some((interaction) => interaction.targetId === npcId));
+  });
+
   it('canonical commit ledger recovers an interrupted command by restoring the durable pre-state checkpoint', () => {
     const repo = new InMemoryWorldRepository({ disablePersistence: true });
     const storyId = 'ledger_recovery_story';

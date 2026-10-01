@@ -40,9 +40,23 @@ function isDecorative(candidate: string): boolean {
 		! /\b(?:learned|discovered|heard|saw|found|met|told|revealed|confirmed|injured|attacked|opened|closed|moved|arrived|left|obtained|lost)\b/i.test(candidate);
 }
 
+function containsUnauthorizedWorldFact(candidate: string, situation: CurrentSituation): boolean {
+	const value = lower(candidate);
+	const known = new Set(situation.playerKnowledge.knownFacts.map((fact) => lower(JSON.stringify(fact))));
+	return situation.worldFacts
+		.filter((fact) => !known.has(lower(JSON.stringify(fact))))
+		.some((fact) => {
+			const anchors = [fact.subjectEntityId, fact.predicate, fact.objectValue]
+				.map(lower)
+				.filter((anchor) => anchor.length >= 8);
+			return anchors.some((anchor) => value.includes(anchor));
+		});
+}
+
 function isDurableCandidate(candidate: string, situation: CurrentSituation, turnPackage: StructuredTurnPackage): boolean {
 	const value = normalize(candidate);
 	if (value.length < 12 || value.length > 900 || isDecorative(value)) return false;
+	if (containsUnauthorizedWorldFact(value, situation)) return false;
 	const canonicalAnchors = [
 		situation.location.name,
 		...situation.nearbyEntities.filter((entity) => entity.visibleToPlayer).map((entity) => entity.name),
@@ -60,7 +74,10 @@ function relatedEntities(candidate: string, situation: CurrentSituation): string
 	const value = lower(candidate);
 	return situation.nearbyEntities
 		.filter((entity) => entity.visibleToPlayer)
-		.filter((entity) => [entity.name, ...(entity.name ? [] : [])].some((name) => value.includes(lower(name))))
+		.filter((entity) => {
+			const name = lower(entity.name);
+			return Boolean(name) && value.includes(name);
+		})
 		.map((entity) => entity.id)
 		.slice(0, 6);
 }
@@ -118,10 +135,11 @@ export class NarrativeMemoryLifecycle {
 		);
 
 		const promotedMemoryIds: string[] = [];
+		const memoryEligible = !params.narrativeReview || params.narrativeReview.decision === 'ACCEPT';
 		const memoryEngine = params.repository.getMemoryEngine(params.storyId);
 		const playerActorId = params.currentSituation.player.actorId;
 		const currentTurn = params.repository.getCanonicalCommandEvents(params.storyId).length;
-		for (const candidate of params.turnPackage.memoryCandidates || []) {
+		for (const candidate of (memoryEligible ? (params.turnPackage.memoryCandidates || []) : [])) {
 			const value = normalize(candidate);
 			if (!isDurableCandidate(value, params.currentSituation, params.turnPackage)) continue;
 			const id = deterministicId('narrative_memory', params.storyId, value);
@@ -189,13 +207,17 @@ export class NarrativeMemoryLifecycle {
 		const actionFact = normalize(params.playerAction);
 		const factualBeatParts = [...eventFacts, ...stateFacts];
 		if (factualBeatParts.length === 0 && actionFact) factualBeatParts.push('Player action: ' + actionFact.slice(0, 300));
-		const plotSummary = factualBeatParts.join('; ').slice(0, 900) || 'Turn resolved without a durable canonical event.';
-		const beatId = deterministicId('plot_beat', params.storyId, params.turnId, plotSummary);
-		const beats = Array.isArray(plot.beats) ? [...plot.beats] : [];
-		if (!beats.some((beat: any) => beat?.id === beatId)) {
-			beats.push({ id: beatId, turnId: params.turnId, text: plotSummary, tags: eventFacts.slice(0, 8), timestamp });
+		const plotSummary = factualBeatParts.length > 0
+			? factualBeatParts.join('; ').slice(0, 900)
+			: (normalize(plot.summary) || 'No new canonical development.');
+		if (factualBeatParts.length > 0) {
+			const beatId = deterministicId('plot_beat', params.storyId, params.turnId, plotSummary);
+			const beats = Array.isArray(plot.beats) ? [...plot.beats] : [];
+			if (!beats.some((beat: any) => beat?.id === beatId)) {
+				beats.push({ id: beatId, turnId: params.turnId, text: plotSummary, tags: eventFacts.slice(0, 8), timestamp });
+			}
+			plot.beats = beats.slice(-40);
 		}
-		plot.beats = beats.slice(-40);
 		plot.summary = plotSummary;
 		plot.updatedAt = timestamp;
 		plot.version = Math.max(1, Number(plot.version || 1)) + 1;

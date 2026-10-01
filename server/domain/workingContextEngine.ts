@@ -59,6 +59,7 @@ export interface BudgetedContextResult {
 
 export interface AssembledTurnContext {
   currentSituation: CurrentSituation;
+  pinnedSourceIds: string[];
   packet: WorkingContextPacket;
   chunks: ContextChunk[];
   assembledText: string;
@@ -1079,10 +1080,23 @@ export class WorkingContextEngine {
       candidateChunks.push(...params.customChunks);
     }
 
+    const persistedPins = Array.isArray(repo.getStoryRun(storyId)?.runtimeState?.workingContextPins)
+      ? repo.getStoryRun(storyId)!.runtimeState!.workingContextPins.filter((id: unknown): id is string => typeof id === 'string' && id.trim())
+      : [];
+    const pinnedSet = new Set(persistedPins);
+    
     // F&F-style context blocks are self-managed projections: normalize types,
     // deduplicate overlapping research blocks, and preserve canonical provenance
     // before applying the deterministic token budget.
-    const normalizedCandidateChunks = WorkingContextEngine.normalizeContextBlocks(candidateChunks);
+    const normalizedCandidateChunks = WorkingContextEngine.normalizeContextBlocks(
+      candidateChunks.map((chunk) => ({
+        ...chunk,
+        isProtected:
+          Boolean(chunk.isProtected) ||
+          pinnedSet.has(String(chunk.id || '')) ||
+          pinnedSet.has(String(chunk.source || '')),
+      })),
+    );
     const currentTurn = repo.getCanonicalCommandEvents(storyId).length + 1;
     const budgetedResult = WorkingContextEngine.assembleBudgetedContext(
       normalizedCandidateChunks,
@@ -1092,6 +1106,7 @@ export class WorkingContextEngine {
 
     return {
       currentSituation,
+      pinnedSourceIds: [...pinnedSet],
       packet,
       chunks: normalizedCandidateChunks,
       assembledText: budgetedResult.assembledText,

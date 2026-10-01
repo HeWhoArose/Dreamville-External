@@ -1062,11 +1062,11 @@ export class StoryActionAdvisor {
 		const safeTips = tips.length > 0
 			? tips.slice(0, 4)
 			: [{
-				id: deterministicId('scene_fallback_tip', storyId, actorId, situation.location.id),
+				id: deterministicId('scene_fallback_tip', storyId, actorId, canonicalSceneContext.locationName || 'current-area'),
 				title: 'Investigate the current scene',
 				description: 'Use the visible environment and the latest situation to decide your next move.',
 				intent: 'INVESTIGATE_SCENE',
-				actionText: `I carefully inspect ${situation.location.name} for useful clues, hazards, exits, or signs of what is happening.`,
+				actionText: `I carefully inspect ${canonicalSceneContext.locationName || 'the current area'} for useful clues, hazards, exits, or signs of what is happening.`,
 				source: 'DETERMINISTIC' as const,
 			}];
 

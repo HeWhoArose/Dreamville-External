@@ -716,10 +716,18 @@ export class CurrentSituationBuilder {
 				})),
 		];
 
-		const currentAction = params.currentAction || (actionText
+		const currentAction: PlayerIntent | undefined = params.currentAction || (actionText
 			? {
 				action: actionText,
-				source: 'DETERMINISTIC' as const,
+				interactionMode: 'OTHER',
+				speechIntent: false,
+				movementIntent: false,
+				observationIntent: false,
+				explicitTargets: [],
+				impliedTargets: [],
+				confidence: 0.2,
+				source: 'DETERMINISTIC',
+				originalText: actionText,
 			}
 			: undefined);
 

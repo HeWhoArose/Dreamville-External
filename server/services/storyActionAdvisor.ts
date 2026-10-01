@@ -1021,7 +1021,6 @@ export class StoryActionAdvisor {
 		const nearbyNpcs = livingWorld
 			.getAllNpcSchedules()
 			.filter((npc) => npc.currentLocationId === playerLocationId)
-			.filter((npc) => relevantEntityIds.size === 0 || relevantEntityIds.has(npc.npcId))
 			.filter((npc) => npc.npcId !== actorId);
 		const visibleNpcNames = uniqueStrings(nearbyNpcs.map((npc) => npc.name), 4);
 		const unresolvedEvents = livingWorld

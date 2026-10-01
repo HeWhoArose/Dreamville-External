@@ -532,7 +532,7 @@ export class NarrativeResearchPipeline {
 			if (b.relevanceScore !== a.relevanceScore) return b.relevanceScore - a.relevanceScore;
 			return a.id.localeCompare(b.id);
 		});
-		const selected: NarrativeResearchBlock[] = [];
+		const selected: CandidateBlock[] = [];
 		const usedByKind: Record<NarrativeResearchBlockKind, number> = {
 			SCENE: 0,
 			ENTITY: 0,

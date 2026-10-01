@@ -311,6 +311,62 @@ test('canonical commit ledger can recover an interrupted command from its pre-st
   assert.equal(canonicalCommitLedger.find(repository, storyId, command.commandId)!.phase, 'HANDLER_RESOLVED');
 });
 
+test('canonical command execution automatically recovers an interrupted repository-local commit before the next command', async () => {
+  const repository = new InMemoryWorldRepository({ disablePersistence: true });
+  const storyId = 'phase23_auto_recovery';
+  repository.seedStory(storyId);
+  const before = captureCanonicalStateSnapshot(storyId, repository);
+  const actorId = repository.getPlayerLifecycle(storyId)!.actorId;
+
+  const interruptedCommand = {
+    commandId: 'phase23_interrupted_before_next',
+    storyId,
+    actorId,
+    type: 'CORE_ACTION' as const,
+    payload: { action: 'interrupted' },
+    source: 'PLAYER' as const,
+  };
+
+  canonicalCommitLedger.begin(
+    repository,
+    interruptedCommand,
+    before,
+    'prehash',
+    'Y0001-M01-D01T00:00:00',
+  );
+
+  repository.updatePlayerLifecycle(
+    storyId,
+    repository.getPlayerLifecycle(storyId)!.copyWith({ currentActivity: 'corrupted_intermediate_state' }),
+  );
+
+  const { canonicalCommandEngine } = await import('../server/domain/canonicalCommandEngine');
+  const result = await canonicalCommandEngine.execute(
+    repository,
+    {
+      commandId: 'phase23_followup',
+      storyId,
+      actorId,
+      type: 'CORE_ACTION',
+      payload: { action: 'follow-up' },
+      source: 'PLAYER',
+    },
+    async () => ({
+      success: true,
+      data: { ok: true },
+      summary: 'Follow-up committed.',
+    }),
+  );
+
+  assert.equal(result.success, true);
+  assert.equal(repository.getPlayerLifecycle(storyId)!.currentActivity, 'idle');
+  assert.equal(
+    canonicalCommitLedger.find(repository, storyId, interruptedCommand.commandId)?.phase,
+    'ABORTED',
+  );
+});
+
+
 test('narration prompt gives structured action resolution precedence over prose reconstruction', () => {
   const resolution: ActionResolution = {
     resolutionId: 'resolution_phase23',

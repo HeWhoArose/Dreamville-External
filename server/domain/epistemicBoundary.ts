@@ -18,11 +18,11 @@ function factAuthorized(situation: CurrentSituation, fact: CurrentSituation['wor
 	const factId = normalize(fact.id);
 	if (factId && Array.isArray(situation.playerKnowledge.authorizedFactIds) && situation.playerKnowledge.authorizedFactIds.includes(factId)) return true;
 	const serialized = normalize(JSON.stringify(fact));
-	return situation.playerKnowledge.knownFacts.some((known) => normalize(JSON.stringify(known)) === serialized);
+	return (Array.isArray(situation.playerKnowledge?.knownFacts) ? situation.playerKnowledge.knownFacts : []).some((known) => normalize(JSON.stringify(known)) === serialized);
 }
 
 function forbiddenAnchors(situation: CurrentSituation): string[] {
-	return situation.worldFacts
+	return (Array.isArray(situation.worldFacts) ? situation.worldFacts : [])
 		.filter((fact) => !factAuthorized(situation, fact))
 		.flatMap((fact) => [
 			fact.objectValue,

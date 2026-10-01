@@ -26,6 +26,7 @@ import { buildNarrationPrompt, defaultNarrationStyle, projectSupportingWorkingCo
 import { SemanticNarrativeReview, type NarrativeReview } from './semanticNarrativeReview';
 import { EpistemicBoundaryEnforcer } from './epistemicBoundary';
 import { NarrativeStateAdjudicator, type StateAdjudicationResult } from './narrativeStateAdjudicator';
+import { AiTurnCallBudget, type AiTurnCallBudgetSnapshot } from './aiTurnCallBudget';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
 
@@ -525,6 +526,7 @@ export interface OrchestratedTurnTelemetry {
   researchTokens?: number;
   narrativePlanObjective?: string;
   narrativeReview?: NarrativeReview;
+  aiCallBudget?: AiTurnCallBudgetSnapshot;
 }
 
 export interface OrchestratedTurnResult {
@@ -6227,6 +6229,7 @@ export class MultiModelOrchestrator {
     playerText: string;
     currentSituation?: ReturnType<typeof CurrentSituationBuilder.build>;
     timeoutMs?: number;
+    turnBudget?: AiTurnCallBudget;
   }): Promise<{
     intent: PlayerIntent;
     modelId?: string;
@@ -6237,6 +6240,14 @@ export class MultiModelOrchestrator {
     const deterministic = PlayerIntentInterpreter.deterministic(originalText, params.currentSituation);
     if (!originalText) return { intent: deterministic, fallbackReason: 'EMPTY_INPUT' };
     if (deterministic.confidence >= 0.9) return { intent: deterministic };
+
+    const budgetDecision = params.turnBudget?.beginTask('intent.interpret');
+    if (budgetDecision && !budgetDecision.allowed) {
+      return {
+        intent: deterministic,
+        fallbackReason: 'TURN_AI_CALL_BUDGET_EXHAUSTED',
+      };
+    }
 
     const prompt = PlayerIntentInterpreter.buildPrompt(originalText, params.currentSituation);
     const selection = this.selectBestModel('intent.interpret', {
@@ -6251,6 +6262,7 @@ export class MultiModelOrchestrator {
       if (!adapter) continue;
 
       const startedAt = Date.now();
+      params.turnBudget?.recordProviderAttempt('intent.interpret');
       try {
         const response = await adapter.generate('intent.interpret', prompt, {
           timeoutMs,
@@ -7008,6 +7020,7 @@ export class MultiModelOrchestrator {
         timeoutMs,
         maxTokens: 650,
         contextTokens: narrationPrompt.totalTokens,
+        turnBudget: turnAiCallBudget,
         forceModelId: params.forceModelId,
         canonicalLocationName: currentSituation.location.name,
         playerAction,
@@ -7215,6 +7228,7 @@ export class MultiModelOrchestrator {
     const turnId = rawIdempotencyKey
       ? deterministicId('turn', storyId, rawIdempotencyKey.replace(/[^a-zA-Z0-9_-]/g, '_'))
       : deterministicId('turn', storyId, turnSequence, task, params.playerAction || '');
+    const turnAiCallBudget = new AiTurnCallBudget();
 
     // Checkpoint continuation awareness (V6.15 / V6.06)
     let priorCheckpoint: ContinuationCheckpoint | undefined;
@@ -7239,6 +7253,7 @@ export class MultiModelOrchestrator {
         playerText: params.playerAction || '',
         currentSituation: initialSituation,
         timeoutMs: Math.min(timeoutMs, 5000),
+        turnBudget: turnAiCallBudget,
       });
       const playerIntent = intentInterpretation.intent;
       const currentSituation = CurrentSituationBuilder.build({
@@ -7403,6 +7418,7 @@ export class MultiModelOrchestrator {
               inputTokens: narrationPrompt.totalTokens,
               outputTokens: 20,
               validated: true,
+          aiCallBudget: turnAiCallBudget.snapshot(),
             },
           };
         }
@@ -7511,6 +7527,7 @@ export class MultiModelOrchestrator {
 
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
           totalAttempts++;
+          turnAiCallBudget.recordProviderAttempt(task);
           const attemptStartedAt = Date.now();
           try {
             // Wrap provider call with AbortController for strict timeout enforcement
@@ -7573,6 +7590,13 @@ export class MultiModelOrchestrator {
               });
               const shouldRewrite = initialReview.decision !== 'ACCEPT' && !semanticRewriteUsed;
               if (shouldRewrite) semanticRewriteUsed = true;
+              const reviewBudget = shouldRewrite
+                ? turnAiCallBudget.beginTask('narrative.review')
+                : { allowed: true };
+              if (shouldRewrite && !reviewBudget.allowed) {
+                throw new Error(reviewBudget.reason || 'Narrative review call budget exhausted.');
+              }
+              if (shouldRewrite) turnAiCallBudget.recordProviderAttempt('narrative.review');
               const reviewed = await this.reviewAndRepairNarrative({
                 turnPackage: validation.turnPackage,
                 intent: playerIntent,
@@ -7679,6 +7703,7 @@ export class MultiModelOrchestrator {
               inputTokens: Math.min(providerRes.inputTokens || narrationPrompt.totalTokens, narrationPrompt.totalTokens),
               outputTokens: providerRes.outputTokens || 50,
               validated: true,
+          aiCallBudget: turnAiCallBudget.snapshot(),
               adjudicationResult: adjudication,
               checkpointCreated: checkpointId,
               recoveredFromCheckpoint: Boolean(params.checkpointId),
@@ -7877,6 +7902,7 @@ export class MultiModelOrchestrator {
               inputTokens: narrationPrompt.totalTokens,
               outputTokens: 30,
               validated: true,
+          aiCallBudget: turnAiCallBudget.snapshot(),
               adjudicationResult: adjudication,
               checkpointCreated: checkpointId,
               recoveredFromCheckpoint: Boolean(params.checkpointId),
@@ -7935,6 +7961,7 @@ export class MultiModelOrchestrator {
           inputTokens: narrationPrompt.totalTokens,
           outputTokens: 0,
           validated: false,
+          aiCallBudget: turnAiCallBudget.snapshot(),
           idempotencyKey: rawIdempotencyKey,
         },
         narrativePlan,
@@ -8035,6 +8062,7 @@ export class MultiModelOrchestrator {
       forceModelId?: string;
       canonicalLocationName?: string;
       playerAction?: string;
+      turnBudget?: AiTurnCallBudget;
       validateResponse?: (text: string) => TaskResponseValidationResult;
       /**
        * When true, a configured task route may be expanded with additional eligible AI models
@@ -8073,6 +8101,50 @@ export class MultiModelOrchestrator {
     }>;
   }> {
     const contract = getAiTaskContract(task);
+    const turnBudgetDecision = options?.turnBudget?.beginTask(task);
+    if (turnBudgetDecision && !turnBudgetDecision.allowed) {
+      if (options?.allowDeterministicFallback === false) {
+        throw new Error(turnBudgetDecision.reason || 'Per-turn AI call budget exhausted.');
+      }
+      const emergency = Array.from(this.models.values()).find((model) => model.isEmergencyFloor && model.roleEligibility.includes(task));
+      const emergencyAdapter = emergency ? this.getAdapter(emergency.providerId) : undefined;
+      if (!emergency || !emergencyAdapter) {
+        throw new Error((turnBudgetDecision.reason || 'Per-turn AI call budget exhausted.') + ' Deterministic emergency floor is unavailable.');
+      }
+      options.turnBudget.recordProviderAttempt(task);
+      const emergencyStartedAt = Date.now();
+      const emergencyResponse = await emergencyAdapter.generate(task, prompt, {
+        allowDeterministicFallback: true,
+        timeoutMs: options?.timeoutMs || 35000,
+        maxTokens: options?.maxTokens,
+        modelId: emergency.modelId,
+        systemInstruction,
+        canonicalLocationName: options?.canonicalLocationName,
+        playerAction: options?.playerAction,
+      });
+      if (!emergencyResponse?.text) {
+        throw new Error('Deterministic emergency floor returned an empty response after AI call budget exhaustion.');
+      }
+      const emergencyValidation = (options?.validateResponse || ((text: string) => validateAiTaskResponse(task, text)))(emergencyResponse.text);
+      if (!emergencyValidation.valid) {
+        throw new Error('Deterministic emergency floor response failed validation after AI call budget exhaustion.');
+      }
+      return {
+        text: emergencyResponse.text,
+        source: 'DETERMINISTIC_FALLBACK',
+        providerId: emergency.providerId,
+        modelId: emergency.modelId,
+        fallbackReason: turnBudgetDecision.reason || 'TURN_AI_CALL_BUDGET_EXHAUSTED',
+        attempts: 1,
+        attemptsTrail: [{
+          providerId: emergency.providerId,
+          modelId: emergency.modelId,
+          displayName: emergency.displayName,
+          status: 'SUCCESS',
+          latencyMs: Math.max(1, Date.now() - emergencyStartedAt),
+        }],
+      };
+    }
     const contractValidator = options?.validateResponse || ((text: string) => validateAiTaskResponse(task, text));
     const allowAdaptiveAiRecovery = options?.allowAdaptiveAiRecovery === true;
     const allowDeterministicFallback = options?.allowDeterministicFallback !== false;
@@ -8381,6 +8453,7 @@ export class MultiModelOrchestrator {
       }
 
       const attemptStartedAt = Date.now();
+      options?.turnBudget?.recordProviderAttempt(task);
       const operationSource: ActiveModelOperation['source'] = currentCandidate.isEmergencyFloor
         ? 'DETERMINISTIC_FALLBACK'
         : (this.modelKey(currentCandidate) === selectedModelKey && !selectionWasForcedFallback ? 'AI_PRIMARY' : 'AI_FALLBACK');

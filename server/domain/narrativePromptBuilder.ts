@@ -6,6 +6,7 @@ import { WorkingContextEngine, type AssembledTurnContext } from './workingContex
 import { EpistemicBoundaryEnforcer } from './epistemicBoundary';
 import type { ActionResolution } from './actionResolution';
 import { buildActionResolutionPromptContext } from './actionResolution';
+import { NarrativeQualityContractEngine, type NarrativeQualityControls, type NarrativeQualityContract } from './narrativeQualityContract';
 
 export interface NarrationPromptInput {
 	situation: CurrentSituation;
@@ -18,12 +19,14 @@ export interface NarrationPromptInput {
 	canonicalOutcome?: string;
 	actionResolution?: ActionResolution;
 	maxPromptTokens?: number;
+	narrativeQualityControls?: Partial<NarrativeQualityControls>;
 }
 
 export interface NarrationPromptResult {
 	prompt: string;
 	styleInstruction: string;
 	totalTokens: number;
+	narrativeQualityContract: NarrativeQualityContract;
 }
 
 export function projectSupportingWorkingContext(context: AssembledTurnContext): string {
@@ -124,6 +127,8 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	const intentContext = JSON.stringify(input.intent);
 	const planContext = NarrativeDirector.toPromptContext(input.plan);
 	const actionResolutionContext = buildActionResolutionPromptContext(input.actionResolution);
+	const narrativeQualityContract = NarrativeQualityContractEngine.resolve(input.intent, input.narrativeQualityControls);
+	const narrativeQualityContext = NarrativeQualityContractEngine.toPromptContext(narrativeQualityContract);
 	const canonicalConstraints = [
 		'CANONICAL CURRENT SCENE ANCHOR:',
 		'Canonical constraints:',
@@ -159,6 +164,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	): string => [
 		section('GLOBAL NARRATION INSTRUCTIONS', overrides?.globalInstruction || globalInstruction),
 		section('NARRATIVE STYLE', overrides?.styleInstruction || styleInstruction),
+		section('NARRATIVE QUALITY CONTRACT', narrativeQualityContext),
 		section('CURRENT SITUATION', overrides?.situationContext || situationContext),
 		section('PLAYER INTENT', overrides?.intentContext || intentContext),
 		section('ACTION RESOLUTION — AUTHORITATIVE', actionResolutionContext),
@@ -174,7 +180,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	const maxPromptTokens = input.maxPromptTokens;
 	if (!maxPromptTokens) {
 		const prompt = compose(initialResearch, initialWorking);
-		return { prompt, styleInstruction, totalTokens: WorkingContextEngine.estimateTokens(prompt) };
+		return { prompt, styleInstruction, totalTokens: WorkingContextEngine.estimateTokens(prompt), narrativeQualityContract };
 	}
 
 	let researchContext = initialResearch;
@@ -202,6 +208,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		if (maxPromptTokens < 600) {
 			const budgetChars = Math.max(1200, maxPromptTokens * 4);
 			const microGlobal = 'Generate only the player-facing narrative. Preserve player agency and canonical truth. Never make major future decisions for the player.';
+			const microQuality = truncatePromptSection(narrativeQualityContext, 700);
 			const microSituation = truncatePromptSection(situationContext, 360);
 			const microIntent = truncatePromptSection(intentContext, 180);
 			const microResolution = truncatePromptSection(actionResolutionContext, 620);
@@ -211,6 +218,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			const microOutput = '{"narrative":["..."],"dialogue":[],"events":[],"stateChanges":[],"memoryCandidates":[],"audioCues":[],"visualCues":[]}';
 			const sections = [
 				section('GLOBAL NARRATION INSTRUCTIONS', microGlobal),
+				section('NARRATIVE QUALITY CONTRACT', microQuality),
 				section('CURRENT SITUATION', microSituation),
 				section('PLAYER INTENT', microIntent),
 				section('ACTION RESOLUTION — AUTHORITATIVE', microResolution),
@@ -282,6 +290,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		} else {
 			const compactGlobal = 'Generate only the player-facing narrative. Never choose a major future action for the player. The structured Action Resolution is authoritative for mechanics and consequences.';
 			const compactStyle = 'Depict the current action and observable response; preserve player agency and canonical truth. Stay in the canonical current location unless the canonical game state has already committed a location change.';
+			const compactQuality = truncatePromptSection(narrativeQualityContext, 700);
 			const compactSituation = truncatePromptSection(situationContext, 520);
 			const compactIntent = truncatePromptSection(intentContext, 180);
 			const compactResolution = truncatePromptSection(actionResolutionContext, 700);
@@ -297,6 +306,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			prompt = [
 				section('GLOBAL NARRATION INSTRUCTIONS', compactGlobal),
 				section('NARRATIVE STYLE', compactStyle),
+				section('NARRATIVE QUALITY CONTRACT', compactQuality),
 				section('CURRENT SITUATION', compactSituation),
 				section('PLAYER INTENT', compactIntent),
 				section('ACTION RESOLUTION — AUTHORITATIVE', compactResolution),
@@ -309,6 +319,6 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			totalTokens = WorkingContextEngine.estimateTokens(prompt);
 		}
 	}
-	return { prompt, styleInstruction, totalTokens };
+	return { prompt, styleInstruction, totalTokens, narrativeQualityContract };
 }
 

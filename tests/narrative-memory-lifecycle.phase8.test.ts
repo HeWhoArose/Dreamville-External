@@ -1,11 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { WorldRepository } from '../server/repositories/worldRepository';
+import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
+import type { WorldRepository } from '../server/repositories/worldRepository';
 import { CurrentSituationBuilder } from '../server/domain/currentSituation';
 import { NarrativeMemoryLifecycle } from '../server/domain/narrativeMemoryLifecycle';
 
 function setup() {
-	const repository = new WorldRepository({ disablePersistence: true });
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
 	repository.seedStory('memory-story');
 	const player = repository.getPlayerLifecycle('memory-story')!;
 	const situation = CurrentSituationBuilder.build({

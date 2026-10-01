@@ -125,7 +125,7 @@ test('Phases 3-5 reach the live narrative provider with ordered CurrentSituation
 		maxRetries: 0,
 	});
 
-	assert.equal(result.success, true);
+	assert.equal(result.success, true, result.error || JSON.stringify(result));
 	assert.equal(result.telemetry.selectedModelId, 'integration-primary');
 	assert.equal(result.telemetry.researchBlockCount && result.telemetry.researchBlockCount > 0, true);
 	assert.equal(result.telemetry.researchTokens && result.telemetry.researchTokens > 0, true);

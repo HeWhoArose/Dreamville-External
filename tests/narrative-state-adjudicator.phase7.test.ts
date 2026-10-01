@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { NarrativeStateAdjudicator } from '../server/domain/narrativeStateAdjudicator';
-import { WorldRepository } from '../server/repositories/worldRepository';
+import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
+import type { WorldRepository } from '../server/repositories/worldRepository';
 
 function setup() {
-	const repository = new WorldRepository({ disablePersistence: true });
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
 	repository.seedStory('state-story');
 	const player = repository.getPlayerLifecycle('state-story')!;
 	const conditionEngine = repository.getConditionEngine('state-story');

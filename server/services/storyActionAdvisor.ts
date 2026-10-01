@@ -11,6 +11,7 @@ import type {
 import { CapabilitySimulationEngine } from '../domain/capabilitySimulationEngine';
 import type { WorldRepository } from '../repositories/worldRepository';
 import { CurrentSituationBuilder } from '../domain/currentSituation';
+import { EntitySceneRelevanceEngine } from '../domain/entitySceneRelevance';
 import { worldRepository } from '../repositories/worldRepository';
 import { UnifiedAiActionOrchestrator, type UnifiedActionPipelineResult } from './unifiedAiActionOrchestrator';
 

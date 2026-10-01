@@ -273,7 +273,6 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 					'workingContext',
 					'researchContext',
 					'planContext',
-					'intentContext',
 					'situationContext',
 				];
 				const key = keys

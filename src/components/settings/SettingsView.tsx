@@ -1034,7 +1034,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                     Procedural multi-layer environmental acoustics (breezes, crickets, hearths, subterranean caverns) with no harsh drone loops.
                   </p>
                 </div>
-                <Badge variant={settings.ambienceEnabled && !isMuted ? 'green' : 'gray'} size="sm">
+                <Badge variant={settings.ambienceEnabled && !isMuted ? 'emerald' : 'stone'} size="sm">
                   {settings.ambienceEnabled && !isMuted
                     ? soundscape?.environmentTrack
                       ? soundscape.environmentTrack.replace(/_/g, ' ').toUpperCase()

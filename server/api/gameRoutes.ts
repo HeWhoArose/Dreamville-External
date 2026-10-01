@@ -205,6 +205,49 @@ gameRouter.get('/narrative-research', (req: Request, res: Response) => {
 	}
 });
 
+gameRouter.get('/context-transparency', (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    return res.json({
+      success: true,
+      storyId,
+      context: serverMockAuthority.getContextTransparency(storyId),
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      errorReason: error?.message || 'Failed to retrieve working context transparency.',
+    });
+  }
+});
+
+gameRouter.post('/context-pin', (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    const sourceId = typeof req.body?.sourceId === 'string' ? req.body.sourceId.trim() : '';
+    const pinned = req.body?.pinned !== false;
+    if (!sourceId) {
+      return res.status(400).json({ success: false, errorReason: 'sourceId is required.' });
+    }
+    const result = serverMockAuthority.setWorkingContextPin(storyId, sourceId, pinned);
+    if (!result.success) {
+      return res.status(404).json({ success: false, errorReason: 'Story run not found.' });
+    }
+    return res.json({
+      success: true,
+      storyId,
+      pinned,
+      pinnedSourceIds: result.pinnedSourceIds,
+      context: serverMockAuthority.getContextTransparency(storyId),
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      errorReason: error?.message || 'Failed to update working context pin.',
+    });
+  }
+});
+
 gameRouter.get('/current-situation', (req: Request, res: Response) => {
   try {
     const storyId = resolveStoryId(req, true);

@@ -11,6 +11,13 @@ import type { WorldRepository } from '../repositories/worldRepository';
 
 export type TurnHarnessNarrationMode = 'DETERMINISTIC' | 'EMPTY' | 'MALFORMED';
 
+export type TurnHarnessProviderMode =
+	| 'PRIMARY_AVAILABLE'
+	| 'PRIMARY_UNAVAILABLE_FALLBACK'
+	| 'ALL_UNAVAILABLE_EMERGENCY';
+
+export type TurnHarnessCommitMode = 'SUCCESS' | 'FAILURE';
+
 export interface TurnHarnessTrace {
 	storyId: string;
 	playerAction: string;
@@ -30,6 +37,10 @@ export interface TurnHarnessTrace {
 		detail: string;
 	}>;
 	failure?: string;
+	providerMode?: TurnHarnessProviderMode;
+	commitMode?: TurnHarnessCommitMode;
+	commitAttempted?: boolean;
+	continuityRecorded?: boolean;
 }
 
 function buildDeterministicNarration(
@@ -90,6 +101,8 @@ export class TurnIntegrationHarness {
 		storyId: string;
 		playerAction: string;
 		narrationMode?: TurnHarnessNarrationMode;
+		providerMode?: TurnHarnessProviderMode;
+		commitMode?: TurnHarnessCommitMode;
 	}): TurnHarnessTrace {
 		const stages: TurnHarnessTrace['stages'] = [];
 		try {
@@ -126,6 +139,28 @@ export class TurnIntegrationHarness {
 			stages.push({ name: 'plan', status: 'PASS', detail: plan.immediateSteps.join(' | ') || plan.objective });
 
 			const mode = params.narrationMode || 'DETERMINISTIC';
+			const providerMode = params.providerMode || 'PRIMARY_AVAILABLE';
+			const commitMode = params.commitMode || 'SUCCESS';
+
+			if (providerMode === 'PRIMARY_UNAVAILABLE_FALLBACK') {
+				stages.push({
+					name: 'ai-provider',
+					status: 'FALLBACK',
+					detail: 'Simulated primary provider outage; deterministic fallback retained the same turn contract.',
+				});
+			} else if (providerMode === 'ALL_UNAVAILABLE_EMERGENCY') {
+				stages.push({
+					name: 'ai-provider',
+					status: 'FALLBACK',
+					detail: 'Simulated total provider outage; deterministic emergency floor retained the same turn contract.',
+				});
+			} else {
+				stages.push({
+					name: 'ai-provider',
+					status: 'PASS',
+					detail: 'Simulated primary provider available; harness remains external-AI free.',
+				});
+			}
 			if (mode === 'EMPTY') {
 				throw new Error('HARNESS_EMPTY_NARRATION');
 			}
@@ -166,8 +201,19 @@ export class TurnIntegrationHarness {
 				canonicalAdjudication: emptyCanonicalAdjudication,
 				verifiedCanonicalChanges: [],
 			});
+			const commitAttempted = true;
+			if (commitMode === 'FAILURE') {
+				stages.push({
+					name: 'state-commit',
+					status: 'FAIL',
+					detail: 'Simulated canonical commit failure; continuity/memory promotion is intentionally not entered.',
+				});
+				throw new Error('HARNESS_CANONICAL_COMMIT_FAILURE');
+			}
+
 			const committedAdjudication = NarrativeStateAdjudicator.commit(params.repository, stateAdjudication);
 			stages.push({ name: 'state-adjudication', status: committedAdjudication.allApproved ? 'PASS' : 'FALLBACK', detail: 'approved=' + committedAdjudication.approvedCount + ', committed=' + committedAdjudication.committedCount });
+			stages.push({ name: 'state-commit', status: 'PASS', detail: 'Canonical adjudication commit completed before continuity lifecycle.' });
 
 			const continuity = NarrativeContinuityEngine.recordTurn(params.repository, {
 				storyId: params.storyId,
@@ -204,6 +250,10 @@ export class TurnIntegrationHarness {
 				continuity,
 				nextSituation,
 				stages,
+				providerMode,
+				commitMode,
+				commitAttempted: true,
+				continuityRecorded: true,
 			};
 		} catch (error: any) {
 			stages.push({ name: 'failure', status: 'FAIL', detail: String(error?.message || error) });

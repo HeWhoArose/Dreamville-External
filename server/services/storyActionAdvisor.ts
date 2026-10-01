@@ -1208,9 +1208,9 @@ export class StoryActionAdvisor {
 
 		if (rumorFacts.length > 0 && visibleNpcNames.length > 0) {
 			addContextTip(
-				`Cross-check the rumor with ${visibleNpcNames[0]}`,
-				'You already know a rumor from your canonical memory. Ask a person who is actually present whether their account matches it.',
-				`I ask ${visibleNpcNames[0]} whether they have heard anything that confirms or contradicts the rumor I know.`,
+				`Ask ${visibleNpcNames[0]} about the lead`,
+				'You already know a rumor from your canonical memory. Ask a person who is actually present about the lead and compare their account with what you know.',
+				`I ask ${visibleNpcNames[0]} about the lead, checking whether their account confirms or contradicts the rumor I know.`,
 				'CROSS_CHECK_INFORMATION',
 			);
 		}

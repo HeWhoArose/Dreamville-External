@@ -1210,6 +1210,7 @@ export class WorkingContextEngine {
       storyId,
       player?.actorId || `player_actor_${storyId}`,
       npcPlanningSituation,
+      npcId,
     );
 
 

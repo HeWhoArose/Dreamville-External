@@ -1006,7 +1006,7 @@ export class StoryActionAdvisor {
 			...(sceneContext?.recentActions || []),
 		].filter(Boolean).map((value) => String(value).trim()).filter(Boolean);
 
-		const normalizedScene = normalize(sceneSources.join(' ') + ' ' + relevantEntityContext);
+		let normalizedScene = normalize(sceneSources.join(' '));
 		const locationLabel = sceneContext?.locationName || location?.name || 'the current area';
 		const player = this.repository.getPlayerLifecycle(storyId);
 		const playerLocationId = player?.locationId || location?.id || '';
@@ -1017,6 +1017,7 @@ export class StoryActionAdvisor {
 		} catch {
 			relevantEntityContext = '';
 		}
+		normalizedScene = normalize(sceneSources.join(' ') + ' ' + relevantEntityContext);
 		const livingWorld = this.repository.getLivingWorldSimulation(storyId);
 		const nearbyNpcs = livingWorld
 			.getAllNpcSchedules()

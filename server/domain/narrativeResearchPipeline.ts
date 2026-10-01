@@ -312,6 +312,21 @@ export class NarrativeResearchPipeline {
 			}, queryTokens);
 		}
 
+		if (packet.npcPlanningContext) {
+			const npc = packet.npcPlanningContext;
+			addCandidate(candidates, {
+				id: `research_npc_plan_${npc.actorId}`,
+				kind: 'ENTITY',
+				source: 'NarrativeContinuityEngine.npcPlanningContext',
+				sourceId: npc.actorId,
+				priority: blockPriority('ENTITY'),
+				reason: 'The player directly addressed this NPC; retrieve an actor-specific memory and knowledge slice rather than general world memory.',
+				expiration: 'TURN',
+				relevanceScore: 1,
+				content: truncate(JSON.stringify(npc), 2400),
+			}, queryTokens);
+		}
+
 		const entityCards = params.repository.getEntityCards(params.storyId);
 		for (const entity of entityCards) {
 			if (!explicitTargetIds.has(entity.id)) continue;

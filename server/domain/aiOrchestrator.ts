@@ -6626,7 +6626,11 @@ export class MultiModelOrchestrator {
       .trim()
       .replace(/[.*+?^$()|[\]\\]/g, '\\$&');
     const subjects = ['you'];
-    if (escapedActor) subjects.push(escapedActor);
+    if (escapedActor) {
+      subjects.push(escapedActor);
+      const actorFirstName = escapedActor.split(/\s+/)[0];
+      if (actorFirstName && actorFirstName !== escapedActor) subjects.push(actorFirstName);
+    }
     const speechVerbs = 'ask|asks|asked|say|says|said|speak|speaks|spoke|tell|tells|told|reply|replies|replied|answer|answers|answered|inquire|inquires|inquired|question|questions|questioned|consult|consults|consulted|shout|shouts|shouted|call out|calls out|called out';
     const protagonistSpeechPattern = new RegExp(
       '\\b(?:' + subjects.join('|') + ')\\s+(?:(?:then|directly|quietly|carefully|firmly)\\s+)?(?:' + speechVerbs + ')\\b',

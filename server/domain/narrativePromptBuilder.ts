@@ -64,9 +64,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	const styleInstruction = input.styleInstruction || defaultNarrationStyle();
 	const situationContext = input.situation ? CurrentSituationBuilder.toPromptContext(input.situation) : '[current situation unavailable]';
 	const intentContext = JSON.stringify(input.intent);
-	const researchContext = input.research?.promptContext || '[research unavailable; use current situation only and preserve uncertainty]';
 	const planContext = NarrativeDirector.toPromptContext(input.plan);
-	const workingContext = input.workingContext || '[no additional working context]';
 	const canonicalConstraints = [
 		'Canonical constraints:',
 		'- The current location and time in Current Situation are authoritative.',
@@ -83,7 +81,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		'Do not include markdown fences, commentary, analysis, implementation details, model names, or debug information.',
 	].join('\n');
 
-	const prompt = [
+	const compose = (researchContext: string, workingContext: string): string => [
 		section('GLOBAL NARRATION INSTRUCTIONS', globalInstruction),
 		section('NARRATIVE STYLE', styleInstruction),
 		section('CURRENT SITUATION', situationContext),
@@ -95,24 +93,34 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		section('OUTPUT CONTRACT', outputContract),
 	].join('\n\n');
 
-	const totalTokens = WorkingContextEngine.estimateTokens(prompt);
-	if (input.maxPromptTokens && totalTokens > input.maxPromptTokens) {
-		const boundedWorkingContext = WorkingContextEngine.estimateTokens(workingContext) > 0
-			? workingContext.slice(0, Math.max(500, input.maxPromptTokens * 4))
-			: workingContext;
-		const boundedPrompt = [
-			section('GLOBAL NARRATION INSTRUCTIONS', globalInstruction),
-			section('NARRATIVE STYLE', styleInstruction),
-			section('CURRENT SITUATION', situationContext),
-			section('PLAYER INTENT', intentContext),
-			section('NARRATIVE RESEARCH', researchContext),
-			section('NARRATIVE DIRECTOR PLAN', planContext),
-			section('SUPPORTING WORKING CONTEXT', boundedWorkingContext),
-			canonicalConstraints,
-			section('OUTPUT CONTRACT', outputContract),
-		].join('\n\n');
-		return { prompt: boundedPrompt, styleInstruction, totalTokens: WorkingContextEngine.estimateTokens(boundedPrompt) };
+	const initialResearch = input.research?.promptContext || '[research unavailable; use current situation only and preserve uncertainty]';
+	const initialWorking = input.workingContext || '[no additional working context]';
+	const maxPromptTokens = input.maxPromptTokens;
+	if (!maxPromptTokens) {
+		const prompt = compose(initialResearch, initialWorking);
+		return { prompt, styleInstruction, totalTokens: WorkingContextEngine.estimateTokens(prompt) };
 	}
+
+	let researchContext = initialResearch;
+	let workingContext = initialWorking;
+	let prompt = compose(researchContext, workingContext);
+	let totalTokens = WorkingContextEngine.estimateTokens(prompt);
+
+	// Preserve global/style/situation/intent/plan/constraints/output structure.
+	// Shed lower-value supporting context first, then research detail, until the prompt fits.
+	for (let pass = 0; pass < 8 && totalTokens > maxPromptTokens; pass += 1) {
+		const excessChars = Math.max(500, (totalTokens - maxPromptTokens) * 4);
+		if (workingContext.length > 900) {
+			workingContext = workingContext.slice(0, Math.max(500, workingContext.length - excessChars)).trimEnd();
+		} else if (researchContext.length > 1200) {
+			researchContext = researchContext.slice(0, Math.max(800, researchContext.length - excessChars)).trimEnd();
+		} else {
+			break;
+		}
+		prompt = compose(researchContext, workingContext);
+		totalTokens = WorkingContextEngine.estimateTokens(prompt);
+	}
+
 	return { prompt, styleInstruction, totalTokens };
 }
 

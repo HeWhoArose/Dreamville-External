@@ -92,9 +92,9 @@ function saveLedger(repository: WorldRepository, storyId: string, ledger: Canoni
 export class CanonicalCommitLedger {
   public static begin(repository: WorldRepository, command: CanonicalCommand, preStateSnapshot: CanonicalStateSnapshot, preStateHash: string, now: string): CanonicalCommitLedgerEntry {
     const existing = this.find(repository, command.storyId, command.commandId);
-    if (existing) return existing;
+    if (existing && existing.phase !== 'ABORTED') return existing;
     const entry: CanonicalCommitLedgerEntry = {
-      ledgerId: 'ledger_' + command.storyId + '_' + command.commandId,
+      ledgerId: existing?.ledgerId || ('ledger_' + command.storyId + '_' + command.commandId),
       storyId: command.storyId,
       commandId: command.commandId,
       phase: 'PREPARED',

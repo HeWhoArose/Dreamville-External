@@ -63,16 +63,13 @@ Committed turns can now emit an immutable objective narrative-event projection.
 
 Durable actor memories are labeled `SUBJECTIVE` and reference that objective event instead of using an arbitrary turn ID as their only provenance.
 
-### 7. Durable canonical commit recovery
+### 7. Canonical commit recovery
 
-`CanonicalCommitLedger` records command preparation and owner phases.
+`CanonicalCommitLedger` records command preparation and owner phases in a repository-local operational journal.
 
-Recovery is event-aware:
-- if the committed event exists and the canonical post-state hash matches, recovery completes the ledger as COMMITTED;
-- if a partial event exists but canonical state was not committed, recovery restores the pre-state and removes the orphan event;
-- terminal ledger entries discard their heavyweight pre-state snapshot while retaining audit metadata.
+Before the next command for a story executes, interrupted entries are restored from their repository-local pre-state checkpoint and marked `ABORTED`. The journal is deliberately excluded from `StoryRun.runtimeState`, so it cannot become a second persisted source of truth.
 
-Operational metadata is excluded from canonical replay hashes.
+Cross-restart replay remains anchored by persisted `CanonicalCommandEvent.replay` checkpoints and canonical idempotency. Operational metadata is excluded from canonical replay hashes.
 
 ### 8. Working Context transparency and pins
 

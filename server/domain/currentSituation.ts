@@ -31,7 +31,7 @@ export interface CurrentLocationContext {
 	}>;
 }
 
-export type EntityDistanceBand = 'SAME_LOCATION' | 'REFERRED';
+export type EntityDistanceBand = 'SAME_LOCATION' | 'NEAR' | 'ADJACENT' | 'CONTACT' | 'REFERRED';
 
 export interface NearbyEntityContext {
 	id: string;
@@ -268,13 +268,29 @@ function normalizeThread(raw: any, index: number): OpenThread | null {
 	};
 }
 
-function entityCardIsVisible(card: EntityCard, currentLocationId: string, playerAction: string, viewerActorId: string, repository: WorldRepository): { visible: boolean; explicitlyReferenced: boolean; distanceBand: EntityDistanceBand } {
+function entityCardIsVisible(
+  card: EntityCard,
+  currentLocationId: string,
+  playerAction: string,
+  viewerActorId: string,
+  repository: WorldRepository,
+  localSpatialState?: LocalSpatialState,
+): { visible: boolean; explicitlyReferenced: boolean; distanceBand: EntityDistanceBand } {
 	const text = playerAction.toLowerCase();
 	const names = [card.name, ...(card.identity?.aliases || [])]
 		.map((value) => normalizeText(value).toLowerCase())
 		.filter((value) => value.length >= 3);
 	const explicitlyReferenced = names.some((name) => text.includes(name));
 	const sameLocation = card.worldState?.locationId === currentLocationId;
+	const localFocus = localSpatialState?.focusEntityId === card.id;
+	const localDistanceBand: EntityDistanceBand = localFocus
+		? localSpatialState?.proximityBand || 'SAME_AREA'
+		: 'SAME_AREA';
+	const projectedLocalBand: EntityDistanceBand =
+		localFocus && localDistanceBand === 'CONTACT' ? 'CONTACT' :
+		localFocus && localDistanceBand === 'ADJACENT' ? 'ADJACENT' :
+		localFocus && localDistanceBand === 'NEAR' ? 'NEAR' :
+		'SAME_LOCATION';
 	const lifecycleStatus = normalizeText(card.lifecycle?.status).toUpperCase();
 	const hidden = Boolean(
 		card.metadata?.hidden === true ||
@@ -285,7 +301,7 @@ function entityCardIsVisible(card: EntityCard, currentLocationId: string, player
 	if (card.isTemplate || lifecycleStatus === 'ARCHIVED' || lifecycleStatus === 'TEMPLATE') {
 		return { visible: false, explicitlyReferenced, distanceBand: sameLocation ? 'SAME_LOCATION' : 'REFERRED' };
 	}
-	if (sameLocation) return { visible: true, explicitlyReferenced, distanceBand: 'SAME_LOCATION' };
+	if (sameLocation) return { visible: true, explicitlyReferenced, distanceBand: projectedLocalBand };
 	if (explicitlyReferenced && repository.isEntityEpistemicallyKnown(
 		card.storyId,
 		viewerActorId,
@@ -318,6 +334,7 @@ function projectLifecycleEntity(
 	state: any,
 	currentLocationId: string,
 	explicitlyReferenced: boolean,
+	localSpatialState?: LocalSpatialState,
 ): NearbyEntityContext {
 	return {
 		id: String(state.actorId),
@@ -327,7 +344,14 @@ function projectLifecycleEntity(
 		presence: state.isDead ? 'absent' : 'present',
 		isAlive: !state.isDead,
 		currentActivity: state.currentActivity,
-		distanceBand: state.locationId === currentLocationId ? 'SAME_LOCATION' : 'REFERRED',
+		distanceBand: state.locationId === currentLocationId
+			? (localSpatialState?.focusEntityId === state.actorId
+				? localSpatialState.proximityBand === 'CONTACT' ? 'CONTACT'
+					: localSpatialState.proximityBand === 'ADJACENT' ? 'ADJACENT'
+					: localSpatialState.proximityBand === 'NEAR' ? 'NEAR'
+					: 'SAME_LOCATION'
+				: 'SAME_LOCATION')
+			: 'REFERRED',
 		importance: state.locationId === currentLocationId ? 1 : explicitlyReferenced ? 0.9 : 0.4,
 		explicitlyReferenced,
 		visibleToPlayer: true,
@@ -580,12 +604,19 @@ export class CurrentSituationBuilder {
 			const explicit = Boolean(actionText) && normalizeText(actionText).toLowerCase().includes(normalizeText(npc.name).toLowerCase());
 			if (npc.locationId !== safeLocation.id && !explicit) continue;
 			if (npc.isDead) continue;
-			nearbyEntities.push(projectLifecycleEntity(npc, safeLocation.id, explicit));
+			nearbyEntities.push(projectLifecycleEntity(npc, safeLocation.id, explicit, player?.localSpatialState));
 		}
 
 		for (const card of repository.getEntityCards(params.storyId)) {
 			if (nearbyEntities.some((entity) => entity.id === card.id)) continue;
-			const visibility = entityCardIsVisible(card, safeLocation.id, actionText, viewerActorId, repository);
+			const visibility = entityCardIsVisible(
+				card,
+				safeLocation.id,
+				actionText,
+				viewerActorId,
+				repository,
+				player?.localSpatialState,
+			);
 			if (!visibility.visible) continue;
 			const projected = projectEntityCard(card, visibility.explicitlyReferenced, visibility.distanceBand);
 			if (projected.presence === 'absent' || !projected.isAlive) continue;
@@ -593,7 +624,16 @@ export class CurrentSituationBuilder {
 		}
 
 		nearbyEntities.sort((a, b) => {
-			if (a.distanceBand !== b.distanceBand) return a.distanceBand === 'SAME_LOCATION' ? -1 : 1;
+			if (a.distanceBand !== b.distanceBand) {
+				const distanceRank: Record<EntityDistanceBand, number> = {
+					CONTACT: 0,
+					ADJACENT: 1,
+					NEAR: 2,
+					SAME_LOCATION: 3,
+					REFERRED: 4,
+				};
+				return distanceRank[a.distanceBand] - distanceRank[b.distanceBand];
+			}
 			if (a.explicitlyReferenced !== b.explicitlyReferenced) return a.explicitlyReferenced ? -1 : 1;
 			if (a.importance !== b.importance) return b.importance - a.importance;
 			return a.id.localeCompare(b.id);
@@ -702,7 +742,11 @@ export class CurrentSituationBuilder {
 						: 'Destination is inaccessible.',
 			})),
 			...limitedNearbyEntities
-				.filter((entity) => entity.kind !== 'PLAYER' && entity.presence === 'present' && entity.distanceBand === 'SAME_LOCATION')
+				.filter((entity) =>
+					entity.kind !== 'PLAYER' &&
+					entity.presence === 'present' &&
+					entity.distanceBand !== 'REFERRED'
+				)
 				.map((entity) => ({
 					id: `talk:${entity.id}`,
 					type: 'TALK' as const,

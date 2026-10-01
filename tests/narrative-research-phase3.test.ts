@@ -202,3 +202,62 @@ test('Phase 3 research failure falls back to bounded Current Situation context',
 		(NarrativeContinuityEngine as any).research = original;
 	}
 });
+
+
+test('Phase 3 excludes an unrelated memory even when its text contains generic context words', () => {
+	const storyId = 'phase3_memory_relevance';
+	const { repository, player } = setupStory(storyId);
+	const situation = CurrentSituationBuilder.build({
+		storyId,
+		playerAction: 'I listen for the fissure rumors.',
+		viewerActorId: player.actorId,
+		worldRepo: repository,
+	});
+	const original = NarrativeContinuityEngine.research;
+	try {
+		(NarrativeContinuityEngine as any).research = () => ({
+			storyId,
+			query: 'I listen for the fissure rumors.',
+			knowledgeFacts: [],
+			memories: [{
+				id: 'memory_unrelated_trade',
+				memoryClass: 'EPISODIC',
+				content: 'The current trade caravan schedule is unchanged three valleys away.',
+			}],
+			storyThreads: [],
+			relationships: [],
+			plot: {
+				storyId,
+				version: 1,
+				currentArc: 'OPENING',
+				summary: '',
+				beats: [],
+				openThreads: [],
+				updatedAt: situation.worldTime,
+			},
+			plan: {
+				storyId,
+				version: 1,
+				objective: 'Continue from current situation.',
+				nextBeats: [],
+				priorityThreads: [],
+				contingencies: [],
+				updatedAt: situation.worldTime,
+			},
+			usageGuidance: {},
+			epistemicallyBoundTo: player.actorId,
+			currentSituation: situation,
+		});
+		const result = NarrativeResearchPipeline.research({
+			repository,
+			storyId,
+			currentSituation: situation,
+			playerAction: 'I listen for the fissure rumors.',
+			viewerActorId: player.actorId,
+		});
+		assert.equal(result.blocks.some((block) => /trade caravan schedule/i.test(block.content)), false);
+		assert.ok(result.excluded.some((item) => /trade caravan schedule/i.test(item.label)));
+	} finally {
+		(NarrativeContinuityEngine as any).research = original;
+	}
+});

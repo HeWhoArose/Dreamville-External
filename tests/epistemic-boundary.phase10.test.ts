@@ -88,3 +88,16 @@ test('Phase 10 prevents unauthorized world truth from reaching the narration pro
 	}).prompt;
 	assert.doesNotMatch(prompt, /sealed royal letter/);
 });
+
+
+test('Phase 10 treats canonical authorization as distinct from current-turn retrieval relevance', () => {
+	const scene: any = situation();
+	scene.playerKnowledge.knownFacts = [];
+	scene.playerKnowledge.authorizedFactIds = ['secret'];
+	const result = EpistemicBoundaryEnforcer.sanitizeContext(
+		'The guard hides the sealed royal letter.',
+		scene,
+	);
+	assert.match(result.text, /sealed royal letter/);
+	assert.equal(result.report.playerSafe, true);
+});

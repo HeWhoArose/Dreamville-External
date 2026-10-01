@@ -19,9 +19,13 @@ interface AudioSettingsModalProps {
 }
 
 export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({ isOpen, onClose }) => {
-  const { settings, updateSettings, isMuted, toggleMute, playSfx, triggerHaptic } = useAudioHaptic();
+  const { settings, soundscape, updateSettings, isMuted, toggleMute, playSfx, triggerHaptic } = useAudioHaptic();
 
   if (!isOpen) return null;
+
+  const currentTrackName = soundscape?.environmentTrack
+    ? soundscape.environmentTrack.replace(/_/g, ' ').toUpperCase()
+    : 'WIND PLAINS (PROCEDURAL BREEZE)';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/80 backdrop-blur-sm animate-in fade-in duration-200">
@@ -153,13 +157,23 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({ isOpen, 
               <span>⚔️</span> SFX & World Ambience
             </h3>
             <div className="bg-stone-950/40 rounded-xl p-4 border border-stone-800/60 space-y-4">
+              {/* Sound Effects (SFX) */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-stone-300 font-medium">Sound Effects (SFX)</span>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settings.sfxEnabled}
+                      onChange={(e) => updateSettings({ sfxEnabled: e.target.checked })}
+                      className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
+                    />
+                    <span className="text-stone-300 font-medium">Sound Effects (SFX)</span>
+                  </label>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => playSfx('combat.stab', 'HIGH', 1.0)}
-                      className="px-2 py-0.5 rounded bg-stone-800 hover:bg-stone-750 text-amber-400 border border-stone-700 text-[10px] font-mono flex items-center gap-1"
+                      disabled={!settings.sfxEnabled || isMuted}
+                      className="px-2 py-0.5 rounded bg-stone-800 hover:bg-stone-750 text-amber-400 border border-stone-700 text-[10px] font-mono flex items-center gap-1 disabled:opacity-40"
                     >
                       <Play className="w-2.5 h-2.5" /> Test SFX
                     </button>
@@ -174,15 +188,30 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({ isOpen, 
                   max="1"
                   step="0.05"
                   value={settings.sfxVolume}
+                  disabled={!settings.sfxEnabled || isMuted}
                   onChange={(e) => updateSettings({ sfxVolume: parseFloat(e.target.value) })}
-                  className="w-full accent-amber-500 cursor-pointer"
+                  className="w-full accent-amber-500 cursor-pointer disabled:opacity-40"
                 />
               </div>
 
-              <div className="space-y-2 pt-2 border-t border-stone-800/60">
+              {/* Ambient Soundscape */}
+              <div className="space-y-2 pt-3 border-t border-stone-800/60">
                 <div className="flex items-center justify-between">
-                  <span className="text-stone-300 font-medium">Ambient Soundscape</span>
-                  <span className="font-mono text-stone-400">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settings.ambienceEnabled}
+                      onChange={(e) => updateSettings({ ambienceEnabled: e.target.checked })}
+                      className="w-4 h-4 accent-amber-500 rounded cursor-pointer"
+                    />
+                    <div>
+                      <span className="text-stone-300 font-medium block">Ambient Soundscape</span>
+                      <span className="text-[10px] text-stone-400 font-mono">
+                        {settings.ambienceEnabled ? currentTrackName : 'AMBIENCE DISABLED'}
+                      </span>
+                    </div>
+                  </label>
+                  <span className="font-mono text-stone-400 w-8 text-right">
                     {Math.round(settings.ambienceVolume * 100)}%
                   </span>
                 </div>
@@ -192,8 +221,9 @@ export const AudioSettingsModal: React.FC<AudioSettingsModalProps> = ({ isOpen, 
                   max="1"
                   step="0.05"
                   value={settings.ambienceVolume}
+                  disabled={!settings.ambienceEnabled || isMuted}
                   onChange={(e) => updateSettings({ ambienceVolume: parseFloat(e.target.value) })}
-                  className="w-full accent-amber-500 cursor-pointer"
+                  className="w-full accent-amber-500 cursor-pointer disabled:opacity-40"
                 />
               </div>
             </div>

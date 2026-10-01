@@ -146,7 +146,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       setActiveTab(initialTab);
     }
   }, [initialTab]);
-  const { settings, updateSettings, isMuted, toggleMute } = useAudioHaptic();
+  const { settings, updateSettings, isMuted, toggleMute, playSfx, soundscape } = useAudioHaptic();
 
   // Provider Key Form State
   const [editingProviderId, setEditingProviderId] = useState<string | null>(null);
@@ -992,10 +992,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-[var(--db-border-subtle)]">
               <div>
                 <h3 className="text-sm font-serif font-bold text-[var(--db-text-primary)] flex items-center gap-2">
-                  <span>🔊</span> Global Audio & TTS Settings
+                  <span>🔊</span> Global Audio, Ambience & Speech
                 </h3>
                 <p className="text-xs text-[var(--db-text-muted)] mt-0.5">
-                  Master volume, soundscape ambience, and speech audio playback defaults.
+                  Master volume, true procedural atmospheric soundscapes, sound effects, and character speech.
                 </p>
               </div>
               <Button variant="subtle" size="sm" onClick={toggleMute}>
@@ -1023,6 +1023,129 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               />
             </div>
 
+            {/* Ambient Soundscape Section */}
+            <div className="space-y-4 pt-3 border-t border-[var(--db-border-subtle)]">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-semibold text-[var(--db-text-primary)] uppercase tracking-wider flex items-center gap-2">
+                    <span>🍃</span> Ambient Soundscape & Environmental Audio
+                  </h4>
+                  <p className="text-[11px] text-[var(--db-text-muted)] mt-0.5">
+                    Procedural multi-layer environmental acoustics (breezes, crickets, hearths, subterranean caverns) with no harsh drone loops.
+                  </p>
+                </div>
+                <Badge variant={settings.ambienceEnabled && !isMuted ? 'green' : 'gray'} size="sm">
+                  {settings.ambienceEnabled && !isMuted
+                    ? soundscape?.environmentTrack
+                      ? soundscape.environmentTrack.replace(/_/g, ' ').toUpperCase()
+                      : 'ACTIVE (PROCEDURAL)'
+                    : 'MUTED'}
+                </Badge>
+              </div>
+
+              <div className="p-3 rounded-[var(--db-radius-md)] bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settings.ambienceEnabled}
+                      disabled={isMuted}
+                      onChange={(e) => updateSettings({ ambienceEnabled: e.target.checked })}
+                      className="w-4 h-4 accent-[var(--db-purple-500)] rounded cursor-pointer disabled:opacity-40"
+                    />
+                    <span className="text-xs font-medium text-[var(--db-text-primary)]">
+                      Enable Atmospheric Soundscape
+                    </span>
+                  </label>
+                  <span className="font-mono text-xs text-[var(--db-gold-400)]">
+                    {Math.round(settings.ambienceVolume * 100)}%
+                  </span>
+                </div>
+
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={settings.ambienceVolume}
+                  disabled={!settings.ambienceEnabled || isMuted}
+                  onChange={(e) => updateSettings({ ambienceVolume: parseFloat(e.target.value) })}
+                  className="w-full accent-[var(--db-purple-500)] cursor-pointer disabled:opacity-40"
+                />
+              </div>
+            </div>
+
+            {/* Sound Effects (SFX) Section */}
+            <div className="space-y-4 pt-3 border-t border-[var(--db-border-subtle)]">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-semibold text-[var(--db-text-primary)] uppercase tracking-wider flex items-center gap-2">
+                    <span>⚔️</span> Sound Effects (SFX)
+                  </h4>
+                  <p className="text-[11px] text-[var(--db-text-muted)] mt-0.5">
+                    Audio cues for combat strikes, healing chimes, dice rolls, and UI interactions.
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => playSfx('combat.stab', 'HIGH', 1.0)}
+                    disabled={!settings.sfxEnabled || isMuted}
+                    className="px-2 py-0.5 text-[10px] rounded bg-[var(--db-bg-canvas)] hover:bg-[var(--db-bg-card)] text-[var(--db-text-primary)] border border-[var(--db-border-default)] disabled:opacity-40 cursor-pointer"
+                  >
+                    🗡️ Blade
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => playSfx('heal.holy', 'HIGH', 1.0)}
+                    disabled={!settings.sfxEnabled || isMuted}
+                    className="px-2 py-0.5 text-[10px] rounded bg-[var(--db-bg-canvas)] hover:bg-[var(--db-bg-card)] text-[var(--db-text-primary)] border border-[var(--db-border-default)] disabled:opacity-40 cursor-pointer"
+                  >
+                    ✨ Chime
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => playSfx('dice.roll', 'HIGH', 1.0)}
+                    disabled={!settings.sfxEnabled || isMuted}
+                    className="px-2 py-0.5 text-[10px] rounded bg-[var(--db-bg-canvas)] hover:bg-[var(--db-bg-card)] text-[var(--db-text-primary)] border border-[var(--db-border-default)] disabled:opacity-40 cursor-pointer"
+                  >
+                    🎲 Dice
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-[var(--db-radius-md)] bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settings.sfxEnabled}
+                      disabled={isMuted}
+                      onChange={(e) => updateSettings({ sfxEnabled: e.target.checked })}
+                      className="w-4 h-4 accent-[var(--db-purple-500)] rounded cursor-pointer disabled:opacity-40"
+                    />
+                    <span className="text-xs font-medium text-[var(--db-text-primary)]">
+                      Enable Sound Effects
+                    </span>
+                  </label>
+                  <span className="font-mono text-xs text-[var(--db-gold-400)]">
+                    {Math.round(settings.sfxVolume * 100)}%
+                  </span>
+                </div>
+
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={settings.sfxVolume}
+                  disabled={!settings.sfxEnabled || isMuted}
+                  onChange={(e) => updateSettings({ sfxVolume: parseFloat(e.target.value) })}
+                  className="w-full accent-[var(--db-purple-500)] cursor-pointer disabled:opacity-40"
+                />
+              </div>
+            </div>
+
             {/* Voice / TTS Configuration */}
             <div className="space-y-4 pt-3 border-t border-[var(--db-border-subtle)]">
               <h4 className="text-xs font-semibold text-[var(--db-text-primary)] uppercase tracking-wider">
@@ -1032,24 +1155,38 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-semibold text-[var(--db-text-secondary)] block mb-1">
-                    Default TTS Provider
+                    Narration Mode
                   </label>
-                  <select className="w-full px-3 py-2 rounded-[var(--db-radius-md)] bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] text-xs text-[var(--db-text-primary)]">
-                    <option>Google Cloud TTS (Neural2)</option>
-                    <option>ElevenLabs AI Voice</option>
-                    <option>Browser Web Speech Native</option>
+                  <select
+                    value={settings.narration}
+                    onChange={(e) => updateSettings({ narration: e.target.value as any })}
+                    className="w-full px-3 py-2 rounded-[var(--db-radius-md)] bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] text-xs text-[var(--db-text-primary)]"
+                  >
+                    <option value="auto">Auto (Full Narration & Dialogue)</option>
+                    <option value="dialogue-only">Dialogue Only (Spoken dialogue only)</option>
+                    <option value="off">Off (Manual read-only)</option>
                   </select>
                 </div>
 
                 <div>
                   <label className="text-xs font-semibold text-[var(--db-text-secondary)] block mb-1">
-                    Speech Autoplay Policy
+                    Speech Volume
                   </label>
-                  <select className="w-full px-3 py-2 rounded-[var(--db-radius-md)] bg-[var(--db-bg-canvas)] border border-[var(--db-border-default)] text-xs text-[var(--db-text-primary)]">
-                    <option>Dialogue Only (Auto-play character speech)</option>
-                    <option>Full Narration + Dialogue</option>
-                    <option>Manual Click to Listen Only</option>
-                  </select>
+                  <div className="flex items-center gap-3 pt-1">
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value={settings.voiceVolume}
+                      disabled={isMuted}
+                      onChange={(e) => updateSettings({ voiceVolume: parseFloat(e.target.value) })}
+                      className="w-full accent-[var(--db-purple-500)] cursor-pointer disabled:opacity-40"
+                    />
+                    <span className="font-mono text-xs text-[var(--db-gold-400)] w-10 text-right">
+                      {Math.round(settings.voiceVolume * 100)}%
+                    </span>
+                  </div>
                 </div>
               </div>
 

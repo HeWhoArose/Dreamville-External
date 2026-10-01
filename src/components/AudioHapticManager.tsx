@@ -32,6 +32,11 @@ export interface QueuedAudioEvent {
 
 interface AudioHapticContextValue {
   settings: AudioSettings;
+  soundscape?: {
+    environmentTrack: string | null;
+    musicStem: string | null;
+    intensity: number;
+  } | null;
   isMuted: boolean;
   toggleMute: () => void;
   updateSettings: (newSettings: Partial<AudioSettings>) => Promise<void>;
@@ -109,22 +114,60 @@ export const AudioHapticProvider: React.FC<{ children: React.ReactNode; storyId?
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const masterGainRef = useRef<GainNode | null>(null);
-  const ambienceOscRef = useRef<OscillatorNode | null>(null);
   const ambienceGainRef = useRef<GainNode | null>(null);
+  const ambientNodesRef = useRef<{ sources: (AudioNode & { stop?: () => void })[]; timers: NodeJS.Timeout[] }>({
+    sources: [],
+    timers: [],
+  });
   const activeAudioElRef = useRef<HTMLAudioElement | null>(null);
   const audioQueueRef = useRef<QueuedAudioEvent[]>([]);
 
+  // Helper: create smooth looping noise buffer (Pink/Brown noise)
+  const createNoiseBuffer = useCallback((ctx: AudioContext, type: 'pink' | 'brown' = 'brown', duration = 4.0): AudioBuffer => {
+    const bufferSize = Math.floor(ctx.sampleRate * duration);
+    const buffer = ctx.createBuffer(2, bufferSize, ctx.sampleRate);
+    for (let channel = 0; channel < 2; channel++) {
+      const data = buffer.getChannelData(channel);
+      let lastOut = 0.0;
+      let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+      for (let i = 0; i < bufferSize; i++) {
+        const white = Math.random() * 2 - 1;
+        if (type === 'pink') {
+          b0 = 0.99886 * b0 + white * 0.0555179;
+          b1 = 0.99332 * b1 + white * 0.0750759;
+          b2 = 0.96900 * b2 + white * 0.1538520;
+          b3 = 0.86650 * b3 + white * 0.3104856;
+          b4 = 0.55000 * b4 + white * 0.5329522;
+          b5 = -0.7616 * b5 - white * 0.0168980;
+          data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.08;
+          b6 = white * 0.115926;
+        } else {
+          // Brown noise (integrated white noise with gentle decay)
+          lastOut = (lastOut + 0.02 * white) / 1.02;
+          data[i] = lastOut * 1.5;
+        }
+      }
+    }
+    return buffer;
+  }, []);
+
   // Stop and disconnect any active ambient sound generator safely
   const stopAmbientGenerator = useCallback(() => {
-    if (ambienceOscRef.current) {
+    ambientNodesRef.current.timers.forEach((t) => clearTimeout(t));
+    ambientNodesRef.current.timers = [];
+
+    ambientNodesRef.current.sources.forEach((node) => {
       try {
-        ambienceOscRef.current.stop();
-        ambienceOscRef.current.disconnect();
+        if (typeof node.stop === 'function') {
+          node.stop();
+        }
+        node.disconnect();
       } catch {
         // Safe disconnect fallback
       }
-      ambienceOscRef.current = null;
-    }
+    });
+    ambientNodesRef.current.sources = [];
+
     if (ambienceGainRef.current) {
       try {
         ambienceGainRef.current.disconnect();
@@ -228,47 +271,211 @@ export const AudioHapticProvider: React.FC<{ children: React.ReactNode; storyId?
     };
   }, [stopAmbientGenerator]);
 
-  // Controlled Ambient Generator: only runs if explicitly requested & enabled
+  // Controlled Procedural Ambient Soundscape Engine
   useEffect(() => {
-    // If disabled, muted, or zero volume -> immediately stop and disconnect oscillator
+    // If disabled, muted, or zero volume -> immediately stop and clean up
     if (!settings.ambienceEnabled || settings.masterMuted || settings.ambienceVolume <= 0) {
       stopAmbientGenerator();
       return;
     }
 
-    // Only start ambient generator if soundscape has a valid active environment track
-    if (!soundscape?.environmentTrack) {
-      stopAmbientGenerator();
-      return;
-    }
+    const envTrack = (soundscape?.environmentTrack || 'wind_plains').toLowerCase();
 
     try {
       const ctx = getAudioContext();
       if (!ctx || !masterGainRef.current) return;
 
-      if (!ambienceOscRef.current) {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = soundscape.environmentTrack.includes('forest') ? 220 : 110;
-        gain.gain.value = settings.ambienceVolume * 0.03; // Gentle whisper level
-        osc.connect(gain);
-        gain.connect(masterGainRef.current);
-        osc.start();
+      // Stop previous instance before spawning a fresh soundscape
+      stopAmbientGenerator();
 
-        ambienceOscRef.current = osc;
-        ambienceGainRef.current = gain;
-      } else if (ambienceGainRef.current) {
-        ambienceGainRef.current.gain.setTargetAtTime(
-          settings.ambienceVolume * 0.03,
-          ctx.currentTime,
-          0.1
-        );
+      const mainAmbienceGain = ctx.createGain();
+      const targetVolume = Math.max(0, Math.min(1, settings.ambienceVolume)) * 0.12;
+      mainAmbienceGain.gain.setValueAtTime(0.001, ctx.currentTime);
+      mainAmbienceGain.gain.exponentialRampToValueAtTime(targetVolume, ctx.currentTime + 0.6);
+      mainAmbienceGain.connect(masterGainRef.current);
+      ambienceGainRef.current = mainAmbienceGain;
+
+      const activeNodes: (AudioNode & { stop?: () => void })[] = [];
+      const timers: NodeJS.Timeout[] = [];
+
+      if (envTrack.includes('forest') || envTrack.includes('crickets') || envTrack.includes('night') || envTrack.includes('nature')) {
+        // True Forest / Night Nature Soundscape
+        // 1. Soft breeze rustle through canopy (pink noise through high-pass & modulated band-pass)
+        const noiseBuf = createNoiseBuffer(ctx, 'pink', 5.0);
+        const noiseSource = ctx.createBufferSource();
+        noiseSource.buffer = noiseBuf;
+        noiseSource.loop = true;
+
+        const leafFilter = ctx.createBiquadFilter();
+        leafFilter.type = 'bandpass';
+        leafFilter.frequency.value = 680;
+        leafFilter.Q.value = 1.2;
+
+        const leafGain = ctx.createGain();
+        leafGain.gain.value = 0.45;
+
+        noiseSource.connect(leafFilter);
+        leafFilter.connect(leafGain);
+        leafGain.connect(mainAmbienceGain);
+        noiseSource.start();
+        activeNodes.push(noiseSource, leafFilter, leafGain);
+
+        // 2. Organic Cricket / Night Chorus Micro-Chirps
+        const spawnCricketChirp = () => {
+          if (!ambienceGainRef.current || !audioContextRef.current || audioContextRef.current.state !== 'running') return;
+          try {
+            const now = ctx.currentTime;
+            const osc = ctx.createOscillator();
+            const chirpGain = ctx.createGain();
+            osc.type = 'sine';
+            const baseFreq = 4200 + Math.random() * 800;
+            osc.frequency.setValueAtTime(baseFreq, now);
+
+            // Double micro-pulse
+            chirpGain.gain.setValueAtTime(0, now);
+            chirpGain.gain.linearRampToValueAtTime(0.08, now + 0.02);
+            chirpGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+            chirpGain.gain.linearRampToValueAtTime(0.07, now + 0.08);
+            chirpGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+
+            osc.connect(chirpGain);
+            chirpGain.connect(mainAmbienceGain);
+            osc.start(now);
+            osc.stop(now + 0.16);
+
+            setTimeout(() => {
+              try { osc.disconnect(); chirpGain.disconnect(); } catch {}
+            }, 300);
+          } catch {}
+
+          // Schedule next chirp randomly between 1.2s and 4.0s
+          const nextDelay = 1200 + Math.random() * 2800;
+          const t = setTimeout(spawnCricketChirp, nextDelay);
+          timers.push(t);
+        };
+
+        const initialTimer = setTimeout(spawnCricketChirp, 800);
+        timers.push(initialTimer);
+      } else if (envTrack.includes('indoor') || envTrack.includes('scriptorium') || envTrack.includes('orrery') || envTrack.includes('hearth') || envTrack.includes('tavern')) {
+        // True Cozy Indoor / Library / Hearth Soundscape
+        // 1. Warm room acoustic air (Brown noise with warm low-pass filter)
+        const brownBuf = createNoiseBuffer(ctx, 'brown', 4.0);
+        const airSource = ctx.createBufferSource();
+        airSource.buffer = brownBuf;
+        airSource.loop = true;
+
+        const roomFilter = ctx.createBiquadFilter();
+        roomFilter.type = 'lowpass';
+        roomFilter.frequency.value = 220;
+
+        const airGain = ctx.createGain();
+        airGain.gain.value = 0.6;
+
+        airSource.connect(roomFilter);
+        roomFilter.connect(airGain);
+        airGain.connect(mainAmbienceGain);
+        airSource.start();
+        activeNodes.push(airSource, roomFilter, airGain);
+
+        // 2. Soft hearth ember crackle simulator
+        const spawnHearthCrackle = () => {
+          if (!ambienceGainRef.current || !audioContextRef.current || audioContextRef.current.state !== 'running') return;
+          try {
+            const now = ctx.currentTime;
+            const popBuf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.03), ctx.sampleRate);
+            const popData = popBuf.getChannelData(0);
+            for (let i = 0; i < popData.length; i++) {
+              popData[i] = (Math.random() * 2 - 1) * Math.exp(-i / (popData.length * 0.2));
+            }
+            const popSource = ctx.createBufferSource();
+            popSource.buffer = popBuf;
+
+            const popFilter = ctx.createBiquadFilter();
+            popFilter.type = 'bandpass';
+            popFilter.frequency.value = 1400 + Math.random() * 1200;
+            popFilter.Q.value = 3.0;
+
+            const popGain = ctx.createGain();
+            popGain.gain.value = 0.12;
+
+            popSource.connect(popFilter);
+            popFilter.connect(popGain);
+            popGain.connect(mainAmbienceGain);
+            popSource.start(now);
+
+            setTimeout(() => {
+              try { popSource.disconnect(); popFilter.disconnect(); popGain.disconnect(); } catch {}
+            }, 100);
+          } catch {}
+
+          const nextDelay = 300 + Math.random() * 1200;
+          const t = setTimeout(spawnHearthCrackle, nextDelay);
+          timers.push(t);
+        };
+
+        const hearthTimer = setTimeout(spawnHearthCrackle, 500);
+        timers.push(hearthTimer);
+      } else if (envTrack.includes('dungeon') || envTrack.includes('cavern') || envTrack.includes('crypt') || envTrack.includes('ruins')) {
+        // Deep Subterranean / Cavern Atmosphere
+        const brownBuf = createNoiseBuffer(ctx, 'brown', 6.0);
+        const caveSource = ctx.createBufferSource();
+        caveSource.buffer = brownBuf;
+        caveSource.loop = true;
+
+        const caveFilter = ctx.createBiquadFilter();
+        caveFilter.type = 'lowpass';
+        caveFilter.frequency.value = 140;
+
+        const caveGain = ctx.createGain();
+        caveGain.gain.value = 0.7;
+
+        caveSource.connect(caveFilter);
+        caveFilter.connect(caveGain);
+        caveGain.connect(mainAmbienceGain);
+        caveSource.start();
+        activeNodes.push(caveSource, caveFilter, caveGain);
+      } else {
+        // Default Open Plains / Mountain Wind Soundscape
+        // Realistic dynamic wind gusts via filtered noise and smooth LFO sweep
+        const brownBuf = createNoiseBuffer(ctx, 'brown', 6.0);
+        const windSource = ctx.createBufferSource();
+        windSource.buffer = brownBuf;
+        windSource.loop = true;
+
+        const windFilter = ctx.createBiquadFilter();
+        windFilter.type = 'bandpass';
+        windFilter.frequency.value = 340;
+        windFilter.Q.value = 1.8;
+
+        // Gentle 0.18 Hz LFO to modulate the wind gusts naturally
+        const lfo = ctx.createOscillator();
+        const lfoGain = ctx.createGain();
+        lfo.type = 'sine';
+        lfo.frequency.value = 0.18;
+        lfoGain.gain.value = 180; // Sweeps filter between 160Hz and 520Hz
+        lfo.connect(lfoGain);
+        lfoGain.connect(windFilter.frequency);
+        lfo.start();
+
+        const windGain = ctx.createGain();
+        windGain.gain.value = 0.55;
+
+        windSource.connect(windFilter);
+        windFilter.connect(windGain);
+        windGain.connect(mainAmbienceGain);
+        windSource.start();
+
+        activeNodes.push(windSource, windFilter, lfo, lfoGain, windGain);
       }
+
+      ambientNodesRef.current = {
+        sources: activeNodes,
+        timers,
+      };
     } catch {
-      // Audio context might need user gesture
+      // AudioContext safe catch
     }
-  }, [settings.ambienceEnabled, settings.masterMuted, settings.ambienceVolume, soundscape, getAudioContext, stopAmbientGenerator]);
+  }, [settings.ambienceEnabled, settings.masterMuted, settings.ambienceVolume, soundscape, getAudioContext, stopAmbientGenerator, createNoiseBuffer]);
 
   const updateSettings = async (newSettings: Partial<AudioSettings>) => {
     const updated = { ...settings, ...newSettings };
@@ -557,6 +764,7 @@ export const AudioHapticProvider: React.FC<{ children: React.ReactNode; storyId?
     <AudioHapticContext.Provider
       value={{
         settings,
+        soundscape,
         isMuted: settings.masterMuted,
         toggleMute,
         updateSettings,

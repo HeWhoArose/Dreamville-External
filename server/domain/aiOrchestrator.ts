@@ -7962,6 +7962,9 @@ export class MultiModelOrchestrator {
             };
           } catch (err: any) {
             lastError = err?.message || String(err);
+            if (typeof process !== 'undefined' && process.env.NODE_ENV === 'test') {
+              console.error('AUDIT_DEBUG_PROVIDER_FAILURE', currentCandidate.providerId, currentCandidate.modelId, lastError);
+            }
             this.recordProviderFailure(currentCandidate, task, err, attemptStartedAt);
 
             // Track consecutive failures & circuit breaker

@@ -576,8 +576,8 @@ Every AI call must have:
 - [x] Prompt connected
 - [x] Review connected
 - [x] Tests added
-- [ ] npm test green
-- [ ] lint green
-- [ ] build green
+- [x] npm test green
+- [x] lint green
+- [x] build green
 
-N2 must not begin until all N1 completion gates are green. CI status must be checked on the N1 branch/PR before N1 is declared complete.
+N1 verification completed green on PR #27: lint, full npm test, production build, and release-contract gate all passed on the final N1 commit. N2 must not begin until the N1 branch is intentionally accepted/merged.

@@ -183,6 +183,7 @@ export class WorkingContextEngine {
     storyId: string;
     playerAction: string;
     viewerActorId?: string;
+    currentAction?: CurrentSituation['currentAction'];
     worldRepo?: WorldRepository;
     hardTokenBudget?: number;
   }): {
@@ -380,6 +381,7 @@ export class WorkingContextEngine {
     const currentSituation = CurrentSituationBuilder.build({
       storyId,
       playerAction: params.playerAction,
+      currentAction: params.currentAction,
       viewerActorId: params.viewerActorId,
       worldRepo: repo,
     });

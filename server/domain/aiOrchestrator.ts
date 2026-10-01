@@ -6666,6 +6666,7 @@ export class MultiModelOrchestrator {
     adapter: IProviderAdapter;
     modelId: string;
     timeoutMs: number;
+    strict?: boolean;
   }): Promise<{ turnPackage: StructuredTurnPackage; review: NarrativeReview }> {
     let review = SemanticNarrativeReview.review({
       intent: params.intent,
@@ -6673,7 +6674,7 @@ export class MultiModelOrchestrator {
       plan: params.plan,
       turnPackage: params.turnPackage,
     });
-    if (review.decision === 'ACCEPT') return { turnPackage: params.turnPackage, review };
+    if (review.decision === 'ACCEPT' || params.strict === false) return { turnPackage: params.turnPackage, review };
 
     const rewritePrompt = SemanticNarrativeReview.buildRewritePrompt({
       intent: params.intent,
@@ -7763,6 +7764,7 @@ export class MultiModelOrchestrator {
                   adapter: emergencyAdapter,
                   modelId: emergencyModel.modelId,
                   timeoutMs,
+                  strict: false,
                 });
                 emergencyTurnPackage = reviewed.turnPackage;
                 emergencyNarrativeReview = reviewed.review;

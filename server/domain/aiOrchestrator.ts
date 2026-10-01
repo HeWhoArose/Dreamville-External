@@ -2863,7 +2863,13 @@ export class MultiModelOrchestrator {
     this.seedDefaultModels();
     this.seedDefaultAdapters();
     this.seedDefaultPins();
-    this.loadPersistedConfig();
+    const isTestRuntime =
+      typeof process !== 'undefined' &&
+      (process.env.NODE_ENV === 'test' || Boolean(process.env.NODE_TEST_CONTEXT));
+    const loadTestPersistence = process.env.DREAMVILLE_TEST_LOAD_PERSISTED_CONFIG === '1';
+    if (!isTestRuntime || loadTestPersistence) {
+      this.loadPersistedConfig();
+    }
     this.normalizePinnedTaskFallbackRoutes();
     this.normalizeGeneralTextTaskEligibility();
   }
@@ -2958,6 +2964,12 @@ export class MultiModelOrchestrator {
   }
 
   private savePersistedConfig(): void {
+    const isTestRuntime =
+      typeof process !== 'undefined' &&
+      (process.env.NODE_ENV === 'test' || Boolean(process.env.NODE_TEST_CONTEXT));
+    if (isTestRuntime && process.env.DREAMVILLE_TEST_LOAD_PERSISTED_CONFIG !== '1') {
+      return;
+    }
     try {
       const dir = path.dirname(this.configFilePath);
       if (!fs.existsSync(dir)) {

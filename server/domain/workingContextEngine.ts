@@ -7,6 +7,7 @@ import { worldRepository } from '../repositories/worldRepository';
 import { NarrativeContinuityEngine, type NarrativeResearchPacket } from './narrativeContinuityEngine';
 import { CurrentSituationBuilder, type CurrentSituation } from './currentSituation';
 import { deriveNarrationContextNeeds } from './narrationContextPolicy';
+import { buildNpcPlanningSlice } from './npcPlanningSlice';
 
 export interface WorkingContextPacket {
   scene: string;
@@ -1198,6 +1199,19 @@ export class WorkingContextEngine {
     const knownFacts = authorizedFacts.map(
       (fact) => `[${fact.predicate}] ${fact.objectValue}`
     );
+    const npcPlanningSituation = CurrentSituationBuilder.build({
+      storyId,
+      playerAction: params.playerSpokenText || '',
+      viewerActorId: player?.actorId || npcId,
+      worldRepo: repo,
+    });
+    const npcPlanningSlice = buildNpcPlanningSlice(
+      repo,
+      storyId,
+      player?.actorId || `player_actor_${storyId}`,
+      npcPlanningSituation,
+    );
+
 
     if (npcKnowledge) {
       for (const fact of Object.values(npcKnowledge.facts)) {
@@ -1222,11 +1236,26 @@ export class WorkingContextEngine {
       observations.push(`Your canonical state was updated at world second ${npcState.updatedAtSeconds}.`);
     }
 
+    const npcPlanningFacts = npcPlanningSlice?.actorId === npcId
+      ? npcPlanningSlice.recentMemories.slice(0, 20).map((memory) =>
+          `[memory ${memory.confidence.toFixed(2)}] ${memory.content}`
+        )
+      : [];
+
     return WorkingContextEngine.buildSanitizedNpcContext({
       npcName: canonicalNpcName,
-      knownFacts,
+      knownFacts: [
+        ...knownFacts,
+        ...npcPlanningFacts,
+        ...(npcPlanningSlice?.immediateGoal ? [`[immediate-goal] ${npcPlanningSlice.immediateGoal}`] : []),
+        ...(npcPlanningSlice?.relationship ? [`[relationship] ${JSON.stringify(npcPlanningSlice.relationship)}`] : []),
+      ],
       currentObservations: observations,
       playerSpokenText: params.playerSpokenText || '',
+      systemDirectives: [
+        'This is a private NPC reasoning context. The NPC may use its own authorized memories, beliefs, relationship state, and immediate goal internally.',
+        'Never disclose private memory or hidden knowledge merely because it exists in this context.',
+      ],
     });
   }
 

@@ -8111,7 +8111,7 @@ export class MultiModelOrchestrator {
       if (!emergency || !emergencyAdapter) {
         throw new Error((turnBudgetDecision.reason || 'Per-turn AI call budget exhausted.') + ' Deterministic emergency floor is unavailable.');
       }
-      options.turnBudget.recordProviderAttempt(task);
+      options?.turnBudget?.recordProviderAttempt(task);
       const emergencyStartedAt = Date.now();
       const emergencyResponse = await emergencyAdapter.generate(task, prompt, {
         allowDeterministicFallback: true,

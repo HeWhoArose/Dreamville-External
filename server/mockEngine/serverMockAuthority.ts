@@ -841,6 +841,7 @@ export class ServerMockAuthority {
 
     if (itemUseResult?.success) {
       actionResolution.resolutionMethod = 'ITEM_USE';
+      if (!storyCheck) actionResolution.outcomeTier = 'CLEAN_SUCCESS';
       const itemName = itemUseResolution.item?.name || 'item';
       if (itemUseResult.healing) {
         actionResolution.actualEffect += ` ${itemName} was consumed and restored ${itemUseResult.healing.finalAmount} health.`;
@@ -965,7 +966,7 @@ export class ServerMockAuthority {
     conditionEngine.processAction(actorId, String(freeformText), worldRepository.getWorldClock(targetStoryId).getAbsoluteTime());
     conditionEngine.tickActor(actorId, 'TURN', worldRepository.getWorldClock(targetStoryId).getAbsoluteTime());
 
-        const conditionStateAfterAction = conditionEngine.getActorState(actorId);
+    const conditionStateAfterAction = conditionEngine.getActorState(actorId);
     if (conditionStateBeforeAction && conditionStateAfterAction) {
       const healthChanged = conditionStateBeforeAction.healthCurrent !== conditionStateAfterAction.healthCurrent;
       const deathChanged = Boolean(conditionStateBeforeAction.dead) !== Boolean(conditionStateAfterAction.dead);

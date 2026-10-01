@@ -24,6 +24,7 @@ import { canonicalCommandEngine } from '../domain/canonicalCommandEngine';
 import { narrativeStateAdjudicator } from '../domain/narrativeStateAdjudicator';
 import { CurrentSituationBuilder } from '../domain/currentSituation';
 import { EntitySceneRelevanceEngine } from '../domain/entitySceneRelevance';
+import { EpistemicBoundaryEnforcer } from '../domain/epistemicBoundary';
 import { captureCanonicalStateSnapshot } from '../domain/canonicalSnapshot';
 import { deterministicId, formatCanonicalTimestamp } from '../domain/deterministicRng';
 import type { CombatEffectDefinition } from '../../src/types';

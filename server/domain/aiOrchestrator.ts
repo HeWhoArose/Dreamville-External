@@ -7363,6 +7363,7 @@ export class MultiModelOrchestrator {
               storyId,
               turnId,
               playerAction: params.playerAction,
+              playerIntent,
               turnPackage: validation.turnPackage,
             });
             persistTurnMemoryCandidates(

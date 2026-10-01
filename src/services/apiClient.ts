@@ -162,19 +162,71 @@ class ApiClient {
    * Fetches current-scene player tips without mutating canonical story state.
    * GET /api/game/action/tips
    */
-  public async getStoryActionTips(storyId?: string): Promise<any[]> {
-    const res = await fetch(`${this.baseUrl}/action/tips${storyId ? `?storyId=${encodeURIComponent(storyId)}` : ''}`, {
+  public async getStoryActionTips(storyId?: string, options?: { refresh?: boolean }): Promise<any[]> {
+    const query = new URLSearchParams();
+    if (storyId) query.set('storyId', storyId);
+    if (options?.refresh) query.set('refresh', '1');
+    const queryString = query.toString();
+    const res = await fetch(this.baseUrl + '/action/tips' + (queryString ? '?' + queryString : ''), {
       method: 'GET',
       headers: { Accept: 'application/json' },
     });
 
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      throw new Error(data?.errorReason || data?.error || `Story tips failed with HTTP ${res.status}`);
+      throw new Error(data?.errorReason || data?.error || ('Story tips failed with HTTP ' + res.status));
     }
     return Array.isArray(data?.tips) ? data.tips : [];
   }
+  public async getSensoryState(storyId?: string): Promise<any> {
+    const query = storyId ? `?storyId=${encodeURIComponent(storyId)}` : '';
+    const res = await fetch(`${this.baseUrl}/sensory/state${query}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.error || `Sensory state failed with HTTP ${res.status}`);
+    return data;
+  }
 
+  public async updateSensorySettings(settings: Record<string, unknown>, storyId?: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/sensory/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ storyId, settings }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const error: any = new Error(data?.error || `Sensory settings failed with HTTP ${res.status}`);
+      error.status = res.status;
+      error.data = data;
+      throw error;
+    }
+    return data;
+  }
+  public async transcribeAudio(params: { storyId?: string; audioBase64: string; audioMimeType?: string }): Promise<{ text: string; modelId?: string; providerId?: string }> {
+    const res = await fetch(`${this.baseUrl}/sensory/transcribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        storyId: params.storyId || globalActiveStoryId,
+        audioBase64: params.audioBase64,
+        audioMimeType: params.audioMimeType || 'audio/webm',
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data?.success !== true || !String(data?.text || '').trim()) {
+      const error: any = new Error(data?.error || data?.errorReason || `Transcription failed with HTTP ${res.status}`);
+      error.status = res.status;
+      error.data = data;
+      throw error;
+    }
+    return {
+      text: String(data.text).trim(),
+      modelId: data.modelId ? String(data.modelId) : undefined,
+      providerId: data.providerId ? String(data.providerId) : undefined,
+    };
+  }
   /**
    * Sends an out-of-character question/request to the dedicated OOC assistant.
    * POST /api/game/action/ooc

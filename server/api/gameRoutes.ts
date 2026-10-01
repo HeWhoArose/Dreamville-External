@@ -234,11 +234,13 @@ gameRouter.get('/current-situation', (req: Request, res: Response) => {
 gameRouter.get('/action/tips', async (req: Request, res: Response) => {
   try {
     const storyId = resolveStoryId(req, true);
-    const tips = await storyActionAdvisor.getTipsForAction(storyId, '');
+    const refresh = String(req.query?.refresh || '').toLowerCase() === '1' || String(req.query?.refresh || '').toLowerCase() === 'true';
+    const tips = await storyActionAdvisor.getTipsForAction(storyId, '', undefined, { refresh });
     return res.json({
       success: true,
       storyId,
       tips,
+      refreshed: refresh,
     });
   } catch (error: any) {
     console.error('[Story Action Advisor] Scene tip generation failed:', error);

@@ -1,3 +1,5 @@
+import type { DiceThemeId } from './data/diceThemes';
+
 export type EpistemicLayer =
   | 'CANONICAL_WORLD_TRUTH'
   | 'PLAYER_KNOWLEDGE'
@@ -1023,6 +1025,7 @@ export interface RollRecord {
   rollId: string;
   rulesetVersion: string;
   formula: string;
+  diceThemeId?: DiceThemeId;
   diceTerms?: DiceTerm[];
   individualDice: number[];
   modifier: number;

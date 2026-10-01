@@ -26,6 +26,7 @@ import { buildNarrationPrompt, defaultNarrationStyle, projectSupportingWorkingCo
 import { SemanticNarrativeReview, type NarrativeReview } from './semanticNarrativeReview';
 import { EpistemicBoundaryEnforcer } from './epistemicBoundary';
 import { NarrativeStateAdjudicator, type StateAdjudicationResult } from './narrativeStateAdjudicator';
+import { AiTurnCallBudget, type AiTurnCallBudgetSnapshot } from './aiTurnCallBudget';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
 
@@ -428,6 +429,7 @@ export interface ProviderGenerateOptions {
   /** Prevent provider adapters from substituting local/mock generation for a missing AI credential. */
   allowDeterministicFallback?: boolean;
   audioInputBase64?: string;
+  audioMimeType?: string;
   voiceProfile?: any;
   timeoutMs?: number;
   abortSignal?: AbortSignal;
@@ -525,6 +527,7 @@ export interface OrchestratedTurnTelemetry {
   researchTokens?: number;
   narrativePlanObjective?: string;
   narrativeReview?: NarrativeReview;
+  aiCallBudget?: AiTurnCallBudgetSnapshot;
 }
 
 export interface OrchestratedTurnResult {
@@ -2094,7 +2097,7 @@ Do not enclose in markdown ticks, output pure JSON.`;
         
         if (task === 'speech.transcribe' && options?.audioInputBase64) {
           reqContents = [
-            { inlineData: { mimeType: 'audio/mp3', data: options.audioInputBase64 } },
+            { inlineData: { mimeType: options.audioMimeType || 'audio/webm', data: options.audioInputBase64 } },
             prompt
           ];
           reqConfig.responseMimeType = 'text/plain';
@@ -2617,7 +2620,7 @@ export function persistTurnMemoryCandidates(
  * Circuit Breaking, Automated Failover, Cross-Model Continuation Checkpoints,
  * Strict Turn Package Validation, and Domain Adjudication.
  */
-export class MultiModelOrchestrator {
+export function validateAudioBase64(input: string): {,  valid: boolean;,  normalized: string;,  errorCode?: 'INPUT_EMPTY' | 'INPUT_INVALID_BASE64';,  reason?: string;,} {,  const normalized = String(input || '').replace(/\s+/g, '');,  if (!normalized) {,    return { valid: false, normalized: '', errorCode: 'INPUT_EMPTY', reason: 'No audio data was supplied.' };,  },  if (normalized.length < 16 || normalized.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(normalized)) {,    return { valid: false, normalized, errorCode: 'INPUT_INVALID_BASE64', reason: 'Audio payload is not valid base64 data.' };,  },  try {,    const bytes = Buffer.from(normalized, 'base64');,    if (!bytes.length) throw new Error('zero bytes');,  } catch {,    return { valid: false, normalized, errorCode: 'INPUT_INVALID_BASE64', reason: 'Audio payload could not be decoded.' };,  },  return { valid: true, normalized };,},,export function normalizeTranscriptionProviderText(rawText: string): { valid: boolean; text: string; reason?: string } {,  let cleaned = String(rawText || ''),    .trim(),    .replace(/^```(?:json|text)?\s*/i, ''),    .replace(/\s*```$/i, ''),    .trim();,  if (!cleaned) return { valid: false, text: '', reason: 'Transcription provider returned empty text.' };,  if (/^<!doctype html\b|^<html\b/i.test(cleaned)) {,    return { valid: false, text: '', reason: 'Transcription provider returned HTML instead of transcript text.' };,  },  try {,    const parsed = JSON.parse(cleaned);,    if (typeof parsed === 'string' && parsed.trim()) {,      cleaned = parsed.trim();,    } else {,      const candidates = [,        parsed?.transcript,,        parsed?.text,,        parsed?.transcription,,        Array.isArray(parsed?.narrative) ? parsed.narrative[0] : undefined,,        Array.isArray(parsed?.segments) ? parsed.segments.map((segment: any) => segment?.text).filter(Boolean).join(' ') : undefined,,      ];,      const resolved = candidates.find((candidate) => typeof candidate === 'string' && candidate.trim());,      if (!resolved) return { valid: false, text: '', reason: 'Transcription JSON did not contain transcript text.' };,      cleaned = String(resolved).trim();,    },  } catch {,    if (/^[\[{]/.test(cleaned)) return { valid: false, text: '', reason: 'Transcription provider returned malformed JSON.' };,  },  return cleaned ? { valid: true, text: cleaned } : { valid: false, text: '', reason: 'Transcription provider returned empty text.' };,},export class MultiModelOrchestrator {
   public static readonly PROMPT_VERSION = DREAMBOOK_PROMPT_VERSION;
   private models: Map<string, ModelRegistryRecord> = new Map();
   private adapters: Map<string, IProviderAdapter> = new Map();
@@ -6166,57 +6169,120 @@ export class MultiModelOrchestrator {
   public async transcribeAudio(params: {
     storyId?: string;
     audioBase64: string;
+    audioMimeType?: string;
     timeoutMs?: number;
   }): Promise<{
     success: boolean;
     text: string;
     modelId?: string;
+    providerId?: string;
+    errorCode?: 'INPUT_EMPTY' | 'INPUT_INVALID_BASE64' | 'TRANSCRIPTION_UNAVAILABLE' | 'TRANSCRIPTION_MALFORMED';
+    errorReason?: string;
+    attemptsTrail?: Array<{
+      providerId: string;
+      modelId: string;
+      status: 'SUCCESS' | 'FAILED';
+      error?: string;
+      latencyMs: number;
+    }>;
   }> {
-    const audioBase64 = params.audioBase64 || '';
+    const audioValidation = validateAudioBase64(params.audioBase64);
+    if (!audioValidation.valid) {
+      return {
+        success: false,
+        text: '',
+        errorCode: audioValidation.errorCode,
+        errorReason: audioValidation.reason,
+        attemptsTrail: [],
+      };
+    }
+
     const selection = this.selectBestModel('speech.transcribe', { contextTokens: 256 });
     const candidates = [selection.selectedModel, ...selection.fallbacks];
-    const timeoutMs = params.timeoutMs || 5000;
+    const timeoutMs = Math.max(1000, Math.min(params.timeoutMs || 5000, 30000));
+    const attemptsTrail: Array<{
+      providerId: string;
+      modelId: string;
+      status: 'SUCCESS' | 'FAILED';
+      error?: string;
+      latencyMs: number;
+    }> = [];
+    let sawMalformedResponse = false;
+    let lastError = '';
 
     for (const candidate of candidates) {
+      if (candidate.isEmergencyFloor) continue;
       if (this.isModelCoolingDown(candidate) || this.isCircuitBreakerTripped(candidate.providerId, candidate.modelId)) continue;
+
       const adapter = this.getAdapter(candidate.providerId);
-      if (!adapter) continue;
+      if (!adapter) {
+        attemptsTrail.push({
+          providerId: candidate.providerId,
+          modelId: candidate.modelId,
+          status: 'FAILED',
+          error: 'Provider adapter is unavailable.',
+          latencyMs: 0,
+        });
+        continue;
+      }
 
       const attemptStartedAt = Date.now();
+      const abortController = new AbortController();
+      const timer = setTimeout(() => abortController.abort(), timeoutMs);
       try {
-        const res = await adapter.generate('speech.transcribe', 'Transcribe user audio input', {
+        const res = await adapter.generate('speech.transcribe', 'Transcribe the supplied audio accurately. Return only the transcript.', {
           timeoutMs,
+          abortSignal: abortController.signal,
           modelId: candidate.modelId,
-          audioInputBase64: audioBase64,
+          audioInputBase64: audioValidation.normalized,
+          audioMimeType: params.audioMimeType || 'audio/webm',
+          maxTokens: 1000,
         });
 
-        let transcribedText = '';
-        try {
-          const parsed = JSON.parse(res.text);
-          transcribedText = parsed.narrative?.[0] || res.text;
-        } catch {
-          transcribedText = res.text;
+        const transcript = normalizeTranscriptionProviderText(res?.text || '');
+        if (!transcript.valid) {
+          sawMalformedResponse = true;
+          throw new Error(transcript.reason || 'Transcription provider returned an invalid transcript payload.');
         }
 
-        if (!transcribedText) throw new Error('Transcription provider returned empty text.');
         this.recordProviderSuccess(candidate, res, 'speech.transcribe', attemptStartedAt);
+        attemptsTrail.push({
+          providerId: candidate.providerId,
+          modelId: candidate.modelId,
+          status: 'SUCCESS',
+          latencyMs: Math.max(1, Date.now() - attemptStartedAt),
+        });
 
         return {
           success: true,
-          text: transcribedText,
+          text: transcript.text,
           modelId: candidate.modelId,
+          providerId: candidate.providerId,
+          attemptsTrail,
         };
       } catch (err: any) {
+        lastError = String(err?.message || err || 'Transcription provider failed.');
         this.recordProviderFailure(candidate, 'speech.transcribe', err, attemptStartedAt);
+        attemptsTrail.push({
+          providerId: candidate.providerId,
+          modelId: candidate.modelId,
+          status: 'FAILED',
+          error: lastError,
+          latencyMs: Math.max(1, Date.now() - attemptStartedAt),
+        });
+      } finally {
+        clearTimeout(timer);
       }
     }
 
     return {
       success: false,
       text: '',
+      errorCode: sawMalformedResponse ? 'TRANSCRIPTION_MALFORMED' : 'TRANSCRIPTION_UNAVAILABLE',
+      errorReason: lastError || 'No eligible transcription provider is currently available.',
+      attemptsTrail,
     };
   }
-
   /**
    * Phase 2 semantic player-intent interpretation.
    * Deterministic parsing handles explicit mechanical distinctions first.
@@ -6227,6 +6293,7 @@ export class MultiModelOrchestrator {
     playerText: string;
     currentSituation?: ReturnType<typeof CurrentSituationBuilder.build>;
     timeoutMs?: number;
+    turnBudget?: AiTurnCallBudget;
   }): Promise<{
     intent: PlayerIntent;
     modelId?: string;
@@ -6237,6 +6304,14 @@ export class MultiModelOrchestrator {
     const deterministic = PlayerIntentInterpreter.deterministic(originalText, params.currentSituation);
     if (!originalText) return { intent: deterministic, fallbackReason: 'EMPTY_INPUT' };
     if (deterministic.confidence >= 0.9) return { intent: deterministic };
+
+    const budgetDecision = params.turnBudget?.beginTask('intent.interpret');
+    if (budgetDecision && !budgetDecision.allowed) {
+      return {
+        intent: deterministic,
+        fallbackReason: 'TURN_AI_CALL_BUDGET_EXHAUSTED',
+      };
+    }
 
     const prompt = PlayerIntentInterpreter.buildPrompt(originalText, params.currentSituation);
     const selection = this.selectBestModel('intent.interpret', {
@@ -6251,6 +6326,7 @@ export class MultiModelOrchestrator {
       if (!adapter) continue;
 
       const startedAt = Date.now();
+      params.turnBudget?.recordProviderAttempt('intent.interpret');
       try {
         const response = await adapter.generate('intent.interpret', prompt, {
           timeoutMs,
@@ -6688,11 +6764,26 @@ export class MultiModelOrchestrator {
       turnPackage: params.turnPackage,
       review,
     });
-    const response = await params.adapter.generate('narrative.generate', rewritePrompt, {
-      timeoutMs: Math.min(params.timeoutMs, 5000),
-      modelId: params.modelId,
-      maxTokens: 1200,
-    });
+    const rewriteStartedAt = Date.now();
+    let response: ProviderGenerateResult;
+    try {
+      response = await params.adapter.generate('narrative.generate', rewritePrompt, {
+        timeoutMs: Math.min(params.timeoutMs, 5000),
+        modelId: params.modelId,
+        maxTokens: 1200,
+      });
+      if (!response?.text) throw new Error('Narrative semantic rewrite provider returned empty text.');
+      const rewriteModel = Array.from(this.models.values()).find((model) => model.modelId === params.modelId || this.modelKey(model) === params.modelId);
+      if (rewriteModel) {
+        this.recordProviderSuccess(rewriteModel, response, 'narrative.generate', rewriteStartedAt);
+      }
+    } catch (error) {
+      const rewriteModel = Array.from(this.models.values()).find((model) => model.modelId === params.modelId || this.modelKey(model) === params.modelId);
+      if (rewriteModel) {
+        this.recordProviderFailure(rewriteModel, 'narrative.generate', error, rewriteStartedAt);
+      }
+      throw error;
+    }
     const validation = this.validateTurnPackage(response.text);
     if (!validation.valid || !validation.turnPackage) {
       throw new Error('Narrative semantic rewrite returned an invalid turn package: ' + (validation.errorReason || 'unknown validation failure'));
@@ -7008,6 +7099,7 @@ export class MultiModelOrchestrator {
         timeoutMs,
         maxTokens: 650,
         contextTokens: narrationPrompt.totalTokens,
+        turnBudget: turnAiCallBudget,
         forceModelId: params.forceModelId,
         canonicalLocationName: currentSituation.location.name,
         playerAction,
@@ -7215,6 +7307,7 @@ export class MultiModelOrchestrator {
     const turnId = rawIdempotencyKey
       ? deterministicId('turn', storyId, rawIdempotencyKey.replace(/[^a-zA-Z0-9_-]/g, '_'))
       : deterministicId('turn', storyId, turnSequence, task, params.playerAction || '');
+    const turnAiCallBudget = new AiTurnCallBudget();
 
     // Checkpoint continuation awareness (V6.15 / V6.06)
     let priorCheckpoint: ContinuationCheckpoint | undefined;
@@ -7239,6 +7332,7 @@ export class MultiModelOrchestrator {
         playerText: params.playerAction || '',
         currentSituation: initialSituation,
         timeoutMs: Math.min(timeoutMs, 5000),
+        turnBudget: turnAiCallBudget,
       });
       const playerIntent = intentInterpretation.intent;
       const currentSituation = CurrentSituationBuilder.build({
@@ -7403,6 +7497,7 @@ export class MultiModelOrchestrator {
               inputTokens: narrationPrompt.totalTokens,
               outputTokens: 20,
               validated: true,
+          aiCallBudget: turnAiCallBudget.snapshot(),
             },
           };
         }
@@ -7496,6 +7591,10 @@ export class MultiModelOrchestrator {
       }
 
       const candidateChain: ModelRegistryRecord[] = [selectedModel, ...fallbacks];
+      const turnTaskBudget = turnAiCallBudget.beginTask(task);
+      if (!turnTaskBudget.allowed) {
+        throw new Error(turnTaskBudget.reason || `Per-turn AI call budget exhausted for ${task}.`);
+      }
       let totalAttempts = 0;
       let lastError = '';
 
@@ -7511,6 +7610,7 @@ export class MultiModelOrchestrator {
 
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
           totalAttempts++;
+          turnAiCallBudget.recordProviderAttempt(task);
           const attemptStartedAt = Date.now();
           try {
             // Wrap provider call with AbortController for strict timeout enforcement
@@ -7573,6 +7673,13 @@ export class MultiModelOrchestrator {
               });
               const shouldRewrite = initialReview.decision !== 'ACCEPT' && !semanticRewriteUsed;
               if (shouldRewrite) semanticRewriteUsed = true;
+              const reviewBudget = shouldRewrite
+                ? turnAiCallBudget.beginTask('narrative.review')
+                : { allowed: true };
+              if (shouldRewrite && !reviewBudget.allowed) {
+                throw new Error(reviewBudget.reason || 'Narrative review call budget exhausted.');
+              }
+              if (shouldRewrite) turnAiCallBudget.recordProviderAttempt('narrative.review');
               const reviewed = await this.reviewAndRepairNarrative({
                 turnPackage: validation.turnPackage,
                 intent: playerIntent,
@@ -7679,6 +7786,7 @@ export class MultiModelOrchestrator {
               inputTokens: Math.min(providerRes.inputTokens || narrationPrompt.totalTokens, narrationPrompt.totalTokens),
               outputTokens: providerRes.outputTokens || 50,
               validated: true,
+          aiCallBudget: turnAiCallBudget.snapshot(),
               adjudicationResult: adjudication,
               checkpointCreated: checkpointId,
               recoveredFromCheckpoint: Boolean(params.checkpointId),
@@ -7877,6 +7985,7 @@ export class MultiModelOrchestrator {
               inputTokens: narrationPrompt.totalTokens,
               outputTokens: 30,
               validated: true,
+          aiCallBudget: turnAiCallBudget.snapshot(),
               adjudicationResult: adjudication,
               checkpointCreated: checkpointId,
               recoveredFromCheckpoint: Boolean(params.checkpointId),
@@ -7935,6 +8044,7 @@ export class MultiModelOrchestrator {
           inputTokens: narrationPrompt.totalTokens,
           outputTokens: 0,
           validated: false,
+          aiCallBudget: turnAiCallBudget.snapshot(),
           idempotencyKey: rawIdempotencyKey,
         },
         narrativePlan,
@@ -8035,6 +8145,7 @@ export class MultiModelOrchestrator {
       forceModelId?: string;
       canonicalLocationName?: string;
       playerAction?: string;
+      turnBudget?: AiTurnCallBudget;
       validateResponse?: (text: string) => TaskResponseValidationResult;
       /**
        * When true, a configured task route may be expanded with additional eligible AI models
@@ -8073,6 +8184,50 @@ export class MultiModelOrchestrator {
     }>;
   }> {
     const contract = getAiTaskContract(task);
+    const turnBudgetDecision = options?.turnBudget?.beginTask(task);
+    if (turnBudgetDecision && !turnBudgetDecision.allowed) {
+      if (options?.allowDeterministicFallback === false) {
+        throw new Error(turnBudgetDecision.reason || 'Per-turn AI call budget exhausted.');
+      }
+      const emergency = Array.from(this.models.values()).find((model) => model.isEmergencyFloor && model.roleEligibility.includes(task));
+      const emergencyAdapter = emergency ? this.getAdapter(emergency.providerId) : undefined;
+      if (!emergency || !emergencyAdapter) {
+        throw new Error((turnBudgetDecision.reason || 'Per-turn AI call budget exhausted.') + ' Deterministic emergency floor is unavailable.');
+      }
+      options?.turnBudget?.recordProviderAttempt(task);
+      const emergencyStartedAt = Date.now();
+      const emergencyResponse = await emergencyAdapter.generate(task, prompt, {
+        allowDeterministicFallback: true,
+        timeoutMs: options?.timeoutMs || 35000,
+        maxTokens: options?.maxTokens,
+        modelId: emergency.modelId,
+        systemInstruction,
+        canonicalLocationName: options?.canonicalLocationName,
+        playerAction: options?.playerAction,
+      });
+      if (!emergencyResponse?.text) {
+        throw new Error('Deterministic emergency floor returned an empty response after AI call budget exhaustion.');
+      }
+      const emergencyValidation = (options?.validateResponse || ((text: string) => validateAiTaskResponse(task, text)))(emergencyResponse.text);
+      if (!emergencyValidation.valid) {
+        throw new Error('Deterministic emergency floor response failed validation after AI call budget exhaustion.');
+      }
+      return {
+        text: emergencyResponse.text,
+        source: 'DETERMINISTIC_FALLBACK',
+        providerId: emergency.providerId,
+        modelId: emergency.modelId,
+        fallbackReason: turnBudgetDecision.reason || 'TURN_AI_CALL_BUDGET_EXHAUSTED',
+        attempts: 1,
+        attemptsTrail: [{
+          providerId: emergency.providerId,
+          modelId: emergency.modelId,
+          displayName: emergency.displayName,
+          status: 'SUCCESS',
+          latencyMs: Math.max(1, Date.now() - emergencyStartedAt),
+        }],
+      };
+    }
     const contractValidator = options?.validateResponse || ((text: string) => validateAiTaskResponse(task, text));
     const allowAdaptiveAiRecovery = options?.allowAdaptiveAiRecovery === true;
     const allowDeterministicFallback = options?.allowDeterministicFallback !== false;
@@ -8381,6 +8536,7 @@ export class MultiModelOrchestrator {
       }
 
       const attemptStartedAt = Date.now();
+      options?.turnBudget?.recordProviderAttempt(task);
       const operationSource: ActiveModelOperation['source'] = currentCandidate.isEmergencyFloor
         ? 'DETERMINISTIC_FALLBACK'
         : (this.modelKey(currentCandidate) === selectedModelKey && !selectionWasForcedFallback ? 'AI_PRIMARY' : 'AI_FALLBACK');

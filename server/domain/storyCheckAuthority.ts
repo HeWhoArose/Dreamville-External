@@ -54,6 +54,8 @@ export class StoryCheckAuthority {
 		const rulesProfile = request.rulesProfile
 			|| repository.getRulesProfile(request.storyId);
 
+		const diceThemeId = repository.getSensoryEngine().getDiceTheme(request.storyId);
+
 		const character = {
 			coreStats: run.characterCoreStats || run.protagonist?.coreStats,
 			skills: run.characterSkills || run.protagonist?.skills,
@@ -68,6 +70,7 @@ export class StoryCheckAuthority {
 			request.challenge,
 			rulesProfile ?? undefined,
 			request.resolutionHint,
+			diceThemeId,
 		);
 	}
 }

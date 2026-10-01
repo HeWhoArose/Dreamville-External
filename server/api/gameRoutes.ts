@@ -21,6 +21,7 @@ import { entityCardService } from '../services/entityCardService';
 import { characterGenesisService } from '../services/characterGenesisService';
 import { storyActionAdvisor } from '../services/storyActionAdvisor';
 import { canonicalCommandEngine } from '../domain/canonicalCommandEngine';
+import { narrativeStateAdjudicator } from '../domain/narrativeStateAdjudicator';
 import { captureCanonicalStateSnapshot } from '../domain/canonicalSnapshot';
 import { deterministicId, formatCanonicalTimestamp } from '../domain/deterministicRng';
 import type { CombatEffectDefinition } from '../../src/types';
@@ -7442,6 +7443,14 @@ gameRouter.post('/orchestrator/turn', async (req: Request, res: Response) => {
           idempotencyKey,
           repository: context.repository,
         });
+
+        if (turnResult.success && turnResult.stateAdjudication) {
+          turnResult.stateAdjudication = narrativeStateAdjudicator.commit(
+            context.repository,
+            turnResult.stateAdjudication,
+          );
+        }
+
         return {
           success: turnResult.success,
           data: turnResult,

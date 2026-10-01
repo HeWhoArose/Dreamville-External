@@ -131,3 +131,58 @@ test('Phase 5 reuses the semantic passive-listening signal rather than raw actio
 	const prompt = buildNarrationPrompt({ situation, intent, research, plan }).prompt;
 	assert.match(prompt, /If the player listens, watches, observes, overhears, or eavesdrops without explicit speech, do not make the player speak/i);
 });
+
+
+test('Phase 5 filters stale and broad supporting context before narration', () => {
+	const supporting = projectSupportingWorkingContext({
+		currentSituation: {} as any,
+		packet: {} as any,
+		chunks: [],
+		assembledText: '',
+		totalTokens: 0,
+		hardTokenBudget: 2000,
+		includedChunks: [
+			{ id: 'b2_campaign_opening', band: 'B2_IMMEDIATE', label: 'Campaign Opening & Premise', content: 'OLD_OPENING_SENTINEL', estimatedTokens: 10 },
+			{ id: 'b3_world_bible_snapshot', band: 'B3_CAUSAL_OPPORTUNITY', label: 'World Bible Snapshot', content: 'BROAD_LORE_SENTINEL', estimatedTokens: 10 },
+			{ id: 'b4_story_threads', band: 'B4_EPISODIC', label: 'Unresolved Story Threads', content: 'BROAD_THREAD_SENTINEL', estimatedTokens: 10 },
+			{ id: 'b2_player_actors', band: 'B2_IMMEDIATE', label: 'Player State & Visible Entities', content: 'CURRENT_ACTORS_SENTINEL', estimatedTokens: 10 },
+		],
+		idleChunks: [],
+		archivedChunks: [],
+		evictedChunkLabels: [],
+		evictionReasons: {},
+		epistemicallySanitized: true,
+	} as any);
+
+	assert.doesNotMatch(supporting, /OLD_OPENING_SENTINEL|BROAD_LORE_SENTINEL|BROAD_THREAD_SENTINEL/);
+	assert.match(supporting, /CURRENT_ACTORS_SENTINEL/);
+});
+
+test('Phase 5 prompt fitter preserves semantic sections under a hard budget', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'phase5_prompt_budget';
+	repository.seedStory(storyId);
+	const action = 'I listen for rumors.';
+	const situation = CurrentSituationBuilder.build({ storyId, playerAction: action, worldRepo: repository });
+	const intent = PlayerIntentInterpreter.deterministic(action, situation);
+	const research = NarrativeResearchPipeline.research({
+		repository,
+		storyId,
+		currentSituation: situation,
+		playerIntent: intent,
+		playerAction: action,
+	});
+	const plan = NarrativeDirector.create({ situation, intent, research });
+	const result = buildNarrationPrompt({
+		situation,
+		intent,
+		research,
+		plan,
+		workingContext: 'SUPPORTING '.repeat(1800),
+		maxPromptTokens: 2200,
+	});
+
+	assert.equal(result.totalTokens <= 2200, true);
+	assert.match(result.prompt, /PLAYER INTENT/);
+	assert.match(result.prompt, /NARRATIVE DIRECTOR PLAN/);
+});

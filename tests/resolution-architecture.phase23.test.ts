@@ -228,6 +228,14 @@ test('canonical commit ledger can recover an interrupted command from its pre-st
   assert.equal(recovered.length, 1);
   assert.equal(repository.getPlayerLifecycle(storyId)!.currentActivity, player.currentActivity);
   assert.equal(canonicalCommitLedger.find(repository, storyId, command.commandId)!.phase, 'ABORTED');
+  const retried = canonicalCommitLedger.begin(
+    repository,
+    command,
+    captureCanonicalStateSnapshot(storyId, repository),
+    'retryhash',
+    'Y0001-M01-D01T00:00:02',
+  );
+  assert.equal(retried.phase, 'PREPARED');
 });
 
 test('narration prompt gives structured action resolution precedence over prose reconstruction', () => {

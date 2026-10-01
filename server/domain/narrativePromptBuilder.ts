@@ -77,8 +77,8 @@ function buildNarrationSituationContext(situation: CurrentSituation): string {
 		'Plot arc: ' + situation.plot.currentArc,
 		situation.plot.summary ? 'Plot summary: ' + situation.plot.summary : '',
 		'Recent turns:\n' + recentTurns,
-		'Active conditions: ' + (situation.activeConditions.map((condition) => condition.label).join('; ') || 'None'),
-		'Available interactions: ' + (situation.availableInteractions.filter((interaction) => interaction.enabled).slice(0, 8).map((interaction) => interaction.label).join('; ') || 'None'),
+		'Active conditions: ' + ((Array.isArray(situation.activeConditions) ? situation.activeConditions : []).map((condition) => condition.label).join('; ') || 'None'),
+		'Available interactions: ' + ((Array.isArray(situation.availableInteractions) ? situation.availableInteractions : []).filter((interaction) => interaction.enabled).slice(0, 8).map((interaction) => interaction.label).join('; ') || 'None'),
 		'Knowledge boundary: research below is the curated source for lore, memories, and unresolved threads; omitted context is not permission to invent facts.',
 	].filter(Boolean).join('\n');
 }
@@ -94,7 +94,7 @@ export function defaultNarrationStyle(): string {
 		'If the player listens, watches, observes, overhears, or eavesdrops without explicit speech, do not make the player speak, ask, shout, answer, or call out.',
 		'If movement and observation are combined, preserve both parts of the action.',
 		'Preserve rumor, hearsay, memory, and uncertainty as uncertainty; do not upgrade them to established fact.',
-		'Remain in the canonical scene and world time unless the supplied canonical state explicitly says they changed.',
+		'Remain in the canonical scene and world time unless the supplied canonical state explicitly says they changed. The canonical game state has already committed a location change only when the supplied Current Situation reflects that change.',
 		'Do not dump research or internal engine terminology into the player-facing narration.',
 		'Normally write 2–3 concise paragraphs; tiny actions may use one paragraph.',
 	].join(' ');

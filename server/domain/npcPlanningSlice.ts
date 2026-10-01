@@ -25,10 +25,12 @@ export function buildNpcPlanningSlice(
   storyId: string,
   viewerActorId: string,
   situation: CurrentSituation,
+  targetEntityId?: string,
 ): NpcPlanningSlice | undefined {
   const normalizedQuery = String(situation.currentAction?.originalText || '').toLowerCase();
   const entity = situation.nearbyEntities.find((candidate) => {
     if (candidate.id === viewerActorId) return false;
+    if (targetEntityId && candidate.id === targetEntityId) return true;
     const name = String(candidate.name || '').toLowerCase();
     return name.length >= 3 && normalizedQuery.includes(name);
   });

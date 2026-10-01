@@ -61,9 +61,9 @@ The visual and narration layers cannot authorize canonical mutations. The canoni
 
 Research is sanitized through the epistemic boundary before being handed to narrative planning/presentation.
 
-## No known Phase 11–22 orphaned subsystem
+## No known Phase 11–16 orphaned subsystem
 
-At source-audit level, no release-critical subsystem introduced by Phases 11–16 is currently orphaned: each has a documented consumer and at least one regression or contract test.
+At source-audit level, no release-critical subsystem introduced by Phases 11–16 is currently orphaned: each has a documented consumer and at least one regression or contract test. The Phase 17–22 closure layers were then checked against the same producer → contract → consumer rule, with no known release-critical orphan remaining.
 
 This is not a substitute for runtime verification. GitHub CI has now executed the repository release gate repeatedly. The current release sequence is `npm run lint`, `npm test`, and `npm run build`; contract verification and TypeScript pass, while the full test gate remains red on earlier-phase/integration regressions still visible in the stacked branch.
 

@@ -206,6 +206,41 @@ test('addressed NPC planning slice stays actor-scoped', () => {
   assert.match(slice!.knowledgeBoundary, /NPC/);
 });
 
+test('canonical restore preserves live transaction ledger and working-context pins', () => {
+  const repository = new InMemoryWorldRepository({ disablePersistence: true });
+  const storyId = 'phase23_restore_metadata';
+  repository.seedStory(storyId);
+  const run = repository.getStoryRun(storyId)!;
+  run.runtimeState = {
+    ...(run.runtimeState || {}),
+    canonicalCommitLedger: [{
+      ledgerId: 'ledger_live',
+      storyId,
+      commandId: 'cmd_live',
+      phase: 'HANDLER_RESOLVED',
+      startedAt: 'Y0001-M01-D01T00:00:00',
+      updatedAt: 'Y0001-M01-D01T00:00:01',
+      transactionMode: 'STAGED',
+      preStateHash: 'hash',
+      preStateSnapshot: captureCanonicalStateSnapshot(storyId, repository),
+      commandPayload: {},
+      ownerPhases: { handler: 'VERIFIED' },
+      recoveryAction: 'ABORT_AND_RESTORE',
+    }],
+    workingContextPins: ['b2_player_intent'],
+  };
+  repository.saveStoryRun(run);
+  const snapshot = captureCanonicalStateSnapshot(storyId, repository);
+  repository.getStoryRun(storyId)!.runtimeState = {
+    ...(repository.getStoryRun(storyId)!.runtimeState || {}),
+    workingContextPins: ['mutated'],
+  };
+  repository.restoreCanonicalStateSnapshot(snapshot);
+  const restored = repository.getStoryRun(storyId)!;
+  assert.deepEqual(restored.runtimeState?.workingContextPins, ['b2_player_intent']);
+  assert.equal(restored.runtimeState?.canonicalCommitLedger?.[0]?.commandId, 'cmd_live');
+});
+
 test('canonical commit ledger can recover an interrupted command from its pre-state', () => {
   const repository = new InMemoryWorldRepository({ disablePersistence: true });
   const storyId = 'phase23_ledger';

@@ -790,6 +790,51 @@ export class ServerMockAuthority {
       committedOutcome += ` The attempted use of ${itemUseResolution.item?.name || 'the item'} did not resolve successfully; do not consume the item.`;
     }
 
+    const spatialMovementIntent = Boolean(resolutionIntent.movementIntent) &&
+      !player?.isTraveling &&
+      currentLocationId === player?.locationId &&
+      /\b(?:closer|toward|towards|approach|near|beside|next to|forward)\b/i.test(String(freeformText));
+    if (spatialMovementIntent && (!storyCheck || storyCheck.success)) {
+      const focusTarget = resolutionIntent.explicitTargets.find((target) =>
+        resolutionSituation.nearbyEntities.some((entity) => entity.id === target.id)
+      );
+      const normalizedAction = String(freeformText).toLowerCase();
+      const proximityBand =
+        /\b(?:contact|touch|touching|grab|hold)\b/.test(normalizedAction) ? 'CONTACT' :
+        /\b(?:adjacent|beside|next to|right next to)\b/.test(normalizedAction) ? 'ADJACENT' :
+        'NEAR';
+      const updatedPlayer = worldRepository.getPlayerLifecycle(targetStoryId);
+      if (updatedPlayer) {
+        worldRepository.updatePlayerLifecycle(targetStoryId, updatedPlayer.copyWith({
+          localSpatialState: {
+            ...updatedPlayer.localSpatialState,
+            areaId: updatedPlayer.localSpatialState?.areaId || updatedPlayer.locationId,
+            focusEntityId: focusTarget?.id,
+            focusLabel: focusTarget?.name || undefined,
+            proximityBand,
+            updatedTurnId: baseResult.actionId,
+          },
+        }));
+        actionResolution.physicalConsequences.push(
+          'The character is now canonically positioned ' + proximityBand.toLowerCase().replace('_', ' ') +
+          ' within the current location' + (focusTarget ? ' relative to ' + focusTarget.name : '') + '.'
+        );
+        actionResolution.actualEffect += ' The bounded local spatial state reflects the resolved movement.';
+        actionResolution.canonicalStateChanges.push({
+          kind: 'LOCATION',
+          targetId: actorId,
+          value: {
+            localSpatialState: {
+              proximityBand,
+              focusEntityId: focusTarget?.id,
+              focusLabel: focusTarget?.name,
+            },
+          },
+          metadata: { scope: 'INTRA_LOCATION_SPATIAL', source: 'canonical_movement_resolution' },
+        });
+      }
+    }
+
     const resolutionHint = actionAdvice?.aiPipeline?.resolutionHint;
     if (
       resolutionHint?.hazard?.type === 'FALL' &&

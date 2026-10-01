@@ -236,6 +236,15 @@ test('canonical commit ledger can recover an interrupted command from its pre-st
     'Y0001-M01-D01T00:00:02',
   );
   assert.equal(retried.phase, 'PREPARED');
+  canonicalCommitLedger.markPhase(
+    repository,
+    storyId,
+    command.commandId,
+    'HANDLER_RESOLVED',
+    'Y0001-M01-D01T00:00:03',
+    { ownerPhases: { handler: 'VERIFIED' } },
+  );
+  assert.equal(canonicalCommitLedger.find(repository, storyId, command.commandId)!.phase, 'HANDLER_RESOLVED');
 });
 
 test('narration prompt gives structured action resolution precedence over prose reconstruction', () => {

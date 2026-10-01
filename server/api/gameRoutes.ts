@@ -7583,7 +7583,13 @@ gameRouter.post('/orchestrator/turn', async (req: Request, res: Response) => {
     }
     // DEF-CH14-04: Client presentation receives perceivable events only
     (turnResult as any).sensoryEvents = sensoryEvents.filter((e: any) => !e.suppressed);
-    res.json(turnResult);
+    res.json({
+      ...turnResult,
+      currentSituation: turnResult.currentSituation || null,
+      latestVisibleNarrative: turnResult.latestVisibleNarrative || turnResult.turnPackage?.narrative?.join('\n\n') || '',
+      narrativeTurnPackage: turnResult.narrativeTurnPackage || turnResult.turnPackage || null,
+      narrativeResearchPacket: turnResult.narrativeResearchPacket || turnResult.researchPacket || null,
+    });
   } catch (error) {
     console.error('Failed to execute orchestrated turn:', error);
     res.status(500).json({ error: 'Failed to execute orchestrated turn.', details: String(error) });

@@ -129,6 +129,9 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	const actionResolutionContext = buildActionResolutionPromptContext(input.actionResolution);
 	const narrativeQualityContract = NarrativeQualityContractEngine.resolve(input.intent, input.narrativeQualityControls);
 	const narrativeQualityContext = NarrativeQualityContractEngine.toPromptContext(narrativeQualityContract);
+	const promptBudgetQualityContext = input.maxPromptTokens && input.maxPromptTokens <= 1500
+		? 'N1 profile=' + narrativeQualityContract.profile + '; enforcement=' + narrativeQualityContract.controls.enforcement + '; preferred paragraphs=' + narrativeQualityContract.controls.preferredParagraphs + '; max paragraphs=' + narrativeQualityContract.controls.maxParagraphs + '; preserve scene grounding, specificity, pacing, novelty, character voice, emotional continuity, coherence, and player agency.'
+		: narrativeQualityContext;
 	const canonicalConstraints = [
 		'CANONICAL CURRENT SCENE ANCHOR:',
 		'Canonical constraints:',
@@ -164,7 +167,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	): string => [
 		section('GLOBAL NARRATION INSTRUCTIONS', overrides?.globalInstruction || globalInstruction),
 		section('NARRATIVE STYLE', overrides?.styleInstruction || styleInstruction),
-		section('NARRATIVE QUALITY CONTRACT', narrativeQualityContext),
+		section('NARRATIVE QUALITY CONTRACT', promptBudgetQualityContext),
 		section('CURRENT SITUATION', overrides?.situationContext || situationContext),
 		section('PLAYER INTENT', overrides?.intentContext || intentContext),
 		section('ACTION RESOLUTION — AUTHORITATIVE', actionResolutionContext),

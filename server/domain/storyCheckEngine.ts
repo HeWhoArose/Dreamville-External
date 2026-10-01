@@ -177,6 +177,12 @@ function containsCondition(
   );
 }
 
+function phraseMatches(normalizedText: string, keyword: string): boolean {
+  const normalizedKeyword = normalize(keyword);
+  if (!normalizedKeyword) return false;
+  return (' ' + normalizedText + ' ').includes(' ' + normalizedKeyword + ' ');
+}
+
 function actionSupportsSkill(
   text: string,
   definition: { id: string; keywords: string[] },
@@ -184,7 +190,7 @@ function actionSupportsSkill(
   const normalizedText = normalize(text);
   return definition.keywords.some((keyword) => {
     const normalizedKeyword = normalize(keyword);
-    return Boolean(normalizedKeyword) && normalizedText.includes(normalizedKeyword);
+    return Boolean(normalizedKeyword) && phraseMatches(normalizedText, normalizedKeyword);
   });
 }
 
@@ -700,7 +706,7 @@ export class StoryCheckEngine {
       .map((profile) => ({
         profile,
         score: profile.keywords.reduce(
-          (score, keyword) => score + (text.includes(normalize(keyword)) ? keyword.length + 1 : 0),
+          (score, keyword) => score + (phraseMatches(text, keyword) ? keyword.length + 1 : 0),
           0
         ),
       }))

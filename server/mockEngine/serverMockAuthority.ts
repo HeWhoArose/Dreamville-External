@@ -1072,6 +1072,7 @@ export class ServerMockAuthority {
       if (storyCheck) {
         actionLog.checkResult = storyCheck;
       }
+      actionLog.actionResolution = actionResolution;
       if (actionTips.length > 0) {
         actionLog.actionAdvice = {
           mode: 'NORMAL_ACTION',

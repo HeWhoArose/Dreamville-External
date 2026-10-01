@@ -108,7 +108,6 @@ const GOOGLE_VERIFIED_FREE_GEMINI_MODELS = new Set([
   'gemini-3.5-flash',
   'gemini-3.5-flash-lite',
   'gemini-3.1-flash-lite',
-  'gemini-2.5-pro',
   'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
   'gemini-2.5-flash-native-audio-preview-12-2025',
@@ -639,21 +638,113 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
         });
         break;
       case 'capability.synthesize':
-      case 'character.capability.propose':
-        text = JSON.stringify({
-          name: 'Deterministic Proposed Capability',
-          category: 'General',
-          activationMode: 'action',
-          powerTier: 'Minor',
-          baseEnergyCost: 0,
-          baseStrainCost: 0,
-          minVesselCapacityRequired: 0,
-          description: 'No AI capability synthesis was available; canonical systems must validate any proposal before use.',
-          targetType: 'self',
-          rangeScope: 'self',
-          actionType: 'INTERACT',
-        });
+      case 'character.capability.propose': {
+        const isMulti = /capabilities array|up to \d+ DISTINCT capability proposals|additional capability proposals/i.test(prompt);
+        const conceptMatch = prompt.match(/(?:concept|manifesting as|mastery of|focusing on|specializing in|named|called|prompt:)\s+([^\n.]+)/i);
+        const extractedConcept = conceptMatch ? conceptMatch[1].trim() : 'Adaptive Talent';
+        
+        const singleProposal = {
+          name: extractedConcept || 'Adaptive Mastery',
+          category: 'Magic',
+          activationMode: 'immediate',
+          powerTier: 'Moderate',
+          baseEnergyCost: 20,
+          baseStrainCost: 10,
+          minVesselCapacityRequired: 15,
+          description: `Specialized mastery and adaptive focus in ${extractedConcept || 'innate power'}.`,
+          actionType: 'action',
+          targetType: 'single_target',
+          rangeScope: 'close',
+          checkFormula: '1d20',
+          effectDefinition: {
+            resolutionMode: 'SINGLE_ATTACK',
+            scale: 'PERSON',
+            targetingMode: 'ONE_TARGET',
+            instanceCount: 1,
+            attackFormula: '1d20',
+            saveFormula: '1d20',
+            damageFormula: '1d8',
+            damageType: 'force',
+          },
+          techniques: [
+            {
+              name: `${extractedConcept || 'Adaptive'} Surge`,
+              description: `A focused surge channeling ${extractedConcept || 'innate power'}.`,
+              activationType: 'Action',
+              energyCost: 15,
+              cooldownTurns: 1,
+              range: 'Close',
+              checkFormula: '1d20',
+            },
+            {
+              name: `${extractedConcept || 'Adaptive'} Guard`,
+              description: `A protective ward channeling ${extractedConcept || 'innate power'}.`,
+              activationType: 'Reaction',
+              energyCost: 10,
+              cooldownTurns: 2,
+              range: 'Self',
+              checkFormula: '1d20',
+            },
+          ],
+        };
+
+        if (isMulti) {
+          text = JSON.stringify({
+            capabilities: [
+              singleProposal,
+              {
+                name: `${extractedConcept || 'Dynamic'} Warding`,
+                category: 'Domain',
+                activationMode: 'reaction',
+                powerTier: 'Moderate',
+                baseEnergyCost: 15,
+                baseStrainCost: 5,
+                description: `Protective defensive reaction aligned with ${extractedConcept || 'character background'}.`,
+                actionType: 'reaction',
+                targetType: 'self',
+                rangeScope: 'close',
+                checkFormula: '1d20',
+                techniques: [
+                  {
+                    name: 'Protective Barrier',
+                    description: 'Raises a temporary protective barrier.',
+                    activationType: 'Reaction',
+                    energyCost: 10,
+                    cooldownTurns: 2,
+                    range: 'Self',
+                  },
+                ],
+              },
+              {
+                name: `${extractedConcept || 'Swift'} Transit`,
+                category: 'Movement',
+                activationMode: 'immediate',
+                powerTier: 'Minor',
+                baseEnergyCost: 10,
+                baseStrainCost: 5,
+                description: `Rapid repositioning technique tailored to the character.`,
+                actionType: 'bonus_action',
+                targetType: 'self',
+                rangeScope: 'close',
+                checkFormula: '1d20',
+                techniques: [
+                  {
+                    name: 'Quickstep',
+                    description: 'Quickly reposition across short distance.',
+                    activationType: 'Bonus Action',
+                    energyCost: 5,
+                    cooldownTurns: 1,
+                    range: 'Self',
+                  },
+                ],
+              },
+            ],
+          });
+        } else {
+          text = JSON.stringify(singleProposal);
+        }
         break;
+      }
       case 'capability.explain':
         text = 'The canonical capability and rules engines remain authoritative. No additional AI explanation was available.';
         break;
@@ -2297,7 +2388,7 @@ Do not enclose in markdown ticks, output pure JSON.`;
       latencyMs: Math.max(10, Date.now() - start),
       inputTokens: Math.ceil(prompt.length / 4),
       outputTokens: Math.ceil(text.length / 4),
-      modelId: options?.modelId || 'gemini-2.5-pro',
+      modelId: options?.modelId || 'gemini-3.5-flash',
       providerId: this.providerId,
     };
   }
@@ -2337,6 +2428,20 @@ Do not enclose in markdown ticks, output pure JSON.`;
         rawName: 'models/gemini-3.5-flash-lite',
         displayName: 'Gemini 3.5 Flash Lite (Fast Utility)',
         description: 'Ultra-fast utility and extraction model',
+        inputTokenLimit: 1048576,
+        outputTokenLimit: 65536,
+        supportedActions: ['generateContent', 'countTokens'],
+        isAccessible: true,
+        lifecycleState: 'active',
+        isPaidModel: false,
+        freeTierStatus: 'VERIFIED',
+        freeTierEvidenceSource: 'PROVIDER',
+      },
+      {
+        id: 'gemini-3.1-flash-lite',
+        rawName: 'models/gemini-3.1-flash-lite',
+        displayName: 'Gemini 3.1 Flash Lite',
+        description: 'Fast utility and extraction model',
         inputTokenLimit: 1048576,
         outputTokenLimit: 65536,
         supportedActions: ['generateContent', 'countTokens'],
@@ -3294,27 +3399,27 @@ export class MultiModelOrchestrator {
   private seedDefaultPins(): void {
     const emergencyKey = 'provider_deterministic_emergency::emergency-fallback-local';
     const routes: Partial<Record<TaskId, string[]>> = {
-      'narrative.generate': ['groq::qwen/qwen3.8-27b','openrouter::inclusionai/ling-3.0-flash:free','openrouter::google/gemma-4-31b-it:free','google_gemini::gemini-3.5-flash','openrouter::qwen/qwen3.8-27b:free','google_gemini::gemini-3.5-flash-lite'],
-      'narrative.review': ['groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.5-flash-lite'],
-      'character.dialogue': ['groq::qwen/qwen3.8-27b','openrouter::inclusionai/ling-3.0-flash:free','openrouter::google/gemma-4-31b-it:free','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.5-flash-lite'],
-      'character.extract': ['google_gemini::gemini-3.5-flash-lite','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free','google_gemini::gemini-3.5-flash'],
-      'memory.extract': ['google_gemini::gemini-3.5-flash-lite','groq::openai/gpt-oss-20b','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free','google_gemini::gemini-3.5-flash'],
-      'summary.scene': ['google_gemini::gemini-3.5-flash-lite','groq::qwen/qwen3.8-27b','openrouter::inclusionai/ling-3.0-flash:free','openrouter::google/gemma-4-31b-it:free','google_gemini::gemini-3.5-flash'],
-      'intent.interpret': ['google_gemini::gemini-3.5-flash-lite','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free','google_gemini::gemini-3.5-flash'],
-      'capability.explain': ['google_gemini::gemini-3.5-flash-lite','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free','google_gemini::gemini-3.5-flash'],
-      'utility.inspect': ['google_gemini::gemini-3.5-flash-lite','groq::qwen/qwen3.8-27b','openrouter::inclusionai/ling-3.0-flash:free','openrouter::google/gemma-4-31b-it:free'],
-      'rules.adjudicate': ['groq::openai/gpt-oss-120b','groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free'],
-      'rules.analyze': ['groq::openai/gpt-oss-120b','groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free'],
-      'tactical.reason': ['groq::openai/gpt-oss-120b','groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free'],
-      'combat.tactics': ['groq::openai/gpt-oss-120b','groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free'],
-      'combat.animation.plan': ['groq::qwen/qwen3.8-27b','groq::openai/gpt-oss-20b','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free','google_gemini::gemini-3.5-flash-lite'],
-      'character.capability.propose': ['groq::openai/gpt-oss-120b','groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free'],
-      'capability.synthesize': ['groq::openai/gpt-oss-120b','groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free'],
-      'world.generate': ['groq::qwen/qwen3.8-27b','openrouter::inclusionai/ling-3.0-flash:free','google_gemini::gemini-3.5-flash','openrouter::google/gemma-4-31b-it:free','openrouter::qwen/qwen3.8-27b:free','google_gemini::gemini-3.5-flash-lite'],
-      'research.query': ['groq::openai/gpt-oss-120b','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free','google_gemini::gemini-3.5-flash'],
-      'research.world-brief': ['groq::openai/gpt-oss-120b','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free','google_gemini::gemini-3.5-flash'],
-      'story.advice': ['groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash-lite','openrouter::inclusionai/ling-3.0-flash:free','openrouter::google/gemma-4-31b-it:free','google_gemini::gemini-3.5-flash'],
-      'ooc.respond': ['groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash','openrouter::inclusionai/ling-3.0-flash:free','openrouter::google/gemma-4-31b-it:free','google_gemini::gemini-3.5-flash-lite'],
+      'narrative.generate': ['groq::qwen/qwen3.8-27b','openrouter::inclusionai/ling-3.0-flash:free','openrouter::google/gemma-4-31b-it:free','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite','openrouter::qwen/qwen3.8-27b:free'],
+      'narrative.review': ['groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite'],
+      'character.dialogue': ['groq::qwen/qwen3.8-27b','openrouter::inclusionai/ling-3.0-flash:free','openrouter::google/gemma-4-31b-it:free','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite'],
+      'character.extract': ['google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free'],
+      'memory.extract': ['google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','groq::openai/gpt-oss-20b','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free'],
+      'summary.scene': ['google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','groq::qwen/qwen3.8-27b','openrouter::inclusionai/ling-3.0-flash:free','openrouter::google/gemma-4-31b-it:free'],
+      'intent.interpret': ['google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free'],
+      'capability.explain': ['google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free'],
+      'utility.inspect': ['google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','groq::qwen/qwen3.8-27b','openrouter::inclusionai/ling-3.0-flash:free','openrouter::google/gemma-4-31b-it:free'],
+      'rules.adjudicate': ['groq::openai/gpt-oss-120b','groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free'],
+      'rules.analyze': ['groq::openai/gpt-oss-120b','groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free'],
+      'tactical.reason': ['groq::openai/gpt-oss-120b','groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free'],
+      'combat.tactics': ['groq::openai/gpt-oss-120b','groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free'],
+      'combat.animation.plan': ['groq::qwen/qwen3.8-27b','groq::openai/gpt-oss-20b','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free','google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite','google_gemini::gemini-3.5-flash'],
+      'character.capability.propose': ['groq::openai/gpt-oss-120b','groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free'],
+      'capability.synthesize': ['groq::openai/gpt-oss-120b','groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free'],
+      'world.generate': ['groq::qwen/qwen3.8-27b','openrouter::inclusionai/ling-3.0-flash:free','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','openrouter::google/gemma-4-31b-it:free','openrouter::qwen/qwen3.8-27b:free','google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite'],
+      'research.query': ['groq::openai/gpt-oss-120b','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','google_gemini::gemini-3.5-flash-lite'],
+      'research.world-brief': ['groq::openai/gpt-oss-120b','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free','openrouter::inclusionai/ling-3.0-flash:free','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','google_gemini::gemini-3.5-flash-lite'],
+      'story.advice': ['groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite','openrouter::inclusionai/ling-3.0-flash:free','openrouter::google/gemma-4-31b-it:free','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash'],
+      'ooc.respond': ['groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','openrouter::inclusionai/ling-3.0-flash:free','openrouter::google/gemma-4-31b-it:free','google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite'],
     };
 
     // Routes are explicit but intentionally not task-pinned. This preserves the
@@ -3448,6 +3553,31 @@ export class MultiModelOrchestrator {
       isEmergencyFloor: false,
     });
 
+    // 0d. Gemini 3.1 Flash Lite (Fast Utility Model)
+    this.registerModel({
+      providerId: 'google_gemini',
+      modelId: 'gemini-3.1-flash-lite',
+      displayName: 'Gemini 3.1 Flash Lite',
+      pool: 'fast',
+      capabilities: ['fast', 'structured_extraction', 'low_cost'],
+      contextWindow: 1048576,
+      health: 'Healthy',
+      quota: 'Healthy',
+      latencyMs: 180,
+      userPriority: 105,
+      roleEligibility: [...ALL_GENERAL_TEXT_ROLES],
+      fallbackEligibility: true,
+      accessStatus: 'accessible',
+      isPaidModel: false,
+      billingState: 'FREE',
+      billingEvidenceSource: 'PROVIDER',
+      freeTierStatus: 'VERIFIED',
+      freeTierEvidenceSource: 'PROVIDER',
+      freeTierVerifiedAt: Date.now(),
+      lifecycleState: 'active',
+      isEmergencyFloor: false,
+    });
+
     // Gemini 3.6 Flash
     this.registerModel({
       providerId: 'google_gemini',
@@ -3478,8 +3608,8 @@ export class MultiModelOrchestrator {
       health: 'Unavailable',
       quota: 'Unknown',
       latencyMs: 800,
-      userPriority: 30,
-      roleEligibility: ['narrative.generate', 'summary.scene'],
+      userPriority: -100,
+      roleEligibility: [],
       fallbackEligibility: false,
       accessStatus: 'unavailable',
       lifecycleState: 'deprecated',

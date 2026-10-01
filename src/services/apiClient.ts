@@ -2623,8 +2623,11 @@ class ApiClient {
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({ capabilityConcept, characterContext }),
     });
-    if (!res.ok) throw new Error(`Failed to propose custom capability: HTTP ${res.status}`);
-    return await res.json();
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      throw new Error(data?.errorReason || data?.error || `Failed to propose custom capability: HTTP ${res.status}`);
+    }
+    return data;
   }
 
   public async proposeCustomFeat(
@@ -2638,8 +2641,11 @@ class ApiClient {
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({ featName, featConcept, characterContext }),
     });
-    if (!res.ok) throw new Error(`Failed to propose custom feat: HTTP ${res.status}`);
-    return await res.json();
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      throw new Error(data?.errorReason || data?.error || `Failed to propose custom feat: HTTP ${res.status}`);
+    }
+    return data;
   }
 
   public async proposeCustomAttribute(
@@ -2654,8 +2660,11 @@ class ApiClient {
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({ attributeName, attributeConcept, category, characterContext }),
     });
-    if (!res.ok) throw new Error(`Failed to propose custom attribute: HTTP ${res.status}`);
-    return await res.json();
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      throw new Error(data?.errorReason || data?.error || `Failed to propose custom attribute: HTTP ${res.status}`);
+    }
+    return data;
   }
 
   public async proposeCustomSkill(
@@ -2669,8 +2678,11 @@ class ApiClient {
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({ skillName, skillConcept, characterContext }),
     });
-    if (!res.ok) throw new Error(`Failed to propose custom skill: HTTP ${res.status}`);
-    return await res.json();
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      throw new Error(data?.errorReason || data?.error || `Failed to propose custom skill: HTTP ${res.status}`);
+    }
+    return data;
   }
 
   public async suggestAdditionalCharacterSkills(
@@ -2745,8 +2757,11 @@ class ApiClient {
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({ itemName, itemConcept, characterContext }),
     });
-    if (!res.ok) throw new Error(`Failed to propose custom equipment: HTTP ${res.status}`);
-    return await res.json();
+    const data = await res.json().catch(() => null);
+    if (!res.ok) {
+      throw new Error(data?.errorReason || data?.error || `Failed to propose custom equipment: HTTP ${res.status}`);
+    }
+    return data;
   }
 
   public async getCharacterDrafts(worldId: string): Promise<any> {

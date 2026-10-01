@@ -1354,23 +1354,20 @@ IMPORTANT:
         }
       );
       if (response.source === 'DETERMINISTIC_FALLBACK') {
-        throw this.buildAiUnavailableError(
-          response.fallbackReason || 'AI custom capability generation is unavailable; deterministic fallback was withheld.',
-          response,
-        );
+        generatedProvenance = 'DETERMINISTIC_FALLBACK';
       }
       if (response.text) {
         proposal = this.parseJsonFromAiResponse(response.text);
       }
     } catch (err: any) {
-      if (err?.code === 'AI_UNAVAILABLE') throw err;
-      console.warn('[CharacterGenesisService] Orchestrated custom capability proposal failed:', err);
+      console.warn('[CharacterGenesisService] Orchestrated custom capability proposal failed, falling back to procedural synthesis:', err);
+      generatedProvenance = 'DETERMINISTIC_FALLBACK';
+      proposal = this.proceduralCustomCapability(concept);
     }
 
     if (!proposal || !proposal.name) {
-      throw this.buildAiUnavailableError(
-        'AI custom capability generation returned no usable proposal. Deterministic fallback was withheld.',
-      );
+      proposal = this.proceduralCustomCapability(concept);
+      generatedProvenance = 'DETERMINISTIC_FALLBACK';
     }
 
     const rawEffect = proposal?.effectDefinition && typeof proposal.effectDefinition === 'object' ? proposal.effectDefinition : {};

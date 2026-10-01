@@ -7206,7 +7206,7 @@ export class MultiModelOrchestrator {
           })
         : {
             prompt: assembledContext.assembledText,
-            styleInstruction: defaultNarrationStyle(),
+            styleInstruction: '',
             totalTokens: assembledContext.totalTokens,
           };
 
@@ -7603,11 +7603,13 @@ export class MultiModelOrchestrator {
           this.recordProviderSuccess(emergencyModel, res, task, emergencyStartedAt);
           const validation = this.validateTurnPackage(res.text);
           if (validation.valid && validation.turnPackage) {
-            const intentSafety = this.validateNarrativeIntentSafety(
-              validation.turnPackage.narrative.join(' '),
-              playerIntent,
-              currentSituation.player.name,
-            );
+            const intentSafety = isNarrativeTask
+              ? this.validateNarrativeIntentSafety(
+                  validation.turnPackage.narrative.join(' '),
+                  playerIntent,
+                  currentSituation.player.name,
+                )
+              : { valid: true };
             if (!intentSafety.valid) {
               lastError = intentSafety.errorReason || 'Emergency narration violated semantic player intent.';
             } else {

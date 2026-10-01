@@ -213,3 +213,88 @@ test('Phase 8 does not resolve an open thread from a negated resolution statemen
 	const threads = run?.runtimeState?.openNarrativeThreads || [];
 	assert.ok(threads.some((thread: any) => thread.status === 'OPEN' && thread.title.includes('origin of the fissure')));
 });
+
+
+test('Phase 8 never promotes AI event text into a durable plot beat without a committed canonical consequence', () => {
+	const { repository, situation } = setup();
+	const before = repository.getStoryRun('memory-story')?.runtimeState?.plot?.beats?.length || 0;
+	const result = NarrativeMemoryLifecycle.processTurn({
+		repository,
+		storyId: 'memory-story',
+		turnId: 'turn-ai-event-only',
+		playerAction: 'I inspect the fissure.',
+		currentSituation: situation,
+		turnPackage: {
+			narrative: ['You inspect the fissure.'],
+			dialogue: [],
+			events: ['The hidden chamber opens beneath the archive.'],
+			stateChanges: [],
+			memoryCandidates: [],
+			audioCues: [],
+		},
+	});
+	const after = repository.getStoryRun('memory-story')?.runtimeState?.plot?.beats?.length || 0;
+	assert.equal(result.plotBeatId, undefined);
+	assert.equal(after, before);
+});
+
+test('Phase 8 creates a plot beat only from a committed canonical state consequence', () => {
+	const { repository, situation } = setup();
+	const result = NarrativeMemoryLifecycle.processTurn({
+		repository,
+		storyId: 'memory-story',
+		turnId: 'turn-canonical-consequence',
+		playerAction: 'I use the authorized mechanism.',
+		currentSituation: situation,
+		stateAdjudication: {
+			turnId: 'turn-canonical-consequence',
+			storyId: 'memory-story',
+			actorId: situation.player.actorId,
+			allApproved: true,
+			approvedCount: 1,
+			rejectedCount: 0,
+			committedCount: 1,
+			rolledBack: false,
+			outcomes: [],
+			commitRecords: [{
+				commandId: 'canonical-1',
+				kind: 'HEALTH',
+				targetId: situation.player.actorId,
+				transactionMode: 'OUTER_STAGED_TRANSACTION',
+				source: 'AI_PROPOSAL',
+			}],
+		},
+		turnPackage: {
+			narrative: ['The authorized effect takes hold.'],
+			dialogue: [],
+			events: ['Decorative AI event claim.'],
+			stateChanges: [],
+			memoryCandidates: [],
+			audioCues: [],
+		},
+	});
+	assert.ok(result.plotBeatId);
+	const beats = repository.getStoryRun('memory-story')?.runtimeState?.plot?.beats || [];
+	assert.ok(beats.some((beat: any) => beat.id === result.plotBeatId));
+});
+
+test('Phase 8 does not close a thread when the narration says it is no longer resolved', () => {
+	const { repository, situation } = setup();
+	NarrativeMemoryLifecycle.processTurn({
+		repository,
+		storyId: 'memory-story',
+		turnId: 'turn-no-longer-resolved',
+		playerAction: 'I investigate.',
+		currentSituation: situation,
+		turnPackage: {
+			narrative: ['The origin of the fissure is no longer resolved; the evidence is uncertain.'],
+			dialogue: [],
+			events: [],
+			stateChanges: [],
+			memoryCandidates: ['The origin of the fissure remains unknown and requires investigation.'],
+			audioCues: [],
+		},
+	});
+	const threads = repository.getStoryRun('memory-story')?.runtimeState?.openNarrativeThreads || [];
+	assert.ok(threads.some((thread: any) => thread.status === 'OPEN' && thread.title.includes('origin of the fissure')));
+});

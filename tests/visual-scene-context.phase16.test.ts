@@ -216,6 +216,12 @@ describe('Phase 16 — visual scene context', () => {
 		assert.match(routeSource, /assertVisualSceneFreshness\(/);
 	});
 
+	it('binds generated scene artwork to the backend sourceActionId', async () => {
+		const storyView = await fs.readFile(new URL('../src/components/StoryView.tsx', import.meta.url), 'utf8');
+		assert.match(storyView, /setSceneSourceActionId\(result\.sourceActionId \|\| null\)/);
+		assert.match(storyView, /sceneSourceActionId && sceneSourceActionId !== latestTurnId/);
+	});
+
 	it('fails closed when the visual context freshness invariant is broken', () => {
 		const context = buildVisualSceneContext({
 			storyId: 'story_1',

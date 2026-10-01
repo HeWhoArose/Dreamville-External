@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
+import { InMemoryWorldRepository, worldRepository } from '../server/repositories/worldRepository';
 import { TurnIntegrationHarness } from '../server/domain/turnIntegrationHarness';
 import { CurrentSituationBuilder } from '../server/domain/currentSituation';
 import { NarrativeStateAdjudicator } from '../server/domain/narrativeStateAdjudicator';

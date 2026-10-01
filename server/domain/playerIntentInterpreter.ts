@@ -228,14 +228,24 @@ export class PlayerIntentInterpreter {
 			return name ? { id: clean(item.id) || undefined, name, kind: clean(item.kind) || undefined, source } : null;
 		};
 
-		const explicitTargets = Array.isArray(value.explicitTargets)
+		const modelExplicitTargets = Array.isArray(value.explicitTargets)
 			? value.explicitTargets.map((entry) => mapTarget(entry, 'EXPLICIT')).filter((entry): entry is IntentEntityReference => Boolean(entry))
-			: fallback.explicitTargets;
-		const impliedTargets = Array.isArray(value.impliedTargets)
+			: [];
+		const modelImpliedTargets = Array.isArray(value.impliedTargets)
 			? value.impliedTargets.map((entry) => mapTarget(entry, 'IMPLIED')).filter((entry): entry is IntentEntityReference => Boolean(entry))
-			: fallback.impliedTargets;
-
+			: [];
+		const textNormalized = normalize(originalText);
+		const knownEntities = situation?.nearbyEntities || [];
+		const targetIsGrounded = (target: IntentEntityReference): boolean => {
+			const targetName = normalize(target.name);
+			return textNormalized.includes(targetName) ||
+				knownEntities.some((entity) => entity.id === target.id && entity.visibleToPlayer);
+		};
+		const explicitTargets = modelExplicitTargets.filter(targetIsGrounded);
+		const impliedTargets = modelImpliedTargets.filter(targetIsGrounded);
 		const safeSpeech = fallback.speechIntent ? Boolean(value.speechIntent) : false;
+		const safeMovement = fallback.movementIntent || Boolean(value.movementIntent && MOVEMENT_PATTERN.test(originalText));
+		const safeObservation = fallback.observationIntent || Boolean(value.observationIntent && PASSIVE_OBSERVATION_PATTERN.test(originalText));
 		const safeMode = !fallback.speechIntent && fallback.interactionMode === 'PASSIVE_OBSERVATION'
 			? 'PASSIVE_OBSERVATION'
 			: mode;
@@ -253,8 +263,8 @@ export class PlayerIntentInterpreter {
 				: fallback.locationTarget,
 			interactionMode: safeMode,
 			speechIntent: safeSpeech,
-			movementIntent: Boolean(value.movementIntent) || fallback.movementIntent,
-			observationIntent: Boolean(value.observationIntent) || fallback.observationIntent,
+			movementIntent: safeMovement,
+			observationIntent: safeObservation,
 			informationGoal: clean(value.informationGoal) || fallback.informationGoal,
 			explicitTargets,
 			impliedTargets,

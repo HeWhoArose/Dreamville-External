@@ -127,6 +127,9 @@ export class SemanticNarrativeReview {
 			const researchAnchors = [
 				...situation.visibleEvents.map((event) => event.summary),
 				...situation.relevantLore.map((fact) => [fact.predicate, fact.objectValue].join(' ')),
+				...situation.openThreads.map((thread) => [thread.title, thread.summary].filter(Boolean).join(' ')),
+				situation.plot.summary,
+				situation.activeDialogue?.text || '',
 				...plan.informationToReveal.map((reveal) => reveal.topic),
 			].join(' ');
 			if (overlap(narration, researchAnchors) < 0.08 && !/\b(?:nothing|no one|nobody|unclear|uncertain|unknown|unverified|could not|couldn't|refused|silent|silence)\b/i.test(lower)) {

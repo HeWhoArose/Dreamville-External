@@ -6963,7 +6963,7 @@ export class MultiModelOrchestrator {
         attemptsTrail: generated.attemptsTrail,
         researchPacket,
         narrativePlan,
-        researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
+        researchAudit: researchResult ? { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query } : undefined,
         contextAudit,
         error: finalSceneContinuity.errorReason || 'Narration scene continuity validation failed.',
       };
@@ -7127,23 +7127,28 @@ export class MultiModelOrchestrator {
         viewerActorId: initialSituation.player.actorId,
         worldRepo: repo,
       });
-      const researchResult = NarrativeResearchPipeline.research({
-        repository: repo,
-        storyId,
-        currentSituation,
-        playerIntent,
-        playerAction: params.playerAction || '',
-        hardTokenBudget: Math.max(1600, hardTokenBudget * 2),
-        viewerActorId: currentSituation.player.actorId,
-      });
-      const researchPacket = researchResult.packet;
-      const narrativePlan = NarrativeDirector.create({
-        situation: currentSituation,
-        intent: playerIntent,
-        research: researchResult,
-      });
+      const isNarrativeTask = task === 'narrative.generate';
+      const researchResult = isNarrativeTask
+        ? NarrativeResearchPipeline.research({
+            repository: repo,
+            storyId,
+            currentSituation,
+            playerIntent,
+            playerAction: params.playerAction || '',
+            hardTokenBudget: Math.max(1600, hardTokenBudget * 2),
+            viewerActorId: currentSituation.player.actorId,
+          })
+        : undefined;
+      const researchPacket = researchResult?.packet;
+      const narrativePlan = researchResult
+        ? NarrativeDirector.create({
+            situation: currentSituation,
+            intent: playerIntent,
+            research: researchResult,
+          })
+        : undefined;
 
-      // 1. Ingest the shared CurrentSituation + Phase 3 research + Phase 4 plan into Working Context.
+      // 1. Ingest the shared CurrentSituation + optional Phase 3-4 narration context into Working Context.
       const assembledContext: AssembledTurnContext = WorkingContextEngine.assembleTurnContext({
         storyId,
         playerAction: params.playerAction || 'Observe surroundings and assess position',
@@ -7153,47 +7158,57 @@ export class MultiModelOrchestrator {
         viewerActorId: currentSituation.player.actorId,
         hardTokenBudget,
         worldRepo: repo,
-        customChunks: [{
-          id: 'b2_player_intent',
-          band: 'B2_IMMEDIATE',
-          label: 'Semantic Player Intent',
-          content: JSON.stringify(playerIntent),
-          estimatedTokens: WorkingContextEngine.estimateTokens(JSON.stringify(playerIntent)),
-          sourceAuthority: 'PlayerIntentInterpreter',
-          relevanceScore: 1,
-          isProtected: true,
-        }, {
-          id: 'b3_narrative_research',
-          band: 'B3_CAUSAL_OPPORTUNITY',
-          label: 'Bounded Narrative Research',
-          content: researchResult.promptContext,
-          estimatedTokens: WorkingContextEngine.estimateTokens(researchResult.promptContext),
-          sourceAuthority: 'NarrativeResearchPipeline (Phase 3)',
-          relevanceScore: 0.98,
-          isProtected: false,
-        }, {
-          id: 'b2_narrative_plan',
-          band: 'B2_IMMEDIATE',
-          label: 'Ephemeral Narrative Director Plan',
-          content: NarrativeDirector.toPromptContext(narrativePlan),
-          estimatedTokens: WorkingContextEngine.estimateTokens(NarrativeDirector.toPromptContext(narrativePlan)),
-          sourceAuthority: 'NarrativeDirector (Phase 4)',
-          relevanceScore: 1,
-          isProtected: true,
-        }],
+        customChunks: [
+          {
+            id: 'b2_player_intent',
+            band: 'B2_IMMEDIATE',
+            label: 'Semantic Player Intent',
+            content: JSON.stringify(playerIntent),
+            estimatedTokens: WorkingContextEngine.estimateTokens(JSON.stringify(playerIntent)),
+            sourceAuthority: 'PlayerIntentInterpreter',
+            relevanceScore: 1,
+            isProtected: true,
+          },
+          ...(researchResult ? [{
+            id: 'b3_narrative_research',
+            band: 'B3_CAUSAL_OPPORTUNITY' as const,
+            label: 'Bounded Narrative Research',
+            content: researchResult.promptContext,
+            estimatedTokens: WorkingContextEngine.estimateTokens(researchResult.promptContext),
+            sourceAuthority: 'NarrativeResearchPipeline (Phase 3)',
+            relevanceScore: 0.98,
+            isProtected: false,
+          }] : []),
+          ...(narrativePlan ? [{
+            id: 'b2_narrative_plan',
+            band: 'B2_IMMEDIATE' as const,
+            label: 'Ephemeral Narrative Director Plan',
+            content: NarrativeDirector.toPromptContext(narrativePlan),
+            estimatedTokens: WorkingContextEngine.estimateTokens(NarrativeDirector.toPromptContext(narrativePlan)),
+            sourceAuthority: 'NarrativeDirector (Phase 4)',
+            relevanceScore: 1,
+            isProtected: true,
+          }] : []),
+        ],
       });
 
       // 1b. CH15 Source Adaptation Adjudication Check
-      const narrationPrompt = buildNarrationPrompt({
-        situation: currentSituation,
-        intent: playerIntent,
-        research: researchResult,
-        plan: narrativePlan,
-        workingContext: projectSupportingWorkingContext(assembledContext),
-        globalInstruction: 'You are Dreamville’s authoritative narrative presentation engine. Generate only the player-facing narrative turn. Canonical game state remains authoritative and prose never commits state.',
-        styleInstruction: defaultNarrationStyle(),
-        maxPromptTokens: Math.max(hardTokenBudget * 2, 2200),
-      });
+      const narrationPrompt = isNarrativeTask && researchResult && narrativePlan
+        ? buildNarrationPrompt({
+            situation: currentSituation,
+            intent: playerIntent,
+            research: researchResult,
+            plan: narrativePlan,
+            workingContext: projectSupportingWorkingContext(assembledContext),
+            globalInstruction: 'You are Dreamville’s authoritative narrative presentation engine. Generate only the player-facing narrative turn. Canonical game state remains authoritative and prose never commits state.',
+            styleInstruction: defaultNarrationStyle(),
+            maxPromptTokens: Math.max(hardTokenBudget * 2, 2200),
+          })
+        : {
+            prompt: assembledContext.assembledText,
+            styleInstruction: defaultNarrationStyle(),
+            totalTokens: assembledContext.totalTokens,
+          };
 
       const profile = repo.getAdaptationProfile(storyId);
       const bible = repo.getAdaptedStoryBible(storyId);
@@ -7504,9 +7519,9 @@ export class MultiModelOrchestrator {
               checkpointCreated: checkpointId,
               recoveredFromCheckpoint: Boolean(params.checkpointId),
               idempotencyKey: rawIdempotencyKey,
-              researchBlockCount: researchResult.blocks.length,
-              researchTokens: researchResult.totalTokens,
-              narrativePlanObjective: narrativePlan.objective,
+              researchBlockCount: researchResult?.blocks.length,
+              researchTokens: researchResult?.totalTokens,
+              narrativePlanObjective: narrativePlan?.objective,
             };
             this.lastTurnTelemetry = telemetry;
             narrativeContinuityEngine.recordTurn(repo, {
@@ -7672,9 +7687,9 @@ export class MultiModelOrchestrator {
               checkpointCreated: checkpointId,
               recoveredFromCheckpoint: Boolean(params.checkpointId),
               idempotencyKey: rawIdempotencyKey,
-              researchBlockCount: researchResult.blocks.length,
-              researchTokens: researchResult.totalTokens,
-              narrativePlanObjective: narrativePlan.objective,
+              researchBlockCount: researchResult?.blocks.length,
+              researchTokens: researchResult?.totalTokens,
+              narrativePlanObjective: narrativePlan?.objective,
             };
             this.lastTurnTelemetry = telemetry;
 

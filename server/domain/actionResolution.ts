@@ -1,4 +1,3 @@
-import type { StateChangeProposal } from '../../src/types';
 import type { StoryCheckResult } from '../../src/types';
 
 export type { ActionResolution, ActionResolutionMethod, ActionOutcomeTier } from '../../src/types';

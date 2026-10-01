@@ -255,7 +255,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		} else if (maxPromptTokens >= 1000) {
 			const compact = {
 				intentContext: intentContext,
-				researchContext: truncatePromptSection(initialResearch, 420),
+				researchContext: truncatePromptSection(initialResearch, 700),
 				planContext: truncatePromptSection(planContext, 300),
 				workingContext: truncatePromptSection(initialWorking, 320),
 				situationContext: truncatePromptSection(situationContext, 900),
@@ -274,7 +274,6 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			for (let pass = 0; pass < 48 && totalTokens > maxPromptTokens; pass += 1) {
 				const keys: Array<keyof typeof compact> = [
 					'workingContext',
-					'researchContext',
 					'planContext',
 					'situationContext',
 				];

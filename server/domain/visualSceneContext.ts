@@ -84,7 +84,6 @@ function projectVisibleCharacters(situation: CurrentSituation): VisualCharacterC
 			entity.visibleToPlayer &&
 			entity.locationId === situation.location.id &&
 			entity.id !== situation.player.actorId &&
-			entity.isAlive !== false &&
 			(entity.kind === 'NPC' || entity.kind === 'CHARACTER' || entity.kind === 'CREATURE'),
 		)
 		.slice(0, 8)
@@ -120,7 +119,7 @@ export function buildVisualSceneContext(input: BuildVisualSceneContextInput): Vi
 	const latestTurn = input.presentationAction || selectLatestVisualTurn(input.actionHistory || []);
 	const latestVisualCues = uniqueNonEmpty(latestTurn?.visualCues || []).slice(0, 4);
 	const latestPlayerAction = normalize(latestTurn?.description);
-	const latestNarrative = normalize(latestTurn?.narrativeResponse || latestTurn?.presentationFeedback || latestTurn?.authoritativeFeedback);
+	const latestNarrative = normalize(latestTurn?.narrativeResponse || latestTurn?.presentationFeedback);
 	const outcome = resolveCanonicalVisualOutcome(latestTurn);
 	const openingState = !latestTurn;
 

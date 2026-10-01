@@ -63,7 +63,7 @@ export class NarrativeContinuityEngine {
     const runtime = (run?.runtimeState || {}) as Record<string, any>;
     return {
       plot: JSON.parse(JSON.stringify(runtime.plot || this.defaultPlot(storyId))),
-      plan: JSON.parse(JSON.stringify(runtime.narrativePlan || this.defaultPlan(storyId))),
+      plan: JSON.parse(JSON.stringify(runtime.continuityPlan || runtime.narrativePlan || this.defaultPlan(storyId))),
       research: runtime.narrativeResearch ? JSON.parse(JSON.stringify(runtime.narrativeResearch)) : undefined,
     };
   }
@@ -264,7 +264,7 @@ export class NarrativeContinuityEngine {
       state.plan.nextBeats = state.plot.beats.slice(-4).map((beat) => beat.text);
       state.plan.updatedAt = timestamp;
       state.plan.version += 1;
-      run.runtimeState = { ...(run.runtimeState || {}), plot: state.plot, narrativePlan: state.plan };
+      run.runtimeState = { ...(run.runtimeState || {}), plot: state.plot, continuityPlan: state.plan };
       repository.saveStoryRun(run);
       return state;
     }
@@ -279,7 +279,7 @@ export class NarrativeContinuityEngine {
     state.plan.contingencies = ['Respect current world and character knowledge boundaries.', 'Prefer canonical consequences over invented drama.'];
     state.plan.updatedAt = formatCanonicalTimestamp(repository.getWorldClock(params.storyId).getTimestamp());
     state.plan.version += 1;
-    run.runtimeState = { ...(run.runtimeState || {}), plot: state.plot, narrativePlan: state.plan };
+    run.runtimeState = { ...(run.runtimeState || {}), plot: state.plot, continuityPlan: state.plan };
     repository.saveStoryRun(run);
     return state;
   }

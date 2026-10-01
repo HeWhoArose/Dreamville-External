@@ -311,7 +311,7 @@ test('canonical commit ledger can recover an interrupted command from its pre-st
   assert.equal(canonicalCommitLedger.find(repository, storyId, command.commandId)!.phase, 'HANDLER_RESOLVED');
 });
 
-test('canonical command execution automatically recovers an interrupted repository-local commit before the next command', async () => {
+test('canonical command execution recovers an interrupted repository-local commit during an explicit recovery operation', async () => {
   const repository = new InMemoryWorldRepository({ disablePersistence: true });
   const storyId = 'phase23_auto_recovery';
   repository.seedStory(storyId);
@@ -341,6 +341,14 @@ test('canonical command execution automatically recovers an interrupted reposito
   );
 
   const { canonicalCommandEngine } = await import('../server/domain/canonicalCommandEngine');
+  const recovered = canonicalCommitLedger.recoverInterrupted(
+    repository,
+    storyId,
+    'Y0001-M01-D01T00:00:01',
+  );
+  assert.equal(recovered.length, 1);
+  assert.equal(recovered[0].phase, 'ABORTED');
+
   const result = await canonicalCommandEngine.execute(
     repository,
     {

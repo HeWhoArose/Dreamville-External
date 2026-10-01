@@ -523,12 +523,15 @@ export interface OrchestratedTurnTelemetry {
   researchBlockCount?: number;
   researchTokens?: number;
   narrativePlanObjective?: string;
+  narrativeReview?: NarrativeReview;
 }
 
 export interface OrchestratedTurnResult {
   success: boolean;
   playerIntent?: PlayerIntent;
   narrativePlan?: EphemeralNarrativePlan;
+  narrativeReview?: NarrativeReview;
+  stateAdjudication?: StateAdjudicationResult;
   turnPackage?: StructuredTurnPackage;
   telemetry: OrchestratedTurnTelemetry;
   adjudicationResult?: AdjudicationResult;

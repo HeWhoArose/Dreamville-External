@@ -193,7 +193,47 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 
 	// Final compact mode: keep the semantic contract intact while reducing lower-priority prose.
 	if (totalTokens > maxPromptTokens) {
-		if (maxPromptTokens >= 1000) {
+		if (maxPromptTokens < 600) {
+			const budgetChars = Math.max(1200, maxPromptTokens * 4);
+			const microGlobal = 'Generate only the player-facing narrative. Preserve player agency and canonical truth. Never make major future decisions for the player.';
+			const microSituation = truncatePromptSection(situationContext, 360);
+			const microIntent = truncatePromptSection(intentContext, 180);
+			const microResearch = truncatePromptSection(initialResearch, 220);
+			const microPlan = truncatePromptSection(planContext, 140);
+			const microCanonical = 'The current location and time are authoritative. Stay in the canonical current location unless the canonical game state has already committed a location change. Do not invent unsupported facts or turn rumor into certainty.';
+			const microOutput = '{"narrative":["..."],"dialogue":[],"events":[],"stateChanges":[],"memoryCandidates":[],"audioCues":[],"visualCues":[]}';
+			const sections = [
+				section('GLOBAL NARRATION INSTRUCTIONS', microGlobal),
+				section('CURRENT SITUATION', microSituation),
+				section('PLAYER INTENT', microIntent),
+				section('NARRATIVE RESEARCH', microResearch),
+				section('NARRATIVE DIRECTOR PLAN', microPlan),
+				section('CANONICAL CURRENT SCENE ANCHOR', microCanonical),
+				section('OUTPUT CONTRACT', 'Return ONLY valid JSON in this shape: ' + microOutput),
+			];
+			prompt = sections.join('\\n\\n');
+			totalTokens = WorkingContextEngine.estimateTokens(prompt);
+			if (totalTokens > maxPromptTokens) {
+				const removable = [
+					['NARRATIVE RESEARCH\\n', microResearch],
+					['NARRATIVE DIRECTOR PLAN\\n', microPlan],
+					['PLAYER INTENT\\n', microIntent],
+					['CURRENT SITUATION\\n', microSituation],
+				];
+				for (const [, value] of removable) {
+					if (totalTokens <= maxPromptTokens) break;
+					const idx = prompt.indexOf(value);
+					if (idx >= 0) {
+						prompt = prompt.slice(0, idx) + '[omitted for hard token budget]' + prompt.slice(idx + value.length);
+						totalTokens = WorkingContextEngine.estimateTokens(prompt);
+					}
+				}
+			}
+			if (totalTokens > maxPromptTokens) {
+				prompt = prompt.slice(0, Math.max(200, budgetChars));
+				totalTokens = WorkingContextEngine.estimateTokens(prompt);
+			}
+		} else if (maxPromptTokens >= 1000) {
 			const compact = {
 				intentContext: truncatePromptSection(intentContext, 260),
 				researchContext: truncatePromptSection(initialResearch, 420),

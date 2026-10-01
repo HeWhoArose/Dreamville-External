@@ -66,8 +66,8 @@ const SAVE_PROFILES: SaveProfile[] = [
     ],
     actionTriggers: ['open', 'touch', 'step', 'walk', 'move', 'enter', 'approach', 'toward', 'towards', 'forward'],
     dc: 13,
-    reason: 'Reacting quickly to avoid a physical hazard.',
-    triggerReason: 'The scene contains a sudden physical hazard that requires a reflexive response.',
+    reason: 'Maintaining balance and control while traversing a physical hazard.',
+    triggerReason: 'The current scene makes ordinary traversal physically hazardous or uncertain, requiring a reflexive movement response.',
   },
   {
     ability: 'Constitution',

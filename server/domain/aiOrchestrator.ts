@@ -6422,7 +6422,7 @@ export class MultiModelOrchestrator {
 
     const escapedActor = String(actorName || '')
       .trim()
-      .replace(/[.*+?^$()|[\\]\\]/g, '\\$&');
+      .replace(/[.*+?^$()|[\]\\]/g, '\\.replace(/[.*+?^$()|[\]\\]/g, '\\.replace(/[.*+?^$()|[\\]\\]/g, '\\$&');');');
     const subjects = ['you'];
     if (escapedActor) subjects.push(escapedActor);
     const speechVerbs = 'ask|asks|asked|say|says|said|speak|speaks|spoke|tell|tells|told|reply|replies|replied|answer|answers|answered|inquire|inquires|inquired|question|questions|questioned|consult|consults|consulted|shout|shouts|shouted|call out|calls out|called out';
@@ -7597,11 +7597,11 @@ export class MultiModelOrchestrator {
               lastError = intentSafety.errorReason || 'Emergency narration violated semantic player intent.';
             } else {
               const adjudication = DomainAdjudicationBridge.adjudicate(
-              validation.turnPackage,
-              repo,
-              storyId,
-              narrativePlan,
-            );
+                validation.turnPackage,
+                repo,
+                storyId,
+                narrativePlan,
+              );
             const checkpointId = rawIdempotencyKey
               ? deterministicId('cp_emergency', storyId, rawIdempotencyKey.replace(/[^a-zA-Z0-9_-]/g, '_'), totalAttempts)
               : deterministicId('cp_emergency', storyId, turnId, totalAttempts);

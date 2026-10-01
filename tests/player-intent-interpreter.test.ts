@@ -174,3 +174,27 @@ test('AI intent cannot invent a target absent from player text or visible scene'
 	assert.ok(result);
 	assert.equal(result.explicitTargets.some((target) => target.name === 'Secret Door'), false);
 });
+
+
+test('AI intent cannot erase explicit player speech', () => {
+	const { currentSituation } = situation();
+	const result = PlayerIntentInterpreter.fromModel(
+		{
+			action: 'observe_silently',
+			goal: 'observe',
+			interactionMode: 'PASSIVE_OBSERVATION',
+			speechIntent: false,
+			movementIntent: false,
+			observationIntent: true,
+			confidence: 0.99,
+			explicitTargets: [],
+			impliedTargets: [],
+		},
+		'I ask the guard what happened.',
+		currentSituation,
+	);
+
+	assert.ok(result);
+	assert.equal(result.speechIntent, true);
+	assert.equal(result.interactionMode, 'DIALOGUE');
+});

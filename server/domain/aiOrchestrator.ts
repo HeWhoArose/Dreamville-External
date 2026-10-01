@@ -6422,7 +6422,7 @@ export class MultiModelOrchestrator {
 
     const escapedActor = String(actorName || '')
       .trim()
-      .replace(/[.*+?^$()|[\]\\]/g, '\\.replace(/[.*+?^$()|[\]\\]/g, '\\.replace(/[.*+?^$()|[\\]\\]/g, '\\$&');');');
+      .replace(/[.*+?^$()|[\]\\]/g, '\\$&');
     const subjects = ['you'];
     if (escapedActor) subjects.push(escapedActor);
     const speechVerbs = 'ask|asks|asked|say|says|said|speak|speaks|spoke|tell|tells|told|reply|replies|replied|answer|answers|answered|inquire|inquires|inquired|question|questions|questioned|consult|consults|consulted|shout|shouts|shouted|call out|calls out|called out';

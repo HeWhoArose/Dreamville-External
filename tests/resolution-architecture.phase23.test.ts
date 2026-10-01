@@ -33,6 +33,49 @@ test('resolution gate does not roll for routine safe movement', () => {
   assert.equal(result.shouldRoll, false);
 });
 
+test('resolution gate keeps routine force actions deterministic without resistance', () => {
+  const result = ResolutionGate.evaluate({
+    actionText: 'I push the door open.',
+    currentSituation: {
+      location: {
+        id: 'loc',
+        name: 'Hall',
+        regionId: 'region',
+        description: 'A normal unlocked door stands here.',
+        accessible: true,
+        discovered: true,
+        connectedLocations: [],
+      },
+      activeConditions: [],
+      visibleEvents: [],
+    } as any,
+  });
+  assert.equal(result.mode, 'NO_CHECK');
+  assert.equal(result.shouldRoll, false);
+});
+
+test('resolution gate rolls for force against explicit resistance', () => {
+  const result = ResolutionGate.evaluate({
+    actionText: 'I force the jammed gate.',
+    currentSituation: {
+      location: {
+        id: 'loc',
+        name: 'Gatehouse',
+        regionId: 'region',
+        description: 'A jammed gate blocks the passage.',
+        accessible: true,
+        discovered: true,
+        connectedLocations: [],
+      },
+      activeConditions: [],
+      visibleEvents: [],
+    } as any,
+  });
+  assert.equal(result.mode, 'CHECK_CANDIDATE');
+  assert.equal(result.shouldRoll, true);
+  assert.match(result.rationale, /resistance/i);
+});
+
 test('resolution gate rolls for explicit parkour even without an authored challenge', () => {
   const result = ResolutionGate.evaluate({
     actionText: 'I parkour across the broken pavement toward the lantern.',

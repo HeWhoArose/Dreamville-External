@@ -307,7 +307,7 @@ test('narration prompt gives structured action resolution precedence over prose 
       availableInteractions: [],
     } as any,
     intent: resolution.playerIntent as any,
-    research: { promptContext: 'none' } as any,
+    research: { blocks: [] } as any,
     plan: {
       objective: 'Resolve current action',
       nextBeats: [],

@@ -148,8 +148,8 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		section('OUTPUT CONTRACT', outputContract),
 	].join('\n\n');
 
-	const initialResearch = input.research?.promptContext || '[research unavailable; use current situation only and preserve uncertainty]';
-	const initialWorking = input.workingContext || '[no additional working context]';
+	const initialResearch = boundedResearch.promptContext || '[research unavailable; use current situation only and preserve uncertainty]';
+	const initialWorking = boundedWorkingContext || '[no additional working context]';
 	const maxPromptTokens = input.maxPromptTokens;
 	if (!maxPromptTokens) {
 		const prompt = compose(initialResearch, initialWorking);

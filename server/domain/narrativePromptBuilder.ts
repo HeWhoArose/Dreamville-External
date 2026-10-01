@@ -3,6 +3,7 @@ import type { PlayerIntent } from './playerIntentInterpreter';
 import { NarrativeDirector, type EphemeralNarrativePlan } from './narrativeDirector';
 import type { NarrativeResearchResult } from './narrativeResearchPipeline';
 import { WorkingContextEngine, type AssembledTurnContext } from './workingContextEngine';
+import { EpistemicBoundaryEnforcer } from './epistemicBoundary';
 
 export interface NarrationPromptInput {
 	situation: CurrentSituation;
@@ -112,6 +113,8 @@ function truncatePromptSection(value: string, maxChars: number): string {
 }
 
 export function buildNarrationPrompt(input: NarrationPromptInput): NarrationPromptResult {
+	const boundedResearch = EpistemicBoundaryEnforcer.sanitizeResearch(input.research, input.situation).result;
+	const boundedWorkingContext = EpistemicBoundaryEnforcer.sanitizeContext(input.workingContext || '[no additional working context]', input.situation).text;
 	const globalInstruction = input.globalInstruction || 'You are the narrative presentation engine for Dreamville. Generate only the player-facing narrative turn. Canonical state, player intent, bounded research, and the ephemeral plan are authoritative inputs; prose is not canonical truth.';
 	const styleInstruction = input.styleInstruction || defaultNarrationStyle();
 	const situationContext = input.situation ? buildNarrationSituationContext(input.situation) : '[current situation unavailable]';

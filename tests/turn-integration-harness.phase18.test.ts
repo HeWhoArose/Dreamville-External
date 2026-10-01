@@ -1,14 +1,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { WorldRepository } from '../server/repositories/worldRepository';
+import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
 import { TurnIntegrationHarness } from '../server/domain/turnIntegrationHarness';
 import { CurrentSituationBuilder } from '../server/domain/currentSituation';
 import { NarrativeStateAdjudicator } from '../server/domain/narrativeStateAdjudicator';
 import type { StructuredTurnPackage } from '../server/domain/aiOrchestrator';
 import { PlayerIntentInterpreter } from '../server/domain/playerIntentInterpreter';
 
-function freshRepository(): WorldRepository {
-	return new WorldRepository({ disablePersistence: true });
+function freshRepository(): InMemoryWorldRepository {
+	return new InMemoryWorldRepository({ disablePersistence: true });
 }
 
 describe('Phase 18 — end-to-end turn harness', () => {

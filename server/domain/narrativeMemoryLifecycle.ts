@@ -248,7 +248,7 @@ export class NarrativeMemoryLifecycle {
 			promotedMemoryIds,
 			updatedThreadIds,
 			resolvedThreadIds,
-			plotBeatId: beatId,
+			plotBeatId,
 			plotSummary,
 			contextHistoryRecorded: true,
 		};

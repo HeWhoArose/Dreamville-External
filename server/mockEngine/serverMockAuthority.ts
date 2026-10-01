@@ -836,7 +836,48 @@ export class ServerMockAuthority {
       }
     } else if (itemUseResolution.requested && itemUseResolution.found && storyCheck && !storyCheck.success) {
       committedOutcome += ` The attempted use of ${itemUseResolution.item?.name || 'the item'} did not resolve successfully; do not consume the item.`;
+      actionResolution.actualEffect += ' The item-use attempt did not resolve successfully.';
     }
+
+    if (itemUseResult?.success) {
+      actionResolution.resolutionMethod = 'ITEM_USE';
+      const itemName = itemUseResolution.item?.name || 'item';
+      if (itemUseResult.healing) {
+        actionResolution.actualEffect += ` ${itemName} was consumed and restored ${itemUseResult.healing.finalAmount} health.`;
+        actionResolution.playerVisibleConsequences.push(
+          `${itemName} was consumed and restored ${itemUseResult.healing.finalAmount} health.`,
+        );
+        actionResolution.canonicalStateChanges.push({
+          kind: 'INVENTORY',
+          targetId: actorId,
+          value: { itemId: itemUseResolution.item?.id, consumed: true },
+          metadata: { source: 'canonical_item_use' },
+        });
+        actionResolution.canonicalStateChanges.push({
+          kind: 'HEALTH',
+          targetId: actorId,
+          value: { restored: itemUseResult.healing.finalAmount },
+          metadata: { source: 'canonical_item_use' },
+        });
+      } else if (itemUseResult.consumed?.success) {
+        actionResolution.actualEffect += ` ${itemName} was used successfully and its configured quantity/charge was consumed.`;
+        actionResolution.playerVisibleConsequences.push(
+          `${itemName} was used successfully.`,
+        );
+        actionResolution.canonicalStateChanges.push({
+          kind: 'INVENTORY',
+          targetId: actorId,
+          value: { itemId: itemUseResolution.item?.id, consumed: true },
+          metadata: { source: 'canonical_item_use' },
+        });
+      }
+    } else if (itemUseResult && !itemUseResult.success) {
+      actionResolution.outcomeTier = storyCheck?.success === false ? 'FAILURE_WITH_COST' : 'BLOCKED';
+      actionResolution.actualEffect += ` Item use failed: ${itemUseResult.errorReason || 'item use could not be committed'}.`;
+      actionResolution.uncertainty.push('Canonical item-use transaction did not commit.');
+    }
+
+    const conditionStateBeforeAction = conditionEngine.getActorState(actorId);
 
     const spatialMovementIntent = Boolean(resolutionIntent.movementIntent) &&
       !player?.isTraveling &&
@@ -898,6 +939,25 @@ export class ServerMockAuthority {
       });
       if (fallResolution.applied && fallResolution.damage) {
         committedOutcome += ` A canonical ${fallResolution.damageFormula} fall-damage resolution was applied, resulting in ${fallResolution.damage.finalAmount} damage and ${fallResolution.damage.healthCurrent} health remaining.`;
+        actionResolution.outcomeTier =
+          storyCheck?.success === false ? 'FAILURE_WITH_COST' :
+          storyCheck ? 'SUCCESS_WITH_COST' : 'SUCCESS_WITH_COST';
+        actionResolution.actualEffect += ` A canonical fall consequence applied ${fallResolution.damage.finalAmount} damage.`;
+        actionResolution.physicalConsequences.push(
+          `Fall consequence: ${fallResolution.damage.finalAmount} damage; ${fallResolution.damage.healthCurrent} health remaining.`,
+        );
+        actionResolution.playerVisibleConsequences.push(
+          `The fall causes ${fallResolution.damage.finalAmount} damage.`,
+        );
+        actionResolution.canonicalStateChanges.push({
+          kind: 'DAMAGE',
+          targetId: actorId,
+          value: {
+            amount: fallResolution.damage.finalAmount,
+            healthCurrent: fallResolution.damage.healthCurrent,
+          },
+          metadata: { source: 'environmental_hazard_engine' },
+        });
       }
     }
 
@@ -905,7 +965,31 @@ export class ServerMockAuthority {
     conditionEngine.processAction(actorId, String(freeformText), worldRepository.getWorldClock(targetStoryId).getAbsoluteTime());
     conditionEngine.tickActor(actorId, 'TURN', worldRepository.getWorldClock(targetStoryId).getAbsoluteTime());
 
-    const conditionStateAfterAction = conditionEngine.getActorState(actorId);
+        const conditionStateAfterAction = conditionEngine.getActorState(actorId);
+    if (conditionStateBeforeAction && conditionStateAfterAction) {
+      const healthChanged = conditionStateBeforeAction.healthCurrent !== conditionStateAfterAction.healthCurrent;
+      const deathChanged = Boolean(conditionStateBeforeAction.dead) !== Boolean(conditionStateAfterAction.dead);
+      if (healthChanged || deathChanged) {
+        actionResolution.outcomeTier =
+          actionResolution.outcomeTier === 'FAILURE'
+            ? 'FAILURE_WITH_COST'
+            : actionResolution.outcomeTier === 'CLEAN_SUCCESS'
+              ? 'SUCCESS_WITH_COST'
+              : actionResolution.outcomeTier;
+        actionResolution.actualEffect += healthChanged
+          ? ` Condition processing changed health to ${conditionStateAfterAction.healthCurrent}.`
+          : ' Condition processing changed the actor state.';
+        actionResolution.canonicalStateChanges.push({
+          kind: 'CONDITION',
+          targetId: actorId,
+          value: {
+            healthCurrent: conditionStateAfterAction.healthCurrent,
+            dead: Boolean(conditionStateAfterAction.dead),
+          },
+          metadata: { source: 'condition_engine' },
+        });
+      }
+    }
     const currentPowerState = capabilityEngine.getPowerState(actorId);
     if (conditionStateAfterAction && currentPowerState) {
       capabilityEngine.setPowerState(actorId, {

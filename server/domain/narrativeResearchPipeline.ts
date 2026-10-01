@@ -1,5 +1,6 @@
 import type { WorldRepository } from '../repositories/worldRepository';
 import { WorkingContextEngine } from './workingContextEngine';
+import { formatCanonicalTimestamp } from './deterministicRng';
 import { CurrentSituationBuilder, type CurrentSituation } from './currentSituation';
 import { narrativeContinuityEngine, type NarrativeResearchPacket } from './narrativeContinuityEngine';
 import type { PlayerIntent } from './playerIntentInterpreter';
@@ -125,14 +126,14 @@ function emptyPacket(storyId: string, query: string, viewerActorId: string, situ
 	};
 }
 
-function currentTurnQuery(situation: CurrentSituation, packet: NarrativeResearchPacket): string {
+function currentTurnQuery(situation: CurrentSituation, playerAction?: string): string {
 	return [
+		playerAction,
 		situation.currentAction?.originalText,
 		situation.currentAction?.goal,
 		situation.currentAction?.informationGoal,
 		situation.location.name,
 		situation.activeDialogue?.text,
-		packet.query,
 	]
 		.filter(Boolean)
 		.join(' ');
@@ -227,9 +228,7 @@ export class NarrativeResearchPipeline {
 			worldRepo: params.repository,
 		});
 		const playerIntent = params.playerIntent || situation.currentAction;
-		const query = currentTurnQuery(situation, {
-			query: params.playerAction || situation.currentAction?.originalText || '',
-		} as NarrativeResearchPacket);
+		const query = currentTurnQuery(situation, params.playerAction || situation.currentAction?.originalText || '');
 		const researchQuery = query || 'current story context';
 		const failures: string[] = [];
 		let packet: NarrativeResearchPacket;
@@ -320,26 +319,23 @@ export class NarrativeResearchPipeline {
 		const entityCards = params.repository.getEntityCards(params.storyId);
 		for (const entity of entityCards) {
 			if (!explicitTargetIds.has(entity.id)) continue;
-			if (!relevantEntities.some((candidate) => candidate.id === entity.id)) {
-				addCandidate(candidates, {
-					id: `research_entity_sheet_${entity.id}`,
-					kind: 'ENTITY',
-					source: 'WorldRepository.entityCards',
-					sourceId: entity.id,
-					priority: blockPriority('ENTITY'),
-					reason: 'The player explicitly referenced a canonical entity; retrieve its current sheet without exposing unrelated entities.',
-					expiration: 'TURN',
-					relevanceScore: 1,
-					content: truncate(JSON.stringify({
-						id: entity.id,
-						name: entity.name,
-						identity: entity.identity,
-						role: entity.role,
-						worldState: entity.worldState,
-						lifecycle: entity.lifecycle,
-					}), 2200),
-				}, queryTokens);
-			}
+			if (relevantEntities.some((candidate) => candidate.id === entity.id)) continue;
+			addCandidate(candidates, {
+				id: `research_entity_sheet_${entity.id}`,
+				kind: 'ENTITY',
+				source: 'WorldRepository.entityCards',
+				sourceId: entity.id,
+				priority: blockPriority('ENTITY'),
+				reason: 'The player explicitly referenced a canonical entity; retrieve only player-safe identity and role context.',
+				expiration: 'TURN',
+				relevanceScore: 1,
+				content: truncate(JSON.stringify({
+					id: entity.id,
+					name: entity.name,
+					identity: entity.identity,
+					role: entity.role,
+				}), 1600),
+			}, queryTokens);
 		}
 
 		const consequenceTurns = situation.recentTurns
@@ -363,15 +359,9 @@ export class NarrativeResearchPipeline {
 			}, queryTokens);
 		}
 
-		const threadCandidates = [
-			...situation.openThreads,
-			...packet.storyThreads.slice(-12).map((thread: any, index) => ({
-				id: normalize(thread?.id || thread?.threadId || `thread_packet_${index + 1}`),
-				title: normalize(thread?.title || thread?.name || thread?.summary || thread?.description || ''),
-				summary: normalize(thread?.summary || thread?.description || ''),
-				status: normalize(thread?.status || thread?.state || 'OPEN'),
-			})),
-		];
+		// Only use threads surfaced through Current Situation. The continuity packet can contain broader server-side threads.
+		const threadCandidates = [...situation.openThreads];
+
 		const seenThreads = new Set<string>();
 		for (const thread of threadCandidates) {
 			const title = normalize((thread as any)?.title || (thread as any)?.name || '');
@@ -596,7 +586,7 @@ export class NarrativeResearchPipeline {
 			budgets,
 			promptContext,
 			totalTokens: total,
-			capturedAt: JSON.stringify(capturedAt),
+			capturedAt: formatCanonicalTimestamp(capturedAt),
 		};
 	}
 

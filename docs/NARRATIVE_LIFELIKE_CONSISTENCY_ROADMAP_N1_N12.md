@@ -572,12 +572,12 @@ Every AI call must have:
 ## N1 implementation status
 
 - [x] Roadmap documented
-- [ ] Contract implemented
-- [ ] Prompt connected
-- [ ] Review connected
-- [ ] Tests added
+- [x] Contract implemented
+- [x] Prompt connected
+- [x] Review connected
+- [x] Tests added
 - [ ] npm test green
 - [ ] lint green
 - [ ] build green
 
-N2 must not begin until all N1 completion gates are green.
+N2 must not begin until all N1 completion gates are green. CI status must be checked on the N1 branch/PR before N1 is declared complete.

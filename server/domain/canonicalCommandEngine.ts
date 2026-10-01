@@ -374,7 +374,7 @@ export class CanonicalCommandEngine {
 				command.commandId,
 				'COMMITTED',
 				formatCanonicalTimestamp(repository.getWorldClock(command.storyId).getTimestamp()),
-				{ recoveryAction: 'NONE', postStateHash: stableHash(after) },
+				{ recoveryAction: 'NONE', postStateHash: existingEvent.replay.postStateHash },
 			);
 
 			return {

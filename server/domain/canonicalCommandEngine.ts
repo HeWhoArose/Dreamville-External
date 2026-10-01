@@ -354,15 +354,8 @@ export class CanonicalCommandEngine {
 		const promise = this.enqueueStoryCommand(
 			command.storyId,
 			async () => {
-				// Recovery and idempotency inspection must be serialized with command execution.
-				// Running either before the per-story queue lets a concurrent request recover
-				// another request's PREPARED ledger entry or race the canonical event log.
-				canonicalCommitLedger.recoverInterrupted(
-					repository,
-					command.storyId,
-					formatCanonicalTimestamp(repository.getWorldClock(command.storyId).getTimestamp()),
-				);
-
+				// Idempotency inspection is serialized with command execution.
+				// Repository-local recovery is explicit and never scans shared persistent StoryRun state.
 				for (const existingEvent of repository.getCanonicalCommandEvents(command.storyId)) {
 					if (existingEvent?.commandId !== command.commandId) continue;
 					if (existingEvent?.fingerprint && existingEvent.fingerprint !== fingerprint) {

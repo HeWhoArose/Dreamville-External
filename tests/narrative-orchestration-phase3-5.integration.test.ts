@@ -177,7 +177,7 @@ test('Phase 3-5 narrative context survives malformed primary output and reaches 
 		maxRetries: 0,
 	});
 
-	assert.equal(result.success, true);
+	assert.equal(result.success, true, result.error || JSON.stringify(result));
 	assert.equal(result.telemetry.selectedModelId, 'integration-fallback');
 	assert.equal(result.telemetry.fallbackChain.includes('integration-fallback'), true);
 	assert.equal(primary.callHistory.length, 1);

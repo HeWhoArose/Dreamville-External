@@ -132,13 +132,13 @@ describe('Phase 16 — visual scene context', () => {
 		assert.equal(resolveCanonicalVisualOutcome(makeAction({ checkResult: { success: true } as any })), 'SUCCESS');
 	});
 
-	it('projects only visible, alive entities from the current location', () => {
+	it('projects visible entities from the current location, including canonically visible dead entities', () => {
 		const context = buildVisualSceneContext({
 			storyId: 'story_1',
 			currentSituation: makeSituation(),
 			actionHistory: [makeAction({ id: 'turn_2', turnNumber: 2 })],
 		});
-		assert.deepEqual(context.visibleCharacters.map((entry) => entry.name), ['Archivist Maren']);
+		assert.deepEqual(context.visibleCharacters.map((entry) => entry.name), ['Archivist Maren', 'Fallen Guard']);
 	});
 
 	it('keeps passive observation distinct from dialogue', () => {

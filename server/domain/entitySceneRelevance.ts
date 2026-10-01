@@ -61,9 +61,12 @@ export class EntitySceneRelevanceEngine {
 					reasons.push('current intent target');
 					bands.push('CURRENT_ACTION');
 				}
-				if (entity.name && normalize(threadText).includes(normalize(entity.name))) {
-					score += 20;
-					reasons.push('active thread relation');
+				const directlyThreadLinked = situation.openThreads.some((thread) =>
+					Array.isArray(thread.relatedEntityIds) && thread.relatedEntityIds.includes(entity.id)
+				);
+				if (directlyThreadLinked || (entity.name && normalize(threadText).includes(normalize(entity.name)))) {
+					score += directlyThreadLinked ? 25 : 20;
+					reasons.push(directlyThreadLinked ? 'explicit open-thread entity link' : 'active thread relation');
 					bands.push('ACTIVE_THREAD');
 				}
 				if (entity.name && normalize(recentText).includes(normalize(entity.name))) {

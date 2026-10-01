@@ -1082,7 +1082,7 @@ export class WorkingContextEngine {
     }
 
     const persistedPins = Array.isArray(repo.getStoryRun(storyId)?.runtimeState?.workingContextPins)
-      ? repo.getStoryRun(storyId)!.runtimeState!.workingContextPins.filter((id: unknown): id is string => typeof id === 'string' && id.trim())
+      ? repo.getStoryRun(storyId)!.runtimeState!.workingContextPins.filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0)
       : [];
     const pinnedSet = new Set(persistedPins);
     

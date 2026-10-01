@@ -3,18 +3,8 @@ import type { DurableMemory } from './memoryOpportunityEngine';
 import type { EntityCard, EntityKind } from './entityCard';
 import type { KnowledgeFact, RouteEdge, WorldTimestamp } from './types';
 import type { WorldRepository } from '../repositories/worldRepository';
+import type { PlayerIntent } from './playerIntentInterpreter';
 
-export interface PlayerIntent {
-	action: string;
-	goal?: string;
-	target?: string;
-	interactionMode?: 'PASSIVE_OBSERVATION' | 'DIRECT_SPEECH' | 'MOVEMENT' | 'INSPECTION' | 'ITEM_USE' | 'COMBAT' | 'OTHER';
-	speechIntent?: boolean;
-	movementIntent?: boolean;
-	targetEntityId?: string;
-	confidence?: number;
-	source?: 'DETERMINISTIC' | 'AI' | 'HYBRID';
-}
 
 export interface CurrentLocationContext {
 	id: string;

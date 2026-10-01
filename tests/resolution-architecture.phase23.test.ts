@@ -9,6 +9,7 @@ import { buildNpcPlanningSlice } from '../server/domain/npcPlanningSlice';
 import { canonicalCommitLedger } from '../server/domain/canonicalCommitLedger';
 import { captureCanonicalStateSnapshot } from '../server/domain/canonicalSnapshot';
 import { buildNarrationPrompt } from '../server/domain/narrativePromptBuilder';
+import { StoryCheckEngine } from '../server/domain/storyCheckEngine';
 import type { ActionResolution } from '../src/types';
 
 test('resolution gate does not roll for routine safe movement', () => {
@@ -52,6 +53,45 @@ test('resolution gate rolls for explicit parkour even without an authored challe
   assert.equal(result.mode, 'CHECK_CANDIDATE');
   assert.equal(result.shouldRoll, true);
   assert.match(result.rationale, /technique/i);
+});
+
+test('authored challenge can declare a partial-success outcome tier', () => {
+  const engine = new StoryCheckEngine();
+  const result = engine.resolve(
+    'phase23_partial',
+    'I force the jammed gate.',
+    {
+      coreStats: {
+        level: 1,
+        strength: 12,
+        dexterity: 10,
+        constitution: 10,
+        intelligence: 10,
+        wisdom: 10,
+        charisma: 10,
+        ac: 10,
+        speed: 30,
+        hitDice: '1d10',
+        hpCurrent: 10,
+        hpMax: 10,
+      },
+      skills: [],
+    },
+    {
+      id: 'challenge_partial',
+      label: 'Jammed gate',
+      keywords: ['force'],
+      difficultyClass: 5,
+      ability: 'Strength',
+      skill: 'Athletics',
+      reason: 'The gate resists normal force.',
+      triggerReason: 'The gate is jammed and needs significant force.',
+      successOutcomeTier: 'PARTIAL_SUCCESS',
+      onSuccess: { summary: 'The gate yields partially.' },
+    },
+  );
+  assert.ok(result);
+  assert.equal(result!.outcomeTier, 'PARTIAL_SUCCESS');
 });
 
 test('player lifecycle persists bounded intra-location spatial state without changing locationId', () => {

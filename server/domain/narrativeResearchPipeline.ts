@@ -373,7 +373,18 @@ export class NarrativeResearchPipeline {
 			seenThreads.add(id);
 			const threadText = [title, normalize((thread as any)?.summary), normalize((thread as any)?.status)].filter(Boolean).join(' | ');
 			const overlap = overlapScore(tokens(threadText), queryTokens);
-			if (overlap === 0 && !(playerIntent?.informationGoal && tokens(threadText).some((token) => tokens(playerIntent.informationGoal).includes(token)))) {
+			const currentSituationThread = situation.openThreads.some((candidate) => {
+				const candidateId = normalize(candidate.id || '');
+				const candidateTitle = normalize(candidate.title || '');
+				return candidateId === id ||
+					candidateId === normalize((thread as any)?.threadId || '') ||
+					candidateTitle.toLowerCase() === title.toLowerCase();
+			});
+			const informationGoalOverlap = Boolean(
+				playerIntent?.informationGoal &&
+				tokens(threadText).some((token) => tokens(playerIntent.informationGoal).includes(token))
+			);
+			if (overlap === 0 && !currentSituationThread && !informationGoalOverlap) {
 				excluded.push({
 					label: title,
 					kind: 'THREAD',

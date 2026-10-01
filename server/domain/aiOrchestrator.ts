@@ -27,6 +27,7 @@ import { SemanticNarrativeReview, type NarrativeReview } from './semanticNarrati
 import { EpistemicBoundaryEnforcer } from './epistemicBoundary';
 import { NarrativeStateAdjudicator, type StateAdjudicationResult } from './narrativeStateAdjudicator';
 import { AiTurnCallBudget, type AiTurnCallBudgetSnapshot } from './aiTurnCallBudget';
+import type { ActionResolution } from './actionResolution';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
 
@@ -7059,6 +7060,9 @@ export class MultiModelOrchestrator {
   public async generateNarrativeOnly(params: {
     storyId?: string;
     playerAction: string;
+    /** Preferred typed canonical mechanics contract. */
+    actionResolution?: ActionResolution;
+    /** Backward-compatible projection for older callers. */
     committedOutcome?: string;
     hardTokenBudget?: number;
     timeoutMs?: number;
@@ -7320,6 +7324,7 @@ export class MultiModelOrchestrator {
       globalInstruction: 'You are Dreamville’s narrative presentation engine. Generate only the player-facing narrative turn using the supplied canonical state, semantic player intent, bounded research, and ephemeral plan.',
       styleInstruction,
       canonicalOutcome: authoritativeOutcome,
+      actionResolution: params.actionResolution,
       maxPromptTokens: Math.max(200, hardTokenBudget),
     });
 

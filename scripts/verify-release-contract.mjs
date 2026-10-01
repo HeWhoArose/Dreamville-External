@@ -23,6 +23,7 @@ for (const script of ['lint', 'test', 'build']) {
 
 const requiredFiles = [
 	'docs/DREAMVILLE_DEEP_IMPLEMENTATION_SPECIFICATION.md',
+	'docs/DREAMVILLE_RELEASE_STABILIZATION_PHASE22.md',
 	'docs/DREAMVILLE_INTEGRATION_MATRIX_PHASE17.md',
 	'server/domain/currentSituation.ts',
 	'server/domain/playerIntentInterpreter.ts',
@@ -40,6 +41,7 @@ const requiredFiles = [
 	'server/api/gameRoutes.ts',
 	'src/components/StoryView.tsx',
 	'src/services/apiClient.ts',
+	'tests/phase22-release-stabilization.test.ts',
 ];
 
 for (const file of requiredFiles) {

@@ -7962,9 +7962,6 @@ export class MultiModelOrchestrator {
             };
           } catch (err: any) {
             lastError = err?.message || String(err);
-            if (typeof process !== 'undefined' && process.env.NODE_ENV === 'test') {
-              console.error('AUDIT_DEBUG_PROVIDER_FAILURE', currentCandidate.providerId, currentCandidate.modelId, lastError);
-            }
             this.recordProviderFailure(currentCandidate, task, err, attemptStartedAt);
 
             // Track consecutive failures & circuit breaker
@@ -7998,9 +7995,6 @@ export class MultiModelOrchestrator {
       }
 
       // All primary models and retries failed -> Fallback to emergency floor if not already tried
-      if (typeof process !== 'undefined' && process.env.NODE_ENV === 'test') {
-        console.error('AUDIT_DEBUG_EXECUTE_TURN_LAST_ERROR', lastError, candidateChain.map((candidate) => this.modelKey(candidate)));
-      }
       const emergencyModel = Array.from(this.models.values()).find((m) => m.isEmergencyFloor);
       if (emergencyModel) {
         const emergencyAdapter = this.getAdapter(emergencyModel.providerId);

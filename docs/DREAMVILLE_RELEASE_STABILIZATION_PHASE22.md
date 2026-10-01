@@ -47,6 +47,29 @@ Phase 22 is complete only when:
 - Phase 21 release gate is wired to contracts → lint → test → build.
 - Phase 22 stabilization tests pass and no new orphaned authority is introduced.
 
+
+## Check-resolution consequence closure
+
+The action-resolution boundary now treats a story check as a causal chain rather than a bare dice result:
+
+PLAYER ACTION
+→ check necessity / scene evidence
+→ selected test and skill
+→ canonical roll and result
+→ bounded success/failure guidance
+→ authored canonical consequence when explicitly defined, otherwise narrative-only setback guidance
+→ player-facing narration
+
+The contract is carried by `StoryCheckResult.narrativeGuidance`. AI may use the guidance for presentation but cannot create canonical damage, conditions, movement, or other state changes from it. Routine movement remains narration-only unless the canonical scene supplies a genuine movement hazard. AI resolution hints cannot manufacture a check without semantic/action or scene evidence.
+
+Regression coverage includes:
+- parkour → Acrobatics with landing/balance failure semantics;
+- movement toward a target is not reclassified as Athletics merely because of the word "push";
+- physical object displacement still permits Athletics;
+- ordinary movement only triggers a save when scene hazards justify it;
+- AI skill/save hints cannot manufacture unsupported checks;
+- the canonical action path passes check justification and bounded failure guidance into narration.
+
 ## Final architecture audit
 
 2026-10-01: Full Phase 0–22 architecture audit performed. The release gate is required on the merged main tree; branch-level validation and post-merge validation are both recorded separately.

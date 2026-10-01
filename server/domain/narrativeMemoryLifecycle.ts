@@ -206,9 +206,7 @@ export class NarrativeMemoryLifecycle {
 		const plot = { ...(runtime.plot || {}) } as Record<string, any>;
 		const eventFacts = (params.turnPackage.events || []).map(normalize).filter(Boolean).slice(-6);
 		const stateFacts = (params.stateAdjudication?.commitRecords || []).map((record) => record.kind + ' committed for ' + record.targetId);
-		const actionFact = normalize(params.playerAction);
 		const factualBeatParts = [...eventFacts, ...stateFacts];
-		if (factualBeatParts.length === 0 && actionFact) factualBeatParts.push('Player action: ' + actionFact.slice(0, 300));
 		const plotSummary = factualBeatParts.length > 0
 			? factualBeatParts.join('; ').slice(0, 900)
 			: (normalize(plot.summary) || 'No new canonical development.');

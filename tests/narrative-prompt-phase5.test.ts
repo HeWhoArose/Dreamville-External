@@ -83,7 +83,7 @@ test('Phase 5 prompt contains an explicit player-agency boundary', () => {
 	});
 
 	assert.match(result.prompt, /never choose a major future action for the player/i);
-	assert.match(result.prompt, /State changes must come from canonical engines/commands/i);
+	assert.match(result.prompt, /State changes must come from canonical engines\/commands/i);
 	assert.match(result.prompt, /unsupported.*entities|unsupported.*objects/i);
 });
 

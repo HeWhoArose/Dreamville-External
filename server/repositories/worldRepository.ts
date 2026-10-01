@@ -434,7 +434,7 @@ export class InMemoryWorldRepository implements WorldRepository {
       }
     }
 
-    this.geographies.set('default_story', new GeographyGraph());
+    this.geographies.set('default_story', new GeographyGraph(true));
     this.seedDefaultTemplates();
     this.seedDefaultStory('default_story');
 
@@ -1420,6 +1420,133 @@ export class InMemoryWorldRepository implements WorldRepository {
         visibility: 'PUBLIC',
         metadata: { subjectName: 'Maren the Archivist' },
       });
+    }
+
+    // Canonical default geography must exist before any CurrentSituation consumer reads the story.
+    // A fresh default story uses the same deterministic topology as all other seeded stories.
+    const defaultGeography = this.geographies.get(storyId);
+    if (defaultGeography && !defaultGeography.getNode('loc_whispering_orrery')) {
+      defaultGeography.clear();
+      defaultGeography.addNode({
+        id: 'loc_whispering_orrery',
+        name: 'The Whispering Orrery',
+        regionId: 'Elysium Solar Citadel',
+        description: 'A vaulted astronomical chamber of bronze armatures and resonant prism rings.',
+        coordinates: { x: 50, y: 50 },
+        accessible: true,
+        discovered: true,
+        ambientSensory: 'Visual: bronze astral rings and prism light. Sounds: low mechanical hum. Scent: warm metal and dust. Tactile: cool stone.',
+        provenance: 'authored',
+      } as any);
+      defaultGeography.addNode({
+        id: 'loc_lantern_vault',
+        name: 'The Lantern Vault',
+        regionId: 'Elysium Solar Citadel',
+        description: 'A guarded vault reached through the archive terraces.',
+        coordinates: { x: 75, y: 50 },
+        accessible: true,
+        discovered: false,
+        ambientSensory: 'Visual: sealed lantern alcoves. Sounds: distant patrol steps. Scent: oil and old stone. Tactile: cold masonry.',
+        provenance: 'authored',
+      } as any);
+      defaultGeography.addEdge({
+        id: 'edge_orrery_lantern_vault',
+        fromLocationId: 'loc_whispering_orrery',
+        toLocationId: 'loc_lantern_vault',
+        distanceKm: 2,
+        terrain: 'Road',
+        allowedModes: ['Foot'],
+        hazardRisk: 0,
+        isBlocked: false,
+        provenance: 'authored',
+      } as any);
+      defaultGeography.addEdge({
+        id: 'edge_lantern_vault_orrery',
+        fromLocationId: 'loc_lantern_vault',
+        toLocationId: 'loc_whispering_orrery',
+        distanceKm: 2,
+        terrain: 'Road',
+        allowedModes: ['Foot'],
+        hazardRisk: 0,
+        isBlocked: false,
+        provenance: 'authored',
+      } as any);
+    }
+
+    // Canonical opening rumor used by the narrative/research pipeline.
+    const defaultFacts = this.knowledgeBases.get(storyId) || [];
+    if (!defaultFacts.some((fact) => fact.id === 'fact_starlight_fissure_rumor')) {
+      defaultFacts.push({
+        id: 'fact_starlight_fissure_rumor',
+        subjectEntityId: 'loc_whispering_orrery',
+        predicate: 'rumor',
+        objectValue: 'Unverified reports describe unstable starlight fissures beneath the citadel.',
+        sourceType: 'told',
+        acquiredAtTimestamp: clock.getTimestamp(),
+        confidence: 0.4,
+        secretLevel: 'public',
+        scope: 'exact',
+        provenanceSummary: 'Public rumor circulating around the archive periphery.',
+      });
+      this.knowledgeBases.set(storyId, defaultFacts);
+    }
+
+    const defaultThreads = this.storyThreads.get(storyId) || [];
+    if (!defaultThreads.some((thread: any) => thread.threadId === 'thread_fissures')) {
+      this.storyThreads.set(storyId, [{
+        storyId,
+        threadId: 'thread_fissures',
+        title: 'Starlight fissure rumors',
+        summary: 'Determine whether the reported unstable starlight fissures are real.',
+        status: 'OPEN',
+        priority: 'HIGH',
+      } as any, ...defaultThreads]);
+    }
+
+    const registry = this.getEntityRegistry(storyId);
+    if (!registry.get('char_maren')) {
+      registry.upsert({
+        id: 'char_maren',
+        name: 'Maren the Archivist',
+        kind: 'NPC',
+        isTemplate: false,
+        identity: { species: 'Human', aliases: ['Maren'] },
+        classification: { role: 'Archivist', profession: 'Archivist', tags: ['scholar'] },
+        personality: { traits: ['methodical'], values: ['truth'], motivations: ['understand the fissures'], fears: [], desires: [], canonicalSecrets: [] },
+        behavior: { defaultBehavior: 'working', priorities: ['archive'], routines: ['study the orrery'] },
+        social: { factionIds: [], reputation: {}, relationships: {} },
+        worldState: { locationId: 'loc_whispering_orrery', currentActivity: 'working', isAlive: true, presence: 'present' },
+        traits: ['scholar'],
+        capabilities: [],
+        feats: [],
+        equipment: [],
+        memoryRefs: [],
+        provenance: { source: 'default_story_seed', createdBy: 'SYSTEM' },
+        lifecycle: { status: 'ACTIVE' },
+        metadata: {},
+      } as any);
+    }
+    if (!registry.get('npc_lantern_guard')) {
+      registry.upsert({
+        id: 'npc_lantern_guard',
+        name: 'Vault Watchman Orlo',
+        kind: 'NPC',
+        isTemplate: false,
+        identity: { species: 'Human', aliases: ['Orlo', 'guard'] },
+        classification: { role: 'Guard', profession: 'Guard', tags: ['watch'] },
+        personality: { traits: ['vigilant'], values: ['duty'], motivations: ['protect the vault'], fears: [], desires: [], canonicalSecrets: [] },
+        behavior: { defaultBehavior: 'patrolling', priorities: ['guard the vault'], routines: ['patrol'] },
+        social: { factionIds: [], reputation: {}, relationships: {} },
+        worldState: { locationId: 'loc_lantern_vault', currentActivity: 'patrolling', isAlive: true, presence: 'present' },
+        traits: ['guard'],
+        capabilities: [],
+        feats: [],
+        equipment: [],
+        memoryRefs: [],
+        provenance: { source: 'default_story_seed', createdBy: 'SYSTEM' },
+        lifecycle: { status: 'ACTIVE' },
+        metadata: {},
+      } as any);
     }
 
     // Embodied player actor

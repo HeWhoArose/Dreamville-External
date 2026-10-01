@@ -169,7 +169,8 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 	revealedOverride,
 }) => {
 	const { playSfx, triggerHaptic, settings } = useAudioHaptic();
-	const diceTheme = getDiceThemePreset(settings.diceTheme);
+	const activeDiceThemeId = roll.diceThemeId || settings.diceTheme;
+	const diceTheme = getDiceThemePreset(activeDiceThemeId);
 	const containerId = useId().replace(/:/g, '');
 	const diceBoxRef = useRef<any>(null);
 	const initializationRef = useRef<Promise<any> | null>(null);
@@ -258,7 +259,7 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 			}
 			diceBoxRef.current = null;
 		};
-	}, [settings.diceTheme]);
+	}, [activeDiceThemeId]);
 
 	useEffect(() => {
 		autoRollStartedRef.current = false;
@@ -274,7 +275,7 @@ export const DiceRollAnimation: React.FC<DiceRollAnimationProps> = ({
 		} catch {
 			// Best-effort visual reset.
 		}
-	}, [roll.rollId, revealedOverride, settings.diceTheme]);
+	}, [roll.rollId, revealedOverride, activeDiceThemeId]);
 
 	const isRevealed = resolveDiceRevealState(revealedOverride, revealed);
 

@@ -18,6 +18,15 @@ import {
 import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
 import { evaluateAiTaskCandidatePreflight, evaluateAiTaskReadiness, getAiTaskContract, getAiTasksByCategory, getAllAiTaskContracts, validateAiTaskResponse, type AiTaskCandidatePreflight, type AiTaskReadiness } from './aiTaskContracts';
 import { narrativeContinuityEngine } from './narrativeContinuityEngine';
+import { CurrentSituationBuilder } from './currentSituation';
+import { PlayerIntentInterpreter, type PlayerIntent } from './playerIntentInterpreter';
+import { NarrativeResearchPipeline, type NarrativeResearchResult } from './narrativeResearchPipeline';
+import { NarrativeDirector, type EphemeralNarrativePlan } from './narrativeDirector';
+import { buildNarrationPrompt, defaultNarrationStyle, projectSupportingWorkingContext } from './narrativePromptBuilder';
+import { SemanticNarrativeReview, type NarrativeReview } from './semanticNarrativeReview';
+import { EpistemicBoundaryEnforcer } from './epistemicBoundary';
+import { NarrativeStateAdjudicator, type StateAdjudicationResult } from './narrativeStateAdjudicator';
+import { AiTurnCallBudget, type AiTurnCallBudgetSnapshot } from './aiTurnCallBudget';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
 
@@ -341,6 +350,7 @@ export interface ContinuationCheckpoint {
   turnId: string;
   role: string;
   playerAction?: string;
+  playerIntent?: PlayerIntent;
   workingContextTokens?: number;
   worldTime: string;
   locationId: string;
@@ -371,6 +381,7 @@ export interface CommittedNarrativeRecord {
   turnId: string;
   role: string;
   playerAction?: string;
+  playerIntent?: PlayerIntent;
   worldTime: string;
   locationId: string;
   sceneSummary: string;
@@ -418,6 +429,7 @@ export interface ProviderGenerateOptions {
   /** Prevent provider adapters from substituting local/mock generation for a missing AI credential. */
   allowDeterministicFallback?: boolean;
   audioInputBase64?: string;
+  audioMimeType?: string;
   voiceProfile?: any;
   timeoutMs?: number;
   abortSignal?: AbortSignal;
@@ -481,6 +493,8 @@ export interface AdjudicationOutcomeItem {
 
 export interface AdjudicationResult {
   allApproved: boolean;
+  narrativePlanObjective?: string;
+  expectedNarrativeEffectKinds?: string[];
   approvedCount: number;
   rejectedCount: number;
   outcomes: AdjudicationOutcomeItem[];
@@ -509,10 +523,19 @@ export interface OrchestratedTurnTelemetry {
   cached?: boolean;
   idempotencyReplayed?: boolean;
   idempotencyKey?: string;
+  researchBlockCount?: number;
+  researchTokens?: number;
+  narrativePlanObjective?: string;
+  narrativeReview?: NarrativeReview;
+  aiCallBudget?: AiTurnCallBudgetSnapshot;
 }
 
 export interface OrchestratedTurnResult {
   success: boolean;
+  playerIntent?: PlayerIntent;
+  narrativePlan?: EphemeralNarrativePlan;
+  narrativeReview?: NarrativeReview;
+  stateAdjudication?: StateAdjudicationResult;
   turnPackage?: StructuredTurnPackage;
   telemetry: OrchestratedTurnTelemetry;
   adjudicationResult?: AdjudicationResult;
@@ -730,13 +753,24 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
           break;
         }
 
-        const actionSentence = extractedPlayerAction
-          ? `You carry out your action to ${extractedPlayerAction.replace(/^(?:i|we|my character)\s+/i, '')}, staying attentive to the immediate environment in ${canonicalLocationName}.`
+        const normalizedAction = extractedPlayerAction
+          .replace(/^(?:i|we|my character)\s+/i, '')
+          .trim();
+        const actionVerb =
+          /\b(?:listen|hear|overhear|eavesdrop)\b/i.test(normalizedAction)
+            ? 'You listen carefully'
+            : /\b(?:look|observe|watch|inspect|examine|scan|study)\b/i.test(normalizedAction)
+              ? 'You observe the scene'
+              : /\b(?:move|walk|approach|step|head|travel|enter|leave|go)\b/i.test(normalizedAction)
+                ? 'You move as requested'
+                : 'You carry out the requested action';
+        const actionSentence = normalizedAction
+          ? `${actionVerb} in ${canonicalLocationName}, following the player action: ${normalizedAction}.`
           : `The scene remains grounded in ${canonicalLocationName}.`;
 
         text = JSON.stringify({
           narrative: [
-            `${actionSentence} The immediate surroundings settle around the effort, with no new location change or time shift committed.`,
+            `${actionSentence} The immediate surroundings settle around the effort, with no new location change or time shift committed. Any information available from the immediate scene remains limited to what can be directly observed; no reliable answer is established beyond that evidence.`,
           ],
           dialogue: [],
           events: ['EMERGENCY_DETERMINISTIC_TICK'],
@@ -2074,7 +2108,7 @@ Do not enclose in markdown ticks, output pure JSON.`;
         
         if (task === 'speech.transcribe' && options?.audioInputBase64) {
           reqContents = [
-            { inlineData: { mimeType: 'audio/mp3', data: options.audioInputBase64 } },
+            { inlineData: { mimeType: options.audioMimeType || 'audio/webm', data: options.audioInputBase64 } },
             prompt
           ];
           reqConfig.responseMimeType = 'text/plain';
@@ -2362,7 +2396,8 @@ export class DomainAdjudicationBridge {
   public static adjudicate(
     turnPackage: StructuredTurnPackage,
     repo: WorldRepository,
-    storyId: string
+    storyId: string,
+    narrativePlan?: EphemeralNarrativePlan,
   ): AdjudicationResult {
     const outcomes: AdjudicationOutcomeItem[] = [];
 
@@ -2504,6 +2539,8 @@ export class DomainAdjudicationBridge {
       outcomes,
       approvedChanges,
       disapprovedChanges,
+      narrativePlanObjective: narrativePlan?.objective,
+      expectedNarrativeEffectKinds: narrativePlan?.stateEffectsExpected.map((effect) => effect.kind),
     };
   }
 }
@@ -2594,6 +2631,93 @@ export function persistTurnMemoryCandidates(
  * Circuit Breaking, Automated Failover, Cross-Model Continuation Checkpoints,
  * Strict Turn Package Validation, and Domain Adjudication.
  */
+export function validateAudioBase64(input: string): {
+	valid: boolean;
+	normalized: string;
+	errorCode?: 'INPUT_EMPTY' | 'INPUT_INVALID_BASE64';
+	reason?: string;
+} {
+	const normalized = String(input || '').replace(/\s+/g, '');
+	if (!normalized) {
+		return {
+			valid: false,
+			normalized: '',
+			errorCode: 'INPUT_EMPTY',
+			reason: 'No audio data was supplied.',
+		};
+	}
+	if (
+		normalized.length < 16 ||
+		normalized.length % 4 !== 0 ||
+		!/^[A-Za-z0-9+/]+={0,2}$/.test(normalized)
+	) {
+		return {
+			valid: false,
+			normalized,
+			errorCode: 'INPUT_INVALID_BASE64',
+			reason: 'Audio payload is not valid base64 data.',
+		};
+	}
+	try {
+		const bytes = Buffer.from(normalized, 'base64');
+		if (!bytes.length) throw new Error('zero bytes');
+	} catch {
+		return {
+			valid: false,
+			normalized,
+			errorCode: 'INPUT_INVALID_BASE64',
+			reason: 'Audio payload could not be decoded.',
+		};
+	}
+	return { valid: true, normalized };
+}
+
+export function normalizeTranscriptionProviderText(rawText: string): { valid: boolean; text: string; reason?: string } {
+	let cleaned = String(rawText || '')
+		.trim()
+		.replace(/^\`\`\`(?:json|text)?\s*/i, '')
+		.replace(/\s*\`\`\`$/i, '')
+		.trim();
+
+	if (!cleaned) {
+		return { valid: false, text: '', reason: 'Transcription provider returned empty text.' };
+	}
+
+	if (/^<!doctype html\b|^<html\b/i.test(cleaned)) {
+		return { valid: false, text: '', reason: 'Transcription provider returned HTML instead of transcript text.' };
+	}
+
+	try {
+		const parsed = JSON.parse(cleaned);
+		if (typeof parsed === 'string' && parsed.trim()) {
+			cleaned = parsed.trim();
+		} else {
+			const candidates = [
+				parsed?.transcript,
+				parsed?.text,
+				parsed?.transcription,
+				Array.isArray(parsed?.narrative) ? parsed.narrative[0] : undefined,
+				Array.isArray(parsed?.segments)
+					? parsed.segments.map((segment: any) => segment?.text).filter(Boolean).join(' ')
+					: undefined,
+			];
+			const resolved = candidates.find((candidate) => typeof candidate === 'string' && candidate.trim());
+			if (!resolved) {
+				return { valid: false, text: '', reason: 'Transcription JSON did not contain transcript text.' };
+			}
+			cleaned = String(resolved).trim();
+		}
+	} catch {
+		if (/^[\[{]/.test(cleaned)) {
+			return { valid: false, text: '', reason: 'Transcription provider returned malformed JSON.' };
+		}
+	}
+
+	return cleaned
+		? { valid: true, text: cleaned }
+		: { valid: false, text: '', reason: 'Transcription provider returned empty text.' };
+}
+
 export class MultiModelOrchestrator {
   public static readonly PROMPT_VERSION = DREAMBOOK_PROMPT_VERSION;
   private models: Map<string, ModelRegistryRecord> = new Map();
@@ -6143,54 +6267,192 @@ export class MultiModelOrchestrator {
   public async transcribeAudio(params: {
     storyId?: string;
     audioBase64: string;
+    audioMimeType?: string;
     timeoutMs?: number;
   }): Promise<{
     success: boolean;
     text: string;
     modelId?: string;
+    providerId?: string;
+    errorCode?: 'INPUT_EMPTY' | 'INPUT_INVALID_BASE64' | 'TRANSCRIPTION_UNAVAILABLE' | 'TRANSCRIPTION_MALFORMED';
+    errorReason?: string;
+    attemptsTrail?: Array<{
+      providerId: string;
+      modelId: string;
+      status: 'SUCCESS' | 'FAILED';
+      error?: string;
+      latencyMs: number;
+    }>;
   }> {
-    const audioBase64 = params.audioBase64 || '';
+    const audioValidation = validateAudioBase64(params.audioBase64);
+    if (!audioValidation.valid) {
+      return {
+        success: false,
+        text: '',
+        errorCode: audioValidation.errorCode,
+        errorReason: audioValidation.reason,
+        attemptsTrail: [],
+      };
+    }
+
     const selection = this.selectBestModel('speech.transcribe', { contextTokens: 256 });
     const candidates = [selection.selectedModel, ...selection.fallbacks];
-    const timeoutMs = params.timeoutMs || 5000;
+    const timeoutMs = Math.max(1000, Math.min(params.timeoutMs || 5000, 30000));
+    const attemptsTrail: Array<{
+      providerId: string;
+      modelId: string;
+      status: 'SUCCESS' | 'FAILED';
+      error?: string;
+      latencyMs: number;
+    }> = [];
+    let sawMalformedResponse = false;
+    let lastError = '';
 
     for (const candidate of candidates) {
+      if (candidate.isEmergencyFloor) continue;
       if (this.isModelCoolingDown(candidate) || this.isCircuitBreakerTripped(candidate.providerId, candidate.modelId)) continue;
+
       const adapter = this.getAdapter(candidate.providerId);
-      if (!adapter) continue;
+      if (!adapter) {
+        attemptsTrail.push({
+          providerId: candidate.providerId,
+          modelId: candidate.modelId,
+          status: 'FAILED',
+          error: 'Provider adapter is unavailable.',
+          latencyMs: 0,
+        });
+        continue;
+      }
 
       const attemptStartedAt = Date.now();
+      const abortController = new AbortController();
+      const timer = setTimeout(() => abortController.abort(), timeoutMs);
       try {
-        const res = await adapter.generate('speech.transcribe', 'Transcribe user audio input', {
+        const res = await adapter.generate('speech.transcribe', 'Transcribe the supplied audio accurately. Return only the transcript.', {
           timeoutMs,
+          abortSignal: abortController.signal,
           modelId: candidate.modelId,
-          audioInputBase64: audioBase64,
+          audioInputBase64: audioValidation.normalized,
+          audioMimeType: params.audioMimeType || 'audio/webm',
+          maxTokens: 1000,
         });
 
-        let transcribedText = '';
-        try {
-          const parsed = JSON.parse(res.text);
-          transcribedText = parsed.narrative?.[0] || res.text;
-        } catch {
-          transcribedText = res.text;
+        const transcript = normalizeTranscriptionProviderText(res?.text || '');
+        if (!transcript.valid) {
+          sawMalformedResponse = true;
+          throw new Error(transcript.reason || 'Transcription provider returned an invalid transcript payload.');
         }
 
-        if (!transcribedText) throw new Error('Transcription provider returned empty text.');
         this.recordProviderSuccess(candidate, res, 'speech.transcribe', attemptStartedAt);
+        attemptsTrail.push({
+          providerId: candidate.providerId,
+          modelId: candidate.modelId,
+          status: 'SUCCESS',
+          latencyMs: Math.max(1, Date.now() - attemptStartedAt),
+        });
 
         return {
           success: true,
-          text: transcribedText,
+          text: transcript.text,
           modelId: candidate.modelId,
+          providerId: candidate.providerId,
+          attemptsTrail,
         };
       } catch (err: any) {
+        lastError = String(err?.message || err || 'Transcription provider failed.');
         this.recordProviderFailure(candidate, 'speech.transcribe', err, attemptStartedAt);
+        attemptsTrail.push({
+          providerId: candidate.providerId,
+          modelId: candidate.modelId,
+          status: 'FAILED',
+          error: lastError,
+          latencyMs: Math.max(1, Date.now() - attemptStartedAt),
+        });
+      } finally {
+        clearTimeout(timer);
       }
     }
 
     return {
       success: false,
       text: '',
+      errorCode: sawMalformedResponse ? 'TRANSCRIPTION_MALFORMED' : 'TRANSCRIPTION_UNAVAILABLE',
+      errorReason: lastError || 'No eligible transcription provider is currently available.',
+      attemptsTrail,
+    };
+  }
+  /**
+   * Phase 2 semantic player-intent interpretation.
+   * Deterministic parsing handles explicit mechanical distinctions first.
+   * AI is used only when deterministic interpretation is not sufficiently specific.
+   */
+  public async interpretPlayerIntent(params: {
+    storyId?: string;
+    playerText: string;
+    currentSituation?: ReturnType<typeof CurrentSituationBuilder.build>;
+    timeoutMs?: number;
+    turnBudget?: AiTurnCallBudget;
+  }): Promise<{
+    intent: PlayerIntent;
+    modelId?: string;
+    providerId?: string;
+    fallbackReason?: string;
+  }> {
+    const originalText = String(params.playerText || '').trim();
+    const deterministic = PlayerIntentInterpreter.deterministic(originalText, params.currentSituation);
+    if (!originalText) return { intent: deterministic, fallbackReason: 'EMPTY_INPUT' };
+    if (deterministic.confidence >= 0.9) return { intent: deterministic };
+
+    const budgetDecision = params.turnBudget?.beginTask('intent.interpret');
+    if (budgetDecision && !budgetDecision.allowed) {
+      return {
+        intent: deterministic,
+        fallbackReason: 'TURN_AI_CALL_BUDGET_EXHAUSTED',
+      };
+    }
+
+    const prompt = PlayerIntentInterpreter.buildPrompt(originalText, params.currentSituation);
+    const selection = this.selectBestModel('intent.interpret', {
+      contextTokens: Math.ceil(prompt.length / 4),
+    });
+    const candidates = [selection.selectedModel, ...selection.fallbacks];
+    const timeoutMs = params.timeoutMs ?? 5000;
+
+    for (const candidate of candidates) {
+      if (candidate.isEmergencyFloor || this.isModelCoolingDown(candidate) || this.isCircuitBreakerTripped(candidate.providerId, candidate.modelId)) continue;
+      const adapter = this.getAdapter(candidate.providerId);
+      if (!adapter) continue;
+
+      const startedAt = Date.now();
+      params.turnBudget?.recordProviderAttempt('intent.interpret');
+      try {
+        const response = await adapter.generate('intent.interpret', prompt, {
+          timeoutMs,
+          modelId: candidate.modelId,
+        });
+        const cleaned = String(response.text || '').trim();
+        const objectStart = cleaned.indexOf('{');
+        const objectEnd = cleaned.lastIndexOf('}');
+        const parsed = JSON.parse(objectStart >= 0 && objectEnd > objectStart
+          ? cleaned.slice(objectStart, objectEnd + 1)
+          : cleaned);
+        const interpreted = PlayerIntentInterpreter.fromModel(parsed, originalText, params.currentSituation);
+        if (!interpreted) throw new Error('Intent interpreter returned an invalid semantic contract.');
+
+        this.recordProviderSuccess(candidate, response, 'intent.interpret', startedAt);
+        return {
+          intent: interpreted,
+          modelId: candidate.modelId,
+          providerId: candidate.providerId,
+        };
+      } catch (error: any) {
+        this.recordProviderFailure(candidate, 'intent.interpret', error, startedAt);
+      }
+    }
+
+    return {
+      intent: deterministic,
+      fallbackReason: 'INTENT_MODEL_UNAVAILABLE_OR_MALFORMED',
     };
   }
 
@@ -6269,10 +6531,43 @@ export class MultiModelOrchestrator {
   private validateNarrativeActionContinuity(
     narration: string,
     playerAction: string,
+    intent?: PlayerIntent,
   ): { valid: boolean; errorReason?: string } {
     const action = String(playerAction || '').trim().toLowerCase();
     const output = String(narration || '').trim().toLowerCase();
     if (!action || !output) return { valid: true };
+
+    if (intent) {
+      const movementAnchors = /\b(?:move|moved|moves|walk|walked|walks|step|stepped|steps|approach|approached|approaches|close|closer|near|nearer|head|headed|travel|traveled|travelled|enter|entered|leave|left)\b/i;
+      const observationAnchors = /\b(?:listen|listened|listens|hear|heard|hears|overhear|overheard|eavesdrop|watch|watched|watches|observe|observed|observes|notice|noticed|notices|see|saw|sees|look|looked|looks|scan|scanned|scans|inspect|inspected|study|studied|studies|attend|attended|attentive|gaze|gazed|watchful|conversation|whispers?|rumou?rs?|details?|sounds?|voices?)\b/i;
+      if (intent.movementIntent && !movementAnchors.test(output)) {
+        return {
+          valid: false,
+          errorReason: 'Narration semantic backstop rejected output: the requested movement was not visibly depicted.',
+        };
+      }
+      if (intent.observationIntent && !observationAnchors.test(output)) {
+        return {
+          valid: false,
+          errorReason: 'Narration semantic backstop rejected output: the requested observation was not visibly depicted.',
+        };
+      }
+      const targets = [
+        ...(intent.explicitTargets || []).map((target) => target.name),
+        intent.target?.name,
+        intent.locationTarget?.name,
+      ]
+        .filter((name): name is string => Boolean(name && name.trim()))
+        .flatMap((name) => name.toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length >= 4))
+        .slice(0, 6);
+      if (targets.length > 0 && !targets.some((token) => output.includes(token))) {
+        return {
+          valid: false,
+          errorReason: 'Narration semantic backstop rejected output: an explicit player target was not visibly represented.',
+        };
+      }
+      return { valid: true };
+    }
 
     const requirements: Array<{ label: string; pattern: RegExp; anchors: string[] }> = [
       { label: 'breathing', pattern: /\b(?:breathe|breathing|breath|inhale|inhaled|exhale|exhaled)\b/i, anchors: ['breathe', 'breath', 'inhale', 'exhale'] },
@@ -6324,18 +6619,67 @@ export class MultiModelOrchestrator {
     return { valid: true };
   }
 
+  /**
+   * Last-mile semantic agency backstop for the live turn.
+   * The intent interpreter and director are the primary semantic layers; this
+   * guard only blocks the catastrophic contradiction that a passive player action
+   * becomes protagonist speech. It does not attempt to understand the whole prose.
+   */
+  private validateNarrativeIntentSafety(
+    narration: string,
+    intent: PlayerIntent,
+    actorName?: string,
+  ): { valid: boolean; errorReason?: string } {
+    if (!narration || !intent || intent.speechIntent) return { valid: true };
+    if (intent.interactionMode !== 'PASSIVE_OBSERVATION' && !intent.observationIntent) return { valid: true };
+
+    const escapedActor = String(actorName || '')
+      .trim()
+      .replace(/[.*+?^$()|[\]\\]/g, '\\$&');
+    const subjects = ['you'];
+    if (escapedActor) {
+      subjects.push(escapedActor);
+      const actorFirstName = escapedActor.split(/\s+/)[0];
+      if (actorFirstName && actorFirstName !== escapedActor) subjects.push(actorFirstName);
+    }
+    const speechVerbs = 'ask|asks|asked|say|says|said|speak|speaks|spoke|tell|tells|told|reply|replies|replied|answer|answers|answered|inquire|inquires|inquired|question|questions|questioned|consult|consults|consulted|shout|shouts|shouted|call out|calls out|called out';
+    const protagonistSpeechPattern = new RegExp(
+      '\\b(?:' + subjects.join('|') + ')\\s+(?:(?:then|directly|quietly|carefully|firmly)\\s+)?(?:' + speechVerbs + ')\\b',
+      'i',
+    );
+    const raisingVoicePattern = new RegExp(
+      '\\b(?:' + subjects.join('|') + ')\\s+(?:\\w+\\s+){0,8}(?:raise|raises|raised|raising)\\s+(?:your|his|her|their)\\s+voice\\b',
+      'i',
+    );
+
+    if (protagonistSpeechPattern.test(narration) || raisingVoicePattern.test(narration)) {
+      return {
+        valid: false,
+        errorReason: 'Semantic intent safety backstop rejected output: passive observation/listening was converted into protagonist speech.',
+      };
+    }
+    return { valid: true };
+  }
+
   private validateNarrativeActionModeContinuity(
     narration: string,
     playerAction: string,
     actorName?: string,
+    intent?: PlayerIntent,
   ): { valid: boolean; errorReason?: string } {
     const action = String(playerAction || '').trim();
     const output = String(narration || '').trim();
     if (!action || !output) return { valid: true };
 
-    const isPassiveListening = NARRATIVE_PASSIVE_LISTENING_PATTERN.test(action);
-    const explicitSpeechIntent = NARRATIVE_DIRECT_SPEECH_PATTERN.test(action);
-    if (!isPassiveListening || explicitSpeechIntent || !NARRATIVE_DIRECT_SPEECH_PATTERN.test(output)) {
+    const isPassiveListening = intent
+      ? !intent.speechIntent && intent.observationIntent && (
+          intent.interactionMode === 'PASSIVE_OBSERVATION' ||
+          intent.interactionMode === 'INFORMATION_SEEKING' ||
+          intent.action === 'approach_and_listen'
+        )
+      : NARRATIVE_PASSIVE_LISTENING_PATTERN.test(action);
+    const explicitSpeechIntent = intent ? intent.speechIntent : NARRATIVE_DIRECT_SPEECH_PATTERN.test(action);
+    if (!isPassiveListening || explicitSpeechIntent) {
       return { valid: true };
     }
 
@@ -6344,7 +6688,11 @@ export class MultiModelOrchestrator {
       .replace(/[.*+?^$()|[\]\\]/g, '\\$&');
 
     const subjects = ['you'];
-    if (escapedActor) subjects.push(escapedActor);
+    if (escapedActor) {
+      subjects.push(escapedActor);
+      const actorFirstName = escapedActor.split(/\s+/)[0];
+      if (actorFirstName && actorFirstName !== escapedActor) subjects.push(actorFirstName);
+    }
 
     const speechVerbs = 'ask|asks|asked|say|says|said|speak|speaks|spoke|tell|tells|told|reply|replies|replied|answer|answers|answered|inquire|inquires|inquired|question|questions|questioned|consult|consults|consulted|shout|shouts|shouted|call out|calls out|called out';
     const protagonistSpeechPattern = new RegExp(
@@ -6352,7 +6700,7 @@ export class MultiModelOrchestrator {
       'i',
     );
     const raisingVoicePattern = new RegExp(
-      '\\b(?:' + subjects.join('|') + ')\\s+(?:\\w+\\s+){0,4}(?:raise|raised|raising)\\s+(?:your|his|her|their)\\s+voice\\b',
+      '\\b(?:' + subjects.join('|') + ')\\s+(?:\\w+\\s+){0,12}(?:raise|raises|raised|raising)\\s+(?:your|his|her|their)\\s+voice\\b',
       'i',
     );
 
@@ -6370,16 +6718,25 @@ export class MultiModelOrchestrator {
     narration: string,
     playerAction: string,
     sceneContext?: string,
+    intent?: PlayerIntent,
   ): { valid: boolean; errorReason?: string } {
     const action = String(playerAction || '').trim();
     const output = String(narration || '').trim();
     const context = String(sceneContext || '').trim();
-    if (!action || !output || !context || !NARRATIVE_INFORMATION_SEEKING_PATTERN.test(action)) {
+    const informationSeeking = intent
+      ? Boolean(intent.informationGoal) ||
+        intent.interactionMode === 'INFORMATION_SEEKING' ||
+        (intent.interactionMode === 'PASSIVE_OBSERVATION' && intent.observationIntent)
+      : NARRATIVE_INFORMATION_SEEKING_PATTERN.test(action);
+    if (!action || !output || !context || !informationSeeking) {
       return { valid: true };
     }
 
-    const passiveListening = NARRATIVE_PASSIVE_LISTENING_PATTERN.test(action);
-    const genericRumorRequest = /\b(?:rumor|rumors|rumour|rumours|gossip|whisper|whispers|hear|listen|overhear|eavesdrop)\b/i.test(action);
+    const passiveListening = intent
+      ? !intent.speechIntent && intent.observationIntent
+      : NARRATIVE_PASSIVE_LISTENING_PATTERN.test(action);
+    const semanticTopic = intent?.informationGoal || intent?.originalText || action;
+    const genericRumorRequest = /\b(?:rumor|rumors|rumour|rumours|gossip|whisper|whispers|hear|listen|overhear|eavesdrop|what people heard|what people know)\b/i.test(semanticTopic);
     const explicitTopicMatch = action.match(/\b(?:about|regarding|concerning|on)\s+(.+?)(?:[.!?]|$)/i);
     const explicitTopic = String(explicitTopicMatch?.[1] || '')
       .trim()
@@ -6434,18 +6791,29 @@ export class MultiModelOrchestrator {
   private validateNarrativeInformationContinuity(
     narration: string,
     playerAction: string,
+    intent?: PlayerIntent,
   ): { valid: boolean; errorReason?: string } {
     const action = String(playerAction || '').trim();
     const output = String(narration || '').trim();
-    if (!action || !output || !NARRATIVE_INFORMATION_SEEKING_PATTERN.test(action)) {
+    const informationSeeking = intent
+      ? Boolean(intent.informationGoal) ||
+        intent.interactionMode === 'INFORMATION_SEEKING' ||
+        (intent.interactionMode === 'PASSIVE_OBSERVATION' && intent.observationIntent)
+      : NARRATIVE_INFORMATION_SEEKING_PATTERN.test(action);
+    if (!action || !output || !informationSeeking) {
       return { valid: true };
     }
 
     const hasInformationResponse = NARRATIVE_INFORMATION_RESPONSE_PATTERN.test(output);
     const hasGroundedNonAnswer = NARRATIVE_INFORMATION_NONANSWER_PATTERN.test(output);
     const hasQuotedResponse = /[“"][^”"]{12,}[”"]/i.test(output);
+    const hasDirectReport = /\b(?:mention|mentions|mentioned|report|reports|reported|whisper|whispers|whispered|say|says|said|tell|tells|told|hear|hears|heard)\b/i.test(output);
 
-    if (!hasGroundedNonAnswer && !(hasInformationResponse && (hasQuotedResponse || /\b(?:that|because|about|from|near|inside|within|after|before|according to|according)\b/i.test(output)))) {
+    if (!hasGroundedNonAnswer && !(hasInformationResponse && (
+      hasQuotedResponse ||
+      hasDirectReport ||
+      /\b(?:that|because|about|from|near|inside|within|after|before|according to|according)\b/i.test(output)
+    ))) {
       return {
         valid: false,
         errorReason: 'Narration information-continuity guard rejected output: the current action seeks information, but the response does not contain a grounded answer, quoted response, or explicit limitation on what can be learned.',
@@ -6479,6 +6847,76 @@ export class MultiModelOrchestrator {
       };
     }
     return { valid: true };
+  }
+
+  private async reviewAndRepairNarrative(params: {
+    turnPackage: StructuredTurnPackage;
+    intent: PlayerIntent;
+    situation: ReturnType<typeof CurrentSituationBuilder.build>;
+    plan: EphemeralNarrativePlan;
+    adapter: IProviderAdapter;
+    modelId: string;
+    timeoutMs: number;
+    strict?: boolean;
+    allowRewrite?: boolean;
+  }): Promise<{ turnPackage: StructuredTurnPackage; review: NarrativeReview }> {
+    let review = SemanticNarrativeReview.review({
+      intent: params.intent,
+      situation: params.situation,
+      plan: params.plan,
+      turnPackage: params.turnPackage,
+    });
+    if (review.decision === 'ACCEPT' || params.strict === false || params.allowRewrite === false) return { turnPackage: params.turnPackage, review };
+
+    const rewritePrompt = SemanticNarrativeReview.buildRewritePrompt({
+      intent: params.intent,
+      situation: params.situation,
+      plan: params.plan,
+      turnPackage: params.turnPackage,
+      review,
+    });
+    const rewriteStartedAt = Date.now();
+    let response: ProviderGenerateResult;
+    try {
+      response = await params.adapter.generate('narrative.generate', rewritePrompt, {
+        timeoutMs: Math.min(params.timeoutMs, 5000),
+        modelId: params.modelId,
+        maxTokens: 1200,
+      });
+      if (!response?.text) throw new Error('Narrative semantic rewrite provider returned empty text.');
+      const rewriteModel = Array.from(this.models.values()).find((model) => model.modelId === params.modelId || this.modelKey(model) === params.modelId);
+      if (rewriteModel) {
+        this.recordProviderSuccess(rewriteModel, response, 'narrative.generate', rewriteStartedAt);
+      }
+    } catch (error) {
+      const rewriteModel = Array.from(this.models.values()).find((model) => model.modelId === params.modelId || this.modelKey(model) === params.modelId);
+      if (rewriteModel) {
+        this.recordProviderFailure(rewriteModel, 'narrative.generate', error, rewriteStartedAt);
+      }
+      throw error;
+    }
+    const validation = this.validateTurnPackage(response.text);
+    if (!validation.valid || !validation.turnPackage) {
+      throw new Error('Narrative semantic rewrite returned an invalid turn package: ' + (validation.errorReason || 'unknown validation failure'));
+    }
+    const intentSafety = this.validateNarrativeIntentSafety(
+      validation.turnPackage.narrative.join(' '),
+      params.intent,
+      params.situation.player.name,
+    );
+    if (!intentSafety.valid) {
+      throw new Error(intentSafety.errorReason || 'Narrative semantic rewrite violated player intent safety.');
+    }
+    review = SemanticNarrativeReview.review({
+      intent: params.intent,
+      situation: params.situation,
+      plan: params.plan,
+      turnPackage: validation.turnPackage,
+    });
+    if (review.decision !== 'ACCEPT') {
+      throw new Error('Narrative semantic review remained ' + review.decision + ' after the single permitted rewrite.');
+    }
+    return { turnPackage: validation.turnPackage, review };
   }
 
   /**
@@ -6517,6 +6955,8 @@ export class MultiModelOrchestrator {
       error?: string;
     }>;
     researchPacket?: ReturnType<typeof narrativeContinuityEngine.research>;
+    narrativePlan?: EphemeralNarrativePlan;
+    researchAudit?: Pick<NarrativeResearchResult, 'blocks' | 'excluded' | 'budgets' | 'totalTokens' | 'query'>;
     contextAudit?: {
       hardTokenBudget: number;
       totalTokens: number;
@@ -6533,34 +6973,63 @@ export class MultiModelOrchestrator {
 
     const hardTokenBudget = params.hardTokenBudget ?? 700;
     const timeoutMs = params.timeoutMs ?? 7000;
+    const turnAiCallBudget = new AiTurnCallBudget();
     const authoritativeOutcome = (params.committedOutcome || '').trim();
     const connectedDirective = (params.continuationDirective || '').trim();
-    const isInformationSeekingAction = NARRATIVE_INFORMATION_SEEKING_PATTERN.test(playerAction);
     const worldRepo = this.getWorldRepository();
+    if (!worldRepo.getStoryRun(storyId)) {
+      worldRepo.seedStory(storyId);
+    }
+    let currentSituation = CurrentSituationBuilder.build({
+      storyId,
+      playerAction,
+      viewerActorId: worldRepo.getPlayerLifecycle(storyId)?.actorId,
+      worldRepo,
+    });
+    const intentInterpretation = await this.interpretPlayerIntent({
+      storyId,
+      playerText: playerAction,
+      currentSituation,
+      timeoutMs: Math.min(timeoutMs, 5000),
+    });
+    const playerIntent = intentInterpretation.intent;
+    currentSituation = CurrentSituationBuilder.build({
+      storyId,
+      playerAction,
+      currentAction: playerIntent,
+      viewerActorId: currentSituation.player.actorId,
+      worldRepo,
+    });
+    const rawResearchResult = NarrativeResearchPipeline.research({
+      repository: worldRepo,
+      storyId,
+      currentSituation,
+      playerIntent,
+      playerAction,
+      hardTokenBudget: Math.max(1600, hardTokenBudget * 2),
+      viewerActorId: currentSituation.player.actorId,
+    });
+    const researchResult = EpistemicBoundaryEnforcer.sanitizeResearch(rawResearchResult, currentSituation).result;
+    const narrativePlan = NarrativeDirector.create({
+      situation: currentSituation,
+      intent: playerIntent,
+      research: researchResult,
+    });
 
-    const canonicalPlayer = worldRepo.getPlayerLifecycle(storyId);
-    const canonicalRun = worldRepo.getStoryRun(storyId);
-    const canonicalLocationId =
-      canonicalPlayer?.locationId ||
-      canonicalRun?.currentLocationId ||
-      canonicalRun?.startingLocationId ||
-      '';
-    const canonicalLocation = canonicalLocationId
-      ? worldRepo.getGeographyGraph(storyId).getNode(canonicalLocationId)
-      : undefined;
-    const canonicalSceneAnchor = canonicalLocation
-      ? [
-          `Location ID: ${canonicalLocation.id}`,
-          `Location name: ${canonicalLocation.name}`,
-          canonicalLocation.regionId ? `Region: ${canonicalLocation.regionId}` : '',
-          canonicalLocation.description ? `Canonical description: ${canonicalLocation.description}` : '',
-          canonicalLocation.ambientSensory ? `Canonical ambient/sensory cues: ${canonicalLocation.ambientSensory}` : '',
-          `Canonical world time: ${worldRepo.getWorldClock(storyId).formatHeader()}`,
-          'Continuity rule: remain within this canonical location unless the canonical game state has already committed a location change for this turn. A failed check, fallback model, or narration request never authorizes an uncommitted relocation.',
-          'Temporal rule: do not move the time of day forward or backward in narration. Multiple player actions may occur within the same canonical time until the game clock is explicitly advanced.',
-        ].filter(Boolean).join('\n')
-      : 'Canonical location is unavailable; do not invent a location change.';
+    const canonicalSceneAnchor = [
+      `Location ID: ${currentSituation.location.id}`,
+      `Location name: ${currentSituation.location.name}`,
+      currentSituation.location.regionId ? `Region: ${currentSituation.location.regionId}` : '',
+      currentSituation.location.description ? `Canonical description: ${currentSituation.location.description}` : '',
+      currentSituation.location.ambientSensory ? `Canonical ambient/sensory cues: ${currentSituation.location.ambientSensory}` : '',
+      `Canonical world time: ${currentSituation.worldTime}`,
+      `Visible entities: ${currentSituation.nearbyEntities.filter((entity) => entity.visibleToPlayer).map((entity) => entity.name).join(', ') || 'None'}`,
+      currentSituation.activeDialogue ? `Active dialogue: ${currentSituation.activeDialogue.speakerName}: ${currentSituation.activeDialogue.text}` : '',
+      'Continuity rule: remain within this canonical location unless the canonical game state has already committed a location change for this turn. A failed check, fallback model, or narration request never authorizes an uncommitted relocation.',
+      'Temporal rule: do not move the time of day forward or backward in narration. Multiple player actions may occur within the same canonical time until the game clock is explicitly advanced.',
+    ].filter(Boolean).join('\n');
 
+    const isInformationSeekingAction = Boolean(playerIntent.informationGoal) || playerIntent.interactionMode === 'INFORMATION_SEEKING' || playerIntent.interactionMode === 'PASSIVE_OBSERVATION';
     const styleInstruction = params.styleInstruction || [
       'Write an immersive tabletop-RPG narrator response for the latest player action.',
       'Canonical mechanics are authoritative. Never invent or expose mechanics, model names, internal identifiers, DCs, dice, state fields, or engine terminology.',
@@ -6571,7 +7040,7 @@ export class MultiModelOrchestrator {
       'Substance has priority over flourish. Every paragraph must either depict a concrete current-turn action, reveal a canon-grounded observation, show an immediate reaction/consequence, or establish a specific unresolved detail. Do not spend a paragraph merely describing atmosphere that does not change what the player knows or what is happening.',
       'Do not pad short actions into poetic scene-setting. The player action is the reason this turn exists; move the scene forward because of it.',
       'When the current action contains multiple concrete steps, resolve each observable step in order instead of stopping after the first movement.',
-      NARRATIVE_INFORMATION_SEEKING_PATTERN.test(playerAction)
+      isInformationSeekingAction
         ? 'This is an information-seeking action. The minimum useful response is: reach the relevant source already established in context, then perform only the kind of information gathering the player actually requested. If the player says listen, hear, overhear, or eavesdrop, the protagonist is listening only; do not make the protagonist ask, answer, speak, call out, or raise their voice unless the player also explicitly requested speech. Then provide the specific information that can be learned from canonical context or clearly state that the available people provide no reliable answer. Distinguish rumor or hearsay from established fact. Do not replace the inquiry with atmosphere, and do not invent a named informant, secret, fact, or revelation that is not supported by the supplied context.'
         : '',
       'Prefer concrete nouns, specific observations, reactions, facts, and consequences over decorative adjectives and repeated sensory metaphors.',
@@ -6579,6 +7048,7 @@ export class MultiModelOrchestrator {
         ? 'A canonical outcome has already been resolved. Describe only the observable experience and immediate consequences supported by it.'
         : 'No canonical mechanical outcome was supplied. Describe only the attempt and observable scene response; do not decide hidden success or failure.',
       connectedDirective ? 'Follow the connected presentation directive only as style guidance; never override canonical state.' : '',
+      'Semantic player intent is authoritative for what the player meant to attempt; do not silently replace it with a different action.',
       'Stay in the canonical current location unless a committed location change is supplied.',
       'Treat the latest player action as the current turn contract. Depict that action first and do not silently replace it with an earlier action from recent history.',
       'Preserve every concrete action target named by the player when it is narratively observable (for example, a scroll, staff, citadel, doorway, person, or object).',
@@ -6591,18 +7061,22 @@ export class MultiModelOrchestrator {
       'No menus, captions, meta-commentary, status labels, or debug text.',
     ].filter(Boolean).join(' ');
 
-    const viewerActorId = worldRepo.getPlayerLifecycle(storyId)?.actorId;
-    const researchQuery = [
-      playerAction,
-      ...(params.recentTurns || []).slice(-2).map((turn) => turn.playerAction),
-    ].filter(Boolean).join(' ');
-    const researchPacket = narrativeContinuityEngine.research(
-      worldRepo,
-      storyId,
-      researchQuery || 'current story context',
-      viewerActorId,
-      { persist: false },
-    );
+    const viewerActorId = currentSituation.player.actorId;
+    const canonicalRecentTurns = (params.recentTurns && params.recentTurns.length > 0)
+      ? params.recentTurns
+      : currentSituation.recentTurns.map((turn) => ({
+          playerAction: turn.playerAction || '',
+          narration: turn.narration || '',
+          worldTime: turn.worldTime,
+        }));
+    const currentSceneFactualContext = [
+      currentSituation.location.description,
+      currentSituation.location.ambientSensory,
+      currentSituation.activeDialogue ? `Active dialogue: ${currentSituation.activeDialogue.speakerName}: ${currentSituation.activeDialogue.text}` : '',
+      ...currentSituation.visibleEvents.map((event) => event.summary),
+      ...currentSituation.relevantLore.map((fact) => `Authorized lore: ${fact.subjectEntityId} ${fact.predicate} ${fact.objectValue}`),
+    ].filter(Boolean).slice(0, 10).join('\n');
+    const researchPacket = researchResult.packet;
     const assembledContext = WorkingContextEngine.assembleTurnContext({
       storyId,
       playerAction,
@@ -6619,28 +7093,57 @@ export class MultiModelOrchestrator {
           isProtected: true,
           relevanceScore: 1,
         },
-        ...(isInformationSeekingAction && params.sceneContext ? [{
+        ...(isInformationSeekingAction && currentSceneFactualContext ? [{
           id: 'current_scene_factual_context',
           band: 'B2_IMMEDIATE' as const,
           label: 'Current Scene Factual Context',
-          content: params.sceneContext,
-          estimatedTokens: WorkingContextEngine.estimateTokens(params.sceneContext),
-          sourceAuthority: 'Canonical StoryRun Scene Context',
+          content: currentSceneFactualContext,
+          estimatedTokens: WorkingContextEngine.estimateTokens(currentSceneFactualContext),
+          sourceAuthority: 'CurrentSituationBuilder canonical scene projection',
           isProtected: true,
           relevanceScore: 0.98,
         }] : []),
-        ...(params.recentTurns?.length ? [{
+        {
+          id: 'b2_player_intent',
+          band: 'B2_IMMEDIATE' as const,
+          label: 'Semantic Player Intent',
+          content: JSON.stringify(playerIntent),
+          estimatedTokens: WorkingContextEngine.estimateTokens(JSON.stringify(playerIntent)),
+          sourceAuthority: 'PlayerIntentInterpreter',
+          isProtected: true,
+          relevanceScore: 1,
+        },
+        {
+          id: 'b3_narrative_research',
+          band: 'B3_CAUSAL_OPPORTUNITY' as const,
+          label: 'Bounded Narrative Research',
+          content: researchResult.promptContext,
+          estimatedTokens: WorkingContextEngine.estimateTokens(researchResult.promptContext),
+          sourceAuthority: 'NarrativeResearchPipeline (Phase 3)',
+          relevanceScore: 0.98,
+        },
+        {
+          id: 'b2_narrative_plan',
+          band: 'B2_IMMEDIATE' as const,
+          label: 'Ephemeral Narrative Director Plan',
+          content: NarrativeDirector.toPromptContext(narrativePlan),
+          estimatedTokens: WorkingContextEngine.estimateTokens(NarrativeDirector.toPromptContext(narrativePlan)),
+          sourceAuthority: 'NarrativeDirector (Phase 4)',
+          isProtected: true,
+          relevanceScore: 1,
+        },
+        ...(canonicalRecentTurns.length ? [{
           id: 'recent_story_turns',
           band: 'B2_IMMEDIATE' as const,
           label: 'Recent Story Turns',
-          content: params.recentTurns
+          content: canonicalRecentTurns
             .slice(-2)
             .map((turn, index) => `Turn ${index + 1} | ${turn.worldTime || 'current'} | Player: ${turn.playerAction} | Narration: ${turn.narration}`)
             .join('\n'),
           estimatedTokens: WorkingContextEngine.estimateTokens(
-            params.recentTurns.slice(-2).map((turn) => `${turn.playerAction} ${turn.narration}`).join(' ')
+            canonicalRecentTurns.slice(-2).map((turn) => `${turn.playerAction} ${turn.narration}`).join(' ')
           ),
-          sourceAuthority: 'Canonical Story History',
+          sourceAuthority: 'CurrentSituationBuilder recent-turn projection',
           isProtected: true,
           relevanceScore: 1,
         }] : []),
@@ -6678,6 +7181,18 @@ export class MultiModelOrchestrator {
       ],
     });
 
+    const narrationPrompt = buildNarrationPrompt({
+      situation: currentSituation,
+      intent: playerIntent,
+      research: researchResult,
+      plan: narrativePlan,
+      workingContext: projectSupportingWorkingContext(assembledContext),
+      globalInstruction: 'You are Dreamville’s narrative presentation engine. Generate only the player-facing narrative turn using the supplied canonical state, semantic player intent, bounded research, and ephemeral plan.',
+      styleInstruction,
+      canonicalOutcome: authoritativeOutcome,
+      maxPromptTokens: Math.max(200, hardTokenBudget),
+    });
+
     const contextAudit = {
       hardTokenBudget: assembledContext.hardTokenBudget,
       totalTokens: assembledContext.totalTokens,
@@ -6693,14 +7208,15 @@ export class MultiModelOrchestrator {
 
     const generated = await this.executeTaskGeneration(
       'narrative.generate',
-      assembledContext.assembledText,
-      styleInstruction,
+      narrationPrompt.prompt,
+      narrationPrompt.styleInstruction,
       {
         timeoutMs,
         maxTokens: 650,
-        contextTokens: assembledContext.totalTokens,
+        contextTokens: narrationPrompt.totalTokens,
+        turnBudget: turnAiCallBudget,
         forceModelId: params.forceModelId,
-        canonicalLocationName: canonicalLocation?.name,
+        canonicalLocationName: currentSituation.location.name,
         playerAction,
         validateResponse: (text) => {
           const validation = this.validateTurnPackage(text, { allowPlainTextNarration: true });
@@ -6714,21 +7230,25 @@ export class MultiModelOrchestrator {
             storyId,
           );
           if (!continuity.valid) return { valid: false, errorReason: continuity.errorReason };
-          const actionContinuity = this.validateNarrativeActionContinuity(narrationText, playerAction);
+          const actionContinuity = this.validateNarrativeActionContinuity(narrationText, playerAction, playerIntent);
           if (!actionContinuity.valid) return { valid: false, errorReason: actionContinuity.errorReason };
           const actionModeContinuity = this.validateNarrativeActionModeContinuity(
             narrationText,
             playerAction,
-            canonicalPlayer?.name,
+            currentSituation.player.name,
+            playerIntent,
           );
           if (!actionModeContinuity.valid) return { valid: false, errorReason: actionModeContinuity.errorReason };
+          const intentSafety = this.validateNarrativeIntentSafety(narrationText, playerIntent, currentSituation.player.name);
+          if (!intentSafety.valid) return { valid: false, errorReason: intentSafety.errorReason };
           const informationTopicContinuity = this.validateNarrativeInformationTopicContinuity(
             narrationText,
             playerAction,
-            params.sceneContext,
+            currentSceneFactualContext,
+            playerIntent,
           );
           if (!informationTopicContinuity.valid) return { valid: false, errorReason: informationTopicContinuity.errorReason };
-          const informationContinuity = this.validateNarrativeInformationContinuity(narrationText, playerAction);
+          const informationContinuity = this.validateNarrativeInformationContinuity(narrationText, playerAction, playerIntent);
           if (!informationContinuity.valid) return { valid: false, errorReason: informationContinuity.errorReason };
           const temporalContinuity = this.validateNarrativeTemporalContinuity(narrationText, worldRepo, storyId);
           return temporalContinuity.valid
@@ -6739,8 +7259,23 @@ export class MultiModelOrchestrator {
     );
 
     // Narrative generation has a deterministic emergency floor. When all configured
-    // AI providers fail, the authoritative fallback remains player-facing rather than
-    // converting a recoverable narration failure into a dead-end turn.
+    // AI providers fail, surface the actual fallback-attempt diagnostics instead of
+    // replacing them with a misleading "Response is not valid JSON" parse error.
+    if (!generated.text) {
+      return {
+        success: false,
+        providerId: generated.providerId,
+        modelId: generated.modelId,
+        source: generated.source,
+        fallbackReason: generated.fallbackReason,
+        attemptsTrail: generated.attemptsTrail,
+        researchPacket,
+        narrativePlan,
+        researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
+        contextAudit,
+        error: generated.fallbackReason || 'All configured narrative providers failed, including the deterministic emergency floor.',
+      };
+    }
 
     const validation = this.validateTurnPackage(generated.text, { allowPlainTextNarration: true });
     if (!validation.valid || !validation.turnPackage) {
@@ -6768,11 +7303,13 @@ export class MultiModelOrchestrator {
         fallbackReason: generated.fallbackReason,
         attemptsTrail: generated.attemptsTrail,
         researchPacket,
+        narrativePlan,
+        researchAudit: researchResult ? { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query } : undefined,
         contextAudit,
         error: finalSceneContinuity.errorReason || 'Narration scene continuity validation failed.',
       };
     }
-    const finalActionContinuity = this.validateNarrativeActionContinuity(finalNarrationText, playerAction);
+    const finalActionContinuity = this.validateNarrativeActionContinuity(finalNarrationText, playerAction, playerIntent);
     if (!finalActionContinuity.valid) {
       return {
         success: false,
@@ -6782,6 +7319,8 @@ export class MultiModelOrchestrator {
         fallbackReason: generated.fallbackReason,
         attemptsTrail: generated.attemptsTrail,
         researchPacket,
+        narrativePlan,
+        researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
         contextAudit,
         error: finalActionContinuity.errorReason || 'Narration action continuity validation failed.',
       };
@@ -6796,6 +7335,8 @@ export class MultiModelOrchestrator {
         fallbackReason: generated.fallbackReason,
         attemptsTrail: generated.attemptsTrail,
         researchPacket,
+        narrativePlan,
+        researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
         contextAudit,
         error: finalInformationContinuity.errorReason || 'Narration information continuity validation failed.',
       };
@@ -6810,6 +7351,8 @@ export class MultiModelOrchestrator {
         fallbackReason: generated.fallbackReason,
         attemptsTrail: generated.attemptsTrail,
         researchPacket,
+        narrativePlan,
+        researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
         contextAudit,
         error: finalTemporalContinuity.errorReason || 'Narration temporal continuity validation failed.',
       };
@@ -6827,6 +7370,8 @@ export class MultiModelOrchestrator {
       fallbackReason: generated.fallbackReason,
       attemptsTrail: generated.attemptsTrail,
       researchPacket,
+      narrativePlan,
+      researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
       contextAudit,
     };
   }
@@ -6884,6 +7429,12 @@ export class MultiModelOrchestrator {
     const maxRetries = params.maxRetries ?? 2;
 
     const repo = params.repository || this.getWorldRepository();
+    // A direct orchestrator caller may be creating the first turn for a new story.
+    // Initialize the canonical Story Run here rather than making every downstream
+    // read-model consumer invent or duplicate initialization behavior.
+    if (!repo.getStoryRun(storyId)) {
+      repo.seedStory(storyId);
+    }
     // V6.34 Stable Identifiers: stats remain process-local, but canonical turn identity
     // derives from the authoritative story command sequence so replay does not depend on
     // unrelated turns executed elsewhere in the process.
@@ -6892,6 +7443,7 @@ export class MultiModelOrchestrator {
     const turnId = rawIdempotencyKey
       ? deterministicId('turn', storyId, rawIdempotencyKey.replace(/[^a-zA-Z0-9_-]/g, '_'))
       : deterministicId('turn', storyId, turnSequence, task, params.playerAction || '');
+    const turnAiCallBudget = new AiTurnCallBudget();
 
     // Checkpoint continuation awareness (V6.15 / V6.06)
     let priorCheckpoint: ContinuationCheckpoint | undefined;
@@ -6903,31 +7455,115 @@ export class MultiModelOrchestrator {
     }
 
     const executeCore = async (): Promise<OrchestratedTurnResult> => {
-      // 1. Ingest CH11 Working Context (DEF-CH12-02)
-      const researchPacket = narrativeContinuityEngine.research(
-        repo,
+      // Phase 6 permits at most one semantic rewrite for the entire turn, not one rewrite per fallback provider.
+      let semanticRewriteUsed = false;
+      const initialSituation = CurrentSituationBuilder.build({
         storyId,
-        params.playerAction || 'current story context',
-        repo.getPlayerLifecycle(storyId)?.actorId,
-      );
+        playerAction: params.playerAction || '',
+        viewerActorId: repo.getPlayerLifecycle(storyId)?.actorId,
+        worldRepo: repo,
+      });
+      const intentInterpretation = await this.interpretPlayerIntent({
+        storyId,
+        playerText: params.playerAction || '',
+        currentSituation: initialSituation,
+        timeoutMs: Math.min(timeoutMs, 5000),
+        turnBudget: turnAiCallBudget,
+      });
+      const playerIntent = intentInterpretation.intent;
+      const currentSituation = CurrentSituationBuilder.build({
+        storyId,
+        playerAction: params.playerAction || '',
+        currentAction: playerIntent,
+        viewerActorId: initialSituation.player.actorId,
+        worldRepo: repo,
+      });
+      const isNarrativeTask = task === 'narrative.generate';
+      const rawResearchResult = isNarrativeTask
+        ? NarrativeResearchPipeline.research({
+            repository: repo,
+            storyId,
+            currentSituation,
+            playerIntent,
+            playerAction: params.playerAction || '',
+            hardTokenBudget: Math.max(1600, hardTokenBudget * 2),
+            viewerActorId: currentSituation.player.actorId,
+          })
+        : undefined;
+      const researchResult = rawResearchResult
+        ? EpistemicBoundaryEnforcer.sanitizeResearch(rawResearchResult, currentSituation).result
+        : undefined;
+      const researchPacket = researchResult?.packet;
+      const narrativePlan = researchResult
+        ? NarrativeDirector.create({
+            situation: currentSituation,
+            intent: playerIntent,
+            research: researchResult,
+          })
+        : undefined;
+
+      // 1. Ingest the shared CurrentSituation + optional Phase 3-4 narration context into Working Context.
       const assembledContext: AssembledTurnContext = WorkingContextEngine.assembleTurnContext({
         storyId,
         playerAction: params.playerAction || 'Observe surroundings and assess position',
+        currentAction: playerIntent,
+        currentSituation,
+        narrativeResearch: researchPacket,
+        viewerActorId: currentSituation.player.actorId,
         hardTokenBudget,
         worldRepo: repo,
-        customChunks: [{
-          id: 'b3_narrative_research',
-          band: 'B3_CAUSAL_OPPORTUNITY',
-          label: 'Narrative Research / Plot / Plan',
-          content: JSON.stringify(researchPacket),
-          estimatedTokens: WorkingContextEngine.estimateTokens(JSON.stringify(researchPacket)),
-          sourceAuthority: 'NarrativeContinuityEngine',
-          relevanceScore: 0.9,
-          isProtected: false,
-        }],
+        customChunks: [
+          {
+            id: 'b2_player_intent',
+            band: 'B2_IMMEDIATE',
+            label: 'Semantic Player Intent',
+            content: JSON.stringify(playerIntent),
+            estimatedTokens: WorkingContextEngine.estimateTokens(JSON.stringify(playerIntent)),
+            sourceAuthority: 'PlayerIntentInterpreter',
+            relevanceScore: 1,
+            isProtected: true,
+          },
+          ...(researchResult ? [{
+            id: 'b3_narrative_research',
+            band: 'B3_CAUSAL_OPPORTUNITY' as const,
+            label: 'Bounded Narrative Research',
+            content: researchResult.promptContext,
+            estimatedTokens: WorkingContextEngine.estimateTokens(researchResult.promptContext),
+            sourceAuthority: 'NarrativeResearchPipeline (Phase 3)',
+            relevanceScore: 0.98,
+            isProtected: false,
+          }] : []),
+          ...(narrativePlan ? [{
+            id: 'b2_narrative_plan',
+            band: 'B2_IMMEDIATE' as const,
+            label: 'Ephemeral Narrative Director Plan',
+            content: NarrativeDirector.toPromptContext(narrativePlan),
+            estimatedTokens: WorkingContextEngine.estimateTokens(NarrativeDirector.toPromptContext(narrativePlan)),
+            sourceAuthority: 'NarrativeDirector (Phase 4)',
+            relevanceScore: 1,
+            isProtected: true,
+          }] : []),
+        ],
       });
 
       // 1b. CH15 Source Adaptation Adjudication Check
+      const narrationPrompt = isNarrativeTask && researchResult && narrativePlan
+        ? buildNarrationPrompt({
+            situation: currentSituation,
+            intent: playerIntent,
+            research: researchResult,
+            plan: narrativePlan,
+            workingContext: projectSupportingWorkingContext(assembledContext),
+            globalInstruction: 'You are Dreamville’s authoritative narrative presentation engine. Generate only the player-facing narrative turn. Canonical game state remains authoritative and prose never commits state.',
+            styleInstruction: defaultNarrationStyle(),
+            maxPromptTokens: Math.max(200, hardTokenBudget),
+          })
+        : {
+            prompt: assembledContext.assembledText,
+            styleInstruction: '',
+            totalTokens: assembledContext.totalTokens,
+          };
+
       const profile = repo.getAdaptationProfile(storyId);
       const bible = repo.getAdaptedStoryBible(storyId);
       if (profile && bible) {
@@ -6961,7 +7597,9 @@ export class MultiModelOrchestrator {
               storyId,
               turnId,
               role: 'narrator',
-              workingContextTokens: assembledContext.totalTokens,
+              playerAction: params.playerAction,
+              playerIntent,
+              workingContextTokens: narrationPrompt.totalTokens,
               worldTime: repo.getWorldClock(storyId).formatHeader(),
               locationId: repo.getPlayerLifecycle(storyId)?.locationId || 'loc_whispering_orrery',
               sceneSummary: evalResult.reason,
@@ -6992,9 +7630,10 @@ export class MultiModelOrchestrator {
               fallbackChain: [],
               attempts: 1,
               latencyMs: 2,
-              inputTokens: assembledContext.totalTokens,
+              inputTokens: narrationPrompt.totalTokens,
               outputTokens: 20,
               validated: true,
+          aiCallBudget: turnAiCallBudget.snapshot(),
             },
           };
         }
@@ -7047,16 +7686,16 @@ export class MultiModelOrchestrator {
           task,
           forced.providerId,
           forced.modelId,
-          assembledContext.totalTokens,
+          narrationPrompt.totalTokens,
           hardTokenBudget,
         );
         const forcedUsable = forced.isEmergencyFloor || (
-          this.isCandidateUsable(forced, task, assembledContext.totalTokens) &&
+          this.isCandidateUsable(forced, task, narrationPrompt.totalTokens) &&
           (!forcedPreflight || forcedPreflight.eligible)
         );
 
         if (!forcedUsable) {
-          const fallbackSelection = this.selectBestModel(task, { contextTokens: assembledContext.totalTokens });
+          const fallbackSelection = this.selectBestModel(task, { contextTokens: narrationPrompt.totalTokens });
           selectedModel = fallbackSelection.selectedModel;
           selectionReason = 'Requested model "' + params.forceModelId + '" was unavailable at preflight; using the configured fallback route instead.';
           fallbacks = fallbackSelection.fallbacks;
@@ -7073,21 +7712,25 @@ export class MultiModelOrchestrator {
                 task,
                 m.providerId,
                 m.modelId,
-                assembledContext.totalTokens,
+                narrationPrompt.totalTokens,
                 hardTokenBudget,
               );
-              return this.isCandidateUsable(m, task, assembledContext.totalTokens) && Boolean(preflight?.eligible);
+              return this.isCandidateUsable(m, task, narrationPrompt.totalTokens) && Boolean(preflight?.eligible);
             });
           fallbacks = configuredFallbacks;
         }
       } else {
-        const selection = this.selectBestModel(task, { contextTokens: assembledContext.totalTokens });
+        const selection = this.selectBestModel(task, { contextTokens: narrationPrompt.totalTokens });
         selectedModel = selection.selectedModel;
         selectionReason = selection.selectionReason;
         fallbacks = selection.fallbacks;
       }
 
       const candidateChain: ModelRegistryRecord[] = [selectedModel, ...fallbacks];
+      const turnTaskBudget = turnAiCallBudget.beginTask(task);
+      if (!turnTaskBudget.allowed) {
+        throw new Error(turnTaskBudget.reason || `Per-turn AI call budget exhausted for ${task}.`);
+      }
       let totalAttempts = 0;
       let lastError = '';
 
@@ -7103,6 +7746,7 @@ export class MultiModelOrchestrator {
 
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
           totalAttempts++;
+          turnAiCallBudget.recordProviderAttempt(task);
           const attemptStartedAt = Date.now();
           try {
             // Wrap provider call with AbortController for strict timeout enforcement
@@ -7111,13 +7755,15 @@ export class MultiModelOrchestrator {
 
             let providerRes: ProviderGenerateResult;
             try {
-              providerRes = await adapter.generate(task, assembledContext.assembledText, {
+              providerRes = await adapter.generate(task, narrationPrompt.prompt, {
                 timeoutMs,
                 abortSignal: abortController.signal,
                 retryCount: attempt,
                 modelId: currentCandidate.modelId,
                 audioInputBase64: params.audioInputBase64,
                 voiceProfile: params.voiceProfile,
+                canonicalLocationName: currentSituation.location.name,
+                playerAction: params.playerAction,
               });
             } finally {
               clearTimeout(timer);
@@ -7132,6 +7778,14 @@ export class MultiModelOrchestrator {
               throw new Error(`Turn package validation failed: ${validation.errorReason}`);
             }
             if (task === 'narrative.generate') {
+              const intentSafety = this.validateNarrativeIntentSafety(
+                validation.turnPackage.narrative.join(' '),
+                playerIntent,
+                currentSituation.player.name,
+              );
+              if (!intentSafety.valid) {
+                throw new Error(intentSafety.errorReason || 'Narrative semantic intent safety validation failed.');
+              }
               const continuity = this.validateNarrativeSceneContinuity(
                 validation.turnPackage.narrative.join(' '),
                 repo,
@@ -7142,14 +7796,62 @@ export class MultiModelOrchestrator {
               }
             }
 
-            // 5. Adjudicate State Changes through Domain Authority Bridge (DEF-CH12-05)
+            // 5. Semantic Narrative Review. Deterministic review is cheap and runs before
+            // state proposals are adjudicated. A single repair may use the same provider.
             this.recordProviderSuccess(currentCandidate, providerRes, task, attemptStartedAt);
 
+            let reviewedTurnPackage = validation.turnPackage;
+            let narrativeReview: NarrativeReview | undefined;
+            if (isNarrativeTask && narrativePlan) {
+              const initialReview = SemanticNarrativeReview.review({
+                intent: playerIntent,
+                situation: currentSituation,
+                plan: narrativePlan,
+                turnPackage: validation.turnPackage,
+              });
+              const shouldRewrite = initialReview.decision !== 'ACCEPT' && !semanticRewriteUsed;
+              if (shouldRewrite) semanticRewriteUsed = true;
+              const reviewBudget = shouldRewrite
+                ? turnAiCallBudget.beginTask('narrative.review')
+                : { allowed: true };
+              if (shouldRewrite && !reviewBudget.allowed) {
+                throw new Error(reviewBudget.reason || 'Narrative review call budget exhausted.');
+              }
+              if (shouldRewrite) turnAiCallBudget.recordProviderAttempt('narrative.review');
+              const reviewed = await this.reviewAndRepairNarrative({
+                turnPackage: validation.turnPackage,
+                intent: playerIntent,
+                situation: currentSituation,
+                plan: narrativePlan,
+                adapter,
+                modelId: currentCandidate.modelId,
+                timeoutMs,
+                allowRewrite: shouldRewrite,
+              });
+              if (reviewed.review.decision !== 'ACCEPT') {
+                throw new Error('Narrative semantic review rejected the provider output after the single permitted rewrite budget was exhausted.');
+              }
+              reviewedTurnPackage = reviewed.turnPackage;
+              narrativeReview = reviewed.review;
+            }
+
+            // 6. Adjudicate state proposals through the canonical state boundary.
             const adjudication = DomainAdjudicationBridge.adjudicate(
-              validation.turnPackage,
+              reviewedTurnPackage,
               repo,
-              storyId
+              storyId,
+              narrativePlan,
             );
+            const stateAdjudication = NarrativeStateAdjudicator.adjudicate({
+              repository: repo,
+              storyId,
+              turnId,
+              actorId: currentSituation.player.actorId,
+              playerIntent,
+              currentSituation,
+              turnPackage: reviewedTurnPackage,
+              canonicalAdjudication: adjudication,
+            });
 
             // 6. Create Continuation Checkpoint (DEF-CH12-06, V6.15 completeness)
             const checkpointId = rawIdempotencyKey
@@ -7161,11 +7863,12 @@ export class MultiModelOrchestrator {
               turnId,
               role: 'narrator',
               playerAction: params.playerAction,
-              workingContextTokens: assembledContext.totalTokens,
+              playerIntent,
+              workingContextTokens: narrationPrompt.totalTokens,
               worldTime: repo.getWorldClock(storyId).formatHeader(),
               locationId: repo.getPlayerLifecycle(storyId)?.locationId || 'loc_whispering_orrery',
-              sceneSummary: validation.turnPackage.narrative[0] || 'Scene observed.',
-              recentOutput: validation.turnPackage.narrative.join(' '),
+              sceneSummary: reviewedTurnPackage.narrative[0] || 'Scene observed.',
+              recentOutput: reviewedTurnPackage.narrative.join(' '),
               uncommittedOutput: '',
               canonicalInvariants: {
                 playerActorId: `player_actor_${storyId}`,
@@ -7175,12 +7878,12 @@ export class MultiModelOrchestrator {
                 tone: 'evocative_canonical_archival',
                 epistemicSanitized: 'true',
               },
-              openThreads: validation.turnPackage.memoryCandidates || [],
+              openThreads: reviewedTurnPackage.memoryCandidates || [],
               presentationEvents: [
-                ...(validation.turnPackage.audioCues || []).map((c: any) =>
+                ...(reviewedTurnPackage.audioCues || []).map((c: any) =>
                   typeof c === 'string' ? `audio:${c}` : `audio:${c.soundId}`
                 ),
-                ...(validation.turnPackage.visualCues || []).map((v: any) =>
+                ...(reviewedTurnPackage.visualCues || []).map((v: any) =>
                   typeof v === 'string' ? `visual:${v}` : `visual:${v.prompt}`
                 ),
               ],
@@ -7188,13 +7891,13 @@ export class MultiModelOrchestrator {
                 sanitized: true,
                 epistemicSanitized: true,
                 hiddenFactsSuppressed: [],
-                totalTokens: assembledContext.totalTokens,
+                totalTokens: narrationPrompt.totalTokens,
                 truncated: (assembledContext.evictedChunkLabels?.length ?? 0) > 0,
                 viewerActorId: `player_actor_${storyId}`,
               },
               handoffEligible: true,
-              summaryText: validation.turnPackage.narrative[0] || 'Scene observed.',
-              recentHistory: validation.turnPackage.narrative || [],
+              summaryText: reviewedTurnPackage.narrative[0] || 'Scene observed.',
+              recentHistory: reviewedTurnPackage.narrative || [],
               activeConditions: [],
               activeQuests: [],
               selectedModelId: currentCandidate.modelId,
@@ -7218,31 +7921,40 @@ export class MultiModelOrchestrator {
               fallbackChain: candidateChain.slice(0, cIdx + 1).map((m) => m.modelId),
               attempts: totalAttempts,
               latencyMs: providerRes.latencyMs,
-              inputTokens: Math.min(providerRes.inputTokens || assembledContext.totalTokens, assembledContext.totalTokens),
+              inputTokens: Math.min(providerRes.inputTokens || narrationPrompt.totalTokens, narrationPrompt.totalTokens),
               outputTokens: providerRes.outputTokens || 50,
               validated: true,
+          aiCallBudget: turnAiCallBudget.snapshot(),
               adjudicationResult: adjudication,
               checkpointCreated: checkpointId,
               recoveredFromCheckpoint: Boolean(params.checkpointId),
               idempotencyKey: rawIdempotencyKey,
+              researchBlockCount: researchResult?.blocks.length,
+              researchTokens: researchResult?.totalTokens,
+              narrativePlanObjective: narrativePlan?.objective,
+              narrativeReview,
             };
             this.lastTurnTelemetry = telemetry;
+            if (!repo.isCanonicalCommandTransactionActive()) {
             narrativeContinuityEngine.recordTurn(repo, {
               storyId,
               turnId,
               playerAction: params.playerAction,
-              turnPackage: validation.turnPackage,
+              playerIntent,
+              currentSituation,
+              narrativeReview,
+              stateAdjudication,
+              turnPackage: reviewedTurnPackage,
             });
-            persistTurnMemoryCandidates(
-              repo,
-              storyId,
-              turnId,
-              validation.turnPackage.memoryCandidates,
-            );
+            }
 
             return {
               success: true,
-              turnPackage: validation.turnPackage,
+              turnPackage: reviewedTurnPackage,
+              playerIntent,
+              narrativePlan,
+              narrativeReview,
+              stateAdjudication,
               telemetry,
               adjudicationResult: adjudication,
               checkpoint,
@@ -7295,19 +8007,57 @@ export class MultiModelOrchestrator {
           const emergencyLocation = emergencyLocationId
             ? repo.getGeographyGraph(storyId).getNode(emergencyLocationId)
             : undefined;
-          const res = await emergencyAdapter.generate(task, assembledContext.assembledText, {
+          const res = await emergencyAdapter.generate(task, narrationPrompt.prompt, {
             audioInputBase64: params.audioInputBase64,
             voiceProfile: params.voiceProfile,
             canonicalLocationName: emergencyLocation?.name,
+            playerAction: params.playerAction,
           });
           this.recordProviderSuccess(emergencyModel, res, task, emergencyStartedAt);
           const validation = this.validateTurnPackage(res.text);
           if (validation.valid && validation.turnPackage) {
-            const adjudication = DomainAdjudicationBridge.adjudicate(
-              validation.turnPackage,
-              repo,
-              storyId
-            );
+            const intentSafety = isNarrativeTask
+              ? this.validateNarrativeIntentSafety(
+                  validation.turnPackage.narrative.join(' '),
+                  playerIntent,
+                  currentSituation.player.name,
+                )
+              : { valid: true };
+            if (!intentSafety.valid) {
+              lastError = intentSafety.errorReason || 'Emergency narration violated semantic player intent.';
+            } else {
+              let emergencyTurnPackage = validation.turnPackage;
+              let emergencyNarrativeReview: NarrativeReview | undefined;
+              if (isNarrativeTask && narrativePlan) {
+                const reviewed = await this.reviewAndRepairNarrative({
+                  turnPackage: validation.turnPackage,
+                  intent: playerIntent,
+                  situation: currentSituation,
+                  plan: narrativePlan,
+                  adapter: emergencyAdapter,
+                  modelId: emergencyModel.modelId,
+                  timeoutMs,
+                  strict: false,
+                });
+                emergencyTurnPackage = reviewed.turnPackage;
+                emergencyNarrativeReview = reviewed.review;
+              }
+              const adjudication = DomainAdjudicationBridge.adjudicate(
+                emergencyTurnPackage,
+                repo,
+                storyId,
+                narrativePlan,
+              );
+              const stateAdjudication = NarrativeStateAdjudicator.adjudicate({
+                repository: repo,
+                storyId,
+                turnId,
+                actorId: currentSituation.player.actorId,
+                playerIntent,
+                currentSituation,
+                turnPackage: emergencyTurnPackage,
+                canonicalAdjudication: adjudication,
+              });
             const checkpointId = rawIdempotencyKey
               ? deterministicId('cp_emergency', storyId, rawIdempotencyKey.replace(/[^a-zA-Z0-9_-]/g, '_'), totalAttempts)
               : deterministicId('cp_emergency', storyId, turnId, totalAttempts);
@@ -7316,7 +8066,9 @@ export class MultiModelOrchestrator {
               storyId,
               turnId,
               role: 'narrator',
-              workingContextTokens: assembledContext.totalTokens,
+              playerAction: params.playerAction,
+              playerIntent,
+              workingContextTokens: narrationPrompt.totalTokens,
               worldTime: repo.getWorldClock(storyId).formatHeader(),
               locationId: repo.getPlayerLifecycle(storyId)?.locationId || 'loc_whispering_orrery',
               sceneSummary: validation.turnPackage.narrative[0],
@@ -7340,7 +8092,7 @@ export class MultiModelOrchestrator {
                 sanitized: true,
                 epistemicSanitized: true,
                 hiddenFactsSuppressed: [],
-                totalTokens: assembledContext.totalTokens,
+                totalTokens: narrationPrompt.totalTokens,
                 truncated: (assembledContext.evictedChunkLabels?.length ?? 0) > 0,
                 viewerActorId: `player_actor_${storyId}`,
               },
@@ -7369,30 +8121,54 @@ export class MultiModelOrchestrator {
               fallbackChain: ['emergency-fallback-local'],
               attempts: totalAttempts + 1,
               latencyMs: res.latencyMs,
-              inputTokens: assembledContext.totalTokens,
+              inputTokens: narrationPrompt.totalTokens,
               outputTokens: 30,
               validated: true,
+          aiCallBudget: turnAiCallBudget.snapshot(),
               adjudicationResult: adjudication,
               checkpointCreated: checkpointId,
               recoveredFromCheckpoint: Boolean(params.checkpointId),
               idempotencyKey: rawIdempotencyKey,
+              researchBlockCount: researchResult?.blocks.length,
+              researchTokens: researchResult?.totalTokens,
+              narrativePlanObjective: narrativePlan?.objective,
+              narrativeReview: emergencyNarrativeReview,
             };
             this.lastTurnTelemetry = telemetry;
 
+            if (!repo.isCanonicalCommandTransactionActive()) {
+            narrativeContinuityEngine.recordTurn(repo, {
+              storyId,
+              turnId,
+              playerAction: params.playerAction,
+              playerIntent,
+              currentSituation,
+              narrativeReview: emergencyNarrativeReview,
+              stateAdjudication,
+              turnPackage: emergencyTurnPackage,
+            });
+            }
+
             return {
               success: true,
-              turnPackage: validation.turnPackage,
+              turnPackage: emergencyTurnPackage,
+              playerIntent,
+              narrativePlan,
+              narrativeReview: emergencyNarrativeReview,
+              stateAdjudication,
               telemetry,
               adjudicationResult: adjudication,
               checkpoint,
               audioResultBase64: res.audioBase64,
             };
+            }
           }
         }
       }
 
       return {
         success: false,
+        playerIntent,
         telemetry: {
           turnId,
           storyId,
@@ -7404,11 +8180,13 @@ export class MultiModelOrchestrator {
           fallbackChain: candidateChain.map((m) => m.modelId),
           attempts: totalAttempts,
           latencyMs: 0,
-          inputTokens: assembledContext.totalTokens,
+          inputTokens: narrationPrompt.totalTokens,
           outputTokens: 0,
           validated: false,
+          aiCallBudget: turnAiCallBudget.snapshot(),
           idempotencyKey: rawIdempotencyKey,
         },
+        narrativePlan,
         error: `All models and emergency fallbacks failed. Last error: ${lastError}`,
       };
     };
@@ -7506,6 +8284,7 @@ export class MultiModelOrchestrator {
       forceModelId?: string;
       canonicalLocationName?: string;
       playerAction?: string;
+      turnBudget?: AiTurnCallBudget;
       validateResponse?: (text: string) => TaskResponseValidationResult;
       /**
        * When true, a configured task route may be expanded with additional eligible AI models
@@ -7544,6 +8323,50 @@ export class MultiModelOrchestrator {
     }>;
   }> {
     const contract = getAiTaskContract(task);
+    const turnBudgetDecision = options?.turnBudget?.beginTask(task);
+    if (turnBudgetDecision && !turnBudgetDecision.allowed) {
+      if (options?.allowDeterministicFallback === false) {
+        throw new Error(turnBudgetDecision.reason || 'Per-turn AI call budget exhausted.');
+      }
+      const emergency = Array.from(this.models.values()).find((model) => model.isEmergencyFloor && model.roleEligibility.includes(task));
+      const emergencyAdapter = emergency ? this.getAdapter(emergency.providerId) : undefined;
+      if (!emergency || !emergencyAdapter) {
+        throw new Error((turnBudgetDecision.reason || 'Per-turn AI call budget exhausted.') + ' Deterministic emergency floor is unavailable.');
+      }
+      options?.turnBudget?.recordProviderAttempt(task);
+      const emergencyStartedAt = Date.now();
+      const emergencyResponse = await emergencyAdapter.generate(task, prompt, {
+        allowDeterministicFallback: true,
+        timeoutMs: options?.timeoutMs || 35000,
+        maxTokens: options?.maxTokens,
+        modelId: emergency.modelId,
+        systemInstruction,
+        canonicalLocationName: options?.canonicalLocationName,
+        playerAction: options?.playerAction,
+      });
+      if (!emergencyResponse?.text) {
+        throw new Error('Deterministic emergency floor returned an empty response after AI call budget exhaustion.');
+      }
+      const emergencyValidation = (options?.validateResponse || ((text: string) => validateAiTaskResponse(task, text)))(emergencyResponse.text);
+      if (!emergencyValidation.valid) {
+        throw new Error('Deterministic emergency floor response failed validation after AI call budget exhaustion.');
+      }
+      return {
+        text: emergencyResponse.text,
+        source: 'DETERMINISTIC_FALLBACK',
+        providerId: emergency.providerId,
+        modelId: emergency.modelId,
+        fallbackReason: turnBudgetDecision.reason || 'TURN_AI_CALL_BUDGET_EXHAUSTED',
+        attempts: 1,
+        attemptsTrail: [{
+          providerId: emergency.providerId,
+          modelId: emergency.modelId,
+          displayName: emergency.displayName,
+          status: 'SUCCESS',
+          latencyMs: Math.max(1, Date.now() - emergencyStartedAt),
+        }],
+      };
+    }
     const contractValidator = options?.validateResponse || ((text: string) => validateAiTaskResponse(task, text));
     const allowAdaptiveAiRecovery = options?.allowAdaptiveAiRecovery === true;
     const allowDeterministicFallback = options?.allowDeterministicFallback !== false;
@@ -7852,6 +8675,7 @@ export class MultiModelOrchestrator {
       }
 
       const attemptStartedAt = Date.now();
+      options?.turnBudget?.recordProviderAttempt(task);
       const operationSource: ActiveModelOperation['source'] = currentCandidate.isEmergencyFloor
         ? 'DETERMINISTIC_FALLBACK'
         : (this.modelKey(currentCandidate) === selectedModelKey && !selectionWasForcedFallback ? 'AI_PRIMARY' : 'AI_FALLBACK');

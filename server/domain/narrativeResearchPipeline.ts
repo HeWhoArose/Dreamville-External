@@ -1,9 +1,10 @@
 import type { WorldRepository } from '../repositories/worldRepository';
-import { formatCanonicalTimestamp } from './deterministicRng';
 import { WorkingContextEngine } from './workingContextEngine';
+import { formatCanonicalTimestamp } from './deterministicRng';
 import { CurrentSituationBuilder, type CurrentSituation } from './currentSituation';
 import { narrativeContinuityEngine, type NarrativeResearchPacket } from './narrativeContinuityEngine';
 import type { PlayerIntent } from './playerIntentInterpreter';
+import { EntitySceneRelevanceEngine } from './entitySceneRelevance';
 
 export type NarrativeResearchBlockKind =
 	| 'SCENE'
@@ -74,7 +75,9 @@ function tokens(value: unknown): string[] {
 			normalize(value)
 				.toLowerCase()
 				.split(/[^a-z0-9]+/)
-				.filter((token) => token.length >= 4),
+				.filter((token) => token.length >= 4)
+				.filter((token) => !new Set(['about', 'after', 'before', 'because', 'between', 'could', 'from', 'have', 'hear', 'heard', 'how', 'listen', 'listening', 'reports', 'report', 'rumor', 'rumors', 'rumour', 'rumours', 'what', 'when', 'where', 'which', 'who', 'why']).has(token))
+				.map((token) => token.length > 5 && token.endsWith('s') ? token.slice(0, -1) : token),
 		),
 	);
 }
@@ -153,7 +156,7 @@ function blockPriority(kind: NarrativeResearchBlockKind): number {
 
 function addCandidate(
 	candidates: CandidateBlock[],
-	params: Omit<CandidateBlock, 'relevanceScore' | 'estimatedTokens'> & { relevanceScore?: number },
+	params: Omit<CandidateBlock, 'relevanceScore' | 'estimatedTokens' | 'topicTokens'> & { relevanceScore?: number },
 	queryTokens: string[],
 ): void {
 	const normalized = normalize(params.content);
@@ -288,16 +291,9 @@ export class NarrativeResearchPipeline {
 			].filter(Boolean).map((name) => String(name).toLowerCase()),
 		);
 
-		const relevantEntities = situation.nearbyEntities
-			.filter((entity) => entity.kind !== 'PLAYER')
-			.filter((entity) => entity.visibleToPlayer)
-			.filter((entity) =>
-				explicitTargetIds.has(entity.id) ||
-				explicitTargetNames.has(entity.name.toLowerCase()) ||
-				entity.distanceBand === 'SAME_LOCATION' ||
-				entity.explicitlyReferenced
-			)
-			.slice(0, 10);
+		const relevanceRank = new Map(EntitySceneRelevanceEngine.rank(situation, playerIntent).map((entry) => [entry.entityId, entry]));
+		const relevantEntities = EntitySceneRelevanceEngine.topVisible(situation, playerIntent, 10)
+			.filter((entity) => explicitTargetIds.has(entity.id) || explicitTargetNames.has(entity.name.toLowerCase()) || (relevanceRank.get(entity.id)?.score || 0) >= 30);
 
 		for (const entity of relevantEntities) {
 			const explicit = explicitTargetIds.has(entity.id) || explicitTargetNames.has(entity.name.toLowerCase()) || entity.explicitlyReferenced;
@@ -320,25 +316,26 @@ export class NarrativeResearchPipeline {
 		for (const entity of entityCards) {
 			if (!explicitTargetIds.has(entity.id)) continue;
 			if (relevantEntities.some((candidate) => candidate.id === entity.id)) continue;
-			// Explicit references may justify a small public identity sheet, but never
-			// dump arbitrary lifecycle/world-state internals into the narrative context.
 			addCandidate(candidates, {
-			id: `research_entity_sheet_${entity.id}`,
-			kind: 'ENTITY',
-			source: 'WorldRepository.entityCards',
-			sourceId: entity.id,
-			priority: blockPriority('ENTITY'),
-			reason: 'The player explicitly referenced a canonical entity; retrieve only player-safe identity/role context.',
-			expiration: 'TURN',
-			relevanceScore: 1,
-			content: truncate(JSON.stringify({
-				id: entity.id,
-				name: entity.name,
-				identity: entity.identity,
-				role: entity.role,
-			}), 1600),
+				id: `research_entity_sheet_${entity.id}`,
+				kind: 'ENTITY',
+				source: 'WorldRepository.entityCards',
+				sourceId: entity.id,
+				priority: blockPriority('ENTITY'),
+				reason: 'The player explicitly referenced a canonical entity; retrieve only player-safe identity and role context.',
+				expiration: 'TURN',
+				relevanceScore: 1,
+				content: truncate(JSON.stringify({
+					id: entity.id,
+					name: entity.name,
+					kind: entity.kind,
+					role: entity.classification?.profession || entity.classification?.archetype || entity.social?.role || entity.classification?.role,
+					currentActivity: entity.worldState?.currentActivity,
+					presence: entity.worldState?.presence,
+					factionIds: entity.social?.factionIds,
+				}), 1600),
 			}, queryTokens);
-	}
+		}
 
 		const consequenceTurns = situation.recentTurns
 			.filter((turn) => turn.unresolvedConsequence)
@@ -361,9 +358,12 @@ export class NarrativeResearchPipeline {
 			}, queryTokens);
 		}
 
-		// Only use thread records already surfaced through the current-situation
-		// projection. The continuity packet may contain broader server-side threads.
-		const threadCandidates = [...situation.openThreads];
+		// Only use threads surfaced through Current Situation. The continuity packet can contain broader server-side threads.
+		const threadCandidates = [
+			...situation.openThreads,
+			...(typeof params.repository.getStoryThreads === 'function' ? params.repository.getStoryThreads(params.storyId) : []),
+		];
+
 		const seenThreads = new Set<string>();
 		for (const thread of threadCandidates) {
 			const title = normalize((thread as any)?.title || (thread as any)?.name || '');
@@ -373,7 +373,18 @@ export class NarrativeResearchPipeline {
 			seenThreads.add(id);
 			const threadText = [title, normalize((thread as any)?.summary), normalize((thread as any)?.status)].filter(Boolean).join(' | ');
 			const overlap = overlapScore(tokens(threadText), queryTokens);
-			if (overlap === 0 && !(playerIntent?.informationGoal && tokens(threadText).some((token) => tokens(playerIntent.informationGoal).includes(token)))) {
+			const currentSituationThread = situation.openThreads.some((candidate) => {
+				const candidateId = normalize(candidate.id || '');
+				const candidateTitle = normalize(candidate.title || '');
+				return candidateId === id ||
+					candidateId === normalize((thread as any)?.threadId || '') ||
+					candidateTitle.toLowerCase() === title.toLowerCase();
+			});
+			const informationGoalOverlap = Boolean(
+				playerIntent?.informationGoal &&
+				tokens(threadText).some((token) => tokens(playerIntent.informationGoal).includes(token))
+			);
+			if (overlap === 0 && !currentSituationThread && !informationGoalOverlap) {
 				excluded.push({
 					label: title,
 					kind: 'THREAD',
@@ -430,8 +441,17 @@ export class NarrativeResearchPipeline {
 			if (seenMemories.has(id)) continue;
 			seenMemories.add(id);
 			const overlap = overlapScore(tokens(content), queryTokens);
-			const locationLinked = /location|scene|present|here|current/i.test(JSON.stringify(memory)) || content.toLowerCase().includes(situation.location.name.toLowerCase());
-			if (overlap === 0 && !locationLinked && !(playerIntent?.explicitTargets?.length)) {
+			const serializedMemory = JSON.stringify(memory).toLowerCase();
+			const locationLinked = serializedMemory.includes(situation.location.id.toLowerCase()) || serializedMemory.includes(situation.location.name.toLowerCase());
+			const targetLinked = (playerIntent?.explicitTargets || []).some((target) => {
+				const targetName = normalize(target.name).toLowerCase();
+				return Boolean(targetName && content.toLowerCase().includes(targetName))
+					|| Boolean(target.id && serializedMemory.includes(String(target.id).toLowerCase()))
+					|| Boolean((memory as any)?.subjectEntityId && target.id === String((memory as any).subjectEntityId))
+					|| (Array.isArray((memory as any)?.relatedEntityIds)
+						&& (memory as any).relatedEntityIds.some((entityId: unknown) => target.id === String(entityId)));
+			});
+			if (overlap === 0 && !locationLinked && !targetLinked) {
 				excluded.push({
 					label: truncate(content, 160),
 					kind: 'MEMORY',
@@ -455,7 +475,19 @@ export class NarrativeResearchPipeline {
 			}, queryTokens);
 		}
 
+		const authorizedFacts = params.repository
+			.getAuthorizedKnowledgeFacts(params.storyId, viewerActorId)
+			.map((fact: any) => ({
+				id: normalize(fact?.id || JSON.stringify(fact)),
+				subjectEntityId: normalize(fact?.subjectEntityId),
+				predicate: normalize(fact?.predicate),
+				objectValue: normalize(fact?.objectValue),
+				sourceType: normalize(fact?.sourceType),
+				scope: normalize(fact?.scope),
+				provenanceSummary: normalize(fact?.provenanceSummary),
+			}));
 		const knowledgeCandidates = [
+			...authorizedFacts,
 			...situation.relevantLore,
 			...packet.knowledgeFacts.map((fact: any) => ({
 				id: normalize(fact?.id || JSON.stringify(fact)),
@@ -528,7 +560,7 @@ export class NarrativeResearchPipeline {
 			if (b.relevanceScore !== a.relevanceScore) return b.relevanceScore - a.relevanceScore;
 			return a.id.localeCompare(b.id);
 		});
-		const selected: NarrativeResearchBlock[] = [];
+		const selected: CandidateBlock[] = [];
 		const usedByKind: Record<NarrativeResearchBlockKind, number> = {
 			SCENE: 0,
 			ENTITY: 0,

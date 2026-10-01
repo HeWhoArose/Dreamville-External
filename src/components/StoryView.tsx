@@ -46,6 +46,10 @@ interface StoryViewProps {
   onRequestInspect: () => void;
   onRequestRest: () => void;
   onCustomAction?: (actionText: string) => void;
+  onRefreshSuggestions?: () => void | Promise<void>;
+  isRefreshingSuggestions?: boolean;
+  actionError?: string | null;
+  onRetryLastAction?: () => void;
   pendingActionAdvice?: ActionAdvice | null;
   actionTips?: ActionTip[];
   onAcceptActionAdvice?: (advice: ActionAdvice) => void;
@@ -233,6 +237,10 @@ export const StoryView: React.FC<StoryViewProps> = ({
   onRequestInspect,
   onRequestRest,
   onCustomAction,
+  onRefreshSuggestions,
+  isRefreshingSuggestions = false,
+  actionError,
+  onRetryLastAction,
   pendingActionAdvice = null,
   actionTips = [],
   onAcceptActionAdvice,
@@ -315,6 +323,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
   const [sceneLoading, setSceneLoading] = useState(false);
   const [scenePrompt, setScenePrompt] = useState<string | null>(null);
   const [sceneImageUrl, setSceneImageUrl] = useState<string | null>(null);
+  const [sceneSourceActionId, setSceneSourceActionId] = useState<string | null>(null);
   const [sceneError, setSceneError] = useState<string | null>(null);
   const [narrationBusyActionId, setNarrationBusyActionId] = useState<string | null>(null);
   const [narrationEditActionId, setNarrationEditActionId] = useState<string | null>(null);
@@ -342,6 +351,25 @@ export const StoryView: React.FC<StoryViewProps> = ({
   useEffect(() => {
     loadNarrationModels();
   }, []);
+
+  useEffect(() => {
+    const latestTurn = [...actionHistory]
+      .filter((entry) => entry.actionType !== 'NOTE_RECORD')
+      .sort((left, right) => {
+        const leftTurn = Number.isFinite(Number(left.turnNumber)) ? Number(left.turnNumber) : -1;
+        const rightTurn = Number.isFinite(Number(right.turnNumber)) ? Number(right.turnNumber) : -1;
+        if (leftTurn !== rightTurn) return rightTurn - leftTurn;
+        return String(right.timestamp || '').localeCompare(String(left.timestamp || ''));
+      })[0];
+
+    const latestTurnId = latestTurn?.id || null;
+    if (sceneSourceActionId && sceneSourceActionId !== latestTurnId) {
+      setScenePrompt(null);
+      setSceneImageUrl(null);
+      setSceneError(null);
+      setSceneSourceActionId(null);
+    }
+  }, [actionHistory, sceneSourceActionId]);
 
   useEffect(() => {
     if (!sceneMenuOpen) return;
@@ -508,18 +536,13 @@ export const StoryView: React.FC<StoryViewProps> = ({
           }
 
           setIsTranscribing(true);
-          const res = await fetch('/api/game/sensory/transcribe', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ audioBase64: base64Audio, storyId }),
+          const transcription = await apiClient.transcribeAudio({
+            storyId,
+            audioBase64: base64Audio,
+            audioMimeType: mediaRecorder.mimeType || audioBlob.type || 'audio/webm',
           });
-          const data = await res.json();
 
-          if (!res.ok || !data?.success || !String(data?.text || '').trim()) {
-            throw new Error(data?.error || 'No transcription result was returned.');
-          }
-
-          const text = String(data.text).trim();
+          const text = transcription.text.trim();
           setTypedAction((previous) => (previous ? `${previous} ${text}` : text));
           triggerHaptic('medium');
         } catch (error) {
@@ -827,6 +850,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
       const result = await apiClient.generateCurrentScenePrompt();
       setScenePrompt(result.prompt);
       setSceneImageUrl(null);
+      setSceneSourceActionId(result.sourceActionId || null);
       setSceneChoiceOpen(false);
       setSceneMenuOpen(false);
     } catch (error: any) {
@@ -845,6 +869,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
         setSceneImageUrl(result.imageUrl);
       }
       setScenePrompt(result.prompt || null);
+      setSceneSourceActionId(result.sourceActionId || null);
       setSceneChoiceOpen(false);
       setSceneMenuOpen(false);
     } catch (error: any) {
@@ -1514,6 +1539,8 @@ export const StoryView: React.FC<StoryViewProps> = ({
               }}
               className="flex h-11 items-center gap-1.5 rounded-xl border border-violet-400/15 bg-violet-500/10 px-3 text-violet-200 transition hover:bg-violet-500/15"
               aria-label="Open More story tools"
+              aria-expanded={sceneMenuOpen}
+              aria-haspopup="menu"
               title="More"
             >
               <Plus className="h-5 w-5" />
@@ -1524,8 +1551,14 @@ export const StoryView: React.FC<StoryViewProps> = ({
               <div className="absolute bottom-14 left-0 z-50 max-h-[min(72vh,40rem)] w-[min(24rem,calc(100vw-1rem))] overflow-y-auto overscroll-contain rounded-2xl border border-white/10 bg-[#110b1d] p-2 shadow-2xl">
                 <button
                   type="button"
-                  onClick={() => setSuggestionsOpen((value) => !value)}
-                  className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-stone-200 hover:bg-violet-500/10"
+                  onClick={() => {
+                    setSuggestionsOpen((value) => !value);
+                    setDiceSettingsOpen(false);
+                    setSceneChoiceOpen(false);
+                  }}
+                  className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left text-sm text-stone-200 hover:bg-violet-500/10 disabled:opacity-50"
+                  aria-expanded={suggestionsOpen}
+                  aria-controls="story-suggestions-panel"
                 >
                   <Sparkles className="h-4 w-4 text-violet-300" />
                   <span className="flex-1">Suggestions</span>
@@ -1627,7 +1660,25 @@ export const StoryView: React.FC<StoryViewProps> = ({
                 )}
 
                 {suggestionsOpen && (
-                  <div className="mt-1 max-h-80 space-y-1 overflow-y-auto rounded-xl border border-white/8 bg-black/20 p-1">
+                  <div
+                    id="story-suggestions-panel"
+                    role="region"
+                    aria-label="Story action suggestions"
+                    className="mt-1 max-h-80 space-y-1 overflow-y-auto rounded-xl border border-white/8 bg-black/20 p-1"
+                  >
+                    <div className="flex items-center justify-between gap-2 px-2 py-1">
+                      <p className="text-[9px] font-black uppercase tracking-[0.16em] text-stone-600">Current situation</p>
+                      <button
+                        type="button"
+                        onClick={() => void onRefreshSuggestions?.()}
+                        disabled={isRefreshingSuggestions || isProcessingAction}
+                        className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-white/10 px-2.5 text-[9px] font-semibold text-stone-400 hover:text-stone-200 disabled:opacity-40"
+                        aria-label="Refresh story suggestions"
+                      >
+                        {isRefreshingSuggestions ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="h-3 w-3" />}
+                        Refresh
+                      </button>
+                    </div>
                     {actionTips.length > 0 ? (
                       actionTips.slice(0, 6).map((tip) => (
                         <button
@@ -1773,7 +1824,8 @@ export const StoryView: React.FC<StoryViewProps> = ({
           <button
             type="button"
             onClick={isRecording ? stopRecording : startRecording}
-            disabled={isTranscribing || isProcessingAction}
+            disabled={isTranscribing || isProcessingAction || isProcessingOoc}
+            aria-pressed={isRecording}
             className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border transition disabled:opacity-50 ${
               isRecording
                 ? 'border-red-800 bg-red-950/50 text-red-300'
@@ -1793,12 +1845,16 @@ export const StoryView: React.FC<StoryViewProps> = ({
           </div>
 
           <div className="flex min-w-0 flex-1 items-end gap-2">
+          <label className="sr-only" htmlFor="story-action-composer">Story action</label>
           <textarea
+            id="story-action-composer"
             ref={actionInputRef}
             value={typedAction}
             rows={2}
             onChange={(event) => setTypedAction(event.target.value)}
-            disabled={isProcessingAction || isProcessingOoc || isRecording}
+            disabled={isProcessingAction || isProcessingOoc || isRecording || isTranscribing}
+            aria-label={inputMode === 'OOC' ? 'Out-of-character message' : 'Story action'}
+            aria-multiline="true"
             placeholder={
               isRecording
                 ? 'Listening…'
@@ -1817,7 +1873,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
 
           <button
             type="submit"
-            disabled={!typedAction.trim() || isProcessingAction || isProcessingOoc || isRecording}
+            disabled={!typedAction.trim() || isProcessingAction || isProcessingOoc || isRecording || isTranscribing}
             className="flex h-12 shrink-0 items-center gap-2 rounded-2xl bg-gradient-to-r from-violet-300 to-fuchsia-300 px-5 text-sm font-semibold text-[#160b22] transition hover:from-violet-200 hover:to-fuchsia-200 disabled:cursor-not-allowed disabled:opacity-30"
           >
             {isProcessingAction ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -1827,10 +1883,28 @@ export const StoryView: React.FC<StoryViewProps> = ({
         </form>
 
         {transcriptionError && (
-          <p className="mt-2 flex items-center gap-1.5 text-xs text-red-400">
-            <AlertCircle className="h-3.5 w-3.5" />
-            {transcriptionError}
+          <p className="mt-2 flex items-center gap-1.5 text-xs text-red-400" role="alert">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+            <span className="min-w-0 break-words">{transcriptionError}</span>
           </p>
+        )}
+
+        {actionError && (
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-red-200/10 bg-red-950/20 px-3 py-2" role="alert">
+            <p className="min-w-0 flex-1 text-xs leading-5 text-red-200 break-words">{actionError}</p>
+            {onRetryLastAction && (
+              <button
+                type="button"
+                onClick={onRetryLastAction}
+                disabled={isProcessingAction || isProcessingOoc}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-red-200/20 px-3 text-[10px] font-semibold text-red-100 hover:bg-red-200/10 disabled:opacity-40"
+                aria-label="Retry the last failed story action"
+              >
+                <RotateCcw className="h-3 w-3" />
+                Retry
+              </button>
+            )}
+          </div>
         )}
       </section>
 

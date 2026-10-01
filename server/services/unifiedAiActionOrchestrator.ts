@@ -207,20 +207,32 @@ export class UnifiedAiActionOrchestrator {
 		const capabilityLike = Boolean(candidate) || capabilityIntent;
 		let research: UnifiedActionPipelineResult['research'] = {required:false,brief:'',facts:[],sources:[],source:'NOT_REQUIRED'};
 		if (capabilityLike && !candidate) {
-			const researchResult = WorkingContextEngine.researchForAction({
-				storyId,
-				playerAction: cleanAction,
-				viewerActorId: actorId,
-				worldRepo: this.repository,
-				hardTokenBudget: 900,
-			});
-			research = {
-				required: researchResult.required,
-				brief: researchResult.brief,
-				facts: researchResult.facts,
-				sources: researchResult.sources,
-				source: 'DETERMINISTIC_FALLBACK',
-			};
+			try {
+				const researchResult = WorkingContextEngine.researchForAction({
+					storyId,
+					playerAction: cleanAction,
+					viewerActorId: actorId,
+					worldRepo: this.repository,
+					hardTokenBudget: 900,
+				});
+				research = {
+					required: researchResult.required,
+					brief: researchResult.brief,
+					facts: researchResult.facts,
+					sources: researchResult.sources,
+					source: 'DETERMINISTIC_FALLBACK',
+				};
+			} catch {
+				// Capability-only previews may have no established geography. Do not fabricate
+				// scene research; continue through canonical capability simulation with empty research.
+				research = {
+					required: false,
+					brief: 'No canonical scene research is available for this preview.',
+					facts: [],
+					sources: [],
+					source: 'DETERMINISTIC_FALLBACK',
+				};
+			}
 		}
 		let synthesized: CapabilityDefinition | undefined;
 		if (capabilityLike && !candidate && capabilityIntent && helperDecision.strategy === 'INTERPRET_SYNTHESIZE_AND_REPAIR') {

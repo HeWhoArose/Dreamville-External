@@ -56,9 +56,14 @@ test('scene-aware suggestions use current rumors, visible NPCs, and reachable di
 	assert.ok(run);
 	repository.saveStoryRun({
 		...run,
-		openingScene: {
-			...(run as any).openingScene,
-			narrativeText: 'Whispers in the Citadel speak of unstable starlight fissures deeper within the Whispering Spore-Sea.',
+		runtimeState: {
+			...(run as any).runtimeState,
+			plot: {
+				...((run as any).runtimeState?.plot || {}),
+				currentArc: 'WHISPERING_SPORE_SEA',
+				summary: 'Whispers in the Citadel speak of unstable starlight fissures deeper within the Whispering Spore-Sea.',
+				openThreads: ['Investigate the unstable starlight fissures in the Whispering Spore-Sea'],
+			},
 		},
 	});
 

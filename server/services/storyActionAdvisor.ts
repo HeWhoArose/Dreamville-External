@@ -10,6 +10,9 @@ import type {
 } from '../domain/capabilitySimulationEngine';
 import { CapabilitySimulationEngine } from '../domain/capabilitySimulationEngine';
 import type { WorldRepository } from '../repositories/worldRepository';
+import { CurrentSituationBuilder, type CurrentSituation } from '../domain/currentSituation';
+import { EntitySceneRelevanceEngine, type EntitySceneRelevance } from '../domain/entitySceneRelevance';
+import { PlayerIntentInterpreter, type PlayerIntent } from '../domain/playerIntentInterpreter';
 import { worldRepository } from '../repositories/worldRepository';
 import { UnifiedAiActionOrchestrator, type UnifiedActionPipelineResult } from './unifiedAiActionOrchestrator';
 
@@ -68,6 +71,9 @@ export interface StoryActionSceneContext {
 	startingSituation?: string;
 	activeDialogue?: string;
 	recentActions?: string[];
+	currentSituation?: CurrentSituation;
+	playerIntent?: PlayerIntent;
+	entityRelevance?: EntitySceneRelevance[];
 }
 function normalize(value: unknown): string {
 	return String(value || '').trim().toLowerCase();
@@ -118,36 +124,90 @@ function sceneContainsAny(text: string, pattern: RegExp): boolean {
 function getCanonicalSceneContext(
 	repository: WorldRepository,
 	storyId: string,
-	supplied?: StoryActionSceneContext,
+	_supplied?: StoryActionSceneContext,
+	providedSituation?: CurrentSituation,
+	providedIntent?: PlayerIntent,
+	providedRelevance?: EntitySceneRelevance[],
 ): StoryActionSceneContext {
-	const player = repository.getPlayerLifecycle(storyId);
-	const run = repository.getStoryRun(storyId);
-	const locationId = player?.locationId || run?.currentLocationId;
-	const location = locationId
-		? repository.getGeographyGraph(storyId).getNode(locationId)
-		: undefined;
+	if (providedSituation) {
+		const situation = providedSituation;
+		const intent = providedIntent || situation.currentAction;
+		const entityRelevance = providedRelevance || EntitySceneRelevanceEngine.rank(situation, intent);
+		return {
+			locationName: situation.location.name,
+			locationRegion: situation.location.regionId,
+			locationDescription: situation.location.description,
+			worldTime: situation.worldTime,
+			openingNarrative: undefined,
+			startingSituation: situation.plot.summary || situation.openThreads.at(0)?.summary || '',
+			activeDialogue: situation.activeDialogue
+				? `${situation.activeDialogue.speakerName}: ${situation.activeDialogue.text}`
+				: undefined,
+			recentActions: situation.recentTurns
+				.slice(-4)
+				.map((entry) => entry.narration || entry.playerAction || '')
+				.filter(Boolean),
+			currentSituation: situation,
+			playerIntent: intent,
+			entityRelevance,
+		};
+	}
 
-	return {
-		locationName: supplied?.locationName || location?.name,
-		locationRegion: supplied?.locationRegion || location?.regionId,
-		locationDescription: supplied?.locationDescription || location?.description,
-		worldTime: supplied?.worldTime,
-		openingNarrative: supplied?.openingNarrative || run?.openingScene?.narrativeText,
-		startingSituation:
-			supplied?.startingSituation ||
-			run?.startingSituation?.summary ||
-			run?.startingSituation?.hook ||
-			run?.initialScene,
-		activeDialogue: supplied?.activeDialogue,
-		recentActions:
-			supplied?.recentActions ||
-			(Array.isArray(run?.runtimeState?.narrativeContextHistory)
-				? run.runtimeState.narrativeContextHistory
-					.slice(-4)
-					.map((entry: any) => entry?.narration?.response || entry?.playerAction)
-					.filter(Boolean)
-				: []),
-	};
+	try {
+		const situation = CurrentSituationBuilder.build({ storyId, worldRepo: repository });
+		const intent = providedIntent || situation.currentAction;
+		const entityRelevance = providedRelevance || EntitySceneRelevanceEngine.rank(situation, intent);
+		return getCanonicalSceneContext(repository, storyId, undefined, situation, intent, entityRelevance);
+	} catch {
+		// Preview/capability-only calls can legitimately occur before a story has an established
+		// geography node. Preserve supplied scene metadata without manufacturing canonical state.
+		return {
+			locationName: _supplied?.locationName || 'the current area',
+			locationRegion: _supplied?.locationRegion,
+			locationDescription: _supplied?.locationDescription,
+			worldTime: _supplied?.worldTime,
+			openingNarrative: undefined,
+			startingSituation: _supplied?.startingSituation || '',
+			activeDialogue: _supplied?.activeDialogue,
+			recentActions: _supplied?.recentActions || [],
+			playerIntent: providedIntent,
+			entityRelevance: providedRelevance || [],
+		};
+	}
+}
+
+export function buildSuggestionCacheKey(
+	situation: CurrentSituation,
+	intent?: PlayerIntent,
+	relevance: EntitySceneRelevance[] = [],
+): string {
+	const relevantEntityKey = relevance
+		.filter((entry) => entry.visible)
+		.slice(0, 8)
+		.map((entry) => `${entry.entityId}:${entry.score}`)
+		.join(',');
+	const threadKey = situation.openThreads
+		.slice(0, 8)
+		.map((thread) => `${thread.id}:${thread.status || ''}:${thread.priority || ''}`)
+		.join(',');
+	const routeKey = situation.location.connectedLocations
+		.slice(0, 8)
+		.map((route) => `${route.routeId}:${route.id}:${route.isBlocked ? 'B' : 'A'}:${route.discovered ? 'D' : 'U'}`)
+		.join(',');
+	return [
+		situation.storyId,
+		situation.turnId,
+		situation.location.id,
+		situation.worldTime,
+		intent?.interactionMode || '',
+		intent?.goal || '',
+		intent?.target?.id || '',
+		situation.activeDialogue?.nodeId || '',
+		situation.activeDialogue?.speakerId || '',
+		relevantEntityKey,
+		threadKey,
+		routeKey,
+	].join('|');
 }
 
 function buildSimulationEnvironment(
@@ -351,6 +411,12 @@ function deterministicAlternativeConcept(requestedName: string, run: any): strin
 
 export class StoryActionAdvisor {
 	private readonly pendingProposals = new Map<string, ActionCapabilityProposal>();
+	private readonly suggestionCache = new Map<string, {
+		tips: ActionTip[];
+		createdAt: number;
+	}>();
+	private readonly suggestionCacheMaxEntries = 64;
+	private readonly suggestionCacheTtlMs = 90_000;
 	private readonly capabilityProposalGenerator?: (
 		concept: string,
 		worldTemplate: any
@@ -932,21 +998,54 @@ export class StoryActionAdvisor {
 		storyId: string,
 		actionText: string,
 		sceneContext?: StoryActionSceneContext,
+		options?: { refresh?: boolean },
 	): Promise<ActionTip[]> {
-		const suppliedContext = sceneContext;
-		// Empty-action requests (the Suggestions popup) should still flow through
-		// the scene-aware deterministic + AI suggestion pipeline. Returning a single
-		// generic "Read the scene" tip here prevented all richer contextual tips from
-		// ever being generated.
-
-
+		const cleanAction = String(actionText || '').trim();
 		const player = this.repository.getPlayerLifecycle(storyId);
 		const run = this.repository.getStoryRun(storyId);
 		const actorId =
 			player?.actorId ||
 			run?.protagonist?.characterId ||
 			'player_actor_' + storyId;
-		const canonicalSceneContext = getCanonicalSceneContext(this.repository, storyId, sceneContext);
+
+		// Build the canonical situation first. Suggestions are a projection of canonical
+		// state, never a second interpretation of UI-local scene text.
+		let situation: CurrentSituation | undefined;
+		let playerIntent: PlayerIntent | undefined;
+		try {
+			const baseSituation = CurrentSituationBuilder.build({
+				storyId,
+				playerAction: cleanAction,
+				viewerActorId: actorId,
+				worldRepo: this.repository,
+			});
+			playerIntent = cleanAction
+				? PlayerIntentInterpreter.deterministic(cleanAction, baseSituation)
+				: baseSituation.currentAction;
+			situation = CurrentSituationBuilder.build({
+				storyId,
+				playerAction: cleanAction,
+				currentAction: playerIntent,
+				viewerActorId: actorId,
+				worldRepo: this.repository,
+			});
+		} catch {
+			// Do not invent a scene merely to produce advisory capability tips.
+		}
+		const entityRelevance = situation ? EntitySceneRelevanceEngine.rank(situation, playerIntent) : [];
+		const canonicalSceneContext = getCanonicalSceneContext(this.repository, storyId, sceneContext, situation, playerIntent, entityRelevance);
+
+		const suggestionKey = situation
+			? buildSuggestionCacheKey(situation, playerIntent, entityRelevance)
+			: undefined;
+		const cached = suggestionKey ? this.suggestionCache.get(suggestionKey) : undefined;
+		if (!options?.refresh && cached && Date.now() - cached.createdAt < this.suggestionCacheTtlMs) {
+			return cached.tips.map((tip) => ({ ...tip }));
+		}
+		if (cached && suggestionKey && (options?.refresh || Date.now() - cached.createdAt >= this.suggestionCacheTtlMs)) {
+			this.suggestionCache.delete(suggestionKey);
+		}
+
 		const actorCapabilities = this.repository.getCapabilityEngine(storyId).getEffectiveActorCapabilities(
 			actorId,
 			this.repository.getInventoryEngine(storyId)
@@ -954,41 +1053,39 @@ export class StoryActionAdvisor {
 		const tips = await this.generateTips(
 			storyId,
 			actorId,
-			actionText,
+			cleanAction,
 			actorCapabilities,
 			canonicalSceneContext,
 			true,
 		);
 
-		if (tips.length > 0) return tips;
-
-		const fallbackContext = sceneContext || canonicalSceneContext;
-		const fallbackLocation = fallbackContext.locationName || canonicalSceneContext.locationName || 'the current area';
-		if (
-			fallbackContext.locationDescription ||
-			fallbackContext.startingSituation ||
-			fallbackContext.openingNarrative ||
-			fallbackContext.activeDialogue ||
-			fallbackContext.recentActions?.length
-		) {
-			return [{
-				id: deterministicId('scene_fallback_tip', storyId, actorId, fallbackLocation, actionText),
+		const safeTips = tips.length > 0
+			? tips.slice(0, 4)
+			: [{
+				id: deterministicId('scene_fallback_tip', storyId, actorId, canonicalSceneContext.locationName || 'current-area'),
 				title: 'Investigate the current scene',
 				description: 'Use the visible environment and the latest situation to decide your next move.',
 				intent: 'INVESTIGATE_SCENE',
-				actionText: `I carefully inspect ${fallbackLocation} for useful clues, hazards, exits, or signs of what is happening.`,
-				source: 'DETERMINISTIC',
+				actionText: `I carefully inspect ${canonicalSceneContext.locationName || 'the current area'} for useful clues, hazards, exits, or signs of what is happening.`,
+				source: 'DETERMINISTIC' as const,
 			}];
-		}
 
-		return actorCapabilities.slice(0, 4).map((capability) => ({
-			id: deterministicId('generic_action_tip_final_fallback', storyId, actorId, capability.id),
-			title: 'Use ' + capability.name,
-			description: capability.description,
-			intent: capability.id,
-			actionText: 'I use ' + capability.name + '.',
-			source: 'DETERMINISTIC' as const,
-		}));
+		if (suggestionKey) this.suggestionCache.set(suggestionKey, { tips: safeTips.map((tip) => ({ ...tip })), createdAt: Date.now() });
+		if (this.suggestionCache.size > this.suggestionCacheMaxEntries) {
+			const oldestKey = this.suggestionCache.keys().next().value;
+			if (oldestKey) this.suggestionCache.delete(oldestKey);
+		}
+		return safeTips;
+	}
+
+	public clearSuggestionCache(storyId?: string): void {
+		if (!storyId) {
+			this.suggestionCache.clear();
+			return;
+		}
+		for (const key of Array.from(this.suggestionCache.keys())) {
+			if (key.startsWith(storyId + '|')) this.suggestionCache.delete(key);
+		}
 	}
 
 	private async generateTips(
@@ -1003,25 +1100,46 @@ export class StoryActionAdvisor {
 		const location = this.repository.getGeographyGraph(storyId)
 			.getAllNodes()
 			.find((node) => node.id === this.repository.getPlayerLifecycle(storyId)?.locationId);
+		const situation = sceneContext?.currentSituation;
+		const intent = sceneContext?.playerIntent || situation?.currentAction;
 		const sceneSources = [
 			sceneContext?.locationName,
 			sceneContext?.locationDescription,
 			sceneContext?.startingSituation,
 			sceneContext?.activeDialogue,
-			sceneContext?.openingNarrative,
 			...(sceneContext?.recentActions || []),
+			situation?.location.ambientSensory,
+			situation?.visibleEvents.slice(-4).map((event) => event.summary).join(' '),
+			situation?.plot.summary,
 		].filter(Boolean).map((value) => String(value).trim()).filter(Boolean);
 
-		const normalizedScene = normalize(sceneSources.join(' '));
+		let normalizedScene = normalize(sceneSources.join(' '));
 		const locationLabel = sceneContext?.locationName || location?.name || 'the current area';
 		const player = this.repository.getPlayerLifecycle(storyId);
 		const playerLocationId = player?.locationId || location?.id || '';
+		let relevantEntityContext = '';
+		try {
+			const situation = CurrentSituationBuilder.build({ storyId, playerAction: actionText, viewerActorId: actorId, worldRepo: this.repository });
+			relevantEntityContext = EntitySceneRelevanceEngine.toPromptContext(situation, situation.currentAction, 8);
+		} catch {
+			relevantEntityContext = '';
+		}
+		normalizedScene = normalize(sceneSources.join(' ') + ' ' + relevantEntityContext);
 		const livingWorld = this.repository.getLivingWorldSimulation(storyId);
+		const rankedEntities = (sceneContext?.entityRelevance || EntitySceneRelevanceEngine.rank(
+			situation || CurrentSituationBuilder.build({ storyId, viewerActorId: actorId, worldRepo: this.repository }),
+			intent,
+		)).filter((entry) => entry.visible);
+		const relevantEntityIds = new Set(rankedEntities.slice(0, 8).map((entry) => entry.entityId));
 		const nearbyNpcs = livingWorld
 			.getAllNpcSchedules()
 			.filter((npc) => npc.currentLocationId === playerLocationId)
-			.filter((npc) => npc.npcId !== actorId);
-		const visibleNpcNames = uniqueStrings(nearbyNpcs.map((npc) => npc.name), 4);
+			.filter((npc) => npc.npcId !== actorId)
+			.filter((npc) => relevantEntityIds.size === 0 || relevantEntityIds.has(npc.npcId));
+		const visibleNpcNames = uniqueStrings(
+			nearbyNpcs.map((npc) => npc.name),
+			4,
+		);
 		const unresolvedEvents = livingWorld
 			.getScheduledEvents()
 			.filter((event) => !event.isResolved)
@@ -1090,9 +1208,9 @@ export class StoryActionAdvisor {
 
 		if (rumorFacts.length > 0 && visibleNpcNames.length > 0) {
 			addContextTip(
-				`Cross-check the rumor with ${visibleNpcNames[0]}`,
-				'You already know a rumor from your canonical memory. Ask a person who is actually present whether their account matches it.',
-				`I ask ${visibleNpcNames[0]} whether they have heard anything that confirms or contradicts the rumor I know.`,
+				`Ask ${visibleNpcNames[0]} about the lead`,
+				'You already know a rumor from your canonical memory. Ask a person who is actually present about the lead and compare their account with what you know.',
+				`I ask ${visibleNpcNames[0]} about the lead, checking whether their account confirms or contradicts the rumor I know.`,
 				'CROSS_CHECK_INFORMATION',
 			);
 		}
@@ -1239,11 +1357,21 @@ export class StoryActionAdvisor {
 							sceneContext?.locationName ? `Current location: ${sceneContext.locationName}` : '',
 							sceneContext?.locationRegion ? `Region: ${sceneContext.locationRegion}` : '',
 							sceneContext?.locationDescription ? `Location description: ${sceneContext.locationDescription}` : '',
-							sceneContext?.startingSituation ? `Starting/current situation: ${sceneContext.startingSituation}` : '',
-							sceneContext?.openingNarrative ? `Recent scene narration: ${sceneContext.openingNarrative}` : '',
+							sceneContext?.startingSituation ? `Current situation: ${sceneContext.startingSituation}` : '',
 							sceneContext?.activeDialogue ? `Active dialogue: ${sceneContext.activeDialogue}` : '',
 							sceneContext?.recentActions?.length
 								? `Recent player actions:\n${sceneContext.recentActions.map((entry) => '- ' + entry).join('\n')}`
+								: '',
+							intent ? `Semantic player intent: ${JSON.stringify({
+								interactionMode: intent.interactionMode,
+								goal: intent.goal,
+								target: intent.target?.name || intent.target?.id,
+								speechIntent: intent.speechIntent,
+								observationIntent: intent.observationIntent,
+								movementIntent: intent.movementIntent,
+							})}` : '',
+							rankedEntities.length
+								? `Most relevant visible entities: ${rankedEntities.slice(0, 6).map((entry) => entry.entityId + ' (' + entry.reasons.slice(0, 2).join(', ') + ')').join('; ')}`
 								: '',
 						].filter(Boolean).join('\n');
 			
@@ -1336,7 +1464,7 @@ export class StoryActionAdvisor {
 			},
 		];
 		const guaranteedTips = [...deterministicTips, ...baselineTips];
-		return guaranteedTips.length > 0 ? guaranteedTips.slice(0, 4) : genericTips;
+		return guaranteedTips.slice(0, 4);
 	}
 }
 

@@ -86,28 +86,49 @@ sensoryRouter.post('/speech', async (req: Request, res: Response) => {
 // POST /api/game/sensory/transcribe
 sensoryRouter.post('/transcribe', async (req: Request, res: Response) => {
   try {
-    const { storyId = 'default_story', audioBase64 } = req.body;
-    const orchestrator = worldRepository.getAiOrchestrator();
-    
-    // DEF-CH14-01: Direct transcription utility path; MUST NOT call executeTurn
-    const result = await orchestrator.transcribeAudio({
-      storyId,
-      audioBase64: String(audioBase64 || ''),
-      timeoutMs: 5000,
-    });
-    
-    if (!result.success || !result.text.trim()) {
-      return res.status(503).json({
+    const { storyId = 'default_story', audioBase64, audioMimeType = 'audio/webm' } = req.body;
+    if (!String(audioBase64 || '').trim()) {
+      return res.status(400).json({
         success: false,
-        error: 'No transcription result is available.',
+        errorCode: 'INPUT_EMPTY',
+        error: 'No microphone recording was supplied.',
       });
     }
 
-    res.json({
+    // DEF-CH14-01: Direct transcription utility path; MUST NOT call executeTurn
+    const result = await worldRepository.getAiOrchestrator().transcribeAudio({
+      storyId,
+      audioBase64: String(audioBase64),
+      audioMimeType: String(audioMimeType || 'audio/webm'),
+      timeoutMs: 5000,
+    });
+
+    if (!result.success || !result.text.trim()) {
+      const status = result.errorCode === 'INPUT_INVALID_BASE64' || result.errorCode === 'INPUT_EMPTY'
+        ? 400
+        : result.errorCode === 'TRANSCRIPTION_MALFORMED'
+        ? 502
+        : 503;
+      return res.status(status).json({
+        success: false,
+        errorCode: result.errorCode || 'TRANSCRIPTION_UNAVAILABLE',
+        error: result.errorReason || 'No transcription result is available.',
+        attemptsTrail: result.attemptsTrail || [],
+      });
+    }
+
+    return res.json({
       success: true,
       text: result.text.trim(),
+      modelId: result.modelId,
+      providerId: result.providerId,
     });
   } catch (error: any) {
-    res.status(500).json({ error: 'Transcription failed.', details: String(error) });
+    return res.status(500).json({
+      success: false,
+      errorCode: 'TRANSCRIPTION_INTERNAL_ERROR',
+      error: 'Transcription failed.',
+      details: String(error?.message || error),
+    });
   }
 });

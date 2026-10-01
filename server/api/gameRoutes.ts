@@ -9,7 +9,10 @@ import { combatTacticsService } from '../domain/combatTacticsService';
 import { PlayerLifecycleState } from '../domain/playerLifecycleState';
 import { OpeningSceneService } from '../services/openingSceneService';
 import { WorkingContextEngine } from '../domain/workingContextEngine';
+import { CurrentSituationBuilder } from '../domain/currentSituation';
 import { narrativeContinuityEngine } from '../domain/narrativeContinuityEngine';
+import { NarrativeResearchPipeline } from '../domain/narrativeResearchPipeline';
+import { PlayerIntentInterpreter } from '../domain/playerIntentInterpreter';
 import { worldVisualIdentityService } from '../services/worldVisualIdentityService';
 import { rulesProfileEngine } from '../domain/rulesProfileEngine';
 import { CustomRuleEngine } from '../domain/customRuleEngine';
@@ -18,6 +21,9 @@ import { entityCardService } from '../services/entityCardService';
 import { characterGenesisService } from '../services/characterGenesisService';
 import { storyActionAdvisor } from '../services/storyActionAdvisor';
 import { canonicalCommandEngine } from '../domain/canonicalCommandEngine';
+import { narrativeStateAdjudicator } from '../domain/narrativeStateAdjudicator';
+import { EntitySceneRelevanceEngine } from '../domain/entitySceneRelevance';
+import { EpistemicBoundaryEnforcer } from '../domain/epistemicBoundary';
 import { captureCanonicalStateSnapshot } from '../domain/canonicalSnapshot';
 import { deterministicId, formatCanonicalTimestamp } from '../domain/deterministicRng';
 import type { CombatEffectDefinition } from '../../src/types';
@@ -31,7 +37,8 @@ import { combatAssetService } from '../services/combatAssetService';
 import { bossPhaseEngine } from '../domain/bossPhaseEngine';
 import { combatEnvironmentEngine } from '../domain/combatEnvironmentEngine';
 import { mediaAdapterService } from '../services/mediaAdapterService';
-import { buildComicScenePrompt, ComicSceneContext } from '../services/comicSceneGenerator';
+import { buildComicScenePromptFromVisualContext } from '../services/comicSceneGenerator';
+import { assertVisualSceneFreshness, buildVisualSceneContext, selectLatestVisualTurn, type VisualSceneContext } from '../domain/visualSceneContext';
 import { projectPlayerCapabilities } from './playerCapabilityProjection';
 import { oocToolRegistry, type OocToolCall } from '../domain/oocToolRegistry';
 import { UniverseRuntimeService } from '../domain/universeRuntimeService';
@@ -139,6 +146,88 @@ gameRouter.get('/state', (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/game/current-situation
+ * Returns the player-safe projection of the canonical CurrentSituation model.
+ * Canonical world facts are intentionally omitted from this projection.
+ */
+
+/**
+ * GET /api/game/narrative-research
+ * Development-only inspection of the bounded Phase 3 narrative research projection.
+ * It exposes only player-visible/current-situation-derived research blocks, not canonical
+ * world facts or private engine notes.
+ */
+gameRouter.get('/narrative-research', (req: Request, res: Response) => {
+	try {
+		if (process.env.NODE_ENV === 'production' && process.env.DREAMVILLE_DEBUG_CONTEXT !== '1') {
+			return res.status(404).json({ success: false, errorReason: 'Narrative context inspection is disabled in production.' });
+		}
+		const storyId = resolveStoryId(req, true);
+		const playerAction = typeof req.query.action === 'string' ? req.query.action.trim() : '';
+		const actorId = worldRepository.getPlayerLifecycle(storyId)?.actorId || `player_actor_${storyId}`;
+		const situation = CurrentSituationBuilder.build({
+			storyId,
+			playerAction,
+			viewerActorId: actorId,
+			worldRepo: worldRepository,
+		});
+		const deterministicIntent = PlayerIntentInterpreter.deterministic(playerAction, situation);
+		const research = NarrativeResearchPipeline.research({
+			repository: worldRepository,
+			storyId,
+			currentSituation: situation,
+			playerIntent: deterministicIntent,
+			playerAction,
+			viewerActorId: actorId,
+		});
+		const boundedResearch = EpistemicBoundaryEnforcer.sanitizeResearch(research, situation);
+		return res.json({
+			success: true,
+			storyId,
+			research: NarrativeResearchPipeline.summarizeForPlayer(boundedResearch.result),
+			retrieval: {
+				mode: research.failures.length > 0 ? 'CURRENT_SITUATION_FALLBACK' : 'DETERMINISTIC_BOUNDED_RETRIEVAL',
+				failures: research.failures,
+				primarySource: 'NarrativeResearchPipeline',
+				fallbackSource: research.failures.length > 0 ? 'CurrentSituationBuilder' : null,
+			},
+			model: {
+				primary: 'DETERMINISTIC_RETRIEVAL',
+				fallback: research.failures.length > 0 ? 'CURRENT_SITUATION_ONLY' : null,
+			},
+		});
+	} catch (error: any) {
+		console.error('[Narrative Research] Context inspection failed:', error);
+		return res.status(500).json({
+			success: false,
+			errorReason: error?.message || 'Failed to inspect narrative research context.',
+		});
+	}
+});
+
+gameRouter.get('/current-situation', (req: Request, res: Response) => {
+  try {
+    const storyId = resolveStoryId(req, true);
+    const situation = CurrentSituationBuilder.build({
+      storyId,
+      viewerActorId: worldRepository.getPlayerLifecycle(storyId)?.actorId,
+      worldRepo: worldRepository,
+    });
+    return res.json({
+      success: true,
+      storyId,
+      situation: CurrentSituationBuilder.toPlayerSafeProjection(situation),
+    });
+  } catch (error: any) {
+    console.error('[Current Situation] Projection failed:', error);
+    return res.status(500).json({
+      success: false,
+      errorReason: error?.message || 'Failed to build current situation.',
+    });
+  }
+});
+
+/**
  * GET /api/game/action/tips
  * Returns player-facing, non-canonical suggestions for the current story scene.
  * Suggestions never mutate game state.
@@ -146,29 +235,13 @@ gameRouter.get('/state', (req: Request, res: Response) => {
 gameRouter.get('/action/tips', async (req: Request, res: Response) => {
   try {
     const storyId = resolveStoryId(req, true);
-    const sceneState = serverMockAuthority.getSanitizedViewState(storyId);
-    const tips = await storyActionAdvisor.getTipsForAction(storyId, '', {
-      worldTime: sceneState.worldTime
-        ? `${sceneState.worldTime.period}, Day ${sceneState.worldTime.cycle}, ${sceneState.worldTime.era}`
-        : undefined,
-      locationName: sceneState.activeLocation?.name,
-      locationRegion: sceneState.activeLocation?.region,
-      locationDescription: sceneState.activeLocation?.description,
-      openingNarrative: sceneState.openingScene?.narrativeText,
-      startingSituation: sceneState.openingScene?.startingSituation,
-      activeDialogue: sceneState.activeDialogue
-        ? `${sceneState.activeDialogue.speakerName || sceneState.activeDialogue.speakerId || 'Speaker'}: ${sceneState.activeDialogue.text || ''}`
-        : undefined,
-      recentActions: Array.isArray(sceneState.actionHistory)
-        ? sceneState.actionHistory.slice(0, 4).map((action: any) =>
-            action.narrativeResponse || action.description || ''
-          ).filter(Boolean)
-        : [],
-    });
+    const refresh = String(req.query?.refresh || '').toLowerCase() === '1' || String(req.query?.refresh || '').toLowerCase() === 'true';
+    const tips = await storyActionAdvisor.getTipsForAction(storyId, '', undefined, { refresh });
     return res.json({
       success: true,
       storyId,
       tips,
+      refreshed: refresh,
     });
   } catch (error: any) {
     console.error('[Story Action Advisor] Scene tip generation failed:', error);
@@ -7376,6 +7449,35 @@ gameRouter.post('/orchestrator/turn', async (req: Request, res: Response) => {
           idempotencyKey,
           repository: context.repository,
         });
+
+        if (turnResult.success && turnResult.stateAdjudication) {
+          turnResult.stateAdjudication = narrativeStateAdjudicator.commit(
+            context.repository,
+            turnResult.stateAdjudication,
+          );
+        }
+
+        if (turnResult.success && turnResult.turnPackage) {
+          const committedPlayer = context.repository.getPlayerLifecycle(storyId);
+          const committedSituation = CurrentSituationBuilder.build({
+            storyId,
+            playerAction,
+            currentAction: turnResult.playerIntent,
+            viewerActorId: committedPlayer?.actorId,
+            worldRepo: context.repository,
+          });
+          narrativeContinuityEngine.recordTurn(context.repository, {
+            storyId,
+            turnId: turnResult.telemetry.turnId,
+            playerAction,
+            playerIntent: turnResult.playerIntent,
+            currentSituation: committedSituation,
+            narrativeReview: turnResult.narrativeReview,
+            stateAdjudication: turnResult.stateAdjudication,
+            turnPackage: turnResult.turnPackage,
+          });
+        }
+
         return {
           success: turnResult.success,
           data: turnResult,
@@ -7396,6 +7498,12 @@ gameRouter.post('/orchestrator/turn', async (req: Request, res: Response) => {
     }
 
     const turnResult = commandResult.data as any;
+    // Keep the latest player-facing narrative explicitly connected to the API response
+    // so StoryView and downstream presentation consumers never have to reconstruct it
+    // from stale opening-scene or action-history projections.
+    turnResult.latestVisibleNarrative = turnResult.turnPackage?.narrative?.join('\n\n') || '';
+    turnResult.narrativeTurnPackage = turnResult.turnPackage || null;
+    turnResult.narrativeResearchPacket = turnResult.researchPacket || null;
 
     // AI-orchestrated turns are canonical gameplay too. Capture important consequences
     // automatically so the player never has to instruct DreamBook to remember them.
@@ -7475,7 +7583,13 @@ gameRouter.post('/orchestrator/turn', async (req: Request, res: Response) => {
     }
     // DEF-CH14-04: Client presentation receives perceivable events only
     (turnResult as any).sensoryEvents = sensoryEvents.filter((e: any) => !e.suppressed);
-    res.json(turnResult);
+    res.json({
+      ...turnResult,
+      currentSituation: turnResult.currentSituation || null,
+      latestVisibleNarrative: turnResult.latestVisibleNarrative || turnResult.turnPackage?.narrative?.join('\n\n') || '',
+      narrativeTurnPackage: turnResult.narrativeTurnPackage || turnResult.turnPackage || null,
+      narrativeResearchPacket: turnResult.narrativeResearchPacket || turnResult.researchPacket || null,
+    });
   } catch (error) {
     console.error('Failed to execute orchestrated turn:', error);
     res.status(500).json({ error: 'Failed to execute orchestrated turn.', details: String(error) });
@@ -10510,89 +10624,41 @@ gameRouter.post('/spells/cast', async (req: Request, res: Response) => {
   }
 });
 
-function buildCurrentComicSceneContext(storyId: string): { context: ComicSceneContext; sourceActionId?: string } {
+function buildCurrentComicSceneContext(storyId: string): { context: VisualSceneContext; sourceActionId?: string } {
   const state = serverMockAuthority.getSanitizedViewState(storyId);
-  const currentCharacters = Object.values(state.characters || {})
-    .filter((character: any) => character.locationId === state.activeLocationId && character.role !== 'PROTAGONIST')
-    .map((character: any) => ({
-      name: character.name,
-      role: character.role,
-      title: character.title,
-      portraitEmoji: character.portraitEmoji,
-    }));
-
-  // Opening/note records are not turns. Scene generation must anchor to the
-  // most recent committed player action so an old opening narration can never
-  // become the source image for a new scene.
-  const latestAction = Array.isArray(state.actionHistory)
-    ? state.actionHistory.find((action: any) => action.actionType !== 'NOTE_RECORD')
+  const player = worldRepository.getPlayerLifecycle(storyId);
+  // The visual path always consumes the most recent committed player action;
+  // NOTE_RECORD entries are presentation notes and never become the source turn.
+  const latestTurn = Array.isArray(state.actionHistory)
+    ? selectLatestVisualTurn(state.actionHistory)
     : undefined;
-  const context: ComicSceneContext = {
-    worldTitle: worldRepository.getStoryRun(storyId)?.worldId
-      ? worldRepository.getWorldTemplate(worldRepository.getStoryRun(storyId)!.worldId)?.title || worldRepository.getStoryRun(storyId)?.worldId
-      : undefined,
-    location: {
-      name: state.activeLocation?.name || 'Current location',
-      region: state.activeLocation?.region,
-      description: state.activeLocation?.description,
-      ambientSensory: state.activeLocation?.ambientSensory,
-    },
-    protagonist: {
-      name: state.protagonist?.name || 'Protagonist',
-      role: state.protagonist?.title,
-      portraitEmoji: state.protagonist?.portraitEmoji,
-      portraitUrl: state.protagonist?.portraitUrl,
-    },
-    visibleCharacters: currentCharacters,
-    latestAction: latestAction
-      ? {
-          id: latestAction.id,
-          actionType: latestAction.actionType,
-          visualCues: latestAction.visualCues,
-          description: latestAction.description,
-          narrativeResponse: latestAction.narrativeResponse,
-          authoritativeFeedback: latestAction.authoritativeFeedback,
-          checkResult: latestAction.checkResult
-            ? {
-                success: latestAction.checkResult.success,
-                total: latestAction.checkResult.total,
-                difficultyClass: latestAction.checkResult.difficultyClass,
-                consequence: latestAction.checkResult.consequence
-                  ? { summary: latestAction.checkResult.consequence.summary }
-                  : undefined,
-              }
-            : undefined,
-        }
-      : undefined,
-    // A committed turn is authoritative for scene generation. Opening-scene
-    // context is allowed only when there is no committed action yet; otherwise
-    // stale setup text would contaminate the exact current visual moment.
-    currentSituation: latestAction
-      ? undefined
-      : state.openingScene?.startingSituation ||
-        state.openingScene?.narrativeText ||
-        worldRepository.getStoryRun(storyId)?.startingSituation?.summary ||
-        worldRepository.getStoryRun(storyId)?.startingSituation?.hook,
-    latestVisibleNarrative: latestAction
-      ? undefined
-      : state.openingScene?.narrativeText,
-    // Deliberately use active dialogue only; the prompt compiler will include it
-    // only for a committed dialogue action. Never include dialogueHistory here.
-    activeDialogue: state.activeDialogue
-      ? {
-          speakerName: state.activeDialogue.speakerName,
-          text: state.activeDialogue.text,
-        }
-      : null,
+
+  const currentSituation = CurrentSituationBuilder.build({
+    storyId,
+    playerAction: latestTurn?.description || '',
+    viewerActorId: player?.actorId,
+    worldRepo: worldRepository,
+  });
+
+  const visualContext = buildVisualSceneContext({
+    storyId,
+    currentSituation,
+    actionHistory: state.actionHistory || [],
+    presentationAction: latestTurn,
+  });
+  assertVisualSceneFreshness(visualContext);
+
+  return {
+    context: visualContext,
+    sourceActionId: visualContext.latestTurnId,
   };
-  return { context, sourceActionId: latestAction?.id };
 }
 
 gameRouter.post('/scene/generate-prompt', (req: Request, res: Response) => {
   try {
     const storyId = resolveStoryId(req, true);
     const { context, sourceActionId } = buildCurrentComicSceneContext(storyId);
-    const result = buildComicScenePrompt(context);
+    const result = buildComicScenePromptFromVisualContext(context);
     return res.json({
       success: true,
       storyId,
@@ -10611,14 +10677,14 @@ gameRouter.post('/scene/generate-image', async (req: Request, res: Response) => 
   try {
     const storyId = resolveStoryId(req, true);
     const { context, sourceActionId } = buildCurrentComicSceneContext(storyId);
-    const promptResult = buildComicScenePrompt(context);
+    const promptResult = buildComicScenePromptFromVisualContext(context);
     const media = await mediaAdapterService.generateImage({
       storyId,
       prompt: promptResult.prompt,
       slotType: 'scene',
       aspectRatio: '16:9',
       tags: ['story-scene', 'comic-page', 'latest-turn'],
-      characterName: context.protagonist.name,
+      characterName: context.currentSituation.player.name,
     });
     return res.json({
       success: media.success,

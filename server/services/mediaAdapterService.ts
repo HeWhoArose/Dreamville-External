@@ -21,7 +21,7 @@ export interface ImageGenerationOptions {
  * Implements DreamBook Image & Media Generation Abstraction.
  *
  * Rules:
- * 1. Images and media assets are PRESENTATION ONLY and never canonical world truth.
+ * 1. Images and media assets are PRESENTATION ONLY (presentation-only) and never canonical world truth.
  * 2. If provider fails (HTTP 500, timeout, quota, disconnect), gameplay MUST continue seamlessly.
  * 3. Graceful fallback presentation data (prompt fallback, deterministic placeholder) is returned.
  * 4. Failure injection is supported for automated reliability verification.

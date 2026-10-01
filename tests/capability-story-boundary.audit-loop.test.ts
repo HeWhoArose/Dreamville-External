@@ -14,7 +14,7 @@ test('capability ownership never falls back to the global registry', () => {
 
 test('scene generation uses the newest non-note action as its source turn', () => {
   const source = read('server/api/gameRoutes.ts');
-  assert.match(source, /actionHistory\.find\(\(action: any\) => action\.actionType !== 'NOTE_RECORD'\)/);
+  assert.match(source, /selectLatestVisualTurn\(state\.actionHistory\)/);
   assert.match(source, /most recent committed player action/i);
 });
 

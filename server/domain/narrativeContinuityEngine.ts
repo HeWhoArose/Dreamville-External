@@ -4,6 +4,11 @@ import type { StructuredTurnPackage } from './aiOrchestrator';
 import { worldMomentumEngine } from './worldMomentumEngine';
 import { researchEvidencePipeline } from './researchEvidence';
 import { UniverseRuntimeService } from './universeRuntimeService';
+import { CurrentSituationBuilder, type CurrentSituation } from './currentSituation';
+import type { PlayerIntent } from './playerIntentInterpreter';
+import { narrativeMemoryLifecycle } from './narrativeMemoryLifecycle';
+import type { NarrativeReview } from './semanticNarrativeReview';
+import type { StateAdjudicationResult } from './narrativeStateAdjudicator';
 
 export interface NarrativePlotState {
   storyId: string;
@@ -49,6 +54,7 @@ export interface NarrativeResearchPacket {
   worldMomentum?: ReturnType<typeof worldMomentumEngine.getState>;
   researchEvidence?: unknown[];
   causalProvenance?: unknown;
+  currentSituation?: CurrentSituation;
 }
 
 export class NarrativeContinuityEngine {
@@ -57,7 +63,7 @@ export class NarrativeContinuityEngine {
     const runtime = (run?.runtimeState || {}) as Record<string, any>;
     return {
       plot: JSON.parse(JSON.stringify(runtime.plot || this.defaultPlot(storyId))),
-      plan: JSON.parse(JSON.stringify(runtime.narrativePlan || this.defaultPlan(storyId))),
+      plan: JSON.parse(JSON.stringify(runtime.continuityPlan || runtime.narrativePlan || this.defaultPlan(storyId))),
       research: runtime.narrativeResearch ? JSON.parse(JSON.stringify(runtime.narrativeResearch)) : undefined,
     };
   }
@@ -67,12 +73,23 @@ export class NarrativeContinuityEngine {
     storyId: string,
     query: string,
     viewerActorId?: string,
-    options: { persist?: boolean } = {},
+    options: { persist?: boolean; currentSituation?: CurrentSituation } = {},
   ): NarrativeResearchPacket {
     const memoryEngine = repository.getMemoryEngine(storyId);
     const clock = repository.getWorldClock(storyId);
     const normalizedQuery = query.trim() || 'current story context';
-    const queryKeywords = normalizedQuery.toLowerCase().split(/\W+/).filter((token) => token.length >= 3).slice(0, 12);
+    const currentSituation = options.currentSituation || CurrentSituationBuilder.build({
+      storyId,
+      playerAction: normalizedQuery,
+      viewerActorId,
+      worldRepo: repository,
+    });
+    const queryKeywords = Array.from(new Set([
+      ...normalizedQuery.toLowerCase().split(/\W+/).filter((token) => token.length >= 3),
+      ...currentSituation.location.name.toLowerCase().split(/\W+/).filter((token) => token.length >= 3),
+      ...currentSituation.location.regionId.toLowerCase().split(/\W+/).filter((token) => token.length >= 3),
+      ...currentSituation.nearbyEntities.map((entity) => entity.name.toLowerCase()),
+    ])).slice(0, 16);
     const baseMemories = memoryEngine.retrieveMemories({
       storyId,
       viewerActorId,
@@ -167,6 +184,7 @@ export class NarrativeContinuityEngine {
       worldMomentum: worldMomentumEngine.getState(repository, storyId),
       researchEvidence: researchEvidencePipeline.getEvidenceForStory(storyId),
       causalProvenance: researchEvidencePipeline.getCausalGraphForStory(storyId),
+      currentSituation,
       usageGuidance: {
         knowledgeFacts: 'Use only to establish facts the viewer is authorized to know; never turn secret or uncertain knowledge into certainty.',
         memories: 'Use both world-local and universe-level durable memories to maintain continuity with what the protagonist has experienced, learned, acquired, or persistently remembers. Universe memories may refer to worlds the protagonist is not currently visiting.',
@@ -195,35 +213,73 @@ export class NarrativeContinuityEngine {
     return packet;
   }
 
-  public static recordTurn(repository: WorldRepository, params: { storyId: string; turnId?: string; playerAction?: string; turnPackage: StructuredTurnPackage }): { plot: NarrativePlotState; plan: NarrativePlanState } {
+  public static recordTurn(repository: WorldRepository, params: { storyId: string; turnId?: string; playerAction?: string; playerIntent?: PlayerIntent; turnPackage: StructuredTurnPackage; currentSituation?: CurrentSituation; narrativeReview?: NarrativeReview; stateAdjudication?: StateAdjudicationResult }): { plot: NarrativePlotState; plan: NarrativePlanState } {
     const run = repository.getStoryRun(params.storyId);
     if (!run) return { plot: this.defaultPlot(params.storyId), plan: this.defaultPlan(params.storyId) };
-    const state = this.getState(repository, params.storyId);
-    const timestamp = formatCanonicalTimestamp(repository.getWorldClock(params.storyId).getTimestamp());
-    const beatText = (params.turnPackage.narrative.join(' ').trim() || params.playerAction || 'Turn resolved.').slice(0, 1200);
-    const tags = [...params.turnPackage.events, ...params.turnPackage.memoryCandidates].map(String).map((value) => value.trim()).filter(Boolean).slice(0, 10);
-    state.plot.beats.push({ id: deterministicId('plot_beat', params.storyId, params.turnId || 'turn', beatText), turnId: params.turnId, text: beatText, tags, timestamp });
-    state.plot.beats = state.plot.beats.slice(-40);
-    const openThreads = new Set(state.plot.openThreads);
-    for (const memoryCandidate of params.turnPackage.memoryCandidates) {
-      const value = String(memoryCandidate).trim();
-      if (value) openThreads.add(value.slice(0, 240));
+    let situation = params.currentSituation;
+    try {
+      if (!situation) {
+        situation = CurrentSituationBuilder.build({
+          storyId: params.storyId,
+          playerAction: params.playerAction || '',
+          currentAction: params.playerIntent,
+          viewerActorId: repository.getPlayerLifecycle(params.storyId)?.actorId,
+          worldRepo: repository,
+        });
+      }
+    } catch {
+      // Compatibility path for lightweight repository doubles/previews that do not establish
+      // geography. Real gameplay always supplies the canonical CurrentSituation.
+      const state = this.getState(repository, params.storyId);
+      const timestamp = formatCanonicalTimestamp(repository.getWorldClock(params.storyId).getTimestamp());
+      const turnId = params.turnId || deterministicId('continuity_turn', params.storyId, params.playerAction || '');
+      const text = (params.turnPackage.narrative || []).filter(Boolean).join(' ').trim() || params.playerAction || '';
+      if (text) {
+        const eventTags = (params.turnPackage.events || []).filter(Boolean).slice(0, 4);
+        state.plot.beats.push({
+          id: deterministicId('plot_beat', params.storyId, turnId, text),
+          turnId,
+          text: text.slice(0, 1000),
+          tags: eventTags.length > 0 ? eventTags : ['LEGACY_COMPATIBILITY'],
+          timestamp,
+        });
+        state.plot.beats = state.plot.beats.slice(-40);
+        state.plot.summary = [state.plot.summary, text].filter(Boolean).join(' ').slice(-4000);
+
+        // Lightweight repository doubles do not provide the full memory lifecycle.
+        // Preserve event-backed continuity rather than dropping the only durable
+        // indication that the turn created an unresolved narrative obligation.
+        for (const event of eventTags.slice(0, 2)) {
+          if (!state.plot.openThreads.includes(event)) {
+            state.plot.openThreads.push(event);
+          }
+        }
+        state.plot.openThreads = state.plot.openThreads.slice(-24);
+      }
+      state.plot.updatedAt = timestamp;
+      state.plot.version += 1;
+      state.plan.objective = params.playerAction
+        ? 'Respond coherently to: ' + params.playerAction.slice(0, 240)
+        : state.plan.objective;
+      state.plan.nextBeats = state.plot.beats.slice(-4).map((beat) => beat.text);
+      state.plan.updatedAt = timestamp;
+      state.plan.version += 1;
+      run.runtimeState = { ...(run.runtimeState || {}), plot: state.plot, continuityPlan: state.plan };
+      repository.saveStoryRun(run);
+      return state;
     }
-    state.plot.openThreads = Array.from(openThreads).slice(-24);
-    state.plot.summary = beatText;
-    state.plot.updatedAt = timestamp;
+    const lifecycle = narrativeMemoryLifecycle.processTurn({ repository, storyId: params.storyId, turnId: params.turnId || situation.turnId, playerAction: params.playerAction, playerIntent: params.playerIntent, currentSituation: situation, turnPackage: params.turnPackage, narrativeReview: params.narrativeReview, stateAdjudication: params.stateAdjudication });
+    const state = this.getState(repository, params.storyId);
+    state.plot.summary = lifecycle.plotSummary;
+    state.plot.updatedAt = formatCanonicalTimestamp(repository.getWorldClock(params.storyId).getTimestamp());
     state.plot.version += 1;
     state.plan.priorityThreads = state.plot.openThreads.slice(-8).reverse();
     state.plan.objective = state.plan.priorityThreads[0] || (params.playerAction ? 'Respond coherently to: ' + params.playerAction.slice(0, 240) : 'Continue the current story arc.');
-    state.plan.nextBeats = state.plan.priorityThreads.slice(0, 4).concat(params.turnPackage.events.slice(-4).map((event) => 'Follow consequence of ' + String(event).slice(0, 180))).slice(0, 8);
+    state.plan.nextBeats = state.plan.priorityThreads.slice(0, 4);
     state.plan.contingencies = ['Respect current world and character knowledge boundaries.', 'Prefer canonical consequences over invented drama.'];
-    state.plan.updatedAt = timestamp;
+    state.plan.updatedAt = formatCanonicalTimestamp(repository.getWorldClock(params.storyId).getTimestamp());
     state.plan.version += 1;
-    run.runtimeState = {
-      ...(run.runtimeState || {}),
-      plot: state.plot,
-      narrativePlan: state.plan,
-    };
+    run.runtimeState = { ...(run.runtimeState || {}), plot: state.plot, continuityPlan: state.plan };
     repository.saveStoryRun(run);
     return state;
   }

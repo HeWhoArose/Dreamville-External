@@ -4,7 +4,8 @@ import { UniverseRuntimeService } from './universeRuntimeService';
 import type { DndRulesMode, NarrativeProfile } from '../../src/types';
 import { rulesProfileEngine } from './rulesProfileEngine';
 import { worldRepository } from '../repositories/worldRepository';
-import { NarrativeContinuityEngine } from './narrativeContinuityEngine';
+import { NarrativeContinuityEngine, type NarrativeResearchPacket } from './narrativeContinuityEngine';
+import { CurrentSituationBuilder, type CurrentSituation } from './currentSituation';
 import { deriveNarrationContextNeeds } from './narrationContextPolicy';
 
 export interface WorkingContextPacket {
@@ -57,6 +58,7 @@ export interface BudgetedContextResult {
 }
 
 export interface AssembledTurnContext {
+  currentSituation: CurrentSituation;
   packet: WorkingContextPacket;
   chunks: ContextChunk[];
   assembledText: string;
@@ -181,6 +183,7 @@ export class WorkingContextEngine {
     storyId: string;
     playerAction: string;
     viewerActorId?: string;
+    currentAction?: CurrentSituation['currentAction'];
     worldRepo?: WorldRepository;
     hardTokenBudget?: number;
   }): {
@@ -272,6 +275,20 @@ export class WorkingContextEngine {
       return idA.localeCompare(idB);
     });
 
+    const protectedMinimumByLowerBand: Partial<Record<PriorityBand, number>> = {};
+    for (const band of ['B2_IMMEDIATE', 'B3_CAUSAL_OPPORTUNITY', 'B4_EPISODIC', 'B5_SEMANTIC_LORE'] as PriorityBand[]) {
+      const protectedTokens = sortedChunks
+        .filter((chunk) => chunk.band === band && chunk.isProtected && chunk.blockStatus !== 'ARCHIVED')
+        .map((chunk) =>
+          WorkingContextEngine.estimateTokens(
+            (chunk.label ? '[' + chunk.label.toUpperCase() + ']\n' : '') + chunk.content,
+          ),
+        );
+      if (protectedTokens.length > 0) {
+        protectedMinimumByLowerBand[band] = Math.min(...protectedTokens);
+      }
+    }
+
     const included: ContextChunk[] = [];
     const idle: ContextChunk[] = [];
     const archived: ContextChunk[] = [];
@@ -314,6 +331,26 @@ export class WorkingContextEngine {
         ? formattedChunk
         : `${currentAssembledText}\n\n${formattedChunk}`;
       const prospectiveTokens = WorkingContextEngine.estimateTokens(prospectiveText);
+
+      // Reserve enough room for the smallest protected B2 block so a large set of
+      // critical policy/context prose cannot consume the entire live-turn budget.
+      const lowerProtectedReservation =
+        bandRank === priorityOrder.B1_CRITICAL
+          ? (protectedMinimumByLowerBand.B2_IMMEDIATE || 0)
+          : 0;
+      if (
+        lowerProtectedReservation > 0 &&
+        bandRank === priorityOrder.B1_CRITICAL &&
+        prospectiveTokens + lowerProtectedReservation > hardTokenBudget &&
+        included.some((item) => item.band === 'B1_CRITICAL') &&
+        chunk.id !== 'b1_current_situation'
+      ) {
+        const idleChunk = { ...chunk, blockStatus: 'IDLE' as const };
+        idle.push(idleChunk);
+        evicted.push(`${chunk.label} (${chunk.band})`);
+        evictionReasons[chunk.label] = 'Deferred to preserve a protected immediate-turn context block within the hard budget.';
+        continue;
+      }
 
       // Caller-declared tokens + framing overhead accounting
       const headerTokens = WorkingContextEngine.estimateTokens(chunkHeader);
@@ -370,11 +407,21 @@ export class WorkingContextEngine {
     customChunks?: ContextChunk[];
     npcTargetId?: string;
     viewerActorId?: string;
+    currentSituation?: CurrentSituation;
+    currentAction?: CurrentSituation['currentAction'];
+    narrativeResearch?: NarrativeResearchPacket;
     worldRepo?: WorldRepository;
   }): AssembledTurnContext {
     const storyId = params.storyId || 'default_story';
     const hardTokenBudget = params.hardTokenBudget ?? 400;
     const repo = params.worldRepo || worldRepository;
+    const currentSituation = params.currentSituation || CurrentSituationBuilder.build({
+      storyId,
+      playerAction: params.playerAction,
+      currentAction: params.currentAction,
+      viewerActorId: params.viewerActorId,
+      worldRepo: repo,
+    });
 
     // 1. Read canonical states (read-only; no state mutation)
     const player = repo.getPlayerLifecycle(storyId);
@@ -388,12 +435,12 @@ export class WorkingContextEngine {
     const livingSim = repo.getLivingWorldSimulation(storyId);
 
     const viewerId = params.viewerActorId || (player ? player.actorId : `player_actor_${storyId}`);
-    const continuityResearch = NarrativeContinuityEngine.research(
+    const continuityResearch = params.narrativeResearch || NarrativeContinuityEngine.research(
       repo,
       storyId,
       params.playerAction || 'current story context',
       viewerId,
-      { persist: false },
+      { persist: false, currentSituation },
     );
 
     // 2. Epistemic Projection: Campaign & Scene Knowledge
@@ -472,9 +519,9 @@ export class WorkingContextEngine {
     ].filter(Boolean).join('\n');
 
     // 2. Epistemic Projection: Scene & Geography
-    const locId = player ? player.locationId : (run?.startingLocationId || run?.currentLocationId || (storyId === 'default_story' ? 'loc_whispering_orrery' : 'loc_unknown'));
+    const locId = currentSituation.location.id;
     const locNode = geography.getNode(locId);
-		const isDiscovered = player ? player.discoveredLocationIds.includes(locId) : false;
+    const isDiscovered = currentSituation.location.discovered;
     // Epistemic filter: only show rich description if discovered; otherwise basic label
     const sceneDesc = isDiscovered && locNode
       ? `${locNode.name}: ${locNode.description}`
@@ -485,9 +532,8 @@ export class WorkingContextEngine {
     const scene = `${sceneDesc}${activeJourney}`;
 
     // 3. Time
-    const locationName = locNode ? locNode.name : 'Current Location';
+    const locationName = currentSituation.location.name;
     const timeHeader = clock.getFormattedLocationTimeHeader(locationName, clock.getTimestamp());
-
     const actionText = params.playerAction || 'Observe surroundings';
     const contextNeeds = deriveNarrationContextNeeds({
       actionText,
@@ -509,9 +555,16 @@ export class WorkingContextEngine {
 
     // 5. Epistemic Projection: Visible Entities
     const allSchedules = livingSim.getAllNpcSchedules();
-    const visibleEntities: string[] = [];
+    const visibleEntities: string[] = currentSituation.nearbyEntities
+      .filter((entity) => entity.visibleToPlayer)
+      .map((entity) => {
+        const activity = entity.currentActivity ? `Activity: ${entity.currentActivity}` : '';
+        const role = entity.role ? `Role: ${entity.role}` : '';
+        return [`${entity.name} (${entity.kind})`, activity, role].filter(Boolean).join(' | ');
+      });
     for (const sched of allSchedules) {
       if (sched.currentLocationId === locId && (!player || sched.npcId !== player.actorId)) {
+        if (visibleEntities.some((entry) => entry.startsWith(`${sched.name || sched.npcId} (`))) continue;
         const cue = livingSim.evaluateHungerNarrativeCue(sched.npcId);
         visibleEntities.push(
           `${sched.name || sched.npcId} (Activity: ${sched.currentActivity}${cue.shouldCue ? `, Cue: ${cue.narrativePromptHint || cue.cueStyle}` : ''})`
@@ -662,6 +715,16 @@ export class WorkingContextEngine {
 
     // Construct Prioritized Candidate Context Chunks
     const candidateChunks: ContextChunk[] = [
+      {
+        id: 'b1_current_situation',
+        band: 'B1_CRITICAL',
+        label: 'Canonical Current Situation Model',
+        content: CurrentSituationBuilder.toPromptContext(currentSituation),
+        estimatedTokens: WorkingContextEngine.estimateTokens(CurrentSituationBuilder.toPromptContext(currentSituation)),
+        sourceAuthority: 'CurrentSituationBuilder (Phase 1) / WorldRepository canonical read models',
+        isProtected: true,
+        relevanceScore: 1,
+      },
       // B1_CRITICAL: Canonical campaign mode boundaries
       {
         id: 'b1_campaign_modes',
@@ -725,6 +788,22 @@ export class WorkingContextEngine {
         sourceAuthority: 'TacticalCombatEngine (CH8)',
         isProtected: true,
         relevanceScore: 0.95,
+      });
+    }
+
+    const authorizedKnowledgeContent = authorizedWorldFacts.length
+      ? authorizedWorldFacts.slice(0, 8).join(' | ')
+      : '';
+    if (authorizedKnowledgeContent) {
+      candidateChunks.push({
+        id: 'b2_authorized_knowledge',
+        band: 'B2_IMMEDIATE',
+        label: 'Player-Authorized Knowledge',
+        content: authorizedKnowledgeContent,
+        estimatedTokens: WorkingContextEngine.estimateTokens(authorizedKnowledgeContent),
+        sourceAuthority: 'WorldRepository.getAuthorizedKnowledgeFacts (Phase 11)',
+        isProtected: false,
+        relevanceScore: 0.88,
       });
     }
 
@@ -978,7 +1057,7 @@ export class WorkingContextEngine {
     }
 
     // B5_SEMANTIC_LORE: Viewer-authorized world knowledge
-    const authorizedFacts = repo.getAuthorizedKnowledgeFacts(storyId, viewerId)
+    const authorizedFacts = currentSituation.playerKnowledge.knownFacts
       .slice(0, 3);
     if (authorizedFacts.length > 0) {
       const loreContent = authorizedFacts
@@ -1012,6 +1091,7 @@ export class WorkingContextEngine {
     );
 
     return {
+      currentSituation,
       packet,
       chunks: normalizedCandidateChunks,
       assembledText: budgetedResult.assembledText,

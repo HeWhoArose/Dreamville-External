@@ -648,5 +648,5 @@ test('narrative continuity records canonical turn outcomes into plot and plan st
   assert.match(result.plan.objective, /observatory/i);
   assert.equal(saved.length, 1);
   assert.ok(saved[0].runtimeState.plot);
-  assert.ok(saved[0].runtimeState.narrativePlan);
+  assert.ok(saved[0].runtimeState.continuityPlan);
 });

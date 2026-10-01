@@ -179,6 +179,7 @@ test('Phase 3-5 narrative context survives malformed primary output and reaches 
 	});
 
 	assert.equal(result.success, true, result.error || JSON.stringify(result));
+	console.error('AUDIT_DEBUG_FALLBACK_TELEMETRY', JSON.stringify(result.telemetry, null, 2), JSON.stringify(result.attemptsTrail, null, 2));
 	assert.equal(result.telemetry.selectedModelId, 'integration-fallback');
 	assert.equal(result.telemetry.fallbackChain.includes('integration-fallback'), true);
 	assert.equal(primary.callHistory.length, 1);

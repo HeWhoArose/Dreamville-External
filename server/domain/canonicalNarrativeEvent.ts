@@ -1,4 +1,5 @@
 import type { WorldRepository } from '../repositories/worldRepository';
+import { formatCanonicalTimestamp } from './deterministicRng';
 
 export interface CanonicalNarrativeEventRecord {
   id: string;
@@ -37,7 +38,7 @@ export function recordCanonicalNarrativeEvent(
     canonicalEventId: params.canonicalEventId,
     commandId: params.commandId,
     turnId: params.turnId,
-    timestamp: JSON.stringify(timestamp),
+    timestamp: formatCanonicalTimestamp(timestamp),
     summary: String(params.summary || 'Canonical action committed.').slice(0, 1200),
     mutationPaths: (params.mutationPaths || []).slice(0, 32),
     perspective: 'OBJECTIVE',

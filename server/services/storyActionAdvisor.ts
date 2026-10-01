@@ -1010,10 +1010,18 @@ export class StoryActionAdvisor {
 		const locationLabel = sceneContext?.locationName || location?.name || 'the current area';
 		const player = this.repository.getPlayerLifecycle(storyId);
 		const playerLocationId = player?.locationId || location?.id || '';
+		let relevantEntityIds = new Set<string>();
+		try {
+			const situation = CurrentSituationBuilder.build({ storyId, playerAction: actionText, viewerActorId: actorId, worldRepo: this.repository });
+			relevantEntityIds = new Set(EntitySceneRelevanceEngine.topVisible(situation, situation.currentAction, 8).map((entity) => entity.id));
+		} catch {
+			relevantEntityIds = new Set<string>();
+		}
 		const livingWorld = this.repository.getLivingWorldSimulation(storyId);
 		const nearbyNpcs = livingWorld
 			.getAllNpcSchedules()
 			.filter((npc) => npc.currentLocationId === playerLocationId)
+			.filter((npc) => relevantEntityIds.size === 0 || relevantEntityIds.has(npc.npcId))
 			.filter((npc) => npc.npcId !== actorId);
 		const visibleNpcNames = uniqueStrings(nearbyNpcs.map((npc) => npc.name), 4);
 		const unresolvedEvents = livingWorld

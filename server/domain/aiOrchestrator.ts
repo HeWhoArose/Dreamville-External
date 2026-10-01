@@ -343,6 +343,7 @@ export interface ContinuationCheckpoint {
   turnId: string;
   role: string;
   playerAction?: string;
+  playerIntent?: PlayerIntent;
   workingContextTokens?: number;
   worldTime: string;
   locationId: string;
@@ -373,6 +374,7 @@ export interface CommittedNarrativeRecord {
   turnId: string;
   role: string;
   playerAction?: string;
+  playerIntent?: PlayerIntent;
   worldTime: string;
   locationId: string;
   sceneSummary: string;
@@ -7288,6 +7290,7 @@ export class MultiModelOrchestrator {
               turnId,
               role: 'narrator',
               playerAction: params.playerAction,
+              playerIntent,
               workingContextTokens: assembledContext.totalTokens,
               worldTime: repo.getWorldClock(storyId).formatHeader(),
               locationId: repo.getPlayerLifecycle(storyId)?.locationId || 'loc_whispering_orrery',
@@ -7370,6 +7373,7 @@ export class MultiModelOrchestrator {
             return {
               success: true,
               turnPackage: validation.turnPackage,
+              playerIntent,
               telemetry,
               adjudicationResult: adjudication,
               checkpoint,
@@ -7509,6 +7513,7 @@ export class MultiModelOrchestrator {
             return {
               success: true,
               turnPackage: validation.turnPackage,
+              playerIntent,
               telemetry,
               adjudicationResult: adjudication,
               checkpoint,

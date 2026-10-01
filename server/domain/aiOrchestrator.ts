@@ -429,6 +429,7 @@ export interface ProviderGenerateOptions {
   /** Prevent provider adapters from substituting local/mock generation for a missing AI credential. */
   allowDeterministicFallback?: boolean;
   audioInputBase64?: string;
+  audioMimeType?: string;
   voiceProfile?: any;
   timeoutMs?: number;
   abortSignal?: AbortSignal;
@@ -2096,7 +2097,7 @@ Do not enclose in markdown ticks, output pure JSON.`;
         
         if (task === 'speech.transcribe' && options?.audioInputBase64) {
           reqContents = [
-            { inlineData: { mimeType: 'audio/mp3', data: options.audioInputBase64 } },
+            { inlineData: { mimeType: options.audioMimeType || 'audio/webm', data: options.audioInputBase64 } },
             prompt
           ];
           reqConfig.responseMimeType = 'text/plain';

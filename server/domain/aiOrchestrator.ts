@@ -7094,8 +7094,11 @@ export class MultiModelOrchestrator {
     contextAudit?: {
       hardTokenBudget: number;
       totalTokens: number;
-      includedChunks: Array<{ label: string; source?: string; relevanceScore?: number; estimatedTokens: number }>;
+      includedChunks: Array<{ id?: string; label: string; band: string; source?: string; relevanceScore?: number; estimatedTokens: number; protected: boolean }>;
+      idleChunks?: Array<{ id?: string; label: string; band: string; source?: string; relevanceScore?: number; estimatedTokens: number; protected: boolean }>;
+      archivedChunks?: Array<{ id?: string; label: string; band: string; source?: string; relevanceScore?: number; estimatedTokens: number; protected: boolean }>;
       evictedChunkLabels: string[];
+      pinnedSourceIds?: string[];
       assembledTextPreview: string;
     };
   }> {
@@ -7332,12 +7335,34 @@ export class MultiModelOrchestrator {
       hardTokenBudget: assembledContext.hardTokenBudget,
       totalTokens: assembledContext.totalTokens,
       includedChunks: assembledContext.includedChunks.map((chunk) => ({
+        id: chunk.id,
         label: chunk.label,
+        band: chunk.band,
         source: chunk.sourceAuthority,
         relevanceScore: chunk.relevanceScore,
         estimatedTokens: chunk.estimatedTokens,
+        protected: Boolean(chunk.isProtected),
+      })),
+      idleChunks: assembledContext.idleChunks.map((chunk) => ({
+        id: chunk.id,
+        label: chunk.label,
+        band: chunk.band,
+        source: chunk.sourceAuthority,
+        relevanceScore: chunk.relevanceScore,
+        estimatedTokens: chunk.estimatedTokens,
+        protected: Boolean(chunk.isProtected),
+      })),
+      archivedChunks: assembledContext.archivedChunks.map((chunk) => ({
+        id: chunk.id,
+        label: chunk.label,
+        band: chunk.band,
+        source: chunk.sourceAuthority,
+        relevanceScore: chunk.relevanceScore,
+        estimatedTokens: chunk.estimatedTokens,
+        protected: Boolean(chunk.isProtected),
       })),
       evictedChunkLabels: assembledContext.evictedChunkLabels,
+      pinnedSourceIds: assembledContext.pinnedSourceIds,
       assembledTextPreview: assembledContext.assembledText.slice(0, 6000),
     };
 

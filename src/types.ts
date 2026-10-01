@@ -287,6 +287,51 @@ export type StoryCheckOutcomeTier =
   | 'CRITICAL_SUCCESS'
   | 'CRITICAL_FAILURE';
 
+export type ActionResolutionMethod =
+  | 'NO_CHECK'
+  | 'DETERMINISTIC'
+  | 'CHECK'
+  | 'AUTHORED_CHALLENGE'
+  | 'CAPABILITY'
+  | 'ITEM_USE'
+  | 'COMBAT'
+  | 'COST_ONLY';
+
+export type ActionOutcomeTier =
+  | StoryCheckOutcomeTier;
+
+export interface ActionResolution {
+  resolutionId: string;
+  storyId: string;
+  turnId: string;
+  playerAction: string;
+  playerIntent: {
+    action: string;
+    interactionMode: string;
+    movementIntent: boolean;
+    observationIntent: boolean;
+    speechIntent: boolean;
+    informationGoal?: string;
+    targetIds?: string[];
+  };
+  attemptedEffect: string;
+  targetEntityIds: string[];
+  resolutionMethod: ActionResolutionMethod;
+  check?: StoryCheckResult;
+  outcomeTier: ActionOutcomeTier;
+  actualEffect: string;
+  canonicalStateChanges: StateChangeProposal[];
+  physicalConsequences: string[];
+  playerVisibleConsequences: string[];
+  evidenceIds: string[];
+  uncertainty: string[];
+  provenance: {
+    source: 'CANONICAL_ENGINE';
+    canonicalCommandId?: string;
+    canonicalEventId?: string;
+  };
+}
+
 export interface StoryCheckResult {
   checkId: string;
   testType: StoryTestType;
@@ -428,7 +473,7 @@ export interface ActionLog {
   canonicalEventId?: string;
   checkResult?: StoryCheckResult;
   /** Canonical mechanics envelope projected to narration and reusable for presentation regeneration. */
-  actionResolution?: import('../server/domain/actionResolution').ActionResolution;
+  actionResolution?: ActionResolution;
   actionAdvice?: ActionAdvice;
 }
 

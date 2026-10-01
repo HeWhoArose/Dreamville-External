@@ -6685,7 +6685,7 @@ export class MultiModelOrchestrator {
       'i',
     );
     const raisingVoicePattern = new RegExp(
-      '\\b(?:' + subjects.join('|') + ')\\s+(?:\\w+\\s+){0,4}(?:raise|raised|raising)\\s+(?:your|his|her|their)\\s+voice\\b',
+      '\\b(?:' + subjects.join('|') + ')\\s+(?:\\w+\\s+){0,12}(?:raise|raised|raising)\\s+(?:your|his|her|their)\\s+voice\\b',
       'i',
     );
 

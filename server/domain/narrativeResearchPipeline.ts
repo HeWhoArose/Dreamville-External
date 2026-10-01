@@ -154,7 +154,7 @@ function blockPriority(kind: NarrativeResearchBlockKind): number {
 
 function addCandidate(
 	candidates: CandidateBlock[],
-	params: Omit<CandidateBlock, 'relevanceScore' | 'estimatedTokens'> & { relevanceScore?: number },
+	params: Omit<CandidateBlock, 'relevanceScore' | 'estimatedTokens' | 'topicTokens'> & { relevanceScore?: number },
 	queryTokens: string[],
 ): void {
 	const normalized = normalize(params.content);

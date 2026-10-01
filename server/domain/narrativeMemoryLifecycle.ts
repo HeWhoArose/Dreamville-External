@@ -141,6 +141,9 @@ export class NarrativeMemoryLifecycle {
 		const currentTurn = params.repository.getCanonicalCommandEvents(params.storyId).length;
 		for (const candidate of (memoryEligible ? (params.turnPackage.memoryCandidates || []) : [])) {
 			const value = normalize(candidate);
+			if (!value) continue;
+			const thread = deriveThreadCandidate(value, params.currentSituation, params.turnId, timestamp);
+			if (thread) threadMap.set(thread.id, thread);
 			if (!isDurableCandidate(value, params.currentSituation, params.turnPackage)) continue;
 			const id = deterministicId('narrative_memory', params.storyId, value);
 			if (memoryEngine.getMemory(id)) {
@@ -154,8 +157,6 @@ export class NarrativeMemoryLifecycle {
 				continue;
 			}
 			const entityIds = relatedEntities(value, params.currentSituation);
-			const thread = deriveThreadCandidate(value, params.currentSituation, params.turnId, timestamp);
-			if (thread) threadMap.set(thread.id, thread);
 			memoryEngine.storeMemory({
 				id,
 				storyId: params.storyId,

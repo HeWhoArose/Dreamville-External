@@ -30,11 +30,56 @@ export function projectSupportingWorkingContext(context: AssembledTurnContext): 
 		'b2_narrative_plan',
 		'canonical_scene_anchor',
 		'current_scene_factual_context',
+		'b2_campaign_opening',
 	]);
 	return context.includedChunks
-		.filter((chunk) => !duplicateSourceIds.has(chunk.id || ''))
+		.filter((chunk) => {
+			if (duplicateSourceIds.has(chunk.id || '')) return false;
+			// Phase 5 deliberately excludes broad B3-B5 context here. Research is the
+			// curated source for lore, memories, threads, and plot; re-injecting those
+			// blocks would bypass Phase 3 relevance selection.
+			if (chunk.band === 'B3_CAUSAL_OPPORTUNITY' || chunk.band === 'B4_EPISODIC' || chunk.band === 'B5_SEMANTIC_LORE') return false;
+			if (/campaign opening|starting situation|world bible|plot & continuity|narrative plot & plan|unresolved story threads|research: authorized knowledge/i.test(chunk.label)) return false;
+			return true;
+		})
 		.map((chunk) => '[' + chunk.label + ']\n' + chunk.content)
 		.join('\n\n') || '[no additional working context]';
+}
+
+function buildNarrationSituationContext(situation: CurrentSituation): string {
+	const visibleEntities = situation.nearbyEntities
+		.filter((entity) => entity.visibleToPlayer)
+		.slice(0, 8)
+		.map((entity) => entity.name + ' [' + entity.kind + '; ' + entity.distanceBand + ']')
+		.join('; ') || 'None';
+
+	const recentTurns = situation.recentTurns
+		.slice(-2)
+		.map((turn) => [
+			turn.playerAction ? 'Player: ' + turn.playerAction : '',
+			turn.narration ? 'Narration: ' + turn.narration : '',
+			turn.unresolvedConsequence ? 'Unresolved consequence: ' + turn.unresolvedConsequence : '',
+		].filter(Boolean).join(' | '))
+		.join('\n') || 'No recent turns.';
+
+	return [
+		'CURRENT SCENE — bounded presentation view',
+		'World: ' + situation.worldId,
+		'Time: ' + situation.worldTime,
+		'Location: ' + situation.location.name + ' (' + situation.location.id + ')',
+		'Region: ' + situation.location.regionId,
+		'Location description: ' + situation.location.description,
+		situation.location.ambientSensory ? 'Ambient: ' + situation.location.ambientSensory : '',
+		'Visible entities: ' + visibleEntities,
+		situation.activeDialogue ? 'Active dialogue: ' + situation.activeDialogue.speakerName + ': ' + situation.activeDialogue.text : '',
+		'Current action: ' + (situation.currentAction?.originalText || situation.currentAction?.action || 'None'),
+		'Plot arc: ' + situation.plot.currentArc,
+		situation.plot.summary ? 'Plot summary: ' + situation.plot.summary : '',
+		'Recent turns:\n' + recentTurns,
+		'Active conditions: ' + (situation.activeConditions.map((condition) => condition.label).join('; ') || 'None'),
+		'Available interactions: ' + (situation.availableInteractions.filter((interaction) => interaction.enabled).slice(0, 8).map((interaction) => interaction.label).join('; ') || 'None'),
+		'Knowledge boundary: research below is the curated source for lore, memories, and unresolved threads; omitted context is not permission to invent facts.',
+	].filter(Boolean).join('\n');
 }
 
 export function defaultNarrationStyle(): string {
@@ -69,7 +114,7 @@ function truncatePromptSection(value: string, maxChars: number): string {
 export function buildNarrationPrompt(input: NarrationPromptInput): NarrationPromptResult {
 	const globalInstruction = input.globalInstruction || 'You are the narrative presentation engine for Dreamville. Generate only the player-facing narrative turn. Canonical state, player intent, bounded research, and the ephemeral plan are authoritative inputs; prose is not canonical truth.';
 	const styleInstruction = input.styleInstruction || defaultNarrationStyle();
-	const situationContext = input.situation ? CurrentSituationBuilder.toPromptContext(input.situation) : '[current situation unavailable]';
+	const situationContext = input.situation ? buildNarrationSituationContext(input.situation) : '[current situation unavailable]';
 	const intentContext = JSON.stringify(input.intent);
 	const planContext = NarrativeDirector.toPromptContext(input.plan);
 	const canonicalConstraints = [

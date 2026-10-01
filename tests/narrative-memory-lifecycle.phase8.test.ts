@@ -111,3 +111,82 @@ test('Phase 8 preserves unresolved thread records across turns', () => {
 	});
 	assert.ok(next.openThreads.some((thread) => thread.title.includes('origin of the fissure')));
 });
+
+
+test('Phase 8 does not promote memory candidates from a rejected narrative review', () => {
+	const { repository, situation } = setup();
+	const result = NarrativeMemoryLifecycle.processTurn({
+		repository,
+		storyId: 'memory-story',
+		turnId: 'turn-rejected',
+		playerAction: 'I investigate.',
+		currentSituation: situation,
+		narrativeReview: {
+			decision: 'REJECT',
+			violations: [],
+			missingRequirements: [],
+			unsupportedClaims: [],
+			playerAgencyViolation: false,
+			semanticMismatch: true,
+			source: 'DETERMINISTIC',
+			confidence: 1,
+		},
+		turnPackage: {
+			narrative: ['Rejected narrative.'],
+			dialogue: [],
+			events: ['A rejected event.'],
+			stateChanges: [],
+			memoryCandidates: ['The fissure definitely opened a hidden passage beneath the archive.'],
+			audioCues: [],
+		},
+	});
+	assert.equal(result.promotedMemoryIds.length, 0);
+});
+
+test('Phase 8 rejects durable candidates that contain unauthorized world-truth anchors', () => {
+	const { repository, situation } = setup();
+	situation.worldFacts = [{
+		subjectEntityId: 'villain',
+		predicate: 'location',
+		objectValue: 'beneath the hidden city',
+	}];
+	situation.playerKnowledge.knownFacts = [];
+	const result = NarrativeMemoryLifecycle.processTurn({
+		repository,
+		storyId: 'memory-story',
+		turnId: 'turn-hidden-memory',
+		playerAction: 'I investigate.',
+		currentSituation: situation,
+		turnPackage: {
+			narrative: ['You search for clues.'],
+			dialogue: [],
+			events: [],
+			stateChanges: [],
+			memoryCandidates: ['You discovered that the villain is beneath the hidden city.'],
+			audioCues: [],
+		},
+	});
+	assert.equal(result.promotedMemoryIds.length, 0);
+});
+
+test('Phase 8 does not turn an uneventful player action into a plot transcript beat', () => {
+	const { repository, situation } = setup();
+	const before = repository.getStoryRun('memory-story')?.runtimeState?.plot?.beats?.length || 0;
+	NarrativeMemoryLifecycle.processTurn({
+		repository,
+		storyId: 'memory-story',
+		turnId: 'turn-no-canon',
+		playerAction: 'I walk around the courtyard.',
+		currentSituation: situation,
+		turnPackage: {
+			narrative: ['You walk around the courtyard.'],
+			dialogue: [],
+			events: [],
+			stateChanges: [],
+			memoryCandidates: [],
+			audioCues: [],
+		},
+	});
+	const after = repository.getStoryRun('memory-story')?.runtimeState?.plot?.beats?.length || 0;
+	assert.equal(after, before);
+});

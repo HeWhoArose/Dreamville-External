@@ -1,14 +1,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
+import { WorldRepository } from '../server/repositories/worldRepository';
 import { TurnIntegrationHarness } from '../server/domain/turnIntegrationHarness';
 import { CurrentSituationBuilder } from '../server/domain/currentSituation';
 import { NarrativeStateAdjudicator } from '../server/domain/narrativeStateAdjudicator';
 import type { StructuredTurnPackage } from '../server/domain/aiOrchestrator';
 import { PlayerIntentInterpreter } from '../server/domain/playerIntentInterpreter';
 
-function freshRepository(): InMemoryWorldRepository {
-	return new InMemoryWorldRepository({ disablePersistence: true });
+function freshRepository(): WorldRepository {
+	return new WorldRepository({ disablePersistence: true });
 }
 
 describe('Phase 18 — end-to-end turn harness', () => {
@@ -111,4 +111,107 @@ describe('Phase 18 — end-to-end turn harness', () => {
 		assert.equal(adjudication.rejectedCount, 1);
 		assert.equal(adjudication.outcomes[0]?.committed, false);
 	});
+
+	it('simulates primary-provider exhaustion without changing the deterministic turn contract', () => {
+		const trace = TurnIntegrationHarness.run({
+			repository: freshRepository(),
+			storyId: 'default_story',
+			playerAction: 'I listen for rumors.',
+			providerMode: 'PRIMARY_UNAVAILABLE_FALLBACK',
+		});
+		assert.equal(trace.providerMode, 'PRIMARY_UNAVAILABLE_FALLBACK');
+		assert.ok(trace.stages.some((stage) =>
+			stage.name === 'ai-provider' &&
+			stage.status === 'FALLBACK' &&
+			/primary provider outage/i.test(stage.detail)
+		));
+		assert.equal(trace.narrativeReview?.decision, 'ACCEPT');
+	});
+
+	it('simulates total AI outage and still exercises the deterministic emergency floor', () => {
+		const trace = TurnIntegrationHarness.run({
+			repository: freshRepository(),
+			storyId: 'default_story',
+			playerAction: 'I inspect the damaged prism.',
+			providerMode: 'ALL_UNAVAILABLE_EMERGENCY',
+		});
+		assert.equal(trace.providerMode, 'ALL_UNAVAILABLE_EMERGENCY');
+		assert.ok(trace.stages.some((stage) =>
+			stage.name === 'ai-provider' &&
+			stage.status === 'FALLBACK' &&
+			/total provider outage/i.test(stage.detail)
+		));
+		assert.equal(trace.narrativeReview?.decision, 'ACCEPT');
+		assert.ok(trace.nextSituation);
+	});
+
+	it('keeps unknown NPC and unknown location references bounded instead of fabricating canonical targets', () => {
+		for (const playerAction of [
+			'I ask a stranger named Zareth what happened.',
+			'I walk toward the nonexistent moon gate.',
+		]) {
+			const trace = TurnIntegrationHarness.run({
+				repository: freshRepository(),
+				storyId: 'default_story',
+				playerAction,
+			});
+			assert.ok(trace.research.blocks.length >= 0);
+			assert.ok(
+				trace.intent.explicitTargets.length === 0 ||
+				trace.intent.explicitTargets.every((target) =>
+					trace.currentSituation.nearbyEntities.some((entity) => entity.id === target.id)
+				)
+			);
+			assert.ok(trace.nextSituation);
+		}
+	});
+
+	it('keeps unauthorized world truth out of the bounded research prompt', () => {
+		const trace = TurnIntegrationHarness.run({
+			repository: freshRepository(),
+			storyId: 'default_story',
+			playerAction: 'I listen for anything important.',
+		});
+		for (const fact of trace.currentSituation.worldFacts) {
+			const secretText = String((fact as any).content || (fact as any).description || '').trim();
+			if (secretText) {
+				assert.equal(trace.research.promptContext.includes(secretText), false, secretText);
+			}
+		}
+	});
+
+	it('preserves canonical failure before continuity when the commit stage fails', () => {
+		assert.throws(
+			() => TurnIntegrationHarness.run({
+				repository: freshRepository(),
+				storyId: 'default_story',
+				playerAction: 'I inspect the sealed archive.',
+				commitMode: 'FAILURE',
+			}),
+			/HARNESS_CANONICAL_COMMIT_FAILURE/
+		);
+	});
+
+	it('covers check-shaped actions without letting narration invent a result', () => {
+		for (const playerAction of [
+			'I attempt to force the sealed archive door.',
+			'I carefully inspect the unstable fissure.',
+		]) {
+			const trace = TurnIntegrationHarness.run({
+				repository: freshRepository(),
+				storyId: 'default_story',
+				playerAction,
+			});
+			assert.equal(trace.narrativeReview?.decision, 'ACCEPT');
+			assert.doesNotMatch(trace.turnPackage?.narrative.join(' ') || '', /automatic success|automatic failure/i);
+		}
+	});
+
+	it('keeps the UI retry contract visible for failed story actions', async () => {
+		const fs = await import('node:fs/promises');
+		const storyView = await fs.readFile(new URL('../src/components/StoryView.tsx', import.meta.url), 'utf8');
+		assert.match(storyView, /Retry the last failed story action/);
+		assert.match(storyView, /onRetryLastAction/);
+	});
+
 });

@@ -41,13 +41,20 @@ function normalize(value: unknown): string {
 	return String(value ?? '').trim().toLowerCase();
 }
 
+function sameProposal(left: StateChangeProposal, right: StateChangeProposal): boolean {
+	return normalize(left.kind) === normalize(right.kind) &&
+		String(left.targetId) === String(right.targetId) &&
+		JSON.stringify(left.value) === JSON.stringify(right.value);
+}
+
 function authorizedHealthProposal(
 	proposal: StateChangeProposal,
 	actorId: string,
+	verifiedCanonicalChanges: StateChangeProposal[],
 ): boolean {
 	return normalize(proposal.kind) === 'health' &&
 		proposal.targetId === actorId &&
-		proposal.metadata?.['serverVerifiedCanonicalMechanic'] === true;
+		verifiedCanonicalChanges.some((effect) => sameProposal(effect, proposal));
 }
 
 export class NarrativeStateAdjudicator {
@@ -62,12 +69,13 @@ export class NarrativeStateAdjudicator {
 	}): StateAdjudicationResult {
 		const outcomes: StateAdjudicationOutcome[] = [];
 		const proposals = Array.isArray(params.turnPackage.stateChanges) ? params.turnPackage.stateChanges : [];
+		const verifiedCanonicalChanges = Array.isArray(params.verifiedCanonicalChanges) ? params.verifiedCanonicalChanges : [];
 
 		proposals.forEach((proposal, index) => {
 			const commandId = deterministicId('narrative_state', params.storyId, params.turnId, index, proposal.kind, proposal.targetId);
 			const kind = normalize(proposal.kind);
 
-			if (authorizedHealthProposal(proposal, params.actorId)) {
+			if (authorizedHealthProposal(proposal, params.actorId, verifiedCanonicalChanges)) {
 				const value = Number(proposal.value);
 				const state = params.repository.getConditionEngine(params.storyId).getActorState(params.actorId);
 				if (!state) {
@@ -144,7 +152,11 @@ export class NarrativeStateAdjudicator {
 		const committed: StateAdjudicationOutcome[] = [];
 		try {
 			for (const outcome of approved) {
-				if (authorizedHealthProposal(outcome.proposal, adjudication.actorId)) {
+				if (authorizedHealthProposal(
+					outcome.proposal,
+					adjudication.actorId,
+					adjudication.outcomes.filter((item) => item.approved).map((item) => item.proposal),
+				)) {
 					repository.getConditionEngine(adjudication.storyId).setHealth(
 						adjudication.actorId,
 						Number(outcome.proposal.value),

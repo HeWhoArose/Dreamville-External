@@ -770,7 +770,7 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
 
         text = JSON.stringify({
           narrative: [
-            `${actionSentence} The immediate surroundings settle around the effort, with no new location change or time shift committed.`,
+            `${actionSentence} The immediate surroundings settle around the effort, with no new location change or time shift committed. Any information available from the immediate scene remains limited to what can be directly observed; no reliable answer is established beyond that evidence.`,
           ],
           dialogue: [],
           events: ['EMERGENCY_DETERMINISTIC_TICK'],

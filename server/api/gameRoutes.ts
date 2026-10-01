@@ -7498,6 +7498,12 @@ gameRouter.post('/orchestrator/turn', async (req: Request, res: Response) => {
     }
 
     const turnResult = commandResult.data as any;
+    // Keep the latest player-facing narrative explicitly connected to the API response
+    // so StoryView and downstream presentation consumers never have to reconstruct it
+    // from stale opening-scene or action-history projections.
+    turnResult.latestVisibleNarrative = turnResult.turnPackage?.narrative?.join('\n\n') || '';
+    turnResult.narrativeTurnPackage = turnResult.turnPackage || null;
+    turnResult.narrativeResearchPacket = turnResult.researchPacket || null;
 
     // AI-orchestrated turns are canonical gameplay too. Capture important consequences
     // automatically so the player never has to instruct DreamBook to remember them.

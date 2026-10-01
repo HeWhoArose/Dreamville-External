@@ -7605,6 +7605,7 @@ export class MultiModelOrchestrator {
               playerIntent,
               currentSituation,
               turnPackage: reviewedTurnPackage,
+              canonicalAdjudication: adjudication,
             });
 
             // 6. Create Continuation Checkpoint (DEF-CH12-06, V6.15 completeness)
@@ -7808,6 +7809,7 @@ export class MultiModelOrchestrator {
                 playerIntent,
                 currentSituation,
                 turnPackage: emergencyTurnPackage,
+                canonicalAdjudication: adjudication,
               });
             const checkpointId = rawIdempotencyKey
               ? deterministicId('cp_emergency', storyId, rawIdempotencyKey.replace(/[^a-zA-Z0-9_-]/g, '_'), totalAttempts)

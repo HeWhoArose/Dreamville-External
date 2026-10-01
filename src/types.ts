@@ -427,6 +427,8 @@ export interface ActionLog {
   canonicalCommandId?: string;
   canonicalEventId?: string;
   checkResult?: StoryCheckResult;
+  /** Canonical mechanics envelope projected to narration and reusable for presentation regeneration. */
+  actionResolution?: import('../server/domain/actionResolution').ActionResolution;
   actionAdvice?: ActionAdvice;
 }
 

@@ -2,7 +2,7 @@ import { deterministicId } from './deterministicRng';
 import type { WorldRepository } from '../repositories/worldRepository';
 import type { PlayerIntent } from './playerIntentInterpreter';
 import type { CurrentSituation } from './currentSituation';
-import type { StructuredTurnPackage, StateChangeProposal } from './aiOrchestrator';
+import type { AdjudicationResult, StructuredTurnPackage, StateChangeProposal } from './aiOrchestrator';
 
 export interface StateAdjudicationOutcome {
 	proposal: StateChangeProposal;
@@ -47,14 +47,18 @@ function sameProposal(left: StateChangeProposal, right: StateChangeProposal): bo
 		JSON.stringify(left.value) === JSON.stringify(right.value);
 }
 
-function authorizedHealthProposal(
+function isVerifiedCanonicalProposal(
 	proposal: StateChangeProposal,
-	actorId: string,
 	verifiedCanonicalChanges: StateChangeProposal[],
 ): boolean {
-	return normalize(proposal.kind) === 'health' &&
-		proposal.targetId === actorId &&
-		verifiedCanonicalChanges.some((effect) => sameProposal(effect, proposal));
+	return verifiedCanonicalChanges.some((effect) => sameProposal(effect, proposal));
+}
+
+function canonicalOutcomeFor(
+	proposal: StateChangeProposal,
+	canonicalAdjudication?: AdjudicationResult,
+): AdjudicationResult['outcomes'][number] | undefined {
+	return canonicalAdjudication?.outcomes.find((outcome) => sameProposal(outcome.change, proposal));
 }
 
 export class NarrativeStateAdjudicator {
@@ -66,63 +70,46 @@ export class NarrativeStateAdjudicator {
 		playerIntent: PlayerIntent;
 		currentSituation: CurrentSituation;
 		turnPackage: StructuredTurnPackage;
+		canonicalAdjudication?: AdjudicationResult;
+		verifiedCanonicalChanges?: StateChangeProposal[];
 	}): StateAdjudicationResult {
 		const outcomes: StateAdjudicationOutcome[] = [];
 		const proposals = Array.isArray(params.turnPackage.stateChanges) ? params.turnPackage.stateChanges : [];
-		const verifiedCanonicalChanges = Array.isArray((params as any).verifiedCanonicalChanges) ? (params as any).verifiedCanonicalChanges : [];
+		const verifiedCanonicalChanges = Array.isArray(params.verifiedCanonicalChanges) ? params.verifiedCanonicalChanges : [];
 
 		proposals.forEach((proposal, index) => {
 			const commandId = deterministicId('narrative_state', params.storyId, params.turnId, index, proposal.kind, proposal.targetId);
 			const kind = normalize(proposal.kind);
 
-			if (authorizedHealthProposal(proposal, params.actorId, verifiedCanonicalChanges)) {
-				const value = Number(proposal.value);
-				const state = params.repository.getConditionEngine(params.storyId).getActorState(params.actorId);
-				if (!state) {
-					outcomes.push({
-						proposal,
-						commandId,
-						approved: false,
-						reason: 'Canonical condition state for the actor does not exist.',
-						canonicalEngine: 'ConditionEngine',
-						committed: false,
-						rollbackSafe: true,
-					});
-					return;
-				}
-				if (!Number.isFinite(value) || value < 0 || value > state.healthMax) {
-					outcomes.push({
-						proposal,
-						commandId,
-						approved: false,
-						reason: 'Health proposal is outside the canonical actor health bounds.',
-						canonicalEngine: 'ConditionEngine',
-						committed: false,
-						rollbackSafe: true,
-					});
-					return;
-				}
-				outcomes.push({
-					proposal,
-					commandId,
-					approved: true,
-					canonicalEngine: 'ConditionEngine',
-					committed: false,
-					rollbackSafe: true,
-				});
-				return;
+			const canonicalOutcome = canonicalOutcomeFor(proposal, params.canonicalAdjudication);
+			const verified = isVerifiedCanonicalProposal(proposal, verifiedCanonicalChanges);
+			if (verified && canonicalOutcome?.approved) {
+				if (kind === 'health') {
+					if (proposal.targetId !== params.actorId) {
+						outcomes.push({ proposal, commandId, approved: false, reason: 'Verified health mutation targets a different actor.', canonicalEngine: 'ConditionEngine', committed: false, rollbackSafe: true });
+						return;
+					}
+					const value = Number(proposal.value);
+					const state = params.repository.getConditionEngine(params.storyId).getActorState(params.actorId);
+					if (!state) {
+						outcomes.push({ proposal, commandId, approved: false, reason: 'Canonical condition state for the actor does not exist.', canonicalEngine: 'ConditionEngine', committed: false, rollbackSafe: true });
+						return;
+					}
+					if (!Number.isFinite(value) || value < 0 || value > state.healthMax) {
+						outcomes.push({ proposal, commandId, approved: false, reason: 'Health proposal is outside the canonical actor health bounds.', canonicalEngine: 'ConditionEngine', committed: false, rollbackSafe: true });
+						return;
+					}
 			}
-
-			const reason =
-				kind === 'location' && !params.playerIntent.movementIntent
-					? 'Location mutation is not authorized because the player intent contains no movement.'
-					: 'AI state proposals require an explicit canonical mechanic authorization; narration alone cannot mutate canonical state.';
 			outcomes.push({
 				proposal,
 				commandId,
-				approved: false,
-				reason,
-				canonicalEngine: kind === 'location' ? 'GeographyGraph' : 'AuthoritativeCanonicalStateBoundary',
+				approved: Boolean(verified && canonicalOutcome?.approved),
+				reason: verified
+					? (canonicalOutcome?.reason || (canonicalOutcome?.approved ? undefined : 'The existing canonical adjudication rejected this proposal.'))
+					: (kind === 'location' && !params.playerIntent.movementIntent
+						? 'Location mutation is not authorized because the player intent contains no movement.'
+						: 'AI state proposals require an independently verified canonical mechanic authorization; proposal metadata and narration cannot self-authorize canonical state.'),
+				canonicalEngine: canonicalOutcome?.canonicalEngine || (kind === 'location' ? 'GeographyGraph' : 'AuthoritativeCanonicalStateBoundary'),
 				committed: false,
 				rollbackSafe: true,
 			});
@@ -152,11 +139,7 @@ export class NarrativeStateAdjudicator {
 		const committed: StateAdjudicationOutcome[] = [];
 		try {
 			for (const outcome of approved) {
-				if (authorizedHealthProposal(
-					outcome.proposal,
-					adjudication.actorId,
-					adjudication.outcomes.filter((item) => item.approved).map((item) => item.proposal),
-				)) {
+				if (normalize(outcome.proposal.kind) === 'health' && outcome.approved) {
 					repository.getConditionEngine(adjudication.storyId).setHealth(
 						adjudication.actorId,
 						Number(outcome.proposal.value),

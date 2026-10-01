@@ -428,8 +428,9 @@ export class NarrativeResearchPipeline {
 			if (seenMemories.has(id)) continue;
 			seenMemories.add(id);
 			const overlap = overlapScore(tokens(content), queryTokens);
-			const locationLinked = /location|scene|present|here|current/i.test(JSON.stringify(memory)) || content.toLowerCase().includes(situation.location.name.toLowerCase());
-			if (overlap === 0 && !locationLinked && !(playerIntent?.explicitTargets?.length)) {
+			const serializedMemory = JSON.stringify(memory).toLowerCase();
+			const locationLinked = serializedMemory.includes(situation.location.id.toLowerCase()) || serializedMemory.includes(situation.location.name.toLowerCase());
+			if (overlap === 0 && !locationLinked) {
 				excluded.push({
 					label: truncate(content, 160),
 					kind: 'MEMORY',

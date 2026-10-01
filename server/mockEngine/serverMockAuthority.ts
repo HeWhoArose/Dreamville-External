@@ -802,7 +802,7 @@ export class ServerMockAuthority {
           : (resolutionGate.mode === 'CAPABILITY'
             ? 'The action is resolved by the established capability/rules layer.'
             : 'The action proceeds as an ordinary deterministic world/narrative action.'),
-      canonicalStateChanges: (canonicalEventForResolution?.mutationPaths || []).map((path) => ({
+      canonicalStateChanges: (canonicalEventForResolution?.mutationPaths || []).map((path: string) => ({
         kind: 'CANONICAL_MUTATION',
         targetId: actorId,
         value: path,

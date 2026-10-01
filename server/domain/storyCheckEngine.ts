@@ -14,6 +14,7 @@ import { rulesProfileEngine } from './rulesProfileEngine';
 import { resolveSkillCheckFormula, normalizeDiceFormula } from '../../src/data/rulesDice';
 import type { RulesProfile } from '../../src/types';
 import { getAllStorySkillCheckDefinitions, getStorySkillCheckDefinition } from './storySkillCheckRegistry';
+import { DEFAULT_DICE_THEME, getCanonicalDiceTheme, type DiceThemeId } from '../../src/data/diceThemes';
 
 interface StoryCheckCharacter {
   coreStats?: CharacterCoreStats;
@@ -194,12 +195,14 @@ export class StoryCheckEngine {
     character: StoryCheckCharacter,
     challenge?: StoryCheckChallenge,
     rulesProfile?: RulesProfile,
-    resolutionHint?: StoryCheckResolutionHint
+    resolutionHint?: StoryCheckResolutionHint,
+    diceThemeId?: DiceThemeId
   ): StoryCheckResult | null {
     const text = normalize(actionText);
     if (!text) return null;
 
     const effectiveRulesProfile = rulesProfile || rulesProfileEngine.createDefault('FULL_DND');
+    const canonicalDiceTheme = getCanonicalDiceTheme(diceThemeId || DEFAULT_DICE_THEME);
     const hasAuthoredChallenge = Boolean(challenge);
     if (
       effectiveRulesProfile.requireAuthoredChallengeForCustomChecks &&
@@ -211,7 +214,7 @@ export class StoryCheckEngine {
     if (effectiveRulesProfile.mode === 'CUSTOM_HOMEBREW_DND' && challenge) {
       const resolutionMode = challenge.resolutionMode;
       if (resolutionMode === 'CUSTOM_D20') {
-        return this.resolveCustomD20(storyId, challenge);
+        return this.resolveCustomD20(storyId, challenge, diceThemeId);
       }
       if (resolutionMode === 'NARRATIVE') {
         return null;
@@ -406,7 +409,10 @@ export class StoryCheckEngine {
       ? 'DISADVANTAGE'
       : 'NORMAL';
 
-    const firstRoll = this.dice(storyId).roll(rollFormula, totalModifier);
+    const firstRoll = {
+      ...this.dice(storyId).roll(rollFormula, totalModifier),
+      diceThemeId: canonicalDiceTheme.id,
+    };
     let roll = firstRoll;
     let selectedDieIndex = 0;
 
@@ -424,6 +430,7 @@ export class StoryCheckEngine {
       const selected = keepFirst ? firstValue : secondValue;
       roll = {
         ...firstRoll,
+        diceThemeId: canonicalDiceTheme.id,
         rollId: `${firstRoll.rollId}_${secondRoll.rollId}`,
         formula: '2d20' + (totalModifier > 0 ? `+${totalModifier}` : totalModifier < 0 ? `${totalModifier}` : ''),
         diceTerms: [{ count: 2, sides: 20 }],
@@ -471,11 +478,15 @@ export class StoryCheckEngine {
 
   private resolveCustomD20(
     storyId: string,
-    challenge: StoryCheckChallenge
+    challenge: StoryCheckChallenge,
+    diceThemeId: DiceThemeId = DEFAULT_DICE_THEME
   ): StoryCheckResult {
     const rawModifier = Number((challenge as any).customModifier ?? 0);
     const customModifier = Number.isFinite(rawModifier) ? rawModifier : 0;
-    const roll = this.dice(storyId).roll('1d20', customModifier);
+    const roll = {
+      ...this.dice(storyId).roll('1d20', customModifier),
+      diceThemeId: getCanonicalDiceTheme(diceThemeId).id,
+    };
     const difficultyClass = challenge.difficultyClass;
     const success = roll.total >= difficultyClass;
 

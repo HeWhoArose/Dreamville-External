@@ -6481,13 +6481,20 @@ export class MultiModelOrchestrator {
     narration: string,
     playerAction: string,
     actorName?: string,
+    intent?: PlayerIntent,
   ): { valid: boolean; errorReason?: string } {
     const action = String(playerAction || '').trim();
     const output = String(narration || '').trim();
     if (!action || !output) return { valid: true };
 
-    const isPassiveListening = NARRATIVE_PASSIVE_LISTENING_PATTERN.test(action);
-    const explicitSpeechIntent = NARRATIVE_DIRECT_SPEECH_PATTERN.test(action);
+    const isPassiveListening = intent
+      ? !intent.speechIntent && intent.observationIntent && (
+          intent.interactionMode === 'PASSIVE_OBSERVATION' ||
+          intent.interactionMode === 'INFORMATION_SEEKING' ||
+          intent.action === 'approach_and_listen'
+        )
+      : NARRATIVE_PASSIVE_LISTENING_PATTERN.test(action);
+    const explicitSpeechIntent = intent ? intent.speechIntent : NARRATIVE_DIRECT_SPEECH_PATTERN.test(action);
     if (!isPassiveListening || explicitSpeechIntent || !NARRATIVE_DIRECT_SPEECH_PATTERN.test(output)) {
       return { valid: true };
     }
@@ -6523,16 +6530,25 @@ export class MultiModelOrchestrator {
     narration: string,
     playerAction: string,
     sceneContext?: string,
+    intent?: PlayerIntent,
   ): { valid: boolean; errorReason?: string } {
     const action = String(playerAction || '').trim();
     const output = String(narration || '').trim();
     const context = String(sceneContext || '').trim();
-    if (!action || !output || !context || !NARRATIVE_INFORMATION_SEEKING_PATTERN.test(action)) {
+    const informationSeeking = intent
+      ? Boolean(intent.informationGoal) ||
+        intent.interactionMode === 'INFORMATION_SEEKING' ||
+        (intent.interactionMode === 'PASSIVE_OBSERVATION' && intent.observationIntent)
+      : NARRATIVE_INFORMATION_SEEKING_PATTERN.test(action);
+    if (!action || !output || !context || !informationSeeking) {
       return { valid: true };
     }
 
-    const passiveListening = NARRATIVE_PASSIVE_LISTENING_PATTERN.test(action);
-    const genericRumorRequest = /\b(?:rumor|rumors|rumour|rumours|gossip|whisper|whispers|hear|listen|overhear|eavesdrop)\b/i.test(action);
+    const passiveListening = intent
+      ? !intent.speechIntent && intent.observationIntent
+      : NARRATIVE_PASSIVE_LISTENING_PATTERN.test(action);
+    const semanticTopic = intent?.informationGoal || intent?.originalText || action;
+    const genericRumorRequest = /\b(?:rumor|rumors|rumour|rumours|gossip|whisper|whispers|hear|listen|overhear|eavesdrop|what people heard|what people know)\b/i.test(semanticTopic);
     const explicitTopicMatch = action.match(/\b(?:about|regarding|concerning|on)\s+(.+?)(?:[.!?]|$)/i);
     const explicitTopic = String(explicitTopicMatch?.[1] || '')
       .trim()
@@ -6587,10 +6603,16 @@ export class MultiModelOrchestrator {
   private validateNarrativeInformationContinuity(
     narration: string,
     playerAction: string,
+    intent?: PlayerIntent,
   ): { valid: boolean; errorReason?: string } {
     const action = String(playerAction || '').trim();
     const output = String(narration || '').trim();
-    if (!action || !output || !NARRATIVE_INFORMATION_SEEKING_PATTERN.test(action)) {
+    const informationSeeking = intent
+      ? Boolean(intent.informationGoal) ||
+        intent.interactionMode === 'INFORMATION_SEEKING' ||
+        (intent.interactionMode === 'PASSIVE_OBSERVATION' && intent.observationIntent)
+      : NARRATIVE_INFORMATION_SEEKING_PATTERN.test(action);
+    if (!action || !output || !informationSeeking) {
       return { valid: true };
     }
 
@@ -6945,6 +6967,7 @@ export class MultiModelOrchestrator {
             narrationText,
             playerAction,
             currentSituation.player.name,
+            playerIntent,
           );
           if (!actionModeContinuity.valid) return { valid: false, errorReason: actionModeContinuity.errorReason };
           const intentSafety = this.validateNarrativeIntentSafety(narrationText, playerIntent, currentSituation.player.name);
@@ -6953,9 +6976,10 @@ export class MultiModelOrchestrator {
             narrationText,
             playerAction,
             currentSceneFactualContext,
+            playerIntent,
           );
           if (!informationTopicContinuity.valid) return { valid: false, errorReason: informationTopicContinuity.errorReason };
-          const informationContinuity = this.validateNarrativeInformationContinuity(narrationText, playerAction);
+          const informationContinuity = this.validateNarrativeInformationContinuity(narrationText, playerAction, playerIntent);
           if (!informationContinuity.valid) return { valid: false, errorReason: informationContinuity.errorReason };
           const temporalContinuity = this.validateNarrativeTemporalContinuity(narrationText, worldRepo, storyId);
           return temporalContinuity.valid

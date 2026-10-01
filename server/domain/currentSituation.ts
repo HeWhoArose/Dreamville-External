@@ -448,6 +448,11 @@ function buildRecentTurns(run: any, canonicalEvents: any[], maxRecentTurns: numb
 
 export class CurrentSituationBuilder {
 	public static build(params: BuildCurrentSituationParams): CurrentSituation {
+		const repository = params.worldRepo;
+		if (!repository) {
+			throw new Error('CurrentSituationBuilder requires a WorldRepository.');
+		}
+
 		const run = repository.getStoryRun(params.storyId);
 		const player = repository.getPlayerLifecycle(params.storyId);
 		const viewerActorId = params.viewerActorId || player?.actorId || run?.protagonist?.characterId || `player_actor_${params.storyId}`;
@@ -471,7 +476,9 @@ export class CurrentSituationBuilder {
 			accessible: false,
 			discovered: false,
 			parentLocationId: null,
-		} as any;		const playerKnowledgeFacts = repository.getAuthorizedKnowledgeFacts(params.storyId, viewerActorId);
+		} as any;
+
+		const playerKnowledgeFacts = repository.getAuthorizedKnowledgeFacts(params.storyId, viewerActorId);
 		const authoritativeFacts = repository.getWorldFacts(params.storyId)
 			.map(projectAuthoritativeFact)
 			.filter((fact) => Boolean(fact.id || fact.objectValue));
@@ -479,8 +486,8 @@ export class CurrentSituationBuilder {
 		const actionText = normalizeText(params.playerAction);
 		const keywords = tokenize([
 			actionText,
-			location.name,
-			location.regionId,
+			safeLocation.name,
+			safeLocation.regionId,
 			
 		].filter(Boolean).join(' '));
 
@@ -571,12 +578,12 @@ export class CurrentSituationBuilder {
 			const explicit = Boolean(actionText) && normalizeText(actionText).toLowerCase().includes(normalizeText(npc.name).toLowerCase());
 			if (npc.locationId !== safeLocation.id && !explicit) continue;
 			if (npc.isDead) continue;
-			nearbyEntities.push(projectLifecycleEntity(npc, location.id, explicit));
+			nearbyEntities.push(projectLifecycleEntity(npc, safeLocation.id, explicit));
 		}
 
 		for (const card of repository.getEntityCards(params.storyId)) {
 			if (nearbyEntities.some((entity) => entity.id === card.id)) continue;
-			const visibility = entityCardIsVisible(card, location.id, actionText, viewerActorId, repository);
+			const visibility = entityCardIsVisible(card, safeLocation.id, actionText, viewerActorId, repository);
 			if (!visibility.visible) continue;
 			const projected = projectEntityCard(card, visibility.explicitlyReferenced, visibility.distanceBand);
 			if (projected.presence === 'absent' || !projected.isAlive) continue;

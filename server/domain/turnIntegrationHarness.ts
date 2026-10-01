@@ -2,7 +2,6 @@ import type { StructuredTurnPackage, AdjudicationResult } from './aiOrchestrator
 import { CurrentSituationBuilder, type CurrentSituation } from './currentSituation';
 import { EpistemicBoundaryEnforcer } from './epistemicBoundary';
 import { NarrativeDirector, type EphemeralNarrativePlan } from './narrativeDirector';
-import { NarrativeMemoryLifecycle } from './narrativeMemoryLifecycle';
 import { NarrativeResearchPipeline, type NarrativeResearchResult } from './narrativeResearchPipeline';
 import { NarrativeStateAdjudicator, type StateAdjudicationResult } from './narrativeStateAdjudicator';
 import { NarrativeContinuityEngine } from './narrativeContinuityEngine';

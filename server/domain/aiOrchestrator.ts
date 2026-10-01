@@ -6807,8 +6807,13 @@ export class MultiModelOrchestrator {
     const hasInformationResponse = NARRATIVE_INFORMATION_RESPONSE_PATTERN.test(output);
     const hasGroundedNonAnswer = NARRATIVE_INFORMATION_NONANSWER_PATTERN.test(output);
     const hasQuotedResponse = /[“"][^”"]{12,}[”"]/i.test(output);
+    const hasDirectReport = /\b(?:mention|mentions|mentioned|report|reports|reported|whisper|whispers|whispered|say|says|said|tell|tells|told|hear|hears|heard)\b/i.test(output);
 
-    if (!hasGroundedNonAnswer && !(hasInformationResponse && (hasQuotedResponse || /\b(?:that|because|about|from|near|inside|within|after|before|according to|according)\b/i.test(output)))) {
+    if (!hasGroundedNonAnswer && !(hasInformationResponse && (
+      hasQuotedResponse ||
+      hasDirectReport ||
+      /\b(?:that|because|about|from|near|inside|within|after|before|according to|according)\b/i.test(output)
+    ))) {
       return {
         valid: false,
         errorReason: 'Narration information-continuity guard rejected output: the current action seeks information, but the response does not contain a grounded answer, quoted response, or explicit limitation on what can be learned.',

@@ -7859,6 +7859,17 @@ export class MultiModelOrchestrator {
             };
             this.lastTurnTelemetry = telemetry;
 
+            narrativeContinuityEngine.recordTurn(repo, {
+              storyId,
+              turnId,
+              playerAction: params.playerAction,
+              playerIntent,
+              currentSituation,
+              narrativeReview: emergencyNarrativeReview,
+              stateAdjudication,
+              turnPackage: emergencyTurnPackage,
+            });
+
             return {
               success: true,
               turnPackage: emergencyTurnPackage,

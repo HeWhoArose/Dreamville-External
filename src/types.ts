@@ -240,6 +240,17 @@ export interface StoryCheckOutcomeDefinition {
   summary?: string;
 }
 
+export interface StoryCheckNarrativeGuidance {
+  /** Why this action legitimately required a mechanical check. */
+  checkJustification: string;
+  /** Bounded player-facing guidance for a successful resolution. */
+  successGuidance: string;
+  /** Bounded player-facing guidance for a failed resolution. */
+  failureGuidance: string;
+  /** Whether the guidance describes an authored/canonical effect or a narrative-only setback. */
+  consequenceMode: 'AUTHORED_CANONICAL' | 'NARRATIVE_ONLY';
+}
+
 export interface StoryCheckDamageOutcome {
   requestedAmount: number;
   rolledAmount: number;
@@ -290,6 +301,8 @@ export interface StoryCheckResult {
   challengeId?: string;
   challengeLabel?: string;
   consequence?: StoryCheckConsequenceResult;
+  /** Explicit resolution-to-consequence closure for narration; never creates canonical state by itself. */
+  narrativeGuidance?: StoryCheckNarrativeGuidance;
 }
 
 export interface ActionTip {

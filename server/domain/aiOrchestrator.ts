@@ -6700,11 +6700,26 @@ export class MultiModelOrchestrator {
       turnPackage: params.turnPackage,
       review,
     });
-    const response = await params.adapter.generate('narrative.generate', rewritePrompt, {
-      timeoutMs: Math.min(params.timeoutMs, 5000),
-      modelId: params.modelId,
-      maxTokens: 1200,
-    });
+    const rewriteStartedAt = Date.now();
+    let response: ProviderGenerateResult;
+    try {
+      response = await params.adapter.generate('narrative.generate', rewritePrompt, {
+        timeoutMs: Math.min(params.timeoutMs, 5000),
+        modelId: params.modelId,
+        maxTokens: 1200,
+      });
+      if (!response?.text) throw new Error('Narrative semantic rewrite provider returned empty text.');
+      const rewriteModel = Array.from(this.models.values()).find((model) => model.modelId === params.modelId || this.modelKey(model) === params.modelId);
+      if (rewriteModel) {
+        this.recordProviderSuccess(rewriteModel, response, 'narrative.generate', rewriteStartedAt);
+      }
+    } catch (error) {
+      const rewriteModel = Array.from(this.models.values()).find((model) => model.modelId === params.modelId || this.modelKey(model) === params.modelId);
+      if (rewriteModel) {
+        this.recordProviderFailure(rewriteModel, 'narrative.generate', error, rewriteStartedAt);
+      }
+      throw error;
+    }
     const validation = this.validateTurnPackage(response.text);
     if (!validation.valid || !validation.turnPackage) {
       throw new Error('Narrative semantic rewrite returned an invalid turn package: ' + (validation.errorReason || 'unknown validation failure'));
@@ -7512,6 +7527,10 @@ export class MultiModelOrchestrator {
       }
 
       const candidateChain: ModelRegistryRecord[] = [selectedModel, ...fallbacks];
+      const turnTaskBudget = turnAiCallBudget.beginTask(task);
+      if (!turnTaskBudget.allowed) {
+        throw new Error(turnTaskBudget.reason || `Per-turn AI call budget exhausted for ${task}.`);
+      }
       let totalAttempts = 0;
       let lastError = '';
 

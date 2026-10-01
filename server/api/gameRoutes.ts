@@ -10615,6 +10615,8 @@ gameRouter.post('/spells/cast', async (req: Request, res: Response) => {
 function buildCurrentComicSceneContext(storyId: string): { context: VisualSceneContext; sourceActionId?: string } {
   const state = serverMockAuthority.getSanitizedViewState(storyId);
   const player = worldRepository.getPlayerLifecycle(storyId);
+  // The visual path always consumes the most recent committed player action;
+  // NOTE_RECORD entries are presentation notes and never become the source turn.
   const latestTurn = Array.isArray(state.actionHistory)
     ? selectLatestVisualTurn(state.actionHistory)
     : undefined;

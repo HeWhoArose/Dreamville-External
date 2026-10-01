@@ -22,7 +22,6 @@ import { characterGenesisService } from '../services/characterGenesisService';
 import { storyActionAdvisor } from '../services/storyActionAdvisor';
 import { canonicalCommandEngine } from '../domain/canonicalCommandEngine';
 import { narrativeStateAdjudicator } from '../domain/narrativeStateAdjudicator';
-import { CurrentSituationBuilder } from '../domain/currentSituation';
 import { EntitySceneRelevanceEngine } from '../domain/entitySceneRelevance';
 import { EpistemicBoundaryEnforcer } from '../domain/epistemicBoundary';
 import { captureCanonicalStateSnapshot } from '../domain/canonicalSnapshot';

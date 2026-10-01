@@ -50,3 +50,21 @@ test('Phase 9 active dialogue is a shared relevance signal', () => {
 	assert.ok(guard.reasons.includes('active dialogue speaker'));
 	assert.ok(guard.bands.includes('ACTIVE_DIALOGUE'));
 });
+
+
+test('Phase 9 uses explicit open-thread entity links even when the thread title omits the entity name', () => {
+	const scene = situation() as any;
+	scene.openThreads = [{
+		id: 'thread-1',
+		title: 'Recover the stolen archive seal',
+		summary: 'The missing seal is still unresolved.',
+		relatedEntityIds: ['guard'],
+		status: 'OPEN',
+		priority: 90,
+	}];
+	const result = EntitySceneRelevanceEngine.rank(scene, scene.currentAction);
+	const guard = result.find((entry) => entry.entityId === 'guard')!;
+	assert.ok(guard.reasons.includes('explicit open-thread entity link'));
+	assert.ok(guard.bands.includes('ACTIVE_THREAD'));
+	assert.ok(guard.score >= 75);
+});

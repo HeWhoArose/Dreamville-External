@@ -9,7 +9,6 @@ import type { PlayerIntent } from './playerIntentInterpreter';
 import { narrativeMemoryLifecycle } from './narrativeMemoryLifecycle';
 import type { NarrativeReview } from './semanticNarrativeReview';
 import type { StateAdjudicationResult } from './narrativeStateAdjudicator';
-import { buildNpcPlanningSlice, type NpcPlanningSlice } from './npcPlanningSlice';
 
 export interface NarrativePlotState {
   storyId: string;

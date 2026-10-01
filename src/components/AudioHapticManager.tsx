@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { DEFAULT_DICE_THEME, DiceThemeId } from './common/diceThemes';
+import apiClient from '../services/apiClient';
 
 export type HapticIntensity = 'off' | 'light' | 'medium' | 'heavy';
 export type NarrationMode = 'auto' | 'dialogue-only' | 'off';
@@ -52,7 +53,7 @@ export const useAudioHaptic = () => {
 
 export const AUDIO_STORAGE_KEY = 'dreambook_audio_preferences';
 
-export const AudioHapticProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const AudioHapticProvider: React.FC<{ children: React.ReactNode; storyId?: string }> = ({ children, storyId = 'default_story' }) => {
   // Silence by default during dashboard and navigation (ambienceEnabled: false)
   const [settings, setSettings] = useState<AudioSettings>(() => {
     const defaultSettings: AudioSettings = {
@@ -162,15 +163,26 @@ export const AudioHapticProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
   }, [settings.masterAudio, settings.masterMuted]);
 
-  // Initial fetch of sensory state from server
+  // Load story-scoped sensory state. Local storage remains a fallback for offline startup.
   useEffect(() => {
-    fetch('/api/game/sensory/state')
-      .then((r) => r.json())
+    let cancelled = false;
+    apiClient.getSensoryState(storyId)
       .then((data) => {
+        if (cancelled) return;
         if (data.soundscape) setSoundscape(data.soundscape);
+        if (data.settings) {
+          setSettings((current) => ({
+            ...current,
+            ...data.settings,
+            diceTheme: data.settings.diceTheme || current.diceTheme || DEFAULT_DICE_THEME,
+          }));
+        }
       })
-      .catch((err) => console.warn('Failed to load sensory state:', err));
-  }, []);
+      .catch((err) => console.warn('Failed to load story sensory state', err));
+    return () => {
+      cancelled = true;
+    };
+  }, [storyId]); []);
 
   // Handle browser tab visibility change
   useEffect(() => {
@@ -270,11 +282,10 @@ export const AudioHapticProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
 
     try {
-      await fetch('/api/game/sensory/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ settings: newSettings }),
-      });
+      const result = await apiClient.updateSensorySettings(newSettings, storyId);
+      if (result?.settings?.diceTheme && result.settings.diceTheme !== updated.diceTheme) {
+        setSettings((current) => ({ ...current, diceTheme: result.settings.diceTheme }));
+      }
     } catch (e) {
       console.warn('Failed to update sensory settings on server', e);
     }

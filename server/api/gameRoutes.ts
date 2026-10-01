@@ -11,6 +11,8 @@ import { OpeningSceneService } from '../services/openingSceneService';
 import { WorkingContextEngine } from '../domain/workingContextEngine';
 import { CurrentSituationBuilder } from '../domain/currentSituation';
 import { narrativeContinuityEngine } from '../domain/narrativeContinuityEngine';
+import { NarrativeResearchPipeline } from '../domain/narrativeResearchPipeline';
+import { PlayerIntentInterpreter } from '../domain/playerIntentInterpreter';
 import { worldVisualIdentityService } from '../services/worldVisualIdentityService';
 import { rulesProfileEngine } from '../domain/rulesProfileEngine';
 import { CustomRuleEngine } from '../domain/customRuleEngine';
@@ -144,6 +146,60 @@ gameRouter.get('/state', (req: Request, res: Response) => {
  * Returns the player-safe projection of the canonical CurrentSituation model.
  * Canonical world facts are intentionally omitted from this projection.
  */
+
+/**
+ * GET /api/game/narrative-research
+ * Development-only inspection of the bounded Phase 3 narrative research projection.
+ * It exposes only player-visible/current-situation-derived research blocks, not canonical
+ * world facts or private engine notes.
+ */
+gameRouter.get('/narrative-research', (req: Request, res: Response) => {
+	try {
+		if (process.env.NODE_ENV === 'production' && process.env.DREAMVILLE_DEBUG_CONTEXT !== '1') {
+			return res.status(404).json({ success: false, errorReason: 'Narrative context inspection is disabled in production.' });
+		}
+		const storyId = resolveStoryId(req, true);
+		const playerAction = typeof req.query.action === 'string' ? req.query.action.trim() : '';
+		const actorId = worldRepository.getPlayerLifecycle(storyId)?.actorId || `player_actor_${storyId}`;
+		const situation = CurrentSituationBuilder.build({
+			storyId,
+			playerAction,
+			viewerActorId: actorId,
+			worldRepo: worldRepository,
+		});
+		const deterministicIntent = PlayerIntentInterpreter.deterministic(playerAction, situation);
+		const research = NarrativeResearchPipeline.research({
+			repository: worldRepository,
+			storyId,
+			currentSituation: situation,
+			playerIntent: deterministicIntent,
+			playerAction,
+			viewerActorId: actorId,
+		});
+		return res.json({
+			success: true,
+			storyId,
+			research: NarrativeResearchPipeline.summarizeForPlayer(research),
+			retrieval: {
+				mode: research.failures.length > 0 ? 'CURRENT_SITUATION_FALLBACK' : 'DETERMINISTIC_BOUNDED_RETRIEVAL',
+				failures: research.failures,
+				primarySource: 'NarrativeResearchPipeline',
+				fallbackSource: research.failures.length > 0 ? 'CurrentSituationBuilder' : null,
+			},
+			model: {
+				primary: 'DETERMINISTIC_RETRIEVAL',
+				fallback: research.failures.length > 0 ? 'CURRENT_SITUATION_ONLY' : null,
+			},
+		});
+	} catch (error: any) {
+		console.error('[Narrative Research] Context inspection failed:', error);
+		return res.status(500).json({
+			success: false,
+			errorReason: error?.message || 'Failed to inspect narrative research context.',
+		});
+	}
+});
+
 gameRouter.get('/current-situation', (req: Request, res: Response) => {
   try {
     const storyId = resolveStoryId(req, true);

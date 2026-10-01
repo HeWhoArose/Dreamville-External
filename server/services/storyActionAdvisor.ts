@@ -157,7 +157,7 @@ function getCanonicalSceneContext(
 	};
 }
 
-function buildSuggestionCacheKey(
+export function buildSuggestionCacheKey(
 	situation: CurrentSituation,
 	intent?: PlayerIntent,
 	relevance: EntitySceneRelevance[] = [],

@@ -1,5 +1,3 @@
-import type { CurrentSituation } from './currentSituation';
-
 export type NarrativeNoveltyCategory = 'PHRASE' | 'IMAGE' | 'OPENING' | 'REACTION' | 'TROPE';
 export interface NarrativeNoveltyItem { category: NarrativeNoveltyCategory; key: string; text: string; count: number; lastSeenTurn: number; }
 export interface NarrativeNoveltyState { version: 1; storyId: string; turnCount: number; items: NarrativeNoveltyItem[]; }

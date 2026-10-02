@@ -8,6 +8,10 @@ import {
 } from '../server/domain/aiOrchestrator';
 import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
 import { NarrativeLongSessionStressEngine } from '../server/domain/narrativeLongSessionStress';
+import { CurrentSituationBuilder } from '../server/domain/currentSituation';
+import { PlayerIntentInterpreter } from '../server/domain/playerIntentInterpreter';
+import { NarrativeResearchPipeline } from '../server/domain/narrativeResearchPipeline';
+import { NarrativeDirector } from '../server/domain/narrativeDirector';
 
 function model(providerId: string, modelId: string, pool: 'creative' | 'fast', capabilities: string[], priority: number): ModelRegistryRecord {
 	return {
@@ -62,8 +66,8 @@ function responseForTurn(turn: number, location: string, target: string): string
 	];
 	return JSON.stringify({
 		narrative: [
-			`You keep ${target} in view at ${location}, studying the expedition charts without speaking. ${sensory[(turn - 1) % sensory.length]}`,
-			`The chart cases remain on the worktable as the room’s quiet activity continues. You keep your attention on what is directly observable and do not establish a new location, hidden fact, or future player decision.`,
+			`You keep ${target} in view at ${location}, asking about the expedition charts. ${sensory[(turn - 1) % sensory.length]}`
+			`The chart cases remain on the worktable as the room’s quiet activity continues. No new location, hidden fact, or future player decision is established.`
 		],
 		dialogue: [],
 		events: [],
@@ -89,6 +93,35 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 	});
 	const target = situation.nearbyEntities.find((entity) => ['NPC', 'CHARACTER'].includes(String(entity.kind).toUpperCase()));
 	assert.ok(target, 'Final audit requires a visible non-player entity for N14/N15 coverage.');
+
+	const targetedSituation = CurrentSituationBuilder.build({
+		storyId,
+		playerAction: `I ask ${target!.name} what happened to the expedition charts.`,
+		viewerActorId: initialPlayer?.actorId,
+		worldRepo: repository,
+	});
+	const targetedIntent = PlayerIntentInterpreter.deterministic(
+		`I ask ${target!.name} what happened to the expedition charts.`,
+		targetedSituation,
+	);
+	assert.ok(targetedIntent.explicitTargets.some((ref) => ref.id === target!.id), 'N14/N15 targeted setup could not resolve the visible NPC as an explicit target.');
+	const targetedResearch = NarrativeResearchPipeline.research({
+		repository,
+		storyId,
+		currentSituation: targetedSituation,
+		playerIntent: targetedIntent,
+		playerAction: targetedIntent.originalText,
+		viewerActorId: targetedSituation.player.actorId,
+	});
+	const targetedPlan = NarrativeDirector.create({
+		repository,
+		storyId,
+		situation: targetedSituation,
+		intent: targetedIntent,
+		research: targetedResearch,
+	});
+	assert.ok(targetedPlan.npcCognition?.some((npc) => npc.actorId === target!.id && npc.expressiveIdentity), 'N14 expressive identity projection failed for an explicit grounded NPC target.');
+	assert.ok(targetedPlan.socialTopology?.conversationActive, 'N15 conversation topology did not activate for explicit NPC dialogue.');
 
 	const memoryEngine = repository.getMemoryEngine(storyId);
 	memoryEngine.storeMemory({
@@ -215,7 +248,6 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 		// N13 is intentionally resolved at the final prompt stage; verify it at its real consumer boundary below.
 		assert.ok(result.narrativePlan?.socialTopology, 'turn ' + turn + ': N15 social topology missing');
 		assert.ok(result.narrativePlan?.episodeProjection, 'turn ' + turn + ': N17 episode projection missing');
-		assert.ok(result.narrativePlan?.npcCognition?.some((npc) => npc.actorId === target!.id && npc.expressiveIdentity), 'turn ' + turn + ': N14 expressive NPC identity missing for explicit target ' + target!.name);
 		assert.notEqual(result.telemetry.selectedModelId, 'canon-guard', 'turn ' + turn + ': integrated audit unexpectedly short-circuited before narration generation');
 		assert.ok(result.narrativeRichnessEvaluation, 'turn ' + turn + ': N18 richness evaluation missing; model=' + result.telemetry.selectedModelId + '; provider=' + result.telemetry.selectedProviderId + '; plan=' + Boolean(result.narrativePlan) + '; review=' + result.narrativeReview?.decision + '; telemetryRichness=' + Boolean(result.telemetry.narrativeRichnessEvaluation) + '; attempts=' + result.telemetry.attempts);
 		const researchBlockCount = Number(result.telemetry.researchBlockCount || 0);

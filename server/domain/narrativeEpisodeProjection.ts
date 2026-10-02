@@ -338,8 +338,7 @@ export class NarrativeEpisodeProjectionEngine {
 
 	public static toCompactPromptContext(projection?: NarrativeEpisodeProjection): string {
 		if (!projection) return 'N17 episode unavailable; preserve current continuity.';
-		const thread = (projection.activeThreadSummaries[0] || 'none').slice(0, 28);
-		return 'N17 Phase: ' + projection.phase + '; Trajectory: ' + projection.trajectory + '; Thread: ' + thread;
+		return 'N17 Phase: ' + projection.phase;
 	}
 
 }

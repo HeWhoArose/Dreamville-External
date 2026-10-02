@@ -37,46 +37,35 @@ function model(providerId: string, modelId: string, pool: 'creative' | 'fast', c
 }
 
 function responseForTurn(turn: number, location: string, target: string): string {
-	if (turn === 1) {
-		return JSON.stringify({
-			narrative: [
-				`You ask ${target} about the expedition charts without assuming the answer.`,
-				`${target} pauses over the sealed chart case, and the response stays cautious rather than turning the report into certainty.`,
-			],
-			dialogue: [{ speaker: target, text: 'The charts are sealed, and the report remains uncertain.' }],
-			events: ['RESEARCHED_RUMOR_HEARD'],
-			stateChanges: [],
-			memoryCandidates: [],
-			audioCues: [],
-		});
-	}
 	const sensory = [
-		'Brass lamp-light moves across the edge of the charts.',
+		'Brass lamp-light moves across the nearby stone.',
 		'A faint mechanical hum settles beneath the room’s quieter sounds.',
-		'Dust shifts along the stone beside the worktable.',
-		'The nearest instrument gives a single restrained click.',
-		'A cool draft passes through the archive and fades.',
-		'Paper edges lift and settle again under the room’s steady air.',
-		'A thin reflection trembles across the glass-covered diagrams.',
-		'The workbench keeps its measured rhythm around the observation.',
+		'Dust shifts along the floor beside the worktable.',
+		'One of the nearby instruments gives a restrained click.',
+		'A cool draft passes through the room and fades.',
+		'Paper edges lift and settle again in the steady air.',
+		'A thin reflection trembles across the glass-covered surfaces.',
+		'The room’s low mechanical rhythm continues beneath the exchange.',
 		'Old metal carries a soft vibration beneath the table.',
 		'The corridor beyond remains audible but visually unobtrusive.',
-		'The chart cases catch a muted glint from the overhead fixtures.',
-		'The room’s low hum becomes noticeable only after everything else quiets.',
+		'The surrounding fixtures catch a muted glint from the overhead light.',
+		'The room’s low hum becomes noticeable only after the exchange quiets.',
 	];
+	const dialogueText = turn === 1
+		? 'I can tell you only what is evident here.'
+		: 'That is what I can tell you from here.';
 	return JSON.stringify({
 		narrative: [
-			`You keep ${target} in view at ${location}, asking about the expedition charts. ${sensory[(turn - 1) % sensory.length]}`,
-			`The chart cases remain on the worktable as the room’s quiet activity continues. No new location, hidden fact, or future player decision is established.`
+			`You ask ${target} about the current scene in ${location}. ${sensory[(turn - 1) % sensory.length]}`,
+			`${target} answers cautiously, keeping the exchange grounded in what is immediately observable. ${turn === 1 ? 'The conversation remains open without forcing a conclusion.' : 'Nothing beyond the current scene is established.'}`,
 		],
-		dialogue: [{ speaker: target, text: 'The charts are sealed, and the report remains uncertain.' }],
+		dialogue: [{ speaker: target, text: dialogueText }],
 		events: [],
 		stateChanges: [],
 		memoryCandidates: [],
 		audioCues: [],
 	});
 }
-
 test('Final integrated audit — 120-turn narration session preserves N13-N19 contracts and long-session bounds', async () => {
 	const storyId = 'final_integrated_120_turn_audit';
 	const repository = new InMemoryWorldRepository({ disablePersistence: true });
@@ -225,7 +214,7 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 		if (turn === 91) fast.failureMode = '500';
 		if (turn === 96) fast.failureMode = undefined;
 
-		const action = 'I ask Maren what happened to the expedition charts.';
+		const action = `I ask ${target!.name} about the current scene.`;
 
 		const response = responseForTurn(turn, situation.location.name, target!.name);
 		primary.cannedResponses.set('narrative.generate', response);

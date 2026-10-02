@@ -130,9 +130,11 @@ test('Phase 24 — all audited phase-specific regression suites remain present',
 	for (const relativePath of tests) mustExist(relativePath);
 });
 
-test('Phase 24 — current branch audit record is explicit about merge and manual-test boundaries', () => {
+test('Phase 24 — merged audit record is explicit about merge and manual-test boundaries', () => {
 	const audit = source('docs/DREAMVILLE_SYSTEM_WIDE_PHASE_AUDIT_PHASE24.md');
-	assert.match(audit, /branch-level verification/i);
+	assert.match(audit, /Merged into:.*main/s);
+	assert.match(audit, /4546899723dd9cfa6821f1313ebb1e62ef715a24/);
+	assert.match(audit, /37003743071/);
 	assert.match(audit, /Live third-party provider behavior/i);
 	assert.match(audit, /Historical audit documents/i);
 });

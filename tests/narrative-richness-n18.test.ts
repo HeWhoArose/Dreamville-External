@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 
 import { NarrativeRichnessEvaluator } from '../server/domain/narrativeRichnessEvaluation';
 import { LiteraryNarrativeReview } from '../server/domain/literaryNarrativeReview';
-import { SemanticNarrativeReview } from '../server/domain/semanticNarrativeReview';
 import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
 
 function makeIntent(overrides: Record<string, any> = {}) {

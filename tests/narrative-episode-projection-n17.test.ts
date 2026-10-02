@@ -261,7 +261,7 @@ test('N17 integrates through NarrativeDirector and preserves prompt visibility u
 	});
 	assert.match(promptResult.prompt, /N17 NARRATIVE EPISODE PROJECTION/);
 	assert.match(promptResult.prompt, /Phase:/i);
-	assert.ok(promptResult.totalTokens <= 2000);
+	assert.ok(promptResult.totalTokens <= 2000, 'N17 compact prompt tokens: ' + promptResult.totalTokens);
 });
 
 test('N17 keeps future player agency outside the projection boundary', () => {

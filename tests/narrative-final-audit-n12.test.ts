@@ -52,7 +52,7 @@ class InspectableEmergencyAdapter implements IProviderAdapter {
 		this.calls.push({ task, prompt, options });
 		const location = options?.canonicalLocationName || 'the current location';
 		return {
-			text: turnResponse(`At ${location}, the immediate scene remains grounded in the visible surroundings as you observe from your current position.`),
+			text: turnResponse(`At ${location}, the immediate scene remains grounded in the visible surroundings as you observe from your current position. There is no reliable answer beyond these directly visible details.`),
 			latencyMs: 1,
 			inputTokens: Math.ceil(prompt.length / 4),
 			outputTokens: 30,

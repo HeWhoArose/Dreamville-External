@@ -506,9 +506,19 @@ export class MemoryOpportunityEngine {
         .map((value) => String(value || '').trim().toLowerCase())
         .filter((value) => value.length >= 3),
     ));
+    const stopWords = new Set([
+      'about', 'after', 'again', 'also', 'because', 'before', 'being', 'could',
+      'from', 'have', 'into', 'just', 'more', 'near', 'should', 'that', 'their',
+      'there', 'these', 'they', 'this', 'those', 'what', 'when', 'where', 'which',
+      'while', 'with', 'would', 'your', 'the', 'and', 'for', 'you', 'are', 'was',
+      'were', 'can', 'did', 'does', 'how', 'why', 'who', 'i',
+    ]);
     const queryTerms = Array.from(new Set([
       ...queryKeywords,
-      ...queryText.split(/[^a-z0-9]+/).filter((token) => token.length >= 3),
+      ...queryText
+        .split(/[^a-z0-9]+/)
+        .filter((token) => token.length >= 4)
+        .filter((token) => !stopWords.has(token)),
     ]));
 
     const targetEntityIds = new Set((params.targetEntityIds || []).filter(Boolean).map(String));

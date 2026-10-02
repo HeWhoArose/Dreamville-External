@@ -82,7 +82,7 @@ test('N9 fallback providers receive the identical provider-independent handoff',
 	const fallbackInstruction = fallback.callHistory[0].options?.systemInstruction || '';
 	assert.equal(primaryInstruction, fallbackInstruction);
 	assert.match(primaryInstruction, /N9 PROVIDER HANDOFF CONTRACT/);
-	assert.match(primaryInstruction, /provider\\/model changes must alter implementation only/i);
+	assert.match(primaryInstruction, /provider\/model changes must alter implementation only/i);
 	assert.match(fallback.callHistory[0].prompt, /N9 PROVIDER HANDOFF CONTRACT/);
 	assert.ok(result.modelId);
 });

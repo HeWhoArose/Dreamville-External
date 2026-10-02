@@ -176,14 +176,7 @@ function scoreSpecificity(
 	if (!anchors.length) {
 		return dimension(
 			'SPECIFICITY',
-			isMicroTurn(
-				{
-					...({} as PlayerIntent),
-					interactionMode: 'PASSIVE_OBSERVATION',
-					action: 'observe',
-				} as PlayerIntent,
-				plan,
-			) ? 0.68 : 0.58,
+			plan.sceneComposition?.beatType === 'MICRO_ACTION' ? 0.68 : 0.58,
 			['No strong scene anchors were available to compare against.'],
 		);
 	}

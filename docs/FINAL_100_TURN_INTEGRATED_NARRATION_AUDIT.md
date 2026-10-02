@@ -114,3 +114,7 @@ N19 and the final integration audit are considered complete only when:
 ## Integrated finding fixed during audit
 
 The 120-turn run exposed an N18 contract gap in the deterministic emergency-floor success path: emergency narration was semantically/literarily/novelty validated but did not return the deterministic richness evaluation. The production path was corrected to evaluate and return N18 on emergency narration without adding an LLM call. The integrated regression now treats primary, provider-fallback, and emergency accepted narration as requiring the same N18 result contract.
+
+## N19 integration-harness isolation
+
+The dedicated N19 regression suite verifies automatic quality-tier selection. The 120-turn stress harness intentionally pins that already-selected creative route and supplies the explicit creative → fast → emergency chain so long-session failures cannot be caused by unrelated seeded provider discovery or registry configuration. The harness still exercises provider failure, fallback, emergency recovery, and post-recovery execution on the real `executeTurn()` path.

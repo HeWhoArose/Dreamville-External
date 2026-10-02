@@ -3094,7 +3094,6 @@ export class MultiModelOrchestrator {
     const categoryOverrideKey = this.categoryOverrides.get(category);
     const fallbackChain = this.getFallbackChain(task);
 
-    const routingPolicy = getAiTaskRoutingPolicy(task);
     if (categoryOverrideKey) {
       const categoryOverrideModel = this.models.get(categoryOverrideKey)
         || Array.from(this.models.values()).find((model) => this.modelKey(model) === categoryOverrideKey || model.modelId === categoryOverrideKey);

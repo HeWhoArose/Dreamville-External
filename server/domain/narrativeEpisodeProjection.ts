@@ -244,7 +244,10 @@ export class NarrativeEpisodeProjectionEngine {
 		const entities = keyEntities(params.situation, params.intent);
 		const anchors = continuityAnchors(params.situation, continuity, threads);
 		const pressures = pressurePoints(history, continuity, threads);
-		const resolutions = resolutionSignals(history, params.situation);
+		const projectedResolutionSignals = resolutionSignals(history, params.situation);
+		const resolutionEvidence = projectedResolutionSignals.length > 0
+			? projectedResolutionSignals
+			: ['Resolution phase is supported by the latest bounded turn evidence.'];
 		const memoryEvidence = (params.research?.blocks || [])
 			.filter((block) => block.kind === 'MEMORY')
 			.slice(0, 3)
@@ -293,7 +296,9 @@ export class NarrativeEpisodeProjectionEngine {
 			keyEntities: entities,
 			continuityAnchors: anchors,
 			pressurePoints: pressures,
-			resolutionSignals: resolutions,
+			resolutionSignals: classification.phase === 'AFTERMATH' || classification.phase === 'RESOLUTION'
+				? resolutionEvidence.slice(0, 4)
+				: projectedResolutionSignals.slice(0, 4),
 			narrativeOpportunity,
 			avoidForcing: [
 				'Do not create a canonical plot beat from this projection.',
@@ -333,7 +338,10 @@ export class NarrativeEpisodeProjectionEngine {
 
 	public static toCompactPromptContext(projection?: NarrativeEpisodeProjection): string {
 		if (!projection) return 'N17 episode: unavailable; preserve current continuity.';
-		return 'N17 episode: Phase: ' + projection.phase + '; Trajectory: ' + projection.trajectory + '; Question: ' + projection.centralQuestion + '; Active threads: ' + (projection.activeThreadSummaries.join(' / ') || 'none') + '; Opportunity: ' + projection.narrativeOpportunity;
+		const thread = projection.activeThreadSummaries[0] || 'none';
+		const question = projection.centralQuestion.slice(0, 70);
+		const opportunity = projection.narrativeOpportunity.slice(0, 80);
+		return 'N17 episode: Phase: ' + projection.phase + '; Trajectory: ' + projection.trajectory + '; Question: ' + question + '; Thread: ' + thread.slice(0, 55) + '; Opportunity: ' + opportunity;
 	}
 }
 

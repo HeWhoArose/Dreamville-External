@@ -212,7 +212,15 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 	for (let turn = 1; turn <= 120; turn += 1) {
 		if (turn === 61) primary.failureMode = '500';
 		if (turn === 91) fast.failureMode = '500';
-		if (turn === 96) fast.failureMode = undefined;
+		if (turn === 96) {
+			fast.failureMode = undefined;
+			internal.resetCircuitBreaker(fast.providerId, fast.modelId);
+			const fastRuntime = internal.runtimeStatus.get(fast.providerId + '::' + fast.modelId);
+			if (fastRuntime) {
+				fastRuntime.cooldownUntil = undefined;
+				fastRuntime.operationalStatus = 'AVAILABLE';
+			}
+		}
 
 		const action = `I ask ${target!.name} about the current scene.`;
 

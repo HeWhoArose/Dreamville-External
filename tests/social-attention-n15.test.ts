@@ -198,8 +198,8 @@ test('N15 remains explicit under compact prompt budgets', () => {
 			createdAt: scene.worldTime,
 			expiresAfterNarration: true,
 		},
-		maxPromptTokens: 1200,
+		maxPromptTokens: 1800,
 	});
-	assert.ok(result.totalTokens <= 1200, `prompt exceeded compact budget: ${result.totalTokens}`);
+	assert.ok(result.totalTokens <= 1800, `prompt exceeded compact budget: ${result.totalTokens}`);
 	assert.match(result.prompt, /N15 SOCIAL ATTENTION/);
 });

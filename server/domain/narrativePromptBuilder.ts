@@ -322,6 +322,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 					intentContext: compact.intentContext,
 					planContext: compact.planContext,
 					sceneCompositionContext: compact.sceneCompositionContext,
+					socialTopologyContext: compact.socialTopologyContext,
 				},
 			);
 			prompt = renderCompact();

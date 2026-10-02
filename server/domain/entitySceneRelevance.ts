@@ -147,7 +147,7 @@ function participantRole(
 	const targets = intentTargetIds(intent);
 	if (activeSpeakerId && entity.id === activeSpeakerId) return 'PRIMARY_SPEAKER';
 
-	if (conversationActive && isInterruptionIntent(intent) && targets.has(entity.id)) {
+	if (conversationActive && /\binterrupt(?:s|ed|ing)?\b|cuts? (?:him|her|them) off/i.test(String(entity.currentActivity || ''))) {
 		return 'INTERRUPTER';
 	}
 

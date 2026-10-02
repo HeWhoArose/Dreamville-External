@@ -25,6 +25,7 @@ import { NarrativeDirector, type EphemeralNarrativePlan } from './narrativeDirec
 import { buildNarrationPrompt, defaultNarrationStyle, projectSupportingWorkingContext } from './narrativePromptBuilder';
 import { SemanticNarrativeReview, type NarrativeReview } from './semanticNarrativeReview';
 import { LiteraryNarrativeReview, type LiteraryReview } from './literaryNarrativeReview';
+import { NarrativeNoveltyEngine } from './narrativeNoveltyEngine';
 import { EpistemicBoundaryEnforcer } from './epistemicBoundary';
 import { NarrativeStateAdjudicator, type StateAdjudicationResult } from './narrativeStateAdjudicator';
 import { NarrativeContinuityStateEngine } from './narrativeContinuityState';
@@ -8024,7 +8025,7 @@ export class MultiModelOrchestrator {
               }
               reviewedTurnPackage = reviewed.turnPackage;
               narrativeReview = reviewed.review;
-              const literary = LiteraryNarrativeReview.review({ intent: playerIntent, situation: currentSituation, plan: narrativePlan, turnPackage: reviewedTurnPackage, voice: narratorVoiceState, previousNarrations: currentSituation.recentTurns.map((entry) => String(entry.narration || '')).filter(Boolean) });
+              const literary = LiteraryNarrativeReview.review({ intent: playerIntent, situation: currentSituation, plan: narrativePlan, turnPackage: reviewedTurnPackage, voice: narratorVoiceState, noveltyState: narrativeNoveltyState, previousNarrations: currentSituation.recentTurns.map((entry) => String(entry.narration || '')).filter(Boolean) });
               literaryReview = literary;
               if (literary.decision === 'REWRITE') {
                 const literaryBudget = turnAiCallBudget.beginTask('narrative.review');

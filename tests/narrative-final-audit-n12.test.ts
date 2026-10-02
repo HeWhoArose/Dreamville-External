@@ -50,8 +50,9 @@ class InspectableEmergencyAdapter implements IProviderAdapter {
 
 	public async generate(task: any, prompt: string, options?: ProviderGenerateOptions): Promise<ProviderGenerateResult> {
 		this.calls.push({ task, prompt, options });
+		const location = options?.canonicalLocationName || 'the current location';
 		return {
-			text: turnResponse('The immediate scene remains grounded in the visible surroundings as you observe from your current position.'),
+			text: turnResponse(`At ${location}, the immediate scene remains grounded in the visible surroundings as you observe from your current position.`),
 			latencyMs: 1,
 			inputTokens: Math.ceil(prompt.length / 4),
 			outputTokens: 30,

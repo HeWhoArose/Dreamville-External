@@ -120,8 +120,8 @@ test('Phase 24 — all audited phase-specific regression suites remain present',
 		'tests/release-gate.phase21.test.ts',
 		'tests/phase22-release-stabilization.test.ts',
 		'tests/narrative-memory-lifecycle.phase8.test.ts',
-		'tests/entity-scene-relevance.test.ts',
-		'tests/phase11.epistemic-authority.test.ts',
+		'tests/entity-scene-relevance.phase9.test.ts',
+		'tests/epistemic-boundary.phase10.test.ts',
 		'tests/architecture-gap-closure.phase23.test.ts',
 	];
 	for (const relativePath of tests) mustExist(relativePath);

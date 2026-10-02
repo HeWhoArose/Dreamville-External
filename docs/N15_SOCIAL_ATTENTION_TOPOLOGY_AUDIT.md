@@ -55,3 +55,5 @@ Targeted tests cover:
 
 ## Compact-path verification
 N15 is serialized as its own prompt section by the existing Narrative Prompt Builder. This prevents prompt-budget truncation of the social contract merely because the broader Narrative Director plan is compacted.
+
+The compact prompt audit also confirmed that the existing micro-contract path is used for budgets below 1800 tokens, preserving deterministic section shedding and the final hard-cap behavior while retaining the N15 section.

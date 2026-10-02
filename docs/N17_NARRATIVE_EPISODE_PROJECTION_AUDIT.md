@@ -77,3 +77,21 @@ Compact-path consumers retain N17 through the existing hard-budget prompt paths.
 - compact prompt visibility;
 - future player agency and thread-mutation boundaries;
 - full regression, build, contracts, and Release Gate.
+
+## Re-audit findings and corrective actions
+The existing N17 branch was re-audited before acceptance. Three correctness gaps were found and corrected:
+
+1. Whitespace normalization used an incorrect regular expression (/s+/g), so multi-line/generated narrative text was not normalized as intended. This was changed to the whitespace-class expression.
+2. Resolution detection could classify negated prose such as "not resolved" as resolution evidence because it searched positive terms without a negation guard. Resolution signals now require an affirmed resolution and explicitly reject nearby negation/unresolved wording.
+3. TURNING_POINT was declared but unreachable. A conservative deterministic transition now projects TURNING_POINT only when the latest bounded narration contains a change/discovery signal and the episode still has active pressure or an unresolved thread; this remains non-binding presentation guidance.
+4. Selected research memory evidence is now carried explicitly as bounded memoryCues rather than affecting confidence without being inspectable by the downstream prompt.
+5. Compact prompt serialization now keeps the N17 non-binding boundary explicit, and the prompt result exposes the resolved projection for verification.
+
+## Final producer -> contract -> consumer after correction
+CurrentSituation + accepted-turn history + plot/open threads + NarrativeContinuityState + bounded research memory blocks
+→ NarrativeEpisodeProjectionEngine.resolve()
+→ NarrativeDirector.episodeProjection
+→ NarrativePromptBuilder full/compact N17 section
+→ narrative provider.
+
+N17 still performs no repository mutation and remains presentation-only.

@@ -7844,6 +7844,7 @@ export class MultiModelOrchestrator {
               outputTokens: 20,
               validated: true,
           aiCallBudget: turnAiCallBudget.snapshot(),
+              narrativeProviderHandoff: narrativeProviderHandoff ? NarrativeProviderHandoffEngine.snapshot(narrativeProviderHandoff) : undefined,
             },
           };
         }

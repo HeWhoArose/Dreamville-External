@@ -41,6 +41,7 @@ export interface NarrativeEpisodeProjection {
 	narrativeOpportunity: string;
 	avoidForcing: string[];
 	confidence: number;
+	classificationReason: string;
 	fallbackReason?: string;
 	expiresAfterNarration: true;
 }
@@ -67,7 +68,7 @@ function recentHistory(situation: CurrentSituation, limit = 6): RecentTurnContex
 
 function unresolvedThreads(situation: CurrentSituation): Array<{ id: string; title: string; summary?: string; priority: number }> {
 	return (Array.isArray(situation.openThreads) ? situation.openThreads : [])
-		.filter((thread) => !thread.status || !/resolved|stale/i.test(String(thread.status)))
+		.filter((thread) => !thread.status || String(thread.status).toUpperCase() === 'OPEN')
 		.map((thread) => ({
 			id: String(thread.id || ''),
 			title: normalize(thread.title),
@@ -344,7 +345,8 @@ export class NarrativeEpisodeProjectionEngine {
 				'Do not force escalation or resolution merely to satisfy the projected phase.',
 			],
 			confidence,
-			fallbackReason: fallbackReason || classification.reason,
+			classificationReason: classification.reason,
+			fallbackReason,
 			expiresAfterNarration: true,
 		};
 	}
@@ -368,7 +370,8 @@ export class NarrativeEpisodeProjectionEngine {
 			'Continuity anchors: ' + projection.continuityAnchors.join('; '),
 			'Current narrative opportunity: ' + projection.narrativeOpportunity,
 			'Confidence: ' + projection.confidence.toFixed(2),
-			projection.fallbackReason ? 'Projection basis: ' + projection.fallbackReason : 'Projection basis: sufficient bounded evidence.',
+			'Projection basis: ' + projection.classificationReason,
+			projection.fallbackReason ? 'Fallback: ' + projection.fallbackReason : 'Fallback: not required.',
 			'Hard boundary: this projection describes the shape of the existing episode; it does not create canon, mutate threads, reveal hidden facts, or choose the player’s future action.',
 		].join('\n');
 	}

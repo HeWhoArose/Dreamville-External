@@ -51,3 +51,7 @@ Targeted tests cover:
 - NarrativeDirector integration
 - no canonical command-event mutation
 - non-dialogue observation fallback
+
+
+## Compact-path verification
+N15 is serialized as its own prompt section by the existing Narrative Prompt Builder. This prevents prompt-budget truncation of the social contract merely because the broader Narrative Director plan is compacted.

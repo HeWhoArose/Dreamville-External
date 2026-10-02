@@ -25,6 +25,7 @@ import { NarrativeDirector, type EphemeralNarrativePlan } from './narrativeDirec
 import { buildNarrationPrompt, defaultNarrationStyle, projectSupportingWorkingContext } from './narrativePromptBuilder';
 import { SemanticNarrativeReview, type NarrativeReview } from './semanticNarrativeReview';
 import { LiteraryNarrativeReview, type LiteraryReview } from './literaryNarrativeReview';
+import { NarrativeRichnessEvaluator, type NarrativeRichnessEvaluation } from './narrativeRichnessEvaluation';
 import { NarrativeProviderHandoffEngine, type NarrativeProviderHandoffContract } from './narrativeProviderHandoff';
 import { NarrativePacingEngine, type NarrativePacingContract } from './narrativePacingEngine';
 import { NarrativeNoveltyEngine } from './narrativeNoveltyEngine';
@@ -533,6 +534,7 @@ export interface OrchestratedTurnTelemetry {
   researchTokens?: number;
   narrativePlanObjective?: string;
   narrativeReview?: NarrativeReview;
+  narrativeRichnessEvaluation?: NarrativeRichnessEvaluation;
   aiCallBudget?: AiTurnCallBudgetSnapshot;
   narrativeProviderHandoff?: NarrativeProviderHandoffContract;
 }
@@ -543,6 +545,7 @@ export interface OrchestratedTurnResult {
   narrativePlan?: EphemeralNarrativePlan;
   narrativeReview?: NarrativeReview;
   literaryReview?: LiteraryReview;
+  narrativeRichnessEvaluation?: NarrativeRichnessEvaluation;
   stateAdjudication?: StateAdjudicationResult;
   turnPackage?: StructuredTurnPackage;
   telemetry: OrchestratedTurnTelemetry;
@@ -7190,6 +7193,7 @@ export class MultiModelOrchestrator {
     researchPacket?: ReturnType<typeof narrativeContinuityEngine.research>;
     narrativePlan?: EphemeralNarrativePlan;
     researchAudit?: Pick<NarrativeResearchResult, 'blocks' | 'excluded' | 'budgets' | 'totalTokens' | 'query'>;
+    narrativeRichnessEvaluation?: NarrativeRichnessEvaluation;
     contextAudit?: {
       hardTokenBudget: number;
       totalTokens: number;
@@ -7618,6 +7622,14 @@ export class MultiModelOrchestrator {
         error: finalInformationContinuity.errorReason || 'Narration information continuity validation failed.',
       };
     }
+    const finalNarrativeRichnessEvaluation = NarrativeRichnessEvaluator.evaluate({
+      intent: playerIntent,
+      situation: currentSituation,
+      plan: narrativePlan,
+      turnPackage: validation.turnPackage,
+      previousNarrations: canonicalRecentTurns.map((turn) => String(turn.narration || '')).filter(Boolean),
+    });
+
     const finalTemporalContinuity = this.validateNarrativeTemporalContinuity(finalNarrationText, worldRepo, storyId);
     if (!finalTemporalContinuity.valid) {
       return {
@@ -7650,6 +7662,7 @@ export class MultiModelOrchestrator {
       narrativePlan,
       researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
       contextAudit,
+      narrativeRichnessEvaluation: finalNarrativeRichnessEvaluation,
     };
   }
 
@@ -8100,6 +8113,7 @@ export class MultiModelOrchestrator {
             let reviewedTurnPackage = validation.turnPackage;
             let narrativeReview: NarrativeReview | undefined;
             let literaryReview: LiteraryReview | undefined;
+            let narrativeRichnessEvaluation: NarrativeRichnessEvaluation | undefined;
             if (isNarrativeTask && narrativePlan) {
               const initialReview = SemanticNarrativeReview.review({
                 intent: playerIntent,
@@ -8136,15 +8150,46 @@ export class MultiModelOrchestrator {
               }
               reviewedTurnPackage = reviewed.turnPackage;
               narrativeReview = reviewed.review;
+              const previousNarrations = currentSituation.recentTurns
+                .map((entry) => String(entry.narration || ''))
+                .filter(Boolean);
               const narrativeNoveltyStateForReview = NarrativeNoveltyEngine.resolve(repo, storyId);
-              const literary = LiteraryNarrativeReview.review({ intent: playerIntent, situation: currentSituation, plan: narrativePlan, turnPackage: reviewedTurnPackage, voice: narratorVoiceState, noveltyState: narrativeNoveltyStateForReview, previousNarrations: currentSituation.recentTurns.map((entry) => String(entry.narration || '')).filter(Boolean) });
+              const literary = LiteraryNarrativeReview.review({
+                intent: playerIntent,
+                situation: currentSituation,
+                plan: narrativePlan,
+                turnPackage: reviewedTurnPackage,
+                voice: narratorVoiceState,
+                noveltyState: narrativeNoveltyStateForReview,
+                previousNarrations,
+              });
               literaryReview = literary;
-              if (literary.decision === 'REWRITE') {
+              narrativeRichnessEvaluation = NarrativeRichnessEvaluator.evaluate({
+                intent: playerIntent,
+                situation: currentSituation,
+                plan: narrativePlan,
+                turnPackage: reviewedTurnPackage,
+                previousNarrations,
+              });
+              const needsLiteraryRewrite = literary.decision === 'REWRITE';
+              if (needsLiteraryRewrite) {
                 const literaryBudget = turnAiCallBudget.beginTask('narrative.review');
-                if (!literaryBudget.allowed) throw new Error(literaryBudget.reason || 'Narrative literary review call budget exhausted.');
+                if (!literaryBudget.allowed) throw new Error(literaryBudget.reason || 'Narrative literary/richness review call budget exhausted.');
                 turnAiCallBudget.recordProviderAttempt('narrative.review');
-                const literaryPrompt = LiteraryNarrativeReview.buildRewritePrompt({ review: literary, turnPackage: reviewedTurnPackage, intent: playerIntent, situation: currentSituation, plan: narrativePlan });
-                const literaryResult = await adapter.generate('narrative.review', literaryPrompt, { modelId: currentCandidate.modelId, timeoutMs, maxTokens: NarrativePacingEngine.outputTokenBudget(narrativePacingContract), systemInstruction: [narrativeProviderHandoff?.providerIndependentInstruction, 'Perform a literary polish only. Preserve canonical truth, state, player agency, knowledge boundaries and plot direction.'].filter(Boolean).join(' ') });
+                const literaryPrompt = LiteraryNarrativeReview.buildRewritePrompt({
+                  review: literary,
+                  richnessEvaluation: narrativeRichnessEvaluation,
+                  turnPackage: reviewedTurnPackage,
+                  intent: playerIntent,
+                  situation: currentSituation,
+                  plan: narrativePlan,
+                });
+                const literaryResult = await adapter.generate('narrative.review', literaryPrompt, {
+                  modelId: currentCandidate.modelId,
+                  timeoutMs,
+                  maxTokens: NarrativePacingEngine.outputTokenBudget(narrativePacingContract),
+                  systemInstruction: [narrativeProviderHandoff?.providerIndependentInstruction, 'Perform a literary/richness polish only. Preserve canonical truth, state, player agency, knowledge boundaries and plot direction.'].filter(Boolean).join(' '),
+                });
                 const literaryValidation = this.validateTurnPackage(literaryResult.text);
                 if (!literaryValidation.valid || !literaryValidation.turnPackage) throw new Error(literaryValidation.errorReason || 'Literary rewrite returned an invalid structured turn package.');
                 const literaryPresentation = this.validateNarrativePresentation({
@@ -8158,7 +8203,12 @@ export class MultiModelOrchestrator {
                 });
                 if (!literaryPresentation.valid) throw new Error(literaryPresentation.errorReason || 'Literary rewrite failed final presentation validation.');
 
-                const postSemantic = SemanticNarrativeReview.review({ intent: playerIntent, situation: currentSituation, plan: narrativePlan, turnPackage: literaryValidation.turnPackage });
+                const postSemantic = SemanticNarrativeReview.review({
+                  intent: playerIntent,
+                  situation: currentSituation,
+                  plan: narrativePlan,
+                  turnPackage: literaryValidation.turnPackage,
+                });
                 if (postSemantic.decision !== 'ACCEPT') throw new Error('Literary rewrite failed the semantic safety gate.');
 
                 const postLiterary = LiteraryNarrativeReview.review({
@@ -8168,7 +8218,7 @@ export class MultiModelOrchestrator {
                   turnPackage: literaryValidation.turnPackage,
                   voice: narratorVoiceState,
                   noveltyState: NarrativeNoveltyEngine.resolve(repo, storyId),
-                  previousNarrations: currentSituation.recentTurns.map((entry) => String(entry.narration || '')).filter(Boolean),
+                  previousNarrations,
                 });
                 if (postLiterary.decision !== 'ACCEPT') throw new Error('Literary rewrite remained below the N6/N7 acceptance threshold.');
 
@@ -8179,8 +8229,16 @@ export class MultiModelOrchestrator {
                 });
                 if (postNovelty.discouraged.length) throw new Error('Literary rewrite reintroduced a discouraged N7 repetition/trope pattern.');
 
+                const postRichness = NarrativeRichnessEvaluator.evaluate({
+                  intent: playerIntent,
+                  situation: currentSituation,
+                  plan: narrativePlan,
+                  turnPackage: literaryValidation.turnPackage,
+                  previousNarrations,
+                });
                 reviewedTurnPackage = literaryValidation.turnPackage;
                 literaryReview = postLiterary;
+                narrativeRichnessEvaluation = postRichness;
               }
             }
 
@@ -8286,6 +8344,7 @@ export class MultiModelOrchestrator {
               researchTokens: researchResult?.totalTokens,
               narrativePlanObjective: narrativePlan?.objective,
               narrativeReview,
+              narrativeRichnessEvaluation,
               narrativeProviderHandoff: narrativeProviderHandoff ? NarrativeProviderHandoffEngine.snapshot(narrativeProviderHandoff) : undefined,
             };
             this.lastTurnTelemetry = telemetry;
@@ -8309,6 +8368,7 @@ export class MultiModelOrchestrator {
               narrativePlan,
               narrativeReview,
               literaryReview,
+              narrativeRichnessEvaluation,
               stateAdjudication,
               telemetry,
               adjudicationResult: adjudication,

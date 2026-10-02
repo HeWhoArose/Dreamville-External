@@ -5,6 +5,7 @@ import { InMemoryWorldRepository } from '../server/repositories/worldRepository'
 import { CurrentSituationBuilder } from '../server/domain/currentSituation';
 import { NarrativeDirector } from '../server/domain/narrativeDirector';
 import { NarrativeResearchPipeline } from '../server/domain/narrativeResearchPipeline';
+import { buildNarrationPrompt } from '../server/domain/narrativePromptBuilder';
 
 function makeSituation(overrides: Record<string, any> = {}) {
 	return {
@@ -160,4 +161,46 @@ test('N15 is safe when dialogue and topic context are absent', () => {
 	const topology = EntitySceneRelevanceEngine.toConversationTopology(scene, intent);
 	assert.equal(topology.conversationActive, false);
 	assert.equal(topology.participants[0]?.role, 'OBSERVER');
+});
+
+
+test('N15 remains explicit under compact prompt budgets', () => {
+	const scene = makeSituation();
+	const intent = dialogueIntent();
+	const topology = EntitySceneRelevanceEngine.toConversationTopology(scene, intent);
+	const result = buildNarrationPrompt({
+		situation: scene,
+		intent,
+		research: {
+			storyId: scene.storyId,
+			turnId: scene.turnId,
+			query: intent.originalText,
+			viewerActorId: scene.player.actorId,
+			failures: [],
+			packet: {} as any,
+			blocks: [],
+			excluded: [],
+			budgets: { scene: 700, entities: 700, memories: 600, lore: 600, plot: 500, thread: 500, consequence: 500, total: 2400 },
+			promptContext: 'NARRATIVE RESEARCH RESULTS\nBounded test context.',
+			totalTokens: 8,
+			capturedAt: scene.worldTime,
+		},
+		plan: {
+			turnId: scene.turnId,
+			objective: 'Answer the Captain.',
+			immediateSteps: ['Respond only to the current dialogue.'],
+			informationToReveal: [],
+			entitiesToReact: [{ id: 'speaker', name: 'Captain' }],
+			npcCognition: [],
+			socialTopology: topology,
+			continuityRequirements: ['Stay in the current scene.'],
+			forbiddenAssumptions: ['Do not invent hidden facts.'],
+			stateEffectsExpected: [],
+			createdAt: scene.worldTime,
+			expiresAfterNarration: true,
+		},
+		maxPromptTokens: 900,
+	});
+	assert.ok(result.totalTokens <= 900, `prompt exceeded compact budget: ${result.totalTokens}`);
+	assert.match(result.prompt, /N15 SOCIAL ATTENTION/);
 });

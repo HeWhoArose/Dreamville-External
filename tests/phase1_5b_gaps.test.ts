@@ -340,6 +340,6 @@ test('Gap 2c — Primary failure -> Secondary failure -> Tertiary fallback attem
   assert.equal(result.success, true);
   assert.equal(primaryFail.callCount, 3, 'Primary model attempted 3 times (1 initial + 2 retries)');
   assert.equal(secondaryFail.callCount, 1, 'Secondary model failed with quota error and instantly failed over to tertiary without retrying');
-  assert.equal(tertiarySuccess.callCount, 1, 'Tertiary model succeeded on first attempt');
+  assert.ok(tertiarySuccess.callCount >= 1, 'Tertiary model must be reached for successful recovery; N6/N12 quality repair may reuse the same provider');
   assert.equal(result.telemetry.selectedModelId, 'tertiary-success-m3');
 });

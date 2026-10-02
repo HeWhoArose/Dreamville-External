@@ -24,6 +24,7 @@ import { NarrativeResearchPipeline, type NarrativeResearchResult } from './narra
 import { NarrativeDirector, type EphemeralNarrativePlan } from './narrativeDirector';
 import { buildNarrationPrompt, defaultNarrationStyle, projectSupportingWorkingContext } from './narrativePromptBuilder';
 import { SemanticNarrativeReview, type NarrativeReview } from './semanticNarrativeReview';
+import { LiteraryNarrativeReview, type LiteraryReview } from './literaryNarrativeReview';
 import { EpistemicBoundaryEnforcer } from './epistemicBoundary';
 import { NarrativeStateAdjudicator, type StateAdjudicationResult } from './narrativeStateAdjudicator';
 import { NarrativeContinuityStateEngine } from './narrativeContinuityState';
@@ -8021,6 +8022,21 @@ export class MultiModelOrchestrator {
               }
               reviewedTurnPackage = reviewed.turnPackage;
               narrativeReview = reviewed.review;
+              const literary = LiteraryNarrativeReview.review({ intent: playerIntent, situation: currentSituation, plan: narrativePlan, turnPackage: reviewedTurnPackage, voice: narratorVoiceState, previousNarrations: currentSituation.narrativeContextHistory?.map((entry: any) => String(entry.narration || entry.text || '')).filter(Boolean) });
+              literaryReview = literary;
+              if (literary.decision === 'REWRITE') {
+                const literaryBudget = turnAiCallBudget.beginTask('narrative.review');
+                if (!literaryBudget.allowed) throw new Error(literaryBudget.reason || 'Narrative literary review call budget exhausted.');
+                turnAiCallBudget.recordProviderAttempt('narrative.review');
+                const literaryPrompt = LiteraryNarrativeReview.buildRewritePrompt({ review: literary, turnPackage: reviewedTurnPackage, intent: playerIntent, situation: currentSituation, plan: narrativePlan });
+                const literaryResult = await adapter.generate('narrative.review', literaryPrompt, { modelId: currentCandidate.modelId, timeoutMs, maxTokens: 1200, systemInstruction: 'Perform a literary polish only. Preserve canonical truth, state, player agency, knowledge boundaries and plot direction.' });
+                const literaryValidation = this.validateTurnPackage(literaryResult.text);
+                if (!literaryValidation.valid || !literaryValidation.turnPackage) throw new Error(literaryValidation.errorReason || 'Literary rewrite returned an invalid structured turn package.');
+                const postSemantic = SemanticNarrativeReview.review({ intent: playerIntent, situation: currentSituation, plan: narrativePlan, turnPackage: literaryValidation.turnPackage });
+                if (postSemantic.decision !== 'ACCEPT') throw new Error('Literary rewrite failed the semantic safety gate.');
+                reviewedTurnPackage = literaryValidation.turnPackage;
+                literaryReview = LiteraryNarrativeReview.review({ intent: playerIntent, situation: currentSituation, plan: narrativePlan, turnPackage: reviewedTurnPackage, voice: narratorVoiceState });
+              }
             }
 
             // 6. Adjudicate state proposals through the canonical state boundary.

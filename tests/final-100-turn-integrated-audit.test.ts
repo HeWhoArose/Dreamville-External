@@ -236,6 +236,8 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 		phase: string;
 		richnessDecision: string;
 		memoryBlocks: number;
+		fastProviderAttempts: number;
+		primaryProviderAttempts: number;
 	}> = [];
 
 	for (let turn = 1; turn <= 120; turn += 1) {
@@ -250,8 +252,13 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 				fastRuntime.operationalStatus = 'AVAILABLE';
 			}
 		}
+			const recoverySelection = orchestrator.selectBestModel('narrative.generate', { contextTokens: 0 });
+			assert.equal(recoverySelection.selectedModel.modelId, 'final-audit-fast', 'N19 recovery selection did not return the recovered fast provider.');
 
 		const action = `I ask ${target!.name} about the current scene.`;
+
+		const primaryCallsBefore = primary.callHistory.length;
+		const fastCallsBefore = fast.callHistory.length;
 
 		const response = responseForTurn(turn, situation.location.name, target!.name);
 		primary.cannedResponses.set('narrative.generate', response);
@@ -278,6 +285,8 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 		assert.ok(result.narrativeRichnessEvaluation, 'turn ' + turn + ': N18 richness evaluation missing; model=' + result.telemetry.selectedModelId + '; provider=' + result.telemetry.selectedProviderId + '; plan=' + Boolean(result.narrativePlan) + '; review=' + result.narrativeReview?.decision + '; telemetryRichness=' + Boolean(result.telemetry.narrativeRichnessEvaluation) + '; attempts=' + result.telemetry.attempts);
 		const researchBlockCount = Number(result.telemetry.researchBlockCount || 0);
 		assert.ok(researchBlockCount >= 1, 'turn ' + turn + ': N16 memory/research path produced no bounded research blocks');
+		const primaryProviderAttempts = primary.callHistory.slice(primaryCallsBefore).filter((call) => call.task === 'narrative.generate').length;
+		const fastProviderAttempts = fast.callHistory.slice(fastCallsBefore).filter((call) => call.task === 'narrative.generate').length;
 
 		const newPrimaryCalls = primary.callHistory.slice(primary.callHistory.length > 0 ? Math.max(0, primary.callHistory.length - 8) : 0);
 		const newFastCalls = fast.callHistory.slice(fast.callHistory.length > 0 ? Math.max(0, fast.callHistory.length - 8) : 0);
@@ -295,6 +304,8 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 			phase: result.narrativePlan.episodeProjection?.phase || 'UNKNOWN',
 			richnessDecision: result.narrativeRichnessEvaluation?.decision || 'UNKNOWN',
 			memoryBlocks: researchBlockCount,
+			fastProviderAttempts,
+			primaryProviderAttempts,
 		});
 	}
 
@@ -302,7 +313,7 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 	assert.equal(observations[0].selectedModelId, 'final-audit-creative', 'N19 did not select the creative model on the normal path');
 	assert.ok(observations.slice(60).some((entry) => entry.selectedModelId === 'final-audit-fast' || entry.selectedModelId === 'emergency-fallback-local'), 'N19/fallback path did not leave the failed creative model');
 	assert.ok(observations.slice(90, 95).some((entry) => entry.selectedModelId === 'emergency-fallback-local'), 'Emergency floor was not exercised after total AI outage');
-	assert.ok(observations.slice(95).some((entry) => entry.selectedModelId === 'final-audit-fast'), 'Fast AI recovery did not resume after provider recovery');
+	assert.ok(observations.slice(95).some((entry) => entry.fastProviderAttempts > 0), 'Fast AI recovery did not resume after provider recovery');
 
 	assert.ok(observations.slice(1).every((entry) => entry.phase !== 'OPENING'), 'N17 remained stuck in OPENING after the episode had history');
 

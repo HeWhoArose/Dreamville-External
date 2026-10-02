@@ -3,6 +3,7 @@ import type { PlayerIntent, IntentEntityReference } from './playerIntentInterpre
 import type { NarrativeResearchResult } from './narrativeResearchPipeline';
 import type { WorldRepository } from '../repositories/worldRepository';
 import { buildNpcPlanningSlice } from './npcPlanningSlice';
+import { NpcExpressiveIdentityEngine, type NpcExpressiveIdentity } from './npcExpressiveIdentity';
 
 export interface InformationReveal {
 	topic: string;
@@ -22,6 +23,7 @@ export interface NpcCognitionContract {
 	traits: string[];
 	values: string[];
 	dialogueStyle?: string;
+	expressiveIdentity: NpcExpressiveIdentity;
 	relationshipStance?: string;
 	relationshipMetrics?: { trust: number; affection: number; respect: number; fear: number; hostility: number };
 	activeBeliefSummaries: string[];
@@ -50,6 +52,7 @@ function buildNpcCognitionContract(repository: WorldRepository, storyId: string,
 		traits: (profile?.traits || []).slice(0, 6),
 		values: (profile?.values || []).slice(0, 6),
 		dialogueStyle: profile?.dialogueStyle,
+		expressiveIdentity,
 		relationshipStance: relationship?.stance,
 		relationshipMetrics: relationship ? { trust: relationship.trust, affection: relationship.affection, respect: relationship.respect, fear: relationship.fear, hostility: relationship.hostility } : undefined,
 		activeBeliefSummaries: authorizedKnowledge.slice(0, 6),

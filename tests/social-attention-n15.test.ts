@@ -80,11 +80,14 @@ test('N15 projects a multi-NPC conversation topology without creating canonical 
 	assert.equal(absent?.signals.canSee, false);
 });
 
-test('N15 preserves explicit interruption semantics deterministically', () => {
-	const scene = makeSituation();
-	const intent = { ...dialogueIntent(), originalText: 'I interrupt the Captain.' };
-	const topology = EntitySceneRelevanceEngine.toConversationTopology(scene, intent);
-	assert.equal(topology.participants.find((entry) => entry.entityId === 'speaker')?.role, 'INTERRUPTER');
+test('N15 preserves NPC-owned interruption semantics deterministically', () => {
+	const scene = makeSituation({
+		nearbyEntities: makeSituation().nearbyEntities.map((entity: any) =>
+			entity.id === 'listener' ? { ...entity, currentActivity: 'interrupting the Captain' } : entity,
+		),
+	});
+	const topology = EntitySceneRelevanceEngine.toConversationTopology(scene, dialogueIntent());
+	assert.equal(topology.participants.find((entry) => entry.entityId === 'listener')?.role, 'INTERRUPTER');
 });
 
 test('N15 fallback is bounded with no visible entities', () => {

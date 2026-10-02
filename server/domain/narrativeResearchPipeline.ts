@@ -5,6 +5,7 @@ import { CurrentSituationBuilder, type CurrentSituation } from './currentSituati
 import { narrativeContinuityEngine, type NarrativeResearchPacket } from './narrativeContinuityEngine';
 import type { PlayerIntent } from './playerIntentInterpreter';
 import { EntitySceneRelevanceEngine } from './entitySceneRelevance';
+import { SemanticNarrativeResearchEngine, type SemanticNarrativeResearchProfile } from './semanticNarrativeResearch';
 
 export type NarrativeResearchBlockKind =
 	| 'SCENE'
@@ -59,6 +60,7 @@ export interface NarrativeResearchResult {
 	promptContext: string;
 	totalTokens: number;
 	capturedAt: string;
+	semanticProfile: SemanticNarrativeResearchProfile;
 }
 
 interface CandidateBlock extends NarrativeResearchBlock {
@@ -247,6 +249,10 @@ export class NarrativeResearchPipeline {
 			failures.push(String(error?.message || error || 'Narrative continuity research failed.'));
 			packet = emptyPacket(params.storyId, researchQuery, viewerActorId, situation);
 		}
+		const semanticProfile = SemanticNarrativeResearchEngine.derive(playerIntent || situation.currentAction || {
+			action: 'continue', interactionMode: 'FREEFORM', speechIntent: false, movementIntent: false, observationIntent: false,
+			explicitTargets: [], impliedTargets: [], confidence: 0, source: 'DETERMINISTIC', originalText: researchQuery,
+		} as PlayerIntent, situation);
 		const queryTokens = tokens([
 			params.playerAction,
 			playerIntent?.goal,
@@ -555,6 +561,10 @@ export class NarrativeResearchPipeline {
 			THREAD: Math.min(budgets.plot, 450),
 		};
 		const sorted = candidates.sort((a, b) => {
+			const semanticA = SemanticNarrativeResearchEngine.scoreCandidate(semanticProfile, a);
+			const semanticB = SemanticNarrativeResearchEngine.scoreCandidate(semanticProfile, b);
+			a.relevanceScore = Math.max(a.relevanceScore, semanticA.score);
+			b.relevanceScore = Math.max(b.relevanceScore, semanticB.score);
 			const priority = b.priority - a.priority;
 			if (priority !== 0) return priority;
 			if (b.relevanceScore !== a.relevanceScore) return b.relevanceScore - a.relevanceScore;
@@ -599,6 +609,7 @@ export class NarrativeResearchPipeline {
 
 		const promptContext = [
 			'NARRATIVE RESEARCH RESULTS',
+			SemanticNarrativeResearchEngine.summarize(semanticProfile),
 			`Query: ${query || 'current story context'}`,
 			`Research budget: ${budgets.total} estimated tokens; selected: ${total}`,
 			...selected.map((block) =>
@@ -621,6 +632,7 @@ export class NarrativeResearchPipeline {
 			promptContext,
 			totalTokens: total,
 			capturedAt: formatCanonicalTimestamp(capturedAt),
+			semanticProfile,
 		};
 	}
 
@@ -647,6 +659,7 @@ export class NarrativeResearchPipeline {
 			excluded: result.excluded.slice(0, 40),
 			promptContext: result.promptContext.slice(0, 12000),
 			fallbackMode: result.failures.length > 0 ? 'CURRENT_SITUATION_ONLY' : 'NORMAL_RESEARCH',
+			semanticProfile: result.semanticProfile,
 		};
 	}
 }

@@ -52,7 +52,7 @@ test('N8 uses N4 scene momentum without making it canonical', () => {
 		narration: 'Steel strikes stone as the threat closes in.',
 	});
 	const before = repository.getCanonicalCommandEvents('n8_momentum').length;
-	const momentumSituation = { ...situation, visibleEvents: [] };
+	const momentumSituation = { ...situation, visibleEvents: [], recentTurns: [{ playerAction: 'previous', narration: 'A previous beat.', worldTime: situation.worldTime }], location: { ...situation.location, description: '' } };
 	const contract = NarrativePacingEngine.resolve({ situation: momentumSituation, intent: intent({ informationGoal: undefined, observationIntent: true, action: 'observe', originalText: 'I observe.' }), continuityState: { ...continuity, sceneMomentum: 'BUILDING' } });
 	assert.equal(contract.profile, 'EXPANDED');
 	assert.ok(contract.signals.includes('continuity_build'));

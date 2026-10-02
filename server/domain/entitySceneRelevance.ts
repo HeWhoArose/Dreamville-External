@@ -160,6 +160,8 @@ function participantRole(
 
 	if (conversationActive && canSee) return 'OBSERVER';
 
+	if (!conversationActive && canSee) return 'OBSERVER';
+
 	if (targets.has(entity.id) && canSee) return 'LISTENER';
 
 	if (relevance.score >= 45 && canSee) return 'BACKGROUND';

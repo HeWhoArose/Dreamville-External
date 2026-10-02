@@ -7568,7 +7568,8 @@ export class MultiModelOrchestrator {
     voiceProfile?: any;
     idempotencyKey?: string;
     repository?: WorldRepository;
-  }): Promise<OrchestratedTurnResult> {
+      narratorVoiceControls?: NarratorVoiceControls;
+}): Promise<OrchestratedTurnResult> {
     const storyId = params.storyId || 'default_story';
     const rawIdempotencyKey = params.idempotencyKey ? String(params.idempotencyKey).trim() : undefined;
     const scopedKey = rawIdempotencyKey ? `${storyId}::${rawIdempotencyKey}` : undefined;

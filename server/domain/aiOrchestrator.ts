@@ -18,7 +18,7 @@ import {
 import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
 import { evaluateAiTaskCandidatePreflight, evaluateAiTaskReadiness, getAiTaskContract, getAiTasksByCategory, getAllAiTaskContracts, validateAiTaskResponse, type AiTaskCandidatePreflight, type AiTaskReadiness } from './aiTaskContracts';
 import { narrativeContinuityEngine } from './narrativeContinuityEngine';
-import { CurrentSituationBuilder } from './currentSituation';
+import { CurrentSituationBuilder, type CurrentSituation } from './currentSituation';
 import { PlayerIntentInterpreter, type PlayerIntent } from './playerIntentInterpreter';
 import { NarrativeResearchPipeline, type NarrativeResearchResult } from './narrativeResearchPipeline';
 import { NarrativeDirector, type EphemeralNarrativePlan } from './narrativeDirector';
@@ -8310,6 +8310,7 @@ export class MultiModelOrchestrator {
               playerIntent,
               narrativePlan,
               narrativeReview,
+              literaryReview,
               stateAdjudication,
               telemetry,
               adjudicationResult: adjudication,
@@ -8385,6 +8386,7 @@ export class MultiModelOrchestrator {
             } else {
               let emergencyTurnPackage = validation.turnPackage;
               let emergencyNarrativeReview: NarrativeReview | undefined;
+              let emergencyLiteraryReview: LiteraryReview | undefined;
               if (isNarrativeTask && narrativePlan) {
                 const reviewed = await this.reviewAndRepairNarrative({
                   turnPackage: validation.turnPackage,
@@ -8424,7 +8426,8 @@ export class MultiModelOrchestrator {
                     lastError = 'Emergency narration failed N7 novelty validation.';
                   } else {
                     emergencyTurnPackage = reviewed.turnPackage;
-                    emergencyNarrativeReview = emergencyLiterary;
+                    emergencyNarrativeReview = reviewed.review;
+                    emergencyLiteraryReview = emergencyLiterary;
                   }
                 }
               }
@@ -8551,6 +8554,7 @@ export class MultiModelOrchestrator {
               playerIntent,
               narrativePlan,
               narrativeReview: emergencyNarrativeReview,
+              literaryReview: emergencyLiteraryReview,
               stateAdjudication,
               telemetry,
               adjudicationResult: adjudication,

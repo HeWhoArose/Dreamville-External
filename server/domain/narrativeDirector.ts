@@ -43,7 +43,7 @@ function buildNpcCognitionContract(repository: WorldRepository, storyId: string,
 	return {
 		actorId: actor.id,
 		name: actor.name,
-		currentActivity: profile ? undefined : actor.currentActivity,
+		currentActivity: npcSlice?.currentActivity || actor.currentActivity,
 		immediateGoal: profile?.canonicalGoal || npcSlice?.immediateGoal,
 		desires: (profile?.desires || []).slice(0, 5),
 		fears: (profile?.fears || []).slice(0, 5),

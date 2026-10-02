@@ -908,7 +908,7 @@ export class DeterministicMockAdapter implements IProviderAdapter {
   public failureMode: 'timeout' | '429' | '500' | 'malformed_json' | 'illegal_state_change' | null = null;
   public failureCount: number = 0;
   public maxFailuresBeforeSuccess: number = 0;
-  public callHistory: { task: TaskId; prompt: string; timestamp: number }[] = [];
+  public callHistory: { task: TaskId; prompt: string; timestamp: number; options?: ProviderGenerateOptions }[] = [];
 
   constructor(providerId: string = 'provider_mock') {
     this.providerId = providerId;
@@ -923,7 +923,7 @@ export class DeterministicMockAdapter implements IProviderAdapter {
   }
 
   public async generate(task: TaskId, prompt: string, options?: ProviderGenerateOptions): Promise<ProviderGenerateResult> {
-    this.callHistory.push({ task, prompt, timestamp: Date.now() });
+    this.callHistory.push({ task, prompt, timestamp: Date.now(), options: options ? { ...options } : undefined });
 
     // Handle failure modes
     if (this.failureMode && (this.maxFailuresBeforeSuccess === 0 || this.failureCount < this.maxFailuresBeforeSuccess)) {

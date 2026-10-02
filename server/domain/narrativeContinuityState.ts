@@ -210,7 +210,15 @@ export class NarrativeContinuityStateEngine {
 			activeConversationalTension: unique([
 				...deriveConversationalTension(params.intent, narration, params.plan),
 			], effective.maxConversationalTensionEntries),
-			relationshipTrajectories: [],
+			relationshipTrajectories: params.situation.nearbyEntities
+				.filter((entity) => entity.visibleToPlayer && params.intent.explicitTargets.some((target) => target.id === entity.id))
+				.slice(0, 6)
+				.map((entity) => {
+					const relation = params.repository.getDynamicCharacterAgencyEngine?.(params.storyId)?.getRelationship(params.storyId, params.situation.player.actorId, entity.id);
+					const stance = String(relation?.stance || '').toUpperCase();
+					const trajectory: NarrativeRelationshipTrajectory = stance === 'FRIENDLY' ? 'FRIENDLY' : stance === 'HOSTILE' ? 'HOSTILE' : stance === 'WARMING' ? 'WARMING' : stance === 'STRAINING' ? 'STRAINING' : 'UNCHANGED';
+					return { entityId: entity.id, entityName: entity.name, trajectory, source: 'CANONICAL_STANCE' as const };
+				}),
 			recentSensoryMotifs: unique([...previous.recentSensoryMotifs, ...sensoryMotifsFrom(narration)], effective.maxRecentMotifs),
 			recentNarrativeBeats: unique([...previous.recentNarrativeBeats, narrativeBeat(narration, params.intent)], effective.maxRecentBeats),
 			recentResponseShapes: unique([...previous.recentResponseShapes, responseShape(narration, params.intent)], effective.maxRecentResponseShapes),

@@ -258,7 +258,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			const microResolution = truncatePromptSection(actionResolutionContext, 620);
 			const microResearch = truncatePromptSection(initialResearch, 220);
 			const microPlan = truncatePromptSection(planContext, 180);
-			const microComposition = truncatePromptSection(sceneCompositionContext, 360);
+			const microComposition = SceneCompositionEngine.toCompactPromptContext(sceneComposition);
 			const microCanonical = 'The current location and time are authoritative. Stay in the canonical current location unless the canonical game state has already committed a location change. Do not invent unsupported facts or turn rumor into certainty.';
 			const microOutput = '{"narrative":["..."],"dialogue":[],"events":[],"stateChanges":[],"memoryCandidates":[],"audioCues":[],"visualCues":[]}';
 			const sections = [
@@ -303,7 +303,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				intentContext: intentContext,
 				researchContext: truncatePromptSection(initialResearch, 700),
 				planContext: truncatePromptSection(planContext, 300),
-				sceneCompositionContext: truncatePromptSection(sceneCompositionContext, 260),
+				sceneCompositionContext: SceneCompositionEngine.toCompactPromptContext(sceneComposition),
 				workingContext: truncatePromptSection(initialWorking, 320),
 				situationContext: truncatePromptSection(situationContext, 900),
 			};
@@ -345,7 +345,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			const compactResolution = truncatePromptSection(actionResolutionContext, 700);
 			const compactResearch = truncatePromptSection(initialResearch, 180);
 			const compactPlan = truncatePromptSection(planContext, 140);
-			const compactComposition = truncatePromptSection(sceneCompositionContext, 220);
+			const compactComposition = SceneCompositionEngine.toCompactPromptContext(sceneComposition);
 			const compactCanonical = [
 				'State changes must come from canonical engines/commands.',
 				'Preserve rumor, hearsay, memory, and uncertainty as uncertainty.',

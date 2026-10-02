@@ -1,6 +1,7 @@
 import type { CurrentSituation } from './currentSituation';
 import type { PlayerIntent } from './playerIntentInterpreter';
 import type { ActionResolution } from './actionResolution';
+import type { NarrativeContinuityState } from './narrativeContinuityState';
 
 export type NarrativePacingProfile = 'MICRO' | 'COMPACT' | 'STANDARD' | 'EXPANDED' | 'KINETIC' | 'CONSEQUENCE';
 export interface NarrativePacingControls { enabled: boolean; minWords: number; maxWords: number; minParagraphs: number; maxParagraphs: number; outputTokenReserve: number; }
@@ -13,7 +14,7 @@ function hasMajorOutcome(resolution?: ActionResolution): boolean { const tier = 
 function hasDiscovery(situation: CurrentSituation, intent: PlayerIntent): boolean { return Boolean(intent.interactionMode === 'INFORMATION_SEEKING' || intent.informationGoal || (Array.isArray(situation.visibleEvents) && situation.visibleEvents.length > 0)); }
 
 export class NarrativePacingEngine {
-	public static resolve(params: { situation: CurrentSituation; intent: PlayerIntent; actionResolution?: ActionResolution; canonicalOutcome?: string; controls?: Partial<NarrativePacingControls>; }): NarrativePacingContract {
+	public static resolve(params: { situation: CurrentSituation; intent: PlayerIntent; actionResolution?: ActionResolution; canonicalOutcome?: string; continuityState?: NarrativeContinuityState; controls?: Partial<NarrativePacingControls>; }): NarrativePacingContract {
 		const base = { ...DEFAULT_NARRATIVE_PACING_CONTROLS, ...(params.controls || {}) };
 		if (!base.enabled) return { version: 1, profile: 'STANDARD', reason: 'N8 pacing is disabled.', controls: base, signals: ['disabled'], variation: 'Use natural scene rhythm without a hard pacing target.' };
 		const intent = params.intent; const signals: string[] = []; const recent = hasRecentNarration(params.situation);
@@ -21,6 +22,9 @@ export class NarrativePacingEngine {
 		const microAction = !movement && !dialogue && !combat && !intent.observationIntent && text(intent.originalText).length <= 24;
 		const majorOutcome = hasMajorOutcome(params.actionResolution) || Boolean(params.canonicalOutcome && params.canonicalOutcome.length > 120);
 		const discovery = hasDiscovery(params.situation, intent);
+		const continuityMomentum = params.continuityState?.sceneMomentum || 'STEADY';
+		const elevatedContinuity = ['BUILDING', 'ESCALATING'].includes(continuityMomentum);
+		const releasingContinuity = continuityMomentum === 'RELEASING';
 		const newLocation = movement && Boolean(intent.locationTarget) && (!recent || /enter|arrive/i.test(intent.action));
 		const activeDialogue = Boolean(params.situation.activeDialogue) && dialogue;
 		let profile: NarrativePacingProfile = 'STANDARD'; let reason = 'Normal scene interaction deserves a moderate response.'; let minWords = 85; let maxWords = 190; let minParagraphs = 1; let maxParagraphs = 2;
@@ -29,8 +33,9 @@ export class NarrativePacingEngine {
 		else if (majorOutcome) { profile='CONSEQUENCE'; reason='A meaningful canonical consequence deserves enough space to land without inventing aftermath.'; minWords=120; maxWords=300; maxParagraphs=3; signals.push('major_outcome'); }
 		else if (newLocation || (!recent && Boolean(params.situation.location.description))) { profile='EXPANDED'; reason='A new or opening scene benefits from spatial and sensory grounding before the next beat.'; minWords=130; maxWords=300; maxParagraphs=3; signals.push(newLocation ? 'new_location' : 'scene_opening'); }
 		else if (activeDialogue) { profile='COMPACT'; reason='An active conversation should leave room for the player to answer rather than monologue.'; minWords=45; maxWords=135; maxParagraphs=2; signals.push('awaiting_dialogue'); }
-		else if (discovery) { profile='EXPANDED'; reason='An observation or discovery needs enough space to communicate the useful reveal and its immediate texture.'; minWords=100; maxWords=240; maxParagraphs=3; signals.push('discovery'); }
+		else if (discovery || elevatedContinuity) { profile='EXPANDED'; reason=discovery ? 'An observation or discovery needs enough space to communicate the useful reveal and its immediate texture.' : 'The current scene is building or escalating; give the beat enough room to land without padding.'; minWords=100; maxWords=elevatedContinuity ? 260 : 240; maxParagraphs=3; signals.push(discovery ? 'discovery' : 'continuity_build'); }
 		else if (movement) { profile='COMPACT'; reason='Routine movement should advance the scene without turning travel into filler.'; minWords=55; maxWords=145; maxParagraphs=2; signals.push('movement'); }
+		if (releasingContinuity && profile === 'STANDARD') { maxWords = 155; signals.push('continuity_release'); }
 		else signals.push('normal_interaction');
 		if (intent.observationIntent) signals.push('observation'); if (intent.speechIntent) signals.push('speech'); if (params.situation.plot?.currentArc) signals.push('arc:' + params.situation.plot.currentArc.toLowerCase());
 		return { version:1, profile, reason, controls:{ ...base, minWords:Math.min(base.maxWords,minWords), maxWords:Math.min(base.maxWords,Math.max(minWords,maxWords)), minParagraphs, maxParagraphs, outputTokenReserve:base.outputTokenReserve }, signals, variation:'Treat these ranges as guidance, not a paragraph template. Let sentence rhythm and the actual scene determine the exact length.' };

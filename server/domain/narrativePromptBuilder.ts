@@ -190,6 +190,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			situationContext: string;
 			intentContext: string;
 			planContext: string;
+			sceneCompositionContext: string;
 			canonicalConstraints: string;
 			outputContract: string;
 		}>,
@@ -207,7 +208,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		section('ACTION RESOLUTION — AUTHORITATIVE', actionResolutionContext),
 		section('NARRATIVE RESEARCH', researchContext),
 		section('NARRATIVE DIRECTOR PLAN', overrides?.planContext || planContext),
-		section('N13 SCENE COMPOSITION', sceneCompositionContext),
+		section('N13 SCENE COMPOSITION', overrides?.sceneCompositionContext || sceneCompositionContext),
 		section('NPC COGNITION BOUNDARY', 'NPC cognition is presentation guidance. Private beliefs, secrets, and knowledge must never be stated as player-visible facts unless independently authorized by research or canonical scene evidence. Express cognition through observable behavior, dialogue, hesitation, priorities, and reactions.'),
 		section('SUPPORTING WORKING CONTEXT', workingContext),
 		overrides?.canonicalConstraints || canonicalConstraints,
@@ -302,6 +303,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				intentContext: intentContext,
 				researchContext: truncatePromptSection(initialResearch, 700),
 				planContext: truncatePromptSection(planContext, 300),
+				sceneCompositionContext: truncatePromptSection(sceneCompositionContext, 260),
 				workingContext: truncatePromptSection(initialWorking, 320),
 				situationContext: truncatePromptSection(situationContext, 900),
 			};
@@ -312,6 +314,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 					situationContext: compact.situationContext,
 					intentContext: compact.intentContext,
 					planContext: compact.planContext,
+					sceneCompositionContext: compact.sceneCompositionContext,
 				},
 			);
 			prompt = renderCompact();
@@ -342,6 +345,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			const compactResolution = truncatePromptSection(actionResolutionContext, 700);
 			const compactResearch = truncatePromptSection(initialResearch, 180);
 			const compactPlan = truncatePromptSection(planContext, 140);
+			const compactComposition = truncatePromptSection(sceneCompositionContext, 220);
 			const compactCanonical = [
 				'State changes must come from canonical engines/commands.',
 				'Preserve rumor, hearsay, memory, and uncertainty as uncertainty.',
@@ -358,6 +362,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				section('ACTION RESOLUTION — AUTHORITATIVE', compactResolution),
 				section('NARRATIVE RESEARCH', compactResearch),
 				section('NARRATIVE DIRECTOR PLAN', compactPlan),
+				section('N13 SCENE COMPOSITION', compactComposition),
 				section('SUPPORTING WORKING CONTEXT', '[omitted]'),
 				compactCanonical,
 				section('OUTPUT CONTRACT', compactOutput),
@@ -365,6 +370,6 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			totalTokens = WorkingContextEngine.estimateTokens(prompt);
 		}
 	}
-	return { prompt, styleInstruction: [styleInstruction, narrativeProviderHandoff.providerIndependentInstruction].join('\n\n'), totalTokens, narrativeQualityContract, narratorVoiceState: input.narratorVoiceState, narrativeContinuityState, narrativePacingContract, narrativeProviderHandoff };
+	return { prompt, styleInstruction: [styleInstruction, narrativeProviderHandoff.providerIndependentInstruction].join('\n\n'), totalTokens, narrativeQualityContract, narratorVoiceState: input.narratorVoiceState, narrativeContinuityState, narrativePacingContract, narrativeProviderHandoff, sceneComposition };
 }
 

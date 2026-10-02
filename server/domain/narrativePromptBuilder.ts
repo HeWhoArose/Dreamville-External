@@ -7,6 +7,7 @@ import { EpistemicBoundaryEnforcer } from './epistemicBoundary';
 import type { ActionResolution } from './actionResolution';
 import { buildActionResolutionPromptContext } from './actionResolution';
 import { NarrativeQualityContractEngine, type NarrativeQualityControls, type NarrativeQualityContract } from './narrativeQualityContract';
+import { NarratorVoiceEngine, type NarratorVoiceControls, type NarratorVoiceState } from './narratorVoiceEngine';
 
 export interface NarrationPromptInput {
 	situation: CurrentSituation;
@@ -20,6 +21,8 @@ export interface NarrationPromptInput {
 	actionResolution?: ActionResolution;
 	maxPromptTokens?: number;
 	narrativeQualityControls?: Partial<NarrativeQualityControls>;
+	narratorVoiceState?: NarratorVoiceState;
+	narratorVoiceControls?: NarratorVoiceControls;
 }
 
 export interface NarrationPromptResult {
@@ -27,6 +30,7 @@ export interface NarrationPromptResult {
 	styleInstruction: string;
 	totalTokens: number;
 	narrativeQualityContract: NarrativeQualityContract;
+	narratorVoiceState?: NarratorVoiceState;
 }
 
 export function projectSupportingWorkingContext(context: AssembledTurnContext): string {
@@ -129,6 +133,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	const actionResolutionContext = buildActionResolutionPromptContext(input.actionResolution);
 	const narrativeQualityContract = NarrativeQualityContractEngine.resolve(input.intent, input.narrativeQualityControls);
 	const narrativeQualityContext = NarrativeQualityContractEngine.toPromptContext(narrativeQualityContract);
+	const promptBudgetVoiceContext = input.narratorVoiceState ? NarratorVoiceEngine.toPromptContext(input.narratorVoiceState) : 'Narrator Voice Contract: disabled for this turn.';
 	const promptBudgetQualityContext = input.maxPromptTokens && input.maxPromptTokens <= 1500
 		? 'N1 profile=' + narrativeQualityContract.profile + '; enforcement=' + narrativeQualityContract.controls.enforcement + '; preferred paragraphs=' + narrativeQualityContract.controls.preferredParagraphs + '; max paragraphs=' + narrativeQualityContract.controls.maxParagraphs + '; preserve scene grounding, specificity, pacing, novelty, character voice, emotional continuity, coherence, and player agency.'
 		: narrativeQualityContext;
@@ -167,6 +172,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	): string => [
 		section('GLOBAL NARRATION INSTRUCTIONS', overrides?.globalInstruction || globalInstruction),
 		section('NARRATIVE STYLE', overrides?.styleInstruction || styleInstruction),
+		section('NARRATOR VOICE CONTRACT', promptBudgetVoiceContext),
 		section('NARRATIVE QUALITY CONTRACT', promptBudgetQualityContext),
 		section('CURRENT SITUATION', overrides?.situationContext || situationContext),
 		section('PLAYER INTENT', overrides?.intentContext || intentContext),
@@ -183,7 +189,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	const maxPromptTokens = input.maxPromptTokens;
 	if (!maxPromptTokens) {
 		const prompt = compose(initialResearch, initialWorking);
-		return { prompt, styleInstruction, totalTokens: WorkingContextEngine.estimateTokens(prompt), narrativeQualityContract };
+		return { prompt, styleInstruction, totalTokens: WorkingContextEngine.estimateTokens(prompt), narrativeQualityContract, narratorVoiceState: input.narratorVoiceState };
 	}
 
 	let researchContext = initialResearch;
@@ -211,6 +217,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		if (maxPromptTokens < 600) {
 			const budgetChars = Math.max(1200, maxPromptTokens * 4);
 			const microGlobal = 'Generate only the player-facing narrative. Preserve player agency and canonical truth. Never make major future decisions for the player.';
+			const microVoice = input.narratorVoiceState ? truncatePromptSection(NarratorVoiceEngine.compactPromptContext(input.narratorVoiceState), 420) : 'N2 voice disabled.';
 			const microQuality = truncatePromptSection(promptBudgetQualityContext, 420);
 			const microSituation = truncatePromptSection(situationContext, 360);
 			const microIntent = truncatePromptSection(intentContext, 180);
@@ -221,6 +228,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			const microOutput = '{"narrative":["..."],"dialogue":[],"events":[],"stateChanges":[],"memoryCandidates":[],"audioCues":[],"visualCues":[]}';
 			const sections = [
 				section('GLOBAL NARRATION INSTRUCTIONS', microGlobal),
+				section('NARRATOR VOICE CONTRACT', microVoice),
 				section('NARRATIVE QUALITY CONTRACT', microQuality),
 				section('CURRENT SITUATION', microSituation),
 				section('PLAYER INTENT', microIntent),
@@ -320,6 +328,6 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			totalTokens = WorkingContextEngine.estimateTokens(prompt);
 		}
 	}
-	return { prompt, styleInstruction, totalTokens, narrativeQualityContract };
+	return { prompt, styleInstruction, totalTokens, narrativeQualityContract, narratorVoiceState: input.narratorVoiceState };
 }
 

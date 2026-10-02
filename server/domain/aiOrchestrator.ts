@@ -5594,6 +5594,7 @@ export class MultiModelOrchestrator {
     const customChainKeys = this.taskFallbackChains.get(routeTask);
     const category = this.getTaskCategory(task);
     const categoryOverrideKey = this.categoryOverrides.get(category);
+    const routingPolicy = getAiTaskRoutingPolicy(task);
 
     const findConfiguredModel = (key: string): ModelRegistryRecord | undefined => {
       let found = Array.from(this.models.values()).find(

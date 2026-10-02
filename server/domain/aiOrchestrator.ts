@@ -538,6 +538,7 @@ export interface OrchestratedTurnResult {
   playerIntent?: PlayerIntent;
   narrativePlan?: EphemeralNarrativePlan;
   narrativeReview?: NarrativeReview;
+  literaryReview?: LiteraryReview;
   stateAdjudication?: StateAdjudicationResult;
   turnPackage?: StructuredTurnPackage;
   telemetry: OrchestratedTurnTelemetry;
@@ -8022,7 +8023,7 @@ export class MultiModelOrchestrator {
               }
               reviewedTurnPackage = reviewed.turnPackage;
               narrativeReview = reviewed.review;
-              const literary = LiteraryNarrativeReview.review({ intent: playerIntent, situation: currentSituation, plan: narrativePlan, turnPackage: reviewedTurnPackage, voice: narratorVoiceState, previousNarrations: currentSituation.narrativeContextHistory?.map((entry: any) => String(entry.narration || entry.text || '')).filter(Boolean) });
+              const literary = LiteraryNarrativeReview.review({ intent: playerIntent, situation: currentSituation, plan: narrativePlan, turnPackage: reviewedTurnPackage, voice: narratorVoiceState, previousNarrations: currentSituation.recentTurns.map((entry) => String(entry.narration || '')).filter(Boolean) });
               literaryReview = literary;
               if (literary.decision === 'REWRITE') {
                 const literaryBudget = turnAiCallBudget.beginTask('narrative.review');

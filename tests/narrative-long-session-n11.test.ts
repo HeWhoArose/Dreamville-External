@@ -52,20 +52,47 @@ function prepareOrchestrator(primary: DeterministicMockAdapter, fallback: Determ
 }
 
 function responseForTurn(turn: number, locationName: string): string {
+	const openings = [
+		'Across ' + locationName + ', your attention settles on the archivists without interrupting their work.',
+		'From where you stand in ' + locationName + ', you watch the archivists continue their quiet task.',
+		'The workbench draws your eye in ' + locationName + ', and you take in the archivists’ movements.',
+		'Nothing in ' + locationName + ' demands action yet; you study the archivists as they carry on.',
+		'Your attention lingers on the archivists inside ' + locationName + ', following the small changes in their routine.',
+		'You take a moment to watch the archivists around you in ' + locationName + '.',
+		'Within ' + locationName + ', the archivists remain your focus as you quietly observe.',
+		'You let the scene in ' + locationName + ' speak for itself while keeping the archivists in view.',
+		'The nearest instruments frame your view of the archivists in ' + locationName + '.',
+		'You scan the immediate scene of ' + locationName + ' and settle on the archivists’ ongoing work.',
+		'At the edge of the work area in ' + locationName + ', you continue watching the archivists.',
+		'For the moment, ' + locationName + ' offers no demand beyond careful observation, and the archivists remain your focus.',
+	];
 	const details = [
-		'brass rings turn overhead while a low current of air moves through the chamber',
-		'blue instrument lights flicker along the archivists’ workbench',
-		'dust shifts across the old stone beside the observatory rail',
-		'distant mechanisms click once and settle back into silence',
-		'a thin reflection moves across the glass before fading',
-		'the archivists continue their measured work without interrupting the scene',
-		'quiet footsteps pass behind the nearest instrument and disappear',
-		'the chamber holds its steady hum while the observation continues',
+		'Brass rings turn overhead while a low current of air passes through the chamber.',
+		'Blue instrument lights flicker along the archivists’ workbench before settling.',
+		'Dust shifts across old stone beside the observatory rail.',
+		'Distant mechanisms click once and then fall silent again.',
+		'A thin reflection moves across the glass before fading.',
+		'The archivists continue their measured work without breaking concentration.',
+		'Quiet footsteps pass behind the nearest instrument and disappear.',
+		'The chamber keeps its steady hum around the observation.',
+		'A loose page lifts at one corner and settles back onto the table.',
+		'The nearest brass assembly gives a soft mechanical tick.',
+		'A faint vibration travels through the rail beneath your hand.',
+		'Nothing else in the immediate scene demands a response yet.',
+	];
+	const opening = openings[(turn - 1) % openings.length];
+	const detail = details[(turn * 3) % details.length];
+	const suffixes = [
+		'No new location or time change is committed.',
+		'The observation remains limited to what is directly visible.',
+		'Nothing in the scene establishes a new fact beyond what you can currently perceive.',
+		'The immediate situation remains unchanged.',
+		'No later player choice is assumed.',
 	];
 	return JSON.stringify({
 		narrative: [
-			'You observe the archivists in ' + locationName + ' without changing position.',
-			'Turn ' + turn + ' remains grounded in the immediate scene; ' + details[turn % details.length] + '.',
+			opening,
+			turn % 2 === 0 ? detail + ' ' + suffixes[turn % suffixes.length] : suffixes[turn % suffixes.length] + ' ' + detail,
 		],
 		dialogue: [],
 		events: [],

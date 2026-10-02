@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { DynamicCharacterAgencyEngine } from '../server/domain/dynamicCharacterAgency';
 import { NpcExpressiveIdentityEngine } from '../server/domain/npcExpressiveIdentity';
 import { NarrativeDirector } from '../server/domain/narrativeDirector';
 import { CurrentSituationBuilder } from '../server/domain/currentSituation';
@@ -39,7 +38,6 @@ function makeProfile(overrides: any = {}) {
 }
 
 test('N14 projects expressive identity from existing authoritative character data without mutating it', () => {
-	const engine = new DynamicCharacterAgencyEngine();
 	const before = JSON.stringify(makeProfile());
 	const identity = NpcExpressiveIdentityEngine.project({
 		characterId: 'npc-1',
@@ -55,7 +53,6 @@ test('N14 projects expressive identity from existing authoritative character dat
 	assert.ok(identity.physicalMannerismCues.some((cue) => /monitor/i.test(cue)));
 	assert.deepEqual(identity.verbalTics, []);
 	assert.equal(identity.expiresAfterNarration, true);
-	void engine;
 });
 
 test('N14 keeps two characters expressively distinct from different existing signals', () => {

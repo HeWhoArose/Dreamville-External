@@ -5,10 +5,13 @@ import { CurrentSituationBuilder, type CurrentSituation } from './currentSituati
 import { narrativeContinuityEngine, type NarrativeResearchPacket } from './narrativeContinuityEngine';
 import type { PlayerIntent } from './playerIntentInterpreter';
 import { EntitySceneRelevanceEngine } from './entitySceneRelevance';
+import { SemanticNarrativeResearchEngine, type SemanticNarrativeResearchProfile } from './semanticNarrativeResearch';
+import { NarrativeContinuityStateEngine, type NarrativeContinuityState } from './narrativeContinuityState';
 
 export type NarrativeResearchBlockKind =
 	| 'SCENE'
 	| 'ENTITY'
+	| 'RELATIONSHIP'
 	| 'KNOWLEDGE'
 	| 'MEMORY'
 	| 'PLOT'
@@ -33,6 +36,7 @@ export interface NarrativeResearchBlock {
 export interface NarrativeResearchBudgets {
 	scene: number;
 	entities: number;
+	relationships: number;
 	memories: number;
 	lore: number;
 	plot: number;
@@ -59,6 +63,8 @@ export interface NarrativeResearchResult {
 	promptContext: string;
 	totalTokens: number;
 	capturedAt: string;
+	semanticProfile: SemanticNarrativeResearchProfile;
+	continuityState: NarrativeContinuityState;
 }
 
 interface CandidateBlock extends NarrativeResearchBlock {
@@ -146,6 +152,7 @@ function blockPriority(kind: NarrativeResearchBlockKind): number {
 	switch (kind) {
 		case 'SCENE': return 100;
 		case 'ENTITY': return 95;
+		case 'RELATIONSHIP': return 91;
 		case 'CONSEQUENCE': return 92;
 		case 'KNOWLEDGE': return 86;
 		case 'THREAD': return 82;
@@ -202,6 +209,7 @@ export class NarrativeResearchPipeline {
 	public static readonly DEFAULT_BUDGETS: NarrativeResearchBudgets = {
 		scene: 700,
 		entities: 700,
+		relationships: 450,
 		memories: 600,
 		lore: 600,
 		plot: 500,
@@ -247,7 +255,14 @@ export class NarrativeResearchPipeline {
 			failures.push(String(error?.message || error || 'Narrative continuity research failed.'));
 			packet = emptyPacket(params.storyId, researchQuery, viewerActorId, situation);
 		}
+		const continuityState = NarrativeContinuityStateEngine.resolve(params.repository, params.storyId);
+		const semanticProfile = SemanticNarrativeResearchEngine.derive(playerIntent || situation.currentAction || {
+			action: 'continue', interactionMode: 'OTHER', speechIntent: false, movementIntent: false, observationIntent: false,
+			explicitTargets: [], impliedTargets: [], confidence: 0, source: 'DETERMINISTIC', originalText: researchQuery,
+		} as PlayerIntent, situation);
 		const queryTokens = tokens([
+			continuityState.narrativeFocus.join(' '),
+			continuityState.unresolvedSubtext.join(' '),
 			params.playerAction,
 			playerIntent?.goal,
 			playerIntent?.informationGoal,
@@ -334,6 +349,32 @@ export class NarrativeResearchPipeline {
 					presence: entity.worldState?.presence,
 					factionIds: entity.social?.factionIds,
 				}), 1600),
+			}, queryTokens);
+		}
+
+		const relationshipCandidates = packet.relationships.filter(Boolean).slice(0, 12);
+		for (const relationship of relationshipCandidates) {
+			const relation = relationship as any;
+			const sourceId = normalize(relation?.sourceId || relation?.fromId);
+			const targetId = normalize(relation?.targetId || relation?.toId);
+			const targetFocused = [sourceId, targetId].some((id) => Boolean(id && explicitTargetIds.has(id)));
+			const content = normalize([
+				relation?.stance ? 'Stance: ' + relation.stance : '',
+				relation?.activeCause ? 'Cause: ' + relation.activeCause : '',
+				relation?.summary ? relation.summary : '',
+				relation?.history?.length ? 'Recent relationship history is available.' : '',
+			].filter(Boolean).join(' | '));
+			if (!content || !targetFocused) continue;
+			addCandidate(candidates, {
+				id: `research_relationship_${relation.id || sourceId + '_' + targetId}`,
+				kind: 'RELATIONSHIP',
+				source: 'DynamicCharacterAgency.relationship',
+				sourceId: normalize(relation.id || sourceId + '_' + targetId),
+				priority: blockPriority('RELATIONSHIP'),
+				reason: 'Player-authorized relationship context is relevant to the focused entity and current interaction.',
+				expiration: 'TURN',
+				relevanceScore: targetFocused ? 0.96 : 0.7,
+				content: truncate(content, 1200),
 			}, queryTokens);
 		}
 
@@ -553,11 +594,19 @@ export class NarrativeResearchPipeline {
 			MEMORY: budgets.memories,
 			PLOT: budgets.plot,
 			THREAD: Math.min(budgets.plot, 450),
+			RELATIONSHIP: budgets.relationships,
 		};
+		const semanticScores = new Map(candidates.map((candidate) => [
+			candidate.id,
+			SemanticNarrativeResearchEngine.scoreCandidate(semanticProfile, candidate),
+		]));
 		const sorted = candidates.sort((a, b) => {
 			const priority = b.priority - a.priority;
 			if (priority !== 0) return priority;
 			if (b.relevanceScore !== a.relevanceScore) return b.relevanceScore - a.relevanceScore;
+			const semanticA = semanticScores.get(a.id)?.score || 0;
+			const semanticB = semanticScores.get(b.id)?.score || 0;
+			if (semanticB !== semanticA) return semanticB - semanticA;
 			return a.id.localeCompare(b.id);
 		});
 		const selected: CandidateBlock[] = [];
@@ -568,6 +617,7 @@ export class NarrativeResearchPipeline {
 			MEMORY: 0,
 			PLOT: 0,
 			THREAD: 0,
+			RELATIONSHIP: 0,
 			CONSEQUENCE: 0,
 		};
 		let total = 0;
@@ -599,6 +649,8 @@ export class NarrativeResearchPipeline {
 
 		const promptContext = [
 			'NARRATIVE RESEARCH RESULTS',
+			SemanticNarrativeResearchEngine.summarize(semanticProfile),
+			NarrativeContinuityStateEngine.compactPromptContext(continuityState),
 			`Query: ${query || 'current story context'}`,
 			`Research budget: ${budgets.total} estimated tokens; selected: ${total}`,
 			...selected.map((block) =>
@@ -621,6 +673,8 @@ export class NarrativeResearchPipeline {
 			promptContext,
 			totalTokens: total,
 			capturedAt: formatCanonicalTimestamp(capturedAt),
+			semanticProfile,
+			continuityState,
 		};
 	}
 
@@ -647,6 +701,8 @@ export class NarrativeResearchPipeline {
 			excluded: result.excluded.slice(0, 40),
 			promptContext: result.promptContext.slice(0, 12000),
 			fallbackMode: result.failures.length > 0 ? 'CURRENT_SITUATION_ONLY' : 'NORMAL_RESEARCH',
+			semanticProfile: result.semanticProfile,
+			continuityState: result.continuityState,
 		};
 	}
 }

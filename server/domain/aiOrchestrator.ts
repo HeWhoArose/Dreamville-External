@@ -18,14 +18,20 @@ import {
 import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
 import { evaluateAiTaskCandidatePreflight, evaluateAiTaskReadiness, getAiTaskContract, getAiTasksByCategory, getAllAiTaskContracts, validateAiTaskResponse, type AiTaskCandidatePreflight, type AiTaskReadiness } from './aiTaskContracts';
 import { narrativeContinuityEngine } from './narrativeContinuityEngine';
-import { CurrentSituationBuilder } from './currentSituation';
+import { CurrentSituationBuilder, type CurrentSituation } from './currentSituation';
 import { PlayerIntentInterpreter, type PlayerIntent } from './playerIntentInterpreter';
 import { NarrativeResearchPipeline, type NarrativeResearchResult } from './narrativeResearchPipeline';
 import { NarrativeDirector, type EphemeralNarrativePlan } from './narrativeDirector';
 import { buildNarrationPrompt, defaultNarrationStyle, projectSupportingWorkingContext } from './narrativePromptBuilder';
 import { SemanticNarrativeReview, type NarrativeReview } from './semanticNarrativeReview';
+import { LiteraryNarrativeReview, type LiteraryReview } from './literaryNarrativeReview';
+import { NarrativeProviderHandoffEngine, type NarrativeProviderHandoffContract } from './narrativeProviderHandoff';
+import { NarrativePacingEngine, type NarrativePacingContract } from './narrativePacingEngine';
+import { NarrativeNoveltyEngine } from './narrativeNoveltyEngine';
 import { EpistemicBoundaryEnforcer } from './epistemicBoundary';
 import { NarrativeStateAdjudicator, type StateAdjudicationResult } from './narrativeStateAdjudicator';
+import { NarrativeContinuityStateEngine } from './narrativeContinuityState';
+import { NarratorVoiceEngine, type NarratorVoiceControls } from './narratorVoiceEngine';
 import { AiTurnCallBudget, type AiTurnCallBudgetSnapshot } from './aiTurnCallBudget';
 import type { ActionResolution } from './actionResolution';
 
@@ -528,6 +534,7 @@ export interface OrchestratedTurnTelemetry {
   narrativePlanObjective?: string;
   narrativeReview?: NarrativeReview;
   aiCallBudget?: AiTurnCallBudgetSnapshot;
+  narrativeProviderHandoff?: NarrativeProviderHandoffContract;
 }
 
 export interface OrchestratedTurnResult {
@@ -535,6 +542,7 @@ export interface OrchestratedTurnResult {
   playerIntent?: PlayerIntent;
   narrativePlan?: EphemeralNarrativePlan;
   narrativeReview?: NarrativeReview;
+  literaryReview?: LiteraryReview;
   stateAdjudication?: StateAdjudicationResult;
   turnPackage?: StructuredTurnPackage;
   telemetry: OrchestratedTurnTelemetry;
@@ -900,7 +908,7 @@ export class DeterministicMockAdapter implements IProviderAdapter {
   public failureMode: 'timeout' | '429' | '500' | 'malformed_json' | 'illegal_state_change' | null = null;
   public failureCount: number = 0;
   public maxFailuresBeforeSuccess: number = 0;
-  public callHistory: { task: TaskId; prompt: string; timestamp: number }[] = [];
+  public callHistory: { task: TaskId; prompt: string; timestamp: number; options?: ProviderGenerateOptions }[] = [];
 
   constructor(providerId: string = 'provider_mock') {
     this.providerId = providerId;
@@ -915,7 +923,7 @@ export class DeterministicMockAdapter implements IProviderAdapter {
   }
 
   public async generate(task: TaskId, prompt: string, options?: ProviderGenerateOptions): Promise<ProviderGenerateResult> {
-    this.callHistory.push({ task, prompt, timestamp: Date.now() });
+    this.callHistory.push({ task, prompt, timestamp: Date.now(), options: options ? { ...options } : undefined });
 
     // Handle failure modes
     if (this.failureMode && (this.maxFailuresBeforeSuccess === 0 || this.failureCount < this.maxFailuresBeforeSuccess)) {
@@ -7000,6 +7008,11 @@ export class MultiModelOrchestrator {
     adapter: IProviderAdapter;
     modelId: string;
     timeoutMs: number;
+    playerAction: string;
+    repository: WorldRepository;
+    storyId: string;
+    narrativePacingContract: NarrativePacingContract;
+    narrativeProviderHandoff?: NarrativeProviderHandoffContract;
     strict?: boolean;
     allowRewrite?: boolean;
   }): Promise<{ turnPackage: StructuredTurnPackage; review: NarrativeReview }> {
@@ -7024,7 +7037,10 @@ export class MultiModelOrchestrator {
       response = await params.adapter.generate('narrative.generate', rewritePrompt, {
         timeoutMs: Math.min(params.timeoutMs, 5000),
         modelId: params.modelId,
-        maxTokens: 1200,
+        maxTokens: NarrativePacingEngine.outputTokenBudget(params.narrativePacingContract),
+        systemInstruction: params.narrativeProviderHandoff?.providerIndependentInstruction,
+        canonicalLocationName: params.situation.location.name,
+        playerAction: params.playerAction,
       });
       if (!response?.text) throw new Error('Narrative semantic rewrite provider returned empty text.');
       const rewriteModel = Array.from(this.models.values()).find((model) => model.modelId === params.modelId || this.modelKey(model) === params.modelId);
@@ -7050,6 +7066,19 @@ export class MultiModelOrchestrator {
     if (!intentSafety.valid) {
       throw new Error(intentSafety.errorReason || 'Narrative semantic rewrite violated player intent safety.');
     }
+    const presentation = this.validateNarrativePresentation({
+      narration: validation.turnPackage.narrative.join(' '),
+      playerAction: params.playerAction,
+      intent: params.intent,
+      situation: params.situation,
+      repository: params.repository,
+      storyId: params.storyId,
+      pacingContract: params.narrativePacingContract,
+    });
+    if (!presentation.valid) {
+      throw new Error(presentation.errorReason || 'Narrative semantic rewrite failed final presentation validation.');
+    }
+
     review = SemanticNarrativeReview.review({
       intent: params.intent,
       situation: params.situation,
@@ -7060,6 +7089,63 @@ export class MultiModelOrchestrator {
       throw new Error('Narrative semantic review remained ' + review.decision + ' after the single permitted rewrite.');
     }
     return { turnPackage: validation.turnPackage, review };
+  }
+
+  private validateNarrativePresentation(params: {
+    narration: string;
+    playerAction: string;
+    intent: PlayerIntent;
+    situation: CurrentSituation;
+    repository: WorldRepository;
+    storyId: string;
+    pacingContract: NarrativePacingContract;
+  }): { valid: boolean; errorReason?: string } {
+    const narration = String(params.narration || '').trim();
+    if (!narration) return { valid: false, errorReason: 'Narration presentation validation received empty output.' };
+
+    const pacing = NarrativePacingEngine.validateNarration(narration, params.pacingContract);
+    if (!pacing.valid) return { valid: false, errorReason: pacing.reason || 'Narration failed N8 adaptive pacing validation.' };
+
+    const sceneContinuity = this.validateNarrativeSceneContinuity(narration, params.repository, params.storyId);
+    if (!sceneContinuity.valid) return { valid: false, errorReason: sceneContinuity.errorReason };
+
+    const actionContinuity = this.validateNarrativeActionContinuity(narration, params.playerAction, params.intent);
+    if (!actionContinuity.valid) return { valid: false, errorReason: actionContinuity.errorReason };
+
+    const actionModeContinuity = this.validateNarrativeActionModeContinuity(
+      narration,
+      params.playerAction,
+      params.situation.player.name,
+      params.intent,
+    );
+    if (!actionModeContinuity.valid) return { valid: false, errorReason: actionModeContinuity.errorReason };
+
+    const intentSafety = this.validateNarrativeIntentSafety(narration, params.intent, params.situation.player.name);
+    if (!intentSafety.valid) return { valid: false, errorReason: intentSafety.errorReason };
+
+    const currentSceneFactualContext = [
+      params.situation.location.description,
+      params.situation.location.ambientSensory,
+      params.situation.activeDialogue ? 'Active dialogue: ' + params.situation.activeDialogue.speakerName + ': ' + params.situation.activeDialogue.text : '',
+      ...params.situation.visibleEvents.map((event) => event.summary),
+      ...params.situation.relevantLore.map((fact) => 'Authorized lore: ' + fact.subjectEntityId + ' ' + fact.predicate + ' ' + fact.objectValue),
+    ].filter(Boolean).slice(0, 10).join('\n');
+
+    const informationTopicContinuity = this.validateNarrativeInformationTopicContinuity(
+      narration,
+      params.playerAction,
+      currentSceneFactualContext,
+      params.intent,
+    );
+    if (!informationTopicContinuity.valid) return { valid: false, errorReason: informationTopicContinuity.errorReason };
+
+    const informationContinuity = this.validateNarrativeInformationContinuity(narration, params.playerAction, params.intent);
+    if (!informationContinuity.valid) return { valid: false, errorReason: informationContinuity.errorReason };
+
+    const temporalContinuity = this.validateNarrativeTemporalContinuity(narration, params.repository, params.storyId);
+    if (!temporalContinuity.valid) return { valid: false, errorReason: temporalContinuity.errorReason };
+
+    return { valid: true };
   }
 
   /**
@@ -7084,6 +7170,7 @@ export class MultiModelOrchestrator {
     recentTurns?: Array<{ playerAction: string; narration: string; worldTime?: string }>;
     sceneContext?: string;
     forceModelId?: string;
+    narratorVoiceControls?: NarratorVoiceControls;
   }): Promise<{
     success: boolean;
     turnPackage?: StructuredTurnPackage;
@@ -7163,6 +7250,8 @@ export class MultiModelOrchestrator {
       situation: currentSituation,
       intent: playerIntent,
       research: researchResult,
+      repository: worldRepo,
+      storyId,
     });
 
     const canonicalSceneAnchor = [
@@ -7205,7 +7294,7 @@ export class MultiModelOrchestrator {
       'Do not invent characters, items, abilities, environmental objects, causal explanations, or knowledge outside the supplied context.',
       'Respect CHECK_PENDING or unresolved actions: show the attempt, not the result.',
       'Use concrete established sensory details and vary wording without repeating recent turns.',
-      'Normally write 2–3 paragraphs. For a tiny action, one concise paragraph is enough.',
+      'Follow the N8 adaptive pacing contract for response length and paragraph count; do not force a universal paragraph template.',
       'Populate visualCues with only current-turn visual beats; one frozen moment uses one cue, distinct immediate beats may use up to three.',
       'No menus, captions, meta-commentary, status labels, or debug text.',
     ].filter(Boolean).join(' ');
@@ -7330,6 +7419,13 @@ export class MultiModelOrchestrator {
       ],
     });
 
+    const narrativeProfile = worldRepo.getNarrativeProfile(storyId);
+    const narratorVoiceState = NarratorVoiceEngine.resolve(worldRepo, storyId, narrativeProfile, params.narratorVoiceControls);
+    NarratorVoiceEngine.persist(worldRepo, storyId, narratorVoiceState);
+    const narrativeNoveltyState = NarrativeNoveltyEngine.resolve(worldRepo, storyId);
+    const narrativeContinuityState = researchResult?.continuityState || NarrativeContinuityStateEngine.resolve(worldRepo, storyId);
+    const narrativePacingContract = NarrativePacingEngine.resolve({ situation: currentSituation, intent: playerIntent, actionResolution: params.actionResolution, canonicalOutcome: authoritativeOutcome, continuityState: narrativeContinuityState });
+
     const narrationPrompt = buildNarrationPrompt({
       situation: currentSituation,
       intent: playerIntent,
@@ -7338,10 +7434,16 @@ export class MultiModelOrchestrator {
       workingContext: projectSupportingWorkingContext(assembledContext),
       globalInstruction: 'You are Dreamville’s narrative presentation engine. Generate only the player-facing narrative turn using the supplied canonical state, semantic player intent, bounded research, and ephemeral plan.',
       styleInstruction,
+      narratorVoiceState,
+      narrativeContinuityState,
+      narrativeNoveltyState,
+      narrativePacingContract,
       canonicalOutcome: authoritativeOutcome,
       actionResolution: params.actionResolution,
       maxPromptTokens: Math.max(200, hardTokenBudget),
     });
+
+    const narrativeProviderHandoff = narrationPrompt.narrativeProviderHandoff;
 
     const contextAudit = {
       hardTokenBudget: assembledContext.hardTokenBudget,
@@ -7384,18 +7486,21 @@ export class MultiModelOrchestrator {
       narrationPrompt.styleInstruction,
       {
         timeoutMs,
-        maxTokens: 650,
+        maxTokens: NarrativePacingEngine.outputTokenBudget(narrativePacingContract),
         contextTokens: narrationPrompt.totalTokens,
         turnBudget: turnAiCallBudget,
         forceModelId: params.forceModelId,
         canonicalLocationName: currentSituation.location.name,
         playerAction,
+        narrativeHandoff: narrativeProviderHandoff,
         validateResponse: (text) => {
           const validation = this.validateTurnPackage(text, { allowPlainTextNarration: true });
           if (!validation.valid || !validation.turnPackage) {
             return { valid: false, errorReason: validation.errorReason };
           }
           const narrationText = validation.turnPackage.narrative.join(' ');
+          const pacing = NarrativePacingEngine.validateNarration(narrationText, narrativePacingContract);
+          if (!pacing.valid) return { valid: false, errorReason: pacing.reason };
           const continuity = this.validateNarrativeSceneContinuity(
             narrationText,
             worldRepo,
@@ -7561,7 +7666,8 @@ export class MultiModelOrchestrator {
     voiceProfile?: any;
     idempotencyKey?: string;
     repository?: WorldRepository;
-  }): Promise<OrchestratedTurnResult> {
+      narratorVoiceControls?: NarratorVoiceControls;
+}): Promise<OrchestratedTurnResult> {
     const storyId = params.storyId || 'default_story';
     const rawIdempotencyKey = params.idempotencyKey ? String(params.idempotencyKey).trim() : undefined;
     const scopedKey = rawIdempotencyKey ? `${storyId}::${rawIdempotencyKey}` : undefined;
@@ -7668,6 +7774,8 @@ export class MultiModelOrchestrator {
       const researchPacket = researchResult?.packet;
       const narrativePlan = researchResult
         ? NarrativeDirector.create({
+            repository: repo,
+            storyId,
             situation: currentSituation,
             intent: playerIntent,
             research: researchResult,
@@ -7718,6 +7826,13 @@ export class MultiModelOrchestrator {
         ],
       });
 
+      const narrativeProfile = repo.getNarrativeProfile(storyId);
+      const narratorVoiceState = NarratorVoiceEngine.resolve(repo, storyId, narrativeProfile, params.narratorVoiceControls);
+      NarratorVoiceEngine.persist(repo, storyId, narratorVoiceState);
+      const narrativeNoveltyState = NarrativeNoveltyEngine.resolve(repo, storyId);
+      const narrativeContinuityState = researchResult?.continuityState || NarrativeContinuityStateEngine.resolve(repo, storyId);
+      const narrativePacingContract = NarrativePacingEngine.resolve({ situation: currentSituation, intent: playerIntent, continuityState: narrativeContinuityState });
+
       // 1b. CH15 Source Adaptation Adjudication Check
       const narrationPrompt = isNarrativeTask && researchResult && narrativePlan
         ? buildNarrationPrompt({
@@ -7728,15 +7843,22 @@ export class MultiModelOrchestrator {
             workingContext: projectSupportingWorkingContext(assembledContext),
             globalInstruction: 'You are Dreamville’s authoritative narrative presentation engine. Generate only the player-facing narrative turn. Canonical game state remains authoritative and prose never commits state.',
             styleInstruction: defaultNarrationStyle(),
+            narratorVoiceState,
+            narrativeContinuityState,
+            narrativeNoveltyState,
+            narrativePacingContract,
             maxPromptTokens: Math.max(200, hardTokenBudget),
           })
         : {
             prompt: assembledContext.assembledText,
             styleInstruction: '',
             totalTokens: assembledContext.totalTokens,
+            narrativeProviderHandoff: undefined,
           };
 
-      const profile = repo.getAdaptationProfile(storyId);
+        const narrativeProviderHandoff = narrationPrompt.narrativeProviderHandoff;
+
+    const profile = repo.getAdaptationProfile(storyId);
       const bible = repo.getAdaptedStoryBible(storyId);
       if (profile && bible) {
         const evalResult = StoryAdaptationPipeline.evaluatePlayerActionAgainstCanon(
@@ -7782,7 +7904,11 @@ export class MultiModelOrchestrator {
                 discoveredLocations: repo.getPlayerLifecycle(storyId)?.discoveredLocationIds || [],
               },
               styleContract: {
-                tone: 'evocative_canonical_archival',
+                profileId: narratorVoiceState.profileId,
+                tone: narratorVoiceState.profileId,
+                cadence: narratorVoiceState.cadence,
+                descriptiveDensity: narratorVoiceState.descriptiveDensity,
+                emotionalDistance: narratorVoiceState.emotionalDistance,
                 epistemicSanitized: 'true',
                 promptVersion: MultiModelOrchestrator.PROMPT_VERSION,
               },
@@ -7806,6 +7932,7 @@ export class MultiModelOrchestrator {
               outputTokens: 20,
               validated: true,
           aiCallBudget: turnAiCallBudget.snapshot(),
+              narrativeProviderHandoff: narrativeProviderHandoff ? NarrativeProviderHandoffEngine.snapshot(narrativeProviderHandoff) : undefined,
             },
           };
         }
@@ -7932,10 +8059,12 @@ export class MultiModelOrchestrator {
                 abortSignal: abortController.signal,
                 retryCount: attempt,
                 modelId: currentCandidate.modelId,
+                maxTokens: NarrativePacingEngine.outputTokenBudget(narrativePacingContract),
                 audioInputBase64: params.audioInputBase64,
                 voiceProfile: params.voiceProfile,
                 canonicalLocationName: currentSituation.location.name,
                 playerAction: params.playerAction,
+                systemInstruction: narrativeProviderHandoff?.providerIndependentInstruction,
               });
             } finally {
               clearTimeout(timer);
@@ -7950,21 +8079,17 @@ export class MultiModelOrchestrator {
               throw new Error(`Turn package validation failed: ${validation.errorReason}`);
             }
             if (task === 'narrative.generate') {
-              const intentSafety = this.validateNarrativeIntentSafety(
-                validation.turnPackage.narrative.join(' '),
-                playerIntent,
-                currentSituation.player.name,
-              );
-              if (!intentSafety.valid) {
-                throw new Error(intentSafety.errorReason || 'Narrative semantic intent safety validation failed.');
-              }
-              const continuity = this.validateNarrativeSceneContinuity(
-                validation.turnPackage.narrative.join(' '),
-                repo,
+              const presentation = this.validateNarrativePresentation({
+                narration: validation.turnPackage.narrative.join(' '),
+                playerAction: params.playerAction || '',
+                intent: playerIntent,
+                situation: currentSituation,
+                repository: repo,
                 storyId,
-              );
-              if (!continuity.valid) {
-                throw new Error(continuity.errorReason || 'Narration scene continuity validation failed.');
+                pacingContract: narrativePacingContract,
+              });
+              if (!presentation.valid) {
+                throw new Error(presentation.errorReason || 'Narrative presentation validation failed.');
               }
             }
 
@@ -7974,6 +8099,7 @@ export class MultiModelOrchestrator {
 
             let reviewedTurnPackage = validation.turnPackage;
             let narrativeReview: NarrativeReview | undefined;
+            let literaryReview: LiteraryReview | undefined;
             if (isNarrativeTask && narrativePlan) {
               const initialReview = SemanticNarrativeReview.review({
                 intent: playerIntent,
@@ -7998,6 +8124,11 @@ export class MultiModelOrchestrator {
                 adapter,
                 modelId: currentCandidate.modelId,
                 timeoutMs,
+                playerAction: params.playerAction || '',
+                repository: repo,
+                storyId,
+                narrativePacingContract,
+                narrativeProviderHandoff,
                 allowRewrite: shouldRewrite,
               });
               if (reviewed.review.decision !== 'ACCEPT') {
@@ -8005,6 +8136,52 @@ export class MultiModelOrchestrator {
               }
               reviewedTurnPackage = reviewed.turnPackage;
               narrativeReview = reviewed.review;
+              const narrativeNoveltyStateForReview = NarrativeNoveltyEngine.resolve(repo, storyId);
+              const literary = LiteraryNarrativeReview.review({ intent: playerIntent, situation: currentSituation, plan: narrativePlan, turnPackage: reviewedTurnPackage, voice: narratorVoiceState, noveltyState: narrativeNoveltyStateForReview, previousNarrations: currentSituation.recentTurns.map((entry) => String(entry.narration || '')).filter(Boolean) });
+              literaryReview = literary;
+              if (literary.decision === 'REWRITE') {
+                const literaryBudget = turnAiCallBudget.beginTask('narrative.review');
+                if (!literaryBudget.allowed) throw new Error(literaryBudget.reason || 'Narrative literary review call budget exhausted.');
+                turnAiCallBudget.recordProviderAttempt('narrative.review');
+                const literaryPrompt = LiteraryNarrativeReview.buildRewritePrompt({ review: literary, turnPackage: reviewedTurnPackage, intent: playerIntent, situation: currentSituation, plan: narrativePlan });
+                const literaryResult = await adapter.generate('narrative.review', literaryPrompt, { modelId: currentCandidate.modelId, timeoutMs, maxTokens: NarrativePacingEngine.outputTokenBudget(narrativePacingContract), systemInstruction: [narrativeProviderHandoff?.providerIndependentInstruction, 'Perform a literary polish only. Preserve canonical truth, state, player agency, knowledge boundaries and plot direction.'].filter(Boolean).join(' ') });
+                const literaryValidation = this.validateTurnPackage(literaryResult.text);
+                if (!literaryValidation.valid || !literaryValidation.turnPackage) throw new Error(literaryValidation.errorReason || 'Literary rewrite returned an invalid structured turn package.');
+                const literaryPresentation = this.validateNarrativePresentation({
+                  narration: literaryValidation.turnPackage.narrative.join(' '),
+                  playerAction: params.playerAction || '',
+                  intent: playerIntent,
+                  situation: currentSituation,
+                  repository: repo,
+                  storyId,
+                  pacingContract: narrativePacingContract,
+                });
+                if (!literaryPresentation.valid) throw new Error(literaryPresentation.errorReason || 'Literary rewrite failed final presentation validation.');
+
+                const postSemantic = SemanticNarrativeReview.review({ intent: playerIntent, situation: currentSituation, plan: narrativePlan, turnPackage: literaryValidation.turnPackage });
+                if (postSemantic.decision !== 'ACCEPT') throw new Error('Literary rewrite failed the semantic safety gate.');
+
+                const postLiterary = LiteraryNarrativeReview.review({
+                  intent: playerIntent,
+                  situation: currentSituation,
+                  plan: narrativePlan,
+                  turnPackage: literaryValidation.turnPackage,
+                  voice: narratorVoiceState,
+                  noveltyState: NarrativeNoveltyEngine.resolve(repo, storyId),
+                  previousNarrations: currentSituation.recentTurns.map((entry) => String(entry.narration || '')).filter(Boolean),
+                });
+                if (postLiterary.decision !== 'ACCEPT') throw new Error('Literary rewrite remained below the N6/N7 acceptance threshold.');
+
+                const postNovelty = NarrativeNoveltyEngine.inspect({
+                  repository: repo,
+                  storyId,
+                  narration: literaryValidation.turnPackage.narrative.join(' '),
+                });
+                if (postNovelty.discouraged.length) throw new Error('Literary rewrite reintroduced a discouraged N7 repetition/trope pattern.');
+
+                reviewedTurnPackage = literaryValidation.turnPackage;
+                literaryReview = postLiterary;
+              }
             }
 
             // 6. Adjudicate state proposals through the canonical state boundary.
@@ -8047,7 +8224,11 @@ export class MultiModelOrchestrator {
                 discoveredLocations: repo.getPlayerLifecycle(storyId)?.discoveredLocationIds || [],
               },
               styleContract: {
-                tone: 'evocative_canonical_archival',
+                profileId: narratorVoiceState.profileId,
+                tone: narratorVoiceState.profileId,
+                cadence: narratorVoiceState.cadence,
+                descriptiveDensity: narratorVoiceState.descriptiveDensity,
+                emotionalDistance: narratorVoiceState.emotionalDistance,
                 epistemicSanitized: 'true',
               },
               openThreads: reviewedTurnPackage.memoryCandidates || [],
@@ -8105,6 +8286,7 @@ export class MultiModelOrchestrator {
               researchTokens: researchResult?.totalTokens,
               narrativePlanObjective: narrativePlan?.objective,
               narrativeReview,
+              narrativeProviderHandoff: narrativeProviderHandoff ? NarrativeProviderHandoffEngine.snapshot(narrativeProviderHandoff) : undefined,
             };
             this.lastTurnTelemetry = telemetry;
             if (!repo.isCanonicalCommandTransactionActive()) {
@@ -8126,6 +8308,7 @@ export class MultiModelOrchestrator {
               playerIntent,
               narrativePlan,
               narrativeReview,
+              literaryReview,
               stateAdjudication,
               telemetry,
               adjudicationResult: adjudication,
@@ -8184,22 +8367,29 @@ export class MultiModelOrchestrator {
             voiceProfile: params.voiceProfile,
             canonicalLocationName: emergencyLocation?.name,
             playerAction: params.playerAction,
+            maxTokens: NarrativePacingEngine.outputTokenBudget(narrativePacingContract),
+            systemInstruction: narrativeProviderHandoff?.providerIndependentInstruction,
           });
           this.recordProviderSuccess(emergencyModel, res, task, emergencyStartedAt);
           const validation = this.validateTurnPackage(res.text);
           if (validation.valid && validation.turnPackage) {
-            const intentSafety = isNarrativeTask
-              ? this.validateNarrativeIntentSafety(
-                  validation.turnPackage.narrative.join(' '),
-                  playerIntent,
-                  currentSituation.player.name,
-                )
+            const presentation = isNarrativeTask
+              ? this.validateNarrativePresentation({
+                  narration: validation.turnPackage.narrative.join(' '),
+                  playerAction: params.playerAction || '',
+                  intent: playerIntent,
+                  situation: currentSituation,
+                  repository: repo,
+                  storyId,
+                  pacingContract: narrativePacingContract,
+                })
               : { valid: true };
-            if (!intentSafety.valid) {
-              lastError = intentSafety.errorReason || 'Emergency narration violated semantic player intent.';
+            if (!presentation.valid) {
+              lastError = presentation.errorReason || 'Emergency narration failed final presentation validation.';
             } else {
               let emergencyTurnPackage = validation.turnPackage;
               let emergencyNarrativeReview: NarrativeReview | undefined;
+              let emergencyLiteraryReview: LiteraryReview | undefined;
               if (isNarrativeTask && narrativePlan) {
                 const reviewed = await this.reviewAndRepairNarrative({
                   turnPackage: validation.turnPackage,
@@ -8209,10 +8399,40 @@ export class MultiModelOrchestrator {
                   adapter: emergencyAdapter,
                   modelId: emergencyModel.modelId,
                   timeoutMs,
+                  playerAction: params.playerAction || '',
+                  repository: repo,
+                  storyId,
+                  narrativePacingContract,
+                  narrativeProviderHandoff,
                   strict: false,
+                  allowRewrite: false,
                 });
-                emergencyTurnPackage = reviewed.turnPackage;
-                emergencyNarrativeReview = reviewed.review;
+                if (reviewed.review.decision !== 'ACCEPT') {
+                  lastError = 'Emergency narration failed semantic narrative review: ' + reviewed.review.decision;
+                } else {
+                  const emergencyLiterary = LiteraryNarrativeReview.review({
+                    intent: playerIntent,
+                    situation: currentSituation,
+                    plan: narrativePlan,
+                    turnPackage: reviewed.turnPackage,
+                    voice: narratorVoiceState,
+                    noveltyState: NarrativeNoveltyEngine.resolve(repo, storyId),
+                    previousNarrations: currentSituation.recentTurns.map((entry) => String(entry.narration || '')).filter(Boolean),
+                  });
+                  if (emergencyLiterary.decision !== 'ACCEPT') {
+                    lastError = 'Emergency narration failed N6 literary review.';
+                  } else if (NarrativeNoveltyEngine.inspect({
+                    repository: repo,
+                    storyId,
+                    narration: reviewed.turnPackage.narrative.join(' '),
+                  }).discouraged.length) {
+                    lastError = 'Emergency narration failed N7 novelty validation.';
+                  } else {
+                    emergencyTurnPackage = reviewed.turnPackage;
+                    emergencyNarrativeReview = reviewed.review;
+                    emergencyLiteraryReview = emergencyLiterary;
+                  }
+                }
               }
               const adjudication = DomainAdjudicationBridge.adjudicate(
                 emergencyTurnPackage,
@@ -8248,7 +8468,10 @@ export class MultiModelOrchestrator {
               uncommittedOutput: '',
               canonicalInvariants: {},
               styleContract: {
-                tone: 'deterministic_emergency',
+                tone: narratorVoiceState.profileId,
+                cadence: narratorVoiceState.cadence,
+                descriptiveDensity: narratorVoiceState.descriptiveDensity,
+                emotionalDistance: narratorVoiceState.emotionalDistance,
                 promptVersion: MultiModelOrchestrator.PROMPT_VERSION,
               },
               openThreads: validation.turnPackage.memoryCandidates || [],
@@ -8305,6 +8528,7 @@ export class MultiModelOrchestrator {
               researchTokens: researchResult?.totalTokens,
               narrativePlanObjective: narrativePlan?.objective,
               narrativeReview: emergencyNarrativeReview,
+              narrativeProviderHandoff: narrativeProviderHandoff ? NarrativeProviderHandoffEngine.snapshot(narrativeProviderHandoff) : undefined,
             };
             this.lastTurnTelemetry = telemetry;
 
@@ -8327,6 +8551,7 @@ export class MultiModelOrchestrator {
               playerIntent,
               narrativePlan,
               narrativeReview: emergencyNarrativeReview,
+              literaryReview: emergencyLiteraryReview,
               stateAdjudication,
               telemetry,
               adjudicationResult: adjudication,
@@ -8456,6 +8681,7 @@ export class MultiModelOrchestrator {
       forceModelId?: string;
       canonicalLocationName?: string;
       playerAction?: string;
+      narrativeHandoff?: NarrativeProviderHandoffContract;
       turnBudget?: AiTurnCallBudget;
       validateResponse?: (text: string) => TaskResponseValidationResult;
       /**
@@ -8486,6 +8712,7 @@ export class MultiModelOrchestrator {
       latencyMs: number;
       error?: string;
     }>;
+    narrativeProviderHandoff?: NarrativeProviderHandoffContract;
     preflightSkipped?: Array<{
       providerId: string;
       modelId: string;
@@ -8512,7 +8739,7 @@ export class MultiModelOrchestrator {
         timeoutMs: options?.timeoutMs || 35000,
         maxTokens: options?.maxTokens,
         modelId: emergency.modelId,
-        systemInstruction,
+        systemInstruction: [systemInstruction, options?.narrativeHandoff?.providerIndependentInstruction].filter(Boolean).join('\n\n'),
         canonicalLocationName: options?.canonicalLocationName,
         playerAction: options?.playerAction,
       });
@@ -8530,6 +8757,7 @@ export class MultiModelOrchestrator {
         modelId: emergency.modelId,
         fallbackReason: turnBudgetDecision.reason || 'TURN_AI_CALL_BUDGET_EXHAUSTED',
         attempts: 1,
+        narrativeProviderHandoff: options?.narrativeHandoff,
         attemptsTrail: [{
           providerId: emergency.providerId,
           modelId: emergency.modelId,
@@ -8865,7 +9093,7 @@ export class MultiModelOrchestrator {
             maxTokens: options?.maxTokens,
             abortSignal: abortController.signal,
             modelId: currentCandidate.modelId,
-            systemInstruction,
+            systemInstruction: [systemInstruction, options?.narrativeHandoff?.providerIndependentInstruction].filter(Boolean).join('\n\n'),
             canonicalLocationName: options?.canonicalLocationName,
             playerAction: options?.playerAction,
           });
@@ -8917,6 +9145,7 @@ export class MultiModelOrchestrator {
           modelId: currentCandidate.modelId,
           fallbackReason,
           attempts: totalAttempts,
+          narrativeProviderHandoff: options?.narrativeHandoff,
           attemptsTrail,
           preflightSkipped,
         };

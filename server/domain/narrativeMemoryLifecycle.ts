@@ -6,6 +6,8 @@ import type { StructuredTurnPackage } from './aiOrchestrator';
 import type { NarrativeReview } from './semanticNarrativeReview';
 import type { StateAdjudicationResult } from './narrativeStateAdjudicator';
 import { recordCanonicalNarrativeEvent, type CanonicalNarrativeEventRecord } from './canonicalNarrativeEvent';
+import { NarrativeContinuityStateEngine } from './narrativeContinuityState';
+import { NarrativeNoveltyEngine } from './narrativeNoveltyEngine';
 
 export interface NarrativeOpenThreadRecord {
 	id: string;
@@ -245,6 +247,41 @@ export class NarrativeMemoryLifecycle {
 		plot.updatedAt = timestamp;
 		plot.openThreads = runtime.openNarrativeThreads.map((thread: NarrativeOpenThreadRecord) => thread.title).slice(-24);
 		runtime.plot = plot;
+
+		const noveltyState = NarrativeNoveltyEngine.recordAcceptedTurn({
+			repository: params.repository,
+			storyId: params.storyId,
+			narration: params.turnPackage.narrative.join(' '),
+			turnNumber: currentTurn + 1,
+		});
+
+		const continuityState = NarrativeContinuityStateEngine.recordAcceptedTurn({
+			repository: params.repository,
+			storyId: params.storyId,
+			turnId: params.turnId,
+			situation: params.currentSituation,
+			intent: params.playerIntent || {
+				action: 'continue',
+				interactionMode: 'OTHER',
+				speechIntent: false,
+				movementIntent: false,
+				observationIntent: false,
+				explicitTargets: [],
+				impliedTargets: [],
+				confidence: 0,
+				source: 'DETERMINISTIC',
+				originalText: params.playerAction || '',
+			},
+			narration: params.turnPackage.narrative.join(' '),
+			plan: undefined,
+			review: params.narrativeReview,
+		});
+
+		// The lifecycle owns accepted-turn presentation state. Keep the local runtime
+		// snapshot in sync before the final save so it cannot overwrite the just-persisted
+		// N7/N4 updates with the stale pre-turn runtime object.
+		runtime.narrativeNovelty = noveltyState;
+		runtime.narrativeContinuity = continuityState;
 
 		const history = Array.isArray(runtime.narrativeContextHistory) ? [...runtime.narrativeContextHistory] : [];
 		history.push({

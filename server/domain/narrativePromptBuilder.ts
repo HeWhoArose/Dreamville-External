@@ -6,6 +6,12 @@ import { WorkingContextEngine, type AssembledTurnContext } from './workingContex
 import { EpistemicBoundaryEnforcer } from './epistemicBoundary';
 import type { ActionResolution } from './actionResolution';
 import { buildActionResolutionPromptContext } from './actionResolution';
+import { NarrativeQualityContractEngine, type NarrativeQualityControls, type NarrativeQualityContract } from './narrativeQualityContract';
+import { NarratorVoiceEngine, type NarratorVoiceControls, type NarratorVoiceState } from './narratorVoiceEngine';
+import { NarrativeContinuityStateEngine, type NarrativeContinuityState } from './narrativeContinuityState';
+import { NarrativeNoveltyEngine, type NarrativeNoveltyState } from './narrativeNoveltyEngine';
+import { NarrativeProviderHandoffEngine, type NarrativeProviderHandoffContract } from './narrativeProviderHandoff';
+import { NarrativePacingEngine, type NarrativePacingContract, type NarrativePacingControls } from './narrativePacingEngine';
 
 export interface NarrationPromptInput {
 	situation: CurrentSituation;
@@ -18,12 +24,25 @@ export interface NarrationPromptInput {
 	canonicalOutcome?: string;
 	actionResolution?: ActionResolution;
 	maxPromptTokens?: number;
+	narrativeQualityControls?: Partial<NarrativeQualityControls>;
+	narratorVoiceState?: NarratorVoiceState;
+	narratorVoiceControls?: NarratorVoiceControls;
+	narrativeContinuityState?: NarrativeContinuityState;
+	narrativeNoveltyState?: NarrativeNoveltyState;
+	narrativePacingContract?: NarrativePacingContract;
+	narrativePacingControls?: Partial<NarrativePacingControls>;
+	narrativeProviderHandoff?: NarrativeProviderHandoffContract;
 }
 
 export interface NarrationPromptResult {
 	prompt: string;
 	styleInstruction: string;
 	totalTokens: number;
+	narrativeQualityContract: NarrativeQualityContract;
+	narratorVoiceState?: NarratorVoiceState;
+	narrativeContinuityState?: NarrativeContinuityState;
+	narrativePacingContract?: NarrativePacingContract;
+	narrativeProviderHandoff?: NarrativeProviderHandoffContract;
 }
 
 export function projectSupportingWorkingContext(context: AssembledTurnContext): string {
@@ -99,7 +118,7 @@ export function defaultNarrationStyle(): string {
 		'Preserve rumor, hearsay, memory, and uncertainty as uncertainty; do not upgrade them to established fact.',
 		'Remain in the canonical scene and world time unless the supplied canonical state explicitly says they changed. The canonical game state has already committed a location change only when the supplied Current Situation reflects that change.',
 		'Do not dump research or internal engine terminology into the player-facing narration.',
-		'Normally write 2–3 concise paragraphs; tiny actions may use one paragraph.',
+		'Response length is governed by the Narrative Quality Contract for this turn; do not force a universal paragraph count.',
 	].join(' ');
 }
 
@@ -124,6 +143,18 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	const intentContext = JSON.stringify(input.intent);
 	const planContext = NarrativeDirector.toPromptContext(input.plan);
 	const actionResolutionContext = buildActionResolutionPromptContext(input.actionResolution);
+	const narrativeContinuityState = input.narrativeContinuityState || NarrativeContinuityStateEngine.defaultState(input.situation.storyId);
+	const narrativeNoveltyState = input.narrativeNoveltyState || NarrativeNoveltyEngine.defaultState(input.situation.storyId);
+	const narrativeNoveltyContext = NarrativeNoveltyEngine.toPromptContext(narrativeNoveltyState);
+	const narrativeContinuityContext = NarrativeContinuityStateEngine.toPromptContext(narrativeContinuityState);
+	const narrativeQualityContract = NarrativeQualityContractEngine.resolve(input.intent, input.narrativeQualityControls);
+	const narrativePacingContract = input.narrativePacingContract || NarrativePacingEngine.resolve({ situation: input.situation, intent: input.intent, actionResolution: input.actionResolution, canonicalOutcome: input.canonicalOutcome, continuityState: narrativeContinuityState, controls: input.narrativePacingControls });
+	const narrativeProviderHandoff = input.narrativeProviderHandoff || NarrativeProviderHandoffEngine.resolve({ storyId: input.situation.storyId, turnId: input.situation.turnId, voice: input.narratorVoiceState || NarratorVoiceEngine.resolve({ getUserData: () => null, saveUserData: () => undefined }, input.situation.storyId), quality: narrativeQualityContract, pacing: narrativePacingContract, continuity: narrativeContinuityState, novelty: narrativeNoveltyState });
+	const narrativeQualityContext = NarrativeQualityContractEngine.toPromptContext(narrativeQualityContract);
+	const promptBudgetVoiceContext = input.narratorVoiceState ? NarratorVoiceEngine.toPromptContext(input.narratorVoiceState) : 'Narrator Voice Contract: disabled for this turn.';
+	const promptBudgetQualityContext = input.maxPromptTokens && input.maxPromptTokens <= 1500
+		? 'N1 profile=' + narrativeQualityContract.profile + '; enforcement=' + narrativeQualityContract.controls.enforcement + '; preferred paragraphs=' + narrativeQualityContract.controls.preferredParagraphs + '; max paragraphs=' + narrativeQualityContract.controls.maxParagraphs + '; preserve scene grounding, specificity, pacing, novelty, character voice, emotional continuity, coherence, and player agency.'
+		: narrativeQualityContext;
 	const canonicalConstraints = [
 		'CANONICAL CURRENT SCENE ANCHOR:',
 		'Canonical constraints:',
@@ -159,11 +190,18 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	): string => [
 		section('GLOBAL NARRATION INSTRUCTIONS', overrides?.globalInstruction || globalInstruction),
 		section('NARRATIVE STYLE', overrides?.styleInstruction || styleInstruction),
+		section('NARRATOR VOICE CONTRACT', promptBudgetVoiceContext),
+		section('NARRATIVE CONTINUITY STATE', narrativeContinuityContext),
+		section('NARRATIVE NOVELTY / REPETITION CONTROL', narrativeNoveltyContext),
+		section('NARRATIVE QUALITY CONTRACT', promptBudgetQualityContext),
+		section('ADAPTIVE PACING CONTRACT', NarrativePacingEngine.toPromptContext(narrativePacingContract)),
+		section('PROVIDER HANDOFF CONTRACT', NarrativeProviderHandoffEngine.toPromptContext(narrativeProviderHandoff)),
 		section('CURRENT SITUATION', overrides?.situationContext || situationContext),
 		section('PLAYER INTENT', overrides?.intentContext || intentContext),
 		section('ACTION RESOLUTION — AUTHORITATIVE', actionResolutionContext),
 		section('NARRATIVE RESEARCH', researchContext),
 		section('NARRATIVE DIRECTOR PLAN', overrides?.planContext || planContext),
+		section('NPC COGNITION BOUNDARY', 'NPC cognition is presentation guidance. Private beliefs, secrets, and knowledge must never be stated as player-visible facts unless independently authorized by research or canonical scene evidence. Express cognition through observable behavior, dialogue, hesitation, priorities, and reactions.'),
 		section('SUPPORTING WORKING CONTEXT', workingContext),
 		overrides?.canonicalConstraints || canonicalConstraints,
 		section('OUTPUT CONTRACT', overrides?.outputContract || outputContract),
@@ -174,7 +212,8 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	const maxPromptTokens = input.maxPromptTokens;
 	if (!maxPromptTokens) {
 		const prompt = compose(initialResearch, initialWorking);
-		return { prompt, styleInstruction, totalTokens: WorkingContextEngine.estimateTokens(prompt) };
+		return { prompt, styleInstruction: [styleInstruction, narrativeProviderHandoff.providerIndependentInstruction].join('\n\n'), totalTokens: WorkingContextEngine.estimateTokens(prompt), narrativeQualityContract, narratorVoiceState: input.narratorVoiceState, narrativeContinuityState, narrativePacingContract, narrativeProviderHandoff };
+
 	}
 
 	let researchContext = initialResearch;
@@ -202,6 +241,10 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		if (maxPromptTokens < 600) {
 			const budgetChars = Math.max(1200, maxPromptTokens * 4);
 			const microGlobal = 'Generate only the player-facing narrative. Preserve player agency and canonical truth. Never make major future decisions for the player.';
+			const microVoice = input.narratorVoiceState ? truncatePromptSection(NarratorVoiceEngine.compactPromptContext(input.narratorVoiceState), 420) : 'N2 voice disabled.';
+			const microQuality = truncatePromptSection(promptBudgetQualityContext, 420);
+			const microContinuity = truncatePromptSection(NarrativeContinuityStateEngine.compactPromptContext(narrativeContinuityState), 420);
+			const microNovelty = truncatePromptSection(NarrativeNoveltyEngine.compactPromptContext(narrativeNoveltyState), 420);
 			const microSituation = truncatePromptSection(situationContext, 360);
 			const microIntent = truncatePromptSection(intentContext, 180);
 			const microResolution = truncatePromptSection(actionResolutionContext, 620);
@@ -211,6 +254,10 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			const microOutput = '{"narrative":["..."],"dialogue":[],"events":[],"stateChanges":[],"memoryCandidates":[],"audioCues":[],"visualCues":[]}';
 			const sections = [
 				section('GLOBAL NARRATION INSTRUCTIONS', microGlobal),
+				section('NARRATOR VOICE CONTRACT', microVoice),
+				section('NARRATIVE QUALITY CONTRACT', microQuality),
+				section('NARRATIVE CONTINUITY STATE', microContinuity),
+				section('NARRATIVE NOVELTY / REPETITION CONTROL', microNovelty),
 				section('CURRENT SITUATION', microSituation),
 				section('PLAYER INTENT', microIntent),
 				section('ACTION RESOLUTION — AUTHORITATIVE', microResolution),
@@ -243,10 +290,10 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			}
 		} else if (maxPromptTokens >= 1000) {
 			const compact = {
-				intentContext: truncatePromptSection(intentContext, 260),
-				researchContext: truncatePromptSection(initialResearch, 420),
-				planContext: truncatePromptSection(planContext, 320),
-				workingContext: '[supporting context omitted to preserve the canonical narration contract]',
+				intentContext: intentContext,
+				researchContext: truncatePromptSection(initialResearch, 700),
+				planContext: truncatePromptSection(planContext, 300),
+				workingContext: truncatePromptSection(initialWorking, 320),
 				situationContext: truncatePromptSection(situationContext, 900),
 			};
 			const renderCompact = () => compose(
@@ -263,9 +310,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			for (let pass = 0; pass < 48 && totalTokens > maxPromptTokens; pass += 1) {
 				const keys: Array<keyof typeof compact> = [
 					'workingContext',
-					'researchContext',
 					'planContext',
-					'intentContext',
 					'situationContext',
 				];
 				const key = keys
@@ -282,6 +327,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		} else {
 			const compactGlobal = 'Generate only the player-facing narrative. Never choose a major future action for the player. The structured Action Resolution is authoritative for mechanics and consequences.';
 			const compactStyle = 'Depict the current action and observable response; preserve player agency and canonical truth. Stay in the canonical current location unless the canonical game state has already committed a location change.';
+			const compactQuality = truncatePromptSection(promptBudgetQualityContext, 420);
 			const compactSituation = truncatePromptSection(situationContext, 520);
 			const compactIntent = truncatePromptSection(intentContext, 180);
 			const compactResolution = truncatePromptSection(actionResolutionContext, 700);
@@ -297,6 +343,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			prompt = [
 				section('GLOBAL NARRATION INSTRUCTIONS', compactGlobal),
 				section('NARRATIVE STYLE', compactStyle),
+				section('NARRATIVE QUALITY CONTRACT', compactQuality),
 				section('CURRENT SITUATION', compactSituation),
 				section('PLAYER INTENT', compactIntent),
 				section('ACTION RESOLUTION — AUTHORITATIVE', compactResolution),
@@ -309,6 +356,6 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			totalTokens = WorkingContextEngine.estimateTokens(prompt);
 		}
 	}
-	return { prompt, styleInstruction, totalTokens };
+	return { prompt, styleInstruction: [styleInstruction, narrativeProviderHandoff.providerIndependentInstruction].join('\n\n'), totalTokens, narrativeQualityContract, narratorVoiceState: input.narratorVoiceState, narrativeContinuityState, narrativePacingContract, narrativeProviderHandoff };
 }
 

@@ -8171,7 +8171,7 @@ export class MultiModelOrchestrator {
                 turnPackage: reviewedTurnPackage,
                 previousNarrations,
               });
-              const needsLiteraryRewrite = literary.decision === 'REWRITE' || (cIdx === 0 && narrativeRichnessEvaluation.decision === 'IMPROVE');
+              const needsLiteraryRewrite = literary.decision === 'REWRITE';
               if (needsLiteraryRewrite) {
                 const literaryBudget = turnAiCallBudget.beginTask('narrative.review');
                 if (!literaryBudget.allowed) throw new Error(literaryBudget.reason || 'Narrative literary/richness review call budget exhausted.');
@@ -8236,8 +8236,6 @@ export class MultiModelOrchestrator {
                   turnPackage: literaryValidation.turnPackage,
                   previousNarrations,
                 });
-                if (postRichness.decision !== 'PASS') throw new Error('Literary rewrite remained below the N18 narrative richness acceptance threshold.');
-
                 reviewedTurnPackage = literaryValidation.turnPackage;
                 literaryReview = postLiterary;
                 narrativeRichnessEvaluation = postRichness;

@@ -380,13 +380,10 @@ export class EntitySceneRelevanceEngine {
 			'N15 SOCIAL ATTENTION / CONVERSATION TOPOLOGY v' + topology.version + ' (EPHEMERAL — PRESENTATION ONLY)',
 			'Conversation active: ' + topology.conversationActive,
 			topology.activeSpeakerId ? 'Active speaker: ' + topology.activeSpeakerId : 'Active speaker: none supplied.',
-			participants.length ? 'Participants:
-- ' + participants.join('
-- ') : 'Participants: none.',
+			participants.length ? 'Participants:\n- ' + participants.join('\n- ') : 'Participants: none.',
 			topology.fallbackReason ? 'Fallback: ' + topology.fallbackReason : 'Fallback: not required.',
 			'Hard boundary: N15 does not mutate canonical social state, invent relationship sentiment, reveal hidden entities, or decide an NPC action. It only projects who can currently perceive or participate in the already-authorized scene.',
-		].join('
-');
+		].join('\n');
 	}
 
 	public static toPromptContext(situation: CurrentSituation, intent?: PlayerIntent, limit = 8): string {

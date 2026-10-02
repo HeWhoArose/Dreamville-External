@@ -93,7 +93,7 @@ function classifyPhase(
 	const latest = lower(history.at(-1)?.narration || '');
 	const hasHistory = history.length > 0;
 	const hasOpenThread = threads.length > 0;
-	const hasResolutionLanguage = containsAny(latest, ['resolved', 'answered', 'confirmed', 'found', 'completed', 'finished', 'safe', 'settled']);
+	const hasResolutionLanguage = containsAny(latest, ['resolved', 'answered', 'confirmed', 'found', 'completed', 'finished', 'safe', 'reassured', 'settled']);
 	const hasComplicationLanguage = containsAny(allRecent, ['but', 'however', 'uncertain', 'unknown', 'refused', 'failed', 'missing', 'still', 'rumor', 'rumour', 'warning', 'danger']);
 	const highPressure = continuity.tension >= 65 || continuity.sceneMomentum === 'ESCALATING';
 	const building = continuity.sceneMomentum === 'BUILDING';
@@ -298,7 +298,7 @@ export class NarrativeEpisodeProjectionEngine {
 			avoidForcing: [
 				'Do not create a canonical plot beat from this projection.',
 				'Do not close or mutate an open thread.',
-				'Do not decide the player’s future consequential action.',
+				'Do not decide the player's future action.',
 				'Do not treat narrative research memories or rumors as new canonical events.',
 				'Do not force escalation or resolution merely to satisfy the projected phase.',
 			],
@@ -333,7 +333,7 @@ export class NarrativeEpisodeProjectionEngine {
 
 	public static toCompactPromptContext(projection?: NarrativeEpisodeProjection): string {
 		if (!projection) return 'N17 episode: unavailable; preserve current continuity.';
-		return 'N17 episode: phase=' + projection.phase + '; trajectory=' + projection.trajectory + '; question=' + projection.centralQuestion + '; activeThreads=' + (projection.activeThreadSummaries.join(' / ') || 'none') + '; opportunity=' + projection.narrativeOpportunity;
+		return 'N17 episode: Phase: ' + projection.phase + '; Trajectory: ' + projection.trajectory + '; Question: ' + projection.centralQuestion + '; Active threads: ' + (projection.activeThreadSummaries.join(' / ') || 'none') + '; Opportunity: ' + projection.narrativeOpportunity;
 	}
 }
 

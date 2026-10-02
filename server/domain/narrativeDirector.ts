@@ -1,12 +1,68 @@
 import type { CurrentSituation } from './currentSituation';
 import type { PlayerIntent, IntentEntityReference } from './playerIntentInterpreter';
 import type { NarrativeResearchResult } from './narrativeResearchPipeline';
+import type { WorldRepository } from '../repositories/worldRepository';
+import { buildNpcPlanningSlice } from './npcPlanningSlice';
 
 export interface InformationReveal {
 	topic: string;
 	sourceBlockIds: string[];
 	presentation: 'FACT' | 'RUMOR' | 'UNCERTAIN' | 'NO_RELIABLE_ANSWER';
 	requirement: 'REVEAL' | 'PRESERVE_UNCERTAINTY';
+}
+
+
+export interface NpcCognitionContract {
+	actorId: string;
+	name: string;
+	currentActivity?: string;
+	immediateGoal?: string;
+	desires: string[];
+	fears: string[];
+	traits: string[];
+	values: string[];
+	dialogueStyle?: string;
+	relationshipStance?: string;
+	relationshipMetrics?: { trust: number; affection: number; respect: number; fear: number; hostility: number };
+	activeBeliefSummaries: string[];
+	relevantMemorySummaries: string[];
+	motivatedAction?: string;
+	privateKnowledgeBoundary: string;
+	presentationRules: string[];
+}
+
+function buildNpcCognitionContract(repository: WorldRepository, storyId: string, situation: CurrentSituation, target: IntentEntityReference): NpcCognitionContract | undefined {
+	const actor = situation.nearbyEntities.find((entity) => entity.id === target.id);
+	if (!actor) return undefined;
+	const agency = repository.getDynamicCharacterAgencyEngine(storyId);
+	const profile = agency.getCharacter(storyId, actor.id);
+	const relationship = agency.getRelationship(storyId, situation.player.actorId, actor.id);
+	const npcSlice = buildNpcPlanningSlice(repository, storyId, situation.player.actorId, situation, actor.id);
+	const memories = (npcSlice?.recentMemories || []).slice(0, 8).map((memory) => memory.content);
+	const authorizedKnowledge = (npcSlice?.authorizedKnowledge || []).slice(0, 6).map((fact: any) => String(fact.summary || fact.description || fact.predicate || '')) .filter(Boolean);
+	return {
+		actorId: actor.id,
+		name: actor.name,
+		currentActivity: profile ? undefined : actor.currentActivity,
+		immediateGoal: profile?.canonicalGoal || npcSlice?.immediateGoal,
+		desires: (profile?.desires || []).slice(0, 5),
+		fears: (profile?.fears || []).slice(0, 5),
+		traits: (profile?.traits || []).slice(0, 6),
+		values: (profile?.values || []).slice(0, 6),
+		dialogueStyle: profile?.dialogueStyle,
+		relationshipStance: relationship?.stance,
+		relationshipMetrics: relationship ? { trust: relationship.trust, affection: relationship.affection, respect: relationship.respect, fear: relationship.fear, hostility: relationship.hostility } : undefined,
+		activeBeliefSummaries: authorizedKnowledge.slice(0, 6),
+		relevantMemorySummaries: memories,
+		motivatedAction: profile?.goals.find((goal) => goal.goalId === profile.currentGoalId && goal.active)?.description,
+		privateKnowledgeBoundary: npcSlice?.knowledgeBoundary || 'Private NPC knowledge must never be presented as player-visible fact.',
+		presentationRules: [
+			'Express personality through observable behavior, word choice, hesitation, priorities, and reactions rather than exposing private thoughts.',
+			'NPC goals and fears influence responses but never override canonical outcomes or player agency.',
+			'Use only authorized NPC knowledge; do not transfer player knowledge into NPC behavior.',
+			'Preserve relationship stance without inventing a relationship change.',
+		],
+	};
 }
 
 export interface ExpectedStateEffect {
@@ -16,6 +72,7 @@ export interface ExpectedStateEffect {
 }
 
 export interface EphemeralNarrativePlan {
+	npcCognition?: NpcCognitionContract[];
 	turnId: string;
 	objective: string;
 	immediateSteps: string[];
@@ -89,10 +146,13 @@ function topThread(research: NarrativeResearchResult): string | undefined {
 }
 
 export class NarrativeDirector {
-	public static create(params: { situation: CurrentSituation; intent: PlayerIntent; research: NarrativeResearchResult }): EphemeralNarrativePlan {
+	public static create(params: { repository?: WorldRepository; storyId?: string; situation: CurrentSituation; intent: PlayerIntent; research: NarrativeResearchResult }): EphemeralNarrativePlan {
 		const situation = params.situation;
 		const intent = params.intent;
 		const research = params.research;
+		const npcCognition: NpcCognitionContract[] = params.repository && params.storyId
+			? entityTargets(situation, intent).map((target) => buildNpcCognitionContract(params.repository!, params.storyId!, situation, target)).filter((value): value is NpcCognitionContract => Boolean(value)).slice(0, 4)
+			: [];
 		const isInformationSeeking = Boolean(intent.informationGoal) || intent.interactionMode === 'INFORMATION_SEEKING';
 		const steps: string[] = [];
 		if (intent.movementIntent) steps.push(intent.action === 'approach_and_listen' ? 'Move the protagonist physically closer to the relevant source while preserving the stated passive intent.' : 'Resolve the requested movement or positional change before any secondary observation or interaction.');
@@ -133,6 +193,7 @@ export class NarrativeDirector {
 			immediateSteps: steps.slice(0, 8),
 			informationToReveal: informationReveals(intent, research).slice(0, 4),
 			entitiesToReact: entityTargets(situation, intent),
+			npcCognition: npcCognition,
 			unresolvedThread: topThread(research),
 			continuityRequirements: continuityRequirements.slice(0, 10),
 			forbiddenAssumptions: forbiddenAssumptions.slice(0, 8),
@@ -149,6 +210,7 @@ export class NarrativeDirector {
 			'Immediate steps:\n' + plan.immediateSteps.map((step, index) => (index + 1) + '. ' + step).join('\n'),
 			plan.informationToReveal.length ? 'Information to reveal:\n' + plan.informationToReveal.map((item) => '- ' + item.topic + ' [' + item.presentation + '] [sources=' + (item.sourceBlockIds.join(', ') || 'none') + ']').join('\n') : 'Information to reveal: none.',
 			plan.entitiesToReact.length ? 'Entities to react: ' + plan.entitiesToReact.map((entity) => entity.name).join(', ') : 'Entities to react: none specified.',
+			plan.npcCognition?.length ? 'NPC cognition contracts:\n' + plan.npcCognition.map((npc) => JSON.stringify(npc)).join('\n') : 'NPC cognition contracts: none.',
 			plan.unresolvedThread ? 'Relevant unresolved thread: ' + plan.unresolvedThread : 'Relevant unresolved thread: none.',
 			'Continuity requirements:\n- ' + plan.continuityRequirements.join('\n- '),
 			'Forbidden assumptions:\n- ' + plan.forbiddenAssumptions.join('\n- '),

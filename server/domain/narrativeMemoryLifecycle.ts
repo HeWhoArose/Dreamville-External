@@ -6,6 +6,8 @@ import type { StructuredTurnPackage } from './aiOrchestrator';
 import type { NarrativeReview } from './semanticNarrativeReview';
 import type { StateAdjudicationResult } from './narrativeStateAdjudicator';
 import { recordCanonicalNarrativeEvent, type CanonicalNarrativeEventRecord } from './canonicalNarrativeEvent';
+import { NarrativeContinuityStateEngine } from './narrativeContinuityState';
+import { NarrativeNoveltyEngine } from './narrativeNoveltyEngine';
 
 export interface NarrativeOpenThreadRecord {
 	id: string;
@@ -245,6 +247,30 @@ export class NarrativeMemoryLifecycle {
 		plot.updatedAt = timestamp;
 		plot.openThreads = runtime.openNarrativeThreads.map((thread: NarrativeOpenThreadRecord) => thread.title).slice(-24);
 		runtime.plot = plot;
+
+		NarrativeNoveltyEngine.recordAcceptedTurn({ repository: params.repository, storyId: params.storyId, narration: params.turnPackage.narrative.join(' '), turnNumber: currentTurn + 1 });
+
+		NarrativeContinuityStateEngine.recordAcceptedTurn({
+			repository: params.repository,
+			storyId: params.storyId,
+			turnId: params.turnId,
+			situation: params.currentSituation,
+			intent: params.playerIntent || {
+				action: 'continue',
+				interactionMode: 'OTHER',
+				speechIntent: false,
+				movementIntent: false,
+				observationIntent: false,
+				explicitTargets: [],
+				impliedTargets: [],
+				confidence: 0,
+				source: 'DETERMINISTIC',
+				originalText: params.playerAction || '',
+			},
+			narration: params.turnPackage.narrative.join(' '),
+			plan: undefined,
+			review: params.narrativeReview,
+		});
 
 		const history = Array.isArray(runtime.narrativeContextHistory) ? [...runtime.narrativeContextHistory] : [];
 		history.push({

@@ -24,8 +24,12 @@ import { NarrativeResearchPipeline, type NarrativeResearchResult } from './narra
 import { NarrativeDirector, type EphemeralNarrativePlan } from './narrativeDirector';
 import { buildNarrationPrompt, defaultNarrationStyle, projectSupportingWorkingContext } from './narrativePromptBuilder';
 import { SemanticNarrativeReview, type NarrativeReview } from './semanticNarrativeReview';
+import { LiteraryNarrativeReview, type LiteraryReview } from './literaryNarrativeReview';
+import { NarrativeNoveltyEngine } from './narrativeNoveltyEngine';
 import { EpistemicBoundaryEnforcer } from './epistemicBoundary';
 import { NarrativeStateAdjudicator, type StateAdjudicationResult } from './narrativeStateAdjudicator';
+import { NarrativeContinuityStateEngine } from './narrativeContinuityState';
+import { NarratorVoiceEngine, type NarratorVoiceControls } from './narratorVoiceEngine';
 import { AiTurnCallBudget, type AiTurnCallBudgetSnapshot } from './aiTurnCallBudget';
 import type { ActionResolution } from './actionResolution';
 
@@ -535,6 +539,7 @@ export interface OrchestratedTurnResult {
   playerIntent?: PlayerIntent;
   narrativePlan?: EphemeralNarrativePlan;
   narrativeReview?: NarrativeReview;
+  literaryReview?: LiteraryReview;
   stateAdjudication?: StateAdjudicationResult;
   turnPackage?: StructuredTurnPackage;
   telemetry: OrchestratedTurnTelemetry;
@@ -7084,6 +7089,7 @@ export class MultiModelOrchestrator {
     recentTurns?: Array<{ playerAction: string; narration: string; worldTime?: string }>;
     sceneContext?: string;
     forceModelId?: string;
+    narratorVoiceControls?: NarratorVoiceControls;
   }): Promise<{
     success: boolean;
     turnPackage?: StructuredTurnPackage;
@@ -7163,6 +7169,8 @@ export class MultiModelOrchestrator {
       situation: currentSituation,
       intent: playerIntent,
       research: researchResult,
+      repository: worldRepo,
+      storyId,
     });
 
     const canonicalSceneAnchor = [
@@ -7330,6 +7338,11 @@ export class MultiModelOrchestrator {
       ],
     });
 
+    const narrativeProfile = worldRepo.getNarrativeProfile(storyId);
+    const narratorVoiceState = NarratorVoiceEngine.resolve(worldRepo, storyId, narrativeProfile, params.narratorVoiceControls);
+    NarratorVoiceEngine.persist(worldRepo, storyId, narratorVoiceState);
+    const narrativeNoveltyState = NarrativeNoveltyEngine.resolve(worldRepo, storyId);
+
     const narrationPrompt = buildNarrationPrompt({
       situation: currentSituation,
       intent: playerIntent,
@@ -7338,6 +7351,8 @@ export class MultiModelOrchestrator {
       workingContext: projectSupportingWorkingContext(assembledContext),
       globalInstruction: 'You are Dreamville’s narrative presentation engine. Generate only the player-facing narrative turn using the supplied canonical state, semantic player intent, bounded research, and ephemeral plan.',
       styleInstruction,
+      narratorVoiceState,
+      narrativeNoveltyState,
       canonicalOutcome: authoritativeOutcome,
       actionResolution: params.actionResolution,
       maxPromptTokens: Math.max(200, hardTokenBudget),
@@ -7561,7 +7576,8 @@ export class MultiModelOrchestrator {
     voiceProfile?: any;
     idempotencyKey?: string;
     repository?: WorldRepository;
-  }): Promise<OrchestratedTurnResult> {
+      narratorVoiceControls?: NarratorVoiceControls;
+}): Promise<OrchestratedTurnResult> {
     const storyId = params.storyId || 'default_story';
     const rawIdempotencyKey = params.idempotencyKey ? String(params.idempotencyKey).trim() : undefined;
     const scopedKey = rawIdempotencyKey ? `${storyId}::${rawIdempotencyKey}` : undefined;
@@ -7718,6 +7734,11 @@ export class MultiModelOrchestrator {
         ],
       });
 
+      const narrativeProfile = repo.getNarrativeProfile(storyId);
+      const narratorVoiceState = NarratorVoiceEngine.resolve(repo, storyId, narrativeProfile, params.narratorVoiceControls);
+      NarratorVoiceEngine.persist(repo, storyId, narratorVoiceState);
+      const narrativeNoveltyState = NarrativeNoveltyEngine.resolve(repo, storyId);
+
       // 1b. CH15 Source Adaptation Adjudication Check
       const narrationPrompt = isNarrativeTask && researchResult && narrativePlan
         ? buildNarrationPrompt({
@@ -7728,6 +7749,8 @@ export class MultiModelOrchestrator {
             workingContext: projectSupportingWorkingContext(assembledContext),
             globalInstruction: 'You are Dreamville’s authoritative narrative presentation engine. Generate only the player-facing narrative turn. Canonical game state remains authoritative and prose never commits state.',
             styleInstruction: defaultNarrationStyle(),
+            narratorVoiceState,
+            narrativeNoveltyState,
             maxPromptTokens: Math.max(200, hardTokenBudget),
           })
         : {
@@ -7974,6 +7997,7 @@ export class MultiModelOrchestrator {
 
             let reviewedTurnPackage = validation.turnPackage;
             let narrativeReview: NarrativeReview | undefined;
+            let literaryReview: LiteraryReview | undefined;
             if (isNarrativeTask && narrativePlan) {
               const initialReview = SemanticNarrativeReview.review({
                 intent: playerIntent,
@@ -8005,6 +8029,22 @@ export class MultiModelOrchestrator {
               }
               reviewedTurnPackage = reviewed.turnPackage;
               narrativeReview = reviewed.review;
+              const narrativeNoveltyStateForReview = NarrativeNoveltyEngine.resolve(repo, storyId);
+              const literary = LiteraryNarrativeReview.review({ intent: playerIntent, situation: currentSituation, plan: narrativePlan, turnPackage: reviewedTurnPackage, voice: narratorVoiceState, noveltyState: narrativeNoveltyStateForReview, previousNarrations: currentSituation.recentTurns.map((entry) => String(entry.narration || '')).filter(Boolean) });
+              literaryReview = literary;
+              if (literary.decision === 'REWRITE') {
+                const literaryBudget = turnAiCallBudget.beginTask('narrative.review');
+                if (!literaryBudget.allowed) throw new Error(literaryBudget.reason || 'Narrative literary review call budget exhausted.');
+                turnAiCallBudget.recordProviderAttempt('narrative.review');
+                const literaryPrompt = LiteraryNarrativeReview.buildRewritePrompt({ review: literary, turnPackage: reviewedTurnPackage, intent: playerIntent, situation: currentSituation, plan: narrativePlan });
+                const literaryResult = await adapter.generate('narrative.review', literaryPrompt, { modelId: currentCandidate.modelId, timeoutMs, maxTokens: 1200, systemInstruction: 'Perform a literary polish only. Preserve canonical truth, state, player agency, knowledge boundaries and plot direction.' });
+                const literaryValidation = this.validateTurnPackage(literaryResult.text);
+                if (!literaryValidation.valid || !literaryValidation.turnPackage) throw new Error(literaryValidation.errorReason || 'Literary rewrite returned an invalid structured turn package.');
+                const postSemantic = SemanticNarrativeReview.review({ intent: playerIntent, situation: currentSituation, plan: narrativePlan, turnPackage: literaryValidation.turnPackage });
+                if (postSemantic.decision !== 'ACCEPT') throw new Error('Literary rewrite failed the semantic safety gate.');
+                reviewedTurnPackage = literaryValidation.turnPackage;
+                literaryReview = LiteraryNarrativeReview.review({ intent: playerIntent, situation: currentSituation, plan: narrativePlan, turnPackage: reviewedTurnPackage, voice: narratorVoiceState });
+              }
             }
 
             // 6. Adjudicate state proposals through the canonical state boundary.
@@ -8117,6 +8157,12 @@ export class MultiModelOrchestrator {
               narrativeReview,
               stateAdjudication,
               turnPackage: reviewedTurnPackage,
+            });
+            NarrativeNoveltyEngine.recordAcceptedTurn({
+              repository: repo,
+              storyId,
+              narration: reviewedTurnPackage.narrative.join(' '),
+              turnNumber: repo.getCanonicalCommandEvents(storyId).length,
             });
             }
 
@@ -8248,7 +8294,10 @@ export class MultiModelOrchestrator {
               uncommittedOutput: '',
               canonicalInvariants: {},
               styleContract: {
-                tone: 'deterministic_emergency',
+                tone: narratorVoiceState.profileId,
+                cadence: narratorVoiceState.cadence,
+                descriptiveDensity: narratorVoiceState.descriptiveDensity,
+                emotionalDistance: narratorVoiceState.emotionalDistance,
                 promptVersion: MultiModelOrchestrator.PROMPT_VERSION,
               },
               openThreads: validation.turnPackage.memoryCandidates || [],
@@ -8318,6 +8367,12 @@ export class MultiModelOrchestrator {
               narrativeReview: emergencyNarrativeReview,
               stateAdjudication,
               turnPackage: emergencyTurnPackage,
+            });
+            NarrativeNoveltyEngine.recordAcceptedTurn({
+              repository: repo,
+              storyId,
+              narration: emergencyTurnPackage.narrative.join(' '),
+              turnNumber: repo.getCanonicalCommandEvents(storyId).length,
             });
             }
 

@@ -7340,6 +7340,7 @@ export class MultiModelOrchestrator {
 
     const narrativeProfile = worldRepo.getNarrativeProfile(storyId);
     const narratorVoiceState = NarratorVoiceEngine.resolve(worldRepo, storyId, narrativeProfile, params.narratorVoiceControls);
+    const narrativeNoveltyState = NarrativeNoveltyEngine.resolve(worldRepo, storyId);
     NarratorVoiceEngine.persist(worldRepo, storyId, narratorVoiceState);
 
     const narrationPrompt = buildNarrationPrompt({

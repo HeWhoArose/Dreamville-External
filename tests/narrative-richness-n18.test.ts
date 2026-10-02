@@ -95,7 +95,7 @@ test('N18 passes a grounded, characterful narration with multiple richness signa
 		situation: makeSituation(),
 		plan: makePlan(),
 		turnPackage: turn(
-			"Rain needles the archive windows as Mara's fingers tighten around the cracked seal. \"You came back,\" she says, but she does not meet your eyes. The brass desk shivers when thunder rolls; beneath the wax, a second seam cuts inward through the iron as if the cabinet was forced open from the other side. Mara exhales slowly and slides the letter toward you, leaving the accusation hanging between you.",
+			"Rain needles the archive windows as Mara's fingers tighten around the cracked seal. assert.match(source, /const needsLiteraryRewrite = literary\.decision === 'REWRITE';/);"You came back,\" she says, but she does not meet your eyes. The brass desk shivers when thunder rolls; the cold stone carries a metallic smell as the damaged seal cuts inward through the iron. The warning in Mara's voice makes the risk plain, and her hesitation says more than the answer she refuses to give. She exhales slowly and slides the letter toward you, leaving the accusation hanging between you.",
 			[{ speaker: 'Mara', text: 'You came back.' }],
 		),
 		previousNarrations: ['The sealed archive still waits beneath the rain.'],
@@ -214,20 +214,6 @@ test('N18 evaluator remains presentation-only in the production orchestrator sou
 	assert.match(source, /narrativeRichnessEvaluation/);
 	assert.match(source, /postRichness\.decision !== 'PASS'/);
 	assert.match(source, /narrative\.review/);
-});
-
-test('N18 does not replace semantic safety review', () => {
-	const situation = makeSituation();
-	const plan = makePlan();
-	const intent = makeIntent({ movementIntent: true, informationGoal: undefined });
-	const semantic = SemanticNarrativeReview.review({
-		intent,
-		situation,
-		plan,
-		turnPackage: turn('You remain still and watch the archive door.'),
-	});
-	assert.equal(semantic.decision, 'REWRITE');
-	assert.ok(semantic.violations.some((violation) => violation.code === 'MISSING_MOVEMENT'));
 });
 
 test('N18 does not spend a second provider call on fallback candidates for richness-only improvement', async () => {

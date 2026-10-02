@@ -40,6 +40,12 @@ function buildNpcCognitionContract(repository: WorldRepository, storyId: string,
 	const profile = agency.getCharacter(storyId, actor.id);
 	const relationship = agency.getRelationship(storyId, situation.player.actorId, actor.id);
 	const npcSlice = buildNpcPlanningSlice(repository, storyId, situation.player.actorId, situation, actor.id);
+	const expressiveIdentity = NpcExpressiveIdentityEngine.project({
+		characterId: actor.id,
+		name: actor.name,
+		profile,
+		actorRole: actor.role,
+	});
 	const memories = (npcSlice?.recentMemories || []).slice(0, 8).map((memory) => memory.content);
 	const authorizedKnowledge = (npcSlice?.authorizedKnowledge || []).slice(0, 6).map((fact: any) => String(fact.summary || fact.description || fact.predicate || '')) .filter(Boolean);
 	return {

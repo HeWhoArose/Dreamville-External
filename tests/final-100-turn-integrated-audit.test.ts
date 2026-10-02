@@ -47,24 +47,10 @@ function responseForTurn(turn: number, location: string, target: string): string
 		'The chart cases catch a muted glint from the overhead fixtures.',
 		'The room’s low hum becomes noticeable only after everything else quiets.',
 	];
-	const beats = [
-		'You keep the figure in view without interrupting the work.',
-		'You study the figure’s hands and the visible arrangement of the charts.',
-		'You follow the small changes in the ongoing task from your current position.',
-		'The observation remains confined to what is directly available in the scene.',
-		'You continue watching as the immediate work proceeds without a new commitment.',
-		'The visible details remain consistent with the current scene and location.',
-		'You notice another small motion at the table without assigning it a hidden cause.',
-		'The scene gives you enough to observe but no reliable basis for a secret explanation.',
-		'You hold your attention on the present activity rather than assuming a future action.',
-		'Nothing in view requires you to choose a later course on your own.',
-		'The ongoing task remains the clearest feature of the immediate scene.',
-		'You let the current evidence speak for itself before drawing any further conclusion.',
-	];
 	return JSON.stringify({
 		narrative: [
-			`At ${location}, you keep ${target} in view. ${beats[(turn - 1) % beats.length]}`,
-			`${sensory[(turn * 3) % sensory.length]} No hidden fact, location change, or future player decision is established by this observation.`,
+			`You keep ${target} in view at ${location}, studying the expedition charts without speaking. ${sensory[(turn - 1) % sensory.length]}`,
+			`The chart cases remain on the worktable as the room’s quiet activity continues. You keep your attention on what is directly observable and do not establish a new location, hidden fact, or future player decision.`,
 		],
 		dialogue: [],
 		events: [],

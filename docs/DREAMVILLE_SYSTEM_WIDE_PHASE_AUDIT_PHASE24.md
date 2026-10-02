@@ -107,14 +107,19 @@ Narrative continuity/novelty/history remain bounded projections. Canonical plot/
 
 ## Release evidence
 
-The current N12 base has already demonstrated:
-- full test suite green;
-- lint/typecheck/build green;
+The current Phase 24 branch has now demonstrated:
+- full test suite green — **1,358/1,358 tests passed**;
+- lint green;
+- typecheck green;
+- production build green;
 - release gate green;
-- N11 100-turn stress green;
-- N12 integration regressions green.
+- N11 100-turn stress regression green;
+- N12 integration regressions green;
+- Phase 24 system-wide audit green.
 
-This Phase 24 branch adds a system-wide source/contract audit as an additional executable regression gate.
+The first Phase 24 verification run exposed one audit-test assumption about the public ActionResolution type export; the audit test was corrected to assert the public contract boundary rather than an implementation declaration. No product-code regression was exposed.
+
+This Phase 24 branch therefore closes the audit loop: audit → implement → regress → re-audit → full repository gates.
 
 ## Conclusion
 

@@ -39,16 +39,14 @@ export class NarrativeProviderHandoffEngine {
 		continuity: NarrativeContinuityState;
 		novelty: NarrativeNoveltyState;
 	}): NarrativeProviderHandoffContract {
-		const noveltyGuidance = NarrativeNoveltyState
-			? 'Provider-independent novelty guidance: ' + (
+		const noveltyGuidance = 'Provider-independent novelty guidance: ' + (
 				params.novelty.items
 					.filter((item) => item.count >= 2)
 					.sort((a, b) => b.count - a.count || b.lastSeenTurn - a.lastSeenTurn)
 					.slice(0, 8)
 					.map((item) => item.category + ':' + item.text + ' (count=' + item.count + ')')
 					.join(', ') || 'no tracked repetition'
-			)
-			: 'Provider-independent novelty guidance: no tracked repetition';
+			);
 
 		const fingerprintSource = [
 			params.storyId,

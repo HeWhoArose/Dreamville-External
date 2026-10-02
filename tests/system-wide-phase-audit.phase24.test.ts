@@ -63,7 +63,9 @@ test('Phase 24 — context, epistemic, and NPC boundaries remain connected', () 
 	mustContain('server/domain/narrativeResearchPipeline.ts', /SemanticNarrativeResearchEngine\.scoreCandidate/, 'Semantic narrative research is not part of candidate selection.');
 	mustContain('server/domain/narrativeDirector.ts', /buildNpcCognitionContract/, 'NPC cognition is not part of narrative direction.');
 	mustContain('server/domain/npcPlanningSlice.ts', /knowledgeBoundary/, 'NPC knowledge boundary is missing.');
-	mustContain('server/domain/epistemicBoundary.ts', /class EpistemicBoundaryEnforcer/, 'Epistemic boundary authority is missing.');
+	mustContain('server/domain/narrativeMemoryLifecycle.ts', /class NarrativeMemoryLifecycle/, 'Phase 8 memory lifecycle authority is missing.');
+	mustContain('server/domain/entitySceneRelevance.ts', /class EntitySceneRelevanceEngine/, 'Phase 9 scene relevance authority is missing.');
+	mustContain('server/domain/epistemicBoundary.ts', /class EpistemicBoundaryEnforcer/, 'Phase 10 epistemic boundary authority is missing.');
 	mustContain('server/domain/aiOrchestrator.ts', /EpistemicBoundaryEnforcer\.sanitizeResearch/, 'Live narration path does not sanitize research before planning.');
 });
 
@@ -117,6 +119,9 @@ test('Phase 24 — all audited phase-specific regression suites remain present',
 		'tests/orphan-connection-audit.phase20.test.ts',
 		'tests/release-gate.phase21.test.ts',
 		'tests/phase22-release-stabilization.test.ts',
+		'tests/narrative-memory-lifecycle.phase8.test.ts',
+		'tests/entity-scene-relevance.test.ts',
+		'tests/phase11.epistemic-authority.test.ts',
 		'tests/architecture-gap-closure.phase23.test.ts',
 	];
 	for (const relativePath of tests) mustExist(relativePath);

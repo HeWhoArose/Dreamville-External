@@ -23,7 +23,7 @@ function model(providerId: string, modelId: string, priority = 100): ModelRegist
 }
 
 const validNarrative = JSON.stringify({
-	narrative: ['You move closer to the archivists, keeping your attention on the low conversation.', 'The whispers mention unstable starlight fissures in the lower sea.'],
+	narrative: ['You move closer to the Whispering Orrery archivists, keeping your attention on the low conversation.', 'The whispers mention unstable starlight fissures in the lower sea.'],
 	dialogue: [], events: [], stateChanges: [], memoryCandidates: [], audioCues: [],
 });
 

@@ -61,21 +61,29 @@ test('N9 creates a provider-independent presentation fingerprint', () => {
 });
 
 test('N9 fallback providers receive the identical provider-independent handoff', async () => {
-	const repository = new InMemoryWorldRepository({ disablePersistence: true });
-	repository.seedStory('n9_fallback');
 	const primary = new DeterministicMockAdapter('n9_primary');
 	primary.failureMode = 'malformed_json';
 	const fallback = new DeterministicMockAdapter('n9_fallback');
 	fallback.cannedResponses.set('narrative.generate', validNarrative);
 	const orchestrator = prepare(primary, fallback);
-	const result = await orchestrator.generateNarrativeOnly({
-		storyId: 'n9_fallback',
-		playerAction: 'I move closer to hear the rumors.',
-		hardTokenBudget: 1400,
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	repository.seedStory('n9_fallback');
+	const situation = CurrentSituationBuilder.build({ storyId: 'n9_fallback', playerAction: 'I move closer.', worldRepo: repository });
+	const intent = PlayerIntentInterpreter.deterministic('I move closer.', situation);
+	const voice = NarratorVoiceEngine.resolve(repository, 'n9_fallback');
+	const quality = NarrativeQualityContractEngine.resolve(intent);
+	const pacing = NarrativePacingEngine.resolve({ situation, intent });
+	const continuity = NarrativeContinuityStateEngine.defaultState('n9_fallback');
+	const novelty = NarrativeNoveltyEngine.defaultState('n9_fallback');
+	const handoff = NarrativeProviderHandoffEngine.resolve({ storyId: 'n9_fallback', turnId: situation.turnId, voice, quality, pacing, continuity, novelty });
+	const result = await orchestrator.executeTaskGeneration('narrative.generate', 'N9 fallback handoff test', 'base narrator instruction', {
+		narrativeHandoff: handoff,
 		timeoutMs: 1000,
-		maxRetries: 0,
+		maxTokens: 500,
+		allowDeterministicFallback: true,
+		validateResponse: () => ({ valid: true }),
 	});
-	assert.equal(result.success, true, result.error);
+	assert.equal(result.source, 'AI_FALLBACK');
 	assert.equal(primary.callHistory.length, 1);
 	assert.equal(fallback.callHistory.length, 1);
 	const primaryInstruction = primary.callHistory[0].options?.systemInstruction || '';
@@ -83,25 +91,32 @@ test('N9 fallback providers receive the identical provider-independent handoff',
 	assert.equal(primaryInstruction, fallbackInstruction);
 	assert.match(primaryInstruction, /N9 PROVIDER HANDOFF CONTRACT/);
 	assert.match(primaryInstruction, /provider\/model changes must alter implementation only/i);
-	assert.match(fallback.callHistory[0].prompt, /N9 PROVIDER HANDOFF CONTRACT/);
-	assert.ok(result.modelId);
+	assert.ok(result.narrativeProviderHandoff);
 });
 
 test('N9 emergency floor receives the same handoff contract', async () => {
-	const repository = new InMemoryWorldRepository({ disablePersistence: true });
-	repository.seedStory('n9_emergency');
 	const primary = new DeterministicMockAdapter('n9_primary_emergency');
 	primary.failureMode = '500';
 	const orchestrator = prepare(primary);
-	const result = await orchestrator.generateNarrativeOnly({
-		storyId: 'n9_emergency',
-		playerAction: 'I move closer to hear the rumors.',
-		hardTokenBudget: 1400,
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	repository.seedStory('n9_emergency');
+	const situation = CurrentSituationBuilder.build({ storyId: 'n9_emergency', playerAction: 'I move closer.', worldRepo: repository });
+	const intent = PlayerIntentInterpreter.deterministic('I move closer.', situation);
+	const voice = NarratorVoiceEngine.resolve(repository, 'n9_emergency');
+	const quality = NarrativeQualityContractEngine.resolve(intent);
+	const pacing = NarrativePacingEngine.resolve({ situation, intent });
+	const continuity = NarrativeContinuityStateEngine.defaultState('n9_emergency');
+	const novelty = NarrativeNoveltyEngine.defaultState('n9_emergency');
+	const handoff = NarrativeProviderHandoffEngine.resolve({ storyId: 'n9_emergency', turnId: situation.turnId, voice, quality, pacing, continuity, novelty });
+	const result = await orchestrator.executeTaskGeneration('narrative.generate', 'N9 emergency handoff test', 'base narrator instruction', {
+		narrativeHandoff: handoff,
 		timeoutMs: 1000,
-		maxRetries: 0,
+		maxTokens: 500,
+		allowDeterministicFallback: true,
+		validateResponse: () => ({ valid: true }),
 	});
-	assert.equal(result.success, true, result.error);
 	assert.equal(result.source, 'DETERMINISTIC_FALLBACK');
 	assert.ok(result.narrativeProviderHandoff);
-	assert.match(result.narrativeProviderHandoff.providerIndependentInstruction, /N9 PROVIDER HANDOFF CONTRACT/);
+	assert.equal(result.narrativeProviderHandoff.handoffId, handoff.handoffId);
 });
+

@@ -26,7 +26,7 @@ import { buildNarrationPrompt, defaultNarrationStyle, projectSupportingWorkingCo
 import { SemanticNarrativeReview, type NarrativeReview } from './semanticNarrativeReview';
 import { LiteraryNarrativeReview, type LiteraryReview } from './literaryNarrativeReview';
 import { NarrativeProviderHandoffEngine, type NarrativeProviderHandoffContract } from './narrativeProviderHandoff';
-import { NarrativePacingEngine } from './narrativePacingEngine';
+import { NarrativePacingEngine, type NarrativePacingContract } from './narrativePacingEngine';
 import { NarrativeNoveltyEngine } from './narrativeNoveltyEngine';
 import { EpistemicBoundaryEnforcer } from './epistemicBoundary';
 import { NarrativeStateAdjudicator, type StateAdjudicationResult } from './narrativeStateAdjudicator';
@@ -7008,6 +7008,11 @@ export class MultiModelOrchestrator {
     adapter: IProviderAdapter;
     modelId: string;
     timeoutMs: number;
+    playerAction: string;
+    repository: WorldRepository;
+    storyId: string;
+    narrativePacingContract: NarrativePacingContract;
+    narrativeProviderHandoff?: NarrativeProviderHandoffContract;
     strict?: boolean;
     allowRewrite?: boolean;
   }): Promise<{ turnPackage: StructuredTurnPackage; review: NarrativeReview }> {
@@ -7032,7 +7037,10 @@ export class MultiModelOrchestrator {
       response = await params.adapter.generate('narrative.generate', rewritePrompt, {
         timeoutMs: Math.min(params.timeoutMs, 5000),
         modelId: params.modelId,
-        maxTokens: 1200,
+        maxTokens: NarrativePacingEngine.outputTokenBudget(params.narrativePacingContract),
+        systemInstruction: params.narrativeProviderHandoff?.providerIndependentInstruction,
+        canonicalLocationName: params.situation.location.name,
+        playerAction: params.playerAction,
       });
       if (!response?.text) throw new Error('Narrative semantic rewrite provider returned empty text.');
       const rewriteModel = Array.from(this.models.values()).find((model) => model.modelId === params.modelId || this.modelKey(model) === params.modelId);
@@ -7058,6 +7066,19 @@ export class MultiModelOrchestrator {
     if (!intentSafety.valid) {
       throw new Error(intentSafety.errorReason || 'Narrative semantic rewrite violated player intent safety.');
     }
+    const presentation = this.validateNarrativePresentation({
+      narration: validation.turnPackage.narrative.join(' '),
+      playerAction: params.playerAction,
+      intent: params.intent,
+      situation: params.situation,
+      repository: params.repository,
+      storyId: params.storyId,
+      pacingContract: params.narrativePacingContract,
+    });
+    if (!presentation.valid) {
+      throw new Error(presentation.errorReason || 'Narrative semantic rewrite failed final presentation validation.');
+    }
+
     review = SemanticNarrativeReview.review({
       intent: params.intent,
       situation: params.situation,
@@ -7068,6 +7089,63 @@ export class MultiModelOrchestrator {
       throw new Error('Narrative semantic review remained ' + review.decision + ' after the single permitted rewrite.');
     }
     return { turnPackage: validation.turnPackage, review };
+  }
+
+  private validateNarrativePresentation(params: {
+    narration: string;
+    playerAction: string;
+    intent: PlayerIntent;
+    situation: CurrentSituation;
+    repository: WorldRepository;
+    storyId: string;
+    pacingContract: NarrativePacingContract;
+  }): { valid: boolean; errorReason?: string } {
+    const narration = String(params.narration || '').trim();
+    if (!narration) return { valid: false, errorReason: 'Narration presentation validation received empty output.' };
+
+    const pacing = NarrativePacingEngine.validateNarration(narration, params.pacingContract);
+    if (!pacing.valid) return { valid: false, errorReason: pacing.reason || 'Narration failed N8 adaptive pacing validation.' };
+
+    const sceneContinuity = this.validateNarrativeSceneContinuity(narration, params.repository, params.storyId);
+    if (!sceneContinuity.valid) return { valid: false, errorReason: sceneContinuity.errorReason };
+
+    const actionContinuity = this.validateNarrativeActionContinuity(narration, params.playerAction, params.intent);
+    if (!actionContinuity.valid) return { valid: false, errorReason: actionContinuity.errorReason };
+
+    const actionModeContinuity = this.validateNarrativeActionModeContinuity(
+      narration,
+      params.playerAction,
+      params.situation.player.name,
+      params.intent,
+    );
+    if (!actionModeContinuity.valid) return { valid: false, errorReason: actionModeContinuity.errorReason };
+
+    const intentSafety = this.validateNarrativeIntentSafety(narration, params.intent, params.situation.player.name);
+    if (!intentSafety.valid) return { valid: false, errorReason: intentSafety.errorReason };
+
+    const currentSceneFactualContext = [
+      params.situation.location.description,
+      params.situation.location.ambientSensory,
+      params.situation.activeDialogue ? 'Active dialogue: ' + params.situation.activeDialogue.speakerName + ': ' + params.situation.activeDialogue.text : '',
+      ...params.situation.visibleEvents.map((event) => event.summary),
+      ...params.situation.relevantLore.map((fact) => 'Authorized lore: ' + fact.subjectEntityId + ' ' + fact.predicate + ' ' + fact.objectValue),
+    ].filter(Boolean).slice(0, 10).join('\n');
+
+    const informationTopicContinuity = this.validateNarrativeInformationTopicContinuity(
+      narration,
+      params.playerAction,
+      currentSceneFactualContext,
+      params.intent,
+    );
+    if (!informationTopicContinuity.valid) return { valid: false, errorReason: informationTopicContinuity.errorReason };
+
+    const informationContinuity = this.validateNarrativeInformationContinuity(narration, params.playerAction, params.intent);
+    if (!informationContinuity.valid) return { valid: false, errorReason: informationContinuity.errorReason };
+
+    const temporalContinuity = this.validateNarrativeTemporalContinuity(narration, params.repository, params.storyId);
+    if (!temporalContinuity.valid) return { valid: false, errorReason: temporalContinuity.errorReason };
+
+    return { valid: true };
   }
 
   /**
@@ -7694,6 +7772,8 @@ export class MultiModelOrchestrator {
       const researchPacket = researchResult?.packet;
       const narrativePlan = researchResult
         ? NarrativeDirector.create({
+            repository: repo,
+            storyId,
             situation: currentSituation,
             intent: playerIntent,
             research: researchResult,
@@ -7820,7 +7900,11 @@ export class MultiModelOrchestrator {
                 discoveredLocations: repo.getPlayerLifecycle(storyId)?.discoveredLocationIds || [],
               },
               styleContract: {
-                tone: 'evocative_canonical_archival',
+                profileId: narratorVoiceState.profileId,
+                tone: narratorVoiceState.profileId,
+                cadence: narratorVoiceState.cadence,
+                descriptiveDensity: narratorVoiceState.descriptiveDensity,
+                emotionalDistance: narratorVoiceState.emotionalDistance,
                 epistemicSanitized: 'true',
                 promptVersion: MultiModelOrchestrator.PROMPT_VERSION,
               },
@@ -7991,23 +8075,17 @@ export class MultiModelOrchestrator {
               throw new Error(`Turn package validation failed: ${validation.errorReason}`);
             }
             if (task === 'narrative.generate') {
-              const pacing = NarrativePacingEngine.validateNarration(validation.turnPackage.narrative.join(' '), narrativePacingContract);
-              if (!pacing.valid) throw new Error(pacing.reason || 'Narration failed N8 adaptive pacing validation.');
-              const intentSafety = this.validateNarrativeIntentSafety(
-                validation.turnPackage.narrative.join(' '),
-                playerIntent,
-                currentSituation.player.name,
-              );
-              if (!intentSafety.valid) {
-                throw new Error(intentSafety.errorReason || 'Narrative semantic intent safety validation failed.');
-              }
-              const continuity = this.validateNarrativeSceneContinuity(
-                validation.turnPackage.narrative.join(' '),
-                repo,
+              const presentation = this.validateNarrativePresentation({
+                narration: validation.turnPackage.narrative.join(' '),
+                playerAction: params.playerAction || '',
+                intent: playerIntent,
+                situation: currentSituation,
+                repository: repo,
                 storyId,
-              );
-              if (!continuity.valid) {
-                throw new Error(continuity.errorReason || 'Narration scene continuity validation failed.');
+                pacingContract: narrativePacingContract,
+              });
+              if (!presentation.valid) {
+                throw new Error(presentation.errorReason || 'Narrative presentation validation failed.');
               }
             }
 
@@ -8042,6 +8120,11 @@ export class MultiModelOrchestrator {
                 adapter,
                 modelId: currentCandidate.modelId,
                 timeoutMs,
+                playerAction: params.playerAction || '',
+                repository: repo,
+                storyId,
+                narrativePacingContract,
+                narrativeProviderHandoff,
                 allowRewrite: shouldRewrite,
               });
               if (reviewed.review.decision !== 'ACCEPT') {
@@ -8060,10 +8143,40 @@ export class MultiModelOrchestrator {
                 const literaryResult = await adapter.generate('narrative.review', literaryPrompt, { modelId: currentCandidate.modelId, timeoutMs, maxTokens: 1200, systemInstruction: [narrativeProviderHandoff?.providerIndependentInstruction, 'Perform a literary polish only. Preserve canonical truth, state, player agency, knowledge boundaries and plot direction.'].filter(Boolean).join(' ') });
                 const literaryValidation = this.validateTurnPackage(literaryResult.text);
                 if (!literaryValidation.valid || !literaryValidation.turnPackage) throw new Error(literaryValidation.errorReason || 'Literary rewrite returned an invalid structured turn package.');
+                const literaryPresentation = this.validateNarrativePresentation({
+                  narration: literaryValidation.turnPackage.narrative.join(' '),
+                  playerAction: params.playerAction || '',
+                  intent: playerIntent,
+                  situation: currentSituation,
+                  repository: repo,
+                  storyId,
+                  pacingContract: narrativePacingContract,
+                });
+                if (!literaryPresentation.valid) throw new Error(literaryPresentation.errorReason || 'Literary rewrite failed final presentation validation.');
+
                 const postSemantic = SemanticNarrativeReview.review({ intent: playerIntent, situation: currentSituation, plan: narrativePlan, turnPackage: literaryValidation.turnPackage });
                 if (postSemantic.decision !== 'ACCEPT') throw new Error('Literary rewrite failed the semantic safety gate.');
+
+                const postLiterary = LiteraryNarrativeReview.review({
+                  intent: playerIntent,
+                  situation: currentSituation,
+                  plan: narrativePlan,
+                  turnPackage: literaryValidation.turnPackage,
+                  voice: narratorVoiceState,
+                  noveltyState: NarrativeNoveltyEngine.resolve(repo, storyId),
+                  previousNarrations: currentSituation.recentTurns.map((entry) => String(entry.narration || '')).filter(Boolean),
+                });
+                if (postLiterary.decision !== 'ACCEPT') throw new Error('Literary rewrite remained below the N6/N7 acceptance threshold.');
+
+                const postNovelty = NarrativeNoveltyEngine.inspect({
+                  repository: repo,
+                  storyId,
+                  narration: literaryValidation.turnPackage.narrative.join(' '),
+                });
+                if (postNovelty.discouraged.length) throw new Error('Literary rewrite reintroduced a discouraged N7 repetition/trope pattern.');
+
                 reviewedTurnPackage = literaryValidation.turnPackage;
-                literaryReview = LiteraryNarrativeReview.review({ intent: playerIntent, situation: currentSituation, plan: narrativePlan, turnPackage: reviewedTurnPackage, voice: narratorVoiceState });
+                literaryReview = postLiterary;
               }
             }
 
@@ -8107,7 +8220,11 @@ export class MultiModelOrchestrator {
                 discoveredLocations: repo.getPlayerLifecycle(storyId)?.discoveredLocationIds || [],
               },
               styleContract: {
-                tone: 'evocative_canonical_archival',
+                profileId: narratorVoiceState.profileId,
+                tone: narratorVoiceState.profileId,
+                cadence: narratorVoiceState.cadence,
+                descriptiveDensity: narratorVoiceState.descriptiveDensity,
+                emotionalDistance: narratorVoiceState.emotionalDistance,
                 epistemicSanitized: 'true',
               },
               openThreads: reviewedTurnPackage.memoryCandidates || [],
@@ -8277,10 +8394,39 @@ export class MultiModelOrchestrator {
                   adapter: emergencyAdapter,
                   modelId: emergencyModel.modelId,
                   timeoutMs,
+                  playerAction: params.playerAction || '',
+                  repository: repo,
+                  storyId,
+                  narrativePacingContract,
+                  narrativeProviderHandoff,
                   strict: false,
+                  allowRewrite: false,
                 });
-                emergencyTurnPackage = reviewed.turnPackage;
-                emergencyNarrativeReview = reviewed.review;
+                if (reviewed.review.decision !== 'ACCEPT') {
+                  lastError = 'Emergency narration failed semantic narrative review: ' + reviewed.review.decision;
+                } else {
+                  const emergencyLiterary = LiteraryNarrativeReview.review({
+                    intent: playerIntent,
+                    situation: currentSituation,
+                    plan: narrativePlan,
+                    turnPackage: reviewed.turnPackage,
+                    voice: narratorVoiceState,
+                    noveltyState: NarrativeNoveltyEngine.resolve(repo, storyId),
+                    previousNarrations: currentSituation.recentTurns.map((entry) => String(entry.narration || '')).filter(Boolean),
+                  });
+                  if (emergencyLiterary.decision !== 'ACCEPT') {
+                    lastError = 'Emergency narration failed N6 literary review.';
+                  } else if (NarrativeNoveltyEngine.inspect({
+                    repository: repo,
+                    storyId,
+                    narration: reviewed.turnPackage.narrative.join(' '),
+                  }).discouraged.length) {
+                    lastError = 'Emergency narration failed N7 novelty validation.';
+                  } else {
+                    emergencyTurnPackage = reviewed.turnPackage;
+                    emergencyNarrativeReview = emergencyLiterary;
+                  }
+                }
               }
               const adjudication = DomainAdjudicationBridge.adjudicate(
                 emergencyTurnPackage,

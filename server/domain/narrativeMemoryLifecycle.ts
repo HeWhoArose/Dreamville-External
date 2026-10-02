@@ -248,9 +248,14 @@ export class NarrativeMemoryLifecycle {
 		plot.openThreads = runtime.openNarrativeThreads.map((thread: NarrativeOpenThreadRecord) => thread.title).slice(-24);
 		runtime.plot = plot;
 
-		NarrativeNoveltyEngine.recordAcceptedTurn({ repository: params.repository, storyId: params.storyId, narration: params.turnPackage.narrative.join(' '), turnNumber: currentTurn + 1 });
+		const noveltyState = NarrativeNoveltyEngine.recordAcceptedTurn({
+			repository: params.repository,
+			storyId: params.storyId,
+			narration: params.turnPackage.narrative.join(' '),
+			turnNumber: currentTurn + 1,
+		});
 
-		NarrativeContinuityStateEngine.recordAcceptedTurn({
+		const continuityState = NarrativeContinuityStateEngine.recordAcceptedTurn({
 			repository: params.repository,
 			storyId: params.storyId,
 			turnId: params.turnId,
@@ -271,6 +276,12 @@ export class NarrativeMemoryLifecycle {
 			plan: undefined,
 			review: params.narrativeReview,
 		});
+
+		// The lifecycle owns accepted-turn presentation state. Keep the local runtime
+		// snapshot in sync before the final save so it cannot overwrite the just-persisted
+		// N7/N4 updates with the stale pre-turn runtime object.
+		runtime.narrativeNovelty = noveltyState;
+		runtime.narrativeContinuity = continuityState;
 
 		const history = Array.isArray(runtime.narrativeContextHistory) ? [...runtime.narrativeContextHistory] : [];
 		history.push({

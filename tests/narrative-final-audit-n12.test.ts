@@ -12,6 +12,8 @@ import { InMemoryWorldRepository } from '../server/repositories/worldRepository'
 import { CurrentSituationBuilder } from '../server/domain/currentSituation';
 import { NarrativeDirector } from '../server/domain/narrativeDirector';
 import { NarratorVoiceEngine } from '../server/domain/narratorVoiceEngine';
+import { NarrativeContinuityStateEngine } from '../server/domain/narrativeContinuityState';
+import { NarrativeNoveltyEngine } from '../server/domain/narrativeNoveltyEngine';
 
 class SequenceNarrativeAdapter implements IProviderAdapter {
 	public readonly providerId = 'n12_sequence_provider';
@@ -134,4 +136,129 @@ test('N12 primary executeTurn carries N5 cognition and rewrites keep N9/N8 contr
 	assert.equal(result.narrativeReview?.decision, 'ACCEPT');
 	assert.equal(result.checkpoint?.styleContract?.profileId, NarratorVoiceEngine.resolve(repository, storyId).profileId);
 	assert.match(adapter.calls[0].options?.systemInstruction || '', /N9 PROVIDER HANDOFF CONTRACT/i);
+});
+
+
+test('N12 live executeTurn injects persisted N4 continuity into the production narration prompt', async () => {
+	const storyId = 'n12_live_n4_prompt';
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	repository.seedStory(storyId);
+	const situation = CurrentSituationBuilder.build({
+		storyId,
+		playerAction: 'I observe the nearby person.',
+		viewerActorId: repository.getPlayerLifecycle(storyId)?.actorId,
+		worldRepo: repository,
+	});
+	const target = situation.nearbyEntities.find((entity) => entity.kind !== 'PLAYER');
+	assert.ok(target);
+
+	const continuity = NarrativeContinuityStateEngine.recordAcceptedTurn({
+		repository,
+		storyId,
+		turnId: 'n12_previous',
+		situation,
+		intent: {
+			action: 'observe',
+			goal: 'observe',
+			interactionMode: 'PASSIVE_OBSERVATION',
+			speechIntent: false,
+			movementIntent: false,
+			observationIntent: true,
+			explicitTargets: [{ id: target!.id, name: target!.name, kind: target!.kind, source: 'EXPLICIT' }],
+			impliedTargets: [],
+			confidence: 1,
+			source: 'DETERMINISTIC',
+			originalText: 'I observe the nearby person.',
+		},
+		narration: 'The room remains unsettled while you keep the nearby figure in view.',
+	});
+	const run = repository.getStoryRun(storyId);
+	assert.ok(run);
+	run!.runtimeState.narrativeContinuity = {
+		...continuity,
+		narrativeFocus: ['N12_CONTINUITY_FOCUS'],
+		unresolvedSubtext: ['N12_CONTINUITY_SUBTEXT'],
+		tension: 73,
+		emotionalTemperature: 'TENSE',
+	};
+	repository.saveStoryRun(run!);
+
+	const adapter = new SequenceNarrativeAdapter([
+		turnResponse(`At ${situation.location.name}, you keep ${target!.name} in view while the immediate scene remains grounded in what you can see.`),
+	]);
+	const orchestrator = new MultiModelOrchestrator();
+	prepare(orchestrator, adapter);
+
+	const result = await orchestrator.executeTurn({
+		storyId,
+		playerAction: `I observe ${target!.name}.`,
+		repository,
+		hardTokenBudget: 1400,
+		timeoutMs: 1000,
+		maxRetries: 0,
+	});
+
+	assert.equal(result.success, true, result.error || 'N12 live continuity turn failed.');
+	assert.match(adapter.calls[0].prompt, /N12_CONTINUITY_FOCUS/);
+	assert.match(adapter.calls[0].prompt, /N12_CONTINUITY_SUBTEXT/);
+	assert.match(adapter.calls[0].prompt, /Scene tension: 73\/100|Scene tension: 7[0-9]\/100/);
+});
+
+test('N12 accepted executeTurn records novelty exactly once through the lifecycle authority', async () => {
+	const storyId = 'n12_single_n7_record';
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	repository.seedStory(storyId);
+	const situation = CurrentSituationBuilder.build({ storyId, playerAction: 'I observe the room.', worldRepo: repository });
+	const adapter = new SequenceNarrativeAdapter([
+		turnResponse(`At ${situation.location.name}, you observe the nearby work area and note only details available from your position.`),
+	]);
+	const orchestrator = new MultiModelOrchestrator();
+	prepare(orchestrator, adapter);
+
+	const result = await orchestrator.executeTurn({
+		storyId,
+		playerAction: 'I observe the room.',
+		repository,
+		hardTokenBudget: 1400,
+		timeoutMs: 1000,
+		maxRetries: 0,
+	});
+	assert.equal(result.success, true, result.error || 'N12 single-record turn failed.');
+	const novelty = NarrativeNoveltyEngine.resolve(repository, storyId);
+	assert.equal(novelty.turnCount, 1);
+});
+
+test('N12 emergency narration preserves N8/N9/N6 guarantees after provider exhaustion', async () => {
+	const storyId = 'n12_emergency_contract';
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	repository.seedStory(storyId);
+	const primary = new DeterministicMockAdapter('n12_primary_exhausted');
+	primary.failureMode = '500';
+	const orchestrator = new MultiModelOrchestrator();
+	for (const model of orchestrator.getAllModels()) {
+		if (!model.isEmergencyFloor) orchestrator.updateModelHealth(model.providerId, model.modelId, 'DisabledByUser');
+	}
+	const primaryRecord = narrativeModel();
+	orchestrator.registerModel(primaryRecord);
+	orchestrator.registerAdapter(primary);
+	orchestrator.pinModelForTask('narrative.generate', primaryRecord.modelId);
+	orchestrator.setFallbackChain('narrative.generate', [
+		primary.providerId + '::' + primaryRecord.modelId,
+		'provider_deterministic_emergency::emergency-fallback-local',
+	]);
+
+	const result = await orchestrator.executeTurn({
+		storyId,
+		playerAction: 'I observe the room.',
+		repository,
+		hardTokenBudget: 1400,
+		timeoutMs: 1000,
+		maxRetries: 0,
+	});
+
+	assert.equal(result.success, true, result.error || 'N12 emergency recovery failed.');
+	assert.equal(result.telemetry.selectedProviderId, 'provider_deterministic_emergency');
+	assert.ok(result.telemetry.narrativeProviderHandoff, 'Emergency telemetry lost N9 handoff.');
+	assert.match(primary.callHistory[0]?.prompt || '', /N8 ADAPTIVE PACING CONTRACT/);
+	assert.ok(result.literaryReview === undefined || result.literaryReview.decision === 'ACCEPT');
 });

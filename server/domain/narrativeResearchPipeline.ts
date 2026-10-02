@@ -6,6 +6,7 @@ import { narrativeContinuityEngine, type NarrativeResearchPacket } from './narra
 import type { PlayerIntent } from './playerIntentInterpreter';
 import { EntitySceneRelevanceEngine } from './entitySceneRelevance';
 import { SemanticNarrativeResearchEngine, type SemanticNarrativeResearchProfile } from './semanticNarrativeResearch';
+import { NarrativeContinuityStateEngine, type NarrativeContinuityState } from './narrativeContinuityState';
 
 export type NarrativeResearchBlockKind =
 	| 'SCENE'
@@ -63,6 +64,7 @@ export interface NarrativeResearchResult {
 	totalTokens: number;
 	capturedAt: string;
 	semanticProfile: SemanticNarrativeResearchProfile;
+	continuityState: NarrativeContinuityState;
 }
 
 interface CandidateBlock extends NarrativeResearchBlock {
@@ -253,11 +255,14 @@ export class NarrativeResearchPipeline {
 			failures.push(String(error?.message || error || 'Narrative continuity research failed.'));
 			packet = emptyPacket(params.storyId, researchQuery, viewerActorId, situation);
 		}
+		const continuityState = NarrativeContinuityStateEngine.resolve(params.repository, params.storyId);
 		const semanticProfile = SemanticNarrativeResearchEngine.derive(playerIntent || situation.currentAction || {
 			action: 'continue', interactionMode: 'OTHER', speechIntent: false, movementIntent: false, observationIntent: false,
 			explicitTargets: [], impliedTargets: [], confidence: 0, source: 'DETERMINISTIC', originalText: researchQuery,
 		} as PlayerIntent, situation);
 		const queryTokens = tokens([
+			continuityState.narrativeFocus.join(' '),
+			continuityState.unresolvedSubtext.join(' '),
 			params.playerAction,
 			playerIntent?.goal,
 			playerIntent?.informationGoal,
@@ -645,6 +650,7 @@ export class NarrativeResearchPipeline {
 		const promptContext = [
 			'NARRATIVE RESEARCH RESULTS',
 			SemanticNarrativeResearchEngine.summarize(semanticProfile),
+			NarrativeContinuityStateEngine.compactPromptContext(continuityState),
 			`Query: ${query || 'current story context'}`,
 			`Research budget: ${budgets.total} estimated tokens; selected: ${total}`,
 			...selected.map((block) =>
@@ -668,6 +674,7 @@ export class NarrativeResearchPipeline {
 			totalTokens: total,
 			capturedAt: formatCanonicalTimestamp(capturedAt),
 			semanticProfile,
+			continuityState,
 		};
 	}
 
@@ -695,6 +702,7 @@ export class NarrativeResearchPipeline {
 			promptContext: result.promptContext.slice(0, 12000),
 			fallbackMode: result.failures.length > 0 ? 'CURRENT_SITUATION_ONLY' : 'NORMAL_RESEARCH',
 			semanticProfile: result.semanticProfile,
+			continuityState: result.continuityState,
 		};
 	}
 }

@@ -8630,6 +8630,7 @@ export class MultiModelOrchestrator {
               narrativePlan,
               narrativeReview: emergencyNarrativeReview,
               literaryReview: emergencyLiteraryReview,
+              narrativeRichnessEvaluation: emergencyNarrativeRichnessEvaluation,
               stateAdjudication,
               telemetry,
               adjudicationResult: adjudication,

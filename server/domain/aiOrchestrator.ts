@@ -7728,6 +7728,7 @@ export class MultiModelOrchestrator {
             workingContext: projectSupportingWorkingContext(assembledContext),
             globalInstruction: 'You are Dreamville’s authoritative narrative presentation engine. Generate only the player-facing narrative turn. Canonical game state remains authoritative and prose never commits state.',
             styleInstruction: defaultNarrationStyle(),
+            narratorVoiceState,
             maxPromptTokens: Math.max(200, hardTokenBudget),
           })
         : {
@@ -8248,7 +8249,10 @@ export class MultiModelOrchestrator {
               uncommittedOutput: '',
               canonicalInvariants: {},
               styleContract: {
-                tone: 'deterministic_emergency',
+                tone: narratorVoiceState.profileId,
+                cadence: narratorVoiceState.cadence,
+                descriptiveDensity: narratorVoiceState.descriptiveDensity,
+                emotionalDistance: narratorVoiceState.emotionalDistance,
                 promptVersion: MultiModelOrchestrator.PROMPT_VERSION,
               },
               openThreads: validation.turnPackage.memoryCandidates || [],

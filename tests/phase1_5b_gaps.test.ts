@@ -113,9 +113,15 @@ class FallbackSuccessAdapter implements IProviderAdapter {
       .trim()
       .replace(/^(?:i|we|my character)\s+/i, '');
     const location = options?.canonicalLocationName || 'the current location';
+    const normalizedAction = action.toLowerCase();
+    const narration = normalizedAction.includes('look up at the stars')
+      ? `You look up at the stars, tracing the visible patterns overhead while the air around you settles. The scene remains confined to ${location}; nothing beyond what you can directly observe is established.`
+      : normalizedAction.includes('investigate')
+        ? `You investigate the glowing runes closely, following their visible markings and the light moving across their surface. The scene remains confined to ${location}; nothing beyond what you can directly observe is established.`
+        : `You ${action}, keeping close to the details immediately available in ${location}. Nothing beyond what you can directly observe is established.`;
     return {
       text: JSON.stringify({
-        narrative: [`At ${location}, you ${action} while the immediate scene remains grounded and unchanged.`],
+        narrative: [narration],
         dialogue: [],
         events: ['FALLBACK_MODEL_TRIGGERED'],
         stateChanges: [],

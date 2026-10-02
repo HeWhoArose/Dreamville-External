@@ -134,8 +134,8 @@ export class NarrativeGoldenRegressionEngine {
 			passed: failures.length === 0,
 			failures,
 			signature: {
-				qualityProfile: observation.quality.profile,
-				pacingProfile: observation.pacing.profile,
+				qualityProfile: observation.qualityProfile,
+				pacingProfile: observation.pacingProfile,
 				voiceProfileId: observation.handoff?.voiceProfileId,
 				continuityTemperature: observation.handoff?.continuity.emotionalTemperature,
 				sceneMomentum: observation.handoff?.continuity.sceneMomentum,

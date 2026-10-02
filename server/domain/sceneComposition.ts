@@ -102,7 +102,7 @@ function focalEntity(situation: CurrentSituation, intent: PlayerIntent, reaction
 	if (target?.id) return { id: target.id, role: 'EXPLICIT_PLAYER_TARGET' };
 	if (situation.activeDialogue?.speakerId) return { id: situation.activeDialogue.speakerId, role: 'ACTIVE_DIALOGUE_SPEAKER' };
 	if (reactionPriority.length > 0) {
-		const entity = situation.nearbyEntities.find((candidate) => candidate.name === reactionPriority[0]);
+		const entity = (situation.nearbyEntities || []).find((candidate) => candidate.name === reactionPriority[0]);
 		if (entity) return { id: entity.id, role: 'PRIMARY_REACTION' };
 	}
 	return { role: 'PROTAGONIST_ACTION' };
@@ -171,7 +171,7 @@ export class SceneCompositionEngine {
 			pacingShape: pacingShape(pacingContract.profile),
 			closingBeat,
 			optionalHook,
-			compositionConfidence: 0.92,
+			compositionConfidence: fallbackReason ? 0.75 : 0.92,
 			fallbackReason,
 			expiresAfterNarration: true,
 		};

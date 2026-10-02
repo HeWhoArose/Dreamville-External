@@ -7363,6 +7363,8 @@ export class MultiModelOrchestrator {
       maxPromptTokens: Math.max(200, hardTokenBudget),
     });
 
+    const narrativeProviderHandoff = narrationPrompt.narrativeProviderHandoff;
+
     const contextAudit = {
       hardTokenBudget: assembledContext.hardTokenBudget,
       totalTokens: assembledContext.totalTokens,
@@ -7769,7 +7771,9 @@ export class MultiModelOrchestrator {
             totalTokens: assembledContext.totalTokens,
           };
 
-      const profile = repo.getAdaptationProfile(storyId);
+        const narrativeProviderHandoff = narrationPrompt.narrativeProviderHandoff;
+
+    const profile = repo.getAdaptationProfile(storyId);
       const bible = repo.getAdaptedStoryBible(storyId);
       if (profile && bible) {
         const evalResult = StoryAdaptationPipeline.evaluatePlayerActionAgainstCanon(

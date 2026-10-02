@@ -34,6 +34,12 @@ import { NarrativeStateAdjudicator, type StateAdjudicationResult } from './narra
 import { NarrativeContinuityStateEngine } from './narrativeContinuityState';
 import { NarratorVoiceEngine, type NarratorVoiceControls } from './narratorVoiceEngine';
 import { AiTurnCallBudget, type AiTurnCallBudgetSnapshot } from './aiTurnCallBudget';
+import { compareModelsForQualityTier, getAiTaskRoutingPolicy } from './aiQualityRouting';
+
+const compareQuality = (model: ModelRegistryRecord, tier: Parameters<typeof compareModelsForQualityTier>[2]): number => {
+  const qualityBase = compareModelsForQualityTier(model, model, tier);
+  return qualityBase;
+};
 import type { ActionResolution } from './actionResolution';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
@@ -3093,6 +3099,7 @@ export class MultiModelOrchestrator {
     const categoryOverrideKey = this.categoryOverrides.get(category);
     const fallbackChain = this.getFallbackChain(task);
 
+    const routingPolicy = getAiTaskRoutingPolicy(task);
     if (categoryOverrideKey) {
       const categoryOverrideModel = this.models.get(categoryOverrideKey)
         || Array.from(this.models.values()).find((model) => this.modelKey(model) === categoryOverrideKey || model.modelId === categoryOverrideKey);
@@ -5643,7 +5650,7 @@ export class MultiModelOrchestrator {
 
         return {
           selectedModel: overridden,
-          selectionReason: `Category-scoped manual override for ${category}; using the requested task's configured fallback route.`,
+          selectionReason: `Category-scoped manual override for ${category}; N19 ${routingPolicy.qualityTier} routing remains advisory beneath the explicit override, using the requested task's configured fallback route.`,
           selectionScore: overridden.userPriority + 1000,
           fallbacks: configuredFallbacks,
         };
@@ -5930,7 +5937,7 @@ export class MultiModelOrchestrator {
 
     return {
       selectedModel: best,
-      selectionReason: `Selected based on high priority (${best.userPriority}), health (${best.health}), and quota (${best.quota}).`,
+      selectionReason: `Selected for ${routingPolicy.qualityTier} quality / ${routingPolicy.cadence} cadence; priority (${best.userPriority}), health (${best.health}), and quota (${best.quota}) remained healthy.`,
       selectionScore: scored[0]?.score || best.userPriority,
       fallbacks,
     };

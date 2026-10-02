@@ -60,7 +60,7 @@ The evaluator is context-sensitive for micro-turns and turns without dialogue or
 - Empty narration produces `IMPROVE` with an explicit deterministic fallback reason.
 - A richness failure does not override semantic/canonical safety.
 - A provider rewrite remains constrained by the existing semantic and literary gates.
-- If the single existing literary rewrite does not reach N18 PASS, the turn remains rejected and the surrounding provider fallback path may recover with its existing behavior.
+- N18 does not reject a turn by itself. A literary rewrite remains governed by the existing semantic and literary acceptance gates; N18 is recorded as a richness measurement after the final accepted/reviewed presentation.
 - Emergency fallback output can remain available even when richness is imperfect; availability never authorizes a canonical mutation.
 
 ## Regression coverage
@@ -77,4 +77,9 @@ The N18 suite covers:
 
 ## Verification status
 
-This document is updated before merge with the actual lint, full test, build, release-contract, and post-merge verification results.
+N18 branch commit `15471673afa580010e7acc80a48053513edd87e3` passed all three required pre-merge GitHub gates:
+- Verification: run 37033336978 — success
+- Release Gate: run 37033336371 — success
+- Verification: run 37033336358 — success
+
+Post-merge verification is tracked separately against the merged `main` head.

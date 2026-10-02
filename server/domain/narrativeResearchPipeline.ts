@@ -10,6 +10,7 @@ import { SemanticNarrativeResearchEngine, type SemanticNarrativeResearchProfile 
 export type NarrativeResearchBlockKind =
 	| 'SCENE'
 	| 'ENTITY'
+	| 'RELATIONSHIP'
 	| 'KNOWLEDGE'
 	| 'MEMORY'
 	| 'PLOT'
@@ -34,6 +35,7 @@ export interface NarrativeResearchBlock {
 export interface NarrativeResearchBudgets {
 	scene: number;
 	entities: number;
+	relationships: number;
 	memories: number;
 	lore: number;
 	plot: number;
@@ -148,6 +150,7 @@ function blockPriority(kind: NarrativeResearchBlockKind): number {
 	switch (kind) {
 		case 'SCENE': return 100;
 		case 'ENTITY': return 95;
+		case 'RELATIONSHIP': return 91;
 		case 'CONSEQUENCE': return 92;
 		case 'KNOWLEDGE': return 86;
 		case 'THREAD': return 82;
@@ -204,6 +207,7 @@ export class NarrativeResearchPipeline {
 	public static readonly DEFAULT_BUDGETS: NarrativeResearchBudgets = {
 		scene: 700,
 		entities: 700,
+		relationships: 450,
 		memories: 600,
 		lore: 600,
 		plot: 500,
@@ -340,6 +344,32 @@ export class NarrativeResearchPipeline {
 					presence: entity.worldState?.presence,
 					factionIds: entity.social?.factionIds,
 				}), 1600),
+			}, queryTokens);
+		}
+
+		const relationshipCandidates = packet.relationships.filter(Boolean).slice(0, 12);
+		for (const relationship of relationshipCandidates) {
+			const relation = relationship as any;
+			const sourceId = normalize(relation?.sourceId || relation?.fromId);
+			const targetId = normalize(relation?.targetId || relation?.toId);
+			const targetFocused = [sourceId, targetId].some((id) => Boolean(id && explicitTargetIds.has(id)));
+			const content = normalize([
+				relation?.stance ? 'Stance: ' + relation.stance : '',
+				relation?.activeCause ? 'Cause: ' + relation.activeCause : '',
+				relation?.summary ? relation.summary : '',
+				relation?.history?.length ? 'Recent relationship history is available.' : '',
+			].filter(Boolean).join(' | '));
+			if (!content || !targetFocused) continue;
+			addCandidate(candidates, {
+				id: `research_relationship_${relation.id || sourceId + '_' + targetId}`,
+				kind: 'RELATIONSHIP',
+				source: 'DynamicCharacterAgency.relationship',
+				sourceId: normalize(relation.id || sourceId + '_' + targetId),
+				priority: blockPriority('RELATIONSHIP'),
+				reason: 'Player-authorized relationship context is relevant to the focused entity and current interaction.',
+				expiration: 'TURN',
+				relevanceScore: targetFocused ? 0.96 : 0.7,
+				content: truncate(content, 1200),
 			}, queryTokens);
 		}
 
@@ -559,6 +589,7 @@ export class NarrativeResearchPipeline {
 			MEMORY: budgets.memories,
 			PLOT: budgets.plot,
 			THREAD: Math.min(budgets.plot, 450),
+			RELATIONSHIP: budgets.relationships,
 		};
 		const sorted = candidates.sort((a, b) => {
 			const semanticA = SemanticNarrativeResearchEngine.scoreCandidate(semanticProfile, a);
@@ -578,6 +609,7 @@ export class NarrativeResearchPipeline {
 			MEMORY: 0,
 			PLOT: 0,
 			THREAD: 0,
+			RELATIONSHIP: 0,
 			CONSEQUENCE: 0,
 		};
 		let total = 0;

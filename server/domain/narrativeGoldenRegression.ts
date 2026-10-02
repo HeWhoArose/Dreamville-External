@@ -65,10 +65,10 @@ export const NARRATIVE_GOLDEN_SCENARIOS: readonly NarrativeGoldenScenario[] = [
 	{
 		id: 'G02_INFORMATION',
 		title: 'Information-seeking uncertainty',
-		playerAction: 'I ask Archivist Maren about the starlight fissures.',
+		playerAction: 'I find out whether the starlight fissures are real.',
 		expectedQualityProfile: 'INFORMATION_SEEKING',
 		expectedPacingProfile: 'COMPACT',
-		requiredIntent: { observationIntent: false, movementIntent: false, speechIntent: true },
+		requiredIntent: { observationIntent: false, movementIntent: false, speechIntent: false },
 		requiredAnchors: [/starlight fissures/i, /uncertain|hearsay|unverified|unknown|no reliable/i],
 		forbiddenPatterns: [/the fissures are definitely/i, /without doubt/i],
 		requireNoStateChanges: true,

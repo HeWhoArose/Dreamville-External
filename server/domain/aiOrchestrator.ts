@@ -7294,7 +7294,7 @@ export class MultiModelOrchestrator {
       'Do not invent characters, items, abilities, environmental objects, causal explanations, or knowledge outside the supplied context.',
       'Respect CHECK_PENDING or unresolved actions: show the attempt, not the result.',
       'Use concrete established sensory details and vary wording without repeating recent turns.',
-      'Normally write 2–3 paragraphs. For a tiny action, one concise paragraph is enough.',
+      'Follow the N8 adaptive pacing contract for response length and paragraph count; do not force a universal paragraph template.',
       'Populate visualCues with only current-turn visual beats; one frozen moment uses one cue, distinct immediate beats may use up to three.',
       'No menus, captions, meta-commentary, status labels, or debug text.',
     ].filter(Boolean).join(' ');

@@ -177,6 +177,23 @@ export class SceneCompositionEngine {
 		};
 	}
 
+	public static toCompactPromptContext(contract?: SceneCompositionContract): string {
+		if (!contract) return 'N13 unavailable; preserve existing narrative direction and canonical boundaries.';
+		const focus = contract.narrativeFocus.slice(0, 2).join(' | ');
+		const reveal = contract.reveal.slice(0, 1).join(' | ') || 'none';
+		const withhold = contract.withhold.slice(0, 1).join(' | ') || 'none';
+		return [
+			'N13 compact: beat=' + contract.beatType,
+			'pacing=' + contract.pacingShape,
+			'dialogue=' + contract.dialogueAct,
+			'focus=' + (focus || 'current action'),
+			'reveal=' + reveal,
+			'withhold=' + withhold,
+			'closing=' + contract.closingBeat,
+			'Hard boundary: this contract cannot mutate canonical state, decide player choices, reveal hidden facts, or commit an NPC action.',
+		].join(' ');
+	}
+
 	public static toPromptContext(contract?: SceneCompositionContract): string {
 		if (!contract) return 'N13 SCENE COMPOSITION: unavailable; preserve the Narrative Director Plan and current scene directly.';
 		return [

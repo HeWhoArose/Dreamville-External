@@ -93,9 +93,6 @@ function intentTargetIds(intent?: PlayerIntent): Set<string> {
 	]);
 }
 
-function isInterruptionIntent(intent?: PlayerIntent): boolean {
-	return /\binterrupt(?:s|ed|ing)?\b|cut (?:them|him|her) off|break(?:s|ing)? into the conversation/i.test(String(intent?.originalText || ''));
-}
 
 function socialDistanceFor(entity: NearbyEntityContext, relevance: EntitySceneRelevance): SocialDistance {
 	if (!entity.visibleToPlayer || entity.presence !== 'present' || !entity.isAlive || entity.distanceBand === 'REFERRED') return 'UNCONNECTED';

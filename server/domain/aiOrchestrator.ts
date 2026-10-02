@@ -8164,7 +8164,7 @@ export class MultiModelOrchestrator {
               researchTokens: researchResult?.totalTokens,
               narrativePlanObjective: narrativePlan?.objective,
               narrativeReview,
-              narrativeProviderHandoff: NarrativeProviderHandoffEngine.snapshot(narrativeProviderHandoff),
+              narrativeProviderHandoff: narrativeProviderHandoff ? NarrativeProviderHandoffEngine.snapshot(narrativeProviderHandoff) : undefined,
             };
             this.lastTurnTelemetry = telemetry;
             if (!repo.isCanonicalCommandTransactionActive()) {

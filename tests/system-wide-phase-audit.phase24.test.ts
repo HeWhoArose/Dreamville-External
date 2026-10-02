@@ -54,7 +54,7 @@ test('Phase 24 — canonical turn boundary remains single-owner', () => {
 	mustContain('server/domain/canonicalCommandEngine.ts', /processCanonicalEvent/, 'Canonical command path does not enter simulation event processing.');
 	mustContain('server/domain/narrativeStateAdjudicator.ts', /class NarrativeStateAdjudicator/, 'Narrative state adjudicator is missing.');
 	mustContain('server/domain/turnIntegrationHarness.ts', /NarrativeStateAdjudicator\.adjudicate/, 'End-to-end harness does not exercise canonical adjudication.');
-	mustContain('server/domain/actionResolution.ts', /export interface ActionResolution/, 'Typed ActionResolution boundary is missing.');
+	mustContain('server/domain/actionResolution.ts', /export type \{ ActionResolution[,\s]/, 'Typed ActionResolution public boundary is missing.');
 	mustContain('server/domain/narrativePromptBuilder.ts', /ACTION RESOLUTION — AUTHORITATIVE/, 'Authoritative action resolution is not projected into narration.');
 });
 

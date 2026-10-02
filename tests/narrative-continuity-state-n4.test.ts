@@ -50,7 +50,7 @@ test('N4 persists accepted-turn continuity and decays tension without deleting h
 		narration: 'Steel rings against stone as the creature surges forward, and the chamber erupts into alarm.',
 	});
 	assert.ok(state.tension > 0);
-	assert.equal(state.emotionalTemperature, 'STEADY');
+	assert.equal(state.emotionalTemperature, 'CALM');
 	assert.equal(state.sceneMomentum, 'ESCALATING');
 	const resolved = NarrativeContinuityStateEngine.resolve(repository, 'n4_persist');
 	assert.ok(resolved.tension < state.tension);

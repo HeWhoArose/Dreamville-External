@@ -7992,6 +7992,7 @@ export class MultiModelOrchestrator {
 
             let reviewedTurnPackage = validation.turnPackage;
             let narrativeReview: NarrativeReview | undefined;
+            let literaryReview: LiteraryReview | undefined;
             if (isNarrativeTask && narrativePlan) {
               const initialReview = SemanticNarrativeReview.review({
                 intent: playerIntent,

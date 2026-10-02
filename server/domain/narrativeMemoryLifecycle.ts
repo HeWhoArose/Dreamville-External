@@ -7,6 +7,7 @@ import type { NarrativeReview } from './semanticNarrativeReview';
 import type { StateAdjudicationResult } from './narrativeStateAdjudicator';
 import { recordCanonicalNarrativeEvent, type CanonicalNarrativeEventRecord } from './canonicalNarrativeEvent';
 import { NarrativeContinuityStateEngine } from './narrativeContinuityState';
+import { NarrativeNoveltyEngine } from './narrativeNoveltyEngine';
 
 export interface NarrativeOpenThreadRecord {
 	id: string;
@@ -246,6 +247,8 @@ export class NarrativeMemoryLifecycle {
 		plot.updatedAt = timestamp;
 		plot.openThreads = runtime.openNarrativeThreads.map((thread: NarrativeOpenThreadRecord) => thread.title).slice(-24);
 		runtime.plot = plot;
+
+		NarrativeNoveltyEngine.recordAcceptedTurn({ repository: params.repository, storyId: params.storyId, narration: params.turnPackage.narrative.join(' '), turnNumber: currentTurn + 1 });
 
 		NarrativeContinuityStateEngine.recordAcceptedTurn({
 			repository: params.repository,

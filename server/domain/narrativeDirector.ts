@@ -72,7 +72,7 @@ export interface ExpectedStateEffect {
 }
 
 export interface EphemeralNarrativePlan {
-	npcCognition: NpcCognitionContract[];
+	npcCognition?: NpcCognitionContract[];
 	turnId: string;
 	objective: string;
 	immediateSteps: string[];
@@ -210,7 +210,7 @@ export class NarrativeDirector {
 			'Immediate steps:\n' + plan.immediateSteps.map((step, index) => (index + 1) + '. ' + step).join('\n'),
 			plan.informationToReveal.length ? 'Information to reveal:\n' + plan.informationToReveal.map((item) => '- ' + item.topic + ' [' + item.presentation + '] [sources=' + (item.sourceBlockIds.join(', ') || 'none') + ']').join('\n') : 'Information to reveal: none.',
 			plan.entitiesToReact.length ? 'Entities to react: ' + plan.entitiesToReact.map((entity) => entity.name).join(', ') : 'Entities to react: none specified.',
-			plan.npcCognition.length ? 'NPC cognition contracts:\n' + plan.npcCognition.map((npc) => JSON.stringify(npc)).join('\n') : 'NPC cognition contracts: none.',
+			plan.npcCognition?.length ? 'NPC cognition contracts:\n' + plan.npcCognition.map((npc) => JSON.stringify(npc)).join('\n') : 'NPC cognition contracts: none.',
 			plan.unresolvedThread ? 'Relevant unresolved thread: ' + plan.unresolvedThread : 'Relevant unresolved thread: none.',
 			'Continuity requirements:\n- ' + plan.continuityRequirements.join('\n- '),
 			'Forbidden assumptions:\n- ' + plan.forbiddenAssumptions.join('\n- '),

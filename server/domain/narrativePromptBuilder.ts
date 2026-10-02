@@ -14,7 +14,7 @@ import { NarrativeProviderHandoffEngine, type NarrativeProviderHandoffContract }
 import { NarrativePacingEngine, type NarrativePacingContract, type NarrativePacingControls } from './narrativePacingEngine';
 import { SceneCompositionEngine, type SceneCompositionContract } from './sceneComposition';
 import { EntitySceneRelevanceEngine } from './entitySceneRelevance';
-import { NarrativeEpisodeProjectionEngine } from './narrativeEpisodeProjection';
+import { NarrativeEpisodeProjectionEngine, type NarrativeEpisodeProjection } from './narrativeEpisodeProjection';
 
 export interface NarrationPromptInput {
 	situation: CurrentSituation;
@@ -36,6 +36,7 @@ export interface NarrationPromptInput {
 	narrativePacingControls?: Partial<NarrativePacingControls>;
 	narrativeProviderHandoff?: NarrativeProviderHandoffContract;
 	sceneComposition?: SceneCompositionContract;
+	episodeProjection?: NarrativeEpisodeProjection;
 }
 
 export interface NarrationPromptResult {
@@ -48,6 +49,7 @@ export interface NarrationPromptResult {
 	narrativePacingContract?: NarrativePacingContract;
 	narrativeProviderHandoff?: NarrativeProviderHandoffContract;
 	sceneComposition?: SceneCompositionContract;
+	episodeProjection?: NarrativeEpisodeProjection;
 }
 
 export function projectSupportingWorkingContext(context: AssembledTurnContext): string {
@@ -228,7 +230,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	const maxPromptTokens = input.maxPromptTokens;
 	if (!maxPromptTokens) {
 		const prompt = compose(initialResearch, initialWorking);
-		return { prompt, styleInstruction: [styleInstruction, narrativeProviderHandoff.providerIndependentInstruction].join('\n\n'), totalTokens: WorkingContextEngine.estimateTokens(prompt), narrativeQualityContract, narratorVoiceState: input.narratorVoiceState, narrativeContinuityState, narrativePacingContract, narrativeProviderHandoff, sceneComposition };
+		return { prompt, styleInstruction: [styleInstruction, narrativeProviderHandoff.providerIndependentInstruction].join('\n\n'), totalTokens: WorkingContextEngine.estimateTokens(prompt), narrativeQualityContract, narratorVoiceState: input.narratorVoiceState, narrativeContinuityState, narrativePacingContract, narrativeProviderHandoff, sceneComposition, episodeProjection: presentationPlan.episodeProjection };
 
 	}
 
@@ -318,7 +320,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				planContext: truncatePromptSection(planContext, tightEpisodeBudget ? 100 : 300),
 				sceneCompositionContext: SceneCompositionEngine.toCompactPromptContext(sceneComposition),
 				socialTopologyContext: truncatePromptSection(socialTopologyContext, 520),
-				episodeProjectionContext: truncatePromptSection(NarrativeEpisodeProjectionEngine.toCompactPromptContext(presentationPlan.episodeProjection), 100),
+				episodeProjectionContext: truncatePromptSection(NarrativeEpisodeProjectionEngine.toCompactPromptContext(presentationPlan.episodeProjection), 180),
 				workingContext: truncatePromptSection(initialWorking, tightEpisodeBudget ? 120 : 320),
 				situationContext: truncatePromptSection(situationContext, tightEpisodeBudget ? 600 : 900),
 			};
@@ -391,6 +393,6 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			totalTokens = WorkingContextEngine.estimateTokens(prompt);
 		}
 	}
-	return { prompt, styleInstruction: [styleInstruction, narrativeProviderHandoff.providerIndependentInstruction].join('\n\n'), totalTokens, narrativeQualityContract, narratorVoiceState: input.narratorVoiceState, narrativeContinuityState, narrativePacingContract, narrativeProviderHandoff, sceneComposition };
+	return { prompt, styleInstruction: [styleInstruction, narrativeProviderHandoff.providerIndependentInstruction].join('\n\n'), totalTokens, narrativeQualityContract, narratorVoiceState: input.narratorVoiceState, narrativeContinuityState, narrativePacingContract, narrativeProviderHandoff, sceneComposition, episodeProjection: presentationPlan.episodeProjection };
 }
 

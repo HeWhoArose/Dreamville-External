@@ -9,9 +9,6 @@ import { NarrativeNoveltyEngine } from '../server/domain/narrativeNoveltyEngine'
 import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
 import { CurrentSituationBuilder } from '../server/domain/currentSituation';
 import { PlayerIntentInterpreter } from '../server/domain/playerIntentInterpreter';
-import { NarrativeResearchPipeline } from '../server/domain/narrativeResearchPipeline';
-import { NarrativeDirector } from '../server/domain/narrativeDirector';
-import { buildNarrationPrompt } from '../server/domain/narrativePromptBuilder';
 import { DeterministicMockAdapter, MultiModelOrchestrator, type ModelRegistryRecord } from '../server/domain/aiOrchestrator';
 
 function model(providerId: string, modelId: string, priority = 100): ModelRegistryRecord {

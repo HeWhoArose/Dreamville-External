@@ -412,3 +412,78 @@ test('N17 compact projection keeps its non-binding boundary intact', () => {
 	assert.match(compact, /non-binding presentation guidance only/i);
 	assert.match(compact, /never force/i);
 });
+
+
+test('N17 does not treat closed or resolved threads as active episode pressure', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'n17-closed-thread';
+	repository.seedStory(storyId);
+	const player = repository.getPlayerLifecycle(storyId)!;
+	const situation = CurrentSituationBuilder.build({
+		storyId,
+		playerAction: 'I wait.',
+		viewerActorId: player.actorId,
+		worldRepo: repository,
+	});
+	situation.recentTurns = [{
+		turnId: 'turn-release',
+		turnNumber: 9,
+		playerAction: 'I resolve the dispute.',
+		narration: 'The dispute is resolved and the archive settles into quiet.',
+		worldTime: situation.worldTime,
+		locationId: situation.location.id,
+		stateChanges: [],
+		isOpeningScene: false,
+	}];
+	situation.openThreads = [{
+		id: 'thread-closed',
+		title: 'Resolve the archive dispute',
+		summary: 'The dispute has been closed.',
+		status: 'CLOSED',
+		priority: 95,
+	}];
+
+	const projection = NarrativeEpisodeProjectionEngine.resolve({
+		situation,
+		intent: intent({ action: 'wait', goal: 'wait', originalText: 'I wait.' }),
+		continuityState: continuity(situation, { tension: 15, sceneMomentum: 'RELEASING' }),
+	});
+
+	assert.equal(projection.activeThreadIds.length, 0);
+	assert.notEqual(projection.phase, 'DEVELOPMENT');
+	assert.equal(projection.phase, 'RESOLUTION');
+});
+
+test('N17 distinguishes normal classification basis from fallback metadata', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'n17-classification-basis';
+	repository.seedStory(storyId);
+	const player = repository.getPlayerLifecycle(storyId)!;
+	const situation = CurrentSituationBuilder.build({
+		storyId,
+		playerAction: 'I investigate the fissure.',
+		viewerActorId: player.actorId,
+		worldRepo: repository,
+	});
+	situation.recentTurns = [{
+		turnId: 'turn-1',
+		turnNumber: 1,
+		playerAction: 'I investigate the fissure.',
+		narration: 'The fissure remains unexplained.',
+		worldTime: situation.worldTime,
+		locationId: situation.location.id,
+		stateChanges: [],
+		isOpeningScene: false,
+	}];
+
+	const projection = NarrativeEpisodeProjectionEngine.resolve({
+		situation,
+		intent: intent(),
+		continuityState: continuity(situation, { sceneMomentum: 'BUILDING' }),
+	});
+
+	assert.ok(projection.classificationReason.length > 0);
+	assert.equal(projection.fallbackReason, undefined);
+	assert.match(NarrativeEpisodeProjectionEngine.toPromptContext(projection), /Projection basis:/i);
+	assert.match(NarrativeEpisodeProjectionEngine.toPromptContext(projection), /Fallback: not required/i);
+});

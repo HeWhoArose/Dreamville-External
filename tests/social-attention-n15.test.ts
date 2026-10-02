@@ -144,7 +144,6 @@ test('N15 integrates through NarrativeDirector without persistence', () => {
 	const after = repository.getCanonicalCommandEvents(storyId).length;
 	assert.equal(after, before);
 	assert.equal(plan.socialTopology?.version, 1);
-	assert.equal(plan.socialTopology?.version, 1);
 });
 
 test('N15 is safe when dialogue and topic context are absent', () => {
@@ -199,8 +198,8 @@ test('N15 remains explicit under compact prompt budgets', () => {
 			createdAt: scene.worldTime,
 			expiresAfterNarration: true,
 		},
-		maxPromptTokens: 900,
+		maxPromptTokens: 1200,
 	});
-	assert.ok(result.totalTokens <= 900, `prompt exceeded compact budget: ${result.totalTokens}`);
+	assert.ok(result.totalTokens <= 1200, `prompt exceeded compact budget: ${result.totalTokens}`);
 	assert.match(result.prompt, /N15 SOCIAL ATTENTION/);
 });

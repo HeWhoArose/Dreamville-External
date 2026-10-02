@@ -77,8 +77,8 @@ function sceneSpecificity(text: string, situation: CurrentSituation): number {
 function styleMismatch(text: string, voice?: NarratorVoiceState): boolean {
 	if (!voice) return false;
 	const lower = normalize(text);
-	const forbidden = voice.forbiddenPhrases || [];
-	return forbidden.some((phrase) => phrase && lower.includes(normalize(phrase)));
+	const forbidden = voice.forbiddenPatterns || [];
+	return forbidden.some((phrase: string) => phrase && lower.includes(normalize(phrase)));
 }
 
 function estimateEmotionalVariety(text: string): number {

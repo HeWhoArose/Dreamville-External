@@ -133,6 +133,8 @@ export class SemanticNarrativeResearchEngine {
 				? ['IMMEDIATE_SCENE', 'SENSORY_CONTEXT']
 				: kind === 'ENTITY'
 					? ['TARGET_IDENTITY', 'RELATIONSHIP']
+					: kind === 'RELATIONSHIP'
+						? ['RELATIONSHIP']
 					: kind === 'CONSEQUENCE'
 						? ['RECENT_CONSEQUENCE']
 						: kind === 'MEMORY'

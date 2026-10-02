@@ -7351,6 +7351,7 @@ export class MultiModelOrchestrator {
       globalInstruction: 'You are Dreamville’s narrative presentation engine. Generate only the player-facing narrative turn using the supplied canonical state, semantic player intent, bounded research, and ephemeral plan.',
       styleInstruction,
       narratorVoiceState,
+      narrativeNoveltyState,
       canonicalOutcome: authoritativeOutcome,
       actionResolution: params.actionResolution,
       maxPromptTokens: Math.max(200, hardTokenBudget),
@@ -7747,6 +7748,7 @@ export class MultiModelOrchestrator {
             globalInstruction: 'You are Dreamville’s authoritative narrative presentation engine. Generate only the player-facing narrative turn. Canonical game state remains authoritative and prose never commits state.',
             styleInstruction: defaultNarrationStyle(),
             narratorVoiceState,
+            narrativeNoveltyState,
             maxPromptTokens: Math.max(200, hardTokenBudget),
           })
         : {
@@ -8154,6 +8156,12 @@ export class MultiModelOrchestrator {
               stateAdjudication,
               turnPackage: reviewedTurnPackage,
             });
+            NarrativeNoveltyEngine.recordAcceptedTurn({
+              repository: repo,
+              storyId,
+              narration: reviewedTurnPackage.narrative.join(' '),
+              turnNumber: repo.getCanonicalCommandEvents(storyId).length,
+            });
             }
 
             return {
@@ -8357,6 +8365,12 @@ export class MultiModelOrchestrator {
               narrativeReview: emergencyNarrativeReview,
               stateAdjudication,
               turnPackage: emergencyTurnPackage,
+            });
+            NarrativeNoveltyEngine.recordAcceptedTurn({
+              repository: repo,
+              storyId,
+              narration: emergencyTurnPackage.narrative.join(' '),
+              turnNumber: repo.getCanonicalCommandEvents(storyId).length,
             });
             }
 

@@ -8104,6 +8104,7 @@ export class MultiModelOrchestrator {
             let reviewedTurnPackage = validation.turnPackage;
             let narrativeReview: NarrativeReview | undefined;
             let literaryReview: LiteraryReview | undefined;
+            let narrativeRichnessEvaluation: NarrativeRichnessEvaluation | undefined;
             if (isNarrativeTask && narrativePlan) {
               const initialReview = SemanticNarrativeReview.review({
                 intent: playerIntent,
@@ -8140,15 +8141,46 @@ export class MultiModelOrchestrator {
               }
               reviewedTurnPackage = reviewed.turnPackage;
               narrativeReview = reviewed.review;
+              const previousNarrations = currentSituation.recentTurns
+                .map((entry) => String(entry.narration || ''))
+                .filter(Boolean);
               const narrativeNoveltyStateForReview = NarrativeNoveltyEngine.resolve(repo, storyId);
-              const literary = LiteraryNarrativeReview.review({ intent: playerIntent, situation: currentSituation, plan: narrativePlan, turnPackage: reviewedTurnPackage, voice: narratorVoiceState, noveltyState: narrativeNoveltyStateForReview, previousNarrations: currentSituation.recentTurns.map((entry) => String(entry.narration || '')).filter(Boolean) });
+              const literary = LiteraryNarrativeReview.review({
+                intent: playerIntent,
+                situation: currentSituation,
+                plan: narrativePlan,
+                turnPackage: reviewedTurnPackage,
+                voice: narratorVoiceState,
+                noveltyState: narrativeNoveltyStateForReview,
+                previousNarrations,
+              });
               literaryReview = literary;
-              if (literary.decision === 'REWRITE') {
+              narrativeRichnessEvaluation = NarrativeRichnessEvaluator.evaluate({
+                intent: playerIntent,
+                situation: currentSituation,
+                plan: narrativePlan,
+                turnPackage: reviewedTurnPackage,
+                previousNarrations,
+              });
+              const needsLiteraryRewrite = literary.decision === 'REWRITE' || narrativeRichnessEvaluation.decision === 'IMPROVE';
+              if (needsLiteraryRewrite) {
                 const literaryBudget = turnAiCallBudget.beginTask('narrative.review');
-                if (!literaryBudget.allowed) throw new Error(literaryBudget.reason || 'Narrative literary review call budget exhausted.');
+                if (!literaryBudget.allowed) throw new Error(literaryBudget.reason || 'Narrative literary/richness review call budget exhausted.');
                 turnAiCallBudget.recordProviderAttempt('narrative.review');
-                const literaryPrompt = LiteraryNarrativeReview.buildRewritePrompt({ review: literary, turnPackage: reviewedTurnPackage, intent: playerIntent, situation: currentSituation, plan: narrativePlan });
-                const literaryResult = await adapter.generate('narrative.review', literaryPrompt, { modelId: currentCandidate.modelId, timeoutMs, maxTokens: NarrativePacingEngine.outputTokenBudget(narrativePacingContract), systemInstruction: [narrativeProviderHandoff?.providerIndependentInstruction, 'Perform a literary polish only. Preserve canonical truth, state, player agency, knowledge boundaries and plot direction.'].filter(Boolean).join(' ') });
+                const literaryPrompt = LiteraryNarrativeReview.buildRewritePrompt({
+                  review: literary,
+                  richnessEvaluation: narrativeRichnessEvaluation,
+                  turnPackage: reviewedTurnPackage,
+                  intent: playerIntent,
+                  situation: currentSituation,
+                  plan: narrativePlan,
+                });
+                const literaryResult = await adapter.generate('narrative.review', literaryPrompt, {
+                  modelId: currentCandidate.modelId,
+                  timeoutMs,
+                  maxTokens: NarrativePacingEngine.outputTokenBudget(narrativePacingContract),
+                  systemInstruction: [narrativeProviderHandoff?.providerIndependentInstruction, 'Perform a literary/richness polish only. Preserve canonical truth, state, player agency, knowledge boundaries and plot direction.'].filter(Boolean).join(' '),
+                });
                 const literaryValidation = this.validateTurnPackage(literaryResult.text);
                 if (!literaryValidation.valid || !literaryValidation.turnPackage) throw new Error(literaryValidation.errorReason || 'Literary rewrite returned an invalid structured turn package.');
                 const literaryPresentation = this.validateNarrativePresentation({
@@ -8162,7 +8194,12 @@ export class MultiModelOrchestrator {
                 });
                 if (!literaryPresentation.valid) throw new Error(literaryPresentation.errorReason || 'Literary rewrite failed final presentation validation.');
 
-                const postSemantic = SemanticNarrativeReview.review({ intent: playerIntent, situation: currentSituation, plan: narrativePlan, turnPackage: literaryValidation.turnPackage });
+                const postSemantic = SemanticNarrativeReview.review({
+                  intent: playerIntent,
+                  situation: currentSituation,
+                  plan: narrativePlan,
+                  turnPackage: literaryValidation.turnPackage,
+                });
                 if (postSemantic.decision !== 'ACCEPT') throw new Error('Literary rewrite failed the semantic safety gate.');
 
                 const postLiterary = LiteraryNarrativeReview.review({
@@ -8172,7 +8209,7 @@ export class MultiModelOrchestrator {
                   turnPackage: literaryValidation.turnPackage,
                   voice: narratorVoiceState,
                   noveltyState: NarrativeNoveltyEngine.resolve(repo, storyId),
-                  previousNarrations: currentSituation.recentTurns.map((entry) => String(entry.narration || '')).filter(Boolean),
+                  previousNarrations,
                 });
                 if (postLiterary.decision !== 'ACCEPT') throw new Error('Literary rewrite remained below the N6/N7 acceptance threshold.');
 
@@ -8183,8 +8220,18 @@ export class MultiModelOrchestrator {
                 });
                 if (postNovelty.discouraged.length) throw new Error('Literary rewrite reintroduced a discouraged N7 repetition/trope pattern.');
 
+                const postRichness = NarrativeRichnessEvaluator.evaluate({
+                  intent: playerIntent,
+                  situation: currentSituation,
+                  plan: narrativePlan,
+                  turnPackage: literaryValidation.turnPackage,
+                  previousNarrations,
+                });
+                if (postRichness.decision !== 'PASS') throw new Error('Literary rewrite remained below the N18 narrative richness acceptance threshold.');
+
                 reviewedTurnPackage = literaryValidation.turnPackage;
                 literaryReview = postLiterary;
+                narrativeRichnessEvaluation = postRichness;
               }
             }
 

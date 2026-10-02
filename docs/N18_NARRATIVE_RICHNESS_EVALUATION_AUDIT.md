@@ -23,15 +23,15 @@ Existing review logic protected correctness and several literary failure modes, 
 
 N18 is a pure evaluator. It reads existing authorized turn inputs and returns a transient evaluation. It never writes canonical state.
 
-When improvement is required, N18 reuses the existing literary rewrite budget. No additional mandatory LLM call is introduced.
+N18 is advisory. It never creates a new rewrite call or a new acceptance gate. When an existing literary rewrite is already authorized, N18 improvement cues are fed into that same rewrite prompt. No additional mandatory LLM call is introduced.
 
 ## Producer -> evaluator -> consumer
 
 `StructuredTurnPackage`
 -> `NarrativeRichnessEvaluator.evaluate()`
 -> `NarrativeRichnessEvaluation`
--> existing literary rewrite guidance when IMPROVE
--> post-rewrite semantic + literary + novelty + N18 re-check
+-> existing literary rewrite guidance when N6 already requests REWRITE
+-> post-rewrite semantic + literary + novelty + N18 measurement
 -> canonical adjudication
 
 The separate `generateNarrativeOnly` route exposes the evaluation result without adding a second generation call.

@@ -186,9 +186,7 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 		if (turn === 91) fast.failureMode = '500';
 		if (turn === 96) fast.failureMode = undefined;
 
-		const action = turn <= 40
-			? `I observe ${target!.name} and the expedition charts.`
-			: `I observe ${target!.name} and remember the sealed expedition charts.`;
+		const action = `I observe ${target!.name} and the expedition charts.`;
 
 		const response = responseForTurn(turn, situation.location.name, target!.name);
 		primary.cannedResponses.set('narrative.generate', response);
@@ -211,6 +209,7 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 		assert.ok(result.narrativePlan?.socialTopology, 'turn ' + turn + ': N15 social topology missing');
 		assert.ok(result.narrativePlan?.episodeProjection, 'turn ' + turn + ': N17 episode projection missing');
 		assert.ok(result.narrativePlan?.npcCognition?.some((npc) => npc.actorId === target!.id && npc.expressiveIdentity), 'turn ' + turn + ': N14 expressive NPC identity missing');
+		assert.notEqual(result.telemetry.selectedModelId, 'canon-guard', 'turn ' + turn + ': integrated audit unexpectedly short-circuited before narration generation');
 		assert.ok(result.narrativeRichnessEvaluation, 'turn ' + turn + ': N18 richness evaluation missing');
 		const researchBlockCount = Number(result.telemetry.researchBlockCount || 0);
 		assert.ok(researchBlockCount >= 1, 'turn ' + turn + ': N16 memory/research path produced no bounded research blocks');

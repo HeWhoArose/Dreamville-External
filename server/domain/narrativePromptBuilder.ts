@@ -32,7 +32,7 @@ export interface NarrationPromptInput {
 	narrativeNoveltyState?: NarrativeNoveltyState;
 	narrativePacingContract?: NarrativePacingContract;
 	narrativePacingControls?: Partial<NarrativePacingControls>;
- 	narrativeProviderHandoff?: NarrativeProviderHandoffContract;
+	narrativeProviderHandoff?: NarrativeProviderHandoffContract;
 	sceneComposition?: SceneCompositionContract;
 }
 

@@ -5875,6 +5875,9 @@ export class MultiModelOrchestrator {
       // Latency penalty (prefer < 500ms)
       if (model.latencyMs > 1500) score -= 15;
 
+      // N19 quality-tier preference is additive to existing reliability/priority scoring.
+      score += Math.min(100, scoreModelForQualityTier(model, routingPolicy.qualityTier) * 0.5);
+
       // Failure penalty
       const failures = this.consecutiveFailures.get(`${model.providerId}::${model.modelId}`) || 0;
       score -= failures * 25;

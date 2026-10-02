@@ -317,7 +317,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				planContext: truncatePromptSection(planContext, 300),
 				sceneCompositionContext: SceneCompositionEngine.toCompactPromptContext(sceneComposition),
 				socialTopologyContext: truncatePromptSection(socialTopologyContext, 520),
-				episodeProjectionContext: truncatePromptSection(episodeProjectionContext, 620),
+				episodeProjectionContext: truncatePromptSection(NarrativeEpisodeProjectionEngine.toCompactPromptContext(presentationPlan.episodeProjection), 320),
 				workingContext: truncatePromptSection(initialWorking, 320),
 				situationContext: truncatePromptSection(situationContext, 900),
 			};

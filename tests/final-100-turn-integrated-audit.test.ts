@@ -153,6 +153,14 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 	internal.taskPinnedModels.clear();
 	internal.categoryOverrides.clear();
 
+	const automaticSelection = orchestrator.selectBestModel('narrative.generate');
+	assert.equal(automaticSelection.selectedModel.modelId, 'final-audit-creative', 'N19 automatic quality-tier selection did not choose the isolated creative model');
+	orchestrator.setFallbackChain('narrative.generate', [
+		'final_audit_creative_provider::final-audit-creative',
+		'final_audit_fast_provider::final-audit-fast',
+		'provider_deterministic_emergency::emergency-fallback-local',
+	]);
+
 	const canonicalBefore = JSON.stringify({
 		events: repository.getCanonicalCommandEvents(storyId),
 		player: repository.getPlayerLifecycle(storyId),
@@ -183,6 +191,7 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 		const result = await orchestrator.executeTurn({
 			storyId,
 			playerAction: action,
+			forceModelId: 'final-audit-creative',
 			repository,
 			hardTokenBudget: 1400,
 			timeoutMs: 1000,

@@ -36,7 +36,7 @@ N15 never:
 
 ## Integration
 Producer -> contract -> consumer:
-`CurrentSituation + PlayerIntent` -> `EntitySceneRelevanceEngine.toConversationTopology()` -> `NarrativeDirector.socialTopology` -> existing `NarrativeDirector.toPromptContext()` -> narration prompt path.
+`CurrentSituation + PlayerIntent` -> `EntitySceneRelevanceEngine.toConversationTopology()` -> `NarrativeDirector.socialTopology` -> `NarrativePromptBuilder` N15 section -> narration prompt path.
 
 Reverse trigger:
 player turn/intent builds Current Situation, then Narrative Director constructs the ephemeral plan for the same turn.

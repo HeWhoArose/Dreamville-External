@@ -77,7 +77,7 @@ test('N13 deterministically stages observation, dialogue, combat, and movement b
 	assert.equal(observations.dialogueAct, 'OBSERVE');
 	assert.equal(observations.focalEntityId, 'npc-1');
 	assert.equal(observations.emotionalMovement, 'RISE');
-	assert.equal(observations.pacingShape, 'MICRO_BEAT');
+	assert.equal(observations.pacingShape, 'EXPANSIVE_GROUNDING');
 
 	const combatIntent = intent({
 		action: 'attack Mara',

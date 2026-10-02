@@ -7622,6 +7622,14 @@ export class MultiModelOrchestrator {
         error: finalInformationContinuity.errorReason || 'Narration information continuity validation failed.',
       };
     }
+    const finalNarrativeRichnessEvaluation = NarrativeRichnessEvaluator.evaluate({
+      intent: playerIntent,
+      situation: currentSituation,
+      plan: narrativePlan,
+      turnPackage: validation.turnPackage,
+      previousNarrations: canonicalRecentTurns.map((turn) => String(turn.narration || '')).filter(Boolean),
+    });
+
     const finalTemporalContinuity = this.validateNarrativeTemporalContinuity(finalNarrationText, worldRepo, storyId);
     if (!finalTemporalContinuity.valid) {
       return {
@@ -7654,6 +7662,7 @@ export class MultiModelOrchestrator {
       narrativePlan,
       researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
       contextAudit,
+      narrativeRichnessEvaluation: finalNarrativeRichnessEvaluation,
     };
   }
 
@@ -8337,6 +8346,7 @@ export class MultiModelOrchestrator {
               researchTokens: researchResult?.totalTokens,
               narrativePlanObjective: narrativePlan?.objective,
               narrativeReview,
+              narrativeRichnessEvaluation,
               narrativeProviderHandoff: narrativeProviderHandoff ? NarrativeProviderHandoffEngine.snapshot(narrativeProviderHandoff) : undefined,
             };
             this.lastTurnTelemetry = telemetry;
@@ -8360,6 +8370,7 @@ export class MultiModelOrchestrator {
               narrativePlan,
               narrativeReview,
               literaryReview,
+              narrativeRichnessEvaluation,
               stateAdjudication,
               telemetry,
               adjudicationResult: adjudication,

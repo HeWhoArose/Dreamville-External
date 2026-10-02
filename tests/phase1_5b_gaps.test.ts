@@ -115,7 +115,7 @@ class FallbackSuccessAdapter implements IProviderAdapter {
     const location = options?.canonicalLocationName || 'the current location';
     const normalizedAction = action.toLowerCase();
     const narration = normalizedAction.includes('look up at the stars')
-      ? `You look up at the stars, tracing the visible patterns overhead while the air around you settles. The scene remains confined to ${location}; nothing beyond what you can directly observe is established.`
+      ? `Above you, the visible stars form faint patterns across the dark sky while your gaze follows their arrangement. The air around you settles, and the scene remains confined to ${location}; nothing beyond what you can directly observe is established.`
       : normalizedAction.includes('investigate')
         ? `You investigate the glowing runes closely, following their visible markings and the light moving across their surface. The scene remains confined to ${location}; nothing beyond what you can directly observe is established.`
         : `You ${action}, keeping close to the details immediately available in ${location}. Nothing beyond what you can directly observe is established.`;

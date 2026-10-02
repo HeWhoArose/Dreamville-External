@@ -659,14 +659,25 @@ export class MemoryOpportunityEngine {
       if (semanticFamily === 'EPISODIC') reasons.push('episodic continuity fit');
       else reasons.push('semantic continuity fit');
 
+      const hasRetrievalSignal =
+        semanticMatch > 0 ||
+        entityLinkScore > 0 ||
+        locationLinkScore > 0 ||
+        threadLinkScore > 0 ||
+        recentEventHit > 0;
+
+      if (
+        !memory.isPersistentCritical &&
+        queryTokenSet.size > 0 &&
+        !hasRetrievalSignal
+      ) {
+        continue;
+      }
+
       if (
         score < 0.24 &&
         !memory.isPersistentCritical &&
-        semanticMatch === 0 &&
-        entityLinkScore === 0 &&
-        locationLinkScore === 0 &&
-        threadLinkScore === 0 &&
-        recentEventHit === 0
+        !hasRetrievalSignal
       ) {
         continue;
       }

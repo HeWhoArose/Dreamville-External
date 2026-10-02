@@ -33,6 +33,19 @@ function model(providerId: string, modelId: string, pool: 'creative' | 'fast', c
 }
 
 function responseForTurn(turn: number, location: string, target: string): string {
+	if (turn === 1) {
+		return JSON.stringify({
+			narrative: [
+				'You move closer to the Whispering Orrery archivists without speaking, keeping your attention on the low conversation.',
+				'The whispers mention unstable starlight fissures in the lower sea, though the speakers treat the report as uncertain hearsay.',
+			],
+			dialogue: [],
+			events: ['RESEARCHED_RUMOR_HEARD'],
+			stateChanges: [],
+			memoryCandidates: [],
+			audioCues: [],
+		});
+	}
 	const sensory = [
 		'Brass lamp-light moves across the edge of the charts.',
 		'A faint mechanical hum settles beneath the room’s quieter sounds.',
@@ -70,7 +83,7 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 
 	const situation = (await import('../server/domain/currentSituation')).CurrentSituationBuilder.build({
 		storyId,
-		playerAction: 'I observe the nearby person and the expedition charts.',
+		playerAction: 'I move closer to hear the rumors.',
 		viewerActorId: initialPlayer?.actorId,
 		worldRepo: repository,
 	});
@@ -179,7 +192,7 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 		if (turn === 91) fast.failureMode = '500';
 		if (turn === 96) fast.failureMode = undefined;
 
-		const action = `I observe ${target!.name} and the expedition charts.`;
+		const action = 'I move closer to hear the rumors.';
 
 		const response = responseForTurn(turn, situation.location.name, target!.name);
 		primary.cannedResponses.set('narrative.generate', response);

@@ -10,6 +10,7 @@ import { NarrativeQualityContractEngine, type NarrativeQualityControls, type Nar
 import { NarratorVoiceEngine, type NarratorVoiceControls, type NarratorVoiceState } from './narratorVoiceEngine';
 import { NarrativeContinuityStateEngine, type NarrativeContinuityState } from './narrativeContinuityState';
 import { NarrativeNoveltyEngine, type NarrativeNoveltyState } from './narrativeNoveltyEngine';
+import { NarrativeProviderHandoffEngine, type NarrativeProviderHandoffContract } from './narrativeProviderHandoff';
 import { NarrativePacingEngine, type NarrativePacingContract, type NarrativePacingControls } from './narrativePacingEngine';
 
 export interface NarrationPromptInput {
@@ -30,6 +31,7 @@ export interface NarrationPromptInput {
 	narrativeNoveltyState?: NarrativeNoveltyState;
 	narrativePacingContract?: NarrativePacingContract;
 	narrativePacingControls?: Partial<NarrativePacingControls>;
+	narrativeProviderHandoff?: NarrativeProviderHandoffContract;
 }
 
 export interface NarrationPromptResult {
@@ -40,6 +42,7 @@ export interface NarrationPromptResult {
 	narratorVoiceState?: NarratorVoiceState;
 	narrativeContinuityState?: NarrativeContinuityState;
 	narrativePacingContract?: NarrativePacingContract;
+	narrativeProviderHandoff?: NarrativeProviderHandoffContract;
 }
 
 export function projectSupportingWorkingContext(context: AssembledTurnContext): string {
@@ -146,6 +149,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	const narrativeContinuityContext = NarrativeContinuityStateEngine.toPromptContext(narrativeContinuityState);
 	const narrativeQualityContract = NarrativeQualityContractEngine.resolve(input.intent, input.narrativeQualityControls);
 	const narrativePacingContract = input.narrativePacingContract || NarrativePacingEngine.resolve({ situation: input.situation, intent: input.intent, actionResolution: input.actionResolution, canonicalOutcome: input.canonicalOutcome, continuityState: narrativeContinuityState, controls: input.narrativePacingControls });
+	const narrativeProviderHandoff = input.narrativeProviderHandoff || NarrativeProviderHandoffEngine.resolve({ storyId: input.situation.storyId, turnId: input.situation.turnId, voice: input.narratorVoiceState || NarratorVoiceEngine.resolve({ getUserData: () => null, saveUserData: () => undefined }, input.situation.storyId), quality: narrativeQualityContract, pacing: narrativePacingContract, continuity: narrativeContinuityState, novelty: narrativeNoveltyState });
 	const narrativeQualityContext = NarrativeQualityContractEngine.toPromptContext(narrativeQualityContract);
 	const promptBudgetVoiceContext = input.narratorVoiceState ? NarratorVoiceEngine.toPromptContext(input.narratorVoiceState) : 'Narrator Voice Contract: disabled for this turn.';
 	const promptBudgetQualityContext = input.maxPromptTokens && input.maxPromptTokens <= 1500
@@ -191,6 +195,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		section('NARRATIVE NOVELTY / REPETITION CONTROL', narrativeNoveltyContext),
 		section('NARRATIVE QUALITY CONTRACT', promptBudgetQualityContext),
 		section('ADAPTIVE PACING CONTRACT', NarrativePacingEngine.toPromptContext(narrativePacingContract)),
+		section('PROVIDER HANDOFF CONTRACT', NarrativeProviderHandoffEngine.toPromptContext(narrativeProviderHandoff)),
 		section('CURRENT SITUATION', overrides?.situationContext || situationContext),
 		section('PLAYER INTENT', overrides?.intentContext || intentContext),
 		section('ACTION RESOLUTION — AUTHORITATIVE', actionResolutionContext),
@@ -207,7 +212,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	const maxPromptTokens = input.maxPromptTokens;
 	if (!maxPromptTokens) {
 		const prompt = compose(initialResearch, initialWorking);
-		return { prompt, styleInstruction, totalTokens: WorkingContextEngine.estimateTokens(prompt), narrativeQualityContract, narratorVoiceState: input.narratorVoiceState, narrativeContinuityState, narrativePacingContract };
+		return { prompt, styleInstruction: [styleInstruction, narrativeProviderHandoff.providerIndependentInstruction].join('\n\n'), totalTokens: WorkingContextEngine.estimateTokens(prompt), narrativeQualityContract, narratorVoiceState: input.narratorVoiceState, narrativeContinuityState, narrativePacingContract, narrativeProviderHandoff };
 
 	}
 
@@ -351,6 +356,6 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			totalTokens = WorkingContextEngine.estimateTokens(prompt);
 		}
 	}
-	return { prompt, styleInstruction, totalTokens, narrativeQualityContract, narratorVoiceState: input.narratorVoiceState, narrativeContinuityState, narrativePacingContract };
+	return { prompt, styleInstruction: [styleInstruction, narrativeProviderHandoff.providerIndependentInstruction].join('\n\n'), totalTokens, narrativeQualityContract, narratorVoiceState: input.narratorVoiceState, narrativeContinuityState, narrativePacingContract, narrativeProviderHandoff };
 }
 

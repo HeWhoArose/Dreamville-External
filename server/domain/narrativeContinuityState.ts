@@ -174,7 +174,7 @@ export class NarrativeContinuityStateEngine {
 			...base,
 			tension: decayed,
 			emotionalTemperature: temperatureForTension(decayed),
-			updatedAt: repository.getWorldClock(storyId).getTimestamp().toISOString(),
+			updatedAt: JSON.stringify(repository.getWorldClock(storyId).getTimestamp()),
 		};
 	}
 
@@ -194,7 +194,7 @@ export class NarrativeContinuityStateEngine {
 		if (!effective.enabled) return previous;
 		const narration = normalize(params.narration);
 		const tension = clamp(previous.tension + tensionDelta(params.intent, narration, params.plan));
-		const timestamp = params.repository.getWorldClock(params.storyId).getTimestamp().toISOString();
+		const timestamp = JSON.stringify(params.repository.getWorldClock(params.storyId).getTimestamp());
 		const state: NarrativeContinuityState = {
 			version: 1,
 			storyId: params.storyId,

@@ -82,6 +82,7 @@ export interface EphemeralNarrativePlan {
 	continuityRequirements: string[];
 	forbiddenAssumptions: string[];
 	stateEffectsExpected: ExpectedStateEffect[];
+	sceneComposition?: import('./sceneComposition').SceneCompositionContract;
 	createdAt: string;
 	expiresAfterNarration: true;
 }
@@ -186,6 +187,7 @@ export class NarrativeDirector {
 		if (intent.movementIntent && intent.locationTarget?.id) stateEffectsExpected.push({ kind: 'LOCATION', description: 'Possible movement toward ' + intent.locationTarget.name + '; canonical movement authority must determine whether it actually commits.', required: false });
 		if (intent.interactionMode === 'COMBAT') stateEffectsExpected.push({ kind: 'COMBAT', description: 'Combat may require canonical combat adjudication; narration alone cannot commit the outcome.', required: false });
 		if (intent.interactionMode === 'MANIPULATION') stateEffectsExpected.push({ kind: 'INVENTORY', description: 'Item/object interaction may affect canonical inventory only when a domain command authorizes it.', required: false });
+
 
 		return {
 			turnId: situation.turnId,

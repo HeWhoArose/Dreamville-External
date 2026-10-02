@@ -12,6 +12,7 @@ import { NarrativeContinuityStateEngine, type NarrativeContinuityState } from '.
 import { NarrativeNoveltyEngine, type NarrativeNoveltyState } from './narrativeNoveltyEngine';
 import { NarrativeProviderHandoffEngine, type NarrativeProviderHandoffContract } from './narrativeProviderHandoff';
 import { NarrativePacingEngine, type NarrativePacingContract, type NarrativePacingControls } from './narrativePacingEngine';
+import { SceneCompositionEngine, type SceneCompositionContract } from './sceneComposition';
 
 export interface NarrationPromptInput {
 	situation: CurrentSituation;
@@ -32,6 +33,7 @@ export interface NarrationPromptInput {
 	narrativePacingContract?: NarrativePacingContract;
 	narrativePacingControls?: Partial<NarrativePacingControls>;
 	narrativeProviderHandoff?: NarrativeProviderHandoffContract;
+	sceneComposition?: SceneCompositionContract;
 }
 
 export interface NarrationPromptResult {
@@ -43,6 +45,7 @@ export interface NarrationPromptResult {
 	narrativeContinuityState?: NarrativeContinuityState;
 	narrativePacingContract?: NarrativePacingContract;
 	narrativeProviderHandoff?: NarrativeProviderHandoffContract;
+	sceneComposition?: SceneCompositionContract;
 }
 
 export function projectSupportingWorkingContext(context: AssembledTurnContext): string {
@@ -141,7 +144,6 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	const styleInstruction = input.styleInstruction || defaultNarrationStyle();
 	const situationContext = input.situation ? buildNarrationSituationContext(input.situation) : '[current situation unavailable]';
 	const intentContext = JSON.stringify(input.intent);
-	const planContext = NarrativeDirector.toPromptContext(input.plan);
 	const actionResolutionContext = buildActionResolutionPromptContext(input.actionResolution);
 	const narrativeContinuityState = input.narrativeContinuityState || NarrativeContinuityStateEngine.defaultState(input.situation.storyId);
 	const narrativeNoveltyState = input.narrativeNoveltyState || NarrativeNoveltyEngine.defaultState(input.situation.storyId);
@@ -149,6 +151,10 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	const narrativeContinuityContext = NarrativeContinuityStateEngine.toPromptContext(narrativeContinuityState);
 	const narrativeQualityContract = NarrativeQualityContractEngine.resolve(input.intent, input.narrativeQualityControls);
 	const narrativePacingContract = input.narrativePacingContract || NarrativePacingEngine.resolve({ situation: input.situation, intent: input.intent, actionResolution: input.actionResolution, canonicalOutcome: input.canonicalOutcome, continuityState: narrativeContinuityState, controls: input.narrativePacingControls });
+	const sceneComposition = input.sceneComposition || SceneCompositionEngine.resolve({ situation: input.situation, intent: input.intent, informationToReveal: input.plan.informationToReveal, entitiesToReact: input.plan.entitiesToReact, unresolvedThread: input.plan.unresolvedThread, continuityState: narrativeContinuityState, pacingContract: narrativePacingContract });
+	const presentationPlan: EphemeralNarrativePlan = { ...input.plan, sceneComposition };
+	const planContext = NarrativeDirector.toPromptContext(presentationPlan);
+	const sceneCompositionContext = SceneCompositionEngine.toPromptContext(sceneComposition);
 	const narrativeProviderHandoff = input.narrativeProviderHandoff || NarrativeProviderHandoffEngine.resolve({ storyId: input.situation.storyId, turnId: input.situation.turnId, voice: input.narratorVoiceState || NarratorVoiceEngine.resolve({ getUserData: () => null, saveUserData: () => undefined }, input.situation.storyId), quality: narrativeQualityContract, pacing: narrativePacingContract, continuity: narrativeContinuityState, novelty: narrativeNoveltyState });
 	const narrativeQualityContext = NarrativeQualityContractEngine.toPromptContext(narrativeQualityContract);
 	const promptBudgetVoiceContext = input.narratorVoiceState ? NarratorVoiceEngine.toPromptContext(input.narratorVoiceState) : 'Narrator Voice Contract: disabled for this turn.';
@@ -184,6 +190,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			situationContext: string;
 			intentContext: string;
 			planContext: string;
+			sceneCompositionContext: string;
 			canonicalConstraints: string;
 			outputContract: string;
 		}>,
@@ -201,6 +208,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		section('ACTION RESOLUTION — AUTHORITATIVE', actionResolutionContext),
 		section('NARRATIVE RESEARCH', researchContext),
 		section('NARRATIVE DIRECTOR PLAN', overrides?.planContext || planContext),
+		section('N13 SCENE COMPOSITION', overrides?.sceneCompositionContext || sceneCompositionContext),
 		section('NPC COGNITION BOUNDARY', 'NPC cognition is presentation guidance. Private beliefs, secrets, and knowledge must never be stated as player-visible facts unless independently authorized by research or canonical scene evidence. Express cognition through observable behavior, dialogue, hesitation, priorities, and reactions.'),
 		section('SUPPORTING WORKING CONTEXT', workingContext),
 		overrides?.canonicalConstraints || canonicalConstraints,
@@ -212,7 +220,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	const maxPromptTokens = input.maxPromptTokens;
 	if (!maxPromptTokens) {
 		const prompt = compose(initialResearch, initialWorking);
-		return { prompt, styleInstruction: [styleInstruction, narrativeProviderHandoff.providerIndependentInstruction].join('\n\n'), totalTokens: WorkingContextEngine.estimateTokens(prompt), narrativeQualityContract, narratorVoiceState: input.narratorVoiceState, narrativeContinuityState, narrativePacingContract, narrativeProviderHandoff };
+		return { prompt, styleInstruction: [styleInstruction, narrativeProviderHandoff.providerIndependentInstruction].join('\n\n'), totalTokens: WorkingContextEngine.estimateTokens(prompt), narrativeQualityContract, narratorVoiceState: input.narratorVoiceState, narrativeContinuityState, narrativePacingContract, narrativeProviderHandoff, sceneComposition };
 
 	}
 
@@ -249,7 +257,8 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			const microIntent = truncatePromptSection(intentContext, 180);
 			const microResolution = truncatePromptSection(actionResolutionContext, 620);
 			const microResearch = truncatePromptSection(initialResearch, 220);
-			const microPlan = truncatePromptSection(planContext, 140);
+			const microPlan = truncatePromptSection(planContext, 180);
+			const microComposition = SceneCompositionEngine.toCompactPromptContext(sceneComposition);
 			const microCanonical = 'The current location and time are authoritative. Stay in the canonical current location unless the canonical game state has already committed a location change. Do not invent unsupported facts or turn rumor into certainty.';
 			const microOutput = '{"narrative":["..."],"dialogue":[],"events":[],"stateChanges":[],"memoryCandidates":[],"audioCues":[],"visualCues":[]}';
 			const sections = [
@@ -263,6 +272,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				section('ACTION RESOLUTION — AUTHORITATIVE', microResolution),
 				section('NARRATIVE RESEARCH', microResearch),
 				section('NARRATIVE DIRECTOR PLAN', microPlan),
+				section('N13 SCENE COMPOSITION', microComposition),
 				section('CANONICAL CURRENT SCENE ANCHOR', microCanonical),
 				section('OUTPUT CONTRACT', 'Return ONLY valid JSON in this shape: ' + microOutput),
 			];
@@ -293,6 +303,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				intentContext: intentContext,
 				researchContext: truncatePromptSection(initialResearch, 700),
 				planContext: truncatePromptSection(planContext, 300),
+				sceneCompositionContext: SceneCompositionEngine.toCompactPromptContext(sceneComposition),
 				workingContext: truncatePromptSection(initialWorking, 320),
 				situationContext: truncatePromptSection(situationContext, 900),
 			};
@@ -303,6 +314,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 					situationContext: compact.situationContext,
 					intentContext: compact.intentContext,
 					planContext: compact.planContext,
+					sceneCompositionContext: compact.sceneCompositionContext,
 				},
 			);
 			prompt = renderCompact();
@@ -333,6 +345,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			const compactResolution = truncatePromptSection(actionResolutionContext, 700);
 			const compactResearch = truncatePromptSection(initialResearch, 180);
 			const compactPlan = truncatePromptSection(planContext, 140);
+			const compactComposition = SceneCompositionEngine.toCompactPromptContext(sceneComposition);
 			const compactCanonical = [
 				'State changes must come from canonical engines/commands.',
 				'Preserve rumor, hearsay, memory, and uncertainty as uncertainty.',
@@ -349,6 +362,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				section('ACTION RESOLUTION — AUTHORITATIVE', compactResolution),
 				section('NARRATIVE RESEARCH', compactResearch),
 				section('NARRATIVE DIRECTOR PLAN', compactPlan),
+				section('N13 SCENE COMPOSITION', compactComposition),
 				section('SUPPORTING WORKING CONTEXT', '[omitted]'),
 				compactCanonical,
 				section('OUTPUT CONTRACT', compactOutput),
@@ -356,6 +370,6 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			totalTokens = WorkingContextEngine.estimateTokens(prompt);
 		}
 	}
-	return { prompt, styleInstruction: [styleInstruction, narrativeProviderHandoff.providerIndependentInstruction].join('\n\n'), totalTokens, narrativeQualityContract, narratorVoiceState: input.narratorVoiceState, narrativeContinuityState, narrativePacingContract, narrativeProviderHandoff };
+	return { prompt, styleInstruction: [styleInstruction, narrativeProviderHandoff.providerIndependentInstruction].join('\n\n'), totalTokens, narrativeQualityContract, narratorVoiceState: input.narratorVoiceState, narrativeContinuityState, narrativePacingContract, narrativeProviderHandoff, sceneComposition };
 }
 

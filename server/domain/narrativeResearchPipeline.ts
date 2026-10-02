@@ -591,14 +591,17 @@ export class NarrativeResearchPipeline {
 			THREAD: Math.min(budgets.plot, 450),
 			RELATIONSHIP: budgets.relationships,
 		};
+		const semanticScores = new Map(candidates.map((candidate) => [
+			candidate.id,
+			SemanticNarrativeResearchEngine.scoreCandidate(semanticProfile, candidate),
+		]));
 		const sorted = candidates.sort((a, b) => {
-			const semanticA = SemanticNarrativeResearchEngine.scoreCandidate(semanticProfile, a);
-			const semanticB = SemanticNarrativeResearchEngine.scoreCandidate(semanticProfile, b);
-			a.relevanceScore = Math.max(a.relevanceScore, semanticA.score);
-			b.relevanceScore = Math.max(b.relevanceScore, semanticB.score);
 			const priority = b.priority - a.priority;
 			if (priority !== 0) return priority;
 			if (b.relevanceScore !== a.relevanceScore) return b.relevanceScore - a.relevanceScore;
+			const semanticA = semanticScores.get(a.id)?.score || 0;
+			const semanticB = semanticScores.get(b.id)?.score || 0;
+			if (semanticB !== semanticA) return semanticB - semanticA;
 			return a.id.localeCompare(b.id);
 		});
 		const selected: CandidateBlock[] = [];

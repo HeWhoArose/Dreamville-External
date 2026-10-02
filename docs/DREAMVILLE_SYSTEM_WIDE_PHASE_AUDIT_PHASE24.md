@@ -1,8 +1,8 @@
 # Dreamville System-Wide Phase Audit — Phase 24
 
 **Date:** 2026-10-02  
-**Branch:** `feat/system-wide-phase-audit`  
-**Base:** `feat/narrative-quality-n12`  
+**Authored on:** `feat/system-wide-phase-audit`  
+**Merged into:** `main` at `4546899723dd9cfa6821f1313ebb1e62ef715a24`  
 **Scope:** Dreamville system architecture from the frozen S1–S7 surgical baseline through Phases 8.5, 11–23, plus narration N1–N12.
 
 ## Audit rule
@@ -20,7 +20,7 @@ For every release-critical phase, the audit verifies:
 7. no known duplicate authority is introduced;
 8. canonical state remains separate from presentation/projection state.
 
-Historical audit documents may contain older environment or gate results. They remain historical records; this document records the current branch state.
+Historical audit documents may contain older environment or gate results. They remain historical records; this document records the current merged `main` state.
 
 ## Phase status matrix
 
@@ -101,9 +101,10 @@ Narrative continuity/novelty/history remain bounded projections. Canonical plot/
 - N5 could discard canonical NPC `currentActivity` when an agency profile existed.
 
 ### Remaining architecture notes
-- The branch is still unmerged into `main`; system-wide verification here is branch-level verification.
+- The audit was verified on the pre-merge branch and is now merged into `main` at `4546899723dd9cfa6821f1313ebb1e62ef715a24`.
+- Post-merge `main` verification completed successfully on that merge commit: Release Gate run `37003743071` and Verification runs `37003743108` / `37003743116`.
 - Live third-party provider behavior and browser-only UI rendering remain manual verification surfaces rather than deterministic CI claims.
-- Historical phase documents are not rewritten merely to change their historical state; this current audit is the up-to-date branch status record.
+- Historical phase documents are not rewritten merely to change their historical state; this document is the current merged-system audit record.
 
 ## Release evidence
 

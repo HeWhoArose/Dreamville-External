@@ -1,7 +1,7 @@
 # N13 — Scene Composition / Dramaturgy
 
 Date: 2026-10-02
-Status: implementation under verification
+Status: implementation complete — full regression and Release Gate verified
 
 ## Audit result
 
@@ -41,4 +41,4 @@ N13 uses existing authoritative inputs and requires no additional LLM call. Miss
 
 ## Verification
 
-Completion requires targeted N13 coverage plus the existing full test, typecheck, production build, release-contract verification, fallback/uncertainty coverage, prompt-budget coverage, and a post-test producer/consumer audit.
+Targeted N13 coverage, fallback/uncertainty coverage, prompt-budget coverage, full regression, typecheck/lint, production build, release-contract verification, and GitHub Release Gate all pass on the final implementation commit.

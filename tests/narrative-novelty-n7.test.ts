@@ -48,3 +48,14 @@ test('N7 does not force novelty when there is no prior repetition', () => {
 	assert.equal(state.items.length, 0);
 	assert.equal(result.discouraged.length, 0);
 });
+
+
+test('N7 remains bounded and does not mutate canonical command events', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	repository.seedStory('n7_bounds');
+	const before = repository.getCanonicalCommandEvents('n7_bounds').length;
+	for (let i = 0; i < 50; i += 1) NarrativeNoveltyEngine.recordAcceptedTurn({ repository, storyId: 'n7_bounds', narration: 'A fresh observation enters the scene with a specific detail.', turnNumber: i + 1 });
+	const state = NarrativeNoveltyEngine.resolve(repository, 'n7_bounds');
+	assert.ok(state.items.length <= 120);
+	assert.equal(repository.getCanonicalCommandEvents('n7_bounds').length, before);
+});

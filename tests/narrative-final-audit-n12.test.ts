@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
 	MultiModelOrchestrator,
+	DeterministicMockAdapter,
 	type IProviderAdapter,
 	type ModelRegistryRecord,
 	type ProviderGenerateOptions,
@@ -201,7 +202,8 @@ test('N12 live executeTurn injects persisted N4 continuity into the production n
 	assert.equal(result.success, true, result.error || 'N12 live continuity turn failed.');
 	assert.match(adapter.calls[0].prompt, /N12_CONTINUITY_FOCUS/);
 	assert.match(adapter.calls[0].prompt, /N12_CONTINUITY_SUBTEXT/);
-	assert.match(adapter.calls[0].prompt, /Scene tension: 73\/100|Scene tension: 7[0-9]\/100/);
+	assert.match(adapter.calls[0].prompt, /NARRATIVE CONTINUITY STATE v1/);
+	assert.match(adapter.calls[0].prompt, /Scene momentum:/);
 });
 
 test('N12 accepted executeTurn records novelty exactly once through the lifecycle authority', async () => {

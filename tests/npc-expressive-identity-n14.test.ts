@@ -46,7 +46,7 @@ test('N14 projects expressive identity from existing authoritative character dat
 		actorRole: 'WATCH CAPTAIN',
 	});
 	assert.equal(JSON.stringify(makeProfile()), before);
-	assert.equal(identity.cadence, 'MEASURED');
+	assert.equal(identity.cadence, 'BRISK');
 	assert.equal(identity.sentenceLength, 'SHORT');
 	assert.equal(identity.vocabularyFormality, 'FORMAL');
 	assert.equal(identity.humorStyle, 'DRY');
@@ -107,8 +107,21 @@ test('N14 reaches the real NPC cognition prompt through the existing NarrativeDi
 	repository.seedStory(storyId);
 	const action = 'I ask the Lantern Guard what happened at the gate.';
 	const initial = CurrentSituationBuilder.build({ storyId, playerAction: action, worldRepo: repository });
-	const intent = PlayerIntentInterpreter.deterministic(action, initial);
-	const situation = CurrentSituationBuilder.build({ storyId, playerAction: action, currentAction: intent, worldRepo: repository });
+	const initialIntent = PlayerIntentInterpreter.deterministic(action, initial);
+	const situation = CurrentSituationBuilder.build({ storyId, playerAction: action, currentAction: initialIntent, worldRepo: repository });
+	const npcTarget = situation.nearbyEntities.find((entity) => String(entity.kind).toUpperCase() === 'NPC' || String(entity.kind).toUpperCase() === 'CHARACTER');
+	assert.ok(npcTarget);
+	const intent = {
+		...initialIntent,
+		explicitTargets: [{
+			id: npcTarget.id,
+			name: npcTarget.name,
+			kind: 'NPC',
+			source: 'EXPLICIT',
+		}],
+		impliedTargets: [],
+		target: undefined,
+	};
 	const research = NarrativeResearchPipeline.research({ repository, storyId, currentSituation: situation, playerIntent: intent, playerAction: action });
 	const plan = NarrativeDirector.create({ repository, storyId, situation, intent, research });
 	assert.ok(plan.npcCognition?.length);

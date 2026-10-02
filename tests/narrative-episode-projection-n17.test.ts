@@ -451,7 +451,7 @@ test('N17 does not treat closed or resolved threads as active episode pressure',
 
 	assert.equal(projection.activeThreadIds.length, 0);
 	assert.notEqual(projection.phase, 'DEVELOPMENT');
-	assert.equal(projection.phase, 'RESOLUTION');
+	assert.equal(projection.phase, 'AFTERMATH');
 });
 
 test('N17 distinguishes normal classification basis from fallback metadata', () => {

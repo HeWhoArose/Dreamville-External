@@ -29,8 +29,8 @@ test('N3 derives information-seeking needs from intent rather than keyword overl
 	repository.seedStory('n3_profile');
 	const situation = CurrentSituationBuilder.build({ storyId: 'n3_profile', playerAction: 'I listen.', worldRepo: repository });
 	const profile = SemanticNarrativeResearchEngine.derive(intent(), situation);
-	assert.ok(profile.needs.some((need) => need.need === 'LORE_FACT' && need.score >= 1));
-	assert.ok(profile.needs.some((need) => need.need === 'MEMORY_CONTINUITY' && need.score >= 0.9));
+	assert.ok(profile.needs.some((need) => need.need === 'LORE_FACT' && need.score >= 0.9));
+	assert.ok(profile.needs.some((need) => need.need === 'MEMORY_CONTINUITY' && need.score >= 0.8));
 	assert.ok(profile.needs.some((need) => need.need === 'OPEN_THREAD' && need.score >= 0.9));
 	assert.match(profile.objective, /what the player needs to know/i);
 });

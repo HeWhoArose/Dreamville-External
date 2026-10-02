@@ -376,6 +376,6 @@ export class NarrativeEpisodeProjectionEngine {
 	public static toCompactPromptContext(projection?: NarrativeEpisodeProjection): string {
 		if (!projection) return 'N17 episode unavailable; preserve current continuity.';
 		return 'N17 Phase: ' + projection.phase + '; Trajectory: ' + projection.trajectory +
-			'; non-binding presentation only; never force phase or choose the player future.';
+			'; non-binding presentation guidance only; never force phase or choose the player future.';
 	}
 }

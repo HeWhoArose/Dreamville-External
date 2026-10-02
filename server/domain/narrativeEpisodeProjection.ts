@@ -337,11 +337,10 @@ export class NarrativeEpisodeProjectionEngine {
 	}
 
 	public static toCompactPromptContext(projection?: NarrativeEpisodeProjection): string {
-		if (!projection) return 'N17 episode: unavailable; preserve current continuity.';
-		const thread = projection.activeThreadSummaries[0] || 'none';
-		const question = projection.centralQuestion.slice(0, 70);
-		const opportunity = projection.narrativeOpportunity.slice(0, 80);
-		return 'N17 episode: Phase: ' + projection.phase + '; Trajectory: ' + projection.trajectory + '; Question: ' + question + '; Thread: ' + thread.slice(0, 55) + '; Opportunity: ' + opportunity;
+		if (!projection) return 'N17 episode unavailable; preserve current continuity.';
+		const thread = (projection.activeThreadSummaries[0] || 'none').slice(0, 28);
+		return 'N17 Phase=' + projection.phase + '; Trajectory=' + projection.trajectory + '; Thread=' + thread;
 	}
+
 }
 

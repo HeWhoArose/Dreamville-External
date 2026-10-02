@@ -210,7 +210,7 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 		assert.ok(result.narrativePlan?.episodeProjection, 'turn ' + turn + ': N17 episode projection missing');
 		assert.ok(result.narrativePlan?.npcCognition?.some((npc) => npc.actorId === target!.id && npc.expressiveIdentity), 'turn ' + turn + ': N14 expressive NPC identity missing');
 		assert.notEqual(result.telemetry.selectedModelId, 'canon-guard', 'turn ' + turn + ': integrated audit unexpectedly short-circuited before narration generation');
-		assert.ok(result.narrativeRichnessEvaluation, 'turn ' + turn + ': N18 richness evaluation missing');
+		assert.ok(result.narrativeRichnessEvaluation, 'turn ' + turn + ': N18 richness evaluation missing; model=' + result.telemetry.selectedModelId + '; provider=' + result.telemetry.selectedProviderId + '; plan=' + Boolean(result.narrativePlan) + '; review=' + result.narrativeReview?.decision + '; telemetryRichness=' + Boolean(result.telemetry.narrativeRichnessEvaluation) + '; attempts=' + result.telemetry.attempts);
 		const researchBlockCount = Number(result.telemetry.researchBlockCount || 0);
 		assert.ok(researchBlockCount >= 1, 'turn ' + turn + ': N16 memory/research path produced no bounded research blocks');
 

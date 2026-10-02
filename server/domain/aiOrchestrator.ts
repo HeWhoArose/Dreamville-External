@@ -8524,6 +8524,7 @@ export class MultiModelOrchestrator {
       forceModelId?: string;
       canonicalLocationName?: string;
       playerAction?: string;
+      narrativeHandoff?: NarrativeProviderHandoffContract;
       turnBudget?: AiTurnCallBudget;
       validateResponse?: (text: string) => TaskResponseValidationResult;
       /**
@@ -8554,6 +8555,7 @@ export class MultiModelOrchestrator {
       latencyMs: number;
       error?: string;
     }>;
+    narrativeProviderHandoff?: NarrativeProviderHandoffContract;
     preflightSkipped?: Array<{
       providerId: string;
       modelId: string;
@@ -8599,6 +8601,7 @@ export class MultiModelOrchestrator {
         modelId: emergency.modelId,
         fallbackReason: turnBudgetDecision.reason || 'TURN_AI_CALL_BUDGET_EXHAUSTED',
         attempts: 1,
+        narrativeProviderHandoff: options?.narrativeHandoff,
         attemptsTrail: [{
           providerId: emergency.providerId,
           modelId: emergency.modelId,
@@ -8987,6 +8990,7 @@ export class MultiModelOrchestrator {
           modelId: currentCandidate.modelId,
           fallbackReason,
           attempts: totalAttempts,
+          narrativeProviderHandoff: options?.narrativeHandoff,
           attemptsTrail,
           preflightSkipped,
         };

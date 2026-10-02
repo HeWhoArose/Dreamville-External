@@ -68,7 +68,7 @@ function recentHistory(situation: CurrentSituation, limit = 6): RecentTurnContex
 
 function unresolvedThreads(situation: CurrentSituation): Array<{ id: string; title: string; summary?: string; priority: number }> {
 	return (Array.isArray(situation.openThreads) ? situation.openThreads : [])
-		.filter((thread) => !thread.status || !/resolved|stale/i.test(String(thread.status)))
+		.filter((thread) => !thread.status || String(thread.status).toUpperCase() === 'OPEN')
 		.map((thread) => ({
 			id: String(thread.id || ''),
 			title: normalize(thread.title),

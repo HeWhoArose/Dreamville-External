@@ -37,35 +37,64 @@ function model(providerId: string, modelId: string, pool: 'creative' | 'fast', c
 }
 
 function responseForTurn(turn: number, location: string, target: string): string {
-	const sensory = [
-		'Brass lamp-light moves across the nearby stone.',
-		'A faint mechanical hum settles beneath the room’s quieter sounds.',
-		'Dust shifts along the floor beside the worktable.',
-		'One of the nearby instruments gives a restrained click.',
-		'A cool draft passes through the room and fades.',
-		'Paper edges lift and settle again in the steady air.',
-		'A thin reflection trembles across the glass-covered surfaces.',
-		'The room’s low mechanical rhythm continues beneath the exchange.',
-		'Old metal carries a soft vibration beneath the table.',
-		'The corridor beyond remains audible but visually unobtrusive.',
-		'The surrounding fixtures catch a muted glint from the overhead light.',
-		'The room’s low hum becomes noticeable only after the exchange quiets.',
+	const openings = [
+		'At the start of this exchange',
+		'As the conversation settles',
+		'With the room still quiet',
+		'After a brief pause',
+		'Under the archive lights',
+		'As the nearby machinery hums',
+		'With dust shifting nearby',
+		'Beside the active worktable',
+		'As the corridor sounds recede',
+		'With the ambient hum returning',
+		'After the last answer fades',
+		'As the next question lands',
 	];
-	const dialogueText = turn === 1
-		? 'I can tell you only what is evident here.'
-		: 'That is what I can tell you from here.';
+	const sensory = [
+		'brass lamp-light catches the stone',
+		'a faint mechanical hum passes beneath the room',
+		'dust shifts lightly along the floor',
+		'a nearby instrument gives a restrained click',
+		'a cool draft crosses the room and fades',
+		'paper edges lift and settle',
+		'a thin reflection trembles across the glass',
+		'the room’s mechanical rhythm continues',
+		'old metal carries a soft vibration',
+		'the corridor remains audible but distant',
+		'overhead fixtures catch a muted glint',
+		'the room’s low hum settles again',
+	];
+	const replies = [
+		'I can tell you only what is evident here.',
+		'That is all I can confirm from this place.',
+		'I would keep the answer to what we can observe.',
+		'Nothing beyond the immediate scene can be confirmed by me.',
+		'I can answer only from what is plainly available here.',
+		'That is as far as I can go without assuming more.',
+		'I would rather leave anything beyond this scene uncertain.',
+		'What you can see here is all I can stand behind.',
+		'I can confirm only what remains observable now.',
+		'I will not claim more than the scene supports.',
+		'The immediate evidence is all I can speak to.',
+		'For now, that is the limit of what I can confirm.',
+	];
+	const opener = openings[(turn - 1) % openings.length];
+	const sense = sensory[(turn - 1) % sensory.length];
+	const reply = replies[(turn - 1) % replies.length];
 	return JSON.stringify({
 		narrative: [
-			`You ask ${target} about the current scene in ${location}. ${sensory[(turn - 1) % sensory.length]}`,
-			`${target} answers cautiously, keeping the exchange grounded in what is immediately observable. ${turn === 1 ? 'The conversation remains open without forcing a conclusion.' : 'Nothing beyond the current scene is established.'}`,
+			`${opener}, exchange ${turn}, you ask ${target} about the current scene in ${location}; ${sense}.`,
+			`${target} answers in a measured voice: "${reply}" Nothing beyond the immediate scene is established in this turn.`,
 		],
-		dialogue: [{ speaker: target, text: dialogueText }],
+		dialogue: [{ speaker: target, text: reply }],
 		events: [],
 		stateChanges: [],
 		memoryCandidates: [],
 		audioCues: [],
 	});
 }
+
 test('Final integrated audit — 120-turn narration session preserves N13-N19 contracts and long-session bounds', async () => {
 	const storyId = 'final_integrated_120_turn_audit';
 	const repository = new InMemoryWorldRepository({ disablePersistence: true });

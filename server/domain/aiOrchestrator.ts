@@ -25,6 +25,7 @@ import { NarrativeDirector, type EphemeralNarrativePlan } from './narrativeDirec
 import { buildNarrationPrompt, defaultNarrationStyle, projectSupportingWorkingContext } from './narrativePromptBuilder';
 import { SemanticNarrativeReview, type NarrativeReview } from './semanticNarrativeReview';
 import { LiteraryNarrativeReview, type LiteraryReview } from './literaryNarrativeReview';
+import { NarrativePacingEngine } from './narrativePacingEngine';
 import { NarrativeNoveltyEngine } from './narrativeNoveltyEngine';
 import { EpistemicBoundaryEnforcer } from './epistemicBoundary';
 import { NarrativeStateAdjudicator, type StateAdjudicationResult } from './narrativeStateAdjudicator';
@@ -7353,6 +7354,7 @@ export class MultiModelOrchestrator {
       styleInstruction,
       narratorVoiceState,
       narrativeNoveltyState,
+      narrativePacingContract,
       canonicalOutcome: authoritativeOutcome,
       actionResolution: params.actionResolution,
       maxPromptTokens: Math.max(200, hardTokenBudget),
@@ -7399,7 +7401,7 @@ export class MultiModelOrchestrator {
       narrationPrompt.styleInstruction,
       {
         timeoutMs,
-        maxTokens: 650,
+        maxTokens: NarrativePacingEngine.outputTokenBudget(narrativePacingContract),
         contextTokens: narrationPrompt.totalTokens,
         turnBudget: turnAiCallBudget,
         forceModelId: params.forceModelId,
@@ -7411,6 +7413,8 @@ export class MultiModelOrchestrator {
             return { valid: false, errorReason: validation.errorReason };
           }
           const narrationText = validation.turnPackage.narrative.join(' ');
+          const pacing = NarrativePacingEngine.validateNarration(narrationText, narrativePacingContract);
+          if (!pacing.valid) return { valid: false, errorReason: pacing.reason };
           const continuity = this.validateNarrativeSceneContinuity(
             narrationText,
             worldRepo,
@@ -7738,6 +7742,7 @@ export class MultiModelOrchestrator {
       const narratorVoiceState = NarratorVoiceEngine.resolve(repo, storyId, narrativeProfile, params.narratorVoiceControls);
       NarratorVoiceEngine.persist(repo, storyId, narratorVoiceState);
       const narrativeNoveltyState = NarrativeNoveltyEngine.resolve(repo, storyId);
+    const narrativePacingContract = NarrativePacingEngine.resolve({ situation: currentSituation, intent: playerIntent, actionResolution: params.actionResolution, canonicalOutcome: authoritativeOutcome, continuityState: NarrativeContinuityStateEngine.resolve(repo, storyId) });
 
       // 1b. CH15 Source Adaptation Adjudication Check
       const narrationPrompt = isNarrativeTask && researchResult && narrativePlan

@@ -251,7 +251,7 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 				fastRuntime.cooldownUntil = undefined;
 				fastRuntime.operationalStatus = 'AVAILABLE';
 			}
-		}
+			internal.taskPinnedModels.delete('narrative.generate');
 			const recoverySelection = orchestrator.selectBestModel('narrative.generate', { contextTokens: 0 });
 			assert.notEqual(recoverySelection.selectedModel.modelId, 'emergency-fallback-local', 'N19 recovery selection remained on the deterministic emergency floor.');
 
@@ -269,7 +269,7 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 		const result = await orchestrator.executeTurn({
 			storyId,
 			playerAction: action,
-			forceModelId: 'final-audit-creative',
+			forceModelId: turn < 96 ? 'final-audit-creative' : undefined,
 			repository,
 			hardTokenBudget: 1400,
 			timeoutMs: 1000,

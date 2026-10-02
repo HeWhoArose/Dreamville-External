@@ -1,7 +1,7 @@
 # Narrative Lifelike & Consistent Narration Roadmap — N1 to N12
 
-Status: **N11 verified — N12 not started**
-Branch: `feat/narrative-quality-n1`
+Status: **N12 verified**
+Branch: `feat/narrative-quality-n12`
 Scope: Dreamville External narration/presentation layer only. The separate authoritative core engine remains authoritative.
 
 ## Goal
@@ -516,6 +516,33 @@ npm run build
  ↓
 FINAL CONNECTION AUDIT
 ```
+
+### N12 completion record
+
+N12 final architecture audit completed on PR #38, final verified commit `6d367fec40b75132edb9e311c32be7cb634e9937`.
+
+The audit found four production-path integration gaps and closed them:
+
+- N5 NPC cognition was not reaching the primary `executeTurn` NarrativeDirector path because repository/story identity was omitted.
+- Semantic repair calls could lose the N9 provider-independent handoff and used a fixed token budget instead of the active N8-derived budget.
+- The primary `executeTurn` path enforced fewer presentation backstops than the presentation-only path. A shared final presentation validator now covers N8 pacing, scene/action continuity, passive-listening safety, information continuity, and temporal continuity.
+- Literary and emergency recovery paths could bypass parts of the N6/N7/N8 acceptance contract. Rewrites and emergency output are now revalidated before acceptance.
+
+A regression fixture in `tests/phase1_5b_gaps.test.ts` was also hardened so fallback verification remains focused on fallback routing while producing prose compatible with the full N1–N9 presentation contract. The tertiary assertion now verifies successful recovery and selected-model ownership rather than assuming the provider can never be reused for quality repair.
+
+Final verification on the exact N12 head:
+
+- Verification workflow A: **green**
+- Verification workflow B: **green**
+- Release Gate: **green**
+- Typecheck: **green**
+- Lint: **green**
+- Full test suite: **green**
+- Production build: **green**
+- N12 integration regression: **green**
+- N11 100-turn stress regression remains covered by the full test suite
+
+N11 remains the verified engineering base for N12; PR #37 remains open and unmerged. N12 PR #38 is also open and unmerged. This roadmap records verification state only; no merge is implied.
 
 ### Final connection audit
 

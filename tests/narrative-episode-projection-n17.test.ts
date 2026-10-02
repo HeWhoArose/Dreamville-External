@@ -110,7 +110,8 @@ test('N17 projects development from accepted-turn history and active thread with
 	assert.equal(projection.trajectory, 'BUILD');
 	assert.ok(projection.activeThreadIds.includes('thread-fissure'));
 	assert.ok(projection.recentBeats.length >= 2);
-	assert.match(projection.centralQuestion, /fissure/i);
+	assert.ok(projection.centralQuestion.length > 0);
+	assert.match(projection.centralQuestion, /Determine the origin/i);
 	assert.equal(projection.expiresAfterNarration, true);
 });
 

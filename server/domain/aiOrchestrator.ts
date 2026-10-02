@@ -26,6 +26,7 @@ import { buildNarrationPrompt, defaultNarrationStyle, projectSupportingWorkingCo
 import { SemanticNarrativeReview, type NarrativeReview } from './semanticNarrativeReview';
 import { EpistemicBoundaryEnforcer } from './epistemicBoundary';
 import { NarrativeStateAdjudicator, type StateAdjudicationResult } from './narrativeStateAdjudicator';
+import { NarrativeContinuityStateEngine } from './narrativeContinuityState';
 import { NarratorVoiceEngine, type NarratorVoiceControls } from './narratorVoiceEngine';
 import { AiTurnCallBudget, type AiTurnCallBudgetSnapshot } from './aiTurnCallBudget';
 import type { ActionResolution } from './actionResolution';

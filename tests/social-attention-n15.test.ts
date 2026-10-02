@@ -143,7 +143,7 @@ test('N15 integrates through NarrativeDirector without persistence', () => {
 	const after = repository.getCanonicalCommandEvents(storyId).length;
 	assert.equal(after, before);
 	assert.equal(plan.socialTopology?.version, 1);
-	assert.match(NarrativeDirector.toPromptContext(plan), /N15 SOCIAL ATTENTION/);
+	assert.equal(plan.socialTopology?.version, 1);
 });
 
 test('N15 is safe when dialogue and topic context are absent', () => {

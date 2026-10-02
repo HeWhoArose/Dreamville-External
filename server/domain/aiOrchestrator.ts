@@ -7166,6 +7166,8 @@ export class MultiModelOrchestrator {
       situation: currentSituation,
       intent: playerIntent,
       research: researchResult,
+      repository: worldRepo,
+      storyId,
     });
 
     const canonicalSceneAnchor = [

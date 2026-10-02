@@ -83,3 +83,8 @@ N18 branch commit `15471673afa580010e7acc80a48053513edd87e3` passed all three re
 - Verification: run 37033336358 — success
 
 Post-merge verification is tracked separately against the merged `main` head.
+
+
+## Final integrated audit correction
+
+The final 120-turn audit exposed a missing N18 projection on the deterministic emergency narration success path. The emergency floor already performed semantic, literary, and novelty validation, but its successful return omitted the deterministic richness evaluation. The emergency path now runs the same `NarrativeRichnessEvaluator` against the accepted emergency turn package and returns the evaluation both on `OrchestratedTurnResult.narrativeRichnessEvaluation` and `OrchestratedTurnTelemetry.narrativeRichnessEvaluation`. No additional LLM call is introduced.

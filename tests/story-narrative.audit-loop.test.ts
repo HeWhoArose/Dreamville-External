@@ -35,7 +35,8 @@ test('Narration, action-routing, suggestions, portrait prompts, and scene prompt
 		assert.match(orchestrator, /Never use phrases such as "the outcome unfolds in the narrative"/, `pass ${pass}: implementation-language prohibition missing`);
 		assert.match(orchestrator, /Narrative Research|narrativeContinuityEngine\.research/, `pass ${pass}: pre-narration research context missing`);
 		assert.match(orchestrator, /narrativeContinuityEngine\.research/, `pass ${pass}: continuity research is not connected to narration`);
-		assert.match(orchestrator, /maxTokens: 650/, `pass ${pass}: narration output budget remains too constrained`);
+		assert.match(orchestrator, /NarrativePacingEngine\.outputTokenBudget/, `pass ${pass}: adaptive narration output budget is not connected`);
+		assert.match(orchestrator, /maxTokens:/, `pass ${pass}: narration provider output budget option is missing`);
 		assert.match(orchestrator, /Vary sentence rhythm|sensory detail/, `pass ${pass}: narrative diversity contract missing`);
 		assert.match(orchestrator, /Substance has priority over flourish/, `pass ${pass}: narrative substance contract missing`);
 		assert.match(orchestrator, /validateNarrativeInformationContinuity/, `pass ${pass}: information-seeking continuity guard missing`);

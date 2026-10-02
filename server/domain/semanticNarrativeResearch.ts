@@ -109,7 +109,10 @@ export class SemanticNarrativeResearchEngine {
 			needs.push({ need: 'OPEN_THREAD', score: 0.75, reason: 'Open narrative threads can explain why this action matters now.' });
 		}
 
-		const deduped = Array.from(new Map(needs.map((entry) => [entry.need, entry])).values()).sort((a, b) => b.score - a.score);
+		const deduped = Array.from(new Map(needs.map((entry) => [entry.need, entry])).values()).map((entry) => {
+			const strongest = needs.filter((candidate) => candidate.need === entry.need).sort((a, b) => b.score - a.score)[0];
+			return strongest || entry;
+		}).sort((a, b) => b.score - a.score);
 		const confidence = clamp(Number(intent.confidence) || 0);
 		return {
 			version: 1,

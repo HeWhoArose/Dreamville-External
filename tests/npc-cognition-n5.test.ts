@@ -57,3 +57,29 @@ test('N5 remains presentation-only and does not mutate canonical command events'
 	NarrativeDirector.create({ repository, storyId: 'n5_safe', situation, intent: makeIntent(), research });
 	assert.equal(repository.getCanonicalCommandEvents('n5_safe').length, before);
 });
+
+
+test('N5 preserves canonical NPC current activity when an agency profile exists', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	repository.seedStory('n5_activity');
+	const situation = CurrentSituationBuilder.build({ storyId: 'n5_activity', playerAction: 'I observe the nearby person.', worldRepo: repository });
+	const target = situation.nearbyEntities.find((entity) => entity.kind !== 'PLAYER');
+	assert.ok(target);
+	target!.currentActivity = 'cataloguing star maps';
+	const playerIntent = {
+		...makeIntent(),
+		action: 'observe',
+		goal: 'observe',
+		interactionMode: 'PASSIVE_OBSERVATION' as const,
+		speechIntent: false,
+		observationIntent: true,
+		explicitTargets: [{ id: target!.id, name: target!.name, kind: target!.kind, source: 'EXPLICIT' as const }],
+		impliedTargets: [],
+		originalText: 'I observe the nearby person.',
+	};
+	const research = NarrativeResearchPipeline.research({ repository, storyId: 'n5_activity', currentSituation: situation, playerIntent, playerAction: 'I observe the nearby person.' });
+	const plan = NarrativeDirector.create({ repository, storyId: 'n5_activity', situation, intent: playerIntent, research });
+	const npc = plan.npcCognition?.find((entry) => entry.actorId === target!.id);
+	assert.ok(npc);
+	assert.equal(npc!.currentActivity, 'cataloguing star maps');
+});

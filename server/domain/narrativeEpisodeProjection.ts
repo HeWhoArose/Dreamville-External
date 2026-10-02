@@ -206,7 +206,7 @@ function resolutionSignals(history: RecentTurnContext[], situation: CurrentSitua
 	];
 	return unique(
 		values
-			.filter((value) => containsAny(lower(value), ['resolved', 'answered', 'confirmed', 'found', 'completed', 'finished', 'safe']))
+			.filter((value) => containsAny(lower(value), ['resolved', 'answered', 'confirmed', 'found', 'completed', 'finished', 'safe', 'reassured', 'settled']))
 			.map((value) => value.slice(0, 180)),
 		4,
 	);
@@ -298,7 +298,7 @@ export class NarrativeEpisodeProjectionEngine {
 			avoidForcing: [
 				'Do not create a canonical plot beat from this projection.',
 				'Do not close or mutate an open thread.',
-				'Do not decide the player’s consequential next action.',
+				'Do not decide the player’s future consequential action.',
 				'Do not treat narrative research memories or rumors as new canonical events.',
 				'Do not force escalation or resolution merely to satisfy the projected phase.',
 			],

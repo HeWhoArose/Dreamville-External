@@ -269,8 +269,21 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 					recoveryRuntime.status = 'Healthy';
 				}
 			}
+			const recoveryDiagnostics = [creativeModel, fastModel].map((candidate) => ({
+				modelId: candidate.modelId,
+				registered: Boolean(orchestrator.getModel(candidate.providerId, candidate.modelId)),
+				health: candidate.health,
+				quota: candidate.quota,
+				accessStatus: candidate.accessStatus,
+				roleEligible: candidate.roleEligibility.includes('narrative.generate'),
+				coolingDown: internal.isModelCoolingDown(candidate),
+				circuitBroken: internal.isCircuitBreakerTripped(candidate.providerId, candidate.modelId),
+				readiness: orchestrator.getTaskReadiness('narrative.generate', candidate.providerId, candidate.modelId, 0),
+				preflight: orchestrator.getTaskCandidatePreflight('narrative.generate', candidate.providerId, candidate.modelId, 0, 0),
+				usable: orchestrator.isCandidateUsable(candidate, 'narrative.generate', 0),
+			}));
 			const recoverySelection = orchestrator.selectBestModel('narrative.generate', { contextTokens: 0 });
-			assert.notEqual(recoverySelection.selectedModel.modelId, 'emergency-fallback-local', 'N19 recovery selection remained on the deterministic emergency floor.');
+			assert.notEqual(recoverySelection.selectedModel.modelId, 'emergency-fallback-local', 'N19 recovery selection remained on the deterministic emergency floor: ' + JSON.stringify(recoveryDiagnostics));
 
 		const action = `I ask ${target!.name} about the current scene.`;
 

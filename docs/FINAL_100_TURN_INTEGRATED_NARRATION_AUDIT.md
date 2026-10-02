@@ -52,7 +52,7 @@ The test also seeds one semantic and one episodic memory linked to the visible N
 
 Each successful turn must expose:
 - Narrative Director plan
-- N13 scene composition
+- N13 scene-composition prompt section at the final prompt consumer boundary
 - N14 expressive NPC identity
 - N15 social topology
 - N16 memory evidence in narrative research

@@ -298,7 +298,7 @@ export class NarrativeEpisodeProjectionEngine {
 			avoidForcing: [
 				'Do not create a canonical plot beat from this projection.',
 				'Do not close or mutate an open thread.',
-				'Do not decide the player's future action.',
+				'Do not decide the player future action.',
 				'Do not treat narrative research memories or rumors as new canonical events.',
 				'Do not force escalation or resolution merely to satisfy the projected phase.',
 			],

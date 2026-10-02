@@ -159,11 +159,12 @@ function keyEntities(situation: CurrentSituation, intent: PlayerIntent): string[
 	const targetNames = [
 		...(intent.explicitTargets || []).map((target) => target.name),
 		intent.target?.name,
-	];
+	].filter((name): name is string => Boolean(name));
 	const visibleNames = (situation.nearbyEntities || [])
 		.filter((entity) => entity.visibleToPlayer)
 		.filter((entity) => targetNames.some((name) => String(name || '').toLowerCase() === String(entity.name || '').toLowerCase()))
-		.map((entity) => entity.name);
+		.map((entity) => entity.name)
+		.filter((name): name is string => Boolean(name));
 	return unique([...targetNames, ...visibleNames], 5);
 }
 

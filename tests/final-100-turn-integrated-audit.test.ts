@@ -242,10 +242,14 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 		const researchBlockCount = Number(result.telemetry.researchBlockCount || 0);
 		assert.ok(researchBlockCount >= 1, 'turn ' + turn + ': N16 memory/research path produced no bounded research blocks');
 
-		const narrationCall = primary.callHistory.at(-1)?.prompt || fast.callHistory.at(-1)?.prompt || '';
-		assert.match(narrationCall, /N13 SCENE COMPOSITION/i, 'turn ' + turn + ': N13 missing from prompt');
-		assert.match(narrationCall, /N15 SOCIAL ATTENTION \/ CONVERSATION TOPOLOGY/i, 'turn ' + turn + ': N15 missing from prompt');
-		assert.match(narrationCall, /N17 NARRATIVE EPISODE PROJECTION/i, 'turn ' + turn + ': N17 missing from prompt');
+		const newPrimaryCalls = primary.callHistory.slice(primary.callHistory.length > 0 ? Math.max(0, primary.callHistory.length - 8) : 0);
+		const newFastCalls = fast.callHistory.slice(fast.callHistory.length > 0 ? Math.max(0, fast.callHistory.length - 8) : 0);
+		const narrationCandidates = [...newPrimaryCalls, ...newFastCalls]
+			.filter((call) => call.task === 'narrative.generate' && /N13 SCENE COMPOSITION/i.test(call.prompt));
+		const narrationCall = narrationCandidates.at(-1)?.prompt || '';
+		assert.match(narrationCall, /N13 SCENE COMPOSITION/i, 'turn ' + turn + ': N13 missing from original narration prompt');
+		assert.match(narrationCall, /N15 SOCIAL ATTENTION \/ CONVERSATION TOPOLOGY/i, 'turn ' + turn + ': N15 missing from original narration prompt');
+		assert.match(narrationCall, /N17 NARRATIVE EPISODE PROJECTION/i, 'turn ' + turn + ': N17 missing from original narration prompt');
 
 		observations.push({
 			turn,

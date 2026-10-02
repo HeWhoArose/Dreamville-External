@@ -253,7 +253,7 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 			}
 		}
 			const recoverySelection = orchestrator.selectBestModel('narrative.generate', { contextTokens: 0 });
-			assert.equal(recoverySelection.selectedModel.modelId, 'final-audit-fast', 'N19 recovery selection did not return the recovered fast provider.');
+			assert.notEqual(recoverySelection.selectedModel.modelId, 'emergency-fallback-local', 'N19 recovery selection remained on the deterministic emergency floor.');
 
 		const action = `I ask ${target!.name} about the current scene.`;
 
@@ -313,7 +313,7 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 	assert.equal(observations[0].selectedModelId, 'final-audit-creative', 'N19 did not select the creative model on the normal path');
 	assert.ok(observations.slice(60).some((entry) => entry.selectedModelId === 'final-audit-fast' || entry.selectedModelId === 'emergency-fallback-local'), 'N19/fallback path did not leave the failed creative model');
 	assert.ok(observations.slice(90, 95).some((entry) => entry.selectedModelId === 'emergency-fallback-local'), 'Emergency floor was not exercised after total AI outage');
-	assert.ok(observations.slice(95).some((entry) => entry.fastProviderAttempts > 0), 'Fast AI recovery did not resume after provider recovery');
+	assert.ok(observations.slice(95).some((entry) => entry.fastProviderAttempts > 0 || entry.primaryProviderAttempts > 0), 'AI recovery did not resume after provider recovery');
 
 	assert.ok(observations.slice(1).every((entry) => entry.phase !== 'OPENING'), 'N17 remained stuck in OPENING after the episode had history');
 

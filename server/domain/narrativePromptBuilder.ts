@@ -9,6 +9,7 @@ import { buildActionResolutionPromptContext } from './actionResolution';
 import { NarrativeQualityContractEngine, type NarrativeQualityControls, type NarrativeQualityContract } from './narrativeQualityContract';
 import { NarratorVoiceEngine, type NarratorVoiceControls, type NarratorVoiceState } from './narratorVoiceEngine';
 import { NarrativeContinuityStateEngine, type NarrativeContinuityState } from './narrativeContinuityState';
+import { NarrativeNoveltyEngine, type NarrativeNoveltyState } from './narrativeNoveltyEngine';
 
 export interface NarrationPromptInput {
 	situation: CurrentSituation;
@@ -25,6 +26,7 @@ export interface NarrationPromptInput {
 	narratorVoiceState?: NarratorVoiceState;
 	narratorVoiceControls?: NarratorVoiceControls;
 	narrativeContinuityState?: NarrativeContinuityState;
+	narrativeNoveltyState?: NarrativeNoveltyState;
 }
 
 export interface NarrationPromptResult {
@@ -135,6 +137,8 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	const planContext = NarrativeDirector.toPromptContext(input.plan);
 	const actionResolutionContext = buildActionResolutionPromptContext(input.actionResolution);
 	const narrativeContinuityState = input.narrativeContinuityState || NarrativeContinuityStateEngine.defaultState(input.situation.storyId);
+	const narrativeNoveltyState = input.narrativeNoveltyState || NarrativeNoveltyEngine.defaultState(input.situation.storyId);
+	const narrativeNoveltyContext = NarrativeNoveltyEngine.toPromptContext(narrativeNoveltyState);
 	const narrativeContinuityContext = NarrativeContinuityStateEngine.toPromptContext(narrativeContinuityState);
 	const narrativeQualityContract = NarrativeQualityContractEngine.resolve(input.intent, input.narrativeQualityControls);
 	const narrativeQualityContext = NarrativeQualityContractEngine.toPromptContext(narrativeQualityContract);
@@ -179,6 +183,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		section('NARRATIVE STYLE', overrides?.styleInstruction || styleInstruction),
 		section('NARRATOR VOICE CONTRACT', promptBudgetVoiceContext),
 		section('NARRATIVE CONTINUITY STATE', narrativeContinuityContext),
+		section('NARRATIVE NOVELTY / REPETITION CONTROL', narrativeNoveltyContext),
 		section('NARRATIVE QUALITY CONTRACT', promptBudgetQualityContext),
 		section('CURRENT SITUATION', overrides?.situationContext || situationContext),
 		section('PLAYER INTENT', overrides?.intentContext || intentContext),
@@ -228,6 +233,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			const microVoice = input.narratorVoiceState ? truncatePromptSection(NarratorVoiceEngine.compactPromptContext(input.narratorVoiceState), 420) : 'N2 voice disabled.';
 			const microQuality = truncatePromptSection(promptBudgetQualityContext, 420);
 			const microContinuity = truncatePromptSection(NarrativeContinuityStateEngine.compactPromptContext(narrativeContinuityState), 420);
+			const microNovelty = truncatePromptSection(NarrativeNoveltyEngine.compactPromptContext(narrativeNoveltyState), 420);
 			const microSituation = truncatePromptSection(situationContext, 360);
 			const microIntent = truncatePromptSection(intentContext, 180);
 			const microResolution = truncatePromptSection(actionResolutionContext, 620);
@@ -240,6 +246,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				section('NARRATOR VOICE CONTRACT', microVoice),
 				section('NARRATIVE QUALITY CONTRACT', microQuality),
 				section('NARRATIVE CONTINUITY STATE', microContinuity),
+				section('NARRATIVE NOVELTY / REPETITION CONTROL', microNovelty),
 				section('CURRENT SITUATION', microSituation),
 				section('PLAYER INTENT', microIntent),
 				section('ACTION RESOLUTION — AUTHORITATIVE', microResolution),

@@ -27,7 +27,6 @@ export interface NarrationPromptInput {
 	narratorVoiceState?: NarratorVoiceState;
 	narratorVoiceControls?: NarratorVoiceControls;
 	narrativeContinuityState?: NarrativeContinuityState;
-	narrativePacingContract?: NarrativePacingContract;
 	narrativeNoveltyState?: NarrativeNoveltyState;
 	narrativePacingContract?: NarrativePacingContract;
 	narrativePacingControls?: Partial<NarrativePacingControls>;
@@ -40,6 +39,7 @@ export interface NarrationPromptResult {
 	narrativeQualityContract: NarrativeQualityContract;
 	narratorVoiceState?: NarratorVoiceState;
 	narrativeContinuityState?: NarrativeContinuityState;
+	narrativePacingContract?: NarrativePacingContract;
 }
 
 export function projectSupportingWorkingContext(context: AssembledTurnContext): string {

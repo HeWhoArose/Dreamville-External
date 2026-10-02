@@ -378,7 +378,7 @@ export class NarrativeEpisodeProjectionEngine {
 		const question = projection.centralQuestion.length > 96
 			? projection.centralQuestion.slice(0, 95).trimEnd() + '…'
 			: projection.centralQuestion;
-		return 'N17 episode=' + projection.phase + '/' + projection.trajectory +
+		return 'N17 Phase: ' + projection.phase + '; Trajectory: ' + projection.trajectory +
 			'; question=' + question +
 			'; threads=' + (projection.activeThreadSummaries.slice(0, 2).join(' / ') || 'none') +
 			'; non-binding presentation guidance only; never force this phase or choose the player’s future action.';

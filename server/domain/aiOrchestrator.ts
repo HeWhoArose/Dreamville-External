@@ -7974,6 +7974,7 @@ export class MultiModelOrchestrator {
                 voiceProfile: params.voiceProfile,
                 canonicalLocationName: currentSituation.location.name,
                 playerAction: params.playerAction,
+                systemInstruction: narrativeProviderHandoff?.providerIndependentInstruction,
               });
             } finally {
               clearTimeout(timer);
@@ -8054,7 +8055,7 @@ export class MultiModelOrchestrator {
                 if (!literaryBudget.allowed) throw new Error(literaryBudget.reason || 'Narrative literary review call budget exhausted.');
                 turnAiCallBudget.recordProviderAttempt('narrative.review');
                 const literaryPrompt = LiteraryNarrativeReview.buildRewritePrompt({ review: literary, turnPackage: reviewedTurnPackage, intent: playerIntent, situation: currentSituation, plan: narrativePlan });
-                const literaryResult = await adapter.generate('narrative.review', literaryPrompt, { modelId: currentCandidate.modelId, timeoutMs, maxTokens: 1200, systemInstruction: 'Perform a literary polish only. Preserve canonical truth, state, player agency, knowledge boundaries and plot direction.' });
+                const literaryResult = await adapter.generate('narrative.review', literaryPrompt, { modelId: currentCandidate.modelId, timeoutMs, maxTokens: 1200, systemInstruction: [narrativeProviderHandoff?.providerIndependentInstruction, 'Perform a literary polish only. Preserve canonical truth, state, player agency, knowledge boundaries and plot direction.'].filter(Boolean).join(' ') });
                 const literaryValidation = this.validateTurnPackage(literaryResult.text);
                 if (!literaryValidation.valid || !literaryValidation.turnPackage) throw new Error(literaryValidation.errorReason || 'Literary rewrite returned an invalid structured turn package.');
                 const postSemantic = SemanticNarrativeReview.review({ intent: playerIntent, situation: currentSituation, plan: narrativePlan, turnPackage: literaryValidation.turnPackage });
@@ -8247,6 +8248,7 @@ export class MultiModelOrchestrator {
             voiceProfile: params.voiceProfile,
             canonicalLocationName: emergencyLocation?.name,
             playerAction: params.playerAction,
+            systemInstruction: narrativeProviderHandoff?.providerIndependentInstruction,
           });
           this.recordProviderSuccess(emergencyModel, res, task, emergencyStartedAt);
           const validation = this.validateTurnPackage(res.text);

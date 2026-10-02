@@ -179,7 +179,7 @@ export class NarrativeContinuityStateEngine {
 	}
 
 	public static recordAcceptedTurn(params: {
-		repository: { getStoryRun(storyId: string): any; saveStoryRun(run: any): void; getWorldClock(storyId: string): { getTimestamp(): Date } };
+		repository: { getStoryRun(storyId: string): any; saveStoryRun(run: any): void; getWorldClock(storyId: string): { getTimestamp(): Date }; getDynamicCharacterAgencyEngine?: (storyId: string) => any };
 		storyId: string;
 		turnId: string;
 		situation: CurrentSituation;

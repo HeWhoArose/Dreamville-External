@@ -7085,6 +7085,7 @@ export class MultiModelOrchestrator {
     recentTurns?: Array<{ playerAction: string; narration: string; worldTime?: string }>;
     sceneContext?: string;
     forceModelId?: string;
+    narratorVoiceControls?: NarratorVoiceControls;
   }): Promise<{
     success: boolean;
     turnPackage?: StructuredTurnPackage;
@@ -7331,6 +7332,10 @@ export class MultiModelOrchestrator {
       ],
     });
 
+    const narrativeProfile = worldRepo.getNarrativeProfile(storyId);
+    const narratorVoiceState = NarratorVoiceEngine.resolve(worldRepo, storyId, narrativeProfile, params.narratorVoiceControls);
+    NarratorVoiceEngine.persist(worldRepo, storyId, narratorVoiceState);
+
     const narrationPrompt = buildNarrationPrompt({
       situation: currentSituation,
       intent: playerIntent,
@@ -7339,6 +7344,7 @@ export class MultiModelOrchestrator {
       workingContext: projectSupportingWorkingContext(assembledContext),
       globalInstruction: 'You are Dreamville’s narrative presentation engine. Generate only the player-facing narrative turn using the supplied canonical state, semantic player intent, bounded research, and ephemeral plan.',
       styleInstruction,
+      narratorVoiceState,
       canonicalOutcome: authoritativeOutcome,
       actionResolution: params.actionResolution,
       maxPromptTokens: Math.max(200, hardTokenBudget),

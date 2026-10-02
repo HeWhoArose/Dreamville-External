@@ -28,6 +28,8 @@ This matrix is the release contract for the Phase 1–16 architecture. It record
 | 20 | OrphanConnectionAudit | orphan/connection report | release audit | pre-release audit | unresolved entries block release | orphan audit test |
 | 21 | ReleaseGateDefinition | lint/test/build + scenario gate | release decision | candidate branch/main | no release claim without all gates | release-gate contract test |
 | 22 | Phase 22 stabilization contracts | stabilization invariants + regression suite | release verifier / release gate | release-candidate audit | fail-fast on stale/partial/orphaned closure | phase22-release-stabilization test |
+| 23 | Resolution architecture closure | ActionResolution / ResolutionGate / local spatial / NPC slice / commit ledger / provenance | narration + canonical commit + recovery | canonical action resolution | bounded deterministic resolution and explicit recovery | phase23 architecture/resolution tests |
+| 24 | System-wide phase audit | current producer → contract → consumer audit | release gate / architecture review | pre-release or cross-phase change | fail closed on missing required contract/test | system-wide-phase-audit.phase24 test |
 
 ## Canonical gameplay dependency chain
 

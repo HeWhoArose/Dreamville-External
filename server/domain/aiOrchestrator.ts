@@ -34,6 +34,7 @@ import { NarrativeStateAdjudicator, type StateAdjudicationResult } from './narra
 import { NarrativeContinuityStateEngine } from './narrativeContinuityState';
 import { NarratorVoiceEngine, type NarratorVoiceControls } from './narratorVoiceEngine';
 import { AiTurnCallBudget, type AiTurnCallBudgetSnapshot } from './aiTurnCallBudget';
+import { scoreModelForQualityTier, getAiTaskRoutingPolicy } from './aiQualityRouting';
 import type { ActionResolution } from './actionResolution';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
@@ -5592,6 +5593,7 @@ export class MultiModelOrchestrator {
     const customChainKeys = this.taskFallbackChains.get(routeTask);
     const category = this.getTaskCategory(task);
     const categoryOverrideKey = this.categoryOverrides.get(category);
+    const routingPolicy = getAiTaskRoutingPolicy(task);
 
     const findConfiguredModel = (key: string): ModelRegistryRecord | undefined => {
       let found = Array.from(this.models.values()).find(
@@ -5643,7 +5645,7 @@ export class MultiModelOrchestrator {
 
         return {
           selectedModel: overridden,
-          selectionReason: `Category-scoped manual override for ${category}; using the requested task's configured fallback route.`,
+          selectionReason: `Category-scoped manual override for ${category}; N19 ${routingPolicy.qualityTier} routing remains advisory beneath the explicit override, using the requested task's configured fallback route.`,
           selectionScore: overridden.userPriority + 1000,
           fallbacks: configuredFallbacks,
         };
@@ -5873,6 +5875,9 @@ export class MultiModelOrchestrator {
       // Latency penalty (prefer < 500ms)
       if (model.latencyMs > 1500) score -= 15;
 
+      // N19 quality-tier preference is additive to existing reliability/priority scoring.
+      score += Math.min(100, scoreModelForQualityTier(model, routingPolicy.qualityTier) * 0.5);
+
       // Failure penalty
       const failures = this.consecutiveFailures.get(`${model.providerId}::${model.modelId}`) || 0;
       score -= failures * 25;
@@ -5930,7 +5935,7 @@ export class MultiModelOrchestrator {
 
     return {
       selectedModel: best,
-      selectionReason: `Selected based on high priority (${best.userPriority}), health (${best.health}), and quota (${best.quota}).`,
+      selectionReason: `Selected for ${routingPolicy.qualityTier} quality / ${routingPolicy.cadence} cadence; priority (${best.userPriority}), health (${best.health}), and quota (${best.quota}) remained healthy.`,
       selectionScore: scored[0]?.score || best.userPriority,
       fallbacks,
     };

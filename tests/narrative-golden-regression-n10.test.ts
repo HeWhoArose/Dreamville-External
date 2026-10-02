@@ -46,7 +46,7 @@ function scenarioResponse(scenario: NarrativeGoldenScenario, variant: 'PRIMARY' 
 		case 'G02_INFORMATION':
 			return JSON.stringify({
 				narrative: [
-					'You ask about the starlight fissures without committing anyone to a certainty.',
+					'You investigate whether the starlight fissures are real without committing anyone to a certainty.',
 					'Archivist Maren can offer only uncertain hearsay: the fissures are unverified, and no reliable answer is established from the immediate evidence. ' + suffix,
 				],
 				dialogue: [], events: [], stateChanges: [], memoryCandidates: [], audioCues: [],

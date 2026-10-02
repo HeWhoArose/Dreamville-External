@@ -71,6 +71,23 @@ test('N3 explicit target matching raises entity relevance without bypassing epis
 	assert.ok(result.score >= 1);
 });
 
+test('N3 relationship research is emitted only for a focused player-authorized target', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	repository.seedStory('n3_relationship');
+	const situation = CurrentSituationBuilder.build({ storyId: 'n3_relationship', playerAction: 'I ask Archivist Maren.', worldRepo: repository });
+	const original = repository.getDynamicCharacterAgencyEngine('n3_relationship').getRelationship;
+	(repository.getDynamicCharacterAgencyEngine('n3_relationship') as any).getRelationship = () => ({ id: 'rel_1', sourceId: 'npc_maren', targetId: 'player', stance: 'FRIENDLY', activeCause: 'HELPED_PLAYER' });
+	const result = NarrativeResearchPipeline.research({
+		repository,
+		storyId: 'n3_relationship',
+		currentSituation: situation,
+		playerIntent: intent({ interactionMode: 'DIALOGUE', speechIntent: true, observationIntent: false, informationGoal: undefined, target: { id: 'npc_maren', name: 'Archivist Maren', kind: 'NPC', source: 'EXPLICIT' }, explicitTargets: [{ id: 'npc_maren', name: 'Archivist Maren', kind: 'NPC', source: 'EXPLICIT' }] }),
+		playerAction: 'I ask Archivist Maren.',
+	});
+	assert.ok(result.blocks.some((block) => block.kind === 'RELATIONSHIP'));
+	(repository.getDynamicCharacterAgencyEngine('n3_relationship') as any).getRelationship = original;
+});
+
 test('N3 production research exposes its semantic profile and retains existing scene boundary', () => {
 	const repository = new InMemoryWorldRepository({ disablePersistence: true });
 	repository.seedStory('n3_pipeline');

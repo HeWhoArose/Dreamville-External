@@ -1,6 +1,6 @@
 # Narrative Lifelike & Consistent Narration Roadmap — N1 to N12
 
-Status: **N2 implementing**
+Status: **N2 verified — N3 not started**
 Branch: `feat/narrative-quality-n1`
 Scope: Dreamville External narration/presentation layer only. The separate authoritative core engine remains authoritative.
 
@@ -580,4 +580,4 @@ Every AI call must have:
 - [x] lint green
 - [x] build green
 
-N1 verification completed green on PR #27: lint, full npm test, production build, and release-contract gate all passed on the final N1 commit. N2 is now implementing on branch `feat/narrative-quality-n2`. N3 must not begin until N2 passes the same connection, regression, lint, test, build, and release gates.
+N1 verification completed green on PR #27: lint, full npm test, production build, and release-contract gate all passed on the final N1 commit. N2 implementation and verification completed on branch `feat/narrative-quality-n2` / PR #28. N3 must not begin until N2 is intentionally accepted/merged.

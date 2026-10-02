@@ -10,6 +10,7 @@ import { NarrativeQualityContractEngine, type NarrativeQualityControls, type Nar
 import { NarratorVoiceEngine, type NarratorVoiceControls, type NarratorVoiceState } from './narratorVoiceEngine';
 import { NarrativeContinuityStateEngine, type NarrativeContinuityState } from './narrativeContinuityState';
 import { NarrativeNoveltyEngine, type NarrativeNoveltyState } from './narrativeNoveltyEngine';
+import { NarrativePacingEngine, type NarrativePacingContract, type NarrativePacingControls } from './narrativePacingEngine';
 
 export interface NarrationPromptInput {
 	situation: CurrentSituation;
@@ -26,7 +27,10 @@ export interface NarrationPromptInput {
 	narratorVoiceState?: NarratorVoiceState;
 	narratorVoiceControls?: NarratorVoiceControls;
 	narrativeContinuityState?: NarrativeContinuityState;
+	narrativePacingContract?: NarrativePacingContract;
 	narrativeNoveltyState?: NarrativeNoveltyState;
+	narrativePacingContract?: NarrativePacingContract;
+	narrativePacingControls?: Partial<NarrativePacingControls>;
 }
 
 export interface NarrationPromptResult {
@@ -141,6 +145,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	const narrativeNoveltyContext = NarrativeNoveltyEngine.toPromptContext(narrativeNoveltyState);
 	const narrativeContinuityContext = NarrativeContinuityStateEngine.toPromptContext(narrativeContinuityState);
 	const narrativeQualityContract = NarrativeQualityContractEngine.resolve(input.intent, input.narrativeQualityControls);
+	const narrativePacingContract = input.narrativePacingContract || NarrativePacingEngine.resolve({ situation: input.situation, intent: input.intent, actionResolution: input.actionResolution, canonicalOutcome: input.canonicalOutcome, continuityState: narrativeContinuityState, controls: input.narrativePacingControls });
 	const narrativeQualityContext = NarrativeQualityContractEngine.toPromptContext(narrativeQualityContract);
 	const promptBudgetVoiceContext = input.narratorVoiceState ? NarratorVoiceEngine.toPromptContext(input.narratorVoiceState) : 'Narrator Voice Contract: disabled for this turn.';
 	const promptBudgetQualityContext = input.maxPromptTokens && input.maxPromptTokens <= 1500
@@ -185,6 +190,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		section('NARRATIVE CONTINUITY STATE', narrativeContinuityContext),
 		section('NARRATIVE NOVELTY / REPETITION CONTROL', narrativeNoveltyContext),
 		section('NARRATIVE QUALITY CONTRACT', promptBudgetQualityContext),
+		section('ADAPTIVE PACING CONTRACT', NarrativePacingEngine.toPromptContext(narrativePacingContract)),
 		section('CURRENT SITUATION', overrides?.situationContext || situationContext),
 		section('PLAYER INTENT', overrides?.intentContext || intentContext),
 		section('ACTION RESOLUTION — AUTHORITATIVE', actionResolutionContext),
@@ -201,7 +207,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	const maxPromptTokens = input.maxPromptTokens;
 	if (!maxPromptTokens) {
 		const prompt = compose(initialResearch, initialWorking);
-		return { prompt, styleInstruction, totalTokens: WorkingContextEngine.estimateTokens(prompt), narrativeQualityContract, narratorVoiceState: input.narratorVoiceState, narrativeContinuityState };
+		return { prompt, styleInstruction, totalTokens: WorkingContextEngine.estimateTokens(prompt), narrativeQualityContract, narratorVoiceState: input.narratorVoiceState, narrativeContinuityState, narrativePacingContract };
 
 	}
 

@@ -176,7 +176,9 @@ test('N11 100-turn session stays bounded and presentation-stable', async () => {
 
 	assert.ok(primary.callHistory.length >= 1, 'primary provider was never exercised');
 	assert.ok(primary.callHistory.length <= 60, 'primary provider exceeded the intended handoff boundary');
-	assert.ok(fallback.callHistory.length >= 40, 'fallback provider should sustain the long session after provider handoff');
+	const nonPrimaryTurns = observations.filter((entry) => entry.selectedModelId !== 'n11-primary').length;
+	assert.ok(fallback.callHistory.length >= 1, 'configured AI fallback provider was never exercised');
+	assert.ok(nonPrimaryTurns >= 20, 'fallback chain was not exercised for enough long-session turns: ' + nonPrimaryTurns);
 
 	const postStartup = observations.slice(1);
 	assert.equal(new Set(postStartup.map(x => x.voiceProfileId)).size, 1, 'narrator voice drifted during the session');

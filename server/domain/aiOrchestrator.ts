@@ -25,6 +25,7 @@ import { NarrativeDirector, type EphemeralNarrativePlan } from './narrativeDirec
 import { buildNarrationPrompt, defaultNarrationStyle, projectSupportingWorkingContext } from './narrativePromptBuilder';
 import { SemanticNarrativeReview, type NarrativeReview } from './semanticNarrativeReview';
 import { LiteraryNarrativeReview, type LiteraryReview } from './literaryNarrativeReview';
+import { NarrativeRichnessEvaluator, type NarrativeRichnessEvaluation } from './narrativeRichnessEvaluation';
 import { NarrativeProviderHandoffEngine, type NarrativeProviderHandoffContract } from './narrativeProviderHandoff';
 import { NarrativePacingEngine, type NarrativePacingContract } from './narrativePacingEngine';
 import { NarrativeNoveltyEngine } from './narrativeNoveltyEngine';
@@ -543,6 +544,7 @@ export interface OrchestratedTurnResult {
   narrativePlan?: EphemeralNarrativePlan;
   narrativeReview?: NarrativeReview;
   literaryReview?: LiteraryReview;
+  narrativeRichnessEvaluation?: NarrativeRichnessEvaluation;
   stateAdjudication?: StateAdjudicationResult;
   turnPackage?: StructuredTurnPackage;
   telemetry: OrchestratedTurnTelemetry;
@@ -7190,6 +7192,7 @@ export class MultiModelOrchestrator {
     researchPacket?: ReturnType<typeof narrativeContinuityEngine.research>;
     narrativePlan?: EphemeralNarrativePlan;
     researchAudit?: Pick<NarrativeResearchResult, 'blocks' | 'excluded' | 'budgets' | 'totalTokens' | 'query'>;
+    narrativeRichnessEvaluation?: NarrativeRichnessEvaluation;
     contextAudit?: {
       hardTokenBudget: number;
       totalTokens: number;

@@ -7742,7 +7742,7 @@ export class MultiModelOrchestrator {
       const narratorVoiceState = NarratorVoiceEngine.resolve(repo, storyId, narrativeProfile, params.narratorVoiceControls);
       NarratorVoiceEngine.persist(repo, storyId, narratorVoiceState);
       const narrativeNoveltyState = NarrativeNoveltyEngine.resolve(repo, storyId);
-    const narrativePacingContract = NarrativePacingEngine.resolve({ situation: currentSituation, intent: playerIntent, actionResolution: params.actionResolution, canonicalOutcome: authoritativeOutcome, continuityState: NarrativeContinuityStateEngine.resolve(repo, storyId) });
+    const narrativePacingContract = NarrativePacingEngine.resolve({ situation: currentSituation, intent: playerIntent, actionResolution: params.actionResolution, continuityState: NarrativeContinuityStateEngine.resolve(repo, storyId) });
 
       // 1b. CH15 Source Adaptation Adjudication Check
       const narrationPrompt = isNarrativeTask && researchResult && narrativePlan
@@ -7756,6 +7756,7 @@ export class MultiModelOrchestrator {
             styleInstruction: defaultNarrationStyle(),
             narratorVoiceState,
             narrativeNoveltyState,
+            narrativePacingContract,
             maxPromptTokens: Math.max(200, hardTokenBudget),
           })
         : {

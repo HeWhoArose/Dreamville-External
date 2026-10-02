@@ -33,6 +33,9 @@ Historical audit documents may contain older environment or gate results. They r
 | S5 Persistent multi-world | CONNECTED | UniverseRuntimeService, WorldRepository, world-memory projections |
 | S6 Spatial authority | CONNECTED | SpatialAuthority, repository/query consumers, spatial audit |
 | S7 Canonical integration | CONNECTED | API → canonicalCommandEngine → simulation/event path |
+| Phase 8 Narrative memory lifecycle | CONNECTED | NarrativeMemoryLifecycle → durable memory/thread/plot state → next turn |
+| Phase 9 Entity scene relevance | CONNECTED | EntitySceneRelevanceEngine → research/action/visual projections |
+| Phase 10 Epistemic boundary | CONNECTED | EpistemicBoundaryEnforcer → player-safe research/context |
 | Phase 8.5 Combat / effects | CONNECTED | combat/effect routing, simulation/presentation separation, audit trail |
 | Phase 11 Action Suggestions | CONNECTED | StoryActionAdvisor → StoryView/API |
 | Phase 12 AI budget/fallback | CONNECTED | AiTurnCallBudget → orchestrator |

@@ -311,15 +311,16 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				totalTokens = WorkingContextEngine.estimateTokens(prompt);
 			}
 		} else if (maxPromptTokens >= 1000) {
+			const tightEpisodeBudget = Boolean(presentationPlan.episodeProjection) && maxPromptTokens <= 2000;
 			const compact = {
 				intentContext: intentContext,
-				researchContext: truncatePromptSection(initialResearch, 700),
-				planContext: truncatePromptSection(planContext, 300),
+				researchContext: truncatePromptSection(initialResearch, tightEpisodeBudget ? 520 : 700),
+				planContext: truncatePromptSection(planContext, tightEpisodeBudget ? 180 : 300),
 				sceneCompositionContext: SceneCompositionEngine.toCompactPromptContext(sceneComposition),
 				socialTopologyContext: truncatePromptSection(socialTopologyContext, 520),
 				episodeProjectionContext: truncatePromptSection(NarrativeEpisodeProjectionEngine.toCompactPromptContext(presentationPlan.episodeProjection), 100),
-				workingContext: truncatePromptSection(initialWorking, 320),
-				situationContext: truncatePromptSection(situationContext, 900),
+				workingContext: truncatePromptSection(initialWorking, tightEpisodeBudget ? 180 : 320),
+				situationContext: truncatePromptSection(situationContext, tightEpisodeBudget ? 700 : 900),
 			};
 			const renderCompact = () => compose(
 				compact.researchContext,

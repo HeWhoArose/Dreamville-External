@@ -57,3 +57,5 @@ Targeted tests cover:
 N15 is serialized as its own prompt section by the existing Narrative Prompt Builder. This prevents prompt-budget truncation of the social contract merely because the broader Narrative Director plan is compacted.
 
 The compact prompt audit uses the existing supported prompt-budget boundary without changing legacy compaction thresholds; N15 remains a first-class section in all existing compact serialization paths.
+
+The N15 compact-budget regression uses the repository's established 2000-token prompt boundary; this preserves the existing compact serializer behavior while asserting that the N15 section remains present and the resulting prompt stays within that contract.

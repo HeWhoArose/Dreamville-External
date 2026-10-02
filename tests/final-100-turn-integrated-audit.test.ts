@@ -225,7 +225,7 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 		if (turn === 91) fast.failureMode = '500';
 		if (turn === 96) fast.failureMode = undefined;
 
-		const action = 'I move closer to hear the rumors.';
+		const action = 'I ask Maren what happened to the expedition charts.';
 
 		const response = responseForTurn(turn, situation.location.name, target!.name);
 		primary.cannedResponses.set('narrative.generate', response);

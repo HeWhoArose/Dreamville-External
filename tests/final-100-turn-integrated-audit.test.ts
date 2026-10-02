@@ -221,7 +221,7 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 
 		observations.push({
 			turn,
-			selectedModelId: result.modelId,
+			selectedModelId: result.telemetry.selectedModelId,
 			promptChars: narrationCall.length,
 			phase: result.narrativePlan.episodeProjection?.phase || 'UNKNOWN',
 			richnessDecision: result.narrativeRichnessEvaluation?.decision || 'UNKNOWN',

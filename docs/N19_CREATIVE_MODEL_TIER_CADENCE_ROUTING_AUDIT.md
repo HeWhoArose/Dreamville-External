@@ -74,7 +74,7 @@ Before CI, a source-level re-audit found two wiring defects:
 1. The selector referenced routingPolicy before binding it.
 2. The first quality-score insertion did not survive the initial source transformation.
 
-Both were corrected before pre-merge verification.
+Both were corrected before pre-merge verification. The first Release Gate then exposed a stale out-of-scope binding at compile time; that stray binding was removed and the exact selector-local binding was added. The corrected head is the one under current CI verification.
 
 ## Authority graph
 

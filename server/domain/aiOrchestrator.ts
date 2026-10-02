@@ -8026,7 +8026,8 @@ export class MultiModelOrchestrator {
               }
               reviewedTurnPackage = reviewed.turnPackage;
               narrativeReview = reviewed.review;
-              const literary = LiteraryNarrativeReview.review({ intent: playerIntent, situation: currentSituation, plan: narrativePlan, turnPackage: reviewedTurnPackage, voice: narratorVoiceState, noveltyState: narrativeNoveltyState, previousNarrations: currentSituation.recentTurns.map((entry) => String(entry.narration || '')).filter(Boolean) });
+              const narrativeNoveltyStateForReview = NarrativeNoveltyEngine.resolve(worldRepo, storyId);
+              const literary = LiteraryNarrativeReview.review({ intent: playerIntent, situation: currentSituation, plan: narrativePlan, turnPackage: reviewedTurnPackage, voice: narratorVoiceState, noveltyState: narrativeNoveltyStateForReview, previousNarrations: currentSituation.recentTurns.map((entry) => String(entry.narration || '')).filter(Boolean) });
               literaryReview = literary;
               if (literary.decision === 'REWRITE') {
                 const literaryBudget = turnAiCallBudget.beginTask('narrative.review');

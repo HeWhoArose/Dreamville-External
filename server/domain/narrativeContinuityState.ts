@@ -161,7 +161,7 @@ function deriveConversationalTension(intent: PlayerIntent, narration: string, pl
 export class NarrativeContinuityStateEngine {
 	public static readonly NAMESPACE = 'runtimeState.narrativeContinuity';
 
-	public static resolve(repository: { getStoryRun(storyId: string): any; getWorldClock(storyId: string): { getTimestamp(): Date } }, storyId: string, controls: Partial<NarrativeContinuityControls> = {}): NarrativeContinuityState {
+	public static resolve(repository: { getStoryRun(storyId: string): any; getWorldClock(storyId: string): { getTimestamp(): any } }, storyId: string, controls: Partial<NarrativeContinuityControls> = {}): NarrativeContinuityState {
 		const effective = { ...DEFAULT_NARRATIVE_CONTINUITY_CONTROLS, ...controls };
 		const run = repository.getStoryRun(storyId);
 		const persisted = run?.runtimeState?.narrativeContinuity;
@@ -179,7 +179,7 @@ export class NarrativeContinuityStateEngine {
 	}
 
 	public static recordAcceptedTurn(params: {
-		repository: { getStoryRun(storyId: string): any; saveStoryRun(run: any): void; getWorldClock(storyId: string): { getTimestamp(): Date }; getDynamicCharacterAgencyEngine?: (storyId: string) => any };
+		repository: { getStoryRun(storyId: string): any; saveStoryRun(run: any): void; getWorldClock(storyId: string): { getTimestamp(): any }; getDynamicCharacterAgencyEngine?: (storyId: string) => any };
 		storyId: string;
 		turnId: string;
 		situation: CurrentSituation;

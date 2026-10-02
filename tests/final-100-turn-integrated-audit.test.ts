@@ -36,10 +36,10 @@ function responseForTurn(turn: number, location: string, target: string): string
 	if (turn === 1) {
 		return JSON.stringify({
 			narrative: [
-				'You move closer to the Whispering Orrery archivists without speaking, keeping your attention on the low conversation.',
-				'The whispers mention unstable starlight fissures in the lower sea, though the speakers treat the report as uncertain hearsay.',
+				`You ask ${target} about the expedition charts without assuming the answer.`,
+				`${target} pauses over the sealed chart case, and the response stays cautious rather than turning the report into certainty.`,
 			],
-			dialogue: [],
+			dialogue: [{ speaker: target, text: 'The charts are sealed, and the report remains uncertain.' }],
 			events: ['RESEARCHED_RUMOR_HEARD'],
 			stateChanges: [],
 			memoryCandidates: [],
@@ -215,7 +215,7 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 		// N13 is intentionally resolved at the final prompt stage; verify it at its real consumer boundary below.
 		assert.ok(result.narrativePlan?.socialTopology, 'turn ' + turn + ': N15 social topology missing');
 		assert.ok(result.narrativePlan?.episodeProjection, 'turn ' + turn + ': N17 episode projection missing');
-		assert.ok(result.narrativePlan?.npcCognition?.some((npc) => npc.actorId === target!.id && npc.expressiveIdentity), 'turn ' + turn + ': N14 expressive NPC identity missing');
+		assert.ok(result.narrativePlan?.npcCognition?.some((npc) => npc.actorId === target!.id && npc.expressiveIdentity), 'turn ' + turn + ': N14 expressive NPC identity missing for explicit target ' + target!.name);
 		assert.notEqual(result.telemetry.selectedModelId, 'canon-guard', 'turn ' + turn + ': integrated audit unexpectedly short-circuited before narration generation');
 		assert.ok(result.narrativeRichnessEvaluation, 'turn ' + turn + ': N18 richness evaluation missing; model=' + result.telemetry.selectedModelId + '; provider=' + result.telemetry.selectedProviderId + '; plan=' + Boolean(result.narrativePlan) + '; review=' + result.narrativeReview?.decision + '; telemetryRichness=' + Boolean(result.telemetry.narrativeRichnessEvaluation) + '; attempts=' + result.telemetry.attempts);
 		const researchBlockCount = Number(result.telemetry.researchBlockCount || 0);

@@ -187,7 +187,7 @@ test('Phase 3-5 narrative context survives malformed primary output and reaches 
 	assert.match(fallback.callHistory[0].prompt, /speechIntent[\s":]+false/i);
 	assert.match(fallback.callHistory[0].prompt, /starlight fissures/i);
 	assert.match(fallback.callHistory[0].options?.systemInstruction || '', /N9 PROVIDER HANDOFF CONTRACT/i);
-	assert.match(fallback.callHistory[0].options?.systemInstruction || '', /provider\\/model changes must alter implementation only/i);
+	assert.match(fallback.callHistory[0].options?.systemInstruction || '', /provider\/model changes must alter implementation only/i);
 });
 
 test('Phase 3-5 emergency floor receives the same context and remains semantically anchored when AI is unavailable', async () => {

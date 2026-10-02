@@ -3,6 +3,7 @@ import type { EphemeralNarrativePlan } from './narrativeDirector';
 import type { StructuredTurnPackage } from './aiOrchestrator';
 import type { PlayerIntent } from './playerIntentInterpreter';
 import type { NarratorVoiceState } from './narratorVoiceEngine';
+import { NarrativeNoveltyEngine, type NarrativeNoveltyState } from './narrativeNoveltyEngine';
 
 export type LiteraryReviewDecision = 'ACCEPT' | 'REWRITE';
 export type LiteraryIssueCode =
@@ -94,6 +95,7 @@ export class LiteraryNarrativeReview {
 		turnPackage: StructuredTurnPackage;
 		voice?: NarratorVoiceState;
 		previousNarrations?: string[];
+		noveltyState?: NarrativeNoveltyState;
 	}): LiteraryReview {
 		const text = params.turnPackage.narrative.join(' ').trim();
 		const issues: LiteraryIssue[] = [];
@@ -101,6 +103,7 @@ export class LiteraryNarrativeReview {
 
 		const ss = sentences(text);
 		const previous = (params.previousNarrations || []).filter(Boolean).slice(-6);
+		const novelty = params.noveltyState ? NarrativeNoveltyEngine.inspect({ repository: { getStoryRun: () => ({ runtimeState: { narrativeNovelty: params.noveltyState } }) }, storyId: params.noveltyState.storyId, narration: text }) : undefined;
 		if (genericOpening(text)) issues.push({ code: 'GENERIC_OPENING', message: 'Opening uses a generic AI-like character/action construction.', severity: 'MEDIUM', evidence: ss[0] });
 		const phrase = repeatedPhrase(text);
 		if (phrase) issues.push({ code: 'REPETITIVE_PHRASE', message: 'The same four-word phrase appears more than once in this turn.', severity: 'MEDIUM', evidence: phrase });
@@ -115,6 +118,7 @@ export class LiteraryNarrativeReview {
 		if (params.intent.observationIntent && estimateEmotionalVariety(text) === 0 && ss.length >= 3) {
 			issues.push({ code: 'TELLING_INSTEAD_OF_SHOWING', message: 'Observation-heavy narration has little observable human/emotional reaction.', severity: 'LOW' });
 		}
+		if (novelty?.discouraged?.length) issues.push({ code: 'REPETITIVE_PHRASE', message: 'N7 novelty ledger detected recently/repeated narrative patterns.', severity: novelty.discouraged.some((item) => item.category === 'TROPE') ? 'HIGH' : 'MEDIUM', evidence: novelty.discouraged.slice(0, 3).map((item) => item.text).join(', ') });
 		if (previous.length > 0) {
 			const previousOpenings = new Set(previous.map((n) => sentences(n)[0]?.slice(0, 55).toLowerCase()).filter(Boolean));
 			if (previousOpenings.has(ss[0]?.slice(0, 55).toLowerCase())) issues.push({ code: 'REPETITIVE_STRUCTURE', message: 'The opening structure closely repeats a recent narration opening.', severity: 'MEDIUM' });

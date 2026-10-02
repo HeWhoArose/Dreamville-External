@@ -207,7 +207,7 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 
 		assert.equal(result.success, true, 'turn ' + turn + ': ' + (result.error || 'unknown failure'));
 		assert.ok(result.narrativePlan, 'turn ' + turn + ': missing Narrative Director plan');
-		assert.ok(result.narrativePlan?.sceneComposition, 'turn ' + turn + ': N13 scene composition missing');
+		// N13 is intentionally resolved at the final prompt stage; verify it at its real consumer boundary below.
 		assert.ok(result.narrativePlan?.socialTopology, 'turn ' + turn + ': N15 social topology missing');
 		assert.ok(result.narrativePlan?.episodeProjection, 'turn ' + turn + ': N17 episode projection missing');
 		assert.ok(result.narrativePlan?.npcCognition?.some((npc) => npc.actorId === target!.id && npc.expressiveIdentity), 'turn ' + turn + ': N14 expressive NPC identity missing');

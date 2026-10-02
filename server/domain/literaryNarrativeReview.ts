@@ -4,6 +4,7 @@ import type { StructuredTurnPackage } from './aiOrchestrator';
 import type { PlayerIntent } from './playerIntentInterpreter';
 import type { NarratorVoiceState } from './narratorVoiceEngine';
 import { NarrativeNoveltyEngine, type NarrativeNoveltyState } from './narrativeNoveltyEngine';
+import { NarrativeRichnessEvaluator, type NarrativeRichnessEvaluation } from './narrativeRichnessEvaluation';
 
 export type LiteraryReviewDecision = 'ACCEPT' | 'REWRITE';
 export type LiteraryIssueCode =
@@ -127,7 +128,7 @@ export class LiteraryNarrativeReview {
 		return { decision: issues.some((i) => i.severity === 'HIGH' || i.severity === 'MEDIUM') ? 'REWRITE' : 'ACCEPT', issues, score, source: 'DETERMINISTIC', confidence: 0.86 };
 	}
 
-	public static buildRewritePrompt(params: { review: LiteraryReview; turnPackage: StructuredTurnPackage; intent: PlayerIntent; situation: CurrentSituation; plan: EphemeralNarrativePlan }): string {
+	public static buildRewritePrompt(params: { review: LiteraryReview; turnPackage: StructuredTurnPackage; intent: PlayerIntent; situation: CurrentSituation; plan: EphemeralNarrativePlan; richnessEvaluation?: NarrativeRichnessEvaluation }): string {
 		return [
 			'Perform one literary polish pass on the existing Dreamville turn.',
 			'Do not change canonical facts, state changes, player choices, outcomes, knowledge boundaries, or plot direction.',
@@ -135,6 +136,7 @@ export class LiteraryNarrativeReview {
 			'Prefer specific scene details, distinct character behavior, varied sentence rhythm, restrained exposition, and observable emotion.',
 			'Never add a fact merely to make prose more interesting.',
 			'Literary review: ' + JSON.stringify(params.review),
+			params.richnessEvaluation ? NarrativeRichnessEvaluator.buildRewriteGuidance(params.richnessEvaluation) : '',
 			'Player intent: ' + JSON.stringify(params.intent),
 			'Plan: ' + JSON.stringify(params.plan),
 			'Current situation: ' + JSON.stringify({ location: params.situation.location, nearbyEntities: params.situation.nearbyEntities.filter((e) => e.visibleToPlayer).slice(0, 8), activeDialogue: params.situation.activeDialogue }),

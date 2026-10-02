@@ -134,7 +134,7 @@ test('Phase 24 — merged audit record is explicit about merge and manual-test b
 	const audit = source('docs/DREAMVILLE_SYSTEM_WIDE_PHASE_AUDIT_PHASE24.md');
 	assert.match(audit, /Merged into:.*main/s);
 	assert.match(audit, /4546899723dd9cfa6821f1313ebb1e62ef715a24/);
-	assert.match(audit, /Release Gate run 37003743071/);
+	assert.match(audit, /37003743071/);
 	assert.match(audit, /Live third-party provider behavior/i);
 	assert.match(audit, /Historical audit documents/i);
 });

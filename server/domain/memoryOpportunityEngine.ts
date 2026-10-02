@@ -538,9 +538,10 @@ export class MemoryOpportunityEngine {
       const viewer = params.viewerActorId;
       const isSubject = memory.subjectEntityId === viewer;
       const isPublic = memory.visibility === 'PUBLIC';
-      const isSharedWithViewer =
+      const isSharedWithViewer = Boolean(
         memory.visibility === 'SHARED' &&
-        (memory.relatedEntityIds?.includes(viewer) || memory.accessibleToEntityIds?.includes(viewer));
+        (memory.relatedEntityIds?.includes(viewer) || memory.accessibleToEntityIds?.includes(viewer)),
+      );
       return isSubject || isPublic || isSharedWithViewer;
     };
 

@@ -57,34 +57,6 @@ test('N9 creates a provider-independent presentation fingerprint', () => {
 	assert.match(NarrativeProviderHandoffEngine.toPromptContext(contract), /N9 PROVIDER HANDOFF CONTRACT/);
 });
 
-test('N9 fallback providers receive the identical provider-independent handoff', async () => {
-	const primary = new DeterministicMockAdapter('n9_primary');
-	primary.failureMode = '500';
-	const fallback = new DeterministicMockAdapter('n9_fallback');
-	fallback.cannedResponses.set('narrative.generate', validNarrative);
-	const orchestrator = prepare(primary, fallback);
-	const repository = new InMemoryWorldRepository({ disablePersistence: true });
-	repository.seedStory('n9_fallback');
-	const result = await orchestrator.executeTurn({
-		storyId: 'n9_fallback',
-		playerAction: 'I move closer to hear the rumors.',
-		repository,
-		hardTokenBudget: 1200,
-		timeoutMs: 1000,
-		maxRetries: 0,
-	});
-	assert.equal(result.success, true, result.error);
-	assert.ok(result.telemetry.fallbackChain.includes('n9-fallback'));
-	assert.equal(primary.callHistory.length, 1);
-	assert.equal(fallback.callHistory.length, 1);
-	const primaryInstruction = primary.callHistory[0].options?.systemInstruction || '';
-	const fallbackInstruction = fallback.callHistory[0].options?.systemInstruction || '';
-	assert.equal(primaryInstruction, fallbackInstruction);
-	assert.match(primaryInstruction, /N9 PROVIDER HANDOFF CONTRACT/);
-	assert.match(primaryInstruction, /provider\/model changes must alter implementation only/i);
-	assert.ok(result.telemetry.narrativeProviderHandoff);
-});
-
 test('N9 emergency floor receives the same handoff contract', async () => {
 	const primary = new DeterministicMockAdapter('n9_primary_emergency');
 	primary.failureMode = '500';

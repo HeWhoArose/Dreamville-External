@@ -519,28 +519,30 @@ FINAL CONNECTION AUDIT
 
 ### N12 completion record
 
-N12 final architecture audit completed on PR #38, final verified commit `6d367fec40b75132edb9e311c32be7cb634e9937`.
+N12 final architecture audit completed on PR #38, final verified commit `81fc08170689c942c35ef1ff6a867fbb892359eb`.
 
-The audit found four production-path integration gaps and closed them:
+The audit found and closed the remaining production-path integration gaps:
 
 - N5 NPC cognition was not reaching the primary `executeTurn` NarrativeDirector path because repository/story identity was omitted.
-- Semantic repair calls could lose the N9 provider-independent handoff and used a fixed token budget instead of the active N8-derived budget.
-- The primary `executeTurn` path enforced fewer presentation backstops than the presentation-only path. A shared final presentation validator now covers N8 pacing, scene/action continuity, passive-listening safety, information continuity, and temporal continuity.
-- Literary and emergency recovery paths could bypass parts of the N6/N7/N8 acceptance contract. Rewrites and emergency output are now revalidated before acceptance.
+- Live narration was resolving N4 continuity for pacing but was not passing that persisted state into `buildNarrationPrompt`; both paths now consume the same resolved continuity state.
+- Semantic and literary repair calls are now bound to the N9 provider-independent handoff and the active N8-derived output budget.
+- The primary and emergency `executeTurn` paths now share the final presentation validation contract for N8 pacing, scene/action continuity, passive-listening safety, information continuity, and temporal continuity; emergency output is also rechecked through N6/N7 before acceptance.
+- The orchestrator had a duplicate N7 accepted-turn recorder; the lifecycle is now the single authority.
+- `NarrativeMemoryLifecycle` could save a stale runtime snapshot after N7/N4 updates and overwrite those fresh states. The lifecycle now writes the returned N4/N7 states back into its local runtime snapshot before the final save, preserving long-session progression.
 
 A regression fixture in `tests/phase1_5b_gaps.test.ts` was also hardened so fallback verification remains focused on fallback routing while producing prose compatible with the full N1–N9 presentation contract. The tertiary assertion now verifies successful recovery and selected-model ownership rather than assuming the provider can never be reused for quality repair.
 
-Final verification on the exact N12 head:
+Final verification on the exact N12 head `81fc08170689c942c35ef1ff6a867fbb892359eb`:
 
 - Verification workflow A: **green**
 - Verification workflow B: **green**
 - Release Gate: **green**
 - Typecheck: **green**
 - Lint: **green**
-- Full test suite: **green**
+- Full test suite: **green — 1,349 tests passed**
 - Production build: **green**
 - N12 integration regression: **green**
-- N11 100-turn stress regression remains covered by the full test suite
+- N11 100-turn stress regression: **green within the full suite, including the 100-turn long-session test**
 
 N11 remains the verified engineering base for N12; PR #37 remains open and unmerged. N12 PR #38 is also open and unmerged. This roadmap records verification state only; no merge is implied.
 
@@ -607,4 +609,4 @@ Every AI call must have:
 - [x] lint green
 - [x] build green
 
-N1 verification completed green on PR #27: lint, full npm test, production build, and release-contract gate all passed on the final N1 commit. N2 implementation and verification completed on PR #28. N3 implementation and verification completed on PR #29. N4 implementation and verification completed on PR #30. N5 implementation and verification completed on PR #31. N6 implementation and verification completed on PR #32. N7 implementation and verification completed on PR #33. N12 must not begin until N11 is intentionally accepted/merged.
+N1 verification completed green on PR #27: lint, full npm test, production build, and release-contract gate all passed on the final N1 commit. N2 implementation and verification completed on PR #28. N3 implementation and verification completed on PR #29. N4 implementation and verification completed on PR #30. N5 implementation and verification completed on PR #31. N6 implementation and verification completed on PR #32. N7 implementation and verification completed on PR #33. N8 implementation and verification completed on PR #34. N9 implementation and verification completed on PR #35. N10 implementation and verification completed on PR #36. N11 implementation and verification completed on PR #37. N12 implementation and verification completed on PR #38.

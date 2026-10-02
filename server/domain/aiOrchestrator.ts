@@ -34,12 +34,7 @@ import { NarrativeStateAdjudicator, type StateAdjudicationResult } from './narra
 import { NarrativeContinuityStateEngine } from './narrativeContinuityState';
 import { NarratorVoiceEngine, type NarratorVoiceControls } from './narratorVoiceEngine';
 import { AiTurnCallBudget, type AiTurnCallBudgetSnapshot } from './aiTurnCallBudget';
-import { compareModelsForQualityTier, getAiTaskRoutingPolicy } from './aiQualityRouting';
-
-const compareQuality = (model: ModelRegistryRecord, tier: Parameters<typeof compareModelsForQualityTier>[2]): number => {
-  const qualityBase = compareModelsForQualityTier(model, model, tier);
-  return qualityBase;
-};
+import { scoreModelForQualityTier, getAiTaskRoutingPolicy } from './aiQualityRouting';
 import type { ActionResolution } from './actionResolution';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';

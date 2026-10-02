@@ -104,8 +104,8 @@ export class LiteraryNarrativeReview {
 		if (genericOpening(text)) issues.push({ code: 'GENERIC_OPENING', message: 'Opening uses a generic AI-like character/action construction.', severity: 'MEDIUM', evidence: ss[0] });
 		const phrase = repeatedPhrase(text);
 		if (phrase) issues.push({ code: 'REPETITIVE_PHRASE', message: 'The same four-word phrase appears more than once in this turn.', severity: 'MEDIUM', evidence: phrase });
-		if (sceneSpecificity(text, params.situation) < 0.15 && params.situation.nearbyEntities.some((e) => e.visibleToPlayer)) {
-			issues.push({ code: 'LOW_SCENE_SPECIFICITY', message: 'Narration contains few concrete anchors from the current scene.', severity: 'MEDIUM' });
+		if (sceneSpecificity(text, params.situation) < 0.08 && params.situation.nearbyEntities.some((e) => e.visibleToPlayer)) {
+			issues.push({ code: 'LOW_SCENE_SPECIFICITY', message: 'Narration contains few concrete anchors from the current scene.', severity: 'LOW' });
 		}
 		if (styleMismatch(text, params.voice)) issues.push({ code: 'VOICE_MISMATCH', message: 'Narration uses a forbidden narrator phrase.', severity: 'HIGH' });
 		if (ss.length >= 5 && ss.every((s) => s.length > 110)) issues.push({ code: 'REPETITIVE_STRUCTURE', message: 'The turn is a sequence of uniformly long sentences.', severity: 'LOW' });

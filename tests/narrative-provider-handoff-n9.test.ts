@@ -65,22 +65,16 @@ test('N9 fallback providers receive the identical provider-independent handoff',
 	const orchestrator = prepare(primary, fallback);
 	const repository = new InMemoryWorldRepository({ disablePersistence: true });
 	repository.seedStory('n9_fallback');
-	const situation = CurrentSituationBuilder.build({ storyId: 'n9_fallback', playerAction: 'I move closer.', worldRepo: repository });
-	const intent = PlayerIntentInterpreter.deterministic('I move closer.', situation);
-	const voice = NarratorVoiceEngine.resolve(repository, 'n9_fallback');
-	const quality = NarrativeQualityContractEngine.resolve(intent);
-	const pacing = NarrativePacingEngine.resolve({ situation, intent });
-	const continuity = NarrativeContinuityStateEngine.defaultState('n9_fallback');
-	const novelty = NarrativeNoveltyEngine.defaultState('n9_fallback');
-	const handoff = NarrativeProviderHandoffEngine.resolve({ storyId: 'n9_fallback', turnId: situation.turnId, voice, quality, pacing, continuity, novelty });
-	const result = await orchestrator.executeTaskGeneration('narrative.generate', 'N9 fallback handoff test', 'base narrator instruction', {
-		narrativeHandoff: handoff,
+	const result = await orchestrator.executeTurn({
+		storyId: 'n9_fallback',
+		playerAction: 'I move closer to hear the rumors.',
+		repository,
+		hardTokenBudget: 1200,
 		timeoutMs: 1000,
-		maxTokens: 500,
-		allowDeterministicFallback: true,
-		validateResponse: () => ({ valid: true }),
+		maxRetries: 0,
 	});
-	assert.equal(result.source, 'AI_FALLBACK');
+	assert.equal(result.success, true, result.error);
+	assert.equal(result.telemetry.selectedModelId, 'n9-fallback');
 	assert.equal(primary.callHistory.length, 1);
 	assert.equal(fallback.callHistory.length, 1);
 	const primaryInstruction = primary.callHistory[0].options?.systemInstruction || '';
@@ -88,7 +82,7 @@ test('N9 fallback providers receive the identical provider-independent handoff',
 	assert.equal(primaryInstruction, fallbackInstruction);
 	assert.match(primaryInstruction, /N9 PROVIDER HANDOFF CONTRACT/);
 	assert.match(primaryInstruction, /provider\/model changes must alter implementation only/i);
-	assert.ok(result.narrativeProviderHandoff);
+	assert.ok(result.telemetry.narrativeProviderHandoff);
 });
 
 test('N9 emergency floor receives the same handoff contract', async () => {

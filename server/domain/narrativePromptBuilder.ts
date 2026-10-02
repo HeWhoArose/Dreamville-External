@@ -351,6 +351,6 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			totalTokens = WorkingContextEngine.estimateTokens(prompt);
 		}
 	}
-	return { prompt, styleInstruction, totalTokens, narrativeQualityContract, narratorVoiceState: input.narratorVoiceState };
+	return { prompt, styleInstruction, totalTokens, narrativeQualityContract, narratorVoiceState: input.narratorVoiceState, narrativeContinuityState, narrativePacingContract };
 }
 

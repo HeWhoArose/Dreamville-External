@@ -33,6 +33,7 @@ export interface NarrativeEpisodeProjection {
 	recentBeats: string[];
 	activeThreadIds: string[];
 	activeThreadSummaries: string[];
+	memoryCues: string[];
 	keyEntities: string[];
 	continuityAnchors: string[];
 	pressurePoints: string[];
@@ -45,7 +46,7 @@ export interface NarrativeEpisodeProjection {
 }
 
 function normalize(value: unknown): string {
-	return String(value ?? '').replace(/s+/g, ' ').trim();
+	return String(value ?? '').replace(/\s+/g, ' ').trim();
 }
 
 function lower(value: unknown): string {
@@ -78,8 +79,33 @@ function unresolvedThreads(situation: CurrentSituation): Array<{ id: string; tit
 		.slice(0, 5);
 }
 
-function containsAny(text: string, terms: string[]): boolean {
-	return terms.some((term) => text.includes(term));
+function hasAnySignal(text: string, terms: string[]): boolean {
+	return new RegExp('\\b(?:' + terms.join('|') + ')\\b', 'i').test(text);
+}
+
+function hasAffirmedResolution(text: string): boolean {
+	return hasAnySignal(text, ['resolved', 'answered', 'confirmed', 'found', 'completed', 'finished', 'settled', 'closed', 'reassured', 'safe']);
+}
+
+function hasNegatedResolution(text: string): boolean {
+	return (
+		/\b(?:not|never|still|yet|cannot|can't|could not|couldn't|has not|hasn't|have not|haven't|remains?|remain|unresolved|unanswered)\b.{0,42}\b(?:resolved|answered|confirmed|found|completed|finished|settled|closed|reassured|safe)\b/i.test(text) ||
+		/\b(?:resolved|answered|confirmed|found|completed|finished|settled|closed|reassured|safe)\b.{0,24}\b(?:not|never|still|yet)\b/i.test(text)
+	);
+}
+
+function hasComplicationSignal(text: string): boolean {
+	return hasAnySignal(text, [
+		'but', 'however', 'uncertain', 'unknown', 'refused', 'failed', 'missing',
+		'still', 'rumor', 'rumour', 'warning', 'danger', 'unresolved', 'unanswered',
+	]);
+}
+
+function hasTurningPointSignal(text: string): boolean {
+	return hasAnySignal(text, [
+		'revealed', 'reveals', 'discovered', 'discovers', 'uncovered', 'uncovers',
+		'learned', 'learns', 'betrayed', 'betrays', 'unexpected', 'instead', 'changed', 'changes',
+	]);
 }
 
 function classifyPhase(
@@ -93,25 +119,30 @@ function classifyPhase(
 	const latest = lower(history.at(-1)?.narration || '');
 	const hasHistory = history.length > 0;
 	const hasOpenThread = threads.length > 0;
-	const hasResolutionLanguage = containsAny(latest, ['resolved', 'answered', 'confirmed', 'found', 'completed', 'finished', 'safe', 'reassured', 'settled']);
-	const hasComplicationLanguage = containsAny(allRecent, ['but', 'however', 'uncertain', 'unknown', 'refused', 'failed', 'missing', 'still', 'rumor', 'rumour', 'warning', 'danger']);
+	const affirmedResolution = hasAffirmedResolution(latest) && !hasNegatedResolution(latest);
 	const highPressure = continuity.tension >= 65 || continuity.sceneMomentum === 'ESCALATING';
 	const building = continuity.sceneMomentum === 'BUILDING';
 
 	if (!hasHistory || situation.currentAction?.action === 'start' || situation.turnId === 'opening') {
 		return { phase: 'OPENING', trajectory: 'ESTABLISH', reason: 'There is insufficient prior accepted-turn history to justify a later episode phase.' };
 	}
-	if (hasResolutionLanguage && !hasOpenThread && continuity.sceneMomentum === 'RELEASING') {
-		return { phase: 'AFTERMATH', trajectory: 'RELEASE', reason: 'Recent narration contains resolution signals and no active thread requires continuation.' };
+	if (affirmedResolution && !hasOpenThread && continuity.sceneMomentum === 'RELEASING') {
+		return { phase: 'AFTERMATH', trajectory: 'RELEASE', reason: 'Recent narration contains an affirmed resolution, no active thread requires continuation, and continuity is releasing.' };
 	}
-	if (hasResolutionLanguage && hasOpenThread && !highPressure) {
-		return { phase: 'RESOLUTION', trajectory: 'RELEASE', reason: 'A recent beat appears resolved while another bounded thread remains available for continuation.' };
+	if (hasTurningPointSignal(latest) && hasOpenThread && (building || highPressure || Boolean(intent.informationGoal))) {
+		return { phase: 'TURNING_POINT', trajectory: 'TURN', reason: 'The latest bounded narration contains a change/discovery signal while the episode still carries active pressure or an unresolved thread.' };
 	}
-	if (highPressure && hasComplicationLanguage) {
+	if (highPressure && hasComplicationSignal(allRecent)) {
 		return { phase: 'ESCALATION', trajectory: 'ESCALATE', reason: 'Canonical continuity shows elevated tension or momentum alongside a recent complication signal.' };
 	}
-	if (intent.informationGoal && hasComplicationLanguage) {
+	if (intent.informationGoal && hasComplicationSignal(allRecent)) {
 		return { phase: 'COMPLICATION', trajectory: 'BUILD', reason: 'The current information objective remains shaped by uncertainty, refusal, or an unresolved complication.' };
+	}
+	if (affirmedResolution && !hasOpenThread) {
+		return { phase: 'RESOLUTION', trajectory: 'RELEASE', reason: 'The latest bounded narration contains an affirmed resolution and there is no active thread requiring continuation.' };
+	}
+	if (affirmedResolution && hasOpenThread && !highPressure) {
+		return { phase: 'RESOLUTION', trajectory: 'RELEASE', reason: 'A recent beat appears resolved while another bounded thread remains available for continuation.' };
 	}
 	if (building || hasOpenThread) {
 		return { phase: 'DEVELOPMENT', trajectory: 'BUILD', reason: 'An active unresolved thread or building continuity state gives the current episode a developing direction.' };
@@ -159,6 +190,7 @@ function keyEntities(situation: CurrentSituation, intent: PlayerIntent): string[
 	const targetNames = [
 		...(intent.explicitTargets || []).map((target) => target.name),
 		intent.target?.name,
+		situation.activeDialogue?.speakerName,
 	].filter((name): name is string => Boolean(name));
 	const visibleNames = (situation.nearbyEntities || [])
 		.filter((entity) => entity.visibleToPlayer)
@@ -176,10 +208,11 @@ function continuityAnchors(
 	return unique([
 		'Location: ' + situation.location.name,
 		'World time: ' + situation.worldTime,
+		situation.activeDialogue ? 'Active dialogue: ' + situation.activeDialogue.speakerName : '',
 		continuity.sceneMomentum ? 'Momentum: ' + continuity.sceneMomentum : '',
 		continuity.emotionalTemperature ? 'Emotional temperature: ' + continuity.emotionalTemperature : '',
 		...threads.slice(0, 2).map((thread) => 'Thread: ' + thread.title),
-	], 6);
+	], 7);
 }
 
 function pressurePoints(
@@ -206,10 +239,19 @@ function resolutionSignals(history: RecentTurnContext[], situation: CurrentSitua
 	];
 	return unique(
 		values
-			.filter((value) => containsAny(lower(value), ['resolved', 'answered', 'confirmed', 'found', 'completed', 'finished', 'safe', 'reassured', 'settled']))
+			.filter((value) => hasAffirmedResolution(value) && !hasNegatedResolution(value))
 			.map((value) => value.slice(0, 180)),
 		4,
 	);
+}
+
+function memoryCues(research?: NarrativeResearchResult): string[] {
+	if (!research) return [];
+	return research.blocks
+		.filter((block) => block.kind === 'MEMORY' && block.relevanceScore >= 0.7)
+		.slice(0, 3)
+		.map((block) => normalize(block.content).slice(0, 180))
+		.filter(Boolean);
 }
 
 export class NarrativeEpisodeProjectionEngine {
@@ -245,14 +287,7 @@ export class NarrativeEpisodeProjectionEngine {
 		const anchors = continuityAnchors(params.situation, continuity, threads);
 		const pressures = pressurePoints(history, continuity, threads);
 		const projectedResolutionSignals = resolutionSignals(history, params.situation);
-		const resolutionEvidence = projectedResolutionSignals.length > 0
-			? projectedResolutionSignals
-			: ['Resolution phase is supported by the latest bounded turn evidence.'];
-		const memoryEvidence = (params.research?.blocks || [])
-			.filter((block) => block.kind === 'MEMORY')
-			.slice(0, 3)
-			.map((block) => normalize(block.content).slice(0, 180))
-			.filter(Boolean);
+		const cues = memoryCues(params.research);
 
 		const fallbackReason = history.length === 0
 			? 'No accepted recent-turn history was available; projection is limited to current canonical scene and continuity state.'
@@ -265,19 +300,21 @@ export class NarrativeEpisodeProjectionEngine {
 					? 'Clarify the current uncertainty or complication through the player-authorized action.'
 					: classification.phase === 'ESCALATION'
 						? 'Give the current pressure a concrete observable consequence without forcing a new player decision.'
-						: classification.phase === 'RESOLUTION'
-							? 'Land the supported consequence while preserving any still-open thread.'
-							: classification.phase === 'AFTERMATH'
-								? 'Let the supported result settle and preserve the next open possibility for the player.'
-								: classification.phase === 'PAUSED'
-									? 'Preserve the current situation and avoid manufacturing escalation merely to create motion.'
-									: 'Advance the current episode by one grounded beat, staying inside the supplied canonical scene and player intent.';
+						: classification.phase === 'TURNING_POINT'
+							? 'Emphasize the supported change or discovery while leaving its next consequence open to canonical adjudication and player choice.'
+							: classification.phase === 'RESOLUTION'
+								? 'Land the supported consequence while preserving any still-open thread.'
+								: classification.phase === 'AFTERMATH'
+									? 'Let the supported result settle and preserve the next open possibility for the player.'
+									: classification.phase === 'PAUSED'
+										? 'Preserve the current situation and avoid manufacturing escalation merely to create motion.'
+										: 'Advance the current episode by one grounded beat, staying inside the supplied canonical scene and player intent.';
 
 		const confidence = clamp(
-			(history.length >= 3 ? 0.45 : 0.2) +
+			(history.length >= 3 ? 0.45 : history.length > 0 ? 0.3 : 0.2) +
 			(threads.length > 0 ? 0.2 : 0) +
 			(continuity.sceneMomentum !== 'STEADY' ? 0.15 : 0) +
-			(params.research && memoryEvidence.length > 0 ? 0.1 : 0) +
+			(cues.length > 0 ? 0.1 : 0) +
 			(entities.length > 0 ? 0.1 : 0),
 		);
 
@@ -293,12 +330,11 @@ export class NarrativeEpisodeProjectionEngine {
 			recentBeats: beats,
 			activeThreadIds: threads.map((thread) => thread.id).filter(Boolean),
 			activeThreadSummaries: threads.map((thread) => thread.summary || thread.title).slice(0, 4),
+			memoryCues: cues,
 			keyEntities: entities,
 			continuityAnchors: anchors,
 			pressurePoints: pressures,
-			resolutionSignals: classification.phase === 'AFTERMATH' || classification.phase === 'RESOLUTION'
-				? resolutionEvidence.slice(0, 4)
-				: projectedResolutionSignals.slice(0, 4),
+			resolutionSignals: projectedResolutionSignals.slice(0, 4),
 			narrativeOpportunity,
 			avoidForcing: [
 				'Do not create a canonical plot beat from this projection.',
@@ -308,7 +344,7 @@ export class NarrativeEpisodeProjectionEngine {
 				'Do not force escalation or resolution merely to satisfy the projected phase.',
 			],
 			confidence,
-			fallbackReason,
+			fallbackReason: fallbackReason || classification.reason,
 			expiresAfterNarration: true,
 		};
 	}
@@ -325,21 +361,26 @@ export class NarrativeEpisodeProjectionEngine {
 			'Latest beat: ' + projection.latestBeat,
 			projection.recentBeats.length ? 'Recent beats:\n- ' + projection.recentBeats.join('\n- ') : 'Recent beats: none.',
 			projection.activeThreadSummaries.length ? 'Active threads:\n- ' + projection.activeThreadSummaries.join('\n- ') : 'Active threads: none.',
+			projection.memoryCues.length ? 'Durable memory cues:\n- ' + projection.memoryCues.join('\n- ') : 'Durable memory cues: none.',
 			projection.keyEntities.length ? 'Key entities: ' + projection.keyEntities.join(', ') : 'Key entities: none.',
 			projection.pressurePoints.length ? 'Pressure points:\n- ' + projection.pressurePoints.join('\n- ') : 'Pressure points: none.',
 			projection.resolutionSignals.length ? 'Resolution signals:\n- ' + projection.resolutionSignals.join('\n- ') : 'Resolution signals: none.',
 			'Continuity anchors: ' + projection.continuityAnchors.join('; '),
 			'Current narrative opportunity: ' + projection.narrativeOpportunity,
 			'Confidence: ' + projection.confidence.toFixed(2),
-			projection.fallbackReason ? 'Fallback: ' + projection.fallbackReason : 'Fallback: not required.',
+			projection.fallbackReason ? 'Projection basis: ' + projection.fallbackReason : 'Projection basis: sufficient bounded evidence.',
 			'Hard boundary: this projection describes the shape of the existing episode; it does not create canon, mutate threads, reveal hidden facts, or choose the player’s future action.',
 		].join('\n');
 	}
 
 	public static toCompactPromptContext(projection?: NarrativeEpisodeProjection): string {
 		if (!projection) return 'N17 episode unavailable; preserve current continuity.';
-		return 'N17 Phase: ' + projection.phase;
+		const question = projection.centralQuestion.length > 96
+			? projection.centralQuestion.slice(0, 95).trimEnd() + '…'
+			: projection.centralQuestion;
+		return 'N17 episode=' + projection.phase + '/' + projection.trajectory +
+			'; question=' + question +
+			'; threads=' + (projection.activeThreadSummaries.slice(0, 2).join(' / ') || 'none') +
+			'; non-binding presentation guidance only; never force this phase or choose the player’s future action.';
 	}
-
 }
-

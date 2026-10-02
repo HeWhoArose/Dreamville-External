@@ -42,6 +42,8 @@ const requiredFiles = [
 	'src/components/StoryView.tsx',
 	'src/services/apiClient.ts',
 	'tests/phase22-release-stabilization.test.ts',
+	'tests/system-wide-phase-audit.phase24.test.ts',
+	'docs/DREAMVILLE_SYSTEM_WIDE_PHASE_AUDIT_PHASE24.md',
 ];
 
 for (const file of requiredFiles) {

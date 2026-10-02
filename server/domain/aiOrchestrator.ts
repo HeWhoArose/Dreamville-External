@@ -7343,6 +7343,7 @@ export class MultiModelOrchestrator {
     const narratorVoiceState = NarratorVoiceEngine.resolve(worldRepo, storyId, narrativeProfile, params.narratorVoiceControls);
     NarratorVoiceEngine.persist(worldRepo, storyId, narratorVoiceState);
     const narrativeNoveltyState = NarrativeNoveltyEngine.resolve(worldRepo, storyId);
+    const narrativePacingContract = NarrativePacingEngine.resolve({ situation: currentSituation, intent: playerIntent, actionResolution: params.actionResolution, canonicalOutcome: authoritativeOutcome, continuityState: NarrativeContinuityStateEngine.resolve(worldRepo, storyId) });
 
     const narrationPrompt = buildNarrationPrompt({
       situation: currentSituation,
@@ -7742,7 +7743,7 @@ export class MultiModelOrchestrator {
       const narratorVoiceState = NarratorVoiceEngine.resolve(repo, storyId, narrativeProfile, params.narratorVoiceControls);
       NarratorVoiceEngine.persist(repo, storyId, narratorVoiceState);
       const narrativeNoveltyState = NarrativeNoveltyEngine.resolve(repo, storyId);
-    const narrativePacingContract = NarrativePacingEngine.resolve({ situation: currentSituation, intent: playerIntent, actionResolution: params.actionResolution, continuityState: NarrativeContinuityStateEngine.resolve(repo, storyId) });
+    const narrativePacingContract = NarrativePacingEngine.resolve({ situation: currentSituation, intent: playerIntent, continuityState: NarrativeContinuityStateEngine.resolve(repo, storyId) });
 
       // 1b. CH15 Source Adaptation Adjudication Check
       const narrationPrompt = isNarrativeTask && researchResult && narrativePlan
@@ -7961,6 +7962,7 @@ export class MultiModelOrchestrator {
                 abortSignal: abortController.signal,
                 retryCount: attempt,
                 modelId: currentCandidate.modelId,
+                maxTokens: NarrativePacingEngine.outputTokenBudget(narrativePacingContract),
                 audioInputBase64: params.audioInputBase64,
                 voiceProfile: params.voiceProfile,
                 canonicalLocationName: currentSituation.location.name,
@@ -7979,6 +7981,8 @@ export class MultiModelOrchestrator {
               throw new Error(`Turn package validation failed: ${validation.errorReason}`);
             }
             if (task === 'narrative.generate') {
+              const pacing = NarrativePacingEngine.validateNarration(validation.turnPackage.narrative.join(' '), narrativePacingContract);
+              if (!pacing.valid) throw new Error(pacing.reason || 'Narration failed N8 adaptive pacing validation.');
               const intentSafety = this.validateNarrativeIntentSafety(
                 validation.turnPackage.narrative.join(' '),
                 playerIntent,

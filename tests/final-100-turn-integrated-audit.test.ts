@@ -136,11 +136,11 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 	const primary = new DeterministicMockAdapter('final_audit_creative_provider');
 	const fast = new DeterministicMockAdapter('final_audit_fast_provider');
 	const orchestrator = new MultiModelOrchestrator();
-
-	for (const existing of orchestrator.getAllModels()) {
-		if (!existing.isEmergencyFloor) {
-			orchestrator.updateModelHealth(existing.providerId, existing.modelId, 'DisabledByUser');
-		}
+	const emergencyModel = orchestrator.getAllModels().find((candidate) => candidate.isEmergencyFloor);
+	const internalRegistry = orchestrator as any;
+	internalRegistry.models.clear();
+	if (emergencyModel) {
+		internalRegistry.models.set(emergencyModel.providerId + '::' + emergencyModel.modelId, emergencyModel);
 	}
 
 	const creativeModel = model(

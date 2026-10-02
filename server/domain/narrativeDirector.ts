@@ -4,6 +4,7 @@ import type { NarrativeResearchResult } from './narrativeResearchPipeline';
 import type { WorldRepository } from '../repositories/worldRepository';
 import { buildNpcPlanningSlice } from './npcPlanningSlice';
 import { NpcExpressiveIdentityEngine, type NpcExpressiveIdentity } from './npcExpressiveIdentity';
+import { EntitySceneRelevanceEngine, type SocialConversationTopology } from './entitySceneRelevance';
 
 export interface InformationReveal {
 	topic: string;
@@ -82,6 +83,7 @@ export interface ExpectedStateEffect {
 
 export interface EphemeralNarrativePlan {
 	npcCognition?: NpcCognitionContract[];
+	socialTopology?: SocialConversationTopology;
 	turnId: string;
 	objective: string;
 	immediateSteps: string[];
@@ -163,6 +165,7 @@ export class NarrativeDirector {
 		const npcCognition: NpcCognitionContract[] = params.repository && params.storyId
 			? entityTargets(situation, intent).map((target) => buildNpcCognitionContract(params.repository!, params.storyId!, situation, target)).filter((value): value is NpcCognitionContract => Boolean(value)).slice(0, 4)
 			: [];
+		const socialTopology = EntitySceneRelevanceEngine.toConversationTopology(situation, intent);
 		const isInformationSeeking = Boolean(intent.informationGoal) || intent.interactionMode === 'INFORMATION_SEEKING';
 		const steps: string[] = [];
 		if (intent.movementIntent) steps.push(intent.action === 'approach_and_listen' ? 'Move the protagonist physically closer to the relevant source while preserving the stated passive intent.' : 'Resolve the requested movement or positional change before any secondary observation or interaction.');
@@ -209,6 +212,7 @@ export class NarrativeDirector {
 			continuityRequirements: continuityRequirements.slice(0, 10),
 			forbiddenAssumptions: forbiddenAssumptions.slice(0, 8),
 			stateEffectsExpected: stateEffectsExpected.slice(0, 4),
+			socialTopology,
 			createdAt: situation.worldTime,
 			expiresAfterNarration: true,
 		};

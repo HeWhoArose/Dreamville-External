@@ -314,13 +314,13 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			const tightEpisodeBudget = Boolean(presentationPlan.episodeProjection) && maxPromptTokens <= 2000;
 			const compact = {
 				intentContext: intentContext,
-				researchContext: truncatePromptSection(initialResearch, tightEpisodeBudget ? 440 : 700),
-				planContext: truncatePromptSection(planContext, tightEpisodeBudget ? 130 : 300),
+				researchContext: truncatePromptSection(initialResearch, tightEpisodeBudget ? 400 : 700),
+				planContext: truncatePromptSection(planContext, tightEpisodeBudget ? 100 : 300),
 				sceneCompositionContext: SceneCompositionEngine.toCompactPromptContext(sceneComposition),
 				socialTopologyContext: truncatePromptSection(socialTopologyContext, 520),
 				episodeProjectionContext: truncatePromptSection(NarrativeEpisodeProjectionEngine.toCompactPromptContext(presentationPlan.episodeProjection), 100),
-				workingContext: truncatePromptSection(initialWorking, tightEpisodeBudget ? 140 : 320),
-				situationContext: truncatePromptSection(situationContext, tightEpisodeBudget ? 640 : 900),
+				workingContext: truncatePromptSection(initialWorking, tightEpisodeBudget ? 120 : 320),
+				situationContext: truncatePromptSection(situationContext, tightEpisodeBudget ? 600 : 900),
 			};
 			const renderCompact = () => compose(
 				compact.researchContext,

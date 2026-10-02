@@ -1,7 +1,7 @@
 # N14 — NPC Expressive Identity
 
 Date: 2026-10-02
-Status: implementation under verification
+Status: implementation complete — full regression and Release Gate verified
 
 ## Audit before implementation
 
@@ -19,6 +19,6 @@ N14 is presentation-only and ephemeral. It does not create or persist NPC agency
 
 N14 derives only from existing authored `dialogueStyle`, personality scores, traits, values, and scene role. It does not invent catchphrases or verbal tics when no source signal exists. In sparse cases it emits conservative defaults and a fallback reason.
 
-## Verification target
+## Verification
 
-Targeted tests cover deterministic projection, character differentiation, sparse-data fallback, authority non-mutation, and the real NarrativeDirector prompt path. Full regression, build, release contracts, and post-merge authority audit are required before completion.
+The final implementation passed targeted N14 projection/differentiation/fallback/authority/prompt-path coverage, the complete regression suite, typecheck/lint, production build, release-contract verification, and all three GitHub verification/release gates for the implementation commit. Post-merge authority verification remains required after merge.

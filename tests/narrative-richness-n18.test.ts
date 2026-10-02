@@ -94,7 +94,7 @@ test('N18 passes a grounded, characterful narration with multiple richness signa
 		situation: makeSituation(),
 		plan: makePlan(),
 		turnPackage: turn(
-			"Rain needles the archive windows as Mara's fingers tighten around the cracked seal. assert.match(source, /const needsLiteraryRewrite = literary\.decision === 'REWRITE';/);"You came back,\" she says, but she does not meet your eyes. The brass desk shivers when thunder rolls; the cold stone carries a metallic smell as the damaged seal cuts inward through the iron. The warning in Mara's voice makes the risk plain, and her hesitation says more than the answer she refuses to give. She exhales slowly and slides the letter toward you, leaving the accusation hanging between you.",
+			"Rain needles the archive windows as Mara's fingers tighten around the cracked seal. 'You came back,' she says, but she does not meet your eyes. The brass desk shivers when thunder rolls; the cold stone carries a metallic smell as the damaged seal cuts inward through the iron. The warning in Mara's voice makes the risk plain, and her hesitation says more than the answer she refuses to give. She exhales slowly and slides the letter toward you, leaving the accusation hanging between you.",
 			[{ speaker: 'Mara', text: 'You came back.' }],
 		),
 		previousNarrations: ['The sealed archive still waits beneath the rain.'],

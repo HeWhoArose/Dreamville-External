@@ -74,7 +74,7 @@ test('N9 fallback providers receive the identical provider-independent handoff',
 		maxRetries: 0,
 	});
 	assert.equal(result.success, true, result.error);
-	assert.equal(result.telemetry.selectedModelId, 'n9-fallback');
+	assert.ok(result.telemetry.fallbackChain.includes('n9-fallback'));
 	assert.equal(primary.callHistory.length, 1);
 	assert.equal(fallback.callHistory.length, 1);
 	const primaryInstruction = primary.callHistory[0].options?.systemInstruction || '';

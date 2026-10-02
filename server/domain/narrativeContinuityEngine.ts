@@ -1,4 +1,3 @@
-import { NarrativeContinuityStateEngine } from './narrativeContinuityState';
 import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
 import type { WorldRepository } from '../repositories/worldRepository';
 import type { StructuredTurnPackage } from './aiOrchestrator';

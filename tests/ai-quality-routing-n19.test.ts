@@ -81,3 +81,43 @@ test('N19 never promotes the deterministic emergency floor as a creative model',
 		assert.equal(scoreModelForQualityTier(emergency, tier), -100000);
 	}
 });
+
+import { MultiModelOrchestrator } from '../server/domain/aiOrchestrator';
+
+test('N19 is wired into the real selector when no explicit route, pin, or override controls selection', () => {
+	process.env.NODE_TEST_CONTEXT = '1';
+	const orchestrator = new MultiModelOrchestrator();
+	const internal = orchestrator as any;
+	internal.models.clear();
+	internal.taskFallbackChains.clear();
+	internal.taskPinnedModels.clear();
+	internal.categoryOverrides.clear();
+	const base = {
+		providerId: 'test',
+		displayName: 'Test',
+		contextWindow: 128000,
+		health: 'Healthy',
+		quota: 'Healthy',
+		latencyMs: 300,
+		userPriority: 50,
+		roleEligibility: ['narrative.generate'],
+		accessStatus: 'accessible',
+		fallbackEligibility: true,
+		isEmergencyFloor: false,
+	};
+	internal.models.set('test::fast', {
+		...base,
+		modelId: 'fast',
+		pool: 'fast',
+		capabilities: ['text_generation', 'fast'],
+	});
+	internal.models.set('test::creative', {
+		...base,
+		modelId: 'creative',
+		pool: 'creative',
+		capabilities: ['text_generation', 'creative_writing'],
+	});
+	const selected = orchestrator.selectBestModel('narrative.generate');
+	assert.equal(selected.selectedModel.modelId, 'creative');
+	assert.match(selected.selectionReason, /CREATIVE/);
+});

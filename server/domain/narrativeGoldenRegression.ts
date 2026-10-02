@@ -1,6 +1,6 @@
 import type { PlayerIntent } from './playerIntentInterpreter';
-import type { NarrativeQualityContract, NarrativeTurnProfile } from './narrativeQualityContract';
-import type { NarrativePacingContract, NarrativePacingProfile } from './narrativePacingEngine';
+import type { NarrativeTurnProfile } from './narrativeQualityContract';
+import type { NarrativePacingProfile } from './narrativePacingEngine';
 import type { NarrativeProviderHandoffContract } from './narrativeProviderHandoff';
 
 export interface NarrativeGoldenScenario {
@@ -20,8 +20,10 @@ export interface NarrativeGoldenObservation {
 	source: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK';
 	narrative: string;
 	intent: PlayerIntent;
-	quality: NarrativeQualityContract;
-	pacing: NarrativePacingContract;
+	qualityProfile: NarrativeTurnProfile;
+	qualityEnforcement?: 'ADVISORY' | 'REWRITE' | 'REJECT';
+	pacingProfile: NarrativePacingProfile;
+	pacingMaxWords?: number;
 	handoff?: NarrativeProviderHandoffContract;
 	stateChangeCount: number;
 	approvedChangeCount: number;
@@ -102,11 +104,11 @@ function containsAll(text: string, patterns: RegExp[]): RegExp[] {
 export class NarrativeGoldenRegressionEngine {
 	public static evaluate(scenario: NarrativeGoldenScenario, observation: NarrativeGoldenObservation): NarrativeGoldenEvaluation {
 		const failures: string[] = [];
-		if (observation.quality.profile !== scenario.expectedQualityProfile) {
-			failures.push('N1 quality profile expected ' + scenario.expectedQualityProfile + ' but received ' + observation.quality.profile + '.');
+		if (observation.qualityProfile !== scenario.expectedQualityProfile) {
+			failures.push('N1 quality profile expected ' + scenario.expectedQualityProfile + ' but received ' + observation.qualityProfile + '.');
 		}
-		if (observation.pacing.profile !== scenario.expectedPacingProfile) {
-			failures.push('N8 pacing profile expected ' + scenario.expectedPacingProfile + ' but received ' + observation.pacing.profile + '.');
+		if (observation.pacingProfile !== scenario.expectedPacingProfile) {
+			failures.push('N8 pacing profile expected ' + scenario.expectedPacingProfile + ' but received ' + observation.pacingProfile + '.');
 		}
 		for (const [key, expected] of Object.entries(scenario.requiredIntent)) {
 			if (expected !== undefined && observation.intent[key as keyof PlayerIntent] !== expected) {
@@ -144,10 +146,10 @@ export class NarrativeGoldenRegressionEngine {
 
 	public static comparePresentation(a: NarrativeGoldenObservation, b: NarrativeGoldenObservation): NarrativeGoldenCompatibility {
 		const failures: string[] = [];
-		if (a.quality.profile !== b.quality.profile) failures.push('N1 quality profile changed across providers.');
-		if (a.quality.controls.enforcement !== b.quality.controls.enforcement) failures.push('N1 enforcement mode changed across providers.');
-		if (a.pacing.profile !== b.pacing.profile) failures.push('N8 pacing profile changed across providers.');
-		if (a.pacing.controls.maxWords !== b.pacing.controls.maxWords) failures.push('N8 pacing ceiling changed across providers.');
+		if (a.qualityProfile !== b.qualityProfile) failures.push('N1 quality profile changed across providers.');
+		if (a.qualityEnforcement !== b.qualityEnforcement) failures.push('N1 enforcement mode changed across providers.');
+		if (a.pacingProfile !== b.pacingProfile) failures.push('N8 pacing profile changed across providers.');
+		if (a.pacingMaxWords !== b.pacingMaxWords) failures.push('N8 pacing ceiling changed across providers.');
 		if (a.intent.movementIntent !== b.intent.movementIntent || a.intent.observationIntent !== b.intent.observationIntent || a.intent.speechIntent !== b.intent.speechIntent) {
 			failures.push('Semantic player intent changed across providers.');
 		}

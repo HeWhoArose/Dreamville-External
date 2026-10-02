@@ -1,6 +1,7 @@
 import type { CurrentSituation } from './currentSituation';
 import type { PlayerIntent, IntentEntityReference } from './playerIntentInterpreter';
 import type { NarrativeResearchResult } from './narrativeResearchPipeline';
+import type { WorldRepository } from '../repositories/worldRepository';
 import { buildNpcPlanningSlice } from './npcPlanningSlice';
 
 export interface InformationReveal {
@@ -30,7 +31,7 @@ export interface NpcCognitionContract {
 	presentationRules: string[];
 }
 
-function buildNpcCognitionContract(repository: CurrentSituation['repository'] extends never ? never : any, storyId: string, situation: CurrentSituation, target: IntentEntityReference): NpcCognitionContract | undefined {
+function buildNpcCognitionContract(repository: WorldRepository, storyId: string, situation: CurrentSituation, target: IntentEntityReference): NpcCognitionContract | undefined {
 	const actor = situation.nearbyEntities.find((entity) => entity.id === target.id);
 	if (!actor) return undefined;
 	const agency = repository.getDynamicCharacterAgencyEngine(storyId);
@@ -145,7 +146,7 @@ function topThread(research: NarrativeResearchResult): string | undefined {
 }
 
 export class NarrativeDirector {
-	public static create(params: { repository?: any; storyId?: string; situation: CurrentSituation; intent: PlayerIntent; research: NarrativeResearchResult }): EphemeralNarrativePlan {
+	public static create(params: { repository?: WorldRepository; storyId?: string; situation: CurrentSituation; intent: PlayerIntent; research: NarrativeResearchResult }): EphemeralNarrativePlan {
 		const situation = params.situation;
 		const intent = params.intent;
 		const research = params.research;

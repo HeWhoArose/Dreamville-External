@@ -25,6 +25,7 @@ import { NarrativeDirector, type EphemeralNarrativePlan } from './narrativeDirec
 import { buildNarrationPrompt, defaultNarrationStyle, projectSupportingWorkingContext } from './narrativePromptBuilder';
 import { SemanticNarrativeReview, type NarrativeReview } from './semanticNarrativeReview';
 import { LiteraryNarrativeReview, type LiteraryReview } from './literaryNarrativeReview';
+import { NarrativeProviderHandoffEngine, type NarrativeProviderHandoffContract } from './narrativeProviderHandoff';
 import { NarrativePacingEngine } from './narrativePacingEngine';
 import { NarrativeNoveltyEngine } from './narrativeNoveltyEngine';
 import { EpistemicBoundaryEnforcer } from './epistemicBoundary';
@@ -533,6 +534,7 @@ export interface OrchestratedTurnTelemetry {
   narrativePlanObjective?: string;
   narrativeReview?: NarrativeReview;
   aiCallBudget?: AiTurnCallBudgetSnapshot;
+  narrativeProviderHandoff?: NarrativeProviderHandoffContract;
 }
 
 export interface OrchestratedTurnResult {
@@ -7408,6 +7410,7 @@ export class MultiModelOrchestrator {
         forceModelId: params.forceModelId,
         canonicalLocationName: currentSituation.location.name,
         playerAction,
+        narrativeHandoff: narrativeProviderHandoff,
         validateResponse: (text) => {
           const validation = this.validateTurnPackage(text, { allowPlainTextNarration: true });
           if (!validation.valid || !validation.turnPackage) {
@@ -8580,6 +8583,7 @@ export class MultiModelOrchestrator {
         systemInstruction,
         canonicalLocationName: options?.canonicalLocationName,
         playerAction: options?.playerAction,
+        systemInstruction: [systemInstruction, options?.narrativeHandoff?.providerIndependentInstruction].filter(Boolean).join('\n\n'),
       });
       if (!emergencyResponse?.text) {
         throw new Error('Deterministic emergency floor returned an empty response after AI call budget exhaustion.');
@@ -8933,6 +8937,7 @@ export class MultiModelOrchestrator {
             systemInstruction,
             canonicalLocationName: options?.canonicalLocationName,
             playerAction: options?.playerAction,
+            systemInstruction: [systemInstruction, options?.narrativeHandoff?.providerIndependentInstruction].filter(Boolean).join('\n\n'),
           });
         } finally {
           clearTimeout(timer);

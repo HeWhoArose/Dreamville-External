@@ -250,7 +250,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 
 	// Final compact mode: keep the semantic contract intact while reducing lower-priority prose.
 	if (totalTokens > maxPromptTokens) {
-		if (maxPromptTokens < 600) {
+		if (maxPromptTokens < 1800) {
 			const budgetChars = Math.max(1200, maxPromptTokens * 4);
 			const microGlobal = 'Generate only the player-facing narrative. Preserve player agency and canonical truth. Never make major future decisions for the player.';
 			const microVoice = input.narratorVoiceState ? truncatePromptSection(NarratorVoiceEngine.compactPromptContext(input.narratorVoiceState), 420) : 'N2 voice disabled.';

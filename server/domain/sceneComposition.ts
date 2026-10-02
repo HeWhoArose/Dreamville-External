@@ -180,11 +180,12 @@ export class SceneCompositionEngine {
 	public static toCompactPromptContext(contract?: SceneCompositionContract): string {
 		if (!contract) return 'N13 unavailable; preserve existing narrative direction and canonical boundaries.';
 		return [
-			'N13 SCENE COMPOSITION CONTRACT v1 (COMPACT — EPHEMERAL): beat=' + contract.beatType,
-			'pacing=' + contract.pacingShape,
-			'dialogue=' + contract.dialogueAct,
-			'reveal=' + (contract.reveal.length ? 'present' : 'none'),
-			'withhold=' + (contract.withhold.length ? 'present' : 'none'),
+			'N13 SCENE COMPOSITION CONTRACT v1 (COMPACT — EPHEMERAL)',
+			'Beat type: ' + contract.beatType,
+			'Pacing shape: ' + contract.pacingShape,
+			'Dialogue act: ' + contract.dialogueAct,
+			'Reveal: ' + (contract.reveal.length ? 'present' : 'none'),
+			'Withhold: ' + (contract.withhold.length ? 'present' : 'none'),
 			'Hard boundary: this contract cannot mutate canonical state, decide player choices, reveal hidden facts, or commit an NPC action.',
 		].join(' ');
 	}

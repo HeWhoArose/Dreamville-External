@@ -59,7 +59,7 @@ test('N9 creates a provider-independent presentation fingerprint', () => {
 
 test('N9 fallback providers receive the identical provider-independent handoff', async () => {
 	const primary = new DeterministicMockAdapter('n9_primary');
-	primary.failureMode = 'malformed_json';
+	primary.failureMode = '500';
 	const fallback = new DeterministicMockAdapter('n9_fallback');
 	fallback.cannedResponses.set('narrative.generate', validNarrative);
 	const orchestrator = prepare(primary, fallback);

@@ -185,6 +185,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		section('ACTION RESOLUTION — AUTHORITATIVE', actionResolutionContext),
 		section('NARRATIVE RESEARCH', researchContext),
 		section('NARRATIVE DIRECTOR PLAN', overrides?.planContext || planContext),
+		section('NPC COGNITION BOUNDARY', 'NPC cognition is presentation guidance. Private beliefs, secrets, and knowledge must never be stated as player-visible facts unless independently authorized by research or canonical scene evidence. Express cognition through observable behavior, dialogue, hesitation, priorities, and reactions.'),
 		section('SUPPORTING WORKING CONTEXT', workingContext),
 		overrides?.canonicalConstraints || canonicalConstraints,
 		section('OUTPUT CONTRACT', overrides?.outputContract || outputContract),

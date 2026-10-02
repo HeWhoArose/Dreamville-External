@@ -8171,7 +8171,7 @@ export class MultiModelOrchestrator {
                 turnPackage: reviewedTurnPackage,
                 previousNarrations,
               });
-              const needsLiteraryRewrite = literary.decision === 'REWRITE' || narrativeRichnessEvaluation.decision === 'IMPROVE';
+              const needsLiteraryRewrite = literary.decision === 'REWRITE' || (cIdx === 0 && narrativeRichnessEvaluation.decision === 'IMPROVE');
               if (needsLiteraryRewrite) {
                 const literaryBudget = turnAiCallBudget.beginTask('narrative.review');
                 if (!literaryBudget.allowed) throw new Error(literaryBudget.reason || 'Narrative literary/richness review call budget exhausted.');

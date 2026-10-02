@@ -254,7 +254,7 @@ export class NarrativeResearchPipeline {
 			packet = emptyPacket(params.storyId, researchQuery, viewerActorId, situation);
 		}
 		const semanticProfile = SemanticNarrativeResearchEngine.derive(playerIntent || situation.currentAction || {
-			action: 'continue', interactionMode: 'FREEFORM', speechIntent: false, movementIntent: false, observationIntent: false,
+			action: 'continue', interactionMode: 'OTHER', speechIntent: false, movementIntent: false, observationIntent: false,
 			explicitTargets: [], impliedTargets: [], confidence: 0, source: 'DETERMINISTIC', originalText: researchQuery,
 		} as PlayerIntent, situation);
 		const queryTokens = tokens([

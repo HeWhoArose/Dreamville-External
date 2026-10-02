@@ -88,6 +88,42 @@ export interface DecaySummary {
   protectedByCritical: string[];
 }
 
+export type NarrativeMemoryFamily = 'SEMANTIC' | 'EPISODIC';
+
+export interface NarrativeMemoryRetrievalParams extends MemoryRetrievalParams {
+  queryText?: string;
+  targetEntityIds?: string[];
+  targetEntityNames?: string[];
+  locationId?: string;
+  locationName?: string;
+  relatedThreadIds?: string[];
+  recentTurnIds?: string[];
+  preferredMemoryClasses?: MemoryClass[];
+}
+
+export interface NarrativeMemoryRetrievalEvidence {
+  memoryId: string;
+  score: number;
+  family: NarrativeMemoryFamily;
+  semanticMatch: number;
+  episodicMatch: number;
+  entityLinkScore: number;
+  locationLinkScore: number;
+  threadLinkScore: number;
+  importanceScore: number;
+  confidenceScore: number;
+  recencyScore: number;
+  classFitScore: number;
+  reasons: string[];
+}
+
+export interface NarrativeMemoryRetrievalResult {
+  memories: DurableMemory[];
+  evidence: NarrativeMemoryRetrievalEvidence[];
+  fallbackReason?: string;
+}
+
+
 /**
  * MemoryOpportunityEngine
  * Implements DreamBook Challenge 9, §290, §291, §296, §297, §312, §313 (Poison-Teeth Exemplar & Anti-Recency).
@@ -451,6 +487,264 @@ export class MemoryOpportunityEngine {
 
     scored.sort((a, b) => b.score - a.score);
     return scored.slice(0, maxResults).map((s) => JSON.parse(JSON.stringify(s.memory)));
+  }
+
+  /**
+   * N16 deterministic semantic + episodic retrieval.
+   *
+   * This extends the canonical MemoryOpportunityEngine rather than introducing
+   * a second memory authority. It combines bounded semantic overlap with
+   * entity/location/thread linkage, memory class fit, importance, confidence,
+   * and a deliberately capped recency contribution. Selection also guarantees
+   * family diversity when both semantic and episodic memories are available.
+   */
+  public retrieveNarrativeMemories(params: NarrativeMemoryRetrievalParams): NarrativeMemoryRetrievalResult {
+    const maxResults = Math.max(1, Math.min(20, params.maxResults ?? 8));
+    const queryText = String(params.queryText || '').trim().toLowerCase();
+    const queryKeywords = Array.from(new Set(
+      (params.queryKeywords || [])
+        .map((value) => String(value || '').trim().toLowerCase())
+        .filter((value) => value.length >= 3),
+    ));
+    const stopWords = new Set([
+      'about', 'after', 'again', 'also', 'because', 'before', 'being', 'could',
+      'from', 'have', 'into', 'just', 'more', 'near', 'should', 'that', 'their',
+      'there', 'these', 'they', 'this', 'those', 'what', 'when', 'where', 'which',
+      'while', 'with', 'would', 'your', 'the', 'and', 'for', 'you', 'are', 'was',
+      'were', 'can', 'did', 'does', 'how', 'why', 'who', 'i',
+    ]);
+    const queryTerms = Array.from(new Set([
+      ...queryKeywords,
+      ...queryText
+        .split(/[^a-z0-9]+/)
+        .filter((token) => token.length >= 4)
+        .filter((token) => !stopWords.has(token)),
+    ]));
+
+    const targetEntityIds = new Set((params.targetEntityIds || []).filter(Boolean).map(String));
+    const targetEntityNames = new Set((params.targetEntityNames || []).filter(Boolean).map((value) => String(value).toLowerCase()));
+    const relatedThreadIds = new Set((params.relatedThreadIds || []).filter(Boolean).map(String));
+    const recentTurnIds = new Set((params.recentTurnIds || []).filter(Boolean).map(String));
+    const preferredClasses = new Set(params.preferredMemoryClasses || []);
+    const currentTurn = params.currentTurn ?? 1;
+    const currentTimestamp = params.currentTimestamp;
+    const candidates: Array<{ memory: DurableMemory; evidence: NarrativeMemoryRetrievalEvidence }> = [];
+
+    const normalizeText = (value: unknown): string => String(value ?? '').trim().toLowerCase();
+    const tokenSet = (value: unknown): Set<string> => new Set(
+      normalizeText(value)
+        .split(/[^a-z0-9]+/)
+        .filter((token) => token.length >= 3),
+    );
+    const queryTokenSet = new Set(queryTerms);
+    const classFamily = (memoryClass: MemoryClass): NarrativeMemoryFamily => {
+      return memoryClass === 'EPISODIC' || memoryClass === 'CAUSAL'
+        ? 'EPISODIC'
+        : 'SEMANTIC';
+    };
+
+    const visibilityAllowed = (memory: DurableMemory): boolean => {
+      if (!params.viewerActorId) return true;
+      const viewer = params.viewerActorId;
+      const isSubject = memory.subjectEntityId === viewer;
+      const isPublic = memory.visibility === 'PUBLIC';
+      const isSharedWithViewer = Boolean(
+        memory.visibility === 'SHARED' &&
+        (memory.relatedEntityIds?.includes(viewer) || memory.accessibleToEntityIds?.includes(viewer)),
+      );
+      return isSubject || isPublic || isSharedWithViewer;
+    };
+
+    for (const memory of this.memories.values()) {
+      if (memory.storyId !== params.storyId) continue;
+      if (memory.status === 'archived' && !params.includeArchived) continue;
+      if (memory.status === 'dormant' && !params.includeDormant && !memory.isPersistentCritical) continue;
+      if (!visibilityAllowed(memory)) continue;
+
+      const contentText = normalizeText(memory.content);
+      const tagText = normalizeText((memory.triggerConditionTags || []).join(' '));
+      const linkedEntityText = normalizeText([
+        memory.subjectEntityId,
+        ...(memory.relatedEntityIds || []),
+      ].join(' '));
+      const serializedText = normalizeText(JSON.stringify(memory));
+      const memoryTokens = new Set([
+        ...tokenSet(contentText),
+        ...tokenSet(tagText),
+      ]);
+
+      let semanticHits = 0;
+      for (const queryToken of queryTokenSet) {
+        if (memoryTokens.has(queryToken) || contentText.includes(queryToken)) semanticHits += 1;
+      }
+      const semanticMatch = queryTokenSet.size > 0
+        ? Math.min(1, semanticHits / Math.min(queryTokenSet.size, 8))
+        : 0;
+
+      const explicitEntityIdHit =
+        targetEntityIds.size > 0 &&
+        Array.from(targetEntityIds).some((id) =>
+          memory.subjectEntityId === id ||
+          (memory.relatedEntityIds || []).includes(id),
+        );
+      const entityNameHit =
+        targetEntityNames.size > 0 &&
+        Array.from(targetEntityNames).some((name) => contentText.includes(name) || serializedText.includes(name));
+      const entityLinkScore = explicitEntityIdHit ? 1 : entityNameHit ? 0.72 : 0;
+
+      const locationIdHit = Boolean(params.locationId && memory.relatedLocationId === params.locationId);
+      const locationNameHit = Boolean(params.locationName && serializedText.includes(String(params.locationName).toLowerCase()));
+      const locationLinkScore = locationIdHit ? 1 : locationNameHit ? 0.65 : 0;
+
+      const threadLinkScore =
+        params.relatedThreadIds?.length
+          ? (memory.relatedThreadId && relatedThreadIds.has(memory.relatedThreadId) ? 1 : 0)
+          : 0;
+
+      const recentEventHit =
+        recentTurnIds.size > 0 && memory.sourceEventId
+          ? (recentTurnIds.has(String(memory.sourceEventId)) ? 1 : 0)
+          : 0;
+
+      const recencyTurns = Math.max(0, currentTurn - Number(memory.lastRecalledTurn || 0));
+      const recencyScore = currentTimestamp && memory.lastRecalledTimestamp
+        ? Math.max(0, 1 - (
+          Math.max(0, currentTimestamp.totalElapsedSeconds - memory.lastRecalledTimestamp.totalElapsedSeconds) /
+          172800
+        ))
+        : Math.max(0, 1 - Math.min(recencyTurns, 40) / 40);
+
+      const semanticFamily = classFamily(memory.memoryClass);
+      const semanticClassBoost = semanticFamily === 'SEMANTIC' ? 1 : 0.2;
+      const episodicClassBoost = semanticFamily === 'EPISODIC' ? 1 : 0.2;
+      const classPreferred = preferredClasses.has(memory.memoryClass);
+      const classFitScore = classPreferred
+        ? 1
+        : semanticFamily === 'SEMANTIC' || semanticFamily === 'EPISODIC'
+          ? 0.55
+          : 0.4;
+
+      const semanticNeed = queryText || queryKeywords.length > 0
+        ? semanticHits > 0 ? semanticClassBoost : 0.18 * semanticClassBoost
+        : semanticClassBoost * 0.35;
+      const episodicNeed =
+        Math.min(
+          1,
+          episodicClassBoost * 0.38 +
+          entityLinkScore * 0.28 +
+          locationLinkScore * 0.16 +
+          threadLinkScore * 0.12 +
+          recentEventHit * 0.1,
+        );
+
+      const importanceScore = Math.max(0, Math.min(1, Number(memory.importance || 0) / 100));
+      const confidenceScore = Math.max(0, Math.min(1, Number(memory.confidence || 0)));
+      const criticalFloor = memory.isPersistentCritical ? 0.12 : 0;
+      const score = Math.min(
+        1,
+        (
+          semanticMatch * 0.24 +
+          entityLinkScore * 0.18 +
+          locationLinkScore * 0.11 +
+          threadLinkScore * 0.09 +
+          importanceScore * 0.14 +
+          confidenceScore * 0.08 +
+          recencyScore * 0.06 +
+          classFitScore * 0.10 +
+          episodicNeed * 0.05 +
+          semanticNeed * 0.05 +
+          recentEventHit * 0.04 +
+          criticalFloor
+        ),
+      );
+
+      const reasons: string[] = [];
+      if (semanticMatch > 0) reasons.push('semantic/query overlap');
+      if (entityLinkScore > 0) reasons.push('target entity link');
+      if (locationLinkScore > 0) reasons.push('current location link');
+      if (threadLinkScore > 0) reasons.push('active thread link');
+      if (recentEventHit > 0) reasons.push('recent canonical source event');
+      if (memory.importance >= 70) reasons.push('high importance');
+      if (memory.confidence >= 0.8) reasons.push('high confidence');
+      if (semanticFamily === 'EPISODIC') reasons.push('episodic continuity fit');
+      else reasons.push('semantic continuity fit');
+
+      const hasRetrievalSignal =
+        semanticMatch > 0 ||
+        entityLinkScore > 0 ||
+        locationLinkScore > 0 ||
+        threadLinkScore > 0 ||
+        recentEventHit > 0;
+
+      if (
+        !memory.isPersistentCritical &&
+        queryTokenSet.size > 0 &&
+        !hasRetrievalSignal
+      ) {
+        continue;
+      }
+
+      if (
+        score < 0.24 &&
+        !memory.isPersistentCritical &&
+        !hasRetrievalSignal
+      ) {
+        continue;
+      }
+
+      candidates.push({
+        memory,
+        evidence: {
+          memoryId: memory.id,
+          score,
+          family: semanticFamily,
+          semanticMatch,
+          episodicMatch: episodicNeed,
+          entityLinkScore,
+          locationLinkScore,
+          threadLinkScore,
+          importanceScore,
+          confidenceScore,
+          recencyScore,
+          classFitScore,
+          reasons,
+        },
+      });
+    }
+
+    const ranked = candidates.sort((a, b) =>
+      b.evidence.score - a.evidence.score ||
+      b.evidence.importanceScore - a.evidence.importanceScore ||
+      b.evidence.confidenceScore - a.evidence.confidenceScore ||
+      a.memory.id.localeCompare(b.memory.id),
+    );
+
+    const semantic = ranked.filter((entry) => entry.evidence.family === 'SEMANTIC');
+    const episodic = ranked.filter((entry) => entry.evidence.family === 'EPISODIC');
+    const selected: typeof ranked = [];
+
+    if (maxResults >= 2 && semantic.length > 0 && episodic.length > 0) {
+      selected.push(semantic[0], episodic[0]);
+    }
+
+    for (const entry of ranked) {
+      if (selected.length >= maxResults) break;
+      if (selected.some((candidate) => candidate.memory.id === entry.memory.id)) continue;
+      selected.push(entry);
+    }
+
+    if (selected.length === 0) {
+      return {
+        memories: [],
+        evidence: [],
+        fallbackReason: 'No epistemically authorized memory matched the supplied retrieval context.',
+      };
+    }
+
+    return {
+      memories: selected.slice(0, maxResults).map((entry) => JSON.parse(JSON.stringify(entry.memory))),
+      evidence: selected.slice(0, maxResults).map((entry) => ({ ...entry.evidence, reasons: [...entry.evidence.reasons] })),
+    };
   }
 
   /**

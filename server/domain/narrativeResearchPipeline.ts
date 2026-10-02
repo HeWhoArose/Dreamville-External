@@ -472,6 +472,11 @@ export class NarrativeResearchPipeline {
 				content: normalize(memory?.content || memory?.summary || memory?.text || JSON.stringify(memory)),
 				source: normalize(memory?.continuityScope || 'WORLD'),
 				importance: Number(memory?.importance || 0),
+				retrievalScore: Number(memory?.retrievalScore || 0),
+				retrievalFamily: normalize(memory?.retrievalFamily || ''),
+				retrievalReasons: Array.isArray(memory?.retrievalReasons)
+					? memory.retrievalReasons.map((reason: unknown) => String(reason))
+					: [],
 			})),
 		];
 		const seenMemories = new Set<string>();
@@ -509,9 +514,17 @@ export class NarrativeResearchPipeline {
 				priority: blockPriority('MEMORY'),
 				reason: locationLinked
 					? 'Memory is linked to the current location/scene.'
-					: 'Memory overlaps the current action or information goal.',
+					: (Array.isArray((memory as any)?.retrievalReasons) && (memory as any).retrievalReasons.length > 0)
+						? 'N16 retrieval signals: ' + (memory as any).retrievalReasons.slice(0, 4).join(', ') + '.'
+						: 'Memory overlaps the current action or information goal.',
 				expiration: 'TURN',
-				relevanceScore: Math.min(0.92, 0.72 + overlap * 0.2),
+				relevanceScore: Math.min(
+					0.98,
+					Math.max(
+						Math.min(0.92, 0.72 + overlap * 0.2),
+						Number((memory as any)?.retrievalScore || 0),
+					),
+				),
 				content: truncate(`[${normalize((memory as any)?.memoryClass || 'MEMORY')}] ${content}`, 1800),
 			}, queryTokens);
 		}

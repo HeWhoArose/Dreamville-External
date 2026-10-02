@@ -317,26 +317,17 @@ export class NarrativeEpisodeProjectionEngine {
 			'Trajectory: ' + projection.trajectory,
 			'Episode question: ' + projection.centralQuestion,
 			'Latest beat: ' + projection.latestBeat,
-			projection.recentBeats.length ? 'Recent beats:
-- ' + projection.recentBeats.join('
-- ') : 'Recent beats: none.',
-			projection.activeThreadSummaries.length ? 'Active threads:
-- ' + projection.activeThreadSummaries.join('
-- ') : 'Active threads: none.',
+			projection.recentBeats.length ? 'Recent beats:\n- ' + projection.recentBeats.join('\n- ') : 'Recent beats: none.',
+			projection.activeThreadSummaries.length ? 'Active threads:\n- ' + projection.activeThreadSummaries.join('\n- ') : 'Active threads: none.',
 			projection.keyEntities.length ? 'Key entities: ' + projection.keyEntities.join(', ') : 'Key entities: none.',
-			projection.pressurePoints.length ? 'Pressure points:
-- ' + projection.pressurePoints.join('
-- ') : 'Pressure points: none.',
-			projection.resolutionSignals.length ? 'Resolution signals:
-- ' + projection.resolutionSignals.join('
-- ') : 'Resolution signals: none.',
+			projection.pressurePoints.length ? 'Pressure points:\n- ' + projection.pressurePoints.join('\n- ') : 'Pressure points: none.',
+			projection.resolutionSignals.length ? 'Resolution signals:\n- ' + projection.resolutionSignals.join('\n- ') : 'Resolution signals: none.',
 			'Continuity anchors: ' + projection.continuityAnchors.join('; '),
 			'Current narrative opportunity: ' + projection.narrativeOpportunity,
 			'Confidence: ' + projection.confidence.toFixed(2),
 			projection.fallbackReason ? 'Fallback: ' + projection.fallbackReason : 'Fallback: not required.',
 			'Hard boundary: this projection describes the shape of the existing episode; it does not create canon, mutate threads, reveal hidden facts, or choose the player’s future action.',
-		].join('
-');
+		].join('\n');
 	}
 
 	public static toCompactPromptContext(projection?: NarrativeEpisodeProjection): string {

@@ -186,6 +186,7 @@ export class SceneCompositionEngine {
 			'Dialogue act: ' + contract.dialogueAct,
 			'Reveal: ' + (contract.reveal.length ? 'present' : 'none'),
 			'Withhold: ' + (contract.withhold.length ? 'present' : 'none'),
+			'Closing beat: ' + contract.closingBeat.slice(0, 64),
 			'Hard boundary: this contract cannot mutate canonical state, decide player choices, reveal hidden facts, or commit an NPC action.',
 		].join(' ');
 	}

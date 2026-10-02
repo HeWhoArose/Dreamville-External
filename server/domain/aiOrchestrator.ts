@@ -7769,6 +7769,7 @@ export class MultiModelOrchestrator {
             prompt: assembledContext.assembledText,
             styleInstruction: '',
             totalTokens: assembledContext.totalTokens,
+            narrativeProviderHandoff: undefined,
           };
 
         const narrativeProviderHandoff = narrationPrompt.narrativeProviderHandoff;
@@ -8588,10 +8589,9 @@ export class MultiModelOrchestrator {
         timeoutMs: options?.timeoutMs || 35000,
         maxTokens: options?.maxTokens,
         modelId: emergency.modelId,
-        systemInstruction,
+        systemInstruction: [systemInstruction, options?.narrativeHandoff?.providerIndependentInstruction].filter(Boolean).join('\n\n'),
         canonicalLocationName: options?.canonicalLocationName,
         playerAction: options?.playerAction,
-        systemInstruction: [systemInstruction, options?.narrativeHandoff?.providerIndependentInstruction].filter(Boolean).join('\n\n'),
       });
       if (!emergencyResponse?.text) {
         throw new Error('Deterministic emergency floor returned an empty response after AI call budget exhaustion.');
@@ -8943,10 +8943,9 @@ export class MultiModelOrchestrator {
             maxTokens: options?.maxTokens,
             abortSignal: abortController.signal,
             modelId: currentCandidate.modelId,
-            systemInstruction,
+            systemInstruction: [systemInstruction, options?.narrativeHandoff?.providerIndependentInstruction].filter(Boolean).join('\n\n'),
             canonicalLocationName: options?.canonicalLocationName,
             playerAction: options?.playerAction,
-            systemInstruction: [systemInstruction, options?.narrativeHandoff?.providerIndependentInstruction].filter(Boolean).join('\n\n'),
           });
         } finally {
           clearTimeout(timer);

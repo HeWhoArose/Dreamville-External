@@ -82,13 +82,12 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 	const initialPlayer = repository.getPlayerLifecycle(storyId);
 	assert.ok(initialPlayer);
 
-	const initialSituation = {
-		repository,
+	const situation = (await import('../server/domain/currentSituation')).CurrentSituationBuilder.build({
 		storyId,
 		playerAction: 'I observe the nearby person and the expedition charts.',
 		viewerActorId: initialPlayer?.actorId,
-	};
-	const situation = (await import('../server/domain/currentSituation')).CurrentSituationBuilder.build(initialSituation);
+		worldRepo: repository,
+	});
 	const target = situation.nearbyEntities.find((entity) => ['NPC', 'CHARACTER'].includes(String(entity.kind).toUpperCase()));
 	assert.ok(target, 'Final audit requires a visible non-player entity for N14/N15 coverage.');
 

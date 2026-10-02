@@ -14,6 +14,7 @@ import { NarrativeProviderHandoffEngine, type NarrativeProviderHandoffContract }
 import { NarrativePacingEngine, type NarrativePacingContract, type NarrativePacingControls } from './narrativePacingEngine';
 import { SceneCompositionEngine, type SceneCompositionContract } from './sceneComposition';
 import { EntitySceneRelevanceEngine } from './entitySceneRelevance';
+import { NarrativeEpisodeProjectionEngine, type NarrativeEpisodeProjection } from './narrativeEpisodeProjection';
 
 export interface NarrationPromptInput {
 	situation: CurrentSituation;
@@ -35,6 +36,7 @@ export interface NarrationPromptInput {
 	narrativePacingControls?: Partial<NarrativePacingControls>;
 	narrativeProviderHandoff?: NarrativeProviderHandoffContract;
 	sceneComposition?: SceneCompositionContract;
+	episodeProjection?: NarrativeEpisodeProjection;
 }
 
 export interface NarrationPromptResult {
@@ -47,6 +49,7 @@ export interface NarrationPromptResult {
 	narrativePacingContract?: NarrativePacingContract;
 	narrativeProviderHandoff?: NarrativeProviderHandoffContract;
 	sceneComposition?: SceneCompositionContract;
+	episodeProjection?: NarrativeEpisodeProjection;
 }
 
 export function projectSupportingWorkingContext(context: AssembledTurnContext): string {
@@ -157,6 +160,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	const planContext = NarrativeDirector.toPromptContext(presentationPlan);
 	const sceneCompositionContext = SceneCompositionEngine.toPromptContext(sceneComposition);
 	const socialTopologyContext = EntitySceneRelevanceEngine.toConversationPromptContext(presentationPlan.socialTopology);
+	const episodeProjectionContext = NarrativeEpisodeProjectionEngine.toPromptContext(presentationPlan.episodeProjection);
 	const narrativeProviderHandoff = input.narrativeProviderHandoff || NarrativeProviderHandoffEngine.resolve({ storyId: input.situation.storyId, turnId: input.situation.turnId, voice: input.narratorVoiceState || NarratorVoiceEngine.resolve({ getUserData: () => null, saveUserData: () => undefined }, input.situation.storyId), quality: narrativeQualityContract, pacing: narrativePacingContract, continuity: narrativeContinuityState, novelty: narrativeNoveltyState });
 	const narrativeQualityContext = NarrativeQualityContractEngine.toPromptContext(narrativeQualityContract);
 	const promptBudgetVoiceContext = input.narratorVoiceState ? NarratorVoiceEngine.toPromptContext(input.narratorVoiceState) : 'Narrator Voice Contract: disabled for this turn.';
@@ -194,6 +198,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			planContext: string;
 			sceneCompositionContext: string;
 			socialTopologyContext: string;
+			episodeProjectionContext: string;
 			canonicalConstraints: string;
 			outputContract: string;
 		}>,
@@ -213,6 +218,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		section('NARRATIVE DIRECTOR PLAN', overrides?.planContext || planContext),
 		section('N13 SCENE COMPOSITION', overrides?.sceneCompositionContext || sceneCompositionContext),
 		section('N15 SOCIAL ATTENTION / CONVERSATION TOPOLOGY', overrides?.socialTopologyContext || socialTopologyContext),
+		section('N17 NARRATIVE EPISODE PROJECTION', overrides?.episodeProjectionContext || episodeProjectionContext),
 		section('NPC COGNITION BOUNDARY', 'NPC cognition is presentation guidance. Private beliefs, secrets, and knowledge must never be stated as player-visible facts unless independently authorized by research or canonical scene evidence. Express cognition through observable behavior, dialogue, hesitation, priorities, and reactions.'),
 		section('SUPPORTING WORKING CONTEXT', workingContext),
 		overrides?.canonicalConstraints || canonicalConstraints,
@@ -224,7 +230,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	const maxPromptTokens = input.maxPromptTokens;
 	if (!maxPromptTokens) {
 		const prompt = compose(initialResearch, initialWorking);
-		return { prompt, styleInstruction: [styleInstruction, narrativeProviderHandoff.providerIndependentInstruction].join('\n\n'), totalTokens: WorkingContextEngine.estimateTokens(prompt), narrativeQualityContract, narratorVoiceState: input.narratorVoiceState, narrativeContinuityState, narrativePacingContract, narrativeProviderHandoff, sceneComposition };
+		return { prompt, styleInstruction: [styleInstruction, narrativeProviderHandoff.providerIndependentInstruction].join('\n\n'), totalTokens: WorkingContextEngine.estimateTokens(prompt), narrativeQualityContract, narratorVoiceState: input.narratorVoiceState, narrativeContinuityState, narrativePacingContract, narrativeProviderHandoff, sceneComposition, episodeProjection: presentationPlan.episodeProjection };
 
 	}
 
@@ -264,6 +270,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			const microPlan = truncatePromptSection(planContext, 180);
 			const microComposition = SceneCompositionEngine.toCompactPromptContext(sceneComposition);
 			const microSocialTopology = truncatePromptSection(socialTopologyContext, 420);
+			const microEpisodeProjection = truncatePromptSection(NarrativeEpisodeProjectionEngine.toCompactPromptContext(presentationPlan.episodeProjection), 500);
 			const microCanonical = 'The current location and time are authoritative. Stay in the canonical current location unless the canonical game state has already committed a location change. Do not invent unsupported facts or turn rumor into certainty.';
 			const microOutput = '{"narrative":["..."],"dialogue":[],"events":[],"stateChanges":[],"memoryCandidates":[],"audioCues":[],"visualCues":[]}';
 			const sections = [
@@ -279,6 +286,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				section('NARRATIVE DIRECTOR PLAN', microPlan),
 				section('N13 SCENE COMPOSITION', microComposition),
 				section('N15 SOCIAL ATTENTION / CONVERSATION TOPOLOGY', microSocialTopology),
+				section('N17 NARRATIVE EPISODE PROJECTION', microEpisodeProjection),
 				section('CANONICAL CURRENT SCENE ANCHOR', microCanonical),
 				section('OUTPUT CONTRACT', 'Return ONLY valid JSON in this shape: ' + microOutput),
 			];
@@ -305,14 +313,16 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				totalTokens = WorkingContextEngine.estimateTokens(prompt);
 			}
 		} else if (maxPromptTokens >= 1000) {
+			const tightEpisodeBudget = Boolean(presentationPlan.episodeProjection) && maxPromptTokens <= 2000;
 			const compact = {
 				intentContext: intentContext,
-				researchContext: truncatePromptSection(initialResearch, 700),
-				planContext: truncatePromptSection(planContext, 300),
+				researchContext: truncatePromptSection(initialResearch, tightEpisodeBudget ? 360 : 700),
+				planContext: truncatePromptSection(planContext, tightEpisodeBudget ? 80 : 300),
 				sceneCompositionContext: SceneCompositionEngine.toCompactPromptContext(sceneComposition),
-				socialTopologyContext: truncatePromptSection(socialTopologyContext, 520),
-				workingContext: truncatePromptSection(initialWorking, 320),
-				situationContext: truncatePromptSection(situationContext, 900),
+				socialTopologyContext: truncatePromptSection(socialTopologyContext, tightEpisodeBudget ? 360 : 520),
+				episodeProjectionContext: truncatePromptSection(NarrativeEpisodeProjectionEngine.toCompactPromptContext(presentationPlan.episodeProjection), tightEpisodeBudget ? 100 : 180),
+				workingContext: truncatePromptSection(initialWorking, tightEpisodeBudget ? 100 : 320),
+				situationContext: truncatePromptSection(situationContext, tightEpisodeBudget ? 500 : 900),
 			};
 			const renderCompact = () => compose(
 				compact.researchContext,
@@ -323,6 +333,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 					planContext: compact.planContext,
 					sceneCompositionContext: compact.sceneCompositionContext,
 					socialTopologyContext: compact.socialTopologyContext,
+					episodeProjectionContext: compact.episodeProjectionContext,
 				},
 			);
 			prompt = renderCompact();
@@ -355,6 +366,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			const compactPlan = truncatePromptSection(planContext, 140);
 			const compactComposition = SceneCompositionEngine.toCompactPromptContext(sceneComposition);
 			const compactSocialTopology = truncatePromptSection(socialTopologyContext, 360);
+			const compactEpisodeProjection = truncatePromptSection(NarrativeEpisodeProjectionEngine.toCompactPromptContext(presentationPlan.episodeProjection), 420);
 			const compactCanonical = [
 				'State changes must come from canonical engines/commands.',
 				'Preserve rumor, hearsay, memory, and uncertainty as uncertainty.',
@@ -373,6 +385,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				section('NARRATIVE DIRECTOR PLAN', compactPlan),
 				section('N13 SCENE COMPOSITION', compactComposition),
 				section('N15 SOCIAL ATTENTION / CONVERSATION TOPOLOGY', compactSocialTopology),
+				section('N17 NARRATIVE EPISODE PROJECTION', compactEpisodeProjection),
 				section('SUPPORTING WORKING CONTEXT', '[omitted]'),
 				compactCanonical,
 				section('OUTPUT CONTRACT', compactOutput),
@@ -380,6 +393,6 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			totalTokens = WorkingContextEngine.estimateTokens(prompt);
 		}
 	}
-	return { prompt, styleInstruction: [styleInstruction, narrativeProviderHandoff.providerIndependentInstruction].join('\n\n'), totalTokens, narrativeQualityContract, narratorVoiceState: input.narratorVoiceState, narrativeContinuityState, narrativePacingContract, narrativeProviderHandoff, sceneComposition };
+	return { prompt, styleInstruction: [styleInstruction, narrativeProviderHandoff.providerIndependentInstruction].join('\n\n'), totalTokens, narrativeQualityContract, narratorVoiceState: input.narratorVoiceState, narrativeContinuityState, narrativePacingContract, narrativeProviderHandoff, sceneComposition, episodeProjection: presentationPlan.episodeProjection };
 }
 

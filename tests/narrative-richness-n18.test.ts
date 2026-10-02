@@ -60,7 +60,7 @@ function makePlan(overrides: Record<string, any> = {}) {
 			emotionalMovement: 'TURN',
 			sensoryAnchor: 'Rain taps the windows.',
 			narrativeFocus: ['sealed archive', 'Mara'],
-			subtext: ['Mara knows more than she is saying.'],
+			subtext: ['Mara deflects the question and refuses to answer.'],
 			reactionPriority: ['Mara', 'Guard'],
 			tensionDirection: 'TURN',
 			closingBeat: 'Land the immediate implication of the discovered seal.',
@@ -211,7 +211,7 @@ test('N18 evaluator remains presentation-only in the production orchestrator sou
 	const source = await fs.readFile(new URL('../server/domain/aiOrchestrator.ts', import.meta.url), 'utf8');
 	assert.match(source, /NarrativeRichnessEvaluator\.evaluate/);
 	assert.match(source, /narrativeRichnessEvaluation/);
-	assert.match(source, /postRichness\.decision !== 'PASS'/);
+	assert.doesNotMatch(source, /postRichness\.decision !== 'PASS'/);
 	assert.match(source, /narrative\.review/);
 });
 

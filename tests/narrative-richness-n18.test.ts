@@ -229,3 +229,12 @@ test('N18 does not replace semantic safety review', () => {
 	assert.equal(semantic.decision, 'REWRITE');
 	assert.ok(semantic.violations.some((violation) => violation.code === 'MISSING_MOVEMENT'));
 });
+
+test('N18 does not spend a second provider call on fallback candidates for richness-only improvement', async () => {
+	const fs = await import('node:fs/promises');
+	const source = await fs.readFile(new URL('../server/domain/aiOrchestrator.ts', import.meta.url), 'utf8');
+	assert.match(
+		source,
+		/const needsLiteraryRewrite = literary\.decision === 'REWRITE' \|\| \(cIdx === 0 && narrativeRichnessEvaluation\.decision === 'IMPROVE'\);/,
+	);
+});

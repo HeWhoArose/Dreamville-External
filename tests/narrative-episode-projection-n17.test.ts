@@ -292,3 +292,123 @@ test('N17 keeps future player agency outside the projection boundary', () => {
 	assert.ok(projection.avoidForcing.some((value) => /player.*future action/i.test(value)));
 	assert.ok(projection.avoidForcing.some((value) => /close.*thread|mutate.*thread/i.test(value)));
 });
+
+
+test('N17 rejects negated resolution evidence and does not collapse an unresolved thread into aftermath', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'n17-negative-resolution';
+	repository.seedStory(storyId);
+	const player = repository.getPlayerLifecycle(storyId)!;
+	const situation = CurrentSituationBuilder.build({
+		storyId,
+		playerAction: 'I keep investigating.',
+		viewerActorId: player.actorId,
+		worldRepo: repository,
+	});
+	situation.recentTurns = [{
+		turnId: 'turn-unresolved',
+		turnNumber: 7,
+		playerAction: 'I keep investigating.',
+		narration: 'The dispute is not resolved, and the missing witness has still not been found.',
+		worldTime: situation.worldTime,
+		locationId: situation.location.id,
+		stateChanges: [],
+		unresolvedConsequence: 'The witness remains missing.',
+		isOpeningScene: false,
+	}];
+	situation.openThreads = [{
+		id: 'thread-witness',
+		title: 'Find the missing witness',
+		summary: 'The witness remains missing.',
+		status: 'OPEN',
+		priority: 90,
+	}];
+
+	const projection = NarrativeEpisodeProjectionEngine.resolve({
+		situation,
+		intent: intent(),
+		continuityState: continuity(situation, { tension: 30, sceneMomentum: 'BUILDING' }),
+	});
+
+	assert.notEqual(projection.phase, 'AFTERMATH');
+	assert.notEqual(projection.phase, 'RESOLUTION');
+	assert.equal(projection.resolutionSignals.length, 0);
+	assert.ok(projection.pressurePoints.some((value) => /missing|unresolved/i.test(value)));
+});
+
+test('N17 exposes a bounded turning-point phase only when change evidence coexists with active episode pressure', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'n17-turning-point';
+	repository.seedStory(storyId);
+	const player = repository.getPlayerLifecycle(storyId)!;
+	const situation = CurrentSituationBuilder.build({
+		storyId,
+		playerAction: 'I investigate the fissure.',
+		viewerActorId: player.actorId,
+		worldRepo: repository,
+	});
+	situation.recentTurns = [{
+		turnId: 'turn-discovery',
+		turnNumber: 5,
+		playerAction: 'I inspect the fissure.',
+		narration: 'The inspection reveals a second fracture beneath the stone.',
+		worldTime: situation.worldTime,
+		locationId: situation.location.id,
+		stateChanges: [],
+		unresolvedConsequence: 'The lower fracture remains unexplored.',
+		isOpeningScene: false,
+	}];
+	situation.openThreads = [{
+		id: 'thread-fracture',
+		title: 'Determine where the lower fracture leads',
+		summary: 'The lower fracture remains unexplored.',
+		status: 'OPEN',
+		priority: 88,
+	}];
+
+	const projection = NarrativeEpisodeProjectionEngine.resolve({
+		situation,
+		intent: intent({ informationGoal: 'where the lower fracture leads' }),
+		continuityState: continuity(situation, { tension: 68, sceneMomentum: 'BUILDING', emotionalTemperature: 'TENSE' }),
+	});
+
+	assert.equal(projection.phase, 'TURNING_POINT');
+	assert.equal(projection.trajectory, 'TURN');
+	assert.match(projection.narrativeOpportunity, /supported change or discovery/i);
+});
+
+test('N17 compact projection keeps its non-binding boundary intact', () => {
+	const situation = {
+		storyId: 'n17-compact',
+		turnId: 'turn-compact',
+		worldId: 'world',
+		worldTime: 'now',
+		location: { id: 'loc', name: 'Hall', regionId: 'region', description: '', connectedLocations: [] },
+		nearbyEntities: [],
+		visibleEvents: [],
+		recentTurns: [{
+			turnId: 't1',
+			playerAction: 'investigate',
+			narration: 'A discovery changes the shape of the mystery.',
+			stateChanges: [],
+			isOpeningScene: false,
+		}],
+		plot: { currentArc: 'OPENING', summary: '', recentBeats: [] },
+		openThreads: [{ id: 't', title: 'Find the missing key', status: 'OPEN', priority: 80 }],
+		player: { actorId: 'player' },
+		activeConditions: [],
+		availableInteractions: [],
+		playerKnowledge: { viewerActorId: 'player', knownFacts: [] },
+		worldFacts: [],
+		relevantMemories: [],
+		relevantLore: [],
+	} as any;
+	const projection = NarrativeEpisodeProjectionEngine.resolve({
+		situation,
+		intent: intent(),
+		continuityState: continuity(situation, { sceneMomentum: 'BUILDING' }),
+	});
+	const compact = NarrativeEpisodeProjectionEngine.toCompactPromptContext(projection);
+	assert.match(compact, /non-binding presentation guidance only/i);
+	assert.match(compact, /never force/i);
+});

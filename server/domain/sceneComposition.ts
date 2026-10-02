@@ -180,7 +180,7 @@ export class SceneCompositionEngine {
 	public static toCompactPromptContext(contract?: SceneCompositionContract): string {
 		if (!contract) return 'N13 unavailable; preserve existing narrative direction and canonical boundaries.';
 		return [
-			'N13 compact: beat=' + contract.beatType,
+			'N13 SCENE COMPOSITION CONTRACT v1 (COMPACT — EPHEMERAL): beat=' + contract.beatType,
 			'pacing=' + contract.pacingShape,
 			'dialogue=' + contract.dialogueAct,
 			'reveal=' + (contract.reveal.length ? 'present' : 'none'),

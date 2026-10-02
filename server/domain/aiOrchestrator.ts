@@ -534,6 +534,7 @@ export interface OrchestratedTurnTelemetry {
   researchTokens?: number;
   narrativePlanObjective?: string;
   narrativeReview?: NarrativeReview;
+  narrativeRichnessEvaluation?: NarrativeRichnessEvaluation;
   aiCallBudget?: AiTurnCallBudgetSnapshot;
   narrativeProviderHandoff?: NarrativeProviderHandoffContract;
 }

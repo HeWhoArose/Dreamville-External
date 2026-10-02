@@ -3,6 +3,9 @@ import type { PlayerIntent, IntentEntityReference } from './playerIntentInterpre
 import type { NarrativeResearchResult } from './narrativeResearchPipeline';
 import type { WorldRepository } from '../repositories/worldRepository';
 import { buildNpcPlanningSlice } from './npcPlanningSlice';
+import { SceneCompositionEngine, type SceneCompositionContract } from './sceneComposition';
+import type { NarrativeContinuityState } from './narrativeContinuityState';
+import type { NarrativePacingContract } from './narrativePacingEngine';
 
 export interface InformationReveal {
 	topic: string;
@@ -82,6 +85,7 @@ export interface EphemeralNarrativePlan {
 	continuityRequirements: string[];
 	forbiddenAssumptions: string[];
 	stateEffectsExpected: ExpectedStateEffect[];
+	sceneComposition: SceneCompositionContract;
 	createdAt: string;
 	expiresAfterNarration: true;
 }
@@ -187,6 +191,37 @@ export class NarrativeDirector {
 		if (intent.interactionMode === 'COMBAT') stateEffectsExpected.push({ kind: 'COMBAT', description: 'Combat may require canonical combat adjudication; narration alone cannot commit the outcome.', required: false });
 		if (intent.interactionMode === 'MANIPULATION') stateEffectsExpected.push({ kind: 'INVENTORY', description: 'Item/object interaction may affect canonical inventory only when a domain command authorizes it.', required: false });
 
+		const defaultContinuity: NarrativeContinuityState = {
+			storyId: situation.storyId,
+			tension: 0,
+			emotionalTemperature: 'STEADY',
+			sceneMomentum: 'STEADY',
+			relationshipTrajectories: [],
+			unresolvedSubtext: [],
+			recentSensoryMotifs: [],
+			recentNarrativeBeats: [],
+			narrativeFocus: [],
+			lastAcceptedTurnId: undefined,
+			updatedAt: situation.worldTime,
+		};
+		const defaultPacing: NarrativePacingContract = {
+			version: 1,
+			profile: 'STANDARD',
+			reason: 'N13 fallback pacing contract used when the caller has not supplied N8 pacing.',
+			controls: { enabled: true, minWords: 85, maxWords: 190, minParagraphs: 1, maxParagraphs: 2, outputTokenReserve: 80 },
+			signals: ['n13_default'],
+			variation: 'Use the current scene rhythm without padding.',
+		};
+		const sceneComposition = SceneCompositionEngine.resolve({
+			situation,
+			intent,
+			informationToReveal: informationReveals(intent, research).slice(0, 4),
+			entitiesToReact: entityTargets(situation, intent),
+			unresolvedThread: topThread(research),
+			continuityState: defaultContinuity,
+			pacingContract: defaultPacing,
+		});
+
 		return {
 			turnId: situation.turnId,
 			objective: intent.goal ? intent.goal + ': ' + (intent.informationGoal || intent.action) : "Faithfully resolve the player's " + intent.action + ' in the current scene.',
@@ -198,6 +233,7 @@ export class NarrativeDirector {
 			continuityRequirements: continuityRequirements.slice(0, 10),
 			forbiddenAssumptions: forbiddenAssumptions.slice(0, 8),
 			stateEffectsExpected: stateEffectsExpected.slice(0, 4),
+			sceneComposition,
 			createdAt: situation.worldTime,
 			expiresAfterNarration: true,
 		};
@@ -211,6 +247,7 @@ export class NarrativeDirector {
 			plan.informationToReveal.length ? 'Information to reveal:\n' + plan.informationToReveal.map((item) => '- ' + item.topic + ' [' + item.presentation + '] [sources=' + (item.sourceBlockIds.join(', ') || 'none') + ']').join('\n') : 'Information to reveal: none.',
 			plan.entitiesToReact.length ? 'Entities to react: ' + plan.entitiesToReact.map((entity) => entity.name).join(', ') : 'Entities to react: none specified.',
 			plan.npcCognition?.length ? 'NPC cognition contracts:\n' + plan.npcCognition.map((npc) => JSON.stringify(npc)).join('\n') : 'NPC cognition contracts: none.',
+			SceneCompositionEngine.toPromptContext(plan.sceneComposition),
 			plan.unresolvedThread ? 'Relevant unresolved thread: ' + plan.unresolvedThread : 'Relevant unresolved thread: none.',
 			'Continuity requirements:\n- ' + plan.continuityRequirements.join('\n- '),
 			'Forbidden assumptions:\n- ' + plan.forbiddenAssumptions.join('\n- '),

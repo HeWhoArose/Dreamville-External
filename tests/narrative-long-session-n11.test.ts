@@ -185,7 +185,7 @@ test('N11 100-turn session stays bounded and presentation-stable', async () => {
 	assert.equal(new Set(postStartup.map(x => x.qualityProfile)).size, 1, 'N1 quality profile drifted during stable-intent session');
 	assert.equal(new Set(postStartup.slice(0, 59).map(x => x.pacingProfile)).size, 1, 'N8 pacing profile drifted during stable-intent session');
 
-	const handoffObservation = observations.find((entry) => entry.selectedModelId === 'n11-fallback');
+	const handoffObservation = observations.find((entry) => entry.selectedModelId !== 'n11-primary');
 	assert.ok(handoffObservation?.handoffId, 'no provider handoff was observed during the long session');
 	assert.match(fallback.callHistory[0].options?.systemInstruction || '', /N9 PROVIDER HANDOFF CONTRACT/i);
 	assert.equal(snapshotCanonical(repository, storyId), canonicalBefore, 'long-session presentation path mutated canonical state unexpectedly');

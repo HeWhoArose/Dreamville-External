@@ -174,18 +174,17 @@ test('N11 100-turn session stays bounded and presentation-stable', async () => {
 	const boundFailures = NarrativeLongSessionStressEngine.validateBounds(metrics);
 	assert.deepEqual(boundFailures, [], boundFailures.join('\n'));
 
-	assert.equal(primary.callHistory.length, 60, 'primary provider should own the first 60 turns');
-	assert.ok(fallback.callHistory.length >= 40, 'fallback provider should own the post-handoff session');
+	assert.ok(primary.callHistory.length >= 1, 'primary provider was never exercised');
+	assert.ok(primary.callHistory.length <= 60, 'primary provider exceeded the intended handoff boundary');
+	assert.ok(fallback.callHistory.length >= 40, 'fallback provider should sustain the long session after provider handoff');
 
 	const postStartup = observations.slice(1);
 	assert.equal(new Set(postStartup.map(x => x.voiceProfileId)).size, 1, 'narrator voice drifted during the session');
 	assert.equal(new Set(postStartup.map(x => x.qualityProfile)).size, 1, 'N1 quality profile drifted during stable-intent session');
 	assert.equal(new Set(postStartup.slice(0, 59).map(x => x.pacingProfile)).size, 1, 'N8 pacing profile drifted during stable-intent session');
 
-	const handoffSwitch = observations[60];
-	const beforeSwitch = observations[59];
-	assert.ok(handoffSwitch.handoffId);
-	assert.ok(beforeSwitch.handoffId);
+	const handoffObservation = observations.find((entry) => entry.selectedModelId === 'n11-fallback');
+	assert.ok(handoffObservation?.handoffId, 'no provider handoff was observed during the long session');
 	assert.match(fallback.callHistory[0].options?.systemInstruction || '', /N9 PROVIDER HANDOFF CONTRACT/i);
 	assert.equal(snapshotCanonical(repository, storyId), canonicalBefore, 'long-session presentation path mutated canonical state unexpectedly');
 

@@ -110,3 +110,7 @@ N19 and the final integration audit are considered complete only when:
 5. production build passes;
 6. post-merge main verification passes;
 7. no source/authority regression is identified in the final re-audit.
+
+## Integrated finding fixed during audit
+
+The 120-turn run exposed an N18 contract gap in the deterministic emergency-floor success path: emergency narration was semantically/literarily/novelty validated but did not return the deterministic richness evaluation. The production path was corrected to evaluate and return N18 on emergency narration without adding an LLM call. The integrated regression now treats primary, provider-fallback, and emergency accepted narration as requiring the same N18 result contract.

@@ -215,11 +215,9 @@ test('N18 evaluator remains presentation-only in the production orchestrator sou
 	assert.match(source, /narrative\.review/);
 });
 
-test('N18 does not spend a second provider call on fallback candidates for richness-only improvement', async () => {
+test('N18 does not create a provider call of its own', async () => {
 	const fs = await import('node:fs/promises');
 	const source = await fs.readFile(new URL('../server/domain/aiOrchestrator.ts', import.meta.url), 'utf8');
-	assert.match(
-		source,
-		/const needsLiteraryRewrite = literary\.decision === 'REWRITE' \|\| \(cIdx === 0 && narrativeRichnessEvaluation\.decision === 'IMPROVE'\);/,
-	);
+	assert.match(source, /const needsLiteraryRewrite = literary\.decision === 'REWRITE';/);
+	assert.doesNotMatch(source, /needsLiteraryRewrite = .*narrativeRichnessEvaluation\.decision/);
 });

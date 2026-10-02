@@ -252,6 +252,23 @@ test('Final integrated audit — 120-turn narration session preserves N13-N19 co
 				fastRuntime.operationalStatus = 'AVAILABLE';
 			}
 			internal.taskPinnedModels.delete('narrative.generate');
+			internal.consecutiveFailures.clear();
+			internal.circuitBreakersTripped.clear();
+			creativeModel.health = 'Healthy';
+			creativeModel.quota = 'Healthy';
+			creativeModel.accessStatus = 'accessible';
+			fastModel.health = 'Healthy';
+			fastModel.quota = 'Healthy';
+			fastModel.accessStatus = 'accessible';
+			for (const recoveryModel of [creativeModel, fastModel]) {
+				const recoveryRuntime = internal.runtimeStatus.get(recoveryModel.providerId + '::' + recoveryModel.modelId);
+				if (recoveryRuntime) {
+					recoveryRuntime.consecutiveFailures = 0;
+					recoveryRuntime.cooldownUntil = undefined;
+					recoveryRuntime.operationalStatus = 'AVAILABLE';
+					recoveryRuntime.status = 'Healthy';
+				}
+			}
 			const recoverySelection = orchestrator.selectBestModel('narrative.generate', { contextTokens: 0 });
 			assert.notEqual(recoverySelection.selectedModel.modelId, 'emergency-fallback-local', 'N19 recovery selection remained on the deterministic emergency floor.');
 

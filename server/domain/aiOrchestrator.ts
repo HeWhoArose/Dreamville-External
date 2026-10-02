@@ -7736,6 +7736,7 @@ export class MultiModelOrchestrator {
       const narrativeProfile = repo.getNarrativeProfile(storyId);
       const narratorVoiceState = NarratorVoiceEngine.resolve(repo, storyId, narrativeProfile, params.narratorVoiceControls);
       NarratorVoiceEngine.persist(repo, storyId, narratorVoiceState);
+      const narrativeNoveltyState = NarrativeNoveltyEngine.resolve(repo, storyId);
 
       // 1b. CH15 Source Adaptation Adjudication Check
       const narrationPrompt = isNarrativeTask && researchResult && narrativePlan

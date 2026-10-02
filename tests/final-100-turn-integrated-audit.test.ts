@@ -69,7 +69,7 @@ function responseForTurn(turn: number, location: string, target: string): string
 			`You keep ${target} in view at ${location}, asking about the expedition charts. ${sensory[(turn - 1) % sensory.length]}`
 			`The chart cases remain on the worktable as the room’s quiet activity continues. No new location, hidden fact, or future player decision is established.`
 		],
-		dialogue: [],
+		dialogue: [{ speaker: target, text: 'The charts are sealed, and the report remains uncertain.' }],
 		events: [],
 		stateChanges: [],
 		memoryCandidates: [],

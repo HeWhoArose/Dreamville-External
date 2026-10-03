@@ -240,7 +240,9 @@ test('FINAL INTEGRATED AUDIT — 120 turns preserve the full N1-N19 narrative co
 		assert.ok(result.narrativeRichnessEvaluation, 'turn ' + turn + ': N18 richness evaluation missing');
 		assert.ok(result.narrativePlan.socialTopology, 'turn ' + turn + ': N15 social topology missing');
 		assert.ok(result.narrativePlan.episodeProjection, 'turn ' + turn + ': N17 episode projection missing');
-		assert.ok(result.narrativePlan.npcCognition?.some((npc) => npc.actorId === target!.id), 'turn ' + turn + ': N5/N14 NPC cognition missing');
+		const targetCognition = result.narrativePlan.npcCognition?.find((npc) => npc.actorId === target!.id);
+		assert.ok(targetCognition, 'turn ' + turn + ': N5/N14 NPC cognition missing');
+		assert.ok(targetCognition?.expressiveIdentity, 'turn ' + turn + ': N14 expressive identity missing from NPC cognition contract');
 		assert.equal(result.narrativePlan.expiresAfterNarration, true);
 		assert.equal(result.playerIntent?.originalText, action);
 
@@ -253,7 +255,6 @@ test('FINAL INTEGRATED AUDIT — 120 turns preserve the full N1-N19 narrative co
 			'N17 NARRATIVE EPISODE PROJECTION',
 			'NARRATIVE RESEARCH',
 			'NPC COGNITION BOUNDARY',
-			'expressiveIdentity',
 		]) {
 			assert.ok(lastCall.prompt.includes(marker), 'turn ' + turn + ': missing prompt marker ' + marker);
 		}

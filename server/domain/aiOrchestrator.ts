@@ -7453,6 +7453,12 @@ export class MultiModelOrchestrator {
     });
 
     const narrativeProviderHandoff = narrationPrompt.narrativeProviderHandoff;
+    // N13 composition is resolved at the presentation layer after actual pacing/continuity are known.
+    // Pass that ephemeral projection into N18 evaluation without creating a second composition authority.
+    const richnessEvaluationPlan: EphemeralNarrativePlan = {
+      ...narrativePlan,
+      sceneComposition: narrationPrompt.sceneComposition,
+    };
 
     const contextAudit = {
       hardTokenBudget: assembledContext.hardTokenBudget,
@@ -8172,7 +8178,7 @@ export class MultiModelOrchestrator {
               narrativeRichnessEvaluation = NarrativeRichnessEvaluator.evaluate({
                 intent: playerIntent,
                 situation: currentSituation,
-                plan: narrativePlan,
+                plan: richnessEvaluationPlan,
                 turnPackage: reviewedTurnPackage,
                 previousNarrations,
               });
@@ -8237,7 +8243,7 @@ export class MultiModelOrchestrator {
                 const postRichness = NarrativeRichnessEvaluator.evaluate({
                   intent: playerIntent,
                   situation: currentSituation,
-                  plan: narrativePlan,
+                  plan: richnessEvaluationPlan,
                   turnPackage: literaryValidation.turnPackage,
                   previousNarrations,
                 });

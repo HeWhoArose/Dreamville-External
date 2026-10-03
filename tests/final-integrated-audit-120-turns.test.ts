@@ -297,7 +297,10 @@ test('FINAL INTEGRATED AUDIT — 120 turns preserve the full N1-N19 narrative co
 	const recoveredAfterPrimaryFailure = observations.slice(60).filter((entry) => entry.selectedModelId === 'final-audit-fallback' || entry.selectedModelId === 'emergency-fallback-local').length;
 	const configuredFallbackTurns = observations.slice(60).filter((entry) => entry.selectedModelId === 'final-audit-fallback').length;
 	assert.equal(recoveredAfterPrimaryFailure, 60, 'all 60 forced-primary-failure turns must recover through configured fallback or emergency floor; configuredFallback=' + configuredFallbackTurns);
-	assert.ok(configuredFallbackTurns >= 50, 'configured AI fallback should carry most forced-failure turns; observed=' + configuredFallbackTurns);
+	if (configuredFallbackTurns < 50) {
+		const diagnosticSelection = orchestrator.selectBestModel('narrative.generate', { contextTokens: 1000 });
+		throw new Error('configured AI fallback should carry most forced-failure turns; observed=' + configuredFallbackTurns + '; finalSelection=' + diagnosticSelection.selectedModel.providerId + '::' + diagnosticSelection.selectedModel.modelId + '; fallbacks=' + diagnosticSelection.fallbacks.map((model) => model.providerId + '::' + model.modelId).join(',') + '; primaryCalls=' + primary.callHistory.length + '; fallbackCalls=' + fallback.callHistory.length);
+	}
 	assert.ok(observations.every((entry) => entry.promptChars < 24000));
 	assert.ok(observations.every((entry) => entry.socialParticipantCount >= 0));
 	assert.ok(observations.some((entry) => entry.episodePhase && entry.episodePhase !== 'OPENING'));

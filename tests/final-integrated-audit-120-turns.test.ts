@@ -177,6 +177,12 @@ test('FINAL INTEGRATED AUDIT — 120 turns preserve the full N1-N19 narrative co
 	});
 	const target = firstSituation.nearbyEntities.find((entity) => entity.kind !== 'PLAYER');
 	assert.ok(target, 'Final integrated audit requires a visible NPC target.');
+	repository.getMemoryEngine(storyId).storeMemory(memory({
+		id: 'final-audit-target-episodic',
+		relatedEntityIds: [target!.id],
+		content: 'Earlier, the player watched ' + target!.name + ' pause beside the unstable starlight fissure before returning to the archive instruments.',
+		triggerConditionTags: ['archive', 'fissure', 'observe'],
+	}));
 
 	const run = repository.getStoryRun(storyId);
 	assert.ok(run);

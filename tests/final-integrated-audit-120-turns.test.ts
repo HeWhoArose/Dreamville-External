@@ -237,7 +237,7 @@ test('FINAL INTEGRATED AUDIT — 120 turns preserve the full N1-N19 narrative co
 		assert.equal(result.success, true, 'turn ' + turn + ': ' + (result.error || 'unknown failure'));
 		assert.ok(result.narrativePlan, 'turn ' + turn + ': missing narrative plan');
 		assert.ok(result.telemetry.narrativeProviderHandoff, 'turn ' + turn + ': missing N9 provider handoff');
-		assert.ok(result.narrativeRichnessEvaluation, 'turn ' + turn + ': N18 richness evaluation missing');
+		assert.ok(result.narrativeRichnessEvaluation, 'turn ' + turn + ': N18 richness evaluation missing; task=' + result.telemetry.taskId + '; provider=' + result.telemetry.selectedProviderId + '; model=' + result.telemetry.selectedModelId + '; plan=' + Boolean(result.narrativePlan) + '; semantic=' + String(result.narrativeReview?.decision || 'none') + '; literary=' + String(result.literaryReview?.decision || 'none') + '; error=' + String(result.error || 'none'));
 		assert.ok(result.narrativePlan.socialTopology, 'turn ' + turn + ': N15 social topology missing');
 		assert.ok(result.narrativePlan.episodeProjection, 'turn ' + turn + ': N17 episode projection missing');
 		const targetCognition = result.narrativePlan.npcCognition?.find((npc) => npc.actorId === target!.id);

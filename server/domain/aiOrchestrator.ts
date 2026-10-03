@@ -7453,7 +7453,12 @@ export class MultiModelOrchestrator {
     });
 
     const narrativeProviderHandoff = narrationPrompt.narrativeProviderHandoff;
-
+    const resolvedSceneComposition =
+      'sceneComposition' in narrationPrompt ? narrationPrompt.sceneComposition : undefined;
+    const richnessEvaluationPlan: EphemeralNarrativePlan = {
+      ...narrativePlan,
+      sceneComposition: resolvedSceneComposition,
+    };
     const contextAudit = {
       hardTokenBudget: assembledContext.hardTokenBudget,
       totalTokens: assembledContext.totalTokens,
@@ -7630,7 +7635,7 @@ export class MultiModelOrchestrator {
     const finalNarrativeRichnessEvaluation = NarrativeRichnessEvaluator.evaluate({
       intent: playerIntent,
       situation: currentSituation,
-      plan: narrativePlan,
+      plan: richnessEvaluationPlan,
       turnPackage: validation.turnPackage,
       previousNarrations: canonicalRecentTurns.map((turn) => String(turn.narration || '')).filter(Boolean),
     });
@@ -7876,6 +7881,7 @@ export class MultiModelOrchestrator {
 
         const narrativeProviderHandoff = narrationPrompt.narrativeProviderHandoff;
 
+
     const profile = repo.getAdaptationProfile(storyId);
       const bible = repo.getAdaptedStoryBible(storyId);
       if (profile && bible) {
@@ -8120,6 +8126,14 @@ export class MultiModelOrchestrator {
             let literaryReview: LiteraryReview | undefined;
             let narrativeRichnessEvaluation: NarrativeRichnessEvaluation | undefined;
             if (isNarrativeTask && narrativePlan) {
+              // N13 is resolved in NarrativePromptBuilder after the actual pacing/continuity state is known.
+              // Feed that same ephemeral projection into N18 without creating a second composition authority.
+              const resolvedSceneComposition =
+                'sceneComposition' in narrationPrompt ? narrationPrompt.sceneComposition : undefined;
+              const richnessEvaluationPlan: EphemeralNarrativePlan = {
+                ...narrativePlan,
+                sceneComposition: resolvedSceneComposition,
+              };
               const initialReview = SemanticNarrativeReview.review({
                 intent: playerIntent,
                 situation: currentSituation,
@@ -8172,7 +8186,7 @@ export class MultiModelOrchestrator {
               narrativeRichnessEvaluation = NarrativeRichnessEvaluator.evaluate({
                 intent: playerIntent,
                 situation: currentSituation,
-                plan: narrativePlan,
+                plan: richnessEvaluationPlan,
                 turnPackage: reviewedTurnPackage,
                 previousNarrations,
               });
@@ -8237,7 +8251,7 @@ export class MultiModelOrchestrator {
                 const postRichness = NarrativeRichnessEvaluator.evaluate({
                   intent: playerIntent,
                   situation: currentSituation,
-                  plan: narrativePlan,
+                  plan: richnessEvaluationPlan,
                   turnPackage: literaryValidation.turnPackage,
                   previousNarrations,
                 });
@@ -8455,6 +8469,7 @@ export class MultiModelOrchestrator {
               let emergencyTurnPackage = validation.turnPackage;
               let emergencyNarrativeReview: NarrativeReview | undefined;
               let emergencyLiteraryReview: LiteraryReview | undefined;
+              let emergencyNarrativeRichnessEvaluation: NarrativeRichnessEvaluation | undefined;
               if (isNarrativeTask && narrativePlan) {
                 const reviewed = await this.reviewAndRepairNarrative({
                   turnPackage: validation.turnPackage,
@@ -8498,8 +8513,29 @@ export class MultiModelOrchestrator {
                     emergencyLiteraryReview = emergencyLiterary;
                   }
                 }
+
+                if (emergencyNarrativeReview) {
+                  const emergencySceneComposition =
+                    'sceneComposition' in narrationPrompt ? narrationPrompt.sceneComposition : undefined;
+                  const emergencyRichnessEvaluationPlan: EphemeralNarrativePlan = {
+                    ...narrativePlan,
+                    sceneComposition: emergencySceneComposition,
+                  };
+                  emergencyNarrativeRichnessEvaluation = NarrativeRichnessEvaluator.evaluate({
+                    intent: playerIntent,
+                    situation: currentSituation,
+                    plan: emergencyRichnessEvaluationPlan,
+                    turnPackage: emergencyTurnPackage,
+                    previousNarrations: currentSituation.recentTurns
+                      .map((entry) => String(entry.narration || ''))
+                      .filter(Boolean),
+                  });
+                }
               }
-              const adjudication = DomainAdjudicationBridge.adjudicate(
+              // Emergency recovery is not an authorization to bypass N6/N7.
+              // A narrative emergency turn succeeds only when semantic + literary acceptance is present.
+              if (!(isNarrativeTask && narrativePlan && !emergencyNarrativeReview)) {
+                const adjudication = DomainAdjudicationBridge.adjudicate(
                 emergencyTurnPackage,
                 repo,
                 storyId,
@@ -8593,6 +8629,7 @@ export class MultiModelOrchestrator {
               researchTokens: researchResult?.totalTokens,
               narrativePlanObjective: narrativePlan?.objective,
               narrativeReview: emergencyNarrativeReview,
+              narrativeRichnessEvaluation: emergencyNarrativeRichnessEvaluation,
               narrativeProviderHandoff: narrativeProviderHandoff ? NarrativeProviderHandoffEngine.snapshot(narrativeProviderHandoff) : undefined,
             };
             this.lastTurnTelemetry = telemetry;
@@ -8610,19 +8647,21 @@ export class MultiModelOrchestrator {
             });
             }
 
-            return {
-              success: true,
-              turnPackage: emergencyTurnPackage,
-              playerIntent,
-              narrativePlan,
-              narrativeReview: emergencyNarrativeReview,
-              literaryReview: emergencyLiteraryReview,
-              stateAdjudication,
-              telemetry,
-              adjudicationResult: adjudication,
-              checkpoint,
-              audioResultBase64: res.audioBase64,
-            };
+                return {
+                  success: true,
+                  turnPackage: emergencyTurnPackage,
+                  playerIntent,
+                  narrativePlan,
+                  narrativeReview: emergencyNarrativeReview,
+                  literaryReview: emergencyLiteraryReview,
+                  narrativeRichnessEvaluation: emergencyNarrativeRichnessEvaluation,
+                  stateAdjudication,
+                  telemetry,
+                  adjudicationResult: adjudication,
+                  checkpoint,
+                  audioResultBase64: res.audioBase64,
+                };
+              }
             }
           }
         }

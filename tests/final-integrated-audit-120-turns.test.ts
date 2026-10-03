@@ -303,7 +303,7 @@ test('FINAL INTEGRATED AUDIT — N19 selects creative capability when explicit r
 });
 
 test('FINAL INTEGRATED AUDIT — emergency floor preserves N13-N18 presentation contracts after total AI outage', async () => {
-	const storyId = 'final_integrated_emergency';
+	const storyId = 'final_integrated_120';
 	const repository = prepareRepository();
 	const primary = new DeterministicMockAdapter('final_emergency_primary');
 	const fallback = new DeterministicMockAdapter('final_emergency_fallback');

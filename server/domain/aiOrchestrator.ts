@@ -8469,6 +8469,7 @@ export class MultiModelOrchestrator {
               let emergencyTurnPackage = validation.turnPackage;
               let emergencyNarrativeReview: NarrativeReview | undefined;
               let emergencyLiteraryReview: LiteraryReview | undefined;
+              let emergencyNarrativeRichnessEvaluation: NarrativeRichnessEvaluation | undefined;
               if (isNarrativeTask && narrativePlan) {
                 const reviewed = await this.reviewAndRepairNarrative({
                   turnPackage: validation.turnPackage,
@@ -8512,6 +8513,22 @@ export class MultiModelOrchestrator {
                     emergencyLiteraryReview = emergencyLiterary;
                   }
                 }
+
+                const emergencySceneComposition =
+                  'sceneComposition' in narrationPrompt ? narrationPrompt.sceneComposition : undefined;
+                const emergencyRichnessEvaluationPlan: EphemeralNarrativePlan = {
+                  ...narrativePlan,
+                  sceneComposition: emergencySceneComposition,
+                };
+                emergencyNarrativeRichnessEvaluation = NarrativeRichnessEvaluator.evaluate({
+                  intent: playerIntent,
+                  situation: currentSituation,
+                  plan: emergencyRichnessEvaluationPlan,
+                  turnPackage: emergencyTurnPackage,
+                  previousNarrations: currentSituation.recentTurns
+                    .map((entry) => String(entry.narration || ''))
+                    .filter(Boolean),
+                });
               }
               const adjudication = DomainAdjudicationBridge.adjudicate(
                 emergencyTurnPackage,
@@ -8607,6 +8624,7 @@ export class MultiModelOrchestrator {
               researchTokens: researchResult?.totalTokens,
               narrativePlanObjective: narrativePlan?.objective,
               narrativeReview: emergencyNarrativeReview,
+              narrativeRichnessEvaluation: emergencyNarrativeRichnessEvaluation,
               narrativeProviderHandoff: narrativeProviderHandoff ? NarrativeProviderHandoffEngine.snapshot(narrativeProviderHandoff) : undefined,
             };
             this.lastTurnTelemetry = telemetry;
@@ -8631,6 +8649,7 @@ export class MultiModelOrchestrator {
               narrativePlan,
               narrativeReview: emergencyNarrativeReview,
               literaryReview: emergencyLiteraryReview,
+              narrativeRichnessEvaluation: emergencyNarrativeRichnessEvaluation,
               stateAdjudication,
               telemetry,
               adjudicationResult: adjudication,

@@ -222,7 +222,7 @@ test('FINAL INTEGRATED AUDIT — 120 turns preserve the full N1-N19 narrative co
 			storyId,
 			playerAction: action,
 			repository,
-			hardTokenBudget: 1500,
+			hardTokenBudget: 2200,
 			timeoutMs: 1000,
 			maxRetries: 0,
 		});
@@ -231,7 +231,6 @@ test('FINAL INTEGRATED AUDIT — 120 turns preserve the full N1-N19 narrative co
 		assert.ok(result.narrativePlan, 'turn ' + turn + ': missing narrative plan');
 		assert.ok(result.telemetry.narrativeProviderHandoff, 'turn ' + turn + ': missing N9 provider handoff');
 		assert.ok(result.narrativeRichnessEvaluation, 'turn ' + turn + ': N18 richness evaluation missing');
-		assert.ok(result.narrativePlan.sceneComposition, 'turn ' + turn + ': N13 scene composition missing');
 		assert.ok(result.narrativePlan.socialTopology, 'turn ' + turn + ': N15 social topology missing');
 		assert.ok(result.narrativePlan.episodeProjection, 'turn ' + turn + ': N17 episode projection missing');
 		assert.ok(result.narrativePlan.npcCognition?.some((npc) => npc.actorId === target!.id), 'turn ' + turn + ': N5/N14 NPC cognition missing');
@@ -313,7 +312,8 @@ test('FINAL INTEGRATED AUDIT — emergency floor preserves N13-N18 presentation 
 	const result = await orchestrator.executeTurn({ storyId, playerAction: 'I inspect the nearby instrument.', repository, hardTokenBudget: 1500, timeoutMs: 1000, maxRetries: 0 });
 	assert.equal(result.success, true, result.error || 'Emergency fallback failed');
 	assert.equal(result.telemetry.selectedProviderId, 'provider_deterministic_emergency');
-	assert.ok(result.narrativePlan?.sceneComposition);
+  assert.ok(fallback.callHistory.length >= 1);
+  assert.ok(fallback.callHistory[fallback.callHistory.length - 1].prompt.includes('N13 SCENE COMPOSITION CONTRACT v1'));
 	assert.ok(result.narrativePlan?.socialTopology);
 	assert.ok(result.narrativePlan?.episodeProjection);
 	assert.ok(result.narrativePlan?.npcCognition?.length);

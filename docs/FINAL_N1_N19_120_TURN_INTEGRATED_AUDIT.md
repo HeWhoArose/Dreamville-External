@@ -100,3 +100,10 @@ Required verification remains:
 - post-merge main verification after the final audit change is merged.
 
 The phase is not complete until all required gates are green.
+## Second re-audit finding and correction
+
+The integrated 120-turn run then exposed a second production-path gap: the deterministic emergency narration branch restored an accepted turn but did not produce the N18 richness evaluation object.
+
+This was corrected by evaluating N18 after emergency semantic/literary acceptance using the same N13-aware ephemeral composition projection. The emergency result and telemetry now carry the richness evaluation just like the normal provider path.
+
+This preserves the existing emergency authority and does not add another generation/review call.

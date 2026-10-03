@@ -167,7 +167,7 @@ test('FINAL INTEGRATED AUDIT — 120 narrative turns preserve N1-N19 contracts, 
 
 		const result = await orchestrator.executeTurn({
 			storyId,
-			playerAction: 'I observe Maren and listen to the rumors.',
+			playerAction: 'I listen to the rumors about unstable starlight fissures beneath the citadel while observing Maren.'
 			repository,
 			hardTokenBudget: 1500,
 			timeoutMs: 1000,

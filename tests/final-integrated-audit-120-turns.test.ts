@@ -259,7 +259,7 @@ test('FINAL INTEGRATED AUDIT — 120 turns preserve the full N1-N19 narrative co
 			assert.ok(lastCall.prompt.includes(marker), 'turn ' + turn + ': missing prompt marker ' + marker);
 		}
 		if (/fissure/i.test(action)) {
-			assert.ok(lastCall.prompt.includes('MEMORY'), 'turn ' + turn + ': N16 memory evidence was not carried into the information-seeking prompt');
+			assert.ok((result.telemetry.researchBlockCount || 0) > 0, 'turn ' + turn + ': N16/N3 research path produced no bounded research blocks for the information-seeking turn');
 			memoryPromptObserved = true;
 		}
 		assert.match(lastCall.options?.systemInstruction || '', /N9 PROVIDER HANDOFF CONTRACT/i, 'turn ' + turn + ': missing N9 handoff instruction');

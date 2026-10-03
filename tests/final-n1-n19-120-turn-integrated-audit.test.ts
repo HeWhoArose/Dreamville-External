@@ -50,9 +50,9 @@ function responseForTurn(turn: number): string {
 	const detail = details[(turn - 1) % details.length];
 	return JSON.stringify({
 		narrative: [
-			'You remain within the Whispering Orrery, listening to Maren the Archivist without speaking or changing the scene.',
+			'You remain within the Whispering Orrery, listening to Maren the Archivist about the starlight fissure rumors without speaking or changing the scene.',
 			turn % 3 === 0
-				? 'Her quiet work continues beside the records, and the starlight fissure reports remain uncertain rather than established fact. ' + detail
+				? 'Her quiet work continues beside the records, and the starlight fissure rumors remain uncertain rather than established fact. ' + detail
 				: detail + ' Maren continues her careful work while the unverified fissure rumors remain only rumors.',
 		],
 		dialogue: [],

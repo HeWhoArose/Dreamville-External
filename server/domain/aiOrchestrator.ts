@@ -7636,7 +7636,7 @@ export class MultiModelOrchestrator {
     const finalNarrativeRichnessEvaluation = NarrativeRichnessEvaluator.evaluate({
       intent: playerIntent,
       situation: currentSituation,
-      plan: narrativePlan,
+      plan: richnessEvaluationPlan,
       turnPackage: validation.turnPackage,
       previousNarrations: canonicalRecentTurns.map((turn) => String(turn.narration || '')).filter(Boolean),
     });

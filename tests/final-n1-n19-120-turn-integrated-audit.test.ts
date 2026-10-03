@@ -37,6 +37,17 @@ function narrativeModel(
 }
 
 function responseForTurn(turn: number): string {
+	const openings = [
+		'Within the Whispering Orrery, you keep your attention on Maren while the archive settles around you.',
+		'At the brass rail of the Whispering Orrery, you listen closely to Maren and the records beside her.',
+		'Near the turning rings, you remain focused on Maren as the instruments mark the quiet interval.',
+		'Beside the archive workbench, you study Maren’s reaction while the orrery continues its slow motion.',
+		'Under the blue instrument light, you listen to Maren without interrupting her careful review.',
+		'Across the stone floor of the Orrery chamber, your attention stays on Maren and the uncertain reports.',
+		'As another brass ring settles into place, you keep watching Maren and listening for the requested information.',
+		'With the vault quiet around you, you concentrate on Maren’s records and the rumors attached to them.',
+	];
+	const opening = openings[(turn - 1) % openings.length];
 	const details = [
 		'Brass rings click softly above the rail while blue instrument light moves across the stone.',
 		'A faint mechanical hum passes through the chamber as dust settles beside the workbench.',
@@ -50,7 +61,7 @@ function responseForTurn(turn: number): string {
 	const detail = details[(turn - 1) % details.length];
 	return JSON.stringify({
 		narrative: [
-			'You remain within the Whispering Orrery, listening to Maren the Archivist about the unstable starlight fissure reports beneath the citadel and their surrounding rumors without speaking or changing the scene.',
+			opening + ' Maren the Archivist is reviewing the unstable starlight fissure reports beneath the citadel and their surrounding rumors without you speaking or changing the scene.',
 			turn % 3 === 0
 				? 'Her quiet work continues beside the records; reports of unstable starlight fissures beneath the citadel remain uncertain, and the surrounding rumors are not established fact. ' + detail
 				: detail + ' Maren continues her careful work while reports of unstable starlight fissures beneath the citadel remain unverified and the surrounding rumors remain only rumors.',
@@ -67,6 +78,7 @@ function responseForTurn(turn: number): string {
 function prepareOrchestrator(
 	primary: DeterministicMockAdapter,
 	fallback: DeterministicMockAdapter,
+	emergency: DeterministicMockAdapter,
 ): MultiModelOrchestrator {
 	const orchestrator = new MultiModelOrchestrator();
 	const internal = orchestrator as any;
@@ -97,6 +109,7 @@ function prepareOrchestrator(
 	}));
 	orchestrator.registerAdapter(primary);
 	orchestrator.registerAdapter(fallback);
+	orchestrator.registerAdapter(emergency);
 	return orchestrator;
 }
 
@@ -136,7 +149,8 @@ test('FINAL INTEGRATED AUDIT — 120 narrative turns preserve N1-N19 contracts, 
 
 	const primary = new DeterministicMockAdapter('final_audit_primary_provider');
 	const fallback = new DeterministicMockAdapter('final_audit_fallback_provider');
-	const orchestrator = prepareOrchestrator(primary, fallback);
+	const emergency = new DeterministicMockAdapter('provider_deterministic_emergency');
+	const orchestrator = prepareOrchestrator(primary, fallback, emergency);
 	const canonicalBefore = canonicalSnapshot(repository, storyId);
 
 	const observations: Array<{
@@ -155,8 +169,13 @@ test('FINAL INTEGRATED AUDIT — 120 narrative turns preserve N1-N19 contracts, 
 	}> = [];
 
 	for (let turn = 1; turn <= 120; turn += 1) {
-		primary.cannedResponses.set('narrative.generate', responseForTurn(turn));
-		fallback.cannedResponses.set('narrative.generate', responseForTurn(turn));
+		const turnResponse = responseForTurn(turn);
+		primary.cannedResponses.set('narrative.generate', turnResponse);
+		fallback.cannedResponses.set('narrative.generate', turnResponse);
+		primary.cannedResponses.set('narrative.review', turnResponse);
+		fallback.cannedResponses.set('narrative.review', turnResponse);
+		emergency.cannedResponses.set('narrative.generate', turnResponse);
+		emergency.cannedResponses.set('narrative.review', turnResponse);
 
 		if (turn === 61) {
 			primary.failureMode = '500';

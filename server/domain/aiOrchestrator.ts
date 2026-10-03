@@ -8455,6 +8455,7 @@ export class MultiModelOrchestrator {
               let emergencyTurnPackage = validation.turnPackage;
               let emergencyNarrativeReview: NarrativeReview | undefined;
               let emergencyLiteraryReview: LiteraryReview | undefined;
+              let emergencyNarrativeRichnessEvaluation: NarrativeRichnessEvaluation | undefined;
               if (isNarrativeTask && narrativePlan) {
                 const reviewed = await this.reviewAndRepairNarrative({
                   turnPackage: validation.turnPackage,
@@ -8496,6 +8497,13 @@ export class MultiModelOrchestrator {
                     emergencyTurnPackage = reviewed.turnPackage;
                     emergencyNarrativeReview = reviewed.review;
                     emergencyLiteraryReview = emergencyLiterary;
+                    emergencyNarrativeRichnessEvaluation = NarrativeRichnessEvaluator.evaluate({
+                      intent: playerIntent,
+                      situation: currentSituation,
+                      plan: narrativePlan,
+                      turnPackage: emergencyTurnPackage,
+                      previousNarrations: currentSituation.recentTurns.map((entry) => String(entry.narration || '')).filter(Boolean),
+                    });
                   }
                 }
               }
@@ -8593,6 +8601,7 @@ export class MultiModelOrchestrator {
               researchTokens: researchResult?.totalTokens,
               narrativePlanObjective: narrativePlan?.objective,
               narrativeReview: emergencyNarrativeReview,
+              narrativeRichnessEvaluation: emergencyNarrativeRichnessEvaluation,
               narrativeProviderHandoff: narrativeProviderHandoff ? NarrativeProviderHandoffEngine.snapshot(narrativeProviderHandoff) : undefined,
             };
             this.lastTurnTelemetry = telemetry;
@@ -8617,6 +8626,7 @@ export class MultiModelOrchestrator {
               narrativePlan,
               narrativeReview: emergencyNarrativeReview,
               literaryReview: emergencyLiteraryReview,
+              narrativeRichnessEvaluation: emergencyNarrativeRichnessEvaluation,
               stateAdjudication,
               telemetry,
               adjudicationResult: adjudication,

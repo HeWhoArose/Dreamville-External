@@ -8457,6 +8457,13 @@ export class MultiModelOrchestrator {
               let emergencyLiteraryReview: LiteraryReview | undefined;
               let emergencyNarrativeRichnessEvaluation: NarrativeRichnessEvaluation | undefined;
               if (isNarrativeTask && narrativePlan) {
+                emergencyNarrativeRichnessEvaluation = NarrativeRichnessEvaluator.evaluate({
+                  intent: playerIntent,
+                  situation: currentSituation,
+                  plan: narrativePlan,
+                  turnPackage: emergencyTurnPackage,
+                  previousNarrations: currentSituation.recentTurns.map((entry) => String(entry.narration || '')).filter(Boolean),
+                });
                 const reviewed = await this.reviewAndRepairNarrative({
                   turnPackage: validation.turnPackage,
                   intent: playerIntent,

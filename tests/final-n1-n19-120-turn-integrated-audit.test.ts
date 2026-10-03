@@ -37,41 +37,27 @@ function narrativeModel(
 }
 
 function responseForTurn(turn: number): string {
-	const openings = [
-		'Within the Whispering Orrery, you keep your attention on Maren while the archive settles around you.',
-		'At the brass rail of the Whispering Orrery, you listen closely to Maren and the records beside her.',
-		'Near the turning rings, you remain focused on Maren as the instruments mark the quiet interval.',
-		'Beside the archive workbench, you study Maren’s reaction while the orrery continues its slow motion.',
-		'Under the blue instrument light, you listen to Maren without interrupting her careful review.',
-		'Across the stone floor of the Orrery chamber, your attention stays on Maren and the uncertain reports.',
-		'As another brass ring settles into place, you keep watching Maren and listening for the requested information.',
-		'With the vault quiet around you, you concentrate on Maren’s records and the rumors attached to them.',
+	const manners = [
+		'quietly', 'calmly', 'carefully', 'cautiously', 'steadily', 'softly',
+		'patiently', 'closely', 'warily', 'thoughtfully', 'deliberately', 'briefly',
 	];
-	const opening = openings[(turn - 1) % openings.length];
-	const details = [
-		'Brass rings click softly above the rail while blue instrument light moves across the stone.',
-		'A faint mechanical hum passes through the chamber as dust settles beside the workbench.',
-		'The prism glass catches a pale reflection before the light fades back into the orrery.',
-		'A loose page stirs near Maren’s elbow and settles beneath the steady ticking of the instruments.',
-		'The air carries the dry scent of old paper and metal while the chamber remains otherwise quiet.',
-		'One of the outer rings turns a fraction and stops, leaving the archive in measured silence.',
-		'Maren keeps her attention on the records while distant footsteps fade beyond the vault arch.',
-		'A small tremor travels through the brass rail and disappears almost as quickly as it arrived.',
+	const verbs = [
+		'reports', 'mentions', 'reveals', 'confirms', 'explains',
+		'tells', 'whispers', 'hears', 'learns', 'says',
 	];
-	const detail = details[(turn - 1) % details.length];
+	const manner = manners[(turn - 1) % manners.length];
+	const verb = verbs[Math.floor((turn - 1) / manners.length)];
+	const narrative = verb === 'says'
+		? `Maren ${manner} says this rumor.`
+		: `Maren ${manner} ${verb} rumors.`;
 	return JSON.stringify({
-		narrative: [
-			opening + ' Maren the Archivist is reviewing the unstable starlight fissure reports beneath the citadel and their surrounding rumors without you speaking or changing the scene.',
-			turn % 3 === 0
-				? 'Her quiet work continues beside the records; reports of unstable starlight fissures beneath the citadel remain uncertain, and the surrounding rumors are not established fact. ' + detail
-				: detail + ' Maren continues her careful work while reports of unstable starlight fissures beneath the citadel remain unverified and the surrounding rumors remain only rumors.',
-		],
+		narrative: [narrative],
 		dialogue: [],
 		events: [],
 		stateChanges: [],
 		memoryCandidates: [],
 		audioCues: [],
-		visualCues: ['Whispering Orrery', 'Maren the Archivist', detail],
+		visualCues: ['Whispering Orrery', 'Maren the Archivist'],
 	});
 }
 

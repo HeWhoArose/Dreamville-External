@@ -8533,7 +8533,7 @@ export class MultiModelOrchestrator {
                 }
               }
               // Emergency recovery is not an authorization to bypass N6/N7.
-              // A narrative emergency turn may succeed only after semantic + literary acceptance.
+              // A narrative emergency turn succeeds only when semantic + literary acceptance is present.
               if (!(isNarrativeTask && narrativePlan && !emergencyNarrativeReview)) {
                 const adjudication = DomainAdjudicationBridge.adjudicate(
                 emergencyTurnPackage,
@@ -8647,20 +8647,21 @@ export class MultiModelOrchestrator {
             });
             }
 
-              return {
-                success: true,
-                turnPackage: emergencyTurnPackage,
-                playerIntent,
-                narrativePlan,
-                narrativeReview: emergencyNarrativeReview,
-                literaryReview: emergencyLiteraryReview,
-                narrativeRichnessEvaluation: emergencyNarrativeRichnessEvaluation,
-                stateAdjudication,
-                telemetry,
-                adjudicationResult: adjudication,
-                checkpoint,
-                audioResultBase64: res.audioBase64,
-              };
+                return {
+                  success: true,
+                  turnPackage: emergencyTurnPackage,
+                  playerIntent,
+                  narrativePlan,
+                  narrativeReview: emergencyNarrativeReview,
+                  literaryReview: emergencyLiteraryReview,
+                  narrativeRichnessEvaluation: emergencyNarrativeRichnessEvaluation,
+                  stateAdjudication,
+                  telemetry,
+                  adjudicationResult: adjudication,
+                  checkpoint,
+                  audioResultBase64: res.audioBase64,
+                };
+              }
             }
           }
         }

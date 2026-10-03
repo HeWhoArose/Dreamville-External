@@ -81,12 +81,12 @@ const SCENE_DETAILS = [
 	'The glass beside the instrument holds a dull reflection of the chamber and nothing more.',
 ] as const;
 
-function responseForTurn(turn: number, locationName: string): string {
+function responseForTurn(turn: number, locationName: string, targetName: string): string {
 	const action = ACTIONS[(turn - 1) % ACTIONS.length];
 	const detail = SCENE_DETAILS[(turn - 1) % SCENE_DETAILS.length];
 	const question = /ask/i.test(action);
 	const opening = question
-		? 'In ' + locationName + ', Maren answers cautiously, choosing her words with the restraint of someone who knows the subject is uncertain.'
+		? 'In ' + locationName + ', ' + targetName + ' answers cautiously, choosing their words with the restraint of someone who knows the subject is uncertain.'
 		: 'In ' + locationName + ', you keep the immediate scene within view while the archivists continue their work.';
 	const second = question
 		? 'Her reply leaves the origin of the fissure unresolved rather than supplying a certainty the scene does not establish.'
@@ -96,7 +96,7 @@ function responseForTurn(turn: number, locationName: string): string {
 			opening + ' ' + detail,
 			second + ' Nothing in the narration commits a new location, time, relationship, inventory result, or future player decision.',
 		],
-		dialogue: question ? [{ speaker: 'Archivist Maren', text: 'I can tell you what I saw, but I cannot tell you what the fissure truly is.' }] : [],
+		dialogue: question ? [{ speaker: targetName, text: 'I can tell you what I saw, but I cannot tell you what the fissure truly is.' }] : [],
 		events: [],
 		stateChanges: [],
 		memoryCandidates: [],
@@ -223,7 +223,7 @@ test('FINAL INTEGRATED AUDIT — 120 turns preserve the full N1-N19 narrative co
 		const locationId = repository.getPlayerLifecycle(storyId)?.locationId;
 		const locationNode = locationId ? repository.getGeographyGraph(storyId).getNode(locationId) : undefined;
 		const locationName = locationNode?.name || 'the current archive';
-		const response = responseForTurn(turn, locationName);
+		const response = responseForTurn(turn, locationName, target!.name);
 		if (turn < 61) {
 			primary.cannedResponses.set('narrative.generate', response);
 		} else {

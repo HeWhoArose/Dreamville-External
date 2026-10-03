@@ -7453,6 +7453,12 @@ export class MultiModelOrchestrator {
     });
 
     const narrativeProviderHandoff = narrationPrompt.narrativeProviderHandoff;
+    const resolvedSceneComposition =
+      'sceneComposition' in narrationPrompt ? narrationPrompt.sceneComposition : undefined;
+    const richnessEvaluationPlan: EphemeralNarrativePlan = {
+      ...narrativePlan,
+      sceneComposition: resolvedSceneComposition,
+    };
     const contextAudit = {
       hardTokenBudget: assembledContext.hardTokenBudget,
       totalTokens: assembledContext.totalTokens,
@@ -7874,12 +7880,6 @@ export class MultiModelOrchestrator {
           };
 
         const narrativeProviderHandoff = narrationPrompt.narrativeProviderHandoff;
-        // N13 composition is resolved at the presentation layer after actual pacing/continuity are known.
-        // Pass that ephemeral projection into N18 evaluation without creating a second composition authority.
-        const richnessEvaluationPlan: EphemeralNarrativePlan = {
-          ...narrativePlan,
-          sceneComposition: narrationPrompt.sceneComposition,
-        };
 
 
     const profile = repo.getAdaptationProfile(storyId);
@@ -8126,6 +8126,14 @@ export class MultiModelOrchestrator {
             let literaryReview: LiteraryReview | undefined;
             let narrativeRichnessEvaluation: NarrativeRichnessEvaluation | undefined;
             if (isNarrativeTask && narrativePlan) {
+              // N13 is resolved in NarrativePromptBuilder after the actual pacing/continuity state is known.
+              // Feed that same ephemeral projection into N18 without creating a second composition authority.
+              const resolvedSceneComposition =
+                'sceneComposition' in narrationPrompt ? narrationPrompt.sceneComposition : undefined;
+              const richnessEvaluationPlan: EphemeralNarrativePlan = {
+                ...narrativePlan,
+                sceneComposition: resolvedSceneComposition,
+              };
               const initialReview = SemanticNarrativeReview.review({
                 intent: playerIntent,
                 situation: currentSituation,

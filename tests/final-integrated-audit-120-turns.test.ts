@@ -210,6 +210,7 @@ test('FINAL INTEGRATED AUDIT — 120 turns preserve the full N1-N19 narrative co
 	});
 
 	const observations: Array<{ turn: number; selectedModelId: string; promptChars: number; npcCount: number; socialParticipantCount: number; episodePhase?: string; richnessScore?: number; }> = [];
+	let memoryPromptObserved = false;
 
 	for (let turn = 1; turn <= 120; turn += 1) {
 		const action = ACTIONS[(turn - 1) % ACTIONS.length];
@@ -253,9 +254,12 @@ test('FINAL INTEGRATED AUDIT — 120 turns preserve the full N1-N19 narrative co
 			'NARRATIVE RESEARCH',
 			'NPC COGNITION BOUNDARY',
 			'expressiveIdentity',
-			'MEMORY',
 		]) {
 			assert.ok(lastCall.prompt.includes(marker), 'turn ' + turn + ': missing prompt marker ' + marker);
+		}
+		if (/fissure/i.test(action)) {
+			assert.ok(lastCall.prompt.includes('MEMORY'), 'turn ' + turn + ': N16 memory evidence was not carried into the information-seeking prompt');
+			memoryPromptObserved = true;
 		}
 		assert.match(lastCall.options?.systemInstruction || '', /N9 PROVIDER HANDOFF CONTRACT/i, 'turn ' + turn + ': missing N9 handoff instruction');
 
@@ -289,6 +293,7 @@ test('FINAL INTEGRATED AUDIT — 120 turns preserve the full N1-N19 narrative co
 	assert.ok(observations.every((entry) => entry.socialParticipantCount >= 0));
 	assert.ok(observations.some((entry) => entry.episodePhase && entry.episodePhase !== 'OPENING'));
 	assert.ok(observations.every((entry) => typeof entry.richnessScore === 'number'));
+	assert.equal(memoryPromptObserved, true, 'N16 live retrieval was never observed in the 120-turn prompt path');
 	assert.equal(JSON.stringify({ events: repository.getCanonicalCommandEvents(storyId), player: repository.getPlayerLifecycle(storyId) }), canonicalBefore, '120-turn presentation audit mutated canonical command/player state');
 });
 

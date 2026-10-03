@@ -286,6 +286,7 @@ test('FINAL INTEGRATED AUDIT — N18 receives the resolved N13 composition proje
 	const fs = await import('node:fs/promises');
 	const source = await fs.readFile(new URL('../server/domain/aiOrchestrator.ts', import.meta.url), 'utf8');
 	assert.match(source, /const richnessEvaluationPlan: EphemeralNarrativePlan = \{/);
-	assert.match(source, /sceneComposition:\s*narrationPrompt\.sceneComposition/);
+	assert.match(source, /'sceneComposition'\s+in\s+narrationPrompt\s+\?\s+narrationPrompt\.sceneComposition\s+:\s+undefined/);
+	assert.match(source, /const richnessEvaluationPlan:\s*EphemeralNarrativePlan/);
 	assert.match(source, /plan:\s*richnessEvaluationPlan/);
 });

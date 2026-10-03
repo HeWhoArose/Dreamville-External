@@ -157,7 +157,6 @@ function prepareOrchestrator(primary: DeterministicMockAdapter, fallback: Determ
 	orchestrator.registerModel(fallbackRecord);
 	orchestrator.registerAdapter(primary);
 	orchestrator.registerAdapter(fallback);
-	orchestrator.pinModelForTask('narrative.generate', primaryRecord.modelId);
 	orchestrator.setFallbackChain('narrative.generate', [
 		primary.providerId + '::' + primaryRecord.modelId,
 		fallback.providerId + '::' + fallbackRecord.modelId,

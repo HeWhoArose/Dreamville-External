@@ -8514,23 +8514,28 @@ export class MultiModelOrchestrator {
                   }
                 }
 
-                const emergencySceneComposition =
-                  'sceneComposition' in narrationPrompt ? narrationPrompt.sceneComposition : undefined;
-                const emergencyRichnessEvaluationPlan: EphemeralNarrativePlan = {
-                  ...narrativePlan,
-                  sceneComposition: emergencySceneComposition,
-                };
-                emergencyNarrativeRichnessEvaluation = NarrativeRichnessEvaluator.evaluate({
-                  intent: playerIntent,
-                  situation: currentSituation,
-                  plan: emergencyRichnessEvaluationPlan,
-                  turnPackage: emergencyTurnPackage,
-                  previousNarrations: currentSituation.recentTurns
-                    .map((entry) => String(entry.narration || ''))
-                    .filter(Boolean),
-                });
+                if (emergencyNarrativeReview) {
+                  const emergencySceneComposition =
+                    'sceneComposition' in narrationPrompt ? narrationPrompt.sceneComposition : undefined;
+                  const emergencyRichnessEvaluationPlan: EphemeralNarrativePlan = {
+                    ...narrativePlan,
+                    sceneComposition: emergencySceneComposition,
+                  };
+                  emergencyNarrativeRichnessEvaluation = NarrativeRichnessEvaluator.evaluate({
+                    intent: playerIntent,
+                    situation: currentSituation,
+                    plan: emergencyRichnessEvaluationPlan,
+                    turnPackage: emergencyTurnPackage,
+                    previousNarrations: currentSituation.recentTurns
+                      .map((entry) => String(entry.narration || ''))
+                      .filter(Boolean),
+                  });
+                }
               }
-              const adjudication = DomainAdjudicationBridge.adjudicate(
+              // Emergency recovery is not an authorization to bypass N6/N7.
+              // A narrative emergency turn may succeed only after semantic + literary acceptance.
+              if (!(isNarrativeTask && narrativePlan && !emergencyNarrativeReview)) {
+                const adjudication = DomainAdjudicationBridge.adjudicate(
                 emergencyTurnPackage,
                 repo,
                 storyId,
@@ -8642,20 +8647,20 @@ export class MultiModelOrchestrator {
             });
             }
 
-            return {
-              success: true,
-              turnPackage: emergencyTurnPackage,
-              playerIntent,
-              narrativePlan,
-              narrativeReview: emergencyNarrativeReview,
-              literaryReview: emergencyLiteraryReview,
-              narrativeRichnessEvaluation: emergencyNarrativeRichnessEvaluation,
-              stateAdjudication,
-              telemetry,
-              adjudicationResult: adjudication,
-              checkpoint,
-              audioResultBase64: res.audioBase64,
-            };
+              return {
+                success: true,
+                turnPackage: emergencyTurnPackage,
+                playerIntent,
+                narrativePlan,
+                narrativeReview: emergencyNarrativeReview,
+                literaryReview: emergencyLiteraryReview,
+                narrativeRichnessEvaluation: emergencyNarrativeRichnessEvaluation,
+                stateAdjudication,
+                telemetry,
+                adjudicationResult: adjudication,
+                checkpoint,
+                audioResultBase64: res.audioBase64,
+              };
             }
           }
         }

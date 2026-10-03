@@ -200,6 +200,12 @@ test('FINAL INTEGRATED AUDIT — 120 turns preserve the full N1-N19 narrative co
 	const primary = new DeterministicMockAdapter('final_audit_primary');
 	const fallback = new DeterministicMockAdapter('final_audit_fallback');
 	const orchestrator = prepareOrchestrator(primary, fallback);
+	const preflightSelection = orchestrator.selectBestModel('narrative.generate', { contextTokens: 1000 });
+	assert.equal(preflightSelection.selectedModel.modelId, 'final-audit-primary');
+	assert.ok(
+		preflightSelection.fallbacks.some((model) => model.modelId === 'final-audit-fallback'),
+		'configured fallback missing from pinned route: ' + JSON.stringify(preflightSelection.fallbacks.map((model) => model.providerId + '::' + model.modelId)),
+	);
 
 	assert.equal(getAiTaskRoutingPolicy('narrative.generate').qualityTier, 'CREATIVE');
 	assert.equal(getAiTaskRoutingPolicy('narrative.generate').cadence, 'PER_TURN');

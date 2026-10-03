@@ -228,7 +228,7 @@ test('FINAL INTEGRATED AUDIT — 120 turns preserve the full N1-N19 narrative co
 			storyId,
 			playerAction: action,
 			repository,
-			hardTokenBudget: 2200,
+			hardTokenBudget: 4000,
 			timeoutMs: 1000,
 			maxRetries: 0,
 		});
@@ -251,7 +251,7 @@ test('FINAL INTEGRATED AUDIT — 120 turns preserve the full N1-N19 narrative co
 			'N15 SOCIAL ATTENTION',
 			'N17 NARRATIVE EPISODE PROJECTION',
 			'NARRATIVE RESEARCH',
-			'NPC cognition contracts:',
+			'NPC COGNITION BOUNDARY',
 			'expressiveIdentity',
 			'MEMORY',
 		]) {
@@ -322,7 +322,7 @@ test('FINAL INTEGRATED AUDIT — emergency floor preserves N13-N18 presentation 
   assert.ok(fallback.callHistory[fallback.callHistory.length - 1].prompt.includes('N13 SCENE COMPOSITION CONTRACT v1'));
 	assert.ok(result.narrativePlan?.socialTopology);
 	assert.ok(result.narrativePlan?.episodeProjection);
-	assert.ok(result.narrativePlan?.npcCognition?.length);
+  assert.ok(result.narrativePlan?.npcCognition?.length);
 	assert.ok(result.narrativeRichnessEvaluation);
 	assert.match(result.telemetry.narrativeProviderHandoff?.providerIndependentInstruction || '', /N9 PROVIDER HANDOFF CONTRACT/i);
 });

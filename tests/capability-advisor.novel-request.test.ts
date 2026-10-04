@@ -214,3 +214,37 @@ test('generated alternate cannot preserve the forbidden Fire mechanism for a dar
   assert.equal(result.simulation?.characterCompatible, false);
   assert.equal(result.proposal, undefined);
 });
+
+
+test('reading or re-reading text does not enter unknown item capability synthesis', async () => {
+  const repository = new InMemoryWorldRepository({ disablePersistence: true });
+  const storyId = 'read_text_normal_action';
+  seedRun(repository, storyId, 'reading_world', 'Archivist', 'An archivist who studies written records.');
+
+  const advisor = new StoryActionAdvisor(repository);
+
+  for (const action of [
+    'I read the note',
+    'I re-read the note',
+    'I read the inscription on the gate',
+    'I re-read Maren\'s account',
+  ]) {
+    const result = await advisor.advise(storyId, action);
+    assert.equal(result.mode, 'NORMAL_ACTION', action);
+    assert.equal(result.canExecuteNow, true, action);
+    assert.equal(result.simulation, undefined, action);
+    assert.equal(result.proposal, undefined, action);
+  }
+});
+
+test('explicit item-use verbs remain eligible for unknown-item capability handling', async () => {
+  const repository = new InMemoryWorldRepository({ disablePersistence: true });
+  const storyId = 'explicit_unknown_item_use';
+  seedRun(repository, storyId, 'item_use_world', 'Adventurer', 'An adventurer carrying no canonical items.');
+
+  const advisor = new StoryActionAdvisor(repository);
+  const result = await advisor.advise(storyId, 'I activate the mysterious artifact');
+
+  assert.notEqual(result.mode, 'NORMAL_ACTION');
+  assert.equal(result.canExecuteNow, false);
+});

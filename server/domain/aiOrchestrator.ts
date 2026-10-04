@@ -7133,6 +7133,9 @@ export class MultiModelOrchestrator {
     const narration = String(params.narration || '').trim();
     if (!narration) return { valid: false, errorReason: 'Narration presentation validation received empty output.' };
 
+    const metaLeakage = this.validateNarrativeMetaLeakage(narration);
+    if (!metaLeakage.valid) return { valid: false, errorReason: metaLeakage.errorReason };
+
     const pacing = NarrativePacingEngine.validateNarration(narration, params.pacingContract);
     if (!pacing.valid) return { valid: false, errorReason: pacing.reason || 'Narration failed N8 adaptive pacing validation.' };
 

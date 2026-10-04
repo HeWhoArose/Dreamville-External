@@ -524,7 +524,7 @@ export class CurrentSituationBuilder {
 				storyId: params.storyId,
 				viewerActorId,
 				queryKeywords: memoryKeywords,
-				currentTurn: repository.getCanonicalCommandEvents(params.storyId).length + 1,
+				currentTurn: repository.getCanonicalCommandEventCount(params.storyId) + 1,
 				currentTimestamp: timestamp,
 				maxResults: 6,
 				includeDormant: false,
@@ -648,7 +648,9 @@ export class CurrentSituationBuilder {
 			run?.dialogue,
 		);
 
-		const canonicalEvents = repository.getCanonicalCommandEvents(params.storyId);
+		// Tail-only read: recent-turn reconstruction and the last six events are all
+		// this projection needs, and the full log grows unboundedly over a campaign.
+		const canonicalEvents = repository.getRecentCanonicalCommandEvents(params.storyId, Math.max(6, params.maxRecentTurns ?? 8));
 		const recentTurns = buildRecentTurns(run, canonicalEvents, params.maxRecentTurns ?? 8);
 		const lastEvents = canonicalEvents
 			.slice(-6)

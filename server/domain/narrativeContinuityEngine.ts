@@ -58,12 +58,50 @@ export interface NarrativeResearchPacket {
 }
 
 export class NarrativeContinuityEngine {
+  /** Runtime-state blobs can be partial or stale (older writers, interrupted
+   * turns, restored archives). Normalize at this contract boundary so every
+   * consumer of getState() sees complete plot/plan shapes even when the
+   * persisted object is a subset of the interface. */
+  private static normalizePlot(storyId: string, raw: unknown): NarrativePlotState {
+    const defaults = this.defaultPlot(storyId);
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return defaults;
+    const plot = raw as Partial<NarrativePlotState>;
+    return JSON.parse(JSON.stringify({
+      ...defaults,
+      ...plot,
+      storyId: typeof plot.storyId === 'string' ? plot.storyId : storyId,
+      version: Number.isFinite(plot.version) ? plot.version : defaults.version,
+      currentArc: typeof plot.currentArc === 'string' ? plot.currentArc : defaults.currentArc,
+      summary: typeof plot.summary === 'string' ? plot.summary : defaults.summary,
+      beats: Array.isArray(plot.beats) ? plot.beats : [],
+      openThreads: Array.isArray(plot.openThreads) ? plot.openThreads : [],
+      updatedAt: typeof plot.updatedAt === 'string' ? plot.updatedAt : defaults.updatedAt,
+    }));
+  }
+
+  private static normalizePlan(storyId: string, raw: unknown): NarrativePlanState {
+    const defaults = this.defaultPlan(storyId);
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return defaults;
+    const plan = raw as Partial<NarrativePlanState>;
+    return JSON.parse(JSON.stringify({
+      ...defaults,
+      ...plan,
+      storyId: typeof plan.storyId === 'string' ? plan.storyId : storyId,
+      version: Number.isFinite(plan.version) ? plan.version : defaults.version,
+      objective: typeof plan.objective === 'string' ? plan.objective : defaults.objective,
+      nextBeats: Array.isArray(plan.nextBeats) ? plan.nextBeats : [],
+      priorityThreads: Array.isArray(plan.priorityThreads) ? plan.priorityThreads : [],
+      contingencies: Array.isArray(plan.contingencies) ? plan.contingencies : [],
+      updatedAt: typeof plan.updatedAt === 'string' ? plan.updatedAt : defaults.updatedAt,
+    }));
+  }
+
   public static getState(repository: WorldRepository, storyId: string): { plot: NarrativePlotState; plan: NarrativePlanState; research?: Record<string, unknown> } {
     const run = repository.getStoryRun(storyId);
     const runtime = (run?.runtimeState || {}) as Record<string, any>;
     return {
-      plot: JSON.parse(JSON.stringify(runtime.plot || this.defaultPlot(storyId))),
-      plan: JSON.parse(JSON.stringify(runtime.continuityPlan || runtime.narrativePlan || this.defaultPlan(storyId))),
+      plot: this.normalizePlot(storyId, runtime.plot),
+      plan: this.normalizePlan(storyId, runtime.continuityPlan || runtime.narrativePlan),
       research: runtime.narrativeResearch ? JSON.parse(JSON.stringify(runtime.narrativeResearch)) : undefined,
     };
   }
@@ -90,7 +128,7 @@ export class NarrativeContinuityEngine {
       ...currentSituation.location.regionId.toLowerCase().split(/\W+/).filter((token) => token.length >= 3),
       ...currentSituation.nearbyEntities.map((entity) => entity.name.toLowerCase()),
     ])).slice(0, 16);
-    const currentTurn = repository.getCanonicalCommandEvents(storyId).length + 1;
+    const currentTurn = repository.getCanonicalCommandEventCount(storyId) + 1;
     const currentIntent = currentSituation.currentAction;
     const targetEntityIds = [
       currentIntent?.target?.id,

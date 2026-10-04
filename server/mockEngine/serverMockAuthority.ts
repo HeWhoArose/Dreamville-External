@@ -762,8 +762,7 @@ export class ServerMockAuthority {
 
     const canonicalEventForResolution = canonicalCommandId
       ? worldRepository
-          .getCanonicalCommandEvents(targetStoryId)
-          .slice()
+          .getRecentCanonicalCommandEvents(targetStoryId, 24)
           .reverse()
           .find((event) => event.commandId === canonicalCommandId)
       : undefined;

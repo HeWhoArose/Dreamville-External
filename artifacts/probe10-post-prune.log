@@ -1,0 +1,12 @@
+turn 1: 322ms | save=26ms(14, 2.3MB) capture=0ms(0) eventsClone=0ms(12) rest=296ms
+turn 2: 184ms | save=40ms(13, 4.3MB) capture=0ms(0) eventsClone=19ms(12) rest=125ms
+turn 3: 295ms | save=61ms(13, 6.7MB) capture=0ms(0) eventsClone=42ms(12) rest=192ms
+turn 4: 342ms | save=94ms(13, 9.2MB) capture=0ms(0) eventsClone=90ms(12) rest=157ms
+turn 5: 543ms | save=290ms(13, 11.8MB) capture=0ms(0) eventsClone=76ms(12) rest=177ms
+turn 6: 471ms | save=165ms(13, 14.5MB) capture=0ms(0) eventsClone=106ms(12) rest=199ms
+turn 7: 521ms | save=174ms(13, 17.4MB) capture=0ms(0) eventsClone=117ms(12) rest=230ms
+turn 8: 590ms | save=190ms(13, 20.3MB) capture=0ms(0) eventsClone=153ms(12) rest=247ms
+turn 9: 631ms | save=220ms(13, 23.3MB) capture=0ms(0) eventsClone=164ms(12) rest=247ms
+turn 10: 746ms | save=244ms(13, 26.3MB) capture=0ms(0) eventsClone=222ms(12) rest=279ms
+turn 11: 753ms | save=255ms(13, 29.5MB) capture=0ms(0) eventsClone=211ms(12) rest=287ms
+turn 12: 804ms | save=272ms(13, 32.7MB) capture=0ms(0) eventsClone=235ms(12) rest=296ms

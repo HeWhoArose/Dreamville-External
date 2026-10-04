@@ -1,0 +1,844 @@
+TAP version 13
+# Subtest: CH14 - Sensory Engine Epistemic Security (DEF-CH14-04)
+    # Subtest: TEST A: Visible source -> cue emitted
+    ok 1 - TEST A: Visible source -> cue emitted
+      ---
+      duration_ms: 1.819858
+      type: 'test'
+      ...
+    # Subtest: TEST B: Hidden source -> cue suppressed
+    ok 2 - TEST B: Hidden source -> cue suppressed
+      ---
+      duration_ms: 0.282673
+      type: 'test'
+      ...
+    # Subtest: TEST C: Undiscovered location -> cue suppressed
+    ok 3 - TEST C: Undiscovered location -> cue suppressed
+      ---
+      duration_ms: 0.20558
+      type: 'test'
+      ...
+    # Subtest: TEST D: Nonexistent source -> cue suppressed
+    ok 4 - TEST D: Nonexistent source -> cue suppressed
+      ---
+      duration_ms: 0.29368
+      type: 'test'
+      ...
+    # Subtest: TEST E: Malformed source -> cue suppressed
+    ok 5 - TEST E: Malformed source -> cue suppressed
+      ---
+      duration_ms: 0.563722
+      type: 'test'
+      ...
+    # Subtest: TEST F: Authorized combat source -> cue emitted
+    ok 6 - TEST F: Authorized combat source -> cue emitted
+      ---
+      duration_ms: 0.300612
+      type: 'test'
+      ...
+    # Subtest: TEST G: Authorized geography source -> cue emitted
+    ok 7 - TEST G: Authorized geography source -> cue emitted
+      ---
+      duration_ms: 0.192539
+      type: 'test'
+      ...
+    # Subtest: TEST H: Exact same cue executed twice -> deterministic result
+    ok 8 - TEST H: Exact same cue executed twice -> deterministic result
+      ---
+      duration_ms: 0.225399
+      type: 'test'
+      ...
+    # Subtest: Spatial Math regression checks
+    ok 9 - Spatial Math regression checks
+      ---
+      duration_ms: 0.330169
+      type: 'test'
+      ...
+    1..9
+ok 1 - CH14 - Sensory Engine Epistemic Security (DEF-CH14-04)
+  ---
+  duration_ms: 5.697567
+  type: 'suite'
+  ...
+# Subtest: N15 projects a multi-NPC conversation topology without creating canonical state
+ok 2 - N15 projects a multi-NPC conversation topology without creating canonical state
+  ---
+  duration_ms: 17.125792
+  type: 'test'
+  ...
+# Subtest: N15 preserves NPC-owned interruption semantics deterministically
+ok 3 - N15 preserves NPC-owned interruption semantics deterministically
+  ---
+  duration_ms: 0.648471
+  type: 'test'
+  ...
+# Subtest: N15 fallback is bounded with no visible entities
+ok 4 - N15 fallback is bounded with no visible entities
+  ---
+  duration_ms: 1.404709
+  type: 'test'
+  ...
+# Subtest: N15 prompt projection excludes hidden participants and keeps canonical boundary explicit
+ok 5 - N15 prompt projection excludes hidden participants and keeps canonical boundary explicit
+  ---
+  duration_ms: 1.092941
+  type: 'test'
+  ...
+# Subtest: N15 integrates through NarrativeDirector without persistence
+ok 6 - N15 integrates through NarrativeDirector without persistence
+  ---
+  duration_ms: 15.266856
+  type: 'test'
+  ...
+# Subtest: N15 is safe when dialogue and topic context are absent
+ok 7 - N15 is safe when dialogue and topic context are absent
+  ---
+  duration_ms: 0.472962
+  type: 'test'
+  ...
+# Subtest: N15 remains explicit under compact prompt budgets
+ok 8 - N15 remains explicit under compact prompt budgets
+  ---
+  duration_ms: 5.097902
+  type: 'test'
+  ...
+# Subtest: S6 spatial authority and integrations survive ten surgical audit passes
+ok 9 - S6 spatial authority and integrations survive ten surgical audit passes
+  ---
+  duration_ms: 9.908707
+  type: 'test'
+  ...
+# Subtest: Phase 14 MediaRecorder fallback uses ApiClient instead of a raw endpoint
+ok 10 - Phase 14 MediaRecorder fallback uses ApiClient instead of a raw endpoint
+  ---
+  duration_ms: 1.003328
+  type: 'test'
+  ...
+# Subtest: Phase 14 ApiClient carries story id and recorded MIME type
+ok 11 - Phase 14 ApiClient carries story id and recorded MIME type
+  ---
+  duration_ms: 0.184752
+  type: 'test'
+  ...
+# Subtest: Phase 14 route classifies empty, malformed and unavailable transcription states
+ok 12 - Phase 14 route classifies empty, malformed and unavailable transcription states
+  ---
+  duration_ms: 0.137205
+  type: 'test'
+  ...
+# Subtest: Phase 14 transcription provider path passes abort signal and audio MIME type
+ok 13 - Phase 14 transcription provider path passes abort signal and audio MIME type
+  ---
+  duration_ms: 0.466361
+  type: 'test'
+  ...
+# Subtest: Phase 14 accepts a valid base64 audio payload shape
+ok 14 - Phase 14 accepts a valid base64 audio payload shape
+  ---
+  duration_ms: 1.407873
+  type: 'test'
+  ...
+# Subtest: Phase 14 rejects empty transcription audio before provider selection
+ok 15 - Phase 14 rejects empty transcription audio before provider selection
+  ---
+  duration_ms: 0.267423
+  type: 'test'
+  ...
+# Subtest: Phase 14 rejects malformed base64 audio before provider selection
+ok 16 - Phase 14 rejects malformed base64 audio before provider selection
+  ---
+  duration_ms: 0.205126
+  type: 'test'
+  ...
+# Subtest: Phase 14 accepts plain-text provider transcripts
+ok 17 - Phase 14 accepts plain-text provider transcripts
+  ---
+  duration_ms: 2.001673
+  type: 'test'
+  ...
+# Subtest: Phase 14 extracts transcript text from common JSON provider envelopes
+ok 18 - Phase 14 extracts transcript text from common JSON provider envelopes
+  ---
+  duration_ms: 0.537955
+  type: 'test'
+  ...
+# Subtest: Phase 14 rejects HTML and malformed JSON as transcript payloads
+ok 19 - Phase 14 rejects HTML and malformed JSON as transcript payloads
+  ---
+  duration_ms: 0.476692
+  type: 'test'
+  ...
+# Subtest: Phase 14 rejects empty JSON envelopes instead of treating them as a transcript
+ok 20 - Phase 14 rejects empty JSON envelopes instead of treating them as a transcript
+  ---
+  duration_ms: 0.388712
+  type: 'test'
+  ...
+# Subtest: scene-aware suggestions use current rumors, visible NPCs, and reachable discovered locations
+ok 21 - scene-aware suggestions use current rumors, visible NPCs, and reachable discovered locations
+  ---
+  duration_ms: 12.421034
+  type: 'test'
+  ...
+# Subtest: Phase 11 suggestion cache key stays stable for an unchanged canonical situation
+ok 22 - Phase 11 suggestion cache key stays stable for an unchanged canonical situation
+  ---
+  duration_ms: 1.083452
+  type: 'test'
+  ...
+# Subtest: Phase 11 suggestion cache key changes when the canonical turn changes
+ok 23 - Phase 11 suggestion cache key changes when the canonical turn changes
+  ---
+  duration_ms: 0.280094
+  type: 'test'
+  ...
+# Subtest: Phase 11 suggestion cache key changes when relevant route availability changes
+ok 24 - Phase 11 suggestion cache key changes when relevant route availability changes
+  ---
+  duration_ms: 0.277404
+  type: 'test'
+  ...
+# Subtest: Phase 11 suggestion cache key changes when an open thread changes lifecycle state
+ok 25 - Phase 11 suggestion cache key changes when an open thread changes lifecycle state
+  ---
+  duration_ms: 0.243668
+  type: 'test'
+  ...
+# Subtest: Phase 11 suggestion cache key changes when relevant entity ranking changes
+ok 26 - Phase 11 suggestion cache key changes when relevant entity ranking changes
+  ---
+  duration_ms: 0.483657
+  type: 'test'
+  ...
+# Subtest: Phase 13 StoryView exposes an explicit suggestion refresh boundary
+ok 27 - Phase 13 StoryView exposes an explicit suggestion refresh boundary
+  ---
+  duration_ms: 1.4758
+  type: 'test'
+  ...
+# Subtest: Phase 13 StoryView does not refresh suggestions merely by opening the menu
+ok 28 - Phase 13 StoryView does not refresh suggestions merely by opening the menu
+  ---
+  duration_ms: 0.507437
+  type: 'test'
+  ...
+# Subtest: Phase 13 StoryView has accessible multiline action input and safe retry surface
+ok 29 - Phase 13 StoryView has accessible multiline action input and safe retry surface
+  ---
+  duration_ms: 0.371902
+  type: 'test'
+  ...
+# Subtest: Phase 13 App wires refresh and failed-action retry to the canonical StoryView
+ok 30 - Phase 13 App wires refresh and failed-action retry to the canonical StoryView
+  ---
+  duration_ms: 0.390643
+  type: 'test'
+  ...
+# Subtest: Phase 13 App persists only CUSTOM_ACTION failures as replayable story actions
+ok 31 - Phase 13 App persists only CUSTOM_ACTION failures as replayable story actions
+  ---
+  duration_ms: 0.237522
+  type: 'test'
+  ...
+# Subtest: past-action editing is wired across UI, API, canonical checkpointing, and rewind route
+ok 32 - past-action editing is wired across UI, API, canonical checkpointing, and rewind route
+  ---
+  duration_ms: 4.081555
+  type: 'test'
+  ...
+# Subtest: dice presets include Norse Foundry-inspired artistic families
+ok 33 - dice presets include Norse Foundry-inspired artistic families
+  ---
+  duration_ms: 0.244715
+  type: 'test'
+  ...
+# Subtest: current custom actions remain editable, and AI narration failure still produces local prose
+ok 34 - current custom actions remain editable, and AI narration failure still produces local prose
+  ---
+  duration_ms: 3.949729
+  type: 'test'
+  ...
+# Subtest: past-action edits remain distinct from presentation-only narration regeneration
+ok 35 - past-action edits remain distinct from presentation-only narration regeneration
+  ---
+  duration_ms: 2.18408
+  type: 'test'
+  ...
+# Subtest: story input uses a mobile-safe multiline composer and real microphone flow
+ok 36 - story input uses a mobile-safe multiline composer and real microphone flow
+  ---
+  duration_ms: 1.931209
+  type: 'test'
+  ...
+# Subtest: dice settings are visually separated and remain usable on narrow screens
+ok 37 - dice settings are visually separated and remain usable on narrow screens
+  ---
+  duration_ms: 0.718055
+  type: 'test'
+  ...
+# Subtest: Narration, action-routing, suggestions, portrait prompts, and scene prompts survive ten audit passes
+ok 38 - Narration, action-routing, suggestions, portrait prompts, and scene prompts survive ten audit passes
+  ---
+  duration_ms: 29.792645
+  type: 'test'
+  ...
+# Subtest: story navigation exposes only player-facing routes with real viewports
+ok 39 - story navigation exposes only player-facing routes with real viewports
+  ---
+  duration_ms: 0.95296
+  type: 'test'
+  ...
+# Subtest: mystery navigation exposes evidence and relationships only through player-facing routes
+ok 40 - mystery navigation exposes evidence and relationships only through player-facing routes
+  ---
+  duration_ms: 0.228958
+  type: 'test'
+  ...
+# Subtest: developer capability workbench stays internal while Character/World stay player-facing
+ok 41 - developer capability workbench stays internal while Character/World stay player-facing
+  ---
+  duration_ms: 0.146605
+  type: 'test'
+  ...
+# Subtest: mystery mode retains World and Recent Actions in secondary navigation
+ok 42 - mystery mode retains World and Recent Actions in secondary navigation
+  ---
+  duration_ms: 0.132767
+  type: 'test'
+  ...
+# Subtest: S2 dice presentation preserves authoritative group structure across eleven audit passes
+ok 43 - S2 dice presentation preserves authoritative group structure across eleven audit passes
+  ---
+  duration_ms: 2.518455
+  type: 'test'
+  ...
+# Subtest: S2 story timeline renders newest-first server history in chronological player order
+ok 44 - S2 story timeline renders newest-first server history in chronological player order
+  ---
+  duration_ms: 2.18846
+  type: 'test'
+  ...
+# Subtest: S2 narration turn labels use action turn ordinals rather than world calendar cycles
+ok 45 - S2 narration turn labels use action turn ordinals rather than world calendar cycles
+  ---
+  duration_ms: 2.34844
+  type: 'test'
+  ...
+# Subtest: S2 Story/OOC/Continue and player portrait remain connected to canonical story state
+ok 46 - S2 Story/OOC/Continue and player portrait remain connected to canonical story state
+  ---
+  duration_ms: 7.390219
+  type: 'test'
+  ...
+# Subtest: suggestion insertion populates the composer without submitting the action
+ok 47 - suggestion insertion populates the composer without submitting the action
+  ---
+  duration_ms: 0.917061
+  type: 'test'
+  ...
+# Subtest: Story UI audit-implementation-regression-fallback loop completes ten deterministic passes
+ok 48 - Story UI audit-implementation-regression-fallback loop completes ten deterministic passes
+  ---
+  duration_ms: 7.37938
+  type: 'test'
+  ...
+# Subtest: Story library persistence and canonical-source audit completes ten deterministic passes
+ok 49 - Story library persistence and canonical-source audit completes ten deterministic passes
+  ---
+  duration_ms: 3.224008
+  type: 'test'
+  ...
+# Subtest: Quest journal surface uses canonical quest projection and player-facing journal data
+ok 50 - Quest journal surface uses canonical quest projection and player-facing journal data
+  ---
+  duration_ms: 9.376484
+  type: 'test'
+  ...
+# Subtest: Story navigation keeps Character primary and separates Quests and Journal destinations across ten audit passes
+ok 51 - Story navigation keeps Character primary and separates Quests and Journal destinations across ten audit passes
+  ---
+  duration_ms: 0.781815
+  type: 'test'
+  ...
+# Subtest: story suggestion selection inserts text without executing the action
+ok 52 - story suggestion selection inserts text without executing the action
+  ---
+  duration_ms: 0.715672
+  type: 'test'
+  ...
+# Subtest: authored challenge overrides inferred save DC and marks the canonical source
+ok 53 - authored challenge overrides inferred save DC and marks the canonical source
+  ---
+  duration_ms: 2.32203
+  type: 'test'
+  ...
+# Subtest: failed authored saving throw applies only its declared consequence
+ok 54 - failed authored saving throw applies only its declared consequence
+  ---
+  duration_ms: 2.324187
+  type: 'test'
+  ...
+# Subtest: successful authored save can use its declared success consequence without invented failure effects
+ok 55 - successful authored save can use its declared success consequence without invented failure effects
+  ---
+  duration_ms: 1.100089
+  type: 'test'
+  ...
+# Subtest: challenge resolver selects authored capability and returns null when no authored challenge matches
+ok 56 - challenge resolver selects authored capability and returns null when no authored challenge matches
+  ---
+  duration_ms: 0.885346
+  type: 'test'
+  ...
+# Subtest: authored challenge does not trigger from scene-only keywords on unrelated movement
+ok 57 - authored challenge does not trigger from scene-only keywords on unrelated movement
+  ---
+  duration_ms: 0.227524
+  type: 'test'
+  ...
+# Subtest: investigation action produces a canonical d20 skill check
+ok 58 - investigation action produces a canonical d20 skill check
+  ---
+  duration_ms: 3.812734
+  type: 'test'
+  ...
+# Subtest: routine actions do not trigger a skill check
+ok 59 - routine actions do not trigger a skill check
+  ---
+  duration_ms: 0.572421
+  type: 'test'
+  ...
+# Subtest: poisoned checks use disadvantage and keep the lower d20
+ok 60 - poisoned checks use disadvantage and keep the lower d20
+  ---
+  duration_ms: 1.020664
+  type: 'test'
+  ...
+# Subtest: blinded characters automatically fail sight-based perception checks
+ok 61 - blinded characters automatically fail sight-based perception checks
+  ---
+  duration_ms: 0.764171
+  type: 'test'
+  ...
+# Subtest: a direct dodge action resolves as a Dexterity saving throw
+ok 62 - a direct dodge action resolves as a Dexterity saving throw
+  ---
+  duration_ms: 0.463651
+  type: 'test'
+  ...
+# Subtest: the world can initiate a saving throw from scene hazard context
+ok 63 - the world can initiate a saving throw from scene hazard context
+  ---
+  duration_ms: 0.607526
+  type: 'test'
+  ...
+# Subtest: a routine breath remains narration-only in a safe scene
+ok 64 - a routine breath remains narration-only in a safe scene
+  ---
+  duration_ms: 0.394453
+  type: 'test'
+  ...
+# Subtest: a dangerous breath can trigger a Constitution saving throw
+ok 65 - a dangerous breath can trigger a Constitution saving throw
+  ---
+  duration_ms: 0.456155
+  type: 'test'
+  ...
+# Subtest: story check RNG advances across repeated checks instead of repeating a fixed d20 result
+ok 66 - story check RNG advances across repeated checks instead of repeating a fixed d20 result
+  ---
+  duration_ms: 2.101771
+  type: 'test'
+  ...
+# Subtest: parkour selects Acrobatics and carries a concrete failed-maneuver consequence contract
+ok 67 - parkour selects Acrobatics and carries a concrete failed-maneuver consequence contract
+  ---
+  duration_ms: 1.814212
+  type: 'test'
+  ...
+# Subtest: moving toward a target does not become Athletics solely because the verb is push
+ok 68 - moving toward a target does not become Athletics solely because the verb is push
+  ---
+  duration_ms: 1.481095
+  type: 'test'
+  ...
+# Subtest: physical object displacement still selects Athletics after push keyword tightening
+ok 69 - physical object displacement still selects Athletics after push keyword tightening
+  ---
+  duration_ms: 0.331304
+  type: 'test'
+  ...
+# Subtest: ordinary movement only triggers a check when the scene makes movement itself hazardous
+ok 70 - ordinary movement only triggers a check when the scene makes movement itself hazardous
+  ---
+  duration_ms: 0.329609
+  type: 'test'
+  ...
+# Subtest: AI skill hints cannot force a skill that the player action does not semantically support
+ok 71 - AI skill hints cannot force a skill that the player action does not semantically support
+  ---
+  duration_ms: 0.423193
+  type: 'test'
+  ...
+# Subtest: AI saving-throw hints cannot manufacture a hazard in a routine scene
+ok 72 - AI saving-throw hints cannot manufacture a hazard in a routine scene
+  ---
+  duration_ms: 0.20159
+  type: 'test'
+  ...
+# Subtest: Phase 24 — system-wide architecture audit: release-critical phases are represented
+ok 73 - Phase 24 — system-wide architecture audit: release-critical phases are represented
+  ---
+  duration_ms: 7.221361
+  type: 'test'
+  ...
+# Subtest: Phase 24 — canonical turn boundary remains single-owner
+ok 74 - Phase 24 — canonical turn boundary remains single-owner
+  ---
+  duration_ms: 3.346805
+  type: 'test'
+  ...
+# Subtest: Phase 24 — context, epistemic, and NPC boundaries remain connected
+ok 75 - Phase 24 — context, epistemic, and NPC boundaries remain connected
+  ---
+  duration_ms: 3.445704
+  type: 'test'
+  ...
+# Subtest: Phase 24 — presentation quality chain is end-to-end connected
+ok 76 - Phase 24 — presentation quality chain is end-to-end connected
+  ---
+  duration_ms: 14.454035
+  type: 'test'
+  ...
+# Subtest: Phase 24 — visual path cannot become a second canonical authority
+ok 77 - Phase 24 — visual path cannot become a second canonical authority
+  ---
+  duration_ms: 6.747672
+  type: 'test'
+  ...
+# Subtest: Phase 24 — verification/release contracts include the complete executable gate
+ok 78 - Phase 24 — verification/release contracts include the complete executable gate
+  ---
+  duration_ms: 0.640899
+  type: 'test'
+  ...
+# Subtest: Phase 24 — all audited phase-specific regression suites remain present
+ok 79 - Phase 24 — all audited phase-specific regression suites remain present
+  ---
+  duration_ms: 0.413771
+  type: 'test'
+  ...
+# Subtest: Phase 24 — merged audit record is explicit about merge and manual-test boundaries
+ok 80 - Phase 24 — merged audit record is explicit about merge and manual-test boundaries
+  ---
+  duration_ms: 0.547383
+  type: 'test'
+  ...
+# Subtest: Phase 18 — end-to-end turn harness
+    # Subtest: executes the full passive-listening chain from player input to next situation
+    ok 1 - executes the full passive-listening chain from player input to next situation
+      ---
+      duration_ms: 63.824632
+      type: 'test'
+      ...
+    # Subtest: keeps an explicit question as dialogue instead of passive observation
+    ok 2 - keeps an explicit question as dialogue instead of passive observation
+      ---
+      duration_ms: 9.137896
+      type: 'test'
+      ...
+    # Subtest: covers movement, inspection, combat, and item manipulation through the same chain
+    ok 3 - covers movement, inspection, combat, and item manipulation through the same chain
+      ---
+      duration_ms: 16.804691
+      type: 'test'
+      ...
+    # Subtest: fails safely on empty or malformed narration paths before canonical mutation
+    ok 4 - fails safely on empty or malformed narration paths before canonical mutation
+      ---
+      duration_ms: 5.111844
+      type: 'test'
+      ...
+    # Subtest: keeps an unverified AI state proposal from being committed
+    ok 5 - keeps an unverified AI state proposal from being committed
+      ---
+      duration_ms: 5.624715
+      type: 'test'
+      ...
+    # Subtest: simulates primary-provider exhaustion without changing the deterministic turn contract
+    ok 6 - simulates primary-provider exhaustion without changing the deterministic turn contract
+      ---
+      duration_ms: 5.743436
+      type: 'test'
+      ...
+    # Subtest: simulates total AI outage and still exercises the deterministic emergency floor
+    ok 7 - simulates total AI outage and still exercises the deterministic emergency floor
+      ---
+      duration_ms: 4.663529
+      type: 'test'
+      ...
+    # Subtest: keeps unknown NPC and unknown location references bounded instead of fabricating canonical targets
+    ok 8 - keeps unknown NPC and unknown location references bounded instead of fabricating canonical targets
+      ---
+      duration_ms: 6.654557
+      type: 'test'
+      ...
+    # Subtest: keeps unauthorized world truth out of the bounded research prompt
+    ok 9 - keeps unauthorized world truth out of the bounded research prompt
+      ---
+      duration_ms: 4.004499
+      type: 'test'
+      ...
+    # Subtest: preserves canonical failure before continuity when the commit stage fails
+    ok 10 - preserves canonical failure before continuity when the commit stage fails
+      ---
+      duration_ms: 4.153977
+      type: 'test'
+      ...
+    # Subtest: covers check-shaped actions without letting narration invent a result
+    ok 11 - covers check-shaped actions without letting narration invent a result
+      ---
+      duration_ms: 12.647353
+      type: 'test'
+      ...
+    # Subtest: keeps the UI retry contract visible for failed story actions
+    ok 12 - keeps the UI retry contract visible for failed story actions
+      ---
+      duration_ms: 60.460265
+      type: 'test'
+      ...
+    1..12
+ok 81 - Phase 18 — end-to-end turn harness
+  ---
+  duration_ms: 200.979677
+  type: 'suite'
+  ...
+# Subtest: full action path hands check justification and bounded failure consequence into narration
+ok 82 - full action path hands check justification and bounded failure consequence into narration
+  ---
+  duration_ms: 75.719889
+  type: 'test'
+  ...
+# Subtest: Universe runtime preserves identity, creates worlds, returns to old worlds, and feeds memory into context
+ok 83 - Universe runtime preserves identity, creates worlds, returns to old worlds, and feeds memory into context
+  ---
+  duration_ms: 83.175644
+  type: 'test'
+  ...
+# Subtest: Canonical inventory gains are captured automatically as universe memories
+ok 84 - Canonical inventory gains are captured automatically as universe memories
+  ---
+  duration_ms: 8.150171
+  type: 'test'
+  ...
+# Subtest: Universe runtime can generate a new world from a premise
+ok 85 - Universe runtime can generate a new world from a premise
+  ---
+  duration_ms: 13.194992
+  type: 'test'
+  ...
+# Subtest: Universe and world/NPC continuity survive repository restart
+ok 86 - Universe and world/NPC continuity survive repository restart
+  ---
+  duration_ms: 22.833279
+  type: 'test'
+  ...
+# Subtest: Structured AI memory candidates are saved automatically to world and universe continuity
+ok 87 - Structured AI memory candidates are saved automatically to world and universe continuity
+  ---
+  duration_ms: 9.163238
+  type: 'test'
+  ...
+# Subtest: Narrative research retrieves entity-linked NPC memories even when memory text omits the NPC name
+ok 88 - Narrative research retrieves entity-linked NPC memories even when memory text omits the NPC name
+  ---
+  duration_ms: 5.11768
+  type: 'test'
+  ...
+# Subtest: Universe travel intent only activates for explicit cross-world language
+ok 89 - Universe travel intent only activates for explicit cross-world language
+  ---
+  duration_ms: 2.380256
+  type: 'test'
+  ...
+# Subtest: Phase 19 — verification discipline
+    # Subtest: publishes a repeatable edit-audit-test-release loop
+    ok 1 - publishes a repeatable edit-audit-test-release loop
+      ---
+      duration_ms: 8.285295
+      type: 'test'
+      ...
+    # Subtest: exposes the executable verification command through package scripts
+    ok 2 - exposes the executable verification command through package scripts
+      ---
+      duration_ms: 3.375446
+      type: 'test'
+      ...
+    1..2
+ok 90 - Phase 19 — verification discipline
+  ---
+  duration_ms: 12.87134
+  type: 'suite'
+  ...
+# Subtest: Phase 16 — visual scene context
+    # Subtest: selects the newest player turn rather than stale opening notes
+    ok 1 - selects the newest player turn rather than stale opening notes
+      ---
+      duration_ms: 1.080159
+      type: 'test'
+      ...
+    # Subtest: keeps canonical failure outcomes as failures for visual generation
+    ok 2 - keeps canonical failure outcomes as failures for visual generation
+      ---
+      duration_ms: 0.237796
+      type: 'test'
+      ...
+    # Subtest: projects visible entities from the current location, including canonically visible dead entities
+    ok 3 - projects visible entities from the current location, including canonically visible dead entities
+      ---
+      duration_ms: 1.003913
+      type: 'test'
+      ...
+    # Subtest: keeps passive observation distinct from dialogue
+    ok 4 - keeps passive observation distinct from dialogue
+      ---
+      duration_ms: 0.410815
+      type: 'test'
+      ...
+    # Subtest: only injects active dialogue for an actual dialogue turn
+    ok 5 - only injects active dialogue for an actual dialogue turn
+      ---
+      duration_ms: 0.244209
+      type: 'test'
+      ...
+    # Subtest: uses the latest turn instead of stale opening prose
+    ok 6 - uses the latest turn instead of stale opening prose
+      ---
+      duration_ms: 1.062394
+      type: 'test'
+      ...
+    # Subtest: preserves failure in the prompt instead of depicting success
+    ok 7 - preserves failure in the prompt instead of depicting success
+      ---
+      duration_ms: 0.614367
+      type: 'test'
+      ...
+    # Subtest: keeps the actual game route wired to the canonical visual-context adapter
+    ok 8 - keeps the actual game route wired to the canonical visual-context adapter
+      ---
+      duration_ms: 35.077208
+      type: 'test'
+      ...
+    # Subtest: binds generated scene artwork to the backend sourceActionId
+    ok 9 - binds generated scene artwork to the backend sourceActionId
+      ---
+      duration_ms: 2.331725
+      type: 'test'
+      ...
+    # Subtest: fails closed when the visual context freshness invariant is broken
+    ok 10 - fails closed when the visual context freshness invariant is broken
+      ---
+      duration_ms: 1.076097
+      type: 'test'
+      ...
+    1..10
+ok 91 - Phase 16 — visual scene context
+  ---
+  duration_ms: 44.720459
+  type: 'suite'
+  ...
+# Subtest: CH10 DEF-CH10-07 and DEF-CH10-08 Verifications
+    # Subtest: TEST A: Advance time across a sunrise boundary while the sunrise-linked condition is active
+    ok 1 - TEST A: Advance time across a sunrise boundary while the sunrise-linked condition is active
+      ---
+      duration_ms: 5.893345
+      type: 'test'
+      ...
+    # Subtest: TEST B: Advance by a large multi-hour jump that crosses sunrise
+    ok 2 - TEST B: Advance by a large multi-hour jump that crosses sunrise
+      ---
+      duration_ms: 1.551978
+      type: 'test'
+      ...
+    # Subtest: TEST C: Trigger a meaningful CH10 world event (CH4 evidence intact)
+    ok 3 - TEST C: Trigger a meaningful CH10 world event (CH4 evidence intact)
+      ---
+      duration_ms: 1.787733
+      type: 'test'
+      ...
+    # Subtest: TEST D, E, F, G: Meaningful event generates CH9 memory, deduplicates, verifies provenance and visibility
+    ok 4 - TEST D, E, F, G: Meaningful event generates CH9 memory, deduplicates, verifies provenance and visibility
+      ---
+      duration_ms: 2.565365
+      type: 'test'
+      ...
+    1..4
+ok 92 - CH10 DEF-CH10-07 and DEF-CH10-08 Verifications
+  ---
+  duration_ms: 12.889855
+  type: 'suite'
+  ...
+# Subtest: world synthesis preserves authored challenges from events and top-level input
+ok 93 - world synthesis preserves authored challenges from events and top-level input
+  ---
+  duration_ms: 5.134528
+  type: 'test'
+  ...
+# Subtest: World Synthesis Repair 2: Comprehensive Architecture Verification Suite
+    # Subtest: 1. Same premise + same seed produces reproducible deterministic candidate
+    ok 1 - 1. Same premise + same seed produces reproducible deterministic candidate
+      ---
+      duration_ms: 18.290386
+      type: 'test'
+      ...
+    # Subtest: 2. Same premise + different seed produces varied candidate structures
+    ok 2 - 2. Same premise + different seed produces varied candidate structures
+      ---
+      duration_ms: 3.776937
+      type: 'test'
+      ...
+    # Subtest: 3. Complete removal of legacy hardcoded fixture fallbacks across varied premises
+    ok 3 - 3. Complete removal of legacy hardcoded fixture fallbacks across varied premises
+      ---
+      duration_ms: 8.805512
+      type: 'test'
+      ...
+    # Subtest: 4. Event quantity is strictly bounded between 5 and 10 events with causal integrity
+    ok 4 - 4. Event quantity is strictly bounded between 5 and 10 events with causal integrity
+      ---
+      duration_ms: 1.641318
+      type: 'test'
+      ...
+    # Subtest: 5. Trimming >10 events preserves causal closure and canonical date floor
+    ok 5 - 5. Trimming >10 events preserves causal closure and canonical date floor
+      ---
+      duration_ms: 0.737933
+      type: 'test'
+      ...
+    # Subtest: 6. Completing <5 events uses seeded premise-derived templates
+    ok 6 - 6. Completing <5 events uses seeded premise-derived templates
+      ---
+      duration_ms: 0.604317
+      type: 'test'
+      ...
+    # Subtest: 5. WorldTemplate provenance records generationSeed and execution metadata
+    ok 7 - 5. WorldTemplate provenance records generationSeed and execution metadata
+      ---
+      duration_ms: 0.935282
+      type: 'test'
+      ...
+    1..7
+ok 94 - World Synthesis Repair 2: Comprehensive Architecture Verification Suite
+  ---
+  duration_ms: 40.639725
+  type: 'test'
+  ...
+1..94
+# tests 133
+# suites 5
+# pass 133
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 12108.667585

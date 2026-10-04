@@ -141,8 +141,9 @@ export class NarrativeMemoryLifecycle {
 		const memoryEligible = !params.narrativeReview || params.narrativeReview.decision === 'ACCEPT';
 		const memoryEngine = params.repository.getMemoryEngine(params.storyId);
 		const playerActorId = params.currentSituation.player.actorId;
-		const currentTurn = params.repository.getCanonicalCommandEvents(params.storyId).length;
-		const canonicalEvents = params.repository.getCanonicalCommandEvents(params.storyId);
+		const currentTurn = params.repository.getCanonicalCommandEventCount(params.storyId);
+		// Reverse-lookup of a single turn's event only needs the recent tail.
+		const canonicalEvents = params.repository.getRecentCanonicalCommandEvents(params.storyId, 12);
 		const canonicalEvent = [...canonicalEvents].reverse().find((event) =>
 			event.commandId === params.turnId ||
 			event.eventId === params.turnId ||

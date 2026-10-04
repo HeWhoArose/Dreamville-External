@@ -1,0 +1,65 @@
+TAP version 13
+# Subtest: Chaos — adapter failure injection through the real action pipeline
+    # Subtest: BASELINE — healthy turn before any injection
+    ok 1 - BASELINE — healthy turn before any injection
+      ---
+      duration_ms: 392.884457
+      type: 'test'
+      ...
+    # Subtest: 429 BURST — rate-limited providers fail over, canonical state intact
+    ok 2 - 429 BURST — rate-limited providers fail over, canonical state intact
+      ---
+      duration_ms: 10212.446428
+      type: 'test'
+      ...
+    # Subtest: 500 ERRORS — provider crashes fail over without corrupting state
+    ok 3 - 500 ERRORS — provider crashes fail over without corrupting state
+      ---
+      duration_ms: 40331.341036
+      type: 'test'
+      ...
+    # Subtest: MALFORMED_JSON — corrupt provider output is rejected, never shown to the player
+    ok 4 - MALFORMED_JSON — corrupt provider output is rejected, never shown to the player
+      ---
+      duration_ms: 332.35603
+      type: 'test'
+      ...
+    # Subtest: TIMEOUT — providers genuinely hang, recovery is bounded and the turn succeeds
+    ok 5 - TIMEOUT — providers genuinely hang, recovery is bounded and the turn succeeds
+      ---
+      duration_ms: 74344.397243
+      type: 'test'
+      ...
+    # Subtest: ILLEGAL_STATE_CHANGE — hostile DELETE_PLAYER proposal is rejected, player survives
+    ok 6 - ILLEGAL_STATE_CHANGE — hostile DELETE_PLAYER proposal is rejected, player survives
+      ---
+      duration_ms: 772.917707
+      type: 'test'
+      ...
+    # Subtest: TOTAL OUTAGE — both models disabled, emergency floor keeps the game playable
+    ok 7 - TOTAL OUTAGE — both models disabled, emergency floor keeps the game playable
+      ---
+      duration_ms: 593.216124
+      type: 'test'
+      ...
+    # Subtest: RECOVERY — pipeline returns to fully healthy operation after all injections
+    ok 8 - RECOVERY — pipeline returns to fully healthy operation after all injections
+      ---
+      duration_ms: 262.126295
+      type: 'test'
+      ...
+    1..8
+ok 1 - Chaos — adapter failure injection through the real action pipeline
+  ---
+  duration_ms: 127257.514578
+  type: 'suite'
+  ...
+1..1
+# tests 8
+# suites 1
+# pass 8
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 128338.385085

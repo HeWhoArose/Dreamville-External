@@ -1,0 +1,131 @@
+{
+  "turns": [
+    16407.387835,
+    16674.011735,
+    17269.331005,
+    17808.648607,
+    17490.022118
+  ],
+  "perTurn": [
+    {
+      "stages": {
+        "universe.ensure": 1.548334,
+        "universe.infer": 0.076478,
+        "advisor.advise": 12.369124,
+        "ai.primary.narrative.generate": 5.130395,
+        "orch.executeTask": 17.599819,
+        "orch.generativeOnly": 1236.21114,
+        "mock.processCustomAction": 7380.789756,
+        "canonical.execute": 11392.633951
+      },
+      "counts": {
+        "universe.ensure": 1,
+        "universe.infer": 1,
+        "advisor.advise": 1,
+        "ai.primary.narrative.generate": 1,
+        "orch.executeTask": 2,
+        "orch.generativeOnly": 1,
+        "mock.processCustomAction": 1,
+        "canonical.execute": 1
+      },
+      "aiCalls": 1,
+      "aiMs": 5.117689
+    },
+    {
+      "stages": {
+        "universe.ensure": 0.825785,
+        "universe.infer": 0.122387,
+        "advisor.advise": 18.640123,
+        "ai.primary.narrative.generate": 4.825006,
+        "orch.executeTask": 12.273454000000001,
+        "orch.generativeOnly": 1291.436996,
+        "mock.processCustomAction": 7522.054519,
+        "canonical.execute": 11529.480818
+      },
+      "counts": {
+        "universe.ensure": 1,
+        "universe.infer": 1,
+        "advisor.advise": 1,
+        "ai.primary.narrative.generate": 1,
+        "orch.executeTask": 2,
+        "orch.generativeOnly": 1,
+        "mock.processCustomAction": 1,
+        "canonical.execute": 1
+      },
+      "aiCalls": 1,
+      "aiMs": 4.818732
+    },
+    {
+      "stages": {
+        "universe.ensure": 0.938599,
+        "universe.infer": 0.111415,
+        "advisor.advise": 27.191657,
+        "ai.primary.narrative.generate": 5.873641,
+        "orch.executeTask": 28.259351000000002,
+        "orch.generativeOnly": 1381.570901,
+        "mock.processCustomAction": 8331.992908,
+        "canonical.execute": 12283.722899
+      },
+      "counts": {
+        "universe.ensure": 1,
+        "universe.infer": 1,
+        "advisor.advise": 1,
+        "ai.primary.narrative.generate": 1,
+        "orch.executeTask": 2,
+        "orch.generativeOnly": 1,
+        "mock.processCustomAction": 1,
+        "canonical.execute": 1
+      },
+      "aiCalls": 1,
+      "aiMs": 5.86528
+    },
+    {
+      "stages": {
+        "universe.ensure": 0.872693,
+        "universe.infer": 0.09423,
+        "advisor.advise": 65.848875,
+        "ai.primary.narrative.generate": 5.765892,
+        "orch.executeTask": 16.068595,
+        "orch.generativeOnly": 1513.085921,
+        "mock.processCustomAction": 8499.988211,
+        "canonical.execute": 12509.197503
+      },
+      "counts": {
+        "universe.ensure": 1,
+        "universe.infer": 1,
+        "advisor.advise": 1,
+        "ai.primary.narrative.generate": 1,
+        "orch.executeTask": 2,
+        "orch.generativeOnly": 1,
+        "mock.processCustomAction": 1,
+        "canonical.execute": 1
+      },
+      "aiCalls": 1,
+      "aiMs": 5.758624
+    },
+    {
+      "stages": {
+        "universe.ensure": 0.861384,
+        "universe.infer": 0.08732,
+        "advisor.advise": 39.189176,
+        "ai.primary.narrative.generate": 4.71668,
+        "orch.executeTask": 16.645396,
+        "orch.generativeOnly": 1465.48524,
+        "mock.processCustomAction": 7985.063969,
+        "canonical.execute": 12034.157627
+      },
+      "counts": {
+        "universe.ensure": 1,
+        "universe.infer": 1,
+        "advisor.advise": 1,
+        "ai.primary.narrative.generate": 1,
+        "orch.executeTask": 2,
+        "orch.generativeOnly": 1,
+        "mock.processCustomAction": 1,
+        "canonical.execute": 1
+      },
+      "aiCalls": 1,
+      "aiMs": 4.711045
+    }
+  ]
+}

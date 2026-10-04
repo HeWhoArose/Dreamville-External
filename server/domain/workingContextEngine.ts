@@ -196,7 +196,7 @@ export class WorkingContextEngine {
     blocks: ContextChunk[];
   } {
     const repo = params.worldRepo || worldRepository;
-    const currentTurn = repo.getCanonicalCommandEvents(params.storyId).length + 1;
+    const currentTurn = repo.getCanonicalCommandEventCount(params.storyId) + 1;
     const context = WorkingContextEngine.assembleTurnContext({
       storyId: params.storyId,
       viewerActorId: params.viewerActorId,
@@ -1098,7 +1098,7 @@ export class WorkingContextEngine {
           pinnedSet.has(String(chunk.source || '')),
       })),
     );
-    const currentTurn = repo.getCanonicalCommandEvents(storyId).length + 1;
+    const currentTurn = repo.getCanonicalCommandEventCount(storyId) + 1;
     const budgetedResult = WorkingContextEngine.assembleBudgetedContext(
       normalizedCandidateChunks,
       hardTokenBudget,

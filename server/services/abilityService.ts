@@ -134,7 +134,7 @@ export class AbilityService {
       };
     }
 
-    const commandSequence = repository.getCanonicalCommandEvents(storyId).length + 1;
+    const commandSequence = repository.getCanonicalCommandEventCount(storyId) + 1;
     const effectId = deterministicId('eff', storyId, commandSequence, def.abilityId, targetId);
     const activeEffect: ActiveEffect = {
       effectId,

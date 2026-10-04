@@ -1,0 +1,95 @@
+TAP version 13
+# Subtest: Marathon — 125 turns, one persistent world, real action pipeline
+    # Subtest: SEGMENT 1/6 — turns 1–40: exploration, dialogue, memory-recall, social
+    ok 1 - SEGMENT 1/6 — turns 1–40: exploration, dialogue, memory-recall, social
+      ---
+      duration_ms: 9030.099718
+      type: 'test'
+      ...
+    # Subtest: SEGMENT 2/6 — turns 41–60: combat-approach, secrets/leak-probe
+    ok 2 - SEGMENT 2/6 — turns 41–60: combat-approach, secrets/leak-probe
+      ---
+      duration_ms: 8050.830249
+      type: 'test'
+      ...
+# [NarrationFallback] AI narration unavailable; local story fallback used. {
+#   storyId: 'marathon_story',
+#   actionId: 'act_srv_a772633d',
+#   provider: 'provider_deterministic_emergency',
+#   model: 'emergency-fallback-local',
+#   error: 'All 4 AI/emergency attempts failed: 1. marathon-primary (provider_marathon_primary) — Task response schema validation failed: Narration continuity guard rejected output: no distinctive lexical anchor for canonical location "The Whispering Orrery".; 2. marathon-fallback (provider_marathon_fallback) — Task response schema validation failed: Narration continuity guard rejected output: no distinctive lexical anchor for canonical location "The Whispering Orrery".; 3. Deterministic Rule Engine (Emergency Floor) (provider_deterministic_emergency) — Task response schema validation failed: Narration semantic backstop rejected output: the requested movement was not visibly depicted.; 4. Deterministic Rule Engine (Emergency Floor) (provider_deterministic_emergency) — Emergency task response validation failed: Narration semantic backstop rejected output: the requested movement was not visibly depicted.',
+#   fallbackReason: 'All 4 AI/emergency attempts failed: 1. marathon-primary (provider_marathon_primary) — Task response schema validation failed: Narration continuity guard rejected output: no distinctive lexical anchor for canonical location "The Whispering Orrery".; 2. marathon-fallback (provider_marathon_fallback) — Task response schema validation failed: Narration continuity guard rejected output: no distinctive lexical anchor for canonical location "The Whispering Orrery".; 3. Deterministic Rule Engine (Emergency Floor) (provider_deterministic_emergency) — Task response schema validation failed: Narration semantic backstop rejected output: the requested movement was not visibly depicted.; 4. Deterministic Rule Engine (Emergency Floor) (provider_deterministic_emergency) — Emergency task response validation failed: Narration semantic backstop rejected output: the requested movement was not visibly depicted.',
+#   attemptsTrail: [
+#     {
+#       providerId: 'provider_marathon_primary',
+#       modelId: 'marathon-primary',
+#       displayName: 'marathon-primary',
+#       status: 'FAILED',
+#       latencyMs: 5,
+#       error: 'Task response schema validation failed: Narration continuity guard rejected output: no distinctive lexical anchor for canonical location "The Whispering Orrery".'
+#     },
+#     {
+#       providerId: 'provider_marathon_fallback',
+#       modelId: 'marathon-fallback',
+#       displayName: 'marathon-fallback',
+#       status: 'FAILED',
+#       latencyMs: 5,
+#       error: 'Task response schema validation failed: Narration continuity guard rejected output: no distinctive lexical anchor for canonical location "The Whispering Orrery".'
+#     },
+#     {
+#       providerId: 'provider_deterministic_emergency',
+#       modelId: 'emergency-fallback-local',
+#       displayName: 'Deterministic Rule Engine (Emergency Floor)',
+#       status: 'FAILED',
+#       latencyMs: 1,
+#       error: 'Task response schema validation failed: Narration semantic backstop rejected output: the requested movement was not visibly depicted.'
+#     },
+#     {
+#       providerId: 'provider_deterministic_emergency',
+#       modelId: 'emergency-fallback-local',
+#       displayName: 'Deterministic Rule Engine (Emergency Floor)',
+#       status: 'FAILED',
+#       latencyMs: 1,
+#       error: 'Emergency task response validation failed: Narration semantic backstop rejected output: the requested movement was not visibly depicted.'
+#     }
+#   ]
+# }
+    # Subtest: SEGMENT 3/6 — turns 61–80: relationships, travel/continuity
+    ok 3 - SEGMENT 3/6 — turns 61–80: relationships, travel/continuity
+      ---
+      duration_ms: 9356.63373
+      type: 'test'
+      ...
+    # Subtest: SEGMENT 4/6 — turns 81–100: plot threads, degradation injections, high-density social
+    ok 4 - SEGMENT 4/6 — turns 81–100: plot threads, degradation injections, high-density social
+      ---
+      duration_ms: 10750.068512
+      type: 'test'
+      ...
+    # Subtest: SEGMENT 5/6 — turns 101–112: stress extension + checkpoint 110
+    ok 5 - SEGMENT 5/6 — turns 101–112: stress extension + checkpoint 110
+      ---
+      duration_ms: 8195.055669
+      type: 'test'
+      ...
+    # Subtest: SEGMENT 6/6 — turns 113–125: stress + checkpoint 118/125 + idempotency probe + final bounds
+    ok 6 - SEGMENT 6/6 — turns 113–125: stress + checkpoint 118/125 + idempotency probe + final bounds
+      ---
+      duration_ms: 12165.060903
+      type: 'test'
+      ...
+    1..6
+ok 1 - Marathon — 125 turns, one persistent world, real action pipeline
+  ---
+  duration_ms: 57568.305811
+  type: 'suite'
+  ...
+1..1
+# tests 6
+# suites 1
+# pass 6
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 58683.488434

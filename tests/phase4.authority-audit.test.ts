@@ -69,7 +69,11 @@ test('Phase 4 — legacy mock action identifiers are deterministic', () => {
 });
 test('Phase 4 — AI turn identity does not depend on process-global turn counters', () => {
 	assert.doesNotMatch(aiOrchestrator, /const turnSequence = \+\+this\.totalTurnsExecuted/);
-	assert.match(aiOrchestrator, /const turnSequence = repo\.getCanonicalCommandEvents\(storyId\)\.length \+ 1/);
+	// Turn identity must derive from the canonical event ledger. The O(1) count
+	// accessor (getCanonicalCommandEventCount) is equivalent to the historical
+	// full-array .length form — both are ledger-derived, neither is a
+	// process-global counter.
+	assert.match(aiOrchestrator, /const turnSequence = repo\.getCanonicalCommandEvent(?:Count\(storyId\)|s\(storyId\)\.length) \+ 1/);
 });
 test('Phase 4 — command, turn, and checkpoint identities are not wall-clock generated', () => {
 	assert.doesNotMatch(gameRoutes, /Date\.now\(\)|Math\.random\(\)/);

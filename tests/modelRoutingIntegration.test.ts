@@ -11,9 +11,16 @@ describe('MODEL ROUTING & TASK ASSIGNMENT OPERATIONAL INTEGRATION', () => {
     : 'orchestrator_config.json';
   const configPath = path.join(process.cwd(), 'server', 'data', configFileName);
 
+  // Isolation with preservation: snapshot the config fixture and restore it in
+  // afterEach so these persistence tests get a clean slate WITHOUT destroying
+  // the tracked orchestrator_config_test.json file for subsequent runs.
+  let savedConfigContent: string | null = null;
+
   beforeEach(() => {
     process.env.DREAMVILLE_TEST_LOAD_PERSISTED_CONFIG = '1';
-    // Reset config file if present
+    savedConfigContent = fs.existsSync(configPath)
+      ? fs.readFileSync(configPath, 'utf8')
+      : null;
     if (fs.existsSync(configPath)) {
       try {
         fs.unlinkSync(configPath);
@@ -26,7 +33,10 @@ describe('MODEL ROUTING & TASK ASSIGNMENT OPERATIONAL INTEGRATION', () => {
 
   afterEach(() => {
     delete process.env.DREAMVILLE_TEST_LOAD_PERSISTED_CONFIG;
-    if (fs.existsSync(configPath)) {
+    if (savedConfigContent !== null) {
+      fs.writeFileSync(configPath, savedConfigContent, 'utf8');
+      savedConfigContent = null;
+    } else if (fs.existsSync(configPath)) {
       try {
         fs.unlinkSync(configPath);
       } catch (err) {

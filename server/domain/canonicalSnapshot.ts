@@ -47,6 +47,21 @@ export function captureCanonicalStateSnapshot(
   storyId: string,
   repo: InMemoryWorldRepository
 ): CanonicalStateSnapshot {
+  // Canonical event history is excluded from canonical captures on purpose.
+  // Events live in their own durable log (StoryRun.canonicalEvents) and each one
+  // can embed a replay checkpoint. Cloning them into every before/after capture
+  // made turn cost grow with total session history (the O(N²) amplification that
+  // produced the long-session latency regression). Restores keep the live log by
+  // default; callers that need a historical event window pass
+  // { preserveCanonicalEvents: true } explicitly.
+  const stripEventHistory = <T>(value: T): T => {
+    if (!value || typeof value !== 'object') return value;
+    const run = value as { canonicalEvents?: unknown };
+    // Normalize to an empty array so before/after comparisons stay key-symmetric
+    // even when the live run has never appended an event.
+    return { ...run, canonicalEvents: [] } as unknown as T;
+  };
+
   const safeClone = <T>(value: T): T => value === undefined ? value : JSON.parse(JSON.stringify(value));
 
   const clock = repo.getWorldClock(storyId);
@@ -108,7 +123,7 @@ export function captureCanonicalStateSnapshot(
       pipelineState: safeClone(repo.getPipelineState(storyId)),
       session: safeClone(repo.getAdaptationSession(storyId)),
       events: safeClone(repo.getAdaptationEvents(storyId)),
-      ch16Run: safeClone(run),
+      ch16Run: run ? stripEventHistory(safeClone(run)) : null,
       ch16Threads: safeClone(repo.getStoryThreads(storyId)),
       ch16ActiveEffects: safeClone(repo.getActiveEffects(storyId)),
       ch16WorldFacts: safeClone(repo.getWorldFacts(storyId)),

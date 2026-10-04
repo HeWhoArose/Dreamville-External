@@ -243,7 +243,7 @@ export class OocToolRegistry {
 						storyId,
 						viewerActorId: actorId,
 						queryKeywords: keywords,
-						currentTurn: repository.getCanonicalCommandEvents(storyId).length + 1,
+						currentTurn: repository.getCanonicalCommandEventCount(storyId) + 1,
 						currentTimestamp: repository.getWorldClock(storyId).getTimestamp(),
 						maxResults: 8,
 						includeDormant: false,
@@ -504,7 +504,7 @@ export class OocToolRegistry {
 		payload: Record<string, unknown>;
 		sequence?: number;
 	}): Promise<OocToolResult> {
-		const commandSequence = params.sequence ?? params.repository.getCanonicalCommandEvents(params.storyId).length + 1;
+		const commandSequence = params.sequence ?? params.repository.getCanonicalCommandEventCount(params.storyId) + 1;
 		const id = commandId(
 			params.storyId,
 			params.actorId,

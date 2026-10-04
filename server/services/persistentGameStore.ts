@@ -7,6 +7,7 @@ import {
   type PersistenceInspection,
   type PersistenceRepairResult,
   migratePersistenceData,
+  normalizeMapsInPlace,
   type VersionedPersistenceData,
 } from './persistenceMigrationService';
 
@@ -14,12 +15,12 @@ export type PersistentGameStoreData = VersionedPersistenceData;
 
 const EMPTY_STORE: PersistentGameStoreData = PersistenceMigrationService.emptyData();
 
-function isRunningUnderTests(): boolean {
-  return Boolean(
-    process.env.NODE_TEST_CONTEXT ||
-    process.env.npm_lifecycle_event === 'test' ||
-    process.argv.some((arg) => arg.includes('--test'))
-  );
+export function isRunningUnderTests(): boolean {
+	return Boolean(
+		process.env.NODE_TEST_CONTEXT ||
+		process.env.npm_lifecycle_event === 'test' ||
+		process.argv.some((arg) => arg.includes('--test'))
+	);
 }
 
 function clone<T>(value: T): T {
@@ -54,13 +55,12 @@ export class PersistentGameStore {
 
     try {
       const parsed = JSON.parse(readFileSync(this.filePath, 'utf8'));
-      const migrated = migratePersistenceData(parsed);
-      if (JSON.stringify(parsed) !== JSON.stringify(migrated)) {
-        // The migration service creates its own pre-migration backup before changing
-        // the primary file. We do not mutate the source during a normal read here.
-        this.migrateIfNeeded(migrated);
-      }
-      return clone(migrated);
+      // A single normalization pass straight out of the parsed JSON. Re-serializing the
+      // whole store here was measurable on large campaigns and this read path runs on
+      // every process boot; validateShape already guarantees the versioned contract.
+      // The clone detaches the result from the parsed JSON so callers can own it.
+      const normalized = normalizeMapsInPlace(parsed);
+      return clone(normalized);
     } catch (error) {
       const recovered = this.tryRecoverFromLatestSnapshot(error);
       if (recovered) return recovered;
@@ -72,7 +72,11 @@ export class PersistentGameStore {
   save(data: PersistentGameStoreData): void {
     if (!this.isEnabled || !this.filePath) return;
 
-    const normalized = migratePersistenceData(data);
+    // Structural normalization only (no per-collection deep clones). The repository
+    // hands us a freshly built payload; we serialize it immediately without mutating
+    // it. clone(data) plus five per-collection clones turned every save into four
+    // full-store serializations on hot paths that persist several times per turn.
+    const normalized = normalizeMapsInPlace(data);
     const directory = dirname(this.filePath);
     mkdirSync(directory, { recursive: true });
 
@@ -81,7 +85,9 @@ export class PersistentGameStore {
     }
 
     const temporaryPath = `${this.filePath}.tmp`;
-    writeFileSync(temporaryPath, JSON.stringify(normalized, null, 2), 'utf8');
+    // Compact serialization: pretty-printing multiplied file size ~4x and pushed
+    // large campaigns into multi-second synchronous writes per turn.
+    writeFileSync(temporaryPath, JSON.stringify(normalized), 'utf8');
     renameSync(temporaryPath, this.filePath);
     this.pruneSnapshots();
   }

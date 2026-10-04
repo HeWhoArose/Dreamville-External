@@ -1,0 +1,1637 @@
+TAP version 13
+# Subtest: Phase 4 — seeded RNG produces identical sequences and deterministic ids
+ok 1 - Phase 4 — seeded RNG produces identical sequences and deterministic ids
+  ---
+  duration_ms: 1.989235
+  type: 'test'
+  ...
+# Subtest: Phase 4 — capability preview identities are deterministic
+ok 2 - Phase 4 — capability preview identities are deterministic
+  ---
+  duration_ms: 1.942645
+  type: 'test'
+  ...
+# Subtest: Phase 4 — deterministic ids are independent of object key order
+ok 3 - Phase 4 — deterministic ids are independent of object key order
+  ---
+  duration_ms: 0.312035
+  type: 'test'
+  ...
+# Subtest: Phase 4 — RNG state export/import resumes at the exact replay position
+ok 4 - Phase 4 — RNG state export/import resumes at the exact replay position
+  ---
+  duration_ms: 0.340386
+  type: 'test'
+  ...
+# Subtest: Phase 4 — LocalDiceEngine replay is independent of wall-clock time
+ok 5 - Phase 4 — LocalDiceEngine replay is independent of wall-clock time
+  ---
+  duration_ms: 0.994946
+  type: 'test'
+  ...
+# Subtest: Phase 4 — StoryCheckEngine persists and restores its RNG position
+ok 6 - Phase 4 — StoryCheckEngine persists and restores its RNG position
+  ---
+  duration_ms: 4.418735
+  type: 'test'
+  ...
+# Subtest: Phase 4 — combat attack replay matches from the same seeded state
+ok 7 - Phase 4 — combat attack replay matches from the same seeded state
+  ---
+  duration_ms: 0.587184
+  type: 'test'
+  ...
+# Subtest: Phase 4 — full canonical combat attack replay matches from identical seeded state
+ok 8 - Phase 4 — full canonical combat attack replay matches from identical seeded state
+  ---
+  duration_ms: 190.276185
+  type: 'test'
+  ...
+# Subtest: Phase 4 — full canonical story-check replay produces identical roll and replay metadata
+ok 9 - Phase 4 — full canonical story-check replay produces identical roll and replay metadata
+  ---
+  duration_ms: 89.694836
+  type: 'test'
+  ...
+# Subtest: Phase 4 — rejected story-check commands restore RNG state exactly
+ok 10 - Phase 4 — rejected story-check commands restore RNG state exactly
+  ---
+  duration_ms: 23.999475
+  type: 'test'
+  ...
+# Subtest: Phase 4 — repository snapshots carry StoryCheck RNG state
+ok 11 - Phase 4 — repository snapshots carry StoryCheck RNG state
+  ---
+  duration_ms: 7.898098
+  type: 'test'
+  ...
+# Subtest: Phase 4 — Chronicle writes through repository authority only become visible after canonical commit
+ok 12 - Phase 4 — Chronicle writes through repository authority only become visible after canonical commit
+  ---
+  duration_ms: 46.731398
+  type: 'test'
+  ...
+# Subtest: Phase 4 — rejected Chronicle transactions leave no evidence behind
+ok 13 - Phase 4 — rejected Chronicle transactions leave no evidence behind
+  ---
+  duration_ms: 14.094103
+  type: 'test'
+  ...
+# Subtest: Phase 4 — direct repository Chronicle writes outside canonical transactions are rejected
+ok 14 - Phase 4 — direct repository Chronicle writes outside canonical transactions are rejected
+  ---
+  duration_ms: 1.583402
+  type: 'test'
+  ...
+# Subtest: Phase 4 — replay output hashing handles commands without result data
+ok 15 - Phase 4 — replay output hashing handles commands without result data
+  ---
+  duration_ms: 42.798315
+  type: 'test'
+  ...
+# Subtest: Phase 4 — canonical command replay metadata is deterministic
+ok 16 - Phase 4 — canonical command replay metadata is deterministic
+  ---
+  duration_ms: 71.210062
+  type: 'test'
+  ...
+# Subtest: Phase 4 — replay state hashing ignores presentation-only wall-clock metadata
+ok 17 - Phase 4 — replay state hashing ignores presentation-only wall-clock metadata
+  ---
+  duration_ms: 123.432719
+  type: 'test'
+  ...
+# Subtest: Phase 4 — replay hashing ignores adaptation session start timestamps
+ok 18 - Phase 4 — replay hashing ignores adaptation session start timestamps
+  ---
+  duration_ms: 88.559367
+  type: 'test'
+  ...
+# Subtest: Phase 4 — deterministic world synthesis uses identical deterministic candidate output for the same seed
+ok 19 - Phase 4 — deterministic world synthesis uses identical deterministic candidate output for the same seed
+  ---
+  duration_ms: 1.501214
+  type: 'test'
+  ...
+# Subtest: Phase 5: multiple eligible opportunity attackers resolve deterministically and consume each Reaction
+ok 20 - Phase 5: multiple eligible opportunity attackers resolve deterministically and consume each Reaction
+  ---
+  duration_ms: 15.044242
+  type: 'test'
+  ...
+# Subtest: Phase 5: Ready Action consumes Action, fires on its configured trigger, and consumes Reaction
+ok 21 - Phase 5: Ready Action consumes Action, fires on its configured trigger, and consumes Reaction
+  ---
+  duration_ms: 2.250353
+  type: 'test'
+  ...
+# Subtest: Phase 5: movement validates the traversed path and difficult terrain cost
+ok 22 - Phase 5: movement validates the traversed path and difficult terrain cost
+  ---
+  duration_ms: 1.564399
+  type: 'test'
+  ...
+# Subtest: Phase 5: Grapple and Shove are canonical Action-consuming control effects
+ok 23 - Phase 5: Grapple and Shove are canonical Action-consuming control effects
+  ---
+  duration_ms: 2.796575
+  type: 'test'
+  ...
+# Subtest: Phase 5: Grappled creatures can spend an Action to escape using the grapple escape DC
+ok 24 - Phase 5: Grappled creatures can spend an Action to escape using the grapple escape DC
+  ---
+  duration_ms: 1.231485
+  type: 'test'
+  ...
+# Subtest: Phase 5: cover modifies canonical attack defense and persists through export/import
+ok 25 - Phase 5: cover modifies canonical attack defense and persists through export/import
+  ---
+  duration_ms: 2.75127
+  type: 'test'
+  ...
+# Subtest: Phase 5: Total Cover blocks direct attacks without consuming the Action
+ok 26 - Phase 5: Total Cover blocks direct attacks without consuming the Action
+  ---
+  duration_ms: 0.979361
+  type: 'test'
+  ...
+# Subtest: Phase 5: opportunity attacks share normal attack condition modifiers
+ok 27 - Phase 5: opportunity attacks share normal attack condition modifiers
+  ---
+  duration_ms: 1.516311
+  type: 'test'
+  ...
+# Subtest: Phase 5: zero-HP combatants cannot move or provoke opportunity reactions
+ok 28 - Phase 5: zero-HP combatants cannot move or provoke opportunity reactions
+  ---
+  duration_ms: 0.643856
+  type: 'test'
+  ...
+# Subtest: Phase 5: tactical combat respects the canonical rules profile
+ok 29 - Phase 5: tactical combat respects the canonical rules profile
+  ---
+  duration_ms: 0.938038
+  type: 'test'
+  ...
+# Subtest: Phase 5: generic reaction adjudicator filters triggers and orders eligible reactions deterministically
+ok 30 - Phase 5: generic reaction adjudicator filters triggers and orders eligible reactions deterministically
+  ---
+  duration_ms: 2.456276
+  type: 'test'
+  ...
+# Subtest: Phase 5: generic reaction adjudicator respects explicit eligibility checks
+ok 31 - Phase 5: generic reaction adjudicator respects explicit eligibility checks
+  ---
+  duration_ms: 0.546402
+  type: 'test'
+  ...
+# Subtest: Phase 5: one actor cannot resolve two reactions from the same trigger event
+ok 32 - Phase 5: one actor cannot resolve two reactions from the same trigger event
+  ---
+  duration_ms: 0.274645
+  type: 'test'
+  ...
+# Subtest: Phase 6 audit: resistance and death use canonical combat damage authority
+ok 33 - Phase 6 audit: resistance and death use canonical combat damage authority
+  ---
+  duration_ms: 17.557697
+  type: 'test'
+  ...
+# Subtest: Phase 6 audit: concentration is interrupted by canonical zero-HP death
+ok 34 - Phase 6 audit: concentration is interrupted by canonical zero-HP death
+  ---
+  duration_ms: 2.362362
+  type: 'test'
+  ...
+# Subtest: Phase 6 audit: canonical save/load preserves spell slots and concentration state
+ok 35 - Phase 6 audit: canonical save/load preserves spell slots and concentration state
+  ---
+  duration_ms: 23.652677
+  type: 'test'
+  ...
+# Subtest: Phase 6 audit: FULL, HYBRID, and CUSTOM rules modes do not silently cross semantic boundaries
+ok 36 - Phase 6 audit: FULL, HYBRID, and CUSTOM rules modes do not silently cross semantic boundaries
+  ---
+  duration_ms: 0.979483
+  type: 'test'
+  ...
+# Subtest: Phase 6 audit: area spells resolve multiple authoritative targets
+ok 37 - Phase 6 audit: area spells resolve multiple authoritative targets
+  ---
+  duration_ms: 2.104763
+  type: 'test'
+  ...
+# Subtest: Phase 6 audit: concentration buffs are reverted when concentration breaks
+ok 38 - Phase 6 audit: concentration buffs are reverted when concentration breaks
+  ---
+  duration_ms: 1.290918
+  type: 'test'
+  ...
+# Subtest: Phase 6 audit: authoritative target rejection is side-effect free
+ok 39 - Phase 6 audit: authoritative target rejection is side-effect free
+  ---
+  duration_ms: 0.337971
+  type: 'test'
+  ...
+# Subtest: Phase 6 audit: canonical cast commits Chronicle evidence once and idempotent replay does not double-spend
+ok 40 - Phase 6 audit: canonical cast commits Chronicle evidence once and idempotent replay does not double-spend
+  ---
+  duration_ms: 113.940737
+  type: 'test'
+  ...
+# Subtest: Phase 6 audit: rejected canonical spell transaction rolls back spell state, combat state, and Chronicle evidence
+ok 41 - Phase 6 audit: rejected canonical spell transaction rolls back spell state, combat state, and Chronicle evidence
+  ---
+  duration_ms: 23.775552
+  type: 'test'
+  ...
+# Subtest: Phase 6 audit: rejected cast does not create spell state for a previously unseen actor
+ok 42 - Phase 6 audit: rejected cast does not create spell state for a previously unseen actor
+  ---
+  duration_ms: 0.58961
+  type: 'test'
+  ...
+# Subtest: Phase 6 audit: invalid spell-slot ledgers are rejected atomically
+ok 43 - Phase 6 audit: invalid spell-slot ledgers are rejected atomically
+  ---
+  duration_ms: 0.726713
+  type: 'test'
+  ...
+# Subtest: Phase 6 audit: concentration cleanup does not remove a pre-existing condition source
+ok 44 - Phase 6 audit: concentration cleanup does not remove a pre-existing condition source
+  ---
+  duration_ms: 3.441358
+  type: 'test'
+  ...
+# Subtest: Phase 6 audit: canonical healing updates the damage authority before later damage
+ok 45 - Phase 6 audit: canonical healing updates the damage authority before later damage
+  ---
+  duration_ms: 1.29455
+  type: 'test'
+  ...
+# Subtest: Phase 6 audit: concentration duration decrements in authoritative state and expires at zero
+ok 46 - Phase 6 audit: concentration duration decrements in authoritative state and expires at zero
+  ---
+  duration_ms: 1.632338
+  type: 'test'
+  ...
+# Subtest: Phase 6 audit: breaking concentration preserves independent pre-existing buff modifiers
+ok 47 - Phase 6 audit: breaking concentration preserves independent pre-existing buff modifiers
+  ---
+  duration_ms: 1.523878
+  type: 'test'
+  ...
+# Subtest: Phase 6 audit: failed learn/prepare operations do not create spellcasting state
+ok 48 - Phase 6 audit: failed learn/prepare operations do not create spellcasting state
+  ---
+  duration_ms: 0.288255
+  type: 'test'
+  ...
+# Subtest: Phase 6 Live HTTP API Test Suite
+    # Subtest: GET /spells/catalog returns catalog list and supports query filters
+    ok 1 - GET /spells/catalog returns catalog list and supports query filters
+      ---
+      duration_ms: 120.475602
+      type: 'test'
+      ...
+    # Subtest: GET /spells/catalog/:spellId returns specific spell or 404
+    ok 2 - GET /spells/catalog/:spellId returns specific spell or 404
+      ---
+      duration_ms: 16.133467
+      type: 'test'
+      ...
+    # Subtest: POST /spells/slots/initialize and GET /spells/actor/:actorId manages slot state
+    ok 3 - POST /spells/slots/initialize and GET /spells/actor/:actorId manages slot state
+      ---
+      duration_ms: 186.85854
+      type: 'test'
+      ...
+    # Subtest: POST /spells/learn and POST /spells/prepare tracks known and prepared spells
+    ok 4 - POST /spells/learn and POST /spells/prepare tracks known and prepared spells
+      ---
+      duration_ms: 263.659967
+      type: 'test'
+      ...
+    # Subtest: POST /spells/slots/reset resets spell slots on rest
+    ok 5 - POST /spells/slots/reset resets spell slots on rest
+      ---
+      duration_ms: 121.796008
+      type: 'test'
+      ...
+    # Subtest: POST /spells/evaluate and POST /spells/register-custom adjudicates novel spells
+    ok 6 - POST /spells/evaluate and POST /spells/register-custom adjudicates novel spells
+      ---
+      duration_ms: 73.587056
+      type: 'test'
+      ...
+    # Subtest: POST /spells/cast executes authoritative cast
+    ok 7 - POST /spells/cast executes authoritative cast
+      ---
+      duration_ms: 342.380146
+      type: 'test'
+      ...
+    # Subtest: POST /spells/concentration/break breaks active concentration
+    ok 8 - POST /spells/concentration/break breaks active concentration
+      ---
+      duration_ms: 82.358965
+      type: 'test'
+      ...
+    1..8
+ok 49 - Phase 6 Live HTTP API Test Suite
+  ---
+  duration_ms: 1222.314547
+  type: 'suite'
+  ...
+# Subtest: Phase 6 Requirement 1: Spell resources and slot consumption
+ok 50 - Phase 6 Requirement 1: Spell resources and slot consumption
+  ---
+  duration_ms: 3.980831
+  type: 'test'
+  ...
+# Subtest: Phase 6 Requirement 2: Prepared and known spell state enforcement
+ok 51 - Phase 6 Requirement 2: Prepared and known spell state enforcement
+  ---
+  duration_ms: 0.40497
+  type: 'test'
+  ...
+# Subtest: Phase 6 Requirement 3: Targeting and range validation
+ok 52 - Phase 6 Requirement 3: Targeting and range validation
+  ---
+  duration_ms: 0.537465
+  type: 'test'
+  ...
+# Subtest: Phase 6 Requirement 4 & 5: Attack/Save resolution and spell effects
+ok 53 - Phase 6 Requirement 4 & 5: Attack/Save resolution and spell effects
+  ---
+  duration_ms: 1.356326
+  type: 'test'
+  ...
+# Subtest: Phase 6 Requirement 6: Upcasting increases spell potency
+ok 54 - Phase 6 Requirement 6: Upcasting increases spell potency
+  ---
+  duration_ms: 0.832979
+  type: 'test'
+  ...
+# Subtest: Phase 6 Requirement 7: Concentration tracking and damage disruption
+ok 55 - Phase 6 Requirement 7: Concentration tracking and damage disruption
+  ---
+  duration_ms: 1.382177
+  type: 'test'
+  ...
+# Subtest: Phase 6 Requirement 8: Ritual casting without slot consumption
+ok 56 - Phase 6 Requirement 8: Ritual casting without slot consumption
+  ---
+  duration_ms: 0.427089
+  type: 'test'
+  ...
+# Subtest: Phase 6 Requirement 9: TacticalCombatEngine integrated spellcasting
+ok 57 - Phase 6 Requirement 9: TacticalCombatEngine integrated spellcasting
+  ---
+  duration_ms: 11.330249
+  type: 'test'
+  ...
+# Subtest: Phase 6 Requirement 10: Rules profiles enforce mode constraints
+ok 58 - Phase 6 Requirement 10: Rules profiles enforce mode constraints
+  ---
+  duration_ms: 0.555368
+  type: 'test'
+  ...
+# Subtest: Phase 6 Requirement 11: Authoritative custom spell evaluation and registration
+ok 59 - Phase 6 Requirement 11: Authoritative custom spell evaluation and registration
+  ---
+  duration_ms: 1.128793
+  type: 'test'
+  ...
+# Subtest: Phase 7 condition elapsed-time schedules respect duration and catch-up ticks
+ok 60 - Phase 7 condition elapsed-time schedules respect duration and catch-up ticks
+  ---
+  duration_ms: 3.082596
+  type: 'test'
+  ...
+# Subtest: Phase 7 exhaustion is canonical, bounded, and exposes deterministic modifiers
+ok 61 - Phase 7 exhaustion is canonical, bounded, and exposes deterministic modifiers
+  ---
+  duration_ms: 1.608583
+  type: 'test'
+  ...
+# Subtest: Phase 7 short rest advances world time, spends canonical Hit Dice, and recovers HP
+ok 62 - Phase 7 short rest advances world time, spends canonical Hit Dice, and recovers HP
+  ---
+  duration_ms: 7.181755
+  type: 'test'
+  ...
+# Subtest: Phase 7 long rest restores HP, spell slots, exhaustion, and breaks concentration
+ok 63 - Phase 7 long rest restores HP, spell slots, exhaustion, and breaks concentration
+  ---
+  duration_ms: 3.871439
+  type: 'test'
+  ...
+# Subtest: Phase 7 interrupted rest advances time but does not apply completion recovery
+ok 64 - Phase 7 interrupted rest advances time but does not apply completion recovery
+  ---
+  duration_ms: 1.623904
+  type: 'test'
+  ...
+# Subtest: Phase 7 custom mode requires explicit rest authority and honors explicit overrides
+ok 65 - Phase 7 custom mode requires explicit rest authority and honors explicit overrides
+  ---
+  duration_ms: 2.133895
+  type: 'test'
+  ...
+# Subtest: Phase 7 active rest survives canonical snapshot save/load and restores without side effects
+ok 66 - Phase 7 active rest survives canonical snapshot save/load and restores without side effects
+  ---
+  duration_ms: 26.596167
+  type: 'test'
+  ...
+# Subtest: Phase 7 invalid rest command is atomic and leaves time/rest state unchanged
+ok 67 - Phase 7 invalid rest command is atomic and leaves time/rest state unchanged
+  ---
+  duration_ms: 9.755737
+  type: 'test'
+  ...
+# Subtest: Phase 7 REST command is staged, committed once, and idempotent on replay
+ok 68 - Phase 7 REST command is staged, committed once, and idempotent on replay
+  ---
+  duration_ms: 86.170625
+  type: 'test'
+  ...
+# Subtest: Phase 8.6-8.12 regression and fallback contracts
+    # Subtest: preserves hidden facility state after a failed search
+    ok 1 - preserves hidden facility state after a failed search
+      ---
+      duration_ms: 1.789194
+      type: 'test'
+      ...
+    # Subtest: derives NPC decisions from state rather than turn scripts
+    ok 2 - derives NPC decisions from state rather than turn scripts
+      ---
+      duration_ms: 0.496436
+      type: 'test'
+      ...
+    # Subtest: supports mission transformation without deleting history
+    ok 3 - supports mission transformation without deleting history
+      ---
+      duration_ms: 0.357538
+      type: 'test'
+      ...
+    # Subtest: keeps failed knowledge acquisition from changing reality
+    ok 4 - keeps failed knowledge acquisition from changing reality
+      ---
+      duration_ms: 0.241781
+      type: 'test'
+      ...
+    # Subtest: preserves causal copies and traces forward/backward
+    ok 5 - preserves causal copies and traces forward/backward
+      ---
+      duration_ms: 0.367324
+      type: 'test'
+      ...
+    # Subtest: clamps relationship consequences and preserves evidence linkage
+    ok 6 - clamps relationship consequences and preserves evidence linkage
+      ---
+      duration_ms: 0.440449
+      type: 'test'
+      ...
+    1..6
+ok 69 - Phase 8.6-8.12 regression and fallback contracts
+  ---
+  duration_ms: 4.970529
+  type: 'suite'
+  ...
+# Subtest: projects Phase 8 state without leaking hidden facility devices or private NPC motives
+ok 70 - projects Phase 8 state without leaking hidden facility devices or private NPC motives
+  ---
+  duration_ms: 2.419147
+  type: 'test'
+  ...
+# Subtest: records facility discovery so a discovered hidden device becomes player-visible without changing reality
+ok 71 - records facility discovery so a discovered hidden device becomes player-visible without changing reality
+  ---
+  duration_ms: 1.591159
+  type: 'test'
+  ...
+# Subtest: does not expose private knowledge or causal edges outside the player-visible projection
+ok 72 - does not expose private knowledge or causal edges outside the player-visible projection
+  ---
+  duration_ms: 1.299357
+  type: 'test'
+  ...
+# Subtest: omits an undiscovered remote facility even when it contains visible non-hidden nodes
+ok 73 - omits an undiscovered remote facility even when it contains visible non-hidden nodes
+  ---
+  duration_ms: 1.08887
+  type: 'test'
+  ...
+# Subtest: Phase 8.6 - Custom Rule Engine
+    # Subtest: evaluates deterministic triggers and priority order
+    ok 1 - evaluates deterministic triggers and priority order
+      ---
+      duration_ms: 23.127722
+      type: 'test'
+      ...
+    # Subtest: evaluates event and world-fact conditions
+    ok 2 - evaluates event and world-fact conditions
+      ---
+      duration_ms: 5.436472
+      type: 'test'
+      ...
+    # Subtest: suppresses duplicate event evaluation
+    ok 3 - suppresses duplicate event evaluation
+      ---
+      duration_ms: 6.371869
+      type: 'test'
+      ...
+    # Subtest: rolls back canonical state when an effect fails
+    ok 4 - rolls back canonical state when an effect fails
+      ---
+      duration_ms: 10.762032
+      type: 'test'
+      ...
+    # Subtest: rejects excessive effect complexity
+    ok 5 - rejects excessive effect complexity
+      ---
+      duration_ms: 0.757258
+      type: 'test'
+      ...
+    # Subtest: restores persisted rule state from the Story Run runtime state
+    ok 6 - restores persisted rule state from the Story Run runtime state
+      ---
+      duration_ms: 5.600764
+      type: 'test'
+      ...
+    # Subtest: routes relationship and knowledge conditions through Phase 8 state
+    ok 7 - routes relationship and knowledge conditions through Phase 8 state
+      ---
+      duration_ms: 9.729536
+      type: 'test'
+      ...
+    # Subtest: routes mission, evidence, relationship and knowledge rule effects
+    ok 8 - routes mission, evidence, relationship and knowledge rule effects
+      ---
+      duration_ms: 4.796295
+      type: 'test'
+      ...
+    1..8
+ok 74 - Phase 8.6 - Custom Rule Engine
+  ---
+  duration_ms: 68.212219
+  type: 'suite'
+  ...
+# Subtest: Phase 8 cross-system canonical integration
+    # Subtest: persists facility, knowledge, mission, causality and relationship state in StoryRun runtime state
+    ok 1 - persists facility, knowledge, mission, causality and relationship state in StoryRun runtime state
+      ---
+      duration_ms: 2.018618
+      type: 'test'
+      ...
+    # Subtest: failed facility discovery does not alter canonical hidden state
+    ok 2 - failed facility discovery does not alter canonical hidden state
+      ---
+      duration_ms: 1.205353
+      type: 'test'
+      ...
+    1..2
+ok 75 - Phase 8 cross-system canonical integration
+  ---
+  duration_ms: 4.187782
+  type: 'suite'
+  ...
+# Subtest: Phase 8 built-in class/species modules seed deterministically from Genesis
+ok 76 - Phase 8 built-in class/species modules seed deterministically from Genesis
+  ---
+  duration_ms: 12.506667
+  type: 'test'
+  ...
+# Subtest: Phase 8 subclass prerequisites and minimum level are enforced
+ok 77 - Phase 8 subclass prerequisites and minimum level are enforced
+  ---
+  duration_ms: 1.549112
+  type: 'test'
+  ...
+# Subtest: Phase 8 feats become canonical progression modules with deterministic identity
+ok 78 - Phase 8 feats become canonical progression modules with deterministic identity
+  ---
+  duration_ms: 2.473084
+  type: 'test'
+  ...
+# Subtest: Phase 8 modifier stacking and precedence produce deterministic source traces
+ok 79 - Phase 8 modifier stacking and precedence produce deterministic source traces
+  ---
+  duration_ms: 0.973385
+  type: 'test'
+  ...
+# Subtest: Phase 8 triggered abilities unlock with level and enforce charges
+ok 80 - Phase 8 triggered abilities unlock with level and enforce charges
+  ---
+  duration_ms: 1.303372
+  type: 'test'
+  ...
+# Subtest: Phase 8 rules profiles gate progression and allow explicit Hybrid overrides
+ok 81 - Phase 8 rules profiles gate progression and allow explicit Hybrid overrides
+  ---
+  duration_ms: 1.12251
+  type: 'test'
+  ...
+# Subtest: Phase 8 Custom Homebrew requires explicit progression enable and custom module authority
+ok 82 - Phase 8 Custom Homebrew requires explicit progression enable and custom module authority
+  ---
+  duration_ms: 0.618651
+  type: 'test'
+  ...
+# Subtest: Phase 8 canonical progression level-up is staged, idempotent, and rollback-safe
+ok 83 - Phase 8 canonical progression level-up is staged, idempotent, and rollback-safe
+  ---
+  duration_ms: 141.313513
+  type: 'test'
+  ...
+# Subtest: Phase 8 progression state survives canonical snapshot save/load
+ok 84 - Phase 8 progression state survives canonical snapshot save/load
+  ---
+  duration_ms: 9.728085
+  type: 'test'
+  ...
+# Subtest: Phase 8 campaign archive preserves progression state without changing legacy archives
+ok 85 - Phase 8 campaign archive preserves progression state without changing legacy archives
+  ---
+  duration_ms: 9.128561
+  type: 'test'
+  ...
+# Subtest: Phase 8 authoritative progression engine rejects direct runtime mutation outside canonical scope
+ok 86 - Phase 8 authoritative progression engine rejects direct runtime mutation outside canonical scope
+  ---
+  duration_ms: 1.258226
+  type: 'test'
+  ...
+# Subtest: Phase 8 Genesis/runtime divergence audit detects sealed-character progression drift
+ok 87 - Phase 8 Genesis/runtime divergence audit detects sealed-character progression drift
+  ---
+  duration_ms: 1.030644
+  type: 'test'
+  ...
+# Subtest: Phase 8 module enable/disable remains singular for class/species and prevents stale modifier stacking
+ok 88 - Phase 8 module enable/disable remains singular for class/species and prevents stale modifier stacking
+  ---
+  duration_ms: 0.670486
+  type: 'test'
+  ...
+# Subtest: Phase 8 malformed progression rule overrides fail closed
+ok 89 - Phase 8 malformed progression rule overrides fail closed
+  ---
+  duration_ms: 0.163927
+  type: 'test'
+  ...
+# Subtest: Phase 8 ability effects require canonical scope and commit deterministic active effects
+ok 90 - Phase 8 ability effects require canonical scope and commit deterministic active effects
+  ---
+  duration_ms: 53.730532
+  type: 'test'
+  ...
+# Subtest: Phase 8 regression: canonical snapshot restores progression after a committed level-up
+ok 91 - Phase 8 regression: canonical snapshot restores progression after a committed level-up
+  ---
+  duration_ms: 53.784371
+  type: 'test'
+  ...
+# Subtest: Phase 8 regression: progression modifiers reach authoritative combat projections and attack resolution
+ok 92 - Phase 8 regression: progression modifiers reach authoritative combat projections and attack resolution
+  ---
+  duration_ms: 4.870335
+  type: 'test'
+  ...
+# Subtest: Phase 8 regression: progression spell attack bonus and save DC are authoritative cast inputs
+ok 93 - Phase 8 regression: progression spell attack bonus and save DC are authoritative cast inputs
+  ---
+  duration_ms: 3.607992
+  type: 'test'
+  ...
+# Subtest: Phase 8 regression: explicit Custom Homebrew progression enables level progression without silently enabling modules
+ok 94 - Phase 8 regression: explicit Custom Homebrew progression enables level progression without silently enabling modules
+  ---
+  duration_ms: 0.533082
+  type: 'test'
+  ...
+# Subtest: Phase 8 regression: disabling a module for one actor does not disable it globally
+ok 95 - Phase 8 regression: disabling a module for one actor does not disable it globally
+  ---
+  duration_ms: 0.472386
+  type: 'test'
+  ...
+# Subtest: Phase 8 regression: Genesis divergence fingerprint maps character feat IDs to canonical feat module IDs
+ok 96 - Phase 8 regression: Genesis divergence fingerprint maps character feat IDs to canonical feat module IDs
+  ---
+  duration_ms: 0.509963
+  type: 'test'
+  ...
+# Subtest: Phase 8 regression: MIN/MAX modifiers behave as floor and ceiling constraints
+ok 97 - Phase 8 regression: MIN/MAX modifiers behave as floor and ceiling constraints
+  ---
+  duration_ms: 0.535584
+  type: 'test'
+  ...
+# Subtest: Phase 8 regression: rules-profile gating is enforced when resolving runtime modifiers
+ok 98 - Phase 8 regression: rules-profile gating is enforced when resolving runtime modifiers
+  ---
+  duration_ms: 0.355494
+  type: 'test'
+  ...
+# Subtest: Phase 8.5: five-beam multi-instance attack consumes one Action and resolves five independent instances
+ok 99 - Phase 8.5: five-beam multi-instance attack consumes one Action and resolves five independent instances
+  ---
+  duration_ms: 7.807074
+  type: 'test'
+  ...
+# Subtest: Phase 8.5: FULL_DND ignores authored non-d20 attack formulas while HYBRID_DND preserves them
+ok 100 - Phase 8.5: FULL_DND ignores authored non-d20 attack formulas while HYBRID_DND preserves them
+  ---
+  duration_ms: 16.034245
+  type: 'test'
+  ...
+# Subtest: Phase 8.5: saving-throw effects consume one Action and route damage through canonical defenses
+ok 101 - Phase 8.5: saving-throw effects consume one Action and route damage through canonical defenses
+  ---
+  duration_ms: 2.60729
+  type: 'test'
+  ...
+# Subtest: Phase 8.5: area automatic damage resolves independently per target through defense pipeline
+ok 102 - Phase 8.5: area automatic damage resolves independently per target through defense pipeline
+  ---
+  duration_ms: 3.67728
+  type: 'test'
+  ...
+# Subtest: Phase 8.5: effect simulation does not mutate live combat state
+ok 103 - Phase 8.5: effect simulation does not mutate live combat state
+  ---
+  duration_ms: 9.448779
+  type: 'test'
+  ...
+# Subtest: Phase 8.5: sequence resolves child effects while consuming only the outer Action
+ok 104 - Phase 8.5: sequence resolves child effects while consuming only the outer Action
+  ---
+  duration_ms: 3.713112
+  type: 'test'
+  ...
+# Subtest: Phase 8.5: semantic outcome definitions validate without pretending they are ordinary damage
+ok 105 - Phase 8.5: semantic outcome definitions validate without pretending they are ordinary damage
+  ---
+  duration_ms: 0.198503
+  type: 'test'
+  ...
+# Subtest: Phase 8.5: invalid child effect rolls back the outer action and all prior child mutations
+ok 106 - Phase 8.5: invalid child effect rolls back the outer action and all prior child mutations
+  ---
+  duration_ms: 3.067802
+  type: 'test'
+  ...
+# Subtest: Phase 8.5: semantic OUTCOME erases a target through canonical combat outcome events
+ok 107 - Phase 8.5: semantic OUTCOME erases a target through canonical combat outcome events
+  ---
+  duration_ms: 2.364912
+  type: 'test'
+  ...
+# Subtest: Phase 8.5: forced movement stops at a wall and applies canonical secondary impact damage
+ok 108 - Phase 8.5: forced movement stops at a wall and applies canonical secondary impact damage
+  ---
+  duration_ms: 3.08383
+  type: 'test'
+  ...
+# Subtest: Phase 8.5: forced movement damages and can destroy an existing destructible environment object
+ok 109 - Phase 8.5: forced movement damages and can destroy an existing destructible environment object
+  ---
+  duration_ms: 2.462867
+  type: 'test'
+  ...
+# Subtest: Phase 8.5: forced movement can resolve creature-on-creature body collision without creating a second damage authority
+ok 110 - Phase 8.5: forced movement can resolve creature-on-creature body collision without creating a second damage authority
+  ---
+  duration_ms: 3.124211
+  type: 'test'
+  ...
+# Subtest: Phase 8.5: spell PUSH movement is routed through the same canonical wall-collision authority
+ok 111 - Phase 8.5: spell PUSH movement is routed through the same canonical wall-collision authority
+  ---
+  duration_ms: 2.557478
+  type: 'test'
+  ...
+# Subtest: Phase 8.5 validation: unsafe forced-movement collision formulas are rejected before combat resolution
+ok 112 - Phase 8.5 validation: unsafe forced-movement collision formulas are rejected before combat resolution
+  ---
+  duration_ms: 0.384689
+  type: 'test'
+  ...
+# Subtest: Phase 8.5: chain targeting deterministically expands from the first target within jump range
+ok 113 - Phase 8.5: chain targeting deterministically expands from the first target within jump range
+  ---
+  duration_ms: 3.143033
+  type: 'test'
+  ...
+# Subtest: Phase 8.5: line-of-sight targeting rejects effects blocked by an impassable obstacle
+ok 114 - Phase 8.5: line-of-sight targeting rejects effects blocked by an impassable obstacle
+  ---
+  duration_ms: 1.896564
+  type: 'test'
+  ...
+# Subtest: Phase 8.5: boss phase modifiers are persisted and participate in projected combat state
+ok 115 - Phase 8.5: boss phase modifiers are persisted and participate in projected combat state
+  ---
+  duration_ms: 2.235602
+  type: 'test'
+  ...
+# Subtest: Phase 8.5: sandbox diagnoses an extreme world effect as simulatable without requiring live-world mutation
+ok 116 - Phase 8.5: sandbox diagnoses an extreme world effect as simulatable without requiring live-world mutation
+  ---
+  duration_ms: 2.969335
+  type: 'test'
+  ...
+# Subtest: Phase 8.5: semantic resource outcome mutates only the target combat resource ledger
+ok 117 - Phase 8.5: semantic resource outcome mutates only the target combat resource ledger
+  ---
+  duration_ms: 1.35208
+  type: 'test'
+  ...
+# Subtest: Phase 8.5: summon outcome creates a canonical combat participant without mutating existing targets
+ok 118 - Phase 8.5: summon outcome creates a canonical combat participant without mutating existing targets
+  ---
+  duration_ms: 1.509512
+  type: 'test'
+  ...
+# Subtest: Phase 8.5: fallback animation generation never blocks combat semantics
+ok 119 - Phase 8.5: fallback animation generation never blocks combat semantics
+  ---
+  duration_ms: 3.049692
+  type: 'test'
+  ...
+# Subtest: Phase 8.5: authoritative capability effect cannot be replaced by a stronger client draft
+ok 120 - Phase 8.5: authoritative capability effect cannot be replaced by a stronger client draft
+  ---
+  duration_ms: 0.960276
+  type: 'test'
+  ...
+# Subtest: Phase 8.5 regression: area range validation checks the origin by default and can require each target explicitly
+ok 121 - Phase 8.5 regression: area range validation checks the origin by default and can require each target explicitly
+  ---
+  duration_ms: 1.893597
+  type: 'test'
+  ...
+# Subtest: Phase 8.5 regression: Full D&D automatic-failure saves only apply to STR/DEX and the correct conditions
+ok 122 - Phase 8.5 regression: Full D&D automatic-failure saves only apply to STR/DEX and the correct conditions
+  ---
+  duration_ms: 4.835863
+  type: 'test'
+  ...
+# Subtest: Phase 8.5 regression: Incapacitated blocks Action without consuming the Action resource
+ok 123 - Phase 8.5 regression: Incapacitated blocks Action without consuming the Action resource
+  ---
+  duration_ms: 1.462189
+  type: 'test'
+  ...
+# Subtest: Phase 8.5 regression: Grappled blocks movement through the same ConditionEngine authority
+ok 124 - Phase 8.5 regression: Grappled blocks movement through the same ConditionEngine authority
+  ---
+  duration_ms: 1.269477
+  type: 'test'
+  ...
+# Subtest: Phase 8.5 regression: explicit per-instance targets preserve duplicate target assignments
+ok 125 - Phase 8.5 regression: explicit per-instance targets preserve duplicate target assignments
+  ---
+  duration_ms: 4.219325
+  type: 'test'
+  ...
+# Subtest: Phase 8.5 regression: semantic erasure synchronizes participant and ConditionEngine death state
+ok 126 - Phase 8.5 regression: semantic erasure synchronizes participant and ConditionEngine death state
+  ---
+  duration_ms: 3.376879
+  type: 'test'
+  ...
+# Subtest: Phase 8.5 regression: raw combat export/import does not bake projected progression modifiers into canonical state
+ok 127 - Phase 8.5 regression: raw combat export/import does not bake projected progression modifiers into canonical state
+  ---
+  duration_ms: 1.731415
+  type: 'test'
+  ...
+# Subtest: Phase 8.5 fallback: generated visual presentation remains non-authoritative when no animation asset is present
+ok 128 - Phase 8.5 fallback: generated visual presentation remains non-authoritative when no animation asset is present
+  ---
+  duration_ms: 1.819984
+  type: 'test'
+  ...
+# Subtest: Phase 8.5 regression: condition triggers execute from canonical combat events without creating a second condition authority
+ok 129 - Phase 8.5 regression: condition triggers execute from canonical combat events without creating a second condition authority
+  ---
+  duration_ms: 0.815933
+  type: 'test'
+  ...
+# Subtest: Phase 8.5 validation: unsafe giant dice formulas are rejected so extreme powers use semantic outcomes
+ok 130 - Phase 8.5 validation: unsafe giant dice formulas are rejected so extreme powers use semantic outcomes
+  ---
+  duration_ms: 0.252383
+  type: 'test'
+  ...
+# Subtest: Phase 8.5 audit pass 5: deterministic animation plans expose bounded reusable instance tracks
+ok 131 - Phase 8.5 audit pass 5: deterministic animation plans expose bounded reusable instance tracks
+  ---
+  duration_ms: 1.553773
+  type: 'test'
+  ...
+# Subtest: Phase 8.5 audit pass 5: simulation request can be bound to canonical capability identity without trusting a forged definition
+ok 132 - Phase 8.5 audit pass 5: simulation request can be bound to canonical capability identity without trusting a forged definition
+  ---
+  duration_ms: 0.596507
+  type: 'test'
+  ...
+# Subtest: Phase 8.5 audit pass 5: animation presentation never becomes canonical combat state
+ok 133 - Phase 8.5 audit pass 5: animation presentation never becomes canonical combat state
+  ---
+  duration_ms: 1.900475
+  type: 'test'
+  ...
+# Subtest: Phase 8.5 audit pass 5: canonical combat replay reproduces a five-instance resolution signature
+ok 134 - Phase 8.5 audit pass 5: canonical combat replay reproduces a five-instance resolution signature
+  ---
+  duration_ms: 6.008162
+  type: 'test'
+  ...
+# Subtest: Phase 8.5 audit pass 5: world-preview replay is explicitly non-mutating
+ok 135 - Phase 8.5 audit pass 5: world-preview replay is explicitly non-mutating
+  ---
+  duration_ms: 2.081092
+  type: 'test'
+  ...
+# Subtest: Phase 8.5 audit pass 5: 50-instance effects stay within the canonical instance bound
+ok 136 - Phase 8.5 audit pass 5: 50-instance effects stay within the canonical instance bound
+  ---
+  duration_ms: 8.83946
+  type: 'test'
+  ...
+# Subtest: Phase 8.5 audit pass 5: canonical combat event buffers remain bounded under repeated multi-instance effects
+ok 137 - Phase 8.5 audit pass 5: canonical combat event buffers remain bounded under repeated multi-instance effects
+  ---
+  duration_ms: 4568.714608
+  type: 'test'
+  ...
+# Subtest: Phase 8.5 regression: boss phase steady-state sync resolves canonical environment ids without undeclared state
+ok 138 - Phase 8.5 regression: boss phase steady-state sync resolves canonical environment ids without undeclared state
+  ---
+  duration_ms: 5.048497
+  type: 'test'
+  ...
+# Subtest: Phase 8.5 regression: animation tracks select HIT, MISS, and CRITICAL variants per instance
+ok 139 - Phase 8.5 regression: animation tracks select HIT, MISS, and CRITICAL variants per instance
+  ---
+  duration_ms: 0.799013
+  type: 'test'
+  ...
+# Subtest: Phase 8.5 regression: replay records remain bounded after repeated effect resolution
+ok 140 - Phase 8.5 regression: replay records remain bounded after repeated effect resolution
+  ---
+  duration_ms: 15267.457976
+  type: 'test'
+  ...
+# Subtest: Phase 8.5 macro connector: world effects project into canonical geography, story threads, timeline, and living world
+ok 141 - Phase 8.5 macro connector: world effects project into canonical geography, story threads, timeline, and living world
+  ---
+  duration_ms: 563.076117
+  type: 'test'
+  ...
+# Subtest: Phase 8.5 macro connector regression: projected mutations reject unknown canonical references before mutation
+ok 142 - Phase 8.5 macro connector regression: projected mutations reject unknown canonical references before mutation
+  ---
+  duration_ms: 2.106314
+  type: 'test'
+  ...
+# Subtest: Phase 9: server equipment rules normalize Genesis-style aliases and two-hand semantics
+ok 143 - Phase 9: server equipment rules normalize Genesis-style aliases and two-hand semantics
+  ---
+  duration_ms: 2.8059
+  type: 'test'
+  ...
+# Subtest: Phase 9: invalid slots are rejected without mutating inventory state
+ok 144 - Phase 9: invalid slots are rejected without mutating inventory state
+  ---
+  duration_ms: 3.72588
+  type: 'test'
+  ...
+# Subtest: Phase 9: unrelated custom-rule evaluation does not lazily seed inventory state
+ok 145 - Phase 9: unrelated custom-rule evaluation does not lazily seed inventory state
+  ---
+  duration_ms: 10.276653
+  type: 'test'
+  ...
+# Subtest: Phase 9: Genesis equipment migrates to canonical definitions and preserves legal slot aliases
+ok 146 - Phase 9: Genesis equipment migrates to canonical definitions and preserves legal slot aliases
+  ---
+  duration_ms: 2.597584
+  type: 'test'
+  ...
+# Subtest: Phase 9: invalid legacy equipment slots are safely retained in inventory during Genesis migration
+ok 147 - Phase 9: invalid legacy equipment slots are safely retained in inventory during Genesis migration
+  ---
+  duration_ms: 1.099292
+  type: 'test'
+  ...
+# Subtest: Phase 9: duplicate ring instances occupy independent canonical slots
+ok 148 - Phase 9: duplicate ring instances occupy independent canonical slots
+  ---
+  duration_ms: 0.863921
+  type: 'test'
+  ...
+# Subtest: Phase 9: two-handed equipment atomically displaces conflicting hand equipment
+ok 149 - Phase 9: two-handed equipment atomically displaces conflicting hand equipment
+  ---
+  duration_ms: 0.894912
+  type: 'test'
+  ...
+# Subtest: Phase 9: equipment modifiers are deterministic and duplicate instances do not collapse
+ok 150 - Phase 9: equipment modifiers are deterministic and duplicate instances do not collapse
+  ---
+  duration_ms: 0.976483
+  type: 'test'
+  ...
+# Subtest: Phase 9: quantity consumables decrement and destroy cleanly at zero
+ok 151 - Phase 9: quantity consumables decrement and destroy cleanly at zero
+  ---
+  duration_ms: 1.387392
+  type: 'test'
+  ...
+# Subtest: Phase 9: charged consumables decrement charges and destroy at zero
+ok 152 - Phase 9: charged consumables decrement charges and destroy at zero
+  ---
+  duration_ms: 1.276081
+  type: 'test'
+  ...
+# Subtest: Phase 9: destructive item operations remove authoritative instances
+ok 153 - Phase 9: destructive item operations remove authoritative instances
+  ---
+  duration_ms: 0.586146
+  type: 'test'
+  ...
+# Subtest: Phase 9: inventory runtime state reloads from Story Run persistence
+ok 154 - Phase 9: inventory runtime state reloads from Story Run persistence
+  ---
+  duration_ms: 5.2656
+  type: 'test'
+  ...
+# Subtest: Phase 9: successful canonical equip persists inventory runtime state
+ok 155 - Phase 9: successful canonical equip persists inventory runtime state
+  ---
+  duration_ms: 102.541785
+  type: 'test'
+  ...
+# Subtest: Phase 9: staged inventory mutations roll back without leaking to live state
+ok 156 - Phase 9: staged inventory mutations roll back without leaking to live state
+  ---
+  duration_ms: 46.495359
+  type: 'test'
+  ...
+# Subtest: Phase 9: equipment custom rules are server-defined and execute through canonical USE_ITEM events
+ok 157 - Phase 9: equipment custom rules are server-defined and execute through canonical USE_ITEM events
+  ---
+  duration_ms: 58.34957
+  type: 'test'
+  ...
+# Subtest: Phase 9: equipment modifiers feed the authoritative combat projection
+ok 158 - Phase 9: equipment modifiers feed the authoritative combat projection
+  ---
+  duration_ms: 2.915683
+  type: 'test'
+  ...
+# Subtest: Phase 9: item custom rules survive authoritative destruction resolution
+ok 159 - Phase 9: item custom rules survive authoritative destruction resolution
+  ---
+  duration_ms: 52.777304
+  type: 'test'
+  ...
+# Subtest: Phase 9: custom-rule rejection rolls back live inventory mutations
+ok 160 - Phase 9: custom-rule rejection rolls back live inventory mutations
+  ---
+  duration_ms: 12.009429
+  type: 'test'
+  ...
+# Subtest: Phase 9: client-supplied item rules cannot become authoritative custom rules
+ok 161 - Phase 9: client-supplied item rules cannot become authoritative custom rules
+  ---
+  duration_ms: 33.4454
+  type: 'test'
+  ...
+# Subtest: entity templates produce reusable independent instances
+ok 162 - entity templates produce reusable independent instances
+  ---
+  duration_ms: 2.710456
+  type: 'test'
+  ...
+# Subtest: merchant entity cards can omit creature-only mechanics
+ok 163 - merchant entity cards can omit creature-only mechanics
+  ---
+  duration_ms: 0.424908
+  type: 'test'
+  ...
+# Subtest: player projection exposes only actor-owned learned capabilities
+ok 164 - player projection exposes only actor-owned learned capabilities
+  ---
+  duration_ms: 1.769358
+  type: 'test'
+  ...
+# Subtest: active equipment grants may appear in effective capabilities without becoming learned skills
+ok 165 - active equipment grants may appear in effective capabilities without becoming learned skills
+  ---
+  duration_ms: 0.332747
+  type: 'test'
+  ...
+# Subtest: projection ignores an unbacked learned capability even if upstream data contains it
+ok 166 - projection ignores an unbacked learned capability even if upstream data contains it
+  ---
+  duration_ms: 0.174822
+  type: 'test'
+  ...
+# Subtest: projection contains no internal DAG or simulation fields
+ok 167 - projection contains no internal DAG or simulation fields
+  ---
+  duration_ms: 0.375264
+  type: 'test'
+  ...
+# Subtest: player-facing capability endpoints consume the shared projection and do not expose the global registry
+ok 168 - player-facing capability endpoints consume the shared projection and do not expose the global registry
+  ---
+  duration_ms: 13.360074
+  type: 'test'
+  ...
+# Subtest: listen intent never becomes speech
+ok 169 - listen intent never becomes speech
+  ---
+  duration_ms: 15.513582
+  type: 'test'
+  ...
+# Subtest: information listening preserves passive intent
+ok 170 - information listening preserves passive intent
+  ---
+  duration_ms: 2.535054
+  type: 'test'
+  ...
+# Subtest: explicit question becomes dialogue
+ok 171 - explicit question becomes dialogue
+  ---
+  duration_ms: 1.787075
+  type: 'test'
+  ...
+# Subtest: movement and observation can coexist without speech
+ok 172 - movement and observation can coexist without speech
+  ---
+  duration_ms: 1.688231
+  type: 'test'
+  ...
+# Subtest: attack is classified as combat without inventing dialogue
+ok 173 - attack is classified as combat without inventing dialogue
+  ---
+  duration_ms: 1.658678
+  type: 'test'
+  ...
+# Subtest: empty input is safe and produces no action
+ok 174 - empty input is safe and produces no action
+  ---
+  duration_ms: 0.209631
+  type: 'test'
+  ...
+# Subtest: inspection is observational rather than item manipulation
+ok 175 - inspection is observational rather than item manipulation
+  ---
+  duration_ms: 1.230966
+  type: 'test'
+  ...
+# Subtest: movement plus information seeking preserves the information goal
+ok 176 - movement plus information seeking preserves the information goal
+  ---
+  duration_ms: 1.01001
+  type: 'test'
+  ...
+# Subtest: malformed AI output is rejected instead of becoming canonical intent
+ok 177 - malformed AI output is rejected instead of becoming canonical intent
+  ---
+  duration_ms: 1.687842
+  type: 'test'
+  ...
+# Subtest: AI intent cannot introduce speech when deterministic text contains no speech intent
+ok 178 - AI intent cannot introduce speech when deterministic text contains no speech intent
+  ---
+  duration_ms: 1.438748
+  type: 'test'
+  ...
+# Subtest: model output retains explicit movement plus observation
+ok 179 - model output retains explicit movement plus observation
+  ---
+  duration_ms: 0.910401
+  type: 'test'
+  ...
+# Subtest: AI intent cannot invent a target absent from player text or visible scene
+ok 180 - AI intent cannot invent a target absent from player text or visible scene
+  ---
+  duration_ms: 0.843162
+  type: 'test'
+  ...
+# Subtest: AI intent cannot erase explicit player speech
+ok 181 - AI intent cannot erase explicit player speech
+  ---
+  duration_ms: 0.655307
+  type: 'test'
+  ...
+# Subtest: PlayerLifecycleState Model (Decision 1)
+    # Subtest: instantiates with deterministic actorId and value immutability
+    ok 1 - instantiates with deterministic actorId and value immutability
+      ---
+      duration_ms: 0.773304
+      type: 'test'
+      ...
+    # Subtest: supports copyWith without mutating original instance
+    ok 2 - supports copyWith without mutating original instance
+      ---
+      duration_ms: 0.245319
+      type: 'test'
+      ...
+    # Subtest: serializes and deserializes deterministically to/from JSON
+    ok 3 - serializes and deserializes deterministically to/from JSON
+      ---
+      duration_ms: 0.284623
+      type: 'test'
+      ...
+    1..3
+ok 182 - PlayerLifecycleState Model (Decision 1)
+  ---
+  duration_ms: 2.269794
+  type: 'suite'
+  ...
+# Subtest: World Repository Authority & Travel Semantics
+    # Subtest: guarantees getCurrentLocation reads directly from PlayerLifecycleState (Single Authority)
+    ok 1 - guarantees getCurrentLocation reads directly from PlayerLifecycleState (Single Authority)
+      ---
+      duration_ms: 0.882461
+      type: 'test'
+      ...
+    # Subtest: strictly enforces Travel Origin Anchoring (Decision 1 Invariants 6 & 7)
+    ok 2 - strictly enforces Travel Origin Anchoring (Decision 1 Invariants 6 & 7)
+      ---
+      duration_ms: 3.879571
+      type: 'test'
+      ...
+    # Subtest: leaves player anchored at origin when travel is cancelled
+    ok 3 - leaves player anchored at origin when travel is cancelled
+      ---
+      duration_ms: 0.792461
+      type: 'test'
+      ...
+    # Subtest: manages player injuries deterministically (CH3 Embodied Lifecycle)
+    ok 4 - manages player injuries deterministically (CH3 Embodied Lifecycle)
+      ---
+      duration_ms: 1.140587
+      type: 'test'
+      ...
+    # Subtest: manages player transformations deterministically (CH3 Embodied Lifecycle)
+    ok 5 - manages player transformations deterministically (CH3 Embodied Lifecycle)
+      ---
+      duration_ms: 0.884954
+      type: 'test'
+      ...
+    # Subtest: manages player mortality and revival deterministically (CH3 Embodied Lifecycle)
+    ok 6 - manages player mortality and revival deterministically (CH3 Embodied Lifecycle)
+      ---
+      duration_ms: 0.82855
+      type: 'test'
+      ...
+    # Subtest: manages player possession deterministically (CH3 Embodied Lifecycle)
+    ok 7 - manages player possession deterministically (CH3 Embodied Lifecycle)
+      ---
+      duration_ms: 0.836337
+      type: 'test'
+      ...
+    1..7
+ok 183 - World Repository Authority & Travel Semantics
+  ---
+  duration_ms: 9.712056
+  type: 'suite'
+  ...
+# Subtest: Phase 21 — release gate
+    # Subtest: defines all release commands and the automated workflow
+    ok 1 - defines all release commands and the automated workflow
+      ---
+      duration_ms: 7.418707
+      type: 'test'
+      ...
+    # Subtest: defines the manual release scenarios and honest environment status
+    ok 2 - defines the manual release scenarios and honest environment status
+      ---
+      duration_ms: 2.390873
+      type: 'test'
+      ...
+    1..2
+ok 184 - Phase 21 — release gate
+  ---
+  duration_ms: 11.137335
+  type: 'suite'
+  ...
+# Subtest: resolution gate does not roll for routine safe movement
+ok 185 - resolution gate does not roll for routine safe movement
+  ---
+  duration_ms: 2.674517
+  type: 'test'
+  ...
+# Subtest: resolution gate keeps routine force actions deterministic without resistance
+ok 186 - resolution gate keeps routine force actions deterministic without resistance
+  ---
+  duration_ms: 0.674922
+  type: 'test'
+  ...
+# Subtest: resolution gate rolls for force against explicit resistance
+ok 187 - resolution gate rolls for force against explicit resistance
+  ---
+  duration_ms: 0.442286
+  type: 'test'
+  ...
+# Subtest: resolution gate rolls for explicit parkour even without an authored challenge
+ok 188 - resolution gate rolls for explicit parkour even without an authored challenge
+  ---
+  duration_ms: 0.178845
+  type: 'test'
+  ...
+# Subtest: authored challenge can declare a partial-success outcome tier
+ok 189 - authored challenge can declare a partial-success outcome tier
+  ---
+  duration_ms: 1.858977
+  type: 'test'
+  ...
+# Subtest: player lifecycle persists bounded intra-location spatial state without changing locationId
+ok 190 - player lifecycle persists bounded intra-location spatial state without changing locationId
+  ---
+  duration_ms: 0.279691
+  type: 'test'
+  ...
+# Subtest: addressed NPC planning slice stays actor-scoped
+ok 191 - addressed NPC planning slice stays actor-scoped
+  ---
+  duration_ms: 12.582137
+  type: 'test'
+  ...
+# Subtest: canonical restore preserves user context pins but does not persist the operational ledger into StoryRun
+ok 192 - canonical restore preserves user context pins but does not persist the operational ledger into StoryRun
+  ---
+  duration_ms: 27.641883
+  type: 'test'
+  ...
+# Subtest: canonical commit ledgers are isolated per repository instance
+ok 193 - canonical commit ledgers are isolated per repository instance
+  ---
+  duration_ms: 8.000181
+  type: 'test'
+  ...
+# Subtest: canonical commit ledger can recover an interrupted command from its pre-state
+ok 194 - canonical commit ledger can recover an interrupted command from its pre-state
+  ---
+  duration_ms: 13.083425
+  type: 'test'
+  ...
+# Subtest: canonical command execution recovers an interrupted repository-local commit during an explicit recovery operation
+ok 195 - canonical command execution recovers an interrupted repository-local commit during an explicit recovery operation
+  ---
+  duration_ms: 75.437201
+  type: 'test'
+  ...
+# Subtest: narration prompt gives structured action resolution precedence over prose reconstruction
+ok 196 - narration prompt gives structured action resolution precedence over prose reconstruction
+  ---
+  duration_ms: 2.84848
+  type: 'test'
+  ...
+# Subtest: S3 OOC boundary exposes canonical tools, enforces the active actor, and rejects malformed calls across eleven audit passes
+ok 197 - S3 OOC boundary exposes canonical tools, enforces the active actor, and rejects malformed calls across eleven audit passes
+  ---
+  duration_ms: 7.850784
+  type: 'test'
+  ...
+# Subtest: S3 OOC research strips private relationship internals and planner/evidence context
+ok 198 - S3 OOC research strips private relationship internals and planner/evidence context
+  ---
+  duration_ms: 17.355528
+  type: 'test'
+  ...
+# Subtest: S3 OOC combat read is actor-projected rather than a raw canonical export
+ok 199 - S3 OOC combat read is actor-projected rather than a raw canonical export
+  ---
+  duration_ms: 1.37296
+  type: 'test'
+  ...
+# Subtest: S3 working context does not bypass epistemic knowledge with raw world-bible character/faction/timeline data
+ok 200 - S3 working context does not bypass epistemic knowledge with raw world-bible character/faction/timeline data
+  ---
+  duration_ms: 11.682089
+  type: 'test'
+  ...
+# Subtest: S3 narration/OOC source architecture remains singular and tool-mediated across eleven audit passes
+ok 201 - S3 narration/OOC source architecture remains singular and tool-mediated across eleven audit passes
+  ---
+  duration_ms: 13.411908
+  type: 'test'
+  ...
+# Subtest: S4 contract registry covers every runtime task with explicit derived architecture metadata
+ok 202 - S4 contract registry covers every runtime task with explicit derived architecture metadata
+  ---
+  duration_ms: 1.243075
+  type: 'test'
+  ...
+# Subtest: S4 readiness rejects incompatible models before provider execution
+ok 203 - S4 readiness rejects incompatible models before provider execution
+  ---
+  duration_ms: 0.494649
+  type: 'test'
+  ...
+# Subtest: S4 central task validator rejects malformed structured output
+ok 204 - S4 central task validator rejects malformed structured output
+  ---
+  duration_ms: 0.229244
+  type: 'test'
+  ...
+# Subtest: S4 orchestrator falls through a schema-invalid model using the central task validator
+ok 205 - S4 orchestrator falls through a schema-invalid model using the central task validator
+  ---
+  duration_ms: 42.230204
+  type: 'test'
+  ...
+# Subtest: S4 context adapters build read-only, player-authorized task contexts
+ok 206 - S4 context adapters build read-only, player-authorized task contexts
+  ---
+  duration_ms: 26.74492
+  type: 'test'
+  ...
+# Subtest: S4 fresh orchestrator does not inherit persisted test-route mutations
+ok 207 - S4 fresh orchestrator does not inherit persisted test-route mutations
+  ---
+  duration_ms: 3.772808
+  type: 'test'
+  ...
+# Subtest: S4 category routes enumerate and preserve route semantics for every owning task
+ok 208 - S4 category routes enumerate and preserve route semantics for every owning task
+  ---
+  duration_ms: 4.051169
+  type: 'test'
+  ...
+# Subtest: S4 configured task route is authoritative for primary selection, even against a higher-scoring unrelated eligible model
+ok 209 - S4 configured task route is authoritative for primary selection, even against a higher-scoring unrelated eligible model
+  ---
+  duration_ms: 8.021075
+  type: 'test'
+  ...
+# Subtest: S4 configured route reaches only its ordered fallbacks before deterministic emergency
+ok 210 - S4 configured route reaches only its ordered fallbacks before deterministic emergency
+  ---
+  duration_ms: 13.51392
+  type: 'test'
+  ...
+# Subtest: S4 category override is task-compatible inside multi-task speech category
+ok 211 - S4 category override is task-compatible inside multi-task speech category
+  ---
+  duration_ms: 1.574581
+  type: 'test'
+  ...
+# Subtest: S4 valid category override is applied to every task in a multi-task category
+ok 212 - S4 valid category override is applied to every task in a multi-task category
+  ---
+  duration_ms: 9.682128
+  type: 'test'
+  ...
+# Subtest: S5 reuses persistent world bindings and carries player state across worlds
+ok 213 - S5 reuses persistent world bindings and carries player state across worlds
+  ---
+  duration_ms: 57.495029
+  type: 'test'
+  ...
+# Subtest: S5 dormant-world catch-up advances the existing Story Run rather than creating a new one
+ok 214 - S5 dormant-world catch-up advances the existing Story Run rather than creating a new one
+  ---
+  duration_ms: 25.670713
+  type: 'test'
+  ...
+# Subtest: S5 travel rollback restores the prior universe when destination activation fails
+ok 215 - S5 travel rollback restores the prior universe when destination activation fails
+  ---
+  duration_ms: 30.482838
+  type: 'test'
+  ...
+# Subtest: S5 universe and cross-world memory survive a real persistence restart
+ok 216 - S5 universe and cross-world memory survive a real persistence restart
+  ---
+  duration_ms: 78.334734
+  type: 'test'
+  ...
+# Subtest: N13 deterministically stages observation, dialogue, combat, and movement beats
+ok 217 - N13 deterministically stages observation, dialogue, combat, and movement beats
+  ---
+  duration_ms: 1.66386
+  type: 'test'
+  ...
+# Subtest: N13 preserves reveal versus uncertainty and does not invent missing sensory data
+ok 218 - N13 preserves reveal versus uncertainty and does not invent missing sensory data
+  ---
+  duration_ms: 1.125526
+  type: 'test'
+  ...
+# Subtest: N13 is ephemeral presentation guidance and reaches the real narration prompt
+ok 219 - N13 is ephemeral presentation guidance and reaches the real narration prompt
+  ---
+  duration_ms: 23.672902
+  type: 'test'
+  ...
+# Subtest: N13 fallback remains deterministic when optional inputs are absent
+ok 220 - N13 fallback remains deterministic when optional inputs are absent
+  ---
+  duration_ms: 0.405718
+  type: 'test'
+  ...
+# Subtest: N16 balances semantic and episodic families instead of letting recency dominate
+ok 221 - N16 balances semantic and episodic families instead of letting recency dominate
+  ---
+  duration_ms: 8.621554
+  type: 'test'
+  ...
+# Subtest: N16 keeps epistemic visibility authoritative while retrieving linked memories
+ok 222 - N16 keeps epistemic visibility authoritative while retrieving linked memories
+  ---
+  duration_ms: 1.519805
+  type: 'test'
+  ...
+# Subtest: N16 retrieval is deterministic and safe for empty or partial context
+ok 223 - N16 retrieval is deterministic and safe for empty or partial context
+  ---
+  duration_ms: 1.803612
+  type: 'test'
+  ...
+# Subtest: N16 routes entity-linked episodic memory through NarrativeContinuityEngine and carries retrieval evidence forward
+ok 224 - N16 routes entity-linked episodic memory through NarrativeContinuityEngine and carries retrieval evidence forward
+  ---
+  duration_ms: 12.582674
+  type: 'test'
+  ...
+# Subtest: N3 derives information-seeking needs from intent rather than keyword overlap alone
+ok 225 - N3 derives information-seeking needs from intent rather than keyword overlap alone
+  ---
+  duration_ms: 13.936354
+  type: 'test'
+  ...
+# Subtest: N3 prioritizes immediate consequences for combat research
+ok 226 - N3 prioritizes immediate consequences for combat research
+  ---
+  duration_ms: 1.883474
+  type: 'test'
+  ...
+# Subtest: N3 explicit target matching raises entity relevance without bypassing epistemic filtering
+ok 227 - N3 explicit target matching raises entity relevance without bypassing epistemic filtering
+  ---
+  duration_ms: 0.178542
+  type: 'test'
+  ...
+# Subtest: N3 relationship research is emitted only for a focused player-authorized target
+ok 228 - N3 relationship research is emitted only for a focused player-authorized target
+  ---
+  duration_ms: 6.407539
+  type: 'test'
+  ...
+# Subtest: N3 production research exposes its semantic profile and retains existing scene boundary
+ok 229 - N3 production research exposes its semantic profile and retains existing scene boundary
+  ---
+  duration_ms: 8.162212
+  type: 'test'
+  ...
+# Subtest: Phase 6 accepts faithful passive listening with movement and observation
+ok 230 - Phase 6 accepts faithful passive listening with movement and observation
+  ---
+  duration_ms: 3.865511
+  type: 'test'
+  ...
+# Subtest: Phase 6 rejects protagonist speech when the player only listens
+ok 231 - Phase 6 rejects protagonist speech when the player only listens
+  ---
+  duration_ms: 1.537896
+  type: 'test'
+  ...
+# Subtest: Phase 6 requests one rewrite when movement is silently skipped
+ok 232 - Phase 6 requests one rewrite when movement is silently skipped
+  ---
+  duration_ms: 0.519417
+  type: 'test'
+  ...
+# Subtest: Phase 6 permits explicit dialogue intent
+ok 233 - Phase 6 permits explicit dialogue intent
+  ---
+  duration_ms: 0.232938
+  type: 'test'
+  ...
+# Subtest: Phase 6 rejects unsupported location mutation from a non-movement intent
+ok 234 - Phase 6 rejects unsupported location mutation from a non-movement intent
+  ---
+  duration_ms: 0.324067
+  type: 'test'
+  ...
+1..234
+# tests 263
+# suites 7
+# pass 263
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 40969.253

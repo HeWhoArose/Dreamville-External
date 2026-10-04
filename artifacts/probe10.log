@@ -1,0 +1,15 @@
+turn 1: 1419ms | save=663ms(16, 87.6MB) capture=0ms(0) eventsClone=4ms(29) rest=752ms
+turn 2: 1066ms | save=542ms(13, 73.6MB) capture=0ms(0) eventsClone=57ms(29) rest=466ms
+turn 3: 1261ms | save=619ms(13, 76.4MB) capture=0ms(0) eventsClone=116ms(29) rest=527ms
+turn 4: 1257ms | save=495ms(13, 79.4MB) capture=0ms(0) eventsClone=220ms(29) rest=542ms
+turn 5: 1274ms | save=531ms(13, 82.9MB) capture=0ms(0) eventsClone=245ms(29) rest=498ms
+turn 6: 1384ms | save=596ms(13, 86.8MB) capture=0ms(0) eventsClone=280ms(29) rest=508ms
+turn 7: 1526ms | save=594ms(13, 91.1MB) capture=0ms(0) eventsClone=403ms(29) rest=530ms
+turn 8: 1805ms | save=679ms(13, 95.9MB) capture=0ms(0) eventsClone=508ms(29) rest=618ms
+turn 9: 2358ms | save=895ms(13, 101.0MB) capture=0ms(0) eventsClone=618ms(29) rest=845ms
+turn 10: 3572ms | save=1585ms(13, 106.7MB) capture=0ms(0) eventsClone=961ms(29) rest=1026ms
+turn 11: 3616ms | save=1280ms(13, 112.8MB) capture=0ms(0) eventsClone=1379ms(29) rest=957ms
+turn 12: 3285ms | save=1076ms(13, 119.3MB) capture=0ms(0) eventsClone=1294ms(29) rest=915ms
+turn 13: 3764ms | save=1268ms(13, 125.5MB) capture=0ms(0) eventsClone=1556ms(29) rest=939ms
+turn 14: 7014ms | save=3597ms(13, 130.8MB) capture=0ms(0) eventsClone=1956ms(29) rest=1461ms
+turn 15: 4778ms | save=1354ms(13, 135.7MB) capture=0ms(0) eventsClone=1999ms(29) rest=1425ms

@@ -402,7 +402,7 @@ gameRouter.post('/action/ooc', async (req: Request, res: Response) => {
         storyId,
         actorId: worldRepository.getPlayerLifecycle(storyId)?.actorId || `player_actor_${storyId}`,
         call: agent.toolCall,
-        sequence: worldRepository.getCanonicalCommandEvents(storyId).length + 1,
+        sequence: worldRepository.getCanonicalCommandEventCount(storyId) + 1,
       });
 
       if (toolResult?.success) {
@@ -479,7 +479,7 @@ gameRouter.post('/action/ooc/tool', async (req: Request, res: Response) => {
 			storyId,
 			actorId,
 			call,
-			sequence: worldRepository.getCanonicalCommandEvents(storyId).length + 1,
+			sequence: worldRepository.getCanonicalCommandEventCount(storyId) + 1,
 		});
 		return res.status(result.success ? 200 : 400).json(result);
 	} catch (error: any) {
@@ -598,7 +598,9 @@ gameRouter.post('/action/history/edit', async (req: Request, res: Response) => {
     );
 
     if (!commandResult.success) {
-      worldRepository.restoreCanonicalStateSnapshot(originalCanonical, { persist: true });
+      // Snapshots exclude the event log by design; the failed edit must not discard
+      // the canonical event history that the live Story Run still owns.
+      worldRepository.restoreCanonicalStateSnapshot(originalCanonical, { persist: true, preserveCanonicalEvents: true });
       serverMockAuthority.importTransactionalState(storyId, originalMockState);
       return res.status(commandResult.statusCode || 400).json({ ...commandResult, error: commandResult.errorReason });
     }
@@ -1033,6 +1035,10 @@ gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => 
  * Returns an ActionResult containing the updated ExternalViewState.
  */
 gameRouter.post('/action', async (req: Request, res: Response) => {
+  // A single player action mutates world state many times (canonical engine stages,
+  // rollback paths, continuity capture). Coalesce those writes into one durable
+  // store save per request; a failing scope still flushes via the finally block.
+  return worldRepository.runWithPersistenceBatching(async () => {
   try {
     const actionRequest = req.body as ActionRequest;
 
@@ -1206,7 +1212,7 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
     const requestedCommandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/action", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, "/action", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
     const source = 'PLAYER' as const;
     const serverPlayer = worldRepository.getPlayerLifecycle(storyId);
     const actorId = serverPlayer?.actorId || `player_actor_${storyId}`;
@@ -1355,6 +1361,7 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
       error: 'Internal server error while resolving action request.',
     });
   }
+  });
 });
 
 /**
@@ -2059,7 +2066,7 @@ gameRouter.post('/inventory/equip', async (req: Request, res: Response) => {
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/inventory/equip", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, "/inventory/equip", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -2123,7 +2130,7 @@ gameRouter.post('/inventory/unequip', async (req: Request, res: Response) => {
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/inventory/unequip", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, "/inventory/unequip", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -2203,7 +2210,7 @@ gameRouter.post('/inventory/craft', async (req: Request, res: Response) => {
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/inventory/craft", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, "/inventory/craft", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -2319,7 +2326,7 @@ gameRouter.post('/inventory/transfer', async (req: Request, res: Response) => {
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/inventory/transfer", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, "/inventory/transfer", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -2401,7 +2408,7 @@ gameRouter.post('/inventory/repair', async (req: Request, res: Response) => {
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/inventory/repair", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, "/inventory/repair", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -2471,7 +2478,7 @@ gameRouter.post('/inventory/degrade', async (req: Request, res: Response) => {
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/inventory/degrade", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, "/inventory/degrade", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -2562,7 +2569,7 @@ gameRouter.post('/inventory/consume', async (req: Request, res: Response) => {
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/inventory/consume", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, "/inventory/consume", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -2636,7 +2643,7 @@ gameRouter.post('/inventory/destroy', async (req: Request, res: Response) => {
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/inventory/destroy", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, "/inventory/destroy", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -2767,7 +2774,7 @@ gameRouter.post('/capabilities/adjudicate', async (req: Request, res: Response) 
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/capabilities/adjudicate", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, "/capabilities/adjudicate", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -2926,7 +2933,7 @@ gameRouter.post('/worlds/runs/:storyId/progression', async (req: Request, res: R
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_progression', storyId, actorId, operation, req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_progression', storyId, actorId, operation, req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute<any, any>(
       worldRepository,
@@ -3075,7 +3082,7 @@ gameRouter.post('/capabilities/acquire', async (req: Request, res: Response) => 
   if (!actorId) return;
   try {
     const capEngine = worldRepository.getCapabilityEngine(storyId);
-    const commandId = (req.headers['x-command-id'] as string | undefined) || (req.body?.commandId as string | undefined) || deterministicId('cmd_cap_acquire', storyId, actorId, req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+    const commandId = (req.headers['x-command-id'] as string | undefined) || (req.body?.commandId as string | undefined) || deterministicId('cmd_cap_acquire', storyId, actorId, req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
     const commandResult = await canonicalCommandEngine.execute(worldRepository, {
       commandId, storyId, actorId, type: 'PROGRESSION',
       payload: {
@@ -3104,7 +3111,7 @@ gameRouter.post('/capabilities/award-xp', async (req: Request, res: Response) =>
   const actorId = resolveProgressionActor(req, res, storyId);
   if (!actorId) return;
   try {
-    const commandId = (req.headers['x-command-id'] as string | undefined) || (req.body?.commandId as string | undefined) || deterministicId('cmd_cap_xp', storyId, actorId, req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+    const commandId = (req.headers['x-command-id'] as string | undefined) || (req.body?.commandId as string | undefined) || deterministicId('cmd_cap_xp', storyId, actorId, req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
     const result = await canonicalCommandEngine.execute(worldRepository, {
       commandId, storyId, actorId, type: 'PROGRESSION',
       payload: { operation: 'AWARD_XP', moduleId: req.body?.capabilityId, xpAmount: req.body?.xpAmount, reason: req.body?.reason },
@@ -3129,7 +3136,7 @@ gameRouter.post('/capabilities/evolve', async (req: Request, res: Response) => {
   const actorId = resolveProgressionActor(req, res, storyId);
   if (!actorId) return;
   try {
-    const commandId = (req.headers['x-command-id'] as string | undefined) || (req.body?.commandId as string | undefined) || deterministicId('cmd_cap_evolve', storyId, actorId, req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+    const commandId = (req.headers['x-command-id'] as string | undefined) || (req.body?.commandId as string | undefined) || deterministicId('cmd_cap_evolve', storyId, actorId, req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
     const result = await canonicalCommandEngine.execute(worldRepository, {
       commandId, storyId, actorId, type: 'PROGRESSION',
       payload: { operation: 'EVOLVE_CAPABILITY', moduleId: req.body?.fromCapabilityId, fromCapabilityId: req.body?.fromCapabilityId, toCapabilityId: req.body?.toCapabilityId, targetDefinition: req.body?.targetDefinition, reason: req.body?.reason },
@@ -3152,7 +3159,7 @@ gameRouter.post('/capabilities/downgrade', async (req: Request, res: Response) =
   const actorId = resolveProgressionActor(req, res, storyId);
   if (!actorId) return;
   try {
-    const commandId = (req.headers['x-command-id'] as string | undefined) || (req.body?.commandId as string | undefined) || deterministicId('cmd_cap_down', storyId, actorId, req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+    const commandId = (req.headers['x-command-id'] as string | undefined) || (req.body?.commandId as string | undefined) || deterministicId('cmd_cap_down', storyId, actorId, req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
     const result = await canonicalCommandEngine.execute(worldRepository, {
       commandId, storyId, actorId, type: 'PROGRESSION',
       payload: { operation: 'DOWNGRADE_CAPABILITY', moduleId: req.body?.capabilityId, targetLevel: req.body?.targetLevel, reason: req.body?.reason },
@@ -3176,7 +3183,7 @@ gameRouter.post('/capabilities/relearn', async (req: Request, res: Response) => 
   const actorId = resolveProgressionActor(req, res, storyId);
   if (!actorId) return;
   try {
-    const commandId = (req.headers['x-command-id'] as string | undefined) || (req.body?.commandId as string | undefined) || deterministicId('cmd_cap_relearn', storyId, actorId, req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+    const commandId = (req.headers['x-command-id'] as string | undefined) || (req.body?.commandId as string | undefined) || deterministicId('cmd_cap_relearn', storyId, actorId, req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
     const result = await canonicalCommandEngine.execute(worldRepository, {
       commandId, storyId, actorId, type: 'PROGRESSION',
       payload: { operation: 'RELEARN_CAPABILITY', moduleId: req.body?.capabilityId, reason: req.body?.reason },
@@ -3361,7 +3368,7 @@ gameRouter.post('/capabilities/synthesize', async (req: Request, res: Response) 
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/capabilities/synthesize", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, "/capabilities/synthesize", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -3727,7 +3734,7 @@ gameRouter.post('/combat/encounter/start', async (req: Request, res: Response) =
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/combat/encounter/start", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, "/combat/encounter/start", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -4018,7 +4025,7 @@ gameRouter.post('/combat/initiative/roll', async (req: Request, res: Response) =
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, '/combat/initiative/roll', req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, '/combat/initiative/roll', req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -4124,7 +4131,7 @@ gameRouter.post('/combat/precombat-action', async (req: Request, res: Response) 
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, '/combat/precombat-action', req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, '/combat/precombat-action', req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -4251,7 +4258,7 @@ gameRouter.post('/combat/move', async (req: Request, res: Response) => {
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/combat/move", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, "/combat/move", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -4336,7 +4343,7 @@ gameRouter.post('/combat/action', async (req: Request, res: Response) => {
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/combat/action", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, "/combat/action", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -4414,7 +4421,7 @@ gameRouter.post('/combat/ready', async (req: Request, res: Response) => {
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, '/combat/ready', req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, '/combat/ready', req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -4472,7 +4479,7 @@ gameRouter.post('/combat/grapple/escape', async (req: Request, res: Response) =>
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, '/combat/grapple/escape', req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, '/combat/grapple/escape', req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -4526,7 +4533,7 @@ gameRouter.post('/combat/control', async (req: Request, res: Response) => {
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, '/combat/control', req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, '/combat/control', req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -4611,7 +4618,7 @@ gameRouter.post('/combat/attack', async (req: Request, res: Response) => {
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/combat/attack", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, "/combat/attack", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -4792,7 +4799,7 @@ gameRouter.post('/combat/player-action', async (req: Request, res: Response) => 
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, '/combat/player-action', req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, '/combat/player-action', req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -5030,7 +5037,7 @@ gameRouter.post('/combat/effect', async (req: Request, res: Response) => {
         '/combat/effect',
         capId,
         resolvedTargetIds,
-        worldRepository.getCanonicalCommandEvents(storyId).length + 1
+        worldRepository.getCanonicalCommandEventCount(storyId) + 1
       );
 
     const commandResult = await canonicalCommandEngine.execute(
@@ -5642,7 +5649,7 @@ gameRouter.post('/combat/cast', async (req: Request, res: Response) => {
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/combat/cast", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, "/combat/cast", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute<{ targetId: any; capabilityId: any; requestedScale: any }, any>(
       worldRepository,
@@ -5914,7 +5921,7 @@ gameRouter.post('/combat/interrupt', async (req: Request, res: Response) => {
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/combat/interrupt", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, "/combat/interrupt", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -5982,7 +5989,7 @@ gameRouter.post('/combat/end-turn', async (req: Request, res: Response) => {
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/combat/end-turn", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, "/combat/end-turn", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -6105,7 +6112,7 @@ gameRouter.post('/combat/npc-turn', async (req: Request, res: Response) => {
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/combat/npc-turn", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, "/combat/npc-turn", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -6609,7 +6616,7 @@ gameRouter.post('/living-world/advance', async (req: Request, res: Response) => 
       (req.headers['x-command-id'] as string | undefined) ||
       (req.headers['idempotency-key'] as string | undefined) ||
       bodyCommandId ||
-      deterministicId('cmd_route', storyId, "/living-world/advance", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, "/living-world/advance", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -6686,7 +6693,7 @@ gameRouter.post('/living-world/schedule-event', async (req: Request, res: Respon
       (req.headers['x-command-id'] as string | undefined) ||
       (req.headers['idempotency-key'] as string | undefined) ||
       bodyCommandId ||
-      deterministicId('cmd_route', storyId, "/living-world/schedule-event", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, "/living-world/schedule-event", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -7461,7 +7468,7 @@ gameRouter.post('/orchestrator/turn', async (req: Request, res: Response) => {
     }
     const orchestrator = worldRepository.getAiOrchestrator();
 
-    const commandId = idempotencyKey || deterministicId('cmd_route', storyId, "/orchestrator/turn", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+    const commandId = idempotencyKey || deterministicId('cmd_route', storyId, "/orchestrator/turn", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
     const beforeOrchestratorInventoryState = worldRepository.getInventoryEngine(String(storyId)).exportState();
     const beforeOrchestratorWorldElapsedSeconds = worldRepository.getWorldClock(String(storyId)).getTimestamp().totalElapsedSeconds;
     const commandResult = await canonicalCommandEngine.execute(
@@ -9632,7 +9639,7 @@ gameRouter.post('/worlds/runs/:storyId/story-director/step', async (req: Request
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/worlds/runs/:storyId/story-director/step", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, "/worlds/runs/:storyId/story-director/step", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -9688,7 +9695,7 @@ gameRouter.post('/worlds/runs/:storyId/story-director/choice', async (req: Reque
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/worlds/runs/:storyId/story-director/choice", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, "/worlds/runs/:storyId/story-director/choice", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -9746,7 +9753,7 @@ gameRouter.post('/worlds/runs/:storyId/story-director/offscreen', async (req: Re
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/worlds/runs/:storyId/story-director/offscreen", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, "/worlds/runs/:storyId/story-director/offscreen", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -9807,7 +9814,7 @@ gameRouter.post('/worlds/runs/:storyId/actions/execute', async (req: Request, re
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/worlds/runs/:storyId/actions/execute", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, "/worlds/runs/:storyId/actions/execute", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
     const player = worldRepository.getPlayerLifecycle(storyId);
     const actorId = player?.actorId || `player_actor_${storyId}`;
 
@@ -9898,7 +9905,7 @@ gameRouter.post('/worlds/runs/:storyId/actions/apply-ability', async (req: Reque
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/worlds/runs/:storyId/actions/apply-ability", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, "/worlds/runs/:storyId/actions/apply-ability", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -9961,7 +9968,7 @@ gameRouter.post('/worlds/runs/:storyId/dice-clash/resolve', async (req: Request,
     const commandId =
       (req.headers['x-command-id'] as string | undefined) ||
       (req.body?.commandId as string | undefined) ||
-      deterministicId('cmd_route', storyId, "/worlds/runs/:storyId/dice-clash/resolve", req.body || {}, worldRepository.getCanonicalCommandEvents(storyId).length + 1);
+      deterministicId('cmd_route', storyId, "/worlds/runs/:storyId/dice-clash/resolve", req.body || {}, worldRepository.getCanonicalCommandEventCount(storyId) + 1);
 
     const commandResult = await canonicalCommandEngine.execute(
       worldRepository,
@@ -10043,7 +10050,7 @@ function resolveSpellCommandId(req: Request, storyId: string, route: string): st
       storyId,
       route,
       req.body || {},
-      worldRepository.getCanonicalCommandEvents(storyId).length + 1
+      worldRepository.getCanonicalCommandEventCount(storyId) + 1
     )
   );
 }

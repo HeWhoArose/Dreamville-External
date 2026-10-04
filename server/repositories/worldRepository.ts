@@ -34,7 +34,7 @@ import { deterministicId, hashStringToSeed } from '../domain/deterministicRng';
 import type { NarrativeProfile } from '../../src/types';
 import { UniverseRuntimeService } from '../domain/universeRuntimeService';
 import type { UniverseCampaignState, UniverseMemoryRecord } from '../domain/universeRuntimeService';
-import { PersistentGameStore } from '../services/persistentGameStore';
+import { PersistentGameStore, isRunningUnderTests } from '../services/persistentGameStore';
 import { UserDataArchiveService, type DeletionTombstone, type UserDataArchive } from '../domain/userDataArchive';
 import {
   AdaptedStoryBible,
@@ -43,6 +43,15 @@ import {
   AdaptationSession,
   TypedAdaptationEvent,
 } from '../domain/storyAdaptation';
+
+/**
+ * Number of most recent canonical events that keep full rewind checkpoints
+ * (preStateSnapshot / mockStateBefore). Older events degrade to checkpoint-less
+ * records; the history-edit API rejects edits on those with
+ * ACTION_EDIT_CHECKPOINT_UNAVAILABLE. This bounds StoryRun and persistence-store
+ * growth, which otherwise made per-turn latency grow with session history.
+ */
+export const CANONICAL_EVENT_CHECKPOINT_RETENTION = 12;
 
 /**
  * WorldRepository
@@ -156,6 +165,16 @@ export interface WorldRepository {
   getAllWorldTemplates(): any[];
   appendCanonicalCommandEvent(storyId: string, event: any): void;
   getCanonicalCommandEvents(storyId: string): any[];
+  /** Coalesce all persistLibrary() calls inside the callback into one full-store save. */
+  runWithPersistenceBatching<T>(callback: () => T): T;
+  /** O(1) event count; avoids cloning the full event log for sequence numbering. */
+  getCanonicalCommandEventCount(storyId: string): number;
+  /** Deep-cloned tail of the event log with heavy replay payloads stripped.
+    * Hot paths consume only event metadata (ids, summaries, turn numbers) and must
+    * stay O(tail) instead of O(full log × checkpoint size) as the campaign grows.
+    * Use getCanonicalCommandEvents() when replay checkpoints are genuinely needed
+    * (e.g. the history-edit route resolving a rewind target). */
+  getRecentCanonicalCommandEvents(storyId: string, count: number): any[];
   restoreCanonicalStateSnapshot(snapshot: any, options?: { persist?: boolean }): void;
   isCanonicalCommandTransactionActive(): boolean;
   inspectPersistence(): import('../services/persistenceMigrationService').PersistenceInspection;
@@ -281,6 +300,15 @@ export class InMemoryWorldRepository implements WorldRepository {
   private universes: Map<string, UniverseCampaignState> = new Map();
   private readonly persistentStore = new PersistentGameStore();
   private readonly persistenceSuppressed: boolean;
+  // Turn-scoped persistence coalescing. Route scopes that perform many mutations
+  // per logical action (a single INTERACT turn can trigger 13-16 full-store saves)
+  // opt in for the duration of the request; the batch flushes exactly once on exit
+  // unless the scope crashed before it could run. Auto-disabled under the test
+  // runner so per-call file visibility contracts (durable-persistence phase)
+  // stay byte-for-byte intact.
+  private persistenceBatchDepth = 0;
+  private persistenceBatchDirty = false;
+  private readonly persistenceBatchingEnabled = !isRunningUnderTests();
 
   private tombstoneKey(entityType: DeletionTombstone['entityType'], entityId: string, scopeId?: string): string {
     return `${entityType}:${scopeId || ''}:${entityId}`;
@@ -2909,7 +2937,53 @@ export class InMemoryWorldRepository implements WorldRepository {
 
   private persistLibrary(): void {
     if (this.persistenceSuppressed) return;
+    if (this.persistenceBatchDepth > 0) {
+      this.persistenceBatchDirty = true;
+      return;
+    }
     this.persistentStore.save(this.buildPersistentData());
+  }
+
+  /**
+   * Coalesces persistLibrary() calls made inside the callback into a single
+   * full-store save when the outermost scope exits. The flush runs inside the
+   * finally block, so a scope that throws still persists whatever state was
+   * committed before the failure (crash-recovery contract preserved).
+   */
+  runWithPersistenceBatching<T>(callback: () => T): T {
+    if (this.persistenceSuppressed || !this.persistenceBatchingEnabled) {
+      return callback();
+    }
+    this.persistenceBatchDepth += 1;
+    const finish = () => {
+      this.persistenceBatchDepth -= 1;
+      if (this.persistenceBatchDepth === 0 && this.persistenceBatchDirty) {
+        this.persistenceBatchDirty = false;
+        this.persistentStore.save(this.buildPersistentData());
+      }
+    };
+    try {
+      const result = callback();
+      // Async route scopes must keep the batch open until the request body settles,
+      // otherwise the flush fires while later mutations still save individually.
+      if (result && typeof (result as { then?: unknown }).then === 'function') {
+        return (result as unknown as Promise<T>).then(
+          (value) => {
+            finish();
+            return value;
+          },
+          (error) => {
+            finish();
+            throw error;
+          },
+        ) as unknown as T;
+      }
+      finish();
+      return result;
+    } catch (error) {
+      finish();
+      throw error;
+    }
   }
 
   public getUniverse(universeId: string): UniverseCampaignState | null {
@@ -3101,13 +3175,54 @@ export class InMemoryWorldRepository implements WorldRepository {
     }
     const existing = Array.isArray(run.canonicalEvents) ? [...run.canonicalEvents] : [];
     if (existing.some((item: any) => item?.eventId === event?.eventId)) return;
-    run.canonicalEvents = [...existing, event];
+    run.canonicalEvents = this.boundReplayCheckpoints([...existing, event]);
     this.saveStoryRun(run);
+  }
+
+  /**
+   * Keeps full rewind checkpoints (preStateSnapshot/mockStateBefore) only for the
+   * most recent CANONICAL_EVENT_CHECKPOINT_RETENTION events. Each checkpoint embeds
+   * a large world snapshot; retaining every one made StoryRun size and per-turn
+   * persistence cost grow with total session history (the long-session latency
+   * regression). History editing of actions older than the retention window is
+   * rejected by the API with ACTION_EDIT_CHECKPOINT_UNAVAILABLE, which is the
+   * designed degradation path for checkpoint-less events.
+   */
+  private boundReplayCheckpoints(events: any[]): any[] {
+    if (events.length <= CANONICAL_EVENT_CHECKPOINT_RETENTION) return events;
+    return events.map((item: any, index: number) => {
+      if (index < events.length - CANONICAL_EVENT_CHECKPOINT_RETENTION) {
+        if (item?.replay && (item.replay.preStateSnapshot !== undefined || item.replay.mockStateBefore !== undefined)) {
+          const { preStateSnapshot: _pre, mockStateBefore: _mock, ...restReplay } = item.replay;
+          return { ...item, replay: restReplay };
+        }
+        return item;
+      }
+      return item;
+    });
   }
 
   public getCanonicalCommandEvents(storyId: string): any[] {
     const run = this.getStoryRun(storyId);
     return Array.isArray(run?.canonicalEvents) ? JSON.parse(JSON.stringify(run.canonicalEvents)) : [];
+  }
+
+  /** O(1) count of committed canonical events for the story. */
+  public getCanonicalCommandEventCount(storyId: string): number {
+    const run = this.storyRuns.get(String(storyId || ''));
+    return Array.isArray(run?.canonicalEvents) ? run.canonicalEvents.length : 0;
+  }
+
+  /** Deep-cloned tail of the event log with replay checkpoints stripped. Hot
+    * paths only read event metadata; cloning the embedded preStateSnapshot/
+    * mockStateBefore payloads (~240KB each) was the dominant per-turn cost and
+    * grew with every retained checkpoint. */
+  public getRecentCanonicalCommandEvents(storyId: string, count: number): any[] {
+    const run = this.storyRuns.get(String(storyId || ''));
+    const events = Array.isArray(run?.canonicalEvents) ? run.canonicalEvents : [];
+    const tail = Number.isFinite(count) && count > 0 ? events.slice(-Math.floor(count)) : [];
+    const cloned = JSON.parse(JSON.stringify(tail, (key, value) => (key === 'replay' ? undefined : value)));
+    return Array.isArray(cloned) ? cloned : [];
   }
 
   public getRulesProfile(storyId: string): RulesProfile | null {

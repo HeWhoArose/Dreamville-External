@@ -1,0 +1,1457 @@
+TAP version 13
+# Subtest: Phase 0.5 persistence: worlds and Story Runs survive repository rehydration
+ok 1 - Phase 0.5 persistence: worlds and Story Runs survive repository rehydration
+  ---
+  duration_ms: 8.713122
+  type: 'test'
+  ...
+# Subtest: Phase 0.5 visual identity: Story Run artwork context remains distinct from world identity
+ok 2 - Phase 0.5 visual identity: Story Run artwork context remains distinct from world identity
+  ---
+  duration_ms: 1.378318
+  type: 'test'
+  ...
+# Subtest: Phase 0.5 navigation exposes Story Library consistently
+ok 3 - Phase 0.5 navigation exposes Story Library consistently
+  ---
+  duration_ms: 1.269967
+  type: 'test'
+  ...
+# Subtest: Phase 0.5 mobile drawer contains only canonical secondary destinations
+ok 4 - Phase 0.5 mobile drawer contains only canonical secondary destinations
+  ---
+  duration_ms: 0.286917
+  type: 'test'
+  ...
+# Subtest: Phase 0.5 world poster prompt incorporates canonical world metadata
+ok 5 - Phase 0.5 world poster prompt incorporates canonical world metadata
+  ---
+  duration_ms: 0.590683
+  type: 'test'
+  ...
+# Subtest: Phase 1 integration: CUSTOM_HOMEBREW_DND does not invent an ability check
+ok 6 - Phase 1 integration: CUSTOM_HOMEBREW_DND does not invent an ability check
+  ---
+  duration_ms: 1.589782
+  type: 'test'
+  ...
+# Subtest: Phase 1 integration: CUSTOM_HOMEBREW_DND accepts an explicitly authored challenge
+ok 7 - Phase 1 integration: CUSTOM_HOMEBREW_DND accepts an explicitly authored challenge
+  ---
+  duration_ms: 1.675945
+  type: 'test'
+  ...
+# Subtest: Phase 1 integration: HYBRID_DND can disable implicit ability checks while preserving authored challenges
+ok 8 - Phase 1 integration: HYBRID_DND can disable implicit ability checks while preserving authored challenges
+  ---
+  duration_ms: 1.079498
+  type: 'test'
+  ...
+# Subtest: Phase 1 integration: StoryCheckEngine honors the StoryRun profile passed by authority
+ok 9 - Phase 1 integration: StoryCheckEngine honors the StoryRun profile passed by authority
+  ---
+  duration_ms: 0.14976
+  type: 'test'
+  ...
+# Subtest: Phase 1 integration: CUSTOM_HOMEBREW_DND rejects authored challenges without an explicit resolver
+ok 10 - Phase 1 integration: CUSTOM_HOMEBREW_DND rejects authored challenges without an explicit resolver
+  ---
+  duration_ms: 0.216805
+  type: 'test'
+  ...
+# Subtest: Phase 1 integration: CUSTOM_HOMEBREW_DND can explicitly use the D&D resolver
+ok 11 - Phase 1 integration: CUSTOM_HOMEBREW_DND can explicitly use the D&D resolver
+  ---
+  duration_ms: 0.357876
+  type: 'test'
+  ...
+# Subtest: Phase 1 integration: CUSTOM_HOMEBREW_DND custom D20 resolution does not apply D&D proficiency rules
+ok 12 - Phase 1 integration: CUSTOM_HOMEBREW_DND custom D20 resolution does not apply D&D proficiency rules
+  ---
+  duration_ms: 0.489287
+  type: 'test'
+  ...
+# Subtest: Phase 1 integration: persisted StoryRun profile is re-canonicalized from the run mode
+ok 13 - Phase 1 integration: persisted StoryRun profile is re-canonicalized from the run mode
+  ---
+  duration_ms: 2.162088
+  type: 'test'
+  ...
+# Subtest: Phase 1 integration: internal NPC tactical execution honors the active rules profile
+ok 14 - Phase 1 integration: internal NPC tactical execution honors the active rules profile
+  ---
+  duration_ms: 6.914604
+  type: 'test'
+  ...
+# Subtest: Phase 1 integration: client-supplied spell rule overrides cannot bypass canonical StoryRun rules
+ok 15 - Phase 1 integration: client-supplied spell rule overrides cannot bypass canonical StoryRun rules
+  ---
+  duration_ms: 2.52647
+  type: 'test'
+  ...
+# Subtest: Phase 1 integration: authored challenge keywords normalize without losing whitespace semantics
+ok 16 - Phase 1 integration: authored challenge keywords normalize without losing whitespace semantics
+  ---
+  duration_ms: 2.657496
+  type: 'test'
+  ...
+# Subtest: Phase 1: FULL_DND uses the standard D&D profile and rejects executable world overrides
+ok 17 - Phase 1: FULL_DND uses the standard D&D profile and rejects executable world overrides
+  ---
+  duration_ms: 2.13729
+  type: 'test'
+  ...
+# Subtest: Phase 1: HYBRID_DND keeps D&D baseline and applies explicit overrides
+ok 18 - Phase 1: HYBRID_DND keeps D&D baseline and applies explicit overrides
+  ---
+  duration_ms: 0.346086
+  type: 'test'
+  ...
+# Subtest: Phase 1: CUSTOM_HOMEBREW_DND never silently inherits D&D mechanics
+ok 19 - Phase 1: CUSTOM_HOMEBREW_DND never silently inherits D&D mechanics
+  ---
+  duration_ms: 1.043151
+  type: 'test'
+  ...
+# Subtest: Phase 1: explicit mode takes precedence over a conflicting supplied profile mode
+ok 20 - Phase 1: explicit mode takes precedence over a conflicting supplied profile mode
+  ---
+  duration_ms: 0.315587
+  type: 'test'
+  ...
+# Subtest: Phase 1: CUSTOM_HOMEBREW_DND does not apply D&D spell-slot legality implicitly
+ok 21 - Phase 1: CUSTOM_HOMEBREW_DND does not apply D&D spell-slot legality implicitly
+  ---
+  duration_ms: 0.459743
+  type: 'test'
+  ...
+# Subtest: Phase 1: FULL_DND still applies standard spell-slot progression
+ok 22 - Phase 1: FULL_DND still applies standard spell-slot progression
+  ---
+  duration_ms: 0.237805
+  type: 'test'
+  ...
+# Subtest: Phase 1: synthesized-world fields preserve the canonical mode and profile contract
+ok 23 - Phase 1: synthesized-world fields preserve the canonical mode and profile contract
+  ---
+  duration_ms: 0.454717
+  type: 'test'
+  ...
+# Subtest: Phase 1: unsupported rule override operations are ignored rather than reported as executable
+ok 24 - Phase 1: unsupported rule override operations are ignored rather than reported as executable
+  ---
+  duration_ms: 0.444559
+  type: 'test'
+  ...
+# Subtest: Phase 1: custom homebrew does not silently inherit D&D tactical combat
+ok 25 - Phase 1: custom homebrew does not silently inherit D&D tactical combat
+  ---
+  duration_ms: 0.404206
+  type: 'test'
+  ...
+# Subtest: Phase 1: FULL_DND and HYBRID_DND retain D&D tactical combat baseline
+ok 26 - Phase 1: FULL_DND and HYBRID_DND retain D&D tactical combat baseline
+  ---
+  duration_ms: 0.535618
+  type: 'test'
+  ...
+# Subtest: Phase 1: custom homebrew can explicitly enable the legacy D&D tactical mechanic
+ok 27 - Phase 1: custom homebrew can explicitly enable the legacy D&D tactical mechanic
+  ---
+  duration_ms: 0.336505
+  type: 'test'
+  ...
+# Subtest: Phase 1: mismatched persisted profile overrides cannot leak across selected rules modes
+ok 28 - Phase 1: mismatched persisted profile overrides cannot leak across selected rules modes
+  ---
+  duration_ms: 0.214667
+  type: 'test'
+  ...
+# Subtest: Phase 1: explicit custom spell rules are honored when standard D&D spell rules are disabled
+ok 29 - Phase 1: explicit custom spell rules are honored when standard D&D spell rules are disabled
+  ---
+  duration_ms: 0.208647
+  type: 'test'
+  ...
+# Subtest: Phase 1: unknown rule identifiers are not executable overrides
+ok 30 - Phase 1: unknown rule identifiers are not executable overrides
+  ---
+  duration_ms: 0.196741
+  type: 'test'
+  ...
+# Subtest: Phase 1: HYBRID_DND supports an explicit spell parameter override
+ok 31 - Phase 1: HYBRID_DND supports an explicit spell parameter override
+  ---
+  duration_ms: 0.363547
+  type: 'test'
+  ...
+# Subtest: Phase 1: FULL_DND cannot execute spell parameter overrides
+ok 32 - Phase 1: FULL_DND cannot execute spell parameter overrides
+  ---
+  duration_ms: 0.164319
+  type: 'test'
+  ...
+# Subtest: Phase 1: FULL_DND ignores client-style custom spell caps
+ok 33 - Phase 1: FULL_DND ignores client-style custom spell caps
+  ---
+  duration_ms: 0.164406
+  type: 'test'
+  ...
+# Subtest: Phase 10: progression resolver fails closed for missing actors
+ok 34 - Phase 10: progression resolver fails closed for missing actors
+  ---
+  duration_ms: 3.777031
+  type: 'test'
+  ...
+# Subtest: Phase 10: progression resolver still evaluates supplied authoritative modifiers without actor state
+ok 35 - Phase 10: progression resolver still evaluates supplied authoritative modifiers without actor state
+  ---
+  duration_ms: 0.770791
+  type: 'test'
+  ...
+# Subtest: Phase 10: capability resolver fails closed for unknown actors
+ok 36 - Phase 10: capability resolver fails closed for unknown actors
+  ---
+  duration_ms: 0.587992
+  type: 'test'
+  ...
+# Subtest: Phase 10: duplicate equipped capability sources collapse to one capability with provenance
+ok 37 - Phase 10: duplicate equipped capability sources collapse to one capability with provenance
+  ---
+  duration_ms: 5.757332
+  type: 'test'
+  ...
+# Subtest: Phase 10: equipment capability resolution deduplicates the same two-hand instance
+ok 38 - Phase 10: equipment capability resolution deduplicates the same two-hand instance
+  ---
+  duration_ms: 2.112702
+  type: 'test'
+  ...
+# Subtest: Phase 10: capability resolution does not mutate inventory state
+ok 39 - Phase 10: capability resolution does not mutate inventory state
+  ---
+  duration_ms: 1.544324
+  type: 'test'
+  ...
+# Subtest: Phase 10: equipment modifiers remain deterministic across repeated repository resolution
+ok 40 - Phase 10: equipment modifiers remain deterministic across repeated repository resolution
+  ---
+  duration_ms: 5.343085
+  type: 'test'
+  ...
+# Subtest: FULL_DND forces standard skill checks to 1d20
+ok 41 - FULL_DND forces standard skill checks to 1d20
+  ---
+  duration_ms: 1.600202
+  type: 'test'
+  ...
+# Subtest: HYBRID_DND preserves an authored 2d6 skill check and StoryCheckEngine resolves it
+ok 42 - HYBRID_DND preserves an authored 2d6 skill check and StoryCheckEngine resolves it
+  ---
+  duration_ms: 3.058229
+  type: 'test'
+  ...
+# Subtest: Genesis progression seeding can register custom modules before a canonical transaction
+ok 43 - Genesis progression seeding can register custom modules before a canonical transaction
+  ---
+  duration_ms: 9.892538
+  type: 'test'
+  ...
+# Subtest: Phase 11: unacquired private facts are excluded from authorized knowledge
+ok 44 - Phase 11: unacquired private facts are excluded from authorized knowledge
+  ---
+  duration_ms: 2.428041
+  type: 'test'
+  ...
+# Subtest: Phase 11: explicit actor acquisition authorizes a private fact
+ok 45 - Phase 11: explicit actor acquisition authorizes a private fact
+  ---
+  duration_ms: 1.9826
+  type: 'test'
+  ...
+# Subtest: Phase 11: failed knowledge checks do not authorize secret facts
+ok 46 - Phase 11: failed knowledge checks do not authorize secret facts
+  ---
+  duration_ms: 0.813684
+  type: 'test'
+  ...
+# Subtest: Phase 11: turn context contains acquired secrets but not unacquired secrets
+ok 47 - Phase 11: turn context contains acquired secrets but not unacquired secrets
+  ---
+  duration_ms: 35.63041
+  type: 'test'
+  ...
+# Subtest: Phase 11: opening context does not leak private facts merely because they concern the starting location
+ok 48 - Phase 11: opening context does not leak private facts merely because they concern the starting location
+  ---
+  duration_ms: 4.901145
+  type: 'test'
+  ...
+# Subtest: Phase 11: epistemic target visibility does not infer hidden targets from unacquired private facts
+ok 49 - Phase 11: epistemic target visibility does not infer hidden targets from unacquired private facts
+  ---
+  duration_ms: 1.561433
+  type: 'test'
+  ...
+# Subtest: Phase 11: public facts remain visible without actor-scoped acquisition
+ok 50 - Phase 11: public facts remain visible without actor-scoped acquisition
+  ---
+  duration_ms: 0.725841
+  type: 'test'
+  ...
+# Subtest: Phase 11: NPCs cannot select actions that require facts they have not acquired
+ok 51 - Phase 11: NPCs cannot select actions that require facts they have not acquired
+  ---
+  duration_ms: 1.886158
+  type: 'test'
+  ...
+# Subtest: Phase 11: authorized NPC context ignores unacquired private facts and client-supplied identity
+ok 52 - Phase 11: authorized NPC context ignores unacquired private facts and client-supplied identity
+  ---
+  duration_ms: 3.357501
+  type: 'test'
+  ...
+# Subtest: Phase 11: faction evidence is not visible to unrelated viewers
+ok 53 - Phase 11: faction evidence is not visible to unrelated viewers
+  ---
+  duration_ms: 1.3781
+  type: 'test'
+  ...
+# Subtest: Phase 11: private chronicle evidence requires viewer linkage
+ok 54 - Phase 11: private chronicle evidence requires viewer linkage
+  ---
+  duration_ms: 0.856521
+  type: 'test'
+  ...
+# Subtest: Phase 12: narration category override does not change world-generation routing
+ok 55 - Phase 12: narration category override does not change world-generation routing
+  ---
+  duration_ms: 6.504867
+  type: 'test'
+  ...
+# Subtest: Phase 12: retryable 429 failure records cooldown telemetry and falls through to a healthy model
+ok 56 - Phase 12: retryable 429 failure records cooldown telemetry and falls through to a healthy model
+  ---
+  duration_ms: 34.462488
+  type: 'test'
+  ...
+# Subtest: Phase 12: malformed narration output is rejected and does not mutate canonical state
+ok 57 - Phase 12: malformed narration output is rejected and does not mutate canonical state
+  ---
+  duration_ms: 55.885948
+  type: 'test'
+  ...
+# Subtest: Phase 12: AI context uses Phase 11 authorized knowledge boundaries
+ok 58 - Phase 12: AI context uses Phase 11 authorized knowledge boundaries
+  ---
+  duration_ms: 51.682792
+  type: 'test'
+  ...
+# Subtest: Phase 12: illegal model state-change kinds remain rejected by structured validation
+ok 59 - Phase 12: illegal model state-change kinds remain rejected by structured validation
+  ---
+  duration_ms: 1.086452
+  type: 'test'
+  ...
+# Subtest: Phase 12: runtime usage ledger preserves token dimensions reported by providers
+ok 60 - Phase 12: runtime usage ledger preserves token dimensions reported by providers
+  ---
+  duration_ms: 6.676288
+  type: 'test'
+  ...
+# Subtest: Phase 12: category runtime state is presentation/configuration state, not story state
+ok 61 - Phase 12: category runtime state is presentation/configuration state, not story state
+  ---
+  duration_ms: 2.249185
+  type: 'test'
+  ...
+# Subtest: Phase 12: timeout failure enters cooldown and falls through without a retry loop leak
+ok 62 - Phase 12: timeout failure enters cooldown and falls through without a retry loop leak
+  ---
+  duration_ms: 38.566558
+  type: 'test'
+  ...
+# Subtest: Phase 12: HTTP 5xx provider failure falls through to the next eligible provider
+ok 63 - Phase 12: HTTP 5xx provider failure falls through to the next eligible provider
+  ---
+  duration_ms: 9.716029
+  type: 'test'
+  ...
+# Subtest: Phase 12: fallback exhaustion reaches the deterministic emergency floor
+ok 64 - Phase 12: fallback exhaustion reaches the deterministic emergency floor
+  ---
+  duration_ms: 3.433552
+  type: 'test'
+  ...
+# Subtest: Phase 12: Phase 9 equipment and Phase 10 living-world state reach authorized AI context
+ok 65 - Phase 12: Phase 9 equipment and Phase 10 living-world state reach authorized AI context
+  ---
+  duration_ms: 9.107137
+  type: 'test'
+  ...
+# Subtest: Phase 12: category override retains automatic failover candidates
+ok 66 - Phase 12: category override retains automatic failover candidates
+  ---
+  duration_ms: 1.397168
+  type: 'test'
+  ...
+# Subtest: Phase 12: a cooling model is excluded from normal selection
+ok 67 - Phase 12: a cooling model is excluded from normal selection
+  ---
+  duration_ms: 2.06742
+  type: 'test'
+  ...
+# Subtest: Phase 12 regression: creative narration accepts valid prose without forcing deterministic fallback
+ok 68 - Phase 12 regression: creative narration accepts valid prose without forcing deterministic fallback
+  ---
+  duration_ms: 2.322821
+  type: 'test'
+  ...
+# Subtest: Phase 12 regression: fenced JSON narration is normalized before validation
+ok 69 - Phase 12 regression: fenced JSON narration is normalized before validation
+  ---
+  duration_ms: 0.897974
+  type: 'test'
+  ...
+# Subtest: Phase 12 audit: task candidate preflight is side-effect-free and reports known capacity constraints
+ok 70 - Phase 12 audit: task candidate preflight is side-effect-free and reports known capacity constraints
+  ---
+  duration_ms: 1.019807
+  type: 'test'
+  ...
+# Subtest: Phase 12 audit: task candidate preflight rejects context plus reserved output overflow without mutating routing state
+ok 71 - Phase 12 audit: task candidate preflight rejects context plus reserved output overflow without mutating routing state
+  ---
+  duration_ms: 0.950861
+  type: 'test'
+  ...
+# Subtest: Phase 12 audit: task candidate preflight rejects reserved output above a known model output limit
+ok 72 - Phase 12 audit: task candidate preflight rejects reserved output above a known model output limit
+  ---
+  duration_ms: 0.43106
+  type: 'test'
+  ...
+# Subtest: Phase 12 audit: task candidate preflight preserves UNKNOWN metadata instead of guessing
+ok 73 - Phase 12 audit: task candidate preflight preserves UNKNOWN metadata instead of guessing
+  ---
+  duration_ms: 0.252827
+  type: 'test'
+  ...
+# Subtest: Phase 12 audit: execution preflight skips a candidate whose context plus reserved output exceeds capacity
+ok 74 - Phase 12 audit: execution preflight skips a candidate whose context plus reserved output exceeds capacity
+  ---
+  duration_ms: 37.232741
+  type: 'test'
+  ...
+# Subtest: Phase 12 audit: task-contract failure advances to the next fallback model instead of stopping at first provider response
+ok 75 - Phase 12 audit: task-contract failure advances to the next fallback model instead of stopping at first provider response
+  ---
+  duration_ms: 12.686332
+  type: 'test'
+  ...
+# Subtest: Phase 12 audit: billing metadata is explicit and missing billing data remains UNKNOWN
+ok 76 - Phase 12 audit: billing metadata is explicit and missing billing data remains UNKNOWN
+  ---
+  duration_ms: 1.476321
+  type: 'test'
+  ...
+# Subtest: Phase 12 audit: task-aware auto arrange verifies an actual task response and rewrites only eligible automatic task routes
+ok 77 - Phase 12 audit: task-aware auto arrange verifies an actual task response and rewrites only eligible automatic task routes
+  ---
+  duration_ms: 10.273559
+  type: 'test'
+  ...
+# Subtest: Phase 12 audit: provider quota evidence overrides unknown model headroom without touching unrelated providers
+ok 78 - Phase 12 audit: provider quota evidence overrides unknown model headroom without touching unrelated providers
+  ---
+  duration_ms: 1.239563
+  type: 'test'
+  ...
+# Subtest: Phase 12 audit: Character Genesis semantic validation advances to the next model when the first response is structurally unusable
+ok 79 - Phase 12 audit: Character Genesis semantic validation advances to the next model when the first response is structurally unusable
+  ---
+  duration_ms: 21.426455
+  type: 'test'
+  ...
+# Subtest: Phase 12 regression: Character Genesis can expand a configured route with additional AI recovery models before the deterministic floor
+ok 80 - Phase 12 regression: Character Genesis can expand a configured route with additional AI recovery models before the deterministic floor
+  ---
+  duration_ms: 7.349842
+  type: 'test'
+  ...
+# Subtest: Phase 12 regression: deterministic fallback can be explicitly withheld after all AI candidates fail
+ok 81 - Phase 12 regression: deterministic fallback can be explicitly withheld after all AI candidates fail
+  ---
+  duration_ms: 4.17516
+  type: 'test'
+  ...
+# Subtest: Phase 12 regression: free-model detection requires provider-verified free-tier evidence
+ok 82 - Phase 12 regression: free-model detection requires provider-verified free-tier evidence
+  ---
+  duration_ms: 0.227918
+  type: 'test'
+  ...
+# Subtest: Phase 12 regression: narrative fallback chain contains the configured OpenRouter free route
+ok 83 - Phase 12 regression: narrative fallback chain contains the configured OpenRouter free route
+  ---
+  duration_ms: 4.680561
+  type: 'test'
+  ...
+# Subtest: Phase 12: canonical scene anchor is preserved in narration context
+ok 84 - Phase 12: canonical scene anchor is preserved in narration context
+  ---
+  duration_ms: 15.214439
+  type: 'test'
+  ...
+# Subtest: Phase 12: narration scene drift is rejected and falls through to the next model
+ok 85 - Phase 12: narration scene drift is rejected and falls through to the next model
+  ---
+  duration_ms: 19.846913
+  type: 'test'
+  ...
+# Subtest: Phase 12: deterministic emergency narration remains valid for the canonical current location
+ok 86 - Phase 12: deterministic emergency narration remains valid for the canonical current location
+  ---
+  duration_ms: 13.18083
+  type: 'test'
+  ...
+# Subtest: Phase 12: Story Run persistence includes the per-story story-check RNG state
+ok 87 - Phase 12: Story Run persistence includes the per-story story-check RNG state
+  ---
+  duration_ms: 7.556442
+  type: 'test'
+  ...
+# Subtest: Phase 12: Story narration model picker resolves the exact narrative task route without hiding non-free configured fallbacks
+ok 88 - Phase 12: Story narration model picker resolves the exact narrative task route without hiding non-free configured fallbacks
+  ---
+  duration_ms: 1.123651
+  type: 'test'
+  ...
+# Subtest: Phase 12: OpenRouter Free is a registered narration fallback model
+ok 89 - Phase 12: OpenRouter Free is a registered narration fallback model
+  ---
+  duration_ms: 5.11135
+  type: 'test'
+  ...
+# Subtest: Phase 12: Run context settings button navigates to the Settings view
+ok 90 - Phase 12: Run context settings button navigates to the Settings view
+  ---
+  duration_ms: 0.341796
+  type: 'test'
+  ...
+# Subtest: Phase 12: StoryCheckEngine rehydrates persisted RNG state after engine recreation
+ok 91 - Phase 12: StoryCheckEngine rehydrates persisted RNG state after engine recreation
+  ---
+  duration_ms: 2.376714
+  type: 'test'
+  ...
+# Subtest: Phase 12: production narration still exposes the deterministic emergency floor to the player
+ok 92 - Phase 12: production narration still exposes the deterministic emergency floor to the player
+  ---
+  duration_ms: 15.578969
+  type: 'test'
+  ...
+# Subtest: Phase 13: Persistence Versioning, Migration & Repair
+    # Subtest: migrates the historical v1 save fixture to the current schema without changing gameplay maps
+    ok 1 - migrates the historical v1 save fixture to the current schema without changing gameplay maps
+      ---
+      duration_ms: 2.072069
+      type: 'test'
+      ...
+    # Subtest: reports current v2 saves as valid and not needing migration
+    ok 2 - reports current v2 saves as valid and not needing migration
+      ---
+      duration_ms: 1.436546
+      type: 'test'
+      ...
+    # Subtest: migrates a v1 file transactionally and preserves an exact pre-migration backup
+    ok 3 - migrates a v1 file transactionally and preserves an exact pre-migration backup
+      ---
+      duration_ms: 2.20026
+      type: 'test'
+      ...
+    # Subtest: refuses an unsupported future version without modifying the source file
+    ok 4 - refuses an unsupported future version without modifying the source file
+      ---
+      duration_ms: 1.07825
+      type: 'test'
+      ...
+    # Subtest: refuses malformed JSON without replacing the source with an empty save
+    ok 5 - refuses malformed JSON without replacing the source with an empty save
+      ---
+      duration_ms: 0.835221
+      type: 'test'
+      ...
+    1..5
+ok 93 - Phase 13: Persistence Versioning, Migration & Repair
+  ---
+  duration_ms: 9.026876
+  type: 'suite'
+  ...
+# Subtest: Phase 14: Developer Diagnostics
+    # Subtest: paginates canonical timeline results for large Chronicles
+    ok 1 - paginates canonical timeline results for large Chronicles
+      ---
+      duration_ms: 6.036433
+      type: 'test'
+      ...
+    # Subtest: redacts provider credentials, secrets and raw response fields from diagnostics
+    ok 2 - redacts provider credentials, secrets and raw response fields from diagnostics
+      ---
+      duration_ms: 0.320863
+      type: 'test'
+      ...
+    # Subtest: does not expose an AI-generated explanation path
+    ok 3 - does not expose an AI-generated explanation path
+      ---
+      duration_ms: 0.444558
+      type: 'test'
+      ...
+    1..3
+ok 94 - Phase 14: Developer Diagnostics
+  ---
+  duration_ms: 8.073321
+  type: 'suite'
+  ...
+# Subtest: Phase 15 master matrix contains all nine rules × narrative combinations
+ok 95 - Phase 15 master matrix contains all nine rules × narrative combinations
+  ---
+  duration_ms: 1.329897
+  type: 'test'
+  ...
+# Subtest: Phase 15 executes every rules × narrative combination against canonical repository authority
+ok 96 - Phase 15 executes every rules × narrative combination against canonical repository authority
+  ---
+  duration_ms: 73.796223
+  type: 'test'
+  ...
+# Subtest: Phase 15 canonical command, combat, conditions and death integrate without crossing authority boundaries
+ok 97 - Phase 15 canonical command, combat, conditions and death integrate without crossing authority boundaries
+  ---
+  duration_ms: 104.082601
+  type: 'test'
+  ...
+# Subtest: Phase 15 spell runtime remains authoritative and rejects unknown spell state without mutation
+ok 98 - Phase 15 spell runtime remains authoritative and rejects unknown spell state without mutation
+  ---
+  duration_ms: 2.084992
+  type: 'test'
+  ...
+# Subtest: Phase 15 persistence/migration preserves source data on failure
+ok 99 - Phase 15 persistence/migration preserves source data on failure
+  ---
+  duration_ms: 1.576963
+  type: 'test'
+  ...
+# Subtest: Phase 15 AI fallback survives a retryable provider failure and avoids canonical game mutation
+ok 100 - Phase 15 AI fallback survives a retryable provider failure and avoids canonical game mutation
+  ---
+  duration_ms: 21.377912
+  type: 'test'
+  ...
+# Subtest: Phase 15 deterministic replay produces identical canonical replay metadata
+ok 101 - Phase 15 deterministic replay produces identical canonical replay metadata
+  ---
+  duration_ms: 105.692826
+  type: 'test'
+  ...
+# Subtest: Phase 15 stress probe handles a 5000-event diagnostic timeline with pagination
+ok 102 - Phase 15 stress probe handles a 5000-event diagnostic timeline with pagination
+  ---
+  duration_ms: 9.588851
+  type: 'test'
+  ...
+# Subtest: OOC: selectBestModel always yields an eligible model or emergency floor
+ok 103 - OOC: selectBestModel always yields an eligible model or emergency floor
+  ---
+  duration_ms: 5.962709
+  type: 'test'
+  ...
+# Subtest: OOC: selectBestModel falls back to emergency floor when all models are marked Unavailable
+ok 104 - OOC: selectBestModel falls back to emergency floor when all models are marked Unavailable
+  ---
+  duration_ms: 0.860572
+  type: 'test'
+  ...
+# Subtest: OOC: isCandidateUsable returns true for emergency floor on ooc.respond
+ok 105 - OOC: isCandidateUsable returns true for emergency floor on ooc.respond
+  ---
+  duration_ms: 0.939619
+  type: 'test'
+  ...
+# Subtest: OOC: executeTaskGeneration produces valid response without throwing even when providers unavailable
+ok 106 - OOC: executeTaskGeneration produces valid response without throwing even when providers unavailable
+  ---
+  duration_ms: 9.445223
+  type: 'test'
+  ...
+# Subtest: Phase 15 OOC registry exposes only canonical read/write tools
+ok 107 - Phase 15 OOC registry exposes only canonical read/write tools
+  ---
+  duration_ms: 3.226585
+  type: 'test'
+  ...
+# Subtest: Phase 15 OOC read tools remain epistemically scoped
+ok 108 - Phase 15 OOC read tools remain epistemically scoped
+  ---
+  duration_ms: 2.362614
+  type: 'test'
+  ...
+# Subtest: Phase 15 invalid OOC equipment mutation fails closed without state drift
+ok 109 - Phase 15 invalid OOC equipment mutation fails closed without state drift
+  ---
+  duration_ms: 52.661753
+  type: 'test'
+  ...
+# Subtest: Phase 15 invalid OOC ability mutation fails closed without fabricated capability state
+ok 110 - Phase 15 invalid OOC ability mutation fails closed without fabricated capability state
+  ---
+  duration_ms: 45.266256
+  type: 'test'
+  ...
+# Subtest: Phase 15 OOC rest tool rejects malformed durations before canonical mutation
+ok 111 - Phase 15 OOC rest tool rejects malformed durations before canonical mutation
+  ---
+  duration_ms: 13.591536
+  type: 'test'
+  ...
+# Subtest: Phase 15 OOC world-time tool rejects unsafe intervals
+ok 112 - Phase 15 OOC world-time tool rejects unsafe intervals
+  ---
+  duration_ms: 1.292098
+  type: 'test'
+  ...
+# Subtest: Phase 15 canonical OOC mutation emits a canonical event when valid
+ok 113 - Phase 15 canonical OOC mutation emits a canonical event when valid
+  ---
+  duration_ms: 104.504596
+  type: 'test'
+  ...
+# Subtest: Phase 15 OOC mutation replay is deterministic
+ok 114 - Phase 15 OOC mutation replay is deterministic
+  ---
+  duration_ms: 90.259525
+  type: 'test'
+  ...
+# Subtest: Phase 16 — friendship can become enmity through a canonical greed betrayal
+ok 115 - Phase 16 — friendship can become enmity through a canonical greed betrayal
+  ---
+  duration_ms: 3.388999
+  type: 'test'
+  ...
+# Subtest: Phase 16 — jealousy, faction conflict, circumstance, and player action remain distinct canonical causes
+ok 116 - Phase 16 — jealousy, faction conflict, circumstance, and player action remain distinct canonical causes
+  ---
+  duration_ms: 0.947398
+  type: 'test'
+  ...
+# Subtest: Phase 16 — false information and framing create a belief that can later be corrected
+ok 117 - Phase 16 — false information and framing create a belief that can later be corrected
+  ---
+  duration_ms: 1.321572
+  type: 'test'
+  ...
+# Subtest: Phase 16 — friendship can return after exoneration, but not before canonical conditions are met
+ok 118 - Phase 16 — friendship can return after exoneration, but not before canonical conditions are met
+  ---
+  duration_ms: 0.800117
+  type: 'test'
+  ...
+# Subtest: Phase 16 — coercion, manipulation, and possession constrain agency without erasing the underlying relationship
+ok 119 - Phase 16 — coercion, manipulation, and possession constrain agency without erasing the underlying relationship
+  ---
+  duration_ms: 1.479954
+  type: 'test'
+  ...
+# Subtest: Phase 16 — canonical NPC intent follows relationship, personality, and active control state
+ok 120 - Phase 16 — canonical NPC intent follows relationship, personality, and active control state
+  ---
+  duration_ms: 0.532401
+  type: 'test'
+  ...
+# Subtest: Phase 16 — malformed or missing persisted agency state falls back safely and deterministically
+ok 121 - Phase 16 — malformed or missing persisted agency state falls back safely and deterministically
+  ---
+  duration_ms: 0.963786
+  type: 'test'
+  ...
+# Subtest: Phase 16 — repository persists and rehydrates dynamic agency through the existing story runtime state
+ok 122 - Phase 16 — repository persists and rehydrates dynamic agency through the existing story runtime state
+  ---
+  duration_ms: 3.16551
+  type: 'test'
+  ...
+# Subtest: Phase 16 — repository bootstraps agency from canonical entity personality, goals, faction, and relationships
+ok 123 - Phase 16 — repository bootstraps agency from canonical entity personality, goals, faction, and relationships
+  ---
+  duration_ms: 2.218281
+  type: 'test'
+  ...
+# Subtest: Phase 16 — relationship authority is story-scoped and does not leak between stories
+ok 124 - Phase 16 — relationship authority is story-scoped and does not leak between stories
+  ---
+  duration_ms: 0.796442
+  type: 'test'
+  ...
+# Subtest: Phase 16 — speaker colors remain stable for a speaker identity within a world and may differ across worlds
+ok 125 - Phase 16 — speaker colors remain stable for a speaker identity within a world and may differ across worlds
+  ---
+  duration_ms: 0.411995
+  type: 'test'
+  ...
+# Subtest: Phase 16 — speaker colors fall back deterministically when no world is supplied
+ok 126 - Phase 16 — speaker colors fall back deterministically when no world is supplied
+  ---
+  duration_ms: 0.162665
+  type: 'test'
+  ...
+# Subtest: Phase 16 — narrative guidance keeps hidden causes out of player-facing guidance
+ok 127 - Phase 16 — narrative guidance keeps hidden causes out of player-facing guidance
+  ---
+  duration_ms: 0.621446
+  type: 'test'
+  ...
+# Subtest: Phase 16 — working context includes canonical NPC relationship and agency guidance for narrative generation
+ok 128 - Phase 16 — working context includes canonical NPC relationship and agency guidance for narrative generation
+  ---
+  duration_ms: 24.836817
+  type: 'test'
+  ...
+# Subtest: Phase 16 — export/import is lossless for canonical agency state
+ok 129 - Phase 16 — export/import is lossless for canonical agency state
+  ---
+  duration_ms: 0.833556
+  type: 'test'
+  ...
+# Subtest: Phase 16 action advisor: compatible unlearned capability requires explicit acquisition approval
+ok 130 - Phase 16 action advisor: compatible unlearned capability requires explicit acquisition approval
+  ---
+  duration_ms: 66.012042
+  type: 'test'
+  ...
+# Subtest: Phase 16 action advisor: ordinary Mage compatibility is not confused with Dark Mage incompatibility
+ok 131 - Phase 16 action advisor: ordinary Mage compatibility is not confused with Dark Mage incompatibility
+  ---
+  duration_ms: 17.662128
+  type: 'test'
+  ...
+# Subtest: Phase 16 action advisor: incompatible Fireball request from a Dark Mage produces a non-canonical alternative proposal
+ok 132 - Phase 16 action advisor: incompatible Fireball request from a Dark Mage produces a non-canonical alternative proposal
+  ---
+  duration_ms: 22.809684
+  type: 'test'
+  ...
+# Subtest: Phase 16 action advisor: an unknown capability request does not silently grant a new skill
+ok 133 - Phase 16 action advisor: an unknown capability request does not silently grant a new skill
+  ---
+  duration_ms: 13.70332
+  type: 'test'
+  ...
+# Subtest: Phase 16 action advisor: already-learned capability resolves directly
+ok 134 - Phase 16 action advisor: already-learned capability resolves directly
+  ---
+  duration_ms: 16.167852
+  type: 'test'
+  ...
+# Subtest: Phase 16 action advisor: generated action tips are advisory only and never create capabilities
+ok 135 - Phase 16 action advisor: generated action tips are advisory only and never create capabilities
+  ---
+  duration_ms: 16.518039
+  type: 'test'
+  ...
+# Subtest: Phase 16 regression: ordinary movement never becomes a novel capability proposal
+ok 136 - Phase 16 regression: ordinary movement never becomes a novel capability proposal
+  ---
+  duration_ms: 4.672311
+  type: 'test'
+  ...
+# Subtest: Phase 16 contextual fallback: suggestions are tied to the visible scene when AI advice is unavailable
+ok 137 - Phase 16 contextual fallback: suggestions are tied to the visible scene when AI advice is unavailable
+  ---
+  duration_ms: 6.265738
+  type: 'test'
+  ...
+# Subtest: Phase 16 regression: exact ordinary movement stays narrative and receives scene-grounded suggestions
+ok 138 - Phase 16 regression: exact ordinary movement stays narrative and receives scene-grounded suggestions
+  ---
+  duration_ms: 4.313715
+  type: 'test'
+  ...
+# Subtest: Phase 16 regression: suggestion text is inserted into the composer and not executed
+ok 139 - Phase 16 regression: suggestion text is inserted into the composer and not executed
+  ---
+  duration_ms: 9.293206
+  type: 'test'
+  ...
+# Subtest: Phase 16 regression: opening-scene nouns do not become capability intent during ordinary inspection
+ok 140 - Phase 16 regression: opening-scene nouns do not become capability intent during ordinary inspection
+  ---
+  duration_ms: 9.663502
+  type: 'test'
+  ...
+# Subtest: Phase 16 regression: explicit capability intent remains eligible for capability adjudication
+ok 141 - Phase 16 regression: explicit capability intent remains eligible for capability adjudication
+  ---
+  duration_ms: 16.948456
+  type: 'test'
+  ...
+# Subtest: Phase 17 AI orchestration contracts cover every new intelligence category
+ok 142 - Phase 17 AI orchestration contracts cover every new intelligence category
+  ---
+  duration_ms: 1.554264
+  type: 'test'
+  ...
+# Subtest: Phase 17 AI orchestration categories are isolated and independently routable
+ok 143 - Phase 17 AI orchestration categories are isolated and independently routable
+  ---
+  duration_ms: 9.337991
+  type: 'test'
+  ...
+# Subtest: Phase 17 every new AI task has a fallback path ending in deterministic recovery
+ok 144 - Phase 17 every new AI task has a fallback path ending in deterministic recovery
+  ---
+  duration_ms: 1.122804
+  type: 'test'
+  ...
+# Subtest: Phase 17 category selection does not silently alias intent, narration, summarization, or research
+ok 145 - Phase 17 category selection does not silently alias intent, narration, summarization, or research
+  ---
+  duration_ms: 1.214864
+  type: 'test'
+  ...
+# Subtest: Phase 17 new task selection exposes an eligible model or deterministic fallback without throwing
+ok 146 - Phase 17 new task selection exposes an eligible model or deterministic fallback without throwing
+  ---
+  duration_ms: 6.791963
+  type: 'test'
+  ...
+# Subtest: Phase 17: narrative continuity is persisted only when a canonical turn is recorded
+ok 147 - Phase 17: narrative continuity is persisted only when a canonical turn is recorded
+  ---
+  duration_ms: 2.690856
+  type: 'test'
+  ...
+# Subtest: Phase 17: world momentum is deterministic and connected to world-time simulation output
+ok 148 - Phase 17: world momentum is deterministic and connected to world-time simulation output
+  ---
+  duration_ms: 1.558975
+  type: 'test'
+  ...
+# Subtest: Phase 17: NPC tactical execution leaves encounter-specific private memory for future planning
+ok 149 - Phase 17: NPC tactical execution leaves encounter-specific private memory for future planning
+  ---
+  duration_ms: 3.656364
+  type: 'test'
+  ...
+# Subtest: Phase 18 wiring: narrative research persists and exposes plot, plan, momentum and provenance
+ok 150 - Phase 18 wiring: narrative research persists and exposes plot, plan, momentum and provenance
+  ---
+  duration_ms: 26.467766
+  type: 'test'
+  ...
+# Subtest: Phase 18 wiring: validated research creates a causal provenance edge into canonical state
+ok 151 - Phase 18 wiring: validated research creates a causal provenance edge into canonical state
+  ---
+  duration_ms: 2.360321
+  type: 'test'
+  ...
+# Subtest: Phase 18 wiring: NPC autonomy engine remains callable as a decision layer
+ok 152 - Phase 18 wiring: NPC autonomy engine remains callable as a decision layer
+  ---
+  duration_ms: 0.560018
+  type: 'test'
+  ...
+# [PersistentGameStore] Primary persistence was unreadable; recovered the last valid snapshot. {
+#   primaryPath: '/tmp/dreambook-durable-VOrXUg/data.json',
+#   snapshotPath: '/tmp/dreambook-durable-VOrXUg/history/data-2026-10-04T18-41-34-196Z-13690.json',
+#   error: "Expected property name or '}' in JSON at position 2 (line 1 column 3)"
+# }
+# Subtest: Phase 19: worlds, runs, confirmed characters, drafts and generic user data survive repository reconstruction
+ok 153 - Phase 19: worlds, runs, confirmed characters, drafts and generic user data survive repository reconstruction
+  ---
+  duration_ms: 16.086383
+  type: 'test'
+  ...
+# Subtest: Phase 19: migrations are additive and preserve unknown data while upgrading drafts
+ok 154 - Phase 19: migrations are additive and preserve unknown data while upgrading drafts
+  ---
+  duration_ms: 1.043621
+  type: 'test'
+  ...
+# Subtest: Phase 19: explicit deletion creates durable tombstones and deleted data does not resurrect on restart
+ok 155 - Phase 19: explicit deletion creates durable tombstones and deleted data does not resurrect on restart
+  ---
+  duration_ms: 6.953194
+  type: 'test'
+  ...
+# Subtest: Phase 19: user-data archive is integrity-protected and merge-restorable
+ok 156 - Phase 19: user-data archive is integrity-protected and merge-restorable
+  ---
+  duration_ms: 5.666061
+  type: 'test'
+  ...
+# Subtest: Phase 19: corrupted primary persistence can recover from the latest durable snapshot
+ok 157 - Phase 19: corrupted primary persistence can recover from the latest durable snapshot
+  ---
+  duration_ms: 7.058326
+  type: 'test'
+  ...
+# Subtest: Phase 19 audit rule: 10 consecutive durable-data connectivity audits pass end-to-end
+ok 158 - Phase 19 audit rule: 10 consecutive durable-data connectivity audits pass end-to-end
+  ---
+  duration_ms: 77.295668
+  type: 'test'
+  ...
+# Subtest: Phase 1.5 — Story Navigation Menu Composition (INVESTIGATION ruleset without active combat hides combat)
+ok 159 - Phase 1.5 — Story Navigation Menu Composition (INVESTIGATION ruleset without active combat hides combat)
+  ---
+  duration_ms: 1.135892
+  type: 'test'
+  ...
+# Subtest: Phase 1.5 — Story Navigation Menu Composition (FULL_DND shows combat when active)
+ok 160 - Phase 1.5 — Story Navigation Menu Composition (FULL_DND shows combat when active)
+  ---
+  duration_ms: 0.267577
+  type: 'test'
+  ...
+# Subtest: Phase 1.5 — Provider-Neutral Prompt Compiler produces structured engine prompt
+ok 161 - Phase 1.5 — Provider-Neutral Prompt Compiler produces structured engine prompt
+  ---
+  duration_ms: 0.342947
+  type: 'test'
+  ...
+# Subtest: Phase 1.5 — Compendium maintains 7 canonical categories
+ok 162 - Phase 1.5 — Compendium maintains 7 canonical categories
+  ---
+  duration_ms: 0.209431
+  type: 'test'
+  ...
+# Subtest: Phase 1.5 — Compendium dataset holds initial entries across categories
+ok 163 - Phase 1.5 — Compendium dataset holds initial entries across categories
+  ---
+  duration_ms: 0.145807
+  type: 'test'
+  ...
+# Subtest: Phase 1.5B — 1. Global Navigation Route Definitions
+ok 164 - Phase 1.5B — 1. Global Navigation Route Definitions
+  ---
+  duration_ms: 1.046469
+  type: 'test'
+  ...
+# Subtest: Phase 1.5B — 2. Sub-categories map under compendium sub-routes
+ok 165 - Phase 1.5B — 2. Sub-categories map under compendium sub-routes
+  ---
+  duration_ms: 0.305106
+  type: 'test'
+  ...
+# Subtest: Phase 1.5B — 3. Compendium maintaining 7 internal tabs
+ok 166 - Phase 1.5B — 3. Compendium maintaining 7 internal tabs
+  ---
+  duration_ms: 0.286001
+  type: 'test'
+  ...
+# Subtest: Phase 1.5B — 4. Compendium items retain provenance tracking properties
+ok 167 - Phase 1.5B — 4. Compendium items retain provenance tracking properties
+  ---
+  duration_ms: 0.163849
+  type: 'test'
+  ...
+# Subtest: Phase 1.5B — 5. Epistemic Separation Invariant (Compendium does not mutate canonical world repo)
+ok 168 - Phase 1.5B — 5. Epistemic Separation Invariant (Compendium does not mutate canonical world repo)
+  ---
+  duration_ms: 0.14936
+  type: 'test'
+  ...
+# Subtest: Phase 1.5B — 6. Automatic Voice Identity Resolver computes deterministic assignment
+ok 169 - Phase 1.5B — 6. Automatic Voice Identity Resolver computes deterministic assignment
+  ---
+  duration_ms: 0.295038
+  type: 'test'
+  ...
+# Subtest: Phase 1.5B — 7. Voice Identity Resolver respects manual override mode
+ok 170 - Phase 1.5B — 7. Voice Identity Resolver respects manual override mode
+  ---
+  duration_ms: 0.183008
+  type: 'test'
+  ...
+# Subtest: Phase 1.5B — 8. Deterministic Character Speaker Accent Color Derivation
+ok 171 - Phase 1.5B — 8. Deterministic Character Speaker Accent Color Derivation
+  ---
+  duration_ms: 0.257463
+  type: 'test'
+  ...
+# Subtest: Phase 1.5B — 9. Narrator / System voice color fallback
+ok 172 - Phase 1.5B — 9. Narrator / System voice color fallback
+  ---
+  duration_ms: 0.277964
+  type: 'test'
+  ...
+# Subtest: Phase 1.5B — 10. Preset Voices pool diversity
+ok 173 - Phase 1.5B — 10. Preset Voices pool diversity
+  ---
+  duration_ms: 0.412962
+  type: 'test'
+  ...
+# Subtest: Gap 1 — Compendium Persistence across reload and provenance preservation
+ok 174 - Gap 1 — Compendium Persistence across reload and provenance preservation
+  ---
+  duration_ms: 1.205112
+  type: 'test'
+  ...
+# Subtest: Gap 1b — Compendium Epistemic Separation Invariant (World B context does NOT know World A Compendium item)
+ok 175 - Gap 1b — Compendium Epistemic Separation Invariant (World B context does NOT know World A Compendium item)
+  ---
+  duration_ms: 0.226839
+  type: 'test'
+  ...
+# Subtest: Gap 2 — Fallback Runtime Proof: Primary failure -> Fallback model invoked -> Successful response
+ok 176 - Gap 2 — Fallback Runtime Proof: Primary failure -> Fallback model invoked -> Successful response
+  ---
+  duration_ms: 368.054232
+  type: 'test'
+  ...
+# Subtest: Gap 2b — Primary success -> Fallback NOT invoked
+ok 177 - Gap 2b — Primary success -> Fallback NOT invoked
+  ---
+  duration_ms: 19.354806
+  type: 'test'
+  ...
+# Subtest: Gap 2c — Primary failure -> Secondary failure -> Tertiary fallback attempted and succeeded
+ok 178 - Gap 2c — Primary failure -> Secondary failure -> Tertiary fallback attempted and succeeded
+  ---
+  duration_ms: 325.963002
+  type: 'test'
+  ...
+# Subtest: Phase 1 Audio Lifecycle: Audio engine settings and lifecycle management
+ok 179 - Phase 1 Audio Lifecycle: Audio engine settings and lifecycle management
+  ---
+  duration_ms: 1.876106
+  type: 'test'
+  ...
+# Subtest: Phase 1 Genre Decoupling: Discovery Preferences ≠ World Genre ≠ Ruleset
+ok 180 - Phase 1 Genre Decoupling: Discovery Preferences ≠ World Genre ≠ Ruleset
+  ---
+  duration_ms: 25.045443
+  type: 'test'
+  ...
+# Subtest: Phase 1 World Manifest: Genre tags are first-class on world templates
+ok 181 - Phase 1 World Manifest: Genre tags are first-class on world templates
+  ---
+  duration_ms: 0.248884
+  type: 'test'
+  ...
+# Subtest: Phase 2 — canonical narrative profile definitions validate for all three modes
+ok 182 - Phase 2 — canonical narrative profile definitions validate for all three modes
+  ---
+  duration_ms: 1.563579
+  type: 'test'
+  ...
+# Subtest: Phase 2 — explicit narrative mode wins over a mismatched persisted profile
+ok 183 - Phase 2 — explicit narrative mode wins over a mismatched persisted profile
+  ---
+  duration_ms: 0.492361
+  type: 'test'
+  ...
+# Subtest: Phase 2 — world synthesis preserves every rules × narrative combination
+ok 184 - Phase 2 — world synthesis preserves every rules × narrative combination
+  ---
+  duration_ms: 13.034001
+  type: 'test'
+  ...
+# Subtest: Phase 2 — confirmed character narrative mode is authoritative at StoryRun creation
+ok 185 - Phase 2 — confirmed character narrative mode is authoritative at StoryRun creation
+  ---
+  duration_ms: 32.208711
+  type: 'test'
+  ...
+# Subtest: Phase 2 — StoryRun API uses the stored confirmed character instead of trusting a submitted character payload
+ok 186 - Phase 2 — StoryRun API uses the stored confirmed character instead of trusting a submitted character payload
+  ---
+  duration_ms: 1.494331
+  type: 'test'
+  ...
+# Subtest: Phase 2 — repository preserves narrative and rules selections independently across all nine combinations
+ok 187 - Phase 2 — repository preserves narrative and rules selections independently across all nine combinations
+  ---
+  duration_ms: 3.678209
+  type: 'test'
+  ...
+# Subtest: Phase 2 — legacy worlds and runs are migrated on persistence reload
+ok 188 - Phase 2 — legacy worlds and runs are migrated on persistence reload
+  ---
+  duration_ms: 5.622911
+  type: 'test'
+  ...
+# Subtest: Phase 2 — duplicated story branches preserve canonical narrative and rules profiles
+ok 189 - Phase 2 — duplicated story branches preserve canonical narrative and rules profiles
+  ---
+  duration_ms: 2.681566
+  type: 'test'
+  ...
+# Subtest: Phase 2 — normal working context carries canonical campaign modes
+ok 190 - Phase 2 — normal working context carries canonical campaign modes
+  ---
+  duration_ms: 20.73431
+  type: 'test'
+  ...
+# Subtest: Phase 2 — campaign archive round-trip preserves canonical narrative and rules profiles
+ok 191 - Phase 2 — campaign archive round-trip preserves canonical narrative and rules profiles
+  ---
+  duration_ms: 22.682977
+  type: 'test'
+  ...
+# Subtest: Phase 2 — runtime projection exposes canonical narrative and rules profiles
+ok 192 - Phase 2 — runtime projection exposes canonical narrative and rules profiles
+  ---
+  duration_ms: 2.188944
+  type: 'test'
+  ...
+# Subtest: Phase 22: default seeded story exposes a canonical scene, rumor thread, and visible entity graph
+ok 193 - Phase 22: default seeded story exposes a canonical scene, rumor thread, and visible entity graph
+  ---
+  duration_ms: 17.063272
+  type: 'test'
+  ...
+# Subtest: Phase 22: explicit entity references outrank incidental recent mentions in scene relevance
+ok 194 - Phase 22: explicit entity references outrank incidental recent mentions in scene relevance
+  ---
+  duration_ms: 0.611663
+  type: 'test'
+  ...
+# Subtest: Phase 22: partial prompt situations fail safe instead of throwing on optional arrays
+ok 195 - Phase 22: partial prompt situations fail safe instead of throwing on optional arrays
+  ---
+  duration_ms: 4.583466
+  type: 'test'
+  ...
+# Subtest: Phase 22: media generation remains presentation-only and fails without canonical mutation
+ok 196 - Phase 22: media generation remains presentation-only and fails without canonical mutation
+  ---
+  duration_ms: 0.615885
+  type: 'test'
+  ...
+# Subtest: Phase 3 — canonical command commits once and emits one canonical event
+ok 197 - Phase 3 — canonical command commits once and emits one canonical event
+  ---
+  duration_ms: 147.346737
+  type: 'test'
+  ...
+# Subtest: Phase 3 — rejected command rolls back every mutation made before rejection
+ok 198 - Phase 3 — rejected command rolls back every mutation made before rejection
+  ---
+  duration_ms: 52.938114
+  type: 'test'
+  ...
+# Subtest: Phase 3 — rejected STAGED handlers cannot leak mutations into the live repository
+ok 199 - Phase 3 — rejected STAGED handlers cannot leak mutations into the live repository
+  ---
+  duration_ms: 30.927623
+  type: 'test'
+  ...
+# Subtest: Phase 3 — duplicate commandId cannot execute a second time
+ok 200 - Phase 3 — duplicate commandId cannot execute a second time
+  ---
+  duration_ms: 37.605139
+  type: 'test'
+  ...
+# Subtest: Phase 3 — duplicate commandId with a different payload is rejected
+ok 201 - Phase 3 — duplicate commandId with a different payload is rejected
+  ---
+  duration_ms: 33.821163
+  type: 'test'
+  ...
+# Subtest: Phase 3 — command payload validation rejects malformed MOVE before mutation
+ok 202 - Phase 3 — command payload validation rejects malformed MOVE before mutation
+  ---
+  duration_ms: 7.300249
+  type: 'test'
+  ...
+# Subtest: Phase 3 — rollback restores a real combat mutation after downstream rejection
+ok 203 - Phase 3 — rollback restores a real combat mutation after downstream rejection
+  ---
+  duration_ms: 20.501316
+  type: 'test'
+  ...
+# Subtest: Phase 3 — AI commands use the same payload validation as player commands
+ok 204 - Phase 3 — AI commands use the same payload validation as player commands
+  ---
+  duration_ms: 1.023326
+  type: 'test'
+  ...
+# Subtest: Phase 3 — staged living-world mutations roll back when the command is rejected
+ok 205 - Phase 3 — staged living-world mutations roll back when the command is rejected
+  ---
+  duration_ms: 24.98489
+  type: 'test'
+  ...
+# Subtest: Phase 3 — staged world-time simulation rolls back all canonical mutations on rejection
+ok 206 - Phase 3 — staged world-time simulation rolls back all canonical mutations on rejection
+  ---
+  duration_ms: 48.570491
+  type: 'test'
+  ...
+# Subtest: Phase 3 — commands for the same story serialize to prevent snapshot races
+ok 207 - Phase 3 — commands for the same story serialize to prevent snapshot races
+  ---
+  duration_ms: 148.831384
+  type: 'test'
+  ...
+# Subtest: Phase 3 — STAGED commands keep live canonical state unchanged until commit
+ok 208 - Phase 3 — STAGED commands keep live canonical state unchanged until commit
+  ---
+  duration_ms: 65.901362
+  type: 'test'
+  ...
+# Subtest: Phase 3 — STAGED handlers that leak into the live repository are rejected and rolled back
+ok 209 - Phase 3 — STAGED handlers that leak into the live repository are rejected and rolled back
+  ---
+  duration_ms: 29.19723
+  type: 'test'
+  ...
+# Subtest: Phase 3 — rejected STAGED commands never touch live canonical state
+ok 210 - Phase 3 — rejected STAGED commands never touch live canonical state
+  ---
+  duration_ms: 18.097175
+  type: 'test'
+  ...
+# Subtest: Phase 3 — canonical validator accepts location movement and time advancement payloads
+ok 211 - Phase 3 — canonical validator accepts location movement and time advancement payloads
+  ---
+  duration_ms: 79.39859
+  type: 'test'
+  ...
+# Subtest: Phase 3 — commit failure rolls a STAGED transaction back to the pre-command snapshot
+ok 212 - Phase 3 — commit failure rolls a STAGED transaction back to the pre-command snapshot
+  ---
+  duration_ms: 68.110667
+  type: 'test'
+  ...
+# Subtest: Phase 3 — staged transaction does not persist speculative repository state before commit
+ok 213 - Phase 3 — staged transaction does not persist speculative repository state before commit
+  ---
+  duration_ms: 69.07138
+  type: 'test'
+  ...
+# Subtest: Phase 3 — staged story-director resolution reads and writes the transaction repository
+ok 214 - Phase 3 — staged story-director resolution reads and writes the transaction repository
+  ---
+  duration_ms: 71.13378
+  type: 'test'
+  ...
+# Subtest: Phase 3 — canonical snapshots are deep-isolated from later repository mutations
+ok 215 - Phase 3 — canonical snapshots are deep-isolated from later repository mutations
+  ---
+  duration_ms: 5.060931
+  type: 'test'
+  ...
+# Subtest: Phase 3 — core authoritative action routes all use the canonical command engine
+ok 216 - Phase 3 — core authoritative action routes all use the canonical command engine
+  ---
+  duration_ms: 3.065345
+  type: 'test'
+  ...
+# Subtest: Phase 3 — the AI orchestrator turn route uses the canonical command engine
+ok 217 - Phase 3 — the AI orchestrator turn route uses the canonical command engine
+  ---
+  duration_ms: 0.364789
+  type: 'test'
+  ...
+# Subtest: Phase 3 — migrated core action routes use true staged transactions
+ok 218 - Phase 3 — migrated core action routes use true staged transactions
+  ---
+  duration_ms: 1.27013
+  type: 'test'
+  ...
+# Subtest: Phase 3 — legacy action endpoint maps movement/equipment/time intent to canonical command types
+ok 219 - Phase 3 — legacy action endpoint maps movement/equipment/time intent to canonical command types
+  ---
+  duration_ms: 0.297686
+  type: 'test'
+  ...
+# Subtest: Phase 3 — authoritative living-world time advancement uses a canonical staged command
+ok 220 - Phase 3 — authoritative living-world time advancement uses a canonical staged command
+  ---
+  duration_ms: 0.29895
+  type: 'test'
+  ...
+# Subtest: Phase 3 — authoritative living-world scheduling uses a canonical staged command
+ok 221 - Phase 3 — authoritative living-world scheduling uses a canonical staged command
+  ---
+  duration_ms: 0.284075
+  type: 'test'
+  ...
+# Subtest: Phase 4 — repository Chronicle engines are transactional, with explicit bootstrap-only writes
+ok 222 - Phase 4 — repository Chronicle engines are transactional, with explicit bootstrap-only writes
+  ---
+  duration_ms: 1.389317
+  type: 'test'
+  ...
+# Subtest: Phase 4 — adaptation session identities do not depend on wall-clock entropy
+ok 223 - Phase 4 — adaptation session identities do not depend on wall-clock entropy
+  ---
+  duration_ms: 0.34399
+  type: 'test'
+  ...
+# Subtest: Phase 4 — canonical repository identifiers do not depend on wall-clock or Math.random entropy
+ok 224 - Phase 4 — canonical repository identifiers do not depend on wall-clock or Math.random entropy
+  ---
+  duration_ms: 0.891416
+  type: 'test'
+  ...
+# Subtest: Phase 4 — legacy Story Run creation does not use wall-clock or Math.random entropy
+ok 225 - Phase 4 — legacy Story Run creation does not use wall-clock or Math.random entropy
+  ---
+  duration_ms: 0.420637
+  type: 'test'
+  ...
+# Subtest: Phase 4 — legacy mock action identifiers are deterministic
+ok 226 - Phase 4 — legacy mock action identifiers are deterministic
+  ---
+  duration_ms: 0.315908
+  type: 'test'
+  ...
+# Subtest: Phase 4 — AI turn identity does not depend on process-global turn counters
+ok 227 - Phase 4 — AI turn identity does not depend on process-global turn counters
+  ---
+  duration_ms: 0.84404
+  type: 'test'
+  ...
+# Subtest: Phase 4 — command, turn, and checkpoint identities are not wall-clock generated
+ok 228 - Phase 4 — command, turn, and checkpoint identities are not wall-clock generated
+  ---
+  duration_ms: 1.329813
+  type: 'test'
+  ...
+# Subtest: Phase 4 — canonical action handlers do not derive canonical evidence ids from wall-clock randomness
+ok 229 - Phase 4 — canonical action handlers do not derive canonical evidence ids from wall-clock randomness
+  ---
+  duration_ms: 1.075686
+  type: 'test'
+  ...
+# Subtest: Phase 4 — canonical command events use deterministic identity and canonical time
+ok 230 - Phase 4 — canonical command events use deterministic identity and canonical time
+  ---
+  duration_ms: 0.45774
+  type: 'test'
+  ...
+# Subtest: Phase 4 — Chronicle-producing routes are all behind canonical command resolution
+ok 231 - Phase 4 — Chronicle-producing routes are all behind canonical command resolution
+  ---
+  duration_ms: 1.018488
+  type: 'test'
+  ...
+# Subtest: Phase 4 — every game route that writes Historical Chronicle evidence is canonical-command bound
+ok 232 - Phase 4 — every game route that writes Historical Chronicle evidence is canonical-command bound
+  ---
+  duration_ms: 0.970895
+  type: 'test'
+  ...
+1..232
+# tests 238
+# suites 2
+# pass 238
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 20473.805941

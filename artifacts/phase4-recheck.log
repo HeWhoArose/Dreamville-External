@@ -1,0 +1,76 @@
+TAP version 13
+# Subtest: Phase 4 — repository Chronicle engines are transactional, with explicit bootstrap-only writes
+ok 1 - Phase 4 — repository Chronicle engines are transactional, with explicit bootstrap-only writes
+  ---
+  duration_ms: 1.488948
+  type: 'test'
+  ...
+# Subtest: Phase 4 — adaptation session identities do not depend on wall-clock entropy
+ok 2 - Phase 4 — adaptation session identities do not depend on wall-clock entropy
+  ---
+  duration_ms: 0.298332
+  type: 'test'
+  ...
+# Subtest: Phase 4 — canonical repository identifiers do not depend on wall-clock or Math.random entropy
+ok 3 - Phase 4 — canonical repository identifiers do not depend on wall-clock or Math.random entropy
+  ---
+  duration_ms: 0.924657
+  type: 'test'
+  ...
+# Subtest: Phase 4 — legacy Story Run creation does not use wall-clock or Math.random entropy
+ok 4 - Phase 4 — legacy Story Run creation does not use wall-clock or Math.random entropy
+  ---
+  duration_ms: 0.517592
+  type: 'test'
+  ...
+# Subtest: Phase 4 — legacy mock action identifiers are deterministic
+ok 5 - Phase 4 — legacy mock action identifiers are deterministic
+  ---
+  duration_ms: 0.446523
+  type: 'test'
+  ...
+# Subtest: Phase 4 — AI turn identity does not depend on process-global turn counters
+ok 6 - Phase 4 — AI turn identity does not depend on process-global turn counters
+  ---
+  duration_ms: 0.864356
+  type: 'test'
+  ...
+# Subtest: Phase 4 — command, turn, and checkpoint identities are not wall-clock generated
+ok 7 - Phase 4 — command, turn, and checkpoint identities are not wall-clock generated
+  ---
+  duration_ms: 1.532951
+  type: 'test'
+  ...
+# Subtest: Phase 4 — canonical action handlers do not derive canonical evidence ids from wall-clock randomness
+ok 8 - Phase 4 — canonical action handlers do not derive canonical evidence ids from wall-clock randomness
+  ---
+  duration_ms: 1.389593
+  type: 'test'
+  ...
+# Subtest: Phase 4 — canonical command events use deterministic identity and canonical time
+ok 9 - Phase 4 — canonical command events use deterministic identity and canonical time
+  ---
+  duration_ms: 0.635875
+  type: 'test'
+  ...
+# Subtest: Phase 4 — Chronicle-producing routes are all behind canonical command resolution
+ok 10 - Phase 4 — Chronicle-producing routes are all behind canonical command resolution
+  ---
+  duration_ms: 1.238938
+  type: 'test'
+  ...
+# Subtest: Phase 4 — every game route that writes Historical Chronicle evidence is canonical-command bound
+ok 11 - Phase 4 — every game route that writes Historical Chronicle evidence is canonical-command bound
+  ---
+  duration_ms: 1.333199
+  type: 'test'
+  ...
+1..11
+# tests 11
+# suites 0
+# pass 11
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 434.399029

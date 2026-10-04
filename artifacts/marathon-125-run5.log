@@ -1,0 +1,76 @@
+TAP version 13
+# Subtest: Marathon — 125 turns, one persistent world, real action pipeline
+    # Subtest: SEGMENT 1/6 — turns 1–40: exploration, dialogue, memory-recall, social
+    ok 1 - SEGMENT 1/6 — turns 1–40: exploration, dialogue, memory-recall, social
+      ---
+      duration_ms: 10262.520786
+      type: 'test'
+      ...
+    # Subtest: SEGMENT 2/6 — turns 41–60: combat-approach, secrets/leak-probe
+    ok 2 - SEGMENT 2/6 — turns 41–60: combat-approach, secrets/leak-probe
+      ---
+      duration_ms: 7490.62311
+      type: 'test'
+      ...
+    # Subtest: SEGMENT 3/6 — turns 61–80: relationships, travel/continuity
+    not ok 3 - SEGMENT 3/6 — turns 61–80: relationships, travel/continuity
+      ---
+      duration_ms: 7118.51663
+      type: 'test'
+      location: '/home/daytona/codebase/tests/marathon-125-turn.integration.test.ts:447:3'
+      failureType: 'testCodeFailure'
+      error: |-
+        turn failed (Return to the Orrery workbench where Maren is still cataloguing.): HTTP 400 {"success":false,"commandId":"cmd_route_ef209d48","errorReason":"Cannot read properties of undefined (reading 'at')","rolledBack":true,"mutationPaths":[],"error":"Cannot read properties of undefined (reading 'at')"}
+        
+        400 !== 200
+        
+      code: 'ERR_ASSERTION'
+      name: 'AssertionError'
+      expected: 200
+      actual: 400
+      operator: 'strictEqual'
+      stack: |-
+        narrationTurn (/home/daytona/codebase/tests/marathon-125-turn.integration.test.ts:266:10)
+        process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+        async runTurns (/home/daytona/codebase/tests/marathon-125-turn.integration.test.ts:274:5)
+        async TestContext.<anonymous> (/home/daytona/codebase/tests/marathon-125-turn.integration.test.ts:461:5)
+        async Test.run (node:internal/test_runner/test:1054:7)
+        async Suite.processPendingSubtests (node:internal/test_runner/test:744:7)
+      ...
+    # Subtest: SEGMENT 4/6 — turns 81–100: plot threads, degradation injections, high-density social
+    ok 4 - SEGMENT 4/6 — turns 81–100: plot threads, degradation injections, high-density social
+      ---
+      duration_ms: 10696.826431
+      type: 'test'
+      ...
+    # Subtest: SEGMENT 5/6 — turns 101–112: stress extension + checkpoint 110
+    ok 5 - SEGMENT 5/6 — turns 101–112: stress extension + checkpoint 110
+      ---
+      duration_ms: 8790.361284
+      type: 'test'
+      ...
+    # Subtest: SEGMENT 6/6 — turns 113–125: stress + checkpoint 118/125 + idempotency probe + final bounds
+    ok 6 - SEGMENT 6/6 — turns 113–125: stress + checkpoint 118/125 + idempotency probe + final bounds
+      ---
+      duration_ms: 14251.396881
+      type: 'test'
+      ...
+    1..6
+not ok 1 - Marathon — 125 turns, one persistent world, real action pipeline
+  ---
+  duration_ms: 58625.208213
+  type: 'suite'
+  location: '/home/daytona/codebase/tests/marathon-125-turn.integration.test.ts:343:1'
+  failureType: 'subtestsFailed'
+  error: '1 subtest failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+1..1
+# tests 6
+# suites 1
+# pass 5
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 59796.933373

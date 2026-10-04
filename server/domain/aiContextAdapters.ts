@@ -150,7 +150,7 @@ export class AiContextAdapters {
 			actorId,
 			rulesProfile: repository.getRulesProfile(storyId),
 			playerProjection: playerCapabilityProjection(repository, storyId, actorId) as unknown as Record<string, unknown>,
-			canonicalEvents: repository.getCanonicalCommandEvents(storyId).slice(-12),
+			canonicalEvents: repository.getRecentCanonicalCommandEvents(storyId, 12),
 		};
 	}
 

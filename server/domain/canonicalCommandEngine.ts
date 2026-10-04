@@ -151,11 +151,37 @@ function normalizeForReplay(value: unknown, key?: string): unknown {
 	return normalized;
 }
 
+// Rolling journals re-derivable from preserved canonical events or rebuilt per
+// turn. They are excluded from stored replay checkpoints so each checkpoint does
+// not re-embed a growing history (checkpoint size stays flat across turns).
+const REPLAY_JOURNAL_KEYS = new Set([
+  'narrativeContextHistory',
+  'canonicalNarrativeEvents',
+  'workingContextPins',
+]);
+
+function pruneJournalEntries(value: unknown): Record<string, unknown> {
+  if (value === null || typeof value !== 'object') return {};
+  const pruned: Record<string, unknown> = {};
+  for (const key of Object.keys(value as Record<string, unknown>)) {
+    if (REPLAY_JOURNAL_KEYS.has(key)) continue;
+    pruned[key] = (value as Record<string, unknown>)[key];
+  }
+  return pruned;
+}
+
 function buildReplayCheckpoint(snapshot: CanonicalStateSnapshot): CanonicalStateSnapshot {
 	const checkpoint = clone(snapshot);
 	if (checkpoint?.adaptation?.ch16Run) {
+		const ch16Run = checkpoint.adaptation.ch16Run as Record<string, unknown>;
+		const runtimeState = ch16Run.runtimeState as Record<string, unknown> | undefined;
 		checkpoint.adaptation.ch16Run = {
-			...checkpoint.adaptation.ch16Run,
+			...pruneJournalEntries(ch16Run),
+			// Engine-authoritative state is kept; only rolling journals are pruned so
+			// each retained checkpoint does not re-embed a growing per-turn history.
+			runtimeState: runtimeState && typeof runtimeState === 'object'
+				? pruneJournalEntries(runtimeState)
+				: runtimeState,
 			// Canonical event checkpoints live outside this snapshot. Keeping the event
 			// log out prevents recursive snapshot growth while retaining the world state.
 			canonicalEvents: [],
@@ -359,7 +385,11 @@ export class CanonicalCommandEngine {
 				// let an old operational checkpoint silently rewind a long-lived repository.
 				// Idempotency inspection is serialized with command execution.
 				// Repository-local recovery is explicit and never scans shared persistent StoryRun state.
-				for (const existingEvent of repository.getCanonicalCommandEvents(command.storyId)) {
+				// Long-session performance guard: the stored event log embeds replay
+				// checkpoints, so the cloned accessor is O(total history) per command and
+				// made per-turn cost grow with session length. This scan only reads
+				// commandId/fingerprint fields; use the in-memory event list directly.
+				for (const existingEvent of repository.getStoryRun(command.storyId)?.canonicalEvents || []) {
 					if (existingEvent?.commandId !== command.commandId) continue;
 					if (existingEvent?.fingerprint && existingEvent.fingerprint !== fingerprint) {
 						return {
@@ -481,7 +511,7 @@ export class CanonicalCommandEngine {
 				const liveAfterHandler = captureCanonicalStateSnapshot(command.storyId, repository);
 				const liveComparison = compareCanonicalSnapshots(before, liveAfterHandler, { ignoreNarrativeHistory: true });
 				if (!liveComparison.identical) {
-					repository.restoreCanonicalStateSnapshot(before);
+					repository.restoreCanonicalStateSnapshot(before, { preserveCanonicalEvents: true });
 					canonicalCommitLedger.markPhase(
 						repository,
 						command.storyId,
@@ -503,13 +533,14 @@ export class CanonicalCommandEngine {
 				}
 			}
 
-			if (!resolved.success) {
-				if (command.transactionMode !== 'STAGED') {
-					transactionalRepository.rollbackCanonicalCommandTransaction(command.storyId);
-					repository.restoreCanonicalStateSnapshot(before);
-				} else {
-					transactionalRepository.rollbackCanonicalCommandTransaction(command.storyId);
-				}
+			if (!resolved.success) {					if (command.transactionMode !== 'STAGED') {
+						transactionalRepository.rollbackCanonicalCommandTransaction(command.storyId);
+						// Snapshots exclude the event log by design; keep the live event
+						// history during rollback restores so committed history survives.
+						repository.restoreCanonicalStateSnapshot(before, { preserveCanonicalEvents: true });
+					} else {
+						transactionalRepository.rollbackCanonicalCommandTransaction(command.storyId);
+					}
 				canonicalCommitLedger.markPhase(
 					repository,
 					command.storyId,
@@ -529,9 +560,7 @@ export class CanonicalCommandEngine {
 					rolledBack: true,
 					mutationPaths: [],
 				};
-			}
-
-			const canonicalSequence = repository.getCanonicalCommandEvents(command.storyId).length + 1;
+			}				const canonicalSequence = (repository.getStoryRun(command.storyId)?.canonicalEvents?.length || 0) + 1;
 			const eventId = deterministicId('evt_cmd', command.storyId, canonicalSequence, fingerprint);
 
 			// Custom rules are evaluated inside the same authoritative transaction as the command.
@@ -563,13 +592,14 @@ export class CanonicalCommandEngine {
 					timestampSeconds: transactionalRepository.getWorldClock(command.storyId).getTimestamp().totalElapsedSeconds,
 				},
 			});
-			if (!customRuleResult.success) {
-				if (command.transactionMode !== 'STAGED') {
-					transactionalRepository.rollbackCanonicalCommandTransaction(command.storyId);
-					repository.restoreCanonicalStateSnapshot(before);
-				} else {
-					transactionalRepository.rollbackCanonicalCommandTransaction(command.storyId);
-				}
+			if (!customRuleResult.success) {					if (command.transactionMode !== 'STAGED') {
+						transactionalRepository.rollbackCanonicalCommandTransaction(command.storyId);
+						// Snapshots exclude the event log by design; keep the live event
+						// history during rollback restores so committed history survives.
+						repository.restoreCanonicalStateSnapshot(before, { preserveCanonicalEvents: true });
+					} else {
+						transactionalRepository.rollbackCanonicalCommandTransaction(command.storyId);
+					}
 				canonicalCommitLedger.markPhase(
 					repository,
 					command.storyId,
@@ -684,7 +714,9 @@ export class CanonicalCommandEngine {
 			if (command.transactionMode === 'STAGED') {
 				transactionalRepository.appendCanonicalCommandEvent(command.storyId, event);
 				const committedAfter = captureCanonicalStateSnapshot(command.storyId, transactionalRepository);
-				repository.restoreCanonicalStateSnapshot(committedAfter, { persist: true });
+				// Keep the live event log: the snapshot intentionally excludes canonical
+				// events and the freshly committed event is appended right after restore.
+				repository.restoreCanonicalStateSnapshot(committedAfter, { persist: true, preserveCanonicalEvents: true });
 				
 				// Propagate all newly created checkpoints, stats, and telemetry to the live orchestrator
 				const stagedOrch = transactionalRepository.getAiOrchestrator();
@@ -734,7 +766,7 @@ export class CanonicalCommandEngine {
 			} catch {
 				// Preserve the original resolution error while still attempting to clear transaction state.
 			}
-			repository.restoreCanonicalStateSnapshot(before);
+			repository.restoreCanonicalStateSnapshot(before, { preserveCanonicalEvents: true });
 			return {
 				success: false,
 				commandId: command.commandId,

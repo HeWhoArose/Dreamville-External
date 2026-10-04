@@ -97,6 +97,51 @@ function normalizeMaps(data: any): VersionedPersistenceData {
   };
 }
 
+/**
+ * Structural normalization without per-collection deep clones.
+ *
+ * migratePersistenceData() must stay defensive: it is an import boundary that also
+ * serves arbitrary JSON. The store hot path (load/save on every persistLibrary())
+ * only ever handles repository-produced objects, so it can safely build the
+ * versioned envelope with a shallow spread and reuse the input collections. The
+ * returned object is a new envelope; input collections are never mutated, but they
+ * are referenced. Callers must treat the result as read-only or copy defensively
+ * before mutating (the repository already hands save() a detached payload).
+ */
+export function normalizeMapsInPlace(data: any): VersionedPersistenceData {
+  if (!isRecord(data)) {
+    throw new Error('Cannot migrate persistence data: root is not an object.');
+  }
+  const sourceVersion = Number(data.version ?? 1);
+  if (!Number.isInteger(sourceVersion) || sourceVersion < 1) {
+    throw new Error(`Cannot migrate persistence data: invalid source version '${String(sourceVersion)}'.`);
+  }
+  if (sourceVersion > CURRENT_PERSISTENCE_VERSION) {
+    throw new Error(`Persistence version ${sourceVersion} is newer than supported version ${CURRENT_PERSISTENCE_VERSION}.`);
+  }
+
+  const schemaVersions = {
+    ...CURRENT_SCHEMA_VERSIONS,
+    ...(isRecord(data.schemaVersions) ? data.schemaVersions : {}),
+    character: CURRENT_SCHEMA_VERSIONS.character,
+  } as PersistenceSchemaVersions;
+
+  const normalized: any = { ...data };
+  normalized.version = CURRENT_PERSISTENCE_VERSION;
+  normalized.schemaVersions = schemaVersions;
+  normalized.worldTemplates = isRecord(data.worldTemplates) ? data.worldTemplates : {};
+  normalized.storyRuns = isRecord(data.storyRuns) ? data.storyRuns : {};
+  normalized.confirmedCharacters = isRecord(data.confirmedCharacters) ? data.confirmedCharacters : {};
+  normalized.characterDrafts = isRecord(data.characterDrafts) ? data.characterDrafts : {};
+  normalized.userData = isRecord(data.userData) ? data.userData : {};
+  normalized.deletionTombstones = Array.isArray(data.deletionTombstones) ? data.deletionTombstones : [];
+  const errors = validateShape(normalized);
+  if (errors.length > 0) {
+    throw new Error(`Migrated persistence failed validation: ${errors.join(' | ')}`);
+  }
+  return normalized;
+}
+
 function validateShape(data: unknown): string[] {
   const errors: string[] = [];
   if (!isRecord(data)) return ['Persistence root must be a JSON object.'];

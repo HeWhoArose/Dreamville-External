@@ -1444,16 +1444,28 @@ describe('Broad Implementation Pass — Domain Subsystems', () => {
   });
 
   describe('Challenge 12: Multi-Model AI Orchestrator', () => {
+    // Isolation: these tests need a clean-slate test config. The snapshot in
+    // beforeEach + restore in afterEach preserves that isolation WITHOUT
+    // destroying the tracked orchestrator_config_test.json fixture (a previous
+    // unconditional afterEach unlink left the repo missing the fixture for
+    // every subsequent test run).
+    let savedTestConfigContent: string | null = null;
+    const testConfigPath = path.resolve(process.cwd(), 'server', 'data', 'orchestrator_config_test.json');
+
     beforeEach(() => {
-      const testConfigPath = path.resolve(process.cwd(), 'server', 'data', 'orchestrator_config_test.json');
+      savedTestConfigContent = fs.existsSync(testConfigPath)
+        ? fs.readFileSync(testConfigPath, 'utf8')
+        : null;
       if (fs.existsSync(testConfigPath)) {
         fs.unlinkSync(testConfigPath);
       }
     });
 
     afterEach(() => {
-      const testConfigPath = path.resolve(process.cwd(), 'server', 'data', 'orchestrator_config_test.json');
-      if (fs.existsSync(testConfigPath)) {
+      if (savedTestConfigContent !== null) {
+        fs.writeFileSync(testConfigPath, savedTestConfigContent, 'utf8');
+        savedTestConfigContent = null;
+      } else if (fs.existsSync(testConfigPath)) {
         fs.unlinkSync(testConfigPath);
       }
     });

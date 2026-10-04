@@ -90,7 +90,11 @@ export class UnifiedAiActionOrchestrator {
 			.map((item) => ({ item, score: normalizedAction.includes(String(item.name || '').toLowerCase()) ? String(item.name || '').length : 0 }))
 			.filter((entry) => entry.score > 0)
 			.sort((a, b) => b.score - a.score)[0]?.item;
-		const itemUseRequested = /\b(use|consume|drink|eat|apply|read|activate)\b/i.test(cleanAction);
+		// `read` is an information-seeking action, not an implicit item/capability use request.
+		// Treating bare reads as unknown item use causes benign text such as "re-read the note"
+		// to enter novel-capability synthesis and be rejected as CHARACTER_INCOMPATIBLE.
+		// Explicit item-use verbs remain strict and still require a canonical inventory match.
+		const itemUseRequested = /\b(use|consume|drink|eat|apply|activate)\b/i.test(cleanAction);
 		const checkOrHazardRequested = /\b(hide|sneak|search|inspect|investigate|climb|jump|dodge|evade|resist|persuade|deceive|intimidate|swim|fall|fell|falling|trap|poison|gas|fumes|debris|collapse)\b/i.test(cleanAction);
 		const explicitCapabilitySyntax = /\b(cast|activate|invoke|channel|release)\b/i.test(cleanAction);
 		const preCandidate =

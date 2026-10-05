@@ -41,7 +41,7 @@ test('S4 fresh orchestrator does not inherit persisted test-route mutations', ()
 	const narrativeRoute = orchestrator.getFallbackChain('narrative.generate');
 	const narrativePin = orchestrator.getPinnedModelForTask('narrative.generate');
 	const gameplayOverride = orchestrator.getCategoryModelOverride('gameplay_advice');
-	assert.equal(narrativeRoute[0], 'groq::qwen/qwen3.8-27b');
+	assert.equal(narrativeRoute[0], 'google_gemini::gemini-3.5-flash');
 	assert.equal(narrativePin, undefined);
 	assert.equal(gameplayOverride, undefined);
 });

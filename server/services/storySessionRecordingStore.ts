@@ -1,31 +1,62 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import type { StorySessionRecording } from '../domain/storySessionRecorder';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import type { StorySessionInteraction, StorySessionRecording } from '../domain/storySessionRecorder';
 import { StorySessionRecorder } from '../domain/storySessionRecorder';
 
 export class StorySessionRecordingStore {
-	private readonly directory?: string;
+	private readonly directory: string;
 	private readonly enabled: boolean;
+	private readonly lastPersistedSequence = new Map<string, number>();
 
 	constructor(baseDirectory = process.env.DREAMBOOK_RECORDINGS_PATH) {
 		this.directory = resolve(baseDirectory || resolve(process.cwd(), '.dreambook', 'recordings'));
 		this.enabled = process.env.DREAMBOOK_DISABLE_RECORDING_PERSISTENCE !== '1';
 	}
 
-	private filePath(storyId: string): string {
-		const safe = String(storyId).replace(/[^a-zA-Z0-9._-]/g, '_');
-		return resolve(this.directory!, safe + '.json');
+	private safeStoryId(storyId: string): string {
+		return String(storyId).replace(/[^a-zA-Z0-9._-]/g, '_');
+	}
+
+	private storyDirectory(storyId: string): string {
+		return resolve(this.directory, this.safeStoryId(storyId));
+	}
+
+	private manifestPath(storyId: string): string {
+		return resolve(this.storyDirectory(storyId), 'manifest.json');
+	}
+
+	private interactionsDirectory(storyId: string): string {
+		return resolve(this.storyDirectory(storyId), 'interactions');
+	}
+
+	private interactionPath(storyId: string, sequence: number): string {
+		return resolve(this.interactionsDirectory(storyId), String(sequence).padStart(8, '0') + '.json');
+	}
+
+	private writeAtomic(path: string, value: unknown): void {
+		const temporaryPath = path + '.tmp';
+		writeFileSync(temporaryPath, JSON.stringify(value), 'utf8');
+		renameSync(temporaryPath, path);
 	}
 
 	load(storyId: string): StorySessionRecording | null {
-		if (!this.enabled || !this.directory) return null;
-		const path = this.filePath(storyId);
-		if (!existsSync(path)) return null;
+		if (!this.enabled) return null;
+		const manifestPath = this.manifestPath(storyId);
+		if (!existsSync(manifestPath)) return null;
 		try {
-			const parsed = JSON.parse(readFileSync(path, 'utf8'));
-			const validation = StorySessionRecorder.validate(parsed);
+			const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as StorySessionRecording;
+			const interactionsPath = this.interactionsDirectory(storyId);
+			const interactions: StorySessionInteraction[] = existsSync(interactionsPath)
+				? readdirSync(interactionsPath)
+					.filter((name) => name.endsWith('.json'))
+					.sort()
+					.map((name) => JSON.parse(readFileSync(resolve(interactionsPath, name), 'utf8')) as StorySessionInteraction)
+				: [];
+			const recording: StorySessionRecording = { ...manifest, interactions };
+			const validation = StorySessionRecorder.validate(recording);
 			if (!validation.valid) throw new Error(validation.errorReason || 'Invalid story session recording.');
-			return parsed as StorySessionRecording;
+			this.lastPersistedSequence.set(storyId, interactions.length);
+			return recording;
 		} catch (error) {
 			console.error('[StorySessionRecordingStore] Failed to load recording.', { storyId, error });
 			return null;
@@ -33,23 +64,30 @@ export class StorySessionRecordingStore {
 	}
 
 	save(recording: StorySessionRecording): void {
-		if (!this.enabled || !this.directory) return;
-		mkdirSync(dirname(this.filePath(recording.storyId)), { recursive: true });
-		const path = this.filePath(recording.storyId);
-		const temporaryPath = path + '.tmp';
-		writeFileSync(temporaryPath, JSON.stringify(recording), 'utf8');
-		renameSync(temporaryPath, path);
+		if (!this.enabled) return;
+		const storyDir = this.storyDirectory(recording.storyId);
+		const interactionsDir = this.interactionsDirectory(recording.storyId);
+		mkdirSync(interactionsDir, { recursive: true });
+
+		const persistedSequence = this.lastPersistedSequence.get(recording.storyId) || 0;
+		for (const interaction of recording.interactions.slice(persistedSequence)) {
+			this.writeAtomic(this.interactionPath(recording.storyId, interaction.sequence), interaction);
+		}
+
+		// The manifest is intentionally compact: the growing per-turn evidence lives
+		// in individual interaction records, avoiding O(N^2) rewrites during long stories.
+		const manifest: StorySessionRecording = {
+			...recording,
+			interactions: [],
+			finalState: undefined,
+		};
+		this.writeAtomic(this.manifestPath(recording.storyId), manifest);
+		this.lastPersistedSequence.set(recording.storyId, recording.interactions.length);
 	}
 
 	delete(storyId: string): void {
-		if (!this.enabled || !this.directory) return;
-		const path = this.filePath(storyId);
-		try {
-			if (existsSync(path)) {
-				// Keep deletion explicit and conservative; the runtime never calls this implicitly.
-				writeFileSync(path, JSON.stringify({ deleted: true, storyId, deletedAt: new Date().toISOString() }), 'utf8');
-			}
-		} catch {}
+		// Recordings are forensic evidence and are never deleted implicitly.
+		void storyId;
 	}
 }
 

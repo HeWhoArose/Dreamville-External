@@ -35,3 +35,4 @@
 [2026-10-05T09:57:55.803Z] SEGMENT 5 complete
 [2026-10-05T09:57:57.014Z] turn 113/125 done (stress)
 [2026-10-05T09:58:00.781Z] checkpoint turn_118 ok (events 117 → 117)
+[2026-10-05T21:33:37.380Z] marathon boot complete (http://127.0.0.1:34363)

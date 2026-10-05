@@ -1,0 +1,6 @@
+[2026-10-05T21:33:50.666Z] chaos boot complete (http://127.0.0.1:32879)
+[2026-10-05T21:36:20.029Z] chaos boot complete (http://127.0.0.1:47577)
+[2026-10-05T21:36:20.803Z] baseline ok (primary 1, fallback 1, 722ms)
+[2026-10-05T21:36:31.215Z] 429 burst ok (primary 1, fallback 1, 297ms)
+[2026-10-05T21:37:11.663Z] 500 errors ok (primary 1, fallback 1, 419ms)
+[2026-10-05T21:37:12.207Z] malformed_json ok (primary 1, fallback 1, 244ms)

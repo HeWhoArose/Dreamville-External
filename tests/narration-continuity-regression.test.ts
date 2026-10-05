@@ -108,6 +108,18 @@ test('narration continuity rejects information-seeking turns that stop at atmosp
 		action,
 	);
 	assert.equal(groundedNonAnswer.valid, true);
+
+	const quotedAnswer = (orchestrator as any).validateNarrativeInformationContinuity(
+		'Aelion asks about the rumors. A veteran root-trapper turns with a grim nod. "The starlight fissures opened three leagues north of the spindle."',
+		action,
+	);
+	assert.equal(quotedAnswer.valid, true);
+
+	const readReport = (orchestrator as any).validateNarrativeInformationContinuity(
+		'Aelion reads the guild report. The document notes that hydraulic pressure remains steady across all secondary lines.',
+		'I read the report on the hydraulic bearing pressure submitted by the guild mechanics.',
+	);
+	assert.equal(readReport.valid, true);
 });
 
 test('deterministic narration fallback preserves substance for movement-plus-inquiry actions', async () => {

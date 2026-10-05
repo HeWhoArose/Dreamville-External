@@ -49,10 +49,10 @@ const NARRATIVE_DIRECT_SPEECH_PATTERN =
 	/\b(ask|asks|asked|say|says|said|speak|speaks|spoke|tell|tells|told|reply|replies|replied|answer|answers|answered|inquire|inquires|inquired|question|questions|questioned|consult|consults|consulted|shout|shouts|shouted|call out|calls out|called out)\b/i;
 
 const NARRATIVE_INFORMATION_RESPONSE_PATTERN =
-	/\b(answer|answered|answers|reply|replied|replies|respond|responded|responds|explain|explained|explains|mention|mentioned|mentions|report|reported|reports|reveal|revealed|reveals|confirm|confirmed|confirms|warn|warned|warns|tell|told|tells|said|says|whispered|whispers|admitted|admits|learned|learns|heard|hears)\b/i;
+	/\b(answer|answered|answers|reply|replied|replies|respond|responded|responds|explain|explained|explains|mention|mentioned|mentions|report|reported|reports|reveal|revealed|reveals|confirm|confirmed|confirms|warn|warned|warns|tell|told|tells|said|says|whispered|whispers|admitted|admits|learned|learns|heard|hears|stated|states|state|described|describes|describe|noted|notes|note|indicated|indicates|indicate|detailed|details|detail|showed|shows|show|read|reads|recorded|records|record|documented|documents|document|outlined|outlines|outline|conveyed|conveys|convey|recounted|recounts|recount|remarked|remarks|remark|spoke|speaks|speak|confessed|confesses|confess|informed|informs|inform|clarified|clarifies|clarify|testified|testifies|testify|observed|observes|observe|found|finds|find|discovered|discovers|discover)\b/i;
 
 const NARRATIVE_INFORMATION_NONANSWER_PATTERN =
-	/\b(no one|nobody|no reliable answer|nothing definite|nothing certain|could not say|couldn't say|did not know|didn't know|refused to answer|kept silent|offered only|conflicting accounts|uncertain|unknown|unclear|unverified|hearsay)\b/i;
+	/\b(no one|nobody|no reliable answer|nothing definite|nothing certain|could not say|couldn't say|did not know|didn't know|refused to answer|kept silent|offered only|conflicting accounts|uncertain|unknown|unclear|unverified|hearsay|no information|no answer|gives no answer|gave no answer|reveals nothing|revealed nothing|finds nothing|found nothing|shows nothing|showed nothing|no sign|no signs|without answer|without explanation|cannot determine|could not determine|unable to determine|none claims|none could say|none can say|limited to what can be directly observed)\b/i;
 
 const NARRATIVE_INTERNAL_META_LEAK_PATTERNS: RegExp[] = [
 	/\b(?:the )?125[- ]turn (?:integration stress test|stress test|integration test)(?: cycle| run| session)?\b/i,
@@ -7007,13 +7007,15 @@ export class MultiModelOrchestrator {
     const hasInformationResponse = NARRATIVE_INFORMATION_RESPONSE_PATTERN.test(output);
     const hasGroundedNonAnswer = NARRATIVE_INFORMATION_NONANSWER_PATTERN.test(output);
     const hasQuotedResponse = /[“"][^”"]{12,}[”"]/i.test(output);
-    const hasDirectReport = /\b(?:mention|mentions|mentioned|report|reports|reported|whisper|whispers|whispered|say|says|said|tell|tells|told|hear|hears|heard)\b/i.test(output);
+    const hasDirectReport = /\b(?:mention|mentions|mentioned|report|reports|reported|whisper|whispers|whispered|say|says|said|tell|tells|told|hear|hears|heard|state|states|stated|describe|describes|described|note|notes|noted|indicate|indicates|indicated|recount|recounts|recounted|remark|remarks|remarked|speak|speaks|spoke|reply|replies|replied|answer|answers|answered|explain|explains|explained|confess|confesses|confessed|inform|informs|informed|assure|assures|assured|warn|warns|warned|admit|admits|admitted|read|reads|record|records|recorded)\b/i.test(output);
+    const hasGroundingPreposition = /\b(?:that|because|about|from|near|inside|within|after|before|according to|according|concerning|regarding|as to|on|upon|into)\b/i.test(output);
 
-    if (!hasGroundedNonAnswer && !(hasInformationResponse && (
+    const isGrounded =
+      hasGroundedNonAnswer ||
       hasQuotedResponse ||
-      hasDirectReport ||
-      /\b(?:that|because|about|from|near|inside|within|after|before|according to|according)\b/i.test(output)
-    ))) {
+      ((hasInformationResponse || hasDirectReport) && (hasDirectReport || hasGroundingPreposition));
+
+    if (!isGrounded) {
       return {
         valid: false,
         errorReason: 'Narration information-continuity guard rejected output: the current action seeks information, but the response does not contain a grounded answer, quoted response, or explicit limitation on what can be learned.',
@@ -7666,7 +7668,7 @@ export class MultiModelOrchestrator {
         error: finalActionContinuity.errorReason || 'Narration action continuity validation failed.',
       };
     }
-    const finalInformationContinuity = this.validateNarrativeInformationContinuity(finalNarrationText, playerAction);
+    const finalInformationContinuity = this.validateNarrativeInformationContinuity(finalNarrationText, playerAction, playerIntent);
     if (!finalInformationContinuity.valid) {
       return {
         success: false,

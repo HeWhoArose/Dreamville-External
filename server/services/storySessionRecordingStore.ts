@@ -10,7 +10,11 @@ export class StorySessionRecordingStore {
 
 	constructor(baseDirectory = process.env.DREAMBOOK_RECORDINGS_PATH) {
 		this.directory = resolve(baseDirectory || resolve(process.cwd(), '.dreambook', 'recordings'));
-		this.enabled = process.env.NODE_ENV !== 'test' && process.env.DREAMBOOK_DISABLE_RECORDING_PERSISTENCE !== '1';
+		const isTestRun =
+			process.env.NODE_ENV === 'test' ||
+			process.env.npm_lifecycle_event === 'test' ||
+			process.argv.some((arg) => arg.includes('test'));
+		this.enabled = !isTestRun && process.env.DREAMBOOK_DISABLE_RECORDING_PERSISTENCE !== '1';
 	}
 
 	private safeStoryId(storyId: string): string {

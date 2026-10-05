@@ -425,7 +425,6 @@ export class CanonicalCommandEngine {
 				}
 
 				const recordingStartedAt = new Date().toISOString();
-				const recordingStartMs = Date.now();
 				const recordingBefore = captureCanonicalStateSnapshot(command.storyId, repository);
 				try {
 					const freshResult = await this.executeFresh(repository, command, handler, fingerprint);
@@ -450,7 +449,6 @@ export class CanonicalCommandEngine {
 						stateAfter: recordingAfter,
 						mutationPaths: freshResult.mutationPaths,
 					});
-					void recordingStartMs;
 					return freshResult;
 				} catch (error: any) {
 					const recordingAfter = captureCanonicalStateSnapshot(command.storyId, repository);
@@ -468,7 +466,6 @@ export class CanonicalCommandEngine {
 						stateBefore: recordingBefore,
 						stateAfter: recordingAfter,
 					});
-					void recordingStartMs;
 					throw error;
 				}
 			}

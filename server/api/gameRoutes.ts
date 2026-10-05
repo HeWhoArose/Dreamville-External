@@ -42,6 +42,7 @@ import { assertVisualSceneFreshness, buildVisualSceneContext, selectLatestVisual
 import { projectPlayerCapabilities } from './playerCapabilityProjection';
 import { oocToolRegistry, type OocToolCall } from '../domain/oocToolRegistry';
 import { UniverseRuntimeService } from '../domain/universeRuntimeService';
+import { StorySessionRecorder } from '../domain/storySessionRecorder';
 
 export const gameRouter = Router();
 import { sensoryRouter } from './sensoryRoutes';

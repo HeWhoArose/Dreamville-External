@@ -7124,6 +7124,7 @@ export class MultiModelOrchestrator {
       situation: params.situation,
       repository: params.repository,
       storyId: params.storyId,
+      plan: params.plan,
       pacingContract: params.narrativePacingContract,
     });
     if (!presentation.valid) {
@@ -8196,6 +8197,7 @@ export class MultiModelOrchestrator {
                 situation: currentSituation,
                 repository: repo,
                 storyId,
+                plan: narrativePlan,
                 pacingContract: narrativePacingContract,
               });
               if (!presentation.valid) {
@@ -8296,6 +8298,7 @@ export class MultiModelOrchestrator {
                   situation: currentSituation,
                   repository: repo,
                   storyId,
+                  plan: narrativePlan,
                   pacingContract: narrativePacingContract,
                 });
                 if (!literaryPresentation.valid) throw new Error(literaryPresentation.errorReason || 'Literary rewrite failed final presentation validation.');

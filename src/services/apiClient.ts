@@ -1449,6 +1449,61 @@ class ApiClient {
   }
 
   /**
+   * Forensic story-session recording.
+   * Captures canonical interactions, complete AI turn evidence, provider provenance,
+   * and lossless state patches for long-session analysis.
+   */
+  public async exportStorySession(storyId: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/story-session/export?storyId=${encodeURIComponent(storyId)}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.errorReason || `Export story session failed: HTTP ${res.status}`);
+    return data;
+  }
+
+  public async startStorySessionRecording(storyId: string, title?: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/story-session/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ storyId, title }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.errorReason || `Start story session recording failed: HTTP ${res.status}`);
+    return data;
+  }
+
+  public async stopStorySessionRecording(storyId: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/story-session/stop`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ storyId }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.errorReason || `Stop story session recording failed: HTTP ${res.status}`);
+    return data;
+  }
+
+  public async validateStorySessionRecording(storyId: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/story-session/validate?storyId=${encodeURIComponent(storyId)}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    return await res.json();
+  }
+
+  public async getStorySessionSummary(storyId: string): Promise<any> {
+    const res = await fetch(`${this.baseUrl}/story-session/summary?storyId=${encodeURIComponent(storyId)}`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.errorReason || `Get story session summary failed: HTTP ${res.status}`);
+    return data;
+  }
+
+  /**
    * Challenge 13: Validate archive integrity and schema without mutating state.
    * POST /api/game/archive/validate
    */

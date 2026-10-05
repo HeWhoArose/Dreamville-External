@@ -61,9 +61,11 @@ export interface StorySessionInteraction {
 
 export interface StorySessionRecording {
 	format: 'DREAMVILLE_STORY_SESSION_RECORDING';
-	schemaVersion: '1.0.0';
-	recorderVersion: '1.0.0';
+	schemaVersion: '1.1.0';
+	recorderVersion: '1.1.0';
 	recordingId: string;
+	/** Identifies the concrete StoryRun incarnation. A reused storyId may have many sessions. */
+	runSessionId: string;
 	storyId: string;
 	title: string;
 	startedAt: string;
@@ -198,8 +200,10 @@ function applyPatch(root: any, operations: StorySessionJsonPatchOperation[]): an
 	return result;
 }
 
+
 export interface StartStorySessionRecordingParams {
 	storyId: string;
+	runSessionId?: string;
 	title?: string;
 	initialState: unknown;
 	engineVersion?: string;
@@ -236,6 +240,7 @@ export class StorySessionRecorder {
 			schemaVersion: this.SCHEMA_VERSION,
 			recorderVersion: this.RECORDER_VERSION,
 			recordingId: crypto.randomUUID(),
+			runSessionId: params.runSessionId || `legacy:${params.storyId}`,
 			storyId: params.storyId,
 			title: params.title?.trim() || 'Dreamville Story Session',
 			startedAt: now,
@@ -312,7 +317,8 @@ export class StorySessionRecorder {
 		if (!recording || typeof recording !== 'object') return { valid: false, errorReason: 'Recording root must be an object.' };
 		const value = recording as Partial<StorySessionRecording>;
 		if (value.format !== this.FORMAT) return { valid: false, errorReason: 'Unsupported story session recording format.' };
-		if (value.schemaVersion !== this.SCHEMA_VERSION) return { valid: false, errorReason: 'Unsupported story session recording schema version.' };
+		if (value.schemaVersion !== this.SCHEMA_VERSION && value.schemaVersion !== '1.0.0') return { valid: false, errorReason: 'Unsupported story session recording schema version.' };
+		if (value.schemaVersion === this.SCHEMA_VERSION && !value.runSessionId) return { valid: false, errorReason: 'Recording is missing runSessionId.' };
 		if (!value.storyId || !value.recordingId) return { valid: false, errorReason: 'Recording metadata is incomplete.' };
 		if (!value.initialState) return { valid: false, errorReason: 'Recording is missing initialState.' };
 		if (!Array.isArray(value.interactions)) return { valid: false, errorReason: 'Recording interactions must be an array.' };

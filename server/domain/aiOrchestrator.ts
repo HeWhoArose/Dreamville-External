@@ -8687,6 +8687,13 @@ export class MultiModelOrchestrator {
               narrativePlanObjective: narrativePlan?.objective,
               narrativeReview: emergencyNarrativeReview,
               narrativeProviderHandoff: narrativeProviderHandoff ? NarrativeProviderHandoffEngine.snapshot(narrativeProviderHandoff) : undefined,
+              attemptsTrail: [...turnAttemptsTrail, {
+                providerId: emergencyModel.providerId,
+                modelId: emergencyModel.modelId,
+                displayName: emergencyModel.displayName || emergencyModel.modelId,
+                status: 'SUCCESS',
+                latencyMs: Math.max(1, Date.now() - emergencyStartedAt),
+              }],
             };
             this.lastTurnTelemetry = telemetry;
 

@@ -424,6 +424,9 @@ export class CanonicalCommandEngine {
 					};
 				}
 
+				// Bootstrap forensic recording before any canonical mutation so the
+				// first interaction always hashes the true state-before snapshot.
+				repository.ensureStorySessionRecording(command.storyId, repository.getStoryRun(command.storyId)?.title);
 				const recordingStartedAt = new Date().toISOString();
 				const recordingBefore = captureCanonicalStateSnapshot(command.storyId, repository);
 				try {

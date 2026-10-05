@@ -59,7 +59,8 @@ const NARRATIVE_INTERNAL_META_LEAK_PATTERNS: RegExp[] = [
 	/\b(?:integration|stress) test(?:ing)? (?:cycle|run|session)\b/i,
 	/\b(?:the )?(?:canonical|authoritative) (?:world )?state (?:report|evaluation|check|verification|assertion|checkpoint)\b/i,
 	/\b(?:active|selected|primary|fallback) provider (?:is|was|remains) (?:Gemini|Groq|OpenRouter|[A-Za-z0-9._:-]+)\b/i,
-	/\b(?:AI|Gemini|LLM|model provider|provider fallback|fallback chain|telemetry|idempotency|checkpoint|adjudication|orchestrator) (?:pipeline|runtime|system|configuration|selection|state|output|response|chain)\b/i,
+	/\b(?:AI|Gemini|LLM|model provider|provider fallback|fallback chain|telemetry|idempotency|checkpoint|adjudication|orchestrator) (?:pipeline|runtime|system|configuration|selection|state|output|response|chain|checkpoint) (?:was|is|remains|has|have|committed|selected|configured|recorded|enabled|disabled|ready|active)\b/i,
+	/\btelemetry checkpoint (?:was|is|has been|remains)\b/i,
 	/\b(?:stateChanges|currentSituation|worldFacts|playerKnowledge|MultiModelOrchestrator|EpistemicBoundaryEnforcer)\b/i,
 	/\b(?:debug|debugging|runtime assertion|test harness|CI\/CD|release gate|regression test)\b/i,
 ];

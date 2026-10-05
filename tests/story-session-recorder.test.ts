@@ -43,10 +43,11 @@ test('story session recorder reconstructs lossless state through JSON patches', 
 	const validation = StorySessionRecorder.validate(recording);
 	assert.equal(validation.valid, true);
 	assert.equal(validation.interactionCount, 1);
-	assert.equal(
-		JSON.stringify(StorySessionRecorder.applyPatches(recording)),
-		JSON.stringify(recording.finalState),
-	);
+	assert.deepEqual(StorySessionRecorder.applyPatches(recording), {
+		worldClock: { seconds: 10 },
+		player: { locationId: 'loc_gate', hp: 10 },
+		npcs: [{ id: 'maren', mood: 'watchful' }],
+	});
 	assert.equal(recording.interactions[0].stateBeforeHash.length, 64);
 	assert.equal(recording.interactions[0].stateAfterHash.length, 64);
 });

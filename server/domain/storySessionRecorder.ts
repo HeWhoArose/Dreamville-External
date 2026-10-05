@@ -61,9 +61,11 @@ export interface StorySessionInteraction {
 
 export interface StorySessionRecording {
 	format: 'DREAMVILLE_STORY_SESSION_RECORDING';
-	schemaVersion: '1.0.0';
-	recorderVersion: '1.0.0';
+	schemaVersion: '1.1.0';
+	recorderVersion: '1.1.0';
 	recordingId: string;
+	runIdentity: string;
+	initialStateHash: string;
 	storyId: string;
 	title: string;
 	startedAt: string;
@@ -203,6 +205,7 @@ export interface StartStorySessionRecordingParams {
 	title?: string;
 	initialState: unknown;
 	engineVersion?: string;
+	runIdentity?: string;
 }
 
 export interface RecordStorySessionInteractionParams {
@@ -226,8 +229,8 @@ export interface RecordStorySessionInteractionParams {
 
 export class StorySessionRecorder {
 	public static readonly FORMAT = 'DREAMVILLE_STORY_SESSION_RECORDING' as const;
-	public static readonly SCHEMA_VERSION = '1.0.0';
-	public static readonly RECORDER_VERSION = '1.0.0';
+	public static readonly SCHEMA_VERSION = '1.1.0';
+	public static readonly RECORDER_VERSION = '1.1.0';
 
 	public static start(params: StartStorySessionRecordingParams): StorySessionRecording {
 		const now = new Date().toISOString();
@@ -236,6 +239,8 @@ export class StorySessionRecorder {
 			schemaVersion: this.SCHEMA_VERSION,
 			recorderVersion: this.RECORDER_VERSION,
 			recordingId: crypto.randomUUID(),
+			runIdentity: params.runIdentity?.trim() || params.storyId,
+			initialStateHash: hash(params.initialState),
 			storyId: params.storyId,
 			title: params.title?.trim() || 'Dreamville Story Session',
 			startedAt: now,
@@ -274,6 +279,15 @@ export class StorySessionRecorder {
 		}
 		const sequence = recording.interactions.length + 1;
 		const before = clone(params.stateBefore);
+		const actualBeforeHash = hash(before);
+		const expectedBeforeHash = recording.interactions.length > 0
+			? recording.interactions[recording.interactions.length - 1].stateAfterHash
+			: recording.initialStateHash;
+		if (actualBeforeHash !== expectedBeforeHash) {
+			throw new Error(
+				`Story session state-before mismatch at interaction ${sequence}: expected ${expectedBeforeHash}, got ${actualBeforeHash}.`,
+			);
+		}
 		const after = clone(params.stateAfter);
 		const statePatch = diff(before, after);
 		const interaction: StorySessionInteraction = {
@@ -292,7 +306,7 @@ export class StorySessionRecorder {
 			...(params.error ? { error: params.error } : {}),
 			...(params.turn ? { turn: clone(params.turn) } : {}),
 			...(params.canonicalEvent !== undefined ? { canonicalEvent: clone(params.canonicalEvent) } : {}),
-			stateBeforeHash: hash(before),
+			stateBeforeHash: actualBeforeHash,
 			stateAfterHash: hash(after),
 			statePatch,
 			...(params.mutationPaths ? { mutationPaths: [...params.mutationPaths] } : {}),
@@ -313,13 +327,18 @@ export class StorySessionRecorder {
 		const value = recording as Partial<StorySessionRecording>;
 		if (value.format !== this.FORMAT) return { valid: false, errorReason: 'Unsupported story session recording format.' };
 		if (value.schemaVersion !== this.SCHEMA_VERSION) return { valid: false, errorReason: 'Unsupported story session recording schema version.' };
-		if (!value.storyId || !value.recordingId) return { valid: false, errorReason: 'Recording metadata is incomplete.' };
+		if (!value.storyId || !value.recordingId || !value.runIdentity) return { valid: false, errorReason: 'Recording metadata is incomplete.' };
 		if (!value.initialState) return { valid: false, errorReason: 'Recording is missing initialState.' };
+		if (!value.initialStateHash) return { valid: false, errorReason: 'Recording is missing initialStateHash.' };
+		const initialHash = hash(value.initialState);
+		if (value.initialStateHash !== initialHash) return { valid: false, errorReason: `Initial state integrity failure: expected ${value.initialStateHash}, got ${initialHash}.` };
 		if (!Array.isArray(value.interactions)) return { valid: false, errorReason: 'Recording interactions must be an array.' };
 
 		let reconstructed = clone(value.initialState);
+		let expectedSequence = 1;
 		for (const interaction of value.interactions) {
 			if (!interaction || typeof interaction !== 'object') return { valid: false, errorReason: 'Recording contains an invalid interaction.' };
+			if (interaction.sequence !== expectedSequence) return { valid: false, errorReason: `Interaction sequence integrity failure: expected ${expectedSequence}, got ${interaction.sequence}.` };
 			const beforeHash = hash(reconstructed);
 			if (interaction.stateBeforeHash !== beforeHash) {
 				return {
@@ -328,6 +347,7 @@ export class StorySessionRecorder {
 				};
 			}
 			reconstructed = applyPatch(reconstructed, interaction.statePatch || []);
+			expectedSequence += 1;
 			const reconstructedHash = hash(reconstructed);
 			if (reconstructedHash !== interaction.stateAfterHash) {
 				return {

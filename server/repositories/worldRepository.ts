@@ -3197,12 +3197,14 @@ export class InMemoryWorldRepository implements WorldRepository {
   }
 
   public exportStorySessionRecording(storyId: string): StorySessionRecording {
-    const recording = this.getStorySessionRecording(storyId);
-    if (!recording) {
-      this.ensureStorySessionRecording(storyId, this.getStoryRun(storyId)?.title);
-    }
     const current = this.getStorySessionRecording(storyId);
-    if (!current) throw new Error('Failed to initialize story session recording.');
+    if (!current) {
+      throw new Error('No forensic story session recording exists for this Story Run. Start or play the Story Run first.');
+    }
+    const validation = StorySessionRecorder.validate(current);
+    if (!validation.valid) {
+      throw new Error(validation.errorReason || 'Forensic story session recording failed integrity validation.');
+    }
     return StorySessionRecorder.export(current);
   }
 

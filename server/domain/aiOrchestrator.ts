@@ -54,6 +54,17 @@ const NARRATIVE_INFORMATION_RESPONSE_PATTERN =
 const NARRATIVE_INFORMATION_NONANSWER_PATTERN =
 	/\b(no one|nobody|no reliable answer|nothing definite|nothing certain|could not say|couldn't say|did not know|didn't know|refused to answer|kept silent|offered only|conflicting accounts|uncertain|unknown|unclear|unverified|hearsay)\b/i;
 
+const NARRATIVE_INTERNAL_META_LEAK_PATTERNS: RegExp[] = [
+	/\b(?:the )?125[- ]turn (?:integration stress test|stress test|integration test)(?: cycle| run| session)?\b/i,
+	/\b(?:integration|stress) test(?:ing)? (?:cycle|run|session)\b/i,
+	/\b(?:the )?(?:canonical|authoritative) (?:world )?state (?:report|evaluation|check|verification|assertion|checkpoint)\b/i,
+	/\b(?:active|selected|primary|fallback) provider (?:is|was|remains) (?:Gemini|Groq|OpenRouter|[A-Za-z0-9._:-]+)\b/i,
+	/\b(?:AI|Gemini|LLM|model provider|provider fallback|fallback chain|telemetry|idempotency|checkpoint|adjudication|orchestrator) (?:pipeline|runtime|system|configuration|selection|state|output|response|chain|checkpoint) (?:was|is|remains|has|have|committed|selected|configured|recorded|enabled|disabled|ready|active)\b/i,
+	/\btelemetry checkpoint (?:was|is|has been|remains)\b/i,
+	/\b(?:stateChanges|currentSituation|worldFacts|playerKnowledge|MultiModelOrchestrator|EpistemicBoundaryEnforcer)\b/i,
+	/\b(?:debug|debugging|runtime assertion|test harness|CI\/CD|release gate|regression test)\b/i,
+];
+
 export type TaskId =
   | 'narrative.generate'
   | 'character.dialogue'
@@ -7099,6 +7110,17 @@ export class MultiModelOrchestrator {
     return { turnPackage: validation.turnPackage, review };
   }
 
+  private validateNarrativeMetaLeakage(narration: string): { valid: boolean; errorReason?: string } {
+    const output = String(narration || '').trim();
+    if (!output) return { valid: true };
+    const leaked = NARRATIVE_INTERNAL_META_LEAK_PATTERNS.find((pattern) => pattern.test(output));
+    if (!leaked) return { valid: true };
+    return {
+      valid: false,
+      errorReason: 'Narration presentation guard rejected output containing internal test, provider, orchestration, or canonical-state terminology that is not player-facing fiction.',
+    };
+  }
+
   private validateNarrativePresentation(params: {
     narration: string;
     playerAction: string;
@@ -7110,6 +7132,9 @@ export class MultiModelOrchestrator {
   }): { valid: boolean; errorReason?: string } {
     const narration = String(params.narration || '').trim();
     if (!narration) return { valid: false, errorReason: 'Narration presentation validation received empty output.' };
+
+    const metaLeakage = this.validateNarrativeMetaLeakage(narration);
+    if (!metaLeakage.valid) return { valid: false, errorReason: metaLeakage.errorReason };
 
     const pacing = NarrativePacingEngine.validateNarration(narration, params.pacingContract);
     if (!pacing.valid) return { valid: false, errorReason: pacing.reason || 'Narration failed N8 adaptive pacing validation.' };

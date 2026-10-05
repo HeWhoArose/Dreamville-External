@@ -24,6 +24,7 @@ import { RestRecoveryEngine } from '../domain/restRecoveryEngine';
 import { Phase8SimulationEngine } from '../domain/phase8SimulationEngine';
 import { StoryCheckEngine } from '../domain/storyCheckEngine';
 import { CampaignArchiveService, PartitionedArchive } from '../domain/campaignArchive';
+import { captureCanonicalStateSnapshot } from '../domain/canonicalSnapshot';
 import { dndSpellRulesEvaluator } from '../domain/dndSpellRulesModel';
 import { bossPhaseEngine } from '../domain/bossPhaseEngine';
 import { EntityRegistry, EntityCard } from '../domain/entityCard';

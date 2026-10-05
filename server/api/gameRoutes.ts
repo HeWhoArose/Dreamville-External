@@ -8151,6 +8151,83 @@ gameRouter.get('/archive/export', async (req: Request, res: Response) => {
   }
 });
 /**
+ * GET /api/game/story-session/export
+ * Exports a forensic recording of the story's complete authoritative interaction history.
+ */
+gameRouter.get('/story-session/export', async (req: Request, res: Response) => {
+  try {
+    const storyId = String(req.query.storyId || 'default_story');
+    const recording = worldRepository.exportStorySessionRecording(storyId);
+    const validation = worldRepository.validateStorySessionRecording(storyId);
+    if (!validation.valid) {
+      return res.status(500).json({ success: false, errorReason: validation.errorReason });
+    }
+    res.json({ success: true, recording, validation });
+  } catch (error: any) {
+    console.error('Failed to export story session recording:', error);
+    res.status(500).json({ success: false, errorReason: error?.message || 'Failed to export story session recording.' });
+  }
+});
+
+/**
+ * POST /api/game/story-session/start
+ * Explicitly starts/restarts the forensic recorder for a story only when no recording exists.
+ */
+gameRouter.post('/story-session/start', async (req: Request, res: Response) => {
+  try {
+    const storyId = String(req.body?.storyId || 'default_story');
+    const title = typeof req.body?.title === 'string' ? req.body.title : undefined;
+    const recording = worldRepository.ensureStorySessionRecording(storyId, title);
+    res.json({ success: true, recordingId: recording.recordingId, storyId, summary: StorySessionRecorder.summarize(recording) });
+  } catch (error: any) {
+    res.status(500).json({ success: false, errorReason: error?.message || 'Failed to start story session recording.' });
+  }
+});
+
+/**
+ * POST /api/game/story-session/stop
+ * Marks a recording complete while retaining all captured evidence.
+ */
+gameRouter.post('/story-session/stop', async (req: Request, res: Response) => {
+  try {
+    const storyId = String(req.body?.storyId || 'default_story');
+    const recording = worldRepository.stopStorySessionRecording(storyId);
+    if (!recording) return res.status(404).json({ success: false, errorReason: 'No story session recording exists for this story.' });
+    res.json({ success: true, recordingId: recording.recordingId, summary: StorySessionRecorder.summarize(recording) });
+  } catch (error: any) {
+    res.status(500).json({ success: false, errorReason: error?.message || 'Failed to stop story session recording.' });
+  }
+});
+
+/**
+ * GET /api/game/story-session/validate
+ * Verifies the lossless state-patch chain and final state hash.
+ */
+gameRouter.get('/story-session/validate', async (req: Request, res: Response) => {
+  try {
+    const storyId = String(req.query.storyId || 'default_story');
+    res.json(worldRepository.validateStorySessionRecording(storyId));
+  } catch (error: any) {
+    res.status(500).json({ valid: false, errorReason: error?.message || 'Failed to validate story session recording.' });
+  }
+});
+
+/**
+ * GET /api/game/story-session/summary
+ * Returns compact recorder statistics without returning the potentially large recording.
+ */
+gameRouter.get('/story-session/summary', async (req: Request, res: Response) => {
+  try {
+    const storyId = String(req.query.storyId || 'default_story');
+    const recording = worldRepository.getStorySessionRecording(storyId);
+    if (!recording) return res.status(404).json({ success: false, errorReason: 'No story session recording exists for this story.' });
+    res.json({ success: true, summary: StorySessionRecorder.summarize(recording) });
+  } catch (error: any) {
+    res.status(500).json({ success: false, errorReason: error?.message || 'Failed to retrieve story session summary.' });
+  }
+});
+
+/**
  * GET /api/game/archive/user-data/export
  * Exports the complete user-owned data boundary: worlds, runs, characters,
  * drafts, generic saved user data, and deletion tombstones.

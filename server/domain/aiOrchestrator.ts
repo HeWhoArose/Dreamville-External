@@ -7160,6 +7160,7 @@ export class MultiModelOrchestrator {
     situation: CurrentSituation;
     repository: WorldRepository;
     storyId: string;
+    plan: EphemeralNarrativePlan;
     pacingContract: NarrativePacingContract;
   }): { valid: boolean; errorReason?: string } {
     const narration = String(params.narration || '').trim();

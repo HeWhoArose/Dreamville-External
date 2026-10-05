@@ -549,6 +549,14 @@ export interface OrchestratedTurnTelemetry {
   narrativeRichnessEvaluation?: NarrativeRichnessEvaluation;
   aiCallBudget?: AiTurnCallBudgetSnapshot;
   narrativeProviderHandoff?: NarrativeProviderHandoffContract;
+  attemptsTrail?: Array<{
+    providerId: string;
+    modelId: string;
+    displayName?: string;
+    status: 'SUCCESS' | 'FAILED';
+    latencyMs: number;
+    error?: string;
+  }>;
 }
 
 export interface OrchestratedTurnResult {
@@ -565,6 +573,20 @@ export interface OrchestratedTurnResult {
   checkpoint?: ContinuationCheckpoint;
   audioResultBase64?: string;
   fallbackText?: string;
+  forensicContext?: {
+    currentSituation?: unknown;
+    researchPacket?: unknown;
+    researchAudit?: unknown;
+    narrativePlan?: unknown;
+    contextAudit?: unknown;
+    narrationPrompt?: string;
+    narrationStyleInstruction?: string;
+    narrativeProviderHandoff?: unknown;
+    narratorVoiceState?: unknown;
+    narrativePacingContract?: unknown;
+    narrativeContinuityState?: unknown;
+    narrativeNoveltyState?: unknown;
+  };
   error?: string;
 }
 
@@ -8075,6 +8097,14 @@ export class MultiModelOrchestrator {
       }
       let totalAttempts = 0;
       let lastError = '';
+      const turnAttemptsTrail: Array<{
+        providerId: string;
+        modelId: string;
+        displayName?: string;
+        status: 'SUCCESS' | 'FAILED';
+        latencyMs: number;
+        error?: string;
+      }> = [];
 
       // 3. Provider Execution Loop with Retries, Timeouts, and Failover (DEF-CH12-01, DEF-CH12-07)
       for (let cIdx = 0; cIdx < candidateChain.length; cIdx++) {
@@ -8115,6 +8145,13 @@ export class MultiModelOrchestrator {
 
             // Reset failure counter on success
             this.consecutiveFailures.set(modelKey, 0);
+            turnAttemptsTrail.push({
+              providerId: currentCandidate.providerId,
+              modelId: currentCandidate.modelId,
+              displayName: currentCandidate.displayName || currentCandidate.modelId,
+              status: 'SUCCESS',
+              latencyMs: Math.max(1, Date.now() - attemptStartedAt),
+            });
 
             // 4. Validate Structured Output (DEF-CH12-05)
             const validation = this.validateTurnPackage(providerRes.text);
@@ -8376,6 +8413,7 @@ export class MultiModelOrchestrator {
               narrativeReview,
               narrativeRichnessEvaluation,
               narrativeProviderHandoff: narrativeProviderHandoff ? NarrativeProviderHandoffEngine.snapshot(narrativeProviderHandoff) : undefined,
+              attemptsTrail: [...turnAttemptsTrail],
             };
             this.lastTurnTelemetry = telemetry;
             if (!repo.isCanonicalCommandTransactionActive()) {
@@ -8404,10 +8442,40 @@ export class MultiModelOrchestrator {
               adjudicationResult: adjudication,
               checkpoint,
               audioResultBase64: providerRes.audioBase64,
+              forensicContext: {
+                currentSituation,
+                researchPacket,
+                researchAudit: researchResult ? { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query } : undefined,
+                narrativePlan,
+                contextAudit: {
+                  hardTokenBudget: assembledContext.hardTokenBudget,
+                  totalTokens: assembledContext.totalTokens,
+                  includedChunks: assembledContext.includedChunks.map((chunk) => ({ id: chunk.id, label: chunk.label, band: chunk.band, source: chunk.sourceAuthority, relevanceScore: chunk.relevanceScore, estimatedTokens: chunk.estimatedTokens, protected: Boolean(chunk.isProtected) })),
+                  idleChunks: assembledContext.idleChunks.map((chunk) => ({ id: chunk.id, label: chunk.label, band: chunk.band, source: chunk.sourceAuthority, relevanceScore: chunk.relevanceScore, estimatedTokens: chunk.estimatedTokens, protected: Boolean(chunk.isProtected) })),
+                  archivedChunks: assembledContext.archivedChunks.map((chunk) => ({ id: chunk.id, label: chunk.label, band: chunk.band, source: chunk.sourceAuthority, relevanceScore: chunk.relevanceScore, estimatedTokens: chunk.estimatedTokens, protected: Boolean(chunk.isProtected) })),
+                  evictedChunkLabels: assembledContext.evictedChunkLabels,
+                  pinnedSourceIds: assembledContext.pinnedSourceIds,
+                },
+                narrationPrompt: narrationPrompt.prompt,
+                narrationStyleInstruction: narrationPrompt.styleInstruction,
+                narrativeProviderHandoff,
+                narratorVoiceState,
+                narrativePacingContract,
+                narrativeContinuityState,
+                narrativeNoveltyState,
+              },
             };
           } catch (err: any) {
             lastError = err?.message || String(err);
             this.recordProviderFailure(currentCandidate, task, err, attemptStartedAt);
+            turnAttemptsTrail.push({
+              providerId: currentCandidate.providerId,
+              modelId: currentCandidate.modelId,
+              displayName: currentCandidate.displayName || currentCandidate.modelId,
+              status: 'FAILED',
+              latencyMs: Math.max(1, Date.now() - attemptStartedAt),
+              error: lastError,
+            });
 
             // Track consecutive failures & circuit breaker
             const failures = (this.consecutiveFailures.get(modelKey) || 0) + 1;
@@ -8647,6 +8715,26 @@ export class MultiModelOrchestrator {
               adjudicationResult: adjudication,
               checkpoint,
               audioResultBase64: res.audioBase64,
+              attemptsTrail: [...turnAttemptsTrail, {
+                providerId: emergencyModel.providerId,
+                modelId: emergencyModel.modelId,
+                displayName: emergencyModel.displayName || emergencyModel.modelId,
+                status: 'SUCCESS',
+                latencyMs: Math.max(1, Date.now() - emergencyStartedAt),
+              }],
+              forensicContext: {
+                currentSituation,
+                researchPacket,
+                researchAudit: researchResult ? { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query } : undefined,
+                narrativePlan,
+                narrationPrompt: narrationPrompt.prompt,
+                narrationStyleInstruction: narrationPrompt.styleInstruction,
+                narrativeProviderHandoff,
+                narratorVoiceState,
+                narrativePacingContract,
+                narrativeContinuityState,
+                narrativeNoveltyState,
+              },
             };
             }
           }

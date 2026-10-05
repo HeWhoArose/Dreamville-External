@@ -31,7 +31,7 @@ describe('Model Routing Slice 1G - Fallback Chain Management & Real Model Connec
     
     assert.ok(defaultChain);
     assert.ok(defaultChain.length >= 2);
-    assert.equal(defaultChain[0], 'groq::qwen/qwen3.8-27b');
+    assert.equal(defaultChain[0], 'google_gemini::gemini-3.5-flash');
     assert.ok(defaultChain[defaultChain.length - 1].includes('emergency-fallback-local'));
 
     // Update fallback chain

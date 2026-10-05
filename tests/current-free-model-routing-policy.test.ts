@@ -11,8 +11,8 @@ const config = JSON.parse(
 );
 
 const expectedStarts: Record<string, string> = {
-  narration: 'groq::qwen/qwen3.8-27b',
-  dialogue: 'groq::qwen/qwen3.8-27b',
+  narration: 'google_gemini::gemini-3.5-flash',
+  dialogue: 'google_gemini::gemini-3.5-flash',
   character_genesis: 'google_gemini::gemini-3.5-flash-lite',
   memory: 'google_gemini::gemini-3.5-flash-lite',
   summarization: 'google_gemini::gemini-3.5-flash-lite',

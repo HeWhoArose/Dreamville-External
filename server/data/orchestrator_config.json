@@ -13,20 +13,22 @@
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "narrative.generate": [
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
       "groq::qwen/qwen3.8-27b",
       "openrouter::inclusionai/ling-3.0-flash:free",
       "openrouter::google/gemma-4-31b-it:free",
-      "google_gemini::gemini-3.5-flash",
       "openrouter::qwen/qwen3.8-27b:free",
-      "google_gemini::gemini-3.5-flash-lite",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "character.dialogue": [
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
       "groq::qwen/qwen3.8-27b",
       "openrouter::inclusionai/ling-3.0-flash:free",
       "openrouter::google/gemma-4-31b-it:free",
-      "google_gemini::gemini-3.5-flash",
-      "google_gemini::gemini-3.5-flash-lite",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "memory.extract": [
@@ -160,11 +162,12 @@
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "narrative.review": [
+      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-3.8-flash",
+      "google_gemini::gemini-3.5-flash-lite",
       "groq::qwen/qwen3.8-27b",
       "openrouter::google/gemma-4-31b-it:free",
       "openrouter::inclusionai/ling-3.0-flash:free",
-      "google_gemini::gemini-3.5-flash",
-      "google_gemini::gemini-3.5-flash-lite",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "combat.animation.plan": [

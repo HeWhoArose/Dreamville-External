@@ -45,6 +45,8 @@ export const ArchiveModal: React.FC<ArchiveModalProps> = ({
   const [copied, setCopied] = useState<boolean>(false);
   const [assets, setAssets] = useState<any[]>([]);
   const [isLoadingAssets, setIsLoadingAssets] = useState<boolean>(false);
+  const [isExportingSession, setIsExportingSession] = useState<boolean>(false);
+  const [sessionExportError, setSessionExportError] = useState<string | null>(null);
 
   const fetchExport = async () => {
     setIsExporting(true);
@@ -96,6 +98,28 @@ export const ArchiveModal: React.FC<ArchiveModalProps> = ({
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+  };
+
+  const handleDownloadSessionRecording = async () => {
+    setIsExportingSession(true);
+    setSessionExportError(null);
+    try {
+      const data = await apiClient.exportStorySession(storyId);
+      const jsonStr = JSON.stringify(data.recording, null, 2);
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `dreamville_story_session_${storyId}_${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setSessionExportError(err?.message || 'Failed to export forensic story session.');
+    } finally {
+      setIsExportingSession(false);
+    }
   };
 
   const handleCopyJson = () => {
@@ -272,6 +296,36 @@ export const ArchiveModal: React.FC<ArchiveModalProps> = ({
                     <span>Download .dreamarchive</span>
                   </button>
                 </div>
+              </div>
+
+              <div className="bg-stone-950/70 border border-indigo-900/50 rounded-xl p-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                  <div>
+                    <h4 className="text-sm font-medium text-stone-200 flex items-center gap-2">
+                      <FileCheck className="w-4 h-4 text-indigo-300" />
+                      Forensic Story Session Recording
+                    </h4>
+                    <p className="text-xs text-stone-400 mt-1">
+                      Exports every canonical interaction plus player input, AI context, prompts, provider/model provenance,
+                      retries/fallbacks, adjudication, narrative output, and lossless before/after state patches.
+                    </p>
+                  </div>
+                  <button
+                    id="story-session-recording-download-btn"
+                    onClick={handleDownloadSessionRecording}
+                    disabled={isExportingSession}
+                    className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-medium transition text-xs flex items-center gap-1.5"
+                  >
+                    <Download className={`w-3.5 h-3.5 ${isExportingSession ? 'animate-pulse' : ''}`} />
+                    <span>{isExportingSession ? 'Preparing…' : 'Download Session JSON'}</span>
+                  </button>
+                </div>
+                {sessionExportError && (
+                  <div className="mt-3 text-xs text-red-300 flex items-center gap-2">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    {sessionExportError}
+                  </div>
+                )}
               </div>
 
               {/* Partition Hashes Matrix */}

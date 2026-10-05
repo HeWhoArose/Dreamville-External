@@ -8868,12 +8868,28 @@ gameRouter.post('/story-runs/:storyId/opening', async (req: Request, res: Respon
       return res.status(404).json({ error: `StoryRun with ID "${storyId}" not found.` });
     }
 
+    const sessionBefore = captureCanonicalStateSnapshot(storyId, worldRepository);
+    const sessionStartedAt = new Date().toISOString();
     const openingScene = await OpeningSceneService.generateOpeningScene({
       storyId,
       forceRegenerate: Boolean(forceRegenerate),
       timeoutMs: typeof timeoutMs === 'number' ? timeoutMs : undefined,
       simulateFailure: Boolean(simulateFailure),
       forceModelId: typeof forceModelId === 'string' ? forceModelId : undefined,
+    });
+    const sessionAfter = captureCanonicalStateSnapshot(storyId, worldRepository);
+    worldRepository.recordStorySessionInteraction({
+      storyId,
+      kind: 'OPENING_SCENE',
+      source: 'OPENING_SCENE_SERVICE',
+      startedAt: sessionStartedAt,
+      completedAt: new Date().toISOString(),
+      success: true,
+      rolledBack: false,
+      request: { forceRegenerate: Boolean(forceRegenerate), timeoutMs, simulateFailure: Boolean(simulateFailure), forceModelId },
+      result: openingScene,
+      stateBefore: sessionBefore,
+      stateAfter: sessionAfter,
     });
 
     const viewState = serverMockAuthority.getSanitizedViewState(storyId);

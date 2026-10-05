@@ -195,6 +195,12 @@ export interface WorldRepository {
   saveUniverse(universe: UniverseCampaignState): void;
   deleteUniverse(universeId: string): void;
   saveUniverseMemory(universeId: string, memory: UniverseMemoryRecord): void;
+  getStorySessionRecording(storyId: string): StorySessionRecording | null;
+  ensureStorySessionRecording(storyId: string, title?: string, initialState?: unknown): StorySessionRecording;
+  recordStorySessionInteraction(params: RecordStorySessionInteractionParams): StorySessionRecording;
+  stopStorySessionRecording(storyId: string): StorySessionRecording | null;
+  validateStorySessionRecording(storyId: string): ReturnType<typeof StorySessionRecorder.validate>;
+  exportStorySessionRecording(storyId: string): StorySessionRecording;
 }
 
 const NARRATIVE_MODE_VALUES = new Set(['PROTAGONIST', 'SIDE_CHARACTER', 'FREE_ROAM']);

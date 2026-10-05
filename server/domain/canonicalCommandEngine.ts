@@ -424,7 +424,50 @@ export class CanonicalCommandEngine {
 					};
 				}
 
-				return this.executeFresh(repository, command, handler, fingerprint);
+				const recordingStartedAt = new Date().toISOString();
+				const recordingBefore = captureCanonicalStateSnapshot(command.storyId, repository);
+				try {
+					const freshResult = await this.executeFresh(repository, command, handler, fingerprint);
+					const recordingAfter = captureCanonicalStateSnapshot(command.storyId, repository);
+					repository.recordStorySessionInteraction({
+						storyId: command.storyId,
+						kind: command.type === 'INTERACT' ? 'DIRECT_TURN' : 'CANONICAL_COMMAND',
+						source: command.source,
+						startedAt: recordingStartedAt,
+						completedAt: new Date().toISOString(),
+						success: freshResult.success,
+						rolledBack: Boolean(freshResult.rolledBack),
+						command,
+						request: command.payload,
+						result: freshResult.data,
+						error: freshResult.errorReason,
+						turn: freshResult.data && typeof freshResult.data === 'object' && (freshResult.data as any).telemetry
+							? clone(freshResult.data as any)
+							: undefined,
+						canonicalEvent: freshResult.event,
+						stateBefore: recordingBefore,
+						stateAfter: recordingAfter,
+						mutationPaths: freshResult.mutationPaths,
+					});
+					return freshResult;
+				} catch (error: any) {
+					const recordingAfter = captureCanonicalStateSnapshot(command.storyId, repository);
+					repository.recordStorySessionInteraction({
+						storyId: command.storyId,
+						kind: command.type === 'INTERACT' ? 'DIRECT_TURN' : 'CANONICAL_COMMAND',
+						source: command.source,
+						startedAt: recordingStartedAt,
+						completedAt: new Date().toISOString(),
+						success: false,
+						rolledBack: true,
+						command,
+						request: command.payload,
+						error: String(error?.message || error),
+						stateBefore: recordingBefore,
+						stateAfter: recordingAfter,
+					});
+					throw error;
+				}
 			}
 		);
 		this.inFlight.set(key, promise as Promise<CanonicalCommandResult>);

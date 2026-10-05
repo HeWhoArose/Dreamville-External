@@ -24,6 +24,7 @@ import { RestRecoveryEngine } from '../domain/restRecoveryEngine';
 import { Phase8SimulationEngine } from '../domain/phase8SimulationEngine';
 import { StoryCheckEngine } from '../domain/storyCheckEngine';
 import { CampaignArchiveService, PartitionedArchive } from '../domain/campaignArchive';
+import { captureCanonicalStateSnapshot } from '../domain/canonicalSnapshot';
 import { dndSpellRulesEvaluator } from '../domain/dndSpellRulesModel';
 import { bossPhaseEngine } from '../domain/bossPhaseEngine';
 import { EntityRegistry, EntityCard } from '../domain/entityCard';
@@ -36,6 +37,8 @@ import { UniverseRuntimeService } from '../domain/universeRuntimeService';
 import type { UniverseCampaignState, UniverseMemoryRecord } from '../domain/universeRuntimeService';
 import { PersistentGameStore, isRunningUnderTests } from '../services/persistentGameStore';
 import { UserDataArchiveService, type DeletionTombstone, type UserDataArchive } from '../domain/userDataArchive';
+import { StorySessionRecorder, type StorySessionRecording, type RecordStorySessionInteractionParams } from '../domain/storySessionRecorder';
+import { storySessionRecordingStore } from '../services/storySessionRecordingStore';
 import {
   AdaptedStoryBible,
   AdaptationProfile,
@@ -287,6 +290,7 @@ export class InMemoryWorldRepository implements WorldRepository {
   // CH16 Storage Maps
   private worldTemplates: Map<string, any> = new Map();
   private storyRuns: Map<string, any> = new Map();
+  private storySessionRecordings: Map<string, StorySessionRecording> = new Map();
   private storyThreads: Map<string, any[]> = new Map();
   private activeEffects: Map<string, any[]> = new Map();
   private worldFactsMap: Map<string, any[]> = new Map();
@@ -3139,6 +3143,67 @@ export class InMemoryWorldRepository implements WorldRepository {
       }
       return ts.totalElapsedSeconds <= currentSeconds;
     });
+  }
+
+  public getStorySessionRecording(storyId: string): StorySessionRecording | null {
+    const key = String(storyId || '');
+    if (!key) return null;
+    const existing = this.storySessionRecordings.get(key);
+    if (existing) return existing;
+    const persisted = storySessionRecordingStore.load(key);
+    if (persisted) {
+      this.storySessionRecordings.set(key, persisted);
+      return persisted;
+    }
+    return null;
+  }
+
+  public ensureStorySessionRecording(storyId: string, title?: string, initialState?: unknown): StorySessionRecording {
+    const key = String(storyId || '').trim();
+    if (!key) throw new Error('storyId is required for session recording.');
+    const existing = this.getStorySessionRecording(key);
+    if (existing) return existing;
+    const snapshot = initialState !== undefined ? initialState : captureCanonicalStateSnapshot(key, this);
+    const recording = StorySessionRecorder.start({
+      storyId: key,
+      title: title || this.getStoryRun(key)?.title || 'Dreamville Story Session',
+      initialState: snapshot,
+      engineVersion: CampaignArchiveService.CURRENT_ENGINE_VERSION,
+    });
+    this.storySessionRecordings.set(key, recording);
+    storySessionRecordingStore.save(recording);
+    return recording;
+  }
+
+  public recordStorySessionInteraction(params: RecordStorySessionInteractionParams): StorySessionRecording {
+    const recording = this.ensureStorySessionRecording(params.storyId, this.getStoryRun(params.storyId)?.title);
+    StorySessionRecorder.append(recording, params);
+    storySessionRecordingStore.save(recording);
+    return recording;
+  }
+
+  public stopStorySessionRecording(storyId: string): StorySessionRecording | null {
+    const recording = this.getStorySessionRecording(storyId);
+    if (!recording) return null;
+    StorySessionRecorder.stop(recording);
+    storySessionRecordingStore.save(recording);
+    return recording;
+  }
+
+  public validateStorySessionRecording(storyId: string): ReturnType<typeof StorySessionRecorder.validate> {
+    const recording = this.getStorySessionRecording(storyId);
+    if (!recording) return { valid: false, errorReason: 'No story session recording exists for this story.' };
+    return StorySessionRecorder.validate(recording);
+  }
+
+  public exportStorySessionRecording(storyId: string): StorySessionRecording {
+    const recording = this.getStorySessionRecording(storyId);
+    if (!recording) {
+      this.ensureStorySessionRecording(storyId, this.getStoryRun(storyId)?.title);
+    }
+    const current = this.getStorySessionRecording(storyId);
+    if (!current) throw new Error('Failed to initialize story session recording.');
+    return StorySessionRecorder.export(current);
   }
 
   public getStoryRun(storyId: string): any | null {

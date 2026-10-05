@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { StorySessionInteraction, StorySessionRecording } from '../domain/storySessionRecorder';
 import { StorySessionRecorder } from '../domain/storySessionRecorder';

@@ -469,6 +469,7 @@ export class CanonicalCommandEngine {
 						error: String(error?.message || error),
 						stateBefore: recordingBefore,
 						stateAfter: recordingAfter,
+						recordingInitialState: recordingBefore,
 					});
 					throw error;
 				}

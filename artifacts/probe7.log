@@ -1,5 +1,0 @@
-turn 1: 26958ms | capture=94ms snap=7005KB run=6903KB events=6442KB lastBlob=1KB mock=4KB narrHist=0
-turn 2: 29080ms | capture=92ms snap=7580KB run=7476KB events=7011KB lastBlob=4KB mock=7KB narrHist=0
-turn 3: 31072ms | capture=95ms snap=8163KB run=8058KB events=7589KB lastBlob=7KB mock=10KB narrHist=0
-turn 4: 29044ms | capture=96ms snap=8754KB run=8648KB events=8176KB lastBlob=10KB mock=13KB narrHist=0
-turn 5: 30676ms | capture=100ms snap=9352KB run=9244KB events=8770KB lastBlob=13KB mock=16KB narrHist=0

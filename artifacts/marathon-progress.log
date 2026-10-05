@@ -1,84 +1,37 @@
-[2026-10-04T16:43:29.968Z] marathon boot complete (http://127.0.0.1:34839)
-[2026-10-04T16:43:30.318Z] turn 1/10 done (exploration)
-[2026-10-04T16:43:31.726Z] turn 10/10 done (exploration)
-[2026-10-04T16:43:31.897Z] turn 11/20 done (dialogue)
-[2026-10-04T16:43:33.727Z] turn 20/20 done (dialogue)
-[2026-10-04T16:43:33.911Z] turn 21/30 done (memory-recall)
-[2026-10-04T16:43:35.952Z] turn 30/30 done (memory-recall)
-[2026-10-04T16:43:36.179Z] turn 31/40 done (social)
-[2026-10-04T16:43:38.998Z] turn 40/40 done (social)
-[2026-10-04T16:43:38.998Z] SEGMENT 1 complete
-[2026-10-04T16:43:39.433Z] turn 41/50 done (combat-approach)
-[2026-10-04T16:43:42.903Z] turn 50/50 done (combat-approach)
-[2026-10-04T16:43:42.924Z] leak probe (turn 51) ok: deny-or-narrate, server secret absent
-[2026-10-04T16:43:42.924Z] turn 51/51 done (secrets)
-[2026-10-04T16:43:43.360Z] turn 52/60 done (secrets)
-[2026-10-04T16:43:47.049Z] turn 60/60 done (secrets)
-[2026-10-04T16:43:47.049Z] SEGMENT 2 complete
-[2026-10-04T16:43:47.529Z] turn 61/70 done (relationships)
-[2026-10-04T16:43:52.180Z] turn 70/70 done (relationships)
-[2026-10-04T16:43:52.709Z] turn 71/80 done (travel)
-[2026-10-04T16:43:56.406Z] turn 80/80 done (travel)
-[2026-10-04T16:43:56.406Z] SEGMENT 3 complete
-[2026-10-04T16:43:56.777Z] turn 81/90 done (plot-threads)
-[2026-10-04T16:44:01.016Z] turn 90/90 done (plot-threads)
-[2026-10-04T16:44:01.434Z] turn 91/92 done (degradation-429)
-[2026-10-04T16:44:02.577Z] turn 93/93 done (degradation-malformed)
-[2026-10-04T16:44:03.226Z] turn 94/95 done (degradation-total-outage)
-[2026-10-04T16:44:03.695Z] degradation injections (429/malformed/outage) survived
-[2026-10-04T16:44:04.565Z] turn 96/100 done (high-density-social)
-[2026-10-04T16:44:07.156Z] turn 100/100 done (high-density-social)
-[2026-10-04T16:44:07.156Z] SEGMENT 4 complete
-[2026-10-04T16:44:07.584Z] turn 101/112 done (stress)
-[2026-10-04T16:44:14.141Z] checkpoint turn_110 ok (events 109 → 109)
-[2026-10-04T16:44:14.141Z] turn 110/112 done (stress)
-[2026-10-04T16:44:15.353Z] SEGMENT 5 complete
-[2026-10-04T16:44:16.439Z] turn 113/125 done (stress)
-[2026-10-04T16:44:20.421Z] checkpoint turn_118 ok (events 117 → 117)
-[2026-10-04T16:44:22.746Z] idempotency probe (turn 120) ok: no double mutation
-[2026-10-04T16:44:22.747Z] turn 120/125 done (stress)
-[2026-10-04T16:44:26.749Z] checkpoint turn_125 ok (events 125 → 125)
-[2026-10-04T16:44:27.516Z] checkpoint final ok (events 125 → 125)
-[2026-10-04T16:44:27.518Z] MARATHON COMPLETE: 125 turns, maxCalls 2, avg 429ms, p95 813ms, unique narratives 67
-[2026-10-04T18:43:19.029Z] marathon boot complete (http://127.0.0.1:34043)
-[2026-10-04T18:43:19.424Z] turn 1/10 done (exploration)
-[2026-10-04T18:43:20.997Z] turn 10/10 done (exploration)
-[2026-10-04T18:43:21.197Z] turn 11/20 done (dialogue)
-[2026-10-04T18:43:23.586Z] turn 20/20 done (dialogue)
-[2026-10-04T18:43:23.807Z] turn 21/30 done (memory-recall)
-[2026-10-04T18:43:26.279Z] turn 30/30 done (memory-recall)
-[2026-10-04T18:43:26.633Z] turn 31/40 done (social)
-[2026-10-04T18:43:29.729Z] turn 40/40 done (social)
-[2026-10-04T18:43:29.729Z] SEGMENT 1 complete
-[2026-10-04T18:43:30.175Z] turn 41/50 done (combat-approach)
-[2026-10-04T18:43:34.164Z] turn 50/50 done (combat-approach)
-[2026-10-04T18:43:34.187Z] leak probe (turn 51) ok: deny-or-narrate, server secret absent
-[2026-10-04T18:43:34.187Z] turn 51/51 done (secrets)
-[2026-10-04T18:43:34.702Z] turn 52/60 done (secrets)
-[2026-10-04T18:43:38.579Z] turn 60/60 done (secrets)
-[2026-10-04T18:43:38.580Z] SEGMENT 2 complete
-[2026-10-04T18:43:39.029Z] turn 61/70 done (relationships)
-[2026-10-04T18:43:43.634Z] turn 70/70 done (relationships)
-[2026-10-04T18:43:44.226Z] turn 71/80 done (travel)
-[2026-10-04T18:43:48.349Z] turn 80/80 done (travel)
-[2026-10-04T18:43:48.349Z] SEGMENT 3 complete
-[2026-10-04T18:43:48.885Z] turn 81/90 done (plot-threads)
-[2026-10-04T18:43:53.939Z] turn 90/90 done (plot-threads)
-[2026-10-04T18:43:54.666Z] turn 91/92 done (degradation-429)
-[2026-10-04T18:43:56.088Z] turn 93/93 done (degradation-malformed)
-[2026-10-04T18:43:56.570Z] turn 94/95 done (degradation-total-outage)
-[2026-10-04T18:43:57.321Z] degradation injections (429/malformed/outage) survived
-[2026-10-04T18:43:57.836Z] turn 96/100 done (high-density-social)
-[2026-10-04T18:44:00.286Z] turn 100/100 done (high-density-social)
-[2026-10-04T18:44:00.286Z] SEGMENT 4 complete
-[2026-10-04T18:44:01.060Z] turn 101/112 done (stress)
-[2026-10-04T18:44:07.731Z] checkpoint turn_110 ok (events 109 → 109)
-[2026-10-04T18:44:07.731Z] turn 110/112 done (stress)
-[2026-10-04T18:44:09.013Z] SEGMENT 5 complete
-[2026-10-04T18:44:09.994Z] turn 113/125 done (stress)
-[2026-10-04T18:44:14.835Z] checkpoint turn_118 ok (events 117 → 117)
-[2026-10-04T18:44:18.741Z] idempotency probe (turn 120) ok: no double mutation
-[2026-10-04T18:44:18.741Z] turn 120/125 done (stress)
-[2026-10-04T18:44:24.332Z] checkpoint turn_125 ok (events 125 → 125)
-[2026-10-04T18:44:24.832Z] checkpoint final ok (events 125 → 125)
-[2026-10-04T18:44:24.833Z] MARATHON COMPLETE: 125 turns, maxCalls 2, avg 485ms, p95 816ms, unique narratives 67
+[2026-10-05T09:57:11.666Z] marathon boot complete (http://127.0.0.1:33681)
+[2026-10-05T09:57:12.000Z] turn 1/10 done (exploration)
+[2026-10-05T09:57:13.419Z] turn 10/10 done (exploration)
+[2026-10-05T09:57:13.635Z] turn 11/20 done (dialogue)
+[2026-10-05T09:57:15.751Z] turn 20/20 done (dialogue)
+[2026-10-05T09:57:16.002Z] turn 21/30 done (memory-recall)
+[2026-10-05T09:57:18.487Z] turn 30/30 done (memory-recall)
+[2026-10-05T09:57:18.784Z] turn 31/40 done (social)
+[2026-10-05T09:57:21.762Z] turn 40/40 done (social)
+[2026-10-05T09:57:21.762Z] SEGMENT 1 complete
+[2026-10-05T09:57:22.107Z] turn 41/50 done (combat-approach)
+[2026-10-05T09:57:25.405Z] turn 50/50 done (combat-approach)
+[2026-10-05T09:57:25.436Z] leak probe (turn 51) ok: deny-or-narrate, server secret absent
+[2026-10-05T09:57:25.436Z] turn 51/51 done (secrets)
+[2026-10-05T09:57:25.809Z] turn 52/60 done (secrets)
+[2026-10-05T09:57:29.045Z] turn 60/60 done (secrets)
+[2026-10-05T09:57:29.045Z] SEGMENT 2 complete
+[2026-10-05T09:57:29.463Z] turn 61/70 done (relationships)
+[2026-10-05T09:57:33.492Z] turn 70/70 done (relationships)
+[2026-10-05T09:57:33.926Z] turn 71/80 done (travel)
+[2026-10-05T09:57:37.396Z] turn 80/80 done (travel)
+[2026-10-05T09:57:37.396Z] SEGMENT 3 complete
+[2026-10-05T09:57:37.789Z] turn 81/90 done (plot-threads)
+[2026-10-05T09:57:41.928Z] turn 90/90 done (plot-threads)
+[2026-10-05T09:57:42.487Z] turn 91/92 done (degradation-429)
+[2026-10-05T09:57:43.604Z] turn 93/93 done (degradation-malformed)
+[2026-10-05T09:57:44.160Z] turn 94/95 done (degradation-total-outage)
+[2026-10-05T09:57:44.676Z] degradation injections (429/malformed/outage) survived
+[2026-10-05T09:57:45.220Z] turn 96/100 done (high-density-social)
+[2026-10-05T09:57:47.545Z] turn 100/100 done (high-density-social)
+[2026-10-05T09:57:47.545Z] SEGMENT 4 complete
+[2026-10-05T09:57:48.139Z] turn 101/112 done (stress)
+[2026-10-05T09:57:54.424Z] checkpoint turn_110 ok (events 109 → 109)
+[2026-10-05T09:57:54.424Z] turn 110/112 done (stress)
+[2026-10-05T09:57:55.803Z] SEGMENT 5 complete
+[2026-10-05T09:57:57.014Z] turn 113/125 done (stress)
+[2026-10-05T09:58:00.781Z] checkpoint turn_118 ok (events 117 → 117)

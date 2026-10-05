@@ -61,58 +61,68 @@ function model(modelId: string, priority: number, health: 'Healthy' | 'Unavailab
 
 test('manual model selection falls through to the configured route when the requested model is unavailable at preflight', async () => {
 	const orchestrator = new MultiModelOrchestrator();
-	const adapter = new ControlledAdapter();
-	orchestrator.registerAdapter(adapter);
-	orchestrator.registerModel(model('preferred-model', 200, 'Unavailable'));
-	orchestrator.registerModel(model('fallback-model', 100));
-	orchestrator.setFallbackChain('narrative.generate', [
-		'test_manual_fallback_provider::preferred-model',
-		'test_manual_fallback_provider::fallback-model',
-	]);
+	const originalChain = orchestrator.getFallbackChain('narrative.generate');
+	try {
+		const adapter = new ControlledAdapter();
+		orchestrator.registerAdapter(adapter);
+		orchestrator.registerModel(model('preferred-model', 200, 'Unavailable'));
+		orchestrator.registerModel(model('fallback-model', 100));
+		orchestrator.setFallbackChain('narrative.generate', [
+			'test_manual_fallback_provider::preferred-model',
+			'test_manual_fallback_provider::fallback-model',
+		]);
 
-	const result = await orchestrator.executeTaskGeneration(
-		'narrative.generate',
-		'Continue the current scene.',
-		undefined,
-		{
-			forceModelId: 'test_manual_fallback_provider::preferred-model',
-			allowDeterministicFallback: false,
-			validateResponse: () => ({ valid: true }),
-		},
-	);
+		const result = await orchestrator.executeTaskGeneration(
+			'narrative.generate',
+			'Continue the current scene.',
+			undefined,
+			{
+				forceModelId: 'test_manual_fallback_provider::preferred-model',
+				allowDeterministicFallback: false,
+				validateResponse: () => ({ valid: true }),
+			},
+		);
 
-	assert.equal(result.modelId, 'fallback-model');
-	assert.equal(result.providerId, 'test_manual_fallback_provider');
-	assert.equal(result.source, 'AI_FALLBACK');
-	assert.deepEqual(result.attemptsTrail.map((entry) => entry.modelId), ['fallback-model']);
+		assert.equal(result.modelId, 'fallback-model');
+		assert.equal(result.providerId, 'test_manual_fallback_provider');
+		assert.equal(result.source, 'AI_FALLBACK');
+		assert.deepEqual(result.attemptsTrail.map((entry) => entry.modelId), ['fallback-model']);
+	} finally {
+		orchestrator.setFallbackChain('narrative.generate', originalChain);
+	}
 });
 
 test('a transient provider 429 cools the preferred model without permanently marking its quota exhausted', async () => {
 	const orchestrator = new MultiModelOrchestrator();
-	const adapter = new ControlledAdapter();
-	adapter.primaryMode = '429';
-	orchestrator.registerAdapter(adapter);
-	orchestrator.registerModel(model('preferred-model', 200));
-	orchestrator.registerModel(model('fallback-model', 100));
-	orchestrator.setFallbackChain('narrative.generate', [
-		'test_manual_fallback_provider::preferred-model',
-		'test_manual_fallback_provider::fallback-model',
-	]);
+	const originalChain = orchestrator.getFallbackChain('narrative.generate');
+	try {
+		const adapter = new ControlledAdapter();
+		adapter.primaryMode = '429';
+		orchestrator.registerAdapter(adapter);
+		orchestrator.registerModel(model('preferred-model', 200));
+		orchestrator.registerModel(model('fallback-model', 100));
+		orchestrator.setFallbackChain('narrative.generate', [
+			'test_manual_fallback_provider::preferred-model',
+			'test_manual_fallback_provider::fallback-model',
+		]);
 
-	const result = await orchestrator.executeTaskGeneration(
-		'narrative.generate',
-		'Continue the current scene.',
-		undefined,
-		{
-			forceModelId: 'test_manual_fallback_provider::preferred-model',
-			allowDeterministicFallback: false,
-			validateResponse: () => ({ valid: true }),
-		},
-	);
+		const result = await orchestrator.executeTaskGeneration(
+			'narrative.generate',
+			'Continue the current scene.',
+			undefined,
+			{
+				forceModelId: 'test_manual_fallback_provider::preferred-model',
+				allowDeterministicFallback: false,
+				validateResponse: () => ({ valid: true }),
+			},
+		);
 
-	assert.equal(result.modelId, 'fallback-model');
-	assert.equal(adapter.calls[0], 'preferred-model');
-	assert.equal(adapter.calls[1], 'fallback-model');
-	assert.equal(orchestrator.getModel('test_manual_fallback_provider', 'preferred-model')?.quota, 'Low');
-	assert.notEqual(orchestrator.getModel('test_manual_fallback_provider', 'preferred-model')?.quota, 'Exhausted');
+		assert.equal(result.modelId, 'fallback-model');
+		assert.equal(adapter.calls[0], 'preferred-model');
+		assert.equal(adapter.calls[1], 'fallback-model');
+		assert.equal(orchestrator.getModel('test_manual_fallback_provider', 'preferred-model')?.quota, 'Low');
+		assert.notEqual(orchestrator.getModel('test_manual_fallback_provider', 'preferred-model')?.quota, 'Exhausted');
+	} finally {
+		orchestrator.setFallbackChain('narrative.generate', originalChain);
+	}
 });

@@ -8572,6 +8572,7 @@ export class MultiModelOrchestrator {
                   situation: currentSituation,
                   repository: repo,
                   storyId,
+                  plan: narrativePlan,
                   pacingContract: narrativePacingContract,
                 })
               : { valid: true };

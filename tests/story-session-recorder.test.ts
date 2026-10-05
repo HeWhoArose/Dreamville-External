@@ -72,3 +72,72 @@ test('story session recorder detects tampered state patches', () => {
 	const validation = StorySessionRecorder.validate(recording);
 	assert.equal(validation.valid, false);
 });
+
+
+test('story session recorder rejects a state-before mismatch at append time', () => {
+	const recording = StorySessionRecorder.start({
+		storyId: 'story_state_mismatch',
+		runSessionId: 'run_1',
+		initialState: { value: 1 },
+	});
+
+	assert.throws(
+		() => StorySessionRecorder.append(recording, {
+			storyId: 'story_state_mismatch',
+			kind: 'DIRECT_TURN',
+			source: 'AI',
+			startedAt: '2026-10-05T10:00:00.000Z',
+			completedAt: '2026-10-05T10:00:00.100Z',
+			success: true,
+			rolledBack: false,
+			stateBefore: { value: 999 },
+			stateAfter: { value: 2 },
+		}),
+		/Story session state-before mismatch/,
+	);
+	assert.equal(recording.interactions.length, 0);
+});
+
+test('story session recorder creates isolated recordings for distinct run sessions', () => {
+	const first = StorySessionRecorder.start({
+		storyId: 'same_story',
+		runSessionId: 'run_a',
+		initialState: { character: 'Elenion' },
+	});
+	const second = StorySessionRecorder.start({
+		storyId: 'same_story',
+		runSessionId: 'run_b',
+		initialState: { character: 'Scribe Vael' },
+	});
+
+	assert.notEqual(first.recordingId, second.recordingId);
+	assert.notEqual(first.runSessionId, second.runSessionId);
+	assert.equal(first.initialState && (first.initialState as any).character, 'Elenion');
+	assert.equal(second.initialState && (second.initialState as any).character, 'Scribe Vael');
+	assert.equal(StorySessionRecorder.validate(first).valid, true);
+	assert.equal(StorySessionRecorder.validate(second).valid, true);
+});
+
+test('story session recorder rejects appending after stop', () => {
+	const recording = StorySessionRecorder.start({
+		storyId: 'story_stopped',
+		runSessionId: 'run_stopped',
+		initialState: { value: 1 },
+	});
+	StorySessionRecorder.stop(recording);
+
+	assert.throws(
+		() => StorySessionRecorder.append(recording, {
+			storyId: 'story_stopped',
+			kind: 'DIRECT_TURN',
+			source: 'AI',
+			startedAt: '2026-10-05T10:00:00.000Z',
+			completedAt: '2026-10-05T10:00:00.100Z',
+			success: true,
+			rolledBack: false,
+			stateBefore: { value: 1 },
+			stateAfter: { value: 2 },
+		}),
+		/Cannot append to a stopped story session recording/,
+	);
+});

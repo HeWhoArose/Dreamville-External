@@ -55,7 +55,7 @@ const NARRATIVE_INFORMATION_NONANSWER_PATTERN =
 	/\b(no one|nobody|no reliable answer|nothing definite|nothing certain|could not say|couldn't say|did not know|didn't know|refused to answer|kept silent|offered only|conflicting accounts|uncertain|unknown|unclear|unverified|hearsay)\b/i;
 
 const NARRATIVE_INTERNAL_META_LEAK_PATTERNS: RegExp[] = [
-	/\b(?:the )?125[- ]turn (?:integration|stress|test) (?:cycle|run|test)\b/i,
+	/\b(?:the )?125[- ]turn (?:integration stress test|stress test|integration test)(?: cycle| run| session)?\b/i,
 	/\b(?:integration|stress) test(?:ing)? (?:cycle|run|session)\b/i,
 	/\b(?:the )?(?:canonical|authoritative) (?:world )?state (?:report|evaluation|check|verification|assertion|checkpoint)\b/i,
 	/\b(?:selected|active|fallback) (?:model|provider) (?:for|during|in) (?:the )?(?:turn|request|narration|run)\b/i,

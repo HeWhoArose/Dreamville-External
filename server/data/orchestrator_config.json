@@ -168,7 +168,6 @@
       "groq::qwen/qwen3.8-27b",
       "openrouter::google/gemma-4-31b-it:free",
       "openrouter::inclusionai/ling-3.0-flash:free",
-      "google_gemini::gemini-3.5-flash-lite",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "combat.animation.plan": [

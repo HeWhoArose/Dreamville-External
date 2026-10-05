@@ -67,6 +67,23 @@ export class StorySessionRecordingStore {
 		if (!this.enabled) return;
 		const storyDir = this.storyDirectory(recording.storyId);
 		const interactionsDir = this.interactionsDirectory(recording.storyId);
+		mkdirSync(storyDir, { recursive: true });
+
+		// A new recording must never inherit interaction files from a previous,
+		// invalid/corrupted recording for the same story.
+		if (recording.interactions.length === 0) {
+			const existingManifestPath = this.manifestPath(recording.storyId);
+			if (existsSync(existingManifestPath)) {
+				try {
+					const existingManifest = JSON.parse(readFileSync(existingManifestPath, 'utf8')) as Partial<StorySessionRecording>;
+					if (existingManifest.recordingId !== recording.recordingId) {
+						rmSync(interactionsDir, { recursive: true, force: true });
+					}
+				} catch {
+					rmSync(interactionsDir, { recursive: true, force: true });
+				}
+			}
+		}
 		mkdirSync(interactionsDir, { recursive: true });
 
 		const persistedSequence = this.lastPersistedSequence.get(recording.storyId) || 0;

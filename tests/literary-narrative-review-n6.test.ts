@@ -59,3 +59,69 @@ test('N6 review is independent from semantic canonical review', () => {
 	assert.equal(review.source, 'DETERMINISTIC');
 	assert.ok(review.score < 100);
 });
+
+
+test('N6 flags a report that contains atmosphere but no substantive response', () => {
+	const { situation, plan } = setup('n6_report_substance');
+	const reportIntent = {
+		action: 'report',
+		goal: 'communicate_with_target',
+		interactionMode: 'DIALOGUE' as const,
+		speechIntent: true,
+		movementIntent: false,
+		observationIntent: false,
+		informationGoal: undefined,
+		explicitTargets: [],
+		impliedTargets: [],
+		confidence: 1,
+		source: 'DETERMINISTIC' as const,
+		originalText: 'I report to the registrar.',
+	};
+	const review = LiteraryNarrativeReview.review({
+		intent: reportIntent,
+		situation,
+		plan,
+		turnPackage: {
+			narrative: ['The corridor smells of dust. Bronze lamps cast long shadows across the stone floor. The distant crowd rolls like thunder through the arena.'],
+			dialogue: [],
+			events: [],
+			stateChanges: [],
+			memoryCandidates: [],
+			audioCues: [],
+		},
+	});
+	assert.equal(review.decision, 'REWRITE');
+	assert.ok(review.issues.some((issue) => issue.code === 'LOW_ACTION_SUBSTANCE'));
+});
+
+test('N6 accepts a report with an actual response', () => {
+	const { situation, plan } = setup('n6_report_response');
+	const reportIntent = {
+		action: 'report',
+		goal: 'communicate_with_target',
+		interactionMode: 'DIALOGUE' as const,
+		speechIntent: true,
+		movementIntent: false,
+		observationIntent: false,
+		informationGoal: undefined,
+		explicitTargets: [],
+		impliedTargets: [],
+		confidence: 1,
+		source: 'DETERMINISTIC' as const,
+		originalText: 'I report to the registrar.',
+	};
+	const review = LiteraryNarrativeReview.review({
+		intent: reportIntent,
+		situation,
+		plan,
+		turnPackage: {
+			narrative: ['You give the registrar your report. She listens, asks for the missing detail, and directs you to wait by the eastern gate.'],
+			dialogue: [{ speaker: 'Registrar', text: 'Wait by the eastern gate.' }],
+			events: [],
+			stateChanges: [],
+			memoryCandidates: [],
+			audioCues: [],
+		},
+	});
+	assert.equal(review.issues.some((issue) => issue.code === 'LOW_ACTION_SUBSTANCE'), false);
+});

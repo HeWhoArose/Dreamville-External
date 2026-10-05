@@ -425,6 +425,10 @@ export class CanonicalCommandEngine {
 				}
 
 				const recordingStartedAt = new Date().toISOString();
+				// The recorder MUST be initialized before the command mutates canonical state.
+				// recordStorySessionInteraction() is intentionally called after execution, so
+				// initialize the recording here with the true pre-command snapshot.
+				repository.ensureStorySessionRecording(command.storyId, undefined, captureCanonicalStateSnapshot(command.storyId, repository));
 				const recordingBefore = captureCanonicalStateSnapshot(command.storyId, repository);
 				try {
 					const freshResult = await this.executeFresh(repository, command, handler, fingerprint);

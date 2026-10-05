@@ -215,3 +215,17 @@ test('AI intent cannot erase explicit player speech', () => {
 	assert.equal(result.speechIntent, true);
 	assert.equal(result.interactionMode, 'DIALOGUE');
 });
+
+
+test('reporting is classified as explicit dialogue', () => {
+	const { currentSituation } = situation();
+	const intent = PlayerIntentInterpreter.deterministic(
+		'I report to the registrar.',
+		currentSituation,
+	);
+
+	assert.equal(intent.action, 'report');
+	assert.equal(intent.interactionMode, 'DIALOGUE');
+	assert.equal(intent.speechIntent, true);
+	assert.equal(intent.observationIntent, false);
+});

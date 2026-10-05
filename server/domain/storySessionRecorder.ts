@@ -320,6 +320,13 @@ export class StorySessionRecorder {
 		let reconstructed = clone(value.initialState);
 		for (const interaction of value.interactions) {
 			if (!interaction || typeof interaction !== 'object') return { valid: false, errorReason: 'Recording contains an invalid interaction.' };
+			const beforeHash = hash(reconstructed);
+			if (interaction.stateBeforeHash !== beforeHash) {
+				return {
+					valid: false,
+					errorReason: `State-before integrity failure at interaction ${interaction.sequence}: expected ${interaction.stateBeforeHash}, got ${beforeHash}.`,
+				};
+			}
 			reconstructed = applyPatch(reconstructed, interaction.statePatch || []);
 			const reconstructedHash = hash(reconstructed);
 			if (reconstructedHash !== interaction.stateAfterHash) {

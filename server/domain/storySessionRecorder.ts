@@ -225,6 +225,8 @@ export interface RecordStorySessionInteractionParams {
 	canonicalEvent?: unknown;
 	stateBefore: unknown;
 	stateAfter: unknown;
+	/** Optional first-state snapshot captured before the interaction mutates canonical state. */
+	recordingInitialState?: unknown;
 	mutationPaths?: string[];
 }
 

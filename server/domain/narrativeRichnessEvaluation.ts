@@ -59,9 +59,9 @@ const WEIGHTS: Record<NarrativeRichnessDimension, number> = {
 	DRAMATIC_TENSION: 0.08,
 	MEANINGFUL_REACTION: 0.08,
 	FRESHNESS: 0.08,
-	SETUP_PAYOFF: 0.05,
-	CLOSURE: 0.03,
-	PLAYER_AGENCY: 0.04,
+	SETUP_PAYOFF: 0.04,
+	CLOSURE: 0.02,
+	PLAYER_AGENCY: 0.03,
 };
 
 const STOP_WORDS = new Set([

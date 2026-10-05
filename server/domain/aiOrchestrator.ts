@@ -573,6 +573,14 @@ export interface OrchestratedTurnResult {
   checkpoint?: ContinuationCheckpoint;
   audioResultBase64?: string;
   fallbackText?: string;
+  attemptsTrail?: Array<{
+    providerId: string;
+    modelId: string;
+    displayName?: string;
+    status: 'SUCCESS' | 'FAILED';
+    latencyMs: number;
+    error?: string;
+  }>;
   forensicContext?: {
     currentSituation?: unknown;
     researchPacket?: unknown;

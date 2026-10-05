@@ -7,6 +7,7 @@ export type NarrativeRichnessDecision = 'PASS' | 'IMPROVE';
 export type NarrativeRichnessSeverity = 'LOW' | 'MEDIUM' | 'HIGH';
 
 export type NarrativeRichnessDimension =
+	| 'ACTION_SUBSTANCE'
 	| 'SPECIFICITY'
 	| 'CHARACTER_DIALOGUE_INDIVIDUALITY'
 	| 'SUBTEXT'
@@ -48,18 +49,19 @@ export interface NarrativeRichnessEvaluation {
 }
 
 const WEIGHTS: Record<NarrativeRichnessDimension, number> = {
-	SPECIFICITY: 0.11,
+	ACTION_SUBSTANCE: 0.16,
+	SPECIFICITY: 0.09,
 	CHARACTER_DIALOGUE_INDIVIDUALITY: 0.09,
 	SUBTEXT: 0.08,
-	EMOTIONAL_PROGRESSION: 0.10,
-	SENSORY_VARIETY: 0.09,
+	EMOTIONAL_PROGRESSION: 0.08,
+	SENSORY_VARIETY: 0.05,
 	BEAT_PROGRESSION: 0.10,
 	DRAMATIC_TENSION: 0.08,
 	MEANINGFUL_REACTION: 0.08,
-	FRESHNESS: 0.10,
-	SETUP_PAYOFF: 0.07,
-	CLOSURE: 0.05,
-	PLAYER_AGENCY: 0.05,
+	FRESHNESS: 0.08,
+	SETUP_PAYOFF: 0.05,
+	CLOSURE: 0.03,
+	PLAYER_AGENCY: 0.04,
 };
 
 const STOP_WORDS = new Set([
@@ -151,6 +153,30 @@ function isMicroTurn(intent: PlayerIntent, plan: EphemeralNarrativePlan): boolea
 		intent.action === 'observe' ||
 		plan.sceneComposition?.pacingShape === 'MICRO_BEAT'
 	);
+}
+
+function scoreActionSubstance(
+	text: string,
+	intent: PlayerIntent,
+	plan: EphemeralNarrativePlan,
+): NarrativeRichnessDimensionResult {
+	const actionSignals = (text.match(/\\b(?:ask(?:s|ed)?|answer(?:s|ed)?|reply(?:s|ied)?|respond(?:s|ed)?|report(?:s|ed)?|tell(?:s|told)?|say(?:s|said)?|speak(?:s|spoke)?|question(?:s|ed)?|explain(?:s|ed)?|reveal(?:s|ed)?|confirm(?:s|ed)?|refuse(?:s|d)?|listen(?:s|ed)?|hear(?:s|d)?|observe(?:s|d)?|inspect(?:s|ed)?|check(?:s|ed)?|draw(?:s|ew)?|grip(?:s|ped)?|tighten(?:s|ed)?|open(?:s|ed)?|close(?:s|d)?|touch(?:es|ed)?|reach(?:es|ed)?|move(?:s|d)?|step(?:s|ped)?|cross(?:es|ed)?|approach(?:es|ed)?|turn(?:s|ed)?|take(?:s|ook)?|pick(?:s|ed)?|enter(?:s|ed)?|leave(?:s|ft)?|hand(?:s|ed)?|give(?:s|ave)?|receive(?:s|d)?|notice(?:s|d)?|discover(?:s|ed)?|find(?:s|ound)?|learn(?:s|ed)?|wait(?:s|ed)?|prepare(?:s|d)?|ready(?:s|ied)?|settle(?:s|d)?|brace(?:s|d)?|raise(?:s|d)?|lower(?:s|ed)?|draw(?:s|ew)?|unsheath(?:s|ed)?|sheath(?:s|ed)?)\\b/gi) || []).length;
+	const reactionSignals = (text.match(/\\b(?:nod(?:s|ded)?|flinch(?:es|ed)?|hesitat(?:es|ed)?|glance(?:s|d)?|stare(?:s|d)?|recoil(?:s|ed)?|smile(?:s|d)?|frown(?:s|ed)?|laugh(?:s|ed)?|gasp(?:s|ed)?|freeze(?:s|d)?|watch(?:es|ed)?|acknowledge(?:s|d)?|gesture(?:s|d)?|pause(?:s|d)?|turn(?:s|ed)?|answer(?:s|ed)?|reply(?:s|ied)?|respond(?:s|ed)?|refuse(?:s|d)?|warn(?:s|ed)?|explain(?:s|ed)?|tell(?:s|told)?|say(?:s|said)?)\\b/gi) || []).length;
+	const informationSignals = (text.match(/\\b(?:learn(?:s|ed)?|discover(?:s|ed)?|reveal(?:s|ed)?|explain(?:s|ed)?|confirm(?:s|ed)?|report(?:s|ed)?|answer(?:s|ed)?|reply(?:s|ied)?|respond(?:s|ed)?|state(?:s|d)?|mention(?:s|ed)?|admit(?:s|ted)?|warn(?:s|ed)?|nothing|unknown|uncertain|unclear|refuse(?:s|d)? to answer|no reliable answer)\\b/gi) || []).length;
+	const sensorySignals = (text.match(/\\b(?:shadow|light|glow|dark|sky|stone|air|dust|smell|scent|sound|echo|murmur|roar|wind|cold|warm|autumn|brass|iron|earth|floor|wall|arch)\\b/gi) || []).length;
+	const sentenceCount = sentences(text).length;
+	const isInformationTurn = intent.interactionMode === 'DIALOGUE' || intent.interactionMode === 'INFORMATION_SEEKING' || Boolean(intent.informationGoal);
+	const hasResolution = reactionSignals > 0 || informationSignals > 0 || Boolean(plan.sceneComposition?.closingBeat && overlap(text, plan.sceneComposition.closingBeat) > 0.05);
+	const actionCoverage = actionSignals > 0 ? Math.min(1, 0.42 + Math.min(0.38, actionSignals * 0.08)) : 0.18;
+	const resolutionCoverage = hasResolution ? 0.22 : isInformationTurn ? 0 : 0.10;
+	const sensoryPenalty = sensorySignals > actionSignals * 1.5 && sentenceCount >= 2 ? 0.24 : sensorySignals > actionSignals && sentenceCount >= 3 ? 0.12 : 0;
+	const score = clamp(actionCoverage + resolutionCoverage - sensoryPenalty);
+	const evidence = [
+		actionSignals ? actionSignals + ' concrete action/resolution signals detected.' : 'No concrete current-turn action signal detected.',
+		hasResolution ? 'The narration contains a response, consequence, information result, or closing beat.' : 'The narration does not clearly provide a response, consequence, information result, or closing beat.',
+		sensoryPenalty ? 'Decorative/environmental detail outweighs substantive action signals.' : 'Environmental detail remains subordinate to the current-turn action.',
+	];
+	return dimension('ACTION_SUBSTANCE', score, evidence);
 }
 
 function scoreSpecificity(
@@ -378,6 +404,7 @@ export class NarrativeRichnessEvaluator {
 		}
 
 		const dimensions = [
+			scoreActionSubstance(text, params.intent, params.plan),
 			scoreSpecificity(text, params.situation, params.plan),
 			scoreDialogueIndividuality(text, params.intent, params.turnPackage),
 			scoreSubtext(text, params.plan),
@@ -410,8 +437,9 @@ export class NarrativeRichnessEvaluator {
 			.slice(0, 4)
 			.map((result) => result.dimension.toLowerCase().replace(/_/g, ' '));
 
+		const substance = dimensions.find((result) => result.dimension === 'ACTION_SUBSTANCE');
 		const decision: NarrativeRichnessDecision =
-			overallScore >= 0.68 && !weak.some((result) => result.dimension === 'PLAYER_AGENCY' || result.score < 0.32)
+			overallScore >= 0.68 && !weak.some((result) => result.dimension === 'PLAYER_AGENCY' || result.score < 0.32) && Boolean(substance && substance.score >= 0.50)
 				? 'PASS'
 				: 'IMPROVE';
 
@@ -447,6 +475,7 @@ export class NarrativeRichnessEvaluator {
 			'N18 richness improvement guidance:',
 			...evaluation.issues.slice(0, 6).map((issue) => '- ' + issue.message + (issue.evidence ? ' Evidence: ' + issue.evidence : '')),
 			'Improve presentation richness only. Preserve canonical facts, semantic player intent, knowledge boundaries, state effects, plot direction, and player agency.',
+			'For ACTION_SUBSTANCE failures, resolve the player action first: show the concrete attempt, then an immediate observable response, consequence, information result, or clearly bounded unresolved result. Do not substitute environmental description for the action.',
 		].join('\n');
 	}
 }

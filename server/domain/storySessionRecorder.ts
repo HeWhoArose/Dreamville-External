@@ -298,12 +298,14 @@ export class StorySessionRecorder {
 			...(params.mutationPaths ? { mutationPaths: [...params.mutationPaths] } : {}),
 		};
 		recording.interactions.push(interaction);
-		recording.finalState = after;
 		recording.finalStateHash = hash(after);
+		delete recording.finalState;
 	}
 
 	public static stop(recording: StorySessionRecording): void {
 		recording.endedAt = new Date().toISOString();
+		recording.finalState = this.applyPatches(recording);
+		recording.finalStateHash = hash(recording.finalState);
 	}
 
 	public static validate(recording: unknown): { valid: boolean; errorReason?: string; interactionCount?: number } {

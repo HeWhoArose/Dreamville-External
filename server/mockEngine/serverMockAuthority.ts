@@ -35,6 +35,10 @@ import { PlayerIntentInterpreter } from '../domain/playerIntentInterpreter';
 import { ResolutionGate } from '../domain/resolutionGate';
 import { outcomeTierFromCheck, type ActionResolution } from '../domain/actionResolution';
 import { type ContextTransparency } from '../../src/types';
+import { NarrativeRichnessEvaluator, type NarrativeRichnessEvaluation } from '../domain/narrativeRichnessEvaluation';
+import { NarrativePacingEngine } from '../domain/narrativePacingEngine';
+import type { EphemeralNarrativePlan } from '../domain/narrativeDirector';
+import type { PlayerIntent } from '../domain/playerIntentInterpreter';
 
 /**
  * ServerMockAuthority
@@ -47,6 +51,30 @@ import { type ContextTransparency } from '../../src/types';
  * - All outbound data passes through filterForExternalClient().
  * - hiddenCanonicalContext and serverBoundarySecret are NEVER returned to the client.
  */
+function parseLiveNarrativeReview(rawText: string): { narrativeText: string; structuredEvents: any[] } | null {
+  const cleaned = String(rawText || '').trim();
+  if (!cleaned) return null;
+  let parsed: any;
+  try { parsed = JSON.parse(cleaned); } catch {
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start < 0 || end <= start) return null;
+    try { parsed = JSON.parse(cleaned.slice(start, end + 1)); } catch { return null; }
+  }
+  if (!parsed || typeof parsed !== 'object' || typeof parsed.narrativeText !== 'string') return null;
+  const narrativeText = parsed.narrativeText.trim();
+  if (!narrativeText) return null;
+  return { narrativeText, structuredEvents: Array.isArray(parsed.structuredEvents) ? parsed.structuredEvents : [] };
+}
+
+function liveNarrativeLexicalOverlap(left: string, right: string): number {
+  const stop = new Set(['the','and','that','this','with','from','into','then','than','they','their','there','were','was','have','has','had','will','would','could','should','your','you','for','are','but','not','his','her','him','she','its','our','out','over','under','after','before','about','what','when','where','which','while','just','only','very','some','i','a','an','to','of','on','in']);
+  const tokens = (value: string) => Array.from(new Set(String(value || '').toLowerCase().split(/[^a-z0-9'-]+/).map(v => v.replace(/^['-]+|['-]+$/g, '')).filter(v => v.length >= 4 && !stop.has(v))));
+  const a = new Set(tokens(left));
+  const b = tokens(right);
+  if (!a.size || !b.length) return 0;
+  return b.filter(token => a.has(token)).length / Math.min(a.size, b.length, 12);
+}
 export class ServerMockAuthority {
   private recordChronicleEvidence(
     storyId: string,
@@ -520,6 +548,61 @@ export class ServerMockAuthority {
    */
   public getSanitizedViewState(storyId?: string): ExternalViewState {
     const targetStoryId = storyId || this.activeStoryId;
+    // N18/N8 continuation-turn gate. Opening scenes already use this review loop;
+    // live turns must not silently accept environment-only or consequence-free prose.
+    if (narrativeResponse && narrativeTurnPackage && narrativeGeneration?.source !== 'DETERMINISTIC_FALLBACK') {
+      const previousNarrations = this.getDynamicStoryState(targetStoryId).actionHistory
+        .filter((entry) => Boolean(entry.narrativeResponse))
+        .slice(-6)
+        .map((entry) => String(entry.narrativeResponse || ''));
+      const firstReview = this.evaluateLiveNarrativeQuality({ narrativeText: narrativeResponse, playerAction: String(freeformText), actionResolution, situation: resolutionSituation, intent: resolutionIntent, previousNarrations });
+      if (!firstReview.accepted) {
+        try {
+          const rewritePrompt = [
+            'CANONICAL LIVE-TURN CONTEXT — preserve exactly; never invent beyond it:',
+            'PLAYER ACTION: ' + String(freeformText),
+            'CANONICAL ACTION RESOLUTION: ' + JSON.stringify(actionResolution),
+            'COMMITTED OUTCOME: ' + committedOutcome,
+            'CURRENT SITUATION: ' + JSON.stringify(resolutionSituation),
+            '',
+            'QUALITY REVIEW: richness=' + firstReview.richness.decision + ' score=' + firstReview.richness.overallScore.toFixed(2),
+            ...firstReview.richness.issues.slice(0, 8).map(issue => '- [' + issue.severity + '] ' + issue.message + (issue.evidence ? ' Evidence: ' + issue.evidence : '')),
+            firstReview.pacingReason ? 'Pacing issue: ' + firstReview.pacingReason : '',
+            firstReview.actionFidelity.reason ? 'Action-fidelity issue: ' + firstReview.actionFidelity.reason : '',
+            '',
+            'ORIGINAL NARRATION:', narrativeResponse,
+            '',
+            'REWRITE REQUIREMENTS:',
+            'Answer the player action first. Show what the action physically or socially does to the situation.',
+            'If another entity is affected, show a concrete visible reaction, response, or changed attention.',
+            'If an object is affected, show the object-level consequence rather than only a sound effect.',
+            'Do not merely restate the room or list scenery.',
+            'Do not invent a consequence not supported by the canonical action resolution or current situation.',
+            'Do not choose the player’s next consequential action.',
+            'Return JSON only with narrativeText and structuredEvents.',
+          ].filter(Boolean).join('\n');
+          const rewriteSystem = 'You are Dreamville’s live-turn narrative quality editor. Rewrite only the presentation of the already-committed turn. Canonical mechanics, world state, epistemic boundaries, and player agency are immutable. The result must contain a clear action -> consequence/reaction beat.';
+          const reviewResponse = await worldRepository.getAiOrchestrator().executeTaskGeneration('narrative.review', rewritePrompt, rewriteSystem, {
+            timeoutMs: 7000, maxTokens: 900, contextTokens: Math.min(12000, Math.ceil(rewritePrompt.length / 4)),
+            validateResponse: (text) => parseLiveNarrativeReview(text) ? { valid: true } : { valid: false, errorReason: 'Live narrative review must return usable JSON prose.' },
+          });
+          if (reviewResponse.source !== 'DETERMINISTIC_FALLBACK') {
+            const parsed = parseLiveNarrativeReview(reviewResponse.text);
+            if (parsed) {
+              const postReview = this.evaluateLiveNarrativeQuality({ narrativeText: parsed.narrativeText, playerAction: String(freeformText), actionResolution, situation: resolutionSituation, intent: resolutionIntent, previousNarrations });
+              if (postReview.accepted) {
+                narrativeResponse = parsed.narrativeText;
+                narrativeTurnPackage = { ...narrativeTurnPackage, narrative: [narrativeResponse], events: [...(narrativeTurnPackage.events || []), 'LIVE_NARRATION_REWRITE_ACCEPTED'] };
+              } else {
+                narrativeTurnPackage = { ...narrativeTurnPackage, events: [...(narrativeTurnPackage.events || []), 'LIVE_NARRATION_REVIEW_REJECTED'] };
+              }
+            }
+          }
+        } catch (reviewError: any) {
+          console.warn('[NarrationQualityGate] Live narration rewrite failed; retaining original provider result.', { storyId: targetStoryId, actionId: baseResult?.actionId, error: reviewError?.message || String(reviewError) });
+        }
+      }
+    }
     const state = this.getDynamicStoryState(targetStoryId);
     return this.filterForExternalClient(state, targetStoryId);
   }
@@ -552,6 +635,83 @@ export class ServerMockAuthority {
    * A separate presentation-only narrator then describes the committed result. The narrator
    * cannot mutate state because MultiModelOrchestrator.generateNarrativeOnly strips state changes.
    */
+  /**
+   * Presentation-only live-turn quality gate. Reuses N18/N8 and adds a hard
+   * action -> consequence/reaction invariant for non-observation player actions.
+   */
+  public evaluateLiveNarrativeQuality(params: {
+    narrativeText: string;
+    playerAction: string;
+    actionResolution: ActionResolution;
+    situation: import('../domain/currentSituation').CurrentSituation;
+    intent: PlayerIntent;
+    previousNarrations?: string[];
+  }): {
+    accepted: boolean;
+    richness: NarrativeRichnessEvaluation;
+    pacingValid: boolean;
+    pacingReason?: string;
+    actionFidelity: { valid: boolean; reason?: string };
+  } {
+    const sceneComposition: any = {
+      version: 1,
+      turnId: params.situation.turnId,
+      sceneObjective: params.actionResolution.actualEffect || 'Show the immediate result of the player action.',
+      beatType: 'MICRO_ACTION',
+      narrativeFocus: [
+        'Answer the player action directly.',
+        params.playerAction,
+        params.actionResolution.actualEffect,
+        ...(params.actionResolution.physicalConsequences || []),
+        ...(params.actionResolution.playerVisibleConsequences || []),
+      ].filter(Boolean).slice(0, 8),
+      emotionalBeat: 'The situation responds to the player action.',
+      emotionalMovement: params.actionResolution.outcomeTier === 'NO_CHECK' ? 'HOLD' : 'RISING',
+      physicalBeat: params.actionResolution.actualEffect || 'A visible consequence follows the action.',
+      sensoryAnchor: params.situation.location.ambientSensory,
+      dialogueAct: params.intent.speechIntent ? 'RESPOND' : 'NONE',
+      subtext: [], reveal: [], withhold: [],
+      reactionPriority: (params.actionResolution.targetEntityIds || [])
+        .map(id => params.situation.nearbyEntities.find(entity => entity.id === id)?.name)
+        .filter((name): name is string => Boolean(name)),
+      tensionDirection: params.actionResolution.outcomeTier === 'FAILURE' || params.actionResolution.outcomeTier === 'FAILURE_WITH_COST' ? 'RISING' : 'STEADY',
+      pacingShape: 'MICRO_BEAT',
+      closingBeat: 'Land the immediate consequence or reaction without deciding the player’s next action.',
+      compositionConfidence: 0.95,
+      expiresAfterNarration: true,
+    };
+    const plan: EphemeralNarrativePlan = {
+      turnId: params.situation.turnId,
+      objective: params.actionResolution.actualEffect || 'Resolve the player action in presentation.',
+      immediateSteps: ['Acknowledge the player action.', 'Show its immediate physical or social consequence.', 'Leave the next choice to the player.'],
+      informationToReveal: [],
+      entitiesToReact: [...(params.actionResolution.targetEntityIds || [])],
+      continuityRequirements: [],
+      forbiddenAssumptions: ['Do not invent hidden facts, new canon, or an uncommitted outcome.', 'Do not choose the player’s next consequential action.'],
+      stateEffectsExpected: [],
+      sceneComposition,
+      createdAt: params.situation.worldTime,
+      expiresAfterNarration: true,
+    };
+    const turnPackage: import('../domain/aiOrchestrator').StructuredTurnPackage = {
+      narrative: [String(params.narrativeText || '').trim()], dialogue: [], events: [], stateChanges: [], memoryCandidates: [], audioCues: [],
+    };
+    const richness = NarrativeRichnessEvaluator.evaluate({ intent: params.intent, situation: params.situation, plan, turnPackage, previousNarrations: params.previousNarrations || [] });
+    const pacingContract = NarrativePacingEngine.resolve({ situation: params.situation, intent: params.intent });
+    const pacing = NarrativePacingEngine.validateNarration(params.narrativeText, pacingContract);
+    const observationLike = params.intent.action === 'observe' || params.intent.interactionMode === 'PASSIVE_OBSERVATION';
+    const actionAnchor = liveNarrativeLexicalOverlap(params.narrativeText, params.playerAction) >= 0.08 ||
+      (params.actionResolution.targetEntityIds || []).some(id => {
+        const entity = params.situation.nearbyEntities.find(item => item.id === id);
+        return Boolean(entity?.name && params.narrativeText.toLowerCase().includes(entity.name.toLowerCase()));
+      });
+    const consequenceText = [params.actionResolution.actualEffect, ...(params.actionResolution.physicalConsequences || []), ...(params.actionResolution.playerVisibleConsequences || [])].join(' ');
+    const consequenceOverlap = liveNarrativeLexicalOverlap(params.narrativeText, consequenceText) >= 0.08;
+    const consequenceSignal = /\b(?:react|reacts|reacted|turns|turned|looks|looked|glances|glanced|flinches|flinched|recoils|recoiled|freezes|froze|stiffens|stiffened|shifts|shifted|steps back|stepped back|approaches|approached|retreats|retreated|draws|drew|raises|raised|lowers|lowered|notices|noticed|catches|caught|lodges|lodged|embeds|embedded|strikes|struck|hits|hit|pierces|pierced|splits|split|breaks|broke|opens|opened|closes|closed|falls|fell|stops|stopped|moves|moved|changes|changed|attention|alarm|silence|settles|settled)\b/i.test(params.narrativeText);
+    const actionFidelityValid = observationLike || (actionAnchor && (consequenceSignal || consequenceOverlap));
+    const actionFidelityReason = actionFidelityValid ? undefined : 'Narration acknowledges too little of the player action or fails to show a concrete consequence/reaction beat.';
+    return { accepted: richness.decision === 'PASS' && pacing.valid && actionFidelityValid, richness, pacingValid: pacing.valid, pacingReason: pacing.reason, actionFidelity: { valid: actionFidelityValid, reason: actionFidelityReason } };
+  }
   public async processCustomAction(
     request: ActionRequest,
     canonicalCommandId?: string,

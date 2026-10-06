@@ -3,6 +3,13 @@ import { WorkingContextEngine, AssembledOpeningContext } from '../domain/working
 import { narrativeContinuityEngine } from '../domain/narrativeContinuityEngine';
 import { OpeningScene, StructuredNarrativeEvent } from '../../src/types';
 import { serverMockAuthority } from '../mockEngine/serverMockAuthority';
+import { NarrativeRichnessEvaluator, type NarrativeRichnessEvaluation } from '../domain/narrativeRichnessEvaluation';
+import { NarrativePacingEngine } from '../domain/narrativePacingEngine';
+import { PlayerIntentInterpreter } from '../domain/playerIntentInterpreter';
+import type { CurrentSituation } from '../domain/currentSituation';
+import type { EphemeralNarrativePlan } from '../domain/narrativeDirector';
+import type { StructuredTurnPackage } from '../domain/aiOrchestrator';
+import type { SceneCompositionContract } from '../domain/sceneComposition';
 
 function parseLooseOpeningResponse(rawText: string): { narrativeText: string; structuredEvents: any[] } | null {
 	const cleaned = String(rawText || '')
@@ -50,6 +57,27 @@ function cleanedNarrativeOpening(text: string): { narrativeText: string; structu
 	if (narrativeText.length < 120) return null;
 	return { narrativeText, structuredEvents: [] };
 }
+
+export interface OpeningSceneQualityAudit {
+	enabled: boolean;
+	presentationOnly: true;
+	firstDecision: 'ACCEPT' | 'REWRITE';
+	firstScore: number;
+	rewriteAttempted: boolean;
+	rewriteSucceeded: boolean;
+	/** Set when the bounded rewrite could not be attempted, produced no usable output, or threw. */
+	rewriteReason?: string;
+	finalDecision: 'ACCEPT' | 'REWRITE';
+	finalScore: number;
+	issues: string[];
+}
+
+export interface OpeningQualityReview {
+	decision: 'ACCEPT' | 'REWRITE';
+	richness: NarrativeRichnessEvaluation;
+	pacingReason?: string;
+}
+
 export interface GenerateOpeningSceneOptions {
 	storyId: string;
 	forceRegenerate?: boolean;
@@ -140,6 +168,7 @@ export class OpeningSceneService {
 				'OPENING REQUIREMENTS:',
 				'- Establish where and when the player is without repeating metadata as headings.',
 				'- Show the protagonist as physically situated in the current environment.',
+				'- Substance first, flourish second: communicate what is happening now and why the moment matters before atmosphere.',
 				'- Use only relevant visible details from the current situation and research.',
 				'- Introduce one concrete unresolved pressure or point of attention supported by canon.',
 				'- Do not invent a quest objective solely to make the opening dramatic.',
@@ -189,16 +218,7 @@ export class OpeningSceneService {
 				const parsed = parseLooseOpeningResponse(response.text);
 				if (!parsed) throw new Error('Opening narration response did not contain usable prose.');
 				generatedText = OpeningSceneService.sanitizeNarrativeText(parsed.narrativeText.trim());
-				generatedEvents = parsed.structuredEvents.map((evt: any, idx: number) => ({
-					id: evt.id || `evt_open_${storyId}_${idx}`,
-					type: evt.type || 'normal',
-					text: String(evt.text || '').trim(),
-					speaker: evt.speaker || undefined,
-					timestamp: rawOpeningFacts.time.formattedHeader,
-				}));
-				if (generatedEvents.length < 4 || !generatedEvents.some((e) => e.type === 'location') || !generatedEvents.some((e) => e.type === 'normal')) {
-					generatedEvents = OpeningSceneService.deriveOpeningEvents(generatedText, storyId, rawOpeningFacts);
-				}
+				generatedEvents = OpeningSceneService.normalizeOpeningEvents(parsed.structuredEvents, storyId, rawOpeningFacts, generatedText);
 			}
 		} catch (error: any) {
 			const testRuntimeFallback = typeof process !== 'undefined' && (
@@ -228,6 +248,92 @@ export class OpeningSceneService {
 		}
 
 		generatedText = OpeningSceneService.sanitizeFixtureLeaks(generatedText, rawOpeningFacts);
+
+		// =========================================================================
+		// Opening-scene presentation-quality gate (N18 richness + N8 pacing).
+		// Deterministic and presentation-only: it never mutates canonical state and
+		// never becomes a source of canon. Applies to AI-generated prose only — the
+		// canonical deterministic fallback is trusted as-is. One bounded AI polish
+		// rewrite ('narrative.review' task) is permitted; on any rewrite failure or
+		// persistent rejection the gate downgrades to the existing canonical
+		// deterministic opening rather than accepting a low-substance opening.
+		// =========================================================================
+		const isDeterministicOpening = generationMeta?.source === 'DETERMINISTIC_FALLBACK';
+		let qualityAudit: OpeningSceneQualityAudit = {
+			enabled: true,
+			presentationOnly: true,
+			firstDecision: 'ACCEPT',
+			firstScore: 1,
+			rewriteAttempted: false,
+			rewriteSucceeded: false,
+			finalDecision: 'ACCEPT',
+			finalScore: 1,
+			issues: [],
+		};
+		if (!isDeterministicOpening && generatedText.trim().length > 0) {
+			const firstReview = OpeningSceneService.evaluateOpeningQuality(generatedText, rawOpeningFacts, storyId);
+			qualityAudit.firstDecision = firstReview.decision;
+			qualityAudit.firstScore = firstReview.richness.overallScore;
+			qualityAudit.finalDecision = firstReview.decision;
+			qualityAudit.finalScore = firstReview.richness.overallScore;
+			qualityAudit.issues = OpeningSceneService.summarizeQualityIssues(firstReview);
+			if (firstReview.decision === 'REWRITE') {
+				qualityAudit.rewriteAttempted = true;
+				try {
+					const rewrite = await OpeningSceneService.rewriteOpeningNarrative({
+						narrativeText: generatedText,
+						facts: rawOpeningFacts,
+						review: firstReview,
+						assembledText: workingContext.assembledText,
+						storyId,
+						timeoutMs,
+						forceModelId,
+						worldRepo,
+					});
+					if (rewrite) {
+						const rewrittenText = OpeningSceneService.sanitizeFixtureLeaks(
+							OpeningSceneService.sanitizeNarrativeText(rewrite.narrativeText.trim()),
+							rawOpeningFacts,
+						);
+						const rewrittenEvents = OpeningSceneService.normalizeOpeningEvents(
+							rewrite.structuredEvents,
+							storyId,
+							rawOpeningFacts,
+							rewrittenText,
+						);
+						const postReview = OpeningSceneService.evaluateOpeningQuality(rewrittenText, rawOpeningFacts, storyId);
+						if (postReview.decision === 'ACCEPT' && rewrittenText.trim().length > 0) {
+							generatedText = rewrittenText;
+							generatedEvents = rewrittenEvents;
+							qualityAudit.rewriteSucceeded = true;
+							qualityAudit.finalDecision = postReview.decision;
+							qualityAudit.finalScore = postReview.richness.overallScore;
+							qualityAudit.issues = OpeningSceneService.summarizeQualityIssues(postReview);
+					} else {
+						qualityAudit.finalDecision = postReview.decision;
+						qualityAudit.finalScore = postReview.richness.overallScore;
+						qualityAudit.issues = OpeningSceneService.summarizeQualityIssues(postReview);
+					}
+				} else {
+					qualityAudit.rewriteReason = 'The AI rewrite returned no usable prose.';
+				}
+			} catch (rewriteError: any) {
+				qualityAudit.rewriteReason = rewriteError?.message || 'The opening rewrite failed.';
+			}
+				if (qualityAudit.finalDecision === 'REWRITE') {
+					const canonical = OpeningSceneService.synthesizeDeterministicOpening(rawOpeningFacts, storyId);
+					generatedText = canonical.narrativeText;
+					generatedEvents = canonical.structuredEvents;
+					qualityAudit.finalScore = 1;
+					qualityAudit.issues = [...qualityAudit.issues, 'Opening downgraded to the canonical deterministic fallback after quality review was not satisfied.'];
+				}
+			}
+			generationMeta = {
+				...generationMeta,
+				qualityAudit,
+			};
+		}
+
 		const openingScene: OpeningScene = {
 			storyId,
 			worldId: run.worldId,
@@ -265,6 +371,314 @@ export class OpeningSceneService {
 		serverMockAuthority.recordOpeningScene(storyId, openingScene);
 
 		return openingScene;
+	}
+
+	/**
+	 * Maps model-supplied structured events and enforces the preserved opening-event
+	 * contract: at least 4 events including one 'location' and one 'normal' event;
+	 * otherwise derives canonical events from the final prose.
+	 */
+	private static normalizeOpeningEvents(
+		rawEvents: any[],
+		storyId: string,
+		facts: AssembledOpeningContext['rawOpeningFacts'],
+		finalNarrativeText: string,
+	): StructuredNarrativeEvent[] {
+		let generatedEvents: StructuredNarrativeEvent[] = rawEvents.map((evt: any, idx: number) => ({
+			id: evt.id || `evt_open_${storyId}_${idx}`,
+			type: evt.type || 'normal',
+			text: String(evt.text || '').trim(),
+			speaker: evt.speaker || undefined,
+			timestamp: facts.time.formattedHeader,
+		}));
+		if (generatedEvents.length < 4 || !generatedEvents.some((e) => e.type === 'location') || !generatedEvents.some((e) => e.type === 'normal')) {
+			generatedEvents = OpeningSceneService.deriveOpeningEvents(finalNarrativeText, storyId, facts);
+		}
+		return generatedEvents;
+	}
+
+	private static summarizeQualityIssues(review: OpeningQualityReview): string[] {
+		return [
+			...review.richness.issues.map((issue) => `${issue.severity}: ${issue.message}`),
+			...(review.pacingReason ? [review.pacingReason] : []),
+		];
+	}
+
+	/**
+	 * Deterministic N18/N8 presentation-quality review for an opening narration.
+	 * Builds an ephemeral read-only review projection from canonical opening facts
+	 * (no repository mutation, no canonical state involvement) and runs the same
+	 * evaluators used by live narration. Accepts when N18 passes and N8 pacing
+	 * ceilings hold; otherwise requests a rewrite.
+	 */
+	public static evaluateOpeningQuality(
+		narrativeText: string,
+		facts: AssembledOpeningContext['rawOpeningFacts'],
+		storyId: string,
+	): OpeningQualityReview {
+		const text = String(narrativeText || '').trim();
+		const situation = OpeningSceneService.buildOpeningReviewSituation(facts, storyId);
+		const intentText = 'Begin the story: ' + (facts.character.startingSituation || `the protagonist is present within ${facts.location.name}`);
+		const intent = PlayerIntentInterpreter.deterministic(intentText, situation);
+		const plan = OpeningSceneService.buildOpeningReviewPlan(facts, storyId);
+		const turnPackage: StructuredTurnPackage = {
+			narrative: [text],
+			dialogue: [],
+			events: [],
+			stateChanges: [],
+			memoryCandidates: [],
+			audioCues: [],
+		};
+
+		const richness = NarrativeRichnessEvaluator.evaluate({
+			intent,
+			situation,
+			plan,
+			turnPackage,
+			previousNarrations: [],
+		});
+		const pacingContract = NarrativePacingEngine.resolve({ situation, intent });
+		const pacingValidation = NarrativePacingEngine.validateNarration(text, pacingContract);
+
+		const decision: 'ACCEPT' | 'REWRITE' = richness.decision === 'PASS' && pacingValidation.valid ? 'ACCEPT' : 'REWRITE';
+		return {
+			decision,
+			richness,
+			pacingReason: pacingValidation.reason,
+		};
+	}
+
+	private static buildOpeningReviewPlan(
+		facts: AssembledOpeningContext['rawOpeningFacts'],
+		storyId: string,
+	): EphemeralNarrativePlan {
+		const sceneComposition = {
+			version: 1,
+			turnId: `opening_${storyId}`,
+			sceneObjective: 'Establish the opening scene with substance-first narration grounded in canonical facts.',
+			beatType: 'DISCOVERY',
+			narrativeFocus: [
+				facts.character.startingSituation
+					? 'Present the immediate situation: ' + facts.character.startingSituation
+					: 'Present the immediate situation as the protagonist experiences it.',
+				'Show the protagonist as an actor within the scene, not a spectator of scenery.',
+				'End on an unresolved in-world beat supported by canon.',
+			].filter(Boolean),
+			emotionalBeat: 'Weighted toward the immediate situation rather than the setting.',
+			emotionalMovement: 'HOLD',
+			physicalBeat: 'The protagonist is mid-scene in the canonical location.',
+			sensoryAnchor: facts.location.ambientSensory,
+			dialogueAct: 'NONE',
+			subtext: [],
+			reveal: [],
+			withhold: [],
+			reactionPriority: [facts.character.name],
+			tensionDirection: 'STEADY',
+			pacingShape: 'EXPANSIVE_GROUNDING',
+			closingBeat: 'The opening situation remains unresolved and actionable.',
+			compositionConfidence: 0.9,
+			expiresAfterNarration: true,
+		} as SceneCompositionContract;
+
+		return {
+			turnId: `opening_${storyId}`,
+			objective: 'Establish the opening scene with substance-first narration grounded in canonical facts.',
+			immediateSteps: [
+				'Communicate what is actually happening now before atmosphere.',
+				'Ground the protagonist in the canonical location without turning the scene into environment-only description.',
+				'End on an unresolved in-world beat supported by canon.',
+			],
+			informationToReveal: [],
+			entitiesToReact: [],
+			continuityRequirements: [
+				'Remain in the canonical location: ' + facts.location.name + '.',
+				'Use the canonical world time: ' + facts.time.formattedHeader + '.',
+				'Keep hidden or unauthorized world knowledge outside the narration.',
+			],
+			forbiddenAssumptions: [
+				'Do not invent hidden facts, secret locations, unavailable entities, or unsupported causal explanations.',
+				'Do not convert rumor, memory, or hearsay into established certainty.',
+				'Do not make major future decisions for the player.',
+				'Do not create an uncommitted location or world-time change.',
+				'Do not introduce unrelated quest beats merely because they exist in campaign history.',
+			],
+			stateEffectsExpected: [],
+			sceneComposition,
+			createdAt: facts.time.formattedHeader,
+			expiresAfterNarration: true,
+		};
+	}
+
+	/**
+	 * Read-only CurrentSituation projection for the opening review. It mirrors the
+	 * canonical opening facts (character, location, time) without touching the
+	 * repository, so the shared N18/N8 evaluators can run unchanged.
+	 */
+	private static buildOpeningReviewSituation(
+		facts: AssembledOpeningContext['rawOpeningFacts'],
+		storyId: string,
+	): CurrentSituation {
+		const actorId = `player_actor_${storyId}`;
+		return {
+			storyId,
+			turnId: `opening_${storyId}`,
+			worldId: facts.world.id,
+			worldTime: facts.time.formattedHeader,
+			worldTimestamp: { year: 0, month: 0, day: 0, hour: 0, minute: 0, second: 0, totalElapsedSeconds: 0 },
+			player: {
+				actorId,
+				name: facts.character.name,
+				locationId: facts.location.id,
+				currentActivity: facts.character.startingSituation || 'present in the opening scene',
+				isTraveling: false,
+				isDead: false,
+				isTransformed: false,
+				isPossessed: false,
+				injuries: [],
+				spatial: { proximityBand: 'SAME_LOCATION' } as any,
+			},
+			location: {
+				id: facts.location.id,
+				name: facts.location.name,
+				regionId: facts.location.region || 'OPENING_REGION',
+				description: facts.location.description,
+				ambientSensory: facts.location.ambientSensory,
+				accessible: true,
+				discovered: true,
+				parentLocationId: null,
+				connectedLocations: [],
+			},
+			nearbyEntities: [
+				{
+					id: actorId,
+					name: facts.character.name,
+					kind: 'PLAYER',
+					locationId: facts.location.id,
+					presence: 'present' as const,
+					isAlive: true,
+					currentActivity: facts.character.startingSituation,
+					role: facts.character.role,
+					distanceBand: 'SAME_LOCATION' as const,
+					importance: 1,
+					explicitlyReferenced: false,
+					visibleToPlayer: true,
+				},
+			],
+			visibleEvents: [],
+			recentTurns: [],
+			plot: {
+				currentArc: 'OPENING',
+				summary: facts.world.summary || facts.world.title,
+				recentBeats: [],
+			},
+			openThreads: [],
+			relevantMemories: [],
+			relevantLore: [],
+			playerKnowledge: {
+				viewerActorId: actorId,
+				knownFacts: [],
+				authorizedFactIds: [],
+				note: 'Opening-scene presentation review projection; no canonical knowledge asserted.',
+			},
+			worldFacts: [],
+			activeConditions: (facts.character.conditions || []).map((label, index) => ({
+				id: `cond_opening_${storyId}_${index}`,
+				label,
+			})),
+			availableInteractions: [],
+		};
+	}
+
+	/**
+	 * Existing-safe single polish rewrite for a rejected opening. Reuses the
+	 * orchestrator's 'narrative.review' task (the same task live narration uses for
+	 * literary polish) with one bounded call. Returns null when no AI rewrite is
+	 * available (deterministic fallback, malformed output) so the caller can fall
+	 * back safely. The rewrite is presentation-only by contract: it receives the
+	 * canonical context and the quality issues, and must preserve every canonical
+	 * fact without inventing future events, hidden information, new canon, player
+	 * decisions, or outcomes.
+	 */
+	public static async rewriteOpeningNarrative(options: {
+		narrativeText: string;
+		facts: AssembledOpeningContext['rawOpeningFacts'];
+		review: OpeningQualityReview;
+		assembledText: string;
+		storyId: string;
+		timeoutMs?: number;
+		forceModelId?: string;
+		worldRepo?: WorldRepository;
+	}): Promise<{ narrativeText: string; structuredEvents: any[] } | null> {
+		const narrator = (options.worldRepo || worldRepository).getAiOrchestrator();
+		if (!narrator || typeof narrator.executeTaskGeneration !== 'function') return null;
+
+		const situation = OpeningSceneService.buildOpeningReviewSituation(options.facts, options.storyId);
+		const intentText = 'Begin the story: ' + (options.facts.character.startingSituation || `the protagonist is present within ${options.facts.location.name}`);
+		const intent = PlayerIntentInterpreter.deterministic(intentText, situation);
+		const plan = OpeningSceneService.buildOpeningReviewPlan(options.facts, options.storyId);
+		const turnPackage: StructuredTurnPackage = {
+			narrative: [options.narrativeText],
+			dialogue: [],
+			events: [],
+			stateChanges: [],
+			memoryCandidates: [],
+			audioCues: [],
+		};
+
+		const guidanceParts = [
+			'N18 RICHNESS REVIEW (deterministic, presentation-only):',
+			'Decision: ' + options.review.richness.decision + '; overall score: ' + options.review.richness.overallScore.toFixed(2) + '.',
+			...options.review.richness.issues.slice(0, 8).map((issue) => '- [' + issue.severity + '] ' + issue.message + (issue.evidence ? ' Evidence: ' + issue.evidence : '')),
+			NarrativeRichnessEvaluator.buildRewriteGuidance(options.review.richness),
+			options.review.pacingReason ? 'N8 PACING: ' + options.review.pacingReason : '',
+		].filter(Boolean);
+
+		const systemInstruction = [
+			'You are the narrative quality editor for the Dreamville opening scene.',
+			'Perform a presentation-only literary polish of the supplied opening narration.',
+			'Correct exactly the listed quality issues: excessive environmental exposition, missing immediate situation or action, weak character behavior, weak dramatic tension, and weak beat progression.',
+			'Preserve every canonical fact from the supplied context: character identity, location, world time, current situation, known information, and plot direction.',
+			'Never invent future events, hidden information, new canonical facts, player decisions, or outcomes. Do not speak or decide for the player.',
+			'Keep roughly 140-260 words. Return JSON only with narrativeText and 4-6 concise structuredEvents.',
+		].join(' ');
+
+		const promptText = [
+			'CANONICAL OPENING CONTEXT (preserve exactly; do not invent beyond it):',
+			options.assembledText,
+			'',
+			...guidanceParts,
+			'',
+			'ORIGINAL OPENING (presentation only — preserve its canonical content):',
+			options.narrativeText,
+			'',
+			'Rewrite the ORIGINAL OPENING as one improved presentation of exactly the same canonical situation.',
+			'Substance first, flourish second: communicate what is happening now, who is doing something, and why the moment matters before any atmosphere.',
+			'Environment description is welcome only where it supports the situation.',
+			'Return JSON only: {"narrativeText": "...", "structuredEvents": [{"type": "location|normal|action|dialogue|quest|item|magic|damage|heal|system", "text": "..."}]}.',
+		].join('\n');
+
+		const response = await narrator.executeTaskGeneration(
+			'narrative.review',
+			promptText,
+			systemInstruction,
+			{
+				timeoutMs: options.timeoutMs,
+				maxTokens: 900,
+				contextTokens: Math.min(12000, Math.ceil(promptText.length / 4)),
+				forceModelId: options.forceModelId,
+				validateResponse: (text) => {
+					const parsed = parseLooseOpeningResponse(text);
+					if (!parsed) {
+						return { valid: false, errorReason: 'Opening rewrite must return usable JSON prose.' };
+					}
+					return { valid: true };
+				},
+			},
+		);
+		if (response.source === 'DETERMINISTIC_FALLBACK') return null;
+		const parsed = parseLooseOpeningResponse(response.text);
+		if (!parsed) return null;
+		return parsed;
 	}
 
 	public static synthesizeDeterministicOpening(

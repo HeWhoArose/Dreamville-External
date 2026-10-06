@@ -548,61 +548,6 @@ export class ServerMockAuthority {
    */
   public getSanitizedViewState(storyId?: string): ExternalViewState {
     const targetStoryId = storyId || this.activeStoryId;
-    // N18/N8 continuation-turn gate. Opening scenes already use this review loop;
-    // live turns must not silently accept environment-only or consequence-free prose.
-    if (narrativeResponse && narrativeTurnPackage && narrativeGeneration?.source !== 'DETERMINISTIC_FALLBACK') {
-      const previousNarrations = this.getDynamicStoryState(targetStoryId).actionHistory
-        .filter((entry) => Boolean(entry.narrativeResponse))
-        .slice(-6)
-        .map((entry) => String(entry.narrativeResponse || ''));
-      const firstReview = this.evaluateLiveNarrativeQuality({ narrativeText: narrativeResponse, playerAction: String(freeformText), actionResolution, situation: resolutionSituation, intent: resolutionIntent, previousNarrations });
-      if (!firstReview.accepted) {
-        try {
-          const rewritePrompt = [
-            'CANONICAL LIVE-TURN CONTEXT — preserve exactly; never invent beyond it:',
-            'PLAYER ACTION: ' + String(freeformText),
-            'CANONICAL ACTION RESOLUTION: ' + JSON.stringify(actionResolution),
-            'COMMITTED OUTCOME: ' + committedOutcome,
-            'CURRENT SITUATION: ' + JSON.stringify(resolutionSituation),
-            '',
-            'QUALITY REVIEW: richness=' + firstReview.richness.decision + ' score=' + firstReview.richness.overallScore.toFixed(2),
-            ...firstReview.richness.issues.slice(0, 8).map(issue => '- [' + issue.severity + '] ' + issue.message + (issue.evidence ? ' Evidence: ' + issue.evidence : '')),
-            firstReview.pacingReason ? 'Pacing issue: ' + firstReview.pacingReason : '',
-            firstReview.actionFidelity.reason ? 'Action-fidelity issue: ' + firstReview.actionFidelity.reason : '',
-            '',
-            'ORIGINAL NARRATION:', narrativeResponse,
-            '',
-            'REWRITE REQUIREMENTS:',
-            'Answer the player action first. Show what the action physically or socially does to the situation.',
-            'If another entity is affected, show a concrete visible reaction, response, or changed attention.',
-            'If an object is affected, show the object-level consequence rather than only a sound effect.',
-            'Do not merely restate the room or list scenery.',
-            'Do not invent a consequence not supported by the canonical action resolution or current situation.',
-            'Do not choose the player’s next consequential action.',
-            'Return JSON only with narrativeText and structuredEvents.',
-          ].filter(Boolean).join('\n');
-          const rewriteSystem = 'You are Dreamville’s live-turn narrative quality editor. Rewrite only the presentation of the already-committed turn. Canonical mechanics, world state, epistemic boundaries, and player agency are immutable. The result must contain a clear action -> consequence/reaction beat.';
-          const reviewResponse = await worldRepository.getAiOrchestrator().executeTaskGeneration('narrative.review', rewritePrompt, rewriteSystem, {
-            timeoutMs: 7000, maxTokens: 900, contextTokens: Math.min(12000, Math.ceil(rewritePrompt.length / 4)),
-            validateResponse: (text) => parseLiveNarrativeReview(text) ? { valid: true } : { valid: false, errorReason: 'Live narrative review must return usable JSON prose.' },
-          });
-          if (reviewResponse.source !== 'DETERMINISTIC_FALLBACK') {
-            const parsed = parseLiveNarrativeReview(reviewResponse.text);
-            if (parsed) {
-              const postReview = this.evaluateLiveNarrativeQuality({ narrativeText: parsed.narrativeText, playerAction: String(freeformText), actionResolution, situation: resolutionSituation, intent: resolutionIntent, previousNarrations });
-              if (postReview.accepted) {
-                narrativeResponse = parsed.narrativeText;
-                narrativeTurnPackage = { ...narrativeTurnPackage, narrative: [narrativeResponse], events: [...(narrativeTurnPackage.events || []), 'LIVE_NARRATION_REWRITE_ACCEPTED'] };
-              } else {
-                narrativeTurnPackage = { ...narrativeTurnPackage, events: [...(narrativeTurnPackage.events || []), 'LIVE_NARRATION_REVIEW_REJECTED'] };
-              }
-            }
-          }
-        } catch (reviewError: any) {
-          console.warn('[NarrationQualityGate] Live narration rewrite failed; retaining original provider result.', { storyId: targetStoryId, actionId: baseResult?.actionId, error: reviewError?.message || String(reviewError) });
-        }
-      }
-    }
     const state = this.getDynamicStoryState(targetStoryId);
     return this.filterForExternalClient(state, targetStoryId);
   }
@@ -706,6 +651,7 @@ export class ServerMockAuthority {
         return Boolean(entity?.name && params.narrativeText.toLowerCase().includes(entity.name.toLowerCase()));
       });
     const consequenceText = [params.actionResolution.actualEffect, ...(params.actionResolution.physicalConsequences || []), ...(params.actionResolution.playerVisibleConsequences || [])].join(' ');
+    const consequenceVerbOverlap = /\b(?:strike|strikes|struck|hit|hits|lodged|lodges|embed|embeds|embedded|pierce|pierces|pierced|split|splits|splinter|splinters|break|breaks|broke|open|opens|opened|close|closes|closed|damage|damages|damaged|restore|restores|restored|heal|heals|healed|move|moves|moved|shift|shifts|shifted|change|changes|changed|stop|stops|stopped|turn|turns|turned|retreat|retreats|retreated|approach|approaches|approached|notice|notices|noticed|react|reacts|reacted)\b/i.test(params.narrativeText) && /\b(?:strike|strikes|struck|hit|hits|lodged|lodges|embed|embeds|embedded|pierce|pierces|pierced|split|splits|splinter|splinters|break|breaks|broke|open|opens|opened|close|closes|closed|damage|damages|damaged|restore|restores|restored|heal|heals|healed|move|moves|moved|shift|shifts|shifted|change|changes|changed|stop|stops|stopped|turn|turns|turned|retreat|retreats|retreated|approach|approaches|approached|notice|notices|noticed|react|reacts|reacted)\b/i.test(consequenceText);
     const consequenceOverlap = liveNarrativeLexicalOverlap(params.narrativeText, consequenceText) >= 0.08;
     const consequenceSignal = /\b(?:react|reacts|reacted|turns|turned|looks|looked|glances|glanced|flinches|flinched|recoils|recoiled|freezes|froze|stiffens|stiffened|shifts|shifted|steps back|stepped back|approaches|approached|retreats|retreated|draws|drew|raises|raised|lowers|lowered|notices|noticed|catches|caught|lodges|lodged|embeds|embedded|strikes|struck|hits|hit|pierces|pierced|splits|split|breaks|broke|opens|opened|closes|closed|falls|fell|stops|stopped|moves|moved|changes|changed|attention|alarm|silence|settles|settled)\b/i.test(params.narrativeText);
     const actionFidelityValid = observationLike || (actionAnchor && (consequenceSignal || consequenceVerbOverlap));
@@ -1288,32 +1234,92 @@ export class ServerMockAuthority {
           attemptsTrail: generated.attemptsTrail,
         });
       }
-    } catch (error: any) {
-      narrativeResponse = this.synthesizeFreeformActionFallback(
-        targetStoryId,
-        String(freeformText),
-        committedOutcome,
-      );
-      narrativeTurnPackage = {
-        narrative: [narrativeResponse],
-        dialogue: [],
-        events: ['LOCAL_NARRATION_FALLBACK'],
-        stateChanges: [],
-        memoryCandidates: [],
-        audioCues: [],
-      };
-      narrativeGeneration = {
-        source: 'DETERMINISTIC_FALLBACK',
-        providerId: 'provider_local_story_fallback',
-        modelId: 'local-story-fallback',
-        regenerated: false,
-      };
-      narrativeError = undefined;
-      console.warn('[NarrationFallback] Narration generation threw; local story fallback used.', {
-        storyId: targetStoryId,
-        actionId: baseResult?.actionId,
-        error: error?.message || String(error),
+    }
+
+    // N18/N8 continuation-turn gate. Opening scenes already use this review loop;
+    // live turns must not silently accept environment-only or consequence-free prose.
+    if (narrativeResponse && narrativeTurnPackage && narrativeGeneration?.source !== 'DETERMINISTIC_FALLBACK') {
+      const previousNarrations = this.getDynamicStoryState(targetStoryId).actionHistory
+        .filter((entry) => Boolean(entry.narrativeResponse))
+        .slice(-6)
+        .map((entry) => String(entry.narrativeResponse || ''));
+      const firstReview = this.evaluateLiveNarrativeQuality({
+        narrativeText: narrativeResponse,
+        playerAction: String(freeformText),
+        actionResolution,
+        situation: resolutionSituation,
+        intent: resolutionIntent,
+        previousNarrations,
       });
+      if (!firstReview.accepted) {
+        try {
+          const rewritePrompt = [
+            'CANONICAL LIVE-TURN CONTEXT — preserve exactly; never invent beyond it:',
+            'PLAYER ACTION: ' + String(freeformText),
+            'CANONICAL ACTION RESOLUTION: ' + JSON.stringify(actionResolution),
+            'COMMITTED OUTCOME: ' + committedOutcome,
+            'CURRENT SITUATION: ' + JSON.stringify(resolutionSituation),
+            '',
+            'QUALITY REVIEW: richness=' + firstReview.richness.decision + ' score=' + firstReview.richness.overallScore.toFixed(2),
+            ...firstReview.richness.issues.slice(0, 8).map(issue => '- [' + issue.severity + '] ' + issue.message + (issue.evidence ? ' Evidence: ' + issue.evidence : '')),
+            firstReview.pacingReason ? 'Pacing issue: ' + firstReview.pacingReason : '',
+            firstReview.actionFidelity.reason ? 'Action-fidelity issue: ' + firstReview.actionFidelity.reason : '',
+            '',
+            'ORIGINAL NARRATION:',
+            narrativeResponse,
+            '',
+            'REWRITE REQUIREMENTS:',
+            'Answer the player action first. Show what the action physically or socially does to the situation.',
+            'If another entity is affected, show a concrete visible reaction, response, or changed attention.',
+            'If an object is affected, show the object-level consequence rather than only a sound effect.',
+            'Do not merely restate the room or list scenery.',
+            'Do not invent a consequence not supported by the canonical action resolution or current situation.',
+            'Do not choose the player’s next consequential action.',
+            'Return JSON only with narrativeText and structuredEvents.',
+          ].filter(Boolean).join('\\n');
+          const rewriteSystem = 'You are Dreamville’s live-turn narrative quality editor. Rewrite only the presentation of the already-committed turn. Canonical mechanics, world state, epistemic boundaries, and player agency are immutable. The result must contain a clear action -> consequence/reaction beat.';
+          const reviewResponse = await worldRepository.getAiOrchestrator().executeTaskGeneration('narrative.review', rewritePrompt, rewriteSystem, {
+            timeoutMs: 7000,
+            maxTokens: 900,
+            contextTokens: Math.min(12000, Math.ceil(rewritePrompt.length / 4)),
+            validateResponse: (text) => parseLiveNarrativeReview(text)
+              ? { valid: true }
+              : { valid: false, errorReason: 'Live narrative review must return usable JSON prose.' },
+          });
+          if (reviewResponse.source !== 'DETERMINISTIC_FALLBACK') {
+            const parsed = parseLiveNarrativeReview(reviewResponse.text);
+            if (parsed) {
+              const postReview = this.evaluateLiveNarrativeQuality({
+                narrativeText: parsed.narrativeText,
+                playerAction: String(freeformText),
+                actionResolution,
+                situation: resolutionSituation,
+                intent: resolutionIntent,
+                previousNarrations,
+              });
+              if (postReview.accepted) {
+                narrativeResponse = parsed.narrativeText;
+                narrativeTurnPackage = {
+                  ...narrativeTurnPackage,
+                  narrative: [narrativeResponse],
+                  events: [...(narrativeTurnPackage.events || []), 'LIVE_NARRATION_REWRITE_ACCEPTED'],
+                };
+              } else {
+                narrativeTurnPackage = {
+                  ...narrativeTurnPackage,
+                  events: [...(narrativeTurnPackage.events || []), 'LIVE_NARRATION_REVIEW_REJECTED'],
+                };
+              }
+            }
+          }
+        } catch (reviewError: any) {
+          console.warn('[NarrationQualityGate] Live narration rewrite failed; retaining original provider result.', {
+            storyId: targetStoryId,
+            actionId: baseResult?.actionId,
+            error: reviewError?.message || String(reviewError),
+          });
+        }
+      }
     }
 
     const state = this.getDynamicStoryState(targetStoryId);

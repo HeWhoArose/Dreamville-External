@@ -708,7 +708,7 @@ export class ServerMockAuthority {
     const consequenceText = [params.actionResolution.actualEffect, ...(params.actionResolution.physicalConsequences || []), ...(params.actionResolution.playerVisibleConsequences || [])].join(' ');
     const consequenceOverlap = liveNarrativeLexicalOverlap(params.narrativeText, consequenceText) >= 0.08;
     const consequenceSignal = /\b(?:react|reacts|reacted|turns|turned|looks|looked|glances|glanced|flinches|flinched|recoils|recoiled|freezes|froze|stiffens|stiffened|shifts|shifted|steps back|stepped back|approaches|approached|retreats|retreated|draws|drew|raises|raised|lowers|lowered|notices|noticed|catches|caught|lodges|lodged|embeds|embedded|strikes|struck|hits|hit|pierces|pierced|splits|split|breaks|broke|opens|opened|closes|closed|falls|fell|stops|stopped|moves|moved|changes|changed|attention|alarm|silence|settles|settled)\b/i.test(params.narrativeText);
-    const actionFidelityValid = observationLike || (actionAnchor && (consequenceSignal || consequenceOverlap));
+    const actionFidelityValid = observationLike || (actionAnchor && (consequenceSignal || consequenceVerbOverlap));
     const actionFidelityReason = actionFidelityValid ? undefined : 'Narration acknowledges too little of the player action or fails to show a concrete consequence/reaction beat.';
     return { accepted: richness.decision === 'PASS' && pacing.valid && actionFidelityValid, richness, pacingValid: pacing.valid, pacingReason: pacing.reason, actionFidelity: { valid: actionFidelityValid, reason: actionFidelityReason } };
   }

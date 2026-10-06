@@ -196,7 +196,7 @@ export class OpeningSceneService {
 					speaker: evt.speaker || undefined,
 					timestamp: rawOpeningFacts.time.formattedHeader,
 				}));
-				if (generatedEvents.length < 4) {
+				if (generatedEvents.length < 4 || !generatedEvents.some((e) => e.type === 'location') || !generatedEvents.some((e) => e.type === 'normal')) {
 					generatedEvents = OpeningSceneService.deriveOpeningEvents(generatedText, storyId, rawOpeningFacts);
 				}
 			}

@@ -43,6 +43,7 @@ const requiredFiles = [
 	'src/services/apiClient.ts',
 	'tests/phase22-release-stabilization.test.ts',
 	'tests/system-wide-phase-audit.phase24.test.ts',
+	'tests/story-beat-director.test.ts',
 	'docs/DREAMVILLE_SYSTEM_WIDE_PHASE_AUDIT_PHASE24.md',
 ];
 

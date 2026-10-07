@@ -263,8 +263,8 @@ export class StoryBeatDirector {
 		if (!beat) return 'Story beat unavailable; follow canonical Action Resolution and Narrative Director.';
 		return [
 			'STORY BEAT: ' + beat.beatType,
-			'Change: ' + beat.meaningfulChange.slice(0, 150),
-			'Focus: ' + beat.narrativeFocus.slice(0, 2).join(' | ').slice(0, 150),
+			'Meaningful change: ' + beat.meaningfulChange.slice(0, 110),
+			'Focus: ' + beat.narrativeFocus.slice(0, 1).join(' | ').slice(0, 100),
 			beat.mustMention.length ? 'Visible anchor: ' + beat.mustMention[0].slice(0, 100) : '',
 			'No invention: unsupported consequences, hidden facts, NPC actions, and player decisions remain forbidden.',
 		].filter(Boolean).join(' ').slice(0, 520);

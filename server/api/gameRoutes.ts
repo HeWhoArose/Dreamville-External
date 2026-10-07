@@ -8868,6 +8868,9 @@ gameRouter.post('/story-runs/:storyId/opening', async (req: Request, res: Respon
       return res.status(404).json({ error: `StoryRun with ID "${storyId}" not found.` });
     }
 
+    // Bootstrap the forensic recording BEFORE opening-scene generation so the opening
+    // interaction's state-before snapshot is the true start of this run.
+    worldRepository.ensureStorySessionRecording(storyId, run.title);
     const sessionBefore = captureCanonicalStateSnapshot(storyId, worldRepository);
     const sessionStartedAt = new Date().toISOString();
     const openingScene = await OpeningSceneService.generateOpeningScene({

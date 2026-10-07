@@ -72,3 +72,40 @@ test('story session recorder detects tampered state patches', () => {
 	const validation = StorySessionRecorder.validate(recording);
 	assert.equal(validation.valid, false);
 });
+
+
+test('story session recorder rejects a discontinuous state-before snapshot', () => {
+	const recording = StorySessionRecorder.start({
+		storyId: 'story_test_3',
+		initialState: { value: 1 },
+		runIdentity: 'run_test_3',
+	});
+
+	assert.throws(
+		() => StorySessionRecorder.append(recording, {
+			storyId: 'story_test_3',
+			kind: 'DIRECT_TURN',
+			source: 'AI',
+			startedAt: '2026-10-05T10:00:00.000Z',
+			completedAt: '2026-10-05T10:00:00.100Z',
+			success: true,
+			rolledBack: false,
+			stateBefore: { value: 999 },
+			stateAfter: { value: 1000 },
+		}),
+		/Story session state-before mismatch/,
+	);
+});
+
+test('story session recorder records a distinct run identity and initial state hash', () => {
+	const initial = { player: { name: 'Elenion', locationId: 'arena' } };
+	const recording = StorySessionRecorder.start({
+		storyId: 'story_test_4',
+		runIdentity: 'run_test_4',
+		initialState: initial,
+	});
+
+	assert.equal(recording.runIdentity, 'run_test_4');
+	assert.equal(recording.initialStateHash.length, 64);
+	assert.equal(StorySessionRecorder.validate(recording).valid, true);
+});

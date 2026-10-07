@@ -62,7 +62,21 @@ export class StorySessionRecordingStore {
 			this.lastPersistedSequence.set(storyId, interactions.length);
 			return recording;
 		} catch (error) {
-			console.error('[StorySessionRecordingStore] Failed to load recording.', { storyId, error });
+			// A damaged/legacy recording must never be silently reused. Preserve it as
+			// forensic evidence, then allow the next explicit recording bootstrap to
+			// start from the live canonical state rather than exporting an empty or
+			// mismatched session.
+			const quarantineSuffix = '.invalid-' + new Date().toISOString().replace(/[:.]/g, '-');
+			const sourceDirectory = this.storyDirectory(storyId);
+			if (existsSync(sourceDirectory)) {
+				try {
+					renameSync(sourceDirectory, sourceDirectory + quarantineSuffix);
+				} catch (quarantineError) {
+					console.error('[StorySessionRecordingStore] Failed to quarantine invalid recording.', { storyId, quarantineError });
+				}
+			}
+			this.lastPersistedSequence.delete(storyId);
+			console.error('[StorySessionRecordingStore] Quarantined invalid recording.', { storyId, error });
 			return null;
 		}
 	}

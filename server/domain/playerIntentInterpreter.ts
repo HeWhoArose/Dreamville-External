@@ -51,7 +51,7 @@ export interface PlayerIntentInterpretation {
 const MOVEMENT_PATTERN = /\b(?:move|walk|step|approach|go|head|travel|enter|leave|return|come|follow|run|sneak|creep|draw closer|draw nearer|move closer|move nearer)\b/i;
 const COMBAT_PATTERN = /\b(?:attack|strike|hit|shoot|fire|stab|slash|punch|kick|fight|cast at|defend|parry)\b/i;
 const ITEM_USE_PATTERN = /\b(?:use|drink|eat|consume|activate|equip|wear|open|unlock|pick up|take|grasp|hold|decipher|translate)\b/i;
-const DIALOGUE_PATTERN = /\b(?:ask|tell|say|speak|talk|reply|answer|question|inquire|consult|call out|shout|yell)\b/i;
+const DIALOGUE_PATTERN = /\b(?:ask|tell|say|speak|talk|reply|answer|question|inquire|consult|report|inform|submit|announce|notify|call out|shout|yell)\b/i;
 const PASSIVE_OBSERVATION_PATTERN = /\b(?:listen|hear|overhear|eavesdrop|observe|watch|look|look around|look for|notice|study|scan|inspect)\b/i;
 const INFORMATION_PATTERN = /\b(?:learn|find out|discover|gather information|information|rumou?rs?|gossip|what happened|who|why|where|when|how|hear|listen|hear about|listen for|overhear)\b/i;
 const OOC_PATTERN = /^(?:ooc|out of character|system|meta)\s*[:>]/i;
@@ -131,6 +131,7 @@ function actionLabel(text: string, mode: PlayerIntentInteractionMode): string {
 	if (/(listen|hear|overhear|eavesdrop)/i.test(text)) return 'listen_and_observe';
 	if (/(observe|watch|look around|scan)/i.test(text)) return 'observe';
 	if (/(ask|question|inquire|consult)/i.test(text)) return 'ask';
+	if (/(report|inform|submit|announce|notify)/i.test(text)) return 'report';
 	if (/(tell|say|speak|talk|reply|answer)/i.test(text)) return 'speak';
 	if (/(shout|yell|call out)/i.test(text)) return 'shout';
 	if (COMBAT_PATTERN.test(text)) return 'attack_or_defend';

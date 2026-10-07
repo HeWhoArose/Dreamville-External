@@ -18,7 +18,9 @@ export type LiteraryIssueCode =
 	| 'OVER_EXPOSITION'
 	| 'TELLING_INSTEAD_OF_SHOWING'
 	| 'PACE_MISMATCH'
-	| 'DIALOGUE_FLATNESS';
+	| 'DIALOGUE_FLATNESS'
+	| 'LOW_ACTION_SUBSTANCE'
+	| 'OVER_ATMOSPHERE';
 
 export interface LiteraryIssue {
 	code: LiteraryIssueCode;
@@ -83,6 +85,32 @@ function styleMismatch(text: string, voice?: NarratorVoiceState): boolean {
 	return forbidden.some((phrase: string) => phrase && lower.includes(normalize(phrase)));
 }
 
+function hasSubstantiveResponse(text: string): boolean {
+	return /\b(?:answers?|answered|replies?|replied|responds?|responded|explains?|explained|reports?|reported|tells?|told|says?|said|asks?|asked|acknowledges?|acknowledged|refuses?|refused|warns?|warned|admits?|admitted|agrees?|agreed|denies?|denied|no answer|no response|kept silent|refused to answer|offered no answer|receives?|received|accepts?|accepted|rejects?|rejected)\b/i.test(text);
+}
+
+function actionSubstanceGap(
+	text: string,
+	params: {
+		intent: PlayerIntent;
+		turnPackage: StructuredTurnPackage;
+	},
+): boolean {
+	const { intent, turnPackage } = params;
+	if (intent.observationIntent && !intent.speechIntent && intent.interactionMode !== 'INFORMATION_SEEKING') return false;
+
+	if (intent.speechIntent || intent.interactionMode === 'DIALOGUE') {
+		const hasDialogue = Array.isArray(turnPackage.dialogue) && turnPackage.dialogue.some((entry) => String(entry?.text || '').trim());
+		return !hasDialogue && !hasSubstantiveResponse(text);
+	}
+
+	if (intent.interactionMode === 'INFORMATION_SEEKING') {
+		return !hasSubstantiveResponse(text) && !/\b(?:learn|discover|find out|information|fact|detail|clue|evidence|rumou?rs?|uncertain|unknown|unclear|unverified|no reliable answer)\b/i.test(text);
+	}
+
+	return false;
+}
+
 function estimateEmotionalVariety(text: string): number {
 	const emotional = /\b(trembl|hesitat|laugh|laughed|smil|frown|anger|fear|relief|grief|delight|uneasy|tense|quiet|shout|whisper|stare|flinch|reluctant|eager|calm)\w*/i;
 	return emotional.test(text) ? 1 : 0;
@@ -118,6 +146,20 @@ export class LiteraryNarrativeReview {
 		}
 		if (params.intent.observationIntent && estimateEmotionalVariety(text) === 0 && ss.length >= 3) {
 			issues.push({ code: 'TELLING_INSTEAD_OF_SHOWING', message: 'Observation-heavy narration has little observable human/emotional reaction.', severity: 'LOW' });
+		}
+		if (actionSubstanceGap(text, params)) {
+			issues.push({
+				code: 'LOW_ACTION_SUBSTANCE',
+				message: 'The player performed a communication or information-seeking action, but the narration does not deliver a concrete response, reaction, information result, or explicit non-response.',
+				severity: 'HIGH',
+			});
+		}
+		if (!params.intent.observationIntent && ss.length >= 4 && !hasSubstantiveResponse(text) && /\b(?:stone|wall|floor|air|wind|light|shadow|dust|sound|echo|smell|scent|cold|warm|heat|mist|metal|crowd|arena|corridor|room)\b/i.test(text)) {
+			issues.push({
+				code: 'OVER_ATMOSPHERE',
+				message: 'The turn spends multiple sentences on environmental atmosphere without a concrete action result, reaction, or information-bearing beat.',
+				severity: 'MEDIUM',
+			});
 		}
 		if (novelty?.discouraged?.length) issues.push({ code: 'REPETITIVE_PHRASE', message: 'N7 novelty ledger detected recently/repeated narrative patterns.', severity: novelty.discouraged.some((item) => item.category === 'TROPE') ? 'HIGH' : 'MEDIUM', evidence: novelty.discouraged.slice(0, 3).map((item) => item.text).join(', ') });
 		if (previous.length > 0) {

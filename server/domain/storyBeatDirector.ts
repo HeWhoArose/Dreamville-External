@@ -128,7 +128,7 @@ export class StoryBeatDirector {
 			playerVisibleConsequences: [],
 			physicalConsequences: [],
 			canonicalStateChanges: [],
-		} as ActionResolution, situation);
+		}, situation);
 		const targets = targetNames(situation, intent);
 		const targetIds = unique([
 			...(actionResolution?.targetEntityIds || []),

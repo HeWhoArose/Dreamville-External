@@ -204,6 +204,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			sceneCompositionContext: string;
 			socialTopologyContext: string;
 			episodeProjectionContext: string;
+			storyBeatContext: string;
 			canonicalConstraints: string;
 			outputContract: string;
 		}>,
@@ -219,7 +220,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		section('CURRENT SITUATION', overrides?.situationContext || situationContext),
 		section('PLAYER INTENT', overrides?.intentContext || intentContext),
 		section('ACTION RESOLUTION — AUTHORITATIVE', actionResolutionContext),
-		section('CURRENT STORY BEAT — MEANINGFUL TURN CONTRACT', storyBeatContext),
+		section('CURRENT STORY BEAT — MEANINGFUL TURN CONTRACT', overrides?.storyBeatContext || storyBeatContext),
 		section('NARRATIVE RESEARCH', researchContext),
 		section('NARRATIVE DIRECTOR PLAN', overrides?.planContext || planContext),
 		section('N13 SCENE COMPOSITION', overrides?.sceneCompositionContext || sceneCompositionContext),
@@ -293,8 +294,8 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				section('NARRATIVE DIRECTOR PLAN', microPlan),
 				section('N13 SCENE COMPOSITION', microComposition),
 				section('N15 SOCIAL ATTENTION / CONVERSATION TOPOLOGY', microSocialTopology),
-				section('N17 NARRATIVE EPISODE PROJECTION', microEpisodeProjection),
 				section('CURRENT STORY BEAT', microStoryBeat),
+				section('N17 NARRATIVE EPISODE PROJECTION', microEpisodeProjection),
 				section('CANONICAL CURRENT SCENE ANCHOR', microCanonical),
 				section('OUTPUT CONTRACT', 'Return ONLY valid JSON in this shape: ' + microOutput),
 			];
@@ -306,6 +307,9 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 					['NARRATIVE DIRECTOR PLAN\\n', microPlan],
 					['PLAYER INTENT\\n', microIntent],
 					['CURRENT SITUATION\\n', microSituation],
+					['N17 NARRATIVE EPISODE PROJECTION\\n', microEpisodeProjection],
+					['N13 SCENE COMPOSITION\\n', microComposition],
+					['N15 SOCIAL ATTENTION / CONVERSATION TOPOLOGY\\n', microSocialTopology],
 				];
 				for (const [, value] of removable) {
 					if (totalTokens <= maxPromptTokens) break;
@@ -394,8 +398,8 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				section('NARRATIVE DIRECTOR PLAN', compactPlan),
 				section('N13 SCENE COMPOSITION', compactComposition),
 				section('N15 SOCIAL ATTENTION / CONVERSATION TOPOLOGY', compactSocialTopology),
-				section('N17 NARRATIVE EPISODE PROJECTION', compactEpisodeProjection),
 				section('CURRENT STORY BEAT', compactStoryBeat),
+				section('N17 NARRATIVE EPISODE PROJECTION', compactEpisodeProjection),
 				section('SUPPORTING WORKING CONTEXT', '[omitted]'),
 				compactCanonical,
 				section('OUTPUT CONTRACT', compactOutput),

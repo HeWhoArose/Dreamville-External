@@ -7246,6 +7246,22 @@ export class MultiModelOrchestrator {
     return { turnPackage: validation.turnPackage, review };
   }
 
+  private validateNarrativeStoryBeat(narration: string, beat?: StoryBeatContract): { valid: boolean; errorReason?: string } {
+    if (!beat || beat.beatType === 'PAUSED') return { valid: true };
+    const output = String(narration || '').toLowerCase();
+    const tokens = (value: string) => Array.from(new Set(value.toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length >= 4)));
+    const meaningful = tokens(beat.meaningfulChange);
+    const overlap = meaningful.filter((token) => output.includes(token)).length / Math.max(1, Math.min(meaningful.length, 8));
+    const targetSignal = beat.mustMention.some((item) => {
+      const itemTokens = tokens(item);
+      return itemTokens.length > 0 && itemTokens.filter((token) => output.includes(token)).length >= Math.min(2, itemTokens.length);
+    });
+    const consequenceSignal = /\b(?:react|reacts|reacted|turns|turned|looks|looked|glances|glanced|flinches|flinched|recoils|recoiled|changes|changed|moves|moved|shifts|shifted|notices|noticed|hears|heard|sees|saw|learns|learned|discovers|discovered|finds|found|opens|opened|closes|closed|damages|damaged|lodges|lodged|embeds|embedded|falls|fell|stops|stopped)\b/i.test(narration);
+    const informationSignal = beat.newInformation.length > 0 && /\b(?:learn|learns|learned|hear|hears|heard|see|sees|saw|notice|notices|noticed|discover|discovers|discovered|find|finds|found|reveal|reveals|revealed|realize|realizes|realized|understand|understands|understood|uncertain|unknown|no reliable answer)\b/i.test(narration);
+    if (overlap >= 0.18 || targetSignal || consequenceSignal || informationSignal) return { valid: true };
+    return { valid: false, errorReason: 'Narration acknowledges the action but does not communicate the meaningful story beat or an observable consequence/information change.' };
+  }
+
   private validateNarrativeMetaLeakage(narration: string): { valid: boolean; errorReason?: string } {
     const output = String(narration || '').trim();
     if (!output) return { valid: true };
@@ -7358,6 +7374,7 @@ export class MultiModelOrchestrator {
     }>;
     researchPacket?: ReturnType<typeof narrativeContinuityEngine.research>;
     narrativePlan?: EphemeralNarrativePlan;
+    storyBeat?: StoryBeatContract;
     researchAudit?: Pick<NarrativeResearchResult, 'blocks' | 'excluded' | 'budgets' | 'totalTokens' | 'query'>;
     narrativeRichnessEvaluation?: NarrativeRichnessEvaluation;
     narrativeQualityAudit?: {
@@ -7428,12 +7445,14 @@ export class MultiModelOrchestrator {
       viewerActorId: currentSituation.player.actorId,
     });
     const researchResult = EpistemicBoundaryEnforcer.sanitizeResearch(rawResearchResult, currentSituation).result;
+    const storyBeat = StoryBeatDirector.resolve({ situation: currentSituation, intent: playerIntent, actionResolution: params.actionResolution, research: researchResult });
     const narrativePlan = NarrativeDirector.create({
       situation: currentSituation,
       intent: playerIntent,
       research: researchResult,
       repository: worldRepo,
       storyId,
+      storyBeat,
     });
 
     const canonicalSceneAnchor = [
@@ -7622,6 +7641,7 @@ export class MultiModelOrchestrator {
       narrativePacingContract,
       canonicalOutcome: authoritativeOutcome,
       actionResolution: params.actionResolution,
+      storyBeat,
       maxPromptTokens: Math.max(200, hardTokenBudget),
     });
 
@@ -7709,6 +7729,8 @@ export class MultiModelOrchestrator {
           if (!informationTopicContinuity.valid) return { valid: false, errorReason: informationTopicContinuity.errorReason };
           const informationContinuity = this.validateNarrativeInformationContinuity(narrationText, playerAction, playerIntent);
           if (!informationContinuity.valid) return { valid: false, errorReason: informationContinuity.errorReason };
+          const storyBeatContinuity = this.validateNarrativeStoryBeat(narrationText, storyBeat);
+          if (!storyBeatContinuity.valid) return { valid: false, errorReason: storyBeatContinuity.errorReason };
           const temporalContinuity = this.validateNarrativeTemporalContinuity(narrationText, worldRepo, storyId);
           return temporalContinuity.valid
             ? { valid: true }
@@ -7783,6 +7805,10 @@ export class MultiModelOrchestrator {
         contextAudit,
         error: finalActionContinuity.errorReason || 'Narration action continuity validation failed.',
       };
+    }
+    const finalStoryBeatContinuity = this.validateNarrativeStoryBeat(finalNarrationText, storyBeat);
+    if (!finalStoryBeatContinuity.valid) {
+      return { success: false, providerId: generated.providerId, modelId: generated.modelId, source: generated.source, fallbackReason: generated.fallbackReason, attemptsTrail: generated.attemptsTrail, researchPacket, narrativePlan, storyBeat, researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query }, contextAudit, error: finalStoryBeatContinuity.errorReason || 'Narration story-beat fidelity validation failed.' };
     }
     const finalInformationContinuity = this.validateNarrativeInformationContinuity(finalNarrationText, playerAction, playerIntent);
     if (!finalInformationContinuity.valid) {

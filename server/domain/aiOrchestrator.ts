@@ -8023,6 +8023,7 @@ export class MultiModelOrchestrator {
       contextAudit,
       narrativeRichnessEvaluation: finalNarrativeRichnessEvaluation,
       narrativeQualityAudit,
+      storyBeat,
     };
   }
 

@@ -78,7 +78,7 @@ function visibleEntityNameById(situation: CurrentSituation, id: string): string 
 	return situation.nearbyEntities.find((entity) => entity.id === id && entity.visibleToPlayer)?.name;
 }
 
-function visibleChanges(resolution: ActionResolution, situation: CurrentSituation): string[] {
+function visibleChanges(resolution: Pick<ActionResolution, 'playerVisibleConsequences' | 'physicalConsequences' | 'canonicalStateChanges'>, situation: CurrentSituation): string[] {
 	const values = [
 		...(resolution.playerVisibleConsequences || []),
 		...(resolution.physicalConsequences || []),

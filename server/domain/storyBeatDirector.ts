@@ -264,6 +264,7 @@ export class StoryBeatDirector {
 			'Meaningful change: ' + beat.meaningfulChange.slice(0, 110),
 			'Focus: ' + beat.narrativeFocus.slice(0, 1).join(' | ').slice(0, 100),
 			beat.mustMention.length ? 'Visible anchor: ' + beat.mustMention[0].slice(0, 100) : '',
+			beat.continuityAnchors.length ? 'Continuity anchor: ' + beat.continuityAnchors.slice(-2).join(' | ').slice(0, 120) : '',
 			'No invention: unsupported consequences, hidden facts, NPC actions, and player decisions remain forbidden.',
 		].filter(Boolean).join(' ').slice(0, 520);
 	}}

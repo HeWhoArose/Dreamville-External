@@ -1,4 +1,4 @@
-import type { StoryCheckResult, ActionResolution, ActionOutcomeTier, ActionResolutionMethod } from '../../src/types';
+import type { StoryCheckResult, ActionResolution, ActionOutcomeTier, ActionResolutionMethod, CombatNarrativeResolution } from '../../src/types';
 export type { ActionResolution, ActionOutcomeTier, ActionResolutionMethod };
 
 export function outcomeTierFromCheck(check: StoryCheckResult): ActionOutcomeTier {
@@ -7,6 +7,68 @@ export function outcomeTierFromCheck(check: StoryCheckResult): ActionOutcomeTier
   if (check.criticalFailure) return 'CRITICAL_FAILURE';
   if (check.success) return check.consequence?.applied ? 'SUCCESS_WITH_COST' : 'CLEAN_SUCCESS';
   return check.consequence?.applied ? 'FAILURE_WITH_COST' : 'FAILURE';
+}
+
+
+export function actionResolutionFromCombat(
+	combat: CombatNarrativeResolution,
+	storyId: string,
+	turnId: string = combat.id,
+): ActionResolution {
+	const hit = combat.hits;
+	const outcomeTier: ActionOutcomeTier = hit === false ? 'FAILURE' : combat.damage && combat.damage > 0 ? 'SUCCESS_WITH_COST' : 'CLEAN_SUCCESS';
+	const targetNames = combat.targetIds.join(', ');
+	const visible = [
+		combat.mechanicalSummary,
+		...(combat.targetHp || []).map((target) =>
+			(target.targetDied ? 'Target ' : 'Target ') + target.targetId + (target.targetDied ? ' was defeated.' : ' remains at ' + target.hpCurrent + ' HP.'),
+		),
+	].filter(Boolean);
+	return {
+		resolutionId: combat.id,
+		storyId,
+		turnId,
+		playerAction: combat.actionText,
+		playerIntent: {
+			action: combat.actionLabel,
+			interactionMode: 'COMBAT',
+			movementIntent: false,
+			observationIntent: false,
+			speechIntent: false,
+			targetIds: combat.targetIds,
+		},
+		attemptedEffect: combat.actionText,
+		targetEntityIds: combat.targetIds,
+		resolutionMethod: 'COMBAT',
+		outcomeTier,
+		actualEffect: combat.mechanicalSummary,
+		canonicalStateChanges: [
+			...(combat.damage && combat.damage > 0 ? combat.targetIds.map((targetId) => ({
+				kind: 'COMBAT_DAMAGE',
+				targetId,
+				value: { damage: combat.damage },
+				metadata: { source: 'combat_canonical_resolution' },
+			})) : []),
+			...(combat.targetHp || []).filter((target) => target.targetDied).map((target) => ({
+				kind: 'COMBAT_DEFEAT',
+				targetId: target.targetId,
+				value: { defeated: true },
+				metadata: { source: 'combat_canonical_resolution' },
+			})),
+		],
+		physicalConsequences: uniqueResolutionStrings(visible),
+		playerVisibleConsequences: uniqueResolutionStrings(visible),
+		evidenceIds: combat.canonicalEventIds.slice(0, 8),
+		uncertainty: [],
+		provenance: {
+			source: 'CANONICAL_ENGINE',
+			canonicalEventId: combat.canonicalEventIds[0],
+		},
+	};
+}
+
+function uniqueResolutionStrings(values: string[]): string[] {
+	return Array.from(new Set(values.map((value) => String(value || '').trim()).filter(Boolean))).slice(0, 8);
 }
 
 export function buildActionResolutionPromptContext(resolution?: ActionResolution): string {

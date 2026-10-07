@@ -7804,7 +7804,9 @@ export class MultiModelOrchestrator {
         error: finalActionContinuity.errorReason || 'Narration action continuity validation failed.',
       };
     }
-    const finalStoryBeatContinuity = this.validateNarrativeStoryBeat(finalNarrationText, storyBeat);
+    const finalStoryBeatContinuity = params.actionResolution
+      ? this.validateNarrativeStoryBeat(finalNarrationText, storyBeat)
+      : { valid: true as const };
     if (!finalStoryBeatContinuity.valid) {
       return { success: false, providerId: generated.providerId, modelId: generated.modelId, source: generated.source, fallbackReason: generated.fallbackReason, attemptsTrail: generated.attemptsTrail, researchPacket, narrativePlan, storyBeat, researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query }, contextAudit, error: finalStoryBeatContinuity.errorReason || 'Narration story-beat fidelity validation failed.' };
     }
@@ -7858,10 +7860,14 @@ export class MultiModelOrchestrator {
       environmentExcess,
       environmentSentenceCounts.environment,
     );
+    const initialStoryBeatContinuity = params.actionResolution
+      ? this.validateNarrativeStoryBeat(finalNarrationText, storyBeat)
+      : { valid: true as const };
     const qualityGateTriggersRewrite =
       environmentExcess ||
       finalNarrativeRichnessEvaluation.decision === 'IMPROVE' ||
-      (params.actionResolution !== undefined && !finalActionModeContinuity.valid);
+      (params.actionResolution !== undefined && !finalActionModeContinuity.valid) ||
+      (params.actionResolution !== undefined && !initialStoryBeatContinuity.valid);
     if (qualityGateTriggersRewrite && (params.maxRetries ?? 0) >= 1) {
       const rewriteBudget = turnAiCallBudget.beginTask('narrative.review');
       if (rewriteBudget.allowed) {
@@ -7886,6 +7892,9 @@ export class MultiModelOrchestrator {
             : []),
           'ORIGINAL NARRATION (presentation only):',
           finalNarrationText,
+          '',
+          'CURRENT STORY BEAT CONTRACT (derived from canonical resolution; communicate it without inventing beyond it):',
+          StoryBeatDirector.toPromptContext(storyBeat),
           '',
           'PRESENTATION QUALITY REVIEW:',
           NarrativeRichnessEvaluator.buildRewriteGuidance(finalNarrativeRichnessEvaluation),
@@ -7948,9 +7957,13 @@ export class MultiModelOrchestrator {
               (rewriteValidation.turnPackage.dialogue || []).length > 0,
               currentSituation.player.name,
             ) && !openingTurn;
+            const rewriteStoryBeatContinuity = params.actionResolution
+              ? this.validateNarrativeStoryBeat(rewriteNarration, storyBeat)
+              : { valid: true as const };
             if (
               rewriteNarration.trim().length > 0 &&
               !rewriteEnvironmentExcess &&
+              rewriteStoryBeatContinuity.valid &&
               postRewriteEvaluation.overallScore > finalNarrativeRichnessEvaluation.overallScore
             ) {
               validation.turnPackage = rewriteValidation.turnPackage;
@@ -7966,7 +7979,9 @@ export class MultiModelOrchestrator {
                 ? 'The rewrite returned empty narration.'
                 : rewriteEnvironmentExcess
                   ? 'The rewrite still spent too many sentences on environment-only description.'
-                  : 'The rewrite scored ' + postRewriteEvaluation.overallScore.toFixed(3) + ', not an improvement over ' + finalNarrativeRichnessEvaluation.overallScore.toFixed(3) + '; the original narration was preserved.';
+                  : !rewriteStoryBeatContinuity.valid
+                    ? (rewriteStoryBeatContinuity.errorReason || 'The rewrite did not communicate the meaningful story beat.')
+                    : 'The rewrite scored ' + postRewriteEvaluation.overallScore.toFixed(3) + ', not an improvement over ' + finalNarrativeRichnessEvaluation.overallScore.toFixed(3) + '; the original narration was preserved.';
             }
           } else {
             narrativeQualityAudit.rewriteErrorReason = rewriteValidation.errorReason || 'The rewrite returned an invalid structured turn package.';

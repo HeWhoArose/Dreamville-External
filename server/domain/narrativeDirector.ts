@@ -234,7 +234,7 @@ export class NarrativeDirector {
 	public static toPromptContext(plan: EphemeralNarrativePlan): string {
 		return [
 			'NARRATIVE DIRECTOR PLAN (EPHEMERAL — USE FOR THIS TURN ONLY)',
-			plan.storyBeat ? 'Meaningful story beat:\n' + JSON.stringify(plan.storyBeat) : 'Meaningful story beat: unavailable; preserve canonical action and existing plan.',
+			plan.storyBeat ? 'StoryBeatContract attached; use the dedicated CURRENT STORY BEAT contract for meaningful-turn guidance.' : 'Meaningful story beat: unavailable; preserve canonical action and existing plan.',
 			'Objective: ' + plan.objective,
 			'Immediate steps:\n' + plan.immediateSteps.map((step, index) => (index + 1) + '. ' + step).join('\n'),
 			plan.informationToReveal.length ? 'Information to reveal:\n' + plan.informationToReveal.map((item) => '- ' + item.topic + ' [' + item.presentation + '] [sources=' + (item.sourceBlockIds.join(', ') || 'none') + ']').join('\n') : 'Information to reveal: none.',

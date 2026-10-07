@@ -2,7 +2,7 @@
 
 ## Status
 
-**Status:** PLANNED  
+**Status:** VERIFIED — RUNTIME TESTED  
 **Owner:** Narrative presentation architecture  
 **Target branch:** `main` after implementation branch verification  
 **Depends on:** N13 Scene Composition, N14 NPC Expressive Identity, N15 Social Attention Topology, N16 Memory Retrieval, N17 Narrative Episode Projection, N18 Narrative Richness Evaluation, N19 Creative Model Tier/Cadence Routing, current live narration fidelity gates, `5343e74`.
@@ -1463,4 +1463,4 @@ The final system should make the narrator behave less like a camera describing a
 
 ---
 
-**Important:** This document is a plan only. It does not authorize implementation until the Phase 0 audit confirms the exact authoritative BEFORE/AFTER data sources and verifies that no existing component already owns the proposed responsibility.
+**Important:** This plan has now been implemented and runtime-verified on `main`. Phase 0 confirmed that existing ActionResolution + CurrentSituation projections provide the required evidence without creating a duplicate simulation authority.

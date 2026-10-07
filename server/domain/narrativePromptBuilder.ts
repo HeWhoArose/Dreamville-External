@@ -333,6 +333,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				sceneCompositionContext: SceneCompositionEngine.toCompactPromptContext(sceneComposition),
 				socialTopologyContext: truncatePromptSection(socialTopologyContext, tightEpisodeBudget ? 360 : 520),
 				episodeProjectionContext: truncatePromptSection(NarrativeEpisodeProjectionEngine.toCompactPromptContext(presentationPlan.episodeProjection), tightEpisodeBudget ? 100 : 180),
+				storyBeatContext: StoryBeatDirector.toCompactPromptContext(storyBeat),
 				workingContext: truncatePromptSection(initialWorking, tightEpisodeBudget ? 100 : 320),
 				situationContext: truncatePromptSection(situationContext, tightEpisodeBudget ? 500 : 900),
 			};
@@ -346,6 +347,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 					sceneCompositionContext: compact.sceneCompositionContext,
 					socialTopologyContext: compact.socialTopologyContext,
 					episodeProjectionContext: compact.episodeProjectionContext,
+					storyBeatContext: compact.storyBeatContext,
 				},
 			);
 			prompt = renderCompact();

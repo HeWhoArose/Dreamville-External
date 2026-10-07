@@ -142,7 +142,9 @@ export class StoryBeatDirector {
 			.map((block) => text(block.content))
 			.filter(Boolean) || [];
 		const newInformation = unique([
-			...(actionResolution?.playerVisibleConsequences || []),
+			...(intent.observationIntent || intent.informationGoal || intent.interactionMode === 'INFORMATION_SEEKING'
+				? (actionResolution?.playerVisibleConsequences || []).filter((value) => /discover|learn|notice|hear|see|reveal|find|report|observe|confirm|unknown|uncertain/i.test(value))
+				: []),
 			...researchChanges.filter((value) => /discover|learn|notice|hear|see|reveal|find|report|observe|confirm|unknown|uncertain/i.test(value)),
 		]).slice(0, 6);
 		const affectedEntityIds = unique([

@@ -25,7 +25,7 @@ import { NarrativeDirector, type EphemeralNarrativePlan } from './narrativeDirec
 import { buildNarrationPrompt, defaultNarrationStyle, projectSupportingWorkingContext } from './narrativePromptBuilder';
 import { SemanticNarrativeReview, type NarrativeReview } from './semanticNarrativeReview';
 import { LiteraryNarrativeReview, type LiteraryReview } from './literaryNarrativeReview';
-import { NarrativeRichnessEvaluator, type NarrativeRichnessEvaluation } from './narrativeRichnessEvaluation';
+import { NarrativeRichnessEvaluator, type NarrativeRichnessEvaluation, type NarrativeRichnessDecision, type NarrativeRichnessIssue } from './narrativeRichnessEvaluation';
 import { NarrativeProviderHandoffEngine, type NarrativeProviderHandoffContract } from './narrativeProviderHandoff';
 import { NarrativePacingEngine, type NarrativePacingContract } from './narrativePacingEngine';
 import { NarrativeNoveltyEngine } from './narrativeNoveltyEngine';
@@ -1367,6 +1367,109 @@ export function classifyDiscoveredModel(
     roles: record.roleEligibility,
     contextWindow: record.contextWindow,
     supportedInputTypes: record.supportedInputTypes,
+  };
+}
+
+/** Maximum sentences a narration may spend on environment-only exposition. */
+const NARRATIVE_ENV_EXCESS_SENTENCE_BUDGET = 3;
+
+/**
+ * Detectors for the N18 presentation-quality gate on live narration.
+ * Environment-heavy, substance-light prose (pure scenery with no situation,
+ * action, dialogue, or stakes) must not reach the player even when it is
+ * grammatically clean: it is the exact failure mode of "too much description
+ * and no substance". Presentation-only: it never alters canonical state.
+ */
+/** Verb/noun stems that indicate situation content: someone acting, speaking, or being acted upon. */
+const NARRATIVE_ENV_SITUATION_STEM_PATTERN = /(?:approach|steps|stepping|enters|entering|reaches|reaching|seeks|search|inquir|question|ask|overhear|listen|whisper|shout|investigat|interrogat|creditor|scribe|narrat|wait|pursu|hunt|prepar|readies|claim|assert|demand|attack|strikes|strike|throws|throw|draws|draw|walk|turns|turned|watch|watches|watched|stares|stared|grips|gripped|clutch|moves|moved|stands|stood|lifts|lifted|leans|leaned|flicks|circles)/i;
+/** Whole words that indicate situation content: actors, crowds, conflict, speech. */
+const NARRATIVE_ENV_SITUATION_WORD_PATTERN = /\b(?:player|you|your|yours|yourself|his|her|their|someone|anyone|no one|figure|figures|crowd|spectator|spectators|guard|guards|enforcer|enforcers|knight|mage|scholar|trader|merchant|market|bar|celebration|fray|fight|battle|voice|voices|being|target|door|dagger|blade|weapon)\b/i;
+/** Static scene-inventory markers: the narration reports absence/stillness instead of events. */
+const NARRATIVE_ENV_STATIC_PATTERN = /\b(?:no sign of|remains? empty|remain empty|no figures? move|nothing moves|no one (?:is |was |appears)|no activity|heat shimmer|silence holds|silent)\b/i;
+
+function countNarrativeEnvironmentSentences(narrationText: string, playerName?: string): { environment: number; playerMentions: number; total: number } {
+  const nameTokens = String(playerName || '')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length >= 3);
+  const playerPattern = new RegExp('\\b(?:you|your|yours|yourself' + (nameTokens.length ? '|' + nameTokens.join('|') : '') + ')\\b', 'i');
+  const sentences = String(narrationText || '')
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  let environment = 0;
+  let playerMentions = 0;
+  for (const sentence of sentences) {
+    const mentionsPlayer = playerPattern.test(sentence);
+    if (mentionsPlayer) {
+      playerMentions += 1;
+      continue;
+    }
+    if (NARRATIVE_ENV_STATIC_PATTERN.test(sentence)) {
+      environment += 1;
+      continue;
+    }
+    if (NARRATIVE_ENV_SITUATION_STEM_PATTERN.test(sentence) || NARRATIVE_ENV_SITUATION_WORD_PATTERN.test(sentence)) {
+      continue;
+    }
+    environment += 1;
+  }
+  return { environment, playerMentions, total: sentences.length };
+}
+
+/**
+ * Environment excess is either a hard overrun of scenery-only sentences or a
+ * narration where scenery dominates despite one player-anchored sentence
+ * (the reported defect: "describing things without explaining what your
+ * character is doing").
+ */
+function detectNarrativeEnvironmentExcess(narrationText: string, hasDialogue: boolean, playerName?: string): boolean {
+  const counts = countNarrativeEnvironmentSentences(narrationText, playerName);
+  if (hasDialogue) return counts.environment > NARRATIVE_ENV_EXCESS_SENTENCE_BUDGET;
+  if (counts.environment > NARRATIVE_ENV_EXCESS_SENTENCE_BUDGET) return true;
+  return counts.total >= 4 && counts.environment >= 3 && counts.playerMentions <= 1;
+}
+
+/**
+ * Is the story's opening turn: the earliest turns carry location-anchoring duty,
+ * so the budget is relaxed to permit a scene-setting first paragraph.
+ */
+function isNarrativeStoryOpeningTurn(storyId: string, repo: WorldRepository): boolean {
+  const storyRun = typeof repo.getStoryRun === 'function' ? repo.getStoryRun(storyId) : undefined;
+  if (!storyRun) return true;
+  const recentCanonicalEvents = typeof repo.getRecentCanonicalCommandEvents === 'function'
+    ? repo.getRecentCanonicalCommandEvents(storyId, 6)
+    : [];
+  return recentCanonicalEvents.length === 0;
+}
+
+function buildNarrativeQualityAudit(
+  evaluation: NarrativeRichnessEvaluation,
+  environmentExcessDetected: boolean,
+  environmentEmissions: number,
+): {
+  firstDecision: NarrativeRichnessDecision | undefined;
+  firstScore: number | undefined;
+  finalDecision: NarrativeRichnessDecision | undefined;
+  finalScore: number | undefined;
+  rewriteAttempted: boolean;
+  rewriteSucceeded: boolean;
+  rewriteSkippedReason: string | undefined;
+  rewriteErrorReason: string | undefined;
+  issues: NarrativeRichnessIssue[];
+  environmentExcessEmissions: number;
+} {
+  return {
+    firstDecision: evaluation.decision,
+    firstScore: evaluation.overallScore,
+    finalDecision: evaluation.decision,
+    finalScore: evaluation.overallScore,
+    rewriteAttempted: false,
+    rewriteSucceeded: false,
+    rewriteSkippedReason: undefined,
+    rewriteErrorReason: undefined,
+    issues: evaluation.issues,
+    environmentExcessEmissions: environmentExcessDetected ? environmentEmissions : 0,
   };
 }
 
@@ -7256,6 +7359,18 @@ export class MultiModelOrchestrator {
     narrativePlan?: EphemeralNarrativePlan;
     researchAudit?: Pick<NarrativeResearchResult, 'blocks' | 'excluded' | 'budgets' | 'totalTokens' | 'query'>;
     narrativeRichnessEvaluation?: NarrativeRichnessEvaluation;
+    narrativeQualityAudit?: {
+      firstDecision: NarrativeRichnessDecision | undefined;
+      firstScore: number | undefined;
+      finalDecision: NarrativeRichnessDecision | undefined;
+      finalScore: number | undefined;
+      rewriteAttempted: boolean;
+      rewriteSucceeded: boolean;
+      rewriteSkippedReason: string | undefined;
+      rewriteErrorReason: string | undefined;
+      issues: NarrativeRichnessIssue[];
+      environmentExcessEmissions: number;
+    };
     contextAudit?: {
       hardTokenBudget: number;
       totalTokens: number;
@@ -7684,13 +7799,168 @@ export class MultiModelOrchestrator {
         error: finalInformationContinuity.errorReason || 'Narration information continuity validation failed.',
       };
     }
-    const finalNarrativeRichnessEvaluation = NarrativeRichnessEvaluator.evaluate({
+    let finalNarrativeRichnessEvaluation = NarrativeRichnessEvaluator.evaluate({
       intent: playerIntent,
       situation: currentSituation,
       plan: narrativePlan,
       turnPackage: validation.turnPackage,
       previousNarrations: canonicalRecentTurns.map((turn) => String(turn.narration || '')).filter(Boolean),
     });
+
+    // N18 presentation-quality gate on live narration: environment-heavy, substance-light
+    // prose is detected deterministically and gets one bounded rewrite using the same
+    // budget contract the orchestrated turn loop uses ('narrative.review', limits 1/turn).
+    // Production callers run this path with maxRetries >= 1 so the rewrite fits the
+    // existing per-turn AI call budget. Test harnesses that pin maxRetries: 0 keep the
+    // historical no-second-call contract, and the evaluation is still attached to the
+    // response so callers can flag or post-process. Presentation-only: canonical state
+    // is untouched either way.
+    const finalActionModeContinuity = this.validateNarrativeActionModeContinuity(
+      finalNarrationText,
+      playerAction,
+      currentSituation.player.name,
+      playerIntent,
+    );
+    const openingTurn = isNarrativeStoryOpeningTurn(storyId, worldRepo);
+    const environmentSentenceCounts = countNarrativeEnvironmentSentences(finalNarrationText, currentSituation.player.name);
+    const environmentExcess = detectNarrativeEnvironmentExcess(
+      finalNarrationText,
+      (validation.turnPackage.dialogue || []).length > 0,
+      currentSituation.player.name,
+    ) && !openingTurn;
+    const narrativeQualityAudit = buildNarrativeQualityAudit(
+      finalNarrativeRichnessEvaluation,
+      environmentExcess,
+      environmentSentenceCounts.environment,
+    );
+    const qualityGateTriggersRewrite =
+      environmentExcess ||
+      finalNarrativeRichnessEvaluation.decision === 'IMPROVE' ||
+      (params.actionResolution !== undefined && !finalActionModeContinuity.valid);
+    if (qualityGateTriggersRewrite && (params.maxRetries ?? 0) >= 1) {
+      const rewriteBudget = turnAiCallBudget.beginTask('narrative.review');
+      if (rewriteBudget.allowed) {
+        turnAiCallBudget.recordProviderAttempt('narrative.review');
+        narrativeQualityAudit.rewriteAttempted = true;
+      try {
+        const styleDirective = (params.styleInstruction || '').trim();
+        const rewritePromptText = [
+          'ORIGINAL PLAYER ACTION (canonical semantic intent; do not replace it):',
+          playerAction,
+          '',
+          'CURRENT SITUATION (canonical; preserve exactly):',
+          JSON.stringify({
+            location: currentSituation.location,
+            worldTime: currentSituation.worldTime,
+            nearbyEntities: currentSituation.nearbyEntities.filter((entity) => entity.visibleToPlayer),
+            visibleEvents: currentSituation.visibleEvents,
+          }),
+          '',
+          ...(canonicalRecentTurns.length
+            ? ['RECENT TURNS (canonically committed; do not contradict):', canonicalRecentTurns.slice(-2).map((turn, index) => `Turn ${index + 1} | Player: ${turn.playerAction} | Narration: ${turn.narration}`).join('\n'), '']
+            : []),
+          'ORIGINAL NARRATION (presentation only):',
+          finalNarrationText,
+          '',
+          'PRESENTATION QUALITY REVIEW:',
+          NarrativeRichnessEvaluator.buildRewriteGuidance(finalNarrativeRichnessEvaluation),
+          environmentExcess
+            ? 'The original narration spends too many sentences on environment-only description. Cut environment-only exposition to at most ' + NARRATIVE_ENV_EXCESS_SENTENCE_BUDGET + ' sentences. What is happening, who is acting, what the player can observe changing, and any immediate stakes take priority over atmosphere. The protagonist must appear as an actor in the scene, reacting, observing, or preparing a next observable step — not as a camera.'
+            : '',
+          'Echo the canonical location name and one or two of its ambient sensory cues where natural so the player stays grounded.',
+          styleDirective ? 'STYLE INSTRUCTION (style only, never override canonical facts): ' + styleDirective : '',
+          '',
+          'Rewrite the ORIGINAL NARRATION as one improved presentation of exactly the same canonical situation and player action. Keep roughly 120-200 words, same canonical location and world time, no new canonical facts, no invented hidden information, no deciding player actions, no talking for the player. Return JSON only: {"narrative": ["..."], "dialogue": [], "events": [], "stateChanges": [], "memoryCandidates": [], "audioCues": []}.',
+        ].filter(Boolean).join('\n');
+        const rewrite = await this.executeTaskGeneration(
+          'narrative.review',
+          rewritePromptText,
+          [
+            'You are Dreamville’s narrative quality editor. Perform a presentation-only literary polish of the supplied narration.',
+            'Fix exactly the listed quality issues and nothing else. Preserve every canonical fact from the supplied context.',
+            'Never invent future events, hidden information, new canonical facts, player decisions, or outcomes. Do not speak or decide for the player.',
+            'Substance first, flourish second: what is happening, who is acting, and what the player can observe changing take priority over atmosphere.',
+            'Return JSON only with the same turn-package shape that was supplied.',
+          ].join(' '),
+          {
+            timeoutMs,
+            maxTokens: NarrativePacingEngine.outputTokenBudget(narrativePacingContract),
+            contextTokens: Math.min(12000, Math.ceil(rewritePromptText.length / 4)),
+            forceModelId: params.forceModelId,
+            validateResponse: (text) => {
+              const rewriteValidation = this.validateTurnPackage(text, { allowPlainTextNarration: true });
+              if (!rewriteValidation.valid || !rewriteValidation.turnPackage) {
+                return { valid: false, errorReason: rewriteValidation.errorReason || 'Narrative rewrite must return a valid structured turn package.' };
+              }
+              const rewritePresentation = this.validateNarrativePresentation({
+                narration: rewriteValidation.turnPackage.narrative.join(' '),
+                playerAction,
+                intent: playerIntent,
+                situation: currentSituation,
+                repository: worldRepo,
+                storyId,
+                pacingContract: narrativePacingContract,
+              });
+              if (!rewritePresentation.valid) return { valid: false, errorReason: rewritePresentation.errorReason || 'Narrative rewrite failed presentation validation.' };
+              return { valid: true };
+            },
+          },
+        );
+        if (rewrite.text && rewrite.source !== 'DETERMINISTIC_FALLBACK') {
+          const rewriteValidation = this.validateTurnPackage(rewrite.text, { allowPlainTextNarration: true });
+          if (rewriteValidation.valid && rewriteValidation.turnPackage) {
+            const rewriteNarration = rewriteValidation.turnPackage.narrative.join(' ');
+            const postRewriteEvaluation = NarrativeRichnessEvaluator.evaluate({
+              intent: playerIntent,
+              situation: currentSituation,
+              plan: narrativePlan,
+              turnPackage: rewriteValidation.turnPackage,
+              previousNarrations: canonicalRecentTurns.map((turn) => String(turn.narration || '')).filter(Boolean),
+            });
+            const rewriteEnvironmentEmissions = countNarrativeEnvironmentSentences(rewriteNarration, currentSituation.player.name).environment;
+            const rewriteEnvironmentExcess = detectNarrativeEnvironmentExcess(
+              rewriteNarration,
+              (rewriteValidation.turnPackage.dialogue || []).length > 0,
+              currentSituation.player.name,
+            ) && !openingTurn;
+            if (
+              rewriteNarration.trim().length > 0 &&
+              !rewriteEnvironmentExcess &&
+              postRewriteEvaluation.overallScore > finalNarrativeRichnessEvaluation.overallScore
+            ) {
+              validation.turnPackage = rewriteValidation.turnPackage;
+              finalNarrativeRichnessEvaluation = postRewriteEvaluation;
+              narrativeQualityAudit.rewriteSucceeded = true;
+              narrativeQualityAudit.finalDecision = postRewriteEvaluation.decision;
+              narrativeQualityAudit.finalScore = postRewriteEvaluation.overallScore;
+              narrativeQualityAudit.issues = postRewriteEvaluation.issues;
+              narrativeQualityAudit.environmentExcessEmissions = rewriteEnvironmentExcess ? rewriteEnvironmentEmissions : 0;
+            } else {
+              narrativeQualityAudit.rewriteErrorReason = !rewriteNarration.trim()
+                ? 'The rewrite returned empty narration.'
+                : rewriteEnvironmentExcess
+                  ? 'The rewrite still spent too many sentences on environment-only description.'
+                  : 'The rewrite scored ' + postRewriteEvaluation.overallScore.toFixed(3) + ', not an improvement over ' + finalNarrativeRichnessEvaluation.overallScore.toFixed(3) + '; the original narration was preserved.';
+            }
+          } else {
+            narrativeQualityAudit.rewriteErrorReason = rewriteValidation.errorReason || 'The rewrite returned an invalid structured turn package.';
+          }
+        } else if (rewrite.text) {
+          narrativeQualityAudit.rewriteErrorReason = 'The rewrite path returned deterministic fallback, so the original narration was preserved.';
+        } else {
+          narrativeQualityAudit.rewriteErrorReason = 'The rewrite path returned no usable output, so the original narration was preserved.';
+        }
+      } catch (rewriteError: any) {
+        narrativeQualityAudit.rewriteErrorReason = rewriteError?.message || 'The narrative rewrite path failed.';
+      }
+      } else {
+        narrativeQualityAudit.rewriteSkippedReason = rewriteBudget.reason || 'Narrative review call budget exhausted.';
+      }
+    } else if (qualityGateTriggersRewrite && (params.maxRetries ?? 0) < 1) {
+      narrativeQualityAudit.rewriteSkippedReason = 'Generation retry budget is zero; rewrite not attempted.';
+    } else if (qualityGateTriggersRewrite) {
+      narrativeQualityAudit.rewriteSkippedReason = 'The narrative review task has already exhausted its per-turn call budget; rewrite was skipped.';
+    }
 
     const finalTemporalContinuity = this.validateNarrativeTemporalContinuity(finalNarrationText, worldRepo, storyId);
     if (!finalTemporalContinuity.valid) {
@@ -7725,6 +7995,7 @@ export class MultiModelOrchestrator {
       researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
       contextAudit,
       narrativeRichnessEvaluation: finalNarrativeRichnessEvaluation,
+      narrativeQualityAudit,
     };
   }
 

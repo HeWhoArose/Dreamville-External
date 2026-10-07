@@ -1,10 +1,44 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { worldRepository } from '../server/repositories/worldRepository';
+import { worldRepository, InMemoryWorldRepository } from '../server/repositories/worldRepository';
 import { OpeningSceneService } from '../server/services/openingSceneService';
 import { WorkingContextEngine } from '../server/domain/workingContextEngine';
 import { serverMockAuthority } from '../server/mockEngine/serverMockAuthority';
+import { MultiModelOrchestrator, DeterministicMockAdapter, type ModelRegistryRecord } from '../server/domain/aiOrchestrator';
 import { WorldTemplate, ConfirmedCharacter } from '../src/types';
+
+function model(
+  providerId: string,
+  modelId: string,
+  tasks: string[],
+): ModelRegistryRecord {
+  return {
+    providerId,
+    modelId,
+    displayName: modelId,
+    pool: 'fast',
+    capabilities: ['text_generation', 'structured_output'],
+    contextWindow: 128000,
+    health: 'Healthy',
+    quota: 'Healthy',
+    latencyMs: 5,
+    userPriority: 100,
+    roleEligibility: tasks as any,
+    fallbackEligibility: true,
+    accessStatus: 'accessible',
+    lifecycleState: 'active',
+    isEmergencyFloor: false,
+  };
+}
+
+/** Isolated rig: non-persisting repository plus its own orchestrator so the shared
+ * global orchestrator's persisted fallback-chain config stays untouched by this test. */
+function buildIsolatedTurnGateRig(): { repository: InMemoryWorldRepository; orchestrator: MultiModelOrchestrator } {
+  const repository = new InMemoryWorldRepository({ disablePersistence: true });
+  const orchestrator = new MultiModelOrchestrator(repository);
+  (orchestrator as any).savePersistedConfig = () => {};
+  return { repository, orchestrator };
+}
 
 test('Story Experience Slice 4 — Dynamic Opening Scene Verification', async (t) => {
   // =========================================================================
@@ -583,6 +617,142 @@ test('Story Experience Slice 4 — Dynamic Opening Scene Verification', async (t
     assert.equal(viewState.openingScene.narrativeText, retryText, 'ViewState must project the persisted opening');
     assert.equal(viewState.activeLocationId, 'loc_raven_archives', 'ViewState location must remain canonical');
   });
+});
+
+// ===========================================================================
+// Turn-level live narration quality gate (user report: arena turns 1-3 —
+// environment-only narration with no situation, action, or reaction beats).
+// ===========================================================================
+
+test('Story Experience Slice 4 — live narration turn gate blocks environment-only prose', async () => {
+  const worldIdG = 'world_live_turn_gate';
+  const worldTemplateG: WorldTemplate = {
+    worldId: worldIdG,
+    worldManifestVersion: 4,
+    title: 'Sand and Iron',
+    description: 'A brutal sand-and-iron arena world of caste enforcers and blood sport.',
+    genreTags: ['Dark Fantasy'],
+    toneTags: ['Tense', 'Violent'],
+    mediumTags: ['Text Adventure'],
+    defaultEra: 'Age of Chains',
+    setting: 'Arena World',
+    canonMode: 'CANON_COMPLIANT',
+    rulesetId: 'rules_arena_v1',
+    capabilities: [],
+    geography: {
+      nodes: [
+        {
+          id: 'loc_arena_floor',
+          name: 'The Obsidian Arena',
+          region: 'The Pit District',
+          description: 'A vast sand-and-iron fighting pit ringed by tiered stone benches under a punishing sun.',
+          coordinates: { x: 10, y: 10 },
+          ambientSensory: 'Sun hammering the sand, iron rails hot to the touch, the murmur of spectators above.',
+        },
+      ],
+      connections: [],
+    },
+    historyTimeline: [],
+    canonKnowledge: [],
+    startingHooks: [],
+  };
+  const { repository, orchestrator } = buildIsolatedTurnGateRig();
+  repository.saveWorldTemplate(worldTemplateG);
+
+  const { storyId: storyIdG } = repository.createStoryRunFromConfirmedCharacter({
+    worldId: worldIdG,
+    confirmedCharacter: {
+      characterId: 'char_arena_dagger',
+      identity: { name: 'Sera Vale', species: 'Human' },
+      role: { profession: 'Pit Fighter', archetype: 'Rogue' },
+      background: { history: 'Thrown into the obsidian arena to repay a blood debt; fights with thrown daggers.' },
+      appearance: { physicalDescription: 'Wiry fighter with sun-scoured skin and scarred knuckles.' },
+      personality: { traits: ['Sharp', 'Restless'] },
+      motivations: { goals: ['Survive the arena and buy back her freedom.'] },
+      condition: { injuries: [], activeEffects: [] },
+      capabilities: [],
+      startingLocation: 'loc_arena_floor',
+      startingSituation: 'Facing the private viewing box where the high-level target watches from behind caste enforcers.',
+    } as unknown as ConfirmedCharacter,
+  });
+
+  // The user's reported defect: an action-anchored opener drowned by four
+  // environment-only sentences that never depict the situation or any actor.
+  const environmentOnlyTurn = JSON.stringify({
+    narrative: [
+      'You circle the arena floor and watch the private viewing box.',
+      'The sun hammers the pale sand of the fighting pit, bleaching it bone-white beneath a merciless sky.',
+      'Basalt walls rise sheer around the arena floor, iron rails gleaming dully where they crown the tiered stone benches.',
+      'Sunlight glints along the iron rails above the tiered benches.',
+      'No sign of movement stirs across the open expanse of the pit.',
+    ],
+    dialogue: [],
+    events: [],
+    stateChanges: [],
+    memoryCandidates: [],
+    audioCues: [],
+  });
+
+  // A substance-first rewrite the same model could return on the review call:
+  const improvedTurn = JSON.stringify({
+    narrative: [
+      'You circle the floor of The Obsidian Arena with your weight low, eyes pinned to the private viewing box above the tiered benches where the high-level target watches from behind caste enforcers.',
+      'One enforcer leans over the iron rail to speak into his ear, and the target shifts behind the rail without standing.',
+      'You mark the number of enforcers around the box and the distance from your position to the base of the rail, dust from the sand gritting under your boots.',
+      'The murmur of the crowd changes pitch around the pit, and you cannot yet tell whether it is for you or for him.',
+    ],
+    dialogue: [],
+    events: [],
+    stateChanges: [],
+    memoryCandidates: [],
+    audioCues: [],
+  });
+
+  const primary = new DeterministicMockAdapter('ch19_turn_gate_primary');
+  const reviewer = new DeterministicMockAdapter('ch19_turn_gate_reviewer');
+  primary.cannedResponses.set('narrative.generate', environmentOnlyTurn);
+  reviewer.cannedResponses.set('narrative.review', improvedTurn);
+  orchestrator.registerAdapter(primary);
+  orchestrator.registerAdapter(reviewer);
+  orchestrator.registerModel(model('ch19_turn_gate_primary', 'turn-gate-model', ['narrative.generate']));
+  orchestrator.registerModel(model('ch19_turn_gate_reviewer', 'turn-gate-reviewer', ['narrative.review']));
+  orchestrator.setFallbackChain('narrative.generate', ['ch19_turn_gate_primary::turn-gate-model', 'provider_deterministic_emergency::emergency-fallback-local']);
+  orchestrator.setFallbackChain('narrative.review', ['ch19_turn_gate_reviewer::turn-gate-reviewer', 'provider_deterministic_emergency::emergency-fallback-local']);
+
+  // One committed canonical event so this is a live continuation turn, not the opening.
+  repository.appendCanonicalCommandEvent(storyIdG, {
+    eventId: 'evt_turn_gate_seed',
+    type: 'OBSERVE',
+    summary: 'Sera Vale studies the arena from the sand.',
+    timestamp: 'Turn 2',
+  });
+
+  const result = await orchestrator.generateNarrativeOnly({
+    storyId: storyIdG,
+    playerAction: 'Circle the arena floor and watch the private viewing box.',
+    hardTokenBudget: 1100,
+    maxRetries: 1,
+  });
+
+  assert.equal(result.success, true, result.error || 'gate test failed before assertions');
+  const narration = result.turnPackage?.narrative.join(' ') || '';
+
+  // The gate must have caught the environment-heavy narration and attempted the rewrite.
+  assert.ok(result.narrativeQualityAudit, 'Response must carry the narrative quality audit');
+  assert.equal(result.narrativeQualityAudit!.rewriteAttempted, true, 'Environment-heavy narration must trigger the bounded rewrite');
+  assert.equal(reviewer.callHistory.length, 1, 'Exactly one bounded narrative.review rewrite call must be made');
+  assert.equal(result.narrativeQualityAudit!.rewriteSucceeded, true, 'The substance-first rewrite must be accepted over scenery-dominated prose');
+  assert.ok(
+    (result.narrativeQualityAudit!.finalScore ?? 0) > (result.narrativeQualityAudit!.firstScore ?? 0),
+    'Accepted rewrite must improve the richness score',
+  );
+  assert.match(narration, /The Obsidian Arena/, 'Accepted rewrite must stay grounded in the canonical location');
+  assert.match(narration, /enforcers/, 'Accepted rewrite must carry situation actors, not just scenery');
+  assert.ok(!/No sign of movement/.test(narration), 'Accepted rewrite must not preserve the static-scene framing');
+
+  const runtimeStatus = orchestrator.getModelRuntimeStatus().find((entry) => entry.modelId === 'turn-gate-model');
+  assert.ok(runtimeStatus);
+  assert.equal(runtimeStatus?.failureCount >= 1, false, 'Primary model must not be penalized for presentation quality');
 });
 
 function aiResponse(text: string) {

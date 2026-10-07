@@ -2,6 +2,7 @@ import type { CombatNarrativeResolution, CombatTransitionState, CombatEffectDefi
 import type { WorldRepository } from '../repositories/worldRepository';
 import { combatEffectEngine } from './combatEffectEngine';
 import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
+import { actionResolutionFromCombat } from './actionResolution';
 import type { EntityCard } from './entityCard';
 
 export interface CombatEncounterCandidate {
@@ -164,6 +165,23 @@ export class CombatEncounterService {
           ? 'resolved successfully.'
           : 'did not overcome the target defense.'
     ) + (damage > 0 ? ' Damage: ' + damage + '.' : '');
+    const provisionalResolutionId = deterministicId('combat_precombat_resolution', params.storyId, params.actorId, params.targetId, params.actionText, combat.getCurrentRound(), combat.getDiceEngine().getRollCounter());
+    const actionResolution = actionResolutionFromCombat({
+      id: provisionalResolutionId,
+      actorId: params.actorId,
+      targetIds: [params.targetId],
+      actionText: params.actionText,
+      actionLabel: label,
+      rolls,
+      success: true,
+      hits: first?.hits ?? mechanical.spellResult?.attackResult?.hits,
+      damage,
+      targetHp: [{ targetId: params.targetId, hpCurrent: updatedTarget.hpCurrent, hpMax: updatedTarget.hpMax, targetDied: updatedTarget.isDead }],
+      mechanicalSummary,
+      narrativeResponse: '',
+      canonicalEventIds: mechanical.canonicalEventIds || [],
+      createdAt: formatCanonicalTimestamp(params.repository.getWorldClock(params.storyId).getTimestamp()),
+    }, params.storyId, provisionalResolutionId);
     const narration = await this.generateNarration({
       storyId: params.storyId,
       actionText: params.actionText,
@@ -171,6 +189,7 @@ export class CombatEncounterService {
       targetName: updatedTarget.name,
       targetHp: updatedTarget.hpCurrent,
       repository: params.repository,
+      actionResolution,
     });
     const resolution: CombatNarrativeResolution = {
       id: deterministicId('combat_precombat_resolution', params.storyId, params.actorId, params.targetId, params.actionText, combat.getCurrentRound(), combat.getDiceEngine().getRollCounter()),
@@ -239,11 +258,12 @@ export class CombatEncounterService {
     return { success: true, resolution, transition };
   }
 
-  private async generateNarration(params: { storyId: string; actionText: string; mechanicalSummary: string; targetName: string; targetHp: number; repository: WorldRepository }): Promise<string> {
+  private async generateNarration(params: { storyId: string; actionText: string; mechanicalSummary: string; targetName: string; targetHp: number; repository: WorldRepository; actionResolution?: import('./actionResolution').ActionResolution }): Promise<string> {
     try {
       const generated = await params.repository.getAiOrchestrator().generateNarrativeOnly({
         storyId: params.storyId,
         playerAction: params.actionText,
+        actionResolution: params.actionResolution,
         committedOutcome: params.mechanicalSummary + ' ' + params.targetName + ' has ' + params.targetHp + ' HP remaining.',
         continuationDirective: 'This is a pre-combat opening action. Narrate the already-resolved result. Do not roll again and do not start initiative in the prose.',
       });

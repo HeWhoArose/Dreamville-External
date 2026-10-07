@@ -52,6 +52,7 @@ export interface NarrationPromptResult {
 	narrativeProviderHandoff?: NarrativeProviderHandoffContract;
 	sceneComposition?: SceneCompositionContract;
 	episodeProjection?: NarrativeEpisodeProjection;
+	storyBeat?: StoryBeatContract;
 }
 
 export function projectSupportingWorkingContext(context: AssembledTurnContext): string {
@@ -235,7 +236,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	const maxPromptTokens = input.maxPromptTokens;
 	if (!maxPromptTokens) {
 		const prompt = compose(initialResearch, initialWorking);
-		return { prompt, styleInstruction: [styleInstruction, narrativeProviderHandoff.providerIndependentInstruction].join('\n\n'), totalTokens: WorkingContextEngine.estimateTokens(prompt), narrativeQualityContract, narratorVoiceState: input.narratorVoiceState, narrativeContinuityState, narrativePacingContract, narrativeProviderHandoff, sceneComposition, episodeProjection: presentationPlan.episodeProjection };
+		return { prompt, styleInstruction: [styleInstruction, narrativeProviderHandoff.providerIndependentInstruction].join('\n\n'), totalTokens: WorkingContextEngine.estimateTokens(prompt), narrativeQualityContract, narratorVoiceState: input.narratorVoiceState, narrativeContinuityState, narrativePacingContract, narrativeProviderHandoff, sceneComposition, episodeProjection: presentationPlan.episodeProjection, storyBeat };
 
 	}
 
@@ -374,7 +375,6 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			const compactComposition = SceneCompositionEngine.toCompactPromptContext(sceneComposition);
 			const compactSocialTopology = truncatePromptSection(socialTopologyContext, 360);
 			const compactEpisodeProjection = truncatePromptSection(NarrativeEpisodeProjectionEngine.toCompactPromptContext(presentationPlan.episodeProjection), 420);
-			const compactStoryBeat = StoryBeatDirector.toCompactPromptContext(storyBeat);
 			const compactStoryBeat = StoryBeatDirector.toCompactPromptContext(storyBeat);
 			const compactCanonical = [
 				'State changes must come from canonical engines/commands.',

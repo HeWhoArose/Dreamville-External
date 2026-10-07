@@ -426,6 +426,9 @@ export class CanonicalCommandEngine {
 
 				const recordingStartedAt = new Date().toISOString();
 				const recordingBefore = captureCanonicalStateSnapshot(command.storyId, repository);
+				// Initialize forensic recording from the exact pre-mutation snapshot. The first command
+				// may be the first recorded interaction, so lazy initialization after executeFresh()
+				// would otherwise capture the post-mutation state and break the hash chain at #1.
 				try {
 					const freshResult = await this.executeFresh(repository, command, handler, fingerprint);
 					const recordingAfter = captureCanonicalStateSnapshot(command.storyId, repository);
@@ -447,6 +450,7 @@ export class CanonicalCommandEngine {
 						canonicalEvent: freshResult.event,
 						stateBefore: recordingBefore,
 						stateAfter: recordingAfter,
+						recordingInitialState: recordingBefore,
 						mutationPaths: freshResult.mutationPaths,
 					});
 					return freshResult;
@@ -465,6 +469,7 @@ export class CanonicalCommandEngine {
 						error: String(error?.message || error),
 						stateBefore: recordingBefore,
 						stateAfter: recordingAfter,
+						recordingInitialState: recordingBefore,
 					});
 					throw error;
 				}

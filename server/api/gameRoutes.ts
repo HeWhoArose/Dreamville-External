@@ -8890,6 +8890,7 @@ gameRouter.post('/story-runs/:storyId/opening', async (req: Request, res: Respon
       result: openingScene,
       stateBefore: sessionBefore,
       stateAfter: sessionAfter,
+      recordingInitialState: sessionBefore,
     });
 
     const viewState = serverMockAuthority.getSanitizedViewState(storyId);

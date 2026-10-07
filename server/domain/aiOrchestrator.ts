@@ -7124,6 +7124,7 @@ export class MultiModelOrchestrator {
       situation: params.situation,
       repository: params.repository,
       storyId: params.storyId,
+      plan: params.plan,
       pacingContract: params.narrativePacingContract,
     });
     if (!presentation.valid) {
@@ -7160,6 +7161,7 @@ export class MultiModelOrchestrator {
     situation: CurrentSituation;
     repository: WorldRepository;
     storyId: string;
+    plan: EphemeralNarrativePlan;
     pacingContract: NarrativePacingContract;
   }): { valid: boolean; errorReason?: string } {
     const narration = String(params.narration || '').trim();
@@ -7206,6 +7208,25 @@ export class MultiModelOrchestrator {
 
     const informationContinuity = this.validateNarrativeInformationContinuity(narration, params.playerAction, params.intent);
     if (!informationContinuity.valid) return { valid: false, errorReason: informationContinuity.errorReason };
+
+    const substanceEvaluation = NarrativeRichnessEvaluator.evaluate({
+      intent: params.intent,
+      situation: params.situation,
+      plan: params.plan,
+      turnPackage: {
+        narrative: [narration],
+        dialogue: [],
+        events: [],
+        stateChanges: [],
+        memoryCandidates: [],
+        audioCues: [],
+        visualCues: [],
+      },
+    });
+    const substanceDimension = substanceEvaluation.dimensions.find((item) => item.dimension === 'ACTION_SUBSTANCE');
+    if (substanceDimension && substanceDimension.score < 0.50) {
+      return { valid: false, errorReason: 'Narration failed the action-substance gate: it does not sufficiently resolve the player action before environmental description.' };
+    }
 
     const temporalContinuity = this.validateNarrativeTemporalContinuity(narration, params.repository, params.storyId);
     if (!temporalContinuity.valid) return { valid: false, errorReason: temporalContinuity.errorReason };
@@ -7341,7 +7362,7 @@ export class MultiModelOrchestrator {
       'Never use phrases such as "the outcome unfolds in the narrative", "the action is committed", or other implementation language.',
       'Use relevant Narrative Research only when it materially helps the current action; never dump raw research.',
       'Vary sentence rhythm and sensory detail without repeating recent turns.',
-      'Substance has priority over flourish. Every paragraph must either depict a concrete current-turn action, reveal a canon-grounded observation, show an immediate reaction/consequence, or establish a specific unresolved detail. Do not spend a paragraph merely describing atmosphere that does not change what the player knows or what is happening.',
+      'Substance has priority over flourish. The first narrative beat MUST resolve the player action itself. For dialogue/information actions, show the relevant response or explicitly bounded lack of answer; for movement, show the movement and what materially changes or becomes observable; for physical interactions, show the interaction and its immediate result. Every paragraph must depict a concrete current-turn action, reveal a canon-grounded observation, show an immediate reaction/consequence, or establish a specific unresolved detail. Do not spend a paragraph merely describing atmosphere that does not change what the player knows or what is happening.',
       'Do not pad short actions into poetic scene-setting. The player action is the reason this turn exists; move the scene forward because of it.',
       'When the current action contains multiple concrete steps, resolve each observable step in order instead of stopping after the first movement.',
       isInformationSeekingAction
@@ -8176,6 +8197,7 @@ export class MultiModelOrchestrator {
                 situation: currentSituation,
                 repository: repo,
                 storyId,
+                plan: narrativePlan,
                 pacingContract: narrativePacingContract,
               });
               if (!presentation.valid) {
@@ -8276,6 +8298,7 @@ export class MultiModelOrchestrator {
                   situation: currentSituation,
                   repository: repo,
                   storyId,
+                  plan: narrativePlan,
                   pacingContract: narrativePacingContract,
                 });
                 if (!literaryPresentation.valid) throw new Error(literaryPresentation.errorReason || 'Literary rewrite failed final presentation validation.');
@@ -8549,6 +8572,7 @@ export class MultiModelOrchestrator {
                   situation: currentSituation,
                   repository: repo,
                   storyId,
+                  plan: narrativePlan,
                   pacingContract: narrativePacingContract,
                 })
               : { valid: true };

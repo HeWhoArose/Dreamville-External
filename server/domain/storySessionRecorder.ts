@@ -61,9 +61,11 @@ export interface StorySessionInteraction {
 
 export interface StorySessionRecording {
 	format: 'DREAMVILLE_STORY_SESSION_RECORDING';
-	schemaVersion: '1.0.0';
-	recorderVersion: '1.0.0';
+	schemaVersion: '1.1.0';
+	recorderVersion: '1.1.0';
 	recordingId: string;
+	/** Identifies the concrete StoryRun incarnation. A reused storyId may have many sessions. */
+	runSessionId: string;
 	storyId: string;
 	title: string;
 	startedAt: string;
@@ -198,8 +200,10 @@ function applyPatch(root: any, operations: StorySessionJsonPatchOperation[]): an
 	return result;
 }
 
+
 export interface StartStorySessionRecordingParams {
 	storyId: string;
+	runSessionId?: string;
 	title?: string;
 	initialState: unknown;
 	engineVersion?: string;
@@ -221,6 +225,8 @@ export interface RecordStorySessionInteractionParams {
 	canonicalEvent?: unknown;
 	stateBefore: unknown;
 	stateAfter: unknown;
+	/** Optional first-state snapshot captured before the interaction mutates canonical state. */
+	recordingInitialState?: unknown;
 	mutationPaths?: string[];
 }
 
@@ -236,6 +242,7 @@ export class StorySessionRecorder {
 			schemaVersion: this.SCHEMA_VERSION,
 			recorderVersion: this.RECORDER_VERSION,
 			recordingId: crypto.randomUUID(),
+			runSessionId: params.runSessionId || `legacy:${params.storyId}`,
 			storyId: params.storyId,
 			title: params.title?.trim() || 'Dreamville Story Session',
 			startedAt: now,
@@ -271,6 +278,18 @@ export class StorySessionRecorder {
 	): void {
 		if (recording.storyId !== params.storyId) {
 			throw new Error('Story session recording storyId mismatch.');
+		}
+		if (recording.endedAt) {
+			throw new Error('Cannot append to a stopped story session recording.');
+		}
+		const expectedBeforeHash = recording.interactions.length
+			? recording.interactions[recording.interactions.length - 1].stateAfterHash
+			: hash(recording.initialState);
+		const suppliedBeforeHash = hash(params.stateBefore);
+		if (suppliedBeforeHash !== expectedBeforeHash) {
+			throw new Error(
+				`Story session state-before mismatch at interaction ${recording.interactions.length + 1}: expected ${expectedBeforeHash}, got ${suppliedBeforeHash}.`,
+			);
 		}
 		const sequence = recording.interactions.length + 1;
 		const before = clone(params.stateBefore);
@@ -312,14 +331,17 @@ export class StorySessionRecorder {
 		if (!recording || typeof recording !== 'object') return { valid: false, errorReason: 'Recording root must be an object.' };
 		const value = recording as Partial<StorySessionRecording>;
 		if (value.format !== this.FORMAT) return { valid: false, errorReason: 'Unsupported story session recording format.' };
-		if (value.schemaVersion !== this.SCHEMA_VERSION) return { valid: false, errorReason: 'Unsupported story session recording schema version.' };
+		if (value.schemaVersion !== this.SCHEMA_VERSION && value.schemaVersion !== '1.0.0') return { valid: false, errorReason: 'Unsupported story session recording schema version.' };
+		if (value.schemaVersion === this.SCHEMA_VERSION && !value.runSessionId) return { valid: false, errorReason: 'Recording is missing runSessionId.' };
 		if (!value.storyId || !value.recordingId) return { valid: false, errorReason: 'Recording metadata is incomplete.' };
 		if (!value.initialState) return { valid: false, errorReason: 'Recording is missing initialState.' };
 		if (!Array.isArray(value.interactions)) return { valid: false, errorReason: 'Recording interactions must be an array.' };
 
 		let reconstructed = clone(value.initialState);
-		for (const interaction of value.interactions) {
+		for (let index = 0; index < value.interactions.length; index += 1) {
+			const interaction = value.interactions[index];
 			if (!interaction || typeof interaction !== 'object') return { valid: false, errorReason: 'Recording contains an invalid interaction.' };
+			if (interaction.sequence !== index + 1) return { valid: false, errorReason: `Recording sequence is not contiguous at interaction ${index + 1}.` };
 			const beforeHash = hash(reconstructed);
 			if (interaction.stateBeforeHash !== beforeHash) {
 				return {

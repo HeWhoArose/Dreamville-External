@@ -6,6 +6,7 @@ import { buildNpcPlanningSlice } from './npcPlanningSlice';
 import { NpcExpressiveIdentityEngine, type NpcExpressiveIdentity } from './npcExpressiveIdentity';
 import { EntitySceneRelevanceEngine, type SocialConversationTopology } from './entitySceneRelevance';
 import { NarrativeEpisodeProjectionEngine, type NarrativeEpisodeProjection } from './narrativeEpisodeProjection';
+import type { StoryBeatContract } from './storyBeatDirector';
 
 export interface InformationReveal {
 	topic: string;
@@ -96,6 +97,7 @@ export interface EphemeralNarrativePlan {
 	forbiddenAssumptions: string[];
 	stateEffectsExpected: ExpectedStateEffect[];
 	sceneComposition?: import('./sceneComposition').SceneCompositionContract;
+	storyBeat?: StoryBeatContract;
 	createdAt: string;
 	expiresAfterNarration: true;
 }
@@ -160,10 +162,11 @@ function topThread(research: NarrativeResearchResult): string | undefined {
 }
 
 export class NarrativeDirector {
-	public static create(params: { repository?: WorldRepository; storyId?: string; situation: CurrentSituation; intent: PlayerIntent; research: NarrativeResearchResult }): EphemeralNarrativePlan {
+	public static create(params: { repository?: WorldRepository; storyId?: string; situation: CurrentSituation; intent: PlayerIntent; research: NarrativeResearchResult; storyBeat?: StoryBeatContract }): EphemeralNarrativePlan {
 		const situation = params.situation;
 		const intent = params.intent;
 		const research = params.research;
+		const storyBeat = params.storyBeat;
 		const npcCognition: NpcCognitionContract[] = params.repository && params.storyId
 			? entityTargets(situation, intent).map((target) => buildNpcCognitionContract(params.repository!, params.storyId!, situation, target)).filter((value): value is NpcCognitionContract => Boolean(value)).slice(0, 4)
 			: [];
@@ -220,6 +223,7 @@ export class NarrativeDirector {
 			continuityRequirements: continuityRequirements.slice(0, 10),
 			forbiddenAssumptions: forbiddenAssumptions.slice(0, 8),
 			stateEffectsExpected: stateEffectsExpected.slice(0, 4),
+			storyBeat,
 			socialTopology,
 			episodeProjection,
 			createdAt: situation.worldTime,
@@ -230,6 +234,7 @@ export class NarrativeDirector {
 	public static toPromptContext(plan: EphemeralNarrativePlan): string {
 		return [
 			'NARRATIVE DIRECTOR PLAN (EPHEMERAL — USE FOR THIS TURN ONLY)',
+			plan.storyBeat ? 'Meaningful story beat:\n' + JSON.stringify(plan.storyBeat) : 'Meaningful story beat: unavailable; preserve canonical action and existing plan.',
 			'Objective: ' + plan.objective,
 			'Immediate steps:\n' + plan.immediateSteps.map((step, index) => (index + 1) + '. ' + step).join('\n'),
 			plan.informationToReveal.length ? 'Information to reveal:\n' + plan.informationToReveal.map((item) => '- ' + item.topic + ' [' + item.presentation + '] [sources=' + (item.sourceBlockIds.join(', ') || 'none') + ']').join('\n') : 'Information to reveal: none.',

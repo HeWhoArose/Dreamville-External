@@ -37,6 +37,7 @@ test('Phase 24 — system-wide architecture audit: release-critical phases are r
 		'server/domain/turnIntegrationHarness.ts',
 		'server/domain/resolutionGate.ts',
 		'server/domain/actionResolution.ts',
+		'server/domain/storyBeatDirector.ts',
 		'server/domain/canonicalCommitLedger.ts',
 		'server/domain/npcPlanningSlice.ts',
 		'server/services/comicSceneGenerator.ts',
@@ -55,7 +56,10 @@ test('Phase 24 — canonical turn boundary remains single-owner', () => {
 	mustContain('server/domain/narrativeStateAdjudicator.ts', /class NarrativeStateAdjudicator/, 'Narrative state adjudicator is missing.');
 	mustContain('server/domain/turnIntegrationHarness.ts', /NarrativeStateAdjudicator\.adjudicate/, 'End-to-end harness does not exercise canonical adjudication.');
 	mustContain('server/domain/actionResolution.ts', /export type \{ ActionResolution[,\s]/, 'Typed ActionResolution public boundary is missing.');
+	mustContain('server/domain/storyBeatDirector.ts', /class StoryBeatDirector/, 'StoryBeatDirector is missing.');
 	mustContain('server/domain/narrativePromptBuilder.ts', /ACTION RESOLUTION — AUTHORITATIVE/, 'Authoritative action resolution is not projected into narration.');
+	mustContain('server/domain/narrativePromptBuilder.ts', /CURRENT STORY BEAT/, 'StoryBeatContract is not serialized into the narration prompt.');
+	mustContain('server/domain/narrativeDirector.ts', /storyBeat\?: StoryBeatContract/, 'NarrativeDirector does not consume StoryBeatContract.');
 });
 
 test('Phase 24 — context, epistemic, and NPC boundaries remain connected', () => {
@@ -75,6 +79,9 @@ test('Phase 24 — presentation quality chain is end-to-end connected', () => {
 	mustContain('server/domain/aiOrchestrator.ts', /NarrativePacingEngine\.resolve/, 'N8 pacing does not reach orchestration.');
 	mustContain('server/domain/aiOrchestrator.ts', /NarrativeProviderHandoffEngine/, 'N9 provider handoff does not reach orchestration.');
 	mustContain('server/domain/aiOrchestrator.ts', /validateNarrativePresentation/, 'Final shared presentation validation is missing.');
+	mustContain('server/domain/aiOrchestrator.ts', /validateNarrativeStoryBeat/, 'StoryBeat fidelity validation is not connected to live narration.');
+	mustContain('server/domain/combatPlayerActionService.ts', /actionResolutionFromCombat/, 'Combat player narration does not project through ActionResolution.');
+	mustContain('server/domain/combatEncounterService.ts', /actionResolutionFromCombat/, 'Pre-combat narration does not project through ActionResolution.');
 	mustContain('server/domain/semanticNarrativeReview.ts', /NarrativeQualityContractEngine\.validate/, 'N1 quality contract is not consumed by semantic review.');
 	mustContain('server/domain/literaryNarrativeReview.ts', /NarrativeNoveltyEngine\.inspect/, 'N6 does not consume N7 novelty data.');
 	mustContain('server/domain/narrativeMemoryLifecycle.ts', /NarrativeNoveltyEngine\.recordAcceptedTurn/, 'N7 accepted-turn persistence is not owned by lifecycle.');

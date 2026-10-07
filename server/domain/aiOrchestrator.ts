@@ -7729,8 +7729,6 @@ export class MultiModelOrchestrator {
           if (!informationTopicContinuity.valid) return { valid: false, errorReason: informationTopicContinuity.errorReason };
           const informationContinuity = this.validateNarrativeInformationContinuity(narrationText, playerAction, playerIntent);
           if (!informationContinuity.valid) return { valid: false, errorReason: informationContinuity.errorReason };
-          const storyBeatContinuity = this.validateNarrativeStoryBeat(narrationText, storyBeat);
-          if (!storyBeatContinuity.valid) return { valid: false, errorReason: storyBeatContinuity.errorReason };
           const temporalContinuity = this.validateNarrativeTemporalContinuity(narrationText, worldRepo, storyId);
           return temporalContinuity.valid
             ? { valid: true }
@@ -7773,7 +7771,7 @@ export class MultiModelOrchestrator {
       };
     }
 
-    const finalNarrationText = validation.turnPackage.narrative.join(' ');
+    let finalNarrationText = validation.turnPackage.narrative.join(' ');
     const finalSceneContinuity = this.validateNarrativeSceneContinuity(finalNarrationText, worldRepo, storyId);
     if (!finalSceneContinuity.valid) {
       return {
@@ -7956,6 +7954,7 @@ export class MultiModelOrchestrator {
               postRewriteEvaluation.overallScore > finalNarrativeRichnessEvaluation.overallScore
             ) {
               validation.turnPackage = rewriteValidation.turnPackage;
+              finalNarrationText = rewriteNarration;
               finalNarrativeRichnessEvaluation = postRewriteEvaluation;
               narrativeQualityAudit.rewriteSucceeded = true;
               narrativeQualityAudit.finalDecision = postRewriteEvaluation.decision;

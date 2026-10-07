@@ -328,14 +328,14 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			const tightEpisodeBudget = Boolean(presentationPlan.episodeProjection) && maxPromptTokens <= 2000;
 			const compact = {
 				intentContext: intentContext,
-				researchContext: truncatePromptSection(initialResearch, tightEpisodeBudget ? 360 : 700),
-				planContext: truncatePromptSection(planContext, tightEpisodeBudget ? 80 : 300),
-				sceneCompositionContext: SceneCompositionEngine.toCompactPromptContext(sceneComposition),
-				socialTopologyContext: truncatePromptSection(socialTopologyContext, tightEpisodeBudget ? 360 : 520),
-				episodeProjectionContext: truncatePromptSection(NarrativeEpisodeProjectionEngine.toCompactPromptContext(presentationPlan.episodeProjection), tightEpisodeBudget ? 100 : 180),
-				storyBeatContext: StoryBeatDirector.toCompactPromptContext(storyBeat),
-				workingContext: truncatePromptSection(initialWorking, tightEpisodeBudget ? 100 : 320),
-				situationContext: truncatePromptSection(situationContext, tightEpisodeBudget ? 500 : 900),
+				researchContext: truncatePromptSection(initialResearch, tightEpisodeBudget ? 180 : 700),
+				planContext: truncatePromptSection(planContext, tightEpisodeBudget ? 40 : 300),
+				sceneCompositionContext: truncatePromptSection(SceneCompositionEngine.toCompactPromptContext(sceneComposition), tightEpisodeBudget ? 160 : 520),
+				socialTopologyContext: truncatePromptSection(socialTopologyContext, tightEpisodeBudget ? 160 : 520),
+				episodeProjectionContext: truncatePromptSection(NarrativeEpisodeProjectionEngine.toCompactPromptContext(presentationPlan.episodeProjection), tightEpisodeBudget ? 90 : 180),
+				storyBeatContext: truncatePromptSection(StoryBeatDirector.toCompactPromptContext(storyBeat), tightEpisodeBudget ? 220 : 520),
+				workingContext: truncatePromptSection(initialWorking, tightEpisodeBudget ? 60 : 320),
+				situationContext: truncatePromptSection(situationContext, tightEpisodeBudget ? 360 : 900),
 			};
 			const renderCompact = () => compose(
 				compact.researchContext,

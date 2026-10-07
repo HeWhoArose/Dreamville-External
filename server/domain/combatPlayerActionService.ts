@@ -2,6 +2,7 @@ import type { CombatNarrativeResolution } from '../../src/types';
 import type { WorldRepository } from '../repositories/worldRepository';
 import { combatEffectEngine } from './combatEffectEngine';
 import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
+import { actionResolutionFromCombat } from './actionResolution';
 
 export interface CombatPlayerActionResult {
   success: boolean;
@@ -90,7 +91,23 @@ export class CombatPlayerActionService {
           ? 'failed to hit or overcome the defense.'
           : 'resolved successfully.'
     ) + (damage > 0 ? ' Damage: ' + damage + '.' : '');
-    const narration = await this.generateNarration(params, mechanicalSummary, targetName, updatedTargets[0]?.hpCurrent);
+    const actionResolution = actionResolutionFromCombat({
+      id: deterministicId('combat_player_resolution', params.storyId, params.actorId, params.actionText, combat.getCurrentRound(), combat.getDiceEngine().getRollCounter()),
+      actorId: params.actorId,
+      targetIds: targetId ? [targetId] : [],
+      actionText: text,
+      actionLabel,
+      rolls,
+      success: true,
+      hits,
+      damage,
+      targetHp: updatedTargets,
+      mechanicalSummary,
+      narrativeResponse: '',
+      canonicalEventIds: mechanical.canonicalEventIds || [],
+      createdAt: formatCanonicalTimestamp(params.repository.getWorldClock(params.storyId).getTimestamp()),
+    }, params.storyId);
+    const narration = await this.generateNarration(params, mechanicalSummary, targetName, updatedTargets[0]?.hpCurrent, actionResolution);
     const resolution: CombatNarrativeResolution = {
       id: deterministicId('combat_player_resolution', params.storyId, params.actorId, params.actionText, combat.getCurrentRound(), combat.getDiceEngine().getRollCounter()),
       actorId: params.actorId,
@@ -117,11 +134,12 @@ export class CombatPlayerActionService {
     return explicit || (participants.length === 1 ? participants[0] : undefined);
   }
 
-  private async generateNarration(params: { storyId: string; actorId: string; actionText: string; repository: WorldRepository }, mechanicalSummary: string, targetName: string, targetHp?: number): Promise<string> {
+  private async generateNarration(params: { storyId: string; actorId: string; actionText: string; repository: WorldRepository }, mechanicalSummary: string, targetName: string, targetHp?: number, actionResolution?: import('./actionResolution').ActionResolution): Promise<string> {
     try {
       const generated = await params.repository.getAiOrchestrator().generateNarrativeOnly({
         storyId: params.storyId,
         playerAction: params.actionText,
+        actionResolution,
         committedOutcome: mechanicalSummary + (targetHp !== undefined ? ' ' + targetName + ' has ' + targetHp + ' HP remaining.' : ''),
         continuationDirective: 'This is an active tactical combat action. The mechanical result is already resolved. Narrate only that committed outcome; never invent a different roll, damage, target state, or condition.',
       });

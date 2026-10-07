@@ -8119,6 +8119,9 @@ export class MultiModelOrchestrator {
         ? EpistemicBoundaryEnforcer.sanitizeResearch(rawResearchResult, currentSituation).result
         : undefined;
       const researchPacket = researchResult?.packet;
+      const storyBeat = isNarrativeTask && researchResult
+        ? StoryBeatDirector.resolve({ situation: currentSituation, intent: playerIntent, research: researchResult })
+        : undefined;
       const narrativePlan = researchResult
         ? NarrativeDirector.create({
             repository: repo,
@@ -8126,6 +8129,7 @@ export class MultiModelOrchestrator {
             situation: currentSituation,
             intent: playerIntent,
             research: researchResult,
+            storyBeat,
           })
         : undefined;
 
@@ -8194,6 +8198,7 @@ export class MultiModelOrchestrator {
             narrativeContinuityState,
             narrativeNoveltyState,
             narrativePacingContract,
+            storyBeat,
             maxPromptTokens: Math.max(200, hardTokenBudget),
           })
         : {

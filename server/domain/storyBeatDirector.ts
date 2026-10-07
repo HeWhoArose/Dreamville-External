@@ -243,21 +243,17 @@ export class StoryBeatDirector {
 			'Beat type: ' + beat.beatType,
 			'Primary action: ' + beat.primaryAction,
 			'Meaningful change: ' + beat.meaningfulChange,
-			'Player-visible change: ' + beat.playerVisibleChange.join(' | '),
-			beat.newInformation.length ? 'New information: ' + beat.newInformation.join(' | ') : 'New information: none established.',
-			beat.affectedEntityIds.length ? 'Affected entities: ' + beat.affectedEntityIds.join(', ') : 'Affected entities: none established.',
-			beat.reactionOpportunities.length ? 'Reaction opportunities: ' + beat.reactionOpportunities.join(' | ') : 'Reaction opportunities: none established.',
-			'Narrative focus: ' + beat.narrativeFocus.join(' | '),
-			'Causal link: ' + beat.causalLink,
+			'Player-visible change: ' + beat.playerVisibleChange.slice(0, 3).join(' | '),
+			beat.newInformation.length ? 'New information: ' + beat.newInformation.slice(0, 3).join(' | ') : 'New information: none established.',
+			'Narrative focus: ' + beat.narrativeFocus.slice(0, 3).join(' | '),
+			beat.reactionOpportunities.length ? 'Reaction opportunities: ' + beat.reactionOpportunities.slice(0, 3).join(' | ') : 'Reaction opportunities: none established.',
+			beat.mustMention.length ? 'Must communicate when observable: ' + beat.mustMention.slice(0, 3).join(' | ') : 'Must communicate: no additional mandatory element.',
+			'Do not invent: ' + beat.mustNotInvent.slice(0, 4).join(' | '),
 			beat.unresolvedConsequence ? 'Unresolved/uncertain consequence: ' + beat.unresolvedConsequence : 'Unresolved consequence: none supplied.',
-			'Continuity anchors: ' + beat.continuityAnchors.join(' | '),
-			beat.mustMention.length ? 'Must communicate when observable: ' + beat.mustMention.join(' | ') : 'Must communicate: no additional mandatory element.',
-			'Do not invent: ' + beat.mustNotInvent.join(' | '),
 			'Confidence: ' + beat.confidence.toFixed(2),
-			beat.fallbackReason ? 'Fallback: ' + beat.fallbackReason : 'Fallback: none.',
-			'Hard boundary: this contract cannot mutate canonical state, create future events, commit NPC actions, reveal hidden facts, or decide player choices.',
 		].join('\n');
 	}
+
 
 	public static toCompactPromptContext(beat?: StoryBeatContract): string {
 		if (!beat) return 'Story beat unavailable; follow canonical Action Resolution and Narrative Director.';

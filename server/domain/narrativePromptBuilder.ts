@@ -15,6 +15,7 @@ import { NarrativePacingEngine, type NarrativePacingContract, type NarrativePaci
 import { SceneCompositionEngine, type SceneCompositionContract } from './sceneComposition';
 import { EntitySceneRelevanceEngine } from './entitySceneRelevance';
 import { NarrativeEpisodeProjectionEngine, type NarrativeEpisodeProjection } from './narrativeEpisodeProjection';
+import { StoryBeatDirector, type StoryBeatContract } from './storyBeatDirector';
 
 export interface NarrationPromptInput {
 	situation: CurrentSituation;
@@ -37,6 +38,7 @@ export interface NarrationPromptInput {
 	narrativeProviderHandoff?: NarrativeProviderHandoffContract;
 	sceneComposition?: SceneCompositionContract;
 	episodeProjection?: NarrativeEpisodeProjection;
+	storyBeat?: StoryBeatContract;
 }
 
 export interface NarrationPromptResult {
@@ -155,12 +157,14 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	const narrativeContinuityContext = NarrativeContinuityStateEngine.toPromptContext(narrativeContinuityState);
 	const narrativeQualityContract = NarrativeQualityContractEngine.resolve(input.intent, input.narrativeQualityControls);
 	const narrativePacingContract = input.narrativePacingContract || NarrativePacingEngine.resolve({ situation: input.situation, intent: input.intent, actionResolution: input.actionResolution, canonicalOutcome: input.canonicalOutcome, continuityState: narrativeContinuityState, controls: input.narrativePacingControls });
-	const sceneComposition = input.sceneComposition || SceneCompositionEngine.resolve({ situation: input.situation, intent: input.intent, informationToReveal: input.plan.informationToReveal, entitiesToReact: input.plan.entitiesToReact, unresolvedThread: input.plan.unresolvedThread, continuityState: narrativeContinuityState, pacingContract: narrativePacingContract });
+	const storyBeat = input.storyBeat || input.plan.storyBeat;
+	const sceneComposition = input.sceneComposition || SceneCompositionEngine.resolve({ situation: input.situation, intent: input.intent, informationToReveal: input.plan.informationToReveal, entitiesToReact: input.plan.entitiesToReact, unresolvedThread: input.plan.unresolvedThread, continuityState: narrativeContinuityState, pacingContract: narrativePacingContract, storyBeat });
 	const presentationPlan: EphemeralNarrativePlan = { ...input.plan, sceneComposition };
 	const planContext = NarrativeDirector.toPromptContext(presentationPlan);
 	const sceneCompositionContext = SceneCompositionEngine.toPromptContext(sceneComposition);
 	const socialTopologyContext = EntitySceneRelevanceEngine.toConversationPromptContext(presentationPlan.socialTopology);
 	const episodeProjectionContext = NarrativeEpisodeProjectionEngine.toPromptContext(presentationPlan.episodeProjection);
+	const storyBeatContext = StoryBeatDirector.toPromptContext(storyBeat);
 	const narrativeProviderHandoff = input.narrativeProviderHandoff || NarrativeProviderHandoffEngine.resolve({ storyId: input.situation.storyId, turnId: input.situation.turnId, voice: input.narratorVoiceState || NarratorVoiceEngine.resolve({ getUserData: () => null, saveUserData: () => undefined }, input.situation.storyId), quality: narrativeQualityContract, pacing: narrativePacingContract, continuity: narrativeContinuityState, novelty: narrativeNoveltyState });
 	const narrativeQualityContext = NarrativeQualityContractEngine.toPromptContext(narrativeQualityContract);
 	const promptBudgetVoiceContext = input.narratorVoiceState ? NarratorVoiceEngine.toPromptContext(input.narratorVoiceState) : 'Narrator Voice Contract: disabled for this turn.';
@@ -214,6 +218,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		section('CURRENT SITUATION', overrides?.situationContext || situationContext),
 		section('PLAYER INTENT', overrides?.intentContext || intentContext),
 		section('ACTION RESOLUTION — AUTHORITATIVE', actionResolutionContext),
+		section('CURRENT STORY BEAT — MEANINGFUL TURN CONTRACT', storyBeatContext),
 		section('NARRATIVE RESEARCH', researchContext),
 		section('NARRATIVE DIRECTOR PLAN', overrides?.planContext || planContext),
 		section('N13 SCENE COMPOSITION', overrides?.sceneCompositionContext || sceneCompositionContext),
@@ -271,6 +276,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			const microComposition = SceneCompositionEngine.toCompactPromptContext(sceneComposition);
 			const microSocialTopology = truncatePromptSection(socialTopologyContext, 420);
 			const microEpisodeProjection = truncatePromptSection(NarrativeEpisodeProjectionEngine.toCompactPromptContext(presentationPlan.episodeProjection), 500);
+			const microStoryBeat = StoryBeatDirector.toCompactPromptContext(storyBeat);
 			const microCanonical = 'The current location and time are authoritative. Stay in the canonical current location unless the canonical game state has already committed a location change. Do not invent unsupported facts or turn rumor into certainty.';
 			const microOutput = '{"narrative":["..."],"dialogue":[],"events":[],"stateChanges":[],"memoryCandidates":[],"audioCues":[],"visualCues":[]}';
 			const sections = [
@@ -287,6 +293,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				section('N13 SCENE COMPOSITION', microComposition),
 				section('N15 SOCIAL ATTENTION / CONVERSATION TOPOLOGY', microSocialTopology),
 				section('N17 NARRATIVE EPISODE PROJECTION', microEpisodeProjection),
+				section('CURRENT STORY BEAT', microStoryBeat),
 				section('CANONICAL CURRENT SCENE ANCHOR', microCanonical),
 				section('OUTPUT CONTRACT', 'Return ONLY valid JSON in this shape: ' + microOutput),
 			];
@@ -367,6 +374,8 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			const compactComposition = SceneCompositionEngine.toCompactPromptContext(sceneComposition);
 			const compactSocialTopology = truncatePromptSection(socialTopologyContext, 360);
 			const compactEpisodeProjection = truncatePromptSection(NarrativeEpisodeProjectionEngine.toCompactPromptContext(presentationPlan.episodeProjection), 420);
+			const compactStoryBeat = StoryBeatDirector.toCompactPromptContext(storyBeat);
+			const compactStoryBeat = StoryBeatDirector.toCompactPromptContext(storyBeat);
 			const compactCanonical = [
 				'State changes must come from canonical engines/commands.',
 				'Preserve rumor, hearsay, memory, and uncertainty as uncertainty.',
@@ -386,6 +395,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				section('N13 SCENE COMPOSITION', compactComposition),
 				section('N15 SOCIAL ATTENTION / CONVERSATION TOPOLOGY', compactSocialTopology),
 				section('N17 NARRATIVE EPISODE PROJECTION', compactEpisodeProjection),
+				section('CURRENT STORY BEAT', compactStoryBeat),
 				section('SUPPORTING WORKING CONTEXT', '[omitted]'),
 				compactCanonical,
 				section('OUTPUT CONTRACT', compactOutput),

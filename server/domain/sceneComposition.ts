@@ -3,6 +3,7 @@ import type { PlayerIntent } from './playerIntentInterpreter';
 import type { NarrativeContinuityState } from './narrativeContinuityState';
 import type { NarrativePacingContract } from './narrativePacingEngine';
 import type { InformationReveal } from './narrativeDirector';
+import type { StoryBeatContract } from './storyBeatDirector';
 
 export type SceneCompositionBeatType =
 	| 'OBSERVATION'
@@ -56,8 +57,13 @@ function firstMeaningfulTarget(intent: PlayerIntent): { id?: string; name?: stri
 	return (intent.explicitTargets || [])[0] || intent.target || (intent.impliedTargets || [])[0];
 }
 
-function beatType(params: { intent: PlayerIntent; informationToReveal: InformationReveal[] }): SceneCompositionBeatType {
-	const { intent, informationToReveal } = params;
+function beatType(params: { intent: PlayerIntent; informationToReveal: InformationReveal[]; storyBeat?: StoryBeatContract }): SceneCompositionBeatType {
+	const { intent, informationToReveal, storyBeat } = params;
+	if (storyBeat?.beatType === 'CONFRONTATION') return 'CONFLICT';
+	if (storyBeat?.beatType === 'CONSEQUENCE') return 'CONSEQUENCE';
+	if (storyBeat?.beatType === 'DISCOVERY') return 'DISCOVERY';
+	if (storyBeat?.beatType === 'OBSERVATION') return 'OBSERVATION';
+	if (storyBeat?.beatType === 'DIALOGUE') return 'DIALOGUE';
 	if (intent.interactionMode === 'COMBAT') return 'CONFLICT';
 	if (intent.interactionMode === 'DIALOGUE' || intent.speechIntent) return 'DIALOGUE';
 	if (intent.movementIntent) return 'TRANSITION';
@@ -117,10 +123,13 @@ export class SceneCompositionEngine {
 		unresolvedThread?: string;
 		continuityState?: NarrativeContinuityState;
 		pacingContract: NarrativePacingContract;
+		storyBeat?: StoryBeatContract;
 	}): SceneCompositionContract {
-		const { situation, intent, informationToReveal, entitiesToReact, unresolvedThread, continuityState, pacingContract } = params;
+		const { situation, intent, informationToReveal, entitiesToReact, unresolvedThread, continuityState, pacingContract, storyBeat } = params;
 		const reactionPriority = entitiesToReact.map((entity) => text(entity.name)).filter(Boolean).slice(0, 6);
 		const focus = [
+			storyBeat?.meaningfulChange ? 'Meaningful change: ' + storyBeat.meaningfulChange : '',
+			...((storyBeat?.narrativeFocus || []).slice(0, 3)),
 			intent.informationGoal ? 'Information goal: ' + intent.informationGoal : '',
 			intent.action ? 'Player action: ' + intent.action : '',
 			reactionPriority.length ? 'Primary reactions: ' + reactionPriority.slice(0, 3).join(', ') : '',
@@ -133,7 +142,9 @@ export class SceneCompositionEngine {
 		const emotionalBeat = continuityState
 			? 'Emotional temperature is ' + continuityState.emotionalTemperature.toLowerCase() + ' with ' + continuityState.sceneMomentum.toLowerCase() + ' scene momentum.'
 			: 'No prior continuity state supplied; preserve the current emotional temperature and avoid unsupported escalation.';
-		const physicalBeat = intent.movementIntent
+		const physicalBeat = storyBeat?.meaningfulChange
+			? 'Communicate the meaningful turn change before secondary description: ' + storyBeat.meaningfulChange
+			: intent.movementIntent
 			? 'Keep the physical movement visible before secondary description.'
 			: intent.interactionMode === 'COMBAT'
 				? 'Show the attempted physical action and only the canon-grounded immediate response.'
@@ -154,7 +165,7 @@ export class SceneCompositionEngine {
 			version: 1,
 			turnId: situation.turnId,
 			sceneObjective: intent.goal ? intent.goal + ': ' + (intent.informationGoal || intent.action) : 'Faithfully resolve the player action in the current scene.',
-			beatType: beatType({ intent, informationToReveal }),
+			beatType: beatType({ intent, informationToReveal, storyBeat }),
 			narrativeFocus: focus.length ? focus : ['Current player action and its immediate scene response.'],
 			focalEntityId: focal.id,
 			focalEntityRole: focal.role,
@@ -169,7 +180,9 @@ export class SceneCompositionEngine {
 			reactionPriority,
 			tensionDirection: continuityState?.sceneMomentum || 'STEADY',
 			pacingShape: pacingShape(pacingContract.profile),
-			closingBeat,
+			closingBeat: storyBeat?.unresolvedConsequence
+			? 'Land the immediate observable beat while preserving this uncertainty: ' + storyBeat.unresolvedConsequence
+			: closingBeat,
 			optionalHook,
 			compositionConfidence: fallbackReason ? 0.75 : 0.92,
 			fallbackReason,

@@ -175,6 +175,7 @@ export class StoryBeatDirector {
 		const narrativeFocus = unique([
 			meaningfulChange,
 			...groundedTargetNames,
+			...(situation.openThreads || []).slice(0, 1).map((thread) => 'Active thread: ' + thread.title),
 			...(newInformation.length ? ['newly available information'] : []),
 			...(intent.observationIntent ? ['what the player can currently perceive'] : []),
 			...(intent.movementIntent ? ['the resolved change in position'] : []),
@@ -183,6 +184,7 @@ export class StoryBeatDirector {
 			situation.location.name,
 			situation.worldTime,
 			...groundedTargetNames,
+			...(situation.openThreads || []).slice(0, 2).map((thread) => thread.title),
 		]).slice(0, 8);
 		const mustMention = unique([
 			...(groundedTargetNames.length ? groundedTargetNames : []),

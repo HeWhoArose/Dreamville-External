@@ -36,6 +36,7 @@ import { NarratorVoiceEngine, type NarratorVoiceControls } from './narratorVoice
 import { AiTurnCallBudget, type AiTurnCallBudgetSnapshot } from './aiTurnCallBudget';
 import { scoreModelForQualityTier, getAiTaskRoutingPolicy } from './aiQualityRouting';
 import type { ActionResolution } from './actionResolution';
+import { StoryBeatDirector, type StoryBeatContract } from './storyBeatDirector';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
 

@@ -630,7 +630,14 @@ export class ServerMockAuthority {
       objective: params.actionResolution.actualEffect || 'Resolve the player action in presentation.',
       immediateSteps: ['Acknowledge the player action.', 'Show its immediate physical or social consequence.', 'Leave the next choice to the player.'],
       informationToReveal: [],
-      entitiesToReact: [...(params.actionResolution.targetEntityIds || [])],
+      entitiesToReact: (params.actionResolution.targetEntityIds || []).map((id) => {
+        const entity = params.situation.nearbyEntities.find((item) => item.id === id);
+        return {
+          id,
+          name: entity?.name || id,
+          source: 'EXPLICIT' as const,
+        };
+      }),
       continuityRequirements: [],
       forbiddenAssumptions: ['Do not invent hidden facts, new canon, or an uncommitted outcome.', 'Do not choose the player’s next consequential action.'],
       stateEffectsExpected: [],
@@ -1234,6 +1241,33 @@ export class ServerMockAuthority {
           attemptsTrail: generated.attemptsTrail,
         });
       }
+    } catch (error: any) {
+      narrativeResponse = this.synthesizeFreeformActionFallback(
+        targetStoryId,
+        String(freeformText),
+        committedOutcome,
+      );
+      narrativeTurnPackage = {
+        narrative: [narrativeResponse],
+        dialogue: [],
+        events: ['LOCAL_NARRATION_FALLBACK'],
+        stateChanges: [],
+        memoryCandidates: [],
+        audioCues: [],
+      };
+      narrativeGeneration = {
+        source: 'DETERMINISTIC_FALLBACK',
+        providerId: 'provider_local_story_fallback',
+        modelId: 'local-story-fallback',
+        regenerated: false,
+      };
+      narrativeVisualCues = undefined;
+      narrativeError = undefined;
+      console.warn('[NarrationFallback] AI narration generation threw error; local story fallback used.', {
+        storyId: targetStoryId,
+        actionId: baseResult?.actionId,
+        error: error?.message || String(error),
+      });
     }
 
     // N18/N8 continuation-turn gate. Opening scenes already use this review loop;

@@ -640,27 +640,6 @@ export class CurrentSituationBuilder {
 			connectedLocations,
 		};
 
-		const sceneObjects: SceneObjectContext[] = (Array.isArray((safeLocation as any).sceneObjects)
-			? (safeLocation as any).sceneObjects
-				.map(projectSceneObject)
-				.filter((object: SceneObjectContext) => object.id && object.name && object.visibleToPlayer)
-			: []);
-
-		for (const item of repository.getInventoryEngine(params.storyId).getItemInstancesByOwner(safeLocation.id)) {
-				if (item.containerType !== 'ground' || item.destroyedAtSeconds !== undefined) continue;
-				sceneObjects.push({
-					id: item.id,
-					name: item.name,
-					kind: 'ITEM',
-					description: undefined,
-					visibleToPlayer: true,
-					interactable: true,
-					tags: [item.category.toLowerCase(), 'ground_item'],
-					properties: { defId: item.defId, quantity: item.quantity },
-					source: 'GROUND_ITEM',
-				});
-		}
-
 		const nearbyEntities: NearbyEntityContext[] = [];
 		if (player) {
 			nearbyEntities.push({
@@ -896,7 +875,6 @@ export class CurrentSituationBuilder {
 			location: currentLocation,
 			nearbyEntities: limitedNearbyEntities,
 			sceneObjects: sceneObjects.slice(0, 32),
-			sceneObjects,
 			visibleEvents,
 			activeDialogue,
 			recentTurns,

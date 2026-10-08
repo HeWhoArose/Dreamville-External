@@ -8814,7 +8814,10 @@ gameRouter.post('/worlds/:worldId/start-run', async (req: Request, res: Response
     // Auto-generate or retrieve canonical opening scene for the new StoryRun (Slice 4)
     let openingScene = null;
     try {
-      openingScene = await OpeningSceneService.generateOpeningScene({ storyId });
+      openingScene = await OpeningSceneService.generateOpeningScene({
+        storyId,
+        allowDeterministicFallback: true,
+      });
     } catch (genErr) {
       console.warn(`[POST /story-runs] Initial opening scene auto-generation deferred:`, genErr);
     }
@@ -8881,6 +8884,7 @@ gameRouter.post('/story-runs/:storyId/opening', async (req: Request, res: Respon
       forceRegenerate: Boolean(forceRegenerate),
       timeoutMs: typeof timeoutMs === 'number' ? timeoutMs : undefined,
       simulateFailure: Boolean(simulateFailure),
+      allowDeterministicFallback: true,
       forceModelId: typeof forceModelId === 'string' ? forceModelId : undefined,
     });
     const sessionAfter = captureCanonicalStateSnapshot(storyId, worldRepository);

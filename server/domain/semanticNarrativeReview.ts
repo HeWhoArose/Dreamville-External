@@ -127,6 +127,13 @@ function isConcreteClaimSupported(claim: string, situation: CurrentSituation): b
 			interaction.label,
 			interaction.targetName || '',
 		].join(' ')),
+		...(Array.isArray(situation.sceneObjects) ? situation.sceneObjects
+			.filter((object) => object.visibleToPlayer)
+			.map((object) => [
+				object.name,
+				object.description || '',
+				...(object.tags || []),
+			].join(' ')) : []),
 	].join(' ').toLowerCase();
 	const claimTokens = tokens(claim).filter((token) => !['current', 'immediate', 'nearby', 'present'].includes(token));
 	if (!claimTokens.length) return true;

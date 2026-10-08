@@ -15,6 +15,17 @@ test('AI call policy keeps ordinary and canonical mechanics deterministic', () =
 	assert.equal(inferAiCallPolicyMode({ itemKnown: true, compoundAction: true }), 'INTERPRETATION');
 });
 
+test('unresolved use targets are interpretation, not novel-capability authorization', () => {
+	const decision = decideAiHelperNeed({ unknownUseTarget: true });
+	assert.equal(decision.strategy, 'INTERPRET_ONCE');
+	assert.equal(decision.mode, 'INTERPRETATION');
+	assert.equal(decision.maxHelperCalls, 2);
+
+	const explicit = decideAiHelperNeed({ unknownUseTarget: true, explicitCapabilitySyntax: true });
+	assert.equal(explicit.strategy, 'INTERPRET_SYNTHESIZE_AND_REPAIR');
+	assert.equal(explicit.mode, 'NOVEL_CAPABILITY');
+});
+
 test('interpretation mode allows one required interpretation and a second repair only when justified', () => {
 	const budget = new AiCallBudget('INTERPRETATION');
 	const first = budget.authorize('intent.interpret', 700, 'INTENT_INTERPRET');

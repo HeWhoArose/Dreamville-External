@@ -9543,7 +9543,7 @@ export class MultiModelOrchestrator {
     // Settings/UI route and the execution route semantically aligned when models
     // are added, removed, disabled, or become temporarily unusable.
     const effectiveRouteAttemptBudget = hasConfiguredTaskChain
-      ? candidateChain.length
+      ? Number.POSITIVE_INFINITY
       : Math.min(candidateChain.length, contract.fallbackPolicy?.maxTotalAttempts ?? candidateChain.length);
     const attemptsTrail: Array<{
       providerId: string;
@@ -9555,7 +9555,7 @@ export class MultiModelOrchestrator {
     }> = [];
 
     for (let cIdx = 0; cIdx < candidateChain.length; cIdx++) {
-      if (totalAttempts >= effectiveRouteAttemptBudget && !candidateChain[cIdx].isEmergencyFloor) {
+      if (!hasConfiguredTaskChain && totalAttempts >= effectiveRouteAttemptBudget && !candidateChain[cIdx].isEmergencyFloor) {
         break;
       }
       // For adaptive tasks only, try one final live-registry recovery

@@ -1,7 +1,7 @@
 import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
 import type { DurableMemory } from './memoryOpportunityEngine';
 import type { EntityCard, EntityKind } from './entityCard';
-import type { KnowledgeFact, RouteEdge, WorldTimestamp } from './types';
+import type { KnowledgeFact, RouteEdge, WorldTimestamp, LocationSceneObject } from './types';
 import type { WorldRepository } from '../repositories/worldRepository';
 import type { PlayerIntent } from './playerIntentInterpreter';
 import type { LocalSpatialState } from './playerLifecycleState';
@@ -47,6 +47,18 @@ export interface NearbyEntityContext {
 	importance: number;
 	explicitlyReferenced: boolean;
 	visibleToPlayer: boolean;
+}
+
+export interface SceneObjectContext {
+	id: string;
+	name: string;
+	kind: LocationSceneObject['kind'];
+	description?: string;
+	visibleToPlayer: boolean;
+	interactable: boolean;
+	tags: string[];
+	properties: Record<string, unknown>;
+	source: 'LOCATION_SCENE_OBJECT' | 'GROUND_ITEM';
 }
 
 export interface VisibleEventContext {
@@ -184,6 +196,7 @@ export interface CurrentSituation {
 	};
 	location: CurrentLocationContext;
 	nearbyEntities: NearbyEntityContext[];
+	sceneObjects: SceneObjectContext[];
 	visibleEvents: VisibleEventContext[];
 	activeDialogue?: ActiveDialogueContext;
 	recentTurns: RecentTurnContext[];
@@ -356,6 +369,20 @@ function projectLifecycleEntity(
 		importance: state.locationId === currentLocationId ? 1 : explicitlyReferenced ? 0.9 : 0.4,
 		explicitlyReferenced,
 		visibleToPlayer: true,
+	};
+}
+
+function projectSceneObject(object: LocationSceneObject): SceneObjectContext {
+	return {
+		id: normalizeText(object.id),
+		name: normalizeText(object.name),
+		kind: object.kind || 'OTHER',
+		description: normalizeText(object.description) || undefined,
+		visibleToPlayer: object.visible !== false,
+		interactable: object.interactable === true,
+		tags: Array.isArray(object.tags) ? object.tags.map(normalizeText).filter(Boolean).slice(0, 12) : [],
+		properties: object.properties && typeof object.properties === 'object' ? clone(object.properties) : {},
+		source: 'LOCATION_SCENE_OBJECT',
 	};
 }
 
@@ -581,6 +608,29 @@ export class CurrentSituationBuilder {
 			parentLocationId: safeLocation.parentLocationId,
 			connectedLocations,
 		};
+
+		const sceneObjects: SceneObjectContext[] = (Array.isArray((safeLocation as any).sceneObjects)
+			? (safeLocation as any).sceneObjects
+				.map(projectSceneObject)
+				.filter((object: SceneObjectContext) => object.id && object.name && object.visibleToPlayer)
+			: []);
+
+		if (player) {
+			for (const item of repository.getInventoryEngine(params.storyId).getItemInstancesByOwner?.(safeLocation.id) || []) {
+				if (item.containerType !== 'ground' || item.destroyedAtSeconds !== undefined) continue;
+				sceneObjects.push({
+					id: item.id,
+					name: item.name,
+					kind: 'ITEM',
+					description: undefined,
+					visibleToPlayer: true,
+					interactable: true,
+					tags: [item.category.toLowerCase(), 'ground_item'],
+					properties: { defId: item.defId, quantity: item.quantity },
+					source: 'GROUND_ITEM',
+				});
+			}
+		}
 
 		const nearbyEntities: NearbyEntityContext[] = [];
 		if (player) {
@@ -816,6 +866,7 @@ export class CurrentSituationBuilder {
 			},
 			location: currentLocation,
 			nearbyEntities: limitedNearbyEntities,
+			sceneObjects,
 			visibleEvents,
 			activeDialogue,
 			recentTurns,

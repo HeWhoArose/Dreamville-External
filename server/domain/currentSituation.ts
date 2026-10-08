@@ -597,6 +597,37 @@ export class CurrentSituationBuilder {
 			})
 			.filter(Boolean) as CurrentLocationContext['connectedLocations'];
 
+		const sceneObjects: SceneObjectContext[] = [];
+
+		// Explicit authored/generated scene objects are the only location-level
+		// source of discrete environmental props. Location prose is never parsed
+		// into objects because prose such as "brass architecture" must not create
+		// a canonical brass lamp or chair.
+		for (const object of Array.isArray(safeLocation.sceneObjects) ? safeLocation.sceneObjects : []) {
+			if (!object?.id || !object?.name || object.visible === false) continue;
+			sceneObjects.push(projectSceneObject(object));
+		}
+
+		// Ground item instances are canonical objects too. Their ownerEntityId is
+		// the location/container authority, while their item definition supplies
+		// the concrete identity and mechanical properties.
+		const inventory = repository.getInventoryEngine(params.storyId);
+		for (const item of inventory.getItemInstancesByOwner(safeLocation.id)) {
+			if (item.containerType !== 'ground' || item.destroyedAtSeconds !== undefined) continue;
+			const definition = inventory.getItemDefinition(item.defId);
+			sceneObjects.push({
+				id: item.id,
+				name: item.name || definition?.name || item.defId,
+				kind: 'ITEM',
+				description: definition?.description,
+				visibleToPlayer: true,
+				interactable: true,
+				tags: definition?.tags ? [...definition.tags] : [],
+				properties: clone(definition?.properties || {}),
+				source: 'GROUND_ITEM',
+			});
+		}
+
 		const currentLocation: CurrentLocationContext = {
 			id: safeLocation.id,
 			name: safeLocation.name,
@@ -864,6 +895,7 @@ export class CurrentSituationBuilder {
 			},
 			location: currentLocation,
 			nearbyEntities: limitedNearbyEntities,
+			sceneObjects: sceneObjects.slice(0, 32),
 			sceneObjects,
 			visibleEvents,
 			activeDialogue,

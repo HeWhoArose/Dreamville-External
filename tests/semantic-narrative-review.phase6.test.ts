@@ -157,3 +157,34 @@ test('Phase 6 rejects invented physical props during observation', () => {
 	assert.equal(review.decision, 'REJECT');
 	assert.ok(review.violations.some((v) => v.code === 'UNSUPPORTED_CLAIM'));
 });
+
+
+test('Phase 6 rejects unsupported environmental features during observation', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	repository.seedStory('phase6_environment_grounding');
+	const situation = CurrentSituationBuilder.build({
+		storyId: 'phase6_environment_grounding',
+		playerAction: 'I stop and look for a tree.',
+		worldRepo: repository,
+	});
+	const intent = PlayerIntentInterpreter.deterministic('I stop and look for a tree.', situation);
+	const plan = NarrativeDirector.create({
+		situation,
+		intent,
+		research: NarrativeResearchPipeline.research({
+			repository,
+			storyId: 'phase6_environment_grounding',
+			currentSituation: situation,
+			playerIntent: intent,
+			playerAction: 'I stop and look for a tree.',
+		}),
+	});
+	const review = SemanticNarrativeReview.review({
+		intent,
+		situation,
+		plan,
+		turnPackage: pkg('You stand on a balcony and notice synthetic moss growing beneath the bridge.'),
+	});
+	assert.equal(review.decision, 'REJECT');
+	assert.ok(review.violations.some((v) => v.code === 'UNSUPPORTED_CLAIM'));
+});

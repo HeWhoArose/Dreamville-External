@@ -88,16 +88,6 @@ function buildNarrationSituationContext(situation: CurrentSituation): string {
 
 	const visibleObjects = (Array.isArray(situation.sceneObjects) ? situation.sceneObjects : [])
 		.filter((object) => object.visibleToPlayer)
-		.slice(0, 16)
-		.map((object) => [
-			object.name + ' [' + object.kind + ']',
-			object.description ? ': ' + object.description : '',
-			object.interactable ? ' (interactable)' : '',
-		].join(''))
-		.join('; ') || 'None';
-
-	const visibleObjects = (Array.isArray(situation.sceneObjects) ? situation.sceneObjects : [])
-		.filter((object) => object.visibleToPlayer)
 		.slice(0, 20)
 		.map((object) => [
 			object.name,

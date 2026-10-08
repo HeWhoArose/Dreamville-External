@@ -9536,6 +9536,15 @@ export class MultiModelOrchestrator {
 
     let totalAttempts = 0;
     let lastError = '';
+
+    // Explicitly configured routes are self-sizing: the runtime attempt budget
+    // follows the effective route after preflight filtering, rather than a fixed
+    // global number silently truncating the configured chain. This keeps the
+    // Settings/UI route and the execution route semantically aligned when models
+    // are added, removed, disabled, or become temporarily unusable.
+    const effectiveRouteAttemptBudget = hasConfiguredTaskChain
+      ? candidateChain.length
+      : Math.min(candidateChain.length, contract.fallbackPolicy?.maxTotalAttempts ?? candidateChain.length);
     const attemptsTrail: Array<{
       providerId: string;
       modelId: string;
@@ -9546,7 +9555,7 @@ export class MultiModelOrchestrator {
     }> = [];
 
     for (let cIdx = 0; cIdx < candidateChain.length; cIdx++) {
-      if (totalAttempts >= (contract.fallbackPolicy?.maxTotalAttempts ?? 5) && !candidateChain[cIdx].isEmergencyFloor) {
+      if (totalAttempts >= effectiveRouteAttemptBudget && !candidateChain[cIdx].isEmergencyFloor) {
         break;
       }
       // For adaptive tasks only, try one final live-registry recovery

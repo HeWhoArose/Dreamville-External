@@ -293,3 +293,60 @@ test('player-safe current situation projection omits canonical world facts and p
 	assert.equal(safe.activeDialogue?.epistemicNote, undefined);
 	assert.equal(safe.activeDialogue?.text, 'The public gate is open.');
 });
+
+
+test('current situation exposes only explicitly canonical visible scene objects and ground items', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'phase1_scene_object_regression';
+	repository.seedStory(storyId);
+	const player = repository.getPlayerLifecycle(storyId);
+	assert.ok(player);
+
+	const geography = repository.getGeographyGraph(storyId);
+	const location = geography.getNode(player.locationId);
+	assert.ok(location);
+	geography.addNode({
+		...location,
+		sceneObjects: [
+			{
+				id: 'canonical_bench',
+				name: 'Stone Bench',
+				kind: 'ENVIRONMENTAL_FEATURE',
+				description: 'A low stone bench beside the path.',
+				visible: true,
+				interactable: true,
+				tags: ['furniture'],
+			},
+			{
+				id: 'hidden_lamp',
+				name: 'Brass Lamp',
+				kind: 'ITEM',
+				visible: false,
+				interactable: true,
+			},
+		],
+	});
+
+	const inventory = repository.getInventoryEngine(storyId);
+	const groundDef = inventory.getAllDefinitions()[0];
+	assert.ok(groundDef);
+	inventory.createInstance({
+		defId: groundDef.id,
+		ownerEntityId: player.locationId,
+		containerType: 'ground',
+		provenance: 'test',
+		customName: 'Ground Relic',
+	});
+
+	const situation = CurrentSituationBuilder.build({
+		storyId,
+		playerAction: 'I observe my surroundings.',
+		viewerActorId: player.actorId,
+		worldRepo: repository,
+	});
+
+	assert.ok(situation.sceneObjects.some((object) => object.id === 'canonical_bench'));
+	assert.equal(situation.sceneObjects.some((object) => object.id === 'hidden_lamp'), false);
+	assert.ok(situation.sceneObjects.some((object) => object.name === 'Ground Relic'));
+	assert.equal(situation.sceneObjects.some((object) => object.name === 'Brass Lamp'), false);
+});

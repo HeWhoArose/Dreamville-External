@@ -405,10 +405,7 @@ function fallbackPolicyFor(task: TaskId, category: AiTaskCategory): AiTaskFallba
 	const fastTask = task === 'intent.interpret' || task === 'story.advice' || task === 'capability.explain' || task === 'utility.inspect';
 	return {
 		maxPrimaryAttempts: fastTask ? 2 : category === 'speech' || category === 'image' ? 2 : 3,
-		// Text routes may contain more than five explicitly configured AI tiers.
-		// The fallback executor must be able to traverse the complete configured
-		// route before reaching the deterministic emergency floor.
-		maxTotalAttempts: fastTask ? 4 : category === 'speech' || category === 'image' ? 4 : 8,
+		maxTotalAttempts: fastTask ? 4 : category === 'speech' || category === 'image' ? 4 : 5,
 		allowEmergencyFloor: true,
 		retryableFailures: ['TIMEOUT', '429', '5XX', 'AUTH', 'UNAVAILABLE', 'MALFORMED', 'OTHER'],
 	};

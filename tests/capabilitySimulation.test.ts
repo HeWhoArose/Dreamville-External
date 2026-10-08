@@ -328,3 +328,12 @@ test('ten deterministic capability audit passes preserve the owned-vs-proposal b
     assert.equal(result.currentlyExecutable, false, `Audit ${audit}: unowned action became executable`);
   }
 });
+
+
+test('ordinary observation and search language never qualifies as a capability request', () => {
+	assert.equal(simulator.isCapabilityLikeRequest('observe my surroundings looking for anything'), false);
+	assert.equal(simulator.isCapabilityLikeRequest('look around for anyone nearby'), false);
+	assert.equal(simulator.isCapabilityLikeRequest('search the courtyard for clues'), false);
+	assert.equal(simulator.isCapabilityLikeRequest('I cast Fireball'), true);
+	assert.equal(simulator.isCapabilityLikeRequest('I teleport behind the guard'), true);
+});

@@ -890,7 +890,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
             size="md"
           />
 
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 break-words">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
               <h1 className="truncate text-base font-semibold text-stone-100">
                 {protagonistName || 'Protagonist'}
@@ -1091,8 +1091,8 @@ export const StoryView: React.FC<StoryViewProps> = ({
       })()}
 
       {pendingActionAdvice?.simulation && (
-        <section className={`rounded-2xl border px-4 py-4 shadow-sm ${pendingActionAdvice.proposal ? 'border-amber-800/70 bg-amber-950/20' : 'border-sky-800/60 bg-sky-950/20'}`}>
-          <div className="flex items-start gap-3">
+        <section className={`overflow-hidden rounded-2xl border px-4 py-4 shadow-sm ${pendingActionAdvice.proposal ? 'border-amber-800/70 bg-amber-950/20' : 'border-sky-800/60 bg-sky-950/20'}`}>
+          <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-start">
             <div className="mt-0.5 shrink-0">
               {pendingActionAdvice.proposal ? <Sparkles className="h-4 w-4 text-amber-300" /> : <AlertCircle className="h-4 w-4 text-sky-300" />}
             </div>
@@ -1106,10 +1106,10 @@ export const StoryView: React.FC<StoryViewProps> = ({
                   ? 'Not currently learnable'
                   : 'Capability simulation'}
               </p>
-              <h3 className="mt-1 text-base font-semibold text-stone-100">
+              <h3 className="mt-1 break-words text-base font-semibold text-stone-100">
                 {pendingActionAdvice.proposal?.alternative?.name || pendingActionAdvice.simulation.candidateCapability?.name || 'Requested capability'}
               </h3>
-              <p className="mt-2 text-sm leading-6 text-stone-300">{pendingActionAdvice.simulation.explanation}</p>
+              <p className="mt-2 break-words text-sm leading-6 text-stone-300">{pendingActionAdvice.simulation.explanation}</p>
               {pendingActionAdvice.simulation.blockers.length > 0 && (
                 <div className="mt-3 space-y-1">
                   {pendingActionAdvice.simulation.blockers.slice(0, 4).map((blocker) => (
@@ -1118,21 +1118,21 @@ export const StoryView: React.FC<StoryViewProps> = ({
                 </div>
               )}
               {pendingActionAdvice.simulation.developmentPath.length > 0 && (
-                <div className="mt-3 rounded-xl border border-white/7 bg-black/15 p-3">
+                <div className="mt-3 overflow-hidden rounded-xl border border-white/7 bg-black/15 p-3">
                   <p className="text-[10px] uppercase tracking-[0.15em] text-stone-600">Development path</p>
                   {pendingActionAdvice.simulation.developmentPath.slice(0, 3).map((step) => (
-                    <p key={step} className="mt-1 text-xs text-stone-400">{step}</p>
+                    <p key={step} className="mt-1 break-words text-xs text-stone-400">{step}</p>
                   ))}
                 </div>
               )}
               {pendingActionAdvice.proposal && (
-                <p className="mt-3 text-xs text-amber-200/75">This is not learned yet. Choosing the action below is the explicit acquisition decision.</p>
+                <p className="mt-3 break-words text-xs text-amber-200/75">This is not learned yet. Choosing the action below is the explicit acquisition decision.</p>
               )}
             </div>
             {pendingActionAdvice.proposal && (
-              <div className="flex shrink-0 flex-col gap-2">
-                <button type="button" onClick={() => onAcceptActionAdvice?.(pendingActionAdvice)} disabled={isProcessingAction} className="rounded-lg bg-amber-200 px-3 py-2 text-xs font-semibold text-stone-950 transition hover:bg-amber-100 disabled:opacity-50">{pendingActionAdvice.proposal.acceptLabel}</button>
-                <button type="button" onClick={() => onRejectActionAdvice?.(pendingActionAdvice)} disabled={isProcessingAction} className="rounded-lg border border-stone-800 bg-stone-900 px-3 py-2 text-xs text-stone-300 transition hover:bg-stone-800 disabled:opacity-50">{pendingActionAdvice.proposal.rejectLabel}</button>
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:shrink-0">
+                <button type="button" onClick={() => onAcceptActionAdvice?.(pendingActionAdvice)} disabled={isProcessingAction} className="w-full rounded-lg bg-amber-200 px-3 py-2 text-xs font-semibold text-stone-950 transition hover:bg-amber-100 disabled:opacity-50 sm:w-auto">{pendingActionAdvice.proposal.acceptLabel}</button>
+                <button type="button" onClick={() => onRejectActionAdvice?.(pendingActionAdvice)} disabled={isProcessingAction} className="w-full rounded-lg border border-stone-800 bg-stone-900 px-3 py-2 text-xs text-stone-300 transition hover:bg-stone-800 disabled:opacity-50 sm:w-auto">{pendingActionAdvice.proposal.rejectLabel}</button>
               </div>
             )}
             {!pendingActionAdvice.proposal && (

@@ -11,6 +11,7 @@ class ControlledAdapter implements IProviderAdapter {
 	public readonly providerId = 'test_manual_fallback_provider';
 	public primaryMode: '429' | 'success' | 'unavailable' = 'success';
 	public calls: string[] = [];
+	public failModels = new Set<string>();
 
 	async generate(
 		_task: any,
@@ -21,6 +22,9 @@ class ControlledAdapter implements IProviderAdapter {
 		this.calls.push(modelId);
 		if (modelId === 'preferred-model' && this.primaryMode === '429') {
 			throw new Error('Provider rate limit exceeded (HTTP 429 Too Many Requests).');
+		}
+		if (this.failModels.has(modelId)) {
+			throw new Error('Injected provider failure for route-length regression.');	
 		}
 		return {
 			text: 'VALID NARRATION',
@@ -163,6 +167,48 @@ test('configured fallback attempt budget follows the effective route instead of 
 		assert.equal(result.source, 'DETERMINISTIC_FALLBACK');
 		assert.deepEqual(adapter.calls, route.map((key) => key.split('::')[1]));
 		assert.equal(result.attemptsTrail.filter((entry) => entry.status === 'FAILED').length, 6);
+	} finally {
+		orchestrator.setFallbackChain('narrative.generate', originalChain);
+	}
+});
+
+
+test('configured fallback budget follows the effective route length instead of truncating after five models', async () => {
+	const orchestrator = new MultiModelOrchestrator();
+	const originalChain = orchestrator.getFallbackChain('narrative.generate');
+	try {
+		const adapter = new ControlledAdapter();
+		adapter.failModels = new Set(['route-model-1', 'route-model-2', 'route-model-3', 'route-model-4', 'route-model-5']);
+		orchestrator.registerAdapter(adapter);
+
+		for (let index = 1; index <= 6; index++) {
+			orchestrator.registerModel(model(`route-model-${index}`, 100 - index));
+		}
+
+		orchestrator.setFallbackChain('narrative.generate', Array.from({ length: 6 }, (_, index) =>
+			`test_manual_fallback_provider::route-model-${index + 1}`,
+		));
+
+		const result = await orchestrator.executeTaskGeneration(
+			'narrative.generate',
+			'Continue the current scene.',
+			undefined,
+			{
+				allowDeterministicFallback: false,
+				validateResponse: () => ({ valid: true }),
+			},
+		);
+
+		assert.equal(result.modelId, 'route-model-6');
+		assert.equal(adapter.calls.length, 6);
+		assert.deepEqual(adapter.calls, [
+			'route-model-1',
+			'route-model-2',
+			'route-model-3',
+			'route-model-4',
+			'route-model-5',
+			'route-model-6',
+		]);
 	} finally {
 		orchestrator.setFallbackChain('narrative.generate', originalChain);
 	}

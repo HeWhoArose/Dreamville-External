@@ -136,14 +136,27 @@ export function decideAiHelperNeed(params: {
 		};
 	}
 
-	if (params.explicitCapabilitySyntax || params.unknownUseTarget || params.semanticNoveltyRequested) {
+	if (params.explicitCapabilitySyntax || params.semanticNoveltyRequested) {
 		return {
 			strategy: 'INTERPRET_SYNTHESIZE_AND_REPAIR',
 			mode: 'NOVEL_CAPABILITY',
 			reason: params.compoundAction
 				? 'The action is compound and semantically novel; use the minimum helper stages required and reserve repair/alternative stages only after canonical validation requires them.'
-				: 'The player expressed a capability-like or unresolved use request without a canonical match.',
+				: 'The player expressed a capability-like or semantically novel request without a canonical match.',
 			maxHelperCalls: MAX_ADAPTIVE_HELPER_CALLS,
+		};
+	}
+
+	// An unresolved "use it" reference is an interpretation problem, not proof that
+	// the player wants a new capability. Resolve the referent first. Only explicit
+	// capability syntax or independently established semantic novelty may authorize
+	// capability synthesis.
+	if (params.unknownUseTarget) {
+		return {
+			strategy: 'INTERPRET_ONCE',
+			mode: 'INTERPRETATION',
+			reason: 'The action contains an unresolved use target; interpret the reference before considering any capability proposal.',
+			maxHelperCalls: 2,
 		};
 	}
 

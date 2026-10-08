@@ -184,7 +184,10 @@ export class UnifiedAiActionOrchestrator {
 					capabilityIntent = true;
 				} else {
 					capabilityIntent = initial.result.source === 'DETERMINISTIC_FALLBACK'
-						? simulator.isCapabilityLikeRequest(cleanAction)
+						? (
+							Boolean(preCandidate) ||
+							(!helperDecision.reason.includes('unresolved use target') && simulator.isCapabilityLikeRequest(cleanAction))
+						)
 						: Boolean(initial.parsed?.capabilityIntent);
 					const firstInterpretationNeedsRepair =
 						intent.confidence < 0.65 ||
@@ -199,7 +202,8 @@ export class UnifiedAiActionOrchestrator {
 			} catch {
 				capabilityIntent = helperDecision.strategy === 'INTERPRET_SYNTHESIZE_AND_REPAIR'
 					? true
-					: Boolean(preCandidate) || simulator.isCapabilityLikeRequest(cleanAction);
+					: Boolean(preCandidate) ||
+						(!helperDecision.reason.includes('unresolved use target') && simulator.isCapabilityLikeRequest(cleanAction));
 			}
 		} else {
 			capabilityIntent = Boolean(preCandidate);

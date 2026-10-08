@@ -110,6 +110,22 @@ function extractConcreteObjectClaims(narration: string): string[] {
 	return claims;
 }
 
+function extractEnvironmentalClaims(narration: string): string[] {
+	const claims: string[] = [];
+	const patterns = [
+		/\b(?:on|onto|inside|within|beneath|above|beside|behind|near)\s+(?:a|an|the)\s+([a-z][a-z'-]{2,}(?:\s+[a-z][a-z'-]{2,}){0,2})\b/gi,
+		/\b(?:a|an|the)\s+([a-z][a-z'-]{2,}(?:\s+[a-z][a-z'-]{2,}){0,2})\s+(?:rises?|stands?|stretches?|spans?|clings?|grows?|hangs?|extends?|runs?|leads?)\b/gi,
+	];
+	for (const pattern of patterns) {
+		let match: RegExpExecArray | null;
+		while ((match = pattern.exec(narration)) !== null) {
+			const claim = normalize(match[1]).trim();
+			if (claim && !claims.includes(claim)) claims.push(claim);
+		}
+	}
+	return claims;
+}
+
 function isConcreteClaimSupported(claim: string, situation: CurrentSituation): boolean {
 	const normalizedClaim = normalize(claim);
 	const visibleObjects = (situation.sceneObjects || [])
@@ -129,6 +145,11 @@ function isConcreteClaimSupported(claim: string, situation: CurrentSituation): b
 		.filter((entity) => entity.visibleToPlayer)
 		.map((entity) => normalize(entity.name));
 	if (visibleEntities.some((name) => name === normalizedClaim || normalizedClaim.includes(name) || name.includes(normalizedClaim))) {
+		return true;
+	}
+
+	const structures = (situation.sceneEvidence?.structures || []).map(normalize);
+	if (structures.some((name) => name === normalizedClaim || normalizedClaim.includes(name) || name.includes(normalizedClaim))) {
 		return true;
 	}
 
@@ -217,13 +238,15 @@ export class SemanticNarrativeReview {
 		// treating that invention as world fact on the next turn.
 		if (intent.observationIntent) {
 			const unsupportedObjects = extractConcreteObjectClaims(narration)
-				.filter((claim) => !isConcreteClaimSupported(claim, situation))
-				.slice(0, 5);
-			if (unsupportedObjects.length > 0) {
-				unsupportedClaims.push(...unsupportedObjects);
+				.filter((claim) => !isConcreteClaimSupported(claim, situation));
+			const unsupportedEnvironment = extractEnvironmentalClaims(narration)
+				.filter((claim) => !isConcreteClaimSupported(claim, situation));
+			const unsupportedConcreteClaims = unique([...unsupportedObjects, ...unsupportedEnvironment]).slice(0, 8);
+			if (unsupportedConcreteClaims.length > 0) {
+				unsupportedClaims.push(...unsupportedConcreteClaims);
 				violations.push({
 					code: 'UNSUPPORTED_CLAIM',
-					message: 'Observation narration introduced concrete physical details not supported by the canonical visible scene: ' + unsupportedObjects.join(', ') + '.',
+					message: 'Observation narration introduced concrete physical/environmental details not supported by canonical scene evidence: ' + unsupportedConcreteClaims.join(', ') + '.',
 					severity: 'HIGH',
 				});
 			}

@@ -2967,11 +2967,23 @@ class ApiClient {
       },
       body: JSON.stringify(options || {}),
     });
+    const data = await readJsonSafely<any>(res);
     if (!res.ok) {
-      const errorData = await res.json().catch(() => null);
-      throw new Error(errorData?.error || `Failed to generate opening scene: HTTP ${res.status}`);
+      const error = new Error(
+        data?.errorReason ||
+        data?.error ||
+        `Failed to generate opening scene: HTTP ${res.status}`
+      );
+      Object.assign(error, {
+        code: data?.code,
+        statusCode: res.status,
+        attemptsTrail: data?.attemptsTrail,
+        fallbackReason: data?.fallbackReason,
+        isServerStarting: (error as any).isServerStarting,
+      });
+      throw error;
     }
-    return await res.json();
+    return data;
   }
 
   /**

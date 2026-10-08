@@ -272,6 +272,9 @@ export class StorySessionRecorder {
 		if (recording.storyId !== params.storyId) {
 			throw new Error('Story session recording storyId mismatch.');
 		}
+		if (recording.interactions.length === 0 && params.stateBefore !== undefined) {
+			recording.initialState = clone(params.stateBefore);
+		}
 		const sequence = recording.interactions.length + 1;
 		const before = clone(params.stateBefore);
 		const after = clone(params.stateAfter);
@@ -322,6 +325,10 @@ export class StorySessionRecorder {
 			if (!interaction || typeof interaction !== 'object') return { valid: false, errorReason: 'Recording contains an invalid interaction.' };
 			const beforeHash = hash(reconstructed);
 			if (interaction.stateBeforeHash !== beforeHash) {
+				if (interaction.sequence === 1 && interaction.stateAfterHash === beforeHash) {
+					// Legacy compatibility: initial state was captured immediately after interaction 1 resolved.
+					continue;
+				}
 				return {
 					valid: false,
 					errorReason: `State-before integrity failure at interaction ${interaction.sequence}: expected ${interaction.stateBeforeHash}, got ${beforeHash}.`,

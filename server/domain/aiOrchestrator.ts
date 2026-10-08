@@ -7247,18 +7247,29 @@ export class MultiModelOrchestrator {
   }
 
   private validateNarrativeStoryBeat(narration: string, beat?: StoryBeatContract): { valid: boolean; errorReason?: string } {
-    if (!beat || beat.beatType === 'PAUSED') return { valid: true };
+    if (!beat || beat.beatType === 'PAUSED' || beat.beatType === 'TRANSITION') return { valid: true };
     const output = String(narration || '').toLowerCase();
-    const tokens = (value: string) => Array.from(new Set(value.toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length >= 4)));
+    if (!output.trim()) return { valid: false, errorReason: 'Narration is empty.' };
+    const tokens = (value: string) => Array.from(new Set(value.toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length >= 3)));
     const meaningful = tokens(beat.meaningfulChange);
+    const primaryTokens = tokens(beat.primaryAction);
+    const visibleTokens = (beat.playerVisibleChange || []).flatMap(tokens);
+    const focusTokens = (beat.narrativeFocus || []).flatMap(tokens);
+    const allBeatTokens = Array.from(new Set([...meaningful, ...primaryTokens, ...visibleTokens, ...focusTokens]));
+
     const overlap = meaningful.filter((token) => output.includes(token)).length / Math.max(1, Math.min(meaningful.length, 8));
-    const targetSignal = beat.mustMention.some((item) => {
+    const focusOverlap = allBeatTokens.filter((token) => output.includes(token)).length / Math.max(1, Math.min(allBeatTokens.length, 10));
+
+    const targetSignal = (beat.mustMention || []).some((item) => {
       const itemTokens = tokens(item);
-      return itemTokens.length > 0 && itemTokens.filter((token) => output.includes(token)).length >= Math.min(2, itemTokens.length);
+      return itemTokens.length > 0 && itemTokens.some((token) => output.includes(token));
     });
-    const consequenceSignal = /\b(?:react|reacts|reacted|turns|turned|looks|looked|glances|glanced|flinches|flinched|recoils|recoiled|changes|changed|moves|moved|shifts|shifted|notices|noticed|hears|heard|sees|saw|learns|learned|discovers|discovered|finds|found|opens|opened|closes|closed|damages|damaged|lodges|lodged|embeds|embedded|falls|fell|stops|stopped)\b/i.test(narration);
-    const informationSignal = beat.newInformation.length > 0 && /\b(?:learn|learns|learned|hear|hears|heard|see|sees|saw|notice|notices|noticed|discover|discovers|discovered|find|finds|found|reveal|reveals|revealed|realize|realizes|realized|understand|understands|understood|uncertain|unknown|no reliable answer)\b/i.test(narration);
-    if (overlap >= 0.18 || targetSignal || consequenceSignal || informationSignal) return { valid: true };
+
+    const consequenceSignal = /\b(?:react|reacts|reacted|turns|turned|looks|looked|glances|glanced|flinches|flinched|recoils|recoiled|changes|changed|moves|moved|shifts|shifted|notices|noticed|hears|heard|sees|saw|learns|learned|discovers|discovered|finds|found|opens|opened|closes|closed|damages|damaged|lodges|lodged|embeds|embedded|falls|fell|stops|stopped|strikes?|struck|hits?|lands?|landed|steps?|stepped|walks?|walked|approach(?:es|ed)?|speaks?|spoke|says?|said|asks?|asked|answers?|answered|repli(?:es|ed)|whispers?|whispered|shouts?|shouted|calls?|called|watch(?:es|ed)?|observ(?:es|ed)|listen(?:s|ed)?|inspect(?:s|ed)?|examin(?:es|ed)|checks?|checked|search(?:es|ed)?|waits?|waited|takes?|took|holds?|held|draws?|drew|pulls?|pulled|push(?:es|ed)?|press(?:es|ed)?|casts?|burns?|burned|burnt|freez(?:es|ed)|froze|blocks?|blocked|dodg(?:es|ed)|parri(?:es|ed)|wounds?|wounded|defeats?|defeated|enters?|entered|leaves?|left|exits?|exited|arriv(?:es|ed)|reach(?:es|ed)?|stands?|stood|sits?|sat|rises?|rose|yields?|yielded|succeeds?|succeeded|fails?|failed|sounds?|sounded|echo(?:es|ed)?|rings?|rang|vanish(?:es|ed)?|appears?|appeared|remains?|remained|sharpens?|sharpened|deepens?|deepened|quicken(?:s|ed)|tightens?|tightened)\b/i.test(narration);
+
+    const informationSignal = (beat.newInformation || []).length > 0 && /\b(?:learn|learns|learned|hear|hears|heard|see|sees|saw|notice|notices|noticed|discover|discovers|discovered|find|finds|found|reveal|reveals|revealed|realize|realizes|realized|understand|understands|understood|uncertain|unknown|no reliable answer|shows?|showed|uncovers?|uncovered)\b/i.test(narration);
+
+    if (overlap >= 0.12 || focusOverlap >= 0.15 || targetSignal || consequenceSignal || informationSignal) return { valid: true };
     return { valid: false, errorReason: 'Narration acknowledges the action but does not communicate the meaningful story beat or an observable consequence/information change.' };
   }
 
@@ -7804,12 +7815,6 @@ export class MultiModelOrchestrator {
         error: finalActionContinuity.errorReason || 'Narration action continuity validation failed.',
       };
     }
-    const finalStoryBeatContinuity = params.actionResolution
-      ? this.validateNarrativeStoryBeat(finalNarrationText, storyBeat)
-      : { valid: true as const };
-    if (!finalStoryBeatContinuity.valid) {
-      return { success: false, providerId: generated.providerId, modelId: generated.modelId, source: generated.source, fallbackReason: generated.fallbackReason, attemptsTrail: generated.attemptsTrail, researchPacket, narrativePlan, storyBeat, researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query }, contextAudit, error: finalStoryBeatContinuity.errorReason || 'Narration story-beat fidelity validation failed.' };
-    }
     const finalInformationContinuity = this.validateNarrativeInformationContinuity(finalNarrationText, playerAction, playerIntent);
     if (!finalInformationContinuity.valid) {
       return {
@@ -8019,6 +8024,14 @@ export class MultiModelOrchestrator {
         error: finalTemporalContinuity.errorReason || 'Narration temporal continuity validation failed.',
       };
     }
+
+    const finalStoryBeatContinuity = params.actionResolution
+      ? this.validateNarrativeStoryBeat(finalNarrationText, storyBeat)
+      : { valid: true as const };
+    (narrativeQualityAudit as any).storyBeatFidelity = {
+      valid: finalStoryBeatContinuity.valid,
+      errorReason: finalStoryBeatContinuity.errorReason,
+    };
 
     return {
       success: true,

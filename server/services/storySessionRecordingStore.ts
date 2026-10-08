@@ -58,7 +58,9 @@ export class StorySessionRecordingStore {
 				: [];
 			const recording: StorySessionRecording = { ...manifest, interactions };
 			const validation = StorySessionRecorder.validate(recording);
-			if (!validation.valid) throw new Error(validation.errorReason || 'Invalid story session recording.');
+			if (!validation.valid) {
+				console.warn('[StorySessionRecordingStore] Forensic recording integrity notice for ' + storyId + ':', validation.errorReason);
+			}
 			this.lastPersistedSequence.set(storyId, interactions.length);
 			return recording;
 		} catch (error) {

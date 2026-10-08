@@ -3176,7 +3176,7 @@ export class InMemoryWorldRepository implements WorldRepository {
   }
 
   public recordStorySessionInteraction(params: RecordStorySessionInteractionParams): StorySessionRecording {
-    const recording = this.ensureStorySessionRecording(params.storyId, this.getStoryRun(params.storyId)?.title);
+    const recording = this.ensureStorySessionRecording(params.storyId, this.getStoryRun(params.storyId)?.title, params.stateBefore);
     StorySessionRecorder.append(recording, params);
     storySessionRecordingStore.save(recording);
     return recording;

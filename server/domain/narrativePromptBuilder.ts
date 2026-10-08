@@ -88,6 +88,16 @@ function buildNarrationSituationContext(situation: CurrentSituation): string {
 
 	const visibleObjects = (Array.isArray(situation.sceneObjects) ? situation.sceneObjects : [])
 		.filter((object) => object.visibleToPlayer)
+		.slice(0, 16)
+		.map((object) => [
+			object.name + ' [' + object.kind + ']',
+			object.description ? ': ' + object.description : '',
+			object.interactable ? ' (interactable)' : '',
+		].join(''))
+		.join('; ') || 'None';
+
+	const visibleObjects = (Array.isArray(situation.sceneObjects) ? situation.sceneObjects : [])
+		.filter((object) => object.visibleToPlayer)
 		.slice(0, 20)
 		.map((object) => [
 			object.name,
@@ -114,6 +124,7 @@ function buildNarrationSituationContext(situation: CurrentSituation): string {
 		'Location description: ' + (situation.location?.description || ''),
 		situation.location?.ambientSensory ? 'Ambient: ' + situation.location.ambientSensory : '',
 		'Visible entities: ' + visibleEntities,
+		'Canonical visible scene objects: ' + visibleObjects,
 		'Canonical visible scene objects: ' + visibleObjects,
 		'Scene-grounding rule: only treat a discrete physical object as present when it appears in canonical visible scene objects or another explicitly supplied authoritative fact. Location prose is environmental description and does not create discrete objects.',
 		situation.activeDialogue ? 'Active dialogue: ' + situation.activeDialogue.speakerName + ': ' + situation.activeDialogue.text : '',

@@ -1356,10 +1356,16 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
     }
 
     res.json(commandResult.data);
-  } catch (error) {
+  } catch (error: any) {
+    const message = error instanceof Error
+      ? error.message
+      : String(error || 'Unknown action-processing error');
     console.error('Error processing authoritative action request:', error);
     res.status(500).json({
-      error: 'Internal server error while resolving action request.',
+      success: false,
+      code: 'ACTION_PROCESSING_FAILED',
+      error: 'The story action could not be resolved.',
+      errorReason: message,
     });
   }
   });

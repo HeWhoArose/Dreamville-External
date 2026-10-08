@@ -94,6 +94,45 @@ function buildForbiddenKnowledgeSet(situation: CurrentSituation): string[] {
 	return Array.from(new Set(forbidden));
 }
 
+function extractConcreteObjectClaims(narration: string): string[] {
+	const claims: string[] = [];
+	const patterns = [
+		/\b(?:a|an|the)\s+([a-z][a-z'-]{2,}(?:\s+[a-z][a-z'-]{2,}){0,2})\s+(?:stands?|rests?|lies?|sits?|leans?|hangs?|glows?|flickers?|waits?|is\s+(?:nearby|present|there))\b/gi,
+		/\b(?:you|your)\s+(?:gaze|eyes|attention|hands?)\s+(?:settles?|locks?|reaches?|grabs?|finds?)\s+(?:on|for)\s+(?:a|an|the)\s+([a-z][a-z'-]{2,}(?:\s+[a-z][a-z'-]{2,}){0,2})\b/gi,
+	];
+	for (const pattern of patterns) {
+		let match: RegExpExecArray | null;
+		while ((match = pattern.exec(narration)) !== null) {
+			const claim = normalize(match[1]).replace(/\b(?:nearby|there|present)\b/g, '').trim();
+			if (claim && !claims.includes(claim)) claims.push(claim);
+		}
+	}
+	return claims;
+}
+
+function isConcreteClaimSupported(claim: string, situation: CurrentSituation): boolean {
+	const evidence = [
+		situation.location.name,
+		situation.location.description,
+		situation.location.ambientSensory || '',
+		...situation.nearbyEntities.filter((entity) => entity.visibleToPlayer).map((entity) => [
+			entity.name,
+			entity.currentActivity || '',
+			entity.role || '',
+		].join(' ')),
+		...situation.visibleEvents.map((event) => event.summary),
+		...situation.relevantLore.map((fact) => [fact.predicate, fact.objectValue].join(' ')),
+		...situation.openThreads.map((thread) => [thread.title, thread.summary || ''].join(' ')),
+		...situation.availableInteractions.filter((interaction) => interaction.enabled).map((interaction) => [
+			interaction.label,
+			interaction.targetName || '',
+		].join(' ')),
+	].join(' ').toLowerCase();
+	const claimTokens = tokens(claim).filter((token) => !['current', 'immediate', 'nearby', 'present'].includes(token));
+	if (!claimTokens.length) return true;
+	return claimTokens.some((token) => evidence.includes(token));
+}
+
 function hasMajorAgencyTakeover(narration: string): boolean {
 	return containsAny(
 		narration,
@@ -167,6 +206,24 @@ export class SemanticNarrativeReview {
 			if (overlap(narration, researchAnchors) < 0.08 && !/\b(?:nothing|no one|nobody|unclear|uncertain|unknown|unverified|could not|couldn't|refused|silent|silence)\b/i.test(lower)) {
 				missingRequirements.push('The information-seeking action should resolve against the established scene lead or clearly state that no reliable information was obtained.');
 				violations.push({ code: 'MISSING_INFORMATION', message: 'The narration did not visibly connect the information-seeking action to the current researched scene.', severity: 'MEDIUM' });
+			}
+		}
+
+		// Observation turns have an additional grounding requirement: concrete
+		// physical props must be supported by the canonical player-visible scene.
+		// This prevents a narrator from inventing a lamp/chair/weapon and then
+		// treating that invention as world fact on the next turn.
+		if (intent.observationIntent) {
+			const unsupportedObjects = extractConcreteObjectClaims(narration)
+				.filter((claim) => !isConcreteClaimSupported(claim, situation))
+				.slice(0, 5);
+			if (unsupportedObjects.length > 0) {
+				unsupportedClaims.push(...unsupportedObjects);
+				violations.push({
+					code: 'UNSUPPORTED_CLAIM',
+					message: 'Observation narration introduced concrete physical details not supported by the canonical visible scene: ' + unsupportedObjects.join(', ') + '.',
+					severity: 'HIGH',
+				});
 			}
 		}
 

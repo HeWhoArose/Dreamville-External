@@ -125,3 +125,35 @@ test('Phase 6 rejects unsupported location mutation from a non-movement intent',
 	assert.equal(review.decision, 'REJECT');
 	assert.ok(review.violations.some((v) => v.code === 'UNSUPPORTED_STATE_PROPOSAL'));
 });
+
+
+test('Phase 6 rejects invented physical props during observation', () => {
+	const review = SemanticNarrativeReview.review({
+		intent: intent({
+			action: 'observe',
+			goal: 'observe_surroundings',
+			movementIntent: false,
+			observationIntent: true,
+			informationGoal: undefined,
+			originalText: 'I observe my surroundings looking for anything useful.',
+		}),
+		situation: situation({
+			location: {
+				id: 'archive',
+				name: 'Archive Periphery',
+				regionId: 'citadel',
+				description: 'A stone courtyard with bare paving and no listed furnishings.',
+				ambientSensory: 'Dry autumn air.',
+				connectedLocations: [],
+			},
+			visibleEvents: [],
+		}),
+		plan: plan({
+			objective: 'Observe the current courtyard without inventing objects.',
+			informationToReveal: [],
+		}),
+		turnPackage: pkg('You notice a heavy brass lamp on a nearby pedestal and a dark wooden chair leaning against a pillar.'),
+	});
+	assert.equal(review.decision, 'REJECT');
+	assert.ok(review.violations.some((v) => v.code === 'UNSUPPORTED_CLAIM'));
+});

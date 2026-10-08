@@ -548,6 +548,7 @@ export class OpeningSceneService {
 				parentLocationId: null,
 				connectedLocations: [],
 			},
+			sceneObjects: [],
 			nearbyEntities: [
 				{
 					id: actorId,

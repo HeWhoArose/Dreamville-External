@@ -870,6 +870,12 @@ export class InventoryItemEngine {
     return items;
   }
 
+  public getItemInstancesByOwner(ownerId: string): ItemInstance[] {
+    return Array.from(this.itemInstances.values())
+      .filter((item) => item.ownerEntityId === ownerId)
+      .map((item) => JSON.parse(JSON.stringify(item)));
+  }
+
   public getInventoryItems(actorId?: string): ItemInstance[] {
     const items: ItemInstance[] = [];
     for (const item of this.itemInstances.values()) {

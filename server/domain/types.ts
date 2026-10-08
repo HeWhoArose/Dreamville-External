@@ -38,6 +38,18 @@ export interface GeographicCoordinates {
 
 export type GeographyProvenance = 'authored' | 'source/reference' | 'generated' | 'imported' | 'hybrid';
 
+export interface LocationSceneObject {
+  id: string;
+  name: string;
+  kind: 'ITEM' | 'ENVIRONMENTAL_FEATURE' | 'STRUCTURE' | 'INTERACTABLE' | 'HAZARD' | 'OTHER';
+  description?: string;
+  visible?: boolean;
+  interactable?: boolean;
+  tags?: string[];
+  properties?: Record<string, unknown>;
+  provenance?: string;
+}
+
 export interface LocationNode {
   provenance: GeographyProvenance;
   id: string;
@@ -49,6 +61,11 @@ export interface LocationNode {
   ambientSensory: string;
   discovered: boolean;
   parentLocationId?: string | null;
+  /**
+   * Explicit canonical scene objects. Location prose/ambient text is descriptive
+   * context only and does not implicitly create discrete objects.
+   */
+  sceneObjects?: LocationSceneObject[];
 }
 
 export interface RouteEdge {

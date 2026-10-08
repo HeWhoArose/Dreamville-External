@@ -111,33 +111,28 @@ function extractConcreteObjectClaims(narration: string): string[] {
 }
 
 function isConcreteClaimSupported(claim: string, situation: CurrentSituation): boolean {
-	const evidence = [
-		situation.location.name,
-		situation.location.description,
-		situation.location.ambientSensory || '',
-		...situation.nearbyEntities.filter((entity) => entity.visibleToPlayer).map((entity) => [
-			entity.name,
-			entity.currentActivity || '',
-			entity.role || '',
-		].join(' ')),
-		...situation.visibleEvents.map((event) => event.summary),
-		...situation.relevantLore.map((fact) => [fact.predicate, fact.objectValue].join(' ')),
-		...situation.openThreads.map((thread) => [thread.title, thread.summary || ''].join(' ')),
-		...situation.availableInteractions.filter((interaction) => interaction.enabled).map((interaction) => [
-			interaction.label,
-			interaction.targetName || '',
-		].join(' ')),
-		...(Array.isArray(situation.sceneObjects) ? situation.sceneObjects
-			.filter((object) => object.visibleToPlayer)
-			.map((object) => [
-				object.name,
-				object.description || '',
-				...(object.tags || []),
-			].join(' ')) : []),
-	].join(' ').toLowerCase();
-	const claimTokens = tokens(claim).filter((token) => !['current', 'immediate', 'nearby', 'present'].includes(token));
-	if (!claimTokens.length) return true;
-	return claimTokens.some((token) => evidence.includes(token));
+	const normalizedClaim = normalize(claim);
+	const visibleObjects = (situation.sceneObjects || [])
+		.filter((object) => object.visibleToPlayer)
+		.map((object) => normalize(object.name));
+
+	// Discrete physical-object claims must resolve to an explicit canonical
+	// scene object. We deliberately do not use location prose, ambient prose,
+	// lore, or arbitrary token overlap as object existence evidence.
+	if (visibleObjects.some((name) => name === normalizedClaim || normalizedClaim.includes(name) || name.includes(normalizedClaim))) {
+		return true;
+	}
+
+	// Character/entity claims are separately authoritative through the visible
+	// entity projection.
+	const visibleEntities = situation.nearbyEntities
+		.filter((entity) => entity.visibleToPlayer)
+		.map((entity) => normalize(entity.name));
+	if (visibleEntities.some((name) => name === normalizedClaim || normalizedClaim.includes(name) || name.includes(normalizedClaim))) {
+		return true;
+	}
+
+	return false;
 }
 
 function hasMajorAgencyTakeover(narration: string): boolean {

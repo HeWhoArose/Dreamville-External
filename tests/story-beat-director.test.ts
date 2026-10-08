@@ -205,3 +205,28 @@ test('combat resolution adapter preserves canonical combat outcome for StoryBeat
 	assert.equal(resolution.targetEntityIds[0], 'guard');
 	assert.ok(resolution.evidenceIds.includes('combat_event_1'));
 });
+
+
+test('StoryBeatDirector marks movement without canonical spatial change as unresolved transition', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	repository.seedStory('story_beat_no_movement_delta');
+	const situation = CurrentSituationBuilder.build({ storyId: 'story_beat_no_movement_delta', playerAction: 'I move further toward the citadel.', worldRepo: repository });
+	const beat = StoryBeatDirector.resolve({
+		situation,
+		intent: intent({ originalText: 'I move further toward the citadel.' }),
+		actionResolution: resolution({
+			playerAction: 'I move further toward the citadel.',
+			attemptedEffect: 'Move further toward the citadel.',
+			actualEffect: 'The action proceeds as an ordinary deterministic world/narrative action.',
+			canonicalStateChanges: [],
+			physicalConsequences: [],
+			playerVisibleConsequences: [],
+			evidenceIds: [],
+			uncertainty: [],
+			outcomeTier: 'NO_CHECK',
+		}),
+	});
+	assert.equal(beat.beatType, 'TRANSITION');
+	assert.match(beat.meaningfulChange, /no additional canonical consequence|attempted the requested action/i);
+	assert.ok(beat.mustNotInvent.some((value) => /unsupported consequence/i.test(value)));
+});

@@ -183,12 +183,21 @@ export class UnifiedAiActionOrchestrator {
 				if (helperDecision.strategy === 'INTERPRET_SYNTHESIZE_AND_REPAIR') {
 					capabilityIntent = true;
 				} else {
-					capabilityIntent = initial.result.source === 'DETERMINISTIC_FALLBACK'
-						? (
-							Boolean(preCandidate) ||
-							(!helperDecision.reason.includes('unresolved use target') && simulator.isCapabilityLikeRequest(cleanAction))
-						)
-						: Boolean(initial.parsed?.capabilityIntent);
+					// AI intent interpretation may clarify an action, but it may not
+					// promote an otherwise ordinary action into capability synthesis.
+					// Capability entry requires deterministic evidence: a canonical
+					// capability match, explicit capability syntax, or independently
+					// detected semantic novelty.
+					const capabilityEvidence =
+						Boolean(preCandidate) ||
+						explicitCapabilitySyntax ||
+						semanticNoveltyRequested;
+
+					capabilityIntent = capabilityEvidence && (
+						initial.result.source === 'DETERMINISTIC_FALLBACK'
+							? simulator.isCapabilityLikeRequest(cleanAction) || Boolean(preCandidate) || semanticNoveltyRequested
+							: Boolean(initial.parsed?.capabilityIntent)
+					);
 					const firstInterpretationNeedsRepair =
 						intent.confidence < 0.65 ||
 						(checkOrHazardRequested && !resolutionHint?.check && !resolutionHint?.hazard);
@@ -200,10 +209,15 @@ export class UnifiedAiActionOrchestrator {
 					}
 				}
 			} catch {
-				capabilityIntent = helperDecision.strategy === 'INTERPRET_SYNTHESIZE_AND_REPAIR'
-					? true
-					: Boolean(preCandidate) ||
-						(!helperDecision.reason.includes('unresolved use target') && simulator.isCapabilityLikeRequest(cleanAction));
+				const capabilityEvidence =
+					Boolean(preCandidate) ||
+					explicitCapabilitySyntax ||
+					semanticNoveltyRequested;
+				capabilityIntent = capabilityEvidence && (
+					helperDecision.strategy === 'INTERPRET_SYNTHESIZE_AND_REPAIR'
+						? true
+						: Boolean(preCandidate) || simulator.isCapabilityLikeRequest(cleanAction) || semanticNoveltyRequested
+				);
 			}
 		} else {
 			capabilityIntent = Boolean(preCandidate);

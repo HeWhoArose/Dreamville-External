@@ -186,3 +186,48 @@ test('Phase 5 prompt fitter preserves semantic sections under a hard budget', ()
 	assert.match(result.prompt, /PLAYER INTENT/);
 	assert.match(result.prompt, /NARRATIVE DIRECTOR PLAN/);
 });
+
+
+test('Phase 5 prompt exposes canonical visible scene objects separately from descriptive location prose', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'phase5_scene_object_prompt';
+	repository.seedStory(storyId);
+	const player = repository.getPlayerLifecycle(storyId);
+	assert.ok(player);
+
+	const geography = repository.getGeographyGraph(storyId);
+	const location = geography.getNode(player.locationId);
+	assert.ok(location);
+	geography.addNode({
+		...location,
+		description: 'A hall with brass architecture.',
+		sceneObjects: [{
+			id: 'scene_lamp',
+			name: 'Brass Lamp',
+			kind: 'ITEM',
+			description: 'A heavy lamp on a stone pedestal.',
+			visible: true,
+			interactable: true,
+		}],
+	});
+
+	const action = 'I observe my surroundings for anything useful.';
+	const situation = CurrentSituationBuilder.build({
+		storyId,
+		playerAction: action,
+		viewerActorId: player.actorId,
+		worldRepo: repository,
+	});
+	const intent = PlayerIntentInterpreter.deterministic(action, situation);
+	const research = NarrativeResearchPipeline.research({
+		repository,
+		storyId,
+		currentSituation: situation,
+		playerIntent: intent,
+		playerAction: action,
+	});
+	const plan = NarrativeDirector.create({ situation, intent, research });
+	const prompt = buildNarrationPrompt({ situation, intent, research, plan }).prompt;
+
+	assert.match(prompt, /Canonical visible scene objects: Brass Lamp \[ITEM\]/i);
+});

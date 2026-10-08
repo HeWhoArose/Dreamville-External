@@ -126,3 +126,44 @@ test('a transient provider 429 cools the preferred model without permanently mar
 		orchestrator.setFallbackChain('narrative.generate', originalChain);
 	}
 });
+
+
+test('configured fallback attempt budget follows the effective route instead of a fixed global cap', async () => {
+	const orchestrator = new MultiModelOrchestrator();
+	const originalChain = orchestrator.getFallbackChain('narrative.generate');
+	try {
+		const adapter = new ControlledAdapter();
+		orchestrator.registerAdapter(adapter);
+		const route = Array.from({ length: 6 }, (_, index) => {
+			const id = 'route-model-' + String(index + 1);
+			orchestrator.registerModel(model(id, 100 - index));
+			return 'test_manual_fallback_provider::' + id;
+		});
+		orchestrator.setFallbackChain('narrative.generate', route);
+
+		// Force every configured model to fail. A fixed maxTotalAttempts=5 would
+		// incorrectly skip the sixth configured candidate and reach the emergency
+		// floor early. The route-derived budget must attempt all six.
+		(adapter as any).generate = async (_task: any, _prompt: string, options?: any) => {
+			const modelId = String(options?.modelId || '');
+			adapter.calls.push(modelId);
+			throw new Error('simulated provider failure');
+		};
+
+		const result = await orchestrator.executeTaskGeneration(
+			'narrative.generate',
+			'Continue the current scene.',
+			undefined,
+			{
+				allowDeterministicFallback: true,
+				validateResponse: () => ({ valid: true }),
+			},
+		);
+
+		assert.equal(result.source, 'DETERMINISTIC_FALLBACK');
+		assert.deepEqual(adapter.calls, route.map((key) => key.split('::')[1]));
+		assert.equal(result.attemptsTrail.filter((entry) => entry.status === 'FAILED').length, 6);
+	} finally {
+		orchestrator.setFallbackChain('narrative.generate', originalChain);
+	}
+});

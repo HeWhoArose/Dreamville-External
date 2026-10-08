@@ -1365,7 +1365,7 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
       success: false,
       code: 'ACTION_PROCESSING_FAILED',
       error: 'The story action could not be resolved.',
-      errorReason: message,
+      errorReason: 'The server encountered an unexpected error while resolving this action. Open developer diagnostics for the detailed server error.',
     });
   }
   });

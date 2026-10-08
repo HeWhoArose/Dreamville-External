@@ -615,8 +615,7 @@ export class CurrentSituationBuilder {
 				.filter((object: SceneObjectContext) => object.id && object.name && object.visibleToPlayer)
 			: []);
 
-		if (player) {
-			for (const item of repository.getInventoryEngine(params.storyId).getItemInstancesByOwner?.(safeLocation.id) || []) {
+		for (const item of repository.getInventoryEngine(params.storyId).getItemInstancesByOwner(safeLocation.id)) {
 				if (item.containerType !== 'ground' || item.destroyedAtSeconds !== undefined) continue;
 				sceneObjects.push({
 					id: item.id,
@@ -629,7 +628,6 @@ export class CurrentSituationBuilder {
 					properties: { defId: item.defId, quantity: item.quantity },
 					source: 'GROUND_ITEM',
 				});
-			}
 		}
 
 		const nearbyEntities: NearbyEntityContext[] = [];

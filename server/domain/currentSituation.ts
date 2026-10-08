@@ -197,6 +197,17 @@ export interface CurrentSituation {
 	location: CurrentLocationContext;
 	nearbyEntities: NearbyEntityContext[];
 	sceneObjects: SceneObjectContext[];
+	/**
+	 * Canonical, player-visible evidence categories. Narration may describe these
+	 * categories, but may not manufacture new concrete scene facts from prose.
+	 */
+	sceneEvidence: {
+		objects: SceneObjectContext[];
+		entities: NearbyEntityContext[];
+		events: VisibleEventContext[];
+		sensory: string[];
+		structures: string[];
+	};
 	visibleEvents: VisibleEventContext[];
 	activeDialogue?: ActiveDialogueContext;
 	recentTurns: RecentTurnContext[];
@@ -599,6 +610,11 @@ export class CurrentSituationBuilder {
 
 		const sceneObjects: SceneObjectContext[] = [];
 
+		// Build a bounded canonical scene-evidence ledger. This is intentionally
+		// separate from prose: descriptive location text may explain atmosphere,
+		// but it does not create concrete environmental facts.
+
+
 		// Explicit authored/generated scene objects are the only location-level
 		// source of discrete environmental props. Location prose is never parsed
 		// into objects because prose such as "brass architecture" must not create
@@ -875,6 +891,18 @@ export class CurrentSituationBuilder {
 			location: currentLocation,
 			nearbyEntities: limitedNearbyEntities,
 			sceneObjects: sceneObjects.slice(0, 32),
+			sceneEvidence: {
+				objects: sceneObjects.slice(0, 32),
+				entities: limitedNearbyEntities.filter((entity) => entity.visibleToPlayer).slice(0, 16),
+				events: visibleEvents.slice(0, 16),
+				sensory: [
+					safeLocation.ambientSensory,
+				].map(normalizeText).filter(Boolean).slice(0, 8),
+				structures: sceneObjects
+					.filter((object) => object.kind === 'STRUCTURE' || object.kind === 'ENVIRONMENTAL_FEATURE')
+					.map((object) => object.name)
+					.slice(0, 16),
+			},
 			visibleEvents,
 			activeDialogue,
 			recentTurns,

@@ -763,6 +763,10 @@ export class ServerMockAuthority {
       };
     }
 
+    const preResolutionPlayer = worldRepository.getPlayerLifecycle(targetStoryId);
+    const preResolutionSpatial = preResolutionPlayer?.spatial ? JSON.parse(JSON.stringify(preResolutionPlayer.spatial)) : undefined;
+    const preResolutionLocationId = preResolutionPlayer?.locationId;
+
     baseResult = this.processAction(request, canonicalCommandId);
     if (!baseResult) {
       return baseResult;
@@ -920,6 +924,25 @@ export class ServerMockAuthority {
         value: path,
         metadata: { source: 'canonical_command_event' },
       })),
+      ...(() => {
+        const postPlayer = worldRepository.getPlayerLifecycle(targetStoryId);
+        const postSpatial = postPlayer?.spatial ? JSON.parse(JSON.stringify(postPlayer.spatial)) : undefined;
+        const postLocationId = postPlayer?.locationId;
+        const spatialChanged = JSON.stringify(preResolutionSpatial) !== JSON.stringify(postSpatial);
+        const locationChanged = preResolutionLocationId !== postLocationId;
+        if (!resolutionIntent.movementIntent || (!spatialChanged && !locationChanged)) return [];
+        return [{
+          kind: locationChanged ? 'LOCATION' : 'SPATIAL',
+          targetId: actorId,
+          value: {
+            fromLocationId: preResolutionLocationId,
+            toLocationId: postLocationId,
+            before: preResolutionSpatial,
+            after: postSpatial,
+          },
+          metadata: { source: 'canonical_player_lifecycle' },
+        }];
+      })(),
       physicalConsequences: storyCheck?.consequence?.summary ? [storyCheck.consequence.summary] : [],
       playerVisibleConsequences: [
         ...(storyCheck?.narrativeGuidance

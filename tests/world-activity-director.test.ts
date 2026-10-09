@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { WorldActivityDirector } from '../server/domain/worldActivityDirector';
 import { hashStringToSeed } from '../server/domain/deterministicRng';
 import { CombatEncounterService } from '../server/domain/combatEncounterService';
+import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
 
 function makeRepository(location: any) {
 	const cards = new Map<string, any>();
@@ -184,4 +185,34 @@ test('WorldActivityDirector allows visible NPCs to initiate occasional, grounded
 		{ ...merchant, visibleToPlayer: false },
 	], 'loc_market', qualifyingTurn);
 	assert.equal(hiddenEvents.length, 0, 'hidden NPCs must not initiate player-visible interactions');
+});
+
+test('WorldActivityDirector persists generated NPCs in the story runtime entity registry', () => {
+	const storyId = 'story_ambient_persistence';
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const geography = repository.getGeographyGraph(storyId);
+	const base = geography.getNode('loc_whispering_orrery');
+	assert.ok(base);
+	geography.addNode({
+		...base!,
+		id: 'loc_persistent_market',
+		name: 'Persistent Market',
+		description: 'A public market with daily trade.',
+		population: { status: 'INHABITED', expectedPopulation: 'SPARSE', provenance: 'AUTHORED' },
+	});
+	repository.saveStoryRun({
+		storyId,
+		id: storyId,
+		worldId: 'world_solar_archive',
+		characterName: 'Test Adventurer',
+		storyMode: 'PROTAGONIST',
+		currentLocationId: 'loc_persistent_market',
+		startingLocationId: 'loc_persistent_market',
+		canonicalEvents: [],
+	} as any);
+
+	const created = WorldActivityDirector.ensureAmbientPopulation(repository, storyId, 'loc_persistent_market');
+	assert.equal(created.length, 1);
+	const run = repository.getStoryRun(storyId);
+	assert.ok(run?.runtimeState?.entities?.cards?.some((card: any) => card.id === created[0].id));
 });

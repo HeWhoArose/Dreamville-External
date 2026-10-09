@@ -549,7 +549,14 @@ export class OpeningSceneService {
 				connectedLocations: [],
 			},
 			sceneObjects: [],
-			sceneEvidence: { objects: [], entities: [], events: [], sensory: facts.location.ambientSensory ? [facts.location.ambientSensory] : [], structures: [] },
+			sceneEvidence: {
+				objects: [],
+				entities: [],
+				events: [],
+				sensory: facts.location.ambientSensory ? [facts.location.ambientSensory] : [],
+				structures: [],
+				occupancy: { status: 'UNKNOWN', accessControlled: false, provenance: 'UNKNOWN' },
+			},
 			nearbyEntities: [
 				{
 					id: actorId,

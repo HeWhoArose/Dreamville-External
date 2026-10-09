@@ -31,6 +31,7 @@ import { narrativeContinuityEngine } from '../domain/narrativeContinuityEngine';
 import { narrativeStateBroker, type ItemUseResolution } from '../domain/narrativeStateBroker';
 import { environmentalHazardEngine } from '../domain/environmentalHazardEngine';
 import { CurrentSituationBuilder } from '../domain/currentSituation';
+import { WorldActivityDirector } from '../domain/worldActivityDirector';
 import { PlayerIntentInterpreter } from '../domain/playerIntentInterpreter';
 import { ResolutionGate } from '../domain/resolutionGate';
 import { outcomeTierFromCheck, type ActionResolution } from '../domain/actionResolution';
@@ -789,6 +790,10 @@ export class ServerMockAuthority {
       String(freeformText),
     );
     const itemUseBlocked = itemUseResolution.requested && !itemUseResolution.found;
+    // Ensure public-place population before building the authoritative narration context.
+    // The director is deterministic and idempotent: abandoned/restricted places are never populated.
+    WorldActivityDirector.ensureAmbientPopulation(worldRepository, targetStoryId, currentLocationId || '');
+
     const resolutionSituation = CurrentSituationBuilder.build({
       storyId: targetStoryId,
       playerAction: String(freeformText),

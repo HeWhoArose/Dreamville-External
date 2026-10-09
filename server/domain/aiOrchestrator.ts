@@ -902,12 +902,16 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
         const normalizedAction = extractedPlayerAction
           .replace(/^(?:i|we|my character)\s+/i, '')
           .trim();
-        const actionVerb =
-          /\b(?:listen|hear|overhear|eavesdrop)\b/i.test(normalizedAction)
+        const hasMovement = /\b(?:move|walk|approach|step|head|travel|enter|leave|go|closer|nearer|toward|towards)\b/i.test(normalizedAction);
+        const hasListening = /\b(?:listen|hear|overhear|eavesdrop|rumou?r|whisper|conversation)\b/i.test(normalizedAction);
+        const hasObservation = /\b(?:look|observe|watch|inspect|examine|scan|study|see|notice)\b/i.test(normalizedAction);
+        const actionVerb = hasMovement && (hasListening || hasObservation)
+          ? 'You make the requested movement and then attend to the scene'
+          : hasListening
             ? 'You listen carefully'
-            : /\b(?:look|observe|watch|inspect|examine|scan|study)\b/i.test(normalizedAction)
+            : hasObservation
               ? 'You observe the scene'
-              : /\b(?:move|walk|approach|step|head|travel|enter|leave|go)\b/i.test(normalizedAction)
+              : hasMovement
                 ? 'You move as requested'
                 : 'You carry out the requested action';
         const actionSentence = normalizedAction
@@ -916,7 +920,7 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
 
         text = JSON.stringify({
           narrative: [
-            `${actionSentence} The immediate surroundings settle around the effort, with no new location change or time shift committed. Any information available from the immediate scene remains limited to what can be directly observed; no reliable answer is established beyond that evidence.`,
+            `${actionSentence} The immediate consequence is limited to the action you attempted: your position changes only to the extent already established by the canonical state, and no additional destination, object, person, or cause is invented. You remain within ${canonicalLocationName} unless the authoritative game state records a successful transition. Any information available from the immediate scene remains limited to directly supported evidence. A rumor stays a rumor, an unclear sound stays uncertain, and the absence of a reliable answer is not proof that nothing exists. No unverified discovery, conversation, or hidden event is declared as fact. The next meaningful step remains yours to choose: you may continue observing, seek a willing source, inspect an established object, or attempt another action. This emergency narration preserves the requested intent while leaving canonical mechanics and future choices to the game systems and player.`,
           ],
           dialogue: [],
           events: ['EMERGENCY_DETERMINISTIC_TICK'],

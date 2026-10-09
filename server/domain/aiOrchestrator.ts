@@ -15,7 +15,7 @@ import {
   deleteCustomProvider,
   type CustomProviderConfig,
 } from '../services/providerCredentialService';
-import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
+import { deterministicId, formatCanonicalTimestamp, hashStringToSeed } from './deterministicRng';
 import { evaluateAiTaskCandidatePreflight, evaluateAiTaskReadiness, getAiTaskContract, getAiTasksByCategory, getAllAiTaskContracts, validateAiTaskResponse, type AiTaskCandidatePreflight, type AiTaskReadiness } from './aiTaskContracts';
 import { narrativeContinuityEngine } from './narrativeContinuityEngine';
 import { CurrentSituationBuilder, type CurrentSituation } from './currentSituation';
@@ -960,19 +960,81 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
                           : hasMovement
                             ? `You move forward within ${canonicalLocationName}.`
                             : `You attempt the requested action within ${canonicalLocationName}.`;
-        // Respect the N8 pacing profile even if provider options omit the token budget.
+        // Respect N8 pacing even when a caller omits maxTokens, and vary the
+        // deterministic floor by canonical turn so long sessions do not repeat one
+        // stock paragraph on every unavailable-provider turn.
         const compactProfileInPrompt = /N8 ADAPTIVE PACING CONTRACT[\s\S]{0,350}Profile:\s*MICRO\b/i.test(prompt) ||
           /pacingProfile\s*[:=]\s*['"]?MICRO\b/i.test(String(options?.systemInstruction || ''));
         const compactFallback = (typeof options?.maxTokens === 'number' && options.maxTokens <= 220) ||
           compactProfileInPrompt ||
           (normalizedAction.length <= 24 && !hasListening && !hasObservation && !hasCombatAction && !hasInformationGoal);
+        const turnMarker = String(prompt || '').match(/canonical turn\s+([^\s\n]+)/i)?.[1] ||
+          String(options?.systemInstruction || '').match(/turnId\s*[:=]\s*['"]?([^,\s'"]+)/i)?.[1] ||
+          'turn-unspecified';
+        const variationIndex = hashStringToSeed(turnMarker + '|' + normalizedAction + '|' + canonicalLocationName) % 6;
+        const compactMovementDetails = [
+          'The attempt does not by itself establish a new destination or any further consequence. You have tried to move; what happens beyond that remains open.',
+          'The movement stays limited to the step you attempted. No arrival, new discovery, or additional event is confirmed by the action alone.',
+          'You have attempted the approach, but the moment does not establish that you reached a different area. The next detail depends on what is actually encountered.',
+          'The immediate beat remains small: the movement was attempted, while any further change or discovery remains unresolved.',
+          'Nothing in the attempt alone confirms a completed journey or a newly reached destination. The scene can develop from the next thing you actually encounter.',
+          'The action advances your intention without proving a larger transition. No extra destination or consequence is assumed.'
+        ];
+        const compactObservationDetails = [
+          'The details available remain limited to what can be perceived from here. No additional object, event, or discovery is confirmed by the observation alone.',
+          'You have directed your attention to the named subject, but the attempt adds no unsupported detail. You can keep observing or shift your attention elsewhere.',
+          'The scene offers only its currently available evidence. Nothing new is established merely because you looked, and the next observation remains open.',
+          'The immediate result is the act of observing itself; no unseen feature or event is treated as present without evidence.',
+          'What can be said remains bounded by what is visible or otherwise available to you now. Further observation may clarify the scene, but no discovery is presumed.',
+          'The moment stays grounded in the subject you examined and the evidence already available, without adding an unverified detail.'
+        ];
+        const compactListeningDetails = [
+          'The available account remains uncertain; no reliable answer is established by this moment. You can keep listening or seek a willing source without assuming a discovery.',
+          'What you can learn here is limited to the evidence available so far. Rumor remains rumor, and no hidden conversation or confirmed answer is invented.',
+          'The listening attempt does not turn an unclear report into fact. The question stays open unless a reliable source or new evidence supports an answer.',
+          'No definite answer emerges from the attempt alone. You may listen further, but neither silence nor uncertainty proves that nothing is happening.',
+          'The information remains incomplete. The scene supports continued attention, not a guaranteed revelation or an assumed conversation.',
+          'The immediate result is limited: the report is still uncertain, and further evidence would be needed before treating it as established.'
+        ];
+        const compactGenericDetails = [
+          'The action remains a small beat, with no extra consequence assumed. You can continue, pause, or change approach when you are ready.',
+          'Nothing beyond the immediate attempt is confirmed. The scene remains open to your next action rather than forcing an outcome.',
+          'The moment does not establish a new event or a lasting change. What follows depends on the next action and the evidence it produces.',
+          'The result stays close to what you attempted; no hidden cause, new object, or future choice is added.',
+          'The action is recorded as an attempt, not proof of a larger outcome. You remain free to continue or take another approach.',
+          'No further consequence is presumed from this brief action. The next meaningful detail can emerge from what you do or encounter next.'
+        ];
+        const informationDetails = [
+          `The available account about ${informationTopic || 'the subject'} remains unverified; no reliable answer is established from this moment. A rumor remains a rumor, and an unclear report does not prove the event real or false. You may continue listening, seek a willing source, or investigate further, but no discovery is assumed merely because you asked.`,
+          `What is currently available about ${informationTopic || 'the subject'} is still uncertain. The evidence does not settle the question, and repeating a report would not make it true. You can keep listening or look for a source whose account can be checked; the answer remains open for now.`,
+          `The question of ${informationTopic || 'the subject'} remains unresolved by the information at hand. The current account is not confirmation, and the lack of a clear answer is not proof of the opposite. Further evidence or a willing source may clarify it, but no revelation is presumed here.`,
+          `The material available about ${informationTopic || 'the subject'} offers no verified conclusion. Treat the report as uncertain rather than established fact. You can seek another account, continue listening, or investigate when you choose; the next step is not decided for you.`,
+          `There is not enough reliable evidence here to settle ${informationTopic || 'the subject'}. An uncertain account remains uncertain, and no hidden explanation is added to fill the gap. You may continue gathering information, but the result of that effort remains open.`,
+          `The available information leaves ${informationTopic || 'the subject'} unanswered. Nothing in this moment proves the report true or false, and no new fact is inferred from the question itself. Further listening or a reliable source could change what is known later.`
+        ];
+        const combatDetails = [
+          'The attempt does not confirm that the target is present or that the strike connects. No hit, damage, or reaction is assumed; the next combat choice remains yours.',
+          'The action is an attempt, not proof of impact. The outcome, any injury, and any response remain unresolved until the relevant mechanics establish them.',
+          'No successful hit or damage is declared from the attempt alone. The target and outcome remain subject to the scene and the next resolved action.',
+          'The strike has been attempted, but its result is not yet confirmed. No damage or follow-up action is assumed, and you retain control of what comes next.',
+          'The moment records the attempted attack without deciding whether it lands. Any consequence must come from the actual result rather than narration alone.',
+          'The attack attempt does not itself prove contact, damage, or victory. The immediate outcome remains open, and the next decision stays with you.'
+        ];
+        const longDetails = [
+          'The immediate result is limited to what this moment actually provides. No new destination, person, object, or cause is invented, and no unverified discovery or hidden event is treated as fact. You can continue observing, approach an already visible subject, or try another action; the next step remains open.',
+          'The scene remains bounded by the evidence available now. A rumor stays uncertain, an unclear sound stays unclear, and an unobserved event is not presented as fact. You may continue observing, seek a willing source, or change your approach without the narration deciding the outcome for you.',
+          'Only the immediate consequence of the attempted action is carried forward. Nothing in the moment confirms a hidden cause or a new event. The available scene can be examined further, but any discovery must come from evidence rather than assumption.',
+          'The moment does not settle more than the action supports. Details that have not been seen, heard, or reliably reported remain unknown, and the scene is left open for the next meaningful action.',
+          'The narration stays with what can be supported here and now. It does not turn uncertainty into fact or supply an unseen reaction just to fill the silence. You can continue, observe further, or choose a different approach.',
+          'No additional consequence is presumed beyond the action and evidence already available. The scene remains coherent without inventing a hidden event, and the next meaningful change can emerge from what happens next.'
+        ];
         const emergencyNarration = hasCombatAction
-          ? `${actionSentence} The attempt remains an attempt until a result is established; no hit, damage, or next action is assumed. You remain free to decide what to do after the outcome is clear.`
+          ? `${actionSentence} ${combatDetails[variationIndex]}`
           : hasInformationGoal
-            ? `${actionSentence} The available information describes ${informationTopic || 'the subject'} as uncertain; no reliable answer is established by the evidence available in this moment. A rumor remains a rumor, and an unclear account does not prove that the reported event is real or false. You may continue listening, look for a willing source, or investigate further, but no discovery is assumed merely because you asked. The next step remains open.`
+            ? `${actionSentence} ${informationDetails[variationIndex]}`
             : compactFallback
-              ? `${actionSentence} The step carries you onward, but it does not by itself establish a new destination or reveal anything beyond what is already available. The scene offers only the details you can actually perceive at this moment. You may continue forward, pause to observe, listen for a clearer clue, or approach someone or something already visible. Nothing more is settled by the movement alone, and the next consequence depends on what you encounter.`
-              : `${actionSentence} The immediate result is limited to what the moment actually provides: no new destination, person, object, or cause is invented. Any information available from the immediate scene remains bounded by what can be directly observed. A rumor remains a rumor, an unclear sound remains uncertain, and the absence of a reliable answer does not prove that nothing exists. No unverified discovery or hidden event is treated as fact. You may continue observing, seek a willing source, inspect something already visible, or attempt another action. The next step remains open, and the scene can develop from whatever you actually encounter.`;
+              ? `${actionSentence} ${(hasMovement ? compactMovementDetails : hasObservation ? compactObservationDetails : hasListening ? compactListeningDetails : compactGenericDetails)[variationIndex]}`
+              : `${actionSentence} ${longDetails[variationIndex]}`;
 
         text = JSON.stringify({
           narrative: [emergencyNarration],

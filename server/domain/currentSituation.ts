@@ -1,4 +1,5 @@
 import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
+import { WorldActivityDirector } from './worldActivityDirector';
 import type { DurableMemory } from './memoryOpportunityEngine';
 import type { EntityCard, EntityKind } from './entityCard';
 import type { KnowledgeFact, RouteEdge, WorldTimestamp, LocationSceneObject } from './types';
@@ -746,6 +747,17 @@ export class CurrentSituationBuilder {
 			}))
 			.filter((event) => event.summary);
 
+		const ambientActivityEvents = WorldActivityDirector.buildAmbientEvents(
+			nearbyEntities.map((entity) => ({
+				id: entity.id,
+				name: entity.name,
+				kind: entity.kind,
+				locationId: entity.locationId,
+				currentActivity: entity.currentActivity,
+				visibleToPlayer: entity.visibleToPlayer,
+			})).filter((entity) => entity.kind !== 'PLAYER'),
+			locationId,
+		);
 		const visibleEvents = activeDialogue
 			? [
 				{
@@ -755,9 +767,10 @@ export class CurrentSituationBuilder {
 					locationId,
 					source: 'CANONICAL_ACTIVE_DIALOGUE',
 				},
+				...ambientActivityEvents,
 				...lastEvents,
 			]
-			: lastEvents;
+			: [...ambientActivityEvents, ...lastEvents];
 
 		const runtime = (run.runtimeState || {}) as Record<string, any>;
 		const plotRaw = runtime.plot || {};

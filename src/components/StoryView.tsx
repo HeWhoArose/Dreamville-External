@@ -1409,6 +1409,16 @@ export const StoryView: React.FC<StoryViewProps> = ({
                           <div className="rounded-2xl border border-red-400/20 bg-red-400/[0.06] px-4 py-3">
                             <p className="text-xs font-semibold text-red-200">Narration AI unavailable</p>
                             <p className="mt-1 text-xs leading-5 text-red-100/75">{entry.narrativeError.message}</p>
+                            {entry.narrativeError.code ? (
+                              <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-red-100/60">
+                                Diagnostic code: {entry.narrativeError.code}
+                              </p>
+                            ) : null}
+                            {entry.narrativeError.fallbackReason ? (
+                              <p className="mt-1 text-xs leading-5 text-red-100/70">
+                                Fallback reason: {entry.narrativeError.fallbackReason}
+                              </p>
+                            ) : null}
                             {entry.narrativeError.attemptsTrail?.length ? (
                               <p className="mt-2 text-[10px] leading-4 text-red-100/55">
                                 {entry.narrativeError.attemptsTrail

@@ -272,7 +272,21 @@ test('Gap 2b — Primary success -> Fallback NOT invoked', async () => {
 });
 
 test('Gap 2c — Primary failure -> Secondary failure -> Tertiary fallback attempted and succeeded', async () => {
-  const orchestrator = new MultiModelOrchestrator(worldRepository);
+  const isolatedRepository = new (require('../server/repositories/worldRepository').InMemoryWorldRepository)({ disablePersistence: true });
+  isolatedRepository.seedStory('story_cascade_fallback_test');
+  const player = isolatedRepository.getPlayerLifecycle('story_cascade_fallback_test');
+  const location = player ? isolatedRepository.getGeographyGraph('story_cascade_fallback_test').getNode(player.locationId) : undefined;
+  if (location) {
+    isolatedRepository.getGeographyGraph('story_cascade_fallback_test').addNode({
+      ...location,
+      sceneObjects: [
+        ...(location.sceneObjects || []),
+        { id: 'visible_night_sky', name: 'Night Sky', kind: 'ENVIRONMENTAL_FEATURE', description: 'A clear night sky with visible stars.', visible: true },
+        { id: 'visible_stars', name: 'Stars', kind: 'ENVIRONMENTAL_FEATURE', description: 'Bright points of starlight.', visible: true },
+      ],
+    });
+  }
+  const orchestrator = new MultiModelOrchestrator(isolatedRepository);
 
   const primaryFail = new PrimaryFailingAdapter();
   const secondaryFail = new SecondaryFailingAdapter();

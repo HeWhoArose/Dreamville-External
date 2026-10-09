@@ -93,7 +93,7 @@ test('WorldActivityDirector supports deterministic robbery and kidnapping encoun
 	for (const variant of [0, 1]) {
 		let storyId = 'story_alley_' + variant;
 		let attempts = 0;
-		while (hashStringToSeed(storyId + '|loc_alley') % 3 !== variant && attempts < 100) {
+		while (hashStringToSeed(storyId + '|loc_alley') % 8 !== variant && attempts < 100) {
 			storyId = 'story_alley_' + variant + '_' + attempts;
 			attempts++;
 		}

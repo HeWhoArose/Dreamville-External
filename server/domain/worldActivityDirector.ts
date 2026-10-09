@@ -234,11 +234,19 @@ export class WorldActivityDirector {
 		role?: string;
 		locationId?: string;
 		currentActivity?: string;
+		presence?: string;
+		isAlive?: boolean;
 		visibleToPlayer?: boolean;
 	}>, locationId: string, turnNumber: number = 1): WorldActivityEvent[] {
 		const events: WorldActivityEvent[] = [];
 		for (const entity of entities) {
-			if (entity.visibleToPlayer === false || entity.locationId !== locationId || !entity.currentActivity) continue;
+			if (
+				entity.visibleToPlayer === false ||
+				entity.isAlive === false ||
+				entity.presence === 'absent' ||
+				entity.locationId !== locationId ||
+				!entity.currentActivity
+			) continue;
 			const activity = String(entity.currentActivity).trim();
 			if (!activity) continue;
 			const role = String(entity.role || '').toLowerCase();

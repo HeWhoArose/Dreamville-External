@@ -73,6 +73,7 @@ export class WorldActivityDirector {
 			return [
 				{ name: 'Mira Fen', kind: 'MERCHANT' as EntityKind, role: 'merchant', activity: 'calling out wares to passersby', motivations: ['earn a living', 'find reliable customers'], traits: ['outgoing', 'observant'] },
 				{ name: 'Sella Vorn', kind: 'NPC' as EntityKind, role: 'local resident', activity: 'chatting with a neighbour while going about daily business', motivations: ['finish daily errands', 'keep informed about local affairs'], traits: ['practical', 'social'] },
+				{ name: 'Dain Orrel', kind: 'NPC' as EntityKind, role: 'market porter', activity: 'carrying crates between market stalls', motivations: ['finish a work shift', 'provide for family'], traits: ['hardworking', 'reserved'] },
 			];
 		}
 		return this.PEOPLE;

@@ -170,7 +170,7 @@ export class WorldActivityDirector {
 			const activity = String(entity.currentActivity).trim();
 			if (!activity) continue;
 			const isSocialOpportunity = /calling out wares|merchant|arguing with another adventurer|folded map|shady contact/i.test(activity + ' ' + String(entity.role || ''));
-			const isPotentialEncounter = /suspicious passerby|guild challenger|shady contact/i.test(String(entity.role || ''));
+			const isPotentialEncounter = /suspicious passerby|guild challenger|shady contact|alley robber|kidnapper/i.test(String(entity.role || ''));
 			events.push({
 				id: deterministicId('ambient_activity', locationId, entity.id, activity),
 				type: isPotentialEncounter ? 'POTENTIAL_ENCOUNTER' : isSocialOpportunity ? 'SOCIAL_OPPORTUNITY' : 'AMBIENT_ACTIVITY',

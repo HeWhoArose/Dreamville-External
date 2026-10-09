@@ -273,6 +273,16 @@ test('Gap 2b — Primary success -> Fallback NOT invoked', async () => {
 
 test('Gap 2c — Primary failure -> Secondary failure -> Tertiary fallback attempted and succeeded', async () => {
   const isolatedRepository = new InMemoryWorldRepository({ disablePersistence: true });
+  isolatedRepository.saveStoryRun({
+    storyId: 'story_cascade_fallback_test',
+    id: 'story_cascade_fallback_test',
+    worldId: 'world_solar_archive',
+    characterName: 'Hero Vael',
+    storyMode: 'PROTAGONIST',
+    currentLocationId: 'loc_whispering_orrery',
+    startingLocationId: 'loc_whispering_orrery',
+    canonicalEvents: [],
+  } as any);
   const isolatedGeography = isolatedRepository.getGeographyGraph('story_cascade_fallback_test');
   const location = isolatedGeography.getNode('loc_whispering_orrery');
   if (location) {

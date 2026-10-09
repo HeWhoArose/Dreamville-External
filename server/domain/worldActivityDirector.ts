@@ -79,6 +79,58 @@ export class WorldActivityDirector {
 		return this.PEOPLE;
 	}
 
+	private static refreshDailyActivity(
+		repository: WorldRepository,
+		storyId: string,
+		locationId: string,
+		existing: EntityCard[],
+	): boolean {
+		const hour = repository.getWorldClock(storyId).getTimestamp().hour;
+		let changed = false;
+		for (const card of existing) {
+			if (card.metadata?.ambientPopulation !== true) continue;
+			const role = String(card.metadata?.activityRole || card.classification?.role || '').toLowerCase();
+			let activity = card.worldState.currentActivity || card.behavior.defaultBehavior || 'going about daily business';
+			let presence: 'present' | 'absent' = 'present';
+			if (role === 'merchant') {
+				if (hour >= 7 && hour < 19) activity = 'calling out wares to passersby';
+				else if (hour >= 19 && hour < 22) activity = 'packing unsold goods and counting the day’s takings';
+				else { activity = 'resting away from the market'; presence = 'absent'; }
+			} else if (role === 'market porter' || role === 'worker') {
+				if (hour >= 6 && hour < 18) activity = 'carrying supplies between nearby buildings';
+				else { activity = 'off duty and away from the market'; presence = 'absent'; }
+			} else if (role === 'local resident') {
+				if (hour >= 7 && hour < 20) activity = 'chatting with neighbours and going about daily errands';
+				else { activity = 'at home for the night'; presence = 'absent'; }
+			} else if (role === 'traveller') {
+				activity = hour >= 6 && hour < 20 ? 'checking a route map and watching the crowd' : 'resting beside their travel pack';
+			} else if (role === 'innkeeper') {
+				if (hour >= 6 && hour < 23) activity = 'checking the common room and serving waiting guests';
+				else { activity = 'closing the inn for the night'; presence = 'absent'; }
+			} else if (role === 'guild clerk') {
+				if (hour >= 8 && hour < 19) activity = 'sorting posted contracts and answering adventurers’ questions';
+				else { activity = 'off duty; the contract desk is unattended'; presence = 'absent'; }
+			} else if (role === 'guild adventurer' || role === 'guild challenger') {
+				if (hour >= 7 && hour < 22) {
+					activity = role === 'guild challenger'
+						? 'arguing with another adventurer over a disputed contract'
+						: 'comparing a contract notice with a travel-worn map';
+				} else { activity = 'away from the guild hall'; presence = 'absent'; }
+			} else if (role === 'suspicious passerby') {
+				if (hour >= 17 && hour < 24) activity = 'lingering near a side passage and watching the flow of pedestrians';
+				else { activity = 'no longer in the alley'; presence = 'absent'; }
+			}
+			if (card.worldState.currentActivity === activity && card.worldState.presence === presence) continue;
+			repository.saveEntityCard(storyId, {
+				...card,
+				worldState: { ...card.worldState, locationId, currentActivity: activity, presence },
+				metadata: { ...card.metadata, ambientActivity: activity },
+			});
+			changed = true;
+		}
+		return changed;
+	}
+
 	public static ensureAmbientPopulation(
 		repository: WorldRepository,
 		storyId: string,
@@ -103,6 +155,7 @@ export class WorldActivityDirector {
 			['NPC', 'MERCHANT', 'CHARACTER', 'FACTION_MEMBER'].includes(card.kind)
 		);
 		const existingIds = new Set(existing.map((card) => card.id));
+		let activitiesChanged = this.refreshDailyActivity(repository, storyId, locationId, existing);
 		const placeText = (location.name + ' ' + (location.description || '')).toLowerCase();
 		const alleyVariant = hashStringToSeed(storyId + '|' + locationId) % 3;
 		const desiredCount = /alley/.test(placeText) ? (alleyVariant === 2 ? 1 : 2)
@@ -112,7 +165,13 @@ export class WorldActivityDirector {
 			: explicitlyInhabited ? 2
 			: /citadel|market|bazaar|guild|inn|tavern|town|city|village|settlement|plaza|square/i.test(location.name) ? 2
 			: 1;
-		if (existing.length >= desiredCount) return [];
+		if (existing.length >= desiredCount) {
+			if (activitiesChanged) {
+				const run = repository.getStoryRun(storyId);
+				if (run) repository.saveStoryRun(run);
+			}
+			return [];
+		}
 
 		const created: EntityCard[] = [];
 		for (let index = 0; index < people.length && existing.length + created.length < desiredCount; index++) {
@@ -156,7 +215,7 @@ export class WorldActivityDirector {
 		// EntityRegistry is included in StoryRun persistence snapshots. Saving the
 		// existing run here makes generated population survive reloads instead of
 		// existing only in the current process.
-		if (created.length > 0) {
+		if (created.length > 0 || activitiesChanged) {
 			const run = repository.getStoryRun(storyId);
 			if (run) repository.saveStoryRun(run);
 		}

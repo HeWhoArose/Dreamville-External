@@ -764,7 +764,7 @@ export class ServerMockAuthority {
     }
 
     const preResolutionPlayer = worldRepository.getPlayerLifecycle(targetStoryId);
-    const preResolutionSpatial = preResolutionPlayer?.spatial ? JSON.parse(JSON.stringify(preResolutionPlayer.spatial)) : undefined;
+    const preResolutionSpatial = preResolutionPlayer?.localSpatialState ? JSON.parse(JSON.stringify(preResolutionPlayer.localSpatialState)) : undefined;
     const preResolutionLocationId = preResolutionPlayer?.locationId;
 
     baseResult = this.processAction(request, canonicalCommandId);
@@ -926,7 +926,7 @@ export class ServerMockAuthority {
       })),
       ...(() => {
         const postPlayer = worldRepository.getPlayerLifecycle(targetStoryId);
-        const postSpatial = postPlayer?.spatial ? JSON.parse(JSON.stringify(postPlayer.spatial)) : undefined;
+        const postSpatial = postPlayer?.localSpatialState ? JSON.parse(JSON.stringify(postPlayer.localSpatialState)) : undefined;
         const postLocationId = postPlayer?.locationId;
         const spatialChanged = JSON.stringify(preResolutionSpatial) !== JSON.stringify(postSpatial);
         const locationChanged = preResolutionLocationId !== postLocationId;

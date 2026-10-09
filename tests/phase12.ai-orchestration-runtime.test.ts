@@ -1199,8 +1199,8 @@ test('deterministic emergency narration preserves combined movement and listenin
 	});
 	const parsed = JSON.parse(response.text);
 	const narration = parsed.narrative.join(' ');
-	assert.match(narration, /move/i);
-	assert.match(narration, /hear|listen/i);
+	assert.match(narration, /\bmove\b/i);
+	assert.match(narration, /\bhear\b|\blisten\b/i);
 	assert.match(narration, /Whispering Orrery/i);
 	assert.match(narration, /rumor|reliable answer/i);
 });

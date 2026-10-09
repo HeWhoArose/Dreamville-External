@@ -170,8 +170,9 @@ test('WorldActivityDirector changes ambient routines with world time and restore
 
 test('CombatEncounterService recognizes intervention actions for active crimes', () => {
 	const service = new CombatEncounterService();
-	assert.equal(service.isHostileAction('I tackle the robber and stop the robbery'), true);
-	assert.equal(service.isHostileAction('I stop the kidnapping and rescue the victim'), true);
+	assert.equal(service.isHostileAction('I tackle the robber to stop the robbery'), true);
+	assert.equal(service.isHostileAction('I punch the kidnapper'), true);
+	assert.equal(service.isHostileAction('I stop the kidnapping and rescue the victim'), false, 'non-attack rescue actions must use the ordinary action/check path');
 	assert.equal(service.isHostileAction('I ask the merchant about the price'), false);
 });
 

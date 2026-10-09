@@ -1050,7 +1050,7 @@ test('Phase 12: deterministic emergency narration remains valid for the canonica
 		maxRetries: 0,
 	});
 
-	assert.equal(result.success, true);
+	assert.equal(result.success, true, JSON.stringify(result));
 	assert.equal(result.modelId, 'emergency-fallback-local');
 	assert.equal(result.providerId, 'provider_deterministic_emergency');
 	assert.equal((result.turnPackage?.narrative.join(' ') || '').includes(location!.name), true);
@@ -1177,7 +1177,7 @@ test('Phase 12: production narration still exposes the deterministic emergency f
 			maxRetries: 0,
 		});
 
-		assert.equal(result.success, true);
+		assert.equal(result.success, true, JSON.stringify(result));
 		assert.equal(result.source, 'DETERMINISTIC_FALLBACK');
 		assert.equal(result.modelId, 'emergency-fallback-local');
 		assert.ok((result.turnPackage?.narrative.join(' ') || '').length > 0);

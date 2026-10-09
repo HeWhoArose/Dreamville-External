@@ -5,10 +5,13 @@ import { hashStringToSeed } from '../server/domain/deterministicRng';
 
 function makeRepository(location: any) {
 	const cards = new Map<string, any>();
+	let hour = 12;
 	return {
 		cards,
+		setHour: (value: number) => { hour = value; },
 		repository: {
 			getGeographyGraph: () => ({ getNode: (id: string) => id === location.id ? location : undefined }),
+			getWorldClock: () => ({ getTimestamp: () => ({ hour }) }),
 			getEntityCards: (_storyId: string, query: any = {}) => Array.from(cards.values()).filter((card: any) =>
 				(!query.status || card.lifecycle?.status === query.status) &&
 				(!query.kind || card.kind === query.kind)
@@ -132,4 +135,31 @@ test('WorldActivityDirector supplies guild and inn social encounter archetypes w
 	const innPeople = WorldActivityDirector.ensureAmbientPopulation(inn.repository, innStoryId, 'loc_inn');
 	assert.ok(innPeople.some((person: any) => person.classification.role === 'shady contact'));
 	assert.ok(innPeople.some((person: any) => person.worldState.currentGoal));
+});
+
+test('WorldActivityDirector changes ambient routines with world time and restores them without duplication', () => {
+	const { repository, cards, setHour } = makeRepository({
+		id: 'loc_market', name: 'Sunrise Market', description: 'A busy open market.',
+		population: { status: 'INHABITED', expectedPopulation: 'MODERATE', provenance: 'AUTHORED' },
+	});
+	WorldActivityDirector.ensureAmbientPopulation(repository, 'story_daily_routine', 'loc_market');
+	assert.equal(cards.size, 3);
+	const merchant = Array.from(cards.values()).find((card: any) => card.classification.role === 'merchant');
+	assert.ok(merchant);
+	assert.equal(merchant.worldState.presence, 'present');
+	assert.match(merchant.worldState.currentActivity, /calling out wares/);
+
+	setHour(23);
+	WorldActivityDirector.ensureAmbientPopulation(repository, 'story_daily_routine', 'loc_market');
+	const nightMerchant = cards.get(merchant.id);
+	assert.equal(nightMerchant.worldState.presence, 'absent');
+	assert.match(nightMerchant.worldState.currentActivity, /resting away/);
+	assert.equal(cards.size, 3, 'off-duty NPCs must not be duplicated');
+
+	setHour(10);
+	WorldActivityDirector.ensureAmbientPopulation(repository, 'story_daily_routine', 'loc_market');
+	const dayMerchant = cards.get(merchant.id);
+	assert.equal(dayMerchant.worldState.presence, 'present');
+	assert.match(dayMerchant.worldState.currentActivity, /calling out wares/);
+	assert.equal(cards.size, 3);
 });

@@ -752,6 +752,7 @@ export class CurrentSituationBuilder {
 				id: entity.id,
 				name: entity.name,
 				kind: entity.kind,
+				role: entity.role,
 				locationId: entity.locationId,
 				currentActivity: entity.currentActivity,
 				visibleToPlayer: entity.visibleToPlayer,

@@ -906,7 +906,7 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
         const hasListening = /\b(?:listen|hear|overhear|eavesdrop|rumou?r|whisper|conversation)\b/i.test(normalizedAction);
         const hasObservation = /\b(?:look|observe|watch|inspect|examine|scan|study|see|notice)\b/i.test(normalizedAction);
         const actionVerb = hasMovement && (hasListening || hasObservation)
-          ? 'You make the requested movement and then attend to the scene'
+          ? 'You move as requested, then attend to the scene'
           : hasListening
             ? 'You listen carefully'
             : hasObservation

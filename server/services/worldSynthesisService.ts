@@ -165,6 +165,12 @@ CRITICAL INSTRUCTIONS FOR PLANNED WORLD EVENTS:
 - All scheduled times must start from Year 42, Month 10, Day 14 (or later) and use standard numbers for month, day, hour, etc.
 - Return locations, factions, characters, and events with aligned, cross-referenced IDs.
 
+- Every location MUST include a population profile. Use UNKNOWN when evidence is insufficient; never default to ABANDONED merely because no named character is assigned there.
+- INHABITED means ordinary population/activity may exist, but does not mean every occupant is visible in every scene.
+- RESTRICTED means access controls and schedules may limit who can be present or perceived.
+- ABANDONED requires a concrete in-world explanation (evacuation, collapse, lockdown, etc.); it must not be used as a synonym for "no NPC was generated".
+- Populate the world's geography with varied, plausible population states and include encounterProfileId only when an encounter design is supported by the world.
+
 The JSON schema must strictly be:
 {
   "title": "A short, evocative world title",
@@ -182,7 +188,15 @@ The JSON schema must strictly be:
         "name": "Location Name",
         "description": "Atmospheric description of location.",
         "coordinates": {"x": number, "y": number},
-        "ambientSensory": "Visual: ... Auditory: ..."
+        "ambientSensory": "Visual: ... Auditory: ...",
+        "population": {
+          "status": "INHABITED" | "RESTRICTED" | "ABANDONED" | "UNKNOWN",
+          "expectedPopulation": "NONE" | "SPARSE" | "MODERATE" | "DENSE" | "VARIABLE",
+          "encounterProfileId": "optional encounter profile ID",
+          "explanation": "Evidence for the occupancy state; required for ABANDONED",
+          "accessControlled": boolean,
+          "provenance": "AUTHORED" | "GENERATED" | "UNKNOWN"
+        }
       }
     ]
   },

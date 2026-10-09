@@ -914,14 +914,27 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
               : hasMovement
                 ? 'You move as requested'
                 : 'You carry out the requested action';
-        const actionSentence = normalizedAction
-          ? `${actionVerb} in ${canonicalLocationName}, following the player action: ${normalizedAction}.`
-          : `The scene remains grounded in ${canonicalLocationName}.`;
+        const actionSentence = !normalizedAction
+          ? `The scene remains quiet within ${canonicalLocationName}.`
+          : hasMovement && (hasListening || hasObservation)
+            ? `${actionVerb} within ${canonicalLocationName}.`
+            : hasListening
+              ? `You listen carefully within ${canonicalLocationName}.`
+              : hasObservation
+                ? `You observe the immediate scene within ${canonicalLocationName}.`
+                : hasMovement
+                  ? `You move forward within ${canonicalLocationName}.`
+                  : `You attempt the requested action within ${canonicalLocationName}.`;
+        // The emergency floor must respect the same adaptive pacing ceiling as AI
+        // narration. Micro/movement turns receive a compact beat; information-seeking
+        // and exploration turns retain enough room to state uncertainty and agency.
+        const compactFallback = typeof options?.maxTokens === 'number' && options.maxTokens <= 220;
+        const emergencyNarration = compactFallback
+          ? `${actionSentence} The step carries you onward, but it does not by itself establish a new destination or reveal anything beyond what is already available. The scene offers only the details you can actually perceive at this moment. You may continue forward, pause to observe, listen for a clearer clue, or approach someone or something already visible. Nothing more is settled by the movement alone, and the next consequence depends on what you encounter.`
+          : `${actionSentence} The immediate result is limited to what the moment actually provides: your position changes only as far as the attempted movement warrants, and no new destination, person, object, or cause is invented. Any information available from the immediate scene remains bounded by what can be directly observed. A rumor remains a rumor, an unclear sound remains uncertain, and the absence of a reliable answer does not prove that nothing exists. No unverified discovery or hidden event is treated as fact. You may continue observing, seek a willing source, inspect something already visible, or attempt another action. The next step remains open, and the scene can develop from whatever you actually encounter.`;
 
         text = JSON.stringify({
-          narrative: [
-            `${actionSentence} The immediate consequence is limited to the action you attempted: your position changes only to the extent already established by the canonical state, and no additional destination, object, person, or cause is invented. You remain within ${canonicalLocationName} unless the authoritative game state records a successful transition. Any information available from the immediate scene remains limited to directly supported evidence. A rumor stays a rumor, an unclear sound stays uncertain, and the absence of a reliable answer is not proof that nothing exists. No unverified discovery, conversation, or hidden event is declared as fact. The next meaningful step remains yours to choose: you may continue observing, seek a willing source, inspect an established object, or attempt another action. This emergency narration preserves the requested intent while leaving canonical mechanics and future choices to the game systems and player.`,
-          ],
+          narrative: [emergencyNarration],
           dialogue: [],
           events: ['EMERGENCY_DETERMINISTIC_TICK'],
           stateChanges: [],

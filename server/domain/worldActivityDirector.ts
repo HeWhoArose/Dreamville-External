@@ -33,7 +33,7 @@ export class WorldActivityDirector {
 
 	private static peopleForLocation(storyId: string, locationId: string, name: string, description: string) {
 		const place = (name + ' ' + description).toLowerCase();
-		const variant = hashStringToSeed(storyId + '|' + locationId) % 3;
+		const variant = hashStringToSeed(storyId + '|' + locationId) % (/alley/.test(place) ? 8 : 3);
 		if (/guild/.test(place)) {
 			return variant === 0 ? [
 				{ name: 'Rook Halvern', kind: 'NPC' as EntityKind, role: 'guild challenger', activity: 'arguing with another adventurer over a disputed contract', motivations: ['claim a lucrative contract', 'protect a hard-won reputation'], traits: ['proud', 'short-tempered'] },
@@ -157,8 +157,8 @@ export class WorldActivityDirector {
 		const existingIds = new Set(existing.map((card) => card.id));
 		let activitiesChanged = this.refreshDailyActivity(repository, storyId, locationId, existing);
 		const placeText = (location.name + ' ' + (location.description || '')).toLowerCase();
-		const alleyVariant = hashStringToSeed(storyId + '|' + locationId) % 3;
-		const desiredCount = /alley/.test(placeText) ? (alleyVariant === 2 ? 1 : 2)
+		const alleyVariant = hashStringToSeed(storyId + '|' + locationId) % 8;
+		const desiredCount = /alley/.test(placeText) ? (alleyVariant >= 2 ? 1 : 2)
 			: population?.expectedPopulation === 'DENSE' ? 4
 			: population?.expectedPopulation === 'MODERATE' ? 3
 			: population?.expectedPopulation === 'SPARSE' ? 1

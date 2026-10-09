@@ -53,9 +53,19 @@ export class WorldActivityDirector {
 			];
 		}
 		if (/alley/.test(place)) {
-			return variant === 0 ? [
-				{ name: 'Kest Varr', kind: 'NPC' as EntityKind, role: 'suspicious passerby', activity: 'lingering near a side passage and watching the flow of pedestrians', motivations: ['spot an easy opportunity', 'avoid being identified'], traits: ['evasive', 'alert'] },
-			] : [
+			if (variant === 0) {
+				return [
+					{ name: 'Kest Varr', kind: 'NPC' as EntityKind, role: 'alley robber', activity: 'trying to wrench a satchel from a passerby in the alley', motivations: ['take valuables quickly', 'escape before witnesses intervene'], traits: ['aggressive', 'evasive'] },
+					{ name: 'Nera Sol', kind: 'NPC' as EntityKind, role: 'robbery victim', activity: 'struggling to keep hold of a satchel and calling for help', motivations: ['protect personal belongings', 'get to safety'], traits: ['frightened', 'determined'] },
+				];
+			}
+			if (variant === 1) {
+				return [
+					{ name: 'Veyr Dask', kind: 'NPC' as EntityKind, role: 'kidnapper', activity: 'trying to force a frightened traveller toward a waiting carriage', motivations: ['remove the captive before anyone intervenes', 'avoid witnesses'], traits: ['coercive', 'calculating'] },
+					{ name: 'Ilyan Mer', kind: 'NPC' as EntityKind, role: 'kidnapping target', activity: 'pulling away from a stranger and shouting for help', motivations: ['escape the captor', 'attract help'], traits: ['frightened', 'resilient'] },
+				];
+			}
+			return [
 				{ name: 'Dain Orrel', kind: 'NPC' as EntityKind, role: 'local worker', activity: 'carrying supplies through the side passage', motivations: ['finish a work shift', 'get home safely'], traits: ['hardworking', 'reserved'] },
 			];
 		}
@@ -92,7 +102,10 @@ export class WorldActivityDirector {
 			['NPC', 'MERCHANT', 'CHARACTER', 'FACTION_MEMBER'].includes(card.kind)
 		);
 		const existingIds = new Set(existing.map((card) => card.id));
-		const desiredCount = population?.expectedPopulation === 'DENSE' ? 4
+		const placeText = (location.name + ' ' + (location.description || '')).toLowerCase();
+		const alleyVariant = hashStringToSeed(storyId + '|' + locationId) % 3;
+		const desiredCount = /alley/.test(placeText) ? (alleyVariant === 2 ? 1 : 2)
+			: population?.expectedPopulation === 'DENSE' ? 4
 			: population?.expectedPopulation === 'MODERATE' ? 3
 			: population?.expectedPopulation === 'SPARSE' ? 1
 			: explicitlyInhabited ? 2
@@ -110,10 +123,16 @@ export class WorldActivityDirector {
 				name: person.name,
 				kind: person.kind,
 				isTemplate: false,
-				identity: { species: 'human', aliases: [] },
-				classification: { role: person.role, profession: person.role, tags: ['ambient_population', 'world_activity'] },
+				identity: { aliases: [] },
+				classification: { role: person.role, profession: person.role, threat: /robber|kidnapper/i.test(person.role) ? 'hostile' : undefined, tags: ['ambient_population', 'world_activity'] },
 				personality: { traits: person.traits, values: ['self-preservation'], motivations: person.motivations, fears: [], desires: person.motivations, dialogueStyle: person.role === 'merchant' ? 'warm, brisk sales patter' : 'natural everyday speech' },
-				behavior: { defaultBehavior: person.activity, priorities: person.motivations, routines: [person.activity] },
+				behavior: {
+					defaultBehavior: person.activity,
+					combatBehavior: /robber|kidnapper/i.test(person.role) ? 'attempt to escape if overwhelmed; otherwise continue hostile action' : undefined,
+					threatResponse: /robber|kidnapper/i.test(person.role) ? 'hostile' : undefined,
+					priorities: person.motivations,
+					routines: [person.activity],
+				},
 				social: { factionIds: [], reputation: {}, relationships: {} },
 				worldState: { locationId, currentActivity: person.activity, currentGoal: person.motivations[0], isAlive: true, presence: 'present' },
 				traits: person.traits,

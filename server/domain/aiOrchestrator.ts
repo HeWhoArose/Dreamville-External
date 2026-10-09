@@ -905,6 +905,26 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
         const hasMovement = /\b(?:move|walk|approach|step|head|travel|enter|leave|go|closer|nearer|toward|towards|forward)\b/i.test(normalizedAction);
         const hasListening = /\b(?:listen|hear|overhear|eavesdrop|rumou?r|whisper|conversation)\b/i.test(normalizedAction);
         const hasObservation = /\b(?:look|observe|watch|inspect|examine|scan|study|see|notice)\b/i.test(normalizedAction);
+        const hasCombatAction = /\b(?:attack|strike|hit|shoot|stab|slash|tackle|punch|fight|knock out|cast|fireball|smite)\b/i.test(normalizedAction);
+        const hasInformationGoal = /\b(?:find out|whether|rumou?r|gossip|learn|discover|listen for|hear about|starlight fissures)\b/i.test(normalizedAction);
+        const observationTargetMatch = normalizedAction.match(/\b(?:observe|watch|inspect|examine|notice|look at)\s+((?:the|a|an)\s+)?([^,.!?]+)/i);
+        const movementTargetMatch = normalizedAction.match(/\b(?:move closer to|approach|walk toward|walk towards|head toward|head towards)\s+((?:the|a|an)\s+)?([^,.!?]+)/i);
+        const combatTargetMatch = normalizedAction.match(/\b(?:attack|strike|hit|shoot|stab|slash|tackle|punch)\s+((?:the|a|an)\s+)?([^,.!?]+)/i);
+        const observationTarget = observationTargetMatch
+          ? (observationTargetMatch[1] || 'the ') + observationTargetMatch[2].trim()
+          : '';
+        const movementTarget = movementTargetMatch
+          ? (movementTargetMatch[1] || '') + movementTargetMatch[2].trim()
+          : '';
+        const combatTarget = combatTargetMatch
+          ? (combatTargetMatch[1] || 'the ') + combatTargetMatch[2].trim()
+          : '';
+        const informationMatch = normalizedAction.match(/\b(?:whether|about|regarding|concerning)\s+(.+?)(?:[.!?]|$)/i);
+        const informationTopic = String(informationMatch?.[1] || normalizedAction)
+          .replace(/^(?:the|a|an)\s+/i, '')
+          .replace(/\s+(?:is|are)\s+real\b.*$/i, '')
+          .replace(/[.!?]+$/g, '')
+          .trim();
         const actionVerb = hasMovement && hasListening
           ? 'You move as requested, then listen carefully'
           : hasMovement && hasObservation
@@ -918,22 +938,36 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
                   : 'You carry out the requested action';
         const actionSentence = !normalizedAction
           ? `The scene remains quiet within ${canonicalLocationName}.`
-          : hasMovement && (hasListening || hasObservation)
-            ? `${actionVerb} within ${canonicalLocationName}.`
-            : hasListening
-              ? `You listen carefully within ${canonicalLocationName}.`
-              : hasObservation
-                ? `You observe the immediate scene within ${canonicalLocationName}.`
-                : hasMovement
-                  ? `You move forward within ${canonicalLocationName}.`
-                  : `You attempt the requested action within ${canonicalLocationName}.`;
-        // The emergency floor must respect the same adaptive pacing ceiling as AI
-        // narration. Micro/movement turns receive a compact beat; information-seeking
-        // and exploration turns retain enough room to state uncertainty and agency.
-        const compactFallback = typeof options?.maxTokens === 'number' && options.maxTokens <= 220;
-        const emergencyNarration = compactFallback
-          ? `${actionSentence} The step carries you onward, but it does not by itself establish a new destination or reveal anything beyond what is already available. The scene offers only the details you can actually perceive at this moment. You may continue forward, pause to observe, listen for a clearer clue, or approach someone or something already visible. Nothing more is settled by the movement alone, and the next consequence depends on what you encounter.`
-          : `${actionSentence} The immediate result is limited to what the moment actually provides: your position changes only as far as the attempted movement warrants, and no new destination, person, object, or cause is invented. Any information available from the immediate scene remains bounded by what can be directly observed. A rumor remains a rumor, an unclear sound remains uncertain, and the absence of a reliable answer does not prove that nothing exists. No unverified discovery or hidden event is treated as fact. You may continue observing, seek a willing source, inspect something already visible, or attempt another action. The next step remains open, and the scene can develop from whatever you actually encounter.`;
+          : hasCombatAction
+            ? `You attempt to strike ${combatTarget || 'the target you named'} within ${canonicalLocationName}; the action does not establish a hit.`
+            : hasInformationGoal
+              ? `You investigate ${informationTopic || 'the subject you asked about'} within ${canonicalLocationName}.`
+              : hasMovement && movementTarget
+                ? `${actionVerb} toward ${movementTarget} within ${canonicalLocationName}.`
+                : hasMovement && (hasListening || hasObservation)
+                  ? `${actionVerb} within ${canonicalLocationName}.`
+                  : hasListening
+                    ? `You listen carefully within ${canonicalLocationName}.`
+                    : hasObservation && observationTarget
+                      ? `You observe ${observationTarget} within ${canonicalLocationName}.`
+                      : hasObservation
+                        ? `You observe the immediate scene within ${canonicalLocationName}.`
+                        : hasMovement
+                          ? `You move forward within ${canonicalLocationName}.`
+                          : `You attempt the requested action within ${canonicalLocationName}.`;
+        // Respect the N8 pacing profile even if provider options omit the token budget.
+        const compactProfileInPrompt = /N8 ADAPTIVE PACING CONTRACT[\s\S]{0,350}Profile:\s*MICRO\b/i.test(prompt) ||
+          /pacingProfile\s*[:=]\s*['"]?MICRO\b/i.test(String(options?.systemInstruction || ''));
+        const compactFallback = (typeof options?.maxTokens === 'number' && options.maxTokens <= 220) ||
+          compactProfileInPrompt ||
+          (normalizedAction.length <= 24 && !hasListening && !hasObservation && !hasCombatAction && !hasInformationGoal);
+        const emergencyNarration = hasCombatAction
+          ? `${actionSentence} The attempt remains an attempt until a result is established; no hit, damage, or next action is assumed. You remain free to decide what to do after the outcome is clear.`
+          : hasInformationGoal
+            ? `${actionSentence} The available information describes ${informationTopic || 'the subject'} as uncertain; no reliable answer is established by the evidence available in this moment. A rumor remains a rumor, and an unclear account does not prove that the reported event is real or false. You may continue listening, look for a willing source, or investigate further, but no discovery is assumed merely because you asked. The next step remains open.`
+            : compactFallback
+              ? `${actionSentence} The step carries you onward, but it does not by itself establish a new destination or reveal anything beyond what is already available. The scene offers only the details you can actually perceive at this moment. You may continue forward, pause to observe, listen for a clearer clue, or approach someone or something already visible. Nothing more is settled by the movement alone, and the next consequence depends on what you encounter.`
+              : `${actionSentence} The immediate result is limited to what the moment actually provides: no new destination, person, object, or cause is invented. Any information available from the immediate scene remains bounded by what can be directly observed. A rumor remains a rumor, an unclear sound remains uncertain, and the absence of a reliable answer does not prove that nothing exists. No unverified discovery or hidden event is treated as fact. You may continue observing, seek a willing source, inspect something already visible, or attempt another action. The next step remains open, and the scene can develop from whatever you actually encounter.`;
 
         text = JSON.stringify({
           narrative: [emergencyNarration],

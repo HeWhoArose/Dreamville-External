@@ -33,8 +33,9 @@ function narrativeModel(providerId: string, modelId: string, priority = 100): Mo
 function validNarrative(): string {
 	return JSON.stringify({
 		narrative: [
-			'You move closer to the Whispering Orrery archivists without speaking, keeping your attention on the low conversation.',
-			'The whispers mention unstable starlight fissures in the lower sea, though the speakers treat the report as uncertain hearsay.',
+			'You move closer within the Whispering Orrery, remaining silent as you listen. The report about unstable starlight fissures in the lower sea is still presented as uncertain hearsay, not confirmed fact.',
+			'The location remains the Whispering Orrery; nothing in the report establishes that the fissures have been personally verified. You focus on the words already available to you, separating what was said from what can actually be known.',
+			'The account offers a lead to investigate, but it does not prove the cause, extent, or precise condition of the fissures. You have moved nearer to listen, and the immediate result is a clearer grasp of the rumor rather than a guaranteed discovery. You remain free to keep listening, question a willing source, or investigate the lower sea when you choose.',
 		],
 		dialogue: [],
 		events: ['RESEARCHED_RUMOR_HEARD'],

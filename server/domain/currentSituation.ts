@@ -758,6 +758,7 @@ export class CurrentSituationBuilder {
 				visibleToPlayer: entity.visibleToPlayer,
 			})).filter((entity) => entity.kind !== 'PLAYER'),
 			locationId,
+			repository.getCanonicalCommandEventCount(params.storyId) + 1,
 		);
 		const visibleEvents = activeDialogue
 			? [

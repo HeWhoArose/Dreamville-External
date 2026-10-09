@@ -942,7 +942,7 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
         const actionSentence = !normalizedAction
           ? `The scene remains quiet within ${canonicalLocationName}.`
           : hasCombatAction
-            ? `You attempt to strike ${combatTarget || 'the target you named'} within ${canonicalLocationName}; the action does not establish a hit.`
+            ? `You attempt to strike ${combatTarget ? combatTarget + ' you named' : 'the target you named'} within ${canonicalLocationName}; the action does not confirm that the target is present or that the strike connects.`
             : hasMovement && hasListening
               ? `You move as requested and listen carefully within ${canonicalLocationName}.`
               : hasMovement && hasObservation

@@ -184,7 +184,12 @@ export class WorldActivityDirector {
 				kind: person.kind,
 				isTemplate: false,
 				identity: { aliases: [] },
-				classification: { role: person.role, profession: person.role, threat: /robber|kidnapper/i.test(person.role) ? 'hostile' : undefined, tags: ['ambient_population', 'world_activity'] },
+				classification: {
+					role: person.role,
+					profession: person.role,
+					threat: /robber|kidnapper/i.test(person.role) ? 'hostile' : undefined,
+					tags: ['ambient_population', 'world_activity', ...(/robber|kidnapper/i.test(person.role) ? ['hostile', 'aggressive'] : [])],
+				},
 				personality: { traits: person.traits, values: ['self-preservation'], motivations: person.motivations, fears: [], desires: person.motivations, dialogueStyle: person.role === 'merchant' ? 'warm, brisk sales patter' : 'natural everyday speech' },
 				behavior: {
 					defaultBehavior: person.activity,

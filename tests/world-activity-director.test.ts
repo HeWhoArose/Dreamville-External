@@ -18,6 +18,8 @@ function makeRepository(location: any) {
 				cards.set(card.id, { ...card });
 				return { ...card };
 			},
+			getStoryRun: () => null,
+			saveStoryRun: () => undefined,
 		} as any,
 	};
 }

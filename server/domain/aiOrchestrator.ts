@@ -913,7 +913,7 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
         ].map((target: any) => typeof target === 'string' ? target : String(target?.name || target?.targetName || ''))
           .find((name: string) => name.trim().length > 0) || '';
         const visibleEntityNames = Array.from(String(prompt || '').matchAll(/([A-Z][^,\n;]+?)\s+\[(?:NPC|MERCHANT|CHARACTER|FACTION_MEMBER)[^\]]*\]/g))
-          .map((match: RegExpMatchArray) => String(match[1] || '').trim())
+          .map((match: RegExpMatchArray) => String(match[1] || '').replace(/^.*Visible entities:\s*/i, '').trim())
           .filter((name: string) => name && !/^(?:Hero|Player)\b/i.test(name));
         const resolveActionTarget = (rawTarget: string): string => {
           if (!rawTarget) return '';

@@ -1,6 +1,6 @@
 import type { WorldRepository } from '../repositories/worldRepository';
 import type { EntityCard, EntityKind } from './entityCard';
-import { deterministicId } from './deterministicRng';
+import { deterministicId, hashStringToSeed } from './deterministicRng';
 
 export interface WorldActivityEvent {
 	id: string;
@@ -28,7 +28,44 @@ export class WorldActivityDirector {
 	];
 
 	private static locationSupportsPublicActivity(name: string, description: string): boolean {
-		return /citadel|market|bazaar|inn|tavern|guild|town|city|village|settlement|harbour|harbor|station|plaza|square|academy|temple district|capital/i.test(name + ' ' + description);
+		return /citadel|market|bazaar|inn|tavern|guild|town|city|village|settlement|harbour|harbor|station|plaza|square|academy|temple district|capital|alley/i.test(name + ' ' + description);
+	}
+
+	private static peopleForLocation(storyId: string, locationId: string, name: string, description: string) {
+		const place = (name + ' ' + description).toLowerCase();
+		const variant = hashStringToSeed(storyId + '|' + locationId) % 3;
+		if (/guild/.test(place)) {
+			return variant === 0 ? [
+				{ name: 'Rook Halvern', kind: 'NPC' as EntityKind, role: 'guild challenger', activity: 'arguing with another adventurer over a disputed contract', motivations: ['claim a lucrative contract', 'protect a hard-won reputation'], traits: ['proud', 'short-tempered'] },
+				{ name: 'Edda Marr', kind: 'NPC' as EntityKind, role: 'guild clerk', activity: 'sorting posted contracts and answering adventurers’ questions', motivations: ['keep the guild orderly', 'match capable adventurers to jobs'], traits: ['organized', 'sharp-eyed'] },
+			] : [
+				{ name: 'Edda Marr', kind: 'NPC' as EntityKind, role: 'guild clerk', activity: 'sorting posted contracts and answering adventurers’ questions', motivations: ['keep the guild orderly', 'match capable adventurers to jobs'], traits: ['organized', 'sharp-eyed'] },
+				{ name: 'Rook Halvern', kind: 'NPC' as EntityKind, role: 'guild adventurer', activity: 'comparing a contract notice with a travel-worn map', motivations: ['prepare for a dangerous contract', 'find reliable companions'], traits: ['wary', 'experienced'] },
+			];
+		}
+		if (/inn|tavern/.test(place)) {
+			return variant === 0 ? [
+				{ name: 'Mira Fen', kind: 'NPC' as EntityKind, role: 'innkeeper', activity: 'checking the common room and serving waiting guests', motivations: ['keep guests safe', 'earn a living'], traits: ['observant', 'practical'] },
+				{ name: 'The Grey Stranger', kind: 'NPC' as EntityKind, role: 'shady contact', activity: 'sitting alone in a shadowed corner, watching who enters and keeping a folded map close', motivations: ['find a discreet buyer for a map', 'avoid drawing attention'], traits: ['guarded', 'calculating'] },
+			] : [
+				{ name: 'Mira Fen', kind: 'NPC' as EntityKind, role: 'innkeeper', activity: 'checking the common room and serving waiting guests', motivations: ['keep guests safe', 'earn a living'], traits: ['observant', 'practical'] },
+				{ name: 'Tomas Reed', kind: 'NPC' as EntityKind, role: 'traveller', activity: 'comparing a route map with the next day’s weather', motivations: ['reach the next settlement safely', 'learn local news'], traits: ['cautious', 'curious'] },
+			];
+		}
+		if (/alley/.test(place)) {
+			return variant === 0 ? [
+				{ name: 'Kest Varr', kind: 'NPC' as EntityKind, role: 'suspicious passerby', activity: 'lingering near a side passage and watching the flow of pedestrians', motivations: ['spot an easy opportunity', 'avoid being identified'], traits: ['evasive', 'alert'] },
+			] : [
+				{ name: 'Dain Orrel', kind: 'NPC' as EntityKind, role: 'local worker', activity: 'carrying supplies through the side passage', motivations: ['finish a work shift', 'get home safely'], traits: ['hardworking', 'reserved'] },
+			];
+		}
+		if (/market|bazaar/.test(place)) {
+			return [
+				{ name: 'Mira Fen', kind: 'MERCHANT' as EntityKind, role: 'merchant', activity: 'calling out wares to passersby', motivations: ['earn a living', 'find reliable customers'], traits: ['outgoing', 'observant'] },
+				{ name: 'Sella Vorn', kind: 'NPC' as EntityKind, role: 'local resident', activity: 'chatting with a neighbour while going about daily business', motivations: ['finish daily errands', 'keep informed about local affairs'], traits: ['practical', 'social'] },
+			];
+		}
+		return this.PEOPLE;
 	}
 
 	public static ensureAmbientPopulation(
@@ -44,6 +81,7 @@ export class WorldActivityDirector {
 		if (population?.expectedPopulation === 'NONE') return [];
 
 		const publicPlace = this.locationSupportsPublicActivity(location.name, location.description || '');
+		const people = this.peopleForLocation(storyId, locationId, location.name, location.description || '');
 		const explicitlyInhabited = population?.status === 'INHABITED';
 		if (!explicitlyInhabited && !publicPlace) return [];
 
@@ -63,8 +101,8 @@ export class WorldActivityDirector {
 		if (existing.length >= desiredCount) return [];
 
 		const created: EntityCard[] = [];
-		for (let index = 0; index < this.PEOPLE.length && existing.length + created.length < desiredCount; index++) {
-			const person = this.PEOPLE[index];
+		for (let index = 0; index < people.length && existing.length + created.length < desiredCount; index++) {
+			const person = people[index];
 			const id = deterministicId('ambient_npc', storyId, locationId, person.role);
 			if (existingIds.has(id) || repository.getEntityCard(storyId, id)) continue;
 			const card = repository.saveEntityCard(storyId, {

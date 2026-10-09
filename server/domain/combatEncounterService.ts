@@ -19,10 +19,12 @@ export class CombatEncounterService {
 
   public isHostileAction(actionText: string): boolean {
     const text = String(actionText || '').toLowerCase();
+    // Only route actions that the pre-combat resolver can execute mechanically.
+    // Non-attack interventions (rescue, restrain, disarm, verbal confrontation)
+    // stay in the normal action/check pipeline instead of being misrepresented as attacks.
     return [
       'attack', 'strike', 'hit', 'shoot', 'stab', 'slash', 'cast', 'spell', 'fireball', 'kill', 'blast', 'burn', 'freeze',
-      'ambush', 'sneak attack', 'smite', 'curse', 'harm', 'tackle', 'punch', 'fight', 'confront', 'intervene',
-      'rescue', 'stop the robbery', 'stop the kidnapping', 'disarm', 'restrain', 'defend', 'protect the victim',
+      'ambush', 'sneak attack', 'smite', 'curse', 'harm', 'tackle', 'punch', 'fight', 'knock out',
     ].some((token) => text.includes(token));
   }
 
@@ -132,7 +134,7 @@ export class CombatEncounterService {
           canonicalEventIds: [],
           spellResult: cast.result,
         };
-      } else if (/(attack|strike|shoot|hit|stab|slash)/.test(text)) {
+      } else if (/(attack|strike|shoot|hit|stab|slash|tackle|punch|fight|knock out)/.test(text)) {
         const attack = combat.executeAttack(params.actorId, params.targetId, { consumeAction: false, advantage: Boolean(params.advantageFromAmbush) });
         mechanical = {
           success: attack.success,

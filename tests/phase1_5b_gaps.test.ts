@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { loadStoredCompendiumItems, saveCompendiumItems } from '../src/components/compendium/CompendiumView';
 import { INITIAL_COMPENDIUM_ITEMS } from '../src/components/compendium/compendiumData';
 import { CompendiumItem } from '../src/components/compendium/compendiumTypes';
-import { worldRepository } from '../server/repositories/worldRepository';
+import { InMemoryWorldRepository, worldRepository } from '../server/repositories/worldRepository';
 import { MultiModelOrchestrator, IProviderAdapter, TaskId, ProviderGenerateOptions, ProviderGenerateResult } from '../server/domain/aiOrchestrator';
 
 // Mock localStorage and window for Node test runner environment
@@ -272,12 +272,11 @@ test('Gap 2b — Primary success -> Fallback NOT invoked', async () => {
 });
 
 test('Gap 2c — Primary failure -> Secondary failure -> Tertiary fallback attempted and succeeded', async () => {
-  const isolatedRepository = new (require('../server/repositories/worldRepository').InMemoryWorldRepository)({ disablePersistence: true });
-  isolatedRepository.seedStory('story_cascade_fallback_test');
-  const player = isolatedRepository.getPlayerLifecycle('story_cascade_fallback_test');
-  const location = player ? isolatedRepository.getGeographyGraph('story_cascade_fallback_test').getNode(player.locationId) : undefined;
+  const isolatedRepository = new InMemoryWorldRepository({ disablePersistence: true });
+  const isolatedGeography = isolatedRepository.getGeographyGraph('story_cascade_fallback_test');
+  const location = isolatedGeography.getNode('loc_whispering_orrery');
   if (location) {
-    isolatedRepository.getGeographyGraph('story_cascade_fallback_test').addNode({
+    isolatedGeography.addNode({
       ...location,
       sceneObjects: [
         ...(location.sceneObjects || []),

@@ -1222,14 +1222,21 @@ export class ServerMockAuthority {
           .slice(0, 4);
 
         if (generated.source === 'DETERMINISTIC_FALLBACK') {
-          // The local emergency engine is a successful presentation fallback, not an AI error.
-          // Keep the player-facing turn alive and expose its provenance without showing an
-          // "AI unavailable" error card.
+          // Preserve the turn, but do not hide that every normal narration provider
+          // may have failed or that the emergency provider itself may have been selected.
           narrativeGeneration = {
             source: 'DETERMINISTIC_FALLBACK',
-            providerId: 'provider_local_story_fallback',
-            modelId: 'local-story-fallback',
+            providerId: generated.providerId || 'provider_local_story_fallback',
+            modelId: generated.modelId || 'local-story-fallback',
             regenerated: false,
+          };
+          narrativeError = {
+            code: 'NARRATION_DETERMINISTIC_FALLBACK',
+            message: generated.fallbackReason || generated.error || 'Narration used the deterministic fallback. Inspect the attempt list for provider or validation failures.',
+            providerId: generated.providerId,
+            modelId: generated.modelId,
+            fallbackReason: generated.fallbackReason,
+            attemptsTrail: generated.attemptsTrail || generated.telemetry?.attemptsTrail || [],
           };
         }
       } else {
@@ -1256,9 +1263,17 @@ export class ServerMockAuthority {
           regenerated: false,
         };
         narrativeVisualCues = undefined;
-        // Keep provider failure details in server logs/diagnostics rather than turning
-        // an otherwise playable local fallback into a blocking narration error.
-        narrativeError = undefined;
+        // Keep the action playable while attaching diagnostics to this action log.
+        // StoryView already renders narrativeError and its attempt trail, so the player
+        // can see why the AI route failed instead of silently receiving fallback prose.
+        narrativeError = {
+          code: 'NARRATION_AI_UNAVAILABLE',
+          message: generated.error || generated.fallbackReason || 'Narration generation failed validation or exhausted its provider route.',
+          providerId: generated.providerId,
+          modelId: generated.modelId,
+          fallbackReason: generated.fallbackReason,
+          attemptsTrail: generated.attemptsTrail || generated.telemetry?.attemptsTrail || [],
+        };
         console.warn('[NarrationFallback] AI narration unavailable; local story fallback used.', {
           storyId: targetStoryId,
           actionId: baseResult?.actionId,
@@ -1290,11 +1305,22 @@ export class ServerMockAuthority {
         regenerated: false,
       };
       narrativeVisualCues = undefined;
-      narrativeError = undefined;
+      narrativeError = {
+        code: String(error?.code || 'NARRATION_GENERATION_EXCEPTION'),
+        message: String(error?.message || error || 'Narration generation threw an unknown error.'),
+        providerId: error?.providerId,
+        modelId: error?.modelId,
+        fallbackReason: error?.fallbackReason,
+        attemptsTrail: Array.isArray(error?.attemptsTrail) ? error.attemptsTrail : [],
+      };
       console.warn('[NarrationFallback] AI narration generation threw error; local story fallback used.', {
         storyId: targetStoryId,
         actionId: baseResult?.actionId,
         error: error?.message || String(error),
+        code: error?.code,
+        fallbackReason: error?.fallbackReason,
+        attemptsTrail: error?.attemptsTrail,
+        preflightSkipped: error?.preflightSkipped,
       });
     }
 

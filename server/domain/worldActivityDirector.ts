@@ -4,7 +4,7 @@ import { deterministicId, hashStringToSeed } from './deterministicRng';
 
 export interface WorldActivityEvent {
 	id: string;
-	type: 'AMBIENT_ACTIVITY' | 'SOCIAL_OPPORTUNITY' | 'POTENTIAL_ENCOUNTER';
+	type: 'AMBIENT_ACTIVITY' | 'SOCIAL_OPPORTUNITY' | 'POTENTIAL_ENCOUNTER' | 'NPC_INITIATED_INTERACTION';
 	summary: string;
 	locationId: string;
 	source: 'WORLD_ACTIVITY_DIRECTOR';
@@ -235,14 +235,15 @@ export class WorldActivityDirector {
 		locationId?: string;
 		currentActivity?: string;
 		visibleToPlayer?: boolean;
-	}>, locationId: string): WorldActivityEvent[] {
+	}>, locationId: string, turnNumber: number = 1): WorldActivityEvent[] {
 		const events: WorldActivityEvent[] = [];
 		for (const entity of entities) {
 			if (entity.visibleToPlayer === false || entity.locationId !== locationId || !entity.currentActivity) continue;
 			const activity = String(entity.currentActivity).trim();
 			if (!activity) continue;
-			const isSocialOpportunity = /calling out wares|merchant|arguing with another adventurer|folded map|shady contact/i.test(activity + ' ' + String(entity.role || ''));
-			const isPotentialEncounter = /suspicious passerby|guild challenger|shady contact|alley robber|kidnapper/i.test(String(entity.role || ''));
+			const role = String(entity.role || '').toLowerCase();
+			const isSocialOpportunity = /calling out wares|merchant|arguing with another adventurer|folded map|shady contact/i.test(activity + ' ' + role);
+			const isPotentialEncounter = /suspicious passerby|guild challenger|shady contact|alley robber|kidnapper|bully|prejudiced|racial tension|lineage supremacist/i.test(role);
 			events.push({
 				id: deterministicId('ambient_activity', locationId, entity.id, activity),
 				type: isPotentialEncounter ? 'POTENTIAL_ENCOUNTER' : isSocialOpportunity ? 'SOCIAL_OPPORTUNITY' : 'AMBIENT_ACTIVITY',
@@ -251,6 +252,30 @@ export class WorldActivityDirector {
 				source: 'WORLD_ACTIVITY_DIRECTOR',
 				entityId: entity.id,
 			});
+
+			// NPCs sometimes initiate contact without being addressed. This is a
+			// deterministic, low-frequency scene beat, not a mandatory quest/fight.
+			// Its evidence exists for this turn only and names the visible initiator.
+			const canInitiate = /merchant|shady contact|guild challenger|traveller|traveler/i.test(role);
+			const initiationSlot = Math.trunc(Math.max(1, turnNumber)) % 5 === 0;
+			const initiationRoll = hashStringToSeed(entity.id + '|init|' + Math.trunc(Math.max(1, turnNumber))) % 3;
+			if (canInitiate && initiationSlot && initiationRoll === 0) {
+				const initiation = role.includes('merchant')
+					? entity.name + ' calls out to you, inviting you to look over the wares.'
+					: role.includes('shady contact')
+						? entity.name + ' catches your eye and quietly beckons you over, keeping a folded map close.'
+						: role.includes('guild challenger')
+							? entity.name + ' turns from the disputed contract and challenges you to explain what business you have here.'
+							: entity.name + ' approaches with a cautious question about the road ahead.';
+				events.push({
+					id: deterministicId('npc_initiated_interaction', locationId, entity.id, turnNumber),
+					type: 'NPC_INITIATED_INTERACTION',
+					summary: initiation,
+					locationId,
+					source: 'WORLD_ACTIVITY_DIRECTOR',
+					entityId: entity.id,
+				});
+			}
 		}
 		return events.slice(0, 8);
 	}

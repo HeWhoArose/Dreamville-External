@@ -19,8 +19,11 @@ export class CombatEncounterService {
 
   public isHostileAction(actionText: string): boolean {
     const text = String(actionText || '').toLowerCase();
-    return ['attack', 'strike', 'hit', 'shoot', 'stab', 'slash', 'cast', 'spell', 'fireball', 'kill', 'blast', 'burn', 'freeze', 'ambush', 'sneak attack', 'smite', 'curse', 'harm']
-      .some((token) => text.includes(token));
+    return [
+      'attack', 'strike', 'hit', 'shoot', 'stab', 'slash', 'cast', 'spell', 'fireball', 'kill', 'blast', 'burn', 'freeze',
+      'ambush', 'sneak attack', 'smite', 'curse', 'harm', 'tackle', 'punch', 'fight', 'confront', 'intervene',
+      'rescue', 'stop the robbery', 'stop the kidnapping', 'disarm', 'restrain', 'defend', 'protect the victim',
+    ].some((token) => text.includes(token));
   }
 
   private isHostileCard(card: EntityCard, actorId: string, storyId: string, repository: WorldRepository): boolean {

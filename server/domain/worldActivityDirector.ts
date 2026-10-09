@@ -85,10 +85,11 @@ export class WorldActivityDirector {
 		locationId: string,
 		existing: EntityCard[],
 	): boolean {
+		const ambientCards = existing.filter((card) => card.metadata?.ambientPopulation === true);
+		if (ambientCards.length === 0) return false;
 		const hour = repository.getWorldClock(storyId).getTimestamp().hour;
 		let changed = false;
-		for (const card of existing) {
-			if (card.metadata?.ambientPopulation !== true) continue;
+		for (const card of ambientCards) {
 			const role = String(card.metadata?.activityRole || card.classification?.role || '').toLowerCase();
 			let activity = card.worldState.currentActivity || card.behavior.defaultBehavior || 'going about daily business';
 			let presence: 'present' | 'absent' = 'present';
@@ -151,7 +152,6 @@ export class WorldActivityDirector {
 		const existing = repository.getEntityCards(storyId, { status: 'ACTIVE' }).filter((card) =>
 			card.worldState.locationId === locationId &&
 			card.worldState.isAlive &&
-			card.worldState.presence !== 'absent' &&
 			['NPC', 'MERCHANT', 'CHARACTER', 'FACTION_MEMBER'].includes(card.kind)
 		);
 		const existingIds = new Set(existing.map((card) => card.id));

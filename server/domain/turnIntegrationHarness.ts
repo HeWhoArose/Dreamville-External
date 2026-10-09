@@ -50,10 +50,9 @@ function buildDeterministicNarration(
 	locationName: string,
 ): string {
 	const firstReveal = plan.informationToReveal[0];
-	const firstResearchBlock = firstReveal
-		? research.blocks.find((block) => firstReveal.sourceBlockIds.includes(block.id))
-		: undefined;
-	const evidence = String(firstResearchBlock?.content || firstReveal?.topic || '').trim();
+	// Narration should receive a bounded, curated topic rather than a full research
+	// block that may contain mixed context or concrete phrases not safe to echo.
+	const evidence = String(firstReveal?.topic || '').trim();
 
 	const parts: string[] = [];
 	if (intent.movementIntent) {

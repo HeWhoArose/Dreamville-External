@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { WorldActivityDirector } from '../server/domain/worldActivityDirector';
+import { hashStringToSeed } from '../server/domain/deterministicRng';
 
 function makeRepository(location: any) {
 	const cards = new Map<string, any>();
@@ -80,4 +81,53 @@ test('WorldActivityDirector projects local activities as grounded scene events o
 	assert.ok(events.some((event) => event.type === 'SOCIAL_OPPORTUNITY' && event.entityId === 'merchant-1'));
 	assert.ok(events.every((event) => event.locationId === 'loc_market'));
 	assert.ok(!events.some((event) => event.entityId === 'hidden-1' || event.entityId === 'away-1'));
+});
+
+test('WorldActivityDirector supports deterministic robbery and kidnapping encounters in alleys', () => {
+	for (const variant of [0, 1]) {
+		let storyId = 'story_alley_' + variant;
+		let attempts = 0;
+		while (hashStringToSeed(storyId + '|loc_alley') % 3 !== variant && attempts < 100) {
+			storyId = 'story_alley_' + variant + '_' + attempts;
+			attempts++;
+		}
+		assert.ok(attempts < 100, 'a deterministic scenario seed should be found');
+		const { repository } = makeRepository({
+			id: 'loc_alley', name: 'Lantern Alley', description: 'A narrow alley behind the market.',
+			population: { status: 'UNKNOWN', provenance: 'UNKNOWN' },
+		});
+		const people = WorldActivityDirector.ensureAmbientPopulation(repository, storyId, 'loc_alley');
+		assert.equal(people.length, 2);
+		const roles = people.map((person: any) => person.classification.role);
+		if (variant === 0) {
+			assert.ok(roles.includes('alley robber'));
+			assert.ok(roles.includes('robbery victim'));
+		} else {
+			assert.ok(roles.includes('kidnapper'));
+			assert.ok(roles.includes('kidnapping target'));
+		}
+		assert.ok(people.every((person: any) => person.worldState.locationId === 'loc_alley'));
+	}
+});
+
+test('WorldActivityDirector supplies guild and inn social encounter archetypes without forcing a fight or quest', () => {
+	let guildStoryId = 'story_guild';
+	while (hashStringToSeed(guildStoryId + '|loc_guild') % 3 !== 0) guildStoryId += '_x';
+	const guild = makeRepository({
+		id: 'loc_guild', name: 'Adventurers Guild', description: 'A public guild hall.',
+		population: { status: 'UNKNOWN', provenance: 'UNKNOWN' },
+	});
+	const guildPeople = WorldActivityDirector.ensureAmbientPopulation(guild.repository, guildStoryId, 'loc_guild');
+	assert.ok(guildPeople.some((person: any) => person.classification.role === 'guild challenger'));
+	assert.ok(guildPeople.some((person: any) => person.currentActivity || person.worldState.currentActivity));
+
+	let innStoryId = 'story_inn';
+	while (hashStringToSeed(innStoryId + '|loc_inn') % 3 !== 0) innStoryId += '_x';
+	const inn = makeRepository({
+		id: 'loc_inn', name: 'The Silver Lantern Inn', description: 'A public inn.',
+		population: { status: 'UNKNOWN', provenance: 'UNKNOWN' },
+	});
+	const innPeople = WorldActivityDirector.ensureAmbientPopulation(inn.repository, innStoryId, 'loc_inn');
+	assert.ok(innPeople.some((person: any) => person.classification.role === 'shady contact'));
+	assert.ok(innPeople.some((person: any) => person.worldState.currentGoal));
 });

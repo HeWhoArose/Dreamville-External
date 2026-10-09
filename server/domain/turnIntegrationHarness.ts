@@ -47,6 +47,7 @@ function buildDeterministicNarration(
 	intent: PlayerIntent,
 	plan: EphemeralNarrativePlan,
 	research: NarrativeResearchResult,
+	locationName: string,
 ): string {
 	const firstReveal = plan.informationToReveal[0];
 	const firstResearchBlock = firstReveal
@@ -76,6 +77,9 @@ function buildDeterministicNarration(
 	if (!parts.length) {
 		parts.push('You act within the current scene and observe the immediate result.');
 	}
+	// Keep the harness fallback explicitly grounded in the canonical scene,
+	// while making no claim that a requested movement was mechanically committed.
+	parts.push(`The current scene remains ${locationName}; no additional location change or unverified discovery is assumed.`);
 	return parts.join(' ');
 }
 
@@ -168,7 +172,7 @@ export class TurnIntegrationHarness {
 				throw new Error('HARNESS_MALFORMED_NARRATION');
 			}
 
-			const narrative = buildDeterministicNarration(intent, plan, research);
+			const narrative = buildDeterministicNarration(intent, plan, research, currentSituation.location.name);
 			const turnPackage = makeTurnPackage(narrative, intent, plan);
 			stages.push({ name: 'narration', status: 'FALLBACK', detail: 'Deterministic mock narrator; no external model call.' });
 

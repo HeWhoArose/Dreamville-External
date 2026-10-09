@@ -905,15 +905,17 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
         const hasMovement = /\b(?:move|walk|approach|step|head|travel|enter|leave|go|closer|nearer|toward|towards|forward)\b/i.test(normalizedAction);
         const hasListening = /\b(?:listen|hear|overhear|eavesdrop|rumou?r|whisper|conversation)\b/i.test(normalizedAction);
         const hasObservation = /\b(?:look|observe|watch|inspect|examine|scan|study|see|notice)\b/i.test(normalizedAction);
-        const actionVerb = hasMovement && (hasListening || hasObservation)
-          ? 'You move as requested, then attend to the scene'
-          : hasListening
-            ? 'You listen carefully'
-            : hasObservation
-              ? 'You observe the scene'
-              : hasMovement
-                ? 'You move as requested'
-                : 'You carry out the requested action';
+        const actionVerb = hasMovement && hasListening
+          ? 'You move as requested, then listen carefully'
+          : hasMovement && hasObservation
+            ? 'You move as requested, then observe the scene'
+            : hasListening
+              ? 'You listen carefully'
+              : hasObservation
+                ? 'You observe the scene'
+                : hasMovement
+                  ? 'You move as requested'
+                  : 'You carry out the requested action';
         const actionSentence = !normalizedAction
           ? `The scene remains quiet within ${canonicalLocationName}.`
           : hasMovement && (hasListening || hasObservation)

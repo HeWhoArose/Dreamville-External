@@ -3370,6 +3370,16 @@ export class InMemoryWorldRepository implements WorldRepository {
       };
     }
 
+    // Entity cards are canonical runtime state. Persist the registry snapshot
+    // whenever a Story Run is saved so generated NPCs and their state survive reloads.
+    const entityRegistry = this.entityRegistries.get(canonicalRun.storyId);
+    if (entityRegistry) {
+      canonicalRun.runtimeState = {
+        ...(canonicalRun.runtimeState || {}),
+        entities: entityRegistry.exportState(),
+      };
+    }
+
     this.storyRuns.set(canonicalRun.storyId, canonicalRun);
     if (canonicalRun?.protagonist) {
       const actorId = this.getPlayerLifecycle(canonicalRun.storyId)?.actorId || canonicalRun.protagonist.characterId || `player_actor_${canonicalRun.storyId}`;

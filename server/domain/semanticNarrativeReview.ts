@@ -153,6 +153,24 @@ function isConcreteClaimSupported(claim: string, situation: CurrentSituation): b
 		return true;
 	}
 
+	// A location's own canonical name and exact authored environmental phrases
+	// are valid evidence for broad environmental claims (e.g. "the bridge" when
+	// the location description explicitly names a bridge). Exact phrase matching
+	// does not let "brass architecture" authorize a separate "brass lamp".
+	const authoredEnvironment = [
+		situation.location.name,
+		situation.location.description,
+		situation.location.ambientSensory,
+		...(situation.sceneEvidence?.sensory || []),
+	].map(normalize).filter(Boolean);
+	if (authoredEnvironment.some((source) =>
+		source === normalizedClaim ||
+		source.includes(normalizedClaim) ||
+		normalizedClaim.includes(source) && source.length >= 8
+	)) {
+		return true;
+	}
+
 	return false;
 }
 

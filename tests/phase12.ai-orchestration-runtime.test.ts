@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import {
+	DeterministicEmergencyFloorAdapter,
 	DeterministicMockAdapter,
 	MultiModelOrchestrator,
 	type ModelRegistryRecord,
@@ -1187,4 +1188,19 @@ test('Phase 12: production narration still exposes the deterministic emergency f
 			process.env.NODE_ENV = previousNodeEnv;
 		}
 	}
+});
+
+
+test('deterministic emergency narration preserves combined movement and listening intent', async () => {
+	const adapter = new DeterministicEmergencyFloorAdapter();
+	const response = await adapter.generate('narrative.generate', 'Current action: I move closer to hear the rumors.', {
+		canonicalLocationName: 'The Whispering Orrery',
+		playerAction: 'I move closer to hear the rumors.',
+	});
+	const parsed = JSON.parse(response.text);
+	const narration = parsed.narrative.join(' ');
+	assert.match(narration, /move/i);
+	assert.match(narration, /hear|listen/i);
+	assert.match(narration, /Whispering Orrery/i);
+	assert.match(narration, /rumor|reliable answer/i);
 });

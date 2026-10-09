@@ -184,7 +184,14 @@ export class TurnIntegrationHarness {
 			});
 			stages.push({ name: 'semantic-review', status: narrativeReview.decision === 'ACCEPT' ? 'PASS' : 'FAIL', detail: narrativeReview.decision });
 			if (narrativeReview.decision !== 'ACCEPT') {
-				throw new Error('HARNESS_NARRATIVE_REVIEW_' + narrativeReview.decision);
+				throw new Error(
+					'HARNESS_NARRATIVE_REVIEW_' + narrativeReview.decision + ': ' +
+					JSON.stringify({
+						violations: narrativeReview.violations,
+						missingRequirements: narrativeReview.missingRequirements,
+						unsupportedClaims: narrativeReview.unsupportedClaims,
+					}),
+				);
 			}
 
 			const emptyCanonicalAdjudication: AdjudicationResult = {

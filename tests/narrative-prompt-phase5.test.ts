@@ -229,5 +229,5 @@ test('Phase 5 prompt exposes canonical visible scene objects separately from des
 	const plan = NarrativeDirector.create({ situation, intent, research });
 	const prompt = buildNarrationPrompt({ situation, intent, research, plan }).prompt;
 
-	assert.match(prompt, /Canonical visible scene objects: Brass Lamp \\[ITEM; LOCATION_SCENE_OBJECT; interactable=true\\]/i);
+	assert.match(prompt, /Canonical visible scene objects: Brass Lamp \[ITEM; LOCATION_SCENE_OBJECT; interactable=true\]/i);
 });

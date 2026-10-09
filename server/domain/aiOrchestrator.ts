@@ -902,7 +902,7 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
         const normalizedAction = extractedPlayerAction
           .replace(/^(?:i|we|my character)\s+/i, '')
           .trim();
-        const hasMovement = /\b(?:move|walk|approach|step|head|travel|enter|leave|go|closer|nearer|toward|towards)\b/i.test(normalizedAction);
+        const hasMovement = /\b(?:move|walk|approach|step|head|travel|enter|leave|go|closer|nearer|toward|towards|forward)\b/i.test(normalizedAction);
         const hasListening = /\b(?:listen|hear|overhear|eavesdrop|rumou?r|whisper|conversation)\b/i.test(normalizedAction);
         const hasObservation = /\b(?:look|observe|watch|inspect|examine|scan|study|see|notice)\b/i.test(normalizedAction);
         const actionVerb = hasMovement && (hasListening || hasObservation)
@@ -6846,7 +6846,7 @@ export class MultiModelOrchestrator {
     if (!action || !output) return { valid: true };
 
     if (intent) {
-      const movementAnchors = /\b(?:move|moved|moves|walk|walked|walks|step|stepped|steps|approach|approached|approaches|close|closer|near|nearer|head|headed|travel|traveled|travelled|enter|entered|leave|left)\b/i;
+      const movementAnchors = /\b(?:move|moved|moves|walk|walked|walks|step|stepped|steps|approach|approached|approaches|close|closer|near|nearer|head|headed|travel|traveled|travelled|enter|entered|leave|left|forward)\b/i;
       const observationAnchors = /\b(?:listen|listened|listens|hear|heard|hears|overhear|overheard|eavesdrop|watch|watched|watches|observe|observed|observes|notice|noticed|notices|see|saw|sees|look|looked|looks|scan|scanned|scans|inspect|inspected|study|studied|studies|attend|attended|attentive|gaze|gazed|watchful|conversation|whispers?|rumou?rs?|details?|sounds?|voices?)\b/i;
       if (intent.movementIntent && !movementAnchors.test(output)) {
         return {

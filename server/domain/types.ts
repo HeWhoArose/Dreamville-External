@@ -50,6 +50,17 @@ export interface LocationSceneObject {
   provenance?: string;
 }
 
+export type LocationOccupancyStatus = 'INHABITED' | 'RESTRICTED' | 'ABANDONED' | 'UNKNOWN';
+
+export interface LocationPopulationProfile {
+  status: LocationOccupancyStatus;
+  expectedPopulation?: 'NONE' | 'SPARSE' | 'MODERATE' | 'DENSE' | 'VARIABLE';
+  encounterProfileId?: string;
+  explanation?: string;
+  accessControlled?: boolean;
+  provenance?: 'AUTHORED' | 'GENERATED' | 'SIMULATED' | 'UNKNOWN';
+}
+
 export interface LocationNode {
   provenance: GeographyProvenance;
   id: string;
@@ -66,6 +77,8 @@ export interface LocationNode {
    * context only and does not implicitly create discrete objects.
    */
   sceneObjects?: LocationSceneObject[];
+  /** Missing occupancy is UNKNOWN, never evidence that the location is abandoned. */
+  population?: LocationPopulationProfile;
 }
 
 export interface RouteEdge {

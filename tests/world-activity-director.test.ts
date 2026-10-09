@@ -171,3 +171,17 @@ test('CombatEncounterService recognizes intervention actions for active crimes',
 	assert.equal(service.isHostileAction('I stop the kidnapping and rescue the victim'), true);
 	assert.equal(service.isHostileAction('I ask the merchant about the price'), false);
 });
+
+test('WorldActivityDirector allows visible NPCs to initiate occasional, grounded interactions', () => {
+	const merchant = { id: 'merchant-init', name: 'Mira Fen', kind: 'MERCHANT', role: 'merchant', locationId: 'loc_market', currentActivity: 'calling out wares to passersby', visibleToPlayer: true };
+	let qualifyingTurn = 5;
+	while (qualifyingTurn < 200 && hashStringToSeed(merchant.id + '|init|' + qualifyingTurn) % 3 !== 0) qualifyingTurn += 5;
+	assert.ok(qualifyingTurn < 200, 'a deterministic interaction turn should be found');
+	const events = WorldActivityDirector.buildAmbientEvents([merchant], 'loc_market', qualifyingTurn);
+	assert.ok(events.some((event) => event.type === 'NPC_INITIATED_INTERACTION' && /calls out to you/i.test(event.summary)));
+
+	const hiddenEvents = WorldActivityDirector.buildAmbientEvents([
+		{ ...merchant, visibleToPlayer: false },
+	], 'loc_market', qualifyingTurn);
+	assert.equal(hiddenEvents.length, 0, 'hidden NPCs must not initiate player-visible interactions');
+});

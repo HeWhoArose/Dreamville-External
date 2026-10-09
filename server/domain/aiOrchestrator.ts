@@ -923,10 +923,10 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
           return rawTarget;
         };
         const hasMovement = /\b(?:move|walk|approach|step|head|travel|enter|leave|go|closer|nearer|toward|towards|forward)\b/i.test(normalizedAction);
-        const hasListening = /\b(?:listen|hear|overhear|eavesdrop|rumou?r|whisper|conversation)\b/i.test(normalizedAction);
+        const hasListening = /\b(?:listen|hear|overhear|eavesdrop|whisper|conversation)\b/i.test(normalizedAction);
         const hasObservation = /\b(?:look|observe|watch|inspect|examine|scan|study|see|notice)\b/i.test(normalizedAction);
         const hasCombatAction = /\b(?:attack|strike|hit|shoot|stab|slash|tackle|punch|fight|knock out|cast|fireball|smite)\b/i.test(normalizedAction);
-        const hasInformationGoal = /\b(?:find out|whether|rumou?r|gossip|learn|discover|listen for|hear about|starlight fissures)\b/i.test(normalizedAction);
+        const hasInformationGoal = /\b(?:find out|whether|rumou?r|gossip|learn|discover|listen for|hear about|starlight fissures|inquire|ask about|question)\b/i.test(normalizedAction);
         const observationTargetMatch = normalizedAction.match(/\b(?:observe|watch|inspect|examine|notice|look at)\s+((?:the|a|an)\s+)?([^,.!?]+)/i);
         const movementTargetMatch = normalizedAction.match(/\b(?:move closer to|approach|walk toward|walk towards|head toward|head towards)\s+((?:the|a|an)\s+)?([^,.!?]+)/i);
         const combatTargetMatch = normalizedAction.match(/\b(?:attack|strike|hit|shoot|stab|slash|tackle|punch)\s+((?:the|a|an)\s+)?([^,.!?]+)/i);
@@ -962,11 +962,11 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
         const actionSentence = !normalizedAction
           ? `The scene remains quiet within ${canonicalLocationName}.`
           : hasCombatAction
-            ? `You attempt to strike ${combatTarget ? combatTarget + ' you named' : 'the target you named'} within ${canonicalLocationName}; the action does not confirm that the target is present or that the strike connects.`
-            : hasMovement && hasListening
-              ? `You move as requested and listen carefully within ${canonicalLocationName}.`
+            ? `You attempt to strike ${combatTarget || explicitTargetName || 'the target you named'} within ${canonicalLocationName}; the action does not confirm that the target is present or that the strike connects.`
+            : hasMovement && (hasListening || hasInformationGoal)
+              ? `You move as requested within ${canonicalLocationName}, then turn your attention to ${informationTopic || 'the information you sought'}.`
               : hasMovement && hasObservation
-                ? `You move as requested and observe the scene within ${canonicalLocationName}.`
+                ? `You move as requested and observe ${observationTarget || 'the immediate scene'} within ${canonicalLocationName}.`
                 : hasMovement && movementTarget
                   ? `${actionVerb} toward ${movementTarget} within ${canonicalLocationName}.`
                   : hasInformationGoal

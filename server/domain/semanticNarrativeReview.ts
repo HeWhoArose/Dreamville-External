@@ -241,7 +241,7 @@ export class SemanticNarrativeReview {
 				.filter((claim) => !isConcreteClaimSupported(claim, situation));
 			const unsupportedEnvironment = extractEnvironmentalClaims(narration)
 				.filter((claim) => !isConcreteClaimSupported(claim, situation));
-			const unsupportedConcreteClaims = unique([...unsupportedObjects, ...unsupportedEnvironment]).slice(0, 8);
+			const unsupportedConcreteClaims = Array.from(new Set([...unsupportedObjects, ...unsupportedEnvironment])).slice(0, 8);
 			if (unsupportedConcreteClaims.length > 0) {
 				unsupportedClaims.push(...unsupportedConcreteClaims);
 				violations.push({

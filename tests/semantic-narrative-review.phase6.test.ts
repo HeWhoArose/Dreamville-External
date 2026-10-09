@@ -4,6 +4,8 @@ import { SemanticNarrativeReview } from '../server/domain/semanticNarrativeRevie
 import { CurrentSituationBuilder } from '../server/domain/currentSituation';
 import { PlayerIntentInterpreter, type PlayerIntent } from '../server/domain/playerIntentInterpreter';
 import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
+import { NarrativeDirector } from '../server/domain/narrativeDirector';
+import { NarrativeResearchPipeline } from '../server/domain/narrativeResearchPipeline';
 
 function intent(overrides: Partial<PlayerIntent> = {}): PlayerIntent {
 	return {

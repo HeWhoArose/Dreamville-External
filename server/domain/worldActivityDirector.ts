@@ -96,7 +96,7 @@ export class WorldActivityDirector {
 			: population?.expectedPopulation === 'MODERATE' ? 3
 			: population?.expectedPopulation === 'SPARSE' ? 1
 			: explicitlyInhabited ? 2
-			: /market|bazaar|guild|inn|tavern|town|city|village|settlement|plaza|square/i.test(location.name) ? 2
+			: /citadel|market|bazaar|guild|inn|tavern|town|city|village|settlement|plaza|square/i.test(location.name) ? 2
 			: 1;
 		if (existing.length >= desiredCount) return [];
 

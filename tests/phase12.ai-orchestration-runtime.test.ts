@@ -849,7 +849,9 @@ test('Phase 12 regression: deterministic fallback can be explicitly withheld aft
 	(orchestrator as any).taskPinnedModels.delete('character.extract');
 	const failing = new DeterministicMockAdapter('phase12_all_ai_failed');
 	failing.failureMode = '500';
-	failing.maxFailuresBeforeSuccess = 1;
+	// This case asserts AI_UNAVAILABLE after exhaustion; the fake must never
+	// recover during the request's retry policy.
+	failing.maxFailuresBeforeSuccess = Number.MAX_SAFE_INTEGER;
 
 	orchestrator.registerAdapter(failing);
 	orchestrator.registerModel(model('phase12_all_ai_failed', 'all-ai-failed', ['character.extract']));

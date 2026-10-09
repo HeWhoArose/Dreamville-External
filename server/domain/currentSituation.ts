@@ -755,6 +755,8 @@ export class CurrentSituationBuilder {
 				role: entity.role,
 				locationId: entity.locationId,
 				currentActivity: entity.currentActivity,
+				presence: entity.presence,
+				isAlive: entity.isAlive,
 				visibleToPlayer: entity.visibleToPlayer,
 			})).filter((entity) => entity.kind !== 'PLAYER'),
 			locationId,

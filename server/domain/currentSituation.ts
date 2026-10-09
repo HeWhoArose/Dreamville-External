@@ -207,6 +207,13 @@ export interface CurrentSituation {
 		events: VisibleEventContext[];
 		sensory: string[];
 		structures: string[];
+		occupancy: {
+			status: 'INHABITED' | 'RESTRICTED' | 'ABANDONED' | 'UNKNOWN';
+			expectedPopulation?: 'NONE' | 'SPARSE' | 'MODERATE' | 'DENSE' | 'VARIABLE';
+			explanation?: string;
+			accessControlled: boolean;
+			provenance: 'AUTHORED' | 'GENERATED' | 'SIMULATED' | 'UNKNOWN';
+		};
 	};
 	visibleEvents: VisibleEventContext[];
 	activeDialogue?: ActiveDialogueContext;
@@ -902,6 +909,13 @@ export class CurrentSituationBuilder {
 					.filter((object) => object.kind === 'STRUCTURE' || object.kind === 'ENVIRONMENTAL_FEATURE')
 					.map((object) => object.name)
 					.slice(0, 16),
+				occupancy: {
+					status: safeLocation.population?.status || 'UNKNOWN',
+					expectedPopulation: safeLocation.population?.expectedPopulation,
+					explanation: safeLocation.population?.explanation,
+					accessControlled: safeLocation.population?.accessControlled === true,
+					provenance: safeLocation.population?.provenance || 'UNKNOWN',
+				},
 			},
 			visibleEvents,
 			activeDialogue,

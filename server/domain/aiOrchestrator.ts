@@ -7245,7 +7245,14 @@ export class MultiModelOrchestrator {
       turnPackage: validation.turnPackage,
     });
     if (review.decision !== 'ACCEPT') {
-      throw new Error('Narrative semantic review remained ' + review.decision + ' after the single permitted rewrite.');
+      throw new Error(
+        'Narrative semantic review remained ' + review.decision + ' after the single permitted rewrite: ' +
+        JSON.stringify({
+          violations: review.violations,
+          missingRequirements: review.missingRequirements,
+          unsupportedClaims: review.unsupportedClaims,
+        }),
+      );
     }
     return { turnPackage: validation.turnPackage, review };
   }

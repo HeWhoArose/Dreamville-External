@@ -350,3 +350,57 @@ test('current situation exposes only explicitly canonical visible scene objects 
 	assert.ok(situation.sceneObjects.some((object) => object.name === 'Ground Relic'));
 	assert.equal(situation.sceneObjects.some((object) => object.name === 'Brass Lamp'), false);
 });
+
+
+test('occupancy projection preserves unknown instead of inferring abandonment', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'phase1_unknown_occupancy';
+	repository.seedStory(storyId);
+	const player = repository.getPlayerLifecycle(storyId);
+	assert.ok(player);
+	const geography = repository.getGeographyGraph(storyId);
+	const location = geography.getNode(player.locationId);
+	assert.ok(location);
+	const { population: _population, ...locationWithoutPopulation } = location;
+	geography.addNode(locationWithoutPopulation);
+
+	const situation = CurrentSituationBuilder.build({
+		storyId,
+		playerAction: 'I look around for people.',
+		viewerActorId: player.actorId,
+		worldRepo: repository,
+	});
+
+	assert.equal(situation.sceneEvidence.occupancy.status, 'UNKNOWN');
+	assert.equal(situation.sceneEvidence.occupancy.provenance, 'UNKNOWN');
+	assert.equal(situation.sceneEvidence.occupancy.status === 'ABANDONED', false);
+});
+
+test('occupancy projection preserves authored inhabited, restricted, and abandoned states', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'phase1_known_occupancy';
+	repository.seedStory(storyId);
+	const player = repository.getPlayerLifecycle(storyId);
+	assert.ok(player);
+	const geography = repository.getGeographyGraph(storyId);
+	const location = geography.getNode(player.locationId);
+	assert.ok(location);
+
+	for (const population of [
+		{ status: 'INHABITED', expectedPopulation: 'MODERATE', provenance: 'AUTHORED' },
+		{ status: 'RESTRICTED', expectedPopulation: 'SPARSE', accessControlled: true, provenance: 'AUTHORED' },
+		{ status: 'ABANDONED', expectedPopulation: 'NONE', explanation: 'Evacuated after the reactor breach.', provenance: 'AUTHORED' },
+	] as const) {
+		geography.addNode({ ...location, population });
+		const situation = CurrentSituationBuilder.build({
+			storyId,
+			playerAction: 'I observe the area.',
+			viewerActorId: player.actorId,
+			worldRepo: repository,
+		});
+		assert.equal(situation.sceneEvidence.occupancy.status, population.status);
+		assert.equal(situation.sceneEvidence.occupancy.provenance, 'AUTHORED');
+		if (population.status === 'RESTRICTED') assert.equal(situation.sceneEvidence.occupancy.accessControlled, true);
+		if (population.status === 'ABANDONED') assert.match(situation.sceneEvidence.occupancy.explanation || '', /Evacuated/i);
+	}
+});

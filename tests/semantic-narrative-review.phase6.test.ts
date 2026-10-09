@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SemanticNarrativeReview } from '../server/domain/semanticNarrativeReview';
 import type { PlayerIntent } from '../server/domain/playerIntentInterpreter';
+import { InMemoryWorldRepository } from '../server/repositories/worldRepository';
 
 function intent(overrides: Partial<PlayerIntent> = {}): PlayerIntent {
 	return {

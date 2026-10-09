@@ -902,6 +902,26 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
         const normalizedAction = extractedPlayerAction
           .replace(/^(?:i|we|my character)\s+/i, '')
           .trim();
+        let promptIntent: any = null;
+        const promptIntentJson = String(prompt || '').match(/\[SEMANTIC PLAYER INTENT\]\s*(\{[^\n]+\})/i)?.[1];
+        if (promptIntentJson) {
+          try { promptIntent = JSON.parse(promptIntentJson); } catch { promptIntent = null; }
+        }
+        const explicitTargetName = [
+          ...(Array.isArray(promptIntent?.explicitTargets) ? promptIntent.explicitTargets : []),
+          ...(Array.isArray(promptIntent?.impliedTargets) ? promptIntent.impliedTargets : []),
+        ].map((target: any) => typeof target === 'string' ? target : String(target?.name || target?.targetName || ''))
+          .find((name: string) => name.trim().length > 0) || '';
+        const visibleEntityNames = Array.from(String(prompt || '').matchAll(/([A-Z][^,\n;]+?)\s+\[(?:NPC|MERCHANT|CHARACTER|FACTION_MEMBER)[^\]]*\]/g))
+          .map((match: RegExpMatchArray) => String(match[1] || '').trim())
+          .filter((name: string) => name && !/^(?:Hero|Player)\b/i.test(name));
+        const resolveActionTarget = (rawTarget: string): string => {
+          if (!rawTarget) return '';
+          if (/(?:nearby person|the person|nearby npc|the npc|the archivists|the guards|the merchant|someone|the target)/i.test(rawTarget)) {
+            return explicitTargetName || visibleEntityNames[0] || rawTarget;
+          }
+          return rawTarget;
+        };
         const hasMovement = /\b(?:move|walk|approach|step|head|travel|enter|leave|go|closer|nearer|toward|towards|forward)\b/i.test(normalizedAction);
         const hasListening = /\b(?:listen|hear|overhear|eavesdrop|rumou?r|whisper|conversation)\b/i.test(normalizedAction);
         const hasObservation = /\b(?:look|observe|watch|inspect|examine|scan|study|see|notice)\b/i.test(normalizedAction);
@@ -911,13 +931,13 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
         const movementTargetMatch = normalizedAction.match(/\b(?:move closer to|approach|walk toward|walk towards|head toward|head towards)\s+((?:the|a|an)\s+)?([^,.!?]+)/i);
         const combatTargetMatch = normalizedAction.match(/\b(?:attack|strike|hit|shoot|stab|slash|tackle|punch)\s+((?:the|a|an)\s+)?([^,.!?]+)/i);
         const observationTarget = observationTargetMatch
-          ? (observationTargetMatch[1] || 'the ') + observationTargetMatch[2].trim()
+          ? resolveActionTarget((observationTargetMatch[1] || 'the ') + observationTargetMatch[2].trim())
           : '';
         const movementTarget = movementTargetMatch
-          ? (movementTargetMatch[1] || '') + movementTargetMatch[2].trim()
+          ? resolveActionTarget((movementTargetMatch[1] || '') + movementTargetMatch[2].trim())
           : '';
         const combatTarget = combatTargetMatch
-          ? (combatTargetMatch[1] || 'the ') + combatTargetMatch[2].trim()
+          ? resolveActionTarget((combatTargetMatch[1] || 'the ') + combatTargetMatch[2].trim())
           : '';
         const informationMatch = normalizedAction.match(/\b(?:whether|about|regarding|concerning|listen for|hear about|find out about)\s+(.+?)(?:[.!?]|$)/i);
         const informationTopic = String(

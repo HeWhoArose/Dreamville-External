@@ -919,8 +919,11 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
         const combatTarget = combatTargetMatch
           ? (combatTargetMatch[1] || 'the ') + combatTargetMatch[2].trim()
           : '';
-        const informationMatch = normalizedAction.match(/\b(?:whether|about|regarding|concerning)\s+(.+?)(?:[.!?]|$)/i);
-        const informationTopic = String(informationMatch?.[1] || normalizedAction)
+        const informationMatch = normalizedAction.match(/\b(?:whether|about|regarding|concerning|listen for|hear about|find out about)\s+(.+?)(?:[.!?]|$)/i);
+        const informationTopic = String(
+          informationMatch?.[1] ||
+          normalizedAction.replace(/^(?:find out|learn|discover|investigate|research|listen for|hear about)\s+/i, ''),
+        )
           .replace(/^(?:the|a|an)\s+/i, '')
           .replace(/\s+(?:is|are)\s+real\b.*$/i, '')
           .replace(/[.!?]+$/g, '')
@@ -940,21 +943,23 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
           ? `The scene remains quiet within ${canonicalLocationName}.`
           : hasCombatAction
             ? `You attempt to strike ${combatTarget || 'the target you named'} within ${canonicalLocationName}; the action does not establish a hit.`
-            : hasInformationGoal
-              ? `You investigate ${informationTopic || 'the subject you asked about'} within ${canonicalLocationName}.`
-              : hasMovement && movementTarget
-                ? `${actionVerb} toward ${movementTarget} within ${canonicalLocationName}.`
-                : hasMovement && (hasListening || hasObservation)
-                  ? `${actionVerb} within ${canonicalLocationName}.`
-                  : hasListening
-                    ? `You listen carefully within ${canonicalLocationName}.`
-                    : hasObservation && observationTarget
-                      ? `You observe ${observationTarget} within ${canonicalLocationName}.`
-                      : hasObservation
-                        ? `You observe the immediate scene within ${canonicalLocationName}.`
-                        : hasMovement
-                          ? `You move forward within ${canonicalLocationName}.`
-                          : `You attempt the requested action within ${canonicalLocationName}.`;
+            : hasMovement && hasListening
+              ? `You move as requested and listen carefully within ${canonicalLocationName}.`
+              : hasMovement && hasObservation
+                ? `You move as requested and observe the scene within ${canonicalLocationName}.`
+                : hasMovement && movementTarget
+                  ? `${actionVerb} toward ${movementTarget} within ${canonicalLocationName}.`
+                  : hasInformationGoal
+                    ? `You investigate ${informationTopic || 'the subject you asked about'} within ${canonicalLocationName}.`
+                    : hasListening
+                      ? `You listen carefully within ${canonicalLocationName}.`
+                      : hasObservation && observationTarget
+                        ? `You observe ${observationTarget} within ${canonicalLocationName}.`
+                        : hasObservation
+                          ? `You observe the immediate scene within ${canonicalLocationName}.`
+                          : hasMovement
+                            ? `You move forward within ${canonicalLocationName}.`
+                            : `You attempt the requested action within ${canonicalLocationName}.`;
         // Respect the N8 pacing profile even if provider options omit the token budget.
         const compactProfileInPrompt = /N8 ADAPTIVE PACING CONTRACT[\s\S]{0,350}Profile:\s*MICRO\b/i.test(prompt) ||
           /pacingProfile\s*[:=]\s*['"]?MICRO\b/i.test(String(options?.systemInstruction || ''));

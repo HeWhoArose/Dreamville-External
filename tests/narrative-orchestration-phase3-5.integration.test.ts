@@ -34,8 +34,8 @@ function validNarrative(): string {
 	return JSON.stringify({
 		narrative: [
 			'You move closer within the Whispering Orrery, remaining silent as you listen. The report about unstable starlight fissures in the lower sea is still presented as uncertain hearsay, not confirmed fact.',
-			'The location remains the Whispering Orrery; nothing in the report establishes that the fissures have been personally verified. You consider what was said, separating the reported claim from what can actually be known.',
-			'The account offers a lead to investigate, but it does not prove the cause, extent, or precise condition of the fissures. You have moved nearer to listen, and the immediate result is a clearer grasp of the rumor rather than a guaranteed discovery. Nothing in the available evidence identifies a witness who has verified the report, and no cause or danger can be inferred merely from its repetition. You remain free to keep listening, question a willing source, or investigate the lower sea when you choose.',
+			'The location remains the Whispering Orrery; nothing in the report establishes that the fissures have been personally verified. The reported claim remains separate from what can actually be known.',
+			'The account offers a lead to investigate, but it does not prove the cause, extent, or precise condition of the fissures. You have moved nearer to listen, and the immediate result is a clearer grasp of the rumor rather than a guaranteed discovery. Nothing in the available evidence identifies a witness who has verified the report, and no cause or danger can be inferred merely from its repetition. The next step remains open: continued listening, finding a willing source, or investigating the lower sea are all possibilities.',
 		],
 		dialogue: [],
 		events: ['RESEARCHED_RUMOR_HEARD'],

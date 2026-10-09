@@ -153,6 +153,13 @@ export class WorldActivityDirector {
 			});
 			created.push(card);
 		}
+		// EntityRegistry is included in StoryRun persistence snapshots. Saving the
+		// existing run here makes generated population survive reloads instead of
+		// existing only in the current process.
+		if (created.length > 0) {
+			const run = repository.getStoryRun(storyId);
+			if (run) repository.saveStoryRun(run);
+		}
 		return created;
 	}
 

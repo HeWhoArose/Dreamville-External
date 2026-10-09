@@ -9555,6 +9555,11 @@ export class MultiModelOrchestrator {
     }> = [];
 
     for (let cIdx = 0; cIdx < candidateChain.length; cIdx++) {
+      // A caller that explicitly withholds deterministic fallback must not reach
+      // the emergency model through the ordinary configured candidate chain.
+      if (candidateChain[cIdx].isEmergencyFloor && !allowDeterministicFallback) {
+        continue;
+      }
       if (!hasConfiguredTaskChain && totalAttempts >= effectiveRouteAttemptBudget && !candidateChain[cIdx].isEmergencyFloor) {
         break;
       }

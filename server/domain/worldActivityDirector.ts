@@ -140,6 +140,7 @@ export class WorldActivityDirector {
 		id: string;
 		name: string;
 		kind?: string;
+		role?: string;
 		locationId?: string;
 		currentActivity?: string;
 		visibleToPlayer?: boolean;
@@ -149,9 +150,11 @@ export class WorldActivityDirector {
 			if (entity.visibleToPlayer === false || entity.locationId !== locationId || !entity.currentActivity) continue;
 			const activity = String(entity.currentActivity).trim();
 			if (!activity) continue;
+			const isSocialOpportunity = /calling out wares|merchant|arguing with another adventurer|folded map|shady contact/i.test(activity + ' ' + String(entity.role || ''));
+			const isPotentialEncounter = /suspicious passerby|guild challenger|shady contact/i.test(String(entity.role || ''));
 			events.push({
 				id: deterministicId('ambient_activity', locationId, entity.id, activity),
-				type: /calling out wares|merchant/i.test(activity) ? 'SOCIAL_OPPORTUNITY' : 'AMBIENT_ACTIVITY',
+				type: isPotentialEncounter ? 'POTENTIAL_ENCOUNTER' : isSocialOpportunity ? 'SOCIAL_OPPORTUNITY' : 'AMBIENT_ACTIVITY',
 				summary: entity.name + ' is ' + activity + '.',
 				locationId,
 				source: 'WORLD_ACTIVITY_DIRECTOR',

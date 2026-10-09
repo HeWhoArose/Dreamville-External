@@ -195,7 +195,7 @@ export class StoryBeatDirector {
 			'Do not reveal hidden knowledge, private NPC cognition, or inaccessible entities.',
 			'Do not choose a future player action.',
 			'Do not create an NPC reaction unless a canonical/visible reaction or authorized scene evidence supports it.',
-			'Do not claim an attempted movement changed the player location or proximity unless canonical spatial state confirms that change; describe an unresolved attempt honestly.',
+			'Do not narrate an unsupported consequence for attempted movement: claim a location or proximity change only when canonical spatial state confirms it; otherwise describe the unresolved attempt honestly.',
 			'Do not upgrade uncertainty, rumor, memory, or hearsay into fact.',
 		];
 		if (!actionResolution) {

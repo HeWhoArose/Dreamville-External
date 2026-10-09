@@ -80,12 +80,14 @@ test('WorldActivityDirector projects local activities as grounded scene events o
 	const events = WorldActivityDirector.buildAmbientEvents([
 		{ id: 'merchant-1', name: 'Mira Fen', kind: 'MERCHANT', locationId: 'loc_market', currentActivity: 'calling out wares to passersby', visibleToPlayer: true },
 		{ id: 'guard-1', name: 'A Guard', kind: 'NPC', locationId: 'loc_market', currentActivity: 'patrolling the gate', visibleToPlayer: true },
+		{ id: 'bully-1', name: 'A Racial Bully', kind: 'NPC', role: 'racial bully', locationId: 'loc_market', currentActivity: 'taunting a traveller over their lineage', visibleToPlayer: true },
 		{ id: 'hidden-1', name: 'Hidden Stranger', kind: 'NPC', locationId: 'loc_market', currentActivity: 'watching silently', visibleToPlayer: false },
 		{ id: 'away-1', name: 'A Traveller', kind: 'NPC', locationId: 'loc_inn', currentActivity: 'packing a bag', visibleToPlayer: true },
 	], 'loc_market');
 
-	assert.equal(events.length, 2);
+	assert.equal(events.length, 3);
 	assert.ok(events.some((event) => event.type === 'SOCIAL_OPPORTUNITY' && event.entityId === 'merchant-1'));
+	assert.ok(events.some((event) => event.type === 'POTENTIAL_ENCOUNTER' && event.entityId === 'bully-1'));
 	assert.ok(events.every((event) => event.locationId === 'loc_market'));
 	assert.ok(!events.some((event) => event.entityId === 'hidden-1' || event.entityId === 'away-1'));
 });

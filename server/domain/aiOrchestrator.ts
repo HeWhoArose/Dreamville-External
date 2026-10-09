@@ -6962,7 +6962,28 @@ export class MultiModelOrchestrator {
     const nameMatch = nameTokens.some((token) => narrationTokens.has(token));
     const sceneMatch = sceneTokens.some((token) => narrationTokens.has(token));
 
-    if (nameTokens.length > 0 && sceneTokens.length > 0 && !nameMatch && !sceneMatch) {
+    // A grounded turn may focus on a visible NPC, active dialogue speaker, or
+    // explicit scene object instead of repeating the location name every turn.
+    // These are valid scene anchors, not permission to invent a new location.
+    const canonicalSceneNames: string[] = [];
+    for (const object of location.sceneObjects || []) {
+      if (object.visible !== false && object.name) canonicalSceneNames.push(object.name);
+    }
+    for (const entity of repository.getEntityCards(storyId, { status: 'ACTIVE' })) {
+      if (entity.worldState?.locationId === locationId &&
+          entity.worldState?.isAlive !== false &&
+          entity.worldState?.presence !== 'absent' &&
+          entity.name) {
+        canonicalSceneNames.push(entity.name);
+      }
+    }
+    const activeDialogue = (run as any)?.runtimeState?.activeDialogue;
+    if (activeDialogue?.speakerName) canonicalSceneNames.push(String(activeDialogue.speakerName));
+    const canonicalEntityMatch = canonicalSceneNames.some((name) =>
+      tokenize(name).some((token) => narrationTokens.has(token))
+    );
+
+    if (nameTokens.length > 0 && sceneTokens.length > 0 && !nameMatch && !sceneMatch && !canonicalEntityMatch) {
       return {
         valid: false,
         errorReason: `Narration continuity guard rejected output: no distinctive lexical anchor for canonical location "${location.name}".`,

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { WorldActivityDirector } from '../server/domain/worldActivityDirector';
 import { hashStringToSeed } from '../server/domain/deterministicRng';
+import { CombatEncounterService } from '../server/domain/combatEncounterService';
 
 function makeRepository(location: any) {
 	const cards = new Map<string, any>();
@@ -162,4 +163,11 @@ test('WorldActivityDirector changes ambient routines with world time and restore
 	assert.equal(dayMerchant.worldState.presence, 'present');
 	assert.match(dayMerchant.worldState.currentActivity, /calling out wares/);
 	assert.equal(cards.size, 3);
+});
+
+test('CombatEncounterService recognizes intervention actions for active crimes', () => {
+	const service = new CombatEncounterService();
+	assert.equal(service.isHostileAction('I tackle the robber and stop the robbery'), true);
+	assert.equal(service.isHostileAction('I stop the kidnapping and rescue the victim'), true);
+	assert.equal(service.isHostileAction('I ask the merchant about the price'), false);
 });

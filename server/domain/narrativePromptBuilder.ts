@@ -390,8 +390,8 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				researchContext: compactRelevantResearch(initialResearch, tightEpisodeBudget ? 180 : 700, [
 					input.intent.originalText,
 					String(input.intent.informationGoal || ''),
-					...(input.plan.informationToReveal || []),
-					...(input.plan.continuityRequirements || []),
+					...(input.plan.informationToReveal || []).map((reveal) => typeof reveal === 'string' ? reveal : reveal.topic),
+					...(input.plan.continuityRequirements || []).map((requirement) => typeof requirement === 'string' ? requirement : requirement.topic),
 					String(input.plan.unresolvedThread || ''),
 				]),
 				planContext: truncatePromptSection(planContext, tightEpisodeBudget ? 40 : 300),

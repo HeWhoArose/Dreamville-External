@@ -133,7 +133,7 @@ test('WorldActivityDirector supplies guild and inn social encounter archetypes w
 	assert.ok(guildPeople.some((person: any) => person.currentActivity || person.worldState.currentActivity));
 
 	let innStoryId = 'story_inn';
-	while (hashStringToSeed(innStoryId + '|loc_inn') % 3 !== 0) innStoryId += '_x';
+	while (hashStringToSeed(innStoryId + '|loc_inn') % 5 !== 0) innStoryId += '_x';
 	const inn = makeRepository({
 		id: 'loc_inn', name: 'The Silver Lantern Inn', description: 'A public inn.',
 		population: { status: 'UNKNOWN', provenance: 'UNKNOWN' },
@@ -220,4 +220,23 @@ test('WorldActivityDirector persists generated NPCs in the story runtime entity 
 	assert.equal(created.length, 1);
 	const run = repository.getStoryRun(storyId);
 	assert.ok(run?.runtimeState?.entities?.cards?.some((card: any) => card.id === created[0].id));
+});
+
+
+test('WorldActivityDirector varies public market NPC identities across story seeds but preserves them per story', () => {
+	const rosterFor = (storyId: string) => {
+		const { repository } = makeRepository({
+			id: 'loc_market', name: 'Sunrise Market', description: 'A busy open market.',
+			population: { status: 'INHABITED', expectedPopulation: 'MODERATE', provenance: 'AUTHORED' },
+		});
+		return WorldActivityDirector.ensureAmbientPopulation(repository, storyId, 'loc_market')
+			.map((person: any) => ({ id: person.id, name: person.name, role: person.classification.role }));
+	};
+	const first = rosterFor('market_roster_alpha');
+	const sameStoryAgain = rosterFor('market_roster_alpha');
+	assert.deepEqual(sameStoryAgain, first, 'the same story/location must reproduce the same roster');
+	const alternatives = ['market_roster_beta', 'market_roster_gamma', 'market_roster_delta', 'market_roster_epsilon']
+		.map(rosterFor);
+	assert.ok(alternatives.some((roster) => roster.map((person) => person.name).join('|') !== first.map((person) => person.name).join('|')),
+		'different stories should not all receive the same fixed NPC roster');
 });

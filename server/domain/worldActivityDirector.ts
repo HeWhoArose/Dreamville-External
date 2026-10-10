@@ -29,7 +29,7 @@ export class WorldActivityDirector {
 		{ name: 'Beren Ashdown', kind: 'NPC' as EntityKind, role: 'guard', activity: 'checking the flow of people at a public entrance', motivations: ['keep the entrance orderly', 'spot trouble early'], traits: ['alert', 'direct'] },
 		{ name: 'Nemi Oris', kind: 'NPC' as EntityKind, role: 'street performer', activity: 'performing a quick tune for passersby', motivations: ['earn a few coins', 'draw a larger audience'], traits: ['expressive', 'playful'] },
 		{ name: 'Calder Voss', kind: 'NPC' as EntityKind, role: 'craftsworker', activity: 'delivering a repaired tool to a waiting customer', motivations: ['keep customers satisfied', 'finish the next repair'], traits: ['patient', 'practical'] },
-		{ name: 'Yara Sen', kind: 'NPC' as EntityKind, role: 'healer', activity: 'checking a traveler's bandage and supplies', motivations: ['help the injured', 'restock medical supplies'], traits: ['kind', 'focused'] },
+		{ name: 'Yara Sen', kind: 'NPC' as EntityKind, role: 'healer', activity: 'checking a traveler\'s bandage and supplies', motivations: ['help the injured', 'restock medical supplies'], traits: ['kind', 'focused'] },
 		{ name: 'Oren Vale', kind: 'NPC' as EntityKind, role: 'messenger', activity: 'asking directions while carrying a folded dispatch', motivations: ['deliver an important message', 'find the quickest route'], traits: ['hurried', 'polite'] },
 	];
 

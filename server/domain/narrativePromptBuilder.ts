@@ -368,7 +368,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				episodeProjectionContext: truncatePromptSection(NarrativeEpisodeProjectionEngine.toCompactPromptContext(presentationPlan.episodeProjection), tightEpisodeBudget ? 90 : 180),
 				storyBeatContext: truncatePromptSection(StoryBeatDirector.toCompactPromptContext(storyBeat), tightEpisodeBudget ? 220 : 520),
 				workingContext: truncatePromptSection(initialWorking, tightEpisodeBudget ? 60 : 320),
-				situationContext: truncatePromptSection(situationContext, tightEpisodeBudget ? 360 : 900),
+				situationContext: 'Location: ' + (input.situation.location?.name || 'Unknown Location') + '; Time: ' + (input.situation.worldTime || 'Unknown Time') + '; ' + truncatePromptSection(situationContext, tightEpisodeBudget ? 360 : 900),
 			};
 			const renderCompact = () => compose(
 				compact.researchContext,

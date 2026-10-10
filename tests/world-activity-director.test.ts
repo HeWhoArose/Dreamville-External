@@ -153,7 +153,7 @@ test('WorldActivityDirector changes ambient routines with world time and restore
 	const merchant = Array.from(cards.values()).find((card: any) => card.classification.role === 'merchant');
 	assert.ok(merchant);
 	assert.equal(merchant.worldState.presence, 'present');
-	assert.match(merchant.worldState.currentActivity, /calling out wares/);
+	assert.equal(merchant.worldState.currentActivity, merchant.metadata.ambientActivity, 'each merchant should resume their own authored daytime activity');
 
 	setHour(23);
 	WorldActivityDirector.ensureAmbientPopulation(repository, 'story_daily_routine', 'loc_market');
@@ -166,7 +166,7 @@ test('WorldActivityDirector changes ambient routines with world time and restore
 	WorldActivityDirector.ensureAmbientPopulation(repository, 'story_daily_routine', 'loc_market');
 	const dayMerchant = cards.get(merchant.id);
 	assert.equal(dayMerchant.worldState.presence, 'present');
-	assert.match(dayMerchant.worldState.currentActivity, /calling out wares/);
+	assert.equal(dayMerchant.worldState.currentActivity, dayMerchant.metadata.ambientActivity, 'the same merchant should resume their own activity after returning on duty');
 	assert.equal(cards.size, 3);
 });
 

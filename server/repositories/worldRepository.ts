@@ -158,6 +158,8 @@ export interface WorldRepository {
   saveActiveEffect(effect: any): void;
   getWorldFacts(storyId: string): any[];
   saveWorldFact(storyId: string, fact: any): void;
+  getProtagonistAgenda?(storyId: string): any | null;
+  saveProtagonistAgenda?(storyId: string, agenda: any): void;
   getRulesProfile(storyId: string): RulesProfile | null;
   getNarrativeProfile(storyId: string): NarrativeProfile | null;
   getAllStoryRuns(): any[];

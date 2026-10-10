@@ -123,7 +123,7 @@ test('WorldActivityDirector supports deterministic robbery and kidnapping encoun
 
 test('WorldActivityDirector supplies guild and inn social encounter archetypes without forcing a fight or quest', () => {
 	let guildStoryId = 'story_guild';
-	while (hashStringToSeed(guildStoryId + '|loc_guild') % 3 !== 0) guildStoryId += '_x';
+	while (hashStringToSeed(guildStoryId + '|loc_guild') % 5 !== 0) guildStoryId += '_x';
 	const guild = makeRepository({
 		id: 'loc_guild', name: 'Adventurers Guild', description: 'A public guild hall.',
 		population: { status: 'UNKNOWN', provenance: 'UNKNOWN' },

@@ -1226,3 +1226,29 @@ test('Phase 12 regression: narrative generation route prefers the configured Gem
 	assert.ok(route.indexOf('google_gemini::gemini-3.8-flash') < route.indexOf('google_gemini::gemini-2.5-flash'), route.join(' -> '));
 	assert.ok(route.some((key) => key.includes('provider_deterministic_emergency::emergency-fallback-local')), 'emergency floor remains available');
 });
+
+
+test('Phase 12 regression: unwraps a provider JSON package accidentally nested inside narrative prose', () => {
+	const orchestrator = createTestOrchestrator();
+	const nested = {
+		narrative: ['Nemi points toward the eastern maintenance hatches and tells Vael to check the daily bulletin for available work.'],
+		dialogue: [{ speaker: 'Nemi Oris', text: 'Check the daily bulletin for current openings.' }],
+		events: [{ type: 'NPC_INTERACTION', description: 'Nemi directs Vael toward the bulletin.' }],
+		stateChanges: [],
+		memoryCandidates: [],
+		audioCues: [],
+	};
+	const raw = JSON.stringify({
+		narrative: [JSON.stringify(nested)],
+		dialogue: [],
+		events: [],
+		stateChanges: [],
+		memoryCandidates: [],
+		audioCues: [],
+	});
+	const result = orchestrator.validateTurnPackage(raw);
+	assert.equal(result.valid, true, result.errorReason);
+	assert.equal(result.turnPackage?.narrative[0], nested.narrative[0]);
+	assert.equal(result.turnPackage?.dialogue[0]?.speaker, 'Nemi Oris');
+	assert.notMatch(result.turnPackage?.narrative.join(' ') || '', /^\s*\{/);
+});

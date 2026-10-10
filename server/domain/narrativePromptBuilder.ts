@@ -160,6 +160,32 @@ function truncatePromptSection(value: string, maxChars: number): string {
 		: normalized;
 }
 
+function compactRelevantResearch(value: string, maxChars: number, priorities: string[]): string {
+	const normalized = String(value || '').trim();
+	if (normalized.length <= maxChars) return normalized;
+	const segments = normalized
+		.split(/\n+|(?<=[.!?])\s+|;\s+/)
+		.map((segment) => segment.trim())
+		.filter(Boolean);
+	const terms = Array.from(new Set(priorities
+		.flatMap((priority) => String(priority || '').toLowerCase().split(/[^a-z0-9]+/))
+		.filter((term) => term.length >= 4)));
+	const ranked = segments.map((segment, index) => ({
+		segment,
+		index,
+		score: terms.reduce((score, term) => score + (segment.toLowerCase().includes(term) ? 1 : 0), 0),
+	}));
+	const relevant = ranked
+		.filter((entry) => entry.score > 0)
+		.sort((left, right) => right.score - left.score || left.index - right.index)
+		.slice(0, 6)
+		.sort((left, right) => left.index - right.index)
+		.map((entry) => entry.segment);
+	const chosen = Array.from(new Set([...segments.slice(0, 2), ...relevant, ...segments.slice(-1)]));
+	const compact = chosen.join('\n');
+	return truncatePromptSection(compact || normalized, maxChars);
+}
+
 export function buildNarrationPrompt(input: NarrationPromptInput): NarrationPromptResult {
 	const boundedResearch = EpistemicBoundaryEnforcer.sanitizeResearch(input.research, input.situation).result;
 	const boundedWorkingContext = EpistemicBoundaryEnforcer.sanitizeContext(input.workingContext || '[no additional working context]', input.situation).text;
@@ -361,7 +387,13 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 					locationTarget: input.intent.locationTarget,
 					originalText: input.intent.originalText,
 				}),
-				researchContext: truncatePromptSection(initialResearch, tightEpisodeBudget ? 180 : 700),
+				researchContext: compactRelevantResearch(initialResearch, tightEpisodeBudget ? 180 : 700, [
+					input.intent.originalText,
+					String(input.intent.informationGoal || ''),
+					...(input.plan.informationToReveal || []),
+					...(input.plan.continuityRequirements || []),
+					String(input.plan.unresolvedThread || ''),
+				]),
 				planContext: truncatePromptSection(planContext, tightEpisodeBudget ? 40 : 300),
 				sceneCompositionContext: truncatePromptSection(SceneCompositionEngine.toCompactPromptContext(sceneComposition), tightEpisodeBudget ? 160 : 520),
 				socialTopologyContext: truncatePromptSection(socialTopologyContext, tightEpisodeBudget ? 160 : 520),

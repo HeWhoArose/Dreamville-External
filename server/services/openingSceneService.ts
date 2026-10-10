@@ -125,6 +125,16 @@ export class OpeningSceneService {
 			worldRepo,
 		});
 		const { rawOpeningFacts } = workingContext;
+		const authoredAgenda = worldRepo.getProtagonistAgenda(storyId);
+		const authoredAgendaContext = authoredAgenda && typeof authoredAgenda.goal === 'string'
+			&& authoredAgenda.goal.trim()
+			&& !/independent (principal.actor|world) objective/i.test(authoredAgenda.goal)
+			? {
+				goal: authoredAgenda.goal,
+				currentLocation: authoredAgenda.currentLocation || null,
+				progressState: Number.isFinite(authoredAgenda.progressState) ? authoredAgenda.progressState : null,
+			}
+			: null;
 		const actorId = worldRepo.getPlayerLifecycle(storyId)?.actorId || `player_actor_${storyId}`;
 		const researchPacket = narrativeContinuityEngine.research(
 			worldRepo,
@@ -168,6 +178,9 @@ export class OpeningSceneService {
 				'',
 				'NARRATIVE RESEARCH:',
 				JSON.stringify(researchPacket),
+				'',
+				'AUTHORED STORY AGENDA (if present; do not invent one):',
+				JSON.stringify(authoredAgendaContext),
 				'',
 				'OPENING REQUIREMENTS:',
 				'- Establish where and when the player is without repeating metadata as headings.',

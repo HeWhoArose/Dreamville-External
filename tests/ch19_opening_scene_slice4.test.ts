@@ -802,3 +802,34 @@ function readAudit(opening: any): any {
   const run = worldRepository.getStoryRun(opening.storyId);
   return run?.runtimeState?.openingNarrativeContext?.generation?.qualityAudit;
 }
+
+
+test('Deterministic opening fallback respects protagonist, side-character, and free-roam modes', () => {
+  const baseFacts: any = {
+    world: { id: 'world_mode_test', title: 'Mode Test', narrativeProfile: { mode: 'PROTAGONIST' } },
+    character: {
+      name: 'Vael', role: 'Knight', background: 'A disgraced knight seeking to restore his honor.',
+      startingSituation: 'A retired veteran once offered to explain how honor can be restored.',
+      capabilities: ['Swordsmanship'], conditions: [], equipment: [],
+    },
+    location: { id: 'loc_town', name: 'Citadel Square', description: 'A public square with people going about their day.' },
+    time: { cycle: 42, period: 'Afternoon', era: 'Autumn', formattedHeader: 'Cycle 42 • Afternoon' },
+    knowledge: [],
+  };
+  const protagonist = OpeningSceneService.synthesizeDeterministicOpening(baseFacts, 'mode_protagonist', {
+    goal: 'Find Sir Edric, the retired knight who knows the path to restoring lost honor.',
+  });
+  assert.match(protagonist.narrativeText, /first lead is clear/i);
+  assert.match(protagonist.narrativeText, /Find Sir Edric/i);
+
+  const sideFacts = { ...baseFacts, world: { ...baseFacts.world, narrativeProfile: { mode: 'SIDE_CHARACTER' } } };
+  const sideCharacter = OpeningSceneService.synthesizeDeterministicOpening(sideFacts, 'mode_side', {
+    goal: 'Help the principal knight uncover who forged the dishonorable order.',
+  });
+  assert.match(sideCharacter.narrativeText, /principal actor's current aim/i);
+  assert.match(sideCharacter.narrativeText, /your response and loyalties remain your decision/i);
+
+  const freeRoamFacts = { ...baseFacts, world: { ...baseFacts.world, narrativeProfile: { mode: 'FREE_ROAM' } } };
+  const freeRoam = OpeningSceneService.synthesizeDeterministicOpening(freeRoamFacts, 'mode_free');
+  assert.match(freeRoam.narrativeText, /There is no prescribed main quest/i);
+});

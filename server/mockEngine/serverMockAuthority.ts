@@ -574,6 +574,14 @@ export class ServerMockAuthority {
         });
       }
     }
+    const updatedRun = worldRepository.getStoryRun(storyId);
+    if (updatedRun) {
+      updatedRun.runtimeState = {
+        ...(updatedRun.runtimeState || {}),
+        dialogueHistory: JSON.parse(JSON.stringify(dState.dialogueHistory || [])),
+      };
+      worldRepository.saveStoryRun(updatedRun);
+    }
   }
 
   /**

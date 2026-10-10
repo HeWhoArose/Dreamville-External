@@ -125,7 +125,7 @@ export class OpeningSceneService {
 			worldRepo,
 		});
 		const { rawOpeningFacts } = workingContext;
-		const authoredAgenda = worldRepo.getProtagonistAgenda(storyId);
+		const authoredAgenda = worldRepo.getProtagonistAgenda?.(storyId) || null;
 		const authoredAgendaContext = authoredAgenda && typeof authoredAgenda.goal === 'string'
 			&& authoredAgenda.goal.trim()
 			&& !/independent (principal.actor|world) objective/i.test(authoredAgenda.goal)
@@ -232,7 +232,7 @@ export class OpeningSceneService {
 					error.attemptsTrail = response.attemptsTrail;
 					throw error;
 				}
-				const canonical = OpeningSceneService.synthesizeDeterministicOpening(rawOpeningFacts, storyId, worldRepo.getProtagonistAgenda(storyId));
+				const canonical = OpeningSceneService.synthesizeDeterministicOpening(rawOpeningFacts, storyId, worldRepo.getProtagonistAgenda?.(storyId) || null);
 				generatedText = canonical.narrativeText;
 				generatedEvents = canonical.structuredEvents;
 			} else {
@@ -247,7 +247,7 @@ export class OpeningSceneService {
 				Boolean(process.env.NODE_TEST_CONTEXT)
 			);
 			if (testRuntimeFallback || (error?.code === 'AI_UNAVAILABLE' && allowDeterministicFallback)) {
-				const canonical = OpeningSceneService.synthesizeDeterministicOpening(rawOpeningFacts, storyId, worldRepo.getProtagonistAgenda(storyId));
+				const canonical = OpeningSceneService.synthesizeDeterministicOpening(rawOpeningFacts, storyId, worldRepo.getProtagonistAgenda?.(storyId) || null);
 				generatedText = canonical.narrativeText;
 				generatedEvents = canonical.structuredEvents;
 				generationMeta = {
@@ -342,7 +342,7 @@ export class OpeningSceneService {
 				qualityAudit.rewriteReason = rewriteError?.message || 'The opening rewrite failed.';
 			}
 				if (qualityAudit.finalDecision === 'REWRITE') {
-					const canonical = OpeningSceneService.synthesizeDeterministicOpening(rawOpeningFacts, storyId, worldRepo.getProtagonistAgenda(storyId));
+					const canonical = OpeningSceneService.synthesizeDeterministicOpening(rawOpeningFacts, storyId, worldRepo.getProtagonistAgenda?.(storyId) || null);
 					generatedText = canonical.narrativeText;
 					generatedEvents = canonical.structuredEvents;
 					qualityAudit.finalScore = 1;

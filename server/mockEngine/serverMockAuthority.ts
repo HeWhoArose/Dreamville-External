@@ -132,6 +132,9 @@ export class ServerMockAuthority {
       const protagonistRole = run?.characterRole || 'Protagonist';
       const protagonistPortraitEmoji = run?.characterPortraitEmoji || '🧙‍♂️';
 
+      const persistedDialogueHistory = Array.isArray(run?.runtimeState?.dialogueHistory)
+        ? JSON.parse(JSON.stringify(run.runtimeState.dialogueHistory))
+        : [];
       const initialCharacters: Record<string, any> = {};
       const activeWorldId = run?.worldId;
       const protagonistActorId = player?.actorId || `player_actor_${storyId}`;
@@ -186,7 +189,7 @@ export class ServerMockAuthority {
         },
         characters: initialCharacters,
         activeDialogue: null,
-        dialogueHistory: [],
+        dialogueHistory: persistedDialogueHistory,
         inventory: [],
         equipment: {},
         knowledgeBase: mappedKnowledge,
@@ -548,6 +551,16 @@ export class ServerMockAuthority {
       dState.actionHistory[existingIndex] = actionRecord;
     } else {
       dState.actionHistory = [actionRecord, ...dState.actionHistory.filter((a) => a.id !== `act_init_${storyId}`)];
+    }
+
+    this.persistActionHistory(storyId, dState);
+    const run = worldRepository.getStoryRun(storyId);
+    if (run) {
+      run.runtimeState = {
+        ...(run.runtimeState || {}),
+        dialogueHistory: JSON.parse(JSON.stringify(dState.dialogueHistory || [])),
+      };
+      worldRepository.saveStoryRun(run);
     }
 
     // Reflect any dialogue from the opening scene into dialogue history

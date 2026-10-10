@@ -118,7 +118,7 @@ export class WorldActivityDirector {
 			let activity = card.worldState.currentActivity || card.behavior.defaultBehavior || 'going about daily business';
 			let presence: 'present' | 'absent' = 'present';
 			if (role === 'merchant') {
-				if (hour >= 7 && hour < 19) activity = 'calling out wares to passersby';
+				if (hour >= 7 && hour < 19) activity = String(card.metadata?.ambientActivity || 'calling out wares to passersby');
 				else if (hour >= 19 && hour < 22) activity = 'packing unsold goods and counting the day’s takings';
 				else { activity = 'resting away from the market'; presence = 'absent'; }
 			} else if (role === 'market porter' || role === 'worker') {
@@ -225,7 +225,7 @@ export class WorldActivityDirector {
 		const created: EntityCard[] = [];
 		for (let index = 0; index < people.length && existing.length + created.length < desiredCount; index++) {
 			const person = people[index];
-			const id = deterministicId('ambient_npc', storyId, locationId, person.role);
+			const id = deterministicId('ambient_npc', storyId, locationId, person.role, person.name);
 			if (existingIds.has(id) || repository.getEntityCard(storyId, id)) continue;
 			const card = repository.saveEntityCard(storyId, {
 				id,

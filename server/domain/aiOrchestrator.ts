@@ -6493,6 +6493,37 @@ export class MultiModelOrchestrator {
         };
       }
 
+      // Some providers double-wrap a structured turn package by placing the entire
+      // JSON response inside parsed.narrative[0]. Unwrap that known envelope before
+      // presentation so the player never sees raw JSON as story prose.
+      if (Array.isArray(parsed?.narrative) && parsed.narrative.length === 1 && typeof parsed.narrative[0] === 'string') {
+        const nestedText = parsed.narrative[0].trim();
+        if (nestedText.startsWith('{') && nestedText.endsWith('}')) {
+          try {
+            const nested = JSON.parse(nestedText);
+            const nestedNarrative = Array.isArray(nested?.narrative)
+              ? nested.narrative
+              : typeof nested?.narrative === 'string' ? [nested.narrative]
+              : typeof nested?.narrativeText === 'string' ? [nested.narrativeText]
+              : typeof nested?.narration === 'string' ? [nested.narration]
+              : typeof nested?.story === 'string' ? [nested.story]
+              : null;
+            if (nestedNarrative?.length && nestedNarrative.every((line: unknown) => typeof line === 'string')) {
+              parsed = {
+                narrative: nestedNarrative,
+                dialogue: Array.isArray(nested.dialogue) ? nested.dialogue : (Array.isArray(parsed.dialogue) ? parsed.dialogue : []),
+                events: Array.isArray(nested.events) ? nested.events : (Array.isArray(parsed.events) ? parsed.events : []),
+                stateChanges: Array.isArray(nested.stateChanges) ? nested.stateChanges : (Array.isArray(parsed.stateChanges) ? parsed.stateChanges : []),
+                memoryCandidates: Array.isArray(nested.memoryCandidates) ? nested.memoryCandidates : (Array.isArray(parsed.memoryCandidates) ? parsed.memoryCandidates : []),
+                audioCues: Array.isArray(nested.audioCues) ? nested.audioCues : (Array.isArray(parsed.audioCues) ? parsed.audioCues : []),
+              };
+            }
+          } catch {
+            // Leave ordinary prose untouched if it only resembles a JSON envelope.
+          }
+        }
+      }
+
       // 1. Narrative must be non-empty string[]
       if (!Array.isArray(parsed.narrative) || parsed.narrative.length === 0) {
         return { valid: false, errorReason: 'Missing or empty narrative array.' };

@@ -35,7 +35,7 @@ test('N8 resolves materially different pacing profiles from the turn situation',
 	const discovery = NarrativePacingEngine.resolve({ situation, intent: intent({ informationGoal: 'what happened here' }) });
 	assert.equal(micro.profile, 'MICRO');
 	assert.equal(combat.profile, 'KINETIC');
-	assert.equal(discovery.profile, 'EXPANDED');
+	assert.equal(discovery.profile, 'STANDARD', 'a routine information request is not automatically an expansive discovery scene');
 	assert.ok(micro.controls.maxWords < combat.controls.maxWords);
 });
 
@@ -54,7 +54,7 @@ test('N8 uses N4 scene momentum without making it canonical', () => {
 	const before = repository.getCanonicalCommandEvents('n8_momentum').length;
 	const momentumSituation = { ...situation, visibleEvents: [], recentTurns: [{ playerAction: 'previous', narration: 'A previous beat.', worldTime: situation.worldTime }], location: { ...situation.location, description: '' } };
 	const contract = NarrativePacingEngine.resolve({ situation: momentumSituation, intent: intent({ informationGoal: undefined, observationIntent: true, action: 'observe', originalText: 'I observe.' }), continuityState: { ...continuity, sceneMomentum: 'BUILDING' } });
-	assert.equal(contract.profile, 'EXPANDED');
+	assert.equal(contract.profile, 'COMPACT');
 	assert.ok(contract.signals.includes('continuity_build'));
 	assert.equal(repository.getCanonicalCommandEvents('n8_momentum').length, before);
 });
@@ -99,4 +99,42 @@ test('N8 can be disabled without changing the existing prompt contract', () => {
 	assert.equal(contract.profile, 'STANDARD');
 	assert.equal(contract.controls.enabled, false);
 	assert.match(NarrativePacingEngine.toPromptContext(contract), /disabled/i);
+});
+
+
+test('N8 treats ambient NPC activity as scene texture, not a reason to expand narration', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	repository.seedStory('n8_ambient_not_discovery');
+	const base = CurrentSituationBuilder.build({ storyId: 'n8_ambient_not_discovery', playerAction: 'I ask how to get clearance.', worldRepo: repository });
+	const situation = {
+		...base,
+		recentTurns: [{ playerAction: 'I ask where to buy a map.', narration: 'A merchant answers briefly.', worldTime: base.worldTime }],
+		visibleEvents: [
+			{ id: 'ambient-1', type: 'SOCIAL_OPPORTUNITY', summary: 'Mira Fen is calling out wares to passersby.', source: 'WORLD_ACTIVITY_DIRECTOR', locationId: base.location.id },
+		],
+	};
+	const contract = NarrativePacingEngine.resolve({
+		situation,
+		intent: intent({
+			action: 'ask about clearance',
+			goal: 'get information',
+			interactionMode: 'DIALOGUE',
+			speechIntent: true,
+			observationIntent: false,
+			informationGoal: 'how to get clearance',
+			originalText: 'How does one get such clearance?',
+		}),
+	});
+	assert.equal(contract.profile, 'COMPACT');
+	assert.ok(contract.controls.maxWords <= 155);
+});
+
+test('N8 opening-scene pacing grounds the player without a long scenic inventory', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	repository.seedStory('n8_opening_brevity');
+	const situation = CurrentSituationBuilder.build({ storyId: 'n8_opening_brevity', playerAction: 'I look around.', worldRepo: repository });
+	const contract = NarrativePacingEngine.resolve({ situation, intent: intent() });
+	assert.equal(contract.profile, 'EXPANDED');
+	assert.equal(contract.controls.maxWords, 190);
+	assert.equal(contract.controls.maxParagraphs, 2);
 });

@@ -257,3 +257,34 @@ test('Phase 19 audit rule: 10 consecutive durable-data connectivity audits pass 
     });
   }
 });
+
+
+test('Phase 19: player action narration history survives mock authority state eviction and reload', async () => {
+  const storyId = 'durable_narration_history_' + Date.now();
+  const { worldRepository } = await import('../server/repositories/worldRepository');
+  const { serverMockAuthority } = await import('../server/mockEngine/serverMockAuthority');
+  worldRepository.seedStory(storyId);
+
+  serverMockAuthority.processAction({
+    type: 'CUSTOM_ACTION',
+    actionText: 'I ask the courier about the road.',
+    storyId,
+  } as any);
+
+  const state = serverMockAuthority.getDynamicStoryState(storyId);
+  const turn = state.actionHistory.find((entry: any) => entry.actionType !== 'NOTE_RECORD');
+  assert.ok(turn, 'the player action should be in the history');
+  turn.narrativeResponse = 'The courier points toward the northern road and warns that the bridge is closed.';
+  (serverMockAuthority as any).persistActionHistory(storyId, state);
+
+  serverMockAuthority.removeStoryState(storyId);
+  const restored = serverMockAuthority.getDynamicStoryState(storyId);
+  const restoredTurn = restored.actionHistory.find((entry: any) => entry.id === turn.id);
+  assert.equal(
+    restoredTurn?.narrativeResponse,
+    'The courier points toward the northern road and warns that the bridge is closed.',
+    'restoring a story must restore later narration, not only the opening scene',
+  );
+  assert.equal(restored.actionHistory.filter((entry: any) => entry.actionType !== 'NOTE_RECORD').length, 1);
+  serverMockAuthority.removeStoryState(storyId);
+});

@@ -1066,8 +1066,8 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
         ];
         const emergencyNarration = hasCombatAction
           ? `${actionSentence} ${combatDetails[variationIndex]}`
-          : hasInformationGoal
-            ? `${actionSentence} ${informationDetails[variationIndex]}`
+          : hasInformationGoal || hasListening
+            ? `${actionSentence} The available account remains uncertain. ${informationDetails[variationIndex]}`
             : compactFallback
               ? `${actionSentence} ${(hasMovement ? compactMovementDetails : hasObservation ? compactObservationDetails : hasListening ? compactListeningDetails : compactGenericDetails)[variationIndex]}`
               : `${actionSentence} ${longDetails[variationIndex]}`;

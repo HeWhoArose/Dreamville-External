@@ -938,7 +938,7 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
           /\b(?:find out|whether|rumou?r|gossip|learn|discover|listen for|hear about|starlight fissures|inquire|ask about|question|what happened|who|why|where|when|how|tell me)\b/i.test(normalizedAction)
         );
         const observationTargetMatch = normalizedAction.match(/\b(?:observe|watch|inspect|examine|notice|look at)\s+((?:the|a|an)\s+)?([^,.!?]+)/i);
-        const movementTargetMatch = normalizedAction.match(/\b(?:move closer to|approach|walk toward|walk towards|head toward|head towards)\s+((?:the|a|an)\s+)?([^,.!?]+)/i);
+        const movementTargetMatch = normalizedAction.match(/\b(?:move(?:\s+(?:down|up|over|closer))?\s+(?:to|into|toward|towards)|approach|walk\s+(?:to|into|toward|towards)|head\s+(?:to|into|toward|towards)|step\s+(?:to|into|toward|towards))\s+((?:the|a|an)\s+)?([^,.!?]+?)(?=\s+to\s+(?:ask|inquire|listen|hear|look|observe|inspect|find out)\b|[,.!?]|$)/i);
         const combatTargetMatch = normalizedAction.match(/\b(?:attack|strike|hit|shoot|stab|slash|tackle|punch)\s+((?:the|a|an)\s+)?([^,.!?]+)/i);
         const observationTarget = observationTargetMatch
           ? resolveActionTarget((observationTargetMatch[1] || 'the ') + observationTargetMatch[2].trim())
@@ -973,23 +973,27 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
           ? `The scene remains quiet within ${canonicalLocationName}.`
           : hasCombatAction
             ? `You attempt to strike ${combatTarget || explicitTargetName || 'the target you named'} within ${canonicalLocationName}; the action does not confirm that the target is present or that the strike connects.`
-            : hasMovement && (hasListening || hasInformationGoal)
-              ? `You move as requested within ${canonicalLocationName}, then turn your attention to ${informationTopic || 'the information you sought'}.`
-              : hasMovement && hasObservation
-                ? `You move as requested and observe ${observationTarget || 'the immediate scene'} within ${canonicalLocationName}.`
-                : hasMovement && movementTarget
-                  ? `${actionVerb} toward ${movementTarget} within ${canonicalLocationName}.`
-                  : hasInformationGoal
-                    ? `You investigate ${informationTopic || 'the subject you asked about'} within ${canonicalLocationName}.`
-                    : hasListening
-                      ? `You listen carefully within ${canonicalLocationName}.`
-                      : hasObservation && observationTarget
-                        ? `You observe ${observationTarget} within ${canonicalLocationName}.`
-                        : hasObservation
-                          ? `You observe the immediate scene within ${canonicalLocationName}.`
-                          : hasMovement
-                            ? `You move forward within ${canonicalLocationName}.`
-                            : `You attempt the requested action within ${canonicalLocationName}.`;
+            : hasMovement && hasListening
+              ? `You move as requested${movementTarget ? ` toward ${movementTarget}` : ''} within ${canonicalLocationName}, then listen for ${informationTopic || 'the information you sought'}.`
+              : hasMovement && hasInformationGoal && /\b(?:ask|inquire|question|consult|tell)\b/i.test(normalizedAction)
+                ? `You move as requested${movementTarget ? ` toward ${movementTarget}` : ''} within ${canonicalLocationName}, then inquire about ${informationTopic || 'the information you sought'}.`
+                : hasMovement && hasInformationGoal
+                  ? `You move as requested${movementTarget ? ` toward ${movementTarget}` : ''} within ${canonicalLocationName}, then turn your attention to ${informationTopic || 'the information you sought'}.`
+                  : hasMovement && hasObservation
+                    ? `You move as requested and observe ${observationTarget || 'the immediate scene'} within ${canonicalLocationName}.`
+                    : hasMovement && movementTarget
+                      ? `${actionVerb} toward ${movementTarget} within ${canonicalLocationName}.`
+                      : hasInformationGoal
+                        ? `You investigate ${informationTopic || 'the subject you asked about'} within ${canonicalLocationName}.`
+                        : hasListening
+                          ? `You listen carefully within ${canonicalLocationName}.`
+                          : hasObservation && observationTarget
+                            ? `You observe ${observationTarget} within ${canonicalLocationName}.`
+                            : hasObservation
+                              ? `You observe the immediate scene within ${canonicalLocationName}.`
+                              : hasMovement
+                                ? `You move forward within ${canonicalLocationName}.`
+                                : `You attempt the requested action within ${canonicalLocationName}.`;
         // Respect N8 pacing even when a caller omits maxTokens, and vary the
         // deterministic floor by canonical turn so long sessions do not repeat one
         // stock paragraph on every unavailable-provider turn.

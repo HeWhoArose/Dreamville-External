@@ -133,24 +133,18 @@ function buildNarrationSituationContext(situation: CurrentSituation): string {
 
 export function defaultNarrationStyle(): string {
 	return [
-		'Write an immersive tabletop-RPG narrator response for the latest player action.',
-		'Player agency is authoritative: describe the immediate consequence of what the player chose, but never choose a major future action for the player.',
-		'Prioritize the player action, NPC behavior/dialogue, useful information, and immediate consequence. Environment description is optional seasoning, not a required opening or paragraph.',
-		'Do not repeat ambient sensory cues, ground texture, lighting, machinery hum, or location description from recent turns unless it changes, affects the action, or conveys a new clue.',
-		'For search, observation, and preparation actions, report relevant visible people, objects, resources, work opportunities, exits, and immediate obstacles before describing atmosphere. If nothing useful is visible, say so briefly.',
-		'When an NPC mentions a lead such as a notice board, guild, job posting, map, or contact, preserve it as a lead; do not invent the lead’s exact contents, available jobs, prices, official rules, or rewards unless canonical scene evidence or an authoritative source supplies them.',
-		'If the player approaches an object or place that is not confirmed in visible scene evidence, narrate the attempt to locate or inspect it without fabricating its physical appearance or contents.',
-		'For questions and routine information-seeking, answer with what a present NPC actually knows or clearly state that no reliable answer is available; do not pad the answer with scenery.',
-		'Use environmental description when it is newly relevant: a meaningful change, danger, clue, transition, mood shift, or player-directed observation. Otherwise move straight to the people and action.',
-		'Do not invent unsupported entities, objects, abilities, locations, causes, secrets, or certainty.',
-		'Do not reveal canonical world facts unless they are supported by the supplied player-visible context.',
-		'Do not turn an attempt into a confirmed success or failure unless a canonical outcome is supplied.',
-		'If the player listens, watches, observes, overhears, or eavesdrops without explicit speech, do not make the player speak, ask, shout, answer, or call out.',
-		'If movement and observation are combined, preserve both parts of the action.',
-		'Preserve rumor, hearsay, memory, and uncertainty as uncertainty; do not upgrade them to established fact.',
-		'Remain in the canonical scene and world time unless the supplied canonical state explicitly says they changed. The canonical game state has already committed a location change only when the supplied Current Situation reflects that change.',
-		'Do not dump research or internal engine terminology into the player-facing narration.',
-		'Response length is governed by the Narrative Quality Contract for this turn; do not force a universal paragraph count.',
+		'Write immersive tabletop-RPG narration for the latest player action.',
+		'Show the immediate canonical consequence; never choose a major future action for the player.',
+		'Prioritize action, NPC behavior/dialogue, useful information, and consequence. Atmosphere is optional.',
+		'Avoid repeating sensory/location details unless newly relevant, changed, actionable, or a clue.',
+		'For search/observation/preparation, lead with visible people, objects, resources, work, exits, and obstacles; briefly say when none are evident.',
+		'Keep leads as leads. Never invent board contents, jobs, prices, rules, rewards, object details, or location contents without canonical evidence.',
+		'For questions, give grounded knowledge from present NPCs or state the limit; do not pad with scenery.',
+		'Invent no unsupported entities, objects, abilities, locations, causes, secrets, or certainty. Player-visible context bounds what may be revealed.',
+		'Do not turn attempts into success/failure without a canonical outcome.',
+		'Listening, watching, observing, overhearing, or eavesdropping without speech must not make the player speak. Preserve both movement and observation when combined.',
+		'Keep rumor/hearsay uncertain and stay in the canonical scene/time unless supplied state confirms a change.',
+		'Do not expose research or engine terminology. Follow this turn’s Narrative Quality Contract for length.',
 	].join(' ');
 }
 
@@ -379,6 +373,11 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 					'workingContext',
 					'planContext',
 					'situationContext',
+					'researchContext',
+					'intentContext',
+					'sceneCompositionContext',
+					'episodeProjectionContext',
+					'storyBeatContext',
 				];
 				const key = keys
 					.filter((candidate) => compact[candidate].length > 120)

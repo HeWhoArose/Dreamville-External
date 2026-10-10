@@ -1204,3 +1204,25 @@ test('deterministic emergency narration preserves combined movement and listenin
 	assert.match(narration, /Whispering Orrery/i);
 	assert.match(narration, /rumor|reliable answer/i);
 });
+
+
+test('Phase 12 regression: information-seeking fallback prose passes continuity validation even with passive-observation intent', () => {
+	const orchestrator = createTestOrchestrator();
+	const validate = (orchestrator as any).validateNarrativeInformationContinuity.bind(orchestrator);
+	const intent: any = {
+		interactionMode: 'PASSIVE_OBSERVATION',
+		observationIntent: true,
+		informationGoal: '',
+	};
+	const fallback = 'You observe the scene within the Whispering Orrery. The available account about local rumors remains unverified; no reliable answer is established from this moment. A rumor remains a rumor, and an unclear report does not prove the event real or false. You may continue listening, seek a willing source, or investigate further, but no discovery is assumed merely because you asked.';
+	const result = validate(fallback, 'I observe the area to see whether there are any rumors.', intent);
+	assert.equal(result.valid, true, result.errorReason);
+});
+
+test('Phase 12 regression: narrative generation route prefers the configured Gemini 3.5/3.8 models before Gemini 2.5', () => {
+	const orchestrator = createTestOrchestrator();
+	const route = orchestrator.getFallbackChain('narrative.generate');
+	assert.ok(route.indexOf('google_gemini::gemini-3.5-flash') < route.indexOf('google_gemini::gemini-2.5-flash'), route.join(' -> '));
+	assert.ok(route.indexOf('google_gemini::gemini-3.8-flash') < route.indexOf('google_gemini::gemini-2.5-flash'), route.join(' -> '));
+	assert.ok(route.some((key) => key.includes('provider_deterministic_emergency::emergency-fallback-local')), 'emergency floor remains available');
+});

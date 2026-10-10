@@ -40,16 +40,16 @@
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "memory.extract": [
-      "google_gemini::gemini-2.5-flash",
       "google_gemini::gemini-3.5-flash-lite",
+      "google_gemini::gemini-2.5-flash",
       "google_gemini::gemini-3.1-flash-lite",
       "groq::openai/gpt-oss-20b",
       "openrouter::google/gemma-4-31b-it:free",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "summary.scene": [
-      "google_gemini::gemini-2.5-flash",
       "google_gemini::gemini-3.5-flash-lite",
+      "google_gemini::gemini-2.5-flash",
       "google_gemini::gemini-3.1-flash-lite",
       "groq::qwen/qwen3.8-27b",
       "openrouter::google/gemma-4-31b-it:free",
@@ -128,6 +128,7 @@
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "combat.animation.plan": [
+      "groq::openai/gpt-oss-120b",
       "groq::qwen/qwen3.8-27b",
       "groq::openai/gpt-oss-20b",
       "openrouter::google/gemma-4-31b-it:free",

@@ -478,7 +478,7 @@ function projectActiveDialogue(raw: any): ActiveDialogueContext | undefined {
 
 function buildRecentTurns(run: any, canonicalEvents: any[], maxRecentTurns: number): RecentTurnContext[] {
 	const runtimeHistory = Array.isArray(run?.runtimeState?.narrativeContextHistory)
-		? run.runtimeState.narrativeContextHistory
+		? run?.runtimeState?.narrativeContextHistory
 		: [];
 	const runtimeTurns = runtimeHistory
 		.map((entry: any, index: number) => ({
@@ -776,7 +776,7 @@ export class CurrentSituationBuilder {
 			]
 			: [...ambientActivityEvents, ...lastEvents];
 
-		const runtime = (run.runtimeState || {}) as Record<string, any>;
+		const runtime = (run?.runtimeState || {}) as Record<string, any>;
 		const plotRaw = runtime.plot || {};
 		const recentBeats = Array.isArray(plotRaw.beats)
 			? plotRaw.beats.slice(-8).map((beat: any, index: number) => ({

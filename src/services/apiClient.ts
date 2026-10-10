@@ -68,13 +68,29 @@ const readJsonSafely = async <T = any>(res: Response): Promise<T> => {
   );
 };
 
-const fetch = (url: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+const fetch = async (url: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const finalInit = init || {};
   const headers = finalInit.headers ? { ...finalInit.headers } as Record<string, string> : {};
   if (!headers['x-story-id'] && !headers['X-Story-ID']) {
     headers['X-Story-ID'] = globalActiveStoryId;
   }
   finalInit.headers = headers;
+
+  let attempts = 0;
+  while (attempts < 2) {
+    try {
+      return await originalFetch(url, finalInit);
+    } catch (err: any) {
+      attempts++;
+      if (attempts >= 2) {
+        if (err?.name === 'TypeError' && err?.message?.includes('fetch')) {
+          throw new Error('Network request failed. Please verify that the game server is reachable.');
+        }
+        throw err;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
   return originalFetch(url, finalInit);
 };
 

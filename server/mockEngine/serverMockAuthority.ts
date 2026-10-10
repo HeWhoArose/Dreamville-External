@@ -1236,7 +1236,7 @@ export class ServerMockAuthority {
             providerId: generated.providerId,
             modelId: generated.modelId,
             fallbackReason: generated.fallbackReason,
-            attemptsTrail: generated.attemptsTrail || generated.telemetry?.attemptsTrail || [],
+            attemptsTrail: generated.attemptsTrail || (generated as any).telemetry?.attemptsTrail || [],
           };
         }
       } else {
@@ -1272,7 +1272,7 @@ export class ServerMockAuthority {
           providerId: generated.providerId,
           modelId: generated.modelId,
           fallbackReason: generated.fallbackReason,
-          attemptsTrail: generated.attemptsTrail || generated.telemetry?.attemptsTrail || [],
+          attemptsTrail: generated.attemptsTrail || (generated as any).telemetry?.attemptsTrail || [],
         };
         console.warn('[NarrationFallback] AI narration unavailable; local story fallback used.', {
           storyId: targetStoryId,

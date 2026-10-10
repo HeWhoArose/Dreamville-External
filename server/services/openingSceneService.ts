@@ -706,23 +706,23 @@ export class OpeningSceneService {
 		const { character, location, time } = facts;
 		const narrativeMode = facts.world.narrativeProfile?.mode || 'PROTAGONIST';
 		const sceneAnchor = location.ambientSensory || location.description;
-		const p1 = \`\${time.formattedHeader}. \${character.name} stands within \${location.name}. \${sceneAnchor}\`;
+		const p1 = `${time.formattedHeader}. ${character.name} stands within ${location.name}. ${sceneAnchor}`;
 		const characterContext = [
 			character.background,
 			character.role ? 'Role: ' + character.role : '',
 			character.capabilities?.slice(0, 3).join(', '),
 		].filter(Boolean).join(' ');
-		const p2 = \`\${character.startingSituation || 'The immediate situation is unsettled.'} \${characterContext ? characterContext + ' ' : ''}Nearby people and activity matter as much as the architecture; the scene is already in motion, and your next action can affect how it unfolds.\`;
+		const p2 = `${character.startingSituation || 'The immediate situation is unsettled.'} ${characterContext ? characterContext + ' ' : ''}Nearby people and activity matter as much as the architecture; the scene is already in motion, and your next action can affect how it unfolds.`;
 		const authoredGoal = typeof agenda?.goal === 'string' && agenda.goal.trim() ? agenda.goal.trim() : '';
 		const p3 = narrativeMode === 'SIDE_CHARACTER'
 			? authoredGoal
-				? \`The principal actor's current aim is \${authoredGoal}. You are connected to this unfolding situation, but your response and loyalties remain your decision.\`
+				? `The principal actor's current aim is ${authoredGoal}. You are connected to this unfolding situation, but your response and loyalties remain your decision.`
 				: 'The wider story centers on another principal actor and their goal; your place in that story is real, but your response remains your decision.'
 			: narrativeMode === 'FREE_ROAM'
 				? 'There is no prescribed main quest here. People have their own purposes, visible opportunities may be pursued or ignored, and the direction of the journey is yours to choose.'
 				: authoredGoal
-					? \`Your first lead is clear: \${authoredGoal}. It gives you a place to begin, not a decision you must make; how you pursue it remains yours.\`
-					: \`Your first lead is the unresolved matter already established: \${character.startingSituation || 'the situation unfolding around you'}. Begin there, and let your choices determine what follows.\`;
+					? `Your first lead is clear: ${authoredGoal}. It gives you a place to begin, not a decision you must make; how you pursue it remains yours.`
+					: `Your first lead is the unresolved matter already established: ${character.startingSituation || 'the situation unfolding around you'}. Begin there, and let your choices determine what follows.`;
 
 		return {
 			narrativeText: `${p1}\n\n${p2}\n\n${p3}`,

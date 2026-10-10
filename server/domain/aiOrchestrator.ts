@@ -3723,13 +3723,13 @@ export class MultiModelOrchestrator {
   private seedDefaultPins(): void {
     const emergencyKey = 'provider_deterministic_emergency::emergency-fallback-local';
     const routes: Partial<Record<TaskId, string[]>> = {
-      'narrative.generate': ['google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-2.5-flash','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free'],
-      'narrative.review': ['google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','google_gemini::gemini-2.5-flash','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free'],
-      'character.dialogue': ['google_gemini::gemini-2.5-flash','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free'],
-      'character.extract': ['google_gemini::gemini-2.5-flash','google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free'],
+      'narrative.generate': ['google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','google_gemini::gemini-2.5-flash','groq::qwen/qwen3.8-27b','openrouter::inclusionai/ling-3.0-flash:free','openrouter::google/gemma-4-31b-it:free'],
+      'narrative.review': ['google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','google_gemini::gemini-2.5-flash','groq::qwen/qwen3.8-27b','openrouter::inclusionai/ling-3.0-flash:free','openrouter::google/gemma-4-31b-it:free'],
+      'character.dialogue': ['google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','google_gemini::gemini-2.5-flash','groq::qwen/qwen3.8-27b','openrouter::inclusionai/ling-3.0-flash:free','openrouter::google/gemma-4-31b-it:free'],
+      'character.extract': ['google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-2.5-flash','google_gemini::gemini-3.1-flash-lite','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free'],
       'memory.extract': ['google_gemini::gemini-2.5-flash','google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite','groq::openai/gpt-oss-20b','openrouter::google/gemma-4-31b-it:free'],
       'summary.scene': ['google_gemini::gemini-2.5-flash','google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free'],
-      'intent.interpret': ['google_gemini::gemini-2.5-flash','google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free'],
+      'intent.interpret': ['google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-2.5-flash','google_gemini::gemini-3.1-flash-lite','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free'],
       'capability.explain': ['google_gemini::gemini-2.5-flash','google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free'],
       'utility.inspect': ['google_gemini::gemini-2.5-flash','google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free'],
       'rules.adjudicate': ['google_gemini::gemini-2.5-flash','groq::openai/gpt-oss-120b','groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash','openrouter::google/gemma-4-31b-it:free'],
@@ -3743,7 +3743,7 @@ export class MultiModelOrchestrator {
       'research.query': ['google_gemini::gemini-2.5-flash','groq::openai/gpt-oss-120b','groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash','openrouter::google/gemma-4-31b-it:free'],
       'research.world-brief': ['google_gemini::gemini-2.5-flash','groq::openai/gpt-oss-120b','groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash','openrouter::google/gemma-4-31b-it:free'],
       'story.advice': ['google_gemini::gemini-2.5-flash','groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite'],
-      'ooc.respond': ['google_gemini::gemini-2.5-flash','groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.5-flash-lite'],
+      'ooc.respond': ['groq::qwen/qwen3.8-27b','google_gemini::gemini-3.5-flash','openrouter::inclusionai/ling-3.0-flash:free','openrouter::google/gemma-4-31b-it:free','google_gemini::gemini-2.5-flash'],
     };
 
     // Routes are explicit but intentionally not task-pinned. This preserves the

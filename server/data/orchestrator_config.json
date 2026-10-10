@@ -18,6 +18,7 @@
       "google_gemini::gemini-3.8-flash",
       "google_gemini::gemini-2.5-flash",
       "groq::qwen/qwen3.8-27b",
+      "openrouter::inclusionai/ling-3.0-flash:free",
       "openrouter::google/gemma-4-31b-it:free",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
@@ -26,6 +27,7 @@
       "google_gemini::gemini-3.8-flash",
       "google_gemini::gemini-2.5-flash",
       "groq::qwen/qwen3.8-27b",
+      "openrouter::inclusionai/ling-3.0-flash:free",
       "openrouter::google/gemma-4-31b-it:free",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
@@ -54,8 +56,8 @@
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "intent.interpret": [
-      "google_gemini::gemini-2.5-flash",
       "google_gemini::gemini-3.5-flash-lite",
+      "google_gemini::gemini-2.5-flash",
       "google_gemini::gemini-3.1-flash-lite",
       "groq::qwen/qwen3.8-27b",
       "openrouter::google/gemma-4-31b-it:free",

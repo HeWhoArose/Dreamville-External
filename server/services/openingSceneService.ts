@@ -154,7 +154,11 @@ export class OpeningSceneService {
 				'Do not use labels such as Visual:, Sounds:, Scent:, Tactile:, Right now, Your turn, or What do you do.',
 				'Do not tell the player what they could choose. End on an unresolved in-world beat, observation, reaction, pressure, or visible opportunity that naturally invites action without a menu.',
 				'Use 3 developed paragraphs when the context supports it. Keep the opening roughly 140–240 words.',
-				'Preserve the narrative mode exactly. PROTAGONIST keeps the player central without forcing a predetermined plot. SIDE_CHARACTER keeps a wider world active beyond the player. FREE_ROAM preserves open agency.',
+				'Preserve the selected narrative mode exactly; these modes must have meaningfully different openings.',
+				'PROTAGONIST: make the player the central actor and establish a clear first lead or next-step objective grounded in the character background, starting situation, world facts, or authored agenda. If the context gives a named person, place, duty, debt, rival, mentor, or unresolved problem, make that lead legible. Do not invent secret canon or force a choice; end with a concrete in-world opening the player can act on.',
+				'SIDE_CHARACTER: establish that a principal character other than the player has the central goal. Explain what they are trying to accomplish and why the player is present or connected, then end on a meaningful decision, request, disagreement, or opportunity for the player. Do not take the player’s decision for them.',
+				'FREE_ROAM: establish the physical situation and interesting people or activity, but do not assign a mandatory main quest or imply there is one correct path. Preserve open-ended agency.',
+				'Describe the people and physical activity around the character, not just lighting, scenery, or sensory metaphors. Once the scene is grounded, do not repeat environmental description unless it changes or matters to the action.',
 				'Return JSON only with narrativeText and 4–6 concise structuredEvents.',
 			].join(' ');
 
@@ -171,6 +175,10 @@ export class OpeningSceneService {
 				'- Substance first, flourish second: communicate what is happening now and why the moment matters before atmosphere.',
 				'- Use only relevant visible details from the current situation and research.',
 				'- Introduce one concrete unresolved pressure or point of attention supported by canon.',
+				'- For PROTAGONIST, identify a clear first lead grounded in the supplied backstory/starting situation; if the canonical setup is too thin, state the nearest grounded lead without inventing a named quest-giver or secret.',
+				'- For SIDE_CHARACTER, make the principal character’s goal clear and give the player a real response or decision to make.',
+				'- For FREE_ROAM, provide visible opportunities but no prescribed main objective.',
+				'- Show who is physically present and what they are doing when that information is available; avoid filler about sunlight, shoes, ground texture, or machinery hum.',
 				'- Do not invent a quest objective solely to make the opening dramatic.',
 			].join('\n');
 

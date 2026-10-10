@@ -923,10 +923,20 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
           return rawTarget;
         };
         const hasMovement = /\b(?:move|walk|approach|step|head|travel|enter|leave|go|closer|nearer|toward|towards|forward)\b/i.test(normalizedAction);
-        const hasListening = /\b(?:listen|hear|overhear|eavesdrop|whisper|conversation)\b/i.test(normalizedAction);
-        const hasObservation = /\b(?:look|observe|watch|inspect|examine|scan|study|see|notice)\b/i.test(normalizedAction);
+        const hasListening = Boolean(
+          promptIntent?.observationIntent && /\b(?:listen|hear|overhear|eavesdrop|whisper|conversation|rumou?r|gossip)\b/i.test(normalizedAction) ||
+          /\b(?:listen|hear|overhear|eavesdrop|whisper|conversation)\b/i.test(normalizedAction)
+        );
+        const hasObservation = Boolean(
+          promptIntent?.observationIntent ||
+          /\b(?:look|observe|watch|inspect|examine|scan|study|see|notice|survey|search)\b/i.test(normalizedAction)
+        );
         const hasCombatAction = /\b(?:attack|strike|hit|shoot|stab|slash|tackle|punch|fight|knock out|cast|fireball|smite)\b/i.test(normalizedAction);
-        const hasInformationGoal = /\b(?:find out|whether|rumou?r|gossip|learn|discover|listen for|hear about|starlight fissures|inquire|ask about|question)\b/i.test(normalizedAction);
+        const hasInformationGoal = Boolean(
+          promptIntent?.informationGoal ||
+          promptIntent?.interactionMode === 'INFORMATION_SEEKING' ||
+          /\b(?:find out|whether|rumou?r|gossip|learn|discover|listen for|hear about|starlight fissures|inquire|ask about|question|what happened|who|why|where|when|how|tell me)\b/i.test(normalizedAction)
+        );
         const observationTargetMatch = normalizedAction.match(/\b(?:observe|watch|inspect|examine|notice|look at)\s+((?:the|a|an)\s+)?([^,.!?]+)/i);
         const movementTargetMatch = normalizedAction.match(/\b(?:move closer to|approach|walk toward|walk towards|head toward|head towards)\s+((?:the|a|an)\s+)?([^,.!?]+)/i);
         const combatTargetMatch = normalizedAction.match(/\b(?:attack|strike|hit|shoot|stab|slash|tackle|punch)\s+((?:the|a|an)\s+)?([^,.!?]+)/i);
@@ -3709,8 +3719,8 @@ export class MultiModelOrchestrator {
   private seedDefaultPins(): void {
     const emergencyKey = 'provider_deterministic_emergency::emergency-fallback-local';
     const routes: Partial<Record<TaskId, string[]>> = {
-      'narrative.generate': ['google_gemini::gemini-2.5-flash','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free'],
-      'narrative.review': ['google_gemini::gemini-2.5-flash','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free'],
+      'narrative.generate': ['google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-2.5-flash','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free'],
+      'narrative.review': ['google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','google_gemini::gemini-2.5-flash','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free'],
       'character.dialogue': ['google_gemini::gemini-2.5-flash','google_gemini::gemini-3.5-flash','google_gemini::gemini-3.8-flash','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free'],
       'character.extract': ['google_gemini::gemini-2.5-flash','google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite','groq::qwen/qwen3.8-27b','openrouter::google/gemma-4-31b-it:free'],
       'memory.extract': ['google_gemini::gemini-2.5-flash','google_gemini::gemini-3.5-flash-lite','google_gemini::gemini-3.1-flash-lite','groq::openai/gpt-oss-20b','openrouter::google/gemma-4-31b-it:free'],

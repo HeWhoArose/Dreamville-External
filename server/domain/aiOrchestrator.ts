@@ -963,7 +963,7 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
         const isDirectSocialQuestion = /\\b(?:excuse me|what do you think|do you like|how do you feel|what is your opinion|can i ask you|may i ask|tell me about)\\b/i.test(normalizedAction);
         const socialTarget = explicitTargetName || visibleEntityNames[0] || 'Nearby figure';
         const socialReply = /\\b(?:like|love|enjoy|think|feel|opinion)\\b/i.test(normalizedAction)
-          ? '“It has its appeal,” they say after a moment. “The place is impressive, though I am still making up my mind about living or working here.”'
+          ? '“It has its appeal. The place is impressive, though I am still making up my mind about living or working here.”'
           : '“I can tell you what I have seen, though I would not claim to know the whole story.”';
         const actionVerb = hasMovement && hasListening
           ? 'You move as requested, then listen carefully'
@@ -1070,7 +1070,7 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
           'No additional consequence is presumed beyond the action and evidence already available. The scene remains coherent without inventing a hidden event, and the next meaningful change can emerge from what happens next.'
         ];
         const emergencyNarration = isDirectSocialQuestion
-          ? `You address ${socialTarget} with your question. They consider it before answering, ${socialReply}`
+          ? `You address ${socialTarget} with your question. They pause to consider it, then answer: ${socialReply}`
           : hasCombatAction
             ? `${actionSentence} ${combatDetails[variationIndex]}`
             : hasInformationGoal || hasListening

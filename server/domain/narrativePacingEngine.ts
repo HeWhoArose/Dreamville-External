@@ -11,7 +11,20 @@ function text(value: unknown): string { return String(value ?? '').trim(); }
 function lower(value: unknown): string { return text(value).toLowerCase(); }
 function hasRecentNarration(situation: CurrentSituation): boolean { return Array.isArray(situation.recentTurns) && situation.recentTurns.some((turn) => text(turn.narration)); }
 function hasMajorOutcome(resolution?: ActionResolution): boolean { const tier = lower(resolution?.outcomeTier); return ['critical_success','critical_failure','success_with_cost','failure_with_cost'].includes(tier); }
-function hasDiscovery(situation: CurrentSituation, intent: PlayerIntent): boolean { return Boolean(intent.interactionMode === 'INFORMATION_SEEKING' || intent.informationGoal || (Array.isArray(situation.visibleEvents) && situation.visibleEvents.length > 0)); }
+function hasDiscovery(situation: CurrentSituation, intent: PlayerIntent): boolean {
+		// Asking a question or looking for information is not itself a discovery.
+		// Ambient population/activity events are scene texture, not proof of a reveal.
+		const events = Array.isArray(situation.visibleEvents) ? situation.visibleEvents : [];
+		const hasSubstantiveEvent = events.some((event: any) => {
+			const type = String(event?.type || '').toUpperCase();
+			const source = String(event?.source || '').toUpperCase();
+			return !['AMBIENT_ACTIVITY', 'SOCIAL_OPPORTUNITY', 'POTENTIAL_ENCOUNTER', 'NPC_INITIATED_INTERACTION'].includes(type)
+				&& !source.includes('WORLD_ACTIVITY_DIRECTOR');
+		});
+		return hasSubstantiveEvent || Boolean(intent.observationIntent && events.some((event: any) =>
+			!['AMBIENT_ACTIVITY', 'SOCIAL_OPPORTUNITY'].includes(String(event?.type || '').toUpperCase())
+		));
+	}
 
 export class NarrativePacingEngine {
 	public static resolve(params: { situation: CurrentSituation; intent: PlayerIntent; actionResolution?: ActionResolution; canonicalOutcome?: string; continuityState?: NarrativeContinuityState; controls?: Partial<NarrativePacingControls>; }): NarrativePacingContract {
@@ -33,7 +46,7 @@ export class NarrativePacingEngine {
 		else if (majorOutcome) { profile='CONSEQUENCE'; reason='A meaningful canonical consequence deserves enough space to land without inventing aftermath.'; minWords=120; maxWords=300; maxParagraphs=3; signals.push('major_outcome'); }
 		else if (newLocation || (!recent && Boolean(params.situation.location?.description))) { profile='EXPANDED'; reason='A new or opening scene benefits from spatial and sensory grounding before the next beat.'; minWords=130; maxWords=300; maxParagraphs=3; signals.push(newLocation ? 'new_location' : 'scene_opening'); }
 		else if (activeDialogue) { profile='COMPACT'; reason='An active conversation should leave room for the player to answer rather than monologue.'; minWords=45; maxWords=135; maxParagraphs=2; signals.push('awaiting_dialogue'); }
-		else if (discovery || elevatedContinuity) { profile='EXPANDED'; reason=discovery ? 'An observation or discovery needs enough space to communicate the useful reveal and its immediate texture.' : 'The current scene is building or escalating; give the beat enough room to land without padding.'; minWords=100; maxWords=elevatedContinuity ? 260 : 240; maxParagraphs=3; signals.push(discovery ? 'discovery' : 'continuity_build'); }
+		else if (discovery || elevatedContinuity) { profile=discovery ? 'STANDARD' : 'COMPACT'; reason=discovery ? 'A supported new fact deserves a clear explanation; include atmosphere only when it helps the reveal.' : 'The current scene is building or escalating; advance the beat without padding.'; minWords=discovery ? 75 : 55; maxWords=elevatedContinuity ? 190 : 155; maxParagraphs=2; signals.push(discovery ? 'discovery' : 'continuity_build'); }
 		else if (movement) { profile='COMPACT'; reason='Routine movement should advance the scene without turning travel into filler.'; minWords=55; maxWords=145; maxParagraphs=2; signals.push('movement'); }
 		if (releasingContinuity && profile === 'STANDARD') { maxWords = 155; signals.push('continuity_release'); }
 		else signals.push('normal_interaction');

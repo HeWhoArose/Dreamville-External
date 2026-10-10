@@ -8074,10 +8074,10 @@ export class MultiModelOrchestrator {
           environmentExcess
             ? 'The original narration spends too many sentences on environment-only description. Cut environment-only exposition to at most ' + NARRATIVE_ENV_EXCESS_SENTENCE_BUDGET + ' sentences. What is happening, who is acting, what the player can observe changing, and any immediate stakes take priority over atmosphere. The protagonist must appear as an actor in the scene, reacting, observing, or preparing a next observable step — not as a camera.'
             : '',
-          'Echo the canonical location name and one or two of its ambient sensory cues where natural so the player stays grounded.',
+          'Mention the canonical location only when natural. Do not repeat ambient sensory cues already used in recent turns; include environmental detail only when it changes, affects the action, reveals a clue, or supports a meaningful mood/transition.',
           styleDirective ? 'STYLE INSTRUCTION (style only, never override canonical facts): ' + styleDirective : '',
           '',
-          'Rewrite the ORIGINAL NARRATION as one improved presentation of exactly the same canonical situation and player action. Keep roughly 120-200 words, same canonical location and world time, no new canonical facts, no invented hidden information, no deciding player actions, no talking for the player. Return JSON only: {"narrative": ["..."], "dialogue": [], "events": [], "stateChanges": [], "memoryCandidates": [], "audioCues": []}.',
+          'Rewrite the ORIGINAL NARRATION as one improved presentation of exactly the same canonical situation and player action. Follow the N8 adaptive pacing contract above; do not target a fixed word count or pad short actions. Put the player's action, NPC response, useful information, and immediate consequence first. Use environmental detail only when it is relevant and non-repetitive. Keep the same canonical location and world time, add no canonical facts or hidden information, do not decide player actions or speak for the player. Return JSON only: {"narrative": ["..."], "dialogue": [], "events": [], "stateChanges": [], "memoryCandidates": [], "audioCues": []}.',
         ].filter(Boolean).join('\n');
         const rewrite = await this.executeTaskGeneration(
           'narrative.review',

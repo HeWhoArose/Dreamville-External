@@ -3757,15 +3757,15 @@ export class MultiModelOrchestrator {
         "openrouter::google/gemma-4-31b-it:free"
       ],
       "memory.extract": [
-        "google_gemini::gemini-2.5-flash",
         "google_gemini::gemini-3.5-flash-lite",
+        "google_gemini::gemini-2.5-flash",
         "google_gemini::gemini-3.1-flash-lite",
         "groq::openai/gpt-oss-20b",
         "openrouter::google/gemma-4-31b-it:free"
       ],
       "summary.scene": [
-        "google_gemini::gemini-2.5-flash",
         "google_gemini::gemini-3.5-flash-lite",
+        "google_gemini::gemini-2.5-flash",
         "google_gemini::gemini-3.1-flash-lite",
         "groq::qwen/qwen3.8-27b",
         "openrouter::google/gemma-4-31b-it:free"
@@ -3836,6 +3836,7 @@ export class MultiModelOrchestrator {
         "openrouter::inclusionai/ling-3.0-flash:free"
       ],
       "combat.animation.plan": [
+        "groq::openai/gpt-oss-120b",
         "groq::qwen/qwen3.8-27b",
         "groq::openai/gpt-oss-20b",
         "openrouter::google/gemma-4-31b-it:free",

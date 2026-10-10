@@ -190,33 +190,52 @@ export class ServerMockAuthority {
         inventory: [],
         equipment: {},
         knowledgeBase: mappedKnowledge,
-        actionHistory: run?.openingScene ? [
-          {
-            id: `act_open_${storyId}`,
-            timestamp: run.openingScene.worldTime.formattedTime || 'Dawn',
-            cycle: run.openingScene.worldTime.cycle || 1,
-            actionType: 'NOTE_RECORD',
-            description: run.openingScene.narrativeText,
-            epistemicValidation: 'MOCK_ENGINE_COMMITTED',
-            authoritativeFeedback: `Opening scene established in ${run.openingScene.startingLocationName}.`,
-          }
-        ] : [
-          {
-            id: `act_init_${storyId}`,
-            timestamp: 'Dawn',
-            cycle: 1,
-            actionType: 'NOTE_RECORD',
-            description: `Awakened in starting location.`,
-            epistemicValidation: 'MOCK_ENGINE_COMMITTED',
-            authoritativeFeedback: run?.initialScene || `Entered the world of ${run?.worldId || 'Adventure'}.`,
-          }
-        ],
+        // Restore the durable action/narration history first. The opening scene is
+        // only the first record, never a replacement for later committed turns.
+        actionHistory: Array.isArray(run?.runtimeState?.actionHistory) && run.runtimeState.actionHistory.length > 0
+          ? JSON.parse(JSON.stringify(run.runtimeState.actionHistory))
+          : run?.openingScene ? [
+            {
+              id: `act_open_${storyId}`,
+              timestamp: run.openingScene.worldTime.formattedTime || 'Dawn',
+              cycle: run.openingScene.worldTime.cycle || 1,
+              actionType: 'NOTE_RECORD',
+              description: run.openingScene.narrativeText,
+              epistemicValidation: 'MOCK_ENGINE_COMMITTED',
+              authoritativeFeedback: `Opening scene established in ${run.openingScene.startingLocationName}.`,
+            }
+          ] : [
+            {
+              id: `act_init_${storyId}`,
+              timestamp: 'Dawn',
+              cycle: 1,
+              actionType: 'NOTE_RECORD',
+              description: `Awakened in starting location.`,
+              epistemicValidation: 'MOCK_ENGINE_COMMITTED',
+              authoritativeFeedback: run?.initialScene || `Entered the world of ${run?.worldId || 'Adventure'}.`,
+            }
+          ],
         engineContractVersion: '1.0.0',
         serverBoundarySecret: 'boundary_verified_secure_token',
       };
       this.dynamicStoryStates.set(storyId, dState);
     }
     return dState;
+  }
+
+  /**
+   * Persist the player's visible action log independently of this process's
+   * in-memory EngineState. This is the durable source used after reload.
+   */
+  private persistActionHistory(storyId: string, state: EngineState): void {
+    if (!storyId || storyId === 'default_story') return;
+    const run = worldRepository.getStoryRun(storyId);
+    if (!run) return;
+    run.runtimeState = {
+      ...(run.runtimeState || {}),
+      actionHistory: JSON.parse(JSON.stringify(state.actionHistory || [])),
+    };
+    worldRepository.saveStoryRun(run);
   }
 
   public setActiveStoryId(storyId: string): void {
@@ -1436,6 +1455,9 @@ export class ServerMockAuthority {
         };
       }
     }
+    // Persist again after narration is attached, so the saved record includes
+    // the actual narrative response and diagnostics rather than only the action.
+    this.persistActionHistory(targetStoryId, state);
 
     // Feed the committed turn back into the continuity loop so future research,
     // plot, plan, memory retrieval, and narration see what actually happened.
@@ -2239,6 +2261,7 @@ The moment does not end so much as shift, leaving the scene open to whatever the
       state.actionHistory = [logEntry, ...state.actionHistory];
     }
 
+    this.persistActionHistory(targetStoryId, state);
     const updatedViewState = this.filterForExternalClient(state, targetStoryId);
 
     return {

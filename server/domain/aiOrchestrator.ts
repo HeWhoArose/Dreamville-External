@@ -7274,7 +7274,8 @@ export class MultiModelOrchestrator {
     const informationSeeking = intent
       ? Boolean(intent.informationGoal) ||
         intent.interactionMode === 'INFORMATION_SEEKING' ||
-        (intent.interactionMode === 'PASSIVE_OBSERVATION' && intent.observationIntent)
+        (intent.interactionMode === 'PASSIVE_OBSERVATION' && intent.observationIntent) ||
+        NARRATIVE_INFORMATION_SEEKING_PATTERN.test(action)
       : NARRATIVE_INFORMATION_SEEKING_PATTERN.test(action);
     if (!action || !output || !informationSeeking) {
       return { valid: true };

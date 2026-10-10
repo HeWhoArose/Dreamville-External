@@ -32,8 +32,8 @@
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "character.extract": [
-      "google_gemini::gemini-2.5-flash",
       "google_gemini::gemini-3.5-flash-lite",
+      "google_gemini::gemini-2.5-flash",
       "google_gemini::gemini-3.1-flash-lite",
       "groq::qwen/qwen3.8-27b",
       "openrouter::google/gemma-4-31b-it:free",

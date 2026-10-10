@@ -128,8 +128,8 @@
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "combat.animation.plan": [
-      "groq::openai/gpt-oss-120b",
       "groq::qwen/qwen3.8-27b",
+      "groq::openai/gpt-oss-120b",
       "groq::openai/gpt-oss-20b",
       "openrouter::google/gemma-4-31b-it:free",
       "openrouter::inclusionai/ling-3.0-flash:free",

@@ -459,7 +459,16 @@ export class OpeningSceneService {
 			previousNarrations: [],
 		});
 		const pacingContract = NarrativePacingEngine.resolve({ situation, intent });
-		const pacingValidation = NarrativePacingEngine.validateNarration(text, pacingContract);
+		// Opening scenes are a distinct authored unit: three short paragraphs are
+		// allowed here even though ordinary turn narration stays at two by default.
+		const openingPacingContract = {
+			...pacingContract,
+			controls: {
+				...pacingContract.controls,
+				maxParagraphs: Math.max(3, pacingContract.controls.maxParagraphs),
+			},
+		};
+		const pacingValidation = NarrativePacingEngine.validateNarration(text, openingPacingContract);
 
 		const decision: 'ACCEPT' | 'REWRITE' = richness.decision === 'PASS' && pacingValidation.valid ? 'ACCEPT' : 'REWRITE';
 		return {

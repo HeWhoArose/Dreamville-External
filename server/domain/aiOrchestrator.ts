@@ -6703,18 +6703,29 @@ export class MultiModelOrchestrator {
         }
       }
 
-      // 2. Dialogue validation
+      // 2. Dialogue normalization.
+      // Providers frequently vary the field names for otherwise usable dialogue
+      // (for example, character/line or name/content). Recover those common shapes
+      // before rejecting the whole turn; unusable optional dialogue must not erase
+      // a valid narrative response.
       const dialogue: { speaker: string; text: string }[] = [];
-      if (parsed.dialogue) {
-        if (!Array.isArray(parsed.dialogue)) {
-          return { valid: false, errorReason: 'Dialogue must be an array.' };
-        }
-        for (const d of parsed.dialogue) {
-          if (!d || typeof d.speaker !== 'string' || typeof d.text !== 'string') {
-            return { valid: false, errorReason: 'Dialogue entries must contain valid speaker and text.' };
+      const rawDialogue = parsed.dialogue == null
+        ? []
+        : Array.isArray(parsed.dialogue) ? parsed.dialogue : [parsed.dialogue];
+      for (const entry of rawDialogue) {
+        let speaker = '';
+        let line = '';
+        if (typeof entry === 'string') {
+          const match = entry.trim().match(/^([^:\\n]{1,80}):\\s*(.+)$/s);
+          if (match) {
+            speaker = match[1].trim();
+            line = match[2].trim();
           }
-          dialogue.push({ speaker: d.speaker, text: d.text });
+        } else if (entry && typeof entry === 'object') {
+          speaker = String(entry.speaker ?? entry.character ?? entry.characterName ?? entry.npc ?? entry.name ?? '').trim();
+          line = String(entry.text ?? entry.line ?? entry.dialogue ?? entry.content ?? entry.utterance ?? entry.message ?? '').trim();
         }
+        if (speaker && line) dialogue.push({ speaker, text: line });
       }
 
       // 3. Events validation

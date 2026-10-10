@@ -1252,3 +1252,45 @@ test('Phase 12 regression: unwraps a provider JSON package accidentally nested i
 	assert.equal(result.turnPackage?.dialogue[0]?.speaker, 'Nemi Oris');
 	assert.equal(/^\s*\{/.test(result.turnPackage?.narrative.join(' ') || ''), false);
 });
+
+
+test('Phase 12 regression: provider dialogue aliases are normalized without discarding valid narration', () => {
+	const orchestrator = createTestOrchestrator();
+	const raw = JSON.stringify({
+		narrative: ['Barren pauses before answering Vael.'],
+		dialogue: [
+			{ character: 'Barren', line: 'The citadel is impressive, though I am still deciding how I feel about it.' },
+			{ name: 'Ivara Pell', content: 'The bridges are beautiful from here.' },
+			{ speaker: '', text: 'This entry has no speaker and should be ignored.' },
+			{ speaker: 'Beren Ashdown' },
+		],
+		events: [],
+		stateChanges: [],
+		memoryCandidates: [],
+		audioCues: [],
+	});
+	const result = orchestrator.validateTurnPackage(raw);
+	assert.equal(result.valid, true, result.errorReason);
+	assert.deepEqual(result.turnPackage?.dialogue, [
+		{ speaker: 'Barren', text: 'The citadel is impressive, though I am still deciding how I feel about it.' },
+		{ speaker: 'Ivara Pell', text: 'The bridges are beautiful from here.' },
+	]);
+});
+
+test('Phase 12 regression: deterministic emergency floor answers direct NPC social questions with dialogue', async () => {
+	const adapter = new DeterministicEmergencyFloorAdapter();
+	const response = await adapter.generate(
+		'narrative.generate',
+		'Visible entities: Barren [NPC]. Current action: Excuse me sir, what do you think of this citadel, do you like it here?',
+		{
+			canonicalLocationName: 'Elysium Solar Citadel',
+			playerAction: 'Excuse me sir, what do you think of this citadel, do you like it here?',
+		},
+	);
+	const orchestrator = createTestOrchestrator();
+	const result = orchestrator.validateTurnPackage(response.text);
+	assert.equal(result.valid, true, result.errorReason);
+	assert.equal(result.turnPackage?.dialogue[0]?.speaker, 'Barren');
+	assert.match(result.turnPackage?.dialogue[0]?.text || '', /appeal|impressive/i);
+	assert.match(result.turnPackage?.narrative.join(' ') || '', /Barren|question/i);
+});

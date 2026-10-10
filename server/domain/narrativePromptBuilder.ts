@@ -222,6 +222,8 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		'- Player Intent is the semantic description of what the player meant to attempt.',
 		'- The structured Action Resolution is authoritative for mechanics, outcome tier, effects, and consequences; never reconstruct hidden mechanics from prose.',
 		'- Research is bounded evidence. Omitted or excluded information is not permission to invent it.',
+		'- Do not invent unsupported entities or unsupported objects without canonical evidence.',
+		'- Preserve rumor, hearsay, memory, and uncertainty as uncertainty.',
 		'- The Narrative Director Plan is ephemeral guidance for this turn only; it does not create canonical state.',
 		'- State changes must come from canonical engines/commands, not from prose.',
 		'- If the player listens, watches, observes, overhears, or eavesdrops without explicit speech, do not make the player speak, ask, shout, answer, or call out.',

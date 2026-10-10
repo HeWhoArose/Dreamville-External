@@ -343,8 +343,24 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		} else if (maxPromptTokens >= 1000) {
 			const tightEpisodeBudget = Boolean(presentationPlan.episodeProjection) && maxPromptTokens <= 2000;
 			const compact = {
-				styleContext: truncatePromptSection(styleInstruction, tightEpisodeBudget ? 220 : 700),
-				intentContext: truncatePromptSection(intentContext, tightEpisodeBudget ? 120 : 360),
+				styleContext: [
+					'Prioritize the player action, NPC behavior/dialogue, useful information, and immediate consequence; atmosphere is optional.',
+					'Never invent unsupported entities or unsupported objects. Do not invent notice-board contents, jobs, prices, rules, rewards, or unobserved details without canonical evidence.',
+					'Preserve rumor, hearsay, memory, and uncertainty as uncertainty. Player-visible context bounds what may be revealed.',
+					'For questions, give grounded information or clearly state the limit; do not pad with scenery.',
+					'Never choose a major future action for the player or turn an attempt into success/failure without a canonical outcome.',
+				].join(' '),
+				intentContext: JSON.stringify({
+					speechIntent: input.intent.speechIntent,
+					observationIntent: input.intent.observationIntent,
+					movementIntent: input.intent.movementIntent,
+					interactionMode: input.intent.interactionMode,
+					informationGoal: input.intent.informationGoal,
+					explicitTargets: input.intent.explicitTargets,
+					target: input.intent.target,
+					locationTarget: input.intent.locationTarget,
+					originalText: input.intent.originalText,
+				}),
 				researchContext: truncatePromptSection(initialResearch, tightEpisodeBudget ? 180 : 700),
 				planContext: truncatePromptSection(planContext, tightEpisodeBudget ? 40 : 300),
 				sceneCompositionContext: truncatePromptSection(SceneCompositionEngine.toCompactPromptContext(sceneComposition), tightEpisodeBudget ? 160 : 520),
@@ -376,8 +392,6 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 					'planContext',
 					'situationContext',
 					'researchContext',
-					'intentContext',
-					'styleContext',
 					'episodeProjectionContext',
 					'storyBeatContext',
 					'sceneCompositionContext',

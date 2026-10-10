@@ -201,11 +201,11 @@
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "ooc.respond": [
-      "google_gemini::gemini-2.5-flash",
       "groq::qwen/qwen3.8-27b",
+      "google_gemini::gemini-3.5-flash",
       "openrouter::inclusionai/ling-3.0-flash:free",
       "openrouter::google/gemma-4-31b-it:free",
-      "google_gemini::gemini-3.5-flash",
+      "google_gemini::gemini-2.5-flash",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "speech.generate": [

@@ -730,7 +730,18 @@ export class OpeningSceneService {
 				{ id: `evt_open_${storyId}_0`, type: 'location', text: `${location.name} — ${location.region}`, timestamp: time.formattedHeader },
 				{ id: `evt_open_${storyId}_1`, type: 'normal', text: location.ambientSensory || `The surroundings of ${location.name} are quiet.`, timestamp: time.formattedHeader },
 				{ id: `evt_open_${storyId}_2`, type: 'action', text: 'The scene is responsive to the protagonist’s presence.', timestamp: time.formattedHeader },
-				{ id: `evt_open_${storyId}_3`, type: 'quest', text: 'An unresolved situation is established.', timestamp: time.formattedHeader },
+				{
+					id: `evt_open_${storyId}_3`,
+					type: narrativeMode === 'FREE_ROAM' ? 'normal' : 'quest',
+					text: narrativeMode === 'FREE_ROAM'
+						? 'Several opportunities may be pursued or ignored; no single path is prescribed.'
+						: narrativeMode === 'SIDE_CHARACTER'
+							? 'The principal actor’s objective remains unresolved, and the player’s response is open.'
+							: authoredGoal
+								? `A first lead is established: ${authoredGoal}`
+								: 'The starting situation remains unresolved.',
+					timestamp: time.formattedHeader,
+				},
 			],
 		};
 	}

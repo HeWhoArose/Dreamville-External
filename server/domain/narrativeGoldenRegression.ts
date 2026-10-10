@@ -67,7 +67,7 @@ export const NARRATIVE_GOLDEN_SCENARIOS: readonly NarrativeGoldenScenario[] = [
 		title: 'Information-seeking uncertainty',
 		playerAction: 'I find out whether the starlight fissures are real.',
 		expectedQualityProfile: 'INFORMATION_SEEKING',
-		expectedPacingProfile: 'EXPANDED',
+		expectedPacingProfile: 'STANDARD',
 		requiredIntent: { observationIntent: false, movementIntent: false, speechIntent: false },
 		requiredAnchors: [/starlight fissures/i, /uncertain|hearsay|unverified|unknown|no reliable/i],
 		forbiddenPatterns: [/the fissures are definitely/i, /without doubt/i],

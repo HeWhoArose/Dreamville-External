@@ -6512,7 +6512,7 @@ export class MultiModelOrchestrator {
               parsed = {
                 narrative: nestedNarrative,
                 dialogue: Array.isArray(nested.dialogue) ? nested.dialogue : (Array.isArray(parsed.dialogue) ? parsed.dialogue : []),
-                events: Array.isArray(nested.events) ? nested.events : (Array.isArray(parsed.events) ? parsed.events : []),
+                events: Array.isArray(nested.events) ? nested.events.map((event: any) => typeof event === 'string' ? event : event && typeof event === 'object' ? [event.type, event.description || event.text || event.summary].filter(Boolean).join(': ') : '').filter(Boolean) : (Array.isArray(parsed.events) ? parsed.events : []),
                 stateChanges: Array.isArray(nested.stateChanges) ? nested.stateChanges : (Array.isArray(parsed.stateChanges) ? parsed.stateChanges : []),
                 memoryCandidates: Array.isArray(nested.memoryCandidates) ? nested.memoryCandidates : (Array.isArray(parsed.memoryCandidates) ? parsed.memoryCandidates : []),
                 audioCues: Array.isArray(nested.audioCues) ? nested.audioCues : (Array.isArray(parsed.audioCues) ? parsed.audioCues : []),

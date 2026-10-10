@@ -142,3 +142,38 @@
 [2026-10-06T07:42:55.376Z] checkpoint turn_125 ok (events 125 → 125)
 [2026-10-06T07:42:56.464Z] checkpoint final ok (events 125 → 125)
 [2026-10-06T07:42:56.465Z] MARATHON COMPLETE: 125 turns, maxCalls 2, avg 932ms, p95 2114ms, unique narratives 67
+[2026-10-10T11:34:14.877Z] marathon boot complete (http://127.0.0.1:44920)
+[2026-10-10T11:34:15.515Z] marathon boot complete (http://127.0.0.1:40887)
+[2026-10-10T11:34:15.541Z] turn 1/10 done (exploration)
+[2026-10-10T11:34:16.079Z] turn 1/10 done (exploration)
+[2026-10-10T11:34:18.782Z] turn 10/10 done (exploration)
+[2026-10-10T11:34:19.081Z] turn 10/10 done (exploration)
+[2026-10-10T11:34:19.216Z] turn 11/20 done (dialogue)
+[2026-10-10T11:34:19.530Z] turn 11/20 done (dialogue)
+[2026-10-10T11:34:24.620Z] turn 20/20 done (dialogue)
+[2026-10-10T11:34:24.914Z] turn 20/20 done (dialogue)
+[2026-10-10T11:34:25.353Z] turn 21/30 done (memory-recall)
+[2026-10-10T11:34:25.628Z] turn 21/30 done (memory-recall)
+[2026-10-10T11:34:32.245Z] turn 30/30 done (memory-recall)
+[2026-10-10T11:34:32.331Z] turn 30/30 done (memory-recall)
+[2026-10-10T11:34:32.883Z] turn 31/40 done (social)
+[2026-10-10T11:34:33.085Z] turn 31/40 done (social)
+[2026-10-10T11:34:39.860Z] turn 40/40 done (social)
+[2026-10-10T11:34:39.860Z] SEGMENT 1 complete
+[2026-10-10T11:34:40.630Z] turn 41/50 done (combat-approach)
+[2026-10-10T11:34:40.704Z] turn 40/40 done (social)
+[2026-10-10T11:34:40.704Z] SEGMENT 1 complete
+[2026-10-10T11:34:41.554Z] turn 41/50 done (combat-approach)
+[2026-10-10T11:34:48.082Z] turn 50/50 done (combat-approach)
+[2026-10-10T11:34:48.105Z] leak probe (turn 51) ok: deny-or-narrate, server secret absent
+[2026-10-10T11:34:48.105Z] turn 51/51 done (secrets)
+[2026-10-10T11:34:48.948Z] turn 52/60 done (secrets)
+[2026-10-10T11:34:49.733Z] turn 50/50 done (combat-approach)
+[2026-10-10T11:34:49.759Z] leak probe (turn 51) ok: deny-or-narrate, server secret absent
+[2026-10-10T11:34:49.759Z] turn 51/51 done (secrets)
+[2026-10-10T11:34:50.721Z] turn 52/60 done (secrets)
+[2026-10-10T11:34:57.621Z] turn 60/60 done (secrets)
+[2026-10-10T11:34:57.621Z] SEGMENT 2 complete
+[2026-10-10T11:34:58.828Z] turn 61/70 done (relationships)
+[2026-10-10T11:34:59.694Z] turn 60/60 done (secrets)
+[2026-10-10T11:34:59.694Z] SEGMENT 2 complete

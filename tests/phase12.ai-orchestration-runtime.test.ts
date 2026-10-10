@@ -1250,5 +1250,5 @@ test('Phase 12 regression: unwraps a provider JSON package accidentally nested i
 	assert.equal(result.valid, true, result.errorReason);
 	assert.equal(result.turnPackage?.narrative[0], nested.narrative[0]);
 	assert.equal(result.turnPackage?.dialogue[0]?.speaker, 'Nemi Oris');
-	assert.notMatch(result.turnPackage?.narrative.join(' ') || '', /^\s*\{/);
+	assert.equal(/^\s*\{/.test(result.turnPackage?.narrative.join(' ') || ''), false);
 });

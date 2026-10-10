@@ -621,8 +621,10 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
     const extractedPlayerAction =
       options?.playerAction?.trim() ||
       (() => {
-        const match = String(prompt || '').match(/(?:Latest Player Action|PLAYER ACTION|Player Input|Action Requested|Intent|Latest Action|Action):\s*([^\n]+)/i);
-        return match?.[1]?.trim() || '';
+        const source = String(prompt || '');
+        const explicitAction = source.match(/(?:Latest Player Action|PLAYER ACTION|Player Input|Action Requested|Latest Action):\s*([^\n]+)/i);
+        const fallbackAction = source.match(/(?:Intent|Action):\s*([^\n]+)/i);
+        return explicitAction?.[1]?.trim() || fallbackAction?.[1]?.trim() || '';
       })();
 
     switch (task) {

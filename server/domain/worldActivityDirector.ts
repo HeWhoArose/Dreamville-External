@@ -25,6 +25,12 @@ export class WorldActivityDirector {
 		{ name: 'Tomas Reed', kind: 'NPC' as EntityKind, role: 'traveller', activity: 'checking a route map and watching the crowd', motivations: ['reach the next settlement safely', 'learn local news'], traits: ['cautious', 'curious'] },
 		{ name: 'Sella Vorn', kind: 'NPC' as EntityKind, role: 'local resident', activity: 'chatting with a neighbour while going about daily business', motivations: ['finish daily errands', 'keep informed about local affairs'], traits: ['practical', 'social'] },
 		{ name: 'Dain Orrel', kind: 'NPC' as EntityKind, role: 'worker', activity: 'carrying supplies between nearby buildings', motivations: ['finish a work shift', 'provide for family'], traits: ['hardworking', 'reserved'] },
+		{ name: 'Ivara Pell', kind: 'NPC' as EntityKind, role: 'courier', activity: 'checking delivery slips and searching for the right street', motivations: ['deliver a sealed parcel', 'avoid missing a deadline'], traits: ['brisk', 'resourceful'] },
+		{ name: 'Beren Ashdown', kind: 'NPC' as EntityKind, role: 'guard', activity: 'checking the flow of people at a public entrance', motivations: ['keep the entrance orderly', 'spot trouble early'], traits: ['alert', 'direct'] },
+		{ name: 'Nemi Oris', kind: 'NPC' as EntityKind, role: 'street performer', activity: 'performing a quick tune for passersby', motivations: ['earn a few coins', 'draw a larger audience'], traits: ['expressive', 'playful'] },
+		{ name: 'Calder Voss', kind: 'NPC' as EntityKind, role: 'craftsworker', activity: 'delivering a repaired tool to a waiting customer', motivations: ['keep customers satisfied', 'finish the next repair'], traits: ['patient', 'practical'] },
+		{ name: 'Yara Sen', kind: 'NPC' as EntityKind, role: 'healer', activity: 'checking a traveler's bandage and supplies', motivations: ['help the injured', 'restock medical supplies'], traits: ['kind', 'focused'] },
+		{ name: 'Oren Vale', kind: 'NPC' as EntityKind, role: 'messenger', activity: 'asking directions while carrying a folded dispatch', motivations: ['deliver an important message', 'find the quickest route'], traits: ['hurried', 'polite'] },
 	];
 
 	private static locationSupportsPublicActivity(name: string, description: string): boolean {
@@ -33,7 +39,15 @@ export class WorldActivityDirector {
 
 	private static peopleForLocation(storyId: string, locationId: string, name: string, description: string) {
 		const place = (name + ' ' + description).toLowerCase();
-		const variant = hashStringToSeed(storyId + '|' + locationId) % (/alley/.test(place) ? 8 : 3);
+		const variant = hashStringToSeed(storyId + '|' + locationId) % (/alley/.test(place) ? 8 : 5);
+		const selectPeople = (pool: any[], count: number) => {
+			const start = hashStringToSeed(storyId + '|' + locationId + '|roster') % pool.length;
+			const chosen: any[] = [];
+			for (let offset = 0; offset < pool.length && chosen.length < count; offset++) {
+				chosen.push(pool[(start + offset) % pool.length]);
+			}
+			return chosen;
+		};
 		if (/guild/.test(place)) {
 			return variant === 0 ? [
 				{ name: 'Rook Halvern', kind: 'NPC' as EntityKind, role: 'guild challenger', activity: 'arguing with another adventurer over a disputed contract', motivations: ['claim a lucrative contract', 'protect a hard-won reputation'], traits: ['proud', 'short-tempered'] },
@@ -44,13 +58,18 @@ export class WorldActivityDirector {
 			];
 		}
 		if (/inn|tavern/.test(place)) {
-			return variant === 0 ? [
+			const innkeepers = [
 				{ name: 'Mira Fen', kind: 'NPC' as EntityKind, role: 'innkeeper', activity: 'checking the common room and serving waiting guests', motivations: ['keep guests safe', 'earn a living'], traits: ['observant', 'practical'] },
-				{ name: 'The Grey Stranger', kind: 'NPC' as EntityKind, role: 'shady contact', activity: 'sitting alone in a shadowed corner, watching who enters and keeping a folded map close', motivations: ['find a discreet buyer for a map', 'avoid drawing attention'], traits: ['guarded', 'calculating'] },
-			] : [
-				{ name: 'Mira Fen', kind: 'NPC' as EntityKind, role: 'innkeeper', activity: 'checking the common room and serving waiting guests', motivations: ['keep guests safe', 'earn a living'], traits: ['observant', 'practical'] },
-				{ name: 'Tomas Reed', kind: 'NPC' as EntityKind, role: 'traveller', activity: 'comparing a route map with the next day’s weather', motivations: ['reach the next settlement safely', 'learn local news'], traits: ['cautious', 'curious'] },
+				{ name: 'Dara Quill', kind: 'NPC' as EntityKind, role: 'innkeeper', activity: 'settling a room dispute and checking the guest ledger', motivations: ['keep the inn profitable', 'prevent trouble'], traits: ['firm', 'fair'] },
+				{ name: 'Pavel Norr', kind: 'NPC' as EntityKind, role: 'innkeeper', activity: 'carrying a tray between tables and listening for requests', motivations: ['serve guests well', 'save for a new kitchen'], traits: ['warm', 'busy'] },
+				{ name: 'Suri Venn', kind: 'NPC' as EntityKind, role: 'innkeeper', activity: 'checking arrivals and asking a tired courier about the road', motivations: ['keep travellers safe', 'learn about road conditions'], traits: ['curious', 'careful'] },
+				{ name: 'Halwen Marr', kind: 'NPC' as EntityKind, role: 'innkeeper', activity: 'counting the evening takings and speaking with a regular', motivations: ['keep the inn afloat', 'protect local friendships'], traits: ['wry', 'experienced'] },
 			];
+			const innkeeper = innkeepers[variant % innkeepers.length];
+			const guest = variant === 0
+				? { name: 'The Grey Stranger', kind: 'NPC' as EntityKind, role: 'shady contact', activity: 'sitting alone in a shadowed corner, watching who enters and keeping a folded map close', motivations: ['find a discreet buyer for a map', 'avoid drawing attention'], traits: ['guarded', 'calculating'] }
+				: selectPeople(this.PEOPLE.filter((person) => person.role !== 'worker'), 1)[0];
+			return [innkeeper, guest];
 		}
 		if (/alley/.test(place)) {
 			if (variant === 0) {
@@ -70,13 +89,18 @@ export class WorldActivityDirector {
 			];
 		}
 		if (/market|bazaar/.test(place)) {
-			return [
+			const merchants = [
 				{ name: 'Mira Fen', kind: 'MERCHANT' as EntityKind, role: 'merchant', activity: 'calling out wares to passersby', motivations: ['earn a living', 'find reliable customers'], traits: ['outgoing', 'observant'] },
-				{ name: 'Sella Vorn', kind: 'NPC' as EntityKind, role: 'local resident', activity: 'chatting with a neighbour while going about daily business', motivations: ['finish daily errands', 'keep informed about local affairs'], traits: ['practical', 'social'] },
-				{ name: 'Dain Orrel', kind: 'NPC' as EntityKind, role: 'market porter', activity: 'carrying crates between market stalls', motivations: ['finish a work shift', 'provide for family'], traits: ['hardworking', 'reserved'] },
+				{ name: 'Jori Kett', kind: 'MERCHANT' as EntityKind, role: 'merchant', activity: 'demonstrating a hand-made gadget to curious shoppers', motivations: ['sell the day’s best work', 'find a skilled apprentice'], traits: ['inventive', 'talkative'] },
+				{ name: 'Amara Doss', kind: 'MERCHANT' as EntityKind, role: 'merchant', activity: 'bargaining with a customer over a basket of rare fruit', motivations: ['earn a fair profit', 'keep regular customers'], traits: ['sharp', 'good-humoured'] },
+				{ name: 'Fenrik Sol', kind: 'MERCHANT' as EntityKind, role: 'merchant', activity: 'laying out maps, inks and travel supplies on a cloth-covered stall', motivations: ['sell useful travel goods', 'hear news from the roads'], traits: ['observant', 'patient'] },
+				{ name: 'Tessa Vey', kind: 'MERCHANT' as EntityKind, role: 'merchant', activity: 'calling customers over to inspect a new shipment of cloth', motivations: ['sell the shipment before dusk', 'maintain her supplier contacts'], traits: ['confident', 'quick-witted'] },
 			];
+			const merchant = merchants[variant % merchants.length];
+			const supporting = selectPeople(this.PEOPLE.filter((person) => person.name !== merchant.name), 2);
+			return [merchant, ...supporting];
 		}
-		return this.PEOPLE;
+		return selectPeople(this.PEOPLE, 3);
 	}
 
 	private static refreshDailyActivity(

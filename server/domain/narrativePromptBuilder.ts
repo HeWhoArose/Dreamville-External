@@ -391,13 +391,12 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 					'workingContext',
 					'planContext',
 					'situationContext',
-					'researchContext',
 					'episodeProjectionContext',
 					'storyBeatContext',
 					'sceneCompositionContext',
 				];
 				const key = keys
-					.filter((candidate) => compact[candidate].length > 40)
+					.filter((candidate) => compact[candidate].length > (candidate === 'researchContext' ? 300 : 40))
 					.sort((a, b) => compact[b].length - compact[a].length)[0];
 				if (!key) break;
 				compact[key] = truncatePromptSection(
@@ -410,7 +409,6 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			// Hard-budget recovery sheds supporting context, never the N15 contract/header.
 			if (totalTokens > maxPromptTokens) {
 				compact.workingContext = '[omitted for hard token budget]';
-				compact.researchContext = '[bounded research omitted for hard token budget; preserve uncertainty]';
 				compact.planContext = '[plan omitted for hard token budget]';
 				prompt = renderCompact();
 				totalTokens = WorkingContextEngine.estimateTokens(prompt);

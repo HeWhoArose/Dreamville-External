@@ -393,7 +393,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 					input.intent.originalText,
 					String(input.intent.informationGoal || ''),
 					...(input.plan.informationToReveal || []).map((reveal) => typeof reveal === 'string' ? reveal : reveal.topic),
-					...(input.plan.continuityRequirements || []).map((requirement) => typeof requirement === 'string' ? requirement : requirement.topic),
+					...(input.plan.continuityRequirements || []),
 					String(input.plan.unresolvedThread || ''),
 				]),
 				planContext: truncatePromptSection(planContext, tightEpisodeBudget ? 40 : 300),

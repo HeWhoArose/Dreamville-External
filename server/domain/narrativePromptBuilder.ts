@@ -433,7 +433,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				if (!key) break;
 				compact[key] = truncatePromptSection(
 					compact[key],
-					Math.max(40, compact[key].length - Math.max(24, (totalTokens - maxPromptTokens) * 4)),
+					Math.max(key === 'researchContext' ? 300 : 40, compact[key].length - Math.max(24, (totalTokens - maxPromptTokens) * 4)),
 				);
 				prompt = renderCompact();
 				totalTokens = WorkingContextEngine.estimateTokens(prompt);

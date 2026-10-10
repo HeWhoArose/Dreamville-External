@@ -343,7 +343,8 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		} else if (maxPromptTokens >= 1000) {
 			const tightEpisodeBudget = Boolean(presentationPlan.episodeProjection) && maxPromptTokens <= 2000;
 			const compact = {
-				intentContext: intentContext,
+				styleContext: truncatePromptSection(styleInstruction, tightEpisodeBudget ? 220 : 700),
+				intentContext: truncatePromptSection(intentContext, tightEpisodeBudget ? 120 : 360),
 				researchContext: truncatePromptSection(initialResearch, tightEpisodeBudget ? 180 : 700),
 				planContext: truncatePromptSection(planContext, tightEpisodeBudget ? 40 : 300),
 				sceneCompositionContext: truncatePromptSection(SceneCompositionEngine.toCompactPromptContext(sceneComposition), tightEpisodeBudget ? 160 : 520),
@@ -357,6 +358,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				compact.researchContext,
 				compact.workingContext,
 				{
+					styleInstruction: compact.styleContext,
 					situationContext: compact.situationContext,
 					intentContext: compact.intentContext,
 					planContext: compact.planContext,
@@ -375,18 +377,27 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 					'situationContext',
 					'researchContext',
 					'intentContext',
-					'sceneCompositionContext',
+					'styleContext',
 					'episodeProjectionContext',
 					'storyBeatContext',
+					'sceneCompositionContext',
 				];
 				const key = keys
-					.filter((candidate) => compact[candidate].length > 120)
+					.filter((candidate) => compact[candidate].length > 40)
 					.sort((a, b) => compact[b].length - compact[a].length)[0];
 				if (!key) break;
 				compact[key] = truncatePromptSection(
 					compact[key],
-					Math.max(120, compact[key].length - Math.max(24, (totalTokens - maxPromptTokens) * 4)),
+					Math.max(40, compact[key].length - Math.max(24, (totalTokens - maxPromptTokens) * 4)),
 				);
+				prompt = renderCompact();
+				totalTokens = WorkingContextEngine.estimateTokens(prompt);
+			}
+			// Hard-budget recovery sheds supporting context, never the N15 contract/header.
+			if (totalTokens > maxPromptTokens) {
+				compact.workingContext = '[omitted for hard token budget]';
+				compact.researchContext = '[bounded research omitted for hard token budget; preserve uncertainty]';
+				compact.planContext = '[plan omitted for hard token budget]';
 				prompt = renderCompact();
 				totalTokens = WorkingContextEngine.estimateTokens(prompt);
 			}

@@ -951,7 +951,7 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
         const combatTarget = combatTargetMatch
           ? resolveActionTarget((combatTargetMatch[1] || 'the ') + combatTargetMatch[2].trim())
           : '';
-        const informationMatch = normalizedAction.match(/\b(?:whether|about|regarding|concerning|listen for|hear about|find out about)\s+(.+?)(?:[.!?]|$)/i);
+        const informationMatch = normalizedAction.match(/\b(?:whether|about|regarding|concerning|listen for|listen to|hear(?: about)?|find out about|inquire about|ask about)\s+(.+?)(?:[.!?]|$)/i);
         const informationTopic = String(
           informationMatch?.[1] ||
           normalizedAction.replace(/^(?:find out|learn|discover|investigate|research|listen for|hear about)\s+/i, ''),

@@ -135,7 +135,10 @@ export function defaultNarrationStyle(): string {
 	return [
 		'Write an immersive tabletop-RPG narrator response for the latest player action.',
 		'Player agency is authoritative: describe the immediate consequence of what the player chose, but never choose a major future action for the player.',
-		'Use concrete current-scene details and useful information before decorative flourish.',
+		'Prioritize the player action, NPC behavior/dialogue, useful information, and immediate consequence. Environment description is optional seasoning, not a required opening or paragraph.',
+		'Do not repeat ambient sensory cues, ground texture, lighting, machinery hum, or location description from recent turns unless it changes, affects the action, or conveys a new clue.',
+		'For questions and routine information-seeking, answer with what a present NPC actually knows or clearly state that no reliable answer is available; do not pad the answer with scenery.',
+		'Use environmental description when it is newly relevant: a meaningful change, danger, clue, transition, mood shift, or player-directed observation. Otherwise move straight to the people and action.',
 		'Do not invent unsupported entities, objects, abilities, locations, causes, secrets, or certainty.',
 		'Do not reveal canonical world facts unless they are supported by the supplied player-visible context.',
 		'Do not turn an attempt into a confirmed success or failure unless a canonical outcome is supplied.',

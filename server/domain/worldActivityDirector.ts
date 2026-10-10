@@ -141,6 +141,31 @@ export class WorldActivityDirector {
 						? 'arguing with another adventurer over a disputed contract'
 						: 'comparing a contract notice with a travel-worn map';
 				} else { activity = 'away from the guild hall'; presence = 'absent'; }
+			} else if (role === 'courier' || role === 'messenger') {
+				if (hour >= 6 && hour < 18) activity = hour < 10
+					? 'checking delivery slips and searching for the right street'
+					: 'hurrying between destinations with a sealed parcel or dispatch';
+				else { activity = 'off duty and delivering no messages'; presence = 'absent'; }
+			} else if (role === 'guard') {
+				if (hour >= 6 && hour < 22) activity = hour < 14
+					? 'checking the flow of people at a public entrance'
+					: 'speaking with a colleague while keeping watch';
+				else { activity = 'off duty at the guard post'; presence = 'absent'; }
+			} else if (role === 'street performer') {
+				if (hour >= 10 && hour < 20) activity = hour < 16
+					? 'performing a quick tune for passersby'
+					: 'taking requests from a small gathering and collecting coins';
+				else { activity = 'packing away the instrument for the day'; presence = 'absent'; }
+			} else if (role === 'craftsworker') {
+				if (hour >= 7 && hour < 19) activity = hour < 13
+					? 'delivering a repaired tool to a waiting customer'
+					: 'checking a tool and discussing a repair with a customer';
+				else { activity = 'back at the workshop after the day’s work'; presence = 'absent'; }
+			} else if (role === 'healer') {
+				if (hour >= 7 && hour < 21) activity = hour < 15
+					? 'checking a traveler’s bandage and supplies'
+					: 'sorting remedies and asking after an injured local';
+				else { activity = 'resting after tending to patients'; presence = 'absent'; }
 			} else if (role === 'suspicious passerby') {
 				if (hour >= 17 && hour < 24) activity = 'lingering near a side passage and watching the flow of pedestrians';
 				else { activity = 'no longer in the alley'; presence = 'absent'; }

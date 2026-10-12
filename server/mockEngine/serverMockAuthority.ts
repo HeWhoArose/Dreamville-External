@@ -9,6 +9,7 @@ import {
   PlayerKnowledge,
   OpeningScene,
   StructuredNarrativeEvent,
+  DialogueNode,
 } from './serverTypes';
 import {
   INITIAL_ENGINE_STATE,
@@ -188,7 +189,13 @@ export class ServerMockAuthority {
           conditionEffects: [],
         },
         characters: initialCharacters,
-        activeDialogue: null,
+        activeDialogue: Array.isArray(run?.runtimeState?.dialogueHistory) && run.runtimeState.dialogueHistory.length > 0
+          ? this.deriveActiveDialogueFromHistory(
+              run.runtimeState.dialogueHistory,
+              initialCharacters,
+              run?.runtimeState?.activeDialogue,
+            )
+          : null,
         dialogueHistory: persistedDialogueHistory,
         inventory: [],
         equipment: {},
@@ -230,6 +237,57 @@ export class ServerMockAuthority {
    * Persist the player's visible action log independently of this process's
    * in-memory EngineState. This is the durable source used after reload.
    */
+  /**
+   * Reconstructs the active-dialogue pointer across engine restarts. A persisted
+   * dialogue node wins; otherwise the most recent NPC entry in the durable
+   * dialogue history is used so free-form conversations resume with the same
+   * NPC instead of dropping the speaker after a reload.
+   */
+  private deriveActiveDialogueFromHistory(
+    dialogueHistory: Array<{ speaker?: string; text?: string; cycle?: number }>,
+    characters: Record<string, { id: string; name: string; role?: string }>,
+    persistedNode?: unknown,
+  ): DialogueNode | null {
+    if (
+      persistedNode &&
+      typeof persistedNode === 'object' &&
+      typeof (persistedNode as any).speakerName === 'string' &&
+      String((persistedNode as any).speakerName).trim().length > 0
+    ) {
+      const node = persistedNode as DialogueNode;
+      return {
+        nodeId: node.nodeId || `dialog_restored_${String(node.speakerName).toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
+        speakerId: node.speakerId || 'unknown_npc',
+        speakerName: node.speakerName,
+        text: node.text || '',
+        epistemicNote: node.epistemicNote || '',
+        choices: Array.isArray(node.choices) ? node.choices : [],
+        rewardKnowledge: node.rewardKnowledge,
+      };
+    }
+    const history = Array.isArray(dialogueHistory) ? dialogueHistory : [];
+    for (let index = history.length - 1; index >= 0; index--) {
+      const entry = history[index];
+      const speaker = String(entry?.speaker || '').trim();
+      const text = String(entry?.text || '').trim();
+      if (!speaker || !text || speaker === 'Narrator' || speaker === 'Player') continue;
+      const character = Object.values(characters).find((candidate) =>
+        candidate.name.toLowerCase() === speaker.toLowerCase() ||
+        speaker.toLowerCase().startsWith(candidate.name.toLowerCase().split(' ')[0]),
+      );
+      if (!character) continue;
+      return {
+        nodeId: `dialog_restored_${character.id}`,
+        speakerId: character.id,
+        speakerName: character.name,
+        text,
+        epistemicNote: '',
+        choices: [],
+      };
+    }
+    return null;
+  }
+
   private persistActionHistory(storyId: string, state: EngineState): void {
     if (!storyId || storyId === 'default_story') return;
     const run = worldRepository.getStoryRun(storyId);
@@ -237,6 +295,7 @@ export class ServerMockAuthority {
     run.runtimeState = {
       ...(run.runtimeState || {}),
       actionHistory: JSON.parse(JSON.stringify(state.actionHistory || [])),
+      activeDialogue: state.activeDialogue ? JSON.parse(JSON.stringify(state.activeDialogue)) : null,
     };
     worldRepository.saveStoryRun(run);
   }
@@ -1404,7 +1463,7 @@ export class ServerMockAuthority {
             'Do not invent a consequence not supported by the canonical action resolution or current situation.',
             'Do not choose the player’s next consequential action.',
             'Return JSON only with narrativeText and structuredEvents.',
-          ].filter(Boolean).join('\\n');
+          ].filter(Boolean).join('\n');
           const rewriteSystem = 'You are Dreamville’s live-turn narrative quality editor. Rewrite only the presentation of the already-committed turn. Canonical mechanics, world state, epistemic boundaries, and player agency are immutable. The result must contain a clear action -> consequence/reaction beat.';
           const reviewResponse = await worldRepository.getAiOrchestrator().executeTaskGeneration('narrative.review', rewritePrompt, rewriteSystem, {
             timeoutMs: 7000,

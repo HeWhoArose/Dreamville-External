@@ -156,6 +156,26 @@ export interface DynamicRelationshipState {
 	activeCause: RelationshipCause;
 	lastChangedAtSeconds: number;
 	history: RelationshipHistoryEntry[];
+	/** Phase C (GAP-3 / S-3) — consolidated inferences. Optional for backward compatibility. */
+	reflections?: RelationshipReflection[];
+}
+
+/**
+ * Phase C (GAP-3 / S-3) — an NPC reflection is a *consolidated inference*, not a
+ * witnessed canonical fact (the Smallville lesson). `confidence` is deliberately
+ * always < 1 so the adjudicator and prompt can distinguish it from canon, and
+ * `evidenceMemoryIds` records exactly which durable memories produced it.
+ */
+export interface RelationshipReflection {
+	id: string;
+	confidence: number;
+	summary: string;
+	evidenceMemoryIds: string[];
+	/** Stable identity of the consolidated evidence set, for de-duplication. */
+	evidenceKey: string;
+	tags: string[];
+	formedAtTurn: number;
+	formedAtSeconds: number;
 }
 
 export interface DynamicCharacterAgencyState {
@@ -810,6 +830,45 @@ export class DynamicCharacterAgencyEngine {
 		return 'OBSERVE';
 	}
 
+	public getRelationshipReflections(storyId: string, sourceId: string, targetId: string): RelationshipReflection[] {
+		return clone(this.state.relationships[this.relationshipKey(storyId, sourceId, targetId)]?.reflections || []);
+	}
+
+	/**
+	 * Store one consolidated NPC inference. De-duplicates by evidence set so the same
+	 * set of memories never produces a second identical reflection. Returns null when
+	 * the reflection already exists (or the input is invalid).
+	 */
+	public addRelationshipReflection(params: {
+		storyId: string;
+		sourceId: string;
+		targetId: string;
+		reflection: Omit<RelationshipReflection, 'id' | 'formedAtSeconds'> & { id?: string; formedAtSeconds?: number };
+		nowSeconds: number;
+	}): RelationshipReflection | null {
+		if (!params.storyId || !params.sourceId || !params.targetId) return null;
+		const relationship = this.ensureRelationship(params.storyId, params.sourceId, params.targetId, params.nowSeconds);
+		const existing = Array.isArray(relationship.reflections) ? relationship.reflections : [];
+		if (existing.some((entry) => entry.evidenceKey && entry.evidenceKey === params.reflection.evidenceKey)) {
+			return null;
+		}
+		const reflection: RelationshipReflection = {
+			id: params.reflection.id || deterministicId('relationship_reflection', relationship.id, params.reflection.evidenceKey),
+			confidence: Math.max(0, Math.min(0.95, Number(params.reflection.confidence) || 0)),
+			summary: String(params.reflection.summary || '').slice(0, 400),
+			evidenceMemoryIds: Array.isArray(params.reflection.evidenceMemoryIds) ? params.reflection.evidenceMemoryIds.map(String) : [],
+			evidenceKey: String(params.reflection.evidenceKey || ''),
+		tags: Array.isArray(params.reflection.tags) ? params.reflection.tags.map(String) : [],
+			formedAtTurn: Number(params.reflection.formedAtTurn) || 0,
+			formedAtSeconds: Number.isFinite(params.reflection.formedAtSeconds as number)
+				? Number(params.reflection.formedAtSeconds)
+				: params.nowSeconds,
+		};
+		relationship.reflections = [...existing, reflection].slice(-8);
+		this.changed();
+		return clone(reflection);
+	}
+
 	public getRelationshipHistory(storyId: string, sourceId: string, targetId: string): RelationshipHistoryEntry[] {
 		return clone(this.getRelationship(storyId, sourceId, targetId)?.history || []);
 	}
@@ -881,6 +940,9 @@ export class DynamicCharacterAgencyEngine {
 				activeCause: relation.activeCause || 'OTHER',
 				lastChangedAtSeconds: Number.isFinite(relation.lastChangedAtSeconds) ? Number(relation.lastChangedAtSeconds) : 0,
 				history: Array.isArray(relation.history) ? clone(relation.history) : [],
+				...(Array.isArray(relation.reflections)
+					? { reflections: relation.reflections.filter((entry) => entry && typeof entry === 'object').map((entry) => clone(entry)) }
+					: {}),
 			};
 			relationships[key] = normalized;
 		}

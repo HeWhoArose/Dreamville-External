@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 const root = process.cwd();
 
@@ -85,3 +86,27 @@ requireText(
 );
 
 console.log('Dreamville release contract verification: PASS');
+
+// Phase D2 (GAP-7/S-7): golden-set narrative judge eval.
+// Printed as a NON-BLOCKING warning until the D3 human calibration pass promotes
+// it. Set DREAMVILLE_JUDGE_BLOCKING=1 to enforce the thresholds now.
+const judgeBlocking = process.env.DREAMVILLE_JUDGE_BLOCKING === '1';
+try {
+	const tsxBin = path.join(root, 'node_modules', '.bin', 'tsx');
+	const judgeArgs = ['scripts/narrative-judge-eval.mjs'];
+	if (judgeBlocking) judgeArgs.push('--blocking');
+	const judge = spawnSync(tsxBin, judgeArgs, { cwd: root, encoding: 'utf8', timeout: 120000 });
+	console.log('\n--- Narrative judge eval (golden set) ---');
+	if (judge.stdout) process.stdout.write(judge.stdout);
+	if (judge.stderr) process.stdout.write(judge.stderr);
+	if (judge.error) {
+		console.log('Narrative judge eval could not run (non-blocking): ' + judge.error.message);
+	} else if (judge.status !== 0) {
+		const label = judgeBlocking ? 'FAILED' : 'reported below-threshold fixtures (non-blocking)';
+		console.log('Narrative judge eval ' + label + '.');
+		if (judgeBlocking) throw new Error('Narrative judge eval gate failed (DREAMVILLE_JUDGE_BLOCKING=1).');
+	}
+} catch (judgeError) {
+	if (judgeBlocking) throw judgeError;
+	console.log('Narrative judge eval skipped (non-blocking): ' + (judgeError && judgeError.message ? judgeError.message : String(judgeError)));
+}

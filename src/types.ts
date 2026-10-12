@@ -466,6 +466,15 @@ export interface ActionLog {
       status: 'SUCCESS' | 'FAILED';
       latencyMs: number;
       error?: string;
+      rejectedShape?: {
+        kind: string;
+        marker: 'NORMALIZED' | 'REJECTED';
+        normalized: boolean;
+        validationErrorReason?: string;
+        rawLength: number;
+        sample: string;
+        sampleTruncated: boolean;
+      };
     }>;
   };
   narrativeGeneration?: {
@@ -987,6 +996,15 @@ export interface CharacterAiExtractionSummary {
     status: 'SUCCESS' | 'FAILED';
     latencyMs?: number;
     error?: string;
+    rejectedShape?: {
+      kind: string;
+      marker: 'NORMALIZED' | 'REJECTED';
+      normalized: boolean;
+      validationErrorReason?: string;
+      rawLength: number;
+      sample: string;
+      sampleTruncated: boolean;
+    };
   }>;
 }
 

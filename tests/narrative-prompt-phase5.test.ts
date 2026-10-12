@@ -40,15 +40,18 @@ test('Phase 5 prompt puts current situation, semantic intent, research, and plan
 	});
 
 	const prompt = result.prompt;
+	// Phase B / S-4 salience order: the authoritative scene, intent, and resolution sit
+	// nearest the generation point (just before the output contract).
 	const indices = [
 		prompt.indexOf('GLOBAL NARRATION INSTRUCTIONS'),
 		prompt.indexOf('NARRATIVE STYLE'),
-		prompt.indexOf('CURRENT SITUATION'),
-		prompt.indexOf('PLAYER INTENT'),
 		prompt.indexOf('NARRATIVE RESEARCH'),
 		prompt.indexOf('NARRATIVE DIRECTOR PLAN'),
 		prompt.indexOf('SUPPORTING WORKING CONTEXT'),
 		prompt.indexOf('Canonical constraints:'),
+		prompt.indexOf('CURRENT SITUATION'),
+		prompt.indexOf('PLAYER INTENT'),
+		prompt.indexOf('ACTION RESOLUTION — AUTHORITATIVE'),
 		prompt.indexOf('OUTPUT CONTRACT'),
 	];
 	for (const index of indices) assert.ok(index >= 0, 'Expected prompt section missing.');

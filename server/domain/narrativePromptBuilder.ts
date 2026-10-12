@@ -124,6 +124,9 @@ function buildNarrationSituationContext(situation: CurrentSituation): string {
 		'Current action: ' + (situation.currentAction?.originalText || situation.currentAction?.action || 'None'),
 		'Plot arc: ' + (situation.plot?.currentArc || 'OPENING'),
 		situation.plot?.summary ? 'Plot summary: ' + situation.plot.summary : '',
+		situation.plot?.recentSceneSummaries && situation.plot.recentSceneSummaries.length > 0
+			? 'Recent scene summaries:\n' + situation.plot.recentSceneSummaries.map((summary) => '- ' + summary).join('\n')
+			: '',
 		'Recent turns:\n' + recentTurns,
 		'Active conditions: ' + ((Array.isArray(situation.activeConditions) ? situation.activeConditions : []).map((condition) => condition.label).join('; ') || 'None'),
 		'Available interactions: ' + ((Array.isArray(situation.availableInteractions) ? situation.availableInteractions : []).filter((interaction) => interaction.enabled).slice(0, 8).map((interaction) => interaction.label).join('; ') || 'None'),
@@ -158,6 +161,115 @@ function truncatePromptSection(value: string, maxChars: number): string {
 	return normalized.length > maxChars
 		? normalized.slice(0, maxChars - 1).trimEnd() + '…'
 		: normalized;
+}
+
+/**
+ * S-4 boundary-aware truncation for the working context: cut at the last sentence/clause
+ * boundary (or word boundary) within a small window of the limit, so shed context never
+ * ends mid-sentence, while retaining as much content as possible.
+ */
+function truncateWorkingContextAtBoundary(value: string, maxChars: number): string {
+	const normalized = String(value || '').trim();
+	if (normalized.length <= maxChars) return normalized;
+	const budget = Math.max(1, maxChars - 1);
+	const head = normalized.slice(0, budget);
+	const windowStart = Math.max(0, head.length - 48);
+	let cut = -1;
+	for (let index = head.length - 1; index >= windowStart; index -= 1) {
+		const char = head[index];
+		if (char === '\n' || char === '.' || char === '!' || char === '?' || char === ';') { cut = index + 1; break; }
+	}
+	if (cut === -1) {
+		const lastSpace = head.lastIndexOf(' ');
+		cut = lastSpace > windowStart ? lastSpace : head.length;
+	}
+	return head.slice(0, cut).trimEnd() + '…';
+}
+
+/** Low-priority sections whose bodies may be dropped (never the authoritative content). */
+const PROMPT_SHED_ORDER = [
+	'SUPPORTING WORKING CONTEXT',
+	'NARRATIVE DIRECTOR PLAN',
+	'N17 NARRATIVE EPISODE PROJECTION',
+	'N13 SCENE COMPOSITION',
+	'N15 SOCIAL ATTENTION / CONVERSATION TOPOLOGY',
+	'ADAPTIVE PACING CONTRACT',
+	'PROVIDER HANDOFF CONTRACT',
+	'NARRATIVE NOVELTY / REPETITION CONTROL',
+];
+
+/** Sections that may be shortened but are never dropped (scene / intent / resolution / research / format). */
+const PROMPT_PROTECTED_HEADERS = [
+	'GLOBAL NARRATION INSTRUCTIONS',
+	'OUTPUT CONTRACT',
+	'CURRENT SITUATION',
+	'PLAYER INTENT',
+	'ACTION RESOLUTION — AUTHORITATIVE',
+	'NARRATIVE RESEARCH',
+	'SESSION ESSENCE',
+];
+
+/** Sections whose bodies are the first candidates for proportional shortening. */
+const PROMPT_REDUCIBLE_HEADERS = [
+	'NARRATIVE STYLE',
+	'NARRATIVE QUALITY CONTRACT',
+	'ADAPTIVE PACING CONTRACT',
+	'PROVIDER HANDOFF CONTRACT',
+	'NARRATIVE CONTINUITY STATE',
+	'NARRATIVE NOVELTY / REPETITION CONTROL',
+	'NARRATIVE DIRECTOR PLAN',
+	'N13 SCENE COMPOSITION',
+	'N15 SOCIAL ATTENTION / CONVERSATION TOPOLOGY',
+	'N17 NARRATIVE EPISODE PROJECTION',
+	'CURRENT STORY BEAT — MEANINGFUL TURN CONTRACT',
+	'CURRENT STORY BEAT',
+	'SUPPORTING WORKING CONTEXT',
+	'SESSION ESSENCE',
+];
+
+/**
+ * S-4 budget reduction: the caller's budget is never knowingly blown by *expendable*
+ * material. Bodies are shortened largest-first, then low-priority sections are dropped;
+ * the authoritative scene / intent / resolution, research, session essence, and output
+ * contract are always preserved, and prose is never cut mid-sentence.
+ */
+function enforceHardPromptBudget(prompt: string, maxPromptTokens: number): string {
+	let working = prompt;
+	const tokens = () => WorkingContextEngine.estimateTokens(working);
+	if (tokens() <= maxPromptTokens) return working;
+	const bodyRange = (header: string): { start: number; end: number } | null => {
+		const index = working.indexOf(header);
+		if (index < 0) return null;
+		const lineStart = working.indexOf('\n', index);
+		if (lineStart < 0) return null;
+		const next = working.indexOf('\n\n', lineStart);
+		return { start: lineStart + 1, end: next < 0 ? working.length : next };
+	};
+	// Pass 1: proportionally shorten the largest expendable bodies.
+	for (let pass = 0; pass < 24 && tokens() > maxPromptTokens; pass += 1) {
+		let best: { header: string; start: number; end: number } | null = null;
+		let bestLength = 0;
+		for (const header of PROMPT_REDUCIBLE_HEADERS) {
+			const range = bodyRange(header);
+			if (!range) continue;
+			const length = range.end - range.start;
+			if (length > bestLength) { bestLength = length; best = { header, start: range.start, end: range.end }; }
+		}
+		if (!best || bestLength <= 60) break;
+		const body = working.slice(best.start, best.end);
+		const bodyBudget = Math.max(40, Math.floor(body.length * 0.6));
+		if (bodyBudget >= body.length) break;
+		working = working.slice(0, best.start) + truncateWorkingContextAtBoundary(body, bodyBudget) + working.slice(best.end);
+	}
+	// Pass 2: drop low-priority sections entirely (never a protected header).
+	for (const header of PROMPT_SHED_ORDER) {
+		if (tokens() <= maxPromptTokens) break;
+		if (PROMPT_PROTECTED_HEADERS.includes(header)) continue;
+		const range = bodyRange(header);
+		if (!range) continue;
+		working = working.slice(0, range.start) + '[omitted for hard token budget]' + working.slice(range.end);
+	}
+	return working;
 }
 
 function compactRelevantResearch(value: string, maxChars: number, priorities: string[]): string {
@@ -223,6 +335,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		'- The structured Action Resolution is authoritative for mechanics, outcome tier, effects, and consequences; never reconstruct hidden mechanics from prose.',
 		'- Research is bounded evidence. Omitted or excluded information is not permission to invent it.',
 		'- Do not invent unsupported entities or unsupported objects without canonical evidence.',
+		'- Use entity names exactly as spelled in Current Situation and Visible entities; never respell, abbreviate, or rename them.',
 		'- Preserve rumor, hearsay, memory, and uncertainty as uncertainty.',
 		'- The Narrative Director Plan is ephemeral guidance for this turn only; it does not create canonical state.',
 		'- State changes must come from canonical engines/commands, not from prose.',
@@ -235,6 +348,18 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		'Narrative should contain only the player-facing prose for this turn.',
 		'Do not include markdown fences, commentary, analysis, implementation details, model names, or debug information.',
 	].join('\n');
+
+	const topOpenThread =
+		(typeof input.plan?.unresolvedThread === 'string' && input.plan.unresolvedThread) ||
+		(Array.isArray(input.situation.openThreads) && input.situation.openThreads[0] ? String((input.situation.openThreads[0] as any).title || input.situation.openThreads[0]) : '') ||
+		'';
+	// S-4: preserve a compact session essence under tight budgets instead of a terse one-liner.
+	const sessionEssence = [
+		'Session essence:',
+		'Location=' + (input.situation.location?.name || 'Unknown Location'),
+		'Goal=' + (input.plan?.objective || input.intent?.informationGoal || input.intent?.originalText || 'Continue the current story arc.'),
+		topOpenThread ? 'Open thread=' + String(topOpenThread).slice(0, 160) : '',
+	].filter(Boolean).join(' ');
 
 	const compose = (
 		researchContext: string,
@@ -251,6 +376,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			storyBeatContext: string;
 			canonicalConstraints: string;
 			outputContract: string;
+			sessionEssence: string;
 		}>,
 	): string => [
 		section('GLOBAL NARRATION INSTRUCTIONS', overrides?.globalInstruction || globalInstruction),
@@ -261,9 +387,6 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		section('NARRATIVE QUALITY CONTRACT', promptBudgetQualityContext),
 		section('ADAPTIVE PACING CONTRACT', NarrativePacingEngine.toPromptContext(narrativePacingContract)),
 		section('PROVIDER HANDOFF CONTRACT', NarrativeProviderHandoffEngine.toPromptContext(narrativeProviderHandoff)),
-		section('CURRENT SITUATION', overrides?.situationContext || situationContext),
-		section('PLAYER INTENT', overrides?.intentContext || intentContext),
-		section('ACTION RESOLUTION — AUTHORITATIVE', actionResolutionContext),
 		section('NARRATIVE RESEARCH', researchContext),
 		section('CURRENT STORY BEAT — MEANINGFUL TURN CONTRACT', overrides?.storyBeatContext || storyBeatContext),
 		section('NARRATIVE DIRECTOR PLAN', overrides?.planContext || planContext),
@@ -272,7 +395,12 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 		section('N17 NARRATIVE EPISODE PROJECTION', overrides?.episodeProjectionContext || episodeProjectionContext),
 		section('NPC COGNITION BOUNDARY', 'NPC cognition is presentation guidance. Private beliefs, secrets, and knowledge must never be stated as player-visible facts unless independently authorized by research or canonical scene evidence. Express cognition through observable behavior, dialogue, hesitation, priorities, and reactions.'),
 		section('SUPPORTING WORKING CONTEXT', workingContext),
+		section('SESSION ESSENCE', overrides?.sessionEssence || sessionEssence),
 		overrides?.canonicalConstraints || canonicalConstraints,
+		// S-4: the authoritative scene / intent / resolution sit nearest the generation point.
+		section('CURRENT SITUATION', overrides?.situationContext || situationContext),
+		section('PLAYER INTENT', overrides?.intentContext || intentContext),
+		section('ACTION RESOLUTION — AUTHORITATIVE', actionResolutionContext),
 		section('OUTPUT CONTRACT', overrides?.outputContract || outputContract),
 	].join('\n\n');
 
@@ -295,9 +423,9 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	for (let pass = 0; pass < 12 && totalTokens > maxPromptTokens; pass += 1) {
 		const excessChars = Math.max(400, (totalTokens - maxPromptTokens) * 4);
 		if (workingContext.length > 700) {
-			workingContext = workingContext.slice(0, Math.max(350, workingContext.length - excessChars)).trimEnd();
+			workingContext = truncateWorkingContextAtBoundary(workingContext, Math.max(350, workingContext.length - excessChars));
 		} else if (researchContext.length > 900) {
-			researchContext = researchContext.slice(0, Math.max(600, researchContext.length - excessChars)).trimEnd();
+			researchContext = truncateWorkingContextAtBoundary(researchContext, Math.max(600, researchContext.length - excessChars));
 		} else {
 			break;
 		}
@@ -308,7 +436,6 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 	// Final compact mode: keep the semantic contract intact while reducing lower-priority prose.
 	if (totalTokens > maxPromptTokens) {
 		if (maxPromptTokens < 600) {
-			const budgetChars = Math.max(1200, maxPromptTokens * 4);
 			const microGlobal = 'Generate only the player-facing narrative. Preserve player agency and canonical truth. Never make major future decisions for the player.';
 			const microVoice = input.narratorVoiceState ? truncatePromptSection(NarratorVoiceEngine.compactPromptContext(input.narratorVoiceState), 420) : 'N2 voice disabled.';
 			const microQuality = truncatePromptSection(promptBudgetQualityContext, 420);
@@ -323,6 +450,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 			const microSocialTopology = truncatePromptSection(socialTopologyContext, 420);
 			const microEpisodeProjection = truncatePromptSection(NarrativeEpisodeProjectionEngine.toCompactPromptContext(presentationPlan.episodeProjection), 500);
 			const microStoryBeat = StoryBeatDirector.toCompactPromptContext(storyBeat);
+			const microEssence = truncatePromptSection(sessionEssence, 200);
 			const microCanonical = 'The current location and time are authoritative. Stay in the canonical current location unless the canonical game state has already committed a location change. Do not invent unsupported facts or turn rumor into certainty.';
 			const microOutput = '{"narrative":["..."],"dialogue":[],"events":[],"stateChanges":[],"memoryCandidates":[],"audioCues":[],"visualCues":[]}';
 			const sections = [
@@ -331,29 +459,31 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				section('NARRATIVE QUALITY CONTRACT', microQuality),
 				section('NARRATIVE CONTINUITY STATE', microContinuity),
 				section('NARRATIVE NOVELTY / REPETITION CONTROL', microNovelty),
-				section('CURRENT SITUATION', microSituation),
-				section('PLAYER INTENT', microIntent),
-				section('ACTION RESOLUTION — AUTHORITATIVE', microResolution),
 				section('NARRATIVE RESEARCH', microResearch),
 				section('NARRATIVE DIRECTOR PLAN', microPlan),
 				section('N13 SCENE COMPOSITION', microComposition),
 				section('N15 SOCIAL ATTENTION / CONVERSATION TOPOLOGY', microSocialTopology),
 				section('CURRENT STORY BEAT', microStoryBeat),
 				section('N17 NARRATIVE EPISODE PROJECTION', microEpisodeProjection),
+				section('SESSION ESSENCE', microEssence),
 				section('CANONICAL CURRENT SCENE ANCHOR', microCanonical),
+				// S-4: authoritative tail nearest the generation point.
+				section('CURRENT SITUATION', microSituation),
+				section('PLAYER INTENT', microIntent),
+				section('ACTION RESOLUTION — AUTHORITATIVE', microResolution),
 				section('OUTPUT CONTRACT', 'Return ONLY valid JSON in this shape: ' + microOutput),
 			];
-			prompt = sections.join('\\n\\n');
+			prompt = sections.join('\n\n');
 			totalTokens = WorkingContextEngine.estimateTokens(prompt);
 			if (totalTokens > maxPromptTokens) {
 				const removable = [
-					['NARRATIVE RESEARCH\\n', microResearch],
-					['NARRATIVE DIRECTOR PLAN\\n', microPlan],
-					['PLAYER INTENT\\n', microIntent],
-					['CURRENT SITUATION\\n', microSituation],
-					['N17 NARRATIVE EPISODE PROJECTION\\n', microEpisodeProjection],
-					['N13 SCENE COMPOSITION\\n', microComposition],
-					['N15 SOCIAL ATTENTION / CONVERSATION TOPOLOGY\\n', microSocialTopology],
+					['NARRATIVE RESEARCH\n', microResearch],
+					['NARRATIVE DIRECTOR PLAN\n', microPlan],
+					['PLAYER INTENT\n', microIntent],
+					['CURRENT SITUATION\n', microSituation],
+					['N17 NARRATIVE EPISODE PROJECTION\n', microEpisodeProjection],
+					['N13 SCENE COMPOSITION\n', microComposition],
+					['N15 SOCIAL ATTENTION / CONVERSATION TOPOLOGY\n', microSocialTopology],
 				];
 				for (const [, value] of removable) {
 					if (totalTokens <= maxPromptTokens) break;
@@ -365,7 +495,12 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				}
 			}
 			if (totalTokens > maxPromptTokens) {
-				prompt = prompt.slice(0, Math.max(200, budgetChars));
+				// Phase B system-audit (B-FIND-2): this used to blind-slice the prompt by
+				// characters (`prompt.slice(0, budgetChars)`). S-4 moved the authoritative
+				// CURRENT SITUATION / PLAYER INTENT / ACTION RESOLUTION / OUTPUT CONTRACT to
+				// the end of the prompt, so that slice deleted exactly the content the budget
+				// must preserve. Reduce expendable sections instead.
+				prompt = enforceHardPromptBudget(prompt, maxPromptTokens);
 				totalTokens = WorkingContextEngine.estimateTokens(prompt);
 			}
 		} else if (maxPromptTokens >= 1000) {
@@ -403,6 +538,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				storyBeatContext: truncatePromptSection(StoryBeatDirector.toCompactPromptContext(storyBeat), tightEpisodeBudget ? 220 : 520),
 				workingContext: truncatePromptSection(initialWorking, tightEpisodeBudget ? 60 : 320),
 				situationContext: 'Location: ' + (input.situation.location?.name || 'Unknown Location') + '; Time: ' + (input.situation.worldTime || 'Unknown Time') + '; ' + truncatePromptSection(situationContext, tightEpisodeBudget ? 360 : 900),
+				sessionEssence: truncatePromptSection(sessionEssence, tightEpisodeBudget ? 140 : 240),
 			};
 			const renderCompact = () => compose(
 				compact.researchContext,
@@ -416,6 +552,7 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 					socialTopologyContext: compact.socialTopologyContext,
 					episodeProjectionContext: compact.episodeProjectionContext,
 					storyBeatContext: compact.storyBeatContext,
+					sessionEssence: compact.sessionEssence,
 				},
 			);
 			prompt = renderCompact();
@@ -471,9 +608,6 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				section('GLOBAL NARRATION INSTRUCTIONS', compactGlobal),
 				section('NARRATIVE STYLE', compactStyle),
 				section('NARRATIVE QUALITY CONTRACT', compactQuality),
-				section('CURRENT SITUATION', compactSituation),
-				section('PLAYER INTENT', compactIntent),
-				section('ACTION RESOLUTION — AUTHORITATIVE', compactResolution),
 				section('NARRATIVE RESEARCH', compactResearch),
 				section('NARRATIVE DIRECTOR PLAN', compactPlan),
 				section('N13 SCENE COMPOSITION', compactComposition),
@@ -481,11 +615,21 @@ export function buildNarrationPrompt(input: NarrationPromptInput): NarrationProm
 				section('CURRENT STORY BEAT', compactStoryBeat),
 				section('N17 NARRATIVE EPISODE PROJECTION', compactEpisodeProjection),
 				section('SUPPORTING WORKING CONTEXT', '[omitted]'),
+				section('SESSION ESSENCE', truncatePromptSection(sessionEssence, 200)),
 				compactCanonical,
+				// S-4: authoritative tail nearest the generation point.
+				section('CURRENT SITUATION', compactSituation),
+				section('PLAYER INTENT', compactIntent),
+				section('ACTION RESOLUTION — AUTHORITATIVE', compactResolution),
 				section('OUTPUT CONTRACT', compactOutput),
 			].join('\n\n');
 			totalTokens = WorkingContextEngine.estimateTokens(prompt);
 		}
+	}
+	// Final S-4 guarantee: never knowingly exceed the caller's hard budget.
+	if (totalTokens > maxPromptTokens) {
+		prompt = enforceHardPromptBudget(prompt, maxPromptTokens);
+		totalTokens = WorkingContextEngine.estimateTokens(prompt);
 	}
 	return { prompt, styleInstruction: [styleInstruction, narrativeProviderHandoff.providerIndependentInstruction].join('\n\n'), totalTokens, narrativeQualityContract, narratorVoiceState: input.narratorVoiceState, narrativeContinuityState, narrativePacingContract, narrativeProviderHandoff, sceneComposition, episodeProjection: presentationPlan.episodeProjection };
 }

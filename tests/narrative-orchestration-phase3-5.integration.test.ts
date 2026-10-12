@@ -138,15 +138,18 @@ test('Phases 3-5 reach the live narrative provider with ordered CurrentSituation
 
 	assert.equal(primary.callHistory.length, 1);
 	const prompt = primary.callHistory[0].prompt;
+	// Phase B / S-4 salience order: the authoritative scene/intent/resolution sit nearest
+	// the generation point (just before the output contract).
 	const orderedSections = [
 		'GLOBAL NARRATION INSTRUCTIONS',
 		'NARRATIVE STYLE',
-		'CURRENT SITUATION',
-		'PLAYER INTENT',
 		'NARRATIVE RESEARCH',
 		'NARRATIVE DIRECTOR PLAN',
 		'SUPPORTING WORKING CONTEXT',
 		'Canonical constraints:',
+		'CURRENT SITUATION',
+		'PLAYER INTENT',
+		'ACTION RESOLUTION — AUTHORITATIVE',
 		'OUTPUT CONTRACT',
 	].map((section) => prompt.indexOf(section));
 	for (let i = 0; i < orderedSections.length; i += 1) {

@@ -78,6 +78,12 @@ export interface MemoryRetrievalParams {
   maxResults?: number;
   includeDormant?: boolean;
   includeArchived?: boolean;
+  /**
+   * Optional Phase B embedding similarities (0..1) keyed by memory id. When present,
+   * retrieval fuses cosine similarity with recency/importance; when absent the
+   * keyword baseline is used unchanged.
+   */
+  embeddingSimilarities?: Record<string, number>;
 }
 
 export interface DecaySummary {
@@ -417,15 +423,34 @@ export class MemoryOpportunityEngine {
 
   /**
    * Epistemic Retrieval & Anti-Recency Scoring (DreamBook §296.2, §312, DEF-CH9-04)
-   * score = relevance + causal_link + proximity + importance + recency_bonus
-   * Filters strictly by viewerActorId visibility.
-   * Guarantees PERSISTENT_CRITICAL memories receive minimum retrieval floor score (75).
+   *
+   * Baseline keyword score = relevance + importance + recency_bonus, with a
+   * PERSISTENT_CRITICAL floor of 75. When embedding similarities are supplied
+   * (Phase B / GAP-2) candidates are re-ranked with the fused signal
+   *   score = 0.45*similarity + 0.25*recency + 0.20*importance + 0.10*epistemic-fit
+   * while the legacy keyword score is preserved on the evidence as `baselineScore`.
+   * With no embedding similarities the returned order is identical to the baseline.
    */
   public retrieveMemories(params: MemoryRetrievalParams): DurableMemory[] {
-    const scored: { memory: DurableMemory; score: number }[] = [];
+    return this.retrieveMemoriesWithEvidence(params).map((entry) => JSON.parse(JSON.stringify(entry.memory)));
+  }
+
+  /** Retrieval with score evidence (Phase B fusion keeps the baseline label). */
+  public retrieveMemoriesWithEvidence(params: MemoryRetrievalParams): Array<{
+    memory: DurableMemory;
+    score: number;
+    baselineScore: number;
+    embeddingScore?: number;
+  }> {
+    const scored: Array<{ memory: DurableMemory; score: number; baselineScore: number; embeddingScore?: number }> = [];
     const maxResults = params.maxResults ?? 5;
     const currentTurn = params.currentTurn ?? 1;
     const queryKeywords = params.queryKeywords ?? [];
+    const embeddingSimilarities = params.embeddingSimilarities;
+    const embeddingsRequested = Boolean(
+      embeddingSimilarities && Object.keys(embeddingSimilarities).length > 0,
+    );
+    const EMBEDDING_FUSION_WEIGHTS = { similarity: 0.45, recency: 0.25, importance: 0.20, epistemic: 0.10 };
 
     for (const mem of this.memories.values()) {
       if (mem.storyId !== params.storyId) continue;
@@ -474,19 +499,46 @@ export class MemoryOpportunityEngine {
       // Importance score (0-100)
       const importanceScore = mem.importance;
 
-      // Total Score
-      let totalScore = relevance + importanceScore + recencyBonus;
+      // Baseline keyword score
+      let baselineScore = relevance + importanceScore + recencyBonus;
 
       // Anti-Recency Floor: PERSISTENT_CRITICAL memories guarantee minimum floor of 75
       if (mem.isPersistentCritical) {
-        totalScore = Math.max(totalScore, 75);
+        baselineScore = Math.max(baselineScore, 75);
       }
 
-      scored.push({ memory: mem, score: totalScore });
+      const rawSimilarity = embeddingSimilarities?.[mem.id];
+      const embeddingScore =
+        embeddingsRequested && rawSimilarity !== undefined && Number.isFinite(rawSimilarity)
+          ? Math.max(0, Math.min(1, Number(rawSimilarity)))
+          : undefined;
+
+      let score = baselineScore;
+      if (embeddingsRequested) {
+        const recency01 = Math.max(0, Math.min(1, recencyBonus / 20));
+        const importance01 = Math.max(0, Math.min(1, Number(mem.importance || 0) / 100));
+        const epistemic01 = Math.max(0, Math.min(1, Number(mem.confidence ?? 0.7)));
+        const similaritySignal = embeddingScore ?? 0;
+        const fused01 =
+          EMBEDDING_FUSION_WEIGHTS.similarity * similaritySignal +
+          EMBEDDING_FUSION_WEIGHTS.recency * recency01 +
+          EMBEDDING_FUSION_WEIGHTS.importance * importance01 +
+          EMBEDDING_FUSION_WEIGHTS.epistemic * epistemic01;
+        score = fused01 * 100;
+        if (mem.isPersistentCritical) score = Math.max(score, 75);
+      }
+
+      scored.push({ memory: mem, score, baselineScore, embeddingScore });
     }
 
-    scored.sort((a, b) => b.score - a.score);
-    return scored.slice(0, maxResults).map((s) => JSON.parse(JSON.stringify(s.memory)));
+    // Phase ABCD system audit (B-FIND-1): with no embeddings the ordering must be
+    // *identical* to the keyword baseline, so ties keep the stable insertion order
+    // (Array.prototype.sort is stable). A deterministic id tie-break is applied only
+    // when embeddings are active, where float scores make ties ambiguous anyway.
+    scored.sort((a, b) =>
+      b.score - a.score || (embeddingsRequested ? a.memory.id.localeCompare(b.memory.id) : 0),
+    );
+    return scored.slice(0, maxResults);
   }
 
   /**

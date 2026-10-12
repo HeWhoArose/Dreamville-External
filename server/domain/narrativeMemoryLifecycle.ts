@@ -6,6 +6,7 @@ import type { StructuredTurnPackage } from './aiOrchestrator';
 import type { NarrativeReview } from './semanticNarrativeReview';
 import type { StateAdjudicationResult } from './narrativeStateAdjudicator';
 import { recordCanonicalNarrativeEvent, type CanonicalNarrativeEventRecord } from './canonicalNarrativeEvent';
+import { synthesizeNpcReflections } from './npcReflectionEngine';
 import { NarrativeContinuityStateEngine } from './narrativeContinuityState';
 import { NarrativeNoveltyEngine } from './narrativeNoveltyEngine';
 
@@ -28,6 +29,8 @@ export interface NarrativeMemoryLifecycleResult {
 	plotBeatId?: string;
 	plotSummary: string;
 	contextHistoryRecorded: boolean;
+	/** Phase C (GAP-3): ids of NPC reflection inferences synthesized this turn. */
+	npcReflectionIds?: string[];
 }
 
 function normalize(value: unknown): string {
@@ -85,14 +88,55 @@ function relatedEntities(candidate: string, situation: CurrentSituation): string
 		.slice(0, 6);
 }
 
+/**
+ * Phase C (GAP-5 / S-5) — thread detection was vocabulary-gated: a thread phrased as
+ * "The mirror shard pulses" could never become OPEN because it lacked a magic word.
+ * The vocabulary is now a *modifier* signal rather than the only gate: a candidate
+ * also qualifies when it carries an NPC attitude verb (pursue/seek/await/verify/...)
+ * that targets a canonically anchored entity or place. Explicit thread/promise/quest
+ * commit kinds from the state adjudication are honoured outright.
+ */
+const THREAD_INTENT_MODIFIER_PATTERN =
+	/\b(?:unresolved|pending|investigate|find|learn|discover|follow up|missing|unknown|rumou?r|rumor|threat|danger|question|ask|look for|still|await)\b/i;
+
+const THREAD_ATTITUDE_VERB_PATTERN =
+	/\b(?:pursue|pursues|pursuing|seek|seeks|seeking|awaits?|awaiting|verif(?:y|ies|ying)|track(?:s|ing)?|hunts?|hunted|hunting|protect(?:s|ing)?|guards?(?:ing|ed)?|aveng(?:e|es|ing|ed)|warn(?:s|ed|ing)?|recover(?:s|ing|ed)?|retriev(?:e|es|ing|ed)|owe(?:s|d)?|swore|swear|vow(?:s|ed)?|promis(?:e|es|ed|ing)|intend(?:s|ed)?|plan(?:s|ned|ning)?|debt|obligat(?:e|ed|ion)|vow)\b/i;
+
+// Phase ABCD system audit (C-FIND-5): the adjudicator only ever emits the eight
+// canonical StateChangeProposal kinds (INVENTORY, CAPABILITY, LOCATION, COMBAT,
+// CHRONICLE, PHYSIOLOGY, HEALTH, ALIGNMENT), so a pattern limited to
+// THREAD/PROMISE/QUEST/GOAL/OBLIGATION/CONTRACT could never fire in production —
+// the explicit-commit branch below was dead. CHRONICLE is the one committed kind
+// that denotes a recorded narrative commitment, so it is the reachable signal;
+// the narrative-only kinds are retained for forward compatibility.
+const THREAD_COMMIT_KIND_PATTERN = /(?:THREAD|PROMISE|QUEST|GOAL|OBLIGATION|CONTRACT|CHRONICLE)/i;
+
+function hasCanonicalAnchorForThread(value: string, situation: CurrentSituation): boolean {
+	const anchors = [
+		situation.location?.name,
+		...(situation.nearbyEntities || []).filter((entity) => entity.visibleToPlayer).map((entity) => entity.name),
+		...(situation.visibleEvents || []).map((event) => event.summary),
+	].filter(Boolean).map((entry) => String(entry).toLowerCase());
+	const lowered = value.toLowerCase();
+	return anchors.some((anchor) => {
+		if (lowered.includes(anchor)) return true;
+		const words = anchor.split(/[^a-z0-9]+/).filter((word) => word.length >= 5);
+		return words.some((word) => lowered.includes(word));
+	});
+}
+
 function deriveThreadCandidate(
 	candidate: string,
 	situation: CurrentSituation,
 	turnId: string,
 	timestamp: string,
+	explicitThreadFlag = false,
 ): NarrativeOpenThreadRecord | undefined {
 	const value = normalize(candidate);
-	if (!value || !/\b(?:unresolved|pending|investigate|find|learn|discover|follow up|missing|unknown|rumou?r|rumor|threat|danger|question|ask|look for|still|await)\b/i.test(value)) {
+	if (!value) return undefined;
+	const modifierMatch = THREAD_INTENT_MODIFIER_PATTERN.test(value);
+	const attitudeWithAnchor = THREAD_ATTITUDE_VERB_PATTERN.test(value) && hasCanonicalAnchorForThread(value, situation);
+	if (!modifierMatch && !attitudeWithAnchor && !explicitThreadFlag) {
 		return undefined;
 	}
 	const related = relatedEntities(value, situation);
@@ -139,6 +183,10 @@ export class NarrativeMemoryLifecycle {
 
 		const promotedMemoryIds: string[] = [];
 		const memoryEligible = !params.narrativeReview || params.narrativeReview.decision === 'ACCEPT';
+		// S-5: an explicit thread/promise/quest commitment is authoritative for OPEN threads
+		// even when the candidate text carries none of the intent vocabulary.
+		const explicitThreadFlag = (params.stateAdjudication?.commitRecords || [])
+			.some((record) => THREAD_COMMIT_KIND_PATTERN.test(String(record?.kind || '')));
 		const memoryEngine = params.repository.getMemoryEngine(params.storyId);
 		const playerActorId = params.currentSituation.player.actorId;
 		const currentTurn = params.repository.getCanonicalCommandEventCount(params.storyId);
@@ -162,9 +210,12 @@ export class NarrativeMemoryLifecycle {
 		for (const candidate of (memoryEligible ? (params.turnPackage.memoryCandidates || []) : [])) {
 			const value = normalize(candidate);
 			if (!value) continue;
-			const thread = deriveThreadCandidate(value, params.currentSituation, params.turnId, timestamp);
+			// S-5: an explicit commitment only widens detection for a *durable* candidate, so a
+			// PROMISE commit cannot turn every incidental observation of that turn into a thread.
+			const durable = isDurableCandidate(value, params.currentSituation, params.turnPackage);
+			const thread = deriveThreadCandidate(value, params.currentSituation, params.turnId, timestamp, explicitThreadFlag && durable);
 			if (thread) threadMap.set(thread.id, thread);
-			if (!isDurableCandidate(value, params.currentSituation, params.turnPackage)) continue;
+			if (!durable) continue;
 			const id = deterministicId('narrative_memory', params.storyId, value);
 			if (memoryEngine.getMemory(id)) {
 				memoryEngine.retrieveMemories({
@@ -219,10 +270,18 @@ export class NarrativeMemoryLifecycle {
 		}
 
 		const updatedThreadIds = Array.from(threadMap.values()).filter((thread) => thread.status === 'OPEN').map((thread) => thread.id);
+		// S-6: rank OPEN threads by priority then last-touched, *before* capping. The
+		// previous sort-then-filter order could cap out OPEN threads in favour of
+		// already-RESOLVED ones, and the trailing slice(-40) re-selected the
+		// lowest-priority tail of a descending sort.
 		runtime.openNarrativeThreads = Array.from(threadMap.values())
-			.sort((a, b) => b.priority - a.priority || b.lastTouchedAt.localeCompare(a.lastTouchedAt))
+			.filter((thread: NarrativeOpenThreadRecord) => thread.status === 'OPEN')
+			.sort((a, b) =>
+				b.priority - a.priority ||
+				String(b.lastTouchedAt).localeCompare(String(a.lastTouchedAt)) ||
+				String(a.id).localeCompare(String(b.id)),
+			)
 			.slice(0, 40);
-		runtime.openNarrativeThreads = runtime.openNarrativeThreads.filter((thread: NarrativeOpenThreadRecord) => thread.status === 'OPEN').slice(-40);
 
 		const plot = { ...(runtime.plot || {}) } as Record<string, any>;
 		// Only committed canonical consequences can create durable plot beats. AI-generated
@@ -300,6 +359,21 @@ export class NarrativeMemoryLifecycle {
 		run.runtimeState = runtime;
 		params.repository.saveStoryRun(run);
 
+		// Phase C (GAP-3 / S-3): consolidate each NPC's viewer-related memories into at
+		// most one tagged inference. Deliberately after the canonical save: the agency
+		// engine persists through its own mutation listener, and the stale `runtime`
+		// snapshot above would otherwise revert the new reflections.
+		let npcReflectionIds: string[] = [];
+		try {
+			npcReflectionIds = synthesizeNpcReflections({
+				repository: params.repository,
+				storyId: params.storyId,
+				viewerActorId: playerActorId,
+			}).reflectionIds;
+		} catch {
+			npcReflectionIds = [];
+		}
+
 		return {
 			promotedMemoryIds,
 			updatedThreadIds,
@@ -307,6 +381,7 @@ export class NarrativeMemoryLifecycle {
 			plotBeatId,
 			plotSummary,
 			contextHistoryRecorded: true,
+			npcReflectionIds,
 		};
 	}
 }

@@ -9,6 +9,7 @@ import type { PlayerIntent } from './playerIntentInterpreter';
 import { narrativeMemoryLifecycle } from './narrativeMemoryLifecycle';
 import type { NarrativeReview } from './semanticNarrativeReview';
 import type { StateAdjudicationResult } from './narrativeStateAdjudicator';
+import type { SceneSummaryChunk } from './narrativeSummaryLifecycle';
 
 export interface NarrativePlotState {
   storyId: string;
@@ -17,6 +18,8 @@ export interface NarrativePlotState {
   summary: string;
   beats: Array<{ id: string; turnId?: string; text: string; tags: string[]; timestamp: string }>;
   openThreads: string[];
+  /** Compressed entity-anchored plot prose produced every N accepted turns. */
+  chunkSummaries?: SceneSummaryChunk[];
   updatedAt: string;
 }
 
@@ -75,6 +78,7 @@ export class NarrativeContinuityEngine {
       summary: typeof plot.summary === 'string' ? plot.summary : defaults.summary,
       beats: Array.isArray(plot.beats) ? plot.beats : [],
       openThreads: Array.isArray(plot.openThreads) ? plot.openThreads : [],
+      chunkSummaries: Array.isArray(plot.chunkSummaries) ? plot.chunkSummaries : [],
       updatedAt: typeof plot.updatedAt === 'string' ? plot.updatedAt : defaults.updatedAt,
     }));
   }
@@ -318,7 +322,7 @@ export class NarrativeContinuityEngine {
   }
 
   private static defaultPlot(storyId: string): NarrativePlotState {
-    return { storyId, version: 1, currentArc: 'OPENING', summary: '', beats: [], openThreads: [], updatedAt: new Date(0).toISOString() };
+    return { storyId, version: 1, currentArc: 'OPENING', summary: '', beats: [], openThreads: [], chunkSummaries: [], updatedAt: new Date(0).toISOString() };
   }
 
   private static defaultPlan(storyId: string): NarrativePlanState {

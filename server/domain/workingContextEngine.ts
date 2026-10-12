@@ -413,6 +413,7 @@ export class WorkingContextEngine {
     currentAction?: CurrentSituation['currentAction'];
     narrativeResearch?: NarrativeResearchPacket;
     worldRepo?: WorldRepository;
+    embeddingSimilarities?: Record<string, number>;
   }): AssembledTurnContext {
     const storyId = params.storyId || 'default_story';
     const hardTokenBudget = params.hardTokenBudget ?? 400;
@@ -491,7 +492,7 @@ export class WorkingContextEngine {
       worldTemplate?.setting ? `Setting: ${worldTemplate.setting}` : '',
       worldTemplate?.era || worldTemplate?.defaultEra ? `Era: ${worldTemplate?.era || worldTemplate?.defaultEra}` : '',
       authorizedWorldFacts.length ? `Authorized world facts: ${authorizedWorldFacts.join(' | ')}` : '',
-    ].filter(Boolean).join('\\n');
+    ].filter(Boolean).join('\n');
 
     const startingSituation = run?.startingSituation
       ? [
@@ -614,6 +615,7 @@ export class WorkingContextEngine {
       viewerActorId: viewerId, // Excludes PRIVATE memories of other entities
       queryKeywords: memoryKeywords,
       maxResults: 3,
+      embeddingSimilarities: params.embeddingSimilarities,
     }) : [];
     const universeMemories = contextNeeds.includeMemories ? UniverseRuntimeService.getRelevantUniverseMemories(
       repo,
@@ -863,6 +865,12 @@ export class WorkingContextEngine {
         `Current arc: ${continuityResearch.plot.currentArc || 'OPENING'}`,
         continuityResearch.plot.openThreads?.length
           ? `Open threads: ${continuityResearch.plot.openThreads.slice(-8).join(' | ')}`
+          : '',
+        Array.isArray(continuityResearch.plot.chunkSummaries) && continuityResearch.plot.chunkSummaries.length > 0
+          ? `Recent scene summaries: ${continuityResearch.plot.chunkSummaries.slice(-2).map((chunk: any) => chunk?.text || chunk).filter(Boolean).join(' | ')}`
+          : '',
+        Array.isArray(continuityResearch.plot.beats) && continuityResearch.plot.beats.length > 0
+          ? `Recent plot beats: ${continuityResearch.plot.beats.slice(-8).map((beat: any) => beat?.text || beat).filter(Boolean).join(' | ')}`
           : '',
         `Plan objective: ${continuityResearch.plan.objective || 'Respond coherently to current canonical state.'}`,
         continuityResearch.plan.nextBeats?.length
@@ -1250,6 +1258,9 @@ export class WorkingContextEngine {
         ...npcPlanningFacts,
         ...(npcPlanningSlice?.immediateGoal ? [`[immediate-goal] ${npcPlanningSlice.immediateGoal}`] : []),
         ...(npcPlanningSlice?.relationship ? [`[relationship] ${JSON.stringify(npcPlanningSlice.relationship)}`] : []),
+        ...((npcPlanningSlice?.reflections || []).map((reflection) =>
+          `[reflection inference conf=${reflection.confidence}] ${reflection.summary}`
+        )),
       ],
       currentObservations: observations,
       playerSpokenText: params.playerSpokenText || '',

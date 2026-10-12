@@ -1294,3 +1294,46 @@ test('Phase 12 regression: deterministic emergency floor answers direct NPC soci
 	assert.match(result.turnPackage?.dialogue[0]?.text || '', /appeal|impressive/i);
 	assert.match(result.turnPackage?.narrative.join(' ') || '', /Barren|question/i);
 });
+
+test('Phase 12 regression: emergency floor answers the exact production misspelled phrasing with dialogue', async () => {
+	const adapter = new DeterministicEmergencyFloorAdapter();
+	const playerAction = 'Excuse me sir but what do you think of thyroid Citadel, do you like it here';
+	const response = await adapter.generate(
+		'narrative.generate',
+		'Visible entities: Beren Ashdown [NPC]. Ivara Pell [NPC]. Current action: ' + playerAction,
+		{
+			canonicalLocationName: 'Elysium Solar Citadel',
+			playerAction,
+		},
+	);
+	const orchestrator = createTestOrchestrator();
+	const result = orchestrator.validateTurnPackage(response.text);
+	assert.equal(result.valid, true, result.errorReason);
+	assert.equal((result.turnPackage?.dialogue || []).length > 0, true, 'Emergency floor must emit NPC dialogue for the direct social question.');
+	assert.equal(result.turnPackage?.dialogue[0]?.speaker, 'Beren Ashdown');
+	assert.match(result.turnPackage?.dialogue[0]?.text || '', /appeal|impressive/i);
+	assert.match(result.turnPackage?.narrative.join(' ') || '', /Beren Ashdown/);
+	assert.match(result.turnPackage?.narrative.join(' ') || '', /[\u201c"][^\u201d"]{12,}[\u201d"]/);
+});
+
+test('Phase 12 regression: regex literals in the emergency floor do not contain escaped word boundaries', () => {
+	// Guards against the introduced-then-fixed bug where regex literals were
+	// written as /\b.../ with a double backslash, silently disabling them.
+	const fs = await_import_fs();
+	const source = fs.readFileSync('server/domain/aiOrchestrator.ts', 'utf8');
+	const violations: string[] = [];
+	const lines = source.split('\n');
+	for (let index = 0; index < lines.length; index++) {
+		const line = lines[index];
+		if (!/\/[^/'"`\n]*\\\\b/.test(line)) continue;
+		if (/new RegExp\(|'\s*\+|regexSource|buildPattern/.test(line)) continue;
+		violations.push('aiOrchestrator.ts:' + (index + 1));
+	}
+	assert.deepEqual(violations, [], 'Regex literals must use single-backslash \\b boundaries; double-backslash literals never match.');
+});
+
+// Minimal import shim so the static lint test does not pull a whole test-file import cycle.
+import { createRequire } from 'node:module';
+function await_import_fs() {
+	return createRequire(import.meta.url)('fs');
+}

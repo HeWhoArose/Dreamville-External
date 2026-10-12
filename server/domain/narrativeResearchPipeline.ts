@@ -451,6 +451,9 @@ export class NarrativeResearchPipeline {
 			`Current arc: ${situation.plot.currentArc || 'OPENING'}`,
 			situation.plot.summary ? `Plot summary: ${situation.plot.summary}` : '',
 			...situation.plot.recentBeats.slice(-4).map((beat) => `Recent beat: ${beat.text}`),
+			...(Array.isArray(situation.plot.recentSceneSummaries)
+				? situation.plot.recentSceneSummaries.slice(-2).map((summary) => `Recent scene summary: ${summary}`)
+				: []),
 		].filter(Boolean).join('\n');
 		if (plotContent) {
 			addCandidate(candidates, {

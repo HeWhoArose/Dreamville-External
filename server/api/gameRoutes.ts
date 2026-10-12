@@ -11,6 +11,7 @@ import { OpeningSceneService } from '../services/openingSceneService';
 import { WorkingContextEngine } from '../domain/workingContextEngine';
 import { CurrentSituationBuilder } from '../domain/currentSituation';
 import { narrativeContinuityEngine } from '../domain/narrativeContinuityEngine';
+import { narrativeSummaryLifecycle } from '../domain/narrativeSummaryLifecycle';
 import { NarrativeResearchPipeline } from '../domain/narrativeResearchPipeline';
 import { PlayerIntentInterpreter } from '../domain/playerIntentInterpreter';
 import { worldVisualIdentityService } from '../services/worldVisualIdentityService';
@@ -433,7 +434,7 @@ gameRouter.post('/action/ooc', async (req: Request, res: Response) => {
       storyId: toolResult?.data?.storyId || storyId,
       message,
       response: toolResult
-        ? (agent.response + (toolResult.success ? '\\n\\n✓ ' : '\\n\\n✗ ') + toolResult.message).trim()
+        ? (agent.response + (toolResult.success ? '\n\n✓ ' : '\n\n✗ ') + toolResult.message).trim()
         : agent.response,
       toolCall: agent.toolCall || null,
       toolResult: toolResult || null,
@@ -1020,7 +1021,19 @@ gameRouter.post('/action/accept-advice', async (req: Request, res: Response) => 
     }
 
     storyActionAdvisor.consumePendingProposal(pendingProposal.proposalId);
-    return res.json(commandResult.data);
+    res.json(commandResult.data);
+
+    // Phase A (long-session memory): post-commit scene-summary emission for approved actions.
+    try {
+      await narrativeSummaryLifecycle.onAcceptedTurn({
+        repository: worldRepository,
+        storyId,
+        orchestrator: worldRepository.getAiOrchestrator(),
+      });
+    } catch (summaryError: any) {
+      console.warn('[NarrativeSummaryLifecycle] Post-commit scene summary failed (accept-advice):', summaryError?.message || String(summaryError));
+    }
+    return;
   } catch (error: any) {
     console.error('[Story Action Advisor] Approval failed:', error);
     return res.status(500).json({
@@ -1356,6 +1369,20 @@ gameRouter.post('/action', async (req: Request, res: Response) => {
     }
 
     res.json(commandResult.data);
+
+    // Phase A (long-session memory): after the canonical command commits and the response
+    // has been sent, compress this accepted turn into a durable, entity-anchored
+    // scene-summary chunk at cadence. Post-commit + non-fatal: it can never roll back
+    // or delay the player turn, and providers fall back to a deterministic summary.
+    try {
+      await narrativeSummaryLifecycle.onAcceptedTurn({
+        repository: worldRepository,
+        storyId,
+        orchestrator: worldRepository.getAiOrchestrator(),
+      });
+    } catch (summaryError: any) {
+      console.warn('[NarrativeSummaryLifecycle] Post-commit scene summary failed:', summaryError?.message || String(summaryError));
+    }
   } catch (error: any) {
     const message = error instanceof Error
       ? error.message

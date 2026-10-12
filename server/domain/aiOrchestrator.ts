@@ -23,6 +23,14 @@ import { PlayerIntentInterpreter, type PlayerIntent } from './playerIntentInterp
 import { NarrativeResearchPipeline, type NarrativeResearchResult } from './narrativeResearchPipeline';
 import { NarrativeDirector, type EphemeralNarrativePlan } from './narrativeDirector';
 import { buildNarrationPrompt, defaultNarrationStyle, projectSupportingWorkingContext } from './narrativePromptBuilder';
+import {
+  memoryVectorIndex,
+  detectEmbeddingProvider,
+  createGeminiEmbeddingProvider,
+  type GeminiEmbeddingClient,
+  type EmbeddingProviderDescriptor,
+} from './memoryVectorIndex';
+import { resolve as resolvePath } from 'node:path';
 import { SemanticNarrativeReview, type NarrativeReview } from './semanticNarrativeReview';
 import { LiteraryNarrativeReview, type LiteraryReview } from './literaryNarrativeReview';
 import { NarrativeRichnessEvaluator, type NarrativeRichnessEvaluation, type NarrativeRichnessDecision, type NarrativeRichnessIssue } from './narrativeRichnessEvaluation';
@@ -37,8 +45,54 @@ import { AiTurnCallBudget, type AiTurnCallBudgetSnapshot } from './aiTurnCallBud
 import { scoreModelForQualityTier, getAiTaskRoutingPolicy } from './aiQualityRouting';
 import type { ActionResolution } from './actionResolution';
 import { StoryBeatDirector, type StoryBeatContract } from './storyBeatDirector';
+import { captureRejectedAttempt, type ProviderAttemptTrailEntry } from './providerAttemptTrail';
 
 export const DREAMBOOK_PROMPT_VERSION = 'phase12-v1';
+
+/**
+ * Phase C (budget follow-up) — the narrative prompt budget must scale with the
+ * model that will actually serve the turn, not with a fixed constant.
+ *
+ * The previous live path hard-coded a 700-token prompt budget while every routable
+ * narration model has a context window of 16k+. That is what produced the
+ * documented "authoritative scene + research + contracts cannot fit" tension: the
+ * budget, not the model, was the bottleneck. This derives a budget from the
+ * selected model's context window, bounded so cost stays predictable:
+ *
+ *   budget = clamp(floor(requested), 0.25 * contextWindow, cap)
+ *
+ * - `floor` is the caller's explicit budget, so nothing is ever *shrunk* by this.
+ * - cap default 3000 tokens (env `DREAMVILLE_NARRATIVE_PROMPT_BUDGET` overrides).
+ * - unknown/zero context window -> the caller's budget is used unchanged.
+ */
+export const NARRATIVE_PROMPT_BUDGET_FRACTION = 0.25;
+export const NARRATIVE_PROMPT_BUDGET_DEFAULT_CAP = 3000;
+
+export function resolveNarrativePromptBudget(params: {
+  requested?: number;
+  contextWindow?: number;
+  cap?: number;
+  envCap?: string | number | undefined;
+}): number {
+  const requested = Number.isFinite(params.requested) && (params.requested as number) > 0
+    ? Math.floor(params.requested as number)
+    : 700;
+  const envCapRaw = params.envCap;
+  const envCap = envCapRaw !== undefined && envCapRaw !== null && String(envCapRaw).trim() !== ''
+    ? Number(envCapRaw)
+    : undefined;
+  const cap = Number.isFinite(params.cap) && (params.cap as number) > 0
+    ? Math.floor(params.cap as number)
+    : (Number.isFinite(envCap) && (envCap as number) > 0
+      ? Math.floor(envCap as number)
+      : NARRATIVE_PROMPT_BUDGET_DEFAULT_CAP);
+  const contextWindow = Number.isFinite(params.contextWindow) && (params.contextWindow as number) > 0
+    ? Math.floor(params.contextWindow as number)
+    : 0;
+  if (contextWindow === 0) return requested;
+  const derived = Math.floor(contextWindow * NARRATIVE_PROMPT_BUDGET_FRACTION);
+  return Math.max(requested, Math.min(derived, cap));
+}
 
 const NARRATIVE_INFORMATION_SEEKING_PATTERN =
 	/\b(ask|asked|inquire|inquired|question|questioned|find out|learn|discover|gather information|seek information|rumor|rumors|rumour|rumours|gossip|what happened|who|why|where|when|how|heard about|hear|listen|listen for|overhear|eavesdrop|tell me)\b/i;
@@ -550,14 +604,7 @@ export interface OrchestratedTurnTelemetry {
   narrativeRichnessEvaluation?: NarrativeRichnessEvaluation;
   aiCallBudget?: AiTurnCallBudgetSnapshot;
   narrativeProviderHandoff?: NarrativeProviderHandoffContract;
-  attemptsTrail?: Array<{
-    providerId: string;
-    modelId: string;
-    displayName?: string;
-    status: 'SUCCESS' | 'FAILED';
-    latencyMs: number;
-    error?: string;
-  }>;
+  attemptsTrail?: ProviderAttemptTrailEntry[];
 }
 
 export interface OrchestratedTurnResult {
@@ -574,14 +621,7 @@ export interface OrchestratedTurnResult {
   checkpoint?: ContinuationCheckpoint;
   audioResultBase64?: string;
   fallbackText?: string;
-  attemptsTrail?: Array<{
-    providerId: string;
-    modelId: string;
-    displayName?: string;
-    status: 'SUCCESS' | 'FAILED';
-    latencyMs: number;
-    error?: string;
-  }>;
+  attemptsTrail?: ProviderAttemptTrailEntry[];
   forensicContext?: {
     currentSituation?: unknown;
     researchPacket?: unknown;
@@ -960,9 +1000,9 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
           .replace(/\s+(?:is|are)\s+real\b.*$/i, '')
           .replace(/[.!?]+$/g, '')
           .trim();
-        const isDirectSocialQuestion = /\\b(?:excuse me|what do you think|do you like|how do you feel|what is your opinion|can i ask you|may i ask|tell me about)\\b/i.test(normalizedAction);
+        const isDirectSocialQuestion = /\b(?:excuse me|what do you think|do you like|how do you feel|what is your opinion|can i ask you|may i ask|tell me about)\b/i.test(normalizedAction);
         const socialTarget = explicitTargetName || visibleEntityNames[0] || 'Nearby figure';
-        const socialReply = /\\b(?:like|love|enjoy|think|feel|opinion)\\b/i.test(normalizedAction)
+        const socialReply = /\b(?:like|love|enjoy|think|feel|opinion)\b/i.test(normalizedAction)
           ? '“It has its appeal. The place is impressive, though I am still making up my mind about living or working here.”'
           : '“I can tell you what I have seen, though I would not claim to know the whole story.”';
         const actionVerb = hasMovement && hasListening
@@ -3154,6 +3194,7 @@ export class MultiModelOrchestrator {
   private totalTurnsExecuted: number = 0;
   private lastTurnTelemetry: OrchestratedTurnTelemetry | null = null;
   private worldRepo?: WorldRepository;
+  private memoryEmbeddingStatus: EmbeddingProviderDescriptor & { reason?: string } = { available: false };
 
   // V6.34 Server-authoritative idempotency caches scoped by `${storyId}::${idempotencyKey}`
   private turnResultsByIdempotencyKey: Map<string, OrchestratedTurnResult> = new Map();
@@ -3192,6 +3233,79 @@ export class MultiModelOrchestrator {
     }
     this.normalizePinnedTaskFallbackRoutes();
     this.normalizeGeneralTextTaskEligibility();
+    this.initializeMemoryEmbeddings();
+  }
+
+  /**
+   * Phase B config follow-up — opt-in embedding retrieval.
+   *
+   * Retrieval stays on the keyword baseline unless embeddings are explicitly
+   * enabled, because a per-turn query embed plus memory indexing costs quota and
+   * latency on the free/cheap chains this project favours. To enable:
+   *
+   *   GEMINI_API_KEY=<key>
+   *   DREAMVILLE_MEMORY_EMBEDDINGS=1
+   *   DREAMVILLE_EMBEDDING_MODEL=<model id>   # optional override of the discovered model
+   *
+   * The index is cached at `.dreambook/memory-vectors.json` (gitignored), keyed by
+   * memory id + model + content hash, so re-embedding only happens when text changes.
+   */
+  private initializeMemoryEmbeddings(): void {
+    try {
+      const env = typeof process !== 'undefined' ? process.env : undefined;
+      const enabled = /^(?:1|true|yes|on)$/i.test(String(env?.DREAMVILLE_MEMORY_EMBEDDINGS || ''));
+      if (!enabled) {
+        memoryVectorIndex.setProvider(null);
+        return;
+      }
+      const apiKey = env?.GEMINI_API_KEY || getProviderApiKey('google_gemini');
+      if (!apiKey) {
+        memoryVectorIndex.setProvider(null);
+        this.memoryEmbeddingStatus = { available: false, reason: 'missing_api_key' };
+        return;
+      }
+      const descriptor = detectEmbeddingProvider(this);
+      const override = String(env?.DREAMVILLE_EMBEDDING_MODEL || '').trim();
+      const modelId = override || descriptor.modelId || '';
+      if (!modelId) {
+        memoryVectorIndex.setProvider(null);
+        this.memoryEmbeddingStatus = { available: false, reason: 'no_embedding_model_discovered' };
+        return;
+      }
+      const providerId = descriptor.providerId || 'google_gemini';
+      memoryVectorIndex.setProvider(createGeminiEmbeddingProvider({
+        client: this.createGeminiEmbeddingClient(apiKey),
+        modelId,
+        providerId,
+      }));
+      memoryVectorIndex.attachFileStore(resolvePath(process.cwd(), '.dreambook', 'memory-vectors.json'));
+      memoryVectorIndex.loadFromFile();
+      this.memoryEmbeddingStatus = { available: true, providerId, modelId, modelKey: `${providerId}::${modelId}` };
+    } catch {
+      // Embeddings are an enhancement: any bootstrap error degrades to keyword retrieval.
+      memoryVectorIndex.setProvider(null);
+      this.memoryEmbeddingStatus = { available: false, reason: 'bootstrap_failed' };
+    }
+  }
+
+  /** Explicit SDK adapter so the client type stays decoupled from the vendor SDK. */
+  private createGeminiEmbeddingClient(apiKey: string): GeminiEmbeddingClient {
+    const client = new GoogleGenAI({ apiKey, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } });
+    return {
+      models: {
+        embedContent: async ({ model, contents }) => {
+          const response = await client.models.embedContent({ model, contents });
+          return {
+            embeddings: (response.embeddings || []).map((entry) => ({ values: entry?.values })),
+          };
+        },
+      },
+    };
+  }
+
+  /** Public diagnostics for the Settings/health surface. */
+  public getMemoryEmbeddingStatus(): EmbeddingProviderDescriptor & { reason?: string } {
+    return { ...this.memoryEmbeddingStatus };
   }
 
   private loadPersistedConfig(): void {
@@ -4770,6 +4884,8 @@ export class MultiModelOrchestrator {
 
     this.lastDiscoveredAt = Date.now();
     this.discoveredCatalog = allDiscovered;
+    // The embedding model only appears in the discovery catalog, so (re)configure after discovery.
+    this.initializeMemoryEmbeddings();
     const geminiConfigured = Boolean(getProviderApiKey('google_gemini'));
     const openrouterConfigured = Boolean(getProviderApiKey('openrouter'));
     const isConfigured = geminiConfigured || openrouterConfigured;
@@ -6623,7 +6739,11 @@ export class MultiModelOrchestrator {
       }
 
       if (parsed === undefined) {
-        if (options?.allowPlainTextNarration && cleaned.length >= 50) {
+        // A response that visibly attempted the JSON turn-package shape but failed
+        // to parse (truncated or malformed) must never be presented as story prose;
+        // presenting it would leak raw JSON into the player-facing narration.
+        const attemptedJsonEnvelope = cleaned.startsWith("{") || cleaned.startsWith("[");
+        if (options?.allowPlainTextNarration && cleaned.length >= 50 && !attemptedJsonEnvelope) {
           return {
             valid: true,
             turnPackage: {
@@ -6723,7 +6843,7 @@ export class MultiModelOrchestrator {
         let speaker = '';
         let line = '';
         if (typeof entry === 'string') {
-          const match = entry.trim().match(/^([^:\\n]{1,80}):\\s*(.+)$/s);
+          const match = entry.trim().match(/^([^:\n]{1,80}):\s*(.+)$/s);
           if (match) {
             speaker = match[1].trim();
             line = match[2].trim();
@@ -6948,13 +7068,7 @@ export class MultiModelOrchestrator {
     providerId?: string;
     errorCode?: 'INPUT_EMPTY' | 'INPUT_INVALID_BASE64' | 'TRANSCRIPTION_UNAVAILABLE' | 'TRANSCRIPTION_MALFORMED';
     errorReason?: string;
-    attemptsTrail?: Array<{
-      providerId: string;
-      modelId: string;
-      status: 'SUCCESS' | 'FAILED';
-      error?: string;
-      latencyMs: number;
-    }>;
+    attemptsTrail?: ProviderAttemptTrailEntry[];
   }> {
     const audioValidation = validateAudioBase64(params.audioBase64);
     if (!audioValidation.valid) {
@@ -6970,13 +7084,7 @@ export class MultiModelOrchestrator {
     const selection = this.selectBestModel('speech.transcribe', { contextTokens: 256 });
     const candidates = [selection.selectedModel, ...selection.fallbacks];
     const timeoutMs = Math.max(1000, Math.min(params.timeoutMs || 5000, 30000));
-    const attemptsTrail: Array<{
-      providerId: string;
-      modelId: string;
-      status: 'SUCCESS' | 'FAILED';
-      error?: string;
-      latencyMs: number;
-    }> = [];
+    const attemptsTrail: ProviderAttemptTrailEntry[] = [];
     let sawMalformedResponse = false;
     let lastError = '';
 
@@ -6999,6 +7107,7 @@ export class MultiModelOrchestrator {
       const attemptStartedAt = Date.now();
       const abortController = new AbortController();
       const timer = setTimeout(() => abortController.abort(), timeoutMs);
+      let lastRawResponse = '';
       try {
         const res = await adapter.generate('speech.transcribe', 'Transcribe the supplied audio accurately. Return only the transcript.', {
           timeoutMs,
@@ -7008,6 +7117,7 @@ export class MultiModelOrchestrator {
           audioMimeType: params.audioMimeType || 'audio/webm',
           maxTokens: 1000,
         });
+        lastRawResponse = res?.text || '';
 
         const transcript = normalizeTranscriptionProviderText(res?.text || '');
         if (!transcript.valid) {
@@ -7033,13 +7143,12 @@ export class MultiModelOrchestrator {
       } catch (err: any) {
         lastError = String(err?.message || err || 'Transcription provider failed.');
         this.recordProviderFailure(candidate, 'speech.transcribe', err, attemptStartedAt);
-        attemptsTrail.push({
+        captureRejectedAttempt(attemptsTrail, {
           providerId: candidate.providerId,
           modelId: candidate.modelId,
-          status: 'FAILED',
           error: lastError,
           latencyMs: Math.max(1, Date.now() - attemptStartedAt),
-        });
+        }, lastRawResponse);
       } finally {
         clearTimeout(timer);
       }
@@ -7749,6 +7858,40 @@ export class MultiModelOrchestrator {
    * turn, but deliberately does NOT adjudicate state changes or create continuation
    * checkpoints. The caller remains responsible for canonical mechanics.
    */
+  /**
+   * Phase C — cheap, offline resolution of the context window for the model that
+   * will serve a task. Prefers an explicitly forced model, then the task's
+   * configured fallback route, then the largest registered non-emergency model.
+   * Deliberately avoids provider network refreshes so it is safe on the prompt hot path.
+   */
+  private resolveTaskContextWindow(task: TaskId, forceModelId?: string): number {
+    try {
+      const findRegistered = (key: string): ModelRegistryRecord | undefined => {
+        const direct = this.models.get(key);
+        if (direct) return direct;
+        const bare = key.includes('::') ? key.slice(key.indexOf('::') + 2) : key;
+        return Array.from(this.models.values()).find((model) => model.modelId === bare);
+      };
+      if (forceModelId) {
+        const forced = findRegistered(forceModelId);
+        if (forced?.contextWindow && forced.contextWindow > 0) return forced.contextWindow;
+      }
+      for (const key of this.getFallbackChain(task)) {
+        if (!key || key.includes('emergency-fallback-local')) continue;
+        const model = findRegistered(key);
+        if (model && !model.isEmergencyFloor && (model.contextWindow || 0) > 0) return model.contextWindow;
+      }
+      const candidates = Array.from(this.models.values())
+        .filter((model) => !model.isEmergencyFloor && (model.contextWindow || 0) > 0);
+      if (candidates.length > 0) {
+        return candidates.reduce((best, model) => Math.max(best, model.contextWindow || 0), 0);
+      }
+    } catch {
+      // Best-effort: fall back to the caller's requested budget.
+    }
+    return 0;
+  }
+
   public async generateNarrativeOnly(params: {
     storyId?: string;
     playerAction: string;
@@ -7773,14 +7916,7 @@ export class MultiModelOrchestrator {
     error?: string;
     source?: 'AI_PRIMARY' | 'AI_FALLBACK' | 'DETERMINISTIC_FALLBACK';
     fallbackReason?: string;
-    attemptsTrail?: Array<{
-      providerId: string;
-      modelId: string;
-      displayName?: string;
-      status: 'SUCCESS' | 'FAILED';
-      latencyMs: number;
-      error?: string;
-    }>;
+    attemptsTrail?: ProviderAttemptTrailEntry[];
     researchPacket?: ReturnType<typeof narrativeContinuityEngine.research>;
     narrativePlan?: EphemeralNarrativePlan;
     storyBeat?: StoryBeatContract;
@@ -7815,7 +7951,12 @@ export class MultiModelOrchestrator {
       return { success: false, error: 'A player action is required for narrative generation.' };
     }
 
-    const hardTokenBudget = params.hardTokenBudget ?? 700;
+    // Phase C: budget scales with the serving model's context window (see resolveNarrativePromptBudget).
+    const hardTokenBudget = resolveNarrativePromptBudget({
+      requested: params.hardTokenBudget,
+      contextWindow: this.resolveTaskContextWindow('narrative.generate', params.forceModelId),
+      envCap: typeof process !== 'undefined' ? process.env?.DREAMVILLE_NARRATIVE_PROMPT_BUDGET : undefined,
+    });
     const timeoutMs = params.timeoutMs ?? 7000;
     const turnAiCallBudget = new AiTurnCallBudget();
     const authoritativeOutcome = (params.committedOutcome || '').trim();
@@ -7925,11 +8066,19 @@ export class MultiModelOrchestrator {
       ...currentSituation.relevantLore.map((fact) => `Authorized lore: ${fact.subjectEntityId} ${fact.predicate} ${fact.objectValue}`),
     ].filter(Boolean).slice(0, 10).join('\n');
     const researchPacket = researchResult.packet;
+    // Phase B (GAP-2): optional semantic retrieval. No-op (returns {}) when no
+    // embedding-capable model is connected, so keyword retrieval is unchanged.
+    const embeddingPreparation = await memoryVectorIndex.prepareEmbeddingContext(
+      storyId,
+      playerAction,
+      worldRepo.getMemoryEngine(storyId).getAllMemories(storyId),
+    );
     const assembledContext = WorkingContextEngine.assembleTurnContext({
       storyId,
       playerAction,
       hardTokenBudget,
       worldRepo,
+      embeddingSimilarities: embeddingPreparation.similarities,
       customChunks: [
         {
           id: 'canonical_scene_anchor',
@@ -8836,14 +8985,7 @@ export class MultiModelOrchestrator {
       }
       let totalAttempts = 0;
       let lastError = '';
-      const turnAttemptsTrail: Array<{
-        providerId: string;
-        modelId: string;
-        displayName?: string;
-        status: 'SUCCESS' | 'FAILED';
-        latencyMs: number;
-        error?: string;
-      }> = [];
+      const turnAttemptsTrail: ProviderAttemptTrailEntry[] = [];
 
       // 3. Provider Execution Loop with Retries, Timeouts, and Failover (DEF-CH12-01, DEF-CH12-07)
       for (let cIdx = 0; cIdx < candidateChain.length; cIdx++) {
@@ -8859,6 +9001,7 @@ export class MultiModelOrchestrator {
           totalAttempts++;
           turnAiCallBudget.recordProviderAttempt(task);
           const attemptStartedAt = Date.now();
+          let lastRawResponse = '';
           try {
             // Wrap provider call with AbortController for strict timeout enforcement
             const abortController = new AbortController();
@@ -8881,6 +9024,7 @@ export class MultiModelOrchestrator {
             } finally {
               clearTimeout(timer);
             }
+            lastRawResponse = providerRes?.text || '';
 
             // Reset failure counter on success
             this.consecutiveFailures.set(modelKey, 0);
@@ -9207,14 +9351,13 @@ export class MultiModelOrchestrator {
           } catch (err: any) {
             lastError = err?.message || String(err);
             this.recordProviderFailure(currentCandidate, task, err, attemptStartedAt);
-            turnAttemptsTrail.push({
+            captureRejectedAttempt(turnAttemptsTrail, {
               providerId: currentCandidate.providerId,
               modelId: currentCandidate.modelId,
               displayName: currentCandidate.displayName || currentCandidate.modelId,
-              status: 'FAILED',
               latencyMs: Math.max(1, Date.now() - attemptStartedAt),
               error: lastError,
-            });
+            }, lastRawResponse);
 
             // Track consecutive failures & circuit breaker
             const failures = (this.consecutiveFailures.get(modelKey) || 0) + 1;
@@ -9628,14 +9771,7 @@ export class MultiModelOrchestrator {
     modelId: string;
     fallbackReason?: string;
     attempts: number;
-    attemptsTrail: Array<{
-      providerId: string;
-      modelId: string;
-      displayName?: string;
-      status: 'SUCCESS' | 'FAILED';
-      latencyMs: number;
-      error?: string;
-    }>;
+    attemptsTrail: ProviderAttemptTrailEntry[];
     narrativeProviderHandoff?: NarrativeProviderHandoffContract;
     preflightSkipped?: Array<{
       providerId: string;
@@ -9943,14 +10079,7 @@ export class MultiModelOrchestrator {
     const effectiveRouteAttemptBudget = hasConfiguredTaskChain
       ? Number.POSITIVE_INFINITY
       : Math.min(candidateChain.length, contract.fallbackPolicy?.maxTotalAttempts ?? candidateChain.length);
-    const attemptsTrail: Array<{
-      providerId: string;
-      modelId: string;
-      displayName?: string;
-      status: 'SUCCESS' | 'FAILED';
-      latencyMs: number;
-      error?: string;
-    }> = [];
+    const attemptsTrail: ProviderAttemptTrailEntry[] = [];
 
     for (let cIdx = 0; cIdx < candidateChain.length; cIdx++) {
       // A caller that explicitly withholds deterministic fallback must not reach
@@ -10018,6 +10147,7 @@ export class MultiModelOrchestrator {
         ? 'DETERMINISTIC_FALLBACK'
         : (this.modelKey(currentCandidate) === selectedModelKey && !selectionWasForcedFallback ? 'AI_PRIMARY' : 'AI_FALLBACK');
       const operationId = this.beginModelOperation(task, currentCandidate, totalAttempts + 1, operationSource);
+      let lastRawResponse = '';
       try {
         totalAttempts++;
         const abortController = new AbortController();
@@ -10038,6 +10168,7 @@ export class MultiModelOrchestrator {
         } finally {
           clearTimeout(timer);
         }
+        lastRawResponse = providerRes?.text || '';
 
         if (!providerRes || !providerRes.text) {
           throw new Error('Provider returned empty response.');
@@ -10112,14 +10243,13 @@ export class MultiModelOrchestrator {
           this.consecutiveFailures.set(modelKey, 0);
         }
 
-        attemptsTrail.push({
+        captureRejectedAttempt(attemptsTrail, {
           providerId: currentCandidate.providerId,
           modelId: currentCandidate.modelId,
           displayName: currentCandidate.displayName || currentCandidate.modelId,
-          status: 'FAILED',
           latencyMs,
           error: lastError,
-        });
+        }, lastRawResponse);
 
       }
     }
@@ -10914,7 +11044,7 @@ export class MultiModelOrchestrator {
       'Return ONLY JSON: {"assignments":[{"modelKey":"provider::model","categories":[{"category":"narration","priority":100}]}]}',
       'Allowed categories: ' + categories.join(', '),
       JSON.stringify(freeModelDescriptions),
-    ].join('\\n');
+    ].join('\n');
 
     let generated: Awaited<ReturnType<MultiModelOrchestrator['executeTaskGeneration']>>;
     try {

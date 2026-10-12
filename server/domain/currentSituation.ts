@@ -102,6 +102,8 @@ export interface PlotContext {
 		tags: string[];
 		timestamp: string;
 	}>;
+	/** Compressed entity-anchored plot prose from NarrativeSummaryLifecycle (latest first). */
+	recentSceneSummaries?: string[];
 }
 
 export interface OpenThread {
@@ -788,10 +790,17 @@ export class CurrentSituationBuilder {
 			})).filter((beat: any) => beat.text)
 			: [];
 
+		const recentSceneSummaries = Array.isArray(plotRaw.chunkSummaries)
+			? plotRaw.chunkSummaries
+				.map((chunk: any) => normalizeText(chunk?.text))
+				.filter(Boolean)
+				.slice(-2)
+			: [];
 		const plot: PlotContext = {
 			currentArc: normalizeText(plotRaw.currentArc) || 'OPENING',
 			summary: normalizeText(plotRaw.summary),
 			recentBeats,
+			recentSceneSummaries,
 		};
 
 		const threadCandidates = [

@@ -960,9 +960,9 @@ export class DeterministicEmergencyFloorAdapter implements IProviderAdapter {
           .replace(/\s+(?:is|are)\s+real\b.*$/i, '')
           .replace(/[.!?]+$/g, '')
           .trim();
-        const isDirectSocialQuestion = /\\b(?:excuse me|what do you think|do you like|how do you feel|what is your opinion|can i ask you|may i ask|tell me about)\\b/i.test(normalizedAction);
+        const isDirectSocialQuestion = /\b(?:excuse me|what do you think|do you like|how do you feel|what is your opinion|can i ask you|may i ask|tell me about)\b/i.test(normalizedAction);
         const socialTarget = explicitTargetName || visibleEntityNames[0] || 'Nearby figure';
-        const socialReply = /\\b(?:like|love|enjoy|think|feel|opinion)\\b/i.test(normalizedAction)
+        const socialReply = /\b(?:like|love|enjoy|think|feel|opinion)\b/i.test(normalizedAction)
           ? '“It has its appeal. The place is impressive, though I am still making up my mind about living or working here.”'
           : '“I can tell you what I have seen, though I would not claim to know the whole story.”';
         const actionVerb = hasMovement && hasListening

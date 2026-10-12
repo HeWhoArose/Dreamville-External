@@ -2016,6 +2016,17 @@ The moment does not end so much as shift, leaving the scene open to whatever the
             : 14400; // 4 hours per cycle step
 
         const advanceResult = worldSimulationService.advanceTime(targetStoryId, secondsToAdvance);
+
+        // World time drives ambient NPC schedules. Refresh canonical occupants
+        // immediately after the clock advances so the next scene projection
+        // cannot keep presenting a stale activity/presence snapshot.
+        const advancedPlayer = worldRepository.getPlayerLifecycle(targetStoryId);
+        const advancedRun = worldRepository.getStoryRun(targetStoryId);
+        const advancedLocationId = advancedPlayer?.locationId || advancedRun?.currentLocationId || '';
+        if (advancedLocationId) {
+          WorldActivityDirector.ensureAmbientPopulation(worldRepository, targetStoryId, advancedLocationId);
+        }
+
         const clock = worldRepository.getWorldClock(targetStoryId);
         const ts = clock.getTimestamp();
         const phase = clock.getState().currentDayPhase;
@@ -2283,6 +2294,19 @@ The moment does not end so much as shift, leaving the scene open to whatever the
     }
 
     this.persistActionHistory(targetStoryId, state);
+
+    // Dialogue choices mutate a separate history stream from action narration.
+    // Persist it on the same authoritative action boundary so reloads do not
+    // restore the opening dialogue while silently dropping later exchanges.
+    const dialogueRun = worldRepository.getStoryRun(targetStoryId);
+    if (dialogueRun) {
+      dialogueRun.runtimeState = {
+        ...(dialogueRun.runtimeState || {}),
+        dialogueHistory: JSON.parse(JSON.stringify(state.dialogueHistory || [])),
+      };
+      worldRepository.saveStoryRun(dialogueRun);
+    }
+
     const updatedViewState = this.filterForExternalClient(state, targetStoryId);
 
     return {

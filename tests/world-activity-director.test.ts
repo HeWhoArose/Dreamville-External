@@ -45,6 +45,17 @@ test('WorldActivityDirector creates deterministic ambient people for an inhabite
 	assert.ok(first.every((person: any) => person.worldState.isAlive && person.worldState.presence === 'present'));
 });
 
+test('WorldActivityDirector fills dense public markets to their authored population target', () => {
+	const { repository, cards } = makeRepository({
+		id: 'loc_dense_market', name: 'Grand Bazaar', description: 'A busy market square.',
+		population: { status: 'INHABITED', expectedPopulation: 'DENSE', provenance: 'AUTHORED' },
+	});
+	const people = WorldActivityDirector.ensureAmbientPopulation(repository, 'story_dense_market', 'loc_dense_market');
+	assert.equal(people.length, 4, 'dense locations should not silently cap at the three-person roster');
+	assert.equal(cards.size, 4);
+	assert.equal(WorldActivityDirector.ensureAmbientPopulation(repository, 'story_dense_market', 'loc_dense_market').length, 0);
+});
+
 test('WorldActivityDirector does not populate authored abandoned or restricted locations', () => {
 	for (const status of ['ABANDONED', 'RESTRICTED']) {
 		const { repository, cards } = makeRepository({

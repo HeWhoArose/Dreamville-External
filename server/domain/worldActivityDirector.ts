@@ -97,10 +97,10 @@ export class WorldActivityDirector {
 				{ name: 'Tessa Vey', kind: 'MERCHANT' as EntityKind, role: 'merchant', activity: 'calling customers over to inspect a new shipment of cloth', motivations: ['sell the shipment before dusk', 'maintain her supplier contacts'], traits: ['confident', 'quick-witted'] },
 			];
 			const merchant = merchants[variant % merchants.length];
-			const supporting = selectPeople(this.PEOPLE.filter((person) => person.name !== merchant.name), 2);
+			const supporting = selectPeople(this.PEOPLE.filter((person) => person.name !== merchant.name), 3);
 			return [merchant, ...supporting];
 		}
-		return selectPeople(this.PEOPLE, 3);
+		return selectPeople(this.PEOPLE, 4);
 	}
 
 	private static refreshDailyActivity(

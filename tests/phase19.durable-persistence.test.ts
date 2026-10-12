@@ -288,3 +288,28 @@ test('Phase 19: player action narration history survives mock authority state ev
   assert.equal(restored.actionHistory.filter((entry: any) => entry.actionType !== 'NOTE_RECORD').length, 1);
   serverMockAuthority.removeStoryState(storyId);
 });
+
+test('Phase 19: dialogue history survives authoritative action and story-state reload', async () => {
+  const storyId = 'durable_dialogue_history_' + Date.now();
+  const { worldRepository } = await import('../server/repositories/worldRepository');
+  const { serverMockAuthority } = await import('../server/mockEngine/serverMockAuthority');
+  worldRepository.seedStory(storyId);
+
+  const result = serverMockAuthority.processAction({
+    type: 'DIALOGUE_CHOICE',
+    targetNodeId: 'maren_intro',
+    storyId,
+  } as any);
+  assert.equal(result.success, true);
+
+  const beforeReload = serverMockAuthority.getDynamicStoryState(storyId);
+  assert.ok(beforeReload.dialogueHistory.some((entry: any) => entry.text.includes('astral rings')));
+
+  serverMockAuthority.removeStoryState(storyId);
+  const restored = serverMockAuthority.getDynamicStoryState(storyId);
+  assert.ok(
+    restored.dialogueHistory.some((entry: any) => entry.text.includes('astral rings')),
+    'dialogue history should restore from durable runtime state, not only the opening scene',
+  );
+  serverMockAuthority.removeStoryState(storyId);
+});

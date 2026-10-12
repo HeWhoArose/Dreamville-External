@@ -2294,6 +2294,19 @@ The moment does not end so much as shift, leaving the scene open to whatever the
     }
 
     this.persistActionHistory(targetStoryId, state);
+
+    // Dialogue choices mutate a separate history stream from action narration.
+    // Persist it on the same authoritative action boundary so reloads do not
+    // restore the opening dialogue while silently dropping later exchanges.
+    const dialogueRun = worldRepository.getStoryRun(targetStoryId);
+    if (dialogueRun) {
+      dialogueRun.runtimeState = {
+        ...(dialogueRun.runtimeState || {}),
+        dialogueHistory: JSON.parse(JSON.stringify(state.dialogueHistory || [])),
+      };
+      worldRepository.saveStoryRun(dialogueRun);
+    }
+
     const updatedViewState = this.filterForExternalClient(state, targetStoryId);
 
     return {

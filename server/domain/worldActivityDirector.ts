@@ -100,7 +100,7 @@ export class WorldActivityDirector {
 			const supporting = selectPeople(this.PEOPLE.filter((person) => person.name !== merchant.name), 2);
 			return [merchant, ...supporting];
 		}
-		return selectPeople(this.PEOPLE, 3);
+		return selectPeople(this.PEOPLE, 4);
 	}
 
 	private static refreshDailyActivity(

@@ -848,6 +848,9 @@ test('Phase 12 regression: Character Genesis can expand a configured route with 
 test('Phase 12 regression: deterministic fallback can be explicitly withheld after all AI candidates fail', async () => {
 	const orchestrator = createTestOrchestrator();
 	(orchestrator as any).taskPinnedModels.delete('character.extract');
+	for (const existing of orchestrator.getAllModels()) {
+		if (!existing.isEmergencyFloor) orchestrator.updateModelHealth(existing.providerId, existing.modelId, 'DisabledByUser');
+	}
 	const failing = new DeterministicMockAdapter('phase12_all_ai_failed');
 	failing.failureMode = '500';
 	// This case asserts AI_UNAVAILABLE after exhaustion; the fake must never

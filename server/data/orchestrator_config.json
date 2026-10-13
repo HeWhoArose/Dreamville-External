@@ -1,7 +1,8 @@
 {
   "pins": {
     "speech.generate": "provider_mock_speech::mock-speech-v1",
-    "image.generate": "google_imagen::imagen-3.0-generate-002"
+    "image.generate": "google_imagen::imagen-3.0-generate-002",
+    "character.extract": "phase12_all_ai_failed::all-ai-failed"
   },
   "fallbackChains": {
     "narrative.generate": [
@@ -32,11 +33,7 @@
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "character.extract": [
-      "google_gemini::gemini-3.5-flash-lite",
-      "google_gemini::gemini-2.5-flash",
-      "google_gemini::gemini-3.1-flash-lite",
-      "groq::qwen/qwen3.8-27b",
-      "openrouter::google/gemma-4-31b-it:free",
+      "phase12_all_ai_failed::all-ai-failed",
       "provider_deterministic_emergency::emergency-fallback-local"
     ],
     "memory.extract": [

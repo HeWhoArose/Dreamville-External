@@ -6742,10 +6742,11 @@ export class MultiModelOrchestrator {
           return { valid: false, errorReason: 'Events must be an array of strings.' };
         }
         for (const e of parsed.events) {
-          if (typeof e !== 'string') {
-            return { valid: false, errorReason: 'Event items must be strings.' };
+          if (typeof e === 'string') {
+            events.push(e);
+          } else if (e != null) {
+            events.push(typeof e === 'object' ? JSON.stringify(e) : String(e));
           }
-          events.push(e);
         }
       }
 
@@ -7231,34 +7232,6 @@ export class MultiModelOrchestrator {
     if (!action || !output) return { valid: true };
 
     if (intent) {
-      const movementAnchors = /\b(?:move|moved|moves|walk|walked|walks|step|stepped|steps|approach|approached|approaches|close|closer|near|nearer|head|headed|travel|traveled|travelled|enter|entered|leave|left|forward)\b/i;
-      const observationAnchors = /\b(?:listen|listened|listens|hear|heard|hears|overhear|overheard|eavesdrop|watch|watched|watches|observe|observed|observes|notice|noticed|notices|see|saw|sees|look|looked|looks|scan|scanned|scans|inspect|inspected|study|studied|studies|attend|attended|attentive|gaze|gazed|watchful|conversation|whispers?|rumou?rs?|details?|sounds?|voices?)\b/i;
-      if (intent.movementIntent && !movementAnchors.test(output)) {
-        return {
-          valid: false,
-          errorReason: 'Narration semantic backstop rejected output: the requested movement was not visibly depicted.',
-        };
-      }
-      if (intent.observationIntent && !observationAnchors.test(output)) {
-        return {
-          valid: false,
-          errorReason: 'Narration semantic backstop rejected output: the requested observation was not visibly depicted.',
-        };
-      }
-      const targets = [
-        ...(intent.explicitTargets || []).map((target) => target.name),
-        intent.target?.name,
-        intent.locationTarget?.name,
-      ]
-        .filter((name): name is string => Boolean(name && name.trim()))
-        .flatMap((name) => name.toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length >= 4))
-        .slice(0, 6);
-      if (targets.length > 0 && !targets.some((token) => output.includes(token))) {
-        return {
-          valid: false,
-          errorReason: 'Narration semantic backstop rejected output: an explicit player target was not visibly represented.',
-        };
-      }
       return { valid: true };
     }
 

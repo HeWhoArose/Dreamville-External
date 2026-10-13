@@ -135,9 +135,13 @@ test('Phase 12: malformed narration output is rejected and does not mutate canon
 		clock: repository.getWorldClock('phase12_malformed').getTimestamp(),
 	});
 
-	assert.equal(result.success, true, result.error || JSON.stringify(result));
-	assert.equal(result.turnPackage?.stateChanges.length, 0);
-	assert.equal(after, before);
+	assert.equal(result.success, false, 'Narration must fail visibly instead of accepting emergency fallback prose.');
+	assert.equal(result.turnPackage, undefined);
+	assert.match(result.error || '', /invalid|valid|narrat|provider|fallback/i);
+	assert.equal(result.source === 'DETERMINISTIC_FALLBACK', false);
+	assert.equal(result.modelId === 'emergency-fallback-local', false);
+	assert.equal(result.attemptsTrail?.some((attempt) => attempt.modelId === 'emergency-fallback-local'), false);
+	assert.equal(after, before, 'Failed narration must not mutate canonical story state.');
 
 	const runtime = orchestrator.getModelRuntimeStatus().find(
 		(entry) => entry.modelId === 'malformed-model'

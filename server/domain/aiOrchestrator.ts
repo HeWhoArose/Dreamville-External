@@ -8073,6 +8073,9 @@ export class MultiModelOrchestrator {
         maxTokens: NarrativePacingEngine.outputTokenBudget(narrativePacingContract),
         contextTokens: narrationPrompt.totalTokens,
         turnBudget: turnAiCallBudget,
+        // Narration must fail visibly when every configured AI provider fails.
+        // Never let the deterministic emergency adapter fabricate player-facing prose.
+        allowDeterministicFallback: false,
         forceModelId: params.forceModelId,
         canonicalLocationName: currentSituation.location.name,
         playerAction,
@@ -8119,10 +8122,10 @@ export class MultiModelOrchestrator {
       },
     );
 
-    // Narrative generation has a deterministic emergency floor. When all configured
-    // AI providers fail, surface the actual fallback-attempt diagnostics instead of
-    // replacing them with a misleading "Response is not valid JSON" parse error.
-    if (!generated.text) {
+    // Narration is intentionally fail-closed: only a real configured AI provider
+    // may produce player-facing prose. When AI providers fail, return their diagnostics
+    // to the UI instead of presenting deterministic emergency text as story narration.
+    if (!generated.text || generated.source === 'DETERMINISTIC_FALLBACK' || generated.modelId === 'emergency-fallback-local') {
       return {
         success: false,
         providerId: generated.providerId,
@@ -8134,7 +8137,7 @@ export class MultiModelOrchestrator {
         narrativePlan,
         researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
         contextAudit,
-        error: generated.fallbackReason || 'All configured narrative providers failed, including the deterministic emergency floor.',
+        error: generated.fallbackReason || 'Narration generation failed: all configured AI providers failed. Review the provider attempt details and retry after correcting the failure.',
       };
     }
 

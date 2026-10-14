@@ -231,7 +231,7 @@ async function recoverPipeline(label: string): Promise<void> {
   assert.ok(orchestrator.getModel(fallback.providerId, FALLBACK_MODEL), `${label}: fallback model must be registered before recovery warm-up.`);
   assert.equal(orchestrator.getAdapter(primary.providerId), primary, `${label}: primary adapter must be registered before recovery warm-up.`);
   assert.equal(orchestrator.getAdapter(fallback.providerId), fallback, `${label}: fallback adapter must be registered before recovery warm-up.`);
-  const warmup = await postAction({ type: 'CUSTOM_ACTION', storyId: STORY, actionText: 'Steady yourself and review the chamber as the instruments settle.' });
+  const warmup = await postAction({ type: 'CUSTOM_ACTION', storyId: STORY, actionText: 'Steady yourself after recovery label ' + label + ' and review the chamber as the instruments settle.' });
   assertTurnSucceeded(warmup, `${label} warm-up`);
   const deltas = takeCallDeltas();
   assert.ok(deltas.total >= 1, `${label} warm-up must be served by a registered adapter (selector recovered), got ${deltas.total} calls.`);

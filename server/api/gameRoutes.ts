@@ -733,6 +733,7 @@ gameRouter.post('/action/narrate/regenerate', async (req: Request, res: Response
         actionCommitted: true,
         storyId,
         actionId,
+        errorReason: action.narrativeError.message,
         narrativeResponse: null,
         narrativeError: action.narrativeError,
         viewState: serverMockAuthority.getSanitizedViewState(storyId),

@@ -77,18 +77,26 @@ const fetch = async (url: RequestInfo | URL, init?: RequestInit): Promise<Respon
   finalInit.headers = headers;
 
   let attempts = 0;
-  while (attempts < 2) {
+  const maxAttempts = 4;
+  while (attempts < maxAttempts) {
     try {
-      return await originalFetch(url, finalInit);
+      const response = await originalFetch(url, finalInit);
+      // Retry transient 502/503/504 gateway errors when server is restarting
+      if ([502, 503, 504].includes(response.status) && attempts < maxAttempts - 1) {
+        attempts++;
+        await new Promise((resolve) => setTimeout(resolve, attempts * 700));
+        continue;
+      }
+      return response;
     } catch (err: any) {
       attempts++;
-      if (attempts >= 2) {
+      if (attempts >= maxAttempts) {
         if (err?.name === 'TypeError' && err?.message?.includes('fetch')) {
           throw new Error('Network request failed. Please verify that the game server is reachable.');
         }
         throw err;
       }
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, attempts * 600));
     }
   }
   return originalFetch(url, finalInit);
@@ -117,7 +125,7 @@ class ApiClient {
       method: 'GET',
       headers: { Accept: 'application/json' },
     });
-    const data = await res.json().catch(() => ({}));
+    const data = await readJsonSafely<any>(res).catch(() => ({}));
     if (!res.ok) {
       throw new Error(data?.error || `Failed to fetch canonical Story Run state: HTTP ${res.status}`);
     }
@@ -137,7 +145,7 @@ class ApiClient {
       throw new Error(`Failed to fetch game state: HTTP ${res.status}`);
     }
 
-    return (await res.json()) as ExternalViewState;
+    return (await readJsonSafely(res)) as ExternalViewState;
   }
 
   /**
@@ -155,7 +163,7 @@ class ApiClient {
     });
 
     if (!res.ok) {
-      const errorData = await res.json().catch(() => null);
+      const errorData = await readJsonSafely(res).catch(() => null);
       const error = new Error(
         errorData?.errorReason ||
         errorData?.error ||
@@ -167,7 +175,7 @@ class ApiClient {
       throw error;
     }
 
-    const result = (await res.json()) as ActionResult & { storyId?: string };
+    const result = (await readJsonSafely(res)) as ActionResult & { storyId?: string };
     if (result.storyId && result.storyId !== globalActiveStoryId) {
       this.setActiveStoryId(result.storyId);
     }

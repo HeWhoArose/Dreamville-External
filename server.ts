@@ -108,7 +108,9 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    if (!isProduction) {
+    const distPath = path.join(process.cwd(), 'dist');
+    const hasDist = fs.existsSync(path.join(distPath, 'index.html'));
+    if (!isProduction && !hasDist) {
       const { build } = await import('vite');
       console.log('[Dreamville Preview] DISABLE_HMR=true detected; building static frontend bundle.');
       await build({
@@ -118,7 +120,6 @@ async function startServer() {
       console.log('[Dreamville Preview] Static frontend bundle ready.');
     }
 
-    const distPath = path.join(process.cwd(), 'dist');
     app.use(
       express.static(distPath, {
         setHeaders: (res, filePath) => {

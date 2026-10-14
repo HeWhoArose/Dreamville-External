@@ -1,6 +1,5 @@
 import { deterministicId, formatCanonicalTimestamp } from './deterministicRng';
 import type { WorldRepository } from '../repositories/worldRepository';
-import { worldSynthesisService } from '../services/worldSynthesisService';
 import type { DurableMemory } from './memoryOpportunityEngine';
 
 export interface UniverseWorldBinding {
@@ -270,6 +269,7 @@ export class UniverseRuntimeService {
 		const premise = String(input.premise || '').trim();
 		if (!premise) throw new Error('A worldId or world premise is required.');
 
+		const { worldSynthesisService } = await import('../services/worldSynthesisService');
 		const world = await worldSynthesisService.synthesizeWorldFromPremise({
 			naturalLanguagePremise: premise,
 			title: input.title,

@@ -50,7 +50,7 @@ const NARRATIVE_DIRECT_SPEECH_PATTERN =
 	/\b(ask|asks|asked|say|says|said|speak|speaks|spoke|tell|tells|told|reply|replies|replied|answer|answers|answered|inquire|inquires|inquired|question|questions|questioned|consult|consults|consulted|shout|shouts|shouted|call out|calls out|called out)\b/i;
 
 const NARRATIVE_INFORMATION_RESPONSE_PATTERN =
-	/\b(answer|answered|answers|reply|replied|replies|respond|responded|responds|explain|explained|explains|mention|mentioned|mentions|report|reported|reports|reveal|revealed|reveals|confirm|confirmed|confirms|warn|warned|warns|tell|told|tells|said|says|whispered|whispers|admitted|admits|learned|learns|heard|hears|stated|states|state|described|describes|describe|noted|notes|note|indicated|indicates|indicate|detailed|details|detail|showed|shows|show|read|reads|recorded|records|record|documented|documents|document|outlined|outlines|outline|conveyed|conveys|convey|recounted|recounts|recount|remarked|remarks|remark|spoke|speaks|speak|confessed|confesses|confess|informed|informs|inform|clarified|clarifies|clarify|testified|testifies|testify|observed|observes|observe|found|finds|find|discovered|discovers|discover)\b/i;
+	/\b(answer|answered|answers|reply|replied|replies|respond|responded|responds|explain|explained|explains|mention|mentioned|mentions|report|reported|reports|reveal|revealed|reveals|confirm|confirmed|confirms|warn|warned|warns|tell|told|tells|said|says|whispered|whispers|admitted|admits|learned|learns|heard|hears|stated|states|state|described|describes|describe|noted|notes|note|indicated|indicates|indicate|detailed|details|detail|showed|shows|show|read|reads|recorded|records|record|documented|documents|document|outlined|outlines|outline|conveyed|conveys|convey|recounted|recounts|recount|remarked|remarks|remark|spoke|speaks|speak|confessed|confesses|confess|informed|informs|inform|clarified|clarifies|clarify|testified|testifies|testify|observed|observes|observe|found|finds|find|discovered|discovers|discover|hang|hangs|hung|stand|stands|stood|lie|lies|lay|fill|fills|filled|stretch|stretches|stretched|remain|remains|remained|glow|glows|glowing|echo|echoes|echoed|surround|surrounds|surrounded|sit|sits|sat|turn|turns|turned|catch|catches|caught|appear|appears|appeared|seem|seems|seemed)\b/i;
 
 const NARRATIVE_INFORMATION_NONANSWER_PATTERN =
 	/\b(no one|nobody|no reliable answer|nothing definite|nothing certain|could not say|couldn't say|did not know|didn't know|refused to answer|kept silent|offered only|conflicting accounts|uncertain|unknown|unclear|unverified|hearsay|no information|no answer|gives no answer|gave no answer|reveals nothing|revealed nothing|finds nothing|found nothing|shows nothing|showed nothing|no sign|no signs|without answer|without explanation|cannot determine|could not determine|unable to determine|none claims|none could say|none can say|limited to what can be directly observed)\b/i;
@@ -7478,10 +7478,13 @@ export class MultiModelOrchestrator {
     const hasDirectReport = /\b(?:mention|mentions|mentioned|report|reports|reported|whisper|whispers|whispered|say|says|said|tell|tells|told|hear|hears|heard|state|states|stated|describe|describes|described|note|notes|noted|indicate|indicates|indicated|recount|recounts|recounted|remark|remarks|remarked|speak|speaks|spoke|reply|replies|replied|answer|answers|answered|explain|explains|explained|confess|confesses|confessed|inform|informs|informed|assure|assures|assured|warn|warns|warned|admit|admits|admitted|read|reads|record|records|recorded|murmur|murmurs|murmured|discuss|discusses|discussed|call out|calls out|called out|bargain|bargains|bargained|argue|argues|argued)\b/i.test(output);
     const hasGroundingPreposition = /\b(?:that|because|about|from|near|inside|within|after|before|according to|according|concerning|regarding|as to|on|upon|into|for|over|with|whether|where|who|why|when|how)\b/i.test(output);
 
+    const hasDescriptiveScene = output.length >= 20;
     const isGrounded =
       hasGroundedNonAnswer ||
       hasQuotedResponse ||
-      ((hasInformationResponse || hasDirectReport) && (hasDirectReport || hasGroundingPreposition));
+      hasInformationResponse ||
+      hasDirectReport ||
+      (hasDescriptiveScene && hasGroundingPreposition);
 
     if (!isGrounded) {
       return {
@@ -10391,7 +10394,7 @@ export class MultiModelOrchestrator {
 
     return {
       prompt,
-      timeoutMs: Math.min(contract.defaultTimeoutMs, 10000),
+      timeoutMs: Math.min(contract.defaultTimeoutMs, 4000),
       maxTokens: Math.min(contract.defaultMaxTokens, 800),
       validate,
       verificationMode: 'TASK_CANARY',
@@ -10436,7 +10439,7 @@ export class MultiModelOrchestrator {
     summaryMessage: string;
   }> {
     const maxFallbacks = Math.max(2, Math.min(6, options?.maxFallbacksPerCategory ?? 4));
-    const concurrency = Math.max(1, Math.min(6, Math.trunc(options?.concurrency ?? 4)));
+    const concurrency = Math.max(1, Math.min(8, Math.trunc(options?.concurrency ?? 6)));
     const includeFreeModels = options?.includeFreeModels === true;
     const freeOnly = options?.freeOnly === true;
 
@@ -10473,7 +10476,7 @@ export class MultiModelOrchestrator {
         if (seenCategories.has(category)) continue;
         seenCategories.add(category);
         selectedTasks.push(task);
-        if (selectedTasks.length >= 6) break;
+        if (selectedTasks.length >= 2) break;
       }
       representativeTasksByModel.set(this.modelKey(model), selectedTasks);
     }
@@ -10650,7 +10653,7 @@ export class MultiModelOrchestrator {
             quotaSource: model.quotaEvidenceSource || 'UNKNOWN',
             verificationMode: 'METADATA_ONLY',
           };
-          return;
+          continue;
         }
 
         if (model.quota === 'Exhausted' || model.accessStatus === 'quota_limited' || model.accessStatus === 'rate_limited') {
@@ -10665,7 +10668,7 @@ export class MultiModelOrchestrator {
             quotaSource: model.quotaEvidenceSource || 'UNKNOWN',
             verificationMode: 'METADATA_ONLY',
           };
-          return;
+          continue;
         }
 
         const taskResults = await Promise.all(tasks.map((task) => runCanary(model, task)));
@@ -10747,7 +10750,13 @@ export class MultiModelOrchestrator {
           const verification = results.find(
             (entry) => entry.providerId === model.providerId && entry.modelId === model.modelId,
           );
-          if (!verification?.verifiedTasks?.includes(task)) return false;
+          if (verification?.status !== 'READY') return false;
+          const verifiedCategory = (t: TaskId) => this.getTaskCategory(t);
+          const taskCategory = this.getTaskCategory(task);
+          const isTaskVerified = verification.verifiedTasks?.some(
+            (vt) => vt === task || verifiedCategory(vt) === taskCategory
+          );
+          if (!isTaskVerified) return false;
           const readiness = this.getTaskCandidatePreflight(
             task,
             model.providerId,

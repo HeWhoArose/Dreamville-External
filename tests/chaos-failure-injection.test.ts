@@ -96,8 +96,12 @@ function buildVariedResponse(task: TaskId, prompt: string, playerAction?: string
     `Nothing in ${location} stands still for long. ${action} The response is immediate and concrete.`,
     `You move with intent. ${action} The details of ${location} sharpen around what you just did.`,
   ];
+  const seeksInformation = /\\b(ask|asked|inquire|inquired|question|questioned|find out|learn|discover|gather information|seek information|rumor|rumors|rumour|rumours|gossip|what happened|who|why|where|when|how|heard about|hear|listen|overhear|eavesdrop|tell me|compare|review|check|inspect|investigate)\\b/i.test(action);
+  const narrative = openings[h % openings.length] + (seeksInformation
+    ? ' The archivist answers, “The latest reading matches the chronicle baseline within the recorded tolerance; the western lens remains unverified.”'
+    : '');
   return JSON.stringify({
-    narrative: [openings[h % openings.length]],
+    narrative: [narrative],
     dialogue: [],
     events: ['CHAOS_TURN_PROGRESSED'],
     stateChanges: [],

@@ -13,8 +13,8 @@
  *   illegal_state_change → hostile DELETE_PLAYER proposal reaches turn-package
  *                          validation, is rejected, and the player/inventory/
  *                          location stay canonically intact
- *   total outage         → both registered models disabled → emergency floor
- *                          still narrates (200, non-empty, deterministic)
+ *   total outage         → both registered models disabled → narration fails visibly
+ *                          with diagnostics; no deterministic story prose is fabricated
  *
  * RIG NOTE: the injection is armed on BOTH registered adapters so the failing
  * payload fires no matter which candidate the selector picks (provider
@@ -67,7 +67,7 @@ let orchestrator!: ReturnType<typeof worldRepository.getAiOrchestrator>;
 class VariedNarrationMockAdapter extends DeterministicMockAdapter {
   public async generate(task: TaskId, prompt: string, options?: ProviderGenerateOptions): Promise<ProviderGenerateResult> {
     const previous = this.defaultResponse;
-    this.defaultResponse = buildVariedResponse(task, prompt);
+    this.defaultResponse = buildVariedResponse(task, prompt, options?.playerAction, options?.canonicalLocationName, options?.modelId);
     try {
       return await super.generate(task, prompt, options);
     } finally {
@@ -85,12 +85,12 @@ function stableHash(text: string): number {
   return Math.abs(h);
 }
 
-function buildVariedResponse(task: TaskId, prompt: string): string {
+function buildVariedResponse(task: TaskId, prompt: string, playerAction?: string, canonicalLocationName?: string, modelId?: string): string {
   const actionMatch = String(prompt || '').match(/(?:Latest Player Action|PLAYER ACTION|Player Input|Action Requested|Intent|Latest Action|Action):\s*([^\n]+)/i);
-  const action = (actionMatch?.[1] || 'the moment passes').trim().slice(0, 180);
+  const action = String(playerAction || actionMatch?.[1] || 'the moment passes').trim().slice(0, 180);
   const locationMatch = String(prompt || '').match(/LOCATION NAME:\s*([^\n]+)/i);
-  const location = (locationMatch?.[1] || 'the chamber').trim();
-  const h = stableHash(task + '|' + action + '|' + location);
+  const location = String(canonicalLocationName || locationMatch?.[1] || 'the chamber').trim();
+  const h = stableHash(task + '|' + prompt + '|' + action + '|' + location + '|' + String(modelId || 'mock-model'));
   const openings = [
     `You give the attempt your full attention in ${location}. ${action} — and the moment answers.`,
     `Breath held, you commit. ${action} In ${location}, the outcome takes shape around your intent.`,
@@ -396,15 +396,22 @@ describe('Chaos — adapter failure injection through the real action pipeline',
     assertTurnSucceeded(cleanTurn, 'post-illegal clean turn');
   });
 
-  it('TOTAL OUTAGE — both models disabled, emergency floor keeps the game playable', async () => {
+  it('TOTAL OUTAGE — disabled AI models produce a visible narration error without emergency prose', async () => {
     orchestrator.updateModelHealth(primary.providerId, PRIMARY_MODEL, 'DisabledByUser');
     orchestrator.updateModelHealth(fallback.providerId, FALLBACK_MODEL, 'DisabledByUser');
+    const before = canonicalFingerprint();
     const turn = await postAction({ type: 'CUSTOM_ACTION', storyId: STORY, actionText: 'Hold the workbench and watch the chamber floor for movement.' });
     const deltas = takeCallDeltas();
-    await recoverPipeline('total_outage');
-    assertTurnSucceeded(turn, 'total_outage');
+    assert.equal(turn.status, 200, 'the canonical action should remain committed when narration is unavailable.');
+    assert.equal(turn.data?.success, true);
+    assert.equal(String(turn.data?.narrativeResponse || '').trim(), '', 'total outage must not fabricate emergency narration.');
+    assert.match(String(turn.data?.narrativeError?.message || ''), /AI candidates|provider|narrat|unavailable/i);
+    assert.notEqual(turn.data?.narrativeGeneration?.source, 'DETERMINISTIC_FALLBACK');
     assert.equal(deltas.total, 0, 'total outage must not reach the registered (disabled) providers.');
-    logProgress(`total outage ok (emergency floor narrated, registered-provider calls ${deltas.total}, ${turn.latencyMs}ms)`);
+    const after = canonicalFingerprint();
+    assert.equal(after.locationId, before.locationId, 'narration failure must not alter canonical location.');
+    await recoverPipeline('total_outage');
+    logProgress(`total outage ok (visible narration error, registered-provider calls ${deltas.total}, ${turn.latencyMs}ms)`);
   });
 
   it('RECOVERY — pipeline returns to fully healthy operation after all injections', async () => {

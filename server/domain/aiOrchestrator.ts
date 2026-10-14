@@ -7502,6 +7502,37 @@ export class MultiModelOrchestrator {
     return { valid: true };
   }
 
+  private validateNarrativeFreshnessContinuity(
+    narration: string,
+    previousNarrations: string[],
+  ): { valid: boolean; errorReason?: string } {
+    const normalizeText = (value: string) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const current = normalizeText(narration);
+    if (!current) return { valid: true };
+    const currentWords = new Set(current.split(/\s+/).filter((word) => word.length >= 4));
+    for (const previousNarration of previousNarrations.slice(-5)) {
+      const previous = normalizeText(previousNarration);
+      if (!previous) continue;
+      if (current === previous) {
+        return {
+          valid: false,
+          errorReason: 'Narration freshness guard rejected an exact repeat of a recent player-facing response; advance the current beat instead of replaying it.',
+        };
+      }
+      const previousWords = new Set(previous.split(/\s+/).filter((word) => word.length >= 4));
+      if (currentWords.size < 18 || previousWords.size < 18) continue;
+      const shared = Array.from(currentWords).filter((word) => previousWords.has(word)).length;
+      const similarity = shared / Math.min(currentWords.size, previousWords.size);
+      if (similarity >= 0.88) {
+        return {
+          valid: false,
+          errorReason: 'Narration freshness guard rejected near-duplicate prose; retain canonical facts but make the current action or result meaningfully advance.',
+        };
+      }
+    }
+    return { valid: true };
+  }
+
   private validateNarrativeTemporalContinuity(
     narration: string,
     repository: WorldRepository,
@@ -8097,6 +8128,11 @@ export class MultiModelOrchestrator {
             return { valid: false, errorReason: validation.errorReason };
           }
           const narrationText = validation.turnPackage.narrative.join(' ');
+          const previousNarrationsForFreshness = currentSituation.recentTurns
+            .map((entry) => String(entry.narration || ''))
+            .filter(Boolean);
+          const freshness = this.validateNarrativeFreshnessContinuity(narrationText, previousNarrationsForFreshness);
+          if (!freshness.valid) return { valid: false, errorReason: freshness.errorReason };
           const pacing = NarrativePacingEngine.validateNarration(narrationText, narrativePacingContract);
           if (!pacing.valid) return { valid: false, errorReason: pacing.reason };
           const continuity = this.validateNarrativeSceneContinuity(

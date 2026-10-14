@@ -105,7 +105,9 @@ function buildVariedResponse(task: TaskId, prompt: string, playerAction?: string
   const action = String(playerAction || actionMatch?.[1] || 'the moment passes').trim().slice(0, 180);
   const locationMatch = String(prompt || '').match(/LOCATION NAME:\s*([^\n]+)/i);
   const location = (locationMatch?.[1] || 'the chamber').trim();
-  const h = stableHash(task + '|' + action + '|' + location);
+  // The assembled prompt includes turn-local continuity and prior beats; include it so repeated
+  // actions still exercise distinct responses across a long session.
+  const h = stableHash(task + '|' + prompt + '|' + action + '|' + location);
   const openings = [
     `You give the attempt your full attention in ${location}. ${action} — and the moment answers.`,
     `Breath held, you commit. ${action} In ${location}, the outcome takes shape around your intent.`,

@@ -706,22 +706,19 @@ gameRouter.post('/action/narrate/regenerate', async (req: Request, res: Response
     } as any);
 
     if (!generated.success || !generated.turnPackage?.narrative?.length) {
-      const localNarration = serverMockAuthority.synthesizeFreeformActionFallback(
-        storyId,
-        action.description,
-        checkOutcome,
-      );
-      action.narrativeResponse = localNarration;
-      action.narrativeError = undefined;
-      action.narrativeGeneration = {
-        source: 'DETERMINISTIC_FALLBACK',
-        providerId: 'provider_local_story_fallback',
-        modelId: 'local-story-fallback',
-        regenerated: true,
+      action.narrativeResponse = '';
+      action.narrativeError = {
+        code: 'NARRATION_AI_UNAVAILABLE',
+        message: generated.error || generated.fallbackReason || 'Narration could not be regenerated because all configured AI providers failed.',
+        providerId: generated.providerId,
+        modelId: generated.modelId,
+        fallbackReason: generated.fallbackReason,
+        attemptsTrail: generated.attemptsTrail || [],
       };
+      action.narrativeGeneration = undefined;
       action.visualCues = undefined;
 
-      console.warn('[NarrationFallback] Retry narration used local story fallback.', {
+      console.warn('[NarrationUnavailable] Retry narration failed; no local prose fallback was used.', {
         storyId,
         actionId,
         provider: generated.providerId,
@@ -731,11 +728,13 @@ gameRouter.post('/action/narrate/regenerate', async (req: Request, res: Response
         attemptsTrail: generated.attemptsTrail || [],
       });
 
-      return res.json({
-        success: true,
-        localFallback: true,
-        narrativeResponse: localNarration,
-        narrativeGeneration: action.narrativeGeneration,
+      return res.status(503).json({
+        success: false,
+        actionCommitted: true,
+        storyId,
+        actionId,
+        narrativeResponse: null,
+        narrativeError: action.narrativeError,
         viewState: serverMockAuthority.getSanitizedViewState(storyId),
       });
     }

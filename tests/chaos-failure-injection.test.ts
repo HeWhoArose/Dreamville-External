@@ -179,6 +179,19 @@ function disarmAdapters(): void {
     adapter.maxFailuresBeforeSuccess = 0;
     adapter.failureCount = 0;
   }
+  // Re-register both records and adapters as well as resetting health. Some
+  // injected failure paths can leave a configured model undiscoverable; a
+  // recovery assertion must prove the real selector can recover from that state.
+  orchestrator.registerModel(narrativeModel(primary.providerId, PRIMARY_MODEL, 100));
+  orchestrator.registerModel(narrativeModel(fallback.providerId, FALLBACK_MODEL, 90));
+  orchestrator.registerAdapter(primary);
+  orchestrator.registerAdapter(fallback);
+  orchestrator.pinModelForTask('narrative.generate', PRIMARY_MODEL);
+  orchestrator.setFallbackChain('narrative.generate', [
+    `${primary.providerId}::${PRIMARY_MODEL}`,
+    `${fallback.providerId}::${FALLBACK_MODEL}`,
+    'provider_deterministic_emergency::emergency-fallback-local',
+  ]);
   orchestrator.updateModelHealth(primary.providerId, PRIMARY_MODEL, 'Healthy');
   orchestrator.updateModelHealth(fallback.providerId, FALLBACK_MODEL, 'Healthy');
 }

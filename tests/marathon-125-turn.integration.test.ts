@@ -81,7 +81,7 @@ let orchestrator!: ReturnType<typeof worldRepository.getAiOrchestrator>;
 class VariedNarrationMockAdapter extends DeterministicMockAdapter {
   public async generate(task: TaskId, prompt: string, options?: ProviderGenerateOptions): Promise<ProviderGenerateResult> {
     const previous = this.defaultResponse;
-    this.defaultResponse = buildVariedResponse(task, prompt);
+    this.defaultResponse = buildVariedResponse(task, prompt, options?.playerAction);
     try {
       return await super.generate(task, prompt, options);
     } finally {
@@ -99,9 +99,10 @@ function stableHash(text: string): number {
   return Math.abs(h);
 }
 
-function buildVariedResponse(task: TaskId, prompt: string): string {
+function buildVariedResponse(task: TaskId, prompt: string, playerAction?: string): string {
   const actionMatch = String(prompt || '').match(/(?:Latest Player Action|PLAYER ACTION|Player Input|Action Requested|Intent|Latest Action|Action):\s*([^\n]+)/i);
-  const action = (actionMatch?.[1] || 'the moment passes').trim().slice(0, 180);
+  // Use the canonical action supplied by the runtime; prompt labels can vary.
+  const action = String(playerAction || actionMatch?.[1] || 'the moment passes').trim().slice(0, 180);
   const locationMatch = String(prompt || '').match(/LOCATION NAME:\s*([^\n]+)/i);
   const location = (locationMatch?.[1] || 'the chamber').trim();
   const h = stableHash(task + '|' + action + '|' + location);

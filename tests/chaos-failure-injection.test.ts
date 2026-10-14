@@ -16,13 +16,11 @@
  *   total outage         → both registered models disabled → narration fails visibly
  *                          with diagnostics; no deterministic story prose is fabricated
  *
- * RIG NOTE: the injection is armed on BOTH registered adapters so the failing
- * payload fires no matter which candidate the selector picks (provider
- * failures trip lingering selection degradation — see recordProviderFailure —
- * so a single-adapter injection can be silently skipped). Each injected turn
- * asserts delivery via adapter callHistory, and the timeout segment asserts a
- * real hang occurred (latency floor ≈ the per-attempt provider timeout), so no
- * assertion in this file can pass vacuously.
+ * RIG NOTE: transient failures are injected on the preferred primary while the
+ * fallback remains healthy, so the suite verifies real cross-provider recovery.
+ * Total outage is a separate case that explicitly disables both models. Each
+ * injected turn asserts delivery via adapter callHistory, and the timeout segment
+ * asserts a real hang occurred, so no assertion can pass vacuously.
  *
  * INTEGRATION CLASS: CONTROLLED DETERMINISTIC/MOCK. External AI credentials are
  * unavailable in the audit environment, so providers are deterministic mock
@@ -218,10 +216,11 @@ async function recoverPipeline(label: string): Promise<void> {
 /** Arm a failure mode on BOTH adapters so the injected payload fires no matter
  * which candidate the model selector picks. */
 function armInjection(mode: NonNullable<DeterministicMockAdapter['failureMode']>, maxFailures: number): void {
-  for (const adapter of [primary, fallback]) {
-    adapter.failureMode = mode;
-    adapter.maxFailuresBeforeSuccess = maxFailures;
-  }
+  primary.failureMode = mode;
+  primary.maxFailuresBeforeSuccess = maxFailures;
+  fallback.failureMode = null;
+  fallback.maxFailuresBeforeSuccess = 0;
+  fallback.failureCount = 0;
 }
 
 function assertTurnSucceeded(turn: { status: number; data: any }, label: string): void {

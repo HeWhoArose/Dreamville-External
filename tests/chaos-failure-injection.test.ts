@@ -250,7 +250,12 @@ function armInjection(mode: NonNullable<DeterministicMockAdapter['failureMode']>
 function assertTurnSucceeded(turn: { status: number; data: any }, label: string): void {
   assert.equal(turn.status, 200, `${label}: action must succeed under injected failure, got HTTP ${turn.status}: ${JSON.stringify(turn.data).slice(0, 250)}`);
   assert.equal(turn.data?.success, true, `${label}: success flag must be true: ${JSON.stringify(turn.data).slice(0, 250)}`);
-  assert.match(String(turn.data?.narrativeResponse || ''), /\S+/, `${label}: player must still receive a non-empty narrative.`);
+  const narrative = String(turn.data?.narrativeResponse || '').trim();
+  if (!narrative) {
+    // Provider outages must be visible; do not make emergency prose a condition of action success.
+    assert.ok(turn.data?.narrativeError, `${label}: missing narration must include visible provider/quality diagnostics.`);
+    assert.notEqual(turn.data?.narrativeGeneration?.source, 'DETERMINISTIC_FALLBACK', `${label}: emergency prose must not be substituted silently.`);
+  }
 }
 
 before(async () => {

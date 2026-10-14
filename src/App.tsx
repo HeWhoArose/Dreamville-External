@@ -354,6 +354,15 @@ export const App: React.FC = () => {
     }
   }, [bootPhase]);
 
+  // Refresh from canonical server state whenever the player returns to the
+  // Story Library. A run may have been created or updated while the Story view
+  // was mounted, so the in-memory React list must not be treated as authoritative.
+  useEffect(() => {
+    if (bootPhase === 'ready' && currentRoute === 'story-library') {
+      void fetchStoryLibrary(false);
+    }
+  }, [bootPhase, currentRoute]);
+
   const dispatchAction = async (
     action: ActionRequest,
     onComplete?: (result: ActionResult) => void | Promise<void>

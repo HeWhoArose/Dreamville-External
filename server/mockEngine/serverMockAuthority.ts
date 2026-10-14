@@ -33,6 +33,7 @@ import { environmentalHazardEngine } from '../domain/environmentalHazardEngine';
 import { CurrentSituationBuilder } from '../domain/currentSituation';
 import { WorldActivityDirector } from '../domain/worldActivityDirector';
 import { PlayerIntentInterpreter } from '../domain/playerIntentInterpreter';
+import { PlayerStateQueryResolver } from '../domain/playerStateQueryResolver';
 import { ResolutionGate } from '../domain/resolutionGate';
 import { outcomeTierFromCheck, type ActionResolution } from '../domain/actionResolution';
 import { type ContextTransparency } from '../../src/types';
@@ -724,6 +725,49 @@ export class ServerMockAuthority {
       (request as any).description ||
       (request as any).input ||
       'Performed freeform action.';
+
+    // Canonical read-only player-state questions must be answered from authoritative
+    // state before capability advice, checks, time advancement, or narrative generation.
+    if (request.type === 'CUSTOM_ACTION') {
+      const state = this.getDynamicStoryState(targetStoryId);
+      const query = PlayerStateQueryResolver.resolve({
+        actionText: String(freeformText),
+        actorId,
+        inventory: worldRepository.getInventoryEngine(targetStoryId),
+        recentActions: state.actionHistory.map((entry) => ({
+          description: entry.description,
+          actionType: entry.actionType,
+        })),
+      });
+      if (query) {
+        const clock = worldRepository.getWorldClock(targetStoryId);
+        const timestamp = formatCanonicalTimestamp(clock.getTimestamp());
+        const actionId = deterministicId('state_query', targetStoryId, String(freeformText), state.actionHistory.length);
+        const logEntry: ActionLog = {
+          id: actionId,
+          timestamp,
+          cycle: clock.getTimestamp().day,
+          actionType: 'CUSTOM_ACTION',
+          description: String(freeformText),
+          epistemicValidation: 'MOCK_ENGINE_COMMITTED',
+          authoritativeFeedback: query.response,
+          narrativeResponse: query.response,
+          presentationFeedback: 'Answered directly from canonical player state; no world-state mutation or time advancement.',
+        };
+        state.actionHistory = [logEntry, ...state.actionHistory];
+        this.persistActionHistory(targetStoryId, state);
+        return {
+          success: true,
+          actionId,
+          requestType: request.type,
+          status: 'MOCK_ENGINE_COMMITTED',
+          message: query.response,
+          authoritativeFeedback: query.response,
+          narrativeResponse: query.response,
+          viewState: this.filterForExternalClient(state, targetStoryId),
+        };
+      }
+    }
 
     // Detect an actionable hostile encounter before capability-advisor gating.
     // A canonical spell such as Fireball can live in SpellRuntime rather than

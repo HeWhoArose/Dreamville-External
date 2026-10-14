@@ -4,205 +4,30 @@
     "image.generate": "google_imagen::imagen-3.0-generate-002"
   },
   "fallbackChains": {
-    "narrative.generate": [
-      "google_gemini::gemini-3.5-flash-lite",
-      "google_gemini::gemini-3.1-flash-lite",
-      "google_gemini::gemini-flash-lite-latest",
-      "google_gemini::gemini-3.1-flash-lite-preview",
-      "provider_deterministic_emergency::emergency-fallback-local"
-    ],
-    "narrative.review": [
-      "google_gemini::gemini-3.5-flash-lite",
-      "google_gemini::gemini-3.1-flash-lite",
-      "google_gemini::gemini-flash-lite-latest",
-      "google_gemini::gemini-3.1-flash-lite-preview",
-      "provider_deterministic_emergency::emergency-fallback-local"
-    ],
-    "character.dialogue": [
-      "google_gemini::gemini-3.1-flash-lite",
-      "google_gemini::gemini-3.5-flash-lite",
-      "nvidia::nvidia/nemotron-3.5-content-safety",
-      "google_gemini::gemini-flash-lite-latest",
-      "provider_deterministic_emergency::emergency-fallback-local"
-    ],
-    "character.extract": [
-      "google_gemini::gemini-3.5-flash-lite",
-      "google_gemini::gemini-2.5-flash",
-      "google_gemini::gemini-3.1-flash-lite",
-      "groq::qwen/qwen3.8-27b",
-      "openrouter::google/gemma-4-31b-it:free",
-      "provider_deterministic_emergency::emergency-fallback-local"
-    ],
-    "memory.extract": [
-      "google_gemini::gemini-3.1-flash-lite",
-      "google_gemini::gemini-3.5-flash-lite",
-      "nvidia::nvidia/nemotron-3.5-content-safety",
-      "google_gemini::gemini-flash-lite-latest",
-      "provider_deterministic_emergency::emergency-fallback-local"
-    ],
-    "summary.scene": [
-      "google_gemini::gemini-3.5-flash-lite",
-      "google_gemini::gemini-2.5-flash",
-      "google_gemini::gemini-3.1-flash-lite",
-      "groq::qwen/qwen3.8-27b",
-      "openrouter::google/gemma-4-31b-it:free",
-      "provider_deterministic_emergency::emergency-fallback-local"
-    ],
-    "intent.interpret": [
-      "google_gemini::gemini-3.5-flash-lite",
-      "google_gemini::gemini-2.5-flash",
-      "google_gemini::gemini-3.1-flash-lite",
-      "groq::qwen/qwen3.8-27b",
-      "openrouter::google/gemma-4-31b-it:free",
-      "provider_deterministic_emergency::emergency-fallback-local"
-    ],
-    "capability.explain": [
-      "google_gemini::gemini-3.5-flash-lite",
-      "google_gemini::gemini-3.1-flash-lite",
-      "google_gemini::gemini-3.5-flash",
-      "google_gemini::gemini-3.8-flash",
-      "groq::qwen/qwen3.8-27b",
-      "openrouter::google/gemma-4-31b-it:free",
-      "openrouter::inclusionai/ling-3.0-flash:free",
-      "provider_deterministic_emergency::emergency-fallback-local"
-    ],
-    "utility.inspect": [
-      "google_gemini::gemini-3.5-flash-lite",
-      "google_gemini::gemini-3.1-flash-lite",
-      "google_gemini::gemini-3.5-flash",
-      "google_gemini::gemini-3.8-flash",
-      "groq::qwen/qwen3.8-27b",
-      "openrouter::inclusionai/ling-3.0-flash:free",
-      "openrouter::google/gemma-4-31b-it:free",
-      "provider_deterministic_emergency::emergency-fallback-local"
-    ],
-    "rules.adjudicate": [
-      "provider_mock_reasoning::mock-reasoning-pro",
-      "provider_deterministic_emergency::emergency-fallback-local"
-    ],
-    "rules.analyze": [
-      "groq::openai/gpt-oss-120b",
-      "groq::qwen/qwen3.8-27b",
-      "google_gemini::gemini-3.5-flash",
-      "google_gemini::gemini-3.8-flash",
-      "google_gemini::gemini-3.5-flash-lite",
-      "google_gemini::gemini-3.1-flash-lite",
-      "openrouter::google/gemma-4-31b-it:free",
-      "openrouter::inclusionai/ling-3.0-flash:free",
-      "provider_deterministic_emergency::emergency-fallback-local"
-    ],
-    "tactical.reason": [
-      "groq::openai/gpt-oss-120b",
-      "groq::qwen/qwen3.8-27b",
-      "google_gemini::gemini-3.5-flash",
-      "google_gemini::gemini-3.8-flash",
-      "google_gemini::gemini-3.5-flash-lite",
-      "google_gemini::gemini-3.1-flash-lite",
-      "openrouter::google/gemma-4-31b-it:free",
-      "openrouter::inclusionai/ling-3.0-flash:free",
-      "provider_deterministic_emergency::emergency-fallback-local"
-    ],
-    "combat.tactics": [
-      "groq::openai/gpt-oss-120b",
-      "groq::qwen/qwen3.8-27b",
-      "google_gemini::gemini-3.5-flash",
-      "google_gemini::gemini-3.8-flash",
-      "google_gemini::gemini-3.5-flash-lite",
-      "google_gemini::gemini-3.1-flash-lite",
-      "openrouter::google/gemma-4-31b-it:free",
-      "openrouter::inclusionai/ling-3.0-flash:free",
-      "provider_deterministic_emergency::emergency-fallback-local"
-    ],
-    "combat.animation.plan": [
-      "groq::openai/gpt-oss-120b",
-      "groq::qwen/qwen3.8-27b",
-      "groq::openai/gpt-oss-20b",
-      "openrouter::google/gemma-4-31b-it:free",
-      "openrouter::inclusionai/ling-3.0-flash:free",
-      "google_gemini::gemini-3.5-flash-lite",
-      "google_gemini::gemini-3.1-flash-lite",
-      "google_gemini::gemini-3.5-flash",
-      "provider_deterministic_emergency::emergency-fallback-local"
-    ],
-    "character.capability.propose": [
-      "groq::openai/gpt-oss-120b",
-      "groq::qwen/qwen3.8-27b",
-      "google_gemini::gemini-3.5-flash",
-      "google_gemini::gemini-3.8-flash",
-      "google_gemini::gemini-3.5-flash-lite",
-      "google_gemini::gemini-3.1-flash-lite",
-      "openrouter::google/gemma-4-31b-it:free",
-      "openrouter::inclusionai/ling-3.0-flash:free",
-      "provider_deterministic_emergency::emergency-fallback-local"
-    ],
-    "capability.synthesize": [
-      "groq::openai/gpt-oss-120b",
-      "groq::qwen/qwen3.8-27b",
-      "google_gemini::gemini-3.5-flash",
-      "google_gemini::gemini-3.8-flash",
-      "google_gemini::gemini-3.5-flash-lite",
-      "google_gemini::gemini-3.1-flash-lite",
-      "openrouter::google/gemma-4-31b-it:free",
-      "openrouter::inclusionai/ling-3.0-flash:free",
-      "provider_deterministic_emergency::emergency-fallback-local"
-    ],
-    "world.generate": [
-      "groq::qwen/qwen3.8-27b",
-      "openrouter::inclusionai/ling-3.0-flash:free",
-      "google_gemini::gemini-3.5-flash",
-      "google_gemini::gemini-3.8-flash",
-      "openrouter::google/gemma-4-31b-it:free",
-      "openrouter::qwen/qwen3.8-27b:free",
-      "google_gemini::gemini-3.5-flash-lite",
-      "google_gemini::gemini-3.1-flash-lite",
-      "provider_deterministic_emergency::emergency-fallback-local"
-    ],
-    "research.query": [
-      "groq::openai/gpt-oss-120b",
-      "groq::qwen/qwen3.8-27b",
-      "openrouter::google/gemma-4-31b-it:free",
-      "openrouter::inclusionai/ling-3.0-flash:free",
-      "google_gemini::gemini-3.5-flash",
-      "google_gemini::gemini-3.8-flash",
-      "google_gemini::gemini-3.5-flash-lite",
-      "provider_deterministic_emergency::emergency-fallback-local"
-    ],
-    "research.world-brief": [
-      "groq::openai/gpt-oss-120b",
-      "groq::qwen/qwen3.8-27b",
-      "openrouter::google/gemma-4-31b-it:free",
-      "openrouter::inclusionai/ling-3.0-flash:free",
-      "google_gemini::gemini-3.5-flash",
-      "google_gemini::gemini-3.8-flash",
-      "google_gemini::gemini-3.5-flash-lite",
-      "provider_deterministic_emergency::emergency-fallback-local"
-    ],
-    "story.advice": [
-      "google_gemini::gemini-3.5-flash-lite",
-      "google_gemini::gemini-3.1-flash-lite",
-      "google_gemini::gemini-flash-lite-latest",
-      "google_gemini::gemini-3.1-flash-lite-preview",
-      "provider_deterministic_emergency::emergency-fallback-local"
-    ],
-    "ooc.respond": [
-      "google_gemini::gemini-3.5-flash-lite",
-      "google_gemini::gemini-3.1-flash-lite",
-      "google_gemini::gemini-flash-lite-latest",
-      "google_gemini::gemini-3.1-flash-lite-preview",
-      "provider_deterministic_emergency::emergency-fallback-local"
-    ],
-    "speech.generate": [
-      "provider_mock_speech::mock-speech-v1",
-      "provider_deterministic_emergency::emergency-fallback-local"
-    ],
-    "speech.transcribe": [
-      "provider_mock_stt::mock-stt-v1",
-      "provider_deterministic_emergency::emergency-fallback-local"
-    ],
-    "image.generate": [
-      "google_imagen::imagen-3.0-generate-002",
-      "provider_deterministic_emergency::emergency-fallback-local"
-    ]
+    "narrative.generate": ["google_gemini::gemini-3.5-flash","google_gemini::gemini-3.8-flash","google_gemini::gemini-2.5-flash","groq::qwen/qwen3.8-27b","openrouter::inclusionai/ling-3.0-flash:free","openrouter::google/gemma-4-31b-it:free","provider_deterministic_emergency::emergency-fallback-local"],
+    "narrative.review": ["google_gemini::gemini-3.5-flash-lite","google_gemini::gemini-3.1-flash-lite","google_gemini::gemini-flash-lite-latest","google_gemini::gemini-3.1-flash-lite-preview","provider_deterministic_emergency::emergency-fallback-local"],
+    "character.dialogue": ["google_gemini::gemini-3.5-flash","google_gemini::gemini-3.8-flash","google_gemini::gemini-2.5-flash","groq::qwen/qwen3.8-27b","openrouter::inclusionai/ling-3.0-flash:free","openrouter::google/gemma-4-31b-it:free","provider_deterministic_emergency::emergency-fallback-local"],
+    "character.extract": ["google_gemini::gemini-3.5-flash-lite","google_gemini::gemini-2.5-flash","google_gemini::gemini-3.1-flash-lite","groq::qwen/qwen3.8-27b","openrouter::google/gemma-4-31b-it:free","provider_deterministic_emergency::emergency-fallback-local"],
+    "memory.extract": ["google_gemini::gemini-3.1-flash-lite","google_gemini::gemini-3.5-flash-lite","google_gemini::gemini-flash-lite-latest","provider_deterministic_emergency::emergency-fallback-local"],
+    "summary.scene": ["google_gemini::gemini-3.5-flash-lite","google_gemini::gemini-2.5-flash","google_gemini::gemini-3.1-flash-lite","groq::qwen/qwen3.8-27b","openrouter::google/gemma-4-31b-it:free","provider_deterministic_emergency::emergency-fallback-local"],
+    "intent.interpret": ["google_gemini::gemini-3.5-flash-lite","google_gemini::gemini-2.5-flash","google_gemini::gemini-3.1-flash-lite","groq::qwen/qwen3.8-27b","openrouter::google/gemma-4-31b-it:free","provider_deterministic_emergency::emergency-fallback-local"],
+    "capability.explain": ["google_gemini::gemini-3.5-flash-lite","google_gemini::gemini-3.1-flash-lite","google_gemini::gemini-3.5-flash","google_gemini::gemini-3.8-flash","groq::qwen/qwen3.8-27b","openrouter::google/gemma-4-31b-it:free","openrouter::inclusionai/ling-3.0-flash:free","provider_deterministic_emergency::emergency-fallback-local"],
+    "utility.inspect": ["google_gemini::gemini-3.5-flash-lite","google_gemini::gemini-3.1-flash-lite","google_gemini::gemini-3.5-flash","google_gemini::gemini-3.8-flash","groq::qwen/qwen3.8-27b","openrouter::inclusionai/ling-3.0-flash:free","openrouter::google/gemma-4-31b-it:free","provider_deterministic_emergency::emergency-fallback-local"],
+    "rules.adjudicate": ["provider_mock_reasoning::mock-reasoning-pro","provider_deterministic_emergency::emergency-fallback-local"],
+    "rules.analyze": ["groq::openai/gpt-oss-120b","groq::qwen/qwen3.8-27b","google_gemini::gemini-3.5-flash","google_gemini::gemini-3.8-flash","google_gemini::gemini-3.5-flash-lite","google_gemini::gemini-3.1-flash-lite","openrouter::google/gemma-4-31b-it:free","openrouter::inclusionai/ling-3.0-flash:free","provider_deterministic_emergency::emergency-fallback-local"],
+    "tactical.reason": ["groq::openai/gpt-oss-120b","groq::qwen/qwen3.8-27b","google_gemini::gemini-3.5-flash","google_gemini::gemini-3.8-flash","google_gemini::gemini-3.5-flash-lite","google_gemini::gemini-3.1-flash-lite","openrouter::google/gemma-4-31b-it:free","openrouter::inclusionai/ling-3.0-flash:free","provider_deterministic_emergency::emergency-fallback-local"],
+    "combat.tactics": ["groq::openai/gpt-oss-120b","groq::qwen/qwen3.8-27b","google_gemini::gemini-3.5-flash","google_gemini::gemini-3.8-flash","google_gemini::gemini-3.5-flash-lite","google_gemini::gemini-3.1-flash-lite","openrouter::google/gemma-4-31b-it:free","openrouter::inclusionai/ling-3.0-flash:free","provider_deterministic_emergency::emergency-fallback-local"],
+    "combat.animation.plan": ["groq::openai/gpt-oss-120b","groq::qwen/qwen3.8-27b","groq::openai/gpt-oss-20b","openrouter::google/gemma-4-31b-it:free","openrouter::inclusionai/ling-3.0-flash:free","google_gemini::gemini-3.5-flash-lite","google_gemini::gemini-3.1-flash-lite","google_gemini::gemini-3.5-flash","provider_deterministic_emergency::emergency-fallback-local"],
+    "character.capability.propose": ["groq::openai/gpt-oss-120b","groq::qwen/qwen3.8-27b","google_gemini::gemini-3.5-flash","google_gemini::gemini-3.8-flash","google_gemini::gemini-3.5-flash-lite","google_gemini::gemini-3.1-flash-lite","openrouter::google/gemma-4-31b-it:free","openrouter::inclusionai/ling-3.0-flash:free","provider_deterministic_emergency::emergency-fallback-local"],
+    "capability.synthesize": ["groq::openai/gpt-oss-120b","groq::qwen/qwen3.8-27b","google_gemini::gemini-3.5-flash","google_gemini::gemini-3.8-flash","google_gemini::gemini-3.5-flash-lite","google_gemini::gemini-3.1-flash-lite","openrouter::google/gemma-4-31b-it:free","openrouter::inclusionai/ling-3.0-flash:free","provider_deterministic_emergency::emergency-fallback-local"],
+    "world.generate": ["groq::qwen/qwen3.8-27b","openrouter::inclusionai/ling-3.0-flash:free","google_gemini::gemini-3.5-flash","google_gemini::gemini-3.8-flash","openrouter::google/gemma-4-31b-it:free","openrouter::qwen/qwen3.8-27b:free","google_gemini::gemini-3.5-flash-lite","google_gemini::gemini-3.1-flash-lite","provider_deterministic_emergency::emergency-fallback-local"],
+    "research.query": ["groq::openai/gpt-oss-120b","groq::qwen/qwen3.8-27b","openrouter::google/gemma-4-31b-it:free","openrouter::inclusionai/ling-3.0-flash:free","google_gemini::gemini-3.5-flash","google_gemini::gemini-3.8-flash","google_gemini::gemini-3.5-flash-lite","provider_deterministic_emergency::emergency-fallback-local"],
+    "research.world-brief": ["groq::openai/gpt-oss-120b","groq::qwen/qwen3.8-27b","openrouter::google/gemma-4-31b-it:free","openrouter::inclusionai/ling-3.0-flash:free","google_gemini::gemini-3.5-flash","google_gemini::gemini-3.8-flash","google_gemini::gemini-3.5-flash-lite","provider_deterministic_emergency::emergency-fallback-local"],
+    "story.advice": ["google_gemini::gemini-3.5-flash-lite","google_gemini::gemini-3.1-flash-lite","google_gemini::gemini-flash-lite-latest","google_gemini::gemini-3.1-flash-lite-preview","provider_deterministic_emergency::emergency-fallback-local"],
+    "ooc.respond": ["groq::qwen/qwen3.8-27b","google_gemini::gemini-3.5-flash","openrouter::inclusionai/ling-3.0-flash:free","openrouter::google/gemma-4-31b-it:free","google_gemini::gemini-2.5-flash","provider_deterministic_emergency::emergency-fallback-local"],
+    "speech.generate": ["provider_mock_speech::mock-speech-v1","provider_deterministic_emergency::emergency-fallback-local"],
+    "speech.transcribe": ["provider_mock_stt::mock-stt-v1","provider_deterministic_emergency::emergency-fallback-local"],
+    "image.generate": ["google_imagen::imagen-3.0-generate-002","provider_deterministic_emergency::emergency-fallback-local"]
   },
   "categoryOverrides": {},
   "overrides": [],

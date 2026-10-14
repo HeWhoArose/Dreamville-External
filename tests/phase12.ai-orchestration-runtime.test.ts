@@ -135,9 +135,13 @@ test('Phase 12: malformed narration output is rejected and does not mutate canon
 		clock: repository.getWorldClock('phase12_malformed').getTimestamp(),
 	});
 
-	assert.equal(result.success, true, result.error || JSON.stringify(result));
-	assert.equal(result.turnPackage?.stateChanges.length, 0);
-	assert.equal(after, before);
+	assert.equal(result.success, false, 'Narration must fail visibly instead of accepting emergency fallback prose.');
+	assert.equal(result.turnPackage, undefined);
+	assert.match(result.error || '', /invalid|valid|narrat|provider|fallback/i);
+	assert.equal(result.source === 'DETERMINISTIC_FALLBACK', false);
+	assert.equal(result.modelId === 'emergency-fallback-local', false);
+	assert.equal(result.attemptsTrail?.some((attempt) => attempt.modelId === 'emergency-fallback-local'), false);
+	assert.equal(after, before, 'Failed narration must not mutate canonical story state.');
 
 	const runtime = orchestrator.getModelRuntimeStatus().find(
 		(entry) => entry.modelId === 'malformed-model'
@@ -1033,7 +1037,7 @@ test('Phase 12: narration scene drift is rejected and falls through to the next 
 });
 
 
-test('Phase 12: deterministic emergency narration remains valid for the canonical current location', async () => {
+test('Phase 12: narration does not use deterministic emergency floor when AI providers are unavailable', async () => {
 	const storyId = 'phase12_emergency_scene';
 	const repository = new InMemoryWorldRepository({ disablePersistence: true });
 	repository.seedStory(storyId);
@@ -1053,10 +1057,10 @@ test('Phase 12: deterministic emergency narration remains valid for the canonica
 		maxRetries: 0,
 	});
 
-	assert.equal(result.success, true, JSON.stringify(result));
-	assert.equal(result.modelId, 'emergency-fallback-local');
-	assert.equal(result.providerId, 'provider_deterministic_emergency');
-	assert.equal((result.turnPackage?.narrative.join(' ') || '').includes(location!.name), true);
+	assert.equal(result.success, false);
+	assert.equal(result.turnPackage, undefined);
+	assert.notEqual(result.modelId, 'emergency-fallback-local');
+	assert.match(result.error || '', /AI candidates were exhausted|provider|narrative/i);
 });
 
 test('Phase 12: Story Run persistence includes the per-story story-check RNG state', () => {
@@ -1160,7 +1164,7 @@ test('Phase 12: StoryCheckEngine rehydrates persisted RNG state after engine rec
 	assert.equal(rehydrated.exportState()[storyId].rollCounter, 2);
 });
 
-test('Phase 12: production narration still exposes the deterministic emergency floor to the player', async () => {
+test('Phase 12: production narration surfaces provider failure instead of emergency prose', async () => {
 	const storyId = 'phase12_production_emergency_floor';
 	const repository = new InMemoryWorldRepository({ disablePersistence: true });
 	repository.seedStory(storyId);
@@ -1180,10 +1184,11 @@ test('Phase 12: production narration still exposes the deterministic emergency f
 			maxRetries: 0,
 		});
 
-		assert.equal(result.success, true, JSON.stringify(result));
-		assert.equal(result.source, 'DETERMINISTIC_FALLBACK');
-		assert.equal(result.modelId, 'emergency-fallback-local');
-		assert.ok((result.turnPackage?.narrative.join(' ') || '').length > 0);
+		assert.equal(result.success, false, JSON.stringify(result));
+		assert.equal(result.source, undefined);
+		assert.equal(result.modelId, undefined);
+		assert.equal(result.turnPackage, undefined);
+		assert.match(result.error || '', /AI candidates were exhausted|provider|narrative/i);
 	} finally {
 		if (previousNodeEnv === undefined) {
 			delete process.env.NODE_ENV;

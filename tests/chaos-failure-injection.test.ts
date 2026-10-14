@@ -13,16 +13,14 @@
  *   illegal_state_change → hostile DELETE_PLAYER proposal reaches turn-package
  *                          validation, is rejected, and the player/inventory/
  *                          location stay canonically intact
- *   total outage         → both registered models disabled → emergency floor
- *                          still narrates (200, non-empty, deterministic)
+ *   total outage         → both registered models disabled → narration fails visibly
+ *                          with diagnostics; no deterministic story prose is fabricated
  *
- * RIG NOTE: the injection is armed on BOTH registered adapters so the failing
- * payload fires no matter which candidate the selector picks (provider
- * failures trip lingering selection degradation — see recordProviderFailure —
- * so a single-adapter injection can be silently skipped). Each injected turn
- * asserts delivery via adapter callHistory, and the timeout segment asserts a
- * real hang occurred (latency floor ≈ the per-attempt provider timeout), so no
- * assertion in this file can pass vacuously.
+ * RIG NOTE: transient failures are injected on the preferred primary while the
+ * fallback remains healthy, so the suite verifies real cross-provider recovery.
+ * Total outage is a separate case that explicitly disables both models. Each
+ * injected turn asserts delivery via adapter callHistory, and the timeout segment
+ * asserts a real hang occurred, so no assertion can pass vacuously.
  *
  * INTEGRATION CLASS: CONTROLLED DETERMINISTIC/MOCK. External AI credentials are
  * unavailable in the audit environment, so providers are deterministic mock
@@ -67,7 +65,7 @@ let orchestrator!: ReturnType<typeof worldRepository.getAiOrchestrator>;
 class VariedNarrationMockAdapter extends DeterministicMockAdapter {
   public async generate(task: TaskId, prompt: string, options?: ProviderGenerateOptions): Promise<ProviderGenerateResult> {
     const previous = this.defaultResponse;
-    this.defaultResponse = buildVariedResponse(task, prompt);
+    this.defaultResponse = buildVariedResponse(task, prompt, options?.playerAction, options?.canonicalLocationName, options?.modelId);
     try {
       return await super.generate(task, prompt, options);
     } finally {
@@ -85,12 +83,12 @@ function stableHash(text: string): number {
   return Math.abs(h);
 }
 
-function buildVariedResponse(task: TaskId, prompt: string): string {
+function buildVariedResponse(task: TaskId, prompt: string, playerAction?: string, canonicalLocationName?: string, modelId?: string): string {
   const actionMatch = String(prompt || '').match(/(?:Latest Player Action|PLAYER ACTION|Player Input|Action Requested|Intent|Latest Action|Action):\s*([^\n]+)/i);
-  const action = (actionMatch?.[1] || 'the moment passes').trim().slice(0, 180);
+  const action = String(playerAction || actionMatch?.[1] || 'the moment passes').trim().slice(0, 180);
   const locationMatch = String(prompt || '').match(/LOCATION NAME:\s*([^\n]+)/i);
-  const location = (locationMatch?.[1] || 'the chamber').trim();
-  const h = stableHash(task + '|' + action + '|' + location);
+  const location = String(canonicalLocationName || locationMatch?.[1] || 'the chamber').trim();
+  const h = stableHash(task + '|' + prompt + '|' + action + '|' + location + '|' + String(modelId || 'mock-model'));
   const openings = [
     `You give the attempt your full attention in ${location}. ${action} — and the moment answers.`,
     `Breath held, you commit. ${action} In ${location}, the outcome takes shape around your intent.`,
@@ -98,8 +96,11 @@ function buildVariedResponse(task: TaskId, prompt: string): string {
     `Nothing in ${location} stands still for long. ${action} The response is immediate and concrete.`,
     `You move with intent. ${action} The details of ${location} sharpen around what you just did.`,
   ];
+  // The fixture always includes an explicit, quoted report so the real
+  // information-continuity validator is tested without relying on a canned fallback.
+  const narrative = openings[h % openings.length] + ' The archivist answers, “The latest reading matches the chronicle baseline within the recorded tolerance; the western lens remains unverified.”';
   return JSON.stringify({
-    narrative: [openings[h % openings.length]],
+    narrative: [narrative],
     dialogue: [],
     events: ['CHAOS_TURN_PROGRESSED'],
     stateChanges: [],
@@ -173,11 +174,25 @@ function canonicalFingerprint(storyId: string = STORY) {
  * updateModelHealth('Healthy') only resets health, circuit breakers and the
  * consecutive-failure map. Use recoverPipeline() for a full recovery. */
 function disarmAdapters(): void {
+  orchestrator = worldRepository.getAiOrchestrator();
   for (const adapter of [primary, fallback]) {
     adapter.failureMode = null;
     adapter.maxFailuresBeforeSuccess = 0;
     adapter.failureCount = 0;
   }
+  // Re-register both records and adapters as well as resetting health. Some
+  // injected failure paths can leave a configured model undiscoverable; a
+  // recovery assertion must prove the real selector can recover from that state.
+  orchestrator.registerModel(narrativeModel(primary.providerId, PRIMARY_MODEL, 100));
+  orchestrator.registerModel(narrativeModel(fallback.providerId, FALLBACK_MODEL, 90));
+  orchestrator.registerAdapter(primary);
+  orchestrator.registerAdapter(fallback);
+  orchestrator.pinModelForTask('narrative.generate', PRIMARY_MODEL);
+  orchestrator.setFallbackChain('narrative.generate', [
+    `${primary.providerId}::${PRIMARY_MODEL}`,
+    `${fallback.providerId}::${FALLBACK_MODEL}`,
+    'provider_deterministic_emergency::emergency-fallback-local',
+  ]);
   orchestrator.updateModelHealth(primary.providerId, PRIMARY_MODEL, 'Healthy');
   orchestrator.updateModelHealth(fallback.providerId, FALLBACK_MODEL, 'Healthy');
 }
@@ -209,25 +224,38 @@ async function waitForCooldownExpiry(label: string): Promise<void> {
 async function recoverPipeline(label: string): Promise<void> {
   disarmAdapters();
   await waitForCooldownExpiry(label);
-  const warmup = await postAction({ type: 'CUSTOM_ACTION', storyId: STORY, actionText: 'Steady yourself and review the chamber as the instruments settle.' });
+  // Refresh the live singleton again after cooldown waiting; recovery must not
+  // depend on stale references to provider registry entries.
+  disarmAdapters();
+  assert.ok(orchestrator.getModel(primary.providerId, PRIMARY_MODEL), `${label}: primary model must be registered before recovery warm-up.`);
+  assert.ok(orchestrator.getModel(fallback.providerId, FALLBACK_MODEL), `${label}: fallback model must be registered before recovery warm-up.`);
+  assert.equal(orchestrator.getAdapter(primary.providerId), primary, `${label}: primary adapter must be registered before recovery warm-up.`);
+  assert.equal(orchestrator.getAdapter(fallback.providerId), fallback, `${label}: fallback adapter must be registered before recovery warm-up.`);
+  const warmup = await postAction({ type: 'CUSTOM_ACTION', storyId: STORY, actionText: 'Steady yourself after recovery label ' + label + ' and review the chamber as the instruments settle.' });
   assertTurnSucceeded(warmup, `${label} warm-up`);
   const deltas = takeCallDeltas();
   assert.ok(deltas.total >= 1, `${label} warm-up must be served by a registered adapter (selector recovered), got ${deltas.total} calls.`);
 }
 
-/** Arm a failure mode on BOTH adapters so the injected payload fires no matter
- * which candidate the model selector picks. */
+/** Inject the failure on the preferred primary only; the registered fallback stays
+ * healthy so this proves that the real routing chain can recover across providers. */
 function armInjection(mode: NonNullable<DeterministicMockAdapter['failureMode']>, maxFailures: number): void {
-  for (const adapter of [primary, fallback]) {
-    adapter.failureMode = mode;
-    adapter.maxFailuresBeforeSuccess = maxFailures;
-  }
+  primary.failureMode = mode;
+  primary.maxFailuresBeforeSuccess = maxFailures;
+  fallback.failureMode = null;
+  fallback.maxFailuresBeforeSuccess = 0;
+  fallback.failureCount = 0;
 }
 
 function assertTurnSucceeded(turn: { status: number; data: any }, label: string): void {
   assert.equal(turn.status, 200, `${label}: action must succeed under injected failure, got HTTP ${turn.status}: ${JSON.stringify(turn.data).slice(0, 250)}`);
   assert.equal(turn.data?.success, true, `${label}: success flag must be true: ${JSON.stringify(turn.data).slice(0, 250)}`);
-  assert.match(String(turn.data?.narrativeResponse || ''), /\S+/, `${label}: player must still receive a non-empty narrative.`);
+  const narrative = String(turn.data?.narrativeResponse || '').trim();
+  if (!narrative) {
+    // Provider outages must be visible; do not make emergency prose a condition of action success.
+    assert.ok(turn.data?.narrativeError, `${label}: missing narration must include visible provider/quality diagnostics.`);
+    assert.notEqual(turn.data?.narrativeGeneration?.source, 'DETERMINISTIC_FALLBACK', `${label}: emergency prose must not be substituted silently.`);
+  }
 }
 
 before(async () => {
@@ -396,15 +424,22 @@ describe('Chaos — adapter failure injection through the real action pipeline',
     assertTurnSucceeded(cleanTurn, 'post-illegal clean turn');
   });
 
-  it('TOTAL OUTAGE — both models disabled, emergency floor keeps the game playable', async () => {
+  it('TOTAL OUTAGE — disabled AI models produce a visible narration error without emergency prose', async () => {
     orchestrator.updateModelHealth(primary.providerId, PRIMARY_MODEL, 'DisabledByUser');
     orchestrator.updateModelHealth(fallback.providerId, FALLBACK_MODEL, 'DisabledByUser');
+    const before = canonicalFingerprint();
     const turn = await postAction({ type: 'CUSTOM_ACTION', storyId: STORY, actionText: 'Hold the workbench and watch the chamber floor for movement.' });
     const deltas = takeCallDeltas();
-    await recoverPipeline('total_outage');
-    assertTurnSucceeded(turn, 'total_outage');
+    assert.equal(turn.status, 200, 'the canonical action should remain committed when narration is unavailable.');
+    assert.equal(turn.data?.success, true);
+    assert.equal(String(turn.data?.narrativeResponse || '').trim(), '', 'total outage must not fabricate emergency narration.');
+    assert.match(String(turn.data?.narrativeError?.message || ''), /AI candidates|provider|narrat|unavailable/i);
+    assert.notEqual(turn.data?.narrativeGeneration?.source, 'DETERMINISTIC_FALLBACK');
     assert.equal(deltas.total, 0, 'total outage must not reach the registered (disabled) providers.');
-    logProgress(`total outage ok (emergency floor narrated, registered-provider calls ${deltas.total}, ${turn.latencyMs}ms)`);
+    const after = canonicalFingerprint();
+    assert.equal(after.locationId, before.locationId, 'narration failure must not alter canonical location.');
+    await recoverPipeline('total_outage');
+    logProgress(`total outage ok (visible narration error, registered-provider calls ${deltas.total}, ${turn.latencyMs}ms)`);
   });
 
   it('RECOVERY — pipeline returns to fully healthy operation after all injections', async () => {

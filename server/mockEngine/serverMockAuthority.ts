@@ -1261,51 +1261,35 @@ export class ServerMockAuthority {
           .filter((cue: any): cue is string => typeof cue === 'string' && cue.trim().length > 0)
           .slice(0, 4);
 
-        if (generated.source === 'DETERMINISTIC_FALLBACK') {
-          // Preserve the turn, but do not hide that every normal narration provider
-          // may have failed or that the emergency provider itself may have been selected.
-          narrativeGeneration = {
-            source: 'DETERMINISTIC_FALLBACK',
-            providerId: generated.providerId || 'provider_local_story_fallback',
-            modelId: generated.modelId || 'local-story-fallback',
-            regenerated: false,
-          };
+        if (generated.source === 'DETERMINISTIC_FALLBACK' || generated.modelId === 'emergency-fallback-local') {
+          narrativeResponse = '';
+          narrativeTurnPackage = undefined;
+          narrativeGeneration = undefined;
+          narrativeVisualCues = undefined;
           narrativeError = {
-            code: 'NARRATION_DETERMINISTIC_FALLBACK',
-            message: generated.fallbackReason || generated.error || 'Narration used the deterministic fallback. Inspect the attempt list for provider or validation failures.',
+            code: 'NARRATION_AI_UNAVAILABLE',
+            message: generated.fallbackReason || generated.error || 'Narration used a deterministic provider; player-facing fallback prose is disabled.',
             providerId: generated.providerId,
             modelId: generated.modelId,
             fallbackReason: generated.fallbackReason,
             attemptsTrail: generated.attemptsTrail || (generated as any).telemetry?.attemptsTrail || [],
           };
+        } else {
+          narrativeGeneration = {
+            source: generated.source,
+            providerId: generated.providerId,
+            modelId: generated.modelId,
+            regenerated: false,
+          };
         }
       } else {
-        // Last-resort local prose fallback. This is deliberately based on the committed
-        // action and canonical scene rather than a fixed generic error message, so a total
-        // provider outage still produces a useful, action-specific narration.
-        narrativeResponse = this.synthesizeFreeformActionFallback(
-          targetStoryId,
-          String(freeformText),
-          committedOutcome,
-        );
-        narrativeTurnPackage = {
-          narrative: [narrativeResponse],
-          dialogue: [],
-          events: ['LOCAL_NARRATION_FALLBACK'],
-          stateChanges: [],
-          memoryCandidates: [],
-          audioCues: [],
-        };
-        narrativeGeneration = {
-          source: 'DETERMINISTIC_FALLBACK',
-          providerId: 'provider_local_story_fallback',
-          modelId: 'local-story-fallback',
-          regenerated: false,
-        };
+        // Never substitute deterministic/local prose when the AI narrator fails.
+        // The canonical action may already be committed; preserve it and expose a
+        // retryable narration error without presenting fabricated story text.
+        narrativeResponse = '';
+        narrativeTurnPackage = undefined;
+        narrativeGeneration = undefined;
         narrativeVisualCues = undefined;
-        // Keep the action playable while attaching diagnostics to this action log.
-        // StoryView already renders narrativeError and its attempt trail, so the player
-        // can see why the AI route failed instead of silently receiving fallback prose.
         narrativeError = {
           code: 'NARRATION_AI_UNAVAILABLE',
           message: generated.error || generated.fallbackReason || 'Narration generation failed validation or exhausted its provider route.',
@@ -1314,36 +1298,20 @@ export class ServerMockAuthority {
           fallbackReason: generated.fallbackReason,
           attemptsTrail: generated.attemptsTrail || (generated as any).telemetry?.attemptsTrail || [],
         };
-        console.warn('[NarrationFallback] AI narration unavailable; local story fallback used.', {
+        console.warn('[NarrationUnavailable] AI narration unavailable; no local prose fallback was used.', {
           storyId: targetStoryId,
           actionId: baseResult?.actionId,
           provider: generated.providerId,
           model: generated.modelId,
           error: generated.error,
           fallbackReason: generated.fallbackReason,
-          attemptsTrail: generated.attemptsTrail,
+          attemptsTrail: generated.attemptsTrail || [],
         });
       }
     } catch (error: any) {
-      narrativeResponse = this.synthesizeFreeformActionFallback(
-        targetStoryId,
-        String(freeformText),
-        committedOutcome,
-      );
-      narrativeTurnPackage = {
-        narrative: [narrativeResponse],
-        dialogue: [],
-        events: ['LOCAL_NARRATION_FALLBACK'],
-        stateChanges: [],
-        memoryCandidates: [],
-        audioCues: [],
-      };
-      narrativeGeneration = {
-        source: 'DETERMINISTIC_FALLBACK',
-        providerId: 'provider_local_story_fallback',
-        modelId: 'local-story-fallback',
-        regenerated: false,
-      };
+      narrativeResponse = '';
+      narrativeTurnPackage = undefined;
+      narrativeGeneration = undefined;
       narrativeVisualCues = undefined;
       narrativeError = {
         code: String(error?.code || 'NARRATION_GENERATION_EXCEPTION'),
@@ -1353,7 +1321,7 @@ export class ServerMockAuthority {
         fallbackReason: error?.fallbackReason,
         attemptsTrail: Array.isArray(error?.attemptsTrail) ? error.attemptsTrail : [],
       };
-      console.warn('[NarrationFallback] AI narration generation threw error; local story fallback used.', {
+      console.warn('[NarrationUnavailable] AI narration generation threw an error; no local prose fallback was used.', {
         storyId: targetStoryId,
         actionId: baseResult?.actionId,
         error: error?.message || String(error),

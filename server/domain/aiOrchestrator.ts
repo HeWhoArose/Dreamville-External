@@ -7479,12 +7479,18 @@ export class MultiModelOrchestrator {
     const hasGroundingPreposition = /\b(?:that|because|about|from|near|inside|within|after|before|according to|according|concerning|regarding|as to|on|upon|into|for|over|with|whether|where|who|why|when|how)\b/i.test(output);
 
     const hasDescriptiveScene = output.length >= 20;
+    // Asking is an attempted action, not evidence that an answer was received.
+    const repeatsQuestionWithoutAnswer =
+      /\b(?:ask|asks|asked|inquire|inquires|inquired|question|questions|questioned)\b/i.test(output) &&
+      !/\b(?:answer|answers|answered|reply|replies|replied|respond|responds|responded|explain|explains|explained|report|reports|reported|reveal|reveals|revealed|confirm|confirms|confirmed|warn|warns|warned|tell|tells|told|said|says|whisper|whispers|whispered|admit|admits|admitted|state|states|stated|describe|describes|described|note|notes|noted|indicate|indicates|indicated|recount|recounts|recounted|remark|remarks|remarked|inform|informs|informed|clarify|clarifies|clarified|show|shows|showed|find|finds|found|discover|discovers|discovered)\b/i.test(output) &&
+      !hasGroundedNonAnswer &&
+      !hasQuotedResponse;
+
     const isGrounded =
       hasGroundedNonAnswer ||
       hasQuotedResponse ||
-      hasInformationResponse ||
-      hasDirectReport ||
-      (hasDescriptiveScene && hasGroundingPreposition);
+      (!repeatsQuestionWithoutAnswer &&
+        ((hasInformationResponse || hasDirectReport) && (hasDirectReport || hasGroundingPreposition)));
 
     if (!isGrounded) {
       return {
@@ -7493,6 +7499,37 @@ export class MultiModelOrchestrator {
       };
     }
 
+    return { valid: true };
+  }
+
+  private validateNarrativeFreshnessContinuity(
+    narration: string,
+    previousNarrations: string[],
+  ): { valid: boolean; errorReason?: string } {
+    const normalizeText = (value: string) => String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const current = normalizeText(narration);
+    if (!current) return { valid: true };
+    const currentWords = new Set(current.split(/\s+/).filter((word) => word.length >= 4));
+    for (const previousNarration of previousNarrations.slice(-5)) {
+      const previous = normalizeText(previousNarration);
+      if (!previous) continue;
+      if (current === previous) {
+        return {
+          valid: false,
+          errorReason: 'Narration freshness guard rejected an exact repeat of a recent player-facing response; advance the current beat instead of replaying it.',
+        };
+      }
+      const previousWords = new Set(previous.split(/\s+/).filter((word) => word.length >= 4));
+      if (currentWords.size < 18 || previousWords.size < 18) continue;
+      const shared = Array.from(currentWords).filter((word) => previousWords.has(word)).length;
+      const similarity = shared / Math.min(currentWords.size, previousWords.size);
+      if (similarity >= 0.88) {
+        return {
+          valid: false,
+          errorReason: 'Narration freshness guard rejected near-duplicate prose; retain canonical facts but make the current action or result meaningfully advance.',
+        };
+      }
+    }
     return { valid: true };
   }
 
@@ -7508,7 +7545,8 @@ export class MultiModelOrchestrator {
       Predawn: ['sunset', 'dusk', 'afternoon', 'midday', 'noon', 'night', 'midnight'],
       Dawn: ['sunset', 'dusk', 'afternoon', 'midday', 'noon', 'midnight'],
       Morning: ['first light', 'dawn', 'predawn', 'sunset', 'dusk', 'midnight', 'late evening'],
-      Afternoon: ['first light', 'daybreak', 'dawn', 'predawn', 'sunrise', 'sunset', 'dusk', 'nightfall', 'midnight', 'early morning', 'morning'],
+      // Late-afternoon prose may mention approaching dusk without advancing canonical time.
+      Afternoon: ['first light', 'daybreak', 'dawn', 'predawn', 'sunrise', 'midnight', 'early morning', 'morning'],
       Dusk: ['first light', 'daybreak', 'dawn', 'predawn', 'sunrise', 'midday', 'noon', 'early morning', 'morning'],
       Night: ['first light', 'daybreak', 'dawn', 'sunrise', 'morning', 'afternoon', 'midday', 'noon', 'sunset'],
     };
@@ -8067,7 +8105,9 @@ export class MultiModelOrchestrator {
       assembledTextPreview: assembledContext.assembledText.slice(0, 6000),
     };
 
-    const generated = await this.executeTaskGeneration(
+    let generated: Awaited<ReturnType<MultiModelOrchestrator['executeTaskGeneration']>>;
+    try {
+      generated = await this.executeTaskGeneration(
       'narrative.generate',
       narrationPrompt.prompt,
       narrationPrompt.styleInstruction,
@@ -8076,6 +8116,8 @@ export class MultiModelOrchestrator {
         maxTokens: NarrativePacingEngine.outputTokenBudget(narrativePacingContract),
         contextTokens: narrationPrompt.totalTokens,
         turnBudget: turnAiCallBudget,
+        // Narration must fail visibly when all configured AI providers fail.
+        allowDeterministicFallback: false,
         forceModelId: params.forceModelId,
         canonicalLocationName: currentSituation.location.name,
         playerAction,
@@ -8086,6 +8128,11 @@ export class MultiModelOrchestrator {
             return { valid: false, errorReason: validation.errorReason };
           }
           const narrationText = validation.turnPackage.narrative.join(' ');
+          const previousNarrationsForFreshness = currentSituation.recentTurns
+            .map((entry) => String(entry.narration || ''))
+            .filter(Boolean);
+          const freshness = this.validateNarrativeFreshnessContinuity(narrationText, previousNarrationsForFreshness);
+          if (!freshness.valid) return { valid: false, errorReason: freshness.errorReason };
           const pacing = NarrativePacingEngine.validateNarration(narrationText, narrativePacingContract);
           if (!pacing.valid) return { valid: false, errorReason: pacing.reason };
           const continuity = this.validateNarrativeSceneContinuity(
@@ -8121,11 +8168,29 @@ export class MultiModelOrchestrator {
         },
       },
     );
+    } catch (generationError: any) {
+      const errorMessage = String(generationError?.message || generationError || 'Narration generation failed.');
+      const attemptsTrail = Array.isArray(generationError?.attemptsTrail) ? generationError.attemptsTrail : [];
+      const lastFailedAttempt = [...attemptsTrail].reverse().find((attempt: any) => attempt.status === 'FAILED');
+      return {
+        success: false,
+        providerId: lastFailedAttempt?.providerId,
+        modelId: lastFailedAttempt?.modelId,
+        error: errorMessage,
+        fallbackReason: generationError?.fallbackReason || errorMessage,
+        attemptsTrail,
+        researchPacket,
+        narrativePlan,
+        storyBeat,
+        researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
+        contextAudit,
+      };
+    }
 
     // Narrative generation has a deterministic emergency floor. When all configured
     // AI providers fail, surface the actual fallback-attempt diagnostics instead of
     // replacing them with a misleading "Response is not valid JSON" parse error.
-    if (!generated.text) {
+    if (!generated.text || generated.source === 'DETERMINISTIC_FALLBACK' || generated.modelId === 'emergency-fallback-local') {
       return {
         success: false,
         providerId: generated.providerId,
@@ -8137,7 +8202,7 @@ export class MultiModelOrchestrator {
         narrativePlan,
         researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
         contextAudit,
-        error: generated.fallbackReason || 'All configured narrative providers failed, including the deterministic emergency floor.',
+        error: generated.fallbackReason || 'Narration generation failed: all configured AI providers failed. Review provider attempt details and retry.',
       };
     }
 

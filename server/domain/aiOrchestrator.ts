@@ -8064,7 +8064,9 @@ export class MultiModelOrchestrator {
       assembledTextPreview: assembledContext.assembledText.slice(0, 6000),
     };
 
-    const generated = await this.executeTaskGeneration(
+    let generated: Awaited<ReturnType<MultiModelOrchestrator['executeTaskGeneration']>>;
+    try {
+      generated = await this.executeTaskGeneration(
       'narrative.generate',
       narrationPrompt.prompt,
       narrationPrompt.styleInstruction,
@@ -8120,7 +8122,37 @@ export class MultiModelOrchestrator {
             : { valid: false, errorReason: temporalContinuity.errorReason };
         },
       },
-    );
+      );
+    } catch (generationError: any) {
+      // Treat exhausted AI providers as a normal, inspectable narration failure.
+      // Preserve attemptsTrail so the UI can explain exactly which models failed.
+      const errorMessage = String(
+        generationError?.message || generationError || 'Narration generation failed for an unknown reason.',
+      );
+      const attemptsTrail = Array.isArray(generationError?.attemptsTrail)
+        ? generationError.attemptsTrail
+        : [];
+      const lastFailedAttempt = [...attemptsTrail].reverse().find((attempt: any) => attempt.status === 'FAILED');
+      return {
+        success: false,
+        providerId: lastFailedAttempt?.providerId,
+        modelId: lastFailedAttempt?.modelId,
+        error: errorMessage,
+        fallbackReason: generationError?.fallbackReason || errorMessage,
+        attemptsTrail,
+        researchPacket,
+        narrativePlan,
+        storyBeat,
+        researchAudit: {
+          blocks: researchResult.blocks,
+          excluded: researchResult.excluded,
+          budgets: researchResult.budgets,
+          totalTokens: researchResult.totalTokens,
+          query: researchResult.query,
+        },
+        contextAudit,
+      };
+    }
 
     // Narration is intentionally fail-closed: only a real configured AI provider
     // may produce player-facing prose. When AI providers fail, return their diagnostics

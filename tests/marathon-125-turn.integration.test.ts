@@ -81,7 +81,7 @@ let orchestrator!: ReturnType<typeof worldRepository.getAiOrchestrator>;
 class VariedNarrationMockAdapter extends DeterministicMockAdapter {
   public async generate(task: TaskId, prompt: string, options?: ProviderGenerateOptions): Promise<ProviderGenerateResult> {
     const previous = this.defaultResponse;
-    this.defaultResponse = buildVariedResponse(task, prompt, options?.playerAction);
+    this.defaultResponse = buildVariedResponse(task, prompt, options?.playerAction, options?.modelId);
     try {
       return await super.generate(task, prompt, options);
     } finally {
@@ -99,7 +99,7 @@ function stableHash(text: string): number {
   return Math.abs(h);
 }
 
-function buildVariedResponse(task: TaskId, prompt: string, playerAction?: string): string {
+function buildVariedResponse(task: TaskId, prompt: string, playerAction?: string, modelId?: string): string {
   const actionMatch = String(prompt || '').match(/(?:Latest Player Action|PLAYER ACTION|Player Input|Action Requested|Intent|Latest Action|Action):\s*([^\n]+)/i);
   // Use the canonical action supplied by the runtime; prompt labels can vary.
   const action = String(playerAction || actionMatch?.[1] || 'the moment passes').trim().slice(0, 180);
@@ -107,7 +107,7 @@ function buildVariedResponse(task: TaskId, prompt: string, playerAction?: string
   const location = (locationMatch?.[1] || 'the chamber').trim();
   // The assembled prompt includes turn-local continuity and prior beats; include it so repeated
   // actions still exercise distinct responses across a long session.
-  const h = stableHash(task + '|' + prompt + '|' + action + '|' + location);
+  const h = stableHash(task + '|' + prompt + '|' + action + '|' + location + '|' + String(modelId || 'mock-model'));
   const openings = [
     `You give the attempt your full attention in ${location}. ${action} — and the moment answers.`,
     `Breath held, you commit. ${action} In ${location}, the outcome takes shape around your intent.`,

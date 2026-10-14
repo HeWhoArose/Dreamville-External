@@ -675,6 +675,8 @@ export type ActionRequest =
     }
   | {
       type: 'CUSTOM_ACTION';
+      /** Canonical field used by the live freeform Story action UI. */
+      actionText?: string;
       customText?: string;
       description?: string;
       input?: string;

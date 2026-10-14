@@ -213,8 +213,8 @@ async function recoverPipeline(label: string): Promise<void> {
   assert.ok(deltas.total >= 1, `${label} warm-up must be served by a registered adapter (selector recovered), got ${deltas.total} calls.`);
 }
 
-/** Arm a failure mode on BOTH adapters so the injected payload fires no matter
- * which candidate the model selector picks. */
+/** Inject the failure on the preferred primary only; the registered fallback stays
+ * healthy so this proves that the real routing chain can recover across providers. */
 function armInjection(mode: NonNullable<DeterministicMockAdapter['failureMode']>, maxFailures: number): void {
   primary.failureMode = mode;
   primary.maxFailuresBeforeSuccess = maxFailures;

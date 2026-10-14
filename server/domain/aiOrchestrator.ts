@@ -3734,24 +3734,30 @@ export class MultiModelOrchestrator {
     const routes: Partial<Record<TaskId, string[]>> = {
       "narrative.generate": [
         "google_gemini::gemini-3.5-flash",
-        "google_gemini::gemini-3.8-flash",
+        "google_gemini::gemini-3.5-flash-lite",
         "google_gemini::gemini-2.5-flash",
+        "google_gemini::gemini-3.1-flash-lite",
+        "google_gemini::gemini-3.8-flash",
         "groq::qwen/qwen3.8-27b",
         "openrouter::google/gemma-4-31b-it:free",
         "openrouter::inclusionai/ling-3.0-flash:free"
       ],
       "narrative.review": [
         "google_gemini::gemini-3.5-flash",
-        "google_gemini::gemini-3.8-flash",
+        "google_gemini::gemini-3.5-flash-lite",
         "google_gemini::gemini-2.5-flash",
+        "google_gemini::gemini-3.1-flash-lite",
+        "google_gemini::gemini-3.8-flash",
         "groq::qwen/qwen3.8-27b",
         "openrouter::inclusionai/ling-3.0-flash:free",
         "openrouter::google/gemma-4-31b-it:free"
       ],
       "character.dialogue": [
         "google_gemini::gemini-3.5-flash",
-        "google_gemini::gemini-3.8-flash",
+        "google_gemini::gemini-3.5-flash-lite",
         "google_gemini::gemini-2.5-flash",
+        "google_gemini::gemini-3.1-flash-lite",
+        "google_gemini::gemini-3.8-flash",
         "groq::qwen/qwen3.8-27b",
         "openrouter::inclusionai/ling-3.0-flash:free",
         "openrouter::google/gemma-4-31b-it:free"
@@ -4112,21 +4118,23 @@ export class MultiModelOrchestrator {
       isEmergencyFloor: false,
     });
 
-    // 2. Gemini 2.5 Flash (HTTP 429 - Quota Limited)
+    // 2. Gemini 2.5 Flash
     this.registerModel({
       providerId: 'google_gemini',
       modelId: 'gemini-2.5-flash',
-      displayName: 'Gemini 2.5 Flash (Quota Limited 429)',
+      displayName: 'Gemini 2.5 Flash',
       pool: 'fast',
-      capabilities: ['fast', 'structured_extraction', 'low_cost'],
-      contextWindow: 1000000,
-      health: 'Throttled',
-      quota: 'Exhausted',
+      capabilities: ['fast', 'creative_writing', 'structured_extraction', 'long_context', 'low_cost'],
+      contextWindow: 1048576,
+      health: 'Healthy',
+      quota: 'Healthy',
       latencyMs: 250,
-      userPriority: 40,
-      roleEligibility: ['character.dialogue', 'ooc.respond', 'memory.extract', 'rules.adjudicate'],
+      userPriority: 108,
+      roleEligibility: [...ALL_GENERAL_TEXT_ROLES],
       fallbackEligibility: true,
-      accessStatus: 'quota_limited',
+      accessStatus: 'accessible',
+      isPaidModel: false,
+      billingState: 'FREE',
       lifecycleState: 'active',
       isEmergencyFloor: false,
     });
@@ -7830,7 +7838,7 @@ export class MultiModelOrchestrator {
     }
 
     const hardTokenBudget = params.hardTokenBudget ?? 700;
-    const timeoutMs = params.timeoutMs ?? 7000;
+    const timeoutMs = params.timeoutMs ?? 15000;
     const turnAiCallBudget = new AiTurnCallBudget();
     const authoritativeOutcome = (params.committedOutcome || '').trim();
     const connectedDirective = (params.continuationDirective || '').trim();
@@ -8118,6 +8126,7 @@ export class MultiModelOrchestrator {
         turnBudget: turnAiCallBudget,
         // Narration must fail visibly when all configured AI providers fail.
         allowDeterministicFallback: false,
+        allowAdaptiveAiRecovery: true,
         forceModelId: params.forceModelId,
         canonicalLocationName: currentSituation.location.name,
         playerAction,
@@ -9857,20 +9866,56 @@ export class MultiModelOrchestrator {
       .filter((key) => key && !key.includes('emergency-fallback-local'));
 
     const registeredRouteKeys = new Set(selectedCandidates.map((candidate) => this.modelKey(candidate)));
-    const unresolvedConfiguredKeys = configuredRouteKeys.filter((key) => !registeredRouteKeys.has(key));
+    const unresolvedConfiguredKeys: string[] = [];
 
-    for (const key of unresolvedConfiguredKeys) {
+    for (const key of configuredRouteKeys) {
+      if (registeredRouteKeys.has(key)) continue;
       const separatorIndex = key.indexOf('::');
       const providerId = separatorIndex >= 0 ? key.slice(0, separatorIndex) : 'unknown';
       const modelId = separatorIndex >= 0 ? key.slice(separatorIndex + 2) : key;
-      const routeError = 'Configured fallback model is not registered/discoverable in the current runtime.';
-      preflightSkipped.push({
-        providerId,
-        modelId,
-        displayName: modelId,
-        state: 'NOT_REGISTERED',
-        reason: routeError,
-      });
+      const registeredModel = this.models.get(key) || Array.from(this.models.values()).find(
+        (m) => (m.modelId === modelId && (separatorIndex < 0 || m.providerId === providerId)) || this.modelKey(m) === key
+      );
+
+      if (!registeredModel) {
+        unresolvedConfiguredKeys.push(key);
+        preflightSkipped.push({
+          providerId,
+          modelId,
+          displayName: modelId,
+          state: 'NOT_REGISTERED',
+          reason: 'Configured fallback model is not registered/discoverable in the current runtime.',
+        });
+      } else {
+        const hasKey = Boolean(getProviderApiKey(registeredModel.providerId));
+        const isTripped = this.isCircuitBreakerTripped(registeredModel.providerId, registeredModel.modelId);
+        const isCooling = this.isModelCoolingDown(registeredModel);
+        const state = !hasKey
+          ? 'NOT_CONFIGURED'
+          : isTripped
+            ? 'CIRCUIT_TRIPPED'
+            : isCooling || registeredModel.health === 'Throttled'
+              ? 'THROTTLED'
+              : registeredModel.health === 'Unavailable' || registeredModel.health === 'DisabledByUser'
+                ? 'UNAVAILABLE'
+                : 'SKIPPED';
+        const reason = !hasKey
+          ? `Provider '${registeredModel.providerId}' is not configured with an API key.`
+          : isTripped
+            ? 'Circuit breaker is tripped for this model.'
+            : isCooling
+              ? 'Model is temporarily cooling down.'
+              : registeredModel.health === 'Throttled'
+                ? 'Model health is currently throttled.'
+                : `Model was not selected for execution (${registeredModel.health}).`;
+        preflightSkipped.push({
+          providerId: registeredModel.providerId,
+          modelId: registeredModel.modelId,
+          displayName: registeredModel.displayName || registeredModel.modelId,
+          state,
+          reason,
+        });
+      }
     }
 
     for (const candidate of selectedCandidates) {

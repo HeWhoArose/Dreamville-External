@@ -174,6 +174,7 @@ function canonicalFingerprint(storyId: string = STORY) {
  * updateModelHealth('Healthy') only resets health, circuit breakers and the
  * consecutive-failure map. Use recoverPipeline() for a full recovery. */
 function disarmAdapters(): void {
+  orchestrator = worldRepository.getAiOrchestrator();
   for (const adapter of [primary, fallback]) {
     adapter.failureMode = null;
     adapter.maxFailuresBeforeSuccess = 0;
@@ -223,6 +224,13 @@ async function waitForCooldownExpiry(label: string): Promise<void> {
 async function recoverPipeline(label: string): Promise<void> {
   disarmAdapters();
   await waitForCooldownExpiry(label);
+  // Refresh the live singleton again after cooldown waiting; recovery must not
+  // depend on stale references to provider registry entries.
+  disarmAdapters();
+  assert.ok(orchestrator.getModel(primary.providerId, PRIMARY_MODEL), `${label}: primary model must be registered before recovery warm-up.`);
+  assert.ok(orchestrator.getModel(fallback.providerId, FALLBACK_MODEL), `${label}: fallback model must be registered before recovery warm-up.`);
+  assert.equal(orchestrator.getAdapter(primary.providerId), primary, `${label}: primary adapter must be registered before recovery warm-up.`);
+  assert.equal(orchestrator.getAdapter(fallback.providerId), fallback, `${label}: fallback adapter must be registered before recovery warm-up.`);
   const warmup = await postAction({ type: 'CUSTOM_ACTION', storyId: STORY, actionText: 'Steady yourself and review the chamber as the instruments settle.' });
   assertTurnSucceeded(warmup, `${label} warm-up`);
   const deltas = takeCallDeltas();

@@ -7479,12 +7479,18 @@ export class MultiModelOrchestrator {
     const hasGroundingPreposition = /\b(?:that|because|about|from|near|inside|within|after|before|according to|according|concerning|regarding|as to|on|upon|into|for|over|with|whether|where|who|why|when|how)\b/i.test(output);
 
     const hasDescriptiveScene = output.length >= 20;
+    // Asking is an attempted action, not evidence that an answer was received.
+    const repeatsQuestionWithoutAnswer =
+      /\b(?:ask|asks|asked|inquire|inquires|inquired|question|questions|questioned)\b/i.test(output) &&
+      !/\b(?:answer|answers|answered|reply|replies|replied|respond|responds|responded|explain|explains|explained|report|reports|reported|reveal|reveals|revealed|confirm|confirms|confirmed|warn|warns|warned|tell|tells|told|said|says|whisper|whispers|whispered|admit|admits|admitted|state|states|stated|describe|describes|described|note|notes|noted|indicate|indicates|indicated|recount|recounts|recounted|remark|remarks|remarked|inform|informs|informed|clarify|clarifies|clarified|show|shows|showed|find|finds|found|discover|discovers|discovered)\b/i.test(output) &&
+      !hasGroundedNonAnswer &&
+      !hasQuotedResponse;
+
     const isGrounded =
       hasGroundedNonAnswer ||
       hasQuotedResponse ||
-      hasInformationResponse ||
-      hasDirectReport ||
-      (hasDescriptiveScene && hasGroundingPreposition);
+      (!repeatsQuestionWithoutAnswer &&
+        ((hasInformationResponse || hasDirectReport) && (hasDirectReport || hasGroundingPreposition)));
 
     if (!isGrounded) {
       return {
@@ -7508,7 +7514,8 @@ export class MultiModelOrchestrator {
       Predawn: ['sunset', 'dusk', 'afternoon', 'midday', 'noon', 'night', 'midnight'],
       Dawn: ['sunset', 'dusk', 'afternoon', 'midday', 'noon', 'midnight'],
       Morning: ['first light', 'dawn', 'predawn', 'sunset', 'dusk', 'midnight', 'late evening'],
-      Afternoon: ['first light', 'daybreak', 'dawn', 'predawn', 'sunrise', 'sunset', 'dusk', 'nightfall', 'midnight', 'early morning', 'morning'],
+      // Late-afternoon prose may mention approaching dusk without advancing canonical time.
+      Afternoon: ['first light', 'daybreak', 'dawn', 'predawn', 'sunrise', 'midnight', 'early morning', 'morning'],
       Dusk: ['first light', 'daybreak', 'dawn', 'predawn', 'sunrise', 'midday', 'noon', 'early morning', 'morning'],
       Night: ['first light', 'daybreak', 'dawn', 'sunrise', 'morning', 'afternoon', 'midday', 'noon', 'sunset'],
     };
@@ -8147,7 +8154,7 @@ export class MultiModelOrchestrator {
     // Narrative generation has a deterministic emergency floor. When all configured
     // AI providers fail, surface the actual fallback-attempt diagnostics instead of
     // replacing them with a misleading "Response is not valid JSON" parse error.
-    if (!generated.text) {
+    if (!generated.text || generated.source === 'DETERMINISTIC_FALLBACK' || generated.modelId === 'emergency-fallback-local') {
       return {
         success: false,
         providerId: generated.providerId,
@@ -8159,7 +8166,7 @@ export class MultiModelOrchestrator {
         narrativePlan,
         researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
         contextAudit,
-        error: generated.fallbackReason || 'All configured narrative providers failed, including the deterministic emergency floor.',
+        error: generated.fallbackReason || 'Narration generation failed: all configured AI providers failed. Review provider attempt details and retry.',
       };
     }
 

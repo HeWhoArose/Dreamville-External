@@ -7505,7 +7505,10 @@ export class MultiModelOrchestrator {
       Predawn: ['sunset', 'dusk', 'afternoon', 'midday', 'noon', 'night', 'midnight'],
       Dawn: ['sunset', 'dusk', 'afternoon', 'midday', 'noon', 'midnight'],
       Morning: ['first light', 'dawn', 'predawn', 'sunset', 'dusk', 'midnight', 'late evening'],
-      Afternoon: ['first light', 'daybreak', 'dawn', 'predawn', 'sunrise', 'sunset', 'dusk', 'nightfall', 'midnight', 'early morning', 'morning'],
+      // "Dusk" is a time-of-day label, not a guaranteed contradiction at late-afternoon
+      // clock times. Only reject clear opposing phases; 17:42 may naturally be described
+      // as fading light or approaching dusk without advancing canonical time.
+      Afternoon: ['first light', 'daybreak', 'dawn', 'predawn', 'sunrise', 'midnight', 'early morning', 'morning'],
       Dusk: ['first light', 'daybreak', 'dawn', 'predawn', 'sunrise', 'midday', 'noon', 'early morning', 'morning'],
       Night: ['first light', 'daybreak', 'dawn', 'sunrise', 'morning', 'afternoon', 'midday', 'noon', 'sunset'],
     };

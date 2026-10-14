@@ -1261,22 +1261,25 @@ export class ServerMockAuthority {
           .filter((cue: any): cue is string => typeof cue === 'string' && cue.trim().length > 0)
           .slice(0, 4);
 
-        if (generated.source === 'DETERMINISTIC_FALLBACK') {
-          // Preserve the turn, but do not hide that every normal narration provider
-          // may have failed or that the emergency provider itself may have been selected.
-          narrativeGeneration = {
-            source: 'DETERMINISTIC_FALLBACK',
-            providerId: generated.providerId || 'provider_local_story_fallback',
-            modelId: generated.modelId || 'local-story-fallback',
-            regenerated: false,
-          };
+        if (generated.source === 'DETERMINISTIC_FALLBACK' || generated.modelId === 'emergency-fallback-local') {
+          narrativeResponse = '';
+          narrativeTurnPackage = undefined;
+          narrativeGeneration = undefined;
+          narrativeVisualCues = undefined;
           narrativeError = {
-            code: 'NARRATION_DETERMINISTIC_FALLBACK',
-            message: generated.fallbackReason || generated.error || 'Narration used the deterministic fallback. Inspect the attempt list for provider or validation failures.',
+            code: 'NARRATION_AI_UNAVAILABLE',
+            message: generated.fallbackReason || generated.error || 'Narration used a deterministic provider; player-facing fallback prose is disabled.',
             providerId: generated.providerId,
             modelId: generated.modelId,
             fallbackReason: generated.fallbackReason,
             attemptsTrail: generated.attemptsTrail || (generated as any).telemetry?.attemptsTrail || [],
+          };
+        } else {
+          narrativeGeneration = {
+            source: generated.source,
+            providerId: generated.providerId,
+            modelId: generated.modelId,
+            regenerated: false,
           };
         }
       } else {

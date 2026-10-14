@@ -210,3 +210,18 @@ test('emergency floor adapter produces valid narration that satisfies informatio
 	assert.equal(infoContinuity.valid, true);
 });
 
+
+
+test('narration freshness rejects exact repeats and near-duplicate atmospheric prose', () => {
+	const repository = new InMemoryWorldRepository({ disablePersistence: true });
+	const storyId = 'narration_freshness_regression';
+	repository.seedStory(storyId);
+	const orchestrator = new MultiModelOrchestrator(repository);
+	const validate = (orchestrator as any).validateNarrativeFreshnessContinuity.bind(orchestrator);
+	const previous = 'You pause beside the old archive shelves and watch amber light settle across the dusty timber. The room remains quiet while the last warmth of afternoon fades into the corridor.';
+	assert.equal(validate(previous, [previous]).valid, false);
+	const nearDuplicate = 'You pause beside the old archive shelves and watch amber light settle across the dusty timber. The room remains quiet while the last warmth of afternoon fades into the corridor, leaving the hallway still.';
+	assert.equal(validate(nearDuplicate, [previous]).valid, false);
+	const advancing = 'The scroll catches your eye: fresh cuts cross the wax seal, and grit from the broken stamp still clings to the fold. Someone has opened it since your last inspection.';
+	assert.equal(validate(advancing, [previous]).valid, true);
+});

@@ -8067,7 +8067,9 @@ export class MultiModelOrchestrator {
       assembledTextPreview: assembledContext.assembledText.slice(0, 6000),
     };
 
-    const generated = await this.executeTaskGeneration(
+    let generated: Awaited<ReturnType<MultiModelOrchestrator['executeTaskGeneration']>>;
+    try {
+      generated = await this.executeTaskGeneration(
       'narrative.generate',
       narrationPrompt.prompt,
       narrationPrompt.styleInstruction,
@@ -8076,6 +8078,8 @@ export class MultiModelOrchestrator {
         maxTokens: NarrativePacingEngine.outputTokenBudget(narrativePacingContract),
         contextTokens: narrationPrompt.totalTokens,
         turnBudget: turnAiCallBudget,
+        // Narration must fail visibly when all configured AI providers fail.
+        allowDeterministicFallback: false,
         forceModelId: params.forceModelId,
         canonicalLocationName: currentSituation.location.name,
         playerAction,
@@ -8121,6 +8125,24 @@ export class MultiModelOrchestrator {
         },
       },
     );
+    } catch (generationError: any) {
+      const errorMessage = String(generationError?.message || generationError || 'Narration generation failed.');
+      const attemptsTrail = Array.isArray(generationError?.attemptsTrail) ? generationError.attemptsTrail : [];
+      const lastFailedAttempt = [...attemptsTrail].reverse().find((attempt: any) => attempt.status === 'FAILED');
+      return {
+        success: false,
+        providerId: lastFailedAttempt?.providerId,
+        modelId: lastFailedAttempt?.modelId,
+        error: errorMessage,
+        fallbackReason: generationError?.fallbackReason || errorMessage,
+        attemptsTrail,
+        researchPacket,
+        narrativePlan,
+        storyBeat,
+        researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
+        contextAudit,
+      };
+    }
 
     // Narrative generation has a deterministic emergency floor. When all configured
     // AI providers fail, surface the actual fallback-attempt diagnostics instead of

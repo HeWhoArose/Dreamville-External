@@ -102,3 +102,14 @@ These are **pre-existing baseline failures by comparison with the recorded `main
 - Phase 1 live-model behaviour: **NOT PASSED**.
 - Full CI: **RED on both main baseline and PR branch**; documentation-specific and baseline runtime failures must be distinguished.
 - Merge readiness: do not describe the PR as fully verified until its docs/release-contract checks and review are complete.
+
+
+## 4. Source-trace update (2026-10-15)
+
+The follow-up trace in [`NARRATIVE_GROUNDING_PHASE0_RUNTIME_TRACE_2026-10-15.md`](NARRATIVE_GROUNDING_PHASE0_RUNTIME_TRACE_2026-10-15.md) inspected the live freeform generation path and the world-simulation/occupancy seam against the recorded `main` baseline.
+
+A concrete runtime defect is now tracked separately in [draft PR #71](https://github.com/HeWhoArose/Dreamville-External/pull/71): after the primary narration has passed `generateNarrativeOnly` validation, the authority-level N18/N8 action-consequence gate may reject it and request a rewrite. On the baseline, the repair candidate is not sent through the same full semantic/presentation checks. If the repair is rejected or throws, the rejected original prose can remain player-facing. PR #71 adds full candidate revalidation and fail-closed behavior while preserving the committed canonical action. This remains **pending CI verification**, not a claimed fix.
+
+The living-world source trace narrows the current evidence: population metadata and simulation of already-registered NPC schedules/events exist, but the inspected runtime code did not establish a deterministic ambient-encounter proposal → canonical NPC/event commit → perception projection → narration → persistence chain. Its end-to-end status remains **UNVERIFIED**. Do not create a parallel encounter generator before the remaining source search identifies the owning subsystem.
+
+This source trace does not change the real-model requirement: Phase 1 and post-fix Phase 7 live sessions through the actual player-facing UI remain **BLOCKED until performed**; mocks, source inspection, and GitHub CI do not count as live-provider validation.

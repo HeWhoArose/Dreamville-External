@@ -1233,6 +1233,15 @@ test('Phase 12 regression: narrative generation route prefers the configured Gem
 	assert.ok(route.indexOf('google_gemini::gemini-3.5-flash') < route.indexOf('google_gemini::gemini-2.5-flash'), route.join(' -> '));
 	assert.ok(route.indexOf('google_gemini::gemini-3.8-flash') < route.indexOf('google_gemini::gemini-2.5-flash'), route.join(' -> '));
 	assert.ok(route.some((key) => key.includes('provider_deterministic_emergency::emergency-fallback-local')), 'emergency floor remains available');
+
+	const configPath = path.join(process.cwd(), 'server', 'data', 'orchestrator_config.json');
+	const runtimeConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+	const configuredRoute: string[] = runtimeConfig.fallbackChains['narrative.generate'];
+	assert.ok(
+		configuredRoute.indexOf('google_gemini::gemini-3.8-flash') < configuredRoute.indexOf('google_gemini::gemini-2.5-flash'),
+		configuredRoute.join(' -> '),
+		'persisted runtime config must preserve the same Gemini 3.8-before-2.5 narrative order',
+	);
 });
 
 

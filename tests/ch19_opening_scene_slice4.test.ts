@@ -740,7 +740,23 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
     maxRetries: 1,
   });
 
-  assert.equal(result.success, true, result.error || 'gate test failed before assertions');
+  assert.equal(
+    result.success,
+    true,
+    JSON.stringify({
+      error: result.error,
+      fallbackReason: result.fallbackReason,
+      attemptsTrail: (result.attemptsTrail || []).map((attempt: any) => ({
+        providerId: attempt.providerId,
+        modelId: attempt.modelId,
+        status: attempt.status,
+        error: attempt.error,
+        errorReason: attempt.errorReason,
+        validationError: attempt.validationError,
+        fallbackReason: attempt.fallbackReason,
+      })),
+    }, null, 2) || 'gate test failed before assertions',
+  );
   const narration = result.turnPackage?.narrative.join(' ') || '';
 
   // The gate must have caught the environment-heavy narration and attempted the rewrite.

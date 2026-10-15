@@ -1191,6 +1191,11 @@ test('Phase 12: production narration surfaces provider failure instead of emerge
 	orchestrator.setFallbackChain('narrative.generate', [
 		'provider_deterministic_emergency::emergency-fallback-local',
 	]);
+	for (const candidate of (orchestrator as any).models.values()) {
+		if (!candidate.isEmergencyFloor && candidate.roleEligibility.includes('narrative.generate')) {
+			candidate.health = 'Unavailable';
+		}
+	}
 
 	const previousNodeEnv = process.env.NODE_ENV;
 	try {

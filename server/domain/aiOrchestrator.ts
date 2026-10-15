@@ -8142,8 +8142,6 @@ export class MultiModelOrchestrator {
             .filter(Boolean);
           const freshness = this.validateNarrativeFreshnessContinuity(narrationText, previousNarrationsForFreshness);
           if (!freshness.valid) return { valid: false, errorReason: freshness.errorReason };
-          const pacing = NarrativePacingEngine.validateNarration(narrationText, narrativePacingContract);
-          if (!pacing.valid) return { valid: false, errorReason: pacing.reason };
           const continuity = this.validateNarrativeSceneContinuity(
             narrationText,
             worldRepo,
@@ -8173,24 +8171,10 @@ export class MultiModelOrchestrator {
           const temporalContinuity = this.validateNarrativeTemporalContinuity(narrationText, worldRepo, storyId);
           if (!temporalContinuity.valid) return { valid: false, errorReason: temporalContinuity.errorReason };
 
-          // Apply semantic/epistemic review to every provider candidate, not only
-          // selected full-turn orchestration paths. This is the live narrative-only
-          // endpoint used by ordinary player actions and retry-generated narration.
-          const semanticReview = SemanticNarrativeReview.review({
-            intent: playerIntent,
-            situation: currentSituation,
-            plan: narrativePlan,
-            turnPackage: validation.turnPackage,
-          });
-          if (semanticReview.decision !== 'ACCEPT') {
-            return {
-              valid: false,
-              errorReason: 'Narration failed semantic grounding review: ' + [
-                ...semanticReview.violations.map((violation) => violation.message),
-                ...semanticReview.missingRequirements,
-              ].join(' | '),
-            };
-          }
+          // Defer literary/semantic completeness to the N18 review-and-repair gate below.
+          // Hard continuity, epistemic, temporal, and action-safety checks still run here.
+          // Rejecting a quality defect at this stage prevents the live rewrite path from
+          // ever seeing the environment-heavy output it is meant to repair.
           return { valid: true };
         },
       },
@@ -8326,6 +8310,12 @@ export class MultiModelOrchestrator {
       (validation.turnPackage.dialogue || []).length > 0,
       currentSituation.player.name,
     ) && !openingTurn;
+    const initialSemanticReview = SemanticNarrativeReview.review({
+      intent: playerIntent,
+      situation: currentSituation,
+      plan: narrativePlan,
+      turnPackage: validation.turnPackage,
+    });
     const narrativeQualityAudit = buildNarrativeQualityAudit(
       finalNarrativeRichnessEvaluation,
       environmentExcess,
@@ -8337,6 +8327,7 @@ export class MultiModelOrchestrator {
     const qualityGateTriggersRewrite =
       environmentExcess ||
       finalNarrativeRichnessEvaluation.decision === 'IMPROVE' ||
+      initialSemanticReview.decision !== 'ACCEPT' ||
       (params.actionResolution !== undefined && !finalActionModeContinuity.valid) ||
       (params.actionResolution !== undefined && !initialStoryBeatContinuity.valid);
     if (qualityGateTriggersRewrite && (params.maxRetries ?? 0) >= 1) {
@@ -8369,6 +8360,12 @@ export class MultiModelOrchestrator {
           '',
           'PRESENTATION QUALITY REVIEW:',
           NarrativeRichnessEvaluator.buildRewriteGuidance(finalNarrativeRichnessEvaluation),
+          initialSemanticReview.decision !== 'ACCEPT'
+            ? 'SEMANTIC GROUNDING ISSUES TO REPAIR: ' + [
+                ...initialSemanticReview.violations.map((violation) => violation.message),
+                ...initialSemanticReview.missingRequirements,
+              ].join(' | ')
+            : '',
           environmentExcess
             ? 'The original narration spends too many sentences on environment-only description. Cut environment-only exposition to at most ' + NARRATIVE_ENV_EXCESS_SENTENCE_BUDGET + ' sentences. What is happening, who is acting, what the player can observe changing, and any immediate stakes take priority over atmosphere. The protagonist must appear as an actor in the scene, reacting, observing, or preparing a next observable step — not as a camera.'
             : '',
@@ -8431,10 +8428,17 @@ export class MultiModelOrchestrator {
             const rewriteStoryBeatContinuity = params.actionResolution
               ? this.validateNarrativeStoryBeat(rewriteNarration, storyBeat)
               : { valid: true as const };
+            const rewriteSemanticReview = SemanticNarrativeReview.review({
+              intent: playerIntent,
+              situation: currentSituation,
+              plan: narrativePlan,
+              turnPackage: rewriteValidation.turnPackage,
+            });
             if (
               rewriteNarration.trim().length > 0 &&
               !rewriteEnvironmentExcess &&
               rewriteStoryBeatContinuity.valid &&
+              rewriteSemanticReview.decision === 'ACCEPT' &&
               postRewriteEvaluation.overallScore > finalNarrativeRichnessEvaluation.overallScore
             ) {
               validation.turnPackage = rewriteValidation.turnPackage;
@@ -8452,7 +8456,12 @@ export class MultiModelOrchestrator {
                   ? 'The rewrite still spent too many sentences on environment-only description.'
                   : !rewriteStoryBeatContinuity.valid
                     ? (rewriteStoryBeatContinuity.errorReason || 'The rewrite did not communicate the meaningful story beat.')
-                    : 'The rewrite scored ' + postRewriteEvaluation.overallScore.toFixed(3) + ', not an improvement over ' + finalNarrativeRichnessEvaluation.overallScore.toFixed(3) + '; the original narration was preserved.';
+                    : rewriteSemanticReview.decision !== 'ACCEPT'
+                      ? 'The rewrite still failed semantic grounding review: ' + [
+                          ...rewriteSemanticReview.violations.map((violation) => violation.message),
+                          ...rewriteSemanticReview.missingRequirements,
+                        ].join(' | ')
+                      : 'The rewrite scored ' + postRewriteEvaluation.overallScore.toFixed(3) + ', not an improvement over ' + finalNarrativeRichnessEvaluation.overallScore.toFixed(3) + '; the original narration was preserved.';
             }
           } else {
             narrativeQualityAudit.rewriteErrorReason = rewriteValidation.errorReason || 'The rewrite returned an invalid structured turn package.';
@@ -8474,6 +8483,48 @@ export class MultiModelOrchestrator {
       narrativeQualityAudit.rewriteSkippedReason = 'The narrative review task has already exhausted its per-turn call budget; rewrite was skipped.';
     }
 
+    const finalSemanticReview = SemanticNarrativeReview.review({
+      intent: playerIntent,
+      situation: currentSituation,
+      plan: narrativePlan,
+      turnPackage: validation.turnPackage,
+    });
+    if (finalSemanticReview.decision !== 'ACCEPT') {
+      return {
+        success: false,
+        providerId: generated.providerId,
+        modelId: generated.modelId,
+        source: generated.source,
+        fallbackReason: generated.fallbackReason,
+        attemptsTrail: generated.attemptsTrail,
+        researchPacket,
+        narrativePlan,
+        storyBeat,
+        researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
+        contextAudit,
+        error: 'Final narration failed semantic grounding review: ' + [
+          ...finalSemanticReview.violations.map((violation) => violation.message),
+          ...finalSemanticReview.missingRequirements,
+        ].join(' | '),
+      };
+    }
+    const finalPacing = NarrativePacingEngine.validateNarration(finalNarrationText, narrativePacingContract);
+    if (!finalPacing.valid) {
+      return {
+        success: false,
+        providerId: generated.providerId,
+        modelId: generated.modelId,
+        source: generated.source,
+        fallbackReason: generated.fallbackReason,
+        attemptsTrail: generated.attemptsTrail,
+        researchPacket,
+        narrativePlan,
+        storyBeat,
+        researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
+        contextAudit,
+        error: finalPacing.reason || 'Final narration failed N8 adaptive pacing validation.',
+      };
+    }
     const finalTemporalContinuity = this.validateNarrativeTemporalContinuity(finalNarrationText, worldRepo, storyId);
     if (!finalTemporalContinuity.valid) {
       return {

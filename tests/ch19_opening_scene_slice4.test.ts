@@ -728,10 +728,18 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
   reviewer.cannedResponses.set('narrative.review', improvedTurn);
   orchestrator.registerAdapter(primary);
   orchestrator.registerAdapter(reviewer);
+  const backup = new DeterministicMockAdapter('ch19_turn_gate_backup');
+  backup.failureMode = '500';
+  orchestrator.registerAdapter(backup);
   orchestrator.registerModel(model('ch19_turn_gate_primary', 'turn-gate-model', ['narrative.generate']));
+  orchestrator.registerModel(model('ch19_turn_gate_backup', 'turn-gate-backup', ['narrative.generate']));
   orchestrator.registerModel(model('ch19_turn_gate_reviewer', 'turn-gate-reviewer', ['narrative.review']));
   orchestrator.pinModelForTask('narrative.generate', null);
-  orchestrator.setFallbackChain('narrative.generate', ['ch19_turn_gate_primary::turn-gate-model', 'provider_deterministic_emergency::emergency-fallback-local']);
+  orchestrator.setFallbackChain('narrative.generate', [
+    'ch19_turn_gate_primary::turn-gate-model',
+    'ch19_turn_gate_backup::turn-gate-backup',
+    'provider_deterministic_emergency::emergency-fallback-local',
+  ]);
   orchestrator.setFallbackChain('narrative.review', ['ch19_turn_gate_reviewer::turn-gate-reviewer', 'provider_deterministic_emergency::emergency-fallback-local']);
 
   // One committed canonical event so this is a live continuation turn, not the opening.

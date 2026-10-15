@@ -7764,6 +7764,81 @@ export class MultiModelOrchestrator {
     return { valid: true };
   }
 
+
+  /**
+   * Revalidates a narrative candidate created outside this orchestrator (for example,
+   * a presentation-only repair requested by ServerMockAuthority). Every candidate
+   * that may be shown to the player must pass the same final presentation and semantic
+   * boundary checks as a primary narrative.generate candidate.
+   */
+  public validateNarrativeCandidate(params: {
+    storyId: string;
+    playerAction: string;
+    intent: PlayerIntent;
+    situation: CurrentSituation;
+    plan: EphemeralNarrativePlan;
+    storyBeat?: StoryBeatContract;
+    turnPackage: StructuredTurnPackage;
+  }): { valid: boolean; errorReason?: string } {
+    const narration = (params.turnPackage.narrative || []).join(' ').trim();
+    if (!narration) {
+      return { valid: false, errorReason: 'Final narrative candidate is empty.' };
+    }
+
+    const freshness = this.validateNarrativeFreshnessContinuity(
+      narration,
+      (params.situation.recentTurns || [])
+        .map((turn) => String(turn.narration || ''))
+        .filter(Boolean),
+    );
+    if (!freshness.valid) {
+      return { valid: false, errorReason: freshness.errorReason || 'Final narrative candidate failed freshness validation.' };
+    }
+
+    const repository = this.getWorldRepository();
+    const pacingContract = NarrativePacingEngine.resolve({
+      situation: params.situation,
+      intent: params.intent,
+    });
+    const presentation = this.validateNarrativePresentation({
+      narration,
+      playerAction: params.playerAction,
+      intent: params.intent,
+      situation: params.situation,
+      repository,
+      storyId: params.storyId,
+      pacingContract,
+    });
+    if (!presentation.valid) {
+      return { valid: false, errorReason: presentation.errorReason || 'Final narrative candidate failed presentation validation.' };
+    }
+
+    const semanticReview = SemanticNarrativeReview.review({
+      intent: params.intent,
+      situation: params.situation,
+      plan: params.plan,
+      turnPackage: params.turnPackage,
+    });
+    if (semanticReview.decision !== 'ACCEPT') {
+      const details = [
+        ...semanticReview.violations.map((violation) => violation.message),
+        ...semanticReview.missingRequirements,
+      ].join(' | ');
+      return {
+        valid: false,
+        errorReason: 'Final narrative candidate failed semantic review' + (details ? ': ' + details : '.'),
+      };
+    }
+
+    const storyBeat = this.validateNarrativeStoryBeat(narration, params.storyBeat);
+    if (!storyBeat.valid) {
+      return { valid: false, errorReason: storyBeat.errorReason || 'Final narrative candidate failed StoryBeat validation.' };
+    }
+
+    return { valid: true };
+  }
+
+
   /**
    * Presentation-only narrative generation.
    *

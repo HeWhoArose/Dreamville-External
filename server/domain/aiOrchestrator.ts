@@ -7779,6 +7779,7 @@ export class MultiModelOrchestrator {
     plan: EphemeralNarrativePlan;
     storyBeat?: StoryBeatContract;
     turnPackage: StructuredTurnPackage;
+    repository?: WorldRepository;
   }): { valid: boolean; errorReason?: string } {
     const narration = (params.turnPackage.narrative || []).join(' ').trim();
     if (!narration) {
@@ -7795,7 +7796,7 @@ export class MultiModelOrchestrator {
       return { valid: false, errorReason: freshness.errorReason || 'Final narrative candidate failed freshness validation.' };
     }
 
-    const repository = this.getWorldRepository();
+    const repository = params.repository || this.getWorldRepository();
     const pacingContract = NarrativePacingEngine.resolve({
       situation: params.situation,
       intent: params.intent,
@@ -8472,23 +8473,49 @@ export class MultiModelOrchestrator {
               if (!rewriteValidation.valid || !rewriteValidation.turnPackage) {
                 return { valid: false, errorReason: rewriteValidation.errorReason || 'Narrative rewrite must return a valid structured turn package.' };
               }
-              const rewritePresentation = this.validateNarrativePresentation({
-                narration: rewriteValidation.turnPackage.narrative.join(' '),
+              if (!narrativePlan) {
+                return { valid: false, errorReason: 'Narrative rewrite cannot be accepted without its active narrative plan.' };
+              }
+              const rewriteFinalValidation = this.validateNarrativeCandidate({
+                storyId,
                 playerAction,
                 intent: playerIntent,
                 situation: currentSituation,
+                plan: narrativePlan,
+                storyBeat,
+                turnPackage: rewriteValidation.turnPackage,
                 repository: worldRepo,
-                storyId,
-                pacingContract: narrativePacingContract,
               });
-              if (!rewritePresentation.valid) return { valid: false, errorReason: rewritePresentation.errorReason || 'Narrative rewrite failed presentation validation.' };
+              if (!rewriteFinalValidation.valid) {
+                return {
+                  valid: false,
+                  errorReason: rewriteFinalValidation.errorReason || 'Narrative rewrite failed the complete final-candidate validation.',
+                };
+              }
               return { valid: true };
             },
           },
         );
         if (rewrite.text && rewrite.source !== 'DETERMINISTIC_FALLBACK') {
           const rewriteValidation = this.validateTurnPackage(rewrite.text, { allowPlainTextNarration: true });
-          if (rewriteValidation.valid && rewriteValidation.turnPackage) {
+          const rewriteCandidateFinalValidation = rewriteValidation.valid && rewriteValidation.turnPackage && narrativePlan
+            ? this.validateNarrativeCandidate({
+                storyId,
+                playerAction,
+                intent: playerIntent,
+                situation: currentSituation,
+                plan: narrativePlan,
+                storyBeat,
+                turnPackage: rewriteValidation.turnPackage,
+                repository: worldRepo,
+              })
+            : {
+                valid: false,
+                errorReason: !narrativePlan
+                  ? 'Narrative rewrite cannot be accepted without its active narrative plan.'
+                  : (rewriteValidation.errorReason || 'The rewrite did not produce a complete turn package.'),
+              };
+          if (rewriteValidation.valid && rewriteValidation.turnPackage && rewriteCandidateFinalValidation.valid) {
             const rewriteNarration = rewriteValidation.turnPackage.narrative.join(' ');
             const postRewriteEvaluation = NarrativeRichnessEvaluator.evaluate({
               intent: playerIntent,
@@ -8523,14 +8550,18 @@ export class MultiModelOrchestrator {
             } else {
               narrativeQualityAudit.rewriteErrorReason = !rewriteNarration.trim()
                 ? 'The rewrite returned empty narration.'
-                : rewriteEnvironmentExcess
-                  ? 'The rewrite still spent too many sentences on environment-only description.'
-                  : !rewriteStoryBeatContinuity.valid
-                    ? (rewriteStoryBeatContinuity.errorReason || 'The rewrite did not communicate the meaningful story beat.')
-                    : 'The rewrite scored ' + postRewriteEvaluation.overallScore.toFixed(3) + ', not an improvement over ' + finalNarrativeRichnessEvaluation.overallScore.toFixed(3) + '; the original narration was preserved.';
+                : !rewriteCandidateFinalValidation.valid
+                  ? (rewriteCandidateFinalValidation.errorReason || 'The rewrite failed complete final-candidate validation.')
+                  : rewriteEnvironmentExcess
+                    ? 'The rewrite still spent too many sentences on environment-only description.'
+                    : !rewriteStoryBeatContinuity.valid
+                      ? (rewriteStoryBeatContinuity.errorReason || 'The rewrite did not communicate the meaningful story beat.')
+                      : 'The rewrite scored ' + postRewriteEvaluation.overallScore.toFixed(3) + ', not an improvement over ' + finalNarrativeRichnessEvaluation.overallScore.toFixed(3) + '; the original narration was preserved.';
             }
           } else {
-            narrativeQualityAudit.rewriteErrorReason = rewriteValidation.errorReason || 'The rewrite returned an invalid structured turn package.';
+            narrativeQualityAudit.rewriteErrorReason = !rewriteCandidateFinalValidation.valid
+              ? (rewriteCandidateFinalValidation.errorReason || 'The rewrite failed complete final-candidate validation.')
+              : (rewriteValidation.errorReason || 'The rewrite returned an invalid structured turn package.');
           }
         } else if (rewrite.text) {
           narrativeQualityAudit.rewriteErrorReason = 'The rewrite path returned deterministic fallback, so the original narration was preserved.';
@@ -8573,6 +8604,48 @@ export class MultiModelOrchestrator {
       valid: finalStoryBeatContinuity.valid,
       errorReason: finalStoryBeatContinuity.errorReason,
     };
+
+    if (!narrativePlan) {
+      return {
+        success: false,
+        providerId: generated.providerId,
+        modelId: generated.modelId,
+        source: generated.source,
+        fallbackReason: 'The active narrative plan is unavailable for final candidate review.',
+        attemptsTrail: generated.attemptsTrail,
+        researchPacket,
+        contextAudit,
+        error: 'Narration failed final validation because the active narrative plan was unavailable.',
+      };
+    }
+    const finalCandidateValidation = this.validateNarrativeCandidate({
+      storyId,
+      playerAction,
+      intent: playerIntent,
+      situation: currentSituation,
+      plan: narrativePlan,
+      storyBeat,
+      turnPackage: validation.turnPackage,
+      repository: worldRepo,
+    });
+    if (!finalCandidateValidation.valid) {
+      return {
+        success: false,
+        providerId: generated.providerId,
+        modelId: generated.modelId,
+        source: generated.source,
+        fallbackReason: finalCandidateValidation.errorReason,
+        attemptsTrail: generated.attemptsTrail,
+        researchPacket,
+        narrativePlan,
+        storyBeat,
+        researchAudit: { blocks: researchResult.blocks, excluded: researchResult.excluded, budgets: researchResult.budgets, totalTokens: researchResult.totalTokens, query: researchResult.query },
+        contextAudit,
+        narrativeRichnessEvaluation: finalNarrativeRichnessEvaluation,
+        narrativeQualityAudit,
+        error: finalCandidateValidation.errorReason || 'Narration failed complete final-candidate validation.',
+      };
+    }
 
     return {
       success: true,

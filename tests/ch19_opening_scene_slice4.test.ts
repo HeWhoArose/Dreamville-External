@@ -686,6 +686,72 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
     } as unknown as ConfirmedCharacter,
   });
 
+  // The target and their guard detail are canonical visible entities, not
+  // mere wording inside startingSituation/canonical event prose. This lets the
+  // semantic reviewer authorize their presence through CurrentSituation.
+  repository.saveEntityCard(storyIdG, {
+    id: 'npc_arena_high_level_target',
+    name: 'High-Level Target',
+    kind: 'NPC',
+    isTemplate: false,
+    identity: { species: 'Human', aliases: ['target', 'viewer'] },
+    classification: { role: 'high-level target', tags: ['target', 'arena'] },
+    personality: {
+      traits: ['composed'],
+      values: ['self-preservation'],
+      motivations: ['observe the arena'],
+      fears: [],
+      desires: [],
+    },
+    behavior: { priorities: ['watch the arena floor'], routines: ['observe from the private viewing box'] },
+    social: { factionIds: [], reputation: {}, relationships: {} },
+    worldState: {
+      locationId: 'loc_arena_floor',
+      currentActivity: 'watching the arena floor from the private viewing box',
+      isAlive: true,
+      presence: 'present',
+    },
+    traits: ['target'],
+    capabilities: [],
+    feats: [],
+    equipment: [],
+    memoryRefs: [],
+    provenance: { source: 'canonical arena test fixture', createdBy: 'SYSTEM' },
+    lifecycle: { status: 'ACTIVE' },
+    metadata: {},
+  });
+  repository.saveEntityCard(storyIdG, {
+    id: 'npc_arena_caste_enforcers',
+    name: 'Caste Enforcers',
+    kind: 'NPC',
+    isTemplate: false,
+    identity: { species: 'Human', aliases: ['enforcers', 'guard detail'] },
+    classification: { role: 'security detail', tags: ['guard', 'arena'] },
+    personality: {
+      traits: ['disciplined'],
+      values: ['duty'],
+      motivations: ['guard the private viewing box'],
+      fears: [],
+      desires: [],
+    },
+    behavior: { priorities: ['keep the viewing box guarded'], routines: ['guard the viewing box'] },
+    social: { factionIds: [], reputation: {}, relationships: {} },
+    worldState: {
+      locationId: 'loc_arena_floor',
+      currentActivity: 'guarding the private viewing box',
+      isAlive: true,
+      presence: 'present',
+    },
+    traits: ['guard'],
+    capabilities: [],
+    feats: [],
+    equipment: [],
+    memoryRefs: [],
+    provenance: { source: 'canonical arena test fixture', createdBy: 'SYSTEM' },
+    lifecycle: { status: 'ACTIVE' },
+    metadata: {},
+  });
+
   // Verify the authored scene-object evidence survives the WorldTemplate ->
   // StoryRun geography projection before it is used by narration review.
   const arenaFloor = repository.getGeographyGraph(storyIdG).getNode('loc_arena_floor') as any;
@@ -714,10 +780,10 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
   // A substance-first rewrite the same model could return on the review call:
   const improvedTurn = JSON.stringify({
     narrative: [
-      'You move across the sand of The Obsidian Arena, keeping the private viewing box in sight and the high-level target behind the caste enforcers as the established scene describes.',
-      'You observe from the new angle and see the same barrier of enforcers; the view offers no reliable clue to the target’s intentions.',
-      'No visible opening emerges, so the route forward remains uncertain without making an approach or forcing a confrontation.',
-      'Above, the sound of spectators remains audible while you keep the box in view. You notice no confirmed movement from the target; the observation gives you a better angle, not a new answer.'
+      'You move across the sand of The Obsidian Arena, keeping the private viewing box in sight where the high-level target watches behind the caste enforcers.',
+      'You observe the guarded box from a different angle and hear the murmur of spectators above; the iron rails are still hot to the touch.',
+      'The tense standoff remains unchanged: the caste enforcers hold their position, but their presence offers no reliable clue to the target’s intentions.',
+      'You notice no confirmed movement from the target. The better angle changes what you can see, not what you know, leaving the next move open.'
     ],
     dialogue: [],
     events: [],

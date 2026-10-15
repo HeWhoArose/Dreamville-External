@@ -164,7 +164,7 @@ world population/activity/encounter authority
   -> reviewed narration
 ```
 
-The existing population profile is a context contract, not a complete encounter generator. The current living-world audit explicitly says encounter generation is not yet verified end-to-end. Phase 4 must inspect and connect the actual world-simulation/encounter producer; it must not add an independent narrator-side spawning system.
+The existing producer is identified: `WorldActivityDirector.ensureAmbientPopulation` creates idempotent canonical ambient EntityCards for eligible locations, and `WorldActivityDirector.buildAmbientEvents` projects grounded activity/social/potential-encounter events into `CurrentSituationBuilder`. The ordinary freeform path invokes the producer before scene projection. Do not build another producer. Source tracing found the opening path was disconnected: fresh StoryRuns generated their opening before ambient population was seeded, and opening context/review omitted visible entities/activity. Draft [PR #72](https://github.com/HeWhoArose/Dreamville-External/pull/72) addresses the opening seam and preservation of authored population metadata; it must pass CI before being marked integrated. The broader live UI/reload/encounter action path remains unverified.
 
 ### 2.8 Candidate routing and fallback connection map
 
@@ -473,16 +473,16 @@ Acceptance:
 **Goal:** preserve a lively world without inventing uncommitted reality.
 
 Tasks:
-1. Audit `docs/LIVING_WORLD_POPULATION_AND_ENCOUNTER_AUDIT.md` and the actual current population/encounter producers.
-2. Distinguish canonical population data from scene-local visibility and from incomplete/uninitialized data.
-3. Define location population states only if existing types cannot express them: e.g. populated, sparse, deserted-by-canon, restricted, unknown/incomplete.
-4. Audit current encounter eligibility, scheduling, cooldown, location rules, faction state, and chance weights before implementing any new generator.
-5. Generate candidate encounters/opportunities only through the existing authoritative world/encounter service; do not let narration invent them.
-6. Validate candidates against time, location, population, travel/combat state, active events, already-used encounters, and continuity.
-7. Provide varied but bounded opportunity sources: NPC-initiated dialogue, merchants advertising wares, guild requests, posted contracts, rumours, ambient activity, and chance encounters.
-8. Respect player agency: an NPC may approach or invite; the player decides whether to engage.
-9. Keep chance encounters optional and contextual, not mandatory every turn.
-10. Avoid both extremes: fabricated busy scenes and sterile worlds caused by requiring every background person to be pre-authored.
+1. Trace `WorldActivityDirector.ensureAmbientPopulation` and `WorldActivityDirector.buildAmbientEvents` first, including their exact callers and the existing `tests/world-activity-director.test.ts`. Reuse this canonical producer; do not create a replacement.
+2. Verify the population profile survives `WorldTemplate → WorldRepository.createStoryRunFromConfirmedCharacter → GeographyGraph → StoryRun persistence`. Draft PR #72 carries a preservation fix and restricted-location regression; confirm CI before accepting it.
+3. Cover each entry path separately: fresh `POST /story-runs` opening generation, ordinary freeform action, movement/time advance, combat actions, regeneration/retry, and resume/reload. State exactly which caller seeds entities and which caller only projects them.
+4. Feed only visible, present, living, same-location entities and their recorded activities into `CurrentSituationBuilder`, ambient event projection, research, StoryBeat, and the actual final prompt. Avoid hidden/off-location facts and avoid declaring unknown-occupancy sites empty.
+5. Audit what `buildAmbientEvents` means at runtime: distinguish activity/social-opportunity/potential-encounter cues from a committed combat encounter, a canonical scheduled event, a job posting, or an actual NPC dialogue. Add missing handoffs only where source trace proves one is absent.
+6. Validate any encounter/action handoff against time, location, population, travel/combat state, active events, already-used encounters, and continuity. Any new actor or event must be committed to canonical state before the narrator can assert it.
+7. Preserve restricted, abandoned, and expectedPopulation=NONE locations; UNKNOWN non-public ruins must not automatically spawn people. A public-looking UNKNOWN citadel can follow the existing deterministic public-place policy without being relabeled as authored INHABITED.
+8. Respect player agency: an NPC may approach, advertise, or invite; the player decides whether to engage.
+9. Keep encounters optional, contextual, seed-stable and idempotent across retry/reload; a quiet turn need not force an encounter.
+10. Verify through the actual Story UI and a real provider that the opening and following turns are lively without becoming fabricated or excessively busy. Record human tests separately from mocked/CI evidence.
 
 Acceptance:
 - explicit deserted/restricted locations remain so;
@@ -709,7 +709,7 @@ This document owns **the narrative grounding/intent-fidelity work only**. It doe
 | `AiOrchestrator.generateNarrativeOnly` and full-turn paths | candidate `StructuredTurnPackage` and review result | HTTP action/narration callers, combat callers, harness, opening scene | retry/fallback/emergency path inside current orchestrator | Existing; trace every caller and exact candidate |
 | `SemanticNarrativeReview` | `NarrativeReview` ACCEPT/REWRITE/REJECT | candidate validator, single-repair gate, emergency narration acceptance | reject + bounded repair/floor | Existing; Phase 6 must prove no fallback bypasses the final gate |
 | `AiTaskContracts` / `MultiModelOrchestrator` / N19 / call budget | task-ready model route and bounded attempt budget | narration/dialogue/research and other task consumers | configured task-specific fallback / emergency floor | Existing; preserve configured fallback order |
-| Population/encounter/world activity producer | canonical population profile, actor/event/opportunity state | `CurrentSituationBuilder`, evidence retrieval, story turn | no narrator-side spawning | **PARTIAL**: occupancy context exists; end-to-end encounter generation remains unverified |
+| `WorldActivityDirector` population/event producer | canonical population profile; persisted ambient `EntityCard`s; grounded activity/social/potential-encounter events | ordinary freeform `ServerMockAuthority` → `CurrentSituationBuilder` → research/StoryBeat/prompt; fresh opening path is being connected in draft PR #72 | no narrator-side spawning; restricted/unknown boundaries; idempotent entity persistence | **PARTIAL**: producer and normal-turn wiring exist; opening wiring and full UI/encounter/reload path require PR #72 CI and live validation |
 | `NarrativeMemoryLifecycle` / continuity owners | accepted turn history, objective events, durable memory/thread updates | next `CurrentSituation` and research | no promotion of rejected/unanchored text | Existing owner; never write memory directly from an unreviewed candidate |
 | `StoryView` / API client | final narration and typed error/loading response | player-visible Story UI | existing typed client/server failure behavior | Human UI validation required for actual user-facing flow |
 

@@ -543,6 +543,18 @@ Acceptance:
 - provider failure or malformed output never results in fabricated details;
 - AI call budgets and latency remain bounded.
 
+#### Phase 6 source finding and PR hand-off (2026-10-15)
+
+This is now a code-backed gap, not only a prospective checklist:
+
+- `AiOrchestrator.generateNarrativeOnly` validates the primary candidate, then may request a bounded `narrative.review` rewrite for N18/N8 quality. The inspected main baseline validated the rewrite's package shape/presentation and scored richness/StoryBeat, but did not rerun `SemanticNarrativeReview` on that replacement. The final StoryBeat check could be recorded as invalid in the quality audit while the method still returned `success: true`.
+- `ServerMockAuthority` applies an additional live action/consequence gate. If it rejected primary prose and the authority repair was rejected or threw, the rejected primary prose could remain in player-facing history.
+- Draft [PR #71](https://github.com/HeWhoArose/Dreamville-External/pull/71) now applies a shared final validator to the internal rewrite, the exact final `generateNarrativeOnly` result, and the outer authority rewrite. The exact-candidate checks are in place in the branch, but the latest branch's CI must pass before calling the change verified. A prior targeted run passed the authority-level fail-closed regression; a later change expanded coverage and changed the environment-heavy rewrite test fixture to use canonical arena facts.
+- Opening-scene generation is a separate code path in `OpeningSceneService`, not simply another `generateNarrativeOnly` caller. It currently uses task-response shape/quality checks and a deterministic opening fallback, so complete semantic/epistemic candidate-validation parity remains an explicit Phase 6 item. Draft [PR #72](https://github.com/HeWhoArose/Dreamville-External/pull/72) is an opening-population integration, not a full fix for this opening-specific candidate-review gap.
+- In the observed CI run for PR #72's latest tested head `9e2255b7fa492d71f747a4ebc0b3ad7d3ce8141a`, both new opening-population tests passed; the full suite still reported the same ten baseline runtime failures. Keep PR #72 draft while the release suite is red.
+
+Before Phase 6 exits, require separate test cases for internal rewrite ACCEPT/REJECT/throw/deterministic fallback; outer authority rewrite ACCEPT/REJECT/throw; opening initial candidate and opening rewrite; provider outage/malformed output; StoryBeat rejection; and confirmation that a failure never displays rejected prose or rolls back the canonical action already committed. The exact final candidate must always be the candidate under test, not an earlier string or a mocked review result.
+
 ### Phase 7 — Post-fix Phase 1 live-model behavioural validation **[HUMAN LIVE-SESSION REQUIRED]**
 
 Re-run the **same A–P suite in Phase 1** against the repaired code and the same live configured provider. Keep the original baseline report unchanged and add a new run report so before/after behaviour can be compared. Re-run all deterministic scenario counterparts through the actual HTTP action pipeline and ensure the actual final returned candidate is tested.

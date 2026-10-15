@@ -53,7 +53,7 @@ const COMBAT_PATTERN = /\b(?:attack|strike|hit|shoot|fire|stab|slash|punch|kick|
 const ITEM_USE_PATTERN = /\b(?:use|drink|eat|consume|activate|equip|wear|open|unlock|pick up|take|grasp|hold|decipher|translate)\b/i;
 const DIALOGUE_PATTERN = /\b(?:ask|tell|say|speak|talk|reply|answer|question|inquire|consult|call out|shout|yell)\b/i;
 const PASSIVE_OBSERVATION_PATTERN = /\b(?:listen|hear|overhear|eavesdrop|observe|watch|look|look around|look for|notice|study|scan|inspect)\b/i;
-const INFORMATION_PATTERN = /\b(?:learn|find out|discover|gather information|information|rumou?rs?|gossip|what happened|what(?:'s| is| are)\s+(?:available|offered|posted|listed)|who|why|where|when|how|hear|listen|hear about|listen for|overhear)\b/i;
+const INFORMATION_PATTERN = /\b(?:learn|find out|discover|gather information|information|rumou?rs?|gossip|what happened|what(?:'s| is| are)\s+(?:available|offered|posted|listed)|check further|look further|find more|learn more|who|why|where|when|how|hear|listen|hear about|listen for|overhear)\b/i;
 const OPPORTUNITY_TOPIC_PATTERN = /\b(?:jobs?|work|employment|contracts?|quests?|tasks?|bount(?:y|ies)|commissions?|assignments?|postings?|notices?|job requests?)\b/i;
 const AVAILABILITY_LOOKUP_PATTERN =
 	/\b(?:check|look|see|find|search|browse|read|review|inspect)\b[\s\S]{0,55}\b(?:what(?:'s| is| are)\s+)?(?:currently\s+)?(?:available|open|posted|listed|offered|jobs?|work|employment|contracts?|quests?|tasks?|bount(?:y|ies)|commissions?|assignments?|postings?|notices?)\b|\b(?:ask|asked|asking|inquir(?:e|ed|ing)|enquir(?:e|ed|ing))\b[\s\S]{0,45}\b(?:jobs?|work|employment|contracts?|quests?|tasks?|bount(?:y|ies)|commissions?|assignments?|postings?|notices?|requests?)\b/i;

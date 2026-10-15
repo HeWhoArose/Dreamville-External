@@ -682,8 +682,8 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
     narrative: [
       'You circle the sand of The Obsidian Arena and keep the private viewing box, where a high-level target watches behind caste enforcers, in sight.',
       'The sun bears down over the pale sand of the fighting pit.',
-      'Tiered stone benches ring the fighting pit beneath the iron rails.',
-      'Sunlight glints along the iron rails above the tiered benches.',
+      'The iron rails catch the sunlight above the fighting pit.',
+      'Sunlight glints along the iron rails around the fighting pit.',
       'The murmur of spectators carries down from the benches.',
     ],
     dialogue: [],
@@ -697,7 +697,7 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
   const improvedTurn = JSON.stringify({
     narrative: [
       'You circle the sand of The Obsidian Arena while keeping the guarded high-level target in the private viewing box in sight.',
-      'Changing your position across the floor gives you a clearer sense of the distance to the box and the iron rails above the tiered benches.',
+      'Changing your position across the sand gives you a clearer sense of the distance to the box and the iron rails around the pit.',
       'The caste enforcers remain between you and the target as established in the scene; their position gives you something concrete to assess without deciding what you will do next.',
       'The murmur of spectators carries down from the benches while you continue watching. You have a better read of the approach, but neither the target’s intentions nor an opening has been confirmed.',
     ],

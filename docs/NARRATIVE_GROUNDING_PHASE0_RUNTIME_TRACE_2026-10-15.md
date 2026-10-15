@@ -41,27 +41,33 @@ Worse, when this rewrite is parsed but `postReview.accepted === false`, code add
 
 Relevant immutable-baseline lines: [authority-level final review and fail-open branches](https://github.com/HeWhoArose/Dreamville-External/blob/090b7d7b8c8b9c6ef47a0f643af3b15a303e1179/server/mockEngine/serverMockAuthority.ts#L1382-L1462).
 
+**Second confirmed gap: the internal N18 rewrite was only partially validated.** In `server/domain/aiOrchestrator.ts`, primary `narrative.generate` candidates pass presentation continuity and `SemanticNarrativeReview`. The bounded `narrative.review` rewrite originally checked package shape and `validateNarrativePresentation`, then richness/environment/StoryBeat-score improvement, but did not rerun `SemanticNarrativeReview` on the replacement. If the rewrite was rejected or unusable, the original primary narration could be preserved; the method also set `storyBeatFidelity.valid=false` in its audit but still returned `success: true`.
+
+Draft PR #71 has now been expanded to share `validateNarrativeCandidate` across both repair layers, pass the active `WorldRepository` explicitly, validate the internal rewrite before it can replace the primary, and perform a final complete candidate check before `generateNarrativeOnly` returns success. A failed final check now returns a typed generation failure for callers to handle rather than returning text with a failed final gate. These code changes are **not yet CI-verified** at the latest PR #71 head; do not treat them as shipped.
+
 **Runtime fix is isolated in draft [PR #71](https://github.com/HeWhoArose/Dreamville-External/pull/71); this documentation report and PR #69 remain docs-only.**
 
 The current PR #71 implementation adds a shared final candidate validator and changes the authority repair path to withhold rejected text. Its CI is still running at the time of this note; do not mark the fix verified until the new regression and full workflow results are inspected.
 
 **Required fix:**
 
-- Re-run the orchestrator’s full shared presentation + semantic + story-beat validation on the authority-rewrite candidate, using the already-built current situation, player intent, narrative plan and StoryBeat contract.
-- Keep the rewritten candidate only when both the full candidate validation and the live action/consequence gate accept it.
-- If the rewrite is unavailable, malformed, rejected, or throws, clear player-facing prose and visual cues and attach a retryable `narrativeError`. Do not undo the already-committed canonical action; keep the action log and canonical outcome intact.
-- Test accepted rewrite, semantically rejected rewrite, action/consequence rejection, malformed/empty rewrite, deterministic fallback from the review call, and provider exception. Assert rejected text is not persisted or shown and the canonical action remains committed.
+- Re-run the orchestrator’s full shared freshness/presentation/semantic/epistemic/StoryBeat validation on the authority-level rewrite candidate, using the already-built current situation, player intent, narrative plan and StoryBeat contract.
+- Apply that same shared validation to the **internal** `narrative.review` rewrite inside `generateNarrativeOnly`; richness improvement alone must never authorize replacement prose.
+- Before returning `success: true`, validate the exact final turn package. A failed final check returns a typed failure; it cannot merely be logged in `narrativeQualityAudit`.
+- Keep rewritten prose only when both the complete candidate validation and the applicable live action/consequence/richness gate accept it.
+- If the authority repair is unavailable, malformed, rejected, or throws, clear player-facing prose and visual cues and attach a retryable `narrativeError`. Do not undo the already-committed canonical action; keep the action log and canonical outcome intact.
+- Test accepted rewrite, semantically/epistemically rejected internal and authority rewrites, invalid StoryBeat, action/consequence rejection, malformed/empty rewrite, deterministic fallback from the review call, and provider exception. Assert rejected text is not persisted or shown and canonical mechanics remain committed.
 
-This must be delivered separately from PR #69 so the archive/documentation PR does not mix unrelated runtime behavior.
+The runtime changes are isolated in draft [PR #71](https://github.com/HeWhoArose/Dreamville-External/pull/71) so the archive/documentation PR does not mix unrelated runtime behavior.
 
 ## 3. Other live narration paths
 
 | Path | Current source/connection | Audit result |
 |---|---|---|
-| Regenerate narration for a committed action | `server/api/gameRoutes.ts` calls `generateNarrativeOnly`; on failure returns a 503 with `actionCommitted: true`, null narration and retryable error state | The main generation validators are reused. Verify UI retry handling in a real session. |
-| Combat-player action | `server/domain/combatPlayerActionService.ts` calls `generateNarrativeOnly` after combat resolution | Caller found; inspect its error and final-display handling before changing it. |
-| Combat encounter service | `server/domain/combatEncounterService.ts` calls `generateNarrativeOnly` after encounter resolution | Caller found; inspect its error and final-display handling before changing it. |
-| Opening scene | `server/services/openingSceneService.ts` builds opening context and research, then has an N18 richness/N8 pacing rewrite; if still rejected, it downgrades to a deterministic canonical opening | A separate policy/path. It does not establish that live turns or opening rewrites receive identical semantic review. |
+| Regenerate narration for a committed action | `server/api/gameRoutes.ts` calls `generateNarrativeOnly`; on failure clears prose/cues and returns 503 with `actionCommitted: true`, null narration and retryable error state | Base validators are reused; route-specific N18 action/consequence parity is not present. Recheck after PR #71 and test retry through actual UI. |
+| Combat-player action | `server/domain/combatPlayerActionService.ts` calls `generateNarrativeOnly` after canonical combat resolution; on generation failure it returns a deterministic `mechanicalSummary + target HP` string | Mechanics remain committed; model prose uses orchestrator validation. The mechanical fallback is grounded but currently string-only and not tagged as a typed narration error. UI presentation and fallback provenance need live verification. |
+| Combat encounter service | `server/domain/combatEncounterService.ts` calls `generateNarrativeOnly`; failed narration falls back to the already-resolved mechanical summary + target HP + initiative instruction | This is an explicit grounded combat fallback, not the authority fail-open bug. Verify UI distinguishes fallback from AI prose and does not re-resolve combat. |
+| Opening scene | `server/services/openingSceneService.ts` calls `executeTaskGeneration('narrative.generate')` with a prose-length check, then applies its separate N18/N8 quality rewrite; persistent rejection/repair failure downgrades to deterministic opening | Separate from `generateNarrativeOnly`: the initial/rewrite acceptance is quality/shape-focused, not the same full `SemanticNarrativeReview` candidate gate. PR #72 fixes population projection, but opening semantic/epistemic parity remains an explicit Phase 6 audit item. |
 | Deterministic `TurnIntegrationHarness` | `server/domain/turnIntegrationHarness.ts` | Deterministic test evidence only; not real provider or UI evidence. |
 
 ## 4. Living-world population and encounter seam

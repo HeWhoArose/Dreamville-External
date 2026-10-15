@@ -686,6 +686,14 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
     } as unknown as ConfirmedCharacter,
   });
 
+  // Verify the authored scene-object evidence survives the WorldTemplate ->
+  // StoryRun geography projection before it is used by narration review.
+  const arenaFloor = repository.getGeographyGraph(storyIdG).getNode('loc_arena_floor') as any;
+  assert.ok(
+    arenaFloor?.sceneObjects?.some((object: any) => object.name === 'private viewing box' && object.visible !== false),
+    'Authored private viewing box must survive StoryRun geography projection',
+  );
+
   // The user's reported defect: an action-anchored opener drowned by four
   // environment-only sentences that never depict the situation or any actor.
   const environmentOnlyTurn = JSON.stringify({
@@ -708,8 +716,8 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
     narrative: [
       'You move across the sand of The Obsidian Arena, keeping the private viewing box in sight.',
       'You observe the box from a different angle and see no further detail from the arena floor.',
-      'The view yields no clear opening; you can keep watching, but the target’s intentions remain unknown.',
-      'Above, the murmur of spectators continues while your attention stays on the box.'
+      'The caste enforcers remain between you and the target, leaving no clear opening to approach.',
+      'Above, the murmur of spectators continues while the private viewing box stays in sight; the target’s intentions remain unknown.'
     ],
     dialogue: [],
     events: [],

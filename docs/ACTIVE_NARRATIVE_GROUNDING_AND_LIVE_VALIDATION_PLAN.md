@@ -551,7 +551,10 @@ This is now a code-backed gap, not only a prospective checklist:
 - `ServerMockAuthority` applies an additional live action/consequence gate. If it rejected primary prose and the authority repair was rejected or threw, the rejected primary prose could remain in player-facing history.
 - Draft [PR #71](https://github.com/HeWhoArose/Dreamville-External/pull/71) now applies a shared final validator to the internal rewrite, the exact final `generateNarrativeOnly` result, and the outer authority rewrite. The exact-candidate checks are in place in the branch, but the latest branch's CI must pass before calling the change verified. A prior targeted run passed the authority-level fail-closed regression; a later change expanded coverage and changed the environment-heavy rewrite test fixture to use canonical arena facts.
 - Opening-scene generation is a separate code path in `OpeningSceneService`, not simply another `generateNarrativeOnly` caller. It currently uses task-response shape/quality checks and a deterministic opening fallback, so complete semantic/epistemic candidate-validation parity remains an explicit Phase 6 item. Draft [PR #72](https://github.com/HeWhoArose/Dreamville-External/pull/72) is an opening-population integration, not a full fix for this opening-specific candidate-review gap.
-- In the observed CI run for PR #72's latest tested head `9e2255b7fa492d71f747a4ebc0b3ad7d3ce8141a`, both new opening-population tests passed; the full suite still reported the same ten baseline runtime failures. Keep PR #72 draft while the release suite is red.
+- A connected grounding gap exists at story creation: `WorldRepository.createStoryRunFromConfirmedCharacter()` originally discarded authored `sceneObjects` while projecting WorldTemplate locations into story-specific geography. Draft PR #71 now carries the field through and asserts the WorldTemplate → StoryRun projection; that new head is awaiting CI, so the fix is **proposed, not verified**. Keep the semantic validator strict; deliver its evidence correctly.
+- The same geography projection also had to preserve authored `population` metadata. Draft PR #72 adds that field so ambient seeding can honour `RESTRICTED`, `ABANDONED`, and expected NONE. Coordinate the two patches so both `sceneObjects` and `population` survive the final node projection.
+- Draft [PR #73](https://github.com/HeWhoArose/Dreamville-External/pull/73) addresses a separate tested configuration mismatch: both seeded and persisted narrative generation/review routes put Gemini 2.5 ahead of Gemini 3.8 despite the Phase 12 route contract. The route-order regression passed on PR #73; its full suite remains red on other assertions.
+- In the observed CI run for PR #72's tested head `9e2255b7fa492d71f747a4ebc0b3ad7d3ce8141a`, both new opening-population tests passed; the full suite still reported the same ten runtime failures. Keep PR #72 draft while the release suite is red.
 
 Before Phase 6 exits, require separate test cases for internal rewrite ACCEPT/REJECT/throw/deterministic fallback; outer authority rewrite ACCEPT/REJECT/throw; opening initial candidate and opening rewrite; provider outage/malformed output; StoryBeat rejection; and confirmation that a failure never displays rejected prose or rolls back the canonical action already committed. The exact final candidate must always be the candidate under test, not an earlier string or a mocked review result.
 
@@ -693,13 +696,13 @@ A separate deep-research investigation is being conducted into commercial and op
 
 ## 11. Immediate next actions
 
-1. Resolve repository/core authority wording.
-2. Capture current CI status for the current `main` SHA.
-3. Trace `SemanticNarrativeReview` through the exact live action route, including all candidate and fallback paths.
-4. Add tests for the specific “check further” objective continuation and opportunity-source retrieval.
-5. Expand the Phase 1 scenario matrix without labelling unrun scenarios as passed.
-6. Implement only the smallest confirmed gap; run targeted, integration, full regression, lint, and build.
-7. Re-audit and only then proceed to population/encounter integration and live-model validation.
+1. Reverify PR #69's documentation archive/index references and compare its red CI with the unchanged `main` baseline; merge no documentation patch solely because it looks docs-only.
+2. Verify the newest PR #71 run after the authored `sceneObjects` projection fix. Its target test must prove the object survives WorldTemplate → StoryRun geography, then prove the rewritten narration passes final review; separate that result from unrelated full-suite failures.
+3. Verify PR #72's opening seed → canonical `EntityCard` → opening context/review projection → persistence/reload path, including authored RESTRICTED/ABANDONED/expected-NONE safeguards. Do not create a second population/encounter owner.
+4. Verify PR #73's route ordering in both the seeded orchestrator and persisted config; keep model registry, scene anchor, movement continuity, and turn-harness failures as independent fixes rather than widening this PR.
+5. Audit `OpeningSceneService` candidate/rewrite/fallback acceptance against the shared final candidate validator from PR #71. Reuse the shared review with an opening-specific pacing ceiling (at least three paragraphs); do not copy a parallel validator.
+6. Audit canonical opportunity retrieval for the user goal “check further”: trace notice/job/opportunity producers, retrieval filters, research packet, narrative plan, selected-model prompt, final review, and the next-turn open thread.
+7. Run targeted → regression → full tests/lint/build for each isolated repair and re-audit the exact current `main` SHA. Human provider-backed sessions and player-facing UI/reload testing remain mandatory; mark them BLOCKED when not run.
 
 **Completion principle:** Dreamville should neither hallucinate a world into existence through prose nor become sterile because the narrator is forbidden from creativity. The authoritative world systems should provide grounded possibilities; the player’s intent should determine the current objective; and the narrator should turn those facts into compelling, faithful presentation.
 

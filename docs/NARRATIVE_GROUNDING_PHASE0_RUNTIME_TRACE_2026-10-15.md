@@ -99,3 +99,30 @@ References: [WorldActivityDirector](https://github.com/HeWhoArose/Dreamville-Ext
 3. Audit remaining callers (`combatPlayerActionService`, `combatEncounterService`, opening generation and the narration-regeneration route) for error/fallback behavior and candidate final-validation parity. Record combat's grounded mechanical-summary fallback separately from the authority fail-open bug.
 4. Run targeted + regression + full CI and compare failures with the documented main baseline. No green status is claimed here.
 5. Run human live-model and player-facing UI/UX sessions for Phase 1 and repeat after each relevant fix. If provider or UI access is unavailable, record BLOCKED rather than PASS.
+
+
+## 6. Additional source finding — authored scene-object projection (2026-10-16)
+
+A live review regression exposed a second, narrower producer-consumer defect in the same grounding path. The reviewer was rejecting the phrase *private viewing box* even when the test's `WorldTemplate.geography.nodes[*].sceneObjects` defined that object as visible and authored.
+
+### Exact contract and root cause
+
+1. **Producer:** `WorldTemplate.geography.nodes[*].sceneObjects` declares authored, potentially visible props.
+2. **Projection boundary:** `WorldRepository.createStoryRunFromConfirmedCharacter()` constructs a new story-specific `GeographyGraph` node. Its previous `locNode` projection copied identity, description, coordinates, accessibility, ambient sensory text, and provenance, but omitted `sceneObjects`.
+3. **Consumer:** `CurrentSituationBuilder.build()` only projects props it receives from the story-specific canonical location into `CurrentSituation.sceneObjects` and `sceneEvidence.objects/structures`.
+4. **Validator:** `SemanticNarrativeReview.isConcreteClaimSupported()` deliberately authorizes concrete prop claims from visible scene objects/structures or visible entities, not from loose prose overlap. That is the correct safety boundary.
+5. **Observed result:** the valid authored object did not reach the review evidence set, so the review correctly treated the model's mention of the box as unsupported. Weakening semantic review would conceal the projection loss and permit hallucinated props.
+
+### Candidate fix and required validation
+
+Draft [PR #71](https://github.com/HeWhoArose/Dreamville-External/pull/71), latest observed branch head `94abd5d0760dd4f353c1827dd54bb4e2f5024e6f`, now preserves a deep copy of `sceneObjects` when constructing story geography and adds an assertion that the private viewing box survives WorldTemplate → StoryRun geography projection. The repaired prose also includes explicit movement and observation verbs required by the current intent review contract.
+
+**Status at this audit:** source change committed to the draft branch; CI for that latest head was still running. The immediately preceding head failed the target test with the unsupported claim `box`, which is the direct evidence that led to this root-cause fix. Do not record PASS until the latest targeted/full workflow confirms the assertion and reviewed rewrite.
+
+This field is separate from the authored `population` profile that draft PR #72 preserves at the same projection boundary. When reconciling either change, preserve **both** fields; neither patch may overwrite the other's contract.
+
+## 7. Configuration audit finding — narration route priority (2026-10-16)
+
+The existing Phase 12 regression requires `google_gemini::gemini-3.8-flash` ahead of `google_gemini::gemini-2.5-flash` for `narrative.generate`. The seeded `MultiModelOrchestrator.seedDefaultPins()` route and persisted `server/data/orchestrator_config.json` disagreed with that declared policy: Gemini 2.5 was earlier than Gemini 3.8. The same ordering issue existed for `narrative.review`.
+
+Draft [PR #73](https://github.com/HeWhoArose/Dreamville-External/pull/73) aligns those two chains and extends the regression to check persisted configuration as well as the in-memory seeded chain. Its route-order test passed in the observed workflow, but the full suite still failed on separate routing-registry, scene-anchor, movement-continuity, and turn-harness assertions. Keep the PR draft; do not describe the full release gate as green.

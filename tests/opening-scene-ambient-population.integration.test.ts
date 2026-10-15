@@ -106,7 +106,7 @@ function buildOpeningRig(storyId: string, locationName: string, population: any)
       `At Cycle 42, Hero Vael stands within ${locationName}, where footsteps and conversation carry through the pale stone arcade. The broad forecourt connects the public walkways, and the traveler pauses long enough to take in who is actually present.`,
       `${peopleDescription} These people and their recorded activities make the setting more than a painted backdrop; each remains occupied with the work or purpose already projected for this location.`,
       'Vael keeps the immediate question in view: what work or duties are available here. The living activity offers concrete details to ask about or observe, but it does not decide whom Vael approaches or what the traveler chooses to do next.',
-    ].join('\\n\\n');
+    ].join('\n\n');
     const text = JSON.stringify({
       narrativeText: prose,
       structuredEvents: [

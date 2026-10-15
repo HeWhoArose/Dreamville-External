@@ -17,6 +17,10 @@ When documents disagree, use this order:
 
 **Do not use documents inside `docs/outdated/` as implementation instructions.** They are kept for traceability and to explain previous decisions, not as a queue of unfinished work.
 
+### `NARRATIVE_GROUNDING_PHASE0_RUNTIME_TRACE_2026-10-15.md`
+
+Current-main source trace for the live freeform narration pipeline, candidate rewrite/final-review seam, other narration callers, and living-world encounter boundary. Records a confirmed fail-open rejected-rewrite path and the follow-on runtime-only fix; this source trace is not a claim of passing tests or live-model validation.
+
 ## 2. Current active plan for narrative grounding
 
 ### `ACTIVE_NARRATIVE_GROUNDING_AND_LIVE_VALIDATION_PLAN.md`

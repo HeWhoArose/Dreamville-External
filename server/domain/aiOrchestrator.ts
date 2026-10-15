@@ -8570,7 +8570,14 @@ export class MultiModelOrchestrator {
         } else if (rewrite.text) {
           narrativeQualityAudit.rewriteErrorReason = 'The rewrite path returned deterministic fallback, so the original narration was preserved.';
         } else {
-          narrativeQualityAudit.rewriteErrorReason = 'The rewrite path returned no usable output, so the original narration was preserved.';
+          const attemptErrors = (rewrite.attemptsTrail || [])
+            .filter((attempt) => attempt.status === 'FAILED' && attempt.error)
+            .map((attempt) => `${attempt.displayName || attempt.modelId}: ${attempt.error}`);
+          narrativeQualityAudit.rewriteErrorReason = [
+            rewrite.fallbackReason,
+            ...attemptErrors,
+          ].filter(Boolean).join(' | ') ||
+            'The rewrite path returned no usable output, so the original narration was preserved.';
         }
       } catch (rewriteError: any) {
         narrativeQualityAudit.rewriteErrorReason = rewriteError?.message || 'The narrative rewrite path failed.';

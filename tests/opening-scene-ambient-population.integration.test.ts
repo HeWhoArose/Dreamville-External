@@ -56,6 +56,7 @@ function buildOpeningRig(storyId: string, locationName: string, population: any)
     characterId: 'char_' + storyId,
     draftId: 'draft_' + storyId,
     worldId,
+    storyMode: 'PROTAGONIST',
     worldVersion: 1,
     confirmedAt: now,
     sourceDescription: 'Opening population integration fixture.',
@@ -148,14 +149,15 @@ test('opening scene seeds and projects canonical ambient people before generatin
   const people = rig.repository.getEntityCards(storyId, { status: 'ACTIVE' }).filter((card: any) =>
     card.metadata?.ambientPopulation === true && card.worldState?.locationId === rig.locationId
   );
-  assert.ok(people.length >= 1, 'a public citadel with unknown occupancy should seed missing ambient people while reusing the existing population policy');
+  assert.equal(people.length, 2, 'a public citadel with unknown occupancy should use the existing deterministic population policy');
   const totalCanonicalPeople = rig.repository.getEntityCards(storyId, { status: 'ACTIVE' }).filter((card: any) =>
     ['NPC', 'MERCHANT', 'CHARACTER', 'FACTION_MEMBER'].includes(card.kind) &&
     card.worldState?.locationId === rig.locationId &&
     card.worldState?.isAlive !== false &&
-    card.worldState?.presence === 'present'
+    card.worldState?.presence === 'present' &&
+    card.kind !== 'PLAYER'
   );
-  assert.ok(totalCanonicalPeople.length >= 2, 'the location should retain existing canonical people and seed enough ambient population to avoid an empty public scene');
+  assert.ok(totalCanonicalPeople.length >= 2, 'the location should expose at least two canonical non-player occupants rather than counting the protagonist as local population');
   assert.ok(people.every((person: any) => person.worldState.presence === 'present' && person.worldState.isAlive));
   assert.ok(people.every((person: any) => opening.narrativeText.includes(person.name)), 'the final opening should carry actual visible occupants, including on deterministic quality fallback');
 

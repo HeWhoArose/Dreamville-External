@@ -680,11 +680,11 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
   // environment-only sentences that never depict the situation or any actor.
   const environmentOnlyTurn = JSON.stringify({
     narrative: [
-      'You circle the arena floor and watch the private viewing box.',
-      'The sun hammers the pale sand of the fighting pit, bleaching it bone-white beneath a merciless sky.',
-      'Basalt walls rise sheer around the arena floor, iron rails gleaming dully where they crown the tiered stone benches.',
+      'You circle the sand of The Obsidian Arena, keeping the private viewing box in sight.',
+      'The sun bears down over the pale sand of the fighting pit.',
+      'Tiered stone benches ring the fighting pit beneath the iron rails.',
       'Sunlight glints along the iron rails above the tiered benches.',
-      'No sign of movement stirs across the open expanse of the pit.',
+      'The murmur of spectators carries down from the benches.',
     ],
     dialogue: [],
     events: [],
@@ -696,10 +696,10 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
   // A substance-first rewrite the same model could return on the review call:
   const improvedTurn = JSON.stringify({
     narrative: [
-      'You circle the floor of The Obsidian Arena with your weight low, eyes pinned to the private viewing box above the tiered benches where the high-level target watches from behind caste enforcers.',
-      'One enforcer leans over the iron rail to speak into his ear, and the target shifts behind the rail without standing.',
-      'You mark the number of enforcers around the box and the distance from your position to the base of the rail, dust from the sand gritting under your boots.',
-      'The murmur of the crowd changes pitch around the pit, and you cannot yet tell whether it is for you or for him.',
+      'You circle the sand of The Obsidian Arena, keeping the private viewing box in sight as you change your angle across the floor.',
+      'From this position, the iron rails no longer overlap the lower edge of the box, giving you a clearer view of the high-level target behind the caste enforcers already established in the scene.',
+      'You gauge the distance from the sand to the rail and the route around the tiered benches; the change in viewpoint gives you a better sense of the approach without committing you to it.',
+      'The murmur of spectators carries down from the benches while the target remains in view; you have improved your read of the space, but no action has been taken on your behalf.',
     ],
     dialogue: [],
     events: [],
@@ -724,6 +724,12 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
     eventId: 'evt_turn_gate_seed',
     type: 'OBSERVE',
     summary: 'Sera Vale studies the arena from the sand.',
+    timestamp: 'Turn 2',
+  });
+  repository.appendCanonicalCommandEvent(storyIdG, {
+    eventId: 'evt_turn_gate_target_anchor',
+    type: 'OBSERVE',
+    summary: 'From the sand, Sera Vale can see the private viewing box where a high-level target watches behind caste enforcers.',
     timestamp: 'Turn 2',
   });
 

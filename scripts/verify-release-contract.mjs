@@ -22,9 +22,9 @@ for (const script of ['lint', 'test', 'build']) {
 }
 
 const requiredFiles = [
-	'docs/DREAMVILLE_DEEP_IMPLEMENTATION_SPECIFICATION.md',
-	'docs/DREAMVILLE_RELEASE_STABILIZATION_PHASE22.md',
-	'docs/DREAMVILLE_INTEGRATION_MATRIX_PHASE17.md',
+	'docs/outdated/superseded-plans/DREAMVILLE_DEEP_IMPLEMENTATION_SPECIFICATION_HISTORICAL.md',
+	'docs/outdated/phase-17-to-24/DREAMVILLE_RELEASE_STABILIZATION_PHASE22_HISTORICAL.md',
+	'docs/outdated/phase-17-to-24/DREAMVILLE_INTEGRATION_MATRIX_PHASE17_HISTORICAL.md',
 	'server/domain/currentSituation.ts',
 	'server/domain/playerIntentInterpreter.ts',
 	'server/domain/narrativeResearchPipeline.ts',
@@ -44,7 +44,7 @@ const requiredFiles = [
 	'tests/phase22-release-stabilization.test.ts',
 	'tests/system-wide-phase-audit.phase24.test.ts',
 	'tests/story-beat-director.test.ts',
-	'docs/DREAMVILLE_SYSTEM_WIDE_PHASE_AUDIT_PHASE24.md',
+	'docs/outdated/phase-17-to-24/DREAMVILLE_SYSTEM_WIDE_PHASE_AUDIT_PHASE24_HISTORICAL.md',
 ];
 
 for (const file of requiredFiles) {
@@ -74,12 +74,12 @@ requireText(
 	'Phase 18 harness must contain the full narrative dependency chain',
 );
 requireText(
-	'docs/DREAMVILLE_INTEGRATION_MATRIX_PHASE17.md',
+	'docs/outdated/phase-17-to-24/DREAMVILLE_INTEGRATION_MATRIX_PHASE17_HISTORICAL.md',
 	/PLAYER INPUT.*PlayerIntent.*CurrentSituation.*NarrativeResearch.*NarrativePlan/s,
 	'Phase 17 matrix must contain the canonical chain',
 );
 requireText(
-	'docs/DREAMVILLE_INTEGRATION_MATRIX_PHASE17.md',
+	'docs/outdated/phase-17-to-24/DREAMVILLE_INTEGRATION_MATRIX_PHASE17_HISTORICAL.md',
 	/CurrentSituation \+ latest committed ActionLog.*VisualSceneContext.*MediaAdapterService/s,
 	'Phase 17 matrix must contain the visual chain',
 );

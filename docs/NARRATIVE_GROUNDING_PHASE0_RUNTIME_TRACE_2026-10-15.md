@@ -117,7 +117,7 @@ A live review regression exposed a second, narrower producer-consumer defect in 
 
 Draft [PR #71](https://github.com/HeWhoArose/Dreamville-External/pull/71), latest observed branch head `94abd5d0760dd4f353c1827dd54bb4e2f5024e6f`, now preserves a deep copy of `sceneObjects` when constructing story geography and adds an assertion that the private viewing box survives WorldTemplate → StoryRun geography projection. The repaired prose also includes explicit movement and observation verbs required by the current intent review contract.
 
-**Status at this audit:** source change committed to the draft branch; CI for that latest head was still running. The immediately preceding head failed the target test with the unsupported claim `box`, which is the direct evidence that led to this root-cause fix. Do not record PASS until the latest targeted/full workflow confirms the assertion and reviewed rewrite.
+**Latest observed status (head `3443ae9dc97b871de228dc0ca4e7340cccd2fef9`):** TypeScript type-check and release contracts passed; `npm test` failed with nine assertions, but `Story Experience Slice 4 — live narration turn gate blocks environment-only prose` was not among the failures. The latest log still shows unrelated model routing, scene-anchor/provider-failure, movement-intent, and Phase 18 harness failures. This means the target test passed in that workflow, not that PR #71 or the full release gate passed. Production build was skipped after test failure. Keep the PR draft until the remaining baseline defects are resolved and all required gates pass.
 
 This field is separate from the authored `population` profile that draft PR #72 preserves at the same projection boundary. When reconciling either change, preserve **both** fields; neither patch may overwrite the other's contract.
 
@@ -147,4 +147,19 @@ PR #73's initial head `41cd7ef683dea71279fbb016bf35b42038ebddcb` passed the spec
 - `tests/ch26_model_routing_slice1g.test.ts` said both configured models were unusable but left Gemini 2.5 Flash in its actual seeded `Healthy` state. The test now marks both configured entries `Unavailable` explicitly before asserting emergency-floor selection; that makes the safety test independent of future default seed health.
 - `tests/modelRoutingIntegration.test.ts` expected Gemini 2.5 Flash `Throttled`, while `seedDefaultModels()` currently sets `Healthy`, `quota: Healthy`, and `accessStatus: accessible`. The test was aligned with that code-backed seed contract, rather than changing the production model health to satisfy an obsolete assertion.
 
-The updated PR #73 head is `46c87b5f90ce6900e3ff015113008973e13f8952`; its CI was queued/in progress when this note was authored. These changes update test fixtures/assertions; they do not claim to resolve the separate scene-anchor, movement-continuity, or turn-harness defects.
+The updated PR #73 head is `46c87b5f90ce6900e3ff015113008973e13f8952`. CI completed with seven failed assertions; the configured route-order assertion and two corrected health/route test assertions passed. Remaining failures were the live narration gate (expected on its main-based branch without PR #71), scene-anchor/provider-failure cases, movement continuity, and Phase 18 harness. Production build did not run after tests failed.
+
+
+## 9. Movement destination continuity audit (2026-10-16)
+
+Draft [PR #74](https://github.com/HeWhoArose/Dreamville-External/pull/74), branch `fix/movement-destination-continuity`, head `6b9b921d80b82845ebd924ce113599260c13bb6c`, addresses three failures observed in the main-based release run:
+
+1. `PlayerIntentInterpreter.explicitLocation()` only returns a location target when its name matches the current location or the immediate connected-location list. An explicitly named destination outside that list was dropped from the intent, so later narration review could not insist that the intended destination remain visible.
+2. A one-word `Continue` following unfinished movement was recognized as `action: continue_travel`, but the subsequent generic movement branch overwrote its goal with `change_position_or_approach_target` instead of `continue_travel_toward_destination`.
+3. `TurnIntegrationHarness.buildDeterministicNarration()` narrated all movement as moving closer to a generic source. `SemanticNarrativeReview` correctly rejected this when the established target was `The Lantern Vault`.
+
+### Scope and safety boundary
+
+PR #74 retains a name-only explicit destination when a player names a place with `toward(s)` or `into` but it is not found in current situation links. It does not invent a location ID, create a location, commit a movement, or claim arrival. Canonical world resolution must still verify the destination and reachability. It also gives continuation its own goal and makes the deterministic harness mention the intended destination while explicitly not claiming arrival.
+
+**Status at this audit:** GitHub workflows had passed release-contract and type-check steps but the test stage was still in progress when the PR was opened. Final targeted and full test status is pending; do not call this change verified until completed logs confirm the movement tests and release gate.

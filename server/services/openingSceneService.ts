@@ -738,13 +738,21 @@ export class OpeningSceneService {
 		const { character, location, time } = facts;
 		const narrativeMode = facts.world.narrativeProfile?.mode || 'PROTAGONIST';
 		const sceneAnchor = location.ambientSensory || location.description;
+		const visiblePeople = (location.visibleEntities || []).filter((entity) =>
+			entity.visibleToPlayer && entity.presence === 'present' && entity.isAlive && entity.locationId === location.id
+		).slice(0, 4);
+		const visiblePeopleText = visiblePeople.length
+			? visiblePeople.map((entity) =>
+				`${entity.name}${entity.role ? ' (' + entity.role + ')' : ''}${entity.currentActivity ? ' is ' + entity.currentActivity : ' is present nearby'}.`
+			).join(' ')
+			: 'No visible occupants are currently established in the canonical scene projection; this alone does not mean the location is abandoned.';
 		const p1 = `${time.formattedHeader}. ${character.name} stands within ${location.name}. ${sceneAnchor}`;
 		const characterContext = [
 			character.background,
 			character.role ? 'Role: ' + character.role : '',
 			character.capabilities?.slice(0, 3).join(', '),
 		].filter(Boolean).join(' ');
-		const p2 = `${character.startingSituation || 'The immediate situation is unsettled.'} ${characterContext ? characterContext + ' ' : ''}Nearby people and activity matter as much as the architecture; the scene is already in motion, and your next action can affect how it unfolds.`;
+		const p2 = `${character.startingSituation || 'The immediate situation is unsettled.'} ${characterContext ? characterContext + ' ' : ''}${visiblePeopleText}`;
 		const authoredGoal = typeof agenda?.goal === 'string' && agenda.goal.trim() ? agenda.goal.trim() : '';
 		const p3 = narrativeMode === 'SIDE_CHARACTER'
 			? authoredGoal
@@ -760,7 +768,7 @@ export class OpeningSceneService {
 			narrativeText: `${p1}\n\n${p2}\n\n${p3}`,
 			structuredEvents: [
 				{ id: `evt_open_${storyId}_0`, type: 'location', text: `${location.name} — ${location.region}`, timestamp: time.formattedHeader },
-				{ id: `evt_open_${storyId}_1`, type: 'normal', text: location.ambientSensory || `The surroundings of ${location.name} are quiet.`, timestamp: time.formattedHeader },
+				{ id: `evt_open_${storyId}_1`, type: 'normal', text: visiblePeople.length ? visiblePeopleText : (location.ambientSensory || `No visible occupants are established at ${location.name}.`), timestamp: time.formattedHeader },
 				{ id: `evt_open_${storyId}_2`, type: 'action', text: 'The scene is responsive to the protagonist’s presence.', timestamp: time.formattedHeader },
 				{
 					id: `evt_open_${storyId}_3`,

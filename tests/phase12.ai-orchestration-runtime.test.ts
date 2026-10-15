@@ -15,7 +15,22 @@ import { evaluateAiTaskCandidatePreflight } from '../server/domain/aiTaskContrac
 import type { KnowledgeFact } from '../server/domain/types';
 
 function createTestOrchestrator(repository?: InMemoryWorldRepository): MultiModelOrchestrator {
-	const orchestrator = new MultiModelOrchestrator(repository);
+	// These orchestration contract tests must exercise the seeded defaults and the
+	// explicit route configured by each test, not the developer's persisted model
+	// pins, category overrides, or manual overrides from orchestrator_config.json.
+	const previousNodeEnv = process.env.NODE_ENV;
+	const previousTestPersistence = process.env.DREAMVILLE_TEST_LOAD_PERSISTED_CONFIG;
+	process.env.NODE_ENV = 'test';
+	delete process.env.DREAMVILLE_TEST_LOAD_PERSISTED_CONFIG;
+	let orchestrator: MultiModelOrchestrator;
+	try {
+		orchestrator = new MultiModelOrchestrator(repository);
+	} finally {
+		if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+		else process.env.NODE_ENV = previousNodeEnv;
+		if (previousTestPersistence === undefined) delete process.env.DREAMVILLE_TEST_LOAD_PERSISTED_CONFIG;
+		else process.env.DREAMVILLE_TEST_LOAD_PERSISTED_CONFIG = previousTestPersistence;
+	}
 	(orchestrator as any).savePersistedConfig = () => {};
 	return orchestrator;
 }

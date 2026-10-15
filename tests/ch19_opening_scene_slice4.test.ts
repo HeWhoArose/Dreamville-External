@@ -35,7 +35,21 @@ function model(
  * global orchestrator's persisted fallback-chain config stays untouched by this test. */
 function buildIsolatedTurnGateRig(): { repository: InMemoryWorldRepository; orchestrator: MultiModelOrchestrator } {
   const repository = new InMemoryWorldRepository({ disablePersistence: true });
-  const orchestrator = new MultiModelOrchestrator(repository);
+  // Do not let a developer's persisted model pins/overrides silently replace the
+  // mocked primary/reviewer route used by this integration test.
+  const previousNodeEnv = process.env.NODE_ENV;
+  const previousTestPersistence = process.env.DREAMVILLE_TEST_LOAD_PERSISTED_CONFIG;
+  process.env.NODE_ENV = 'test';
+  delete process.env.DREAMVILLE_TEST_LOAD_PERSISTED_CONFIG;
+  let orchestrator: MultiModelOrchestrator;
+  try {
+    orchestrator = new MultiModelOrchestrator(repository);
+  } finally {
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnv;
+    if (previousTestPersistence === undefined) delete process.env.DREAMVILLE_TEST_LOAD_PERSISTED_CONFIG;
+    else process.env.DREAMVILLE_TEST_LOAD_PERSISTED_CONFIG = previousTestPersistence;
+  }
   (orchestrator as any).savePersistedConfig = () => {};
   return { repository, orchestrator };
 }
@@ -716,6 +730,7 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
   orchestrator.registerAdapter(reviewer);
   orchestrator.registerModel(model('ch19_turn_gate_primary', 'turn-gate-model', ['narrative.generate']));
   orchestrator.registerModel(model('ch19_turn_gate_reviewer', 'turn-gate-reviewer', ['narrative.review']));
+  orchestrator.pinModelForTask('narrative.generate', null);
   orchestrator.setFallbackChain('narrative.generate', ['ch19_turn_gate_primary::turn-gate-model', 'provider_deterministic_emergency::emergency-fallback-local']);
   orchestrator.setFallbackChain('narrative.review', ['ch19_turn_gate_reviewer::turn-gate-reviewer', 'provider_deterministic_emergency::emergency-fallback-local']);
 

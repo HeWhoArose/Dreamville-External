@@ -500,7 +500,7 @@ export class WorkingContextEngine {
       worldTemplate?.setting ? `Setting: ${worldTemplate.setting}` : '',
       worldTemplate?.era || worldTemplate?.defaultEra ? `Era: ${worldTemplate?.era || worldTemplate?.defaultEra}` : '',
       authorizedWorldFacts.length ? `Authorized world facts: ${authorizedWorldFacts.join(' | ')}` : '',
-    ].filter(Boolean).join('\\n');
+    ].filter(Boolean).join('\n');
 
     const startingSituation = run?.startingSituation
       ? [
@@ -1338,10 +1338,10 @@ export class WorkingContextEngine {
     const visiblePopulationText = openingVisibleEntities.length
       ? openingVisibleEntities.map((entity) =>
           `- ${entity.name}${entity.role ? ` (role: ${entity.role})` : ''}${entity.currentActivity ? `: ${entity.currentActivity}` : ''}`
-        ).join('\\n')
+        ).join('\n')
       : 'No visible occupants are established by the current canonical entity projection.';
     const visibleActivityText = openingVisibleEvents.length
-      ? openingVisibleEvents.map((event) => `- ${event.summary}`).join('\\n')
+      ? openingVisibleEvents.map((event) => `- ${event.summary}`).join('\n')
       : 'No additional visible activity event is established for the opening location.';
 
     // 2. Canonical protagonist details
@@ -1449,7 +1449,7 @@ export class WorkingContextEngine {
           'VISIBLE CANONICAL ACTIVITY EVENTS:',
           visibleActivityText,
           'Presence rule: UNKNOWN occupancy does not mean abandoned or empty. Use the listed visible entities and events; do not claim no one exists unless the canonical state supports that.',
-        ].join('\\n'),
+        ].join('\n'),
         estimatedTokens: WorkingContextEngine.estimateTokens(
           visiblePopulationText + visibleActivityText + String(openingPopulation.explanation || ''),
         ),

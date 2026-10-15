@@ -18,7 +18,7 @@ describe('Phase 21 — release gate', () => {
 	});
 
 	it('defines the manual release scenarios and honest environment status', async () => {
-		const doc = await fs.readFile(new URL('../docs/DREAMVILLE_RELEASE_GATE_PHASE21.md', import.meta.url), 'utf8');
+		const doc = await fs.readFile(new URL('../docs/outdated/phase-17-to-24/DREAMVILLE_RELEASE_GATE_PHASE21_HISTORICAL.md', import.meta.url), 'utf8');
 		for (const phrase of [
 			'I move closer to hear the rumors.',
 			'primary model unavailable with fallback',

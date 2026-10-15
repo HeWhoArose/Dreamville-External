@@ -4,7 +4,7 @@ import { promises as fs } from 'node:fs';
 
 describe('Phase 20 — orphan and connection audit', () => {
 	it('contains a source-level audit of the release-critical producer/consumer chain', async () => {
-		const audit = await fs.readFile(new URL('../docs/DREAMVILLE_ORPHAN_CONNECTION_AUDIT_PHASE20.md', import.meta.url), 'utf8');
+		const audit = await fs.readFile(new URL('../docs/outdated/phase-17-to-24/DREAMVILLE_ORPHAN_CONNECTION_AUDIT_PHASE20_HISTORICAL.md', import.meta.url), 'utf8');
 		for (const phrase of [
 			'No known Phase 11–16 orphaned subsystem',
 			'CurrentSituationBuilder → VisualSceneContext → buildComicScenePromptFromVisualContext',
@@ -22,7 +22,7 @@ describe('Phase 20 — orphan and connection audit', () => {
 	});
 
 	it('keeps the release audit honest about the remaining runtime gate', async () => {
-		const audit = await fs.readFile(new URL('../docs/DREAMVILLE_ORPHAN_CONNECTION_AUDIT_PHASE20.md', import.meta.url), 'utf8');
+		const audit = await fs.readFile(new URL('../docs/outdated/phase-17-to-24/DREAMVILLE_ORPHAN_CONNECTION_AUDIT_PHASE20_HISTORICAL.md', import.meta.url), 'utf8');
 		assert.match(audit, /npm run lint.*npm test.*npm run build/s);
 		assert.match(audit, /GitHub CI has now executed.*full test gate remains red/s);
 	});

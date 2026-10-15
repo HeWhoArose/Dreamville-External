@@ -117,6 +117,7 @@ test('Story library persistence and canonical-source audit completes ten determi
 		assert.equal(app.includes("apiClient.setActiveStoryId(activeStoryId);"), true, `Audit ${iteration}: API active-story authority is not synchronized`);
 		assert.equal(app.includes("initializeApp(activeStoryId);"), true, `Audit ${iteration}: remount falls back to an implicit dummy story`);
 		assert.equal(app.includes("const runs = await apiClient.getStoryRuns();"), true, `Audit ${iteration}: main library is not using canonical Story Runs`);
+		assert.equal(app.includes("bootPhase === 'ready' && currentRoute === 'story-library'"), true, `Audit ${iteration}: returning from gameplay does not refresh the canonical Story Library`);
 
 		assert.equal(library.includes("const list = await apiClient.getStoryRuns();"), true, `Audit ${iteration}: legacy adaptation-only library source remains`);
 		assert.equal(library.includes("apiClient.listAdaptedStories()"), false, `Audit ${iteration}: decoy adapted-story endpoint remains connected to Story Library`);

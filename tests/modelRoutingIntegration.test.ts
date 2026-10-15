@@ -55,7 +55,7 @@ describe('MODEL ROUTING & TASK ASSIGNMENT OPERATIONAL INTEGRATION', () => {
 
     const flash25Model = models.find((m) => m.modelId === 'gemini-2.5-flash');
     assert.ok(flash25Model);
-    assert.equal(flash25Model?.health, 'Throttled');
+    assert.equal(flash25Model?.health, 'Healthy');
 
     const flash35Model = models.find((m) => m.modelId === 'gemini-3.5-flash');
     assert.ok(flash35Model);

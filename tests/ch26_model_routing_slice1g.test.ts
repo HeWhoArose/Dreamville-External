@@ -52,7 +52,7 @@ describe('Model Routing Slice 1G - Fallback Chain Management & Real Model Connec
     orchestrator.pinModelForTask('narrative.generate', null);
     const customChain = [
       'google_gemini::gemini-3.6-flash',
-      'google_gemini::gemini-2.5-flash',
+      'google_gemini::gemini-2.5-pro',
     ];
     orchestrator.setFallbackChain('narrative.generate', customChain);
 

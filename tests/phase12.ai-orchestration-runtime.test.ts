@@ -948,7 +948,7 @@ test('Phase 12: canonical scene anchor is preserved in narration context', async
 	const orchestrator = createTestOrchestrator(repository);
 	const observer = new DeterministicMockAdapter('phase12_scene_anchor_provider');
 	observer.cannedResponses.set('narrative.generate', JSON.stringify({
-		narrative: [`The scene remains centered on ${location!.name}, with the immediate surroundings responding to your movement.`],
+		narrative: [`The scene remains centered on ${location!.name} as you continue toward the passage, with the immediate surroundings responding to your movement.`],
 		dialogue: [],
 		events: [],
 		stateChanges: [],
@@ -957,6 +957,7 @@ test('Phase 12: canonical scene anchor is preserved in narration context', async
 	}));
 	orchestrator.registerAdapter(observer);
 	orchestrator.registerModel(model('phase12_scene_anchor_provider', 'scene-anchor-model', ['narrative.generate']));
+	orchestrator.pinModelForTask('narrative.generate', null);
 	orchestrator.setFallbackChain('narrative.generate', [
 		'phase12_scene_anchor_provider::scene-anchor-model',
 		'provider_deterministic_emergency::emergency-fallback-local',
@@ -997,7 +998,7 @@ test('Phase 12: narration scene drift is rejected and falls through to the next 
 
 	const recovery = new DeterministicMockAdapter('phase12_scene_recovery_provider');
 	recovery.cannedResponses.set('narrative.generate', JSON.stringify({
-		narrative: [`The surroundings remain rooted in ${location!.name} as the passage draws your attention deeper into the same place.`],
+		narrative: [`You continue toward the passage within ${location!.name}, keeping the opening in view while the surrounding stonework and light remain unchanged.`],
 		dialogue: [],
 		events: [],
 		stateChanges: [],
@@ -1009,6 +1010,7 @@ test('Phase 12: narration scene drift is rejected and falls through to the next 
 	orchestrator.registerAdapter(recovery);
 	orchestrator.registerModel(model('phase12_scene_drift_provider', 'drift-model', ['narrative.generate']));
 	orchestrator.registerModel(model('phase12_scene_recovery_provider', 'recovery-model', ['narrative.generate']));
+	orchestrator.pinModelForTask('narrative.generate', null);
 	orchestrator.setFallbackChain('narrative.generate', [
 		'phase12_scene_drift_provider::drift-model',
 		'phase12_scene_recovery_provider::recovery-model',
@@ -1170,6 +1172,7 @@ test('Phase 12: production narration surfaces provider failure instead of emerge
 	repository.seedStory(storyId);
 
 	const orchestrator = createTestOrchestrator(repository);
+	orchestrator.pinModelForTask('narrative.generate', null);
 	orchestrator.setFallbackChain('narrative.generate', [
 		'provider_deterministic_emergency::emergency-fallback-local',
 	]);

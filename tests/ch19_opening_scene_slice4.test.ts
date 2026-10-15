@@ -648,6 +648,16 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
           description: 'A vast sand-and-iron fighting pit ringed by tiered stone benches under a punishing sun.',
           coordinates: { x: 10, y: 10 },
           ambientSensory: 'Sun hammering the sand, iron rails hot to the touch, the murmur of spectators above.',
+          sceneObjects: [
+            {
+              id: 'arena_private_viewing_box',
+              name: 'private viewing box',
+              kind: 'STRUCTURE',
+              description: 'An elevated private viewing box above the tiered benches, visible from the arena floor.',
+              visible: true,
+              interactable: false,
+            },
+          ],
         },
       ],
       connections: [],
@@ -696,10 +706,10 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
   // A substance-first rewrite the same model could return on the review call:
   const improvedTurn = JSON.stringify({
     narrative: [
-      'You circle the sand of The Obsidian Arena while keeping the private viewing box in sight.',
-      'Changing your position across the sand gives you a clearer angle on the private viewing box, but it does not establish what the target intends.',
-      'The caste enforcers remain between you and the target, as established in the scene; their position gives you something concrete to assess without deciding what you will do next.',
-      'The murmur of spectators remains audible above while you continue watching. You have a clearer view of the private viewing box, but neither the target’s intentions nor an opening has been confirmed.'
+      'You circle the sand of The Obsidian Arena, keeping the elevated private viewing box in view from the arena floor.',
+      'Changing your position gives you a different angle on the structure, but the view reveals no further detail beyond the box itself.',
+      'You continue watching instead of committing to an approach; no additional movement or response is established by what you can see.',
+      'The murmur of spectators remains audible above. The private viewing box stays in sight, but your observation has not revealed a clear opening or any new information.'
     ],
     dialogue: [],
     events: [],

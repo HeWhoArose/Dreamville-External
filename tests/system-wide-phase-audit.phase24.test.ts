@@ -100,7 +100,7 @@ test('Phase 24 — verification/release contracts include the complete executabl
 	for (const script of ['verify:contracts', 'lint', 'test', 'build']) {
 		assert.equal(typeof pkg.scripts?.[script], 'string', 'Missing required npm script: ' + script);
 	}
-	mustContain('scripts/verify-release-contract.mjs', /DREAMVILLE_INTEGRATION_MATRIX_PHASE17\.md/, 'Release contract does not require Phase 17 integration matrix.');
+	mustContain('scripts/verify-release-contract.mjs', /DREAMVILLE_INTEGRATION_MATRIX_PHASE17_HISTORICAL\\.md/, 'Release contract does not require Phase 17 integration matrix.');
 	mustContain('scripts/verify-release-contract.mjs', /phase22-release-stabilization\.test\.ts/, 'Release contract does not require Phase 22 stabilization test.');
 	mustContain('scripts/verify-release-contract.mjs', /system-wide-phase-audit\.phase24\.test\.ts/, 'Release contract does not require the Phase 24 system-wide audit test.');
 });

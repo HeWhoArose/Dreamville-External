@@ -165,3 +165,111 @@ This is intentional. We must never fake a “live model pass” with a mock and 
 - full regression suite green after each correction cycle;
 - final live-model report committed to `docs/`.
 
+
+
+---
+
+## Expanded coverage — Narrative Grounding & Player-Intent Plan
+
+This file remains the **Phase 1 live-model gate**. It is not replaced by the broader cross-cutting plan:
+[`NARRATIVE_GROUNDING_AND_PLAYER_INTENT_IMPLEMENTATION_PLAN.md`](./NARRATIVE_GROUNDING_AND_PLAYER_INTENT_IMPLEMENTATION_PLAN.md).
+
+Keep scenarios A–E above. Add the following scenarios to the Phase 1 execution matrix. These are **required cases, not claimed results**; each remains unverified until the actual configured model is run through the live player-turn route.
+
+### F — Direct opportunity inquiry
+
+Player action:
+
+`I check the guild board for available work.`
+
+Test fixtures must include both:
+- a case where a canonical, player-visible notice exists;
+- a case where the available-opportunity source is empty or incomplete.
+
+Expected:
+- a real notice is accurately summarized when present;
+- no invented notice is described as an existing fact;
+- missing/incomplete data is described as unknown or “none found in the sources checked,” not proof that the world has no work.
+
+### G — Elliptical follow-up
+
+Turn 1: `I ask what work is available in this guild.`
+
+Turn 2: `I check further for what I can do.`
+
+Expected:
+- turn 2 retains the active work/opportunity information goal;
+- it checks additional relevant sources or explains the search boundary;
+- it does not revert to generic environmental description;
+- it does not create a quest or posting merely to provide a satisfying answer.
+
+### H — Quiet but populated location
+
+Fixture: a location has canonical population/activity evidence, but no NPC is in the immediate visible-entity projection.
+
+Expected:
+- the narrator does not label the whole location deserted solely because no NPC is currently visible;
+- population, visibility, and uncertainty remain distinct;
+- no specific NPC is invented as a confirmed person unless the encounter/world authority provides one.
+
+### I — Canonically deserted or restricted location
+
+Fixture: the location is explicitly deserted or restricted by authoritative world state.
+
+Expected:
+- narration preserves that fact;
+- no crowd, merchant, guard, or quest board is introduced without a valid canonical event or authorized world-state change.
+
+### J — NPC-initiated activity
+
+Fixture: the authoritative encounter/activity mechanism returns an eligible NPC approach, such as a merchant advertising goods or guild staff offering a visible contract.
+
+Expected:
+- the encounter is surfaced naturally;
+- the NPC can initiate contact;
+- the player is not forced to accept, follow, buy, speak, or begin a quest;
+- the event is not duplicated or inconsistent with location/time state.
+
+### K — Rejected primary candidate and rejected repair
+
+Inject a primary candidate that omits the direct answer or invents an unsupported object/event. Then inject a repair that also fails review.
+
+Expected:
+- neither rejected candidate is shown;
+- the fallback is evidence-bound and preserves the original player goal;
+- the exact final candidate passes final validation;
+- no canonical state mutation occurs during review or repair.
+
+### L — Provider outage / malformed output
+
+Exercise unavailable provider, malformed output, and exhausted fallback chain using the live action route or its established integration harness.
+
+Expected:
+- a bounded deterministic response is returned;
+- the response does not fabricate objects, notices, NPCs, reactions, or hidden knowledge;
+- state remains valid and unchanged except for canonical effects that were independently resolved before narration;
+- fallback provenance and failure reason are recorded.
+
+## Additional required measurements
+
+In addition to the measurements above, capture for F–L:
+- exact player input and preceding objective-setting turns;
+- interpreted intent, information goal, and continuation source;
+- evidence source IDs and visibility authorization;
+- population/opportunity data status (present, empty after query, incomplete, or not queried);
+- all primary/repair/fallback candidate texts and review decisions;
+- final visible response and canonical state diff;
+- number of model calls and total latency.
+
+## Revised exit criteria
+
+Phase 1 may be marked **PASS** only when:
+- original scenarios A–E and expanded scenarios F–L have been executed;
+- deterministic integration cases and live-model behavioural cases are reported separately;
+- every returned candidate, including fallback, passes final intent/grounding checks;
+- no unsupported fact, hidden-knowledge leak, agency takeover, or canonical mutation from narration is observed;
+- information-seeking actions answer from evidence or state the evidence limitation honestly;
+- all failures have reproducible regression tests and the full available regression gate is green;
+- provider credentials are available for the real-model runs and the outputs are recorded.
+
+If provider credentials are unavailable, report **DETERMINISTIC INTEGRATION PASS / LIVE MODEL BLOCKED** as appropriate. Do not report Phase 1 as fully passed.

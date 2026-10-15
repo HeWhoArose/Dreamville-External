@@ -225,9 +225,13 @@ export class SemanticNarrativeReview {
 			}
 		}
 
-		if (intent.movementIntent && !containsAny(lower, /\b(?:move|moves|moved|approach|approaches|approached|step|steps|stepped|walk|walks|walked|head|heads|headed|travel|travels|traveled|enter|enters|entered|leave|leaves|left|closer|toward|towards|nearer)\b/i)) {
+		if (intent.movementIntent && !containsAny(lower, /\b(?:move|moves|moved|approach|approaches|approached|step|steps|stepped|walk|walks|walked|head|heads|headed|travel|travels|traveled|enter|enters|entered|leave|leaves|left|closer|toward|towards|nearer|proceed|continued|continue|journey|way toward|way towards)\b/i)) {
 			missingRequirements.push('The immediate physical movement/position change should be represented.');
 			violations.push({ code: 'MISSING_MOVEMENT', message: 'The player requested movement, but the narration does not depict a corresponding movement or position change.', severity: 'MEDIUM' });
+		}
+		if (intent.movementIntent && intent.locationTarget?.name && !lower.includes(normalize(intent.locationTarget.name))) {
+			missingRequirements.push('Keep the intended destination visible in the movement narration without claiming arrival unless canonical spatial state confirms it.');
+			violations.push({ code: 'MISSING_MOVEMENT', message: 'The narration omits the player’s established movement destination: ' + intent.locationTarget.name + '.', severity: 'MEDIUM' });
 		}
 
 		if (intent.observationIntent && !containsAny(lower, /\b(?:hear|hears|heard|listen|listens|listened|overhear|overheard|notice|notices|noticed|observe|observes|observed|watch|watches|watched|see|sees|saw|look|looks|looked|spot|spots|inspect|inspects|examines|examined|sense|senses|detected|detects|attend|attended|attention|attentive|focus|focused|conversation|whisper|whispers|whispered|sound|sounds|voice|voices|rumou?r|hearsay)\b/i)) {

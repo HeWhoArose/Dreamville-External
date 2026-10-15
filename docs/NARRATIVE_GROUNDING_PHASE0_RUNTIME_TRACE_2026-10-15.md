@@ -41,7 +41,11 @@ Worse, when this rewrite is parsed but `postReview.accepted === false`, code add
 
 Relevant immutable-baseline lines: [authority-level final review and fail-open branches](https://github.com/HeWhoArose/Dreamville-External/blob/090b7d7b8c8b9c6ef47a0f643af3b15a303e1179/server/mockEngine/serverMockAuthority.ts#L1382-L1462).
 
-**Required fix (separate runtime PR, not this docs PR):**
+**Runtime fix is isolated in draft [PR #71](https://github.com/HeWhoArose/Dreamville-External/pull/71); this documentation report and PR #69 remain docs-only.**
+
+The current PR #71 implementation adds a shared final candidate validator and changes the authority repair path to withhold rejected text. Its CI is still running at the time of this note; do not mark the fix verified until the new regression and full workflow results are inspected.
+
+**Required fix:**
 
 - Re-run the orchestrator’s full shared presentation + semantic + story-beat validation on the authority-rewrite candidate, using the already-built current situation, player intent, narrative plan and StoryBeat contract.
 - Keep the rewritten candidate only when both the full candidate validation and the live action/consequence gate accept it.

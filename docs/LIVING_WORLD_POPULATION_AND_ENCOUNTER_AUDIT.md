@@ -53,3 +53,16 @@ The following must be traced/verified before this work is considered complete:
 ## Status
 
 This pass establishes the occupancy data contract and passes it through the scene and opening-review projections. It does **not** by itself prove encounter generation is connected end-to-end. Do not mark the overall living-world requirement VERIFIED until the required wiring is inspected and integration tests plus the real Start Run/multi-turn flow pass.
+
+## Source trace correction and integration hand-off (2026-10-15)
+
+Repository source tracing has confirmed the existing population owner: `server/domain/worldActivityDirector.ts`.
+
+- `WorldActivityDirector.ensureAmbientPopulation` is the deterministic, idempotent producer of eligible canonical ambient NPC `EntityCard`s. It respects `ABANDONED`, `RESTRICTED`, and `expectedPopulation=NONE`; `UNKNOWN` non-public ruins do not imply people, while eligible public-place names such as citadels can use the existing public-place policy.
+- `WorldActivityDirector.buildAmbientEvents` projects local recorded activity into ambient/social/potential-encounter events, including occasional NPC-initiated interaction opportunities. These projected cues must not be conflated with a committed combat encounter, a durable job posting, or actual dialogue unless the subsequent caller/service performs that handoff.
+- The ordinary `ServerMockAuthority` freeform path invokes population seeding before `CurrentSituationBuilder.build`; `CurrentSituationBuilder` then projects visible entities/events and occupancy into live narration context. Existing `tests/world-activity-director.test.ts` is the owner test suite for deterministic seeding, restrictions, event filtering, idempotence, schedule refresh, and persistence.
+- A distinct gap exists at fresh StoryRun startup. `POST /story-runs` calls `OpeningSceneService.generateOpeningScene` before the normal freeform path, and the old opening context/review omitted canonical visible occupants/activity. Draft [PR #72](https://github.com/HeWhoArose/Dreamville-External/pull/72) proposes to seed the existing producer before opening assembly, share the canonical visibility/occupancy projection with generation and review, and preserve authored population metadata through `WorldTemplate → StoryRun GeographyGraph` conversion. CI is pending and this is not yet VERIFIED.
+
+**Corrected status:** the producer and ordinary-turn wiring exist; opening-path integration and real UI end-to-end behavior remain PARTIAL/UNVERIFIED. Reuse `WorldActivityDirector`; do not create a parallel narrator-side encounter generator. Continue verifying the separate handoff from a `POTENTIAL_ENCOUNTER`/`SOCIAL_OPPORTUNITY` cue to canonical interaction/combat resolution, plus retries, persistence, reload, and real-provider/UI sessions.
+
+Required human check: start a fresh run in Elysium Solar Citadel, inspect the actual opening, then ask what work is available and follow up with “check further”; confirm the opening and later turn both expose grounded local people/activity without declaring unknown occupancy empty, inventing uncommitted postings, forcing player agency, or duplicating NPCs after retry/reload. Repeat with a restricted/abandoned location to confirm no unauthorized population. Record provider/model/output and screenshots/session notes; mocks are not a PASS.

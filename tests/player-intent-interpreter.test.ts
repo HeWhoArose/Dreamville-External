@@ -256,3 +256,48 @@ test('follow-up request to check further remains information-seeking', () => {
 	assert.equal(result.speechIntent, false);
 	assert.equal(result.observationIntent, false);
 });
+
+
+test('movement phrasing preserves the named destination in make-my-way actions', () => {
+	const { currentSituation } = situation();
+	const result = PlayerIntentInterpreter.deterministic('I make my way towards the Archive of Contracts.', currentSituation);
+
+	assert.equal(result.movementIntent, true);
+	assert.equal(result.goal, 'change_position_or_approach_target');
+	assert.equal(result.locationTarget?.name, 'Archive of Contracts');
+});
+
+test('Continue inherits an unfinished travel destination from the immediately previous movement turn', () => {
+	const { currentSituation } = situation();
+	currentSituation.recentTurns.push({
+		turnId: 'previous-travel',
+		playerAction: 'I make my way towards the Archive of Contracts.',
+		narration: 'You begin crossing the concourse toward the Archive of Contracts.',
+		locationId: currentSituation.location.id,
+		stateChanges: [],
+		isOpeningScene: false,
+	});
+	const result = PlayerIntentInterpreter.deterministic('Continue', currentSituation);
+
+	assert.equal(result.movementIntent, true);
+	assert.equal(result.action, 'continue_travel');
+	assert.equal(result.goal, 'continue_travel_toward_destination');
+	assert.equal(result.locationTarget?.name, 'Archive of Contracts');
+	assert.equal(result.locationTarget?.source, 'IMPLIED');
+});
+
+test('Continue does not invent a travel destination when no unfinished movement exists', () => {
+	const { currentSituation } = situation();
+	currentSituation.recentTurns.push({
+		turnId: 'previous-observation',
+		playerAction: 'I look around the concourse.',
+		narration: 'The concourse is busy.',
+		locationId: currentSituation.location.id,
+		stateChanges: [],
+		isOpeningScene: false,
+	});
+	const result = PlayerIntentInterpreter.deterministic('Continue', currentSituation);
+
+	assert.equal(result.movementIntent, false);
+	assert.equal(result.locationTarget, undefined);
+});

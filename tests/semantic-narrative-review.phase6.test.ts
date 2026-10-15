@@ -245,3 +245,26 @@ test('Phase 6 rejects an invented dockside notice board and job postings during 
 	assert.equal(review.decision, 'REJECT');
 	assert.ok(review.violations.some((v) => v.code === 'UNSUPPORTED_CLAIM'));
 });
+
+
+test('Phase 6 requests a rewrite when movement narration drops the established destination', () => {
+	const travelIntent = intent({
+		action: 'move',
+		goal: 'change_position_or_approach_target',
+		interactionMode: 'MOVEMENT',
+		movementIntent: true,
+		observationIntent: false,
+		informationGoal: undefined,
+		locationTarget: { name: 'Archive of Contracts', source: 'IMPLIED' },
+		originalText: 'I make my way towards the Archive of Contracts.',
+	});
+	const review = SemanticNarrativeReview.review({
+		intent: travelIntent,
+		situation: situation(),
+		plan: plan({ objective: 'Continue toward the Archive of Contracts without asserting arrival.' }),
+		turnPackage: pkg('You cross the sunlit concourse as the afternoon light catches the stonework.'),
+	});
+
+	assert.equal(review.decision, 'REWRITE');
+	assert.ok(review.violations.some((v) => v.code === 'MISSING_MOVEMENT' && /Archive of Contracts/.test(v.message)));
+});

@@ -48,7 +48,17 @@ export interface PlayerIntentInterpretation {
 	fallbackReason?: string;
 }
 
-const MOVEMENT_PATTERN = /\b(?:move|walk|step|approach|go|head|travel|enter|leave|return|come|follow|run|sneak|creep|draw closer|draw nearer|move closer|move nearer)\b/i;
+const MOVEMENT_PATTERN = /\b(?:move|walk|step|approach|go|head|travel|enter|leave|return|come|follow|run|sneak|creep|draw closer|draw nearer|move closer|move nearer|make (?:my|our|your) way|proceed|continue toward|continue towards)\b/i;
+const CONTINUE_ACTION_PATTERN = /^(?:continue|continue on|keep going|go on|proceed|carry on|keep moving)[.!\s]*$/i;
+
+function pendingMovementDestination(situation?: CurrentSituation): string | undefined {
+	const previous = situation?.recentTurns.slice(-1)[0];
+	if (!previous?.playerAction || !MOVEMENT_PATTERN.test(previous.playerAction)) return undefined;
+	const action = previous.playerAction;
+	const destination = action.match(/\b(?:toward|towards|to|into)\s+(?:the\s+)?(.+?)(?:[.!?]|$)/i)?.[1];
+	if (destination) return clean(destination).replace(/\s+(?:as|while|and then|and)\s+.*$/i, '').trim();
+	return undefined;
+}
 const COMBAT_PATTERN = /\b(?:attack|strike|hit|shoot|fire|stab|slash|punch|kick|fight|cast at|defend|parry)\b/i;
 const ITEM_USE_PATTERN = /\b(?:use|drink|eat|consume|activate|equip|wear|open|unlock|pick up|take|grasp|hold|decipher|translate)\b/i;
 const DIALOGUE_PATTERN = /\b(?:ask|tell|say|speak|talk|reply|answer|question|inquire|consult|call out|shout|yell)\b/i;
@@ -160,10 +170,12 @@ export class PlayerIntentInterpreter {
 			};
 		}
 
+		const continuationDestination = CONTINUE_ACTION_PATTERN.test(originalText) ? pendingMovementDestination(situation) : undefined;
+		const isTravelContinuation = Boolean(continuationDestination);
 		const availabilityLookup = AVAILABILITY_LOOKUP_PATTERN.test(originalText);
 		const passive = PASSIVE_OBSERVATION_PATTERN.test(originalText) || availabilityLookup;
 		const dialogue = DIALOGUE_PATTERN.test(originalText);
-		const movement = MOVEMENT_PATTERN.test(originalText);
+		const movement = MOVEMENT_PATTERN.test(originalText) || isTravelContinuation;
 		const combat = COMBAT_PATTERN.test(originalText);
 		const opportunityInquiry = OPPORTUNITY_TOPIC_PATTERN.test(originalText) &&
 			/\b(?:ask|asked|asking|inquir(?:e|ed|ing)|enquir(?:e|ed|ing)|look(?:ing)?|search(?:ing)?|check(?:ing)?|find|finding|read|review|inspect|available|offered|request(?:s|ed|ing)?)\b/i.test(originalText);
@@ -185,7 +197,9 @@ export class PlayerIntentInterpreter {
 
 		const explicitTargets = unique(explicitEntities(originalText, situation), (target) => target.id || target.name.toLowerCase());
 		const targetText = extractedTarget(originalText);
-		const explicitLocationTarget = explicitLocation(originalText, situation);
+		const explicitLocationTarget = explicitLocation(originalText, situation) || (continuationDestination
+			? { name: continuationDestination, source: 'IMPLIED' as const }
+			: undefined);
 
 		let goal: string | undefined;
 		let informationGoal: string | undefined;
@@ -205,7 +219,7 @@ export class PlayerIntentInterpreter {
 		else if (passive) goal = 'observe_current_scene';
 
 		return {
-			action: actionLabel(originalText, interactionMode),
+			action: isTravelContinuation ? 'continue_travel' : actionLabel(originalText, interactionMode),
 			goal,
 			target: explicitTargets[0],
 			locationTarget: explicitLocationTarget,

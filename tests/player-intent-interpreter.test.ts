@@ -241,3 +241,18 @@ test('asking around for job requests preserves the opportunity inquiry', () => {
 	assert.match(result.informationGoal || '', /work|jobs|contracts|notices/i);
 	assert.equal(result.speechIntent, true);
 });
+
+
+test('follow-up request to check further remains information-seeking', () => {
+	const { currentSituation } = situation();
+	const result = PlayerIntentInterpreter.deterministic(
+		'I check further for what I can do.',
+		currentSituation,
+	);
+
+	assert.equal(result.goal, 'gather_information');
+	assert.equal(result.interactionMode, 'INFORMATION_SEEKING');
+	assert.match(result.informationGoal || '', /learn what can be discovered/i);
+	assert.equal(result.speechIntent, false);
+	assert.equal(result.observationIntent, false);
+});

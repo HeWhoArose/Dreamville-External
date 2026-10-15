@@ -52,7 +52,7 @@ The following must be traced/verified before this work is considered complete:
 
 ## Status
 
-This pass establishes the occupancy data contract and passes it through the scene and opening-review projections. It does **not** by itself prove encounter generation is connected end-to-end. Do not mark the overall living-world requirement VERIFIED until the required wiring is inspected and integration tests plus the real Start Run/multi-turn flow pass.
+This report's original pass established the occupancy contract but did not fully trace the producer. The 2026-10-15 source-trace correction below identifies `WorldActivityDirector` as the existing canonical population/activity producer and records its normal-turn wiring; do not interpret the older sentence as saying that no producer exists. Fresh opening-scene wiring was missing on the inspected baseline. Draft PR #72 addresses that seam; its two targeted opening-population tests passed at head `9e2255b`, while the full suite remained red on ten baseline failures. Do not mark the overall living-world requirement VERIFIED until latest CI, real Start Run/multi-turn behavior, encounter/social-opportunity handoff, and reload/idempotence checks pass.
 
 ## Source trace correction and integration hand-off (2026-10-15)
 

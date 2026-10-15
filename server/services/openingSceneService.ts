@@ -10,6 +10,7 @@ import type { CurrentSituation } from '../domain/currentSituation';
 import type { EphemeralNarrativePlan } from '../domain/narrativeDirector';
 import type { StructuredTurnPackage } from '../domain/aiOrchestrator';
 import type { SceneCompositionContract } from '../domain/sceneComposition';
+import { WorldActivityDirector } from '../domain/worldActivityDirector';
 
 function parseLooseOpeningResponse(rawText: string): { narrativeText: string; structuredEvents: any[] } | null {
 	const cleaned = String(rawText || '')
@@ -118,6 +119,14 @@ export class OpeningSceneService {
 		const run = worldRepo.getStoryRun(storyId);
 		if (!run) throw new Error(`StoryRun with ID "${storyId}" does not exist in repository.`);
 		if (run.openingScene && !forceRegenerate) return run.openingScene;
+
+		// Seed canonical occupants before the opening projection is assembled. The
+		// same idempotent producer is used by ordinary live turns; a fresh public
+		// citadel/market must not open before its visible population exists.
+		const openingLocationId = run.startingLocationId || run.currentLocationId || worldRepo.getPlayerLifecycle(storyId)?.locationId || '';
+		if (openingLocationId) {
+			WorldActivityDirector.ensureAmbientPopulation(worldRepo, storyId, openingLocationId);
+		}
 
 		const workingContext: AssembledOpeningContext = WorkingContextEngine.assembleOpeningContext({
 			storyId,
@@ -581,13 +590,14 @@ export class OpeningSceneService {
 			sceneObjects: [],
 			sceneEvidence: {
 				objects: [],
-				entities: [],
-				events: [],
+				entities: (facts.location.visibleEntities || []).filter((entity) => entity.visibleToPlayer),
+				events: facts.location.visibleEvents || [],
 				sensory: facts.location.ambientSensory ? [facts.location.ambientSensory] : [],
 				structures: [],
-				occupancy: { status: 'UNKNOWN', accessControlled: false, provenance: 'UNKNOWN' },
+				occupancy: facts.location.population || { status: 'UNKNOWN', accessControlled: false, provenance: 'UNKNOWN' },
 			},
 			nearbyEntities: [
+				...(facts.location.visibleEntities || []).filter((entity) => entity.visibleToPlayer),
 				{
 					id: actorId,
 					name: facts.character.name,
@@ -603,7 +613,7 @@ export class OpeningSceneService {
 					visibleToPlayer: true,
 				},
 			],
-			visibleEvents: [],
+			visibleEvents: facts.location.visibleEvents || [],
 			recentTurns: [],
 			plot: {
 				currentArc: 'OPENING',

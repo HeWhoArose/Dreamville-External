@@ -126,3 +126,25 @@ This field is separate from the authored `population` profile that draft PR #72 
 The existing Phase 12 regression requires `google_gemini::gemini-3.8-flash` ahead of `google_gemini::gemini-2.5-flash` for `narrative.generate`. The seeded `MultiModelOrchestrator.seedDefaultPins()` route and persisted `server/data/orchestrator_config.json` disagreed with that declared policy: Gemini 2.5 was earlier than Gemini 3.8. The same ordering issue existed for `narrative.review`.
 
 Draft [PR #73](https://github.com/HeWhoArose/Dreamville-External/pull/73) aligns those two chains and extends the regression to check persisted configuration as well as the in-memory seeded chain. Its route-order test passed in the observed workflow, but the full suite still failed on separate routing-registry, scene-anchor, movement-continuity, and turn-harness assertions. Keep the PR draft; do not describe the full release gate as green.
+
+
+## 8. CI follow-up — test evidence and fixture correction (2026-10-16)
+
+### PR #69 documentation cleanup gate
+
+The release-contract check and TypeScript type-check passed on the current documented branch head `bed5834b5af0cff6f8c74af7570630fbfffe94b6`. Its release-gate `npm test` step failed with **1491 tests: 1481 passed, 10 failed**. The failures surfaced in live narration repair, model routing/config expectations, canonical scene-anchor/fallback behavior, movement destination continuity, and the Phase 18 integration harness. The workflow log contained no missing-archive-path assertion among the failures. This is not a pass and not proof that every failure predates this branch; classify by comparing the exact failing assertions on `main` before merge.
+
+### PR #71 semantic fixture correction
+
+At head `c296376e0680026acd720c72fe07745be29aa725`, the original “private viewing box” unsupported-claim failure was resolved by carrying `sceneObjects` through story-geography projection, but strict semantic review then rejected “caste enforcers.” The test fixture had described the guard detail only in `startingSituation` and canonical event summaries; those are not substitutes for visible canonical `EntityCard`s.
+
+The newest draft head `3443ae9dc97b871de228dc0ca4e7340cccd2fef9` therefore adds explicit visible entity cards for the high-level target and Caste Enforcers, while retaining the authored private viewing box in the location's `sceneObjects`. The rewritten narration also cites canonical ambient sensory evidence and keeps the observation unresolved. This is the correct boundary: **strict review should reject unsupported actors; canonical scene setup must provide those actors as visible entities.** The latest head's workflows were in progress when this note was authored; keep PR #71 draft until the live target test and all CI runs finish.
+
+### PR #73 routing regression cleanup
+
+PR #73's initial head `41cd7ef683dea71279fbb016bf35b42038ebddcb` passed the specific configured-order regression but the suite remained red. Two additional routing failures were traced to test assumptions inconsistent with the seeded registry:
+
+- `tests/ch26_model_routing_slice1g.test.ts` said both configured models were unusable but left Gemini 2.5 Flash in its actual seeded `Healthy` state. The test now marks both configured entries `Unavailable` explicitly before asserting emergency-floor selection; that makes the safety test independent of future default seed health.
+- `tests/modelRoutingIntegration.test.ts` expected Gemini 2.5 Flash `Throttled`, while `seedDefaultModels()` currently sets `Healthy`, `quota: Healthy`, and `accessStatus: accessible`. The test was aligned with that code-backed seed contract, rather than changing the production model health to satisfy an obsolete assertion.
+
+The updated PR #73 head is `46c87b5f90ce6900e3ff015113008973e13f8952`; its CI was queued/in progress when this note was authored. These changes update test fixtures/assertions; they do not claim to resolve the separate scene-anchor, movement-continuity, or turn-harness defects.

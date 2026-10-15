@@ -737,6 +737,12 @@ export class InMemoryWorldRepository implements WorldRepository {
               ? nodeItem.ambientSensory
               : `Visual: Distinct environment of ${name}. Sounds: Ambient murmurs. Scent: Fresh air. Tactile: Stable terrain.`,
             provenance: (isObj && nodeItem.provenance) || 'authored',
+            // Keep the authored occupancy contract when projecting a WorldTemplate
+            // into a StoryRun geography graph. Ambient-population generation must
+            // respect ABANDONED/RESTRICTED/NONE instead of silently losing that data.
+            population: isObj && nodeItem.population && typeof nodeItem.population === 'object'
+              ? { ...nodeItem.population }
+              : undefined,
           };
           registeredNodes.push(locNode);
           geographyGraph.addNode(locNode as any);

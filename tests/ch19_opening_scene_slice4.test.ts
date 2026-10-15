@@ -763,7 +763,20 @@ test('Story Experience Slice 4 — live narration turn gate blocks environment-o
   assert.ok(result.narrativeQualityAudit, 'Response must carry the narrative quality audit');
   assert.equal(result.narrativeQualityAudit!.rewriteAttempted, true, 'Environment-heavy narration must trigger the bounded rewrite');
   assert.equal(reviewer.callHistory.length, 1, 'Exactly one bounded narrative.review rewrite call must be made');
-  assert.equal(result.narrativeQualityAudit!.rewriteSucceeded, true, 'The substance-first rewrite must be accepted over scenery-dominated prose');
+  assert.equal(
+    result.narrativeQualityAudit!.rewriteSucceeded,
+    true,
+    JSON.stringify({
+      message: 'The substance-first rewrite must be accepted over scenery-dominated prose',
+      rewriteErrorReason: result.narrativeQualityAudit!.rewriteErrorReason,
+      rewriteSkippedReason: result.narrativeQualityAudit!.rewriteSkippedReason,
+      firstDecision: result.narrativeQualityAudit!.firstDecision,
+      firstScore: result.narrativeQualityAudit!.firstScore,
+      finalDecision: result.narrativeQualityAudit!.finalDecision,
+      finalScore: result.narrativeQualityAudit!.finalScore,
+      issues: result.narrativeQualityAudit!.issues,
+    }, null, 2),
+  );
   assert.ok(
     (result.narrativeQualityAudit!.finalScore ?? 0) > (result.narrativeQualityAudit!.firstScore ?? 0),
     'Accepted rewrite must improve the richness score',

@@ -1239,8 +1239,7 @@ test('Phase 12 regression: narrative generation route prefers the configured Gem
 	const configuredRoute: string[] = runtimeConfig.fallbackChains['narrative.generate'];
 	assert.ok(
 		configuredRoute.indexOf('google_gemini::gemini-3.8-flash') < configuredRoute.indexOf('google_gemini::gemini-2.5-flash'),
-		configuredRoute.join(' -> '),
-		'persisted runtime config must preserve the same Gemini 3.8-before-2.5 narrative order',
+		'persisted runtime config must preserve the same Gemini 3.8-before-2.5 narrative order: ' + configuredRoute.join(' -> '),
 	);
 });
 

@@ -1476,6 +1476,7 @@ export class ServerMockAuthority {
               storyBeat: narrativeStoryBeatForFinalReview,
               turnPackage: rewrittenTurnPackage,
               repository: worldRepository,
+              pacingContract: narrativeGeneration?.narrativePacingContract,
             });
             const postReview = this.evaluateLiveNarrativeQuality({
               narrativeText: parsed.narrativeText,

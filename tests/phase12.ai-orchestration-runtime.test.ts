@@ -948,7 +948,11 @@ test('Phase 12: canonical scene anchor is preserved in narration context', async
 	const orchestrator = createTestOrchestrator(repository);
 	const observer = new DeterministicMockAdapter('phase12_scene_anchor_provider');
 	observer.cannedResponses.set('narrative.generate', JSON.stringify({
-		narrative: [`The scene remains centered on ${location!.name}, with the immediate surroundings responding to your movement.`],
+		narrative: [
+			`You move toward the passage, keeping it as your intended direction while the scene remains within ${location!.name}.`,
+			`The current place stays centered on ${location!.name}; no arrival at another location is confirmed.`,
+			'You continue toward the route ahead without assuming what lies beyond the current scene.',
+		],
 		dialogue: [],
 		events: [],
 		stateChanges: [],
@@ -997,7 +1001,11 @@ test('Phase 12: narration scene drift is rejected and falls through to the next 
 
 	const recovery = new DeterministicMockAdapter('phase12_scene_recovery_provider');
 	recovery.cannedResponses.set('narrative.generate', JSON.stringify({
-		narrative: [`The surroundings remain rooted in ${location!.name} as the passage draws your attention deeper into the same place.`],
+		narrative: [
+			`You continue toward the passage while the current scene remains rooted in ${location!.name}.`,
+			'Your movement does not confirm arrival, and the surrounding place stays the same.',
+			'You keep your attention on the intended route without assuming what lies beyond it.',
+		],
 		dialogue: [],
 		events: [],
 		stateChanges: [],
@@ -1186,8 +1194,17 @@ test('Phase 12: production narration surfaces provider failure instead of emerge
 
 		assert.equal(result.success, false, JSON.stringify(result));
 		assert.equal(result.source, undefined);
-		assert.equal(result.modelId, undefined);
+		assert.notEqual(
+			result.modelId,
+			'emergency-fallback-local',
+			'When AI candidates are exhausted, return diagnostics from the last failed AI candidate, never deterministic emergency prose.',
+		);
 		assert.equal(result.turnPackage, undefined);
+		assert.equal(
+			result.attemptsTrail?.some((attempt) => attempt.modelId === 'emergency-fallback-local'),
+			false,
+			'Production narration may report AI failures but must not invoke the deterministic emergency adapter.',
+		);
 		assert.match(result.error || '', /AI candidates were exhausted|provider|narrative/i);
 	} finally {
 		if (previousNodeEnv === undefined) {

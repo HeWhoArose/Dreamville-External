@@ -9,6 +9,7 @@
 **Primary connected documents:**  
 - `docs/STORY_BEAT_DIRECTOR_FINAL_AUDIT.md` — verified implementation evidence; do not reimplement StoryBeatDirector.  
 - `docs/LIVING_WORLD_POPULATION_AND_ENCOUNTER_AUDIT.md` — occupancy contract exists; full encounter wiring is explicitly not yet verified.  
+- `docs/NARRATIVE_GROUNDING_PHASE0_RUNTIME_TRACE_2026-10-15.md` — source trace of the live narration path, a confirmed fail-open repair boundary, and the current living-world encounter seam; runtime fix isolated in [draft PR #71](https://github.com/HeWhoArose/Dreamville-External/pull/71).  
 - `docs/N13_SCENE_COMPOSITION_AUDIT.md` through `docs/N19_CREATIVE_MODEL_TIER_CADENCE_ROUTING_AUDIT.md` — existing narrative layers and contracts.  
 - `docs/AI_ORCHESTRATION_MODEL_INTELLIGENCE_SPEC_V1.md` and `docs/AI_ORCHESTRATION_IMPLEMENTATION_PLAN_V1.md` — model/task routing and fallback ownership.  
 - `docs/STORY_RUNTIME_AND_PLAYER_INTERACTION_SPEC_V1.md` — Story/OOC/Continue and player-facing presentation contract.  

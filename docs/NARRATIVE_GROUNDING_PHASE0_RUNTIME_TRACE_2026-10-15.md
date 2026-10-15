@@ -162,4 +162,25 @@ Draft [PR #74](https://github.com/HeWhoArose/Dreamville-External/pull/74), branc
 
 PR #74 retains a name-only explicit destination when a player names a place with `toward(s)` or `into` but it is not found in current situation links. It does not invent a location ID, create a location, commit a movement, or claim arrival. Canonical world resolution must still verify the destination and reachability. It also gives continuation its own goal and makes the deterministic harness mention the intended destination while explicitly not claiming arrival.
 
-**Status at this audit:** GitHub workflows had passed release-contract and type-check steps but the test stage was still in progress when the PR was opened. Final targeted and full test status is pending; do not call this change verified until completed logs confirm the movement tests and release gate.
+**Latest observed CI status (head 6b9b921d80b82845ebd924ce113599260c13bb6c):** the named-destination intent test, the Continue-preserves-travel-goal test, and the Phase 18 movement/inspection/combat/item-manipulation chain test no longer appear among failures. The release gate reported 1491 tests: 1484 passed, 7 failed; release-contract and type-check steps passed, but the production build was skipped. Remaining failures were the live narration gate, stale routing tests on this main-based branch, and Phase 12 scene-anchor/provider-failure checks. This is evidence that PR #74 fixes the targeted movement regressions in that run—not that the full branch is green. Keep the PR draft.
+
+## 10. Movement CI outcome and cross-PR merge dependencies (2026-10-16)
+
+PR #74 head 6b9b921d80b82845ebd924ce113599260c13bb6c produced a completed release-gate run with 1484 passed / 7 failed of 1491. The three intended movement tests were absent from the failure list:
+
+- movement phrasing preserves the named destination in make-my-way actions — passes on this head;
+- Continue inherits an unfinished travel destination from the immediately previous movement turn — passes on this head;
+- Phase 18 covers movement, inspection, combat, and item manipulation through the same chain — no longer fails in that run.
+
+The remaining seven failures block the release gate. PR #74's main-based branch does not include the PR #71 candidate-review fix or PR #73 routing test corrections, so some known failures remain until branches are integrated. Re-run on a combined integration branch after resolving the projection overlap.
+
+### Safe integration sequence (proposal, not a merge record)
+
+1. Keep PR #69 as the documentation/archive owner; rerun it on the integrated code baseline before merging, because its own full suite is red.
+2. Reconcile PR #71 and #72's WorldRepository projection changes. Final node mapping must preserve both authored sceneObjects and authored population; ensure neither patch overwrites the other.
+3. Integrate PR #73 routing/config correction and explicit-health test fixes. Check configured in-memory and persisted route order together.
+4. Integrate PR #74 destination/goal changes and harness-only destination presentation, ensuring name-only targets receive no synthetic ID or direct canonical mutation.
+5. Run targeted suites, full suite, lint, type-check, production build, and release contracts on one combined branch. Compare exact failures against the same main baseline; do not call every failure preexisting without evidence.
+6. After code CI is green, run provider-backed Phase 1 sessions through the actual player-facing UI and persistence/reload tests. Those human tests remain BLOCKED until actually executed.
+
+No merge is recorded by this audit.

@@ -697,15 +697,15 @@ A separate deep-research investigation is being conducted into commercial and op
 
 ## 11. Immediate next actions
 
-1. Reverify PR #69's documentation archive/index references and capture whether its ten failed tests match `main` exactly. Release-contract/type-check are green; suite is red, so do not merge it on the docs-only premise.
-2. Re-run PR #71 once the independently fixed routing and movement baseline tests are reconciled; its live narration gate is no longer a reported failure, but the overall suite has nine failures.
-3. Verify PR #72's opening seed → canonical `EntityCard` → opening context/review projection → persistence/reload path, including authored RESTRICTED/ABANDONED/expected-NONE safeguards. Do not create a second population/encounter owner.
-4. Verify PR #73's route ordering in both the seeded orchestrator and persisted config; its corrected registry/route tests passed, but scene-anchor/provider-failure and movement/harness failures remain.
-5. Verify PR #74's destination intent preservation, Continue goal, and harness narration tests from its workflow before making the fix part of `main`.
-6. Audit the Phase 12 canonical scene anchor and provider-error/fallback path: trace intended scene identity from CurrentSituation → prompts → every primary/rewrite/fallback candidate → final player-visible result. Do not widen PR #73 beyond its route priority contract.
-7. Audit `OpeningSceneService` candidate/rewrite/fallback acceptance against the shared final candidate validator from PR #71. Reuse shared review with opening-specific pacing (at least three paragraphs); do not copy a parallel validator.
+1. Reverify PR #69's documentation archive/index references and compare its red CI with the exact main baseline; do not merge solely because it looks docs-only.
+2. Re-run PR #71 after the separate routing tests are reconciled; its live narration gate no longer appears in the failed-test list, but the full suite has nine failures.
+3. Verify PR #72's opening seed → canonical EntityCard → opening context/review projection → persistence/reload path, including authored RESTRICTED/ABANDONED/expected-NONE safeguards. Do not create a second population/encounter owner.
+4. Verify PR #73's route ordering in both seeded orchestrator and persisted config; corrected route/health assertions passed, but Phase 12 scene-anchor/provider failure tests remain.
+5. PR #74's three targeted movement regressions pass in CI, but its full release gate still has seven failures. Re-run it with PR #71, #72, and #73 integrated carefully; preserve both sceneObjects and population at the shared projection boundary.
+6. Audit the Phase 12 canonical scene anchor and provider-error/fallback path: trace scene identity from CurrentSituation → prompts → every primary/rewrite/fallback candidate → final player-visible result. Keep this separate from PR #73's route priority contract.
+7. Audit OpeningSceneService candidate/rewrite/fallback acceptance against the shared final candidate validator from PR #71. Reuse shared review with opening-specific pacing (at least three paragraphs); do not copy a parallel validator.
 8. Audit canonical opportunity retrieval for the user goal “check further”: trace notice/job/opportunity producers, retrieval filters, research packet, narrative plan, selected-model prompt, final review, and the next-turn open thread.
-9. Run targeted → regression → full tests/lint/build for each isolated repair and re-audit the exact current `main` SHA. Human provider-backed sessions and player-facing UI/reload tests remain mandatory; mark them BLOCKED when not run.
+9. Run targeted → regression → full tests/lint/type-check/build/release contracts on the integrated branch and classify exact failures against the same main baseline. Then run human provider-backed and player-facing UI/reload tests; mark human tests BLOCKED until actually run.
 
 **Completion principle:** Dreamville should neither hallucinate a world into existence through prose nor become sterile because the narrator is forbidden from creativity. The authoritative world systems should provide grounded possibilities; the player’s intent should determine the current objective; and the narrator should turn those facts into compelling, faithful presentation.
 
